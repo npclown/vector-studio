@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: Pre-implementation; bootstrap verification PR in progress
+Status: Ready for P0.0; implementation not started
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -86,7 +86,7 @@ Observed repository state on 2026-08-27:
 - [x] Validate and create the one-time documentation-only baseline commit authorized by `AGENTS.md`.
 - [x] Push the baseline and establish `origin/main` as the upstream/default branch.
 - [x] Configure the repository to require pull requests for changes to `main`, disallow force pushes, and require available validation checks as CI is introduced.
-- [ ] Verify the complete workflow with a documentation-only feature branch and pull request if needed.
+- [x] Verify the complete workflow with a documentation-only feature branch and pull request if needed.
 
 Gate: no P0.0 product/toolchain implementation begins until `origin/main` exists, GitHub authentication works, and the pull-request workflow is usable. Evidence includes sanitized `git remote -v`, `git branch -vv`, `gh auth status`, the baseline commit ID, and the repository/default-branch protection URL or settings record.
 
@@ -283,7 +283,8 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-08-27 | Git/GitHub workflow audited. Repository has no commits, remote, upstream, or available `gh` CLI; P0 is gated on bootstrap. | Local Git and CLI status checks; `AGENTS.md` workflow |
 | 2026-08-27 | Public `origin` registered, unborn branch renamed to `main`, and GitHub CLI authenticated as `npclown`. | `gh auth status`, `gh repo view`, `git remote -v`, `git status --branch` |
 | 2026-08-27 | Documentation-only baseline `21afc22` pushed to `origin/main`; squash-only merge and protected `main` configured. | GitHub repository and branch-protection API verification |
+| 2026-08-27 | Feature branch workflow completed through validation, commit, push, PR #1, protected squash merge, and branch cleanup. | `https://github.com/npclown/vector-studio/pull/1` |
 
 ## Gate outcome
 
-Current outcome: **AWAITING BOOTSTRAP VERIFICATION PR**. Repository bootstrap, authentication, and `main` protection are complete. The first feature-branch pull request must merge successfully before P0.0 begins. Product implementation has not started.
+Current outcome: **READY FOR P0.0**. Repository bootstrap, authentication, protected `main`, and the feature-branch pull-request workflow are verified. Product implementation has not started.
