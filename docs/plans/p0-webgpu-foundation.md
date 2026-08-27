@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.0 integrated; ready for P0.1
+Status: P0.1 complete locally; pull-request and CI validation pending
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -108,12 +108,20 @@ Evidence:
 
 ### P0.1 Contracts and diagnostics
 
-- [ ] Define renderer lifecycle, pixel-size, invalidation, statistics, capability-result, and diagnostic contracts without WebGPU types.
-- [ ] Define stable diagnostic codes for capability, initialization, validation, device loss, recovery, allocation, render, and disposal events.
-- [ ] Implement subscription disposal and deterministic timestamps for tests.
-- [ ] Define resource-accounting categories and byte-estimation rules.
+- [x] Define renderer lifecycle, pixel-size, invalidation, statistics, capability-result, and diagnostic contracts without WebGPU types.
+- [x] Define stable diagnostic codes for capability, initialization, validation, device loss, recovery, allocation, render, and disposal events.
+- [x] Implement subscription disposal and deterministic timestamps for tests.
+- [x] Define resource-accounting categories and byte-estimation rules.
 
-Evidence: unit tests and an architecture-boundary test.
+Evidence:
+
+- `pnpm check` passes formatting, ESLint, TypeScript project-reference checking, 21 tests across 5 Vitest files, and dependency-boundary validation.
+- `tests/unit/contracts.test.ts` verifies lifecycle/invalidation/resource constants, plain-data contract shapes, runtime-frozen stable constants, unique diagnostic codes, and every required diagnostic category.
+- `tests/unit/contracts-boundary.test.ts` rejects framework, concrete-renderer, browser runtime, and GPU API types or imports from the public contracts package.
+- `rg -n 'GPU[A-Z][A-Za-z]+|HTMLCanvasElement|HTMLElement|from ["'']react' packages/contracts/dist` reports no forbidden type or import in the generated public declarations.
+- `tests/unit/diagnostic-channel.test.ts` verifies injected deterministic timestamps, monotonic sequence numbers, immutable payloads, independent idempotent subscriptions, teardown, and listener-failure isolation.
+- `tests/unit/resource-accounting.test.ts` verifies buffer, layered/multisampled 2D texture, 3D mip, and count-only estimation rules plus live/peak accounting, release, clear, duplicate IDs, invalid descriptors, and safe-integer overflow handling.
+- `pnpm build` produces clean declaration/JavaScript outputs for all three packages and the playground production bundle.
 
 ### P0.2 WebGPU initialization and surface
 
@@ -294,7 +302,8 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-08-27 | P0.0 pull-request validation passed on GitHub's Windows runner. | PR #4 final `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33072953884/job/98519653495` |
 | 2026-08-27 | The P0.0 validation job became a strict required status check on protected `main`. | GitHub branch-protection API: `Static, unit, boundaries, and build`, strict mode enabled |
 | 2026-08-27 | P0.0 integrated into protected `main` through a squash merge. | PR #4: `https://github.com/npclown/vector-studio/pull/4`; merge commit `a3c1219` |
+| 2026-08-27 | P0.1 contracts, diagnostics, subscriptions, and resource accounting completed locally on `codex/p0-1-contracts-diagnostics`; PR and CI validation remain. | `pnpm check`: 21 tests across 5 files; `pnpm build`; public-contract architecture-boundary test |
 
 ## Gate outcome
 
-Current outcome: **P0.0 PASS; READY FOR P0.1**. The pinned workspace, package boundaries, root command surface, deterministic checks, production build, required GitHub Actions job, and protected-branch merge satisfy the P0.0 gate. P0.1 has not started.
+Current outcome: **P0.1 LOCAL PASS; PR/CI PENDING**. Renderer contracts, stable diagnostics, disposable subscriptions, deterministic clocks, and resource accounting satisfy the P0.1 evidence gate locally. P0.2 has not started; P0.1 is not integrated until its pull request and required CI check pass.

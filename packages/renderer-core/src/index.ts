@@ -1,2 +1,2 @@
-/** Retained renderer orchestration begins after the P0.1 contract checkpoint. */
-export {};
+export * from './diagnostic-channel.js';
+export * from './resource-accounting.js';
