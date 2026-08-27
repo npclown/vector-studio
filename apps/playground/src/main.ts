@@ -10,6 +10,7 @@ const canvas = document.createElement('canvas');
 canvas.id = 'webgpu-surface';
 canvas.style.width = '640px';
 canvas.style.height = '360px';
+canvas.style.display = 'block';
 app.append(canvas);
 
 const backend = new WebGpuBackend();
@@ -31,9 +32,15 @@ const api = Object.freeze({
     state: backend.state,
     surfaceRevision: backend.surfaceRevision,
     surfaceSize: backend.surfaceSize,
+    statistics: backend.getStatistics(),
   }),
+  dispose: () => backend.dispose(),
+  getFrameMeasurements: () => backend.getFrameMeasurements(),
+  invalidate: () => backend.invalidate({ reason: 'scene' }),
+  resetFrameMeasurements: () => backend.resetFrameMeasurements(),
   resize: (width: number, height: number, devicePixelRatio: number) =>
     backend.resize({ width, height }, devicePixelRatio),
+  setMode: (mode: 'on-demand' | 'continuous') => backend.setMode(mode),
 });
 
 Object.assign(globalThis, { __vectorStudioP0: api });

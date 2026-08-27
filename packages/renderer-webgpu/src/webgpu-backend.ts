@@ -8,14 +8,19 @@ import {
   type RendererCapabilities,
   type RendererCapabilityResult,
   type RendererDiagnostic,
+  type RendererInvalidation,
+  type RendererInvalidationTarget,
   type RendererLifecycle,
   type RendererLifecycleState,
   type RendererStatistics,
+  type RendererMode,
   type RendererSurfaceSize,
 } from '@vector-studio/contracts';
 import {
   DiagnosticChannel,
+  FrameScheduler,
   ResourceAccounting,
+  type AnimationFrameClock,
   type DiagnosticClock,
 } from '@vector-studio/renderer-core';
 
@@ -24,6 +29,7 @@ import {
   createBrowserWebGpuPlatform,
   type WebGpuCanvasContextPort,
   type WebGpuDevicePort,
+  type WebGpuFoundationScenePort,
   type WebGpuPlatform,
 } from './webgpu-platform.js';
 
@@ -34,8 +40,15 @@ export interface WebGpuSurface {
 }
 
 export interface WebGpuBackendOptions {
+  readonly animationFrameClock?: AnimationFrameClock;
   readonly clock?: DiagnosticClock;
+  readonly now?: () => number;
   readonly platform?: WebGpuPlatform;
+}
+
+export interface WebGpuFrameMeasurements {
+  readonly encodeAndSubmitMs: readonly number[];
+  readonly frameIntervalsMs: readonly number[];
 }
 
 function errorContext(error: unknown): DiagnosticContext {
@@ -45,14 +58,25 @@ function errorContext(error: unknown): DiagnosticContext {
   return Object.freeze({ errorMessage: String(error) });
 }
 
-export class WebGpuBackend implements RendererLifecycle<WebGpuSurface> {
+export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, RendererInvalidationTarget {
   readonly #diagnostics: DiagnosticChannel;
   readonly #platform: WebGpuPlatform;
   readonly #resources = new ResourceAccounting();
+  readonly #scheduler: FrameScheduler;
+  readonly #now: () => number;
   #capabilityResult: RendererCapabilityResult | undefined;
   #canvas: HTMLCanvasElement | undefined;
   #context: WebGpuCanvasContextPort | undefined;
   #device: WebGpuDevicePort | undefined;
+  #scene: WebGpuFoundationScenePort | undefined;
+  #invalidationsRequested = 0;
+  #framesSubmitted = 0;
+  #framesPresented = 0;
+  #shaderModulesCreated = 0;
+  #pipelinesCreated = 0;
+  #encodeAndSubmitMs: number[] = [];
+  #frameIntervalsMs: number[] = [];
+  #lastFrameTimestampMs: number | undefined;
   #generation = 0;
   #initialization: Promise<RendererCapabilityResult> | undefined;
   #operationToken = 0;
@@ -66,6 +90,11 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface> {
       options.clock === undefined ? {} : { clock: options.clock },
     );
     this.#platform = options.platform ?? createBrowserWebGpuPlatform();
+    this.#now = options.now ?? (() => performance.now());
+    this.#scheduler = new FrameScheduler({
+      ...(options.animationFrameClock === undefined ? {} : { clock: options.animationFrameClock }),
+      render: (timestampMs) => this.#render(timestampMs),
+    });
   }
 
   get state(): RendererLifecycleState {
@@ -135,19 +164,52 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface> {
       throw new Error('The device did not report maxTextureDimension2D.');
     }
 
-    return this.#applySurfaceSize(this.#canvas, cssSize, devicePixelRatio, maxDimension);
+    const previousRevision = this.#surfaceRevision;
+    const size = this.#applySurfaceSize(this.#canvas, cssSize, devicePixelRatio, maxDimension);
+    if (this.#surfaceRevision !== previousRevision) {
+      this.#resizeScene(size.physical);
+      this.invalidate({ reason: 'resize', sourceRevision: this.#surfaceRevision });
+    }
+    return size;
+  }
+
+  invalidate(invalidation: RendererInvalidation): void {
+    void invalidation;
+    if (this.#state !== 'ready') {
+      return;
+    }
+    this.#invalidationsRequested += 1;
+    this.#scheduler.invalidate();
+  }
+
+  setMode(mode: RendererMode): void {
+    this.#scheduler.setMode(mode);
+  }
+
+  resetFrameMeasurements(): void {
+    this.#encodeAndSubmitMs = [];
+    this.#frameIntervalsMs = [];
+    this.#lastFrameTimestampMs = undefined;
+  }
+
+  getFrameMeasurements(): WebGpuFrameMeasurements {
+    return Object.freeze({
+      encodeAndSubmitMs: Object.freeze([...this.#encodeAndSubmitMs]),
+      frameIntervalsMs: Object.freeze([...this.#frameIntervalsMs]),
+    });
   }
 
   getStatistics(): RendererStatistics {
     return Object.freeze({
       lifecycle: this.#state,
       generation: this.#generation,
-      mode: 'on-demand',
-      invalidationsRequested: 0,
-      framesSubmitted: 0,
-      framesPresented: 0,
-      shaderModulesCreated: 0,
-      pipelinesCreated: 0,
+      mode: this.#scheduler.mode,
+      invalidationsRequested: this.#invalidationsRequested,
+      framesSubmitted: this.#framesSubmitted,
+      framesPresented: this.#framesPresented,
+      pendingFrameCallbacks: this.#scheduler.pendingCallbacks,
+      shaderModulesCreated: this.#shaderModulesCreated,
+      pipelinesCreated: this.#pipelinesCreated,
       resources: this.#resources.snapshot(),
     });
   }
@@ -159,8 +221,10 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface> {
 
     this.#operationToken += 1;
     this.#state = 'disposed';
+    this.#scheduler.dispose();
 
     try {
+      this.#scene?.dispose();
       this.#context?.unconfigure();
       this.#device?.destroy();
     } catch (error: unknown) {
@@ -175,6 +239,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface> {
 
     this.#context = undefined;
     this.#device = undefined;
+    this.#scene = undefined;
     this.#canvas = undefined;
     this.#surfaceSize = undefined;
     this.#presentationFormat = undefined;
@@ -310,12 +375,51 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface> {
       return this.#stale(generation);
     }
 
+    let foundation;
+    try {
+      foundation = await device.createFoundationScene(format);
+    } catch (error: unknown) {
+      context.unconfigure();
+      device.destroy();
+      return this.#failed(
+        DIAGNOSTIC_CODES.FOUNDATION_SCENE_FAILED,
+        'The WebGPU foundation scene could not be created.',
+        token,
+        generation,
+        errorContext(error),
+      );
+    }
+    if (!this.#isCurrent(token)) {
+      foundation.scene.dispose();
+      context.unconfigure();
+      device.destroy();
+      return this.#stale(generation);
+    }
+
+    this.#scene = foundation.scene;
+    this.#resizeScene(this.#surfaceSize?.physical ?? { width: 0, height: 0 });
+    this.#shaderModulesCreated += foundation.scene.shaderModulesCreated;
+    this.#pipelinesCreated += foundation.scene.pipelinesCreated;
+    this.#resources.track(`shader-${generation}`, { category: 'shader-module' });
+    for (let index = 0; index < foundation.scene.pipelinesCreated; index += 1) {
+      this.#resources.track(`pipeline-${generation}-${index}`, { category: 'render-pipeline' });
+    }
+    if (foundation.fellBackFrom4x) {
+      this.#emit(
+        DIAGNOSTIC_CODES.MSAA_FALLBACK,
+        '4x MSAA was unavailable; the foundation scene uses 1x sampling.',
+        'warning',
+        generation,
+        Object.freeze({ requestedSampleCount: 4, selectedSampleCount: 1 }),
+      );
+    }
+
     const capabilities: RendererCapabilities = Object.freeze({
       backend: 'webgpu',
       adapter: Object.freeze({ ...adapter.info }),
       selectedFeatures: Object.freeze([...device.features]),
       limits: Object.freeze({ ...device.limits }),
-      sampleCount: 1,
+      sampleCount: foundation.scene.sampleCount,
     });
     const result: RendererCapabilityResult = Object.freeze({ supported: true, capabilities });
 
@@ -326,7 +430,60 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface> {
     this.#presentationFormat = format;
     this.#capabilityResult = result;
     this.#state = 'ready';
+    this.invalidate({ reason: 'initialization' });
     return result;
+  }
+
+  #render(timestampMs: number): void {
+    if (
+      this.#state !== 'ready' ||
+      !this.#scene ||
+      !this.#context ||
+      this.#surfaceSize?.suspended !== false
+    ) {
+      return;
+    }
+
+    if (this.#lastFrameTimestampMs !== undefined) {
+      this.#frameIntervalsMs.push(timestampMs - this.#lastFrameTimestampMs);
+    }
+    this.#lastFrameTimestampMs = timestampMs;
+
+    const startedMs = this.#now();
+    try {
+      this.#scene.render(this.#context);
+      this.#framesSubmitted += 1;
+      this.#framesPresented += 1;
+      this.#encodeAndSubmitMs.push(this.#now() - startedMs);
+    } catch (error: unknown) {
+      this.#emit(
+        DIAGNOSTIC_CODES.RENDER_SUBMISSION_FAILED,
+        'The foundation frame submission failed.',
+        'error',
+        this.#generation,
+        errorContext(error),
+      );
+    }
+  }
+
+  #resizeScene(size: PixelSize): void {
+    if (!this.#scene) {
+      return;
+    }
+    this.#resources.release('foundation-attachment');
+    this.#scene.resize(size);
+    if (this.#scene.attachmentBytes > 0 && size.width > 0 && size.height > 0) {
+      this.#resources.track('foundation-attachment', {
+        category: 'texture',
+        dimension: '2d',
+        width: size.width,
+        height: size.height,
+        depthOrArrayLayers: 1,
+        mipLevelCount: 1,
+        sampleCount: this.#scene.sampleCount,
+        bytesPerTexel: 4,
+      });
+    }
   }
 
   #applySurfaceSize(

@@ -11,6 +11,7 @@
   },
   "scripts": {
     "benchmark:p0": "node tooling/pending-command.mjs benchmark:p0 P0.5",
+    "benchmark:p0:p0-3": "pnpm build && playwright test --config playwright.p0-3-benchmark.config.ts",
     "build": "pnpm --recursive --if-present run build",
     "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test:unit && pnpm run check:boundaries",
     "check:boundaries": "node tooling/check-boundaries.mjs",

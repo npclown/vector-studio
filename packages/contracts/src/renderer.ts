@@ -82,6 +82,7 @@ export interface RendererStatistics {
   readonly invalidationsRequested: number;
   readonly framesSubmitted: number;
   readonly framesPresented: number;
+  readonly pendingFrameCallbacks: number;
   readonly shaderModulesCreated: number;
   readonly pipelinesCreated: number;
   readonly resources: ResourceAccountingSnapshot;
