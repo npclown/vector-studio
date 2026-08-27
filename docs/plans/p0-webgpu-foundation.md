@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: Ready for P0.0; implementation not started
+Status: P0.0 complete locally; pull-request and CI validation pending
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -92,13 +92,19 @@ Gate: no P0.0 product/toolchain implementation begins until `origin/main` exists
 
 ### P0.0 Repository foundation
 
-- [ ] Create the minimal workspace and package boundaries described by `ARCHITECTURE.md`.
-- [ ] Pin the Node/package-manager/toolchain versions used by the repository.
-- [ ] Establish root commands for build, static checks, unit tests, browser tests, GPU validation, and P0 benchmarks.
-- [ ] Add dependency-boundary enforcement or an equivalent test.
-- [ ] Keep the repository buildable without Rust until P2.
+- [x] Create the minimal workspace and package boundaries described by `ARCHITECTURE.md`.
+- [x] Pin the Node/package-manager/toolchain versions used by the repository.
+- [x] Establish root commands for build, static checks, unit tests, browser tests, GPU validation, and P0 benchmarks.
+- [x] Add dependency-boundary enforcement or an equivalent test.
+- [x] Keep the repository buildable without Rust until P2.
 
-Evidence: static validation command, package graph output, clean production build.
+Evidence:
+
+- `pnpm check` passes formatting, ESLint, TypeScript project-reference checking, 2 Vitest tests, and the dependency-boundary check.
+- `pnpm build` produces all three package outputs and the Vite playground production bundle.
+- `pnpm list --recursive --prod --depth Infinity` shows only the four local workspace packages in the runtime graph; no external renderer, scene graph, tessellator, or Rust/WASM dependency exists.
+- `pnpm peers check` reports no peer dependency issues with the locked toolchain.
+- `pnpm test:browser`, `pnpm test:gpu`, and `pnpm benchmark:p0` are stable root entrypoints that exit 1 with an explicit `NOT IMPLEMENTED` message until P0.2, P0.4, and P0.5 respectively. They cannot be mistaken for validation evidence before their owning checkpoints.
 
 ### P0.1 Contracts and diagnostics
 
@@ -284,7 +290,8 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-08-27 | Public `origin` registered, unborn branch renamed to `main`, and GitHub CLI authenticated as `npclown`. | `gh auth status`, `gh repo view`, `git remote -v`, `git status --branch` |
 | 2026-08-27 | Documentation-only baseline `21afc22` pushed to `origin/main`; squash-only merge and protected `main` configured. | GitHub repository and branch-protection API verification |
 | 2026-08-27 | Feature branch workflow completed through validation, commit, push, PR #1, protected squash merge, and branch cleanup. | `https://github.com/npclown/vector-studio/pull/1` |
+| 2026-08-27 | P0.0 repository foundation completed locally on `codex/p0-0-repository-foundation`; PR and CI validation remain. | `pnpm check`, `pnpm build`, `pnpm peers check`, production dependency graph, and explicit future-gate command results |
 
 ## Gate outcome
 
-Current outcome: **READY FOR P0.0**. Repository bootstrap, authentication, protected `main`, and the feature-branch pull-request workflow are verified. Product implementation has not started.
+Current outcome: **P0.0 LOCAL PASS; PR/CI PENDING**. The pinned workspace, package boundaries, root command surface, deterministic checks, and production build satisfy the P0.0 evidence gate locally. P0.1 has not started; P0.0 is not integrated until its pull request and required CI check pass.
