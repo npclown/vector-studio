@@ -9,6 +9,7 @@
     "@vector-studio/renderer-webgpu": "workspace:*"
   },
   "scripts": {
-    "build": "vite build"
+    "build": "vite build",
+    "dev": "vite"
   }
 }
