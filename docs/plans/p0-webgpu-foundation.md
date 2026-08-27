@@ -290,8 +290,9 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-08-27 | Public `origin` registered, unborn branch renamed to `main`, and GitHub CLI authenticated as `npclown`. | `gh auth status`, `gh repo view`, `git remote -v`, `git status --branch` |
 | 2026-08-27 | Documentation-only baseline `21afc22` pushed to `origin/main`; squash-only merge and protected `main` configured. | GitHub repository and branch-protection API verification |
 | 2026-08-27 | Feature branch workflow completed through validation, commit, push, PR #1, protected squash merge, and branch cleanup. | `https://github.com/npclown/vector-studio/pull/1` |
-| 2026-08-27 | P0.0 repository foundation completed locally on `codex/p0-0-repository-foundation`; PR and CI validation remain. | `pnpm check`, `pnpm build`, `pnpm peers check`, production dependency graph, and explicit future-gate command results |
+| 2026-08-27 | P0.0 repository foundation completed locally and submitted through PR #4. | `pnpm check`, `pnpm build`, `pnpm peers check`, production dependency graph, and explicit future-gate command results |
 | 2026-08-27 | P0.0 pull-request validation passed on GitHub's Windows runner. | PR #4 `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33072558895/job/98518263505` |
+| 2026-08-27 | The P0.0 validation job became a strict required status check on protected `main`. | GitHub branch-protection API: `Static, unit, boundaries, and build`, strict mode enabled |
 
 ## Gate outcome
 
