@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.1 complete locally; pull-request and CI validation pending
+Status: P0.1 validated; pull-request integration pending
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -302,8 +302,9 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-08-27 | P0.0 pull-request validation passed on GitHub's Windows runner. | PR #4 final `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33072953884/job/98519653495` |
 | 2026-08-27 | The P0.0 validation job became a strict required status check on protected `main`. | GitHub branch-protection API: `Static, unit, boundaries, and build`, strict mode enabled |
 | 2026-08-27 | P0.0 integrated into protected `main` through a squash merge. | PR #4: `https://github.com/npclown/vector-studio/pull/4`; merge commit `a3c1219` |
-| 2026-08-27 | P0.1 contracts, diagnostics, subscriptions, and resource accounting completed locally on `codex/p0-1-contracts-diagnostics`; PR and CI validation remain. | `pnpm check`: 21 tests across 5 files; `pnpm build`; public-contract architecture-boundary test |
+| 2026-08-27 | P0.1 contracts, diagnostics, subscriptions, and resource accounting completed locally and submitted through PR #6. | `pnpm check`: 21 tests across 5 files; `pnpm build`; public-contract architecture-boundary test |
+| 2026-08-27 | P0.1 pull-request validation passed on GitHub's Windows runner. | PR #6 `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33074741520/job/98525882270` |
 
 ## Gate outcome
 
-Current outcome: **P0.1 LOCAL PASS; PR/CI PENDING**. Renderer contracts, stable diagnostics, disposable subscriptions, deterministic clocks, and resource accounting satisfy the P0.1 evidence gate locally. P0.2 has not started; P0.1 is not integrated until its pull request and required CI check pass.
+Current outcome: **P0.1 VALIDATED; INTEGRATION PENDING**. Renderer contracts, stable diagnostics, disposable subscriptions, deterministic clocks, resource accounting, and the required GitHub Actions job satisfy the P0.1 evidence gate. P0.2 has not started; P0.1 is not integrated until PR #6 merges.
