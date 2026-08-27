@@ -1,2 +1,3 @@
-/** Concrete WebGPU implementation begins at the P0.2 checkpoint. */
-export {};
+export * from './surface-size.js';
+export * from './webgpu-backend.js';
+export * from './webgpu-platform.js';

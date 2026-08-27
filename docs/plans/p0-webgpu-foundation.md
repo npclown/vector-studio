@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.1 integrated; ready for P0.2
+Status: P0.2 complete locally; pull-request and CI validation pending
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -125,14 +125,22 @@ Evidence:
 
 ### P0.2 WebGPU initialization and surface
 
-- [ ] Detect secure context, `navigator.gpu`, adapter availability, and canvas-context availability separately.
-- [ ] Request and record adapter/device information and limits.
-- [ ] Configure the canvas using the preferred presentation format.
-- [ ] Convert CSS size and DPR to bounded physical dimensions using device limits.
-- [ ] Suspend presentation for zero-area surfaces while retaining valid lifecycle state.
-- [ ] Handle resize without recreating size-independent resources.
+- [x] Detect secure context, `navigator.gpu`, adapter availability, and canvas-context availability separately.
+- [x] Request and record adapter/device information and limits.
+- [x] Configure the canvas using the preferred presentation format.
+- [x] Convert CSS size and DPR to bounded physical dimensions using device limits.
+- [x] Suspend presentation for zero-area surfaces while retaining valid lifecycle state.
+- [x] Handle resize without recreating size-independent resources.
 
-Evidence: unit tests with injected capabilities plus Chrome/Edge browser integration tests.
+Evidence:
+
+- `pnpm check` passes formatting, ESLint, TypeScript project-reference checking, 33 tests across 7 Vitest files, and dependency-boundary validation.
+- `tests/unit/webgpu-backend.test.ts` injects platform, adapter, device, and canvas-context ports to verify distinct capability/initialization diagnostics, recorded adapter/device capabilities, preferred-format configuration, shared concurrent initialization, ready-state idempotence, terminal disposal, and stale-completion rejection.
+- `tests/unit/surface-size.test.ts` verifies DPR conversion, rounding, device-limit clamping, zero-area suspension, and invalid-input rejection. Backend tests additionally assert that resize does not request another adapter/device or reconfigure the context.
+- `pnpm test:browser` passes the real canvas initialization and resize test in stable Chrome `151.0.7922.174` and Edge `151.0.4129.107` on the Windows reference machine: 2 tests passed in 3.8 seconds. This is headless browser-integration evidence with `--enable-unsafe-webgpu`, not the headed hardware acceptance owned by P0.4.
+- The browser test verifies a supported capability result, ready lifecycle, preferred presentation format, positive `maxTextureDimension2D`, exact 640 x 360 physical sizing, DPR resize, zero-area suspension, and zero page errors in both browsers.
+- `pnpm build` produces clean outputs for all three packages and the WebGPU-enabled playground production bundle.
+- `pnpm list --recursive --prod --depth Infinity` shows no new runtime dependency; Playwright is root test tooling only and TypeScript's pinned DOM library supplies concrete WebGPU bindings.
 
 ### P0.3 Render scheduling and foundation scene
 
@@ -305,7 +313,8 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-08-27 | P0.1 contracts, diagnostics, subscriptions, and resource accounting completed locally and submitted through PR #6. | `pnpm check`: 21 tests across 5 files; `pnpm build`; public-contract architecture-boundary test |
 | 2026-08-27 | P0.1 pull-request validation passed on GitHub's Windows runner. | PR #6 final `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33074926266/job/98526521203` |
 | 2026-08-27 | P0.1 integrated into protected `main` through a squash merge. | PR #6: `https://github.com/npclown/vector-studio/pull/6`; merge commit `607a5f6` |
+| 2026-08-27 | P0.2 WebGPU initialization and surface handling completed locally on `codex/p0-2-webgpu-initialization`; PR and CI validation remain. | `pnpm check`: 33 tests across 7 files; `pnpm test:browser`: Chrome and Edge 2/2; `pnpm build`; production dependency audit |
 
 ## Gate outcome
 
-Current outcome: **P0.1 PASS; READY FOR P0.2**. Renderer contracts, stable diagnostics, disposable subscriptions, deterministic clocks, resource accounting, required GitHub Actions validation, and the protected-branch merge satisfy the P0.1 gate. P0.2 has not started.
+Current outcome: **P0.2 LOCAL PASS; PR/CI PENDING**. Capability detection, adapter/device acquisition, canvas configuration, bounded DPR sizing, zero-area suspension, and resize behavior satisfy the P0.2 evidence gate locally in unit tests and stable Chrome/Edge. P0.3 has not started; P0.2 is not integrated until its pull request and required CI check pass.

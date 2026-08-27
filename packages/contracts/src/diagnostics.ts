@@ -7,6 +7,7 @@ export const DIAGNOSTIC_CODES = Object.freeze({
   DEVICE_REQUEST_FAILED: 'initialization.device-request-failed',
   SURFACE_CONFIGURATION_FAILED: 'initialization.surface-configuration-failed',
   STALE_INITIALIZATION_IGNORED: 'initialization.stale-completion-ignored',
+  INITIALIZATION_AFTER_DISPOSE: 'initialization.after-dispose',
   VALIDATION_ERROR: 'validation.uncaptured-error',
   OUT_OF_MEMORY: 'validation.out-of-memory',
   DEVICE_LOST: 'device-loss.detected',
