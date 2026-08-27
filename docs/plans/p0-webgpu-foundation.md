@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.3 implementation complete; integration validation pending
+Status: P0.3 integrated; ready for P0.4
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -326,7 +326,9 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-08-27 | P0.2 pull-request validation passed on GitHub's Windows runner. | PR #8 final `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33076963055/job/98533565510` |
 | 2026-08-27 | P0.2 integrated into protected `main` through a squash merge. | PR #8: `https://github.com/npclown/vector-studio/pull/8`; merge commit `3de7801` |
 | 2026-08-27 | P0.3 render scheduling, foundation scene, headed visual evidence, and fixed-scenario benchmark implementation completed locally. | `pnpm check`: 39 tests across 8 files; `pnpm build`; headed Chrome/Edge 6/6; production P0.3 benchmark 2/2 with five repetitions per scenario/browser |
+| 2026-08-27 | P0.3 pull-request validation passed on GitHub's Windows runner. | PR #10 final `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33081358041/job/98549136759` |
+| 2026-08-27 | P0.3 integrated into protected `main` through a squash merge. | PR #10: `https://github.com/npclown/vector-studio/pull/10`; merge commit `b9285b9` |
 
 ## Gate outcome
 
-Current outcome: **P0.3 IMPLEMENTATION PASS; INTEGRATION PENDING**. Scheduling, deterministic foundation rendering, explicit four-to-one-sample fallback, headed Chrome/Edge visual validation, and the P0 steady/idle thresholds pass locally. The P0.3 gate becomes integrated only after the feature branch passes the required GitHub Actions check and merges through protected `main`; P0.4 must not begin before that workflow completes.
+Current outcome: **P0.3 PASS; READY FOR P0.4**. Scheduling, deterministic foundation rendering, explicit four-to-one-sample fallback, headed Chrome/Edge visual validation, P0 steady/idle thresholds, required GitHub Actions validation, and the protected-branch merge satisfy the P0.3 gate. Resource lifecycle, device-error handling, loss, and recovery remain owned by P0.4.
