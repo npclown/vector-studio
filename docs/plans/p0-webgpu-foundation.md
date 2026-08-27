@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.2 complete locally; pull-request and CI validation pending
+Status: P0.2 validated; pull-request integration pending
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -313,8 +313,9 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-08-27 | P0.1 contracts, diagnostics, subscriptions, and resource accounting completed locally and submitted through PR #6. | `pnpm check`: 21 tests across 5 files; `pnpm build`; public-contract architecture-boundary test |
 | 2026-08-27 | P0.1 pull-request validation passed on GitHub's Windows runner. | PR #6 final `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33074926266/job/98526521203` |
 | 2026-08-27 | P0.1 integrated into protected `main` through a squash merge. | PR #6: `https://github.com/npclown/vector-studio/pull/6`; merge commit `607a5f6` |
-| 2026-08-27 | P0.2 WebGPU initialization and surface handling completed locally on `codex/p0-2-webgpu-initialization`; PR and CI validation remain. | `pnpm check`: 33 tests across 7 files; `pnpm test:browser`: Chrome and Edge 2/2; `pnpm build`; production dependency audit |
+| 2026-08-27 | P0.2 WebGPU initialization and surface handling completed locally and submitted through PR #8. | `pnpm check`: 33 tests across 7 files; `pnpm test:browser`: Chrome and Edge 2/2; `pnpm build`; production dependency audit |
+| 2026-08-27 | P0.2 pull-request validation passed on GitHub's Windows runner. | PR #8 `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33076774032/job/98532894465` |
 
 ## Gate outcome
 
-Current outcome: **P0.2 LOCAL PASS; PR/CI PENDING**. Capability detection, adapter/device acquisition, canvas configuration, bounded DPR sizing, zero-area suspension, and resize behavior satisfy the P0.2 evidence gate locally in unit tests and stable Chrome/Edge. P0.3 has not started; P0.2 is not integrated until its pull request and required CI check pass.
+Current outcome: **P0.2 VALIDATED; INTEGRATION PENDING**. Capability detection, adapter/device acquisition, canvas configuration, bounded DPR sizing, zero-area suspension, resize behavior, stable Chrome/Edge integration, and the required GitHub Actions job satisfy the P0.2 evidence gate. P0.3 has not started; P0.2 is not integrated until PR #8 merges.
