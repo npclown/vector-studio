@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.0 complete locally; pull-request and CI validation pending
+Status: P0.0 validated; pull-request integration pending
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -291,7 +291,8 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-08-27 | Documentation-only baseline `21afc22` pushed to `origin/main`; squash-only merge and protected `main` configured. | GitHub repository and branch-protection API verification |
 | 2026-08-27 | Feature branch workflow completed through validation, commit, push, PR #1, protected squash merge, and branch cleanup. | `https://github.com/npclown/vector-studio/pull/1` |
 | 2026-08-27 | P0.0 repository foundation completed locally on `codex/p0-0-repository-foundation`; PR and CI validation remain. | `pnpm check`, `pnpm build`, `pnpm peers check`, production dependency graph, and explicit future-gate command results |
+| 2026-08-27 | P0.0 pull-request validation passed on GitHub's Windows runner. | PR #4 `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33072558895/job/98518263505` |
 
 ## Gate outcome
 
-Current outcome: **P0.0 LOCAL PASS; PR/CI PENDING**. The pinned workspace, package boundaries, root command surface, deterministic checks, and production build satisfy the P0.0 evidence gate locally. P0.1 has not started; P0.0 is not integrated until its pull request and required CI check pass.
+Current outcome: **P0.0 VALIDATED; INTEGRATION PENDING**. The pinned workspace, package boundaries, root command surface, deterministic checks, production build, and GitHub Actions job satisfy the P0.0 evidence gate. P0.1 has not started; P0.0 is not integrated until PR #4 merges.
