@@ -1,0 +1,14 @@
+{
+  "name": "@vector-studio/playground",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@vector-studio/contracts": "workspace:*",
+    "@vector-studio/renderer-core": "workspace:*",
+    "@vector-studio/renderer-webgpu": "workspace:*"
+  },
+  "scripts": {
+    "build": "vite build"
+  }
+}

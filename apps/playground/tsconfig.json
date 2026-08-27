@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "emitDeclarationOnly": true,
+    "lib": ["DOM", "ES2022"],
+    "outDir": "node_modules/.cache/types",
+    "rootDir": "src",
+    "tsBuildInfoFile": "node_modules/.cache/playground.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/renderer-core" },
+    { "path": "../../packages/renderer-webgpu" }
+  ]
+}
