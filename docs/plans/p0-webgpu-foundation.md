@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.2 integrated; ready for P0.3
+Status: P0.3 implementation complete; integration validation pending
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -144,14 +144,23 @@ Evidence:
 
 ### P0.3 Render scheduling and foundation scene
 
-- [ ] Coalesce multiple invalidations into at most one submitted frame per animation frame.
-- [ ] Submit no frames while idle and unchanged.
-- [ ] Support an explicit continuous mode for benchmark and future animation use.
-- [ ] Create shader modules and pipelines outside the steady-state frame path.
-- [ ] Render a deterministic clear color and triangle through a multisampled target when four-sample MSAA is supported.
-- [ ] Fall back from four-sample to one-sample only as an explicit recorded capability decision, not to another renderer.
+- [x] Coalesce multiple invalidations into at most one submitted frame per animation frame.
+- [x] Submit no frames while idle and unchanged.
+- [x] Support an explicit continuous mode for benchmark and future animation use.
+- [x] Create shader modules and pipelines outside the steady-state frame path.
+- [x] Render a deterministic clear color and triangle through a multisampled target when four-sample MSAA is supported.
+- [x] Fall back from four-sample to one-sample only as an explicit recorded capability decision, not to another renderer.
 
 Evidence: scheduler tests, pipeline/resource counters, browser screenshot, and P0 steady/idle benchmark results.
+
+P0.3 implementation evidence:
+
+- `FrameScheduler` has an injected animation-frame clock and deterministic tests for a 100-invalidation burst, idle behavior, continuous mode, and disposal cancellation. Backend tests assert one render, stable shader/pipeline counters, and the explicit `capability.msaa-fallback` diagnostic.
+- The concrete WebGPU backend creates its WGSL shader and render pipeline during initialization. It selects four-sample MSAA when pipeline creation succeeds, records a four-to-one-sample fallback otherwise, owns the size-dependent multisample attachment, and renders a deterministic clear plus gradient triangle.
+- `pnpm check` passes formatting, ESLint, TypeScript project-reference checking, 39 tests across 8 Vitest files, and dependency-boundary validation. `pnpm build` produces all package and playground production outputs.
+- `pnpm test:browser --headed` passes 6/6 tests in Chrome `151.0.7922.174` and Edge `151.0.4129.107`; committed visual artifacts are `docs/evidence/p0.3/foundation-chrome.png` and `foundation-edge.png`.
+- `pnpm benchmark:p0:p0-3` runs a production build with headed browsers, DevTools/tracing/recording disabled, a 1280 x 720 physical surface at DPR 1, 3-second warm-up, 10-second steady window, 5-second idle window, and five repetitions per browser. Browser projects run serially so each headed window remains foreground-visible and avoids background throttling.
+- Chrome and Edge both record a worst per-run frame-interval p95 of 16.8 ms, CPU encode-and-submit p95 of 0.2 ms, zero long tasks, zero measured-window shader/pipeline creation, and 14,745,600 peak engine-accounted bytes. Every idle repetition records exactly one burst submission, zero subsequent idle submissions, and zero pending callbacks after disposal. Raw JSON and Markdown results are committed under `docs/benchmarks/results/2026-08-27_p0.3_*`.
 
 ### P0.4 Resource lifecycle and recovery
 
@@ -316,7 +325,8 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-08-27 | P0.2 WebGPU initialization and surface handling completed locally and submitted through PR #8. | `pnpm check`: 33 tests across 7 files; `pnpm test:browser`: Chrome and Edge 2/2; `pnpm build`; production dependency audit |
 | 2026-08-27 | P0.2 pull-request validation passed on GitHub's Windows runner. | PR #8 final `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33076963055/job/98533565510` |
 | 2026-08-27 | P0.2 integrated into protected `main` through a squash merge. | PR #8: `https://github.com/npclown/vector-studio/pull/8`; merge commit `3de7801` |
+| 2026-08-27 | P0.3 render scheduling, foundation scene, headed visual evidence, and fixed-scenario benchmark implementation completed locally. | `pnpm check`: 39 tests across 8 files; `pnpm build`; headed Chrome/Edge 6/6; production P0.3 benchmark 2/2 with five repetitions per scenario/browser |
 
 ## Gate outcome
 
-Current outcome: **P0.2 PASS; READY FOR P0.3**. Capability detection, adapter/device acquisition, canvas configuration, bounded DPR sizing, zero-area suspension, resize behavior, stable Chrome/Edge integration, required GitHub Actions validation, and the protected-branch merge satisfy the P0.2 gate. P0.3 has not started.
+Current outcome: **P0.3 IMPLEMENTATION PASS; INTEGRATION PENDING**. Scheduling, deterministic foundation rendering, explicit four-to-one-sample fallback, headed Chrome/Edge visual validation, and the P0 steady/idle thresholds pass locally. The P0.3 gate becomes integrated only after the feature branch passes the required GitHub Actions check and merges through protected `main`; P0.4 must not begin before that workflow completes.

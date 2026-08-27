@@ -4,10 +4,33 @@ import {
   type WebGpuAdapterPort,
   type WebGpuCanvasContextPort,
   type WebGpuDevicePort,
+  type WebGpuFoundationScenePort,
   type WebGpuPlatform,
   type WebGpuSurface,
 } from '@vector-studio/renderer-webgpu';
 import { describe, expect, it, vi } from 'vitest';
+import type { AnimationFrameClock } from '@vector-studio/renderer-core';
+
+class ManualAnimationFrameClock implements AnimationFrameClock {
+  readonly callbacks = new Map<number, (timestampMs: number) => void>();
+  #nextHandle = 1;
+
+  request(callback: (timestampMs: number) => void): number {
+    const handle = this.#nextHandle++;
+    this.callbacks.set(handle, callback);
+    return handle;
+  }
+
+  cancel(handle: number): void {
+    this.callbacks.delete(handle);
+  }
+
+  flush(timestampMs = 16): void {
+    const callbacks = [...this.callbacks.values()];
+    this.callbacks.clear();
+    for (const callback of callbacks) callback(timestampMs);
+  }
+}
 
 interface Deferred<Value> {
   readonly promise: Promise<Value>;
@@ -43,11 +66,29 @@ function fixture(): {
   requestAdapter: ReturnType<typeof vi.fn>;
   requestDevice: ReturnType<typeof vi.fn>;
   unconfigure: ReturnType<typeof vi.fn>;
+  scene: WebGpuFoundationScenePort;
+  render: ReturnType<typeof vi.fn>;
 } {
   const destroy = vi.fn();
+  const render = vi.fn();
+  let attachmentBytes = 0;
+  const scene: WebGpuFoundationScenePort = {
+    sampleCount: 4,
+    shaderModulesCreated: 1,
+    pipelinesCreated: 1,
+    get attachmentBytes() {
+      return attachmentBytes;
+    },
+    resize: (size) => {
+      attachmentBytes = size.width * size.height * 4 * 4;
+    },
+    render,
+    dispose: vi.fn(),
+  };
   const device: WebGpuDevicePort = {
     features: ['timestamp-query'],
     limits: { maxTextureDimension2D: 4096, maxBufferSize: 268_435_456 },
+    createFoundationScene: () => Promise.resolve({ scene, fellBackFrom4x: false }),
     destroy,
   };
   const requestDevice = vi.fn(() => Promise.resolve(device));
@@ -76,6 +117,8 @@ function fixture(): {
     requestAdapter,
     requestDevice,
     unconfigure,
+    scene,
+    render,
   };
 }
 
@@ -184,7 +227,7 @@ describe('WebGpuBackend lifecycle and surface', () => {
         adapter: { vendor: 'test-vendor', architecture: 'test-architecture' },
         selectedFeatures: ['timestamp-query'],
         limits: { maxTextureDimension2D: 4096, maxBufferSize: 268_435_456 },
-        sampleCount: 1,
+        sampleCount: 4,
       },
     });
     expect(backend.state).toBe('ready');
@@ -266,6 +309,77 @@ describe('WebGpuBackend lifecycle and surface', () => {
     expect(configure).toHaveBeenCalledOnce();
     expect(requestAdapter).toHaveBeenCalledOnce();
     expect(requestDevice).toHaveBeenCalledOnce();
-    expect(backend.getStatistics().resources.live).toBe(0);
+    expect(backend.getStatistics().resources.live).toBe(2);
+  });
+
+  it('coalesces backend invalidations and leaves pipeline creation outside frame submission', async () => {
+    const { platform, render } = fixture();
+    const animationFrameClock = new ManualAnimationFrameClock();
+    const backend = new WebGpuBackend({ platform, animationFrameClock, now: () => 1 });
+    await backend.initialize(surface());
+
+    for (let index = 0; index < 100; index += 1) {
+      backend.invalidate({ reason: 'scene' });
+    }
+
+    expect(animationFrameClock.callbacks).toHaveLength(1);
+    expect(backend.getStatistics()).toMatchObject({
+      invalidationsRequested: 101,
+      pendingFrameCallbacks: 1,
+      pipelinesCreated: 1,
+      shaderModulesCreated: 1,
+    });
+    animationFrameClock.flush();
+    expect(render).toHaveBeenCalledOnce();
+    expect(backend.getStatistics()).toMatchObject({
+      framesSubmitted: 1,
+      framesPresented: 1,
+      pendingFrameCallbacks: 0,
+      pipelinesCreated: 1,
+      shaderModulesCreated: 1,
+    });
+    animationFrameClock.flush(32);
+    expect(render).toHaveBeenCalledOnce();
+  });
+
+  it('records the explicit 4x to 1x MSAA fallback', async () => {
+    const { device, platform, scene } = fixture();
+    const diagnostics: RendererDiagnostic[] = [];
+    const oneSampleScene: WebGpuFoundationScenePort = {
+      ...scene,
+      sampleCount: 1,
+      pipelinesCreated: 1,
+    };
+    const backend = new WebGpuBackend({
+      platform: {
+        ...platform,
+        requestAdapter: () =>
+          Promise.resolve({
+            info: {},
+            requestDevice: () =>
+              Promise.resolve({
+                ...device,
+                createFoundationScene: () =>
+                  Promise.resolve({ scene: oneSampleScene, fellBackFrom4x: true }),
+              }),
+          }),
+      },
+    });
+    backend.subscribeDiagnostics((diagnostic) => diagnostics.push(diagnostic));
+
+    await expect(backend.initialize(surface())).resolves.toMatchObject({
+      supported: true,
+      capabilities: { sampleCount: 1 },
+    });
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: DIAGNOSTIC_CODES.MSAA_FALLBACK,
+        context: { requestedSampleCount: 4, selectedSampleCount: 1 },
+      }),
+    );
+    expect(backend.getStatistics()).toMatchObject({
+      pipelinesCreated: 1,
+      shaderModulesCreated: 1,
+    });
   });
 });

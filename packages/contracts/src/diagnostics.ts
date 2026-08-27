@@ -6,6 +6,8 @@ export const DIAGNOSTIC_CODES = Object.freeze({
   ADAPTER_REQUEST_FAILED: 'initialization.adapter-request-failed',
   DEVICE_REQUEST_FAILED: 'initialization.device-request-failed',
   SURFACE_CONFIGURATION_FAILED: 'initialization.surface-configuration-failed',
+  FOUNDATION_SCENE_FAILED: 'initialization.foundation-scene-failed',
+  MSAA_FALLBACK: 'capability.msaa-fallback',
   STALE_INITIALIZATION_IGNORED: 'initialization.stale-completion-ignored',
   INITIALIZATION_AFTER_DISPOSE: 'initialization.after-dispose',
   VALIDATION_ERROR: 'validation.uncaptured-error',

@@ -5,7 +5,7 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["playwright.config.ts", "tests/**/*.ts", "vitest.config.ts"],
+  "include": ["playwright*.config.ts", "tests/**/*.ts", "vitest.config.ts"],
   "references": [
     { "path": "./packages/contracts" },
     { "path": "./packages/renderer-core" },
