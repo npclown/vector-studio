@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.1 validated; pull-request integration pending
+Status: P0.1 integrated; ready for P0.2
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -303,8 +303,9 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-08-27 | The P0.0 validation job became a strict required status check on protected `main`. | GitHub branch-protection API: `Static, unit, boundaries, and build`, strict mode enabled |
 | 2026-08-27 | P0.0 integrated into protected `main` through a squash merge. | PR #4: `https://github.com/npclown/vector-studio/pull/4`; merge commit `a3c1219` |
 | 2026-08-27 | P0.1 contracts, diagnostics, subscriptions, and resource accounting completed locally and submitted through PR #6. | `pnpm check`: 21 tests across 5 files; `pnpm build`; public-contract architecture-boundary test |
-| 2026-08-27 | P0.1 pull-request validation passed on GitHub's Windows runner. | PR #6 `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33074741520/job/98525882270` |
+| 2026-08-27 | P0.1 pull-request validation passed on GitHub's Windows runner. | PR #6 final `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33074926266/job/98526521203` |
+| 2026-08-27 | P0.1 integrated into protected `main` through a squash merge. | PR #6: `https://github.com/npclown/vector-studio/pull/6`; merge commit `607a5f6` |
 
 ## Gate outcome
 
-Current outcome: **P0.1 VALIDATED; INTEGRATION PENDING**. Renderer contracts, stable diagnostics, disposable subscriptions, deterministic clocks, resource accounting, and the required GitHub Actions job satisfy the P0.1 evidence gate. P0.2 has not started; P0.1 is not integrated until PR #6 merges.
+Current outcome: **P0.1 PASS; READY FOR P0.2**. Renderer contracts, stable diagnostics, disposable subscriptions, deterministic clocks, resource accounting, required GitHub Actions validation, and the protected-branch merge satisfy the P0.1 gate. P0.2 has not started.
