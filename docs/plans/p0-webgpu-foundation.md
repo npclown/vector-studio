@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.2 validated; pull-request integration pending
+Status: P0.2 integrated; ready for P0.3
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -314,8 +314,9 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-08-27 | P0.1 pull-request validation passed on GitHub's Windows runner. | PR #6 final `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33074926266/job/98526521203` |
 | 2026-08-27 | P0.1 integrated into protected `main` through a squash merge. | PR #6: `https://github.com/npclown/vector-studio/pull/6`; merge commit `607a5f6` |
 | 2026-08-27 | P0.2 WebGPU initialization and surface handling completed locally and submitted through PR #8. | `pnpm check`: 33 tests across 7 files; `pnpm test:browser`: Chrome and Edge 2/2; `pnpm build`; production dependency audit |
-| 2026-08-27 | P0.2 pull-request validation passed on GitHub's Windows runner. | PR #8 `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33076774032/job/98532894465` |
+| 2026-08-27 | P0.2 pull-request validation passed on GitHub's Windows runner. | PR #8 final `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33076963055/job/98533565510` |
+| 2026-08-27 | P0.2 integrated into protected `main` through a squash merge. | PR #8: `https://github.com/npclown/vector-studio/pull/8`; merge commit `3de7801` |
 
 ## Gate outcome
 
-Current outcome: **P0.2 VALIDATED; INTEGRATION PENDING**. Capability detection, adapter/device acquisition, canvas configuration, bounded DPR sizing, zero-area suspension, resize behavior, stable Chrome/Edge integration, and the required GitHub Actions job satisfy the P0.2 evidence gate. P0.3 has not started; P0.2 is not integrated until PR #8 merges.
+Current outcome: **P0.2 PASS; READY FOR P0.3**. Capability detection, adapter/device acquisition, canvas configuration, bounded DPR sizing, zero-area suspension, resize behavior, stable Chrome/Edge integration, required GitHub Actions validation, and the protected-branch merge satisfy the P0.2 gate. P0.3 has not started.
