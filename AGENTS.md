@@ -86,6 +86,41 @@ A pull request is ready for merge only when:
 - unresolved risks and intentionally deferred items are explicit;
 - no secrets, machine-local caches, or unrelated files are included.
 
+### Pull-request description format
+
+Every pull request created by an agent must use reviewable Markdown rather than compressing evidence into a paragraph. Use these required sections in this order:
+
+```markdown
+## Summary
+
+- Describe the outcome and why it is needed.
+- Keep each point independently scannable.
+
+## Scope
+
+State what is included and call out important exclusions or deferred work.
+
+## Validation
+
+- `exact command or check` — PASS: concrete result, count, or observation.
+- `another command or check` — PASS: concrete result.
+
+## Gate
+
+State which execution-plan checkpoint or acceptance criteria this PR satisfies, and what remains before the next gate.
+```
+
+Rules:
+
+- `Summary`, `Scope`, `Validation`, and `Gate` are required `##` headings.
+- `Summary` and `Validation` use bullet lists.
+- Validation entries name the actual command or check and its result. Do not write only “validated”, “tests passed”, or similarly unauditable claims.
+- If a required check was not run, say `NOT RUN` and explain why; do not omit or imply success.
+- Add `## Benchmark` only when the work includes benchmark execution or performance claims. Include scenario/version, environment, command, metrics, thresholds, and result-record links.
+- Add `## Design Decisions` only when the PR introduces or changes an important architecture decision. Summarize the decision, consequences, and links to the owning architecture or decision record.
+- Do not add empty, irrelevant, or speculative sections merely to fill a template.
+- Prefer creating the PR body from a Markdown file or another method that preserves real line breaks and lists. Do not pass a compressed one-paragraph body when using GitHub CLI.
+
 ## Change workflow
 
 1. Identify the owning source-of-truth document.
