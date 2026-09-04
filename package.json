@@ -19,7 +19,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "test:browser": "playwright test --config playwright.config.ts",
-    "test:gpu": "node tooling/pending-command.mjs test:gpu P0.4",
+    "test:gpu": "playwright test --config playwright.gpu.config.ts",
     "test:unit": "vitest run",
     "typecheck": "tsc --build"
   },

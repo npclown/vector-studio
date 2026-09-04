@@ -1,0 +1,218 @@
+{
+  "timestampUtc": "2026-09-04T05:04:57.626Z",
+  "command": "pnpm test:gpu",
+  "headed": true,
+  "operatingSystem": "win32 10.0.26200 x64",
+  "browser": {
+    "channel": "chrome",
+    "version": "152.0.7977.76"
+  },
+  "adapter": {
+    "architecture": "turing",
+    "description": "",
+    "vendor": "nvidia"
+  },
+  "before": {
+    "lifecycle": "ready",
+    "generation": 1,
+    "mode": "on-demand",
+    "invalidationsRequested": 1,
+    "framesSubmitted": 1,
+    "framesPresented": 1,
+    "pendingFrameCallbacks": 0,
+    "recoveryAttempts": 0,
+    "staleGenerationSubmissions": 0,
+    "diagnosticListeners": 1,
+    "deviceListeners": 2,
+    "shaderModulesCreated": 1,
+    "pipelinesCreated": 1,
+    "resources": {
+      "created": 4,
+      "live": 4,
+      "liveBytes": 3686460,
+      "peakLiveBytes": 3686460,
+      "byCategory": {
+        "buffer": {
+          "created": 1,
+          "live": 1,
+          "liveBytes": 60,
+          "peakLiveBytes": 60
+        },
+        "texture": {
+          "created": 1,
+          "live": 1,
+          "liveBytes": 3686400,
+          "peakLiveBytes": 3686400
+        },
+        "texture-view": {
+          "created": 0,
+          "live": 0,
+          "liveBytes": 0,
+          "peakLiveBytes": 0
+        },
+        "sampler": {
+          "created": 0,
+          "live": 0,
+          "liveBytes": 0,
+          "peakLiveBytes": 0
+        },
+        "bind-group": {
+          "created": 0,
+          "live": 0,
+          "liveBytes": 0,
+          "peakLiveBytes": 0
+        },
+        "bind-group-layout": {
+          "created": 0,
+          "live": 0,
+          "liveBytes": 0,
+          "peakLiveBytes": 0
+        },
+        "pipeline-layout": {
+          "created": 0,
+          "live": 0,
+          "liveBytes": 0,
+          "peakLiveBytes": 0
+        },
+        "render-pipeline": {
+          "created": 1,
+          "live": 1,
+          "liveBytes": 0,
+          "peakLiveBytes": 0
+        },
+        "shader-module": {
+          "created": 1,
+          "live": 1,
+          "liveBytes": 0,
+          "peakLiveBytes": 0
+        }
+      }
+    }
+  },
+  "recovered": {
+    "lifecycle": "ready",
+    "generation": 2,
+    "mode": "on-demand",
+    "invalidationsRequested": 2,
+    "framesSubmitted": 2,
+    "framesPresented": 2,
+    "pendingFrameCallbacks": 0,
+    "recoveryAttempts": 1,
+    "staleGenerationSubmissions": 0,
+    "diagnosticListeners": 1,
+    "deviceListeners": 2,
+    "shaderModulesCreated": 2,
+    "pipelinesCreated": 2,
+    "resources": {
+      "created": 8,
+      "live": 4,
+      "liveBytes": 3686460,
+      "peakLiveBytes": 3686460,
+      "byCategory": {
+        "buffer": {
+          "created": 2,
+          "live": 1,
+          "liveBytes": 60,
+          "peakLiveBytes": 60
+        },
+        "texture": {
+          "created": 2,
+          "live": 1,
+          "liveBytes": 3686400,
+          "peakLiveBytes": 3686400
+        },
+        "texture-view": {
+          "created": 0,
+          "live": 0,
+          "liveBytes": 0,
+          "peakLiveBytes": 0
+        },
+        "sampler": {
+          "created": 0,
+          "live": 0,
+          "liveBytes": 0,
+          "peakLiveBytes": 0
+        },
+        "bind-group": {
+          "created": 0,
+          "live": 0,
+          "liveBytes": 0,
+          "peakLiveBytes": 0
+        },
+        "bind-group-layout": {
+          "created": 0,
+          "live": 0,
+          "liveBytes": 0,
+          "peakLiveBytes": 0
+        },
+        "pipeline-layout": {
+          "created": 0,
+          "live": 0,
+          "liveBytes": 0,
+          "peakLiveBytes": 0
+        },
+        "render-pipeline": {
+          "created": 2,
+          "live": 1,
+          "liveBytes": 0,
+          "peakLiveBytes": 0
+        },
+        "shader-module": {
+          "created": 2,
+          "live": 1,
+          "liveBytes": 0,
+          "peakLiveBytes": 0
+        }
+      }
+    }
+  },
+  "observedDiagnostics": [
+    {
+      "code": "validation.uncaptured-error",
+      "message": "An uncaptured WebGPU device error occurred.",
+      "severity": "error",
+      "generation": 1,
+      "context": {
+        "errorType": "validation",
+        "errorMessage": "Source and destination are the same buffer ([Buffer \"vector-studio/test-overlapping-copy-buffer\"]).\n - While encoding [CommandEncoder \"vector-studio/test-invalid-command-encoder\"].CopyBufferToBuffer([Buffer \"vector-studio/test-overlapping-copy-buffer\"], 0, [Buffer \"vector-studio/test-overlapping-copy-buffer\"], 0, 4).\n - While finishing [CommandEncoder \"vector-studio/test-invalid-command-encoder\"].\n"
+      },
+      "sequence": 0,
+      "timestampMs": 1788498297527
+    },
+    {
+      "code": "device-loss.detected",
+      "message": "The active WebGPU device was lost.",
+      "severity": "error",
+      "generation": 1,
+      "context": {
+        "reason": "destroyed",
+        "message": "Device was destroyed."
+      },
+      "sequence": 1,
+      "timestampMs": 1788498297543
+    },
+    {
+      "code": "recovery.started",
+      "message": "WebGPU device recovery started.",
+      "severity": "info",
+      "generation": 2,
+      "context": {
+        "lostGeneration": 1
+      },
+      "sequence": 2,
+      "timestampMs": 1788498297543
+    },
+    {
+      "code": "recovery.succeeded",
+      "message": "WebGPU device recovery succeeded.",
+      "severity": "info",
+      "generation": 2,
+      "context": {
+        "lostGeneration": 1
+      },
+      "sequence": 3,
+      "timestampMs": 1788498297591
+    }
+  ],
+  "pageErrors": []
+}

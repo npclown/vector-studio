@@ -1,12 +1,22 @@
 export interface PlaygroundStatistics {
+  readonly lifecycle: string;
+  readonly generation: number;
   readonly framesSubmitted: number;
   readonly framesPresented: number;
   readonly invalidationsRequested: number;
   readonly pendingFrameCallbacks: number;
+  readonly recoveryAttempts: number;
+  readonly staleGenerationSubmissions: number;
+  readonly diagnosticListeners: number;
+  readonly deviceListeners: number;
   readonly pipelinesCreated: number;
   readonly shaderModulesCreated: number;
   readonly mode: 'on-demand' | 'continuous';
-  readonly resources: { readonly peakLiveBytes: number };
+  readonly resources: {
+    readonly live: number;
+    readonly liveBytes: number;
+    readonly peakLiveBytes: number;
+  };
 }
 
 export interface PlaygroundSnapshot {
@@ -19,7 +29,12 @@ export interface PlaygroundSnapshot {
     };
     readonly diagnostic?: { readonly code: string };
   };
-  readonly diagnostics: readonly { readonly severity?: string }[];
+  readonly diagnostics: readonly {
+    readonly code?: string;
+    readonly severity?: string;
+    readonly generation?: number;
+    readonly context?: Record<string, unknown>;
+  }[];
   readonly presentationFormat?: string;
   readonly state: string;
   readonly surfaceRevision: number;
@@ -35,6 +50,7 @@ declare global {
     __p0LongTasks: number[];
     __vectorStudioP0: {
       dispose(): void;
+      destroyDeviceForTesting(): void;
       getFrameMeasurements(): {
         readonly encodeAndSubmitMs: readonly number[];
         readonly frameIntervalsMs: readonly number[];
@@ -44,6 +60,7 @@ declare global {
       resize(width: number, height: number, devicePixelRatio: number): unknown;
       setMode(mode: 'on-demand' | 'continuous'): void;
       snapshot(): PlaygroundSnapshot;
+      triggerValidationErrorForTesting(): void;
     };
   }
 }

@@ -4,6 +4,8 @@ import {
   type WebGpuAdapterPort,
   type WebGpuCanvasContextPort,
   type WebGpuDevicePort,
+  type WebGpuDeviceError,
+  type WebGpuDeviceLoss,
   type WebGpuFoundationScenePort,
   type WebGpuPlatform,
   type WebGpuSurface,
@@ -56,6 +58,81 @@ function surface(canvas = fakeCanvas()): WebGpuSurface {
   return { canvas, cssSize: { width: 640, height: 360 }, devicePixelRatio: 1 };
 }
 
+interface FakeDeviceController {
+  readonly destroy: ReturnType<typeof vi.fn>;
+  readonly device: WebGpuDevicePort;
+  readonly render: ReturnType<typeof vi.fn>;
+  readonly scene: WebGpuFoundationScenePort;
+  readonly sceneDispose: ReturnType<typeof vi.fn>;
+  emitError(error: WebGpuDeviceError): void;
+  lose(loss?: WebGpuDeviceLoss): void;
+  listenerCount(): number;
+}
+
+function fakeDeviceController(): FakeDeviceController {
+  const render = vi.fn();
+  const sceneDispose = vi.fn();
+  const loss = deferred<WebGpuDeviceLoss>();
+  const destroy = vi.fn(() =>
+    loss.resolve({ reason: 'destroyed', message: 'test device destroyed' }),
+  );
+  const errorListeners = new Set<(error: WebGpuDeviceError) => void>();
+  let attachmentBytes = 0;
+  const scene: WebGpuFoundationScenePort = {
+    sampleCount: 4,
+    shaderModulesCreated: 1,
+    pipelinesCreated: 1,
+    staticResources: [
+      { id: 'foundation-vertices', descriptor: { category: 'buffer', size: 60 } },
+      { id: 'foundation-shader', descriptor: { category: 'shader-module' } },
+      { id: 'foundation-pipeline', descriptor: { category: 'render-pipeline' } },
+    ],
+    get attachmentBytes() {
+      return attachmentBytes;
+    },
+    resize: (size) => {
+      attachmentBytes = size.width * size.height * 4 * 4;
+    },
+    render,
+    dispose: sceneDispose,
+  };
+  const device: WebGpuDevicePort = {
+    features: ['timestamp-query'],
+    limits: { maxTextureDimension2D: 4096, maxBufferSize: 268_435_456 },
+    lost: loss.promise,
+    createFoundationScene: () => Promise.resolve({ scene, fellBackFrom4x: false }),
+    subscribeErrors: (listener) => {
+      let disposed = false;
+      errorListeners.add(listener);
+      return {
+        get disposed() {
+          return disposed;
+        },
+        dispose: () => {
+          if (disposed) return;
+          disposed = true;
+          errorListeners.delete(listener);
+        },
+      };
+    },
+    triggerValidationErrorForTesting: vi.fn(),
+    destroy,
+  };
+  return {
+    destroy,
+    device,
+    render,
+    scene,
+    sceneDispose,
+    emitError: (error) => {
+      for (const listener of errorListeners) listener(error);
+    },
+    lose: (deviceLoss = { reason: 'destroyed', message: 'test device loss' }) =>
+      loss.resolve(deviceLoss),
+    listenerCount: () => errorListeners.size,
+  };
+}
+
 function fixture(): {
   adapter: WebGpuAdapterPort;
   configure: ReturnType<typeof vi.fn>;
@@ -68,29 +145,10 @@ function fixture(): {
   unconfigure: ReturnType<typeof vi.fn>;
   scene: WebGpuFoundationScenePort;
   render: ReturnType<typeof vi.fn>;
+  controller: FakeDeviceController;
 } {
-  const destroy = vi.fn();
-  const render = vi.fn();
-  let attachmentBytes = 0;
-  const scene: WebGpuFoundationScenePort = {
-    sampleCount: 4,
-    shaderModulesCreated: 1,
-    pipelinesCreated: 1,
-    get attachmentBytes() {
-      return attachmentBytes;
-    },
-    resize: (size) => {
-      attachmentBytes = size.width * size.height * 4 * 4;
-    },
-    render,
-    dispose: vi.fn(),
-  };
-  const device: WebGpuDevicePort = {
-    features: ['timestamp-query'],
-    limits: { maxTextureDimension2D: 4096, maxBufferSize: 268_435_456 },
-    createFoundationScene: () => Promise.resolve({ scene, fellBackFrom4x: false }),
-    destroy,
-  };
+  const controller = fakeDeviceController();
+  const { destroy, device, render, scene } = controller;
   const requestDevice = vi.fn(() => Promise.resolve(device));
   const adapter: WebGpuAdapterPort = {
     info: { vendor: 'test-vendor', architecture: 'test-architecture' },
@@ -119,6 +177,7 @@ function fixture(): {
     unconfigure,
     scene,
     render,
+    controller,
   };
 }
 
@@ -309,7 +368,15 @@ describe('WebGpuBackend lifecycle and surface', () => {
     expect(configure).toHaveBeenCalledOnce();
     expect(requestAdapter).toHaveBeenCalledOnce();
     expect(requestDevice).toHaveBeenCalledOnce();
-    expect(backend.getStatistics().resources.live).toBe(2);
+    expect(backend.getStatistics().resources).toMatchObject({
+      live: 3,
+      byCategory: {
+        buffer: { live: 1 },
+        texture: { created: 2, live: 0 },
+        'shader-module': { live: 1 },
+        'render-pipeline': { live: 1 },
+      },
+    });
   });
 
   it('coalesces backend invalidations and leaves pipeline creation outside frame submission', async () => {
@@ -381,5 +448,175 @@ describe('WebGpuBackend lifecycle and surface', () => {
       pipelinesCreated: 1,
       shaderModulesCreated: 1,
     });
+  });
+
+  it('maps uncaptured validation and out-of-memory errors with generation context', async () => {
+    const { controller, platform } = fixture();
+    const diagnostics: RendererDiagnostic[] = [];
+    const backend = new WebGpuBackend({ platform });
+    backend.subscribeDiagnostics((diagnostic) => diagnostics.push(diagnostic));
+    await backend.initialize(surface());
+
+    controller.emitError({ type: 'validation', message: 'invalid binding' });
+    controller.emitError({ type: 'out-of-memory', message: 'allocation rejected' });
+    controller.emitError({ type: 'internal', message: 'driver failure' });
+
+    expect(diagnostics.slice(-3)).toMatchObject([
+      {
+        code: DIAGNOSTIC_CODES.VALIDATION_ERROR,
+        generation: 1,
+        context: { errorType: 'validation', errorMessage: 'invalid binding' },
+      },
+      {
+        code: DIAGNOSTIC_CODES.OUT_OF_MEMORY,
+        generation: 1,
+        context: { errorType: 'out-of-memory', errorMessage: 'allocation rejected' },
+      },
+      {
+        code: DIAGNOSTIC_CODES.RENDER_SUBMISSION_FAILED,
+        generation: 1,
+        context: { errorType: 'internal', errorMessage: 'driver failure' },
+      },
+    ]);
+  });
+
+  it('pauses the lost generation and performs one ordered recovery from CPU descriptors', async () => {
+    const first = fakeDeviceController();
+    const second = fakeDeviceController();
+    const recoveredDevice = deferred<WebGpuDevicePort>();
+    const configure = vi.fn();
+    const unconfigure = vi.fn();
+    const context: WebGpuCanvasContextPort = { configure, unconfigure };
+    const requestAdapter = vi
+      .fn<() => Promise<WebGpuAdapterPort | null>>()
+      .mockResolvedValueOnce({
+        info: { vendor: 'first' },
+        requestDevice: () => Promise.resolve(first.device),
+      })
+      .mockResolvedValueOnce({
+        info: { vendor: 'second' },
+        requestDevice: () => recoveredDevice.promise,
+      });
+    const platform: WebGpuPlatform = {
+      secureContext: true,
+      apiAvailable: true,
+      requestAdapter,
+      getCanvasContext: () => context,
+      getPreferredCanvasFormat: () => 'bgra8unorm',
+    };
+    const animationFrameClock = new ManualAnimationFrameClock();
+    const diagnostics: RendererDiagnostic[] = [];
+    const backend = new WebGpuBackend({ platform, animationFrameClock });
+    backend.subscribeDiagnostics((diagnostic) => diagnostics.push(diagnostic));
+    await backend.initialize(surface());
+    animationFrameClock.flush();
+    const presentedBeforeLoss = backend.getStatistics().framesPresented;
+
+    first.lose({ reason: 'destroyed', message: 'deliberate test loss' });
+    await vi.waitFor(() => expect(backend.getStatistics().recoveryAttempts).toBe(1));
+    const sharedRecovery = backend.initialize(surface());
+    expect(backend.initialize(surface())).toBe(sharedRecovery);
+    expect(requestAdapter).toHaveBeenCalledTimes(2);
+    recoveredDevice.resolve(second.device);
+    await expect(sharedRecovery).resolves.toMatchObject({ supported: true });
+    await vi.waitFor(() => expect(backend.state).toBe('ready'));
+
+    expect(backend.generation).toBe(2);
+    expect(requestAdapter).toHaveBeenCalledTimes(2);
+    expect(configure).toHaveBeenCalledTimes(2);
+    expect(unconfigure).toHaveBeenCalledOnce();
+    expect(first.sceneDispose).toHaveBeenCalledOnce();
+    expect(first.listenerCount()).toBe(0);
+    expect(second.listenerCount()).toBe(1);
+    expect(backend.getStatistics()).toMatchObject({
+      recoveryAttempts: 1,
+      staleGenerationSubmissions: 0,
+      pendingFrameCallbacks: 1,
+      resources: { live: 4 },
+    });
+    const recoveryCodes: readonly string[] = [
+      DIAGNOSTIC_CODES.DEVICE_LOST,
+      DIAGNOSTIC_CODES.RECOVERY_STARTED,
+      DIAGNOSTIC_CODES.RECOVERY_SUCCEEDED,
+    ];
+    expect(
+      diagnostics
+        .filter((diagnostic) => recoveryCodes.includes(diagnostic.code))
+        .map(({ code, generation }) => ({ code, generation })),
+    ).toEqual([
+      { code: DIAGNOSTIC_CODES.DEVICE_LOST, generation: 1 },
+      { code: DIAGNOSTIC_CODES.RECOVERY_STARTED, generation: 2 },
+      { code: DIAGNOSTIC_CODES.RECOVERY_SUCCEEDED, generation: 2 },
+    ]);
+
+    animationFrameClock.flush(32);
+    expect(backend.getStatistics().framesPresented).toBe(presentedBeforeLoss + 1);
+    expect(second.render).toHaveBeenCalledOnce();
+  });
+
+  it('attempts recovery only once and becomes failed when reacquisition fails', async () => {
+    const { adapter, controller, platform } = fixture();
+    let adapterRequest = 0;
+    const requestAdapter = vi.fn(() => Promise.resolve(adapterRequest++ === 0 ? adapter : null));
+    const diagnostics: RendererDiagnostic[] = [];
+    const backend = new WebGpuBackend({ platform: { ...platform, requestAdapter } });
+    backend.subscribeDiagnostics((diagnostic) => diagnostics.push(diagnostic));
+    await backend.initialize(surface());
+
+    controller.lose();
+    await vi.waitFor(() => expect(backend.getStatistics().recoveryAttempts).toBe(1));
+    await vi.waitFor(() => expect(backend.state).toBe('failed'));
+
+    expect(requestAdapter).toHaveBeenCalledTimes(2);
+    expect(backend.getStatistics()).toMatchObject({ recoveryAttempts: 1, resources: { live: 0 } });
+    expect(
+      diagnostics.filter(({ code }) => code === DIAGNOSTIC_CODES.RECOVERY_FAILED),
+    ).toHaveLength(1);
+  });
+
+  it('ignores loss completion after terminal disposal', async () => {
+    const { controller, platform, requestAdapter } = fixture();
+    const backend = new WebGpuBackend({ platform });
+    await backend.initialize(surface());
+    backend.dispose();
+    controller.lose();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(backend.state).toBe('disposed');
+    expect(requestAdapter).toHaveBeenCalledOnce();
+    expect(backend.getStatistics()).toMatchObject({
+      recoveryAttempts: 0,
+      resources: { live: 0 },
+      diagnosticListeners: 0,
+      deviceListeners: 0,
+      pendingFrameCallbacks: 0,
+    });
+  });
+
+  it('returns resources and listeners to zero across 25 lifecycle cycles', async () => {
+    for (let cycle = 0; cycle < 25; cycle += 1) {
+      const { controller, platform } = fixture();
+      const animationFrameClock = new ManualAnimationFrameClock();
+      const backend = new WebGpuBackend({ platform, animationFrameClock });
+      const subscription = backend.subscribeDiagnostics(() => undefined);
+      await backend.initialize(surface());
+      animationFrameClock.flush();
+      expect(backend.getStatistics()).toMatchObject({
+        resources: { live: 4 },
+        diagnosticListeners: 1,
+        deviceListeners: 2,
+      });
+
+      backend.dispose();
+      expect(subscription.disposed).toBe(true);
+      expect(controller.listenerCount()).toBe(0);
+      expect(backend.getStatistics()).toMatchObject({
+        resources: { live: 0, liveBytes: 0 },
+        diagnosticListeners: 0,
+        deviceListeners: 0,
+        pendingFrameCallbacks: 0,
+      });
+    }
   });
 });

@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.3 integrated; ready for P0.4
+Status: P0.4 implementation complete; integration validation pending
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -164,15 +164,41 @@ P0.3 implementation evidence:
 
 ### P0.4 Resource lifecycle and recovery
 
-- [ ] Track owned buffers, textures, shader modules, pipelines, and size-dependent attachments.
-- [ ] Replace and release size-dependent attachments on resize.
-- [ ] Capture uncaptured GPU validation and out-of-memory errors as structured diagnostics.
-- [ ] Observe device loss and prevent work submission to the lost generation.
-- [ ] Simulate loss by deliberately destroying the device in a test-only control.
-- [ ] Attempt one recovery and rebuild the foundation scene from CPU descriptors.
-- [ ] Release all tracked resources and listeners on dispose.
+Execution details fixed before implementation:
+
+- A device-generation token is captured by every device listener and render submission. Loss from a stale or disposed generation is ignored and cannot start recovery.
+- Current-generation loss pauses animation-frame scheduling before GPU resources are released. Diagnostics are ordered as `device-loss.detected` on the lost generation, `recovery.started` on the next generation, then exactly one of `recovery.succeeded` or `recovery.failed` on that next generation.
+- One loss event starts at most one adapter/device recovery attempt. Success reconfigures the existing canvas context, rebuilds the foundation scene from CPU-owned surface descriptors, resumes the prior scheduler mode, and presents a recovery frame. Failure is terminal for that backend instance until disposal.
+- Uncaptured validation and out-of-memory errors map to their existing stable diagnostic codes with the current backend generation, normalized error type, and message. Unknown GPU errors use the existing render/allocation failure paths rather than inventing a silent category.
+- Resource accounting represents live engine-owned resources. Size-independent shader/pipeline records are released with the lost generation; the multisample attachment is released before resize replacement. Dispose removes device listeners, releases every tracked resource, cancels pending animation callbacks, and clears diagnostic subscriptions.
+- Deliberate validation-error and device-destruction controls exist only on the concrete WebGPU backend/playground test surface. They are not added to renderer contracts or durable editor APIs.
+- P0.4 implements the headed `test:gpu` command for Chrome and Edge. The generalized 25-cycle benchmark record and all-scenario `benchmark:p0` command remain P0.5/P0.6 work, while deterministic 25-cycle resource/listener assertions are required now.
+
+- [x] Track owned buffers, textures, shader modules, pipelines, and size-dependent attachments.
+- [x] Replace and release size-dependent attachments on resize.
+- [x] Capture uncaptured GPU validation and out-of-memory errors as structured diagnostics.
+- [x] Observe device loss and prevent work submission to the lost generation.
+- [x] Simulate loss by deliberately destroying the device in a test-only control.
+- [x] Attempt one recovery and rebuild the foundation scene from CPU descriptors.
+- [x] Release all tracked resources and listeners on dispose.
 
 Evidence: lifecycle contract suite, resource-counter assertions, ordered loss/recovery diagnostics, and headed hardware recovery run.
+
+Validation method:
+
+- `pnpm check` covers deterministic listener cleanup, validation/out-of-memory mapping, resize replacement, stale-loss rejection, single-attempt recovery success/failure, generation changes, and 25 lifecycle cycles.
+- `pnpm test:browser` retains the normal Chrome/Edge initialization and rendering surface.
+- `pnpm test:gpu` runs headed Chrome and Edge, triggers one uncaptured validation error, destroys the active device, asserts ordered diagnostics and one generation increment, then waits for a post-recovery presentation.
+- `pnpm build` and the dependency-boundary audit verify that concrete WebGPU types and test controls do not escape the backend boundary.
+
+P0.4 implementation evidence:
+
+- `pnpm check` passes formatting, ESLint, TypeScript project-reference checking, 45 tests across 8 Vitest files, and dependency-boundary validation. The lifecycle suite covers validation/out-of-memory/internal error mapping, ordered recovery success and failure, concurrent `initialize` sharing the in-flight recovery, stale loss after disposal, attachment replacement, scheduler pause/resume, and 25 initialize/render/dispose cycles.
+- The 25-cycle test records four live foundation resources while ready (vertex buffer, multisample texture, shader module, and render pipeline), then zero live resources, zero bytes, zero diagnostic/device listeners, and zero pending animation callbacks after every disposal.
+- `pnpm build` produces all package and playground production outputs. The foundation triangle now uses an owned 60-byte vertex buffer so buffer lifetime participates in real backend accounting without adding a runtime dependency.
+- `pnpm test:browser` passes 6/6 normal WebGPU integration tests in Chrome and Edge after the lifecycle changes.
+- `pnpm test:gpu` passes 2/2 headed hardware tests on Windows `10.0.26200`, NVIDIA/Turing, Chrome `152.0.7977.76`, and Edge `152.0.4191.62`. Each browser surfaces one deliberately uncaptured native validation error, reports loss/start/success diagnostics for generations 1/2/2, performs one recovery attempt, rebuilds four live resources, and presents from generation 2 with no page errors.
+- Machine-readable headed-run records and post-recovery screenshots are committed under `docs/evidence/p0.4/recovery-{chrome,edge}.{json,png}`. The generalized `p0/lifecycle-recovery/v1` benchmark record remains assigned to P0.5/P0.6 as planned.
 
 ### P0.5 Playground and measurement harness
 
@@ -328,7 +354,8 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-08-27 | P0.3 render scheduling, foundation scene, headed visual evidence, and fixed-scenario benchmark implementation completed locally. | `pnpm check`: 39 tests across 8 files; `pnpm build`; headed Chrome/Edge 6/6; production P0.3 benchmark 2/2 with five repetitions per scenario/browser |
 | 2026-08-27 | P0.3 pull-request validation passed on GitHub's Windows runner. | PR #10 final `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33081358041/job/98549136759` |
 | 2026-08-27 | P0.3 integrated into protected `main` through a squash merge. | PR #10: `https://github.com/npclown/vector-studio/pull/10`; merge commit `b9285b9` |
+| 2026-09-04 | P0.4 resource lifecycle, structured GPU errors, generation-safe device-loss recovery, and headed hardware evidence completed locally. | `pnpm check`: 45 tests across 8 files; `pnpm build`; browser 6/6; headed GPU Chrome/Edge 2/2; `docs/evidence/p0.4/` |
 
 ## Gate outcome
 
-Current outcome: **P0.3 PASS; READY FOR P0.4**. Scheduling, deterministic foundation rendering, explicit four-to-one-sample fallback, headed Chrome/Edge visual validation, P0 steady/idle thresholds, required GitHub Actions validation, and the protected-branch merge satisfy the P0.3 gate. Resource lifecycle, device-error handling, loss, and recovery remain owned by P0.4.
+Current outcome: **P0.4 IMPLEMENTATION PASS; INTEGRATION PENDING**. Deterministic lifecycle tests and headed Chrome/Edge hardware evidence satisfy the P0.4 implementation checkpoint for resource ownership, GPU diagnostics, single-attempt generation-safe recovery, rebuilt presentation, and disposal cleanup. The checkpoint becomes integrated only after required GitHub Actions validation and protected-main merge; the generalized playground and complete P0 benchmark harness remain P0.5 work.

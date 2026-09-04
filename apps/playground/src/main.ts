@@ -35,12 +35,14 @@ const api = Object.freeze({
     statistics: backend.getStatistics(),
   }),
   dispose: () => backend.dispose(),
+  destroyDeviceForTesting: () => backend.destroyDeviceForTesting(),
   getFrameMeasurements: () => backend.getFrameMeasurements(),
   invalidate: () => backend.invalidate({ reason: 'scene' }),
   resetFrameMeasurements: () => backend.resetFrameMeasurements(),
   resize: (width: number, height: number, devicePixelRatio: number) =>
     backend.resize({ width, height }, devicePixelRatio),
   setMode: (mode: 'on-demand' | 'continuous') => backend.setMode(mode),
+  triggerValidationErrorForTesting: () => backend.triggerValidationErrorForTesting(),
 });
 
 Object.assign(globalThis, { __vectorStudioP0: api });

@@ -88,4 +88,22 @@ describe('FrameScheduler', () => {
     expect(clock.cancelled).toEqual([1]);
     expect(scheduler.pendingCallbacks).toBe(0);
   });
+
+  it('pauses pending work and resumes the prior continuous mode', () => {
+    const clock = new ManualAnimationFrameClock();
+    const render = vi.fn();
+    const scheduler = new FrameScheduler({ clock, render });
+
+    scheduler.setMode('continuous');
+    expect(scheduler.pendingCallbacks).toBe(1);
+    scheduler.setActive(false);
+    expect(scheduler.pendingCallbacks).toBe(0);
+    clock.flush();
+    expect(render).not.toHaveBeenCalled();
+
+    scheduler.setActive(true);
+    expect(scheduler.pendingCallbacks).toBe(1);
+    clock.flush(16);
+    expect(render).toHaveBeenCalledOnce();
+  });
 });

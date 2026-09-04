@@ -34,6 +34,7 @@ export class FrameScheduler {
   readonly #clock: AnimationFrameClock;
   readonly #render: (timestampMs: number) => void;
   #disposed = false;
+  #active = true;
   #mode: RendererMode = 'on-demand';
   #pendingHandle: number | undefined;
 
@@ -51,7 +52,20 @@ export class FrameScheduler {
   }
 
   invalidate(): void {
-    if (!this.#disposed) {
+    if (!this.#disposed && this.#active) {
+      this.#schedule();
+    }
+  }
+
+  setActive(active: boolean): void {
+    if (this.#disposed || active === this.#active) {
+      return;
+    }
+    this.#active = active;
+    if (!active && this.#pendingHandle !== undefined) {
+      this.#clock.cancel(this.#pendingHandle);
+      this.#pendingHandle = undefined;
+    } else if (active && this.#mode === 'continuous') {
       this.#schedule();
     }
   }
@@ -84,11 +98,11 @@ export class FrameScheduler {
     }
     this.#pendingHandle = this.#clock.request((timestampMs) => {
       this.#pendingHandle = undefined;
-      if (this.#disposed) {
+      if (this.#disposed || !this.#active) {
         return;
       }
       this.#render(timestampMs);
-      if (this.#mode === 'continuous') {
+      if (this.#active && this.#mode === 'continuous') {
         this.#schedule();
       }
     });
