@@ -1,4 +1,9 @@
-import type { PixelSize, RendererAdapterInfo } from '@vector-studio/contracts';
+import type {
+  Disposable,
+  PixelSize,
+  RendererAdapterInfo,
+  ResourceDescriptor,
+} from '@vector-studio/contracts';
 
 const FOUNDATION_SHADER = /* wgsl */ `
 struct VertexOutput {
@@ -7,20 +12,10 @@ struct VertexOutput {
 };
 
 @vertex
-fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
-  var positions = array<vec2f, 3>(
-    vec2f(0.0, 0.65),
-    vec2f(-0.6, -0.55),
-    vec2f(0.6, -0.55),
-  );
-  var colors = array<vec3f, 3>(
-    vec3f(0.35, 0.75, 1.0),
-    vec3f(0.68, 0.35, 1.0),
-    vec3f(1.0, 0.42, 0.55),
-  );
+fn vertexMain(@location(0) position: vec2f, @location(1) color: vec3f) -> VertexOutput {
   var output: VertexOutput;
-  output.position = vec4f(positions[vertexIndex], 0.0, 1.0);
-  output.color = colors[vertexIndex];
+  output.position = vec4f(position, 0.0, 1.0);
+  output.color = color;
   return output;
 }
 
@@ -31,12 +26,32 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
 `;
 
 const RENDER_ATTACHMENT_USAGE = 0x10;
+const VERTEX_BUFFER_USAGE = 0x20;
+const COPY_SOURCE_AND_DESTINATION_USAGE = 0x0c;
+
+export type WebGpuDeviceErrorType = 'validation' | 'out-of-memory' | 'internal' | 'unknown';
+
+export interface WebGpuDeviceError {
+  readonly type: WebGpuDeviceErrorType;
+  readonly message: string;
+}
+
+export interface WebGpuDeviceLoss {
+  readonly reason: string;
+  readonly message: string;
+}
+
+export interface WebGpuTrackedResource {
+  readonly id: string;
+  readonly descriptor: ResourceDescriptor;
+}
 
 export interface WebGpuFoundationScenePort {
   readonly sampleCount: 1 | 4;
   readonly shaderModulesCreated: number;
   readonly pipelinesCreated: number;
   readonly attachmentBytes: number;
+  readonly staticResources: readonly WebGpuTrackedResource[];
   resize(size: PixelSize): void;
   render(context: WebGpuCanvasContextPort): void;
   dispose(): void;
@@ -50,7 +65,10 @@ export interface WebGpuFoundationSceneResult {
 export interface WebGpuDevicePort {
   readonly features: readonly string[];
   readonly limits: Readonly<Record<string, number>>;
+  readonly lost: Promise<WebGpuDeviceLoss>;
   createFoundationScene(format: string): Promise<WebGpuFoundationSceneResult>;
+  subscribeErrors(listener: (error: WebGpuDeviceError) => void): Disposable;
+  triggerValidationErrorForTesting(): void;
   destroy(): void;
 }
 
@@ -97,13 +115,28 @@ function collectLimits(limits: GPUSupportedLimits): Readonly<Record<string, numb
 class BrowserDevicePort implements WebGpuDevicePort {
   readonly features: readonly string[];
   readonly limits: Readonly<Record<string, number>>;
+  readonly lost: Promise<WebGpuDeviceLoss>;
 
   constructor(readonly native: GPUDevice) {
     this.features = Object.freeze([...native.features].sort());
     this.limits = collectLimits(native.limits);
+    this.lost = native.lost.then(({ message, reason }) =>
+      Object.freeze({ message, reason: String(reason) }),
+    );
   }
 
   async createFoundationScene(format: string): Promise<WebGpuFoundationSceneResult> {
+    const vertices = new Float32Array([
+      0, 0.65, 0.35, 0.75, 1, -0.6, -0.55, 0.68, 0.35, 1, 0.6, -0.55, 1, 0.42, 0.55,
+    ]);
+    const vertexBuffer = this.native.createBuffer({
+      label: 'vector-studio/foundation-vertices',
+      size: vertices.byteLength,
+      usage: VERTEX_BUFFER_USAGE,
+      mappedAtCreation: true,
+    });
+    new Float32Array(vertexBuffer.getMappedRange()).set(vertices);
+    vertexBuffer.unmap();
     const shader = this.native.createShaderModule({
       label: 'vector-studio/foundation-shader',
       code: FOUNDATION_SHADER,
@@ -112,7 +145,19 @@ class BrowserDevicePort implements WebGpuDevicePort {
       this.native.createRenderPipelineAsync({
         label: `vector-studio/foundation-pipeline-${sampleCount}x`,
         layout: 'auto',
-        vertex: { module: shader, entryPoint: 'vertexMain' },
+        vertex: {
+          module: shader,
+          entryPoint: 'vertexMain',
+          buffers: [
+            {
+              arrayStride: 20,
+              attributes: [
+                { shaderLocation: 0, offset: 0, format: 'float32x2' },
+                { shaderLocation: 1, offset: 8, format: 'float32x3' },
+              ],
+            },
+          ],
+        },
         fragment: {
           module: shader,
           entryPoint: 'fragmentMain',
@@ -125,16 +170,79 @@ class BrowserDevicePort implements WebGpuDevicePort {
     try {
       const pipeline = await createPipeline(4);
       return {
-        scene: new BrowserFoundationScene(this.native, pipeline, format, 4, 1),
+        scene: new BrowserFoundationScene(
+          this.native,
+          pipeline,
+          vertexBuffer,
+          vertices.byteLength,
+          format,
+          4,
+          1,
+        ),
         fellBackFrom4x: false,
       };
     } catch {
-      const pipeline = await createPipeline(1);
-      return {
-        scene: new BrowserFoundationScene(this.native, pipeline, format, 1, 1),
-        fellBackFrom4x: true,
-      };
+      try {
+        const pipeline = await createPipeline(1);
+        return {
+          scene: new BrowserFoundationScene(
+            this.native,
+            pipeline,
+            vertexBuffer,
+            vertices.byteLength,
+            format,
+            1,
+            1,
+          ),
+          fellBackFrom4x: true,
+        };
+      } catch (error: unknown) {
+        vertexBuffer.destroy();
+        throw error;
+      }
     }
+  }
+
+  subscribeErrors(listener: (error: WebGpuDeviceError) => void): Disposable {
+    let disposed = false;
+    const handler = (event: GPUUncapturedErrorEvent) => {
+      const constructorName = event.error.constructor.name;
+      const type: WebGpuDeviceErrorType =
+        constructorName === 'GPUValidationError'
+          ? 'validation'
+          : constructorName === 'GPUOutOfMemoryError'
+            ? 'out-of-memory'
+            : constructorName === 'GPUInternalError'
+              ? 'internal'
+              : 'unknown';
+      listener(Object.freeze({ type, message: event.error.message }));
+    };
+    this.native.addEventListener('uncapturederror', handler);
+    return {
+      get disposed() {
+        return disposed;
+      },
+      dispose: () => {
+        if (disposed) return;
+        disposed = true;
+        this.native.removeEventListener('uncapturederror', handler);
+      },
+    };
+  }
+
+  triggerValidationErrorForTesting(): void {
+    const buffer = this.native.createBuffer({
+      label: 'vector-studio/test-overlapping-copy-buffer',
+      size: 4,
+      usage: COPY_SOURCE_AND_DESTINATION_USAGE,
+    });
+    const encoder = this.native.createCommandEncoder({
+      label: 'vector-studio/test-invalid-command-encoder',
+    });
+    encoder.copyBufferToBuffer(buffer, 0, buffer, 0, 4);
+    encoder.finish();
+    this.native.queue.submit([]);
+    buffer.destroy();
   }
 
   destroy(): void {
@@ -146,24 +254,37 @@ class BrowserFoundationScene implements WebGpuFoundationScenePort {
   readonly shaderModulesCreated = 1;
   readonly #device: GPUDevice;
   readonly #pipeline: GPURenderPipeline;
+  readonly #vertexBuffer: GPUBuffer;
   readonly #format: string;
   readonly sampleCount: 1 | 4;
   readonly pipelinesCreated: number;
+  readonly staticResources: readonly WebGpuTrackedResource[];
   #attachment: GPUTexture | undefined;
   #attachmentBytes = 0;
 
   constructor(
     device: GPUDevice,
     pipeline: GPURenderPipeline,
+    vertexBuffer: GPUBuffer,
+    vertexBufferBytes: number,
     format: string,
     sampleCount: 1 | 4,
     pipelinesCreated: number,
   ) {
     this.#device = device;
     this.#pipeline = pipeline;
+    this.#vertexBuffer = vertexBuffer;
     this.#format = format;
     this.sampleCount = sampleCount;
     this.pipelinesCreated = pipelinesCreated;
+    this.staticResources = Object.freeze([
+      {
+        id: 'foundation-vertices',
+        descriptor: { category: 'buffer', size: vertexBufferBytes },
+      },
+      { id: 'foundation-shader', descriptor: { category: 'shader-module' } },
+      { id: 'foundation-pipeline', descriptor: { category: 'render-pipeline' } },
+    ] satisfies WebGpuTrackedResource[]);
   }
 
   get attachmentBytes(): number {
@@ -211,6 +332,7 @@ class BrowserFoundationScene implements WebGpuFoundationScenePort {
       ],
     });
     pass.setPipeline(this.#pipeline);
+    pass.setVertexBuffer(0, this.#vertexBuffer);
     pass.draw(3);
     pass.end();
     this.#device.queue.submit([encoder.finish()]);
@@ -220,6 +342,7 @@ class BrowserFoundationScene implements WebGpuFoundationScenePort {
     this.#attachment?.destroy();
     this.#attachment = undefined;
     this.#attachmentBytes = 0;
+    this.#vertexBuffer.destroy();
   }
 }
 

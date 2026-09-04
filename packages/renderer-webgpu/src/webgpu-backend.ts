@@ -29,6 +29,8 @@ import {
   createBrowserWebGpuPlatform,
   type WebGpuCanvasContextPort,
   type WebGpuDevicePort,
+  type WebGpuDeviceError,
+  type WebGpuDeviceLoss,
   type WebGpuFoundationScenePort,
   type WebGpuPlatform,
 } from './webgpu-platform.js';
@@ -68,12 +70,15 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   #canvas: HTMLCanvasElement | undefined;
   #context: WebGpuCanvasContextPort | undefined;
   #device: WebGpuDevicePort | undefined;
+  #deviceErrorSubscription: Disposable | undefined;
   #scene: WebGpuFoundationScenePort | undefined;
   #invalidationsRequested = 0;
   #framesSubmitted = 0;
   #framesPresented = 0;
   #shaderModulesCreated = 0;
   #pipelinesCreated = 0;
+  #recoveryAttempts = 0;
+  #staleGenerationSubmissions = 0;
   #encodeAndSubmitMs: number[] = [];
   #frameIntervalsMs: number[] = [];
   #lastFrameTimestampMs: number | undefined;
@@ -186,6 +191,20 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     this.#scheduler.setMode(mode);
   }
 
+  triggerValidationErrorForTesting(): void {
+    if (this.#state !== 'ready' || !this.#device) {
+      throw new Error('The backend must be ready before triggering a validation error.');
+    }
+    this.#device.triggerValidationErrorForTesting();
+  }
+
+  destroyDeviceForTesting(): void {
+    if (this.#state !== 'ready' || !this.#device) {
+      throw new Error('The backend must be ready before destroying the device.');
+    }
+    this.#device.destroy();
+  }
+
   resetFrameMeasurements(): void {
     this.#encodeAndSubmitMs = [];
     this.#frameIntervalsMs = [];
@@ -208,6 +227,10 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       framesSubmitted: this.#framesSubmitted,
       framesPresented: this.#framesPresented,
       pendingFrameCallbacks: this.#scheduler.pendingCallbacks,
+      recoveryAttempts: this.#recoveryAttempts,
+      staleGenerationSubmissions: this.#staleGenerationSubmissions,
+      diagnosticListeners: this.#diagnostics.listenerCount,
+      deviceListeners: this.#deviceErrorSubscription?.disposed === false ? 2 : 0,
       shaderModulesCreated: this.#shaderModulesCreated,
       pipelinesCreated: this.#pipelinesCreated,
       resources: this.#resources.snapshot(),
@@ -223,23 +246,9 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     this.#state = 'disposed';
     this.#scheduler.dispose();
 
-    try {
-      this.#scene?.dispose();
-      this.#context?.unconfigure();
-      this.#device?.destroy();
-    } catch (error: unknown) {
-      this.#emit(
-        DIAGNOSTIC_CODES.DISPOSAL_FAILED,
-        'A WebGPU resource failed during disposal.',
-        'error',
-        this.#generation,
-        errorContext(error),
-      );
-    }
+    this.#releaseDeviceGeneration(true);
 
     this.#context = undefined;
-    this.#device = undefined;
-    this.#scene = undefined;
     this.#canvas = undefined;
     this.#surfaceSize = undefined;
     this.#presentationFormat = undefined;
@@ -258,6 +267,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     surface: WebGpuSurface,
     token: number,
     generation: number,
+    scheduleInitialFrame = true,
   ): Promise<RendererCapabilityResult> {
     if (!this.#platform.secureContext) {
       return this.#unsupported(
@@ -396,13 +406,27 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       return this.#stale(generation);
     }
 
-    this.#scene = foundation.scene;
-    this.#resizeScene(this.#surfaceSize?.physical ?? { width: 0, height: 0 });
-    this.#shaderModulesCreated += foundation.scene.shaderModulesCreated;
-    this.#pipelinesCreated += foundation.scene.pipelinesCreated;
-    this.#resources.track(`shader-${generation}`, { category: 'shader-module' });
-    for (let index = 0; index < foundation.scene.pipelinesCreated; index += 1) {
-      this.#resources.track(`pipeline-${generation}-${index}`, { category: 'render-pipeline' });
+    try {
+      this.#scene = foundation.scene;
+      this.#resizeScene(this.#surfaceSize?.physical ?? { width: 0, height: 0 });
+      this.#shaderModulesCreated += foundation.scene.shaderModulesCreated;
+      this.#pipelinesCreated += foundation.scene.pipelinesCreated;
+      for (const resource of foundation.scene.staticResources) {
+        this.#resources.track(`${generation}/${resource.id}`, resource.descriptor);
+      }
+    } catch (error: unknown) {
+      foundation.scene.dispose();
+      this.#scene = undefined;
+      this.#resources.clear();
+      context.unconfigure();
+      device.destroy();
+      return this.#failed(
+        DIAGNOSTIC_CODES.ALLOCATION_FAILED,
+        'The WebGPU foundation resources could not be allocated.',
+        token,
+        generation,
+        errorContext(error),
+      );
     }
     if (foundation.fellBackFrom4x) {
       this.#emit(
@@ -430,8 +454,148 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     this.#presentationFormat = format;
     this.#capabilityResult = result;
     this.#state = 'ready';
-    this.invalidate({ reason: 'initialization' });
+    this.#attachDeviceObservers(device, generation);
+    if (scheduleInitialFrame) {
+      this.invalidate({ reason: 'initialization' });
+    }
     return result;
+  }
+
+  #attachDeviceObservers(device: WebGpuDevicePort, generation: number): void {
+    this.#deviceErrorSubscription?.dispose();
+    this.#deviceErrorSubscription = device.subscribeErrors((error) =>
+      this.#handleDeviceError(device, generation, error),
+    );
+    void device.lost.then((loss) => this.#handleDeviceLoss(device, generation, loss));
+  }
+
+  #handleDeviceError(device: WebGpuDevicePort, generation: number, error: WebGpuDeviceError): void {
+    if (this.#state !== 'ready' || this.#device !== device || this.#generation !== generation) {
+      return;
+    }
+    const code =
+      error.type === 'validation'
+        ? DIAGNOSTIC_CODES.VALIDATION_ERROR
+        : error.type === 'out-of-memory'
+          ? DIAGNOSTIC_CODES.OUT_OF_MEMORY
+          : DIAGNOSTIC_CODES.RENDER_SUBMISSION_FAILED;
+    this.#emit(code, 'An uncaptured WebGPU device error occurred.', 'error', generation, {
+      errorType: error.type,
+      errorMessage: error.message,
+    });
+  }
+
+  async #handleDeviceLoss(
+    device: WebGpuDevicePort,
+    lostGeneration: number,
+    loss: WebGpuDeviceLoss,
+  ): Promise<void> {
+    if (this.#state !== 'ready' || this.#device !== device || this.#generation !== lostGeneration) {
+      return;
+    }
+
+    this.#scheduler.setActive(false);
+    this.#state = 'lost';
+    this.#emit(
+      DIAGNOSTIC_CODES.DEVICE_LOST,
+      'The active WebGPU device was lost.',
+      'error',
+      lostGeneration,
+      { reason: loss.reason, message: loss.message },
+    );
+
+    const canvas = this.#canvas;
+    const surfaceSize = this.#surfaceSize;
+    this.#releaseDeviceGeneration(false);
+    if (!canvas || !surfaceSize) {
+      return;
+    }
+
+    const recoveryGeneration = lostGeneration + 1;
+    this.#generation = recoveryGeneration;
+    this.#state = 'recovering';
+    this.#recoveryAttempts += 1;
+    this.#emit(
+      DIAGNOSTIC_CODES.RECOVERY_STARTED,
+      'WebGPU device recovery started.',
+      'info',
+      recoveryGeneration,
+      { lostGeneration },
+    );
+
+    const token = ++this.#operationToken;
+    const recovery = this.#initializeAttempt(
+      {
+        canvas,
+        cssSize: surfaceSize.css,
+        devicePixelRatio: surfaceSize.devicePixelRatio,
+      },
+      token,
+      recoveryGeneration,
+      false,
+    );
+    this.#initialization = recovery;
+    const result = await recovery;
+    if (this.#initialization === recovery) {
+      this.#initialization = undefined;
+    }
+    if (!this.#isCurrent(token)) {
+      return;
+    }
+    if (!result.supported || !this.#isReady()) {
+      this.#state = 'failed';
+      this.#emit(
+        DIAGNOSTIC_CODES.RECOVERY_FAILED,
+        'WebGPU device recovery failed.',
+        'error',
+        recoveryGeneration,
+        result.supported ? undefined : { diagnosticCode: result.diagnostic.code },
+      );
+      return;
+    }
+
+    this.#scheduler.setActive(true);
+    this.#emit(
+      DIAGNOSTIC_CODES.RECOVERY_SUCCEEDED,
+      'WebGPU device recovery succeeded.',
+      'info',
+      recoveryGeneration,
+      { lostGeneration },
+    );
+    this.invalidate({ reason: 'recovery' });
+  }
+
+  #releaseDeviceGeneration(destroyDevice: boolean): void {
+    this.#deviceErrorSubscription?.dispose();
+    this.#deviceErrorSubscription = undefined;
+    const actions: readonly (() => void)[] = [
+      () => this.#scene?.dispose(),
+      () => this.#context?.unconfigure(),
+      ...(destroyDevice ? [() => this.#device?.destroy()] : []),
+    ];
+    for (const action of actions) {
+      try {
+        action();
+      } catch (error: unknown) {
+        this.#emit(
+          DIAGNOSTIC_CODES.DISPOSAL_FAILED,
+          'A WebGPU resource failed during release.',
+          'error',
+          this.#generation,
+          errorContext(error),
+        );
+      }
+    }
+    this.#context = undefined;
+    this.#device = undefined;
+    this.#scene = undefined;
+    this.#capabilityResult = undefined;
+    this.#presentationFormat = undefined;
+    this.#resources.clear();
+  }
+
+  #isReady(): boolean {
+    return this.#state === 'ready';
   }
 
   #render(timestampMs: number): void {
