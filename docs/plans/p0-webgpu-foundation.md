@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.4 implementation complete; integration validation pending
+Status: P0.4 integrated; ready for P0.5
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -355,7 +355,9 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-08-27 | P0.3 pull-request validation passed on GitHub's Windows runner. | PR #10 final `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33081358041/job/98549136759` |
 | 2026-08-27 | P0.3 integrated into protected `main` through a squash merge. | PR #10: `https://github.com/npclown/vector-studio/pull/10`; merge commit `b9285b9` |
 | 2026-09-04 | P0.4 resource lifecycle, structured GPU errors, generation-safe device-loss recovery, and headed hardware evidence completed locally. | `pnpm check`: 45 tests across 8 files; `pnpm build`; browser 6/6; headed GPU Chrome/Edge 2/2; `docs/evidence/p0.4/` |
+| 2026-09-04 | P0.4 pull-request validation passed on GitHub's Windows runner. | PR #12 final `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33839256994/job/100918002724` |
+| 2026-09-04 | P0.4 integrated into protected `main` through a squash merge. | PR #12: `https://github.com/npclown/vector-studio/pull/12`; merge commit `a15adcb` |
 
 ## Gate outcome
 
-Current outcome: **P0.4 IMPLEMENTATION PASS; INTEGRATION PENDING**. Deterministic lifecycle tests and headed Chrome/Edge hardware evidence satisfy the P0.4 implementation checkpoint for resource ownership, GPU diagnostics, single-attempt generation-safe recovery, rebuilt presentation, and disposal cleanup. The checkpoint becomes integrated only after required GitHub Actions validation and protected-main merge; the generalized playground and complete P0 benchmark harness remain P0.5 work.
+Current outcome: **P0.4 PASS; READY FOR P0.5**. Resource ownership, structured GPU diagnostics, single-attempt generation-safe recovery, rebuilt presentation, disposal cleanup, required GitHub Actions validation, and protected-main integration satisfy the P0.4 gate. The generalized playground and complete P0 benchmark harness remain P0.5 work.
