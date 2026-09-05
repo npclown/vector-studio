@@ -407,6 +407,62 @@ describe('WebGpuBackend lifecycle and surface', () => {
     });
     animationFrameClock.flush(32);
     expect(render).toHaveBeenCalledOnce();
+    expect(backend.getFrameMeasurements()).toMatchObject({
+      active: false,
+      encodeAndSubmitMs: [],
+      frameIntervalsMs: [],
+    });
+  });
+
+  it('collects only explicit bounded measurement windows and clears them on reset or dispose', async () => {
+    const { platform } = fixture();
+    const animationFrameClock = new ManualAnimationFrameClock();
+    let nowMs = 0;
+    const backend = new WebGpuBackend({
+      platform,
+      animationFrameClock,
+      now: () => nowMs++,
+    });
+    await backend.initialize(surface());
+    animationFrameClock.flush(0);
+
+    expect(() => backend.startFrameMeasurements(0)).toThrow(RangeError);
+    backend.startFrameMeasurements(2);
+    backend.setMode('continuous');
+    animationFrameClock.flush(16);
+    animationFrameClock.flush(32);
+    animationFrameClock.flush(48);
+    animationFrameClock.flush(64);
+    backend.setMode('on-demand');
+
+    expect(backend.stopFrameMeasurements()).toMatchObject({
+      active: false,
+      capacity: 2,
+      startedAtMs: 1,
+      endedAtMs: 8,
+      encodeAndSubmitMs: [1, 1],
+      frameIntervalsMs: [16, 16],
+      droppedSamples: { encodeAndSubmitMs: 2, frameIntervalsMs: 1 },
+    });
+    animationFrameClock.flush(80);
+    expect(backend.getFrameMeasurements().encodeAndSubmitMs).toHaveLength(2);
+
+    backend.resetFrameMeasurements();
+    expect(backend.getFrameMeasurements()).toMatchObject({
+      active: false,
+      capacity: 4096,
+      encodeAndSubmitMs: [],
+      frameIntervalsMs: [],
+      droppedSamples: { encodeAndSubmitMs: 0, frameIntervalsMs: 0 },
+    });
+
+    backend.startFrameMeasurements();
+    backend.dispose();
+    expect(backend.getFrameMeasurements()).toMatchObject({
+      active: false,
+      encodeAndSubmitMs: [],
+      frameIntervalsMs: [],
+    });
   });
 
   it('records the explicit 4x to 1x MSAA fallback', async () => {

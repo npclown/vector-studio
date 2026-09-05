@@ -49,9 +49,19 @@ export interface WebGpuBackendOptions {
 }
 
 export interface WebGpuFrameMeasurements {
+  readonly active: boolean;
+  readonly capacity: number;
   readonly encodeAndSubmitMs: readonly number[];
   readonly frameIntervalsMs: readonly number[];
+  readonly droppedSamples: Readonly<{
+    encodeAndSubmitMs: number;
+    frameIntervalsMs: number;
+  }>;
+  readonly startedAtMs?: number;
+  readonly endedAtMs?: number;
 }
+
+const DEFAULT_MEASUREMENT_CAPACITY = 4096;
 
 function errorContext(error: unknown): DiagnosticContext {
   if (error instanceof Error) {
@@ -79,8 +89,14 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   #pipelinesCreated = 0;
   #recoveryAttempts = 0;
   #staleGenerationSubmissions = 0;
+  #measurementActive = false;
+  #measurementCapacity = DEFAULT_MEASUREMENT_CAPACITY;
+  #measurementStartedAtMs: number | undefined;
+  #measurementEndedAtMs: number | undefined;
   #encodeAndSubmitMs: number[] = [];
   #frameIntervalsMs: number[] = [];
+  #droppedEncodeAndSubmitSamples = 0;
+  #droppedFrameIntervalSamples = 0;
   #lastFrameTimestampMs: number | undefined;
   #generation = 0;
   #initialization: Promise<RendererCapabilityResult> | undefined;
@@ -209,16 +225,57 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     this.#device.destroy();
   }
 
+  startFrameMeasurements(capacity = DEFAULT_MEASUREMENT_CAPACITY): void {
+    if (!Number.isSafeInteger(capacity) || capacity <= 0) {
+      throw new RangeError('Measurement capacity must be a positive safe integer.');
+    }
+    this.#resetFrameMeasurementState();
+    this.#measurementCapacity = capacity;
+    this.#measurementActive = true;
+    this.#measurementStartedAtMs = this.#now();
+  }
+
+  stopFrameMeasurements(): WebGpuFrameMeasurements {
+    if (this.#measurementActive) {
+      this.#measurementActive = false;
+      this.#measurementEndedAtMs = this.#now();
+      this.#lastFrameTimestampMs = undefined;
+    }
+    return this.getFrameMeasurements();
+  }
+
   resetFrameMeasurements(): void {
+    this.#resetFrameMeasurementState();
+  }
+
+  #resetFrameMeasurementState(): void {
+    this.#measurementActive = false;
+    this.#measurementCapacity = DEFAULT_MEASUREMENT_CAPACITY;
+    this.#measurementStartedAtMs = undefined;
+    this.#measurementEndedAtMs = undefined;
     this.#encodeAndSubmitMs = [];
     this.#frameIntervalsMs = [];
+    this.#droppedEncodeAndSubmitSamples = 0;
+    this.#droppedFrameIntervalSamples = 0;
     this.#lastFrameTimestampMs = undefined;
   }
 
   getFrameMeasurements(): WebGpuFrameMeasurements {
     return Object.freeze({
+      active: this.#measurementActive,
+      capacity: this.#measurementCapacity,
       encodeAndSubmitMs: Object.freeze([...this.#encodeAndSubmitMs]),
       frameIntervalsMs: Object.freeze([...this.#frameIntervalsMs]),
+      droppedSamples: Object.freeze({
+        encodeAndSubmitMs: this.#droppedEncodeAndSubmitSamples,
+        frameIntervalsMs: this.#droppedFrameIntervalSamples,
+      }),
+      ...(this.#measurementStartedAtMs === undefined
+        ? {}
+        : { startedAtMs: this.#measurementStartedAtMs }),
+      ...(this.#measurementEndedAtMs === undefined
+        ? {}
+        : { endedAtMs: this.#measurementEndedAtMs }),
     });
   }
 
@@ -257,6 +314,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     this.#surfaceSize = undefined;
     this.#presentationFormat = undefined;
     this.#capabilityResult = undefined;
+    this.#resetFrameMeasurementState();
     this.#resources.clear();
     this.#emit(
       DIAGNOSTIC_CODES.DISPOSAL_COMPLETED,
@@ -643,17 +701,29 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       return;
     }
 
-    if (this.#lastFrameTimestampMs !== undefined) {
-      this.#frameIntervalsMs.push(timestampMs - this.#lastFrameTimestampMs);
+    if (this.#measurementActive) {
+      if (this.#lastFrameTimestampMs !== undefined) {
+        if (this.#frameIntervalsMs.length < this.#measurementCapacity) {
+          this.#frameIntervalsMs.push(timestampMs - this.#lastFrameTimestampMs);
+        } else {
+          this.#droppedFrameIntervalSamples += 1;
+        }
+      }
+      this.#lastFrameTimestampMs = timestampMs;
     }
-    this.#lastFrameTimestampMs = timestampMs;
 
     const startedMs = this.#now();
     try {
       this.#scene.render(this.#context);
       this.#framesSubmitted += 1;
       this.#framesPresented += 1;
-      this.#encodeAndSubmitMs.push(this.#now() - startedMs);
+      if (this.#measurementActive) {
+        if (this.#encodeAndSubmitMs.length < this.#measurementCapacity) {
+          this.#encodeAndSubmitMs.push(this.#now() - startedMs);
+        } else {
+          this.#droppedEncodeAndSubmitSamples += 1;
+        }
+      }
     } catch (error: unknown) {
       this.#emit(
         DIAGNOSTIC_CODES.RENDER_SUBMISSION_FAILED,
