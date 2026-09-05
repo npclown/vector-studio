@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.4 integrated; P0 open with measurement and foundation follow-ups
+Status: P0.4 integrated; P0.4a recovery regression correction in progress
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -80,8 +80,8 @@ Reviewed baseline: `2df8848` (P0.4 integrated). Historical checkpoint evidence b
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | Roadmap scope has no execution acceptance       | Camera transform, buffer suballocation experiment, and keyed pipeline cache are absent from current foundation implementation                          | P0.5a and P0-A13 through A15; do not silently move them to P1                                                                            |
 | Presentation is inferred from submission        | `WebGpuBackend.#render` increments `framesPresented` beside `framesSubmitted`                                                                          | P0.5 must distinguish measured events; startup/recovery present-time gates remain UNVERIFIED until an accepted measurement method exists |
-| Stale submission counter cannot prove exclusion | `staleGenerationSubmissions` is initialized to zero and never updated                                                                                  | P0.5b must assert calls against old/new device spies across loss and delayed completion                                                  |
-| Recovery failure can be retried                 | `initialize` can leave `failed`; current failure test stops before another explicit initialize                                                         | P0.5b must enforce and test the existing terminal recovery-failure rule                                                                  |
+| Stale submission counter cannot prove exclusion | `staleGenerationSubmissions` is initialized to zero and never updated                                                                                  | P0.4a must assert calls against old/new device spies across loss and delayed completion                                                  |
+| Recovery failure can be retried                 | `initialize` can leave `failed`; current failure test stops before another explicit initialize                                                         | P0.4a must enforce and test the existing terminal recovery-failure rule                                                                  |
 | Benchmark records can be overwritten            | `tests/benchmark/p0-3-foundation.spec.ts` uses a fixed 2026-08-27 filename, always marks revision dirty, and writes Accepted from numeric checks alone | P0.5 must use unique output identities, actual source provenance, and separate acceptance review                                         |
 | Unavailable measurements can appear as success  | The fixed runner treats unsupported long-task observation/empty samples as zero and records only initial diagnostics                                   | P0.5 schema and runner tests must reject false-zero evidence and capture complete measured windows                                       |
 | Hardware evidence is narrower than P0-A07       | Headed GPU test triggers validation error and device loss; OOM mapping is injected only in unit tests                                                  | P0-A07 hardware OOM remains UNVERIFIED; do not deliberately exhaust the machine or replace the criterion with unit evidence              |
@@ -223,6 +223,24 @@ P0.4 implementation evidence:
 - `pnpm test:gpu` passes 2/2 headed hardware tests on Windows `10.0.26200`, NVIDIA/Turing, Chrome `152.0.7977.76`, and Edge `152.0.4191.62`. Each browser surfaces one deliberately uncaptured native validation error, reports loss/start/success diagnostics for generations 1/2/2, performs one recovery attempt, rebuilds four live resources, and presents from generation 2 with no page errors.
 - Machine-readable headed-run records are `docs/evidence/p0.4/recovery-{chrome,edge}.json`; post-recovery screenshots are `recovered-{chrome,edge}.png` in the same directory. The generalized `p0/lifecycle-recovery/v1` benchmark record remains assigned to P0.5/P0.6 as planned.
 
+### P0.4a Recovery regression correction
+
+The review found missing proof of existing lifecycle invariants; this correction runs before P0.5 so the measurement harness does not encode or measure known-invalid recovery behavior. It changes neither the lifecycle contract nor the P0.4 historical evidence.
+
+- [ ] After recovery fails, repeated explicit/concurrent `initialize` calls return the stored terminal result, make no new adapter/device request, and cannot return the instance to ready. Disposal remains idempotent; a new instance may initialize.
+- [ ] Hold recovery promises pending while invalidating, changing mode, or disposing. Assert zero render calls on the old device/scene after loss, one controlled attempt, no resurrection after disposal, and rendering only through the rebuilt generation on success.
+- [ ] Re-enter lifecycle methods from diagnostic callbacks and verify they cannot trigger duplicate recovery, submit through the lost generation, or revive disposed resources.
+- [ ] Treat `staleGenerationSubmissions` as a diagnostic counter only. Acceptance for exclusion requires instrumented old/new render spies and scheduler callback assertions rather than a constant zero value.
+
+Validation method:
+
+- `pnpm check` runs named deterministic regressions for terminal recovery failure, delayed recovery success/disposal, diagnostic-callback re-entry, device request counts, old/new render spies, listener cleanup, and pending animation callbacks.
+- `pnpm build` verifies the correction does not alter package boundaries or leak concrete WebGPU types.
+- `pnpm test:browser` verifies the normal Chrome/Edge foundation path after the lifecycle correction.
+- `pnpm test:gpu` refreshes headed Chrome/Edge recovery evidence with the reviewed revision and retains ordered real-device loss/recovery diagnostics.
+
+Evidence: named regression tests through the commands above and headed Chrome/Edge recovery artifacts with revision metadata. These corrections must pass before P0.5 begins; they do not retroactively rewrite P0.4 run records.
+
 ### P0.5 Playground and measurement harness
 
 - [ ] Display backend state, adapter identity, surface size, sample count, frame counters, timing summaries, and recent diagnostics.
@@ -253,16 +271,6 @@ These items restore the existing P0 roadmap scope; the foundation triangle and a
 - [ ] **P0-A15 keyed pipeline cache:** define keys for shader/layout, target format, sample count, and relevant render state. Identical requests reuse one entry, incompatible keys do not alias, and loss invalidates the generation's entries. Unit tests plus headed resource counters show no steady-state creation and successful rebuild; a single pipeline created at startup alone is insufficient cache evidence.
 
 Evidence: `pnpm check`, `pnpm build`, headed Chrome/Edge fixture artifacts, and counters linked individually to P0-A13/A14/A15. Record any changed benchmark configuration as a successor scenario before final measurement.
-
-### P0.5b Recovery regression correction
-
-The review found missing proof of existing lifecycle invariants; product code is unchanged in this documentation checkpoint.
-
-- [ ] After recovery fails, repeated explicit/concurrent `initialize` calls make no new adapter/device request and cannot return the instance to ready. Disposal remains idempotent; a new instance may initialize.
-- [ ] Hold recovery promises pending while invalidating, changing mode, or disposing. Assert zero calls on the old device/scene, one controlled attempt, no resurrection after disposal, and rendering only through the rebuilt generation on success.
-- [ ] Replace constant-counter-only evidence with instrumented old/new submission spies, and verify diagnostic callbacks cannot trigger duplicate recovery or revive disposed resources.
-
-Evidence: named regression tests through `pnpm check`, `pnpm build`, and headed Chrome/Edge recovery evidence with revision metadata. These corrections must pass before P0.6; they do not retroactively rewrite P0.4 run records.
 
 ### P0.6 Final validation and gate review
 
@@ -420,4 +428,4 @@ Documentation review update, 2026-09-05: reconciled the dependency graph (ADR 00
 
 ## Gate outcome
 
-Current outcome: **P0 OPEN; P0.4 INTEGRATED WITH REVIEW FOLLOW-UPS**. The historical P0.4 checkpoint and its CI/hardware evidence remain recorded. This review identified a terminal-recovery gap and limits to presentation/constant-counter evidence; it does not claim those are fixed. Next: P0.5 measurement harness, P0.5a foundation experiments, P0.5b recovery corrections, then P0.6 full gate review. P1 may not begin until the complete P0 gate passes or the owning design is explicitly revised before implementation.
+Current outcome: **P0 OPEN; P0.4 INTEGRATED, P0.4A IN PROGRESS**. The historical P0.4 checkpoint and its CI/hardware evidence remain recorded. PR #14 identified a terminal-recovery gap and limits to constant-counter evidence; P0.4a corrects those lifecycle regressions before they become inputs to the measurement harness. Next: P0.4a recovery corrections, P0.5 measurement harness, P0.5a foundation experiments, then P0.6 full gate review. P1 may not begin until the complete P0 gate passes or the owning design is explicitly revised before implementation.
