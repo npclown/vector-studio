@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.4a integrated; P0.5.0 validated locally and awaiting integration
+Status: P0.5.0 integrated; P0.5.1 validated locally and awaiting integration
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -255,7 +255,7 @@ P0.4a implementation evidence:
 Execution order:
 
 - [x] **P0.5.0 measurement contract:** define clocks/events, bounded collection, scenario/result schema, configuration hashing, provenance, validation, and collision-safe artifact writing with deterministic unit tests.
-- [ ] **P0.5.1 playground controls:** expose the required dashboard and controls through a backend-instance composition root; disposal/reinitialize replaces the terminal backend instance.
+- [x] **P0.5.1 playground controls:** expose the required dashboard and controls through a backend-instance composition root; disposal/reinitialize replaces the terminal backend instance.
 - [ ] **P0.5.2 five-scenario runner:** replace the pending root command, execute every `p0/*/v1` scenario in the production headed Chrome/Edge configuration, and generate schema-valid raw JSON plus matching Markdown without accepting its own output.
 - [ ] **P0.5.3 smoke evidence and integration:** run a bounded smoke profile, inspect dashboard/JSON/Markdown artifacts, record limitations, pass required CI, and integrate before P0.5a.
 
@@ -298,6 +298,25 @@ P0.5.0 implementation evidence:
 - `pnpm check` passes formatting, ESLint, TypeScript project-reference checking, 53 tests across 9 Vitest files, and dependency-boundary validation.
 - `pnpm build` produces all library outputs and the Vite playground production bundle; `pnpm test:browser` passes 6/6 Chrome/Edge WebGPU integration tests.
 - This checkpoint creates no benchmark observation or performance claim. P0.5.2 owns scenario execution and P0.5.3 owns smoke artifacts.
+
+P0.5.1 interaction details fixed before implementation:
+
+- The playground composition root is the only owner of the concrete backend instance. Its public test surface delegates to the current instance so disposal/reinitialize cannot leave stale closures.
+- The dashboard uses stable element IDs and displays lifecycle/generation, current adapter, physical surface/DPR, selected sample count, frame/resource/listener counters, bounded timing summaries, and at most the 50 most recent diagnostics.
+- Controls cover one and 100 invalidations, on-demand/continuous mode, a deterministic 120-step resize/DPR storm followed by the reference surface, validation error, device loss, measurement start/stop/reset, disposal, and reinitialize with a new backend instance.
+- Reinitialize is serialized: concurrent requests share one replacement attempt. It disposes the old terminal instance, creates a fresh diagnostic subscription and backend, restores the reference surface, and publishes readiness only after capability resolution.
+- Browser tests exercise controls through their user-facing elements, verify the dashboard matches the public snapshot, prove recovery updates current-generation capability/state, and prove disposal/reinitialize advances to a fresh instance without reusing a disposed backend.
+- Dashboard refresh is event/control driven rather than a perpetual timer so the production benchmark page does not add periodic DOM work to measured windows.
+
+P0.5.1 implementation evidence:
+
+- The playground now owns the current `WebGpuBackend` through one mutable composition root. Its frozen test API delegates to that current instance, and the dashboard exposes stable controls and status IDs without introducing a UI/runtime dependency.
+- The dashboard shows backend instance, lifecycle/generation, current capability adapter/sample count, physical surface/DPR, submission-path frame counters, resource/listener counts, bounded timing p95 summaries, dropped samples, and the 50 most recent diagnostics.
+- User controls cover single/burst invalidation, continuous mode, explicit measurement windows, deterministic 120-step resize storm, native validation error, device loss, disposal, refresh, and serialized fresh-instance reinitialization.
+- `pnpm check` passes formatting, ESLint, TypeScript project-reference checking, 53 tests across 9 Vitest files, and dependency-boundary validation. `pnpm build` produces the library packages and production playground bundle.
+- `pnpm test:browser` passes 10/10 Chrome/Edge tests. The new tests drive dashboard controls, observe bounded samples, recover to generation 2 with refreshed capability display, dispose/reinitialize to a fresh generation-1 instance, prove two synchronous reinitialize controls create only one replacement, and restore the exact 640 x 360 DPR-1 reference surface after 120 resize steps.
+- Routine browser screenshots now use the Playwright per-run output directory instead of overwriting the committed P0.3 historical images. The two historical files remain byte-identical to `main`.
+- P0.5.3 still owns the committed manual smoke screenshot; no benchmark result or performance claim is created here.
 
 ### P0.5a Missing foundation experiments
 
@@ -464,6 +483,8 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-09-06 | P0.4a pull-request validation passed on GitHub's Windows runner.                                                                                    | PR #15 final `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33975533285/job/101331443610`          |
 | 2026-09-06 | P0.4a integrated into protected `main` through a squash merge.                                                                                      | PR #15: `https://github.com/npclown/vector-studio/pull/15`; merge commit `07a8a7f`                                                                    |
 | 2026-09-06 | P0.5.0 measurement clocks/events, bounded collection, result validation, hashing, Markdown generation, and collision-safe writes completed locally. | `pnpm check`: 53 tests across 9 files; `pnpm build`; browser 6/6                                                                                      |
+| 2026-09-06 | P0.5.0 pull-request validation passed and the checkpoint integrated into protected `main`.                                                          | PR #17: `https://github.com/npclown/vector-studio/pull/17`; merge commit `50b8254`; required validation job `101337535972`                            |
+| 2026-09-06 | P0.5.1 playground dashboard, complete control surface, current-generation capability display, and serialized backend replacement completed locally. | `pnpm check`: 53 tests; `pnpm build`; Chrome/Edge browser controls 10/10                                                                              |
 
 Documentation review update, 2026-09-05: reconciled the dependency graph (ADR 0001), mapped graphics/MVP coverage, restored missing P0 foundation acceptance, and recorded lifecycle/measurement follow-ups. Local documentation links/formatting, `git diff --check`, `pnpm check` (45 tests), and `pnpm build` pass; details and reproduction commands are in `docs/evidence/docs-review-2026-09-05.md`. This update adds no implementation or benchmark result.
 

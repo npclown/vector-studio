@@ -127,6 +127,10 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     return this.#generation;
   }
 
+  get capabilityResult(): RendererCapabilityResult | undefined {
+    return this.#capabilityResult;
+  }
+
   get presentationFormat(): string | undefined {
     return this.#presentationFormat;
   }
