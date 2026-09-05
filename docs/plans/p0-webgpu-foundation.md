@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.4 integrated; P0.4a validated locally and awaiting integration
+Status: P0.4a integrated; ready for P0.5
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -433,9 +433,11 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-09-04 | P0.4 pull-request validation passed on GitHub's Windows runner.                                                                       | PR #12 final `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33839256994/job/100918002724`          |
 | 2026-09-04 | P0.4 integrated into protected `main` through a squash merge.                                                                         | PR #12: `https://github.com/npclown/vector-studio/pull/12`; merge commit `a15adcb`                                                                    |
 | 2026-09-06 | P0.4a corrected terminal recovery, diagnostic re-entry, inactive continuous scheduling, and stale-generation proof before P0.5.       | `pnpm check`: 48 tests; `pnpm build`; browser 6/6; headed GPU 2/2; `docs/evidence/p0.4a/`                                                             |
+| 2026-09-06 | P0.4a pull-request validation passed on GitHub's Windows runner.                                                                      | PR #15 final `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33975533285/job/101331443610`          |
+| 2026-09-06 | P0.4a integrated into protected `main` through a squash merge.                                                                        | PR #15: `https://github.com/npclown/vector-studio/pull/15`; merge commit `07a8a7f`                                                                    |
 
 Documentation review update, 2026-09-05: reconciled the dependency graph (ADR 0001), mapped graphics/MVP coverage, restored missing P0 foundation acceptance, and recorded lifecycle/measurement follow-ups. Local documentation links/formatting, `git diff --check`, `pnpm check` (45 tests), and `pnpm build` pass; details and reproduction commands are in `docs/evidence/docs-review-2026-09-05.md`. This update adds no implementation or benchmark result.
 
 ## Gate outcome
 
-Current outcome: **P0 OPEN; P0.4A VALIDATED LOCALLY, AWAITING PR INTEGRATION**. The historical P0.4 checkpoint and its CI/hardware evidence remain recorded. PR #14 identified a terminal-recovery gap and limits to constant-counter evidence; P0.4a now has deterministic and headed hardware evidence without rewriting those historical records. After required CI and protected-branch integration, the next checkpoint is P0.5 measurement harness, followed by P0.5a foundation experiments and P0.6 full gate review. P1 may not begin until the complete P0 gate passes or the owning design is explicitly revised before implementation.
+Current outcome: **P0 OPEN; P0.4A INTEGRATED, READY FOR P0.5**. The historical P0.4 checkpoint and its CI/hardware evidence remain recorded. PR #14 identified a terminal-recovery gap and limits to constant-counter evidence; P0.4a now has deterministic and headed hardware evidence without rewriting those historical records. The next checkpoint is P0.5 measurement harness, followed by P0.5a foundation experiments and P0.6 full gate review. P1 may not begin until the complete P0 gate passes or the owning design is explicitly revised before implementation.
