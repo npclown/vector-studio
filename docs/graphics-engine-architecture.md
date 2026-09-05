@@ -55,19 +55,19 @@ interface RenderChangeSet {
 
 The renderer maintains a mirror keyed by node ID. It updates only affected transforms, styles, geometry, ordering, and bounds.
 
+This example reserves a future scene contract; P0 currently exposes lifecycle, invalidation, diagnostics, and statistics in `packages/contracts/src/renderer.ts`. Before retained-scene implementation, the P1 execution plan must specify full-snapshot initialization, document/page identity, base and resulting revisions, atomic application, and resynchronization after a missing or out-of-order change. Duplicate IDs, missing parents, cycles, and unknown removals need deterministic validation. Device recovery rebuilds GPU resources from the accepted CPU mirror without replaying document commands.
+
 ### Backend contract
 
 The common boundary is a render scene and draw packets, not a lowest-common-denominator wrapper around WebGPU/WebGL calls.
 
-```ts
-interface RenderBackend {
-  initialize(surface: RenderSurface): Promise<void>;
-  resize(size: PixelSize): void;
-  applyChanges(changes: RenderChangeSet): void;
-  render(frame: RenderFrame): void;
-  dispose(): void;
-}
-```
+| Boundary                             | Input and responsibility                                                        |
+| ------------------------------------ | ------------------------------------------------------------------------------- |
+| Editor -> renderer service           | Scene snapshots/change sets, viewport, invalidation, lifecycle, diagnostics     |
+| Renderer core -> backend             | Ordered draw packets and resource descriptors prepared from the retained mirror |
+| Composition root -> concrete backend | Browser surface acquisition and concrete adapter construction                   |
+
+`applyChanges(RenderChangeSet)` belongs to the renderer service, not the low-level GPU backend. GPU resource types stay private to `renderer-webgpu`; concrete surface acquisition must not introduce DOM types into editor-facing contracts. Exact packet types will be fixed in the P1 execution plan before implementation. P0's `WebGpuBackend` combines lifecycle and foundation-scene orchestration temporarily; it does not define the final scene port. See [ADR 0001](decisions/0001-port-composition.md).
 
 ## Coordinate and numeric policy
 
@@ -129,6 +129,8 @@ interface GeometryBatchResult {
 
 The cache key includes node geometry revision, stroke-style hash, fill rule, and a quantized tolerance/zoom bucket.
 
+Before P2 implementation, its plan must define ABI versioning, offset units and terminal offsets, bounds checks, allocation ownership/release, and typed-view lifetimes after reserve, growth, or another batch. Results carry source revisions so stale work cannot replace newer geometry. A transform-only cache hit is valid only while the required screen-space tolerance remains in the cached bucket; scale, shear, or DPR changes may require a finer mesh. Numeric fixtures must include those transitions and non-finite input rejection.
+
 ## Retained render scene
 
 The render scene stores only data needed for output:
@@ -150,7 +152,7 @@ The display list preserves painter's order. Batching only combines adjacent comp
 
 Rectangles, rounded rectangles, ellipses, and simple lines use shared unit geometry with per-instance transforms and style data. Analytic shader distance is preferred for primitive edges and independent corner radii.
 
-Arbitrary path fills and strokes use WASM-produced meshes. A geometry-only change rebuilds the mesh; a transform-only change updates instance data without retessellation.
+Arbitrary path fills and strokes use WASM-produced meshes. A geometry-only change rebuilds the mesh; a transform-only change updates instance data without retessellation while the cached tolerance remains sufficient.
 
 Style data is stored separately from geometry so color and opacity changes do not rebuild vertices.
 
@@ -194,6 +196,19 @@ MSAA-only output is not considered sufficient for the final path renderer. Quali
 Text is not part of the first graphics-kernel milestone. The architecture reserves separate font, shaping, layout, glyph-atlas, and text-input services.
 
 Committed text will eventually render through GPU glyph atlases, while active editing uses a DOM overlay. No DOM or browser font object enters persistent document data.
+
+## Design gates before later implementation
+
+These decisions are still open and must be resolved with acceptance fixtures in the owning milestone plan. They are not implemented features or permission to choose silent fallback behavior.
+
+| Owner             | Decision required before implementation                                                                                                                                                              |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1                | Coordinate conventions, supported coordinate/zoom ranges, inverse-transform failure behavior, and camera-relative precision fixtures                                                                 |
+| P1                | Premultiplied-alpha/color-space policy, overlap compositing fixtures, and whether container opacity needs isolated composition; child alpha multiplication cannot be assumed equivalent              |
+| P2/P3             | Convert the 0.25-screen-pixel error target to a defined CSS or physical pixel unit, account for world transform and DPR, and bound flattening/tessellation work on degenerate and adversarial inputs |
+| P3                | Dash units/phase, miter limit, zero-length segments, coincident edges, self-intersections, and independent reference fixtures for both fill rules                                                    |
+| P4                | Mask coverage semantics, stencil push/pop and sibling restoration, attachment format, antialiasing of mask edges, and interaction with container opacity; validate depths 0, 1, 32, and rejected 33  |
+| Post-P5 text plan | Font loading/fallback and shaping ownership, matching DOM/GPU layout, Korean IME composition transactions, and selection/caret fixtures                                                              |
 
 ## Failure and capability behavior
 

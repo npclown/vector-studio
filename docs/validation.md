@@ -88,14 +88,14 @@ Performance runs follow `docs/benchmarks/README.md`. They are isolated from func
 
 Every execution-plan acceptance criterion declares one or more evidence types:
 
-| Evidence type | Required content |
-| --- | --- |
-| Static | Exact command and zero exit status |
-| Unit/contract | Test identifier, command, pass count |
-| Browser | Browser channel/version, test identifier, artifact link |
-| Manual GPU | Hardware/browser metadata, steps, observed diagnostics |
-| Visual | Fixture ID, image artifact, comparison result |
-| Benchmark | Result file conforming to benchmark schema |
+| Evidence type | Required content                                        |
+| ------------- | ------------------------------------------------------- |
+| Static        | Exact command and zero exit status                      |
+| Unit/contract | Test identifier, command, pass count                    |
+| Browser       | Browser channel/version, test identifier, artifact link |
+| Manual GPU    | Hardware/browser metadata, steps, observed diagnostics  |
+| Visual        | Fixture ID, image artifact, comparison result           |
+| Benchmark     | Result file conforming to benchmark schema              |
 
 Terminal output pasted without its command, environment, or revision is incomplete evidence.
 
@@ -110,22 +110,33 @@ Git workflow is owned by `AGENTS.md`. Validation participates in that workflow a
 - A CI failure returns the plan item to in-progress. Apply the correction on the same feature branch, rerun affected local validation, update evidence, and commit again.
 - A pull request cannot claim an acceptance criterion proven by results from another revision unless the result is explicitly revision-independent.
 
-Documentation-only bootstrap validation consists of link/path checks, formatting/whitespace checks, a source-of-truth responsibility review, and confirmation that no product source or machine-local artifact is included.
+Documentation-only changes, including bootstrap, require local link/path and heading-anchor checks, formatting/whitespace checks, a source-of-truth responsibility review, and confirmation that no product source, dependency, historical result, or machine-local artifact was unintentionally changed. Compare implementation claims with source and distinguish historical evidence from new validation.
 
-## Planned command surface
+Markdown is excluded by the current `.prettierignore`. Consequently `pnpm check` alone does not verify Markdown formatting. Check changed Markdown explicitly with `pnpm exec prettier --check --ignore-path <empty-ignore-file> <changed-markdown-files>`; do not reformat unrelated historical results. Repository static/unit/build commands still provide the PR's required CI surface. A documentation-only change needs no new GPU or performance run unless it makes a new claim requiring one.
 
-The toolchain does not exist yet. P0 implementation should establish a stable root command surface with these responsibilities; exact tools are an implementation detail recorded in the execution plan:
+## Current command surface
 
-```text
-check          static checks and all deterministic tests
-test:unit      unit and contract tests without a browser
-test:browser   automated Chrome/Edge integration tests
-test:gpu       headed reference-machine GPU validation
-benchmark:p0   production-build P0 benchmark runner
-build          all affected packages and playground
-```
+The toolchain exists as of P0.4. `package.json` owns exact commands and pinned versions; the responsibilities and current limitations are:
+
+| Command                  | Current responsibility / limitation                                                                                            |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `pnpm check`             | Formatting (Markdown excluded), ESLint, TypeScript, unit/contract tests, package boundaries                                    |
+| `pnpm test:unit`         | Deterministic Vitest tests without a physical GPU                                                                              |
+| `pnpm test:browser`      | Chrome/Edge browser integration; headless by default, not hardware acceptance                                                  |
+| `pnpm test:gpu`          | Headed Chrome/Edge validation error and device-loss recovery; not native OOM evidence                                          |
+| `pnpm benchmark:p0:p0-3` | Legacy production steady/idle runner; fixed historical output filenames must be corrected before reuse in the tracked checkout |
+| `pnpm benchmark:p0`      | Still exits 1 with NOT IMPLEMENTED; full runner is P0.5 work                                                                   |
+| `pnpm build`             | Workspace package declarations/JavaScript and playground production build                                                      |
 
 Agents must use repository commands once they exist rather than bypassing them with ad hoc package-local commands when claiming repository-wide validation.
+
+## Evidence limits and gate status
+
+- A submission counter proves a submission-path event, not display presentation. Use the [benchmark measurement policy](benchmarks/README.md#measurement-semantics) for timing claims, and pair rendering assertions with defined visual fixtures.
+- A counter initialized to zero without observing the relevant event is not proof that the event was prevented. Lifecycle tests must inspect old/new device calls and exercise delayed completions and disposal races.
+- Distinguish injected error mapping from native hardware error delivery. Current GPU tests do not reproduce native OOM; leave any criterion requiring that evidence UNVERIFIED until an appropriate controlled method or a prospective criterion revision is accepted.
+- Historical artifacts are immutable observations. Corrections to their interpretation belong in the active plan or a new review record; source changes require new affected evidence.
+- PASS means the complete declared criterion has valid evidence; FAIL means observed behavior violates it; UNVERIFIED means required evidence is missing or unsuitable. An integrated checkpoint does not automatically make the whole milestone PASS.
 
 ## Failure handling
 

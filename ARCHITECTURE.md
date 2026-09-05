@@ -89,25 +89,26 @@ Persistence adapters serialize committed document snapshots and schema versions.
 
 The intended package-level direction is:
 
+Every arrow below means **consumer imports dependency**, including type-only imports:
+
 ```text
-model
-  ^
-  |
-contracts <------ geometry-reference
-  ^                    ^
-  |                    |
-editor-core       geometry-wasm
-  ^       ^              ^
-  |       |              |
-react   renderer-core ---+
-  ^          ^
-  |          |
-ui     renderer-webgpu
-  \          /
-    playground
+contracts        -> model
+editor-core      -> model, contracts
+renderer-core    -> contracts
+renderer-webgpu  -> renderer-core, contracts
+geometry-wasm    -> contracts
+geometry-reference (test-only) -> contracts
+react            -> editor-core, contracts
+ui               -> react
+persistence adapters -> model, contracts
+playground / host composition -> public API and selected concrete adapters
 ```
 
+The host composition root constructs the concrete renderer, geometry, and persistence adapters and injects them through contracts. Neither `editor-core` nor `renderer-core` imports `geometry-wasm`. The TypeScript geometry reference is an independent test oracle, not a production dependency of the WASM adapter. See [ADR 0001](docs/decisions/0001-port-composition.md) for the correction to the earlier package diagram.
+
 This diagram reserves boundaries; it does not require every box to become a package immediately. A package is created only when a boundary needs independent compilation, dependency isolation, testing, or distribution.
+
+At P0.4, only `contracts`, `renderer-core`, `renderer-webgpu`, and `playground` exist. The current boundary checker covers those four packages; future packages must extend the checker and contract tests before use. The reserved dependency graph is not evidence that the editor, model, or geometry services have been implemented.
 
 Forbidden dependency examples:
 
@@ -120,22 +121,25 @@ Forbidden dependency examples:
 
 ## State classification
 
-| State | Owner | Durable |
-| --- | --- | --- |
-| Document nodes and styles | Document model | Yes |
-| Commands and undo entries | Editor core | Session/history policy |
-| Selection, hover and active tool | Editor core session | No |
-| Viewport and camera | Editor session/renderer contract | No by default |
-| World bounds and spatial index | Derived services | Rebuildable |
-| Flattened paths and meshes | Geometry/graphics cache | Rebuildable |
-| GPU buffers, textures and pipelines | WebGPU backend | Rebuildable |
-| React component state | Framework/UI adapters | No |
+| State                               | Owner                            | Durable                                  |
+| ----------------------------------- | -------------------------------- | ---------------------------------------- |
+| Document nodes and styles           | Document model                   | Yes                                      |
+| Commands and undo entries           | Editor core                      | Session/history policy                   |
+| Selection, hover and active tool    | Editor core session              | No                                       |
+| Viewport and camera                 | Editor session/renderer contract | No by default                            |
+| Last open page ID                   | Host/persistence envelope        | Yes; separate from document edit history |
+| World bounds and spatial index      | Derived services                 | Rebuildable                              |
+| Flattened paths and meshes          | Geometry/graphics cache          | Rebuildable                              |
+| GPU buffers, textures and pipelines | WebGPU backend                   | Rebuildable                              |
+| React component state               | Framework/UI adapters            | No                                       |
 
 ## Extension boundary
 
 Trusted prototype extensions register declarative node definitions, tools, commands, shortcuts, and UI contributions. They use public command, query, event, geometry, and render-contribution contracts.
 
 Extensions cannot receive mutable store internals, arbitrary WebGPU handles, WASM pointers, or unrestricted global access through the SDK. This constraint keeps a future message-based sandbox possible.
+
+Trusted build-time extensions execute in the host's JavaScript environment. Restricting SDK handles is an API boundary, not a security sandbox; isolation remains deferred by the requirements.
 
 ## Cross-cutting policies
 
@@ -149,4 +153,3 @@ Extensions cannot receive mutable store internals, arbitrary WebGPU handles, WAS
 ## Decision changes
 
 A change to a top-level boundary or dependency direction requires updating this document and adding a focused decision record under `docs/decisions/`. Subsystem algorithm changes update their subsystem architecture document instead.
-
