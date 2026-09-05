@@ -21,13 +21,18 @@ function outputDirectory(testInfo: TestInfo): string {
 
 export function evidenceSource(testInfo: TestInfo): EvidenceSource {
   const directory = repositoryPath(outputDirectory(testInfo));
-  const ignoredPrefixes = [`${directory}/`, 'docs/benchmarks/results/', 'test-results/'];
+  const ignoredRoots = [directory, 'docs/benchmarks/results', 'test-results'];
   const sourceChanges = execFileSync('git', ['status', '--short'], { encoding: 'utf8' })
     .split(/\r?\n/u)
     .filter((entry) => {
       if (entry === '') return false;
-      const changedPath = entry.slice(3).replaceAll('\\', '/');
-      return !ignoredPrefixes.some((prefix) => changedPath.startsWith(prefix));
+      const changedPath = entry.slice(3).replaceAll('\\', '/').replace(/\/$/u, '');
+      return !ignoredRoots.some(
+        (root) =>
+          changedPath === root ||
+          changedPath.startsWith(`${root}/`) ||
+          root.startsWith(`${changedPath}/`),
+      );
     });
   return {
     revision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
