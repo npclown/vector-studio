@@ -39,6 +39,8 @@ const api = Object.freeze({
   getFrameMeasurements: () => backend.getFrameMeasurements(),
   invalidate: () => backend.invalidate({ reason: 'scene' }),
   resetFrameMeasurements: () => backend.resetFrameMeasurements(),
+  startFrameMeasurements: (capacity?: number) => backend.startFrameMeasurements(capacity),
+  stopFrameMeasurements: () => backend.stopFrameMeasurements(),
   resize: (width: number, height: number, devicePixelRatio: number) =>
     backend.resize({ width, height }, devicePixelRatio),
   setMode: (mode: 'on-demand' | 'continuous') => backend.setMode(mode),

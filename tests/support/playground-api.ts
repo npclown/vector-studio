@@ -45,18 +45,30 @@ export interface PlaygroundSnapshot {
   readonly statistics: PlaygroundStatistics;
 }
 
+export interface PlaygroundFrameMeasurements {
+  readonly active: boolean;
+  readonly capacity: number;
+  readonly encodeAndSubmitMs: readonly number[];
+  readonly frameIntervalsMs: readonly number[];
+  readonly droppedSamples: {
+    readonly encodeAndSubmitMs: number;
+    readonly frameIntervalsMs: number;
+  };
+  readonly startedAtMs?: number;
+  readonly endedAtMs?: number;
+}
+
 declare global {
   interface Window {
     __p0LongTasks: number[];
     __vectorStudioP0: {
       dispose(): void;
       destroyDeviceForTesting(): void;
-      getFrameMeasurements(): {
-        readonly encodeAndSubmitMs: readonly number[];
-        readonly frameIntervalsMs: readonly number[];
-      };
+      getFrameMeasurements(): PlaygroundFrameMeasurements;
       invalidate(): void;
       resetFrameMeasurements(): void;
+      startFrameMeasurements(capacity?: number): void;
+      stopFrameMeasurements(): PlaygroundFrameMeasurements;
       resize(width: number, height: number, devicePixelRatio: number): unknown;
       setMode(mode: 'on-demand' | 'continuous'): void;
       snapshot(): PlaygroundSnapshot;

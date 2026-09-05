@@ -170,14 +170,14 @@ test('records the P0.3 steady and idle scenarios', async ({ browser, page }, tes
     await page.waitForTimeout(3000);
     const baseline = await page.evaluate(() => {
       window.__p0LongTasks = [];
-      window.__vectorStudioP0.resetFrameMeasurements();
+      window.__vectorStudioP0.startFrameMeasurements();
       return window.__vectorStudioP0.snapshot().statistics;
     });
     await page.waitForTimeout(10_000);
     await page.evaluate(() => window.__vectorStudioP0.setMode('on-demand'));
     await page.waitForTimeout(100);
     const measured = await page.evaluate(() => ({
-      measurements: window.__vectorStudioP0.getFrameMeasurements(),
+      measurements: window.__vectorStudioP0.stopFrameMeasurements(),
       snapshot: window.__vectorStudioP0.snapshot(),
       longTasks: window.__p0LongTasks.length,
     }));
