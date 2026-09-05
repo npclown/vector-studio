@@ -34,6 +34,11 @@ export interface P0BenchmarkRepetition {
   readonly index: number;
   readonly startedAtUtc: string;
   readonly endedAtUtc: string;
+  readonly window: {
+    readonly clock: string;
+    readonly startMs: number;
+    readonly endMs: number;
+  };
   readonly sampleCounts: Readonly<Record<string, number>>;
   readonly samples: Readonly<Record<string, readonly number[]>>;
   readonly metrics: Readonly<Record<string, BenchmarkMetric>>;
@@ -199,6 +204,17 @@ export function validateP0BenchmarkRecord(record: P0BenchmarkRecord): readonly s
       Date.parse(repetition.endedAtUtc) < Date.parse(repetition.startedAtUtc)
     ) {
       issues.push(`${prefix} ends before it starts.`);
+    }
+    if (!isNonEmpty(repetition.window.clock)) {
+      issues.push(`${prefix}.window.clock must be non-empty.`);
+    }
+    if (
+      !Number.isFinite(repetition.window.startMs) ||
+      !Number.isFinite(repetition.window.endMs) ||
+      repetition.window.startMs < 0 ||
+      repetition.window.endMs < repetition.window.startMs
+    ) {
+      issues.push(`${prefix}.window must contain finite ordered non-negative times.`);
     }
     for (const [name, count] of Object.entries(repetition.sampleCounts)) {
       if (!Number.isSafeInteger(count) || count < 0) {

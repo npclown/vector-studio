@@ -118,15 +118,15 @@ Markdown is excluded by the current `.prettierignore`. Consequently `pnpm check`
 
 The toolchain exists as of P0.4. `package.json` owns exact commands and pinned versions; the responsibilities and current limitations are:
 
-| Command                  | Current responsibility / limitation                                                                                            |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| `pnpm check`             | Formatting (Markdown excluded), ESLint, TypeScript, unit/contract tests, package boundaries                                    |
-| `pnpm test:unit`         | Deterministic Vitest tests without a physical GPU                                                                              |
-| `pnpm test:browser`      | Chrome/Edge browser integration; headless by default, not hardware acceptance                                                  |
-| `pnpm test:gpu`          | Headed Chrome/Edge validation error and device-loss recovery; not native OOM evidence                                          |
-| `pnpm benchmark:p0:p0-3` | Legacy production steady/idle runner; fixed historical output filenames must be corrected before reuse in the tracked checkout |
-| `pnpm benchmark:p0`      | Still exits 1 with NOT IMPLEMENTED; full runner is P0.5 work                                                                   |
-| `pnpm build`             | Workspace package declarations/JavaScript and playground production build                                                      |
+| Command                  | Current responsibility / limitation                                                                                                                              |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm check`             | Formatting (Markdown excluded), ESLint, TypeScript, unit/contract tests, package boundaries                                                                      |
+| `pnpm test:unit`         | Deterministic Vitest tests without a physical GPU                                                                                                                |
+| `pnpm test:browser`      | Chrome/Edge browser integration; headless by default, not hardware acceptance                                                                                    |
+| `pnpm test:gpu`          | Headed Chrome/Edge validation error and device-loss recovery; not native OOM evidence                                                                            |
+| `pnpm benchmark:p0:p0-3` | Legacy production steady/idle runner; fixed historical output filenames must be corrected before reuse in the tracked checkout                                   |
+| `pnpm benchmark:p0`      | P0.5 five-scenario production headed runner; defaults to acceptance and requires `--display-refresh-hz`, with an explicit non-accepting `--profile smoke` option |
+| `pnpm build`             | Workspace package declarations/JavaScript and playground production build                                                                                        |
 
 Agents must use repository commands once they exist rather than bypassing them with ad hoc package-local commands when claiming repository-wide validation.
 

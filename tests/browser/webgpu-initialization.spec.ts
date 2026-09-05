@@ -23,6 +23,18 @@ test('initializes and resizes a real WebGPU canvas', async ({ page, browserName 
   await page.waitForFunction(
     () => window.__vectorStudioP0.snapshot().statistics.framesPresented === 1,
   );
+  await page.evaluate(() => window.__vectorStudioP0.waitForInitializationMilestones());
+  const timing = await page.evaluate(() => window.__vectorStudioP0.getInitializationTiming());
+  expect(timing).toMatchObject({
+    timeOrigin: expect.any(Number),
+    initializationStartedAtMs: expect.any(Number),
+    readyAtMs: expect.any(Number),
+    firstSubmissionAtMs: expect.any(Number),
+    gpuCompletionAtMs: expect.any(Number),
+  });
+  expect(timing?.initializationToReadyMs).toBeGreaterThanOrEqual(0);
+  expect(timing?.firstSubmissionMs).toBeGreaterThanOrEqual(timing?.initializationToReadyMs ?? 0);
+  expect(timing?.gpuCompletionMs).toBeGreaterThanOrEqual(timing?.firstSubmissionMs ?? 0);
   const presented = await page.evaluate(() => window.__vectorStudioP0.snapshot());
   expect(presented.statistics).toMatchObject({
     framesSubmitted: 1,

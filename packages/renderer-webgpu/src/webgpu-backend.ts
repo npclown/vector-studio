@@ -229,6 +229,13 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     this.#device.destroy();
   }
 
+  waitForSubmittedWork(): Promise<void> {
+    if (this.#state !== 'ready' || !this.#device) {
+      return Promise.reject(new Error('The backend must be ready before waiting for GPU work.'));
+    }
+    return this.#device.waitForSubmittedWork();
+  }
+
   startFrameMeasurements(capacity = DEFAULT_MEASUREMENT_CAPACITY): void {
     if (!Number.isSafeInteger(capacity) || capacity <= 0) {
       throw new RangeError('Measurement capacity must be a positive safe integer.');

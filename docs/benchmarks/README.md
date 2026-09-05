@@ -16,7 +16,7 @@ docs/benchmarks/
 
 Raw machine-readable output should be stored beside a result when the runner produces it, using the same base name and a `.json` extension. Large traces and screenshots may live in the test artifact store and be linked from the result.
 
-Every new run needs a collision-free identity, such as a UTC time/run-ID suffix after the machine name. Writers must refuse to replace an existing artifact. Keep committed observations immutable; append a correction/review record or a new run instead. The legacy P0.3 runner currently violates this rule through fixed filenames; its replacement is tracked in [P0.5](../plans/p0-webgpu-foundation.md#p05-playground-and-measurement-harness).
+Every new run needs a collision-free identity, such as a UTC time/run-ID suffix after the machine name. Writers must refuse to replace an existing artifact. Keep committed observations immutable; append a correction/review record or a new run instead. The legacy `benchmark:p0:p0-3` runner still violates this rule through fixed filenames and must not be reused in the tracked checkout. Its P0.5 successor is the safe root `benchmark:p0` runner documented in the [active plan](../plans/p0-webgpu-foundation.md#p05-playground-and-measurement-harness).
 
 ## Reproducibility requirements
 

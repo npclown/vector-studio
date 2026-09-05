@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.5.0 integrated; P0.5.1 validated locally and awaiting integration
+Status: P0.5.1 integrated; P0.5.2 validated locally and awaiting integration
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -256,7 +256,7 @@ Execution order:
 
 - [x] **P0.5.0 measurement contract:** define clocks/events, bounded collection, scenario/result schema, configuration hashing, provenance, validation, and collision-safe artifact writing with deterministic unit tests.
 - [x] **P0.5.1 playground controls:** expose the required dashboard and controls through a backend-instance composition root; disposal/reinitialize replaces the terminal backend instance.
-- [ ] **P0.5.2 five-scenario runner:** replace the pending root command, execute every `p0/*/v1` scenario in the production headed Chrome/Edge configuration, and generate schema-valid raw JSON plus matching Markdown without accepting its own output.
+- [x] **P0.5.2 five-scenario runner:** replace the pending root command, execute every `p0/*/v1` scenario in the production headed Chrome/Edge configuration, and generate schema-valid raw JSON plus matching Markdown without accepting its own output.
 - [ ] **P0.5.3 smoke evidence and integration:** run a bounded smoke profile, inspect dashboard/JSON/Markdown artifacts, record limitations, pass required CI, and integrate before P0.5a.
 
 - [ ] Display backend state, adapter identity, surface size, sample count, frame counters, timing summaries, and recent diagnostics.
@@ -317,6 +317,16 @@ P0.5.1 implementation evidence:
 - `pnpm test:browser` passes 10/10 Chrome/Edge tests. The new tests drive dashboard controls, observe bounded samples, recover to generation 2 with refreshed capability display, dispose/reinitialize to a fresh generation-1 instance, prove two synchronous reinitialize controls create only one replacement, and restore the exact 640 x 360 DPR-1 reference surface after 120 resize steps.
 - Routine browser screenshots now use the Playwright per-run output directory instead of overwriting the committed P0.3 historical images. The two historical files remain byte-identical to `main`.
 - P0.5.3 still owns the committed manual smoke screenshot; no benchmark result or performance claim is created here.
+
+P0.5.2 implementation evidence:
+
+- `pnpm benchmark:p0` now runs a production build and the serial headed Chrome/Edge `p0-foundation.spec.ts` runner. The default `acceptance` profile requires an explicit positive display refresh rate; `--profile smoke` reduces durations/cycles but retains full configuration and cannot satisfy thresholds.
+- The runner exports `p0/startup/v1`, `p0/steady-foundation/v1`, `p0/idle-invalidation/v1`, `p0/resize-storm/v1`, and `p0/lifecycle-recovery/v1`. The legacy P0.3 config is restricted to its historical runner and can no longer accidentally execute the successor suite.
+- Startup records navigation-to-ready, initialization-to-ready, first submission, and `GPUQueue.onSubmittedWorkDone()` completion separately. Recovery records ready, first rebuilt submission, queue completion, and unavailable physical presentation separately; no submission/completion value is labeled present.
+- Every repetition stores UTC and monotonic measurement-window boundaries, raw timed samples, counts, expected/unexpected diagnostics, dropped-sample counts, complete configuration/hash, environment, browser flags, and clean or manifest-hashed dirty source provenance.
+- `pnpm benchmark:p0 -- --profile smoke --output-dir test-results/p0-smoke-final` passes 2/2 headed browser projects in 9.3 seconds after the production build. Immediate validation finds 10 JSON plus 10 matching Markdown artifacts, all schema v1 and Exploratory, with ordered windows, zero unexpected diagnostics, zero dropped samples, and all five scenario IDs in both browsers.
+- `pnpm check` passes 53 tests across 9 files plus all static/boundary checks. `pnpm test:browser` passes 10/10 Chrome/Edge tests including monotonic initialization/first-submission/queue-completion ordering.
+- Smoke output remains an ignored local test artifact because it measured an uncommitted source manifest. P0.5.3 owns a clean-revision committed smoke record and dashboard screenshot; this checkpoint makes no performance claim.
 
 ### P0.5a Missing foundation experiments
 
@@ -485,9 +495,11 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-09-06 | P0.5.0 measurement clocks/events, bounded collection, result validation, hashing, Markdown generation, and collision-safe writes completed locally. | `pnpm check`: 53 tests across 9 files; `pnpm build`; browser 6/6                                                                                      |
 | 2026-09-06 | P0.5.0 pull-request validation passed and the checkpoint integrated into protected `main`.                                                          | PR #17: `https://github.com/npclown/vector-studio/pull/17`; merge commit `50b8254`; required validation job `101337535972`                            |
 | 2026-09-06 | P0.5.1 playground dashboard, complete control surface, current-generation capability display, and serialized backend replacement completed locally. | `pnpm check`: 53 tests; `pnpm build`; Chrome/Edge browser controls 10/10                                                                              |
+| 2026-09-06 | P0.5.1 pull-request validation passed and the checkpoint integrated into protected `main`.                                                          | PR #18: `https://github.com/npclown/vector-studio/pull/18`; merge commit `e873efa`; required validation job `101340186331`                            |
+| 2026-09-06 | P0.5.2 five-scenario production runner, event-separated timing, queue completion, full record provenance, and safe output completed locally.        | `pnpm check`: 53 tests; browser 10/10; headed smoke 2/2 producing 10 JSON + 10 Markdown records                                                       |
 
 Documentation review update, 2026-09-05: reconciled the dependency graph (ADR 0001), mapped graphics/MVP coverage, restored missing P0 foundation acceptance, and recorded lifecycle/measurement follow-ups. Local documentation links/formatting, `git diff --check`, `pnpm check` (45 tests), and `pnpm build` pass; details and reproduction commands are in `docs/evidence/docs-review-2026-09-05.md`. This update adds no implementation or benchmark result.
 
 ## Gate outcome
 
-Current outcome: **P0 OPEN; P0.4A INTEGRATED, READY FOR P0.5**. The historical P0.4 checkpoint and its CI/hardware evidence remain recorded. PR #14 identified a terminal-recovery gap and limits to constant-counter evidence; P0.4a now has deterministic and headed hardware evidence without rewriting those historical records. The next checkpoint is P0.5 measurement harness, followed by P0.5a foundation experiments and P0.6 full gate review. P1 may not begin until the complete P0 gate passes or the owning design is explicitly revised before implementation.
+Current outcome: **P0 OPEN; P0.5.1 INTEGRATED, P0.5.2 AWAITING INTEGRATION**. The five-scenario runner is locally validated but its smoke output is not an accepted performance baseline. P0.5.3 still owns clean-revision smoke evidence and integration, followed by P0.5a foundation experiments and P0.6 full gate review. P1 may not begin until the complete P0 gate passes or the owning design is explicitly revised before implementation.
