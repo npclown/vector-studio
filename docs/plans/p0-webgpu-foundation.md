@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.5.1 integrated; P0.5.2 validated locally and awaiting integration
+Status: P0.5.2 integrated; P0.5.3 in progress
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -328,6 +328,14 @@ P0.5.2 implementation evidence:
 - `pnpm check` passes 53 tests across 9 files plus all static/boundary checks. `pnpm test:browser` passes 10/10 Chrome/Edge tests including monotonic initialization/first-submission/queue-completion ordering.
 - Smoke output remains an ignored local test artifact because it measured an uncommitted source manifest. P0.5.3 owns a clean-revision committed smoke record and dashboard screenshot; this checkpoint makes no performance claim.
 
+P0.5.3 evidence-capture rules fixed before implementation:
+
+- Routine `pnpm test:gpu` runs write only to Playwright's ignored per-test output. They must not rewrite the immutable P0.4/P0.4a evidence directories.
+- A deliberate evidence run sets `P0_EVIDENCE_OUTPUT_DIR` to a new checkpoint-specific directory. JSON and screenshots use exclusive-create checks and fail rather than replacing an existing artifact.
+- The dashboard smoke record includes the exact source revision/clean state, UTC timestamp, headed browser channel/version, adapter metadata, current dashboard snapshot, and screenshot filename. Source cleanliness is evaluated before output and ignores only the selected evidence directory, benchmark-result output, and ignored test output.
+- Generate benchmark records and dashboard/GPU evidence from one clean source commit. The following evidence-only commit may add those immutable outputs and the reviewed plan disposition; preserve both commits when merging so recorded source revision remains reachable.
+- The smoke profile proves orchestration and artifact validity only. Its reduced repetitions/durations, unavailable display refresh rate, and unavailable physical-presentation timestamp keep all numeric performance gates UNVERIFIED.
+
 ### P0.5a Missing foundation experiments
 
 These items restore the existing P0 roadmap scope; the foundation triangle and a single owned vertex buffer do not prove them. Implement as a separately reviewable checkpoint after P0.5 and before P0.6.
@@ -497,9 +505,10 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-09-06 | P0.5.1 playground dashboard, complete control surface, current-generation capability display, and serialized backend replacement completed locally. | `pnpm check`: 53 tests; `pnpm build`; Chrome/Edge browser controls 10/10                                                                              |
 | 2026-09-06 | P0.5.1 pull-request validation passed and the checkpoint integrated into protected `main`.                                                          | PR #18: `https://github.com/npclown/vector-studio/pull/18`; merge commit `e873efa`; required validation job `101340186331`                            |
 | 2026-09-06 | P0.5.2 five-scenario production runner, event-separated timing, queue completion, full record provenance, and safe output completed locally.        | `pnpm check`: 53 tests; browser 10/10; headed smoke 2/2 producing 10 JSON + 10 Markdown records                                                       |
+| 2026-09-06 | P0.5.2 pull-request validation passed and the checkpoint integrated into protected `main`.                                                          | PR #19: `https://github.com/npclown/vector-studio/pull/19`; merge commit `b5ad020`; required validation job `101345581612`                            |
 
 Documentation review update, 2026-09-05: reconciled the dependency graph (ADR 0001), mapped graphics/MVP coverage, restored missing P0 foundation acceptance, and recorded lifecycle/measurement follow-ups. Local documentation links/formatting, `git diff --check`, `pnpm check` (45 tests), and `pnpm build` pass; details and reproduction commands are in `docs/evidence/docs-review-2026-09-05.md`. This update adds no implementation or benchmark result.
 
 ## Gate outcome
 
-Current outcome: **P0 OPEN; P0.5.1 INTEGRATED, P0.5.2 AWAITING INTEGRATION**. The five-scenario runner is locally validated but its smoke output is not an accepted performance baseline. P0.5.3 still owns clean-revision smoke evidence and integration, followed by P0.5a foundation experiments and P0.6 full gate review. P1 may not begin until the complete P0 gate passes or the owning design is explicitly revised before implementation.
+Current outcome: **P0 OPEN; P0.5.2 INTEGRATED, P0.5.3 IN PROGRESS**. P0.5.3 owns clean-revision smoke records, dashboard/GPU evidence, and integration; the smoke profile cannot become an accepted performance baseline. P0.5a foundation experiments and P0.6 full gate review follow. P1 may not begin until the complete P0 gate passes or the owning design is explicitly revised before implementation.

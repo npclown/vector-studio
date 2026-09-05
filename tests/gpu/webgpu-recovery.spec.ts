@@ -1,9 +1,11 @@
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
-import path from 'node:path';
 
 import { expect, test } from '@playwright/test';
+import {
+  captureEvidenceScreenshot,
+  evidenceSource,
+  writeEvidenceJson,
+} from '../support/evidence-output.js';
 import '../support/playground-api.js';
 
 const lifecycleCodes = ['device-loss.detected', 'recovery.started', 'recovery.succeeded'] as const;
@@ -12,10 +14,7 @@ test('surfaces validation error and recovers once after deliberate device destru
   browser,
   page,
 }, testInfo) => {
-  const revision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-  const sourceChanges = execFileSync('git', ['status', '--short'], { encoding: 'utf8' })
-    .split(/\r?\n/)
-    .filter((entry) => entry !== '' && !entry.slice(3).startsWith('docs/evidence/p0.4a/'));
+  const source = evidenceSource(testInfo);
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.goto('/');
@@ -73,36 +72,28 @@ test('surfaces validation error and recovers once after deliberate device destru
   ).toHaveLength(1);
   expect(pageErrors).toEqual([]);
 
-  const evidenceDirectory = path.resolve('docs/evidence/p0.4a');
-  mkdirSync(evidenceDirectory, { recursive: true });
-  writeFileSync(
-    path.join(evidenceDirectory, `recovery-${testInfo.project.name}.json`),
-    `${JSON.stringify(
-      {
-        timestampUtc: new Date().toISOString(),
-        command: 'pnpm test:gpu',
-        revision,
-        sourceWorktree: sourceChanges.length === 0 ? 'clean' : 'dirty',
-        headed: true,
-        operatingSystem: `${os.platform()} ${os.release()} ${os.arch()}`,
-        browser: {
-          channel: testInfo.project.name,
-          version: browser.version(),
-        },
-        adapter: before.capability.capabilities?.adapter ?? {},
-        before: before.statistics,
-        recovered: recovered.statistics,
-        observedDiagnostics: recovered.diagnostics.filter(({ code }) =>
-          ['validation.uncaptured-error', ...lifecycleCodes].includes(code ?? ''),
-        ),
-        pageErrors,
-      },
-      null,
-      2,
-    )}\n`,
-  );
-
-  await page.locator('#webgpu-surface').screenshot({
-    path: `docs/evidence/p0.4a/recovered-${testInfo.project.name}.png`,
+  writeEvidenceJson(testInfo, `recovery-${testInfo.project.name}.json`, {
+    timestampUtc: new Date().toISOString(),
+    command: 'pnpm test:gpu',
+    ...source,
+    headed: true,
+    operatingSystem: `${os.platform()} ${os.release()} ${os.arch()}`,
+    browser: {
+      channel: testInfo.project.name,
+      version: browser.version(),
+    },
+    adapter: before.capability.capabilities?.adapter ?? {},
+    before: before.statistics,
+    recovered: recovered.statistics,
+    observedDiagnostics: recovered.diagnostics.filter(({ code }) =>
+      ['validation.uncaptured-error', ...lifecycleCodes].includes(code ?? ''),
+    ),
+    pageErrors,
   });
+
+  await captureEvidenceScreenshot(
+    testInfo,
+    `recovered-${testInfo.project.name}.png`,
+    page.locator('#webgpu-surface'),
+  );
 });
