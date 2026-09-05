@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,6 +12,10 @@ test('surfaces validation error and recovers once after deliberate device destru
   browser,
   page,
 }, testInfo) => {
+  const revision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  const sourceChanges = execFileSync('git', ['status', '--short'], { encoding: 'utf8' })
+    .split(/\r?\n/)
+    .filter((entry) => entry !== '' && !entry.slice(3).startsWith('docs/evidence/p0.4a/'));
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   await page.goto('/');
@@ -68,7 +73,7 @@ test('surfaces validation error and recovers once after deliberate device destru
   ).toHaveLength(1);
   expect(pageErrors).toEqual([]);
 
-  const evidenceDirectory = path.resolve('docs/evidence/p0.4');
+  const evidenceDirectory = path.resolve('docs/evidence/p0.4a');
   mkdirSync(evidenceDirectory, { recursive: true });
   writeFileSync(
     path.join(evidenceDirectory, `recovery-${testInfo.project.name}.json`),
@@ -76,6 +81,8 @@ test('surfaces validation error and recovers once after deliberate device destru
       {
         timestampUtc: new Date().toISOString(),
         command: 'pnpm test:gpu',
+        revision,
+        sourceWorktree: sourceChanges.length === 0 ? 'clean' : 'dirty',
         headed: true,
         operatingSystem: `${os.platform()} ${os.release()} ${os.arch()}`,
         browser: {
@@ -96,6 +103,6 @@ test('surfaces validation error and recovers once after deliberate device destru
   );
 
   await page.locator('#webgpu-surface').screenshot({
-    path: `docs/evidence/p0.4/recovered-${testInfo.project.name}.png`,
+    path: `docs/evidence/p0.4a/recovered-${testInfo.project.name}.png`,
   });
 });

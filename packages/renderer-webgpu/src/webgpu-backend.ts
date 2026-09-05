@@ -84,6 +84,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   #lastFrameTimestampMs: number | undefined;
   #generation = 0;
   #initialization: Promise<RendererCapabilityResult> | undefined;
+  #terminalRecoveryResult: RendererCapabilityResult | undefined;
   #operationToken = 0;
   #presentationFormat: string | undefined;
   #state: RendererLifecycleState = 'idle';
@@ -139,6 +140,9 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     }
     if (this.#state === 'ready' && this.#capabilityResult) {
       return Promise.resolve(this.#capabilityResult);
+    }
+    if (this.#terminalRecoveryResult) {
+      return Promise.resolve(this.#terminalRecoveryResult);
     }
     if (this.#initialization) {
       return this.#initialization;
@@ -496,6 +500,14 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
 
     this.#scheduler.setActive(false);
     this.#state = 'lost';
+    const token = ++this.#operationToken;
+    let resolveRecovery!: (result: RendererCapabilityResult) => void;
+    const recovery = new Promise<RendererCapabilityResult>((resolve) => {
+      resolveRecovery = resolve;
+    });
+    this.#initialization = recovery;
+    const canvas = this.#canvas;
+    const surfaceSize = this.#surfaceSize;
     this.#emit(
       DIAGNOSTIC_CODES.DEVICE_LOST,
       'The active WebGPU device was lost.',
@@ -504,10 +516,25 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       { reason: loss.reason, message: loss.message },
     );
 
-    const canvas = this.#canvas;
-    const surfaceSize = this.#surfaceSize;
+    if (!this.#isCurrent(token)) {
+      resolveRecovery(this.#stale(lostGeneration + 1));
+      if (this.#initialization === recovery) this.#initialization = undefined;
+      return;
+    }
+
     this.#releaseDeviceGeneration(false);
     if (!canvas || !surfaceSize) {
+      const diagnostic = this.#emit(
+        DIAGNOSTIC_CODES.RECOVERY_FAILED,
+        'WebGPU device recovery failed because the surface was unavailable.',
+        'error',
+        lostGeneration + 1,
+      );
+      const result = Object.freeze({ supported: false as const, diagnostic });
+      this.#state = 'failed';
+      this.#terminalRecoveryResult = result;
+      resolveRecovery(result);
+      if (this.#initialization === recovery) this.#initialization = undefined;
       return;
     }
 
@@ -523,8 +550,13 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       { lostGeneration },
     );
 
-    const token = ++this.#operationToken;
-    const recovery = this.#initializeAttempt(
+    if (!this.#isCurrent(token)) {
+      resolveRecovery(this.#stale(recoveryGeneration));
+      if (this.#initialization === recovery) this.#initialization = undefined;
+      return;
+    }
+
+    const attempt = this.#initializeAttempt(
       {
         canvas,
         cssSize: surfaceSize.css,
@@ -534,12 +566,10 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       recoveryGeneration,
       false,
     );
-    this.#initialization = recovery;
-    const result = await recovery;
-    if (this.#initialization === recovery) {
-      this.#initialization = undefined;
-    }
+    const result = await attempt;
     if (!this.#isCurrent(token)) {
+      resolveRecovery(result);
+      if (this.#initialization === recovery) this.#initialization = undefined;
       return;
     }
     if (!result.supported || !this.#isReady()) {
@@ -551,6 +581,9 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         recoveryGeneration,
         result.supported ? undefined : { diagnosticCode: result.diagnostic.code },
       );
+      this.#terminalRecoveryResult = result;
+      resolveRecovery(result);
+      if (this.#initialization === recovery) this.#initialization = undefined;
       return;
     }
 
@@ -563,6 +596,8 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       { lostGeneration },
     );
     this.invalidate({ reason: 'recovery' });
+    resolveRecovery(result);
+    if (this.#initialization === recovery) this.#initialization = undefined;
   }
 
   #releaseDeviceGeneration(destroyDevice: boolean): void {

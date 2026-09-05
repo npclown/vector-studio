@@ -76,7 +76,7 @@ export class FrameScheduler {
     }
 
     this.#mode = mode;
-    if (mode === 'continuous') {
+    if (mode === 'continuous' && this.#active) {
       this.#schedule();
     }
   }

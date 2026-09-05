@@ -517,6 +517,11 @@ describe('WebGpuBackend lifecycle and surface', () => {
     const sharedRecovery = backend.initialize(surface());
     expect(backend.initialize(surface())).toBe(sharedRecovery);
     expect(requestAdapter).toHaveBeenCalledTimes(2);
+    backend.invalidate({ reason: 'scene' });
+    backend.setMode('continuous');
+    backend.invalidate({ reason: 'viewport' });
+    expect(animationFrameClock.callbacks).toHaveLength(0);
+    expect(first.render).toHaveBeenCalledOnce();
     recoveredDevice.resolve(second.device);
     await expect(sharedRecovery).resolves.toMatchObject({ supported: true });
     await vi.waitFor(() => expect(backend.state).toBe('ready'));
@@ -552,9 +557,10 @@ describe('WebGpuBackend lifecycle and surface', () => {
     animationFrameClock.flush(32);
     expect(backend.getStatistics().framesPresented).toBe(presentedBeforeLoss + 1);
     expect(second.render).toHaveBeenCalledOnce();
+    expect(first.render).toHaveBeenCalledOnce();
   });
 
-  it('attempts recovery only once and becomes failed when reacquisition fails', async () => {
+  it('keeps recovery failure terminal for one instance while a new instance can initialize', async () => {
     const { adapter, controller, platform } = fixture();
     let adapterRequest = 0;
     const requestAdapter = vi.fn(() => Promise.resolve(adapterRequest++ === 0 ? adapter : null));
@@ -572,6 +578,156 @@ describe('WebGpuBackend lifecycle and surface', () => {
     expect(
       diagnostics.filter(({ code }) => code === DIAGNOSTIC_CODES.RECOVERY_FAILED),
     ).toHaveLength(1);
+
+    const retryResults = await Promise.all([
+      backend.initialize(surface()),
+      backend.initialize(surface()),
+      backend.initialize(surface()),
+    ]);
+    expect(retryResults.every((result) => result === retryResults[0])).toBe(true);
+    expect(retryResults[0]).toMatchObject({ supported: false });
+    expect(requestAdapter).toHaveBeenCalledTimes(2);
+    expect(backend.state).toBe('failed');
+
+    backend.dispose();
+    backend.dispose();
+    expect(backend.state).toBe('disposed');
+
+    const fresh = fixture();
+    const replacement = new WebGpuBackend({ platform: fresh.platform });
+    await expect(replacement.initialize(surface())).resolves.toMatchObject({ supported: true });
+    expect(fresh.requestAdapter).toHaveBeenCalledOnce();
+    replacement.dispose();
+  });
+
+  it('does not revive or submit when disposal wins a pending recovery race', async () => {
+    const first = fakeDeviceController();
+    const second = fakeDeviceController();
+    const recoveredDevice = deferred<WebGpuDevicePort>();
+    const requestAdapter = vi
+      .fn<() => Promise<WebGpuAdapterPort | null>>()
+      .mockResolvedValueOnce({
+        info: { vendor: 'first' },
+        requestDevice: () => Promise.resolve(first.device),
+      })
+      .mockResolvedValueOnce({
+        info: { vendor: 'second' },
+        requestDevice: () => recoveredDevice.promise,
+      });
+    const base = fixture();
+    const animationFrameClock = new ManualAnimationFrameClock();
+    const backend = new WebGpuBackend({
+      animationFrameClock,
+      platform: { ...base.platform, requestAdapter },
+    });
+    await backend.initialize(surface());
+    animationFrameClock.flush();
+
+    first.lose();
+    await vi.waitFor(() => expect(backend.getStatistics().recoveryAttempts).toBe(1));
+    const pendingRecovery = backend.initialize(surface());
+    backend.invalidate({ reason: 'scene' });
+    backend.setMode('continuous');
+    backend.dispose();
+    recoveredDevice.resolve(second.device);
+
+    await expect(pendingRecovery).resolves.toMatchObject({
+      supported: false,
+      diagnostic: { code: DIAGNOSTIC_CODES.STALE_INITIALIZATION_IGNORED },
+    });
+    expect(backend.state).toBe('disposed');
+    expect(requestAdapter).toHaveBeenCalledTimes(2);
+    expect(first.render).toHaveBeenCalledOnce();
+    expect(second.render).not.toHaveBeenCalled();
+    expect(second.destroy).toHaveBeenCalledOnce();
+    expect(animationFrameClock.callbacks).toHaveLength(0);
+    expect(backend.getStatistics()).toMatchObject({
+      resources: { live: 0 },
+      diagnosticListeners: 0,
+      deviceListeners: 0,
+      pendingFrameCallbacks: 0,
+    });
+  });
+
+  it('shares recovery when lifecycle methods re-enter from diagnostic callbacks', async () => {
+    const first = fakeDeviceController();
+    const second = fakeDeviceController();
+    const recoveredDevice = deferred<WebGpuDevicePort>();
+    const requestAdapter = vi
+      .fn<() => Promise<WebGpuAdapterPort | null>>()
+      .mockResolvedValueOnce({ info: {}, requestDevice: () => Promise.resolve(first.device) })
+      .mockResolvedValueOnce({ info: {}, requestDevice: () => recoveredDevice.promise });
+    const base = fixture();
+    const animationFrameClock = new ManualAnimationFrameClock();
+    const backend = new WebGpuBackend({
+      animationFrameClock,
+      platform: { ...base.platform, requestAdapter },
+    });
+    const reentrantInitializations: Promise<unknown>[] = [];
+    backend.subscribeDiagnostics((diagnostic) => {
+      if (
+        diagnostic.code === DIAGNOSTIC_CODES.DEVICE_LOST ||
+        diagnostic.code === DIAGNOSTIC_CODES.RECOVERY_STARTED
+      ) {
+        reentrantInitializations.push(backend.initialize(surface()));
+        backend.invalidate({ reason: 'scene' });
+      }
+    });
+    await backend.initialize(surface());
+    animationFrameClock.flush();
+
+    first.lose();
+    await vi.waitFor(() => expect(reentrantInitializations).toHaveLength(2));
+    expect(reentrantInitializations[0]).toBe(reentrantInitializations[1]);
+    expect(requestAdapter).toHaveBeenCalledTimes(2);
+    recoveredDevice.resolve(second.device);
+    await Promise.all(reentrantInitializations);
+    await vi.waitFor(() => expect(backend.state).toBe('ready'));
+
+    animationFrameClock.flush();
+    expect(first.render).toHaveBeenCalledOnce();
+    expect(second.render).toHaveBeenCalledOnce();
+    expect(backend.getStatistics()).toMatchObject({
+      recoveryAttempts: 1,
+      staleGenerationSubmissions: 0,
+    });
+  });
+
+  it('lets disposal from a recovery diagnostic terminate the shared attempt', async () => {
+    const first = fakeDeviceController();
+    const base = fixture();
+    const requestAdapter = vi
+      .fn<() => Promise<WebGpuAdapterPort | null>>()
+      .mockResolvedValueOnce({ info: {}, requestDevice: () => Promise.resolve(first.device) });
+    const backend = new WebGpuBackend({ platform: { ...base.platform, requestAdapter } });
+    let sharedRecovery: Promise<unknown> | undefined;
+    backend.subscribeDiagnostics((diagnostic) => {
+      if (diagnostic.code === DIAGNOSTIC_CODES.DEVICE_LOST) {
+        sharedRecovery = backend.initialize(surface());
+      }
+      if (diagnostic.code === DIAGNOSTIC_CODES.RECOVERY_STARTED) {
+        backend.dispose();
+        backend.dispose();
+      }
+    });
+    await backend.initialize(surface());
+
+    first.lose();
+    await vi.waitFor(() => expect(sharedRecovery).toBeDefined());
+    await expect(sharedRecovery).resolves.toMatchObject({
+      supported: false,
+      diagnostic: { code: DIAGNOSTIC_CODES.STALE_INITIALIZATION_IGNORED },
+    });
+    expect(backend.state).toBe('disposed');
+    expect(requestAdapter).toHaveBeenCalledOnce();
+    expect(first.render).not.toHaveBeenCalled();
+    expect(backend.getStatistics()).toMatchObject({
+      recoveryAttempts: 1,
+      resources: { live: 0 },
+      diagnosticListeners: 0,
+      deviceListeners: 0,
+      pendingFrameCallbacks: 0,
+    });
   });
 
   it('ignores loss completion after terminal disposal', async () => {
