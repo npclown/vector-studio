@@ -1,0 +1,191 @@
+{
+  "timestampUtc": "2026-09-05T17:33:28.979Z",
+  "command": "pnpm test:gpu",
+  "revision": "59d103f655ec9b4ee5549ce252c4960bffa94f3b",
+  "sourceWorktree": "clean",
+  "sourceChanges": [],
+  "headed": true,
+  "operatingSystem": "win32 10.0.26200 x64",
+  "browser": {
+    "channel": "chrome",
+    "version": "152.0.7977.76"
+  },
+  "adapter": {
+    "architecture": "turing",
+    "description": "",
+    "vendor": "nvidia"
+  },
+  "screenshot": "dashboard-chrome.png",
+  "snapshot": {
+    "capability": {
+      "supported": true,
+      "capabilities": {
+        "backend": "webgpu",
+        "adapter": {
+          "architecture": "turing",
+          "description": "",
+          "vendor": "nvidia"
+        },
+        "selectedFeatures": ["core-features-and-limits"],
+        "limits": {
+          "maxTextureDimension1D": 8192,
+          "maxTextureDimension2D": 8192,
+          "maxTextureDimension3D": 2048,
+          "maxTextureArrayLayers": 256,
+          "maxBindGroups": 4,
+          "maxBindGroupsPlusVertexBuffers": 24,
+          "maxBindingsPerBindGroup": 1000,
+          "maxDynamicUniformBuffersPerPipelineLayout": 8,
+          "maxDynamicStorageBuffersPerPipelineLayout": 4,
+          "maxSampledTexturesPerShaderStage": 16,
+          "maxSamplersPerShaderStage": 16,
+          "maxStorageBuffersPerShaderStage": 8,
+          "maxStorageTexturesPerShaderStage": 4,
+          "maxUniformBuffersPerShaderStage": 12,
+          "maxUniformBufferBindingSize": 65536,
+          "maxStorageBufferBindingSize": 134217728,
+          "minUniformBufferOffsetAlignment": 256,
+          "minStorageBufferOffsetAlignment": 256,
+          "maxVertexBuffers": 8,
+          "maxBufferSize": 268435456,
+          "maxVertexAttributes": 16,
+          "maxVertexBufferArrayStride": 2048,
+          "maxInterStageShaderVariables": 16,
+          "maxColorAttachments": 8,
+          "maxColorAttachmentBytesPerSample": 32,
+          "maxComputeWorkgroupStorageSize": 16384,
+          "maxComputeInvocationsPerWorkgroup": 256,
+          "maxComputeWorkgroupSizeX": 256,
+          "maxComputeWorkgroupSizeY": 256,
+          "maxComputeWorkgroupSizeZ": 64,
+          "maxComputeWorkgroupsPerDimension": 65535,
+          "maxImmediateSize": 64,
+          "maxStorageBuffersInFragmentStage": 8,
+          "maxStorageTexturesInFragmentStage": 4,
+          "maxStorageBuffersInVertexStage": 8,
+          "maxStorageTexturesInVertexStage": 4
+        },
+        "sampleCount": 4
+      }
+    },
+    "diagnostics": [
+      {
+        "code": "validation.uncaptured-error",
+        "message": "An uncaptured WebGPU device error occurred.",
+        "severity": "error",
+        "generation": 1,
+        "context": {
+          "errorType": "validation",
+          "errorMessage": "Source and destination are the same buffer ([Buffer \"vector-studio/test-overlapping-copy-buffer\"]).\n - While encoding [CommandEncoder \"vector-studio/test-invalid-command-encoder\"].CopyBufferToBuffer([Buffer \"vector-studio/test-overlapping-copy-buffer\"], 0, [Buffer \"vector-studio/test-overlapping-copy-buffer\"], 0, 4).\n - While finishing [CommandEncoder \"vector-studio/test-invalid-command-encoder\"].\n"
+        },
+        "sequence": 0,
+        "timestampMs": 847.4000000059605
+      }
+    ],
+    "backendInstance": 1,
+    "presentationFormat": "bgra8unorm",
+    "state": "ready",
+    "surfaceRevision": 1,
+    "surfaceSize": {
+      "css": {
+        "width": 640,
+        "height": 360
+      },
+      "physical": {
+        "width": 640,
+        "height": 360
+      },
+      "devicePixelRatio": 1,
+      "suspended": false
+    },
+    "statistics": {
+      "lifecycle": "ready",
+      "generation": 1,
+      "mode": "on-demand",
+      "invalidationsRequested": 1,
+      "framesSubmitted": 10,
+      "framesPresented": 10,
+      "pendingFrameCallbacks": 0,
+      "recoveryAttempts": 0,
+      "staleGenerationSubmissions": 0,
+      "diagnosticListeners": 1,
+      "deviceListeners": 2,
+      "shaderModulesCreated": 1,
+      "pipelinesCreated": 1,
+      "resources": {
+        "created": 4,
+        "live": 4,
+        "liveBytes": 3686460,
+        "peakLiveBytes": 3686460,
+        "byCategory": {
+          "buffer": {
+            "created": 1,
+            "live": 1,
+            "liveBytes": 60,
+            "peakLiveBytes": 60
+          },
+          "texture": {
+            "created": 1,
+            "live": 1,
+            "liveBytes": 3686400,
+            "peakLiveBytes": 3686400
+          },
+          "texture-view": {
+            "created": 0,
+            "live": 0,
+            "liveBytes": 0,
+            "peakLiveBytes": 0
+          },
+          "sampler": {
+            "created": 0,
+            "live": 0,
+            "liveBytes": 0,
+            "peakLiveBytes": 0
+          },
+          "bind-group": {
+            "created": 0,
+            "live": 0,
+            "liveBytes": 0,
+            "peakLiveBytes": 0
+          },
+          "bind-group-layout": {
+            "created": 0,
+            "live": 0,
+            "liveBytes": 0,
+            "peakLiveBytes": 0
+          },
+          "pipeline-layout": {
+            "created": 0,
+            "live": 0,
+            "liveBytes": 0,
+            "peakLiveBytes": 0
+          },
+          "render-pipeline": {
+            "created": 1,
+            "live": 1,
+            "liveBytes": 0,
+            "peakLiveBytes": 0
+          },
+          "shader-module": {
+            "created": 1,
+            "live": 1,
+            "liveBytes": 0,
+            "peakLiveBytes": 0
+          }
+        }
+      }
+    }
+  },
+  "initializationTiming": {
+    "timeOrigin": 1788629607912.7,
+    "initializationStartedAtMs": 69.90000000596046,
+    "readyAtMs": 497.80000001192093,
+    "navigationToReadyMs": 497.80000001192093,
+    "initializationToReadyMs": 427.90000000596046,
+    "firstSubmissionAtMs": 513.8000000119209,
+    "firstSubmissionMs": 443.90000000596046,
+    "gpuCompletionAtMs": 518.8000000119209,
+    "gpuCompletionMs": 448.90000000596046
+  },
+  "pageErrors": []
+}

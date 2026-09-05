@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.5.2 integrated; P0.5.3 in progress
+Status: P0.5 complete locally; P0.5.3 awaiting integration
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -59,7 +59,7 @@ The backend implements explicit states:
 | recovering                                        | reacquisition or rebuild fails           | failed; terminal until disposal |
 | Any non-disposed state                            | dispose                                  | disposed                        |
 
-The terminal restriction after recovery failure is an existing P0.4 requirement. The current implementation does not distinguish it from retryable initial failure; correction and regression evidence are tracked in P0.5b below.
+The terminal restriction after recovery failure is an existing P0.4 requirement. P0.4a corrected the former retryable-failure behavior and added deterministic and headed regression evidence before P0.5.
 
 Required invariants:
 
@@ -257,14 +257,14 @@ Execution order:
 - [x] **P0.5.0 measurement contract:** define clocks/events, bounded collection, scenario/result schema, configuration hashing, provenance, validation, and collision-safe artifact writing with deterministic unit tests.
 - [x] **P0.5.1 playground controls:** expose the required dashboard and controls through a backend-instance composition root; disposal/reinitialize replaces the terminal backend instance.
 - [x] **P0.5.2 five-scenario runner:** replace the pending root command, execute every `p0/*/v1` scenario in the production headed Chrome/Edge configuration, and generate schema-valid raw JSON plus matching Markdown without accepting its own output.
-- [ ] **P0.5.3 smoke evidence and integration:** run a bounded smoke profile, inspect dashboard/JSON/Markdown artifacts, record limitations, pass required CI, and integrate before P0.5a.
+- [ ] **P0.5.3 smoke evidence and integration:** run a bounded smoke profile, inspect dashboard/JSON/Markdown artifacts, record limitations, pass required CI, and integrate before P0.5a. Local evidence is complete; remote CI and integration are pending.
 
-- [ ] Display backend state, adapter identity, surface size, sample count, frame counters, timing summaries, and recent diagnostics.
-- [ ] Provide controls for invalidation, continuous rendering, resize storm, device-loss simulation, and disposal/reinitialize checks.
-- [ ] Use stable scenario IDs, versions, and seeds.
-- [ ] Export raw benchmark data and environment metadata as JSON.
-- [ ] Generate or support generation of the committed Markdown result format.
-- [ ] Ensure measurement mode runs a production build without DevTools or tracing overhead.
+- [x] Display backend state, adapter identity, surface size, sample count, frame counters, timing summaries, and recent diagnostics.
+- [x] Provide controls for invalidation, continuous rendering, resize storm, device-loss simulation, and disposal/reinitialize checks.
+- [x] Use stable scenario IDs, versions, and seeds.
+- [x] Export raw benchmark data and environment metadata as JSON.
+- [x] Generate or support generation of the committed Markdown result format.
+- [x] Ensure measurement mode runs a production build without DevTools or tracing overhead.
 
 Evidence: browser integration tests, manual smoke artifact, and schema-valid result files.
 
@@ -335,6 +335,15 @@ P0.5.3 evidence-capture rules fixed before implementation:
 - The dashboard smoke record includes the exact source revision/clean state, UTC timestamp, headed browser channel/version, adapter metadata, current dashboard snapshot, and screenshot filename. Source cleanliness is evaluated before output and ignores only the selected evidence directory, benchmark-result output, and ignored test output.
 - Generate benchmark records and dashboard/GPU evidence from one clean source commit. The following evidence-only commit may add those immutable outputs and the reviewed plan disposition; preserve both commits when merging so recorded source revision remains reachable.
 - The smoke profile proves orchestration and artifact validity only. Its reduced repetitions/durations, unavailable display refresh rate, and unavailable physical-presentation timestamp keep all numeric performance gates UNVERIFIED.
+
+P0.5.3 implementation evidence:
+
+- Routine headed evidence now goes to Playwright's ignored per-test output; the historical P0.4/P0.4a files remain unchanged. `P0_EVIDENCE_OUTPUT_DIR` enables a deliberate unique run, and both JSON and screenshot paths refuse replacement.
+- Clean source revision `59d103f655ec9b4ee5549ce252c4960bffa94f3b` produced 10 schema-valid JSON plus 10 matching Markdown smoke records for the five scenarios in headed Chrome and Edge. All records are Exploratory, have ordered monotonic windows, and report zero unexpected diagnostics and zero dropped samples.
+- The headed dashboard/recovery suite passes 4/4 in 7.5 seconds and produces four clean-provenance JSON records plus four PNGs with zero page errors. Both dashboard screenshots were visually inspected for the rendered scene and all required status/control/diagnostic regions.
+- The reviewed artifact index, exact commands, environment, links, observations, and limitations are recorded in [P0.5 smoke evidence](../evidence/p0.5/2026-09-06-smoke-59d103f/README.md).
+- `pnpm check` passes 53 tests across 9 files plus formatting, ESLint, TypeScript, and boundaries. The smoke benchmark performs the production build; `pnpm test:gpu` passes 4/4 Chrome/Edge tests without modifying historical evidence.
+- P0.5 is functionally complete at this checkpoint, but smoke results do not evaluate performance thresholds. P0.5a remains required before the full five-repetition P0.6 acceptance review.
 
 ### P0.5a Missing foundation experiments
 
@@ -506,9 +515,10 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-09-06 | P0.5.1 pull-request validation passed and the checkpoint integrated into protected `main`.                                                          | PR #18: `https://github.com/npclown/vector-studio/pull/18`; merge commit `e873efa`; required validation job `101340186331`                            |
 | 2026-09-06 | P0.5.2 five-scenario production runner, event-separated timing, queue completion, full record provenance, and safe output completed locally.        | `pnpm check`: 53 tests; browser 10/10; headed smoke 2/2 producing 10 JSON + 10 Markdown records                                                       |
 | 2026-09-06 | P0.5.2 pull-request validation passed and the checkpoint integrated into protected `main`.                                                          | PR #19: `https://github.com/npclown/vector-studio/pull/19`; merge commit `b5ad020`; required validation job `101345581612`                            |
+| 2026-09-06 | P0.5.3 immutable evidence capture and clean-revision smoke records completed locally.                                                               | Source `59d103f`; benchmark 2/2 with 10 JSON + 10 Markdown; headed GPU/dashboard 4/4 with 4 JSON + 4 PNG; reviewed evidence index                     |
 
 Documentation review update, 2026-09-05: reconciled the dependency graph (ADR 0001), mapped graphics/MVP coverage, restored missing P0 foundation acceptance, and recorded lifecycle/measurement follow-ups. Local documentation links/formatting, `git diff --check`, `pnpm check` (45 tests), and `pnpm build` pass; details and reproduction commands are in `docs/evidence/docs-review-2026-09-05.md`. This update adds no implementation or benchmark result.
 
 ## Gate outcome
 
-Current outcome: **P0 OPEN; P0.5.2 INTEGRATED, P0.5.3 IN PROGRESS**. P0.5.3 owns clean-revision smoke records, dashboard/GPU evidence, and integration; the smoke profile cannot become an accepted performance baseline. P0.5a foundation experiments and P0.6 full gate review follow. P1 may not begin until the complete P0 gate passes or the owning design is explicitly revised before implementation.
+Current outcome: **P0 OPEN; P0.5 COMPLETE LOCALLY, AWAITING P0.5.3 INTEGRATION**. The clean-revision smoke records and dashboard/GPU artifacts prove the measurement workflow, but the shortened smoke profile is not an accepted performance baseline. P0.5a foundation experiments precede the P0.6 full gate review; the earlier terminal-recovery correction is already integrated as P0.4a. P1 may not begin until the complete P0 gate passes or the owning design is explicitly revised before implementation.

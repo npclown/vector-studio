@@ -1,0 +1,165 @@
+{
+  "schema": "vector-studio/p0-benchmark-result/v1",
+  "status": "Exploratory",
+  "identity": {
+    "revision": "59d103f655ec9b4ee5549ce252c4960bffa94f3b",
+    "sourceState": "clean",
+    "runId": "38262ce0-3469-4bf6-86e6-2724d2dabc8b",
+    "timestampUtc": "2026-09-05T17:33:07.071Z",
+    "localTimezone": "Asia/Seoul"
+  },
+  "runner": {
+    "id": "vector-studio/p0-runner/v1",
+    "command": "pnpm benchmark:p0 -- --profile smoke --output-dir \"docs/benchmarks/results\"",
+    "buildMode": "production"
+  },
+  "environment": {
+    "operatingSystem": "win32 10.0.26200 x64",
+    "cpu": "AMD Ryzen 7 3700X 8-Core Processor             ",
+    "logicalCores": 16,
+    "installedMemoryBytes": 34291060736,
+    "gpu": {
+      "architecture": "turing",
+      "description": "",
+      "vendor": "nvidia",
+      "driver": "unavailable"
+    },
+    "webGpuLimits": {
+      "maxTextureDimension1D": 8192,
+      "maxTextureDimension2D": 8192,
+      "maxTextureDimension3D": 2048,
+      "maxTextureArrayLayers": 256,
+      "maxBindGroups": 4,
+      "maxBindGroupsPlusVertexBuffers": 24,
+      "maxBindingsPerBindGroup": 1000,
+      "maxDynamicUniformBuffersPerPipelineLayout": 8,
+      "maxDynamicStorageBuffersPerPipelineLayout": 4,
+      "maxSampledTexturesPerShaderStage": 16,
+      "maxSamplersPerShaderStage": 16,
+      "maxStorageBuffersPerShaderStage": 8,
+      "maxStorageTexturesPerShaderStage": 4,
+      "maxUniformBuffersPerShaderStage": 12,
+      "maxUniformBufferBindingSize": 65536,
+      "maxStorageBufferBindingSize": 134217728,
+      "minUniformBufferOffsetAlignment": 256,
+      "minStorageBufferOffsetAlignment": 256,
+      "maxVertexBuffers": 8,
+      "maxBufferSize": 268435456,
+      "maxVertexAttributes": 16,
+      "maxVertexBufferArrayStride": 2048,
+      "maxInterStageShaderVariables": 16,
+      "maxColorAttachments": 8,
+      "maxColorAttachmentBytesPerSample": 32,
+      "maxComputeWorkgroupStorageSize": 16384,
+      "maxComputeInvocationsPerWorkgroup": 256,
+      "maxComputeWorkgroupSizeX": 256,
+      "maxComputeWorkgroupSizeY": 256,
+      "maxComputeWorkgroupSizeZ": 64,
+      "maxComputeWorkgroupsPerDimension": 65535,
+      "maxImmediateSize": 64,
+      "maxStorageBuffersInFragmentStage": 8,
+      "maxStorageTexturesInFragmentStage": 4,
+      "maxStorageBuffersInVertexStage": 8,
+      "maxStorageTexturesInVertexStage": 4
+    },
+    "browser": {
+      "product": "chrome",
+      "channel": "chrome",
+      "version": "152.0.7977.76"
+    },
+    "browserLaunchFlags": ["--enable-unsafe-webgpu"],
+    "displayRefreshRate": {
+      "availability": "unavailable",
+      "reason": "P0_DISPLAY_REFRESH_HZ-not-provided"
+    },
+    "selectedFeatures": ["core-features-and-limits"],
+    "sampleCount": 4,
+    "viewport": {
+      "css": [1280, 720],
+      "physical": [1280, 720],
+      "devicePixelRatio": 1
+    },
+    "power": {
+      "source": "AC/charging",
+      "batteryLevel": 1,
+      "mode": "unavailable"
+    },
+    "knownBackgroundLoad": "not audited; benchmark browsers only were intentionally launched",
+    "hostReportedLogicalCores": 16,
+    "hostReportedMemoryGiB": 32,
+    "devTools": false,
+    "tracing": false,
+    "screenRecording": false,
+    "timezone": "Asia/Seoul"
+  },
+  "scenario": {
+    "id": "p0/idle-invalidation",
+    "version": 1,
+    "seed": 0,
+    "profile": "smoke",
+    "configuration": {
+      "scenarioVersion": 1,
+      "seed": 0,
+      "profile": "smoke",
+      "parameters": {
+        "repetitions": 1,
+        "burstInvalidations": 100,
+        "idleObservationMs": 200,
+        "viewport": [1280, 720],
+        "devicePixelRatio": 1
+      }
+    },
+    "configurationHash": "80f802f5930cc64b3a83eb354abbc35a3fba539fdd0af1728d7a4deab422d71e"
+  },
+  "repetitions": [
+    {
+      "index": 1,
+      "startedAtUtc": "2026-09-05T17:33:06.832Z",
+      "endedAtUtc": "2026-09-05T17:33:07.071Z",
+      "window": {
+        "clock": "performance.now",
+        "startMs": 134,
+        "endMs": 363.19999998807907
+      },
+      "sampleCounts": {
+        "invariants": 3
+      },
+      "samples": {
+        "invariants": [1, 0, 0]
+      },
+      "metrics": {
+        "burstSubmissions": {
+          "availability": "available",
+          "value": 1,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "burst-start",
+          "endEvent": "burst-settled",
+          "observation": "backend statistics"
+        },
+        "idleSubmissions": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "idle-start",
+          "endEvent": "idle-end",
+          "observation": "backend statistics"
+        },
+        "pendingCallbacksAfterDispose": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "dispose-call",
+          "endEvent": "dispose-return",
+          "observation": "scheduler statistics"
+        }
+      },
+      "diagnostics": {
+        "expected": [],
+        "unexpected": []
+      }
+    }
+  ]
+}
