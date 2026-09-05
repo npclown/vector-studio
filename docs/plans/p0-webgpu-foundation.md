@@ -333,7 +333,7 @@ P0.5.3 evidence-capture rules fixed before implementation:
 - Routine `pnpm test:gpu` runs write only to Playwright's ignored per-test output. They must not rewrite the immutable P0.4/P0.4a evidence directories.
 - A deliberate evidence run sets `P0_EVIDENCE_OUTPUT_DIR` to a new checkpoint-specific directory. JSON and screenshots use exclusive-create checks and fail rather than replacing an existing artifact.
 - The dashboard smoke record includes the exact source revision/clean state, UTC timestamp, headed browser channel/version, adapter metadata, current dashboard snapshot, and screenshot filename. Source cleanliness is evaluated before output and ignores only the selected evidence directory, benchmark-result output, and ignored test output.
-- Generate benchmark records and dashboard/GPU evidence from one clean source commit. The following evidence-only commit may add those immutable outputs and the reviewed plan disposition; preserve both commits when merging so recorded source revision remains reachable.
+- Generate benchmark records and dashboard/GPU evidence from one clean source commit. The following evidence-only commit may add those immutable outputs and the reviewed plan disposition. Keep the measured source revision reachable: preserve commits when repository policy allows it, or create a named annotated evidence tag before squash merging when protected linear history requires squash.
 - The smoke profile proves orchestration and artifact validity only. Its reduced repetitions/durations, unavailable display refresh rate, and unavailable physical-presentation timestamp keep all numeric performance gates UNVERIFIED.
 
 P0.5.3 implementation evidence:
@@ -342,6 +342,7 @@ P0.5.3 implementation evidence:
 - Clean source revision `59d103f655ec9b4ee5549ce252c4960bffa94f3b` produced 10 schema-valid JSON plus 10 matching Markdown smoke records for the five scenarios in headed Chrome and Edge. All records are Exploratory, have ordered monotonic windows, and report zero unexpected diagnostics and zero dropped samples.
 - The headed dashboard/recovery suite passes 4/4 in 7.5 seconds and produces four clean-provenance JSON records plus four PNGs with zero page errors. Both dashboard screenshots were visually inspected for the rendered scene and all required status/control/diagnostic regions.
 - The reviewed artifact index, exact commands, environment, links, observations, and limitations are recorded in [P0.5 smoke evidence](../evidence/p0.5/2026-09-06-smoke-59d103f/README.md).
+- Protected `main` requires linear history and the repository permits squash merges only. Before integration, preserve measured source `59d103f` as annotated tag `evidence/p0.5-smoke-2026-09-06`; then use the normal squash merge and delete the feature branch.
 - `pnpm check` passes 53 tests across 9 files plus formatting, ESLint, TypeScript, and boundaries. The smoke benchmark performs the production build; `pnpm test:gpu` passes 4/4 Chrome/Edge tests without modifying historical evidence.
 - P0.5 is functionally complete at this checkpoint, but smoke results do not evaluate performance thresholds. P0.5a remains required before the full five-repetition P0.6 acceptance review.
 
