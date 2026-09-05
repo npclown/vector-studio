@@ -6,6 +6,12 @@ This document is the source of truth for prototype milestone order and milestone
 
 The prototype validates the custom graphics engine before the full editor. Each milestone has an exit gate; later milestones do not begin when a foundational gate fails without an explicit design revision.
 
+## Current position and plan entry rule
+
+P0.0-P0.4 have integration evidence. P0 remains open: the [active P0 plan](plans/p0-webgpu-foundation.md#current-gate-review-2026-09-05) tracks measurement gaps and missing foundation scope. P1-P5 below are roadmap scope, not execution-ready plans.
+
+Before each milestone starts, create its execution plan with acceptance IDs, deterministic fixtures/seeds, numeric tolerances, error behavior, validation commands, and required evidence. Resolve the relevant [graphics design gates](graphics-engine-architecture.md#design-gates-before-later-implementation). A performance gate must also define its measured event, sample/aggregation method, reference environment, and memory-accounting categories before a run; prose such as “measurably faster” is not an executable threshold.
+
 ## Benchmark governance
 
 All milestones use the environment metadata, run protocol, metrics, and result format defined by `docs/benchmarks/README.md`. This roadmap owns only milestone-specific scenes and high-level thresholds until a dedicated execution plan replaces them.
@@ -73,6 +79,8 @@ Exit gate:
 - Single-path edits do not rebuild unrelated paths.
 - Memory growth and typed-view refresh behavior is covered by tests.
 
+P2's execution plan must set the required batch speedup, minimum workload/sample count, and absolute/relative tolerances before benchmarking. Include packing, copying, and output-consumption costs in both variants and keep the TypeScript oracle independent from the Rust implementation.
+
 ## P3: Fill and stroke meshes
 
 Scope:
@@ -98,7 +106,7 @@ Exit gate:
 - No crashes, invalid indices, NaN vertices, or out-of-range writes on the corpus.
 - Fill-rule and winding fixtures match expected reference images.
 - Geometry error remains within the 0.25-screen-pixel target.
-- Stable paths reuse cached meshes while only transforms change.
+- Stable paths reuse cached meshes while transforms stay within the validated tolerance bucket; zoom/DPR changes crossing a bucket rebuild only affected geometry.
 
 ## P4: Clip and mask
 
@@ -130,6 +138,31 @@ Only after the graphics gates pass, connect a minimal editor slice:
 
 This slice proves that the graphics engine is a replaceable downstream service rather than the owner of document semantics.
 
+Exit gate to make concrete in the P5 execution plan:
+
+- Creation, selection, move, and resize run through the public command/query API; a continuous drag creates one undo step and redo restores the same durable content.
+- JSON round trip preserves stable IDs, geometry, paint order, and schema version while excluding renderer caches and transient selection/viewport state; malformed and unsupported-version inputs fail explicitly.
+- A test renderer can replace WebGPU without changing document/history behavior.
+- The custom node registers and edits through public extension contracts without mutable store or GPU access.
+- The slice works through React client bindings in a Next.js client-component host; no browser access occurs during server module import. SSR canvas rendering remains out of scope.
+
+## Requirement coverage
+
+This table maps [the product baseline](requirements.md) to validation scope; it does not add product deferrals.
+
+| Requirement area           | Graphics-prototype coverage                               | Remaining editor/MVP work                                                                                           |
+| -------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| React/Next.js and host API | P5 minimal client integration and replaceable renderer    | Complete headless API, selectors, hooks, configurable shortcuts and minimal UI                                      |
+| Document and persistence   | P5 one-page schema/JSON round trip and history slice      | Multiple pages, migration policy, host save/load and last-open-page envelope, optional IndexedDB autosave           |
+| Shapes and appearance      | P1 primitive fills/strokes/opacity; P3 paths; P4 clipping | Arrow semantics, gradients, dash editing, and full appearance controls                                              |
+| Path editing               | P2/P3 geometry and fill/stroke output                     | Anchor/handle editing, insertion/removal and editor transactions                                                    |
+| Containers and symbols     | P4 render clipping/masks                                  | Group/frame editing, constraints, isolated opacity decisions, symbols/instances and detach                          |
+| Interaction                | P5 click/marquee, move/resize, undo/redo                  | Rotate, snapping, align/distribute, clipboard, layer ordering, duplication/nudging and overlap/frame-entry behavior |
+| Text                       | Architecture reservation only                             | Styled runs, font services, layout, caret/selection and Korean IME                                                  |
+| Performance                | P1 fixed primitive workloads; P2/P3 geometry workloads    | Representative mixed editor workloads and lower-tier hardware before alpha                                          |
+
+P5 completion authorizes planning the remaining editor work; it does not establish MVP completion. Features absent from the first column's prototype coverage need a later execution plan, not an implicit implementation inside P0-P5.
+
 ## Deferred from the graphics prototype
 
 - Rich text and Korean IME
@@ -149,3 +182,5 @@ This slice proves that the graphics engine is a replaceable downstream service r
 2. The current development PC is the first reference machine; every result records hardware and browser metadata. A lower-tier GPU gate is added before alpha distribution.
 3. The prototype is WebGPU-only and reports a structured capability error on unsupported systems.
 4. The 10,000-node stress scene has an initial 256 MB combined working-memory ceiling.
+
+For that ceiling, the P1 plan must define simultaneous live document/scene data, CPU geometry/upload buffers, WASM linear memory when present, and engine-accounted GPU allocations, counting copied storage separately and shared storage once. Distinguish MB (decimal) from MiB (binary), state exclusions, and report unavailable CPU accounting as unverified rather than claiming the combined ceiling from GPU counters alone. P0's 32 MiB GPU gate does not prove this later combined-memory gate.

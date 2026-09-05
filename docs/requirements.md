@@ -10,6 +10,8 @@ Vector Studio is an embeddable vector-editor SDK for React and Next.js applicati
 
 The long-term direction is a precise and extensible editor comparable to Figma. The initial experience and UI should stay small and approachable, closer to Excalidraw. The first deliverable is an in-repository prototype, not a production application or public package.
 
+The MVP requirements below describe the intended editor, not a claim that the graphics prototype implements them. The narrower P0-P5 validation slice and remaining coverage are tracked in [the prototype roadmap](prototype-plan.md#requirement-coverage). Deferral from that slice does not remove an MVP requirement.
+
 ## SDK model
 
 - The editor engine owns live editing state.
