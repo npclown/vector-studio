@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.4 integrated; P0.4a recovery regression correction in progress
+Status: P0.4 integrated; P0.4a validated locally and awaiting integration
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -227,10 +227,10 @@ P0.4 implementation evidence:
 
 The review found missing proof of existing lifecycle invariants; this correction runs before P0.5 so the measurement harness does not encode or measure known-invalid recovery behavior. It changes neither the lifecycle contract nor the P0.4 historical evidence.
 
-- [ ] After recovery fails, repeated explicit/concurrent `initialize` calls return the stored terminal result, make no new adapter/device request, and cannot return the instance to ready. Disposal remains idempotent; a new instance may initialize.
-- [ ] Hold recovery promises pending while invalidating, changing mode, or disposing. Assert zero render calls on the old device/scene after loss, one controlled attempt, no resurrection after disposal, and rendering only through the rebuilt generation on success.
-- [ ] Re-enter lifecycle methods from diagnostic callbacks and verify they cannot trigger duplicate recovery, submit through the lost generation, or revive disposed resources.
-- [ ] Treat `staleGenerationSubmissions` as a diagnostic counter only. Acceptance for exclusion requires instrumented old/new render spies and scheduler callback assertions rather than a constant zero value.
+- [x] After recovery fails, repeated explicit/concurrent `initialize` calls return the stored terminal result, make no new adapter/device request, and cannot return the instance to ready. Disposal remains idempotent; a new instance may initialize.
+- [x] Hold recovery promises pending while invalidating, changing mode, or disposing. Assert zero render calls on the old device/scene after loss, one controlled attempt, no resurrection after disposal, and rendering only through the rebuilt generation on success.
+- [x] Re-enter lifecycle methods from diagnostic callbacks and verify they cannot trigger duplicate recovery, submit through the lost generation, or revive disposed resources.
+- [x] Treat `staleGenerationSubmissions` as a diagnostic counter only. Acceptance for exclusion requires instrumented old/new render spies and scheduler callback assertions rather than a constant zero value.
 
 Validation method:
 
@@ -240,6 +240,15 @@ Validation method:
 - `pnpm test:gpu` refreshes headed Chrome/Edge recovery evidence with the reviewed revision and retains ordered real-device loss/recovery diagnostics.
 
 Evidence: named regression tests through the commands above and headed Chrome/Edge recovery artifacts with revision metadata. These corrections must pass before P0.5 begins; they do not retroactively rewrite P0.4 run records.
+
+P0.4a implementation evidence:
+
+- `pnpm check` passes formatting, ESLint, TypeScript project-reference checking, 48 tests across 8 Vitest files, and dependency-boundary validation. Named regressions cover terminal recovery failure, delayed success/disposal, diagnostic-callback re-entry, stable adapter request counts, old/new render spies, and scheduler cleanup.
+- The backend installs a shared recovery promise before emitting loss diagnostics. A failed recovery stores its terminal result, while disposal invalidates a pending attempt without allowing resource or render resurrection. `FrameScheduler` no longer schedules continuous work while inactive.
+- `pnpm build` produces all library outputs and the Vite playground production bundle; no package boundary or dependency changed.
+- `pnpm test:browser` passes 6/6 normal WebGPU integration tests in Chrome and Edge.
+- `pnpm test:gpu` passes 2/2 headed hardware tests on Windows `10.0.26200`, NVIDIA/Turing, Chrome `152.0.7977.76`, and Edge `152.0.4191.62` against clean source revision `541bf87aead8f4d391fa311c084b75ddd07884c2`. Each browser records one controlled recovery, generations 1 to 2, rebuilt live resources, ordered diagnostics, and no page errors.
+- New machine-readable records and screenshots are under `docs/evidence/p0.4a/`. The immutable `docs/evidence/p0.4/` records were not modified.
 
 ### P0.5 Playground and measurement harness
 
@@ -423,9 +432,10 @@ The implementation may choose concrete tools, but these root responsibilities an
 | 2026-09-04 | P0.4 resource lifecycle, structured GPU errors, generation-safe device-loss recovery, and headed hardware evidence completed locally. | `pnpm check`: 45 tests across 8 files; `pnpm build`; browser 6/6; headed GPU Chrome/Edge 2/2; `docs/evidence/p0.4/`                                   |
 | 2026-09-04 | P0.4 pull-request validation passed on GitHub's Windows runner.                                                                       | PR #12 final `Static, unit, boundaries, and build` job: `https://github.com/npclown/vector-studio/actions/runs/33839256994/job/100918002724`          |
 | 2026-09-04 | P0.4 integrated into protected `main` through a squash merge.                                                                         | PR #12: `https://github.com/npclown/vector-studio/pull/12`; merge commit `a15adcb`                                                                    |
+| 2026-09-06 | P0.4a corrected terminal recovery, diagnostic re-entry, inactive continuous scheduling, and stale-generation proof before P0.5.       | `pnpm check`: 48 tests; `pnpm build`; browser 6/6; headed GPU 2/2; `docs/evidence/p0.4a/`                                                             |
 
 Documentation review update, 2026-09-05: reconciled the dependency graph (ADR 0001), mapped graphics/MVP coverage, restored missing P0 foundation acceptance, and recorded lifecycle/measurement follow-ups. Local documentation links/formatting, `git diff --check`, `pnpm check` (45 tests), and `pnpm build` pass; details and reproduction commands are in `docs/evidence/docs-review-2026-09-05.md`. This update adds no implementation or benchmark result.
 
 ## Gate outcome
 
-Current outcome: **P0 OPEN; P0.4 INTEGRATED, P0.4A IN PROGRESS**. The historical P0.4 checkpoint and its CI/hardware evidence remain recorded. PR #14 identified a terminal-recovery gap and limits to constant-counter evidence; P0.4a corrects those lifecycle regressions before they become inputs to the measurement harness. Next: P0.4a recovery corrections, P0.5 measurement harness, P0.5a foundation experiments, then P0.6 full gate review. P1 may not begin until the complete P0 gate passes or the owning design is explicitly revised before implementation.
+Current outcome: **P0 OPEN; P0.4A VALIDATED LOCALLY, AWAITING PR INTEGRATION**. The historical P0.4 checkpoint and its CI/hardware evidence remain recorded. PR #14 identified a terminal-recovery gap and limits to constant-counter evidence; P0.4a now has deterministic and headed hardware evidence without rewriting those historical records. After required CI and protected-branch integration, the next checkpoint is P0.5 measurement harness, followed by P0.5a foundation experiments and P0.6 full gate review. P1 may not begin until the complete P0 gate passes or the owning design is explicitly revised before implementation.
