@@ -1,0 +1,187 @@
+{
+  "schema": "vector-studio/p0-benchmark-result/v1",
+  "status": "Exploratory",
+  "identity": {
+    "revision": "59d103f655ec9b4ee5549ce252c4960bffa94f3b",
+    "sourceState": "clean",
+    "runId": "0b360467-f728-41e1-a7c2-84b381edfb95",
+    "timestampUtc": "2026-09-05T17:33:09.891Z",
+    "localTimezone": "Asia/Seoul"
+  },
+  "runner": {
+    "id": "vector-studio/p0-runner/v1",
+    "command": "pnpm benchmark:p0 -- --profile smoke --output-dir \"docs/benchmarks/results\"",
+    "buildMode": "production"
+  },
+  "environment": {
+    "operatingSystem": "win32 10.0.26200 x64",
+    "cpu": "AMD Ryzen 7 3700X 8-Core Processor             ",
+    "logicalCores": 16,
+    "installedMemoryBytes": 34291060736,
+    "gpu": {
+      "architecture": "turing",
+      "description": "",
+      "vendor": "nvidia",
+      "driver": "unavailable"
+    },
+    "webGpuLimits": {
+      "maxTextureDimension1D": 8192,
+      "maxTextureDimension2D": 8192,
+      "maxTextureDimension3D": 2048,
+      "maxTextureArrayLayers": 256,
+      "maxBindGroups": 4,
+      "maxBindGroupsPlusVertexBuffers": 24,
+      "maxBindingsPerBindGroup": 1000,
+      "maxDynamicUniformBuffersPerPipelineLayout": 8,
+      "maxDynamicStorageBuffersPerPipelineLayout": 4,
+      "maxSampledTexturesPerShaderStage": 16,
+      "maxSamplersPerShaderStage": 16,
+      "maxStorageBuffersPerShaderStage": 8,
+      "maxStorageTexturesPerShaderStage": 4,
+      "maxUniformBuffersPerShaderStage": 12,
+      "maxUniformBufferBindingSize": 65536,
+      "maxStorageBufferBindingSize": 134217728,
+      "minUniformBufferOffsetAlignment": 256,
+      "minStorageBufferOffsetAlignment": 256,
+      "maxVertexBuffers": 8,
+      "maxBufferSize": 268435456,
+      "maxVertexAttributes": 16,
+      "maxVertexBufferArrayStride": 2048,
+      "maxInterStageShaderVariables": 16,
+      "maxColorAttachments": 8,
+      "maxColorAttachmentBytesPerSample": 32,
+      "maxComputeWorkgroupStorageSize": 16384,
+      "maxComputeInvocationsPerWorkgroup": 256,
+      "maxComputeWorkgroupSizeX": 256,
+      "maxComputeWorkgroupSizeY": 256,
+      "maxComputeWorkgroupSizeZ": 64,
+      "maxComputeWorkgroupsPerDimension": 65535,
+      "maxImmediateSize": 64,
+      "maxStorageBuffersInFragmentStage": 8,
+      "maxStorageTexturesInFragmentStage": 4,
+      "maxStorageBuffersInVertexStage": 8,
+      "maxStorageTexturesInVertexStage": 4
+    },
+    "browser": {
+      "product": "edge",
+      "channel": "edge",
+      "version": "152.0.4191.62"
+    },
+    "browserLaunchFlags": ["--enable-unsafe-webgpu"],
+    "displayRefreshRate": {
+      "availability": "unavailable",
+      "reason": "P0_DISPLAY_REFRESH_HZ-not-provided"
+    },
+    "selectedFeatures": ["core-features-and-limits"],
+    "sampleCount": 4,
+    "viewport": {
+      "css": [1280, 720],
+      "physical": [1280, 720],
+      "devicePixelRatio": 1
+    },
+    "power": {
+      "source": "AC/charging",
+      "batteryLevel": 1,
+      "mode": "unavailable"
+    },
+    "knownBackgroundLoad": "not audited; benchmark browsers only were intentionally launched",
+    "hostReportedLogicalCores": 16,
+    "hostReportedMemoryGiB": 32,
+    "devTools": false,
+    "tracing": false,
+    "screenRecording": false,
+    "timezone": "Asia/Seoul"
+  },
+  "scenario": {
+    "id": "p0/startup",
+    "version": 1,
+    "seed": 0,
+    "profile": "smoke",
+    "configuration": {
+      "scenarioVersion": 1,
+      "seed": 0,
+      "profile": "smoke",
+      "parameters": {
+        "repetitions": 1,
+        "viewport": [1280, 720],
+        "devicePixelRatio": 1
+      }
+    },
+    "configurationHash": "ea8ed16b75f49ed8b01eea21ef9190544c1b6aa557a1265b0b70c6191fc57725"
+  },
+  "repetitions": [
+    {
+      "index": 1,
+      "startedAtUtc": "2026-09-05T17:33:09.721Z",
+      "endedAtUtc": "2026-09-05T17:33:09.890Z",
+      "window": {
+        "clock": "performance.now",
+        "startMs": 32.30000001192093,
+        "endMs": 151.2000000178814
+      },
+      "sampleCounts": {
+        "navigationToReadyMs": 1,
+        "initializationToReadyMs": 1,
+        "firstSubmissionMs": 1,
+        "gpuCompletionMs": 1
+      },
+      "samples": {
+        "navigationToReadyMs": [142.30000001192093],
+        "initializationToReadyMs": [110],
+        "firstSubmissionMs": [113.90000000596046],
+        "gpuCompletionMs": [118.90000000596046]
+      },
+      "metrics": {
+        "navigationToReady": {
+          "availability": "available",
+          "value": 142.3,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "performance.timeOrigin",
+          "endEvent": "backend-ready",
+          "observation": "playground initialization timing"
+        },
+        "initializationToReady": {
+          "availability": "available",
+          "value": 110,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "initialize-call",
+          "endEvent": "backend-ready",
+          "observation": "playground initialization timing"
+        },
+        "firstSubmission": {
+          "availability": "available",
+          "value": 113.9,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "initialize-call",
+          "endEvent": "framesSubmitted increment",
+          "observation": "backend statistics observation"
+        },
+        "gpuCompletion": {
+          "availability": "available",
+          "value": 118.9,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "initialize-call",
+          "endEvent": "GPUQueue.onSubmittedWorkDone resolution",
+          "observation": "queue completion promise"
+        },
+        "observedPresentation": {
+          "availability": "unavailable",
+          "reason": "browser-webgpu-no-presentation-timestamp",
+          "unit": "ms",
+          "clock": "unavailable",
+          "startEvent": "initialize-call",
+          "endEvent": "physical-display-presentation",
+          "observation": "unavailable"
+        }
+      },
+      "diagnostics": {
+        "expected": [],
+        "unexpected": []
+      }
+    }
+  ]
+}
