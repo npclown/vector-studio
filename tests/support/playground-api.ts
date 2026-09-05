@@ -16,6 +16,16 @@ export interface PlaygroundStatistics {
     readonly live: number;
     readonly liveBytes: number;
     readonly peakLiveBytes: number;
+    readonly byCategory: Readonly<
+      Record<
+        string,
+        {
+          readonly live: number;
+          readonly liveBytes: number;
+          readonly peakLiveBytes: number;
+        }
+      >
+    >;
   };
 }
 
@@ -26,6 +36,7 @@ export interface PlaygroundSnapshot {
     readonly capabilities?: {
       readonly adapter: Record<string, string>;
       readonly limits: Record<string, number>;
+      readonly selectedFeatures: readonly string[];
       readonly sampleCount: 1 | 4;
     };
     readonly diagnostic?: { readonly code: string };
@@ -34,6 +45,7 @@ export interface PlaygroundSnapshot {
     readonly code?: string;
     readonly severity?: string;
     readonly generation?: number;
+    readonly timestampMs?: number;
     readonly context?: Record<string, unknown>;
   }[];
   readonly presentationFormat?: string;
@@ -60,13 +72,27 @@ export interface PlaygroundFrameMeasurements {
   readonly endedAtMs?: number;
 }
 
+export interface PlaygroundInitializationTiming {
+  readonly timeOrigin: number;
+  readonly initializationStartedAtMs: number;
+  readonly readyAtMs: number;
+  readonly navigationToReadyMs: number;
+  readonly initializationToReadyMs: number;
+  readonly firstSubmissionAtMs?: number;
+  readonly firstSubmissionMs?: number;
+  readonly gpuCompletionAtMs?: number;
+  readonly gpuCompletionMs?: number;
+}
+
 declare global {
   interface Window {
     __p0LongTasks: number[];
+    __p0LongTaskObserverAvailable: boolean;
     __vectorStudioP0: {
       dispose(): void;
       destroyDeviceForTesting(): void;
       getFrameMeasurements(): PlaygroundFrameMeasurements;
+      getInitializationTiming(): PlaygroundInitializationTiming | undefined;
       invalidate(): void;
       reinitialize(): Promise<unknown>;
       resetFrameMeasurements(): void;
@@ -77,6 +103,8 @@ declare global {
       setMode(mode: 'on-demand' | 'continuous'): void;
       snapshot(): PlaygroundSnapshot;
       triggerValidationErrorForTesting(): void;
+      waitForInitializationMilestones(): Promise<void>;
+      waitForSubmittedWork(): Promise<void>;
     };
   }
 }

@@ -67,6 +67,7 @@ export interface WebGpuDevicePort {
   readonly limits: Readonly<Record<string, number>>;
   readonly lost: Promise<WebGpuDeviceLoss>;
   createFoundationScene(format: string): Promise<WebGpuFoundationSceneResult>;
+  waitForSubmittedWork(): Promise<void>;
   subscribeErrors(listener: (error: WebGpuDeviceError) => void): Disposable;
   triggerValidationErrorForTesting(): void;
   destroy(): void;
@@ -201,6 +202,10 @@ class BrowserDevicePort implements WebGpuDevicePort {
         throw error;
       }
     }
+  }
+
+  waitForSubmittedWork(): Promise<void> {
+    return this.native.queue.onSubmittedWorkDone();
   }
 
   subscribeErrors(listener: (error: WebGpuDeviceError) => void): Disposable {

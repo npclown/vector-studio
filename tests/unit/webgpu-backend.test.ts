@@ -64,6 +64,7 @@ interface FakeDeviceController {
   readonly render: ReturnType<typeof vi.fn>;
   readonly scene: WebGpuFoundationScenePort;
   readonly sceneDispose: ReturnType<typeof vi.fn>;
+  readonly waitForSubmittedWork: ReturnType<typeof vi.fn>;
   emitError(error: WebGpuDeviceError): void;
   lose(loss?: WebGpuDeviceLoss): void;
   listenerCount(): number;
@@ -76,6 +77,7 @@ function fakeDeviceController(): FakeDeviceController {
   const destroy = vi.fn(() =>
     loss.resolve({ reason: 'destroyed', message: 'test device destroyed' }),
   );
+  const waitForSubmittedWork = vi.fn(() => Promise.resolve());
   const errorListeners = new Set<(error: WebGpuDeviceError) => void>();
   let attachmentBytes = 0;
   const scene: WebGpuFoundationScenePort = {
@@ -101,6 +103,7 @@ function fakeDeviceController(): FakeDeviceController {
     limits: { maxTextureDimension2D: 4096, maxBufferSize: 268_435_456 },
     lost: loss.promise,
     createFoundationScene: () => Promise.resolve({ scene, fellBackFrom4x: false }),
+    waitForSubmittedWork,
     subscribeErrors: (listener) => {
       let disposed = false;
       errorListeners.add(listener);
@@ -124,6 +127,7 @@ function fakeDeviceController(): FakeDeviceController {
     render,
     scene,
     sceneDispose,
+    waitForSubmittedWork,
     emitError: (error) => {
       for (const listener of errorListeners) listener(error);
     },
@@ -296,6 +300,7 @@ describe('WebGpuBackend lifecycle and surface', () => {
     expect(configure).toHaveBeenCalledOnce();
     expect(requestAdapter).toHaveBeenCalledOnce();
     expect(requestDevice).toHaveBeenCalledOnce();
+    await expect(backend.waitForSubmittedWork()).resolves.toBeUndefined();
   });
 
   it('shares one concurrent initialization attempt', async () => {
@@ -342,6 +347,9 @@ describe('WebGpuBackend lifecycle and surface', () => {
       diagnostic: { code: DIAGNOSTIC_CODES.STALE_INITIALIZATION_IGNORED },
     });
     expect(backend.state).toBe('disposed');
+    await expect(backend.waitForSubmittedWork()).rejects.toThrow(
+      'The backend must be ready before waiting for GPU work.',
+    );
     expect(destroy).toHaveBeenCalledOnce();
     expect(unconfigure).not.toHaveBeenCalled();
     await expectFailure(backend, DIAGNOSTIC_CODES.INITIALIZATION_AFTER_DISPOSE);

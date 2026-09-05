@@ -10,6 +10,18 @@ const REFERENCE_SURFACE = Object.freeze({
 });
 const MAX_RECENT_DIAGNOSTICS = 50;
 
+interface InitializationTiming {
+  readonly timeOrigin: number;
+  readonly initializationStartedAtMs: number;
+  readonly readyAtMs: number;
+  readonly navigationToReadyMs: number;
+  readonly initializationToReadyMs: number;
+  readonly firstSubmissionAtMs?: number;
+  readonly firstSubmissionMs?: number;
+  readonly gpuCompletionAtMs?: number;
+  readonly gpuCompletionMs?: number;
+}
+
 app.innerHTML = `
   <style>
     :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #080d17; color: #e8edf7; }
@@ -91,6 +103,8 @@ let capability: RendererCapabilityResult | undefined;
 let diagnostics: RendererDiagnostic[] = [];
 let backendInstance = 0;
 let replacement: Promise<RendererCapabilityResult> | undefined;
+let initializationTiming: InitializationTiming | undefined;
+let initializationMilestones: Promise<void> = Promise.resolve();
 
 function currentSurface(): WebGpuSurface {
   return {
@@ -167,6 +181,7 @@ async function createBackend(): Promise<RendererCapabilityResult> {
     now: () => performance.now(),
   });
   backend = candidate;
+  const initializationStartedAtMs = performance.now();
   candidate.subscribeDiagnostics((diagnostic) => {
     if (backend !== candidate) return;
     diagnostics.push(diagnostic);
@@ -175,8 +190,52 @@ async function createBackend(): Promise<RendererCapabilityResult> {
     renderDashboard();
   });
   capability = await candidate.initialize(currentSurface());
+  const readyAtMs = performance.now();
+  const timing = Object.freeze({
+    timeOrigin: performance.timeOrigin,
+    initializationStartedAtMs,
+    readyAtMs,
+    navigationToReadyMs: readyAtMs,
+    initializationToReadyMs: readyAtMs - initializationStartedAtMs,
+  });
+  initializationTiming = timing;
+  initializationMilestones = observeInitializationMilestones(candidate, timing);
+  void initializationMilestones.catch(() => undefined);
   renderDashboard();
   return capability;
+}
+
+async function observeInitializationMilestones(
+  candidate: WebGpuBackend,
+  timing: InitializationTiming,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const deadline = performance.now() + 5000;
+    const observe = () => {
+      if (candidate.getStatistics().framesSubmitted > 0) {
+        resolve();
+      } else if (backend !== candidate || candidate.state === 'disposed') {
+        reject(new Error('Backend changed before its first submission.'));
+      } else if (performance.now() >= deadline) {
+        reject(new Error('Timed out waiting for the first submission.'));
+      } else {
+        requestAnimationFrame(observe);
+      }
+    };
+    observe();
+  });
+  const firstSubmissionAtMs = performance.now();
+  if (backend !== candidate) throw new Error('Backend changed before GPU completion observation.');
+  await candidate.waitForSubmittedWork();
+  const gpuCompletionAtMs = performance.now();
+  if (backend !== candidate) return;
+  initializationTiming = Object.freeze({
+    ...timing,
+    firstSubmissionAtMs,
+    firstSubmissionMs: firstSubmissionAtMs - timing.initializationStartedAtMs,
+    gpuCompletionAtMs,
+    gpuCompletionMs: gpuCompletionAtMs - timing.initializationStartedAtMs,
+  });
 }
 
 function reinitialize(): Promise<RendererCapabilityResult> {
@@ -271,6 +330,7 @@ const api = Object.freeze({
   },
   destroyDeviceForTesting: () => backend.destroyDeviceForTesting(),
   getFrameMeasurements: () => backend.getFrameMeasurements(),
+  getInitializationTiming: () => initializationTiming,
   invalidate: () => backend.invalidate({ reason: 'scene' }),
   reinitialize,
   resetFrameMeasurements: () => backend.resetFrameMeasurements(),
@@ -280,6 +340,8 @@ const api = Object.freeze({
   stopFrameMeasurements: () => backend.stopFrameMeasurements(),
   setMode: (mode: 'on-demand' | 'continuous') => backend.setMode(mode),
   triggerValidationErrorForTesting: () => backend.triggerValidationErrorForTesting(),
+  waitForInitializationMilestones: () => initializationMilestones,
+  waitForSubmittedWork: () => backend.waitForSubmittedWork(),
 });
 
 Object.assign(globalThis, { __vectorStudioP0: api });

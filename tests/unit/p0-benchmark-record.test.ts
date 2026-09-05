@@ -80,6 +80,7 @@ function record(runId = 'run-a'): P0BenchmarkRecord {
         index: 1,
         startedAtUtc: '2026-09-06T01:02:04.000Z',
         endedAtUtc: '2026-09-06T01:02:05.000Z',
+        window: { clock: 'performance.now', startMs: 100, endMs: 1100 },
         sampleCounts: { frameIntervalMs: 1 },
         samples: { frameIntervalMs: [16.25] },
         metrics: {

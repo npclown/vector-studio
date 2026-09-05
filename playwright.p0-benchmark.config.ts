@@ -1,18 +1,18 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const webGpuArguments = ['--enable-unsafe-webgpu'];
+const smoke = process.env.P0_BENCHMARK_PROFILE === 'smoke';
 
 export default defineConfig({
   testDir: './tests/benchmark',
-  testMatch: 'p0-3-foundation.spec.ts',
+  testMatch: 'p0-foundation.spec.ts',
   fullyParallel: false,
-  // Headed benchmark windows must remain foreground-visible; parallel browsers are throttled.
   workers: 1,
   retries: 0,
   reporter: 'line',
-  timeout: 120_000,
+  timeout: smoke ? 120_000 : 900_000,
   use: {
-    baseURL: 'http://127.0.0.1:4174',
+    baseURL: 'http://127.0.0.1:4176',
     trace: 'off',
     video: 'off',
     screenshot: 'off',
@@ -40,8 +40,8 @@ export default defineConfig({
   ],
   webServer: {
     command:
-      'pnpm --filter @vector-studio/playground exec vite preview --host 127.0.0.1 --port 4174 --strictPort',
-    url: 'http://127.0.0.1:4174',
+      'pnpm --filter @vector-studio/playground exec vite preview --host 127.0.0.1 --port 4176 --strictPort',
+    url: 'http://127.0.0.1:4176',
     reuseExistingServer: false,
     timeout: 30_000,
   },
