@@ -20,6 +20,7 @@ export interface PlaygroundStatistics {
 }
 
 export interface PlaygroundSnapshot {
+  readonly backendInstance: number;
   readonly capability: {
     readonly supported: boolean;
     readonly capabilities?: {
@@ -39,6 +40,7 @@ export interface PlaygroundSnapshot {
   readonly state: string;
   readonly surfaceRevision: number;
   readonly surfaceSize?: {
+    readonly devicePixelRatio: number;
     readonly physical: { readonly width: number; readonly height: number };
     readonly suspended: boolean;
   };
@@ -66,10 +68,12 @@ declare global {
       destroyDeviceForTesting(): void;
       getFrameMeasurements(): PlaygroundFrameMeasurements;
       invalidate(): void;
+      reinitialize(): Promise<unknown>;
       resetFrameMeasurements(): void;
       startFrameMeasurements(capacity?: number): void;
       stopFrameMeasurements(): PlaygroundFrameMeasurements;
       resize(width: number, height: number, devicePixelRatio: number): unknown;
+      resizeStorm(): Promise<void>;
       setMode(mode: 'on-demand' | 'continuous'): void;
       snapshot(): PlaygroundSnapshot;
       triggerValidationErrorForTesting(): void;
