@@ -8,7 +8,7 @@ The prototype validates the custom graphics engine before the full editor. Each 
 
 ## Current position and plan entry rule
 
-P0 foundation has a [complete final local acceptance review](evidence/p0.6/20260909-final/README.md) on measured source `b524927`; the [active P0 plan](plans/p0-webgpu-foundation.md#gate-outcome) records its approved measurement boundaries and protected-integration gate. After that checkpoint integrates, the next work is a P1 execution plan resolving the design gates below. P1-P5 remain roadmap scope, not execution-ready implementation plans.
+P0 foundation was integrated through [PR #25](https://github.com/npclown/vector-studio/pull/25) as `28181b7`. Its [final acceptance review](evidence/p0.6/20260909-final/README.md) remains tied to measured source `b524927`. The next checkpoint is the [P1 execution-plan proposal](plans/p1-instanced-primitives.md): scene/public-contract and visual-policy decisions are pending, so P1 implementation has not started. P2-P5 remain roadmap scope without execution-ready plans.
 
 Before each milestone starts, create its execution plan with acceptance IDs, deterministic fixtures/seeds, numeric tolerances, error behavior, validation commands, and required evidence. Resolve the relevant [graphics design gates](graphics-engine-architecture.md#design-gates-before-later-implementation). A performance gate must also define its measured event, sample/aggregation method, reference environment, and memory-accounting categories before a run; prose such as “measurably faster” is not an executable threshold.
 

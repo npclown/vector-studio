@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0 final local acceptance PASS on b524927; protected PR integration gate applies; P1 execution planning is next
+Status: P0 accepted evidence on b524927; integrated through PR #25 as 28181b7; P1 execution-plan proposal is next
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -672,3 +672,7 @@ Documentation review update, 2026-09-05: reconciled the dependency graph (ADR 00
 ## Gate outcome
 
 **P0 LOCAL PASS** on measured source `b524927f841347051ca2b4f95f8c4c83f5b4c14e`, preserved by `evidence/p0.6-final-20260909`. [Final review](../evidence/p0.6/20260909-final/README.md) records all fifteen revised acceptance criteria and ten browser/scenario outcomes as PASS, with clean-source benchmark and headed evidence. The first matrix on `62ed77a` is preserved but not accepted because of incomplete configuration hashes; the replacement run corrects metadata without changing algorithms or thresholds. Physical-display timing and native hardware OOM remain explicitly UNVERIFIED outside the approved exit gate. After required CI and protected PR integration, begin the P1 execution-plan/design-gate checkpoint; no P1 product code is authorized by this result alone.
+
+## Protected integration and P1 handoff
+
+[PR #25](https://github.com/npclown/vector-studio/pull/25) integrated this checkpoint as `28181b7dbc1af586430d05458cdf91f363efa8f6`. Required `Static, unit, boundaries, and build` CI passed on reviewed PR head `7fe629af285cb30034914942ed516ad95f52c27a`; the squash result has the same tree. Historical local status and evidence above retain their original measured revisions. The next checkpoint is the [P1 design and execution-plan proposal](p1-instanced-primitives.md), not primitive implementation or a new interpretation of P0 performance.
