@@ -72,7 +72,7 @@ test('surfaces validation error and recovers once after deliberate device destru
   ).toHaveLength(1);
   expect(pageErrors).toEqual([]);
 
-  writeEvidenceJson(testInfo, `recovery-${testInfo.project.name}.json`, {
+  await writeEvidenceJson(testInfo, `recovery-${testInfo.project.name}.json`, {
     timestampUtc: new Date().toISOString(),
     command: 'pnpm test:gpu',
     ...source,

@@ -4,29 +4,9 @@ import type {
   RendererAdapterInfo,
   ResourceDescriptor,
 } from '@vector-studio/contracts';
+import type { FoundationBindingSource } from './foundation-experiment.js';
+import { createNativeFoundationSceneCreation } from './native-foundation-scene.js';
 
-const FOUNDATION_SHADER = /* wgsl */ `
-struct VertexOutput {
-  @builtin(position) position: vec4f,
-  @location(0) color: vec3f,
-};
-
-@vertex
-fn vertexMain(@location(0) position: vec2f, @location(1) color: vec3f) -> VertexOutput {
-  var output: VertexOutput;
-  output.position = vec4f(position, 0.0, 1.0);
-  output.color = color;
-  return output;
-}
-
-@fragment
-fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
-  return vec4f(input.color, 1.0);
-}
-`;
-
-const RENDER_ATTACHMENT_USAGE = 0x10;
-const VERTEX_BUFFER_USAGE = 0x20;
 const COPY_SOURCE_AND_DESTINATION_USAGE = 0x0c;
 
 export type WebGpuDeviceErrorType = 'validation' | 'out-of-memory' | 'internal' | 'unknown';
@@ -52,7 +32,7 @@ export interface WebGpuFoundationScenePort {
   readonly pipelinesCreated: number;
   readonly attachmentBytes: number;
   readonly staticResources: readonly WebGpuTrackedResource[];
-  resize(size: PixelSize): void;
+  resize(size: PixelSize, devicePixelRatio: number): void;
   render(context: WebGpuCanvasContextPort): void;
   dispose(): void;
 }
@@ -62,11 +42,20 @@ export interface WebGpuFoundationSceneResult {
   readonly fellBackFrom4x: boolean;
 }
 
+export interface WebGpuFoundationSceneCreationPort {
+  readonly result: Promise<WebGpuFoundationSceneResult>;
+  /** Promptly releases attempt-owned resources; implementations must be idempotent. */
+  dispose(): void;
+}
+
 export interface WebGpuDevicePort {
   readonly features: readonly string[];
   readonly limits: Readonly<Record<string, number>>;
   readonly lost: Promise<WebGpuDeviceLoss>;
-  createFoundationScene(format: string): Promise<WebGpuFoundationSceneResult>;
+  createFoundationScene(
+    format: string,
+    source: FoundationBindingSource,
+  ): WebGpuFoundationSceneCreationPort;
   waitForSubmittedWork(): Promise<void>;
   subscribeErrors(listener: (error: WebGpuDeviceError) => void): Disposable;
   triggerValidationErrorForTesting(): void;
@@ -126,82 +115,11 @@ class BrowserDevicePort implements WebGpuDevicePort {
     );
   }
 
-  async createFoundationScene(format: string): Promise<WebGpuFoundationSceneResult> {
-    const vertices = new Float32Array([
-      0, 0.65, 0.35, 0.75, 1, -0.6, -0.55, 0.68, 0.35, 1, 0.6, -0.55, 1, 0.42, 0.55,
-    ]);
-    const vertexBuffer = this.native.createBuffer({
-      label: 'vector-studio/foundation-vertices',
-      size: vertices.byteLength,
-      usage: VERTEX_BUFFER_USAGE,
-      mappedAtCreation: true,
-    });
-    new Float32Array(vertexBuffer.getMappedRange()).set(vertices);
-    vertexBuffer.unmap();
-    const shader = this.native.createShaderModule({
-      label: 'vector-studio/foundation-shader',
-      code: FOUNDATION_SHADER,
-    });
-    const createPipeline = (sampleCount: 1 | 4) =>
-      this.native.createRenderPipelineAsync({
-        label: `vector-studio/foundation-pipeline-${sampleCount}x`,
-        layout: 'auto',
-        vertex: {
-          module: shader,
-          entryPoint: 'vertexMain',
-          buffers: [
-            {
-              arrayStride: 20,
-              attributes: [
-                { shaderLocation: 0, offset: 0, format: 'float32x2' },
-                { shaderLocation: 1, offset: 8, format: 'float32x3' },
-              ],
-            },
-          ],
-        },
-        fragment: {
-          module: shader,
-          entryPoint: 'fragmentMain',
-          targets: [{ format: format as GPUTextureFormat }],
-        },
-        primitive: { topology: 'triangle-list' },
-        multisample: { count: sampleCount },
-      });
-
-    try {
-      const pipeline = await createPipeline(4);
-      return {
-        scene: new BrowserFoundationScene(
-          this.native,
-          pipeline,
-          vertexBuffer,
-          vertices.byteLength,
-          format,
-          4,
-          1,
-        ),
-        fellBackFrom4x: false,
-      };
-    } catch {
-      try {
-        const pipeline = await createPipeline(1);
-        return {
-          scene: new BrowserFoundationScene(
-            this.native,
-            pipeline,
-            vertexBuffer,
-            vertices.byteLength,
-            format,
-            1,
-            1,
-          ),
-          fellBackFrom4x: true,
-        };
-      } catch (error: unknown) {
-        vertexBuffer.destroy();
-        throw error;
-      }
-    }
+  createFoundationScene(
+    format: string,
+    source: FoundationBindingSource,
+  ): WebGpuFoundationSceneCreationPort {
+    return createNativeFoundationSceneCreation(this.native, format, source);
   }
 
   waitForSubmittedWork(): Promise<void> {
@@ -252,102 +170,6 @@ class BrowserDevicePort implements WebGpuDevicePort {
 
   destroy(): void {
     this.native.destroy();
-  }
-}
-
-class BrowserFoundationScene implements WebGpuFoundationScenePort {
-  readonly shaderModulesCreated = 1;
-  readonly #device: GPUDevice;
-  readonly #pipeline: GPURenderPipeline;
-  readonly #vertexBuffer: GPUBuffer;
-  readonly #format: string;
-  readonly sampleCount: 1 | 4;
-  readonly pipelinesCreated: number;
-  readonly staticResources: readonly WebGpuTrackedResource[];
-  #attachment: GPUTexture | undefined;
-  #attachmentBytes = 0;
-
-  constructor(
-    device: GPUDevice,
-    pipeline: GPURenderPipeline,
-    vertexBuffer: GPUBuffer,
-    vertexBufferBytes: number,
-    format: string,
-    sampleCount: 1 | 4,
-    pipelinesCreated: number,
-  ) {
-    this.#device = device;
-    this.#pipeline = pipeline;
-    this.#vertexBuffer = vertexBuffer;
-    this.#format = format;
-    this.sampleCount = sampleCount;
-    this.pipelinesCreated = pipelinesCreated;
-    this.staticResources = Object.freeze([
-      {
-        id: 'foundation-vertices',
-        descriptor: { category: 'buffer', size: vertexBufferBytes },
-      },
-      { id: 'foundation-shader', descriptor: { category: 'shader-module' } },
-      { id: 'foundation-pipeline', descriptor: { category: 'render-pipeline' } },
-    ] satisfies WebGpuTrackedResource[]);
-  }
-
-  get attachmentBytes(): number {
-    return this.#attachmentBytes;
-  }
-
-  resize(size: PixelSize): void {
-    this.#attachment?.destroy();
-    this.#attachment = undefined;
-    this.#attachmentBytes = 0;
-    if (this.sampleCount === 1 || size.width === 0 || size.height === 0) {
-      return;
-    }
-
-    this.#attachment = this.#device.createTexture({
-      label: 'vector-studio/foundation-msaa-color',
-      size: { width: size.width, height: size.height },
-      sampleCount: this.sampleCount,
-      format: this.#format as GPUTextureFormat,
-      usage: RENDER_ATTACHMENT_USAGE,
-    });
-    this.#attachmentBytes = size.width * size.height * 4 * this.sampleCount;
-  }
-
-  render(context: WebGpuCanvasContextPort): void {
-    if (!(context instanceof BrowserCanvasContextPort)) {
-      throw new TypeError('Browser foundation scene requires a browser canvas context.');
-    }
-
-    const presentationView = context.native.getCurrentTexture().createView();
-    const multisampleView = this.#attachment?.createView();
-    const encoder = this.#device.createCommandEncoder({
-      label: 'vector-studio/foundation-frame',
-    });
-    const pass = encoder.beginRenderPass({
-      label: 'vector-studio/foundation-pass',
-      colorAttachments: [
-        {
-          view: multisampleView ?? presentationView,
-          ...(multisampleView === undefined ? {} : { resolveTarget: presentationView }),
-          clearValue: { r: 0.035, g: 0.055, b: 0.1, a: 1 },
-          loadOp: 'clear',
-          storeOp: multisampleView === undefined ? 'store' : 'discard',
-        },
-      ],
-    });
-    pass.setPipeline(this.#pipeline);
-    pass.setVertexBuffer(0, this.#vertexBuffer);
-    pass.draw(3);
-    pass.end();
-    this.#device.queue.submit([encoder.finish()]);
-  }
-
-  dispose(): void {
-    this.#attachment?.destroy();
-    this.#attachment = undefined;
-    this.#attachmentBytes = 0;
-    this.#vertexBuffer.destroy();
   }
 }
 

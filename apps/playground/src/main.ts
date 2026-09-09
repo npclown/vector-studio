@@ -9,6 +9,9 @@ const REFERENCE_SURFACE = Object.freeze({
   devicePixelRatio: 1,
 });
 const MAX_RECENT_DIAGNOSTICS = 50;
+const fixtureParameter = new URLSearchParams(window.location.search).get('fixture');
+const foundationFixture = fixtureParameter === 'camera-triangle-v1' ? fixtureParameter : undefined;
+const fixtureMode = foundationFixture !== undefined;
 
 interface InitializationTiming {
   readonly timeOrigin: number;
@@ -32,6 +35,9 @@ app.innerHTML = `
     .stage { display: grid; align-content: start; justify-content: center; padding: 24px; overflow: auto; }
     .stage h1 { width: 640px; margin: 0 0 16px; font-size: 20px; font-weight: 650; }
     #webgpu-surface { display: block; width: 640px; height: 360px; border: 1px solid #34435e; border-radius: 8px; }
+    #app.fixture-mode .stage { justify-content: start; border: 0; padding: 24px; }
+    #app.fixture-mode .stage h1 { line-height: 24px; }
+    #app.fixture-mode #webgpu-surface { border: 0; border-radius: 0; }
     .panel { padding: 16px; overflow: auto; }
     .panel h2 { margin: 0 0 12px; font-size: 15px; }
     .status-grid { display: grid; grid-template-columns: 120px 1fr; gap: 7px 10px; margin: 0 0 18px; font-size: 12px; }
@@ -82,6 +88,8 @@ app.innerHTML = `
   </aside>
 `;
 
+if (fixtureMode) app.classList.add('fixture-mode');
+
 const canvasElement = document.querySelector<HTMLCanvasElement>('#webgpu-surface');
 if (!canvasElement) throw new Error('Playground canvas is missing.');
 const canvas: HTMLCanvasElement = canvasElement;
@@ -110,7 +118,7 @@ function currentSurface(): WebGpuSurface {
   return {
     canvas,
     cssSize: REFERENCE_SURFACE.cssSize,
-    devicePixelRatio: REFERENCE_SURFACE.devicePixelRatio,
+    devicePixelRatio: fixtureMode ? window.devicePixelRatio : REFERENCE_SURFACE.devicePixelRatio,
   };
 }
 
@@ -179,6 +187,7 @@ async function createBackend(): Promise<RendererCapabilityResult> {
   const candidate = new WebGpuBackend({
     clock: () => performance.now(),
     now: () => performance.now(),
+    ...(foundationFixture === undefined ? {} : { foundationFixture }),
   });
   backend = candidate;
   const initializationStartedAtMs = performance.now();
@@ -330,6 +339,7 @@ const api = Object.freeze({
   },
   destroyDeviceForTesting: () => backend.destroyDeviceForTesting(),
   getFrameMeasurements: () => backend.getFrameMeasurements(),
+  getFoundationExperimentSnapshot: () => backend.getFoundationExperimentSnapshot(),
   getInitializationTiming: () => initializationTiming,
   invalidate: () => backend.invalidate({ reason: 'scene' }),
   reinitialize,

@@ -26,12 +26,19 @@ import {
 
 import { computeSurfaceSize } from './surface-size.js';
 import {
+  FoundationExperiment,
+  type FoundationFixture,
+  type FoundationBindingSource,
+  type FoundationExperimentSnapshot,
+} from './foundation-experiment.js';
+import {
   createBrowserWebGpuPlatform,
   type WebGpuCanvasContextPort,
   type WebGpuDevicePort,
   type WebGpuDeviceError,
   type WebGpuDeviceLoss,
   type WebGpuFoundationScenePort,
+  type WebGpuFoundationSceneCreationPort,
   type WebGpuPlatform,
 } from './webgpu-platform.js';
 
@@ -46,6 +53,7 @@ export interface WebGpuBackendOptions {
   readonly clock?: DiagnosticClock;
   readonly now?: () => number;
   readonly platform?: WebGpuPlatform;
+  readonly foundationFixture?: FoundationFixture;
 }
 
 export interface WebGpuFrameMeasurements {
@@ -76,11 +84,16 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   readonly #resources = new ResourceAccounting();
   readonly #scheduler: FrameScheduler;
   readonly #now: () => number;
+  readonly #foundationFixture: FoundationFixture | undefined;
   #capabilityResult: RendererCapabilityResult | undefined;
   #canvas: HTMLCanvasElement | undefined;
   #context: WebGpuCanvasContextPort | undefined;
   #device: WebGpuDevicePort | undefined;
   #deviceErrorSubscription: Disposable | undefined;
+  #experiment: FoundationExperiment | undefined;
+  #foundationCreation: WebGpuFoundationSceneCreationPort | undefined;
+  #foundationBinding: FoundationBindingSource | undefined;
+  #pendingAttemptRelease: (() => void) | undefined;
   #scene: WebGpuFoundationScenePort | undefined;
   #invalidationsRequested = 0;
   #framesSubmitted = 0;
@@ -108,10 +121,17 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   #surfaceSize: RendererSurfaceSize | undefined;
 
   constructor(options: WebGpuBackendOptions = {}) {
+    if (
+      options.foundationFixture !== undefined &&
+      options.foundationFixture !== 'camera-triangle-v1'
+    ) {
+      throw new RangeError(`Unsupported foundation fixture: ${String(options.foundationFixture)}.`);
+    }
     this.#diagnostics = new DiagnosticChannel(
       options.clock === undefined ? {} : { clock: options.clock },
     );
     this.#platform = options.platform ?? createBrowserWebGpuPlatform();
+    this.#foundationFixture = options.foundationFixture;
     this.#now = options.now ?? (() => performance.now());
     this.#scheduler = new FrameScheduler({
       ...(options.animationFrameClock === undefined ? {} : { clock: options.animationFrameClock }),
@@ -141,6 +161,10 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
 
   get surfaceSize(): RendererSurfaceSize | undefined {
     return this.#surfaceSize;
+  }
+
+  getFoundationExperimentSnapshot(): FoundationExperimentSnapshot | undefined {
+    return this.#experiment?.snapshot();
   }
 
   subscribeDiagnostics(listener: DiagnosticListener): Disposable {
@@ -318,7 +342,11 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     this.#state = 'disposed';
     this.#scheduler.dispose();
 
+    const pendingAttemptRelease = this.#pendingAttemptRelease;
+    this.#pendingAttemptRelease = undefined;
+    pendingAttemptRelease?.();
     this.#releaseDeviceGeneration(true);
+    this.#experiment?.dispose();
 
     this.#context = undefined;
     this.#canvas = undefined;
@@ -432,6 +460,35 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       );
     }
 
+    let creation: WebGpuFoundationSceneCreationPort | undefined;
+    let binding: FoundationBindingSource | undefined;
+    let contextConfigured = false;
+    let attemptReleased = false;
+    const releaseAttempt = () => {
+      if (attemptReleased) return;
+      attemptReleased = true;
+      const actions: readonly (() => void)[] = [
+        () => creation?.dispose(),
+        () => binding?.detach(),
+        ...(contextConfigured ? [() => context.unconfigure()] : []),
+        () => device.destroy(),
+      ];
+      for (const action of actions) {
+        try {
+          action();
+        } catch (releaseError: unknown) {
+          this.#emit(
+            DIAGNOSTIC_CODES.DISPOSAL_FAILED,
+            'A pending WebGPU initialization resource failed during release.',
+            'error',
+            generation,
+            errorContext(releaseError),
+          );
+        }
+      }
+    };
+    this.#pendingAttemptRelease = releaseAttempt;
+
     let format: string;
     try {
       format = this.#platform.getPreferredCanvasFormat();
@@ -441,9 +498,12 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         surface.devicePixelRatio,
         maxTextureDimension2D,
       );
+      contextConfigured = true;
       context.configure({ device, format, alphaMode: 'premultiplied' });
     } catch (error: unknown) {
-      device.destroy();
+      releaseAttempt();
+      if (this.#pendingAttemptRelease === releaseAttempt) this.#pendingAttemptRelease = undefined;
+      if (!this.#isCurrent(token)) return this.#stale(generation);
       return this.#failed(
         DIAGNOSTIC_CODES.SURFACE_CONFIGURATION_FAILED,
         'The WebGPU canvas configuration failed.',
@@ -453,17 +513,32 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       );
     }
     if (!this.#isCurrent(token)) {
-      context.unconfigure();
-      device.destroy();
+      releaseAttempt();
+      if (this.#pendingAttemptRelease === releaseAttempt) this.#pendingAttemptRelease = undefined;
       return this.#stale(generation);
     }
 
     let foundation;
     try {
-      foundation = await device.createFoundationScene(format);
+      const experiment =
+        this.#experiment ?? new FoundationExperiment(generation, this.#foundationFixture);
+      if (this.#experiment === undefined) {
+        this.#experiment = experiment;
+      }
+      const size = this.#surfaceSize;
+      if (size === undefined) {
+        throw new Error('The foundation surface size is unavailable.');
+      }
+      binding = experiment.createBinding(generation, size.physical, size.devicePixelRatio);
+      creation = device.createFoundationScene(format, binding);
+      foundation = await creation.result;
+      binding.creationSettled();
     } catch (error: unknown) {
-      context.unconfigure();
-      device.destroy();
+      binding?.creationSettled();
+      releaseAttempt();
+      if (this.#pendingAttemptRelease === releaseAttempt) this.#pendingAttemptRelease = undefined;
+      if (!this.#isCurrent(token)) return this.#stale(generation);
+      this.#abortExperimentAttempt(generation);
       return this.#failed(
         DIAGNOSTIC_CODES.FOUNDATION_SCENE_FAILED,
         'The WebGPU foundation scene could not be created.',
@@ -473,14 +548,15 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       );
     }
     if (!this.#isCurrent(token)) {
-      foundation.scene.dispose();
-      context.unconfigure();
-      device.destroy();
+      releaseAttempt();
+      if (this.#pendingAttemptRelease === releaseAttempt) this.#pendingAttemptRelease = undefined;
       return this.#stale(generation);
     }
 
     try {
+      this.#foundationCreation = creation;
       this.#scene = foundation.scene;
+      this.#foundationBinding = binding;
       this.#resizeScene(this.#surfaceSize?.physical ?? { width: 0, height: 0 });
       this.#shaderModulesCreated += foundation.scene.shaderModulesCreated;
       this.#pipelinesCreated += foundation.scene.pipelinesCreated;
@@ -488,11 +564,14 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         this.#resources.track(`${generation}/${resource.id}`, resource.descriptor);
       }
     } catch (error: unknown) {
-      foundation.scene.dispose();
+      releaseAttempt();
       this.#scene = undefined;
+      this.#foundationBinding = undefined;
+      if (this.#foundationCreation === creation) this.#foundationCreation = undefined;
+      if (this.#pendingAttemptRelease === releaseAttempt) this.#pendingAttemptRelease = undefined;
+      if (!this.#isCurrent(token)) return this.#stale(generation);
+      this.#abortExperimentAttempt(generation);
       this.#resources.clear();
-      context.unconfigure();
-      device.destroy();
       return this.#failed(
         DIAGNOSTIC_CODES.ALLOCATION_FAILED,
         'The WebGPU foundation resources could not be allocated.',
@@ -509,6 +588,13 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         generation,
         Object.freeze({ requestedSampleCount: 4, selectedSampleCount: 1 }),
       );
+      if (!this.#isCurrent(token)) {
+        releaseAttempt();
+        if (this.#pendingAttemptRelease === releaseAttempt) {
+          this.#pendingAttemptRelease = undefined;
+        }
+        return this.#stale(generation);
+      }
     }
 
     const capabilities: RendererCapabilities = Object.freeze({
@@ -520,6 +606,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     });
     const result: RendererCapabilityResult = Object.freeze({ supported: true, capabilities });
 
+    if (this.#pendingAttemptRelease === releaseAttempt) this.#pendingAttemptRelease = undefined;
     this.#canvas = surface.canvas;
     this.#context = context;
     this.#device = device;
@@ -592,7 +679,13 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     }
 
     this.#releaseDeviceGeneration(false);
+    if (!this.#isCurrent(token)) {
+      resolveRecovery(this.#stale(lostGeneration + 1));
+      if (this.#initialization === recovery) this.#initialization = undefined;
+      return;
+    }
     if (!canvas || !surfaceSize) {
+      this.#state = 'failed';
       const diagnostic = this.#emit(
         DIAGNOSTIC_CODES.RECOVERY_FAILED,
         'WebGPU device recovery failed because the surface was unavailable.',
@@ -600,7 +693,11 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         lostGeneration + 1,
       );
       const result = Object.freeze({ supported: false as const, diagnostic });
-      this.#state = 'failed';
+      if (!this.#isCurrent(token)) {
+        resolveRecovery(this.#stale(lostGeneration + 1));
+        if (this.#initialization === recovery) this.#initialization = undefined;
+        return;
+      }
       this.#terminalRecoveryResult = result;
       resolveRecovery(result);
       if (this.#initialization === recovery) this.#initialization = undefined;
@@ -608,6 +705,28 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     }
 
     const recoveryGeneration = lostGeneration + 1;
+    try {
+      this.#experiment?.advanceGeneration(recoveryGeneration);
+    } catch (error: unknown) {
+      this.#state = 'failed';
+      const diagnostic = this.#emit(
+        DIAGNOSTIC_CODES.RECOVERY_FAILED,
+        'WebGPU device recovery could not advance foundation ownership.',
+        'error',
+        recoveryGeneration,
+        errorContext(error),
+      );
+      const result = Object.freeze({ supported: false as const, diagnostic });
+      if (!this.#isCurrent(token)) {
+        resolveRecovery(this.#stale(recoveryGeneration));
+        if (this.#initialization === recovery) this.#initialization = undefined;
+        return;
+      }
+      this.#terminalRecoveryResult = result;
+      resolveRecovery(result);
+      if (this.#initialization === recovery) this.#initialization = undefined;
+      return;
+    }
     this.#generation = recoveryGeneration;
     this.#state = 'recovering';
     this.#recoveryAttempts += 1;
@@ -669,11 +788,34 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     if (this.#initialization === recovery) this.#initialization = undefined;
   }
 
+  #abortExperimentAttempt(generation: number): void {
+    const experiment = this.#experiment;
+    if (experiment === undefined || this.#state === 'disposed') return;
+    try {
+      experiment.abortAttempt(generation);
+    } catch (error: unknown) {
+      this.#emit(
+        DIAGNOSTIC_CODES.DISPOSAL_FAILED,
+        'An aborted foundation attempt could not reset its device-local cache.',
+        'error',
+        generation,
+        errorContext(error),
+      );
+    }
+  }
+
   #releaseDeviceGeneration(destroyDevice: boolean): void {
     this.#deviceErrorSubscription?.dispose();
     this.#deviceErrorSubscription = undefined;
+    const creation = this.#foundationCreation;
+    const scene = this.#scene;
+    const binding = this.#foundationBinding;
+    this.#foundationCreation = undefined;
+    this.#scene = undefined;
+    this.#foundationBinding = undefined;
     const actions: readonly (() => void)[] = [
-      () => this.#scene?.dispose(),
+      () => (creation === undefined ? scene?.dispose() : creation.dispose()),
+      () => binding?.detach(),
       () => this.#context?.unconfigure(),
       ...(destroyDevice ? [() => this.#device?.destroy()] : []),
     ];
@@ -692,7 +834,6 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     }
     this.#context = undefined;
     this.#device = undefined;
-    this.#scene = undefined;
     this.#capabilityResult = undefined;
     this.#presentationFormat = undefined;
     this.#resources.clear();
@@ -751,7 +892,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       return;
     }
     this.#resources.release('foundation-attachment');
-    this.#scene.resize(size);
+    this.#scene.resize(size, this.#surfaceSize?.devicePixelRatio ?? 1);
     if (this.#scene.attachmentBytes > 0 && size.width > 0 && size.height > 0) {
       this.#resources.track('foundation-attachment', {
         category: 'texture',

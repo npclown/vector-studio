@@ -7,6 +7,7 @@ import {
   type WebGpuDeviceError,
   type WebGpuDeviceLoss,
   type WebGpuFoundationScenePort,
+  type WebGpuFoundationSceneResult,
   type WebGpuPlatform,
   type WebGpuSurface,
 } from '@vector-studio/renderer-webgpu';
@@ -80,12 +81,13 @@ function fakeDeviceController(): FakeDeviceController {
   const waitForSubmittedWork = vi.fn(() => Promise.resolve());
   const errorListeners = new Set<(error: WebGpuDeviceError) => void>();
   let attachmentBytes = 0;
+  let creationDisposed = false;
   const scene: WebGpuFoundationScenePort = {
     sampleCount: 4,
     shaderModulesCreated: 1,
     pipelinesCreated: 1,
     staticResources: [
-      { id: 'foundation-vertices', descriptor: { category: 'buffer', size: 60 } },
+      { id: 'foundation-vertices', descriptor: { category: 'buffer', size: 256 } },
       { id: 'foundation-shader', descriptor: { category: 'shader-module' } },
       { id: 'foundation-pipeline', descriptor: { category: 'render-pipeline' } },
     ],
@@ -102,7 +104,15 @@ function fakeDeviceController(): FakeDeviceController {
     features: ['timestamp-query'],
     limits: { maxTextureDimension2D: 4096, maxBufferSize: 268_435_456 },
     lost: loss.promise,
-    createFoundationScene: () => Promise.resolve({ scene, fellBackFrom4x: false }),
+    createFoundationScene: (_format, source) => ({
+      result: Promise.resolve({ scene, fellBackFrom4x: false }),
+      dispose: () => {
+        if (creationDisposed) return;
+        creationDisposed = true;
+        source.detach();
+        scene.dispose();
+      },
+    }),
     waitForSubmittedWork,
     subscribeErrors: (listener) => {
       let disposed = false;
@@ -355,6 +365,75 @@ describe('WebGpuBackend lifecycle and surface', () => {
     await expectFailure(backend, DIAGNOSTIC_CODES.INITIALIZATION_AFTER_DISPOSE);
   });
 
+  it('releases a configured pending attempt once before another backend owns the canvas', async () => {
+    const first = fakeDeviceController();
+    const second = fakeDeviceController();
+    const delayedFoundation = deferred<WebGpuFoundationSceneResult>();
+    const createFoundationScene = vi.fn<WebGpuDevicePort['createFoundationScene']>(
+      (_format, source) => {
+        let disposed = false;
+        return {
+          result: delayedFoundation.promise.then((result) => {
+            source.creationSettled();
+            if (disposed) {
+              result.scene.dispose();
+              throw new Error('delayed foundation completed after disposal');
+            }
+            return result;
+          }),
+          dispose: () => {
+            if (disposed) return;
+            disposed = true;
+            source.detach();
+          },
+        };
+      },
+    );
+    const firstDevice: WebGpuDevicePort = { ...first.device, createFoundationScene };
+    const requestAdapter = vi
+      .fn<() => Promise<WebGpuAdapterPort | null>>()
+      .mockResolvedValueOnce({ info: {}, requestDevice: () => Promise.resolve(firstDevice) })
+      .mockResolvedValueOnce({ info: {}, requestDevice: () => Promise.resolve(second.device) });
+    let configured = false;
+    const configure = vi.fn(() => {
+      configured = true;
+    });
+    const unconfigure = vi.fn(() => {
+      configured = false;
+    });
+    const platform: WebGpuPlatform = {
+      secureContext: true,
+      apiAvailable: true,
+      requestAdapter,
+      getCanvasContext: () => ({ configure, unconfigure }),
+      getPreferredCanvasFormat: () => 'bgra8unorm',
+    };
+    const canvas = fakeCanvas();
+    const abandoned = new WebGpuBackend({ platform });
+    const abandonedInitialization = abandoned.initialize(surface(canvas));
+    await vi.waitFor(() => expect(createFoundationScene).toHaveBeenCalledOnce());
+
+    abandoned.dispose();
+    expect(first.destroy).toHaveBeenCalledOnce();
+    expect(unconfigure).toHaveBeenCalledOnce();
+
+    const replacement = new WebGpuBackend({ platform });
+    await expect(replacement.initialize(surface(canvas))).resolves.toMatchObject({
+      supported: true,
+    });
+    expect(configured).toBe(true);
+    delayedFoundation.resolve({ scene: first.scene, fellBackFrom4x: false });
+    await expect(abandonedInitialization).resolves.toMatchObject({
+      supported: false,
+      diagnostic: { code: DIAGNOSTIC_CODES.STALE_INITIALIZATION_IGNORED },
+    });
+    expect(unconfigure).toHaveBeenCalledOnce();
+    expect(configured).toBe(true);
+
+    replacement.dispose();
+    expect(unconfigure).toHaveBeenCalledTimes(2);
+  });
+
   it('resizes with DPR and clamping without recreating size-independent state', async () => {
     const { configure, platform, requestAdapter, requestDevice } = fixture();
     const canvas = fakeCanvas();
@@ -490,8 +569,13 @@ describe('WebGpuBackend lifecycle and surface', () => {
             requestDevice: () =>
               Promise.resolve({
                 ...device,
-                createFoundationScene: () =>
-                  Promise.resolve({ scene: oneSampleScene, fellBackFrom4x: true }),
+                createFoundationScene: (_format, source) => ({
+                  result: Promise.resolve({ scene: oneSampleScene, fellBackFrom4x: true }),
+                  dispose: () => {
+                    source.detach();
+                    oneSampleScene.dispose();
+                  },
+                }),
               }),
           }),
       },
@@ -511,6 +595,59 @@ describe('WebGpuBackend lifecycle and surface', () => {
     expect(backend.getStatistics()).toMatchObject({
       pipelinesCreated: 1,
       shaderModulesCreated: 1,
+    });
+  });
+
+  it('cannot publish ready when fallback diagnostics synchronously dispose the backend', async () => {
+    const { device, platform, scene } = fixture();
+    const sceneDispose = vi.fn();
+    const oneSampleScene: WebGpuFoundationScenePort = {
+      ...scene,
+      sampleCount: 1,
+      dispose: sceneDispose,
+    };
+    const backend = new WebGpuBackend({
+      platform: {
+        ...platform,
+        requestAdapter: () =>
+          Promise.resolve({
+            info: {},
+            requestDevice: () =>
+              Promise.resolve({
+                ...device,
+                createFoundationScene: (_format, source) => {
+                  let disposed = false;
+                  return {
+                    result: Promise.resolve({
+                      scene: oneSampleScene,
+                      fellBackFrom4x: true,
+                    }),
+                    dispose: () => {
+                      if (disposed) return;
+                      disposed = true;
+                      source.detach();
+                      oneSampleScene.dispose();
+                    },
+                  };
+                },
+              }),
+          }),
+      },
+    });
+    backend.subscribeDiagnostics((diagnostic) => {
+      if (diagnostic.code === DIAGNOSTIC_CODES.MSAA_FALLBACK) backend.dispose();
+    });
+
+    await expect(backend.initialize(surface())).resolves.toMatchObject({
+      supported: false,
+      diagnostic: { code: DIAGNOSTIC_CODES.STALE_INITIALIZATION_IGNORED },
+    });
+    expect(backend.state).toBe('disposed');
+    expect(sceneDispose).toHaveBeenCalledOnce();
+    expect(backend.getStatistics()).toMatchObject({
+      resources: { live: 0, liveBytes: 0 },
+      deviceListeners: 0,
+      pendingFrameCallbacks: 0,
     });
   });
 
@@ -544,6 +681,54 @@ describe('WebGpuBackend lifecycle and surface', () => {
     ]);
   });
 
+  it('does not revive recovery when a release failure diagnostic disposes the backend', async () => {
+    const { controller, platform, requestAdapter } = fixture();
+    const backend = new WebGpuBackend({ platform });
+    let sharedRecovery: Promise<unknown> | undefined;
+    const diagnosticCodes: string[] = [];
+    backend.subscribeDiagnostics((diagnostic) => {
+      diagnosticCodes.push(diagnostic.code);
+      if (diagnostic.code === DIAGNOSTIC_CODES.DEVICE_LOST) {
+        sharedRecovery = backend.initialize(surface());
+      }
+      if (diagnostic.code === DIAGNOSTIC_CODES.DISPOSAL_FAILED) {
+        backend.dispose();
+      }
+    });
+    await backend.initialize(surface());
+    controller.sceneDispose.mockImplementationOnce(() => {
+      throw new Error('scene release failed');
+    });
+
+    controller.lose();
+    await vi.waitFor(() => expect(sharedRecovery).toBeDefined());
+    const recoveryResult = await sharedRecovery;
+    expect({ recoveryResult, state: backend.state }).toMatchObject({
+      recoveryResult: {
+        supported: false,
+        diagnostic: { code: DIAGNOSTIC_CODES.STALE_INITIALIZATION_IGNORED },
+      },
+      state: 'disposed',
+    });
+    expect(diagnosticCodes).toContain(DIAGNOSTIC_CODES.DISPOSAL_FAILED);
+
+    expect(backend.state).toBe('disposed');
+    expect(requestAdapter).toHaveBeenCalledOnce();
+    expect(controller.destroy).toHaveBeenCalledOnce();
+    expect(backend.getStatistics()).toMatchObject({
+      recoveryAttempts: 0,
+      resources: { live: 0, liveBytes: 0 },
+      diagnosticListeners: 0,
+      deviceListeners: 0,
+      pendingFrameCallbacks: 0,
+    });
+    expect(backend.getFoundationExperimentSnapshot()).toMatchObject({
+      disposed: true,
+      liveBackingBuffers: 0,
+      allocator: { disposed: true, liveAllocationCount: 0 },
+    });
+  });
+
   it('pauses the lost generation and performs one ordered recovery from CPU descriptors', async () => {
     const first = fakeDeviceController();
     const second = fakeDeviceController();
@@ -573,6 +758,8 @@ describe('WebGpuBackend lifecycle and surface', () => {
     const backend = new WebGpuBackend({ platform, animationFrameClock });
     backend.subscribeDiagnostics((diagnostic) => diagnostics.push(diagnostic));
     await backend.initialize(surface());
+    const experimentBeforeLoss = backend.getFoundationExperimentSnapshot();
+    expect(experimentBeforeLoss).toBeDefined();
     animationFrameClock.flush();
     const presentedBeforeLoss = backend.getStatistics().framesPresented;
 
@@ -597,6 +784,18 @@ describe('WebGpuBackend lifecycle and surface', () => {
     expect(first.sceneDispose).toHaveBeenCalledOnce();
     expect(first.listenerCount()).toBe(0);
     expect(second.listenerCount()).toBe(1);
+    const experimentAfterRecovery = backend.getFoundationExperimentSnapshot();
+    expect(experimentAfterRecovery).toMatchObject({
+      allocator: { generation: 2, liveAllocationCount: 2 },
+      cache: { generation: 2, disposed: false },
+      bindingGeneration: 2,
+    });
+    expect(experimentAfterRecovery?.allocations.positions).toBe(
+      experimentBeforeLoss?.allocations.positions,
+    );
+    expect(experimentAfterRecovery?.allocations.colors).toBe(
+      experimentBeforeLoss?.allocations.colors,
+    );
     expect(backend.getStatistics()).toMatchObject({
       recoveryAttempts: 1,
       staleGenerationSubmissions: 0,
