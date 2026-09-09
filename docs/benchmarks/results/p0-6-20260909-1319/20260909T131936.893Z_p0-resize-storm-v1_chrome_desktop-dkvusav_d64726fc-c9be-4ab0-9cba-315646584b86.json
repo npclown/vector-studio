@@ -1,0 +1,825 @@
+{
+  "schema": "vector-studio/p0-benchmark-result/v1",
+  "status": "Exploratory",
+  "identity": {
+    "revision": "62ed77af33915fdbce79a95c4a7680f0b62c6254",
+    "sourceState": "clean",
+    "runId": "d64726fc-c9be-4ab0-9cba-315646584b86",
+    "timestampUtc": "2026-09-09T13:19:36.893Z",
+    "localTimezone": "Asia/Seoul"
+  },
+  "runner": {
+    "id": "vector-studio/p0-runner/v1",
+    "command": "pnpm benchmark:p0 -- --profile acceptance --output-dir \"docs/benchmarks/results/p0-6-20260909-1319\" --display-refresh-hz 60 --power-source \"AC\" --power-mode \"Balanced\" --background-load \"User reports YouTube and other GPU work closed; Codex remains active\" --gpu-driver \"32.0.15.9186\"",
+    "buildMode": "production"
+  },
+  "environment": {
+    "operatingSystem": "win32 10.0.26200 x64",
+    "cpu": "AMD Ryzen 7 3700X 8-Core Processor             ",
+    "logicalCores": 16,
+    "installedMemoryBytes": 34291060736,
+    "gpu": {
+      "architecture": "turing",
+      "description": "",
+      "vendor": "nvidia",
+      "driver": {
+        "availability": "available",
+        "value": "32.0.15.9186",
+        "observation": "operator/shell preflight via CLI"
+      }
+    },
+    "webGpuLimits": {
+      "maxTextureDimension1D": 8192,
+      "maxTextureDimension2D": 8192,
+      "maxTextureDimension3D": 2048,
+      "maxTextureArrayLayers": 256,
+      "maxBindGroups": 4,
+      "maxBindGroupsPlusVertexBuffers": 24,
+      "maxBindingsPerBindGroup": 1000,
+      "maxDynamicUniformBuffersPerPipelineLayout": 8,
+      "maxDynamicStorageBuffersPerPipelineLayout": 4,
+      "maxSampledTexturesPerShaderStage": 16,
+      "maxSamplersPerShaderStage": 16,
+      "maxStorageBuffersPerShaderStage": 8,
+      "maxStorageTexturesPerShaderStage": 4,
+      "maxUniformBuffersPerShaderStage": 12,
+      "maxUniformBufferBindingSize": 65536,
+      "maxStorageBufferBindingSize": 134217728,
+      "minUniformBufferOffsetAlignment": 256,
+      "minStorageBufferOffsetAlignment": 256,
+      "maxVertexBuffers": 8,
+      "maxBufferSize": 268435456,
+      "maxVertexAttributes": 16,
+      "maxVertexBufferArrayStride": 2048,
+      "maxInterStageShaderVariables": 16,
+      "maxColorAttachments": 8,
+      "maxColorAttachmentBytesPerSample": 32,
+      "maxComputeWorkgroupStorageSize": 16384,
+      "maxComputeInvocationsPerWorkgroup": 256,
+      "maxComputeWorkgroupSizeX": 256,
+      "maxComputeWorkgroupSizeY": 256,
+      "maxComputeWorkgroupSizeZ": 64,
+      "maxComputeWorkgroupsPerDimension": 65535,
+      "maxImmediateSize": 64,
+      "maxStorageBuffersInFragmentStage": 8,
+      "maxStorageTexturesInFragmentStage": 4,
+      "maxStorageBuffersInVertexStage": 8,
+      "maxStorageTexturesInVertexStage": 4
+    },
+    "browser": {
+      "product": "chrome",
+      "channel": "chrome",
+      "version": "152.0.7977.83"
+    },
+    "browserLaunchFlags": ["--enable-unsafe-webgpu"],
+    "displayRefreshRate": {
+      "availability": "available",
+      "value": 60,
+      "unit": "Hz",
+      "observation": "operator/shell preflight via CLI"
+    },
+    "selectedFeatures": ["core-features-and-limits"],
+    "sampleCount": 4,
+    "viewport": {
+      "css": [1280, 720],
+      "physical": [1280, 720],
+      "devicePixelRatio": 1
+    },
+    "power": {
+      "source": {
+        "availability": "available",
+        "value": "AC",
+        "observation": "operator/shell preflight via CLI"
+      },
+      "mode": {
+        "availability": "available",
+        "value": "Balanced",
+        "observation": "operator/shell preflight via CLI"
+      },
+      "browserBattery": {
+        "source": "AC/charging",
+        "batteryLevel": 1,
+        "observation": "navigator.getBattery"
+      }
+    },
+    "knownBackgroundLoad": {
+      "availability": "available",
+      "value": "User reports YouTube and other GPU work closed; Codex remains active",
+      "observation": "operator/shell preflight via CLI"
+    },
+    "hostReportedLogicalCores": 16,
+    "hostReportedMemoryGiB": 32,
+    "devTools": false,
+    "tracing": false,
+    "screenRecording": false,
+    "timezone": "Asia/Seoul",
+    "pageVisibility": {
+      "state": "visible",
+      "observation": "document.visibilityState"
+    },
+    "windowPlacement": {
+      "screenX": 10,
+      "screenY": 10,
+      "outerWidth": 1296,
+      "outerHeight": 808,
+      "screenWidth": 1280,
+      "screenHeight": 720,
+      "screenAvailWidth": 1280,
+      "screenAvailHeight": 720,
+      "observation": "Playwright-emulated browser window and Screen API snapshot",
+      "context": "emulated values; does not establish physical monitor association"
+    },
+    "actualWindowBounds": {
+      "availability": "available",
+      "left": 10,
+      "top": 10,
+      "width": 1296,
+      "height": 808,
+      "windowState": "normal",
+      "observation": "CDP Browser.getWindowForTarget read-only query"
+    }
+  },
+  "scenario": {
+    "id": "p0/resize-storm",
+    "version": 1,
+    "seed": 0,
+    "profile": "acceptance",
+    "configuration": {
+      "scenarioVersion": 1,
+      "seed": 0,
+      "profile": "acceptance",
+      "parameters": {
+        "repetitions": 5,
+        "steps": 120,
+        "pacing": "one deterministic resize before each requestAnimationFrame",
+        "finalViewport": [1280, 720],
+        "finalDevicePixelRatio": 1
+      }
+    },
+    "configurationHash": "9ddece1c24dc3139acdf00d90d76fed5e7a80fbf8d99375ca360b270a3387daf"
+  },
+  "repetitions": [
+    {
+      "index": 1,
+      "startedAtUtc": "2026-09-09T13:19:26.159Z",
+      "endedAtUtc": "2026-09-09T13:19:28.174Z",
+      "window": {
+        "clock": "performance.now",
+        "startMs": 219.09999999403954,
+        "endMs": 2226.3999999910593
+      },
+      "sampleCounts": {
+        "resizeObservations": 124
+      },
+      "samples": {
+        "resizeObservations": [
+          0.20000000298023224, 0.20000000298023224, 0.10000000894069672, 0.09999999403953552,
+          0.20000000298023224, 0.10000000894069672, 0.09999999403953552, 0.09999999403953552,
+          0.10000000894069672, 0.20000000298023224, 0.20000000298023224, 0.10000000894069672,
+          0.09999999403953552, 0.20000000298023224, 0.20000000298023224, 0.20000000298023224,
+          0.09999999403953552, 0.10000000894069672, 0.09999999403953552, 0.10000000894069672,
+          0.10000000894069672, 0.09999999403953552, 0.09999999403953552, 0, 0.20000000298023224,
+          0.10000000894069672, 0.10000000894069672, 0.09999999403953552, 0.09999999403953552,
+          0.09999999403953552, 0.10000000894069672, 0, 0, 0.09999999403953552, 0.09999999403953552,
+          0.20000000298023224, 0.09999999403953552, 0.09999999403953552, 0.19999998807907104,
+          0.10000000894069672, 0.09999999403953552, 0.10000000894069672, 0.20000000298023224,
+          0.20000000298023224, 0.20000000298023224, 0.09999999403953552, 0.10000000894069672,
+          0.20000000298023224, 0.19999998807907104, 0.09999999403953552, 0.09999999403953552,
+          0.20000000298023224, 0.20000000298023224, 0.10000000894069672, 0, 0.20000000298023224,
+          0.09999999403953552, 0.09999999403953552, 0.20000000298023224, 0.20000000298023224,
+          0.19999998807907104, 0.20000000298023224, 0.09999999403953552, 0.10000000894069672,
+          0.20000000298023224, 0.10000000894069672, 0, 0.09999999403953552, 0.10000000894069672,
+          0.19999998807907104, 0.10000000894069672, 0.10000000894069672, 0, 0.10000000894069672,
+          0.10000000894069672, 0.09999999403953552, 0.09999999403953552, 0, 0.09999999403953552,
+          0.10000000894069672, 0.10000000894069672, 0.09999999403953552, 0.20000000298023224,
+          0.09999999403953552, 0.09999999403953552, 0.10000000894069672, 0.20000000298023224,
+          0.09999999403953552, 0.20000000298023224, 0.10000000894069672, 0, 0.09999999403953552,
+          0.10000000894069672, 0.20000000298023224, 0.09999999403953552, 0.3999999910593033, 0,
+          0.09999999403953552, 0.20000000298023224, 0.09999999403953552, 0.10000000894069672,
+          0.20000000298023224, 0.4000000059604645, 0.20000000298023224, 0.09999999403953552,
+          0.20000000298023224, 0, 0.09999999403953552, 0.09999999403953552, 0.09999999403953552,
+          0.09999999403953552, 0.10000000894069672, 0.09999999403953552, 0.20000000298023224,
+          0.20000000298023224, 0.09999999403953552, 0.09999999403953552, 0.10000000894069672,
+          0.09999999403953552, 0, 0.09999999403953552, 1, 1280, 720
+        ]
+      },
+      "metrics": {
+        "cpuEncodeAndSubmitMedian": {
+          "availability": "available",
+          "value": 0.1,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "render-encode-start",
+          "endEvent": "queue-submit-return",
+          "observation": "backend CPU clock"
+        },
+        "cpuEncodeAndSubmitP95": {
+          "availability": "available",
+          "value": 0.2,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "render-encode-start",
+          "endEvent": "queue-submit-return",
+          "observation": "backend CPU clock"
+        },
+        "cpuEncodeAndSubmitP99": {
+          "availability": "available",
+          "value": 0.4,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "render-encode-start",
+          "endEvent": "queue-submit-return",
+          "observation": "backend CPU clock"
+        },
+        "maximumSubmissionsPerAnimationFrame": {
+          "availability": "available",
+          "value": 1,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "resize-before-animation-frame",
+          "endEvent": "animation-frame",
+          "observation": "backend statistics delta"
+        },
+        "liveSizeDependentAttachments": {
+          "availability": "available",
+          "value": 1,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "resize-storm-start",
+          "endEvent": "resize-settled",
+          "observation": "engine texture resource counter"
+        },
+        "finalPhysicalWidth": {
+          "availability": "available",
+          "value": 1280,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "resize-storm-start",
+          "endEvent": "resize-settled",
+          "observation": "surface snapshot"
+        },
+        "finalPhysicalHeight": {
+          "availability": "available",
+          "value": 720,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "resize-storm-start",
+          "endEvent": "resize-settled",
+          "observation": "surface snapshot"
+        },
+        "droppedFrameIntervalSamples": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "measurement-window-start",
+          "endEvent": "measurement-window-end",
+          "observation": "bounded measurement storage"
+        },
+        "droppedEncodeAndSubmitSamples": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "measurement-window-start",
+          "endEvent": "measurement-window-end",
+          "observation": "bounded measurement storage"
+        }
+      },
+      "diagnostics": {
+        "expected": [],
+        "unexpected": []
+      }
+    },
+    {
+      "index": 2,
+      "startedAtUtc": "2026-09-09T13:19:28.333Z",
+      "endedAtUtc": "2026-09-09T13:19:30.357Z",
+      "window": {
+        "clock": "performance.now",
+        "startMs": 154.40000000596046,
+        "endMs": 2174.300000011921
+      },
+      "sampleCounts": {
+        "resizeObservations": 124
+      },
+      "samples": {
+        "resizeObservations": [
+          0, 0.10000000894069672, 0.09999999403953552, 0, 0.20000000298023224, 0.30000001192092896,
+          0.19999998807907104, 0.30000001192092896, 0.20000000298023224, 0.20000000298023224,
+          0.09999999403953552, 0.20000000298023224, 0.09999999403953552, 0.20000000298023224, 0,
+          0.20000000298023224, 0.09999999403953552, 0.09999999403953552, 0, 0.09999999403953552,
+          0.20000000298023224, 0.09999999403953552, 0.09999999403953552, 0.09999999403953552,
+          0.09999999403953552, 0.09999999403953552, 0.10000000894069672, 0.09999999403953552,
+          0.20000000298023224, 0.20000000298023224, 0.19999998807907104, 0.09999999403953552, 0,
+          0.20000000298023224, 0.09999999403953552, 0.09999999403953552, 0, 0.20000000298023224, 0,
+          0, 0.20000000298023224, 0, 0.09999999403953552, 0, 0.09999999403953552,
+          0.09999999403953552, 0.10000000894069672, 0, 0.20000000298023224, 0.09999999403953552,
+          0.09999999403953552, 0.09999999403953552, 0.10000000894069672, 0.20000000298023224, 0,
+          0.20000000298023224, 0.20000000298023224, 0.20000000298023224, 0.09999999403953552,
+          0.09999999403953552, 0.10000000894069672, 0.09999999403953552, 0.20000000298023224,
+          0.10000000894069672, 0.20000000298023224, 0.20000000298023224, 0.09999999403953552,
+          0.09999999403953552, 0.20000000298023224, 0.20000000298023224, 0.10000000894069672,
+          0.09999999403953552, 0.20000000298023224, 0.09999999403953552, 0.09999999403953552,
+          0.09999999403953552, 0.09999999403953552, 0, 0.20000000298023224, 0.09999999403953552,
+          0.09999999403953552, 0.20000000298023224, 0.09999999403953552, 0.09999999403953552,
+          0.20000000298023224, 0.09999999403953552, 0.20000000298023224, 0.10000000894069672,
+          0.20000000298023224, 0.20000000298023224, 0.10000000894069672, 0, 0.20000000298023224, 0,
+          0, 0.09999999403953552, 0.20000000298023224, 0.19999998807907104, 0.09999999403953552,
+          0.20000000298023224, 0.09999999403953552, 0.09999999403953552, 0.20000000298023224,
+          0.09999999403953552, 0.20000000298023224, 0.19999998807907104, 0.20000000298023224,
+          0.09999999403953552, 0, 0.09999999403953552, 0.09999999403953552, 0.10000000894069672,
+          0.09999999403953552, 0.20000000298023224, 0.09999999403953552, 0, 0.09999999403953552,
+          0.10000000894069672, 0.09999999403953552, 0.20000000298023224, 0.10000000894069672, 1,
+          1280, 720
+        ]
+      },
+      "metrics": {
+        "cpuEncodeAndSubmitMedian": {
+          "availability": "available",
+          "value": 0.1,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "render-encode-start",
+          "endEvent": "queue-submit-return",
+          "observation": "backend CPU clock"
+        },
+        "cpuEncodeAndSubmitP95": {
+          "availability": "available",
+          "value": 0.2,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "render-encode-start",
+          "endEvent": "queue-submit-return",
+          "observation": "backend CPU clock"
+        },
+        "cpuEncodeAndSubmitP99": {
+          "availability": "available",
+          "value": 0.3,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "render-encode-start",
+          "endEvent": "queue-submit-return",
+          "observation": "backend CPU clock"
+        },
+        "maximumSubmissionsPerAnimationFrame": {
+          "availability": "available",
+          "value": 1,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "resize-before-animation-frame",
+          "endEvent": "animation-frame",
+          "observation": "backend statistics delta"
+        },
+        "liveSizeDependentAttachments": {
+          "availability": "available",
+          "value": 1,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "resize-storm-start",
+          "endEvent": "resize-settled",
+          "observation": "engine texture resource counter"
+        },
+        "finalPhysicalWidth": {
+          "availability": "available",
+          "value": 1280,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "resize-storm-start",
+          "endEvent": "resize-settled",
+          "observation": "surface snapshot"
+        },
+        "finalPhysicalHeight": {
+          "availability": "available",
+          "value": 720,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "resize-storm-start",
+          "endEvent": "resize-settled",
+          "observation": "surface snapshot"
+        },
+        "droppedFrameIntervalSamples": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "measurement-window-start",
+          "endEvent": "measurement-window-end",
+          "observation": "bounded measurement storage"
+        },
+        "droppedEncodeAndSubmitSamples": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "measurement-window-start",
+          "endEvent": "measurement-window-end",
+          "observation": "bounded measurement storage"
+        }
+      },
+      "diagnostics": {
+        "expected": [],
+        "unexpected": []
+      }
+    },
+    {
+      "index": 3,
+      "startedAtUtc": "2026-09-09T13:19:30.508Z",
+      "endedAtUtc": "2026-09-09T13:19:32.526Z",
+      "window": {
+        "clock": "performance.now",
+        "startMs": 146.70000000298023,
+        "endMs": 2159
+      },
+      "sampleCounts": {
+        "resizeObservations": 124
+      },
+      "samples": {
+        "resizeObservations": [
+          0.10000000894069672, 0.09999999403953552, 0.09999999403953552, 0.20000000298023224,
+          0.20000000298023224, 0.20000000298023224, 0.09999999403953552, 0.20000000298023224,
+          0.10000000894069672, 0.09999999403953552, 0.20000000298023224, 0.20000000298023224,
+          0.20000000298023224, 0.10000000894069672, 0.20000000298023224, 0.09999999403953552,
+          0.09999999403953552, 0.09999999403953552, 0.09999999403953552, 0.09999999403953552,
+          0.20000000298023224, 0.20000000298023224, 0.10000000894069672, 0, 0.10000000894069672,
+          0.09999999403953552, 0.09999999403953552, 0.09999999403953552, 0.20000000298023224,
+          0.09999999403953552, 0.09999999403953552, 0, 0, 0.20000000298023224, 0.09999999403953552,
+          0.10000000894069672, 0.19999998807907104, 0.09999999403953552, 0.09999999403953552,
+          0.09999999403953552, 0.20000000298023224, 0.09999999403953552, 0.20000000298023224,
+          0.10000000894069672, 0, 0.09999999403953552, 0.09999999403953552, 0.20000000298023224,
+          0.09999999403953552, 0, 0.10000000894069672, 0.09999999403953552, 0.10000000894069672,
+          0.09999999403953552, 0.10000000894069672, 0.09999999403953552, 0.09999999403953552,
+          0.09999999403953552, 0.09999999403953552, 0.10000000894069672, 0.09999999403953552, 0,
+          0.20000000298023224, 0.10000000894069672, 0.20000000298023224, 0.20000000298023224,
+          0.09999999403953552, 0.20000000298023224, 0.09999999403953552, 0.10000000894069672,
+          0.20000000298023224, 0.10000000894069672, 0.20000000298023224, 0.20000000298023224,
+          0.20000000298023224, 0.20000000298023224, 0.10000000894069672, 0.20000000298023224,
+          0.09999999403953552, 0.09999999403953552, 0.09999999403953552, 0.10000000894069672,
+          0.09999999403953552, 0, 0.09999999403953552, 0.20000000298023224, 0.20000000298023224,
+          0.20000000298023224, 0.20000000298023224, 0.09999999403953552, 0, 0, 0.20000000298023224,
+          0.10000000894069672, 0.09999999403953552, 0.20000000298023224, 0.09999999403953552,
+          0.09999999403953552, 0.20000000298023224, 0.20000000298023224, 0.20000000298023224,
+          0.20000000298023224, 0.09999999403953552, 0.20000000298023224, 0.09999999403953552,
+          0.09999999403953552, 0.09999999403953552, 0.09999999403953552, 0.09999999403953552,
+          0.09999999403953552, 0.20000000298023224, 0.20000000298023224, 0.20000000298023224,
+          0.10000000894069672, 0.20000000298023224, 0.20000000298023224, 0.10000000894069672,
+          0.09999999403953552, 0.20000000298023224, 0.09999999403953552, 0.09999999403953552, 1,
+          1280, 720
+        ]
+      },
+      "metrics": {
+        "cpuEncodeAndSubmitMedian": {
+          "availability": "available",
+          "value": 0.1,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "render-encode-start",
+          "endEvent": "queue-submit-return",
+          "observation": "backend CPU clock"
+        },
+        "cpuEncodeAndSubmitP95": {
+          "availability": "available",
+          "value": 0.2,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "render-encode-start",
+          "endEvent": "queue-submit-return",
+          "observation": "backend CPU clock"
+        },
+        "cpuEncodeAndSubmitP99": {
+          "availability": "available",
+          "value": 0.2,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "render-encode-start",
+          "endEvent": "queue-submit-return",
+          "observation": "backend CPU clock"
+        },
+        "maximumSubmissionsPerAnimationFrame": {
+          "availability": "available",
+          "value": 1,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "resize-before-animation-frame",
+          "endEvent": "animation-frame",
+          "observation": "backend statistics delta"
+        },
+        "liveSizeDependentAttachments": {
+          "availability": "available",
+          "value": 1,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "resize-storm-start",
+          "endEvent": "resize-settled",
+          "observation": "engine texture resource counter"
+        },
+        "finalPhysicalWidth": {
+          "availability": "available",
+          "value": 1280,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "resize-storm-start",
+          "endEvent": "resize-settled",
+          "observation": "surface snapshot"
+        },
+        "finalPhysicalHeight": {
+          "availability": "available",
+          "value": 720,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "resize-storm-start",
+          "endEvent": "resize-settled",
+          "observation": "surface snapshot"
+        },
+        "droppedFrameIntervalSamples": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "measurement-window-start",
+          "endEvent": "measurement-window-end",
+          "observation": "bounded measurement storage"
+        },
+        "droppedEncodeAndSubmitSamples": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "measurement-window-start",
+          "endEvent": "measurement-window-end",
+          "observation": "bounded measurement storage"
+        }
+      },
+      "diagnostics": {
+        "expected": [],
+        "unexpected": []
+      }
+    },
+    {
+      "index": 4,
+      "startedAtUtc": "2026-09-09T13:19:32.677Z",
+      "endedAtUtc": "2026-09-09T13:19:34.692Z",
+      "window": {
+        "clock": "performance.now",
+        "startMs": 146.90000000596046,
+        "endMs": 2156.4000000059605
+      },
+      "sampleCounts": {
+        "resizeObservations": 124
+      },
+      "samples": {
+        "resizeObservations": [
+          0.10000000894069672, 0.09999999403953552, 0.09999999403953552, 0.09999999403953552,
+          0.10000000894069672, 0.09999999403953552, 0.09999999403953552, 0.20000000298023224,
+          0.09999999403953552, 0.09999999403953552, 0.10000000894069672, 0.09999999403953552,
+          0.10000000894069672, 0.29999999701976776, 0.09999999403953552, 0.20000000298023224,
+          0.20000000298023224, 0.09999999403953552, 0.20000000298023224, 0.20000000298023224,
+          0.29999999701976776, 0.09999999403953552, 0.09999999403953552, 0.09999999403953552,
+          0.09999999403953552, 0.10000000894069672, 0.09999999403953552, 0.10000000894069672,
+          0.10000000894069672, 0.20000000298023224, 0.10000000894069672, 0, 0.09999999403953552, 0,
+          0.10000000894069672, 0.09999999403953552, 0.09999999403953552, 0.10000000894069672,
+          0.09999999403953552, 0.20000000298023224, 0.10000000894069672, 0.19999998807907104,
+          0.20000000298023224, 0, 0.09999999403953552, 0.20000000298023224, 0.09999999403953552,
+          0.09999999403953552, 0.09999999403953552, 0, 0.09999999403953552, 0.10000000894069672,
+          0.10000000894069672, 0.09999999403953552, 0.09999999403953552, 0.10000000894069672,
+          0.09999999403953552, 0.20000000298023224, 0.10000000894069672, 0.09999999403953552,
+          0.10000000894069672, 0.10000000894069672, 0.20000000298023224, 0.20000000298023224,
+          0.10000000894069672, 0.09999999403953552, 0.20000000298023224, 0.10000000894069672, 0,
+          0.20000000298023224, 0.20000000298023224, 0.09999999403953552, 0.09999999403953552,
+          0.10000000894069672, 0.09999999403953552, 0, 0.10000000894069672, 0.20000000298023224,
+          0.09999999403953552, 0.20000000298023224, 0.10000000894069672, 0.20000000298023224,
+          0.10000000894069672, 0.09999999403953552, 0.10000000894069672, 0.09999999403953552,
+          0.20000000298023224, 0.10000000894069672, 0.09999999403953552, 0.10000000894069672,
+          0.09999999403953552, 0.20000000298023224, 0.20000000298023224, 0.20000000298023224,
+          0.20000000298023224, 0.20000000298023224, 0.09999999403953552, 0.09999999403953552,
+          0.09999999403953552, 0.09999999403953552, 0.10000000894069672, 0.20000000298023224, 0,
+          0.09999999403953552, 0.10000000894069672, 0.20000000298023224, 0.20000000298023224,
+          0.20000000298023224, 0.10000000894069672, 0.09999999403953552, 0.20000000298023224,
+          0.20000000298023224, 0.19999998807907104, 0.10000000894069672, 0.20000000298023224,
+          0.09999999403953552, 0.20000000298023224, 0.09999999403953552, 0.09999999403953552,
+          0.09999999403953552, 0.09999999403953552, 1, 1280, 720
+        ]
+      },
+      "metrics": {
+        "cpuEncodeAndSubmitMedian": {
+          "availability": "available",
+          "value": 0.1,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "render-encode-start",
+          "endEvent": "queue-submit-return",
+          "observation": "backend CPU clock"
+        },
+        "cpuEncodeAndSubmitP95": {
+          "availability": "available",
+          "value": 0.2,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "render-encode-start",
+          "endEvent": "queue-submit-return",
+          "observation": "backend CPU clock"
+        },
+        "cpuEncodeAndSubmitP99": {
+          "availability": "available",
+          "value": 0.3,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "render-encode-start",
+          "endEvent": "queue-submit-return",
+          "observation": "backend CPU clock"
+        },
+        "maximumSubmissionsPerAnimationFrame": {
+          "availability": "available",
+          "value": 1,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "resize-before-animation-frame",
+          "endEvent": "animation-frame",
+          "observation": "backend statistics delta"
+        },
+        "liveSizeDependentAttachments": {
+          "availability": "available",
+          "value": 1,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "resize-storm-start",
+          "endEvent": "resize-settled",
+          "observation": "engine texture resource counter"
+        },
+        "finalPhysicalWidth": {
+          "availability": "available",
+          "value": 1280,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "resize-storm-start",
+          "endEvent": "resize-settled",
+          "observation": "surface snapshot"
+        },
+        "finalPhysicalHeight": {
+          "availability": "available",
+          "value": 720,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "resize-storm-start",
+          "endEvent": "resize-settled",
+          "observation": "surface snapshot"
+        },
+        "droppedFrameIntervalSamples": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "measurement-window-start",
+          "endEvent": "measurement-window-end",
+          "observation": "bounded measurement storage"
+        },
+        "droppedEncodeAndSubmitSamples": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "measurement-window-start",
+          "endEvent": "measurement-window-end",
+          "observation": "bounded measurement storage"
+        }
+      },
+      "diagnostics": {
+        "expected": [],
+        "unexpected": []
+      }
+    },
+    {
+      "index": 5,
+      "startedAtUtc": "2026-09-09T13:19:34.866Z",
+      "endedAtUtc": "2026-09-09T13:19:36.893Z",
+      "window": {
+        "clock": "performance.now",
+        "startMs": 169.3999999910593,
+        "endMs": 2191.8999999910593
+      },
+      "sampleCounts": {
+        "resizeObservations": 124
+      },
+      "samples": {
+        "resizeObservations": [
+          0.20000000298023224, 0.20000000298023224, 0.20000000298023224, 0.29999999701976776,
+          0.29999999701976776, 0.20000000298023224, 0, 0.09999999403953552, 0.20000000298023224,
+          0.09999999403953552, 0.09999999403953552, 0.09999999403953552, 0.20000000298023224,
+          0.29999999701976776, 0.20000000298023224, 0.20000000298023224, 0.19999998807907104,
+          0.09999999403953552, 0, 0.19999998807907104, 0.10000000894069672, 0.09999999403953552,
+          0.09999999403953552, 0.09999999403953552, 0.20000000298023224, 0.09999999403953552,
+          0.20000000298023224, 0.20000000298023224, 0.09999999403953552, 0.20000000298023224,
+          0.29999999701976776, 0.10000000894069672, 0.20000000298023224, 0.09999999403953552,
+          0.20000000298023224, 0, 0.20000000298023224, 0.19999998807907104, 0.10000000894069672,
+          0.10000000894069672, 0.09999999403953552, 0, 0.10000000894069672, 0.09999999403953552,
+          0.09999999403953552, 0.09999999403953552, 0.09999999403953552, 0.10000000894069672,
+          0.10000000894069672, 0.09999999403953552, 0.20000000298023224, 0.10000000894069672,
+          0.09999999403953552, 0.20000000298023224, 0.19999998807907104, 0.20000000298023224,
+          0.20000000298023224, 0.20000000298023224, 0.20000000298023224, 0.20000000298023224,
+          0.10000000894069672, 0.20000000298023224, 0.20000000298023224, 0.09999999403953552,
+          0.09999999403953552, 0.10000000894069672, 0.10000000894069672, 0.19999998807907104,
+          0.20000000298023224, 0.09999999403953552, 0.20000000298023224, 0.20000000298023224, 0,
+          0.20000000298023224, 0.10000000894069672, 0.20000000298023224, 0.19999998807907104,
+          0.09999999403953552, 0.29999999701976776, 0.20000000298023224, 0.20000000298023224,
+          0.10000000894069672, 0.09999999403953552, 0.20000000298023224, 0.10000000894069672,
+          0.09999999403953552, 0.20000000298023224, 0.20000000298023224, 0.09999999403953552,
+          0.10000000894069672, 0.20000000298023224, 0.19999998807907104, 0.20000000298023224,
+          0.20000000298023224, 0.20000000298023224, 0.09999999403953552, 0.20000000298023224,
+          0.10000000894069672, 0.19999998807907104, 0, 0.19999998807907104, 0.20000000298023224,
+          0.09999999403953552, 0.19999998807907104, 0.20000000298023224, 0.10000000894069672,
+          0.19999998807907104, 0.10000000894069672, 0.20000000298023224, 0.09999999403953552, 0,
+          0.20000000298023224, 0.20000000298023224, 0.09999999403953552, 0.10000000894069672,
+          0.09999999403953552, 0.09999999403953552, 0.09999999403953552, 0.09999999403953552,
+          0.09999999403953552, 0, 1, 1280, 720
+        ]
+      },
+      "metrics": {
+        "cpuEncodeAndSubmitMedian": {
+          "availability": "available",
+          "value": 0.1,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "render-encode-start",
+          "endEvent": "queue-submit-return",
+          "observation": "backend CPU clock"
+        },
+        "cpuEncodeAndSubmitP95": {
+          "availability": "available",
+          "value": 0.2,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "render-encode-start",
+          "endEvent": "queue-submit-return",
+          "observation": "backend CPU clock"
+        },
+        "cpuEncodeAndSubmitP99": {
+          "availability": "available",
+          "value": 0.3,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "render-encode-start",
+          "endEvent": "queue-submit-return",
+          "observation": "backend CPU clock"
+        },
+        "maximumSubmissionsPerAnimationFrame": {
+          "availability": "available",
+          "value": 1,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "resize-before-animation-frame",
+          "endEvent": "animation-frame",
+          "observation": "backend statistics delta"
+        },
+        "liveSizeDependentAttachments": {
+          "availability": "available",
+          "value": 1,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "resize-storm-start",
+          "endEvent": "resize-settled",
+          "observation": "engine texture resource counter"
+        },
+        "finalPhysicalWidth": {
+          "availability": "available",
+          "value": 1280,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "resize-storm-start",
+          "endEvent": "resize-settled",
+          "observation": "surface snapshot"
+        },
+        "finalPhysicalHeight": {
+          "availability": "available",
+          "value": 720,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "resize-storm-start",
+          "endEvent": "resize-settled",
+          "observation": "surface snapshot"
+        },
+        "droppedFrameIntervalSamples": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "measurement-window-start",
+          "endEvent": "measurement-window-end",
+          "observation": "bounded measurement storage"
+        },
+        "droppedEncodeAndSubmitSamples": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "measurement-window-start",
+          "endEvent": "measurement-window-end",
+          "observation": "bounded measurement storage"
+        }
+      },
+      "diagnostics": {
+        "expected": [],
+        "unexpected": []
+      }
+    }
+  ]
+}

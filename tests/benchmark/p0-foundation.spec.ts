@@ -42,6 +42,24 @@ const settings =
         lifecycleCycles: 2,
       };
 const launchFlags = ['--enable-unsafe-webgpu'];
+const MEASUREMENT_CAPACITY = 4096;
+const REFERENCE_SURFACE_CONFIGURATION = Object.freeze({
+  cssSize: Object.freeze([1280, 720] as const),
+  physicalSize: Object.freeze([1280, 720] as const),
+  devicePixelRatio: 1,
+});
+const FOUNDATION_WORKLOAD = Object.freeze({
+  sceneId: 'native-foundation-triangle-v1',
+  objectCounts: Object.freeze({ renderedObjects: 1, triangles: 1, vertices: 3 }),
+  drawCallsPerSubmittedFrame: 1,
+  renderPassesPerSubmittedFrame: 1,
+});
+const RESIZE_SEQUENCE = Object.freeze({
+  width: Object.freeze({ base: 900, stepMultiplier: 37, modulus: 380 }),
+  height: Object.freeze({ base: 500, stepMultiplier: 23, modulus: 220 }),
+  devicePixelRatios: Object.freeze([1, 1.5, 2] as const),
+  pacing: 'one deterministic resize before each requestAnimationFrame',
+});
 
 function fixed(value: number): number {
   return Number(value.toFixed(3));
@@ -198,6 +216,10 @@ async function environment(
       getBattery?: () => Promise<{ charging: boolean; level: number }>;
     };
     const battery = await navigatorWithBattery.getBattery?.();
+    const performanceWithMemory = performance as Performance & {
+      memory?: { usedJSHeapSize?: number };
+    };
+    const usedJSHeapSize = performanceWithMemory.memory?.usedJSHeapSize;
     return {
       hardwareConcurrency: navigator.hardwareConcurrency,
       deviceMemoryGiB: navigatorWithBattery.deviceMemory ?? null,
@@ -205,6 +227,8 @@ async function environment(
         battery === undefined ? 'unavailable' : battery.charging ? 'AC/charging' : 'battery',
       batteryLevel: battery?.level ?? null,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      usedJSHeapSize:
+        usedJSHeapSize !== undefined && Number.isFinite(usedJSHeapSize) ? usedJSHeapSize : null,
       visibilityState: document.visibilityState,
       windowPlacement: {
         screenX: window.screenX,
@@ -224,6 +248,8 @@ async function environment(
   const powerSource = process.env.P0_POWER_SOURCE;
   const powerMode = process.env.P0_POWER_MODE;
   const backgroundLoad = process.env.P0_BACKGROUND_LOAD;
+  const capabilities = snapshot.capability.capabilities;
+  const surfaceSize = snapshot.surfaceSize;
   return {
     operatingSystem: `${os.platform()} ${os.release()} ${os.arch()}`,
     cpu: os.cpus()[0]?.model ?? 'unavailable',
@@ -248,9 +274,30 @@ async function environment(
             observation: preflightObservation,
           }
         : { availability: 'unavailable', reason: 'P0_DISPLAY_REFRESH_HZ-not-provided' },
-    selectedFeatures: snapshot.capability.capabilities?.selectedFeatures ?? [],
-    sampleCount: snapshot.capability.capabilities?.sampleCount ?? 0,
-    viewport: { css: [1280, 720], physical: [1280, 720], devicePixelRatio: 1 },
+    selectedFeatures:
+      capabilities === undefined
+        ? { availability: 'unavailable', reason: 'webgpu-capabilities-unavailable' }
+        : capabilities.selectedFeatures,
+    sampleCount:
+      capabilities === undefined
+        ? { availability: 'unavailable', reason: 'webgpu-capabilities-unavailable' }
+        : capabilities.sampleCount,
+    presentationFormat:
+      snapshot.presentationFormat === undefined
+        ? { availability: 'unavailable', reason: 'presentation-format-unavailable' }
+        : snapshot.presentationFormat,
+    viewport: {
+      css: REFERENCE_SURFACE_CONFIGURATION.cssSize,
+      physical:
+        surfaceSize === undefined
+          ? { availability: 'unavailable', reason: 'surface-size-unavailable' }
+          : [surfaceSize.physical.width, surfaceSize.physical.height],
+      devicePixelRatio:
+        surfaceSize === undefined
+          ? { availability: 'unavailable', reason: 'surface-size-unavailable' }
+          : surfaceSize.devicePixelRatio,
+      observation: 'requested CSS size and backend surface snapshot',
+    },
     power: {
       source:
         powerSource === undefined
@@ -290,6 +337,18 @@ async function environment(
       context: 'emulated values; does not establish physical monitor association',
     },
     actualWindowBounds,
+    browserHeap:
+      browserEnvironment.usedJSHeapSize === null
+        ? { availability: 'unavailable', reason: 'performance-memory-unavailable' }
+        : {
+            availability: 'available',
+            usedBytes: browserEnvironment.usedJSHeapSize,
+            observation: 'performance.memory.usedJSHeapSize initial-page snapshot',
+          },
+    processGpuMemory: {
+      availability: 'unavailable',
+      reason: 'browser-no-process-gpu-memory-api',
+    },
   };
 }
 
@@ -306,6 +365,11 @@ function record(
     scenarioVersion,
     seed: 0,
     profile,
+    renderConfiguration: {
+      selectedFeatures: environmentValue.selectedFeatures,
+      selectedSampleCount: environmentValue.sampleCount,
+      presentationFormat: environmentValue.presentationFormat,
+    },
     parameters: configuration,
   });
   const command = [
@@ -675,8 +739,14 @@ test('runs all P0 foundation scenarios and exports validated exploratory records
       2,
       json({
         repetitions: settings.repetitions,
-        viewport: [1280, 720],
-        devicePixelRatio: 1,
+        workload: FOUNDATION_WORKLOAD,
+        referenceSurface: REFERENCE_SURFACE_CONFIGURATION,
+        mode: 'on-demand',
+        warmupDurationMs: 0,
+        measurementWindow: {
+          kind: 'fresh-navigation-event-bounded',
+          endEvent: 'first submitted GPU work queue completion',
+        },
         surfaceFixture: 'p0-reference-v1',
         timingEndpoints: {
           navigationReady: {
@@ -874,11 +944,12 @@ test('runs all P0 foundation scenarios and exports validated exploratory records
       1,
       json({
         repetitions: settings.repetitions,
+        workload: FOUNDATION_WORKLOAD,
+        referenceSurface: REFERENCE_SURFACE_CONFIGURATION,
+        mode: 'continuous',
         warmupDurationMs: settings.steadyWarmupMs,
         measuredDurationMs: settings.steadyMeasuredMs,
-        measurementCapacity: 4096,
-        viewport: [1280, 720],
-        devicePixelRatio: 1,
+        measurementCapacity: MEASUREMENT_CAPACITY,
       }),
       steadyRuns,
       environmentValue,
@@ -949,10 +1020,16 @@ test('runs all P0 foundation scenarios and exports validated exploratory records
       1,
       json({
         repetitions: settings.repetitions,
+        workload: FOUNDATION_WORKLOAD,
+        referenceSurface: REFERENCE_SURFACE_CONFIGURATION,
+        mode: 'on-demand',
+        warmupDurationMs: 0,
         burstInvalidations: 100,
         idleObservationMs: settings.idleObservedMs,
-        viewport: [1280, 720],
-        devicePixelRatio: 1,
+        measurementWindow: {
+          kind: 'fixed-duration-after-burst-settlement',
+          durationMs: settings.idleObservedMs,
+        },
       }),
       idleRuns,
       environmentValue,
@@ -965,22 +1042,39 @@ test('runs all P0 foundation scenarios and exports validated exploratory records
     await prepare(page);
     const startedAtUtc = new Date().toISOString();
     await page.evaluate(() => window.__vectorStudioP0.startFrameMeasurements());
-    const maximumSubmissions = await page.evaluate(async (steps) => {
-      let previous = window.__vectorStudioP0.snapshot().statistics.framesSubmitted;
-      let maximum = 0;
-      for (let step = 0; step < steps; step += 1) {
-        const width = 900 + ((step * 37) % 380);
-        const height = 500 + ((step * 23) % 220);
-        window.__vectorStudioP0.resize(width, height, [1, 1.5, 2][step % 3] ?? 1);
+    const maximumSubmissions = await page.evaluate(
+      async ({ steps, sequence, finalSurface }) => {
+        let previous = window.__vectorStudioP0.snapshot().statistics.framesSubmitted;
+        let maximum = 0;
+        for (let step = 0; step < steps; step += 1) {
+          const width =
+            sequence.width.base + ((step * sequence.width.stepMultiplier) % sequence.width.modulus);
+          const height =
+            sequence.height.base +
+            ((step * sequence.height.stepMultiplier) % sequence.height.modulus);
+          const devicePixelRatio =
+            sequence.devicePixelRatios[step % sequence.devicePixelRatios.length] ??
+            sequence.devicePixelRatios[0];
+          window.__vectorStudioP0.resize(width, height, devicePixelRatio);
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          const current = window.__vectorStudioP0.snapshot().statistics.framesSubmitted;
+          maximum = Math.max(maximum, current - previous);
+          previous = current;
+        }
+        window.__vectorStudioP0.resize(
+          finalSurface.cssSize[0],
+          finalSurface.cssSize[1],
+          finalSurface.devicePixelRatio,
+        );
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-        const current = window.__vectorStudioP0.snapshot().statistics.framesSubmitted;
-        maximum = Math.max(maximum, current - previous);
-        previous = current;
-      }
-      window.__vectorStudioP0.resize(1280, 720, 1);
-      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-      return maximum;
-    }, settings.resizeSteps);
+        return maximum;
+      },
+      {
+        steps: settings.resizeSteps,
+        sequence: RESIZE_SEQUENCE,
+        finalSurface: REFERENCE_SURFACE_CONFIGURATION,
+      },
+    );
     const result = await page.evaluate(() => ({
       measurements: window.__vectorStudioP0.stopFrameMeasurements(),
       snapshot: window.__vectorStudioP0.snapshot(),
@@ -1076,10 +1170,15 @@ test('runs all P0 foundation scenarios and exports validated exploratory records
       1,
       json({
         repetitions: settings.repetitions,
+        workload: FOUNDATION_WORKLOAD,
+        mode: 'on-demand',
+        warmupDurationMs: 0,
+        measurementCapacity: MEASUREMENT_CAPACITY,
         steps: settings.resizeSteps,
-        pacing: 'one deterministic resize before each requestAnimationFrame',
-        finalViewport: [1280, 720],
-        finalDevicePixelRatio: 1,
+        sequence: RESIZE_SEQUENCE,
+        initialSurface: REFERENCE_SURFACE_CONFIGURATION,
+        finalSurface: REFERENCE_SURFACE_CONFIGURATION,
+        measurementWindow: { kind: 'operation-bounded', operations: settings.resizeSteps },
       }),
       resizeRuns,
       environmentValue,
@@ -1318,10 +1417,17 @@ test('runs all P0 foundation scenarios and exports validated exploratory records
       2,
       json({
         repetitions: settings.repetitions,
+        workload: FOUNDATION_WORKLOAD,
+        referenceSurface: REFERENCE_SURFACE_CONFIGURATION,
+        mode: 'on-demand',
+        warmupDurationMs: 0,
+        measurementWindow: {
+          kind: 'cycles-then-loss-recovery-event-bounded',
+          cycles: settings.lifecycleCycles,
+          endEvent: 'rebuilt GPU work queue completion',
+        },
         initializeRenderDisposeCycles: settings.lifecycleCycles,
         deliberateLossesPerRepetition: 1,
-        viewport: [1280, 720],
-        devicePixelRatio: 1,
         surfaceFixture: 'p0-reference-v1',
         timingEndpoints: {
           recoveryReady: {

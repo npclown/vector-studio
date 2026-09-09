@@ -504,6 +504,8 @@ Implementation checkpoint: update runner scenario identity and endpoint metadata
 
 The [implementation review](../evidence/p0-6-observable-boundary-2026-09-09.md) records local static/unit/build, 12 browser cases, 10 headed GPU cases and the final two-browser smoke run. This checkpoint alone does not close P0.6. The user reports YouTube and other GPU work closed. Read-only Windows preflight resolves both active displays to 1920 x 1080 at 60 Hz using per-device `EnumDisplaySettings`, power line status to AC, and the active power scheme to Balanced. CDP window bounds place both smoke browser windows wholly within the primary monitor; emulated Screen values are labeled separately. Final source capture and threshold review remain required.
 
+The first complete matrix on clean source `62ed77af33915fdbce79a95c4a7680f0b62c6254` completed both browsers, but review found omitted deterministic inputs in the configuration hash. Preserve those observations under `docs/benchmarks/results/p0-6-20260909-1319/` as metadata-UNVERIFIED. Before a replacement run, include the existing default triangle identity/counts, actual selected sample count and target format, explicit reference CSS/physical/DPR fields, resize formula constants/DPR sequence and measurement modes/windows in the stored configuration. This repairs existing reproducibility acceptance, with no algorithm, sample-window, threshold or scenario-version change. Validate exported values against actual source/snapshots and rerun from a new clean source; never patch the first observations.
+
 - [ ] Run the complete static/unit/contract/browser validation surface.
 - [ ] Run headed Chrome and Edge GPU validation on the reference machine.
 - [ ] Execute five repetitions of every P0 benchmark scenario.
