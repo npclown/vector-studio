@@ -64,6 +64,39 @@ test('initializes and resizes a real WebGPU canvas', async ({ page, browserName 
   expect(pageErrors).toEqual([]);
 });
 
+test('keeps the P0 reference surface through first initialization and reinitialization', async ({
+  page,
+}) => {
+  await page.goto('/?surface=p0-reference-v1');
+  await page.waitForFunction(() => window.__vectorStudioP0?.snapshot().state === 'ready');
+
+  const initial = await page.evaluate(() => ({
+    canvas: (() => {
+      const canvas = document.querySelector<HTMLCanvasElement>('#webgpu-surface');
+      if (!canvas) throw new Error('WebGPU canvas is missing.');
+      const bounds = canvas.getBoundingClientRect();
+      return { width: bounds.width, height: bounds.height };
+    })(),
+    surface: window.__vectorStudioP0.snapshot().surfaceSize,
+  }));
+  expect(initial.canvas).toEqual({ width: 1280, height: 720 });
+  expect(initial.surface).toMatchObject({
+    devicePixelRatio: 1,
+    physical: { width: 1280, height: 720 },
+    suspended: false,
+  });
+
+  const reinitialized = await page.evaluate(async () => {
+    await window.__vectorStudioP0.reinitialize();
+    return window.__vectorStudioP0.snapshot().surfaceSize;
+  });
+  expect(reinitialized).toMatchObject({
+    devicePixelRatio: 1,
+    physical: { width: 1280, height: 720 },
+    suspended: false,
+  });
+});
+
 test('coalesces invalidation, remains idle, and renders the foundation scene', async ({
   page,
 }, testInfo) => {

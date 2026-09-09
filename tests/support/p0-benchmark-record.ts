@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { closeSync, mkdirSync, openSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { format, resolveConfig } from 'prettier';
+
 export const P0_BENCHMARK_SCHEMA = 'vector-studio/p0-benchmark-result/v1' as const;
 export const P0_RUNNER_ID = 'vector-studio/p0-runner/v1' as const;
 
@@ -275,24 +277,35 @@ export function renderP0BenchmarkMarkdown(record: P0BenchmarkRecord): string {
   return `# Benchmark result: ${record.scenario.id}/v${record.scenario.version}\n\nStatus: Exploratory\n\n## Identity\n\n- Revision: ${record.identity.revision}\n- Run ID: ${record.identity.runId}\n- Timestamp UTC: ${record.identity.timestampUtc}\n- Configuration hash: ${record.scenario.configurationHash}\n- Profile: ${record.scenario.profile}\n\n## Results\n\n| Metric | ${headings.join(' | ')} |\n| --- | ${headings.map(() => '---:').join(' | ')} |\n${rows.join('\n')}\n\n## Gate\n\nThis generated observation is not accepted automatically. Link an execution-plan review before using it as a baseline.\n`;
 }
 
-export function writeP0BenchmarkArtifacts(
+export async function writeP0BenchmarkArtifacts(
   record: P0BenchmarkRecord,
   directory: string,
   browser: string,
   machine: string,
-): BenchmarkArtifactPaths {
+): Promise<BenchmarkArtifactPaths> {
   const issues = validateP0BenchmarkRecord(record);
   if (issues.length > 0) throw new TypeError(`Invalid P0 benchmark record:\n${issues.join('\n')}`);
-  mkdirSync(directory, { recursive: true });
   const base = path.join(directory, benchmarkArtifactBaseName(record, browser, machine));
   const paths = { json: `${base}.json`, markdown: `${base}.md` };
+  const serialized = JSON.stringify(record, null, 2);
+  const [json, markdown] = await Promise.all([
+    format(serialized, {
+      ...(await resolveConfig(paths.json)),
+      filepath: paths.json,
+    }),
+    format(renderP0BenchmarkMarkdown(record), {
+      ...(await resolveConfig(paths.markdown)),
+      filepath: paths.markdown,
+    }),
+  ]);
+  mkdirSync(directory, { recursive: true });
   let jsonHandle: number | undefined;
   let markdownHandle: number | undefined;
   try {
     jsonHandle = openSync(paths.json, 'wx');
     markdownHandle = openSync(paths.markdown, 'wx');
-    writeFileSync(jsonHandle, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
-    writeFileSync(markdownHandle, renderP0BenchmarkMarkdown(record), 'utf8');
+    writeFileSync(jsonHandle, json, 'utf8');
+    writeFileSync(markdownHandle, markdown, 'utf8');
   } catch (error: unknown) {
     if (jsonHandle !== undefined) {
       closeSync(jsonHandle);

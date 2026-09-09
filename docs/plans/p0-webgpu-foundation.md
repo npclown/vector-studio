@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.5a integrated; P0.6 measurement feasibility investigated; instrumentation/acceptance direction requires user decision; P0 gate open
+Status: P0 final local acceptance PASS on b524927; protected PR integration gate applies; P1 execution planning is next
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -486,53 +486,69 @@ T006b clean-source outcome (2026-09-09): **COMPLETE**. Source checkpoint `11314b
 
 ### P0.6 Final validation and gate review
 
-P0.5a was integrated through [PR #22](https://github.com/npclown/vector-studio/pull/22) as `1c64eab878dd004891971da86f359814e44daebc`. The [2026-09-09 readiness review](../evidence/p0-6-readiness-2026-09-09.md) verifies squash/source equivalence, audits the five-scenario runner, and records the remaining presentation/native-OOM decisions and reference-environment preparation. Existing A13-A15 evidence retains its measured revision; no new benchmark or final gate result is inferred from the merge. Next, investigate feasible presentation/native-OOM observation procedures under the existing criteria. Read-only investigation needs no new approval; escalate only if a criterion, dependency, architecture or operational-risk change is necessary. Before an acceptance run, resolve the actual observation method or obtain an explicit prospective criterion revision. Current thresholds remain unchanged.
+P0.5a was integrated through [PR #22](https://github.com/npclown/vector-studio/pull/22) as `1c64eab878dd004891971da86f359814e44daebc`. The [2026-09-09 readiness review](../evidence/p0-6-readiness-2026-09-09.md) verifies squash/source equivalence, audits the five-scenario runner, and records the remaining presentation/native-OOM decisions and reference-environment preparation. Existing A13-A15 evidence retains its measured revision; no new benchmark or final gate result is inferred from the merge. Next, investigate feasible presentation/native-OOM observation procedures under the existing criteria. Read-only investigation needs no new approval; escalate only if a criterion, dependency, architecture or operational-risk change is necessary. That investigation led to the explicitly approved prospective revision below. Numeric ceilings remain unchanged; the named startup/recovery endpoints change only in v2.
 
-The [measurement-feasibility investigation](../evidence/p0-6-measurement-feasibility-2026-09-09.md) is complete. Standard browser APIs and generic presentation feedback do not establish the required physical-display endpoint; no guaranteed bounded native-hardware-OOM method was identified for the stock-browser public API. A read-only machine audit also found two active monitors, so controller-reported 60 Hz is not sufficient to identify the benchmark display. The report contains a bounded external-instrumentation proposal and an explicitly unapproved alternative for revising P0 verification to observable SDK boundaries. Neither external tooling nor acceptance-semantic changes are authorized by this investigation. Current criteria and scenario versions remain in force; obtain the user's direction before either proposed implementation path.
+The [measurement-feasibility investigation](../evidence/p0-6-measurement-feasibility-2026-09-09.md) is complete. Standard browser APIs and generic presentation feedback do not establish the required physical-display endpoint; no guaranteed bounded native-hardware-OOM method was identified for the stock-browser public API. A read-only machine audit also found two active monitors, so controller-reported 60 Hz is not sufficient to identify the benchmark display. The report contains a bounded external-instrumentation proposal and an explicitly unapproved alternative for revising P0 verification to observable SDK boundaries. The investigation itself authorized neither path. The user subsequently selected the observable-boundary revision recorded below; external tooling remains outside scope.
 
-- [ ] Run the complete static/unit/contract/browser validation surface.
-- [ ] Run headed Chrome and Edge GPU validation on the reference machine.
-- [ ] Execute five repetitions of every P0 benchmark scenario.
-- [ ] Commit raw JSON and Markdown summaries.
-- [ ] Evaluate every acceptance criterion below as PASS, FAIL, or UNVERIFIED.
-- [ ] Record residual risks and decide whether P1 may begin.
+### Approved observable-boundary contract (2026-09-09)
+
+The user explicitly approved the preceding feasibility report's proposed revision on 2026-09-09. This prospective contract supersedes the pending-decision statements above; historical reports and v1 observations remain unchanged. External instrumentation and hardware-exhaustion experiments are not included.
+
+- Startup advances to `p0/startup/v2`. Navigation-to-backend-ready retains the 1,000 ms p95 ceiling; initialize-call-to-ready is reported separately. Initialization start to completion of the first submitted GPU work replaces physical first-present timing, with the unchanged 1,200 ms p95 ceiling. Headed visual output is verified separately.
+- Lifecycle advances to `p0/lifecycle-recovery/v2`. Both recovery-ready and rebuilt-work queue completion must occur within 3,000 ms of current-generation loss detection in every repetition. The 25 cycles, zero disposed ownership/listeners, one recovery attempt and no stale submissions remain required. Headed visual reconstruction is separate evidence.
+- P0-A07 requires injected OOM diagnostic mapping plus native headed validation-error and device-loss delivery. Actual native hardware OOM remains **UNVERIFIED**, explicitly outside the revised P0 exit gate. OOM product behavior is unchanged.
+- Queue completion is not physical presentation. Physical-display timing remains unavailable/residual; neither screenshots nor submission counters establish its timing. This is an approved reduction of required hardware evidence, not equivalent proof of the original gate.
+- Other scenario versions, configurations, durations, five repetitions per browser, numeric ceilings and architecture are unchanged. Every revised criterion and all five scenarios in both browsers must pass before P0 closes. Acceptance-sensitive environment fields must be established before an acceptance run.
+
+Implementation checkpoint: update runner scenario identity and endpoint metadata, preserve collision-safe immutable output, and validate static/unit/build plus headed smoke execution. Primary review found that the previous startup/lifecycle runner declared 1280 x 720 but initialized the playground default 640 x 360. The v2 scenarios must select the internal reference-surface fixture before initialization and assert 1280 x 720 at DPR 1 through reinitialization/recovery. This restores the declared reference surface; v1 observations are not retroactively relabeled. Browser fixture checks and actual surface fields in the new records must prove the correction.
+
+The [implementation review](../evidence/p0-6-observable-boundary-2026-09-09.md) records local static/unit/build, 12 browser cases, 10 headed GPU cases and the final two-browser smoke run. This checkpoint alone does not close P0.6. The user reports YouTube and other GPU work closed. Read-only Windows preflight resolves both active displays to 1920 x 1080 at 60 Hz using per-device `EnumDisplaySettings`, power line status to AC, and the active power scheme to Balanced. CDP window bounds place both smoke browser windows wholly within the primary monitor; emulated Screen values are labeled separately. Final source capture and threshold review remain required.
+
+The first complete matrix on clean source `62ed77af33915fdbce79a95c4a7680f0b62c6254` completed both browsers, but review found omitted deterministic inputs in the configuration hash. Preserve those observations under `docs/benchmarks/results/p0-6-20260909-1319/` as metadata-UNVERIFIED. Before a replacement run, include the existing default triangle identity/counts, actual selected sample count and target format, explicit reference CSS/physical/DPR fields, resize formula constants/DPR sequence and measurement modes/windows in the stored configuration. This repairs existing reproducibility acceptance, with no algorithm, sample-window, threshold or scenario-version change. Validate exported values against actual source/snapshots and rerun from a new clean source; never patch the first observations.
+
+- [x] Run the complete static/unit/contract/browser validation surface.
+- [x] Run headed Chrome and Edge GPU validation on the reference machine.
+- [x] Execute five repetitions of every P0 benchmark scenario.
+- [x] Commit raw JSON and Markdown summaries.
+- [x] Evaluate every acceptance criterion below as PASS, FAIL, or UNVERIFIED.
+- [x] Record residual risks and decide whether P1 may begin.
 
 Evidence: completed acceptance matrix and linked result files.
 
 ## Acceptance criteria
 
-| ID     | Criterion                                                                                                                                                | Required validation                  |
-| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| P0-A01 | Insecure context, missing WebGPU API, missing adapter, missing canvas context, and device-request failure produce distinct stable diagnostic codes.      | Unit + browser                       |
-| P0-A02 | Initialization is concurrency-safe and idempotent; disposal is idempotent and terminal; stale async completion cannot revive disposed state.             | Unit + contract                      |
-| P0-A03 | Surface sizing applies DPR, clamps to adapter limits, handles zero area without presenting, and recreates only size-dependent resources.                 | Unit + browser + resource counters   |
-| P0-A04 | The foundation scene presents the expected clear color and triangle in stable Chrome and Edge.                                                           | Headed browser + visual artifact     |
-| P0-A05 | Multiple invalidations before the next animation frame produce at most one submission; an unchanged idle backend submits none.                           | Unit + benchmark                     |
-| P0-A06 | Shader module and pipeline creation counts remain constant throughout steady-state measured frames.                                                      | Resource counters + benchmark        |
-| P0-A07 | Uncaptured validation/out-of-memory errors and device loss are surfaced as structured diagnostics with backend generation and context.                   | Contract + headed hardware           |
-| P0-A08 | Deliberate device destruction invalidates old resources, performs one controlled recovery, rebuilds the foundation scene, and presents again.            | Headed Chrome + Edge                 |
-| P0-A09 | After each dispose, engine-owned live-resource counters return to zero; 25 lifecycle cycles show no accumulating tracked resources or listeners.         | Contract + benchmark                 |
-| P0-A10 | Benchmark output includes all metadata required by `docs/benchmarks/README.md` and can reproduce the scenario from ID, version, seed, and configuration. | Schema/contract test                 |
-| P0-A11 | The production build passes the full planned root validation commands and contains no runtime renderer/scene/tessellation dependency.                    | Static + dependency audit            |
-| P0-A12 | Renderer contracts and editor-facing code contain no exported WebGPU types; only the concrete backend imports WebGPU bindings.                           | Type/API boundary test               |
-| P0-A13 | Camera conversions and rendered transforms satisfy P0.5a fixtures.                                                                                       | Unit + headed visual/numeric fixture |
-| P0-A14 | Shared-buffer suballocation satisfies alignment, lifetime, recovery, and accounting invariants in P0.5a.                                                 | Unit + headed GPU counters/fixture   |
-| P0-A15 | Pipeline cache keys preserve compatibility, reuse, and generation invalidation as defined in P0.5a.                                                      | Unit + headed GPU counters           |
+| ID     | Criterion                                                                                                                                                                 | Required validation                  |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| P0-A01 | Insecure context, missing WebGPU API, missing adapter, missing canvas context, and device-request failure produce distinct stable diagnostic codes.                       | Unit + browser                       |
+| P0-A02 | Initialization is concurrency-safe and idempotent; disposal is idempotent and terminal; stale async completion cannot revive disposed state.                              | Unit + contract                      |
+| P0-A03 | Surface sizing applies DPR, clamps to adapter limits, handles zero area without presenting, and recreates only size-dependent resources.                                  | Unit + browser + resource counters   |
+| P0-A04 | The foundation scene presents the expected clear color and triangle in stable Chrome and Edge.                                                                            | Headed browser + visual artifact     |
+| P0-A05 | Multiple invalidations before the next animation frame produce at most one submission; an unchanged idle backend submits none.                                            | Unit + benchmark                     |
+| P0-A06 | Shader module and pipeline creation counts remain constant throughout steady-state measured frames.                                                                       | Resource counters + benchmark        |
+| P0-A07 | Validation/OOM errors and device loss produce structured diagnostics with generation and context: injected OOM mapping, native validation-error and device-loss delivery. | Contract + headed hardware           |
+| P0-A08 | Deliberate device destruction invalidates old resources, performs one controlled recovery, rebuilds the foundation scene, and presents again.                             | Headed Chrome + Edge                 |
+| P0-A09 | After each dispose, engine-owned live-resource counters return to zero; 25 lifecycle cycles show no accumulating tracked resources or listeners.                          | Contract + benchmark                 |
+| P0-A10 | Benchmark output includes all metadata required by `docs/benchmarks/README.md` and can reproduce the scenario from ID, version, seed, and configuration.                  | Schema/contract test                 |
+| P0-A11 | The production build passes the full planned root validation commands and contains no runtime renderer/scene/tessellation dependency.                                     | Static + dependency audit            |
+| P0-A12 | Renderer contracts and editor-facing code contain no exported WebGPU types; only the concrete backend imports WebGPU bindings.                                            | Type/API boundary test               |
+| P0-A13 | Camera conversions and rendered transforms satisfy P0.5a fixtures.                                                                                                        | Unit + headed visual/numeric fixture |
+| P0-A14 | Shared-buffer suballocation satisfies alignment, lifetime, recovery, and accounting invariants in P0.5a.                                                                  | Unit + headed GPU counters/fixture   |
+| P0-A15 | Pipeline cache keys preserve compatibility, reuse, and generation invalidation as defined in P0.5a.                                                                       | Unit + headed GPU counters           |
 
 P0 passes only when all P0-A criteria are PASS. A criterion cannot be waived by a good benchmark number.
 
-At this review, P0-A01 through A12 retain partial historical evidence, not a final-current-revision PASS. P0-A07's hardware OOM path, presentation timing, and complete benchmark metadata/scenarios remain explicitly UNVERIFIED. P0-A13 through A15 are PASS on source `11314b52ddb23f6d43c69d5cce20870caa9fb211` with [reviewed P0.5a evidence](../evidence/p0.5a/2026-09-09T061400Z/README.md); this does not complete the final-current-revision P0.6 review. P0.6 must add a per-ID outcome with evidence revision/artifact links for all fifteen criteria and all five scenarios in both browsers. A numeric scenario result and evidence validity are separate evaluations.
+Final local review on source `b524927f841347051ca2b4f95f8c4c83f5b4c14e`: **P0-A01 through P0-A15 PASS**, and all five scenarios in both browsers PASS. The [final acceptance matrix and artifact index](../evidence/p0.6/20260909-final/README.md) links each criterion to current-source evidence, numeric outcomes and the environment review. The first full matrix remains excluded for metadata omissions. Native hardware OOM and physical-presentation timing remain UNVERIFIED residuals outside the explicitly revised P0 exit gate. Required remote CI and protected PR integration remain repository gates; P1 implementation still requires its own execution plan.
 
 ## P0 benchmark scenarios and thresholds
 
 All runs follow `docs/benchmarks/README.md`, use the reference 1280 x 720 physical surface at DPR 1, run a production build, warm for 3 seconds where applicable, and contain at least five measured repetitions.
 
-### `p0/startup/v1`
+### `p0/startup/v2`
 
-Repeated fresh page loads through backend ready and first present.
+Repeated fresh page loads through backend ready and completion of first submitted GPU work. This prospectively supersedes v1 physical first-present timing; v1 observations retain their original meaning.
 
-- Backend-ready wall time p95: at most 1,000 ms
-- First-present wall time p95: at most 1,200 ms
+- Navigation-to-backend-ready wall time p95: at most 1,000 ms
+- Initialization-start-to-first-work GPU queue completion p95: at most 1,200 ms
 - Error diagnostics: zero
 
 The result records adapter request and device request subspans separately so browser/driver cost is not confused with engine work.
@@ -567,13 +583,13 @@ Apply 120 deterministic size/DPR changes over 2 seconds, followed by the referen
 - Final physical surface size: exactly 1280 x 720
 - Validation/error diagnostics: zero
 
-### `p0/lifecycle-recovery/v1`
+### `p0/lifecycle-recovery/v2`
 
 Run 25 initialize/render/dispose cycles, followed by one deliberate device-loss and recovery cycle.
 
 - Live engine-owned resource count after each dispose: zero
 - Retained diagnostic listeners after each dispose: zero
-- Recovery reaches ready and presents within 3,000 ms
+- Recovery-ready and rebuilt-work GPU queue completion each occur within 3,000 ms of current-generation loss detection in every repetition; headed visual reconstruction is verified separately
 - Recovery attempts for one loss event: exactly one
 - Stale-generation submissions: zero
 
@@ -655,4 +671,4 @@ Documentation review update, 2026-09-05: reconciled the dependency graph (ADR 00
 
 ## Gate outcome
 
-Current outcome remains **P0 OPEN; P0.5A INTEGRATED; P0.6 FEASIBILITY COMPLETE, USER DIRECTION PENDING**. This batch makes no new P0 gate judgment. The [P0.5a evidence](../evidence/p0.5a/2026-09-09T061400Z/README.md) completes the camera, shared-buffer and pipeline-cache checkpoint. The earlier shortened benchmark smoke profile is still not an accepted performance baseline. P0.5a PR #22 is integrated; the [P0.6 readiness review](../evidence/p0-6-readiness-2026-09-09.md) identifies the next measurement and environment decisions before the full gate run; the terminal-recovery correction is already integrated as P0.4a. P1 may not begin until the complete P0 gate passes or the owning design is explicitly revised before implementation.
+**P0 LOCAL PASS** on measured source `b524927f841347051ca2b4f95f8c4c83f5b4c14e`, preserved by `evidence/p0.6-final-20260909`. [Final review](../evidence/p0.6/20260909-final/README.md) records all fifteen revised acceptance criteria and ten browser/scenario outcomes as PASS, with clean-source benchmark and headed evidence. The first matrix on `62ed77a` is preserved but not accepted because of incomplete configuration hashes; the replacement run corrects metadata without changing algorithms or thresholds. Physical-display timing and native hardware OOM remain explicitly UNVERIFIED outside the approved exit gate. After required CI and protected PR integration, begin the P1 execution-plan/design-gate checkpoint; no P1 product code is authorized by this result alone.

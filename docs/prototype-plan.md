@@ -8,7 +8,7 @@ The prototype validates the custom graphics engine before the full editor. Each 
 
 ## Current position and plan entry rule
 
-P0.0-P0.4 have integration evidence. P0 remains open: the [active P0 plan](plans/p0-webgpu-foundation.md#current-gate-review-2026-09-05) tracks measurement gaps and missing foundation scope. P1-P5 below are roadmap scope, not execution-ready plans.
+P0 foundation has a [complete final local acceptance review](evidence/p0.6/20260909-final/README.md) on measured source `b524927`; the [active P0 plan](plans/p0-webgpu-foundation.md#gate-outcome) records its approved measurement boundaries and protected-integration gate. After that checkpoint integrates, the next work is a P1 execution plan resolving the design gates below. P1-P5 remain roadmap scope, not execution-ready implementation plans.
 
 Before each milestone starts, create its execution plan with acceptance IDs, deterministic fixtures/seeds, numeric tolerances, error behavior, validation commands, and required evidence. Resolve the relevant [graphics design gates](graphics-engine-architecture.md#design-gates-before-later-implementation). A performance gate must also define its measured event, sample/aggregation method, reference environment, and memory-accounting categories before a run; prose such as “measurably faster” is not an executable threshold.
 

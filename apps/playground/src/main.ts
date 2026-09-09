@@ -8,10 +8,17 @@ const REFERENCE_SURFACE = Object.freeze({
   cssSize: Object.freeze({ width: 640, height: 360 }),
   devicePixelRatio: 1,
 });
+const P0_REFERENCE_SURFACE = Object.freeze({
+  cssSize: Object.freeze({ width: 1280, height: 720 }),
+  devicePixelRatio: 1,
+});
 const MAX_RECENT_DIAGNOSTICS = 50;
 const fixtureParameter = new URLSearchParams(window.location.search).get('fixture');
 const foundationFixture = fixtureParameter === 'camera-triangle-v1' ? fixtureParameter : undefined;
 const fixtureMode = foundationFixture !== undefined;
+const surfaceFixture = new URLSearchParams(window.location.search).get('surface');
+const initialSurface =
+  surfaceFixture === 'p0-reference-v1' ? P0_REFERENCE_SURFACE : REFERENCE_SURFACE;
 
 interface InitializationTiming {
   readonly timeOrigin: number;
@@ -93,6 +100,8 @@ if (fixtureMode) app.classList.add('fixture-mode');
 const canvasElement = document.querySelector<HTMLCanvasElement>('#webgpu-surface');
 if (!canvasElement) throw new Error('Playground canvas is missing.');
 const canvas: HTMLCanvasElement = canvasElement;
+canvas.style.width = `${initialSurface.cssSize.width}px`;
+canvas.style.height = `${initialSurface.cssSize.height}px`;
 
 function element(id: string): HTMLElement {
   const value = document.querySelector<HTMLElement>(`#${id}`);
@@ -117,8 +126,8 @@ let initializationMilestones: Promise<void> = Promise.resolve();
 function currentSurface(): WebGpuSurface {
   return {
     canvas,
-    cssSize: REFERENCE_SURFACE.cssSize,
-    devicePixelRatio: fixtureMode ? window.devicePixelRatio : REFERENCE_SURFACE.devicePixelRatio,
+    cssSize: initialSurface.cssSize,
+    devicePixelRatio: fixtureMode ? window.devicePixelRatio : initialSurface.devicePixelRatio,
   };
 }
 
