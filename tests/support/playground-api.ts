@@ -1,3 +1,5 @@
+import type { WebGpuBackend } from '@vector-studio/renderer-webgpu';
+
 export interface PlaygroundStatistics {
   readonly lifecycle: string;
   readonly generation: number;
@@ -92,6 +94,9 @@ declare global {
       dispose(): void;
       destroyDeviceForTesting(): void;
       getFrameMeasurements(): PlaygroundFrameMeasurements;
+      getFoundationExperimentSnapshot(): ReturnType<
+        WebGpuBackend['getFoundationExperimentSnapshot']
+      >;
       getInitializationTiming(): PlaygroundInitializationTiming | undefined;
       invalidate(): void;
       reinitialize(): Promise<unknown>;

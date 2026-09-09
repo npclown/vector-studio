@@ -49,7 +49,7 @@ test('captures a functional dashboard smoke artifact', async ({ browser, page },
     screenshotName,
     page.locator('#app'),
   );
-  writeEvidenceJson(testInfo, `dashboard-${testInfo.project.name}.json`, {
+  await writeEvidenceJson(testInfo, `dashboard-${testInfo.project.name}.json`, {
     timestampUtc: new Date().toISOString(),
     command: 'pnpm test:gpu',
     ...source,

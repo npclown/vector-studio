@@ -2,6 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
+import { format, resolveConfig } from 'prettier';
+
 import type { Locator, TestInfo } from '@playwright/test';
 
 export interface EvidenceSource {
@@ -47,9 +49,19 @@ export function evidencePath(testInfo: TestInfo, fileName: string): string {
   return path.join(directory, fileName);
 }
 
-export function writeEvidenceJson(testInfo: TestInfo, fileName: string, value: unknown): string {
+export async function writeEvidenceJson(
+  testInfo: TestInfo,
+  fileName: string,
+  value: unknown,
+): Promise<string> {
   const destination = evidencePath(testInfo, fileName);
-  writeFileSync(destination, `${JSON.stringify(value, null, 2)}\n`, {
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) throw new TypeError('Evidence must be JSON-serializable.');
+  const formatted = await format(serialized, {
+    ...(await resolveConfig(destination)),
+    filepath: destination,
+  });
+  writeFileSync(destination, formatted, {
     encoding: 'utf8',
     flag: 'wx',
   });
