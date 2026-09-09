@@ -42,6 +42,8 @@ For new runs, include schema version, full scenario configuration (not only its 
 
 The runner reports measured values and numeric PASS/FAIL/UNVERIFIED, initially with Exploratory status. Only an execution-plan review linking the source, metadata, artifacts, and owning criteria accepts a result as a baseline. A generated `pass: true` or `Status: Accepted` label alone cannot establish acceptance. Older records retain their historical labels; the active plan records limits on their reuse.
 
+The P0 runner accepts `--power-source`, `--power-mode`, `--background-load` and `--gpu-driver` observations from a documented operator/shell preflight, alongside `--display-refresh-hz`. These are supplied observations, not automatic hardware detection; record their provenance in the run review. Browser Battery API observations and actual window/screen geometry remain separate. A missing preflight value retains an explicit unavailable reason. For a multi-monitor setup, verify each applicable display's active mode and the recorded browser-window bounds; a controller-wide refresh value alone is insufficient. Never invent metadata to make an acceptance run eligible.
+
 ## Run protocol
 
 1. Use a production build served from localhost or HTTPS.
@@ -77,6 +79,8 @@ Browser APIs do not expose every GPU timing or allocation consistently. Missing 
 Each metric records its clock, start/end event, unit, observation method, and availability. WebGPU separates submission and completion; `onSubmittedWorkDone()` reports queue-work completion. Treating either as physical display presentation would be an inference, not a measured display timestamp. See the [WebGPU queue API reference](https://gpuweb.github.io/types/interfaces/GPUQueue.html#onsubmittedworkdone). A requestAnimationFrame interval is a callback cadence, and CPU encode-and-submit time excludes later GPU execution.
 
 For startup, report navigation-to-ready separately from initialize-call-to-ready. First submission, queue completion, and observed presentation require distinct names. For recovery, use the current-generation loss observation as the start and label ready, first rebuilt submission, and presentation endpoints separately. A proxy must not silently satisfy a threshold written for presentation: if that event cannot be measured, mark it UNVERIFIED and resolve the owning plan before an acceptance run.
+
+The explicitly approved [P0 observable-boundary revision](../plans/p0-webgpu-foundation.md#approved-observable-boundary-contract-2026-09-09) uses initialization-to-first-work queue completion in startup v2 and loss-to-rebuilt-work queue completion in lifecycle v2, paired with separate headed visual checks. These named completion endpoints replace former P0 timing requirements prospectively; physical-display timestamps remain unavailable. Historical v1 records and other scenario versions are unchanged. This exception does not redefine presentation or supply presentation latency for future milestones.
 
 The current P0 `framesPresented` field increments on submission. Historical values must be interpreted as submission-path counts; screenshots separately support visible output. Do not infer startup, recovery, or pointer-to-present latency from this field.
 

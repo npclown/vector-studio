@@ -134,7 +134,7 @@ Agents must use repository commands once they exist rather than bypassing them w
 
 - A submission counter proves a submission-path event, not display presentation. Use the [benchmark measurement policy](benchmarks/README.md#measurement-semantics) for timing claims, and pair rendering assertions with defined visual fixtures.
 - A counter initialized to zero without observing the relevant event is not proof that the event was prevented. Lifecycle tests must inspect old/new device calls and exercise delayed completions and disposal races.
-- Distinguish injected error mapping from native hardware error delivery. Current GPU tests do not reproduce native OOM; leave any criterion requiring that evidence UNVERIFIED until an appropriate controlled method or a prospective criterion revision is accepted.
+- Distinguish injected error mapping from native hardware error delivery. Current GPU tests do not reproduce native OOM. The user-approved 2026-09-09 P0 revision requires injected OOM mapping plus native validation-error and device-loss delivery; actual native hardware OOM remains UNVERIFIED outside that revised exit gate. This narrower acceptance does not prove hardware exhaustion or change OOM product behavior; see the [owning contract](plans/p0-webgpu-foundation.md#approved-observable-boundary-contract-2026-09-09).
 - Historical artifacts are immutable observations. Corrections to their interpretation belong in the active plan or a new review record; source changes require new affected evidence.
 - PASS means the complete declared criterion has valid evidence; FAIL means observed behavior violates it; UNVERIFIED means required evidence is missing or unsuitable. An integrated checkpoint does not automatically make the whole milestone PASS.
 

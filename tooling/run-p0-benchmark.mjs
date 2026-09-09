@@ -13,6 +13,21 @@ if (profile !== 'smoke' && profile !== 'acceptance') {
 
 const outputDirectory = option('--output-dir') ?? 'docs/benchmarks/results';
 const displayRefreshRate = option('--display-refresh-hz');
+const referenceEnvironment = Object.fromEntries(
+  [
+    ['--power-source', 'P0_POWER_SOURCE'],
+    ['--power-mode', 'P0_POWER_MODE'],
+    ['--background-load', 'P0_BACKGROUND_LOAD'],
+    ['--gpu-driver', 'P0_GPU_DRIVER'],
+  ].flatMap(([flag, variable]) => {
+    const value = option(flag);
+    if (process.argv.includes(flag) && (!value || value.startsWith('--'))) {
+      console.error(`${flag} requires a nonempty observation.`);
+      process.exit(2);
+    }
+    return value === undefined ? [] : [[variable, value]];
+  }),
+);
 if (profile === 'acceptance' && displayRefreshRate === undefined) {
   console.error('Acceptance runs require --display-refresh-hz <number>.');
   process.exit(2);
@@ -34,6 +49,7 @@ const environment = {
   ...process.env,
   P0_BENCHMARK_PROFILE: profile,
   P0_BENCHMARK_OUTPUT_DIR: outputDirectory,
+  ...referenceEnvironment,
   ...(displayRefreshRate === undefined ? {} : { P0_DISPLAY_REFRESH_HZ: displayRefreshRate }),
 };
 for (const arguments_ of [

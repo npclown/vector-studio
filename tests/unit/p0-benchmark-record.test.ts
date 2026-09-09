@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
+import { check, resolveConfig } from 'prettier';
 
 import {
   P0_BENCHMARK_SCHEMA,
@@ -152,19 +153,33 @@ describe('P0 benchmark record contract', () => {
     expect(markdown).toContain('not accepted automatically');
   });
 
-  it('writes collision-safe JSON and Markdown pairs and refuses replacement', () => {
+  it('writes formatter-compliant collision-safe JSON and Markdown pairs without replacement', async () => {
     const directory = mkdtempSync(path.join(os.tmpdir(), 'vector-studio-p0-record-'));
     temporaryDirectories.push(directory);
     const first = record('run-a');
-    const firstPaths = writeP0BenchmarkArtifacts(first, directory, 'Chrome', 'Reference PC');
+    const firstPaths = await writeP0BenchmarkArtifacts(first, directory, 'Chrome', 'Reference PC');
 
     expect(JSON.parse(readFileSync(firstPaths.json, 'utf8'))).toEqual(first);
-    expect(readFileSync(firstPaths.markdown, 'utf8')).toBe(renderP0BenchmarkMarkdown(first));
-    expect(() => writeP0BenchmarkArtifacts(first, directory, 'Chrome', 'Reference PC')).toThrow();
+    const json = readFileSync(firstPaths.json, 'utf8');
+    const markdown = readFileSync(firstPaths.markdown, 'utf8');
+    expect(
+      await check(json, { ...(await resolveConfig(firstPaths.json)), filepath: firstPaths.json }),
+    ).toBe(true);
+    expect(
+      await check(markdown, {
+        ...(await resolveConfig(firstPaths.markdown)),
+        filepath: firstPaths.markdown,
+      }),
+    ).toBe(true);
+    await expect(
+      writeP0BenchmarkArtifacts(first, directory, 'Chrome', 'Reference PC'),
+    ).rejects.toThrow();
+    expect(readFileSync(firstPaths.json, 'utf8')).toBe(json);
+    expect(readFileSync(firstPaths.markdown, 'utf8')).toBe(markdown);
     expect(readdirSync(directory)).toHaveLength(2);
 
     const second = record('run-b');
-    writeP0BenchmarkArtifacts(second, directory, 'Chrome', 'Reference PC');
+    await writeP0BenchmarkArtifacts(second, directory, 'Chrome', 'Reference PC');
     expect(readdirSync(directory)).toHaveLength(4);
     expect(benchmarkArtifactBaseName(first, 'Chrome', 'Reference PC')).not.toBe(
       benchmarkArtifactBaseName(second, 'Chrome', 'Reference PC'),
