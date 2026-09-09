@@ -43,19 +43,9 @@ Path records
 
 The editor sends incremental semantic changes, not framework objects or GPU commands.
 
-```ts
-interface RenderChangeSet {
-  revision: number;
-  inserted: readonly RenderNodeSnapshot[];
-  updated: readonly RenderNodeSnapshot[];
-  removed: readonly string[];
-  orderChangedParents: readonly string[];
-}
-```
+The user-approved [P1 D1 contract](plans/p1-instanced-primitives.md#d1--approved-scene-and-packet-contract) replaces the earlier reserved example. It defines full snapshot initialization, document/page identity, atomic base/result-revision changes, deterministic graph validation, replay/resynchronization and CPU-copy ownership. The approved camera operation has a separate transient revision; surface/DPR ownership stays with the concrete backend. These are design decisions, not implemented exports.
 
-The renderer maintains a mirror keyed by node ID. It updates only affected transforms, styles, geometry, ordering, and bounds.
-
-This example reserves a future scene contract; P0 currently exposes lifecycle, invalidation, diagnostics, and statistics in `packages/contracts/src/renderer.ts`. Before retained-scene implementation, the P1 execution plan must specify full-snapshot initialization, document/page identity, base and resulting revisions, atomic application, and resynchronization after a missing or out-of-order change. Duplicate IDs, missing parents, cycles, and unknown removals need deterministic validation. Device recovery rebuilds GPU resources from the accepted CPU mirror without replaying document commands.
+The renderer maintains a mirror keyed by node ID and updates affected transforms, styles, geometry, ordering and bounds. Device recovery rebuilds the latest accepted CPU state without replaying document commands. Private draw-packet layouts and precision/rebase budgets still require P1.0b before implementation.
 
 ### Backend contract
 
@@ -197,14 +187,19 @@ Text is not part of the first graphics-kernel milestone. The architecture reserv
 
 Committed text will eventually render through GPU glyph atlases, while active editing uses a DOM overlay. No DOM or browser font object enters persistent document data.
 
+## Approved P1 visual behavior
+
+On 2026-09-09 the user approved [P1 D2](plans/p1-instanced-primitives.md#d2--approved-p1-visual-behavior): straight-alpha sRGB input, encoded-sRGB premultiplied source-over on a non-sRGB unorm target/view, and primitive opacity applied once after local fill/stroke composition. The linked contract fixes canvas configuration, blend factors, coverage and compositing formulas, local-space stroke transforms, radius normalization and degenerate-input behavior.
+
+P1 structural containers support transform/visibility and require opacity 1. Non-unit container opacity rejects the transaction; descendant alpha multiplication is not a substitute. Future non-unit container opacity requires isolated composition and its own implementation plan. This does not remove the MVP appearance requirement or add offscreen composition to P1.
+
 ## Design gates before later implementation
 
-These decisions are still open and must be resolved with acceptance fixtures in the owning milestone plan. They are not implemented features or permission to choose silent fallback behavior.
+The remaining decisions below must be resolved with acceptance fixtures in the owning milestone plan. P1 D1/D2 are approved above; their private layouts, precision/rebase budget and executable measurement methods remain entry gates. They are not implemented features or permission to choose silent fallback behavior.
 
 | Owner             | Decision required before implementation                                                                                                                                                              |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | P1                | Coordinate conventions, supported coordinate/zoom ranges, inverse-transform failure behavior, and camera-relative precision fixtures                                                                 |
-| P1                | Premultiplied-alpha/color-space policy, overlap compositing fixtures, and whether container opacity needs isolated composition; child alpha multiplication cannot be assumed equivalent              |
 | P2/P3             | Convert the 0.25-screen-pixel error target to a defined CSS or physical pixel unit, account for world transform and DPR, and bound flattening/tessellation work on degenerate and adversarial inputs |
 | P3                | Dash units/phase, miter limit, zero-length segments, coincident edges, self-intersections, and independent reference fixtures for both fill rules                                                    |
 | P4                | Mask coverage semantics, stencil push/pop and sibling restoration, attachment format, antialiasing of mask edges, and interaction with container opacity; validate depths 0, 1, 32, and rejected 33  |

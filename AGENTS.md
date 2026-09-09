@@ -11,24 +11,24 @@ Before changing the repository, read the documents relevant to the task in this 
 3. `ARCHITECTURE.md` for system boundaries and allowed dependency direction.
 4. The relevant subsystem design, currently `docs/graphics-engine-architecture.md`.
 5. `docs/prototype-plan.md` for milestone order and exit gates.
-6. The active plan under `docs/plans/`, currently `docs/plans/p0-webgpu-foundation.md`.
+6. The active plan under `docs/plans/`, currently `docs/plans/p1-instanced-primitives.md` and its linked measurement contract; P0 history remains in `docs/plans/p0-webgpu-foundation.md`.
 7. `docs/validation.md` and `docs/benchmarks/README.md` before claiming verification or performance results.
 
 When instructions conflict, the narrower document owns details inside its declared responsibility. A product requirement cannot be changed implicitly by an implementation plan, and a benchmark result cannot redefine its acceptance threshold.
 
 ## Documentation ownership
 
-| Document | Source of truth for | Must not duplicate |
-| --- | --- | --- |
-| `AGENTS.md` | Repository navigation, agent workflow, change discipline | Product or technical design |
-| `docs/requirements.md` | Product goals, supported behavior, scope and deferrals | Implementation sequence |
-| `ARCHITECTURE.md` | System boundaries, ownership, dependency direction | Renderer algorithms |
-| `docs/graphics-engine-architecture.md` | Graphics-engine internals and accepted rendering decisions | Whole-system package policy |
-| `docs/prototype-plan.md` | P0-P5 milestone order and milestone-level gates | Active task checklist |
-| `docs/plans/p0-webgpu-foundation.md` | P0 execution order, status, acceptance criteria and evidence | Cross-project validation policy |
-| `docs/validation.md` | Test layers, validation policy and evidence requirements | Benchmark thresholds or results |
-| `docs/benchmarks/README.md` | Benchmark methodology, metadata schema and result format | Milestone scope |
-| `docs/benchmarks/results/*` | Immutable observations from individual runs | Requirements or thresholds |
+| Document                                  | Source of truth for                                                 | Must not duplicate              |
+| ----------------------------------------- | ------------------------------------------------------------------- | ------------------------------- |
+| `AGENTS.md`                               | Repository navigation, agent workflow, change discipline            | Product or technical design     |
+| `docs/requirements.md`                    | Product goals, supported behavior, scope and deferrals              | Implementation sequence         |
+| `ARCHITECTURE.md`                         | System boundaries, ownership, dependency direction                  | Renderer algorithms             |
+| `docs/graphics-engine-architecture.md`    | Graphics-engine internals and accepted rendering decisions          | Whole-system package policy     |
+| `docs/prototype-plan.md`                  | P0-P5 milestone order and milestone-level gates                     | Active task checklist           |
+| Active milestone plan under `docs/plans/` | Milestone execution order, status, acceptance criteria and evidence | Cross-project validation policy |
+| `docs/validation.md`                      | Test layers, validation policy and evidence requirements            | Benchmark thresholds or results |
+| `docs/benchmarks/README.md`               | Benchmark methodology, metadata schema and result format            | Milestone scope                 |
+| `docs/benchmarks/results/*`               | Immutable observations from individual runs                         | Requirements or thresholds      |
 
 ## Working rules
 
