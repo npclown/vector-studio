@@ -1,0 +1,794 @@
+{
+  "timestampUtc": "2026-09-09T13:34:33.890Z",
+  "command": "pnpm test:gpu",
+  "revision": "b524927f841347051ca2b4f95f8c4c83f5b4c14e",
+  "sourceWorktree": "clean",
+  "sourceChanges": [],
+  "headed": true,
+  "fixtureId": "camera-triangle-v1",
+  "operatingSystem": "win32 10.0.26200 x64",
+  "browser": { "channel": "edge", "version": "152.0.4191.66" },
+  "adapter": { "architecture": "turing", "description": "", "vendor": "nvidia" },
+  "limits": {
+    "maxTextureDimension1D": 8192,
+    "maxTextureDimension2D": 8192,
+    "maxTextureDimension3D": 2048,
+    "maxTextureArrayLayers": 256,
+    "maxBindGroups": 4,
+    "maxBindGroupsPlusVertexBuffers": 24,
+    "maxBindingsPerBindGroup": 1000,
+    "maxDynamicUniformBuffersPerPipelineLayout": 8,
+    "maxDynamicStorageBuffersPerPipelineLayout": 4,
+    "maxSampledTexturesPerShaderStage": 16,
+    "maxSamplersPerShaderStage": 16,
+    "maxStorageBuffersPerShaderStage": 8,
+    "maxStorageTexturesPerShaderStage": 4,
+    "maxUniformBuffersPerShaderStage": 12,
+    "maxUniformBufferBindingSize": 65536,
+    "maxStorageBufferBindingSize": 134217728,
+    "minUniformBufferOffsetAlignment": 256,
+    "minStorageBufferOffsetAlignment": 256,
+    "maxVertexBuffers": 8,
+    "maxBufferSize": 268435456,
+    "maxVertexAttributes": 16,
+    "maxVertexBufferArrayStride": 2048,
+    "maxInterStageShaderVariables": 16,
+    "maxColorAttachments": 8,
+    "maxColorAttachmentBytesPerSample": 32,
+    "maxComputeWorkgroupStorageSize": 16384,
+    "maxComputeInvocationsPerWorkgroup": 256,
+    "maxComputeWorkgroupSizeX": 256,
+    "maxComputeWorkgroupSizeY": 256,
+    "maxComputeWorkgroupSizeZ": 64,
+    "maxComputeWorkgroupsPerDimension": 65535,
+    "maxImmediateSize": 64,
+    "maxStorageBuffersInFragmentStage": 8,
+    "maxStorageTexturesInFragmentStage": 4,
+    "maxStorageBuffersInVertexStage": 8,
+    "maxStorageTexturesInVertexStage": 4
+  },
+  "selectedFeatures": ["core-features-and-limits"],
+  "sampleCount": 4,
+  "emulatedDevicePixelRatio": 1.5,
+  "cssSize": { "width": 640, "height": 360 },
+  "expectedPhysicalSize": { "width": 960, "height": 540 },
+  "expectedDocumentVertices": [0, 0, 100, 0, 0, 60],
+  "expectedPhysicalVertices": [45, 22.5, 270, 22.5, 45, 157.5],
+  "stages": {
+    "initial": {
+      "backend": {
+        "capability": {
+          "supported": true,
+          "capabilities": {
+            "backend": "webgpu",
+            "adapter": { "architecture": "turing", "description": "", "vendor": "nvidia" },
+            "selectedFeatures": ["core-features-and-limits"],
+            "limits": {
+              "maxTextureDimension1D": 8192,
+              "maxTextureDimension2D": 8192,
+              "maxTextureDimension3D": 2048,
+              "maxTextureArrayLayers": 256,
+              "maxBindGroups": 4,
+              "maxBindGroupsPlusVertexBuffers": 24,
+              "maxBindingsPerBindGroup": 1000,
+              "maxDynamicUniformBuffersPerPipelineLayout": 8,
+              "maxDynamicStorageBuffersPerPipelineLayout": 4,
+              "maxSampledTexturesPerShaderStage": 16,
+              "maxSamplersPerShaderStage": 16,
+              "maxStorageBuffersPerShaderStage": 8,
+              "maxStorageTexturesPerShaderStage": 4,
+              "maxUniformBuffersPerShaderStage": 12,
+              "maxUniformBufferBindingSize": 65536,
+              "maxStorageBufferBindingSize": 134217728,
+              "minUniformBufferOffsetAlignment": 256,
+              "minStorageBufferOffsetAlignment": 256,
+              "maxVertexBuffers": 8,
+              "maxBufferSize": 268435456,
+              "maxVertexAttributes": 16,
+              "maxVertexBufferArrayStride": 2048,
+              "maxInterStageShaderVariables": 16,
+              "maxColorAttachments": 8,
+              "maxColorAttachmentBytesPerSample": 32,
+              "maxComputeWorkgroupStorageSize": 16384,
+              "maxComputeInvocationsPerWorkgroup": 256,
+              "maxComputeWorkgroupSizeX": 256,
+              "maxComputeWorkgroupSizeY": 256,
+              "maxComputeWorkgroupSizeZ": 64,
+              "maxComputeWorkgroupsPerDimension": 65535,
+              "maxImmediateSize": 64,
+              "maxStorageBuffersInFragmentStage": 8,
+              "maxStorageTexturesInFragmentStage": 4,
+              "maxStorageBuffersInVertexStage": 8,
+              "maxStorageTexturesInVertexStage": 4
+            },
+            "sampleCount": 4
+          }
+        },
+        "diagnostics": [],
+        "backendInstance": 1,
+        "presentationFormat": "bgra8unorm",
+        "state": "ready",
+        "surfaceRevision": 1,
+        "surfaceSize": {
+          "css": { "width": 640, "height": 360 },
+          "physical": { "width": 960, "height": 540 },
+          "devicePixelRatio": 1.5,
+          "suspended": false
+        },
+        "statistics": {
+          "lifecycle": "ready",
+          "generation": 1,
+          "mode": "on-demand",
+          "invalidationsRequested": 1,
+          "framesSubmitted": 1,
+          "framesPresented": 1,
+          "pendingFrameCallbacks": 0,
+          "recoveryAttempts": 0,
+          "staleGenerationSubmissions": 0,
+          "diagnosticListeners": 1,
+          "deviceListeners": 2,
+          "shaderModulesCreated": 1,
+          "pipelinesCreated": 1,
+          "resources": {
+            "created": 4,
+            "live": 4,
+            "liveBytes": 8294656,
+            "peakLiveBytes": 8294656,
+            "byCategory": {
+              "buffer": { "created": 1, "live": 1, "liveBytes": 256, "peakLiveBytes": 256 },
+              "texture": {
+                "created": 1,
+                "live": 1,
+                "liveBytes": 8294400,
+                "peakLiveBytes": 8294400
+              },
+              "texture-view": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "sampler": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "bind-group": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "bind-group-layout": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "pipeline-layout": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "render-pipeline": { "created": 1, "live": 1, "liveBytes": 0, "peakLiveBytes": 0 },
+              "shader-module": { "created": 1, "live": 1, "liveBytes": 0, "peakLiveBytes": 0 }
+            }
+          }
+        }
+      },
+      "experiment": {
+        "disposed": false,
+        "allocator": {
+          "generation": 1,
+          "disposed": false,
+          "capacityBytes": 256,
+          "alignment": 4,
+          "liveAllocationCount": 2,
+          "liveRequestedBytes": 60,
+          "liveAllocatedBytes": 60,
+          "retiredBytes": 0,
+          "reservedBytes": 60,
+          "peakReservedBytes": 60
+        },
+        "allocations": {
+          "positions": { "id": 1, "offset": 0, "requestedBytes": 24, "allocatedBytes": 24 },
+          "colors": { "id": 2, "offset": 24, "requestedBytes": 36, "allocatedBytes": 36 }
+        },
+        "camera": { "position": { "x": -20, "y": -10 }, "zoom": 1.5, "devicePixelRatio": 1.5 },
+        "physicalSize": { "width": 960, "height": 540 },
+        "documentVertices": [0, 0, 100, 0, 0, 60],
+        "physicalVertices": [45, 22.5, 270, 22.5, 45, 157.5],
+        "ndcVertices": [
+          -0.90625, 0.9166666666666666, -0.4375, 0.9166666666666666, -0.90625, 0.41666666666666663
+        ],
+        "bindingGeneration": 1,
+        "pendingNativeCreations": 0,
+        "backingBufferCreations": 1,
+        "liveBackingBuffers": 1,
+        "pipelineCreations": 1,
+        "pipelineRequests": 2,
+        "livePipelines": 1,
+        "submittedSerial": 1,
+        "completedSerial": 1,
+        "cache": {
+          "generation": 1,
+          "disposed": false,
+          "pendingEntries": 0,
+          "readyEntries": 1,
+          "successfulCreations": 1
+        }
+      },
+      "browserDevicePixelRatio": 1.5,
+      "canvasBackingSize": { "width": 960, "height": 540 }
+    },
+    "steady": {
+      "backend": {
+        "capability": {
+          "supported": true,
+          "capabilities": {
+            "backend": "webgpu",
+            "adapter": { "architecture": "turing", "description": "", "vendor": "nvidia" },
+            "selectedFeatures": ["core-features-and-limits"],
+            "limits": {
+              "maxTextureDimension1D": 8192,
+              "maxTextureDimension2D": 8192,
+              "maxTextureDimension3D": 2048,
+              "maxTextureArrayLayers": 256,
+              "maxBindGroups": 4,
+              "maxBindGroupsPlusVertexBuffers": 24,
+              "maxBindingsPerBindGroup": 1000,
+              "maxDynamicUniformBuffersPerPipelineLayout": 8,
+              "maxDynamicStorageBuffersPerPipelineLayout": 4,
+              "maxSampledTexturesPerShaderStage": 16,
+              "maxSamplersPerShaderStage": 16,
+              "maxStorageBuffersPerShaderStage": 8,
+              "maxStorageTexturesPerShaderStage": 4,
+              "maxUniformBuffersPerShaderStage": 12,
+              "maxUniformBufferBindingSize": 65536,
+              "maxStorageBufferBindingSize": 134217728,
+              "minUniformBufferOffsetAlignment": 256,
+              "minStorageBufferOffsetAlignment": 256,
+              "maxVertexBuffers": 8,
+              "maxBufferSize": 268435456,
+              "maxVertexAttributes": 16,
+              "maxVertexBufferArrayStride": 2048,
+              "maxInterStageShaderVariables": 16,
+              "maxColorAttachments": 8,
+              "maxColorAttachmentBytesPerSample": 32,
+              "maxComputeWorkgroupStorageSize": 16384,
+              "maxComputeInvocationsPerWorkgroup": 256,
+              "maxComputeWorkgroupSizeX": 256,
+              "maxComputeWorkgroupSizeY": 256,
+              "maxComputeWorkgroupSizeZ": 64,
+              "maxComputeWorkgroupsPerDimension": 65535,
+              "maxImmediateSize": 64,
+              "maxStorageBuffersInFragmentStage": 8,
+              "maxStorageTexturesInFragmentStage": 4,
+              "maxStorageBuffersInVertexStage": 8,
+              "maxStorageTexturesInVertexStage": 4
+            },
+            "sampleCount": 4
+          }
+        },
+        "diagnostics": [],
+        "backendInstance": 1,
+        "presentationFormat": "bgra8unorm",
+        "state": "ready",
+        "surfaceRevision": 1,
+        "surfaceSize": {
+          "css": { "width": 640, "height": 360 },
+          "physical": { "width": 960, "height": 540 },
+          "devicePixelRatio": 1.5,
+          "suspended": false
+        },
+        "statistics": {
+          "lifecycle": "ready",
+          "generation": 1,
+          "mode": "on-demand",
+          "invalidationsRequested": 1,
+          "framesSubmitted": 7,
+          "framesPresented": 7,
+          "pendingFrameCallbacks": 0,
+          "recoveryAttempts": 0,
+          "staleGenerationSubmissions": 0,
+          "diagnosticListeners": 1,
+          "deviceListeners": 2,
+          "shaderModulesCreated": 1,
+          "pipelinesCreated": 1,
+          "resources": {
+            "created": 4,
+            "live": 4,
+            "liveBytes": 8294656,
+            "peakLiveBytes": 8294656,
+            "byCategory": {
+              "buffer": { "created": 1, "live": 1, "liveBytes": 256, "peakLiveBytes": 256 },
+              "texture": {
+                "created": 1,
+                "live": 1,
+                "liveBytes": 8294400,
+                "peakLiveBytes": 8294400
+              },
+              "texture-view": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "sampler": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "bind-group": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "bind-group-layout": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "pipeline-layout": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "render-pipeline": { "created": 1, "live": 1, "liveBytes": 0, "peakLiveBytes": 0 },
+              "shader-module": { "created": 1, "live": 1, "liveBytes": 0, "peakLiveBytes": 0 }
+            }
+          }
+        }
+      },
+      "experiment": {
+        "disposed": false,
+        "allocator": {
+          "generation": 1,
+          "disposed": false,
+          "capacityBytes": 256,
+          "alignment": 4,
+          "liveAllocationCount": 2,
+          "liveRequestedBytes": 60,
+          "liveAllocatedBytes": 60,
+          "retiredBytes": 0,
+          "reservedBytes": 60,
+          "peakReservedBytes": 60
+        },
+        "allocations": {
+          "positions": { "id": 1, "offset": 0, "requestedBytes": 24, "allocatedBytes": 24 },
+          "colors": { "id": 2, "offset": 24, "requestedBytes": 36, "allocatedBytes": 36 }
+        },
+        "camera": { "position": { "x": -20, "y": -10 }, "zoom": 1.5, "devicePixelRatio": 1.5 },
+        "physicalSize": { "width": 960, "height": 540 },
+        "documentVertices": [0, 0, 100, 0, 0, 60],
+        "physicalVertices": [45, 22.5, 270, 22.5, 45, 157.5],
+        "ndcVertices": [
+          -0.90625, 0.9166666666666666, -0.4375, 0.9166666666666666, -0.90625, 0.41666666666666663
+        ],
+        "bindingGeneration": 1,
+        "pendingNativeCreations": 0,
+        "backingBufferCreations": 1,
+        "liveBackingBuffers": 1,
+        "pipelineCreations": 1,
+        "pipelineRequests": 2,
+        "livePipelines": 1,
+        "submittedSerial": 7,
+        "completedSerial": 7,
+        "cache": {
+          "generation": 1,
+          "disposed": false,
+          "pendingEntries": 0,
+          "readyEntries": 1,
+          "successfulCreations": 1
+        }
+      }
+    },
+    "recovered": {
+      "backend": {
+        "capability": {
+          "supported": true,
+          "capabilities": {
+            "backend": "webgpu",
+            "adapter": { "architecture": "turing", "description": "", "vendor": "nvidia" },
+            "selectedFeatures": ["core-features-and-limits"],
+            "limits": {
+              "maxTextureDimension1D": 8192,
+              "maxTextureDimension2D": 8192,
+              "maxTextureDimension3D": 2048,
+              "maxTextureArrayLayers": 256,
+              "maxBindGroups": 4,
+              "maxBindGroupsPlusVertexBuffers": 24,
+              "maxBindingsPerBindGroup": 1000,
+              "maxDynamicUniformBuffersPerPipelineLayout": 8,
+              "maxDynamicStorageBuffersPerPipelineLayout": 4,
+              "maxSampledTexturesPerShaderStage": 16,
+              "maxSamplersPerShaderStage": 16,
+              "maxStorageBuffersPerShaderStage": 8,
+              "maxStorageTexturesPerShaderStage": 4,
+              "maxUniformBuffersPerShaderStage": 12,
+              "maxUniformBufferBindingSize": 65536,
+              "maxStorageBufferBindingSize": 134217728,
+              "minUniformBufferOffsetAlignment": 256,
+              "minStorageBufferOffsetAlignment": 256,
+              "maxVertexBuffers": 8,
+              "maxBufferSize": 268435456,
+              "maxVertexAttributes": 16,
+              "maxVertexBufferArrayStride": 2048,
+              "maxInterStageShaderVariables": 16,
+              "maxColorAttachments": 8,
+              "maxColorAttachmentBytesPerSample": 32,
+              "maxComputeWorkgroupStorageSize": 16384,
+              "maxComputeInvocationsPerWorkgroup": 256,
+              "maxComputeWorkgroupSizeX": 256,
+              "maxComputeWorkgroupSizeY": 256,
+              "maxComputeWorkgroupSizeZ": 64,
+              "maxComputeWorkgroupsPerDimension": 65535,
+              "maxImmediateSize": 64,
+              "maxStorageBuffersInFragmentStage": 8,
+              "maxStorageTexturesInFragmentStage": 4,
+              "maxStorageBuffersInVertexStage": 8,
+              "maxStorageTexturesInVertexStage": 4
+            },
+            "sampleCount": 4
+          }
+        },
+        "diagnostics": [
+          {
+            "code": "device-loss.detected",
+            "message": "The active WebGPU device was lost.",
+            "severity": "error",
+            "generation": 1,
+            "context": { "reason": "destroyed", "message": "Device was destroyed." },
+            "sequence": 0,
+            "timestampMs": 548.7999999970198
+          },
+          {
+            "code": "recovery.started",
+            "message": "WebGPU device recovery started.",
+            "severity": "info",
+            "generation": 2,
+            "context": { "lostGeneration": 1 },
+            "sequence": 1,
+            "timestampMs": 549.2999999970198
+          },
+          {
+            "code": "recovery.succeeded",
+            "message": "WebGPU device recovery succeeded.",
+            "severity": "info",
+            "generation": 2,
+            "context": { "lostGeneration": 1 },
+            "sequence": 2,
+            "timestampMs": 597.5
+          }
+        ],
+        "backendInstance": 1,
+        "presentationFormat": "bgra8unorm",
+        "state": "ready",
+        "surfaceRevision": 1,
+        "surfaceSize": {
+          "css": { "width": 640, "height": 360 },
+          "physical": { "width": 960, "height": 540 },
+          "devicePixelRatio": 1.5,
+          "suspended": false
+        },
+        "statistics": {
+          "lifecycle": "ready",
+          "generation": 2,
+          "mode": "on-demand",
+          "invalidationsRequested": 2,
+          "framesSubmitted": 8,
+          "framesPresented": 8,
+          "pendingFrameCallbacks": 0,
+          "recoveryAttempts": 1,
+          "staleGenerationSubmissions": 0,
+          "diagnosticListeners": 1,
+          "deviceListeners": 2,
+          "shaderModulesCreated": 2,
+          "pipelinesCreated": 2,
+          "resources": {
+            "created": 8,
+            "live": 4,
+            "liveBytes": 8294656,
+            "peakLiveBytes": 8294656,
+            "byCategory": {
+              "buffer": { "created": 2, "live": 1, "liveBytes": 256, "peakLiveBytes": 256 },
+              "texture": {
+                "created": 2,
+                "live": 1,
+                "liveBytes": 8294400,
+                "peakLiveBytes": 8294400
+              },
+              "texture-view": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "sampler": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "bind-group": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "bind-group-layout": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "pipeline-layout": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "render-pipeline": { "created": 2, "live": 1, "liveBytes": 0, "peakLiveBytes": 0 },
+              "shader-module": { "created": 2, "live": 1, "liveBytes": 0, "peakLiveBytes": 0 }
+            }
+          }
+        }
+      },
+      "experiment": {
+        "disposed": false,
+        "allocator": {
+          "generation": 2,
+          "disposed": false,
+          "capacityBytes": 256,
+          "alignment": 4,
+          "liveAllocationCount": 2,
+          "liveRequestedBytes": 60,
+          "liveAllocatedBytes": 60,
+          "retiredBytes": 0,
+          "reservedBytes": 60,
+          "peakReservedBytes": 60
+        },
+        "allocations": {
+          "positions": { "id": 1, "offset": 0, "requestedBytes": 24, "allocatedBytes": 24 },
+          "colors": { "id": 2, "offset": 24, "requestedBytes": 36, "allocatedBytes": 36 }
+        },
+        "camera": { "position": { "x": -20, "y": -10 }, "zoom": 1.5, "devicePixelRatio": 1.5 },
+        "physicalSize": { "width": 960, "height": 540 },
+        "documentVertices": [0, 0, 100, 0, 0, 60],
+        "physicalVertices": [45, 22.5, 270, 22.5, 45, 157.5],
+        "ndcVertices": [
+          -0.90625, 0.9166666666666666, -0.4375, 0.9166666666666666, -0.90625, 0.41666666666666663
+        ],
+        "bindingGeneration": 2,
+        "pendingNativeCreations": 0,
+        "backingBufferCreations": 2,
+        "liveBackingBuffers": 1,
+        "pipelineCreations": 2,
+        "pipelineRequests": 4,
+        "livePipelines": 1,
+        "submittedSerial": 1,
+        "completedSerial": 1,
+        "cache": {
+          "generation": 2,
+          "disposed": false,
+          "pendingEntries": 0,
+          "readyEntries": 1,
+          "successfulCreations": 2
+        }
+      },
+      "canvasBackingSize": { "width": 960, "height": 540 }
+    },
+    "disposed": {
+      "backend": {
+        "capability": {
+          "supported": true,
+          "capabilities": {
+            "backend": "webgpu",
+            "adapter": { "architecture": "turing", "description": "", "vendor": "nvidia" },
+            "selectedFeatures": ["core-features-and-limits"],
+            "limits": {
+              "maxTextureDimension1D": 8192,
+              "maxTextureDimension2D": 8192,
+              "maxTextureDimension3D": 2048,
+              "maxTextureArrayLayers": 256,
+              "maxBindGroups": 4,
+              "maxBindGroupsPlusVertexBuffers": 24,
+              "maxBindingsPerBindGroup": 1000,
+              "maxDynamicUniformBuffersPerPipelineLayout": 8,
+              "maxDynamicStorageBuffersPerPipelineLayout": 4,
+              "maxSampledTexturesPerShaderStage": 16,
+              "maxSamplersPerShaderStage": 16,
+              "maxStorageBuffersPerShaderStage": 8,
+              "maxStorageTexturesPerShaderStage": 4,
+              "maxUniformBuffersPerShaderStage": 12,
+              "maxUniformBufferBindingSize": 65536,
+              "maxStorageBufferBindingSize": 134217728,
+              "minUniformBufferOffsetAlignment": 256,
+              "minStorageBufferOffsetAlignment": 256,
+              "maxVertexBuffers": 8,
+              "maxBufferSize": 268435456,
+              "maxVertexAttributes": 16,
+              "maxVertexBufferArrayStride": 2048,
+              "maxInterStageShaderVariables": 16,
+              "maxColorAttachments": 8,
+              "maxColorAttachmentBytesPerSample": 32,
+              "maxComputeWorkgroupStorageSize": 16384,
+              "maxComputeInvocationsPerWorkgroup": 256,
+              "maxComputeWorkgroupSizeX": 256,
+              "maxComputeWorkgroupSizeY": 256,
+              "maxComputeWorkgroupSizeZ": 64,
+              "maxComputeWorkgroupsPerDimension": 65535,
+              "maxImmediateSize": 64,
+              "maxStorageBuffersInFragmentStage": 8,
+              "maxStorageTexturesInFragmentStage": 4,
+              "maxStorageBuffersInVertexStage": 8,
+              "maxStorageTexturesInVertexStage": 4
+            },
+            "sampleCount": 4
+          }
+        },
+        "diagnostics": [
+          {
+            "code": "device-loss.detected",
+            "message": "The active WebGPU device was lost.",
+            "severity": "error",
+            "generation": 1,
+            "context": { "reason": "destroyed", "message": "Device was destroyed." },
+            "sequence": 0,
+            "timestampMs": 548.7999999970198
+          },
+          {
+            "code": "recovery.started",
+            "message": "WebGPU device recovery started.",
+            "severity": "info",
+            "generation": 2,
+            "context": { "lostGeneration": 1 },
+            "sequence": 1,
+            "timestampMs": 549.2999999970198
+          },
+          {
+            "code": "recovery.succeeded",
+            "message": "WebGPU device recovery succeeded.",
+            "severity": "info",
+            "generation": 2,
+            "context": { "lostGeneration": 1 },
+            "sequence": 2,
+            "timestampMs": 597.5
+          },
+          {
+            "code": "disposal.completed",
+            "message": "WebGPU backend disposal completed.",
+            "severity": "info",
+            "generation": 2,
+            "sequence": 3,
+            "timestampMs": 795.1000000089407
+          }
+        ],
+        "backendInstance": 1,
+        "state": "disposed",
+        "surfaceRevision": 1,
+        "statistics": {
+          "lifecycle": "disposed",
+          "generation": 2,
+          "mode": "on-demand",
+          "invalidationsRequested": 2,
+          "framesSubmitted": 8,
+          "framesPresented": 8,
+          "pendingFrameCallbacks": 0,
+          "recoveryAttempts": 1,
+          "staleGenerationSubmissions": 0,
+          "diagnosticListeners": 0,
+          "deviceListeners": 0,
+          "shaderModulesCreated": 2,
+          "pipelinesCreated": 2,
+          "resources": {
+            "created": 8,
+            "live": 0,
+            "liveBytes": 0,
+            "peakLiveBytes": 8294656,
+            "byCategory": {
+              "buffer": { "created": 2, "live": 0, "liveBytes": 0, "peakLiveBytes": 256 },
+              "texture": { "created": 2, "live": 0, "liveBytes": 0, "peakLiveBytes": 8294400 },
+              "texture-view": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "sampler": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "bind-group": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "bind-group-layout": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "pipeline-layout": { "created": 0, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "render-pipeline": { "created": 2, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 },
+              "shader-module": { "created": 2, "live": 0, "liveBytes": 0, "peakLiveBytes": 0 }
+            }
+          }
+        }
+      },
+      "experiment": {
+        "disposed": true,
+        "allocator": {
+          "generation": 2,
+          "disposed": true,
+          "capacityBytes": 256,
+          "alignment": 4,
+          "liveAllocationCount": 0,
+          "liveRequestedBytes": 0,
+          "liveAllocatedBytes": 0,
+          "retiredBytes": 0,
+          "reservedBytes": 0,
+          "peakReservedBytes": 60
+        },
+        "allocations": {
+          "positions": { "id": 1, "offset": 0, "requestedBytes": 24, "allocatedBytes": 24 },
+          "colors": { "id": 2, "offset": 24, "requestedBytes": 36, "allocatedBytes": 36 }
+        },
+        "camera": { "position": { "x": -20, "y": -10 }, "zoom": 1.5, "devicePixelRatio": 1.5 },
+        "physicalSize": { "width": 960, "height": 540 },
+        "documentVertices": [0, 0, 100, 0, 0, 60],
+        "physicalVertices": [45, 22.5, 270, 22.5, 45, 157.5],
+        "ndcVertices": [
+          -0.90625, 0.9166666666666666, -0.4375, 0.9166666666666666, -0.90625, 0.41666666666666663
+        ],
+        "pendingNativeCreations": 0,
+        "backingBufferCreations": 2,
+        "liveBackingBuffers": 0,
+        "pipelineCreations": 2,
+        "pipelineRequests": 4,
+        "livePipelines": 0,
+        "submittedSerial": 1,
+        "completedSerial": 1,
+        "cache": {
+          "generation": 2,
+          "disposed": true,
+          "pendingEntries": 0,
+          "readyEntries": 0,
+          "successfulCreations": 2
+        }
+      }
+    }
+  },
+  "screenshots": {
+    "initial": "foundation-camera-triangle-v1-dpr-1-5-edge-initial.png",
+    "recovered": "foundation-camera-triangle-v1-dpr-1-5-edge-recovered.png"
+  },
+  "imageMetrics": {
+    "initial": {
+      "width": 960,
+      "height": 540,
+      "foregroundPixelCount": 15305,
+      "foregroundBounds": { "minX": 45, "minY": 22, "maxX": 269, "maxY": 156 },
+      "observedVertices": [45, 22, 270, 22, 45, 157],
+      "samples": [
+        {
+          "name": "interior",
+          "x": 90,
+          "y": 45,
+          "expectedForeground": true,
+          "foreground": true,
+          "maxRgb": 235,
+          "rgba": [134, 156, 235, 255]
+        },
+        {
+          "name": "exterior-above",
+          "x": 45,
+          "y": 8,
+          "expectedForeground": false,
+          "foreground": false,
+          "maxRgb": 25,
+          "rgba": [9, 14, 25, 255]
+        },
+        {
+          "name": "exterior-lower-right",
+          "x": 255,
+          "y": 143,
+          "expectedForeground": false,
+          "foreground": false,
+          "maxRgb": 25,
+          "rgba": [9, 14, 25, 255]
+        }
+      ]
+    },
+    "recovered": {
+      "width": 960,
+      "height": 540,
+      "foregroundPixelCount": 15305,
+      "foregroundBounds": { "minX": 45, "minY": 22, "maxX": 269, "maxY": 156 },
+      "observedVertices": [45, 22, 270, 22, 45, 157],
+      "samples": [
+        {
+          "name": "interior",
+          "x": 90,
+          "y": 45,
+          "expectedForeground": true,
+          "foreground": true,
+          "maxRgb": 235,
+          "rgba": [134, 156, 235, 255]
+        },
+        {
+          "name": "exterior-above",
+          "x": 45,
+          "y": 8,
+          "expectedForeground": false,
+          "foreground": false,
+          "maxRgb": 25,
+          "rgba": [9, 14, 25, 255]
+        },
+        {
+          "name": "exterior-lower-right",
+          "x": 255,
+          "y": 143,
+          "expectedForeground": false,
+          "foreground": false,
+          "maxRgb": 25,
+          "rgba": [9, 14, 25, 255]
+        }
+      ]
+    }
+  },
+  "observedDiagnostics": [
+    {
+      "code": "device-loss.detected",
+      "message": "The active WebGPU device was lost.",
+      "severity": "error",
+      "generation": 1,
+      "context": { "reason": "destroyed", "message": "Device was destroyed." },
+      "sequence": 0,
+      "timestampMs": 548.7999999970198
+    },
+    {
+      "code": "recovery.started",
+      "message": "WebGPU device recovery started.",
+      "severity": "info",
+      "generation": 2,
+      "context": { "lostGeneration": 1 },
+      "sequence": 1,
+      "timestampMs": 549.2999999970198
+    },
+    {
+      "code": "recovery.succeeded",
+      "message": "WebGPU device recovery succeeded.",
+      "severity": "info",
+      "generation": 2,
+      "context": { "lostGeneration": 1 },
+      "sequence": 2,
+      "timestampMs": 597.5
+    },
+    {
+      "code": "disposal.completed",
+      "message": "WebGPU backend disposal completed.",
+      "severity": "info",
+      "generation": 2,
+      "sequence": 3,
+      "timestampMs": 795.1000000089407
+    }
+  ],
+  "unexpectedDiagnostics": [],
+  "pageErrors": []
+}

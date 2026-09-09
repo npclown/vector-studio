@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.5a integrated; P0.6 observable-boundary revision approved; implementation and final validation in progress; P0 gate open
+Status: P0 final local acceptance PASS on b524927; protected PR integration gate applies; P1 execution planning is next
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -506,12 +506,12 @@ The [implementation review](../evidence/p0-6-observable-boundary-2026-09-09.md) 
 
 The first complete matrix on clean source `62ed77af33915fdbce79a95c4a7680f0b62c6254` completed both browsers, but review found omitted deterministic inputs in the configuration hash. Preserve those observations under `docs/benchmarks/results/p0-6-20260909-1319/` as metadata-UNVERIFIED. Before a replacement run, include the existing default triangle identity/counts, actual selected sample count and target format, explicit reference CSS/physical/DPR fields, resize formula constants/DPR sequence and measurement modes/windows in the stored configuration. This repairs existing reproducibility acceptance, with no algorithm, sample-window, threshold or scenario-version change. Validate exported values against actual source/snapshots and rerun from a new clean source; never patch the first observations.
 
-- [ ] Run the complete static/unit/contract/browser validation surface.
-- [ ] Run headed Chrome and Edge GPU validation on the reference machine.
-- [ ] Execute five repetitions of every P0 benchmark scenario.
-- [ ] Commit raw JSON and Markdown summaries.
-- [ ] Evaluate every acceptance criterion below as PASS, FAIL, or UNVERIFIED.
-- [ ] Record residual risks and decide whether P1 may begin.
+- [x] Run the complete static/unit/contract/browser validation surface.
+- [x] Run headed Chrome and Edge GPU validation on the reference machine.
+- [x] Execute five repetitions of every P0 benchmark scenario.
+- [x] Commit raw JSON and Markdown summaries.
+- [x] Evaluate every acceptance criterion below as PASS, FAIL, or UNVERIFIED.
+- [x] Record residual risks and decide whether P1 may begin.
 
 Evidence: completed acceptance matrix and linked result files.
 
@@ -537,7 +537,7 @@ Evidence: completed acceptance matrix and linked result files.
 
 P0 passes only when all P0-A criteria are PASS. A criterion cannot be waived by a good benchmark number.
 
-At this review, P0-A01 through A12 retain partial historical evidence, not a final-current-revision PASS. Complete benchmark metadata/scenarios remain UNVERIFIED. Native hardware OOM and physical-presentation timing remain UNVERIFIED residual items outside the revised P0 exit gate. P0-A13 through A15 are PASS on source `11314b52ddb23f6d43c69d5cce20870caa9fb211` with [reviewed P0.5a evidence](../evidence/p0.5a/2026-09-09T061400Z/README.md); this does not complete the final-current-revision P0.6 review. P0.6 must add a per-ID outcome with evidence revision/artifact links for all fifteen criteria and all five scenarios in both browsers. A numeric scenario result and evidence validity are separate evaluations.
+Final local review on source `b524927f841347051ca2b4f95f8c4c83f5b4c14e`: **P0-A01 through P0-A15 PASS**, and all five scenarios in both browsers PASS. The [final acceptance matrix and artifact index](../evidence/p0.6/20260909-final/README.md) links each criterion to current-source evidence, numeric outcomes and the environment review. The first full matrix remains excluded for metadata omissions. Native hardware OOM and physical-presentation timing remain UNVERIFIED residuals outside the explicitly revised P0 exit gate. Required remote CI and protected PR integration remain repository gates; P1 implementation still requires its own execution plan.
 
 ## P0 benchmark scenarios and thresholds
 
@@ -671,4 +671,4 @@ Documentation review update, 2026-09-05: reconciled the dependency graph (ADR 00
 
 ## Gate outcome
 
-Current outcome remains **P0 OPEN; P0.5A INTEGRATED; P0.6 OBSERVABLE-BOUNDARY REVISION APPROVED, VALIDATION IN PROGRESS**. This batch makes no new P0 gate judgment. The [P0.5a evidence](../evidence/p0.5a/2026-09-09T061400Z/README.md) completes the camera, shared-buffer and pipeline-cache checkpoint. The earlier shortened benchmark smoke profile is still not an accepted performance baseline. P0.5a PR #22 is integrated; the [P0.6 readiness review](../evidence/p0-6-readiness-2026-09-09.md) identifies the next measurement and environment decisions before the full gate run; the terminal-recovery correction is already integrated as P0.4a. P1 may not begin until the complete P0 gate passes or the owning design is explicitly revised before implementation.
+**P0 LOCAL PASS** on measured source `b524927f841347051ca2b4f95f8c4c83f5b4c14e`, preserved by `evidence/p0.6-final-20260909`. [Final review](../evidence/p0.6/20260909-final/README.md) records all fifteen revised acceptance criteria and ten browser/scenario outcomes as PASS, with clean-source benchmark and headed evidence. The first matrix on `62ed77a` is preserved but not accepted because of incomplete configuration hashes; the replacement run corrects metadata without changing algorithms or thresholds. Physical-display timing and native hardware OOM remain explicitly UNVERIFIED outside the approved exit gate. After required CI and protected PR integration, begin the P1 execution-plan/design-gate checkpoint; no P1 product code is authorized by this result alone.

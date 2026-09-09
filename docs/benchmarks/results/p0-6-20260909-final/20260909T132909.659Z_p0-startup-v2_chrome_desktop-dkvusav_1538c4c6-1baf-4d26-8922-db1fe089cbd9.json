@@ -1,0 +1,886 @@
+{
+  "schema": "vector-studio/p0-benchmark-result/v1",
+  "status": "Exploratory",
+  "identity": {
+    "revision": "b524927f841347051ca2b4f95f8c4c83f5b4c14e",
+    "sourceState": "clean",
+    "runId": "1538c4c6-1baf-4d26-8922-db1fe089cbd9",
+    "timestampUtc": "2026-09-09T13:29:09.659Z",
+    "localTimezone": "Asia/Seoul"
+  },
+  "runner": {
+    "id": "vector-studio/p0-runner/v1",
+    "command": "pnpm benchmark:p0 -- --profile acceptance --output-dir \"docs/benchmarks/results/p0-6-20260909-final\" --display-refresh-hz 60 --power-source \"AC\" --power-mode \"Balanced\" --background-load \"User reports YouTube and other GPU work closed; Codex remains active\" --gpu-driver \"32.0.15.9186\"",
+    "buildMode": "production"
+  },
+  "environment": {
+    "operatingSystem": "win32 10.0.26200 x64",
+    "cpu": "AMD Ryzen 7 3700X 8-Core Processor             ",
+    "logicalCores": 16,
+    "installedMemoryBytes": 34291060736,
+    "gpu": {
+      "architecture": "turing",
+      "description": "",
+      "vendor": "nvidia",
+      "driver": {
+        "availability": "available",
+        "value": "32.0.15.9186",
+        "observation": "operator/shell preflight via CLI"
+      }
+    },
+    "webGpuLimits": {
+      "maxTextureDimension1D": 8192,
+      "maxTextureDimension2D": 8192,
+      "maxTextureDimension3D": 2048,
+      "maxTextureArrayLayers": 256,
+      "maxBindGroups": 4,
+      "maxBindGroupsPlusVertexBuffers": 24,
+      "maxBindingsPerBindGroup": 1000,
+      "maxDynamicUniformBuffersPerPipelineLayout": 8,
+      "maxDynamicStorageBuffersPerPipelineLayout": 4,
+      "maxSampledTexturesPerShaderStage": 16,
+      "maxSamplersPerShaderStage": 16,
+      "maxStorageBuffersPerShaderStage": 8,
+      "maxStorageTexturesPerShaderStage": 4,
+      "maxUniformBuffersPerShaderStage": 12,
+      "maxUniformBufferBindingSize": 65536,
+      "maxStorageBufferBindingSize": 134217728,
+      "minUniformBufferOffsetAlignment": 256,
+      "minStorageBufferOffsetAlignment": 256,
+      "maxVertexBuffers": 8,
+      "maxBufferSize": 268435456,
+      "maxVertexAttributes": 16,
+      "maxVertexBufferArrayStride": 2048,
+      "maxInterStageShaderVariables": 16,
+      "maxColorAttachments": 8,
+      "maxColorAttachmentBytesPerSample": 32,
+      "maxComputeWorkgroupStorageSize": 16384,
+      "maxComputeInvocationsPerWorkgroup": 256,
+      "maxComputeWorkgroupSizeX": 256,
+      "maxComputeWorkgroupSizeY": 256,
+      "maxComputeWorkgroupSizeZ": 64,
+      "maxComputeWorkgroupsPerDimension": 65535,
+      "maxImmediateSize": 64,
+      "maxStorageBuffersInFragmentStage": 8,
+      "maxStorageTexturesInFragmentStage": 4,
+      "maxStorageBuffersInVertexStage": 8,
+      "maxStorageTexturesInVertexStage": 4
+    },
+    "browser": {
+      "product": "chrome",
+      "channel": "chrome",
+      "version": "152.0.7977.83"
+    },
+    "browserLaunchFlags": ["--enable-unsafe-webgpu"],
+    "displayRefreshRate": {
+      "availability": "available",
+      "value": 60,
+      "unit": "Hz",
+      "observation": "operator/shell preflight via CLI"
+    },
+    "selectedFeatures": ["core-features-and-limits"],
+    "sampleCount": 4,
+    "presentationFormat": "bgra8unorm",
+    "viewport": {
+      "css": [1280, 720],
+      "physical": [1280, 720],
+      "devicePixelRatio": 1,
+      "observation": "requested CSS size and backend surface snapshot"
+    },
+    "power": {
+      "source": {
+        "availability": "available",
+        "value": "AC",
+        "observation": "operator/shell preflight via CLI"
+      },
+      "mode": {
+        "availability": "available",
+        "value": "Balanced",
+        "observation": "operator/shell preflight via CLI"
+      },
+      "browserBattery": {
+        "source": "AC/charging",
+        "batteryLevel": 1,
+        "observation": "navigator.getBattery"
+      }
+    },
+    "knownBackgroundLoad": {
+      "availability": "available",
+      "value": "User reports YouTube and other GPU work closed; Codex remains active",
+      "observation": "operator/shell preflight via CLI"
+    },
+    "hostReportedLogicalCores": 16,
+    "hostReportedMemoryGiB": 32,
+    "devTools": false,
+    "tracing": false,
+    "screenRecording": false,
+    "timezone": "Asia/Seoul",
+    "pageVisibility": {
+      "state": "visible",
+      "observation": "document.visibilityState"
+    },
+    "windowPlacement": {
+      "screenX": 10,
+      "screenY": 10,
+      "outerWidth": 1296,
+      "outerHeight": 808,
+      "screenWidth": 1280,
+      "screenHeight": 720,
+      "screenAvailWidth": 1280,
+      "screenAvailHeight": 720,
+      "observation": "Playwright-emulated browser window and Screen API snapshot",
+      "context": "emulated values; does not establish physical monitor association"
+    },
+    "actualWindowBounds": {
+      "availability": "available",
+      "left": 10,
+      "top": 10,
+      "width": 1296,
+      "height": 808,
+      "windowState": "normal",
+      "observation": "CDP Browser.getWindowForTarget read-only query"
+    },
+    "browserHeap": {
+      "availability": "available",
+      "usedBytes": 2515349,
+      "observation": "performance.memory.usedJSHeapSize initial-page snapshot"
+    },
+    "processGpuMemory": {
+      "availability": "unavailable",
+      "reason": "browser-no-process-gpu-memory-api"
+    }
+  },
+  "scenario": {
+    "id": "p0/startup",
+    "version": 2,
+    "seed": 0,
+    "profile": "acceptance",
+    "configuration": {
+      "scenarioVersion": 2,
+      "seed": 0,
+      "profile": "acceptance",
+      "renderConfiguration": {
+        "selectedFeatures": ["core-features-and-limits"],
+        "selectedSampleCount": 4,
+        "presentationFormat": "bgra8unorm"
+      },
+      "parameters": {
+        "repetitions": 5,
+        "workload": {
+          "sceneId": "native-foundation-triangle-v1",
+          "objectCounts": {
+            "renderedObjects": 1,
+            "triangles": 1,
+            "vertices": 3
+          },
+          "drawCallsPerSubmittedFrame": 1,
+          "renderPassesPerSubmittedFrame": 1
+        },
+        "referenceSurface": {
+          "cssSize": [1280, 720],
+          "physicalSize": [1280, 720],
+          "devicePixelRatio": 1
+        },
+        "mode": "on-demand",
+        "warmupDurationMs": 0,
+        "measurementWindow": {
+          "kind": "fresh-navigation-event-bounded",
+          "endEvent": "first submitted GPU work queue completion"
+        },
+        "surfaceFixture": "p0-reference-v1",
+        "timingEndpoints": {
+          "navigationReady": {
+            "clock": "performance.now",
+            "startEvent": "performance.timeOrigin",
+            "endEvent": "backend-ready"
+          },
+          "initializationReady": {
+            "clock": "performance.now",
+            "startEvent": "initialize-call",
+            "endEvent": "backend-ready"
+          },
+          "firstSubmission": {
+            "clock": "performance.now",
+            "startEvent": "initialize-call",
+            "endEvent": "framesSubmitted increment"
+          },
+          "firstWorkGpuCompletion": {
+            "clock": "performance.now",
+            "startEvent": "initialize-call",
+            "endEvent": "GPUQueue.onSubmittedWorkDone resolution"
+          },
+          "adapterRequest": {
+            "clock": "performance.now",
+            "startEvent": "navigator.gpu.requestAdapter call",
+            "endEvent": "native requestAdapter promise settlement",
+            "observation": "test-only method wrapper"
+          },
+          "deviceRequest": {
+            "clock": "performance.now",
+            "startEvent": "GPUAdapter.requestDevice call",
+            "endEvent": "native requestDevice promise settlement",
+            "observation": "test-only method wrapper"
+          },
+          "physicalPresentation": {
+            "availability": "unavailable",
+            "reason": "browser-webgpu-no-presentation-timestamp"
+          }
+        },
+        "acceptance": {
+          "navigationReady": {
+            "aggregation": "p95-nearest-rank",
+            "ceilingMs": 1000
+          },
+          "firstWorkGpuCompletion": {
+            "aggregation": "p95-nearest-rank",
+            "ceilingMs": 1200
+          }
+        },
+        "instrumentationOverhead": "two performance.now calls and one promise continuation per wrapped request"
+      }
+    },
+    "configurationHash": "8b3c999dd8b1084700282ff3ac2a8549ddd3d992b4df9ac15b87fa4c9ade480f"
+  },
+  "repetitions": [
+    {
+      "index": 1,
+      "startedAtUtc": "2026-09-09T13:29:08.893Z",
+      "endedAtUtc": "2026-09-09T13:29:09.106Z",
+      "window": {
+        "clock": "performance.now",
+        "startMs": 24.5,
+        "endMs": 199.20000000298023
+      },
+      "sampleCounts": {
+        "navigationToReadyMs": 1,
+        "initializationToReadyMs": 1,
+        "firstSubmissionMs": 1,
+        "gpuCompletionMs": 1,
+        "adapterRequestMs": 1,
+        "deviceRequestMs": 1,
+        "actualPhysicalWidth": 1,
+        "actualPhysicalHeight": 1,
+        "actualDevicePixelRatio": 1
+      },
+      "samples": {
+        "navigationToReadyMs": [166.5],
+        "initializationToReadyMs": [142],
+        "firstSubmissionMs": [142.70000000298023],
+        "gpuCompletionMs": [174.70000000298023],
+        "adapterRequestMs": [48],
+        "deviceRequestMs": [37.29999999701977],
+        "actualPhysicalWidth": [1280],
+        "actualPhysicalHeight": [720],
+        "actualDevicePixelRatio": [1]
+      },
+      "metrics": {
+        "navigationToReady": {
+          "availability": "available",
+          "value": 166.5,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "performance.timeOrigin",
+          "endEvent": "backend-ready",
+          "observation": "playground initialization timing"
+        },
+        "initializationToReady": {
+          "availability": "available",
+          "value": 142,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "initialize-call",
+          "endEvent": "backend-ready",
+          "observation": "playground initialization timing"
+        },
+        "adapterRequest": {
+          "availability": "available",
+          "value": 48,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "navigator.gpu.requestAdapter call",
+          "endEvent": "native requestAdapter promise settlement",
+          "observation": "test-only method wrapper using performance.now"
+        },
+        "deviceRequest": {
+          "availability": "available",
+          "value": 37.3,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "GPUAdapter.requestDevice call",
+          "endEvent": "native requestDevice promise settlement",
+          "observation": "test-only method wrapper using performance.now"
+        },
+        "firstSubmission": {
+          "availability": "available",
+          "value": 142.7,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "initialize-call",
+          "endEvent": "framesSubmitted increment",
+          "observation": "backend statistics observation"
+        },
+        "gpuCompletion": {
+          "availability": "available",
+          "value": 174.7,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "initialize-call",
+          "endEvent": "GPUQueue.onSubmittedWorkDone resolution",
+          "observation": "queue completion promise for first submitted work"
+        },
+        "observedPresentation": {
+          "availability": "unavailable",
+          "reason": "browser-webgpu-no-presentation-timestamp",
+          "unit": "ms",
+          "clock": "unavailable",
+          "startEvent": "initialize-call",
+          "endEvent": "physical-display-presentation",
+          "observation": "unavailable"
+        },
+        "actualPhysicalWidth": {
+          "availability": "available",
+          "value": 1280,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "backend-ready",
+          "endEvent": "initial-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualPhysicalHeight": {
+          "availability": "available",
+          "value": 720,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "backend-ready",
+          "endEvent": "initial-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualDevicePixelRatio": {
+          "availability": "available",
+          "value": 1,
+          "unit": "ratio",
+          "clock": "performance.now",
+          "startEvent": "backend-ready",
+          "endEvent": "initial-surface-snapshot",
+          "observation": "backend surface snapshot"
+        }
+      },
+      "diagnostics": {
+        "expected": [],
+        "unexpected": []
+      }
+    },
+    {
+      "index": 2,
+      "startedAtUtc": "2026-09-09T13:29:09.106Z",
+      "endedAtUtc": "2026-09-09T13:29:09.253Z",
+      "window": {
+        "clock": "performance.now",
+        "startMs": 34.5,
+        "endMs": 125.5
+      },
+      "sampleCounts": {
+        "navigationToReadyMs": 1,
+        "initializationToReadyMs": 1,
+        "firstSubmissionMs": 1,
+        "gpuCompletionMs": 1,
+        "adapterRequestMs": 1,
+        "deviceRequestMs": 1,
+        "actualPhysicalWidth": 1,
+        "actualPhysicalHeight": 1,
+        "actualDevicePixelRatio": 1
+      },
+      "samples": {
+        "navigationToReadyMs": [119.20000000298023],
+        "initializationToReadyMs": [84.70000000298023],
+        "firstSubmissionMs": [85.90000000596046],
+        "gpuCompletionMs": [91],
+        "adapterRequestMs": [37.5],
+        "deviceRequestMs": [34.5],
+        "actualPhysicalWidth": [1280],
+        "actualPhysicalHeight": [720],
+        "actualDevicePixelRatio": [1]
+      },
+      "metrics": {
+        "navigationToReady": {
+          "availability": "available",
+          "value": 119.2,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "performance.timeOrigin",
+          "endEvent": "backend-ready",
+          "observation": "playground initialization timing"
+        },
+        "initializationToReady": {
+          "availability": "available",
+          "value": 84.7,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "initialize-call",
+          "endEvent": "backend-ready",
+          "observation": "playground initialization timing"
+        },
+        "adapterRequest": {
+          "availability": "available",
+          "value": 37.5,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "navigator.gpu.requestAdapter call",
+          "endEvent": "native requestAdapter promise settlement",
+          "observation": "test-only method wrapper using performance.now"
+        },
+        "deviceRequest": {
+          "availability": "available",
+          "value": 34.5,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "GPUAdapter.requestDevice call",
+          "endEvent": "native requestDevice promise settlement",
+          "observation": "test-only method wrapper using performance.now"
+        },
+        "firstSubmission": {
+          "availability": "available",
+          "value": 85.9,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "initialize-call",
+          "endEvent": "framesSubmitted increment",
+          "observation": "backend statistics observation"
+        },
+        "gpuCompletion": {
+          "availability": "available",
+          "value": 91,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "initialize-call",
+          "endEvent": "GPUQueue.onSubmittedWorkDone resolution",
+          "observation": "queue completion promise for first submitted work"
+        },
+        "observedPresentation": {
+          "availability": "unavailable",
+          "reason": "browser-webgpu-no-presentation-timestamp",
+          "unit": "ms",
+          "clock": "unavailable",
+          "startEvent": "initialize-call",
+          "endEvent": "physical-display-presentation",
+          "observation": "unavailable"
+        },
+        "actualPhysicalWidth": {
+          "availability": "available",
+          "value": 1280,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "backend-ready",
+          "endEvent": "initial-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualPhysicalHeight": {
+          "availability": "available",
+          "value": 720,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "backend-ready",
+          "endEvent": "initial-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualDevicePixelRatio": {
+          "availability": "available",
+          "value": 1,
+          "unit": "ratio",
+          "clock": "performance.now",
+          "startEvent": "backend-ready",
+          "endEvent": "initial-surface-snapshot",
+          "observation": "backend surface snapshot"
+        }
+      },
+      "diagnostics": {
+        "expected": [],
+        "unexpected": []
+      }
+    },
+    {
+      "index": 3,
+      "startedAtUtc": "2026-09-09T13:29:09.253Z",
+      "endedAtUtc": "2026-09-09T13:29:09.392Z",
+      "window": {
+        "clock": "performance.now",
+        "startMs": 25.700000002980232,
+        "endMs": 127.20000000298023
+      },
+      "sampleCounts": {
+        "navigationToReadyMs": 1,
+        "initializationToReadyMs": 1,
+        "firstSubmissionMs": 1,
+        "gpuCompletionMs": 1,
+        "adapterRequestMs": 1,
+        "deviceRequestMs": 1,
+        "actualPhysicalWidth": 1,
+        "actualPhysicalHeight": 1,
+        "actualDevicePixelRatio": 1
+      },
+      "samples": {
+        "navigationToReadyMs": [112.8999999910593],
+        "initializationToReadyMs": [87.19999998807907],
+        "firstSubmissionMs": [97.8999999910593],
+        "gpuCompletionMs": [101.5],
+        "adapterRequestMs": [38],
+        "deviceRequestMs": [35.70000000298023],
+        "actualPhysicalWidth": [1280],
+        "actualPhysicalHeight": [720],
+        "actualDevicePixelRatio": [1]
+      },
+      "metrics": {
+        "navigationToReady": {
+          "availability": "available",
+          "value": 112.9,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "performance.timeOrigin",
+          "endEvent": "backend-ready",
+          "observation": "playground initialization timing"
+        },
+        "initializationToReady": {
+          "availability": "available",
+          "value": 87.2,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "initialize-call",
+          "endEvent": "backend-ready",
+          "observation": "playground initialization timing"
+        },
+        "adapterRequest": {
+          "availability": "available",
+          "value": 38,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "navigator.gpu.requestAdapter call",
+          "endEvent": "native requestAdapter promise settlement",
+          "observation": "test-only method wrapper using performance.now"
+        },
+        "deviceRequest": {
+          "availability": "available",
+          "value": 35.7,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "GPUAdapter.requestDevice call",
+          "endEvent": "native requestDevice promise settlement",
+          "observation": "test-only method wrapper using performance.now"
+        },
+        "firstSubmission": {
+          "availability": "available",
+          "value": 97.9,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "initialize-call",
+          "endEvent": "framesSubmitted increment",
+          "observation": "backend statistics observation"
+        },
+        "gpuCompletion": {
+          "availability": "available",
+          "value": 101.5,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "initialize-call",
+          "endEvent": "GPUQueue.onSubmittedWorkDone resolution",
+          "observation": "queue completion promise for first submitted work"
+        },
+        "observedPresentation": {
+          "availability": "unavailable",
+          "reason": "browser-webgpu-no-presentation-timestamp",
+          "unit": "ms",
+          "clock": "unavailable",
+          "startEvent": "initialize-call",
+          "endEvent": "physical-display-presentation",
+          "observation": "unavailable"
+        },
+        "actualPhysicalWidth": {
+          "availability": "available",
+          "value": 1280,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "backend-ready",
+          "endEvent": "initial-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualPhysicalHeight": {
+          "availability": "available",
+          "value": 720,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "backend-ready",
+          "endEvent": "initial-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualDevicePixelRatio": {
+          "availability": "available",
+          "value": 1,
+          "unit": "ratio",
+          "clock": "performance.now",
+          "startEvent": "backend-ready",
+          "endEvent": "initial-surface-snapshot",
+          "observation": "backend surface snapshot"
+        }
+      },
+      "diagnostics": {
+        "expected": [],
+        "unexpected": []
+      }
+    },
+    {
+      "index": 4,
+      "startedAtUtc": "2026-09-09T13:29:09.392Z",
+      "endedAtUtc": "2026-09-09T13:29:09.529Z",
+      "window": {
+        "clock": "performance.now",
+        "startMs": 24.400000005960464,
+        "endMs": 120.20000000298023
+      },
+      "sampleCounts": {
+        "navigationToReadyMs": 1,
+        "initializationToReadyMs": 1,
+        "firstSubmissionMs": 1,
+        "gpuCompletionMs": 1,
+        "adapterRequestMs": 1,
+        "deviceRequestMs": 1,
+        "actualPhysicalWidth": 1,
+        "actualPhysicalHeight": 1,
+        "actualDevicePixelRatio": 1
+      },
+      "samples": {
+        "navigationToReadyMs": [106.40000000596046],
+        "initializationToReadyMs": [82],
+        "firstSubmissionMs": [92.8999999910593],
+        "gpuCompletionMs": [95.79999999701977],
+        "adapterRequestMs": [36.599999994039536],
+        "deviceRequestMs": [31.600000008940697],
+        "actualPhysicalWidth": [1280],
+        "actualPhysicalHeight": [720],
+        "actualDevicePixelRatio": [1]
+      },
+      "metrics": {
+        "navigationToReady": {
+          "availability": "available",
+          "value": 106.4,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "performance.timeOrigin",
+          "endEvent": "backend-ready",
+          "observation": "playground initialization timing"
+        },
+        "initializationToReady": {
+          "availability": "available",
+          "value": 82,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "initialize-call",
+          "endEvent": "backend-ready",
+          "observation": "playground initialization timing"
+        },
+        "adapterRequest": {
+          "availability": "available",
+          "value": 36.6,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "navigator.gpu.requestAdapter call",
+          "endEvent": "native requestAdapter promise settlement",
+          "observation": "test-only method wrapper using performance.now"
+        },
+        "deviceRequest": {
+          "availability": "available",
+          "value": 31.6,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "GPUAdapter.requestDevice call",
+          "endEvent": "native requestDevice promise settlement",
+          "observation": "test-only method wrapper using performance.now"
+        },
+        "firstSubmission": {
+          "availability": "available",
+          "value": 92.9,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "initialize-call",
+          "endEvent": "framesSubmitted increment",
+          "observation": "backend statistics observation"
+        },
+        "gpuCompletion": {
+          "availability": "available",
+          "value": 95.8,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "initialize-call",
+          "endEvent": "GPUQueue.onSubmittedWorkDone resolution",
+          "observation": "queue completion promise for first submitted work"
+        },
+        "observedPresentation": {
+          "availability": "unavailable",
+          "reason": "browser-webgpu-no-presentation-timestamp",
+          "unit": "ms",
+          "clock": "unavailable",
+          "startEvent": "initialize-call",
+          "endEvent": "physical-display-presentation",
+          "observation": "unavailable"
+        },
+        "actualPhysicalWidth": {
+          "availability": "available",
+          "value": 1280,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "backend-ready",
+          "endEvent": "initial-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualPhysicalHeight": {
+          "availability": "available",
+          "value": 720,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "backend-ready",
+          "endEvent": "initial-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualDevicePixelRatio": {
+          "availability": "available",
+          "value": 1,
+          "unit": "ratio",
+          "clock": "performance.now",
+          "startEvent": "backend-ready",
+          "endEvent": "initial-surface-snapshot",
+          "observation": "backend surface snapshot"
+        }
+      },
+      "diagnostics": {
+        "expected": [],
+        "unexpected": []
+      }
+    },
+    {
+      "index": 5,
+      "startedAtUtc": "2026-09-09T13:29:09.529Z",
+      "endedAtUtc": "2026-09-09T13:29:09.658Z",
+      "window": {
+        "clock": "performance.now",
+        "startMs": 22.400000005960464,
+        "endMs": 116.5
+      },
+      "sampleCounts": {
+        "navigationToReadyMs": 1,
+        "initializationToReadyMs": 1,
+        "firstSubmissionMs": 1,
+        "gpuCompletionMs": 1,
+        "adapterRequestMs": 1,
+        "deviceRequestMs": 1,
+        "actualPhysicalWidth": 1,
+        "actualPhysicalHeight": 1,
+        "actualDevicePixelRatio": 1
+      },
+      "samples": {
+        "navigationToReadyMs": [105.6000000089407],
+        "initializationToReadyMs": [83.20000000298023],
+        "firstSubmissionMs": [91.20000000298023],
+        "gpuCompletionMs": [94.09999999403954],
+        "adapterRequestMs": [37.1000000089407],
+        "deviceRequestMs": [34.20000000298023],
+        "actualPhysicalWidth": [1280],
+        "actualPhysicalHeight": [720],
+        "actualDevicePixelRatio": [1]
+      },
+      "metrics": {
+        "navigationToReady": {
+          "availability": "available",
+          "value": 105.6,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "performance.timeOrigin",
+          "endEvent": "backend-ready",
+          "observation": "playground initialization timing"
+        },
+        "initializationToReady": {
+          "availability": "available",
+          "value": 83.2,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "initialize-call",
+          "endEvent": "backend-ready",
+          "observation": "playground initialization timing"
+        },
+        "adapterRequest": {
+          "availability": "available",
+          "value": 37.1,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "navigator.gpu.requestAdapter call",
+          "endEvent": "native requestAdapter promise settlement",
+          "observation": "test-only method wrapper using performance.now"
+        },
+        "deviceRequest": {
+          "availability": "available",
+          "value": 34.2,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "GPUAdapter.requestDevice call",
+          "endEvent": "native requestDevice promise settlement",
+          "observation": "test-only method wrapper using performance.now"
+        },
+        "firstSubmission": {
+          "availability": "available",
+          "value": 91.2,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "initialize-call",
+          "endEvent": "framesSubmitted increment",
+          "observation": "backend statistics observation"
+        },
+        "gpuCompletion": {
+          "availability": "available",
+          "value": 94.1,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "initialize-call",
+          "endEvent": "GPUQueue.onSubmittedWorkDone resolution",
+          "observation": "queue completion promise for first submitted work"
+        },
+        "observedPresentation": {
+          "availability": "unavailable",
+          "reason": "browser-webgpu-no-presentation-timestamp",
+          "unit": "ms",
+          "clock": "unavailable",
+          "startEvent": "initialize-call",
+          "endEvent": "physical-display-presentation",
+          "observation": "unavailable"
+        },
+        "actualPhysicalWidth": {
+          "availability": "available",
+          "value": 1280,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "backend-ready",
+          "endEvent": "initial-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualPhysicalHeight": {
+          "availability": "available",
+          "value": 720,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "backend-ready",
+          "endEvent": "initial-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualDevicePixelRatio": {
+          "availability": "available",
+          "value": 1,
+          "unit": "ratio",
+          "clock": "performance.now",
+          "startEvent": "backend-ready",
+          "endEvent": "initial-surface-snapshot",
+          "observation": "backend surface snapshot"
+        }
+      },
+      "diagnostics": {
+        "expected": [],
+        "unexpected": []
+      }
+    }
+  ]
+}

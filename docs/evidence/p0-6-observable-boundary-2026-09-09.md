@@ -1,6 +1,6 @@
 # P0.6 approved observable-boundary implementation and review
 
-Status: Implementation validated; clean-source acceptance capture pending; P0 gate open
+Status: Implementation and final local P0 acceptance complete; see the final review
 
 ## Approval and scope
 
@@ -75,3 +75,7 @@ Source `62ed77af33915fdbce79a95c4a7680f0b62c6254`, clean in all ten records. Com
 - edge p0/idle-invalidation/v1: [JSON](../benchmarks/results/p0-6-20260909-1319/20260909T132122.828Z_p0-idle-invalidation-v1_edge_desktop-dkvusav_52300d55-9c62-4277-8e95-b44d1effc316.json), [summary](../benchmarks/results/p0-6-20260909-1319/20260909T132122.828Z_p0-idle-invalidation-v1_edge_desktop-dkvusav_52300d55-9c62-4277-8e95-b44d1effc316.md).
 - edge p0/resize-storm/v1: [JSON](../benchmarks/results/p0-6-20260909-1319/20260909T132133.774Z_p0-resize-storm-v1_edge_desktop-dkvusav_9a3894a2-9b87-4d88-8160-31b12b4c19a1.json), [summary](../benchmarks/results/p0-6-20260909-1319/20260909T132133.774Z_p0-resize-storm-v1_edge_desktop-dkvusav_9a3894a2-9b87-4d88-8160-31b12b4c19a1.md).
 - edge p0/lifecycle-recovery/v2: [JSON](../benchmarks/results/p0-6-20260909-1319/20260909T132143.492Z_p0-lifecycle-recovery-v2_edge_desktop-dkvusav_5dd27c88-74c4-4b6b-99ac-895d214ff00c.json), [summary](../benchmarks/results/p0-6-20260909-1319/20260909T132143.492Z_p0-lifecycle-recovery-v2_edge_desktop-dkvusav_5dd27c88-74c4-4b6b-99ac-895d214ff00c.md).
+
+## Final disposition
+
+[The final review](p0.6/20260909-final/README.md) accepts source `b524927f841347051ca2b4f95f8c4c83f5b4c14e`: all fifteen revised criteria and all ten browser/scenario outcomes PASS. It includes the replacement matrix, current-source headed evidence, Primary review and residual risks. Earlier pending statements in this implementation chronology are superseded by that final disposition; the initial matrix remains metadata-UNVERIFIED. Protected CI/PR integration is still enforced.

@@ -1,0 +1,1207 @@
+{
+  "schema": "vector-studio/p0-benchmark-result/v1",
+  "status": "Exploratory",
+  "identity": {
+    "revision": "b524927f841347051ca2b4f95f8c4c83f5b4c14e",
+    "sourceState": "clean",
+    "runId": "cdb8a7c5-101a-482b-b176-1b7176d901ed",
+    "timestampUtc": "2026-09-09T13:32:59.611Z",
+    "localTimezone": "Asia/Seoul"
+  },
+  "runner": {
+    "id": "vector-studio/p0-runner/v1",
+    "command": "pnpm benchmark:p0 -- --profile acceptance --output-dir \"docs/benchmarks/results/p0-6-20260909-final\" --display-refresh-hz 60 --power-source \"AC\" --power-mode \"Balanced\" --background-load \"User reports YouTube and other GPU work closed; Codex remains active\" --gpu-driver \"32.0.15.9186\"",
+    "buildMode": "production"
+  },
+  "environment": {
+    "operatingSystem": "win32 10.0.26200 x64",
+    "cpu": "AMD Ryzen 7 3700X 8-Core Processor             ",
+    "logicalCores": 16,
+    "installedMemoryBytes": 34291060736,
+    "gpu": {
+      "architecture": "turing",
+      "description": "",
+      "vendor": "nvidia",
+      "driver": {
+        "availability": "available",
+        "value": "32.0.15.9186",
+        "observation": "operator/shell preflight via CLI"
+      }
+    },
+    "webGpuLimits": {
+      "maxTextureDimension1D": 8192,
+      "maxTextureDimension2D": 8192,
+      "maxTextureDimension3D": 2048,
+      "maxTextureArrayLayers": 256,
+      "maxBindGroups": 4,
+      "maxBindGroupsPlusVertexBuffers": 24,
+      "maxBindingsPerBindGroup": 1000,
+      "maxDynamicUniformBuffersPerPipelineLayout": 8,
+      "maxDynamicStorageBuffersPerPipelineLayout": 4,
+      "maxSampledTexturesPerShaderStage": 16,
+      "maxSamplersPerShaderStage": 16,
+      "maxStorageBuffersPerShaderStage": 8,
+      "maxStorageTexturesPerShaderStage": 4,
+      "maxUniformBuffersPerShaderStage": 12,
+      "maxUniformBufferBindingSize": 65536,
+      "maxStorageBufferBindingSize": 134217728,
+      "minUniformBufferOffsetAlignment": 256,
+      "minStorageBufferOffsetAlignment": 256,
+      "maxVertexBuffers": 8,
+      "maxBufferSize": 268435456,
+      "maxVertexAttributes": 16,
+      "maxVertexBufferArrayStride": 2048,
+      "maxInterStageShaderVariables": 16,
+      "maxColorAttachments": 8,
+      "maxColorAttachmentBytesPerSample": 32,
+      "maxComputeWorkgroupStorageSize": 16384,
+      "maxComputeInvocationsPerWorkgroup": 256,
+      "maxComputeWorkgroupSizeX": 256,
+      "maxComputeWorkgroupSizeY": 256,
+      "maxComputeWorkgroupSizeZ": 64,
+      "maxComputeWorkgroupsPerDimension": 65535,
+      "maxImmediateSize": 64,
+      "maxStorageBuffersInFragmentStage": 8,
+      "maxStorageTexturesInFragmentStage": 4,
+      "maxStorageBuffersInVertexStage": 8,
+      "maxStorageTexturesInVertexStage": 4
+    },
+    "browser": {
+      "product": "edge",
+      "channel": "edge",
+      "version": "152.0.4191.66"
+    },
+    "browserLaunchFlags": ["--enable-unsafe-webgpu"],
+    "displayRefreshRate": {
+      "availability": "available",
+      "value": 60,
+      "unit": "Hz",
+      "observation": "operator/shell preflight via CLI"
+    },
+    "selectedFeatures": ["core-features-and-limits"],
+    "sampleCount": 4,
+    "presentationFormat": "bgra8unorm",
+    "viewport": {
+      "css": [1280, 720],
+      "physical": [1280, 720],
+      "devicePixelRatio": 1,
+      "observation": "requested CSS size and backend surface snapshot"
+    },
+    "power": {
+      "source": {
+        "availability": "available",
+        "value": "AC",
+        "observation": "operator/shell preflight via CLI"
+      },
+      "mode": {
+        "availability": "available",
+        "value": "Balanced",
+        "observation": "operator/shell preflight via CLI"
+      },
+      "browserBattery": {
+        "source": "AC/charging",
+        "batteryLevel": 1,
+        "observation": "navigator.getBattery"
+      }
+    },
+    "knownBackgroundLoad": {
+      "availability": "available",
+      "value": "User reports YouTube and other GPU work closed; Codex remains active",
+      "observation": "operator/shell preflight via CLI"
+    },
+    "hostReportedLogicalCores": 16,
+    "hostReportedMemoryGiB": 32,
+    "devTools": false,
+    "tracing": false,
+    "screenRecording": false,
+    "timezone": "Asia/Seoul",
+    "pageVisibility": {
+      "state": "visible",
+      "observation": "document.visibilityState"
+    },
+    "windowPlacement": {
+      "screenX": 10,
+      "screenY": 10,
+      "outerWidth": 1296,
+      "outerHeight": 808,
+      "screenWidth": 1280,
+      "screenHeight": 720,
+      "screenAvailWidth": 1280,
+      "screenAvailHeight": 720,
+      "observation": "Playwright-emulated browser window and Screen API snapshot",
+      "context": "emulated values; does not establish physical monitor association"
+    },
+    "actualWindowBounds": {
+      "availability": "available",
+      "left": 10,
+      "top": 10,
+      "width": 1296,
+      "height": 808,
+      "windowState": "normal",
+      "observation": "CDP Browser.getWindowForTarget read-only query"
+    },
+    "browserHeap": {
+      "availability": "available",
+      "usedBytes": 2514049,
+      "observation": "performance.memory.usedJSHeapSize initial-page snapshot"
+    },
+    "processGpuMemory": {
+      "availability": "unavailable",
+      "reason": "browser-no-process-gpu-memory-api"
+    }
+  },
+  "scenario": {
+    "id": "p0/lifecycle-recovery",
+    "version": 2,
+    "seed": 0,
+    "profile": "acceptance",
+    "configuration": {
+      "scenarioVersion": 2,
+      "seed": 0,
+      "profile": "acceptance",
+      "renderConfiguration": {
+        "selectedFeatures": ["core-features-and-limits"],
+        "selectedSampleCount": 4,
+        "presentationFormat": "bgra8unorm"
+      },
+      "parameters": {
+        "repetitions": 5,
+        "workload": {
+          "sceneId": "native-foundation-triangle-v1",
+          "objectCounts": {
+            "renderedObjects": 1,
+            "triangles": 1,
+            "vertices": 3
+          },
+          "drawCallsPerSubmittedFrame": 1,
+          "renderPassesPerSubmittedFrame": 1
+        },
+        "referenceSurface": {
+          "cssSize": [1280, 720],
+          "physicalSize": [1280, 720],
+          "devicePixelRatio": 1
+        },
+        "mode": "on-demand",
+        "warmupDurationMs": 0,
+        "measurementWindow": {
+          "kind": "cycles-then-loss-recovery-event-bounded",
+          "cycles": 25,
+          "endEvent": "rebuilt GPU work queue completion"
+        },
+        "initializeRenderDisposeCycles": 25,
+        "deliberateLossesPerRepetition": 1,
+        "surfaceFixture": "p0-reference-v1",
+        "timingEndpoints": {
+          "recoveryReady": {
+            "clock": "performance.now",
+            "startEvent": "device-loss.detected",
+            "endEvent": "recovery.succeeded"
+          },
+          "firstRebuiltSubmission": {
+            "clock": "performance.now",
+            "startEvent": "device-loss.detected",
+            "endEvent": "rebuilt-generation framesSubmitted increment"
+          },
+          "rebuiltWorkGpuCompletion": {
+            "clock": "performance.now",
+            "startEvent": "device-loss.detected",
+            "endEvent": "GPUQueue.onSubmittedWorkDone resolution",
+            "observation": "completion timestamp sampled in the resolving page task; upper bound"
+          },
+          "physicalPresentation": {
+            "availability": "unavailable",
+            "reason": "browser-webgpu-no-presentation-timestamp"
+          }
+        },
+        "acceptance": {
+          "recoveryReady": {
+            "aggregation": "every-repetition",
+            "ceilingMs": 3000
+          },
+          "rebuiltWorkGpuCompletion": {
+            "aggregation": "every-repetition",
+            "ceilingMs": 3000
+          }
+        }
+      }
+    },
+    "configurationHash": "8b47c2cd479e0e73d1a611bfd591141f900efecc30d05f6be785f036e24ffcc7"
+  },
+  "repetitions": [
+    {
+      "index": 1,
+      "startedAtUtc": "2026-09-09T13:32:49.653Z",
+      "endedAtUtc": "2026-09-09T13:32:51.459Z",
+      "window": {
+        "clock": "performance.now",
+        "startMs": 1884,
+        "endMs": 1958.2000000029802
+      },
+      "sampleCounts": {
+        "disposedLiveResources": 25,
+        "disposedDiagnosticListeners": 25,
+        "disposedPendingCallbacks": 25,
+        "recoveryReadyMs": 1,
+        "recoveryFirstSubmissionMs": 1,
+        "recoveryGpuCompletionMs": 1,
+        "initializedPhysicalWidths": 28,
+        "initializedPhysicalHeights": 28,
+        "initializedDevicePixelRatios": 28
+      },
+      "samples": {
+        "disposedLiveResources": [
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ],
+        "disposedDiagnosticListeners": [
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ],
+        "disposedPendingCallbacks": [
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ],
+        "recoveryReadyMs": [43.900000005960464],
+        "recoveryFirstSubmissionMs": [72.90000000596046],
+        "recoveryGpuCompletionMs": [74.20000000298023],
+        "initializedPhysicalWidths": [
+          1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280,
+          1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280
+        ],
+        "initializedPhysicalHeights": [
+          720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720,
+          720, 720, 720, 720, 720, 720, 720, 720, 720, 720
+        ],
+        "initializedDevicePixelRatios": [
+          1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+        ]
+      },
+      "metrics": {
+        "maximumLiveResourcesAfterDispose": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "cycle-dispose",
+          "endEvent": "cycle-snapshot",
+          "observation": "engine resource counters"
+        },
+        "maximumDiagnosticListenersAfterDispose": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "cycle-dispose",
+          "endEvent": "cycle-snapshot",
+          "observation": "diagnostic channel count"
+        },
+        "maximumPendingCallbacksAfterDispose": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "cycle-dispose",
+          "endEvent": "cycle-snapshot",
+          "observation": "scheduler statistics"
+        },
+        "recoveryReady": {
+          "availability": "available",
+          "value": 43.9,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "recovery.succeeded",
+          "observation": "diagnostic monotonic timestamps"
+        },
+        "recoveryFirstSubmission": {
+          "availability": "available",
+          "value": 72.9,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "rebuilt-generation framesSubmitted increment",
+          "observation": "backend statistics observation"
+        },
+        "recoveryGpuCompletion": {
+          "availability": "available",
+          "value": 74.2,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "GPUQueue.onSubmittedWorkDone resolution",
+          "observation": "queue completion promise; timestamp sampled in the resolving page task is a conservative observation upper bound"
+        },
+        "observedPresentation": {
+          "availability": "unavailable",
+          "reason": "browser-webgpu-no-presentation-timestamp",
+          "unit": "ms",
+          "clock": "unavailable",
+          "startEvent": "device-loss.detected",
+          "endEvent": "physical-display-presentation",
+          "observation": "unavailable"
+        },
+        "recoveryAttempts": {
+          "availability": "available",
+          "value": 1,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "recovery.succeeded",
+          "observation": "backend statistics"
+        },
+        "staleGenerationSubmissions": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "recovery.succeeded",
+          "observation": "diagnostic counter; deterministic spy evidence is separate"
+        },
+        "actualPhysicalWidth": {
+          "availability": "available",
+          "value": 1280,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "recovery.succeeded",
+          "endEvent": "recovered-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualPhysicalHeight": {
+          "availability": "available",
+          "value": 720,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "recovery.succeeded",
+          "endEvent": "recovered-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualDevicePixelRatio": {
+          "availability": "available",
+          "value": 1,
+          "unit": "ratio",
+          "clock": "performance.now",
+          "startEvent": "recovery.succeeded",
+          "endEvent": "recovered-surface-snapshot",
+          "observation": "backend surface snapshot"
+        }
+      },
+      "diagnostics": {
+        "expected": [
+          {
+            "code": "device-loss.detected",
+            "message": "The active WebGPU device was lost.",
+            "severity": "error",
+            "generation": 1,
+            "context": {
+              "reason": "destroyed",
+              "message": "Device was destroyed."
+            },
+            "sequence": 0,
+            "timestampMs": 1884
+          },
+          {
+            "code": "recovery.started",
+            "message": "WebGPU device recovery started.",
+            "severity": "info",
+            "generation": 2,
+            "context": {
+              "lostGeneration": 1
+            },
+            "sequence": 1,
+            "timestampMs": 1884.2000000029802
+          },
+          {
+            "code": "recovery.succeeded",
+            "message": "WebGPU device recovery succeeded.",
+            "severity": "info",
+            "generation": 2,
+            "context": {
+              "lostGeneration": 1
+            },
+            "sequence": 2,
+            "timestampMs": 1927.9000000059605
+          }
+        ],
+        "unexpected": []
+      }
+    },
+    {
+      "index": 2,
+      "startedAtUtc": "2026-09-09T13:32:51.636Z",
+      "endedAtUtc": "2026-09-09T13:32:53.426Z",
+      "window": {
+        "clock": "performance.now",
+        "startMs": 1886.7000000029802,
+        "endMs": 1958.1000000089407
+      },
+      "sampleCounts": {
+        "disposedLiveResources": 25,
+        "disposedDiagnosticListeners": 25,
+        "disposedPendingCallbacks": 25,
+        "recoveryReadyMs": 1,
+        "recoveryFirstSubmissionMs": 1,
+        "recoveryGpuCompletionMs": 1,
+        "initializedPhysicalWidths": 28,
+        "initializedPhysicalHeights": 28,
+        "initializedDevicePixelRatios": 28
+      },
+      "samples": {
+        "disposedLiveResources": [
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ],
+        "disposedDiagnosticListeners": [
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ],
+        "disposedPendingCallbacks": [
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ],
+        "recoveryReadyMs": [44.29999999701977],
+        "recoveryFirstSubmissionMs": [70.09999999403954],
+        "recoveryGpuCompletionMs": [71.40000000596046],
+        "initializedPhysicalWidths": [
+          1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280,
+          1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280
+        ],
+        "initializedPhysicalHeights": [
+          720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720,
+          720, 720, 720, 720, 720, 720, 720, 720, 720, 720
+        ],
+        "initializedDevicePixelRatios": [
+          1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+        ]
+      },
+      "metrics": {
+        "maximumLiveResourcesAfterDispose": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "cycle-dispose",
+          "endEvent": "cycle-snapshot",
+          "observation": "engine resource counters"
+        },
+        "maximumDiagnosticListenersAfterDispose": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "cycle-dispose",
+          "endEvent": "cycle-snapshot",
+          "observation": "diagnostic channel count"
+        },
+        "maximumPendingCallbacksAfterDispose": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "cycle-dispose",
+          "endEvent": "cycle-snapshot",
+          "observation": "scheduler statistics"
+        },
+        "recoveryReady": {
+          "availability": "available",
+          "value": 44.3,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "recovery.succeeded",
+          "observation": "diagnostic monotonic timestamps"
+        },
+        "recoveryFirstSubmission": {
+          "availability": "available",
+          "value": 70.1,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "rebuilt-generation framesSubmitted increment",
+          "observation": "backend statistics observation"
+        },
+        "recoveryGpuCompletion": {
+          "availability": "available",
+          "value": 71.4,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "GPUQueue.onSubmittedWorkDone resolution",
+          "observation": "queue completion promise; timestamp sampled in the resolving page task is a conservative observation upper bound"
+        },
+        "observedPresentation": {
+          "availability": "unavailable",
+          "reason": "browser-webgpu-no-presentation-timestamp",
+          "unit": "ms",
+          "clock": "unavailable",
+          "startEvent": "device-loss.detected",
+          "endEvent": "physical-display-presentation",
+          "observation": "unavailable"
+        },
+        "recoveryAttempts": {
+          "availability": "available",
+          "value": 1,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "recovery.succeeded",
+          "observation": "backend statistics"
+        },
+        "staleGenerationSubmissions": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "recovery.succeeded",
+          "observation": "diagnostic counter; deterministic spy evidence is separate"
+        },
+        "actualPhysicalWidth": {
+          "availability": "available",
+          "value": 1280,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "recovery.succeeded",
+          "endEvent": "recovered-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualPhysicalHeight": {
+          "availability": "available",
+          "value": 720,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "recovery.succeeded",
+          "endEvent": "recovered-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualDevicePixelRatio": {
+          "availability": "available",
+          "value": 1,
+          "unit": "ratio",
+          "clock": "performance.now",
+          "startEvent": "recovery.succeeded",
+          "endEvent": "recovered-surface-snapshot",
+          "observation": "backend surface snapshot"
+        }
+      },
+      "diagnostics": {
+        "expected": [
+          {
+            "code": "device-loss.detected",
+            "message": "The active WebGPU device was lost.",
+            "severity": "error",
+            "generation": 1,
+            "context": {
+              "reason": "destroyed",
+              "message": "Device was destroyed."
+            },
+            "sequence": 0,
+            "timestampMs": 1886.7000000029802
+          },
+          {
+            "code": "recovery.started",
+            "message": "WebGPU device recovery started.",
+            "severity": "info",
+            "generation": 2,
+            "context": {
+              "lostGeneration": 1
+            },
+            "sequence": 1,
+            "timestampMs": 1886.9000000059605
+          },
+          {
+            "code": "recovery.succeeded",
+            "message": "WebGPU device recovery succeeded.",
+            "severity": "info",
+            "generation": 2,
+            "context": {
+              "lostGeneration": 1
+            },
+            "sequence": 2,
+            "timestampMs": 1931
+          }
+        ],
+        "unexpected": []
+      }
+    },
+    {
+      "index": 3,
+      "startedAtUtc": "2026-09-09T13:32:53.602Z",
+      "endedAtUtc": "2026-09-09T13:32:55.426Z",
+      "window": {
+        "clock": "performance.now",
+        "startMs": 1915.199999988079,
+        "endMs": 1990
+      },
+      "sampleCounts": {
+        "disposedLiveResources": 25,
+        "disposedDiagnosticListeners": 25,
+        "disposedPendingCallbacks": 25,
+        "recoveryReadyMs": 1,
+        "recoveryFirstSubmissionMs": 1,
+        "recoveryGpuCompletionMs": 1,
+        "initializedPhysicalWidths": 28,
+        "initializedPhysicalHeights": 28,
+        "initializedDevicePixelRatios": 28
+      },
+      "samples": {
+        "disposedLiveResources": [
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ],
+        "disposedDiagnosticListeners": [
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ],
+        "disposedPendingCallbacks": [
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ],
+        "recoveryReadyMs": [50.1000000089407],
+        "recoveryFirstSubmissionMs": [73.6000000089407],
+        "recoveryGpuCompletionMs": [74.80000001192093],
+        "initializedPhysicalWidths": [
+          1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280,
+          1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280
+        ],
+        "initializedPhysicalHeights": [
+          720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720,
+          720, 720, 720, 720, 720, 720, 720, 720, 720, 720
+        ],
+        "initializedDevicePixelRatios": [
+          1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+        ]
+      },
+      "metrics": {
+        "maximumLiveResourcesAfterDispose": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "cycle-dispose",
+          "endEvent": "cycle-snapshot",
+          "observation": "engine resource counters"
+        },
+        "maximumDiagnosticListenersAfterDispose": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "cycle-dispose",
+          "endEvent": "cycle-snapshot",
+          "observation": "diagnostic channel count"
+        },
+        "maximumPendingCallbacksAfterDispose": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "cycle-dispose",
+          "endEvent": "cycle-snapshot",
+          "observation": "scheduler statistics"
+        },
+        "recoveryReady": {
+          "availability": "available",
+          "value": 50.1,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "recovery.succeeded",
+          "observation": "diagnostic monotonic timestamps"
+        },
+        "recoveryFirstSubmission": {
+          "availability": "available",
+          "value": 73.6,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "rebuilt-generation framesSubmitted increment",
+          "observation": "backend statistics observation"
+        },
+        "recoveryGpuCompletion": {
+          "availability": "available",
+          "value": 74.8,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "GPUQueue.onSubmittedWorkDone resolution",
+          "observation": "queue completion promise; timestamp sampled in the resolving page task is a conservative observation upper bound"
+        },
+        "observedPresentation": {
+          "availability": "unavailable",
+          "reason": "browser-webgpu-no-presentation-timestamp",
+          "unit": "ms",
+          "clock": "unavailable",
+          "startEvent": "device-loss.detected",
+          "endEvent": "physical-display-presentation",
+          "observation": "unavailable"
+        },
+        "recoveryAttempts": {
+          "availability": "available",
+          "value": 1,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "recovery.succeeded",
+          "observation": "backend statistics"
+        },
+        "staleGenerationSubmissions": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "recovery.succeeded",
+          "observation": "diagnostic counter; deterministic spy evidence is separate"
+        },
+        "actualPhysicalWidth": {
+          "availability": "available",
+          "value": 1280,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "recovery.succeeded",
+          "endEvent": "recovered-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualPhysicalHeight": {
+          "availability": "available",
+          "value": 720,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "recovery.succeeded",
+          "endEvent": "recovered-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualDevicePixelRatio": {
+          "availability": "available",
+          "value": 1,
+          "unit": "ratio",
+          "clock": "performance.now",
+          "startEvent": "recovery.succeeded",
+          "endEvent": "recovered-surface-snapshot",
+          "observation": "backend surface snapshot"
+        }
+      },
+      "diagnostics": {
+        "expected": [
+          {
+            "code": "device-loss.detected",
+            "message": "The active WebGPU device was lost.",
+            "severity": "error",
+            "generation": 1,
+            "context": {
+              "reason": "destroyed",
+              "message": "Device was destroyed."
+            },
+            "sequence": 0,
+            "timestampMs": 1915.199999988079
+          },
+          {
+            "code": "recovery.started",
+            "message": "WebGPU device recovery started.",
+            "severity": "info",
+            "generation": 2,
+            "context": {
+              "lostGeneration": 1
+            },
+            "sequence": 1,
+            "timestampMs": 1915.3999999910593
+          },
+          {
+            "code": "recovery.succeeded",
+            "message": "WebGPU device recovery succeeded.",
+            "severity": "info",
+            "generation": 2,
+            "context": {
+              "lostGeneration": 1
+            },
+            "sequence": 2,
+            "timestampMs": 1965.2999999970198
+          }
+        ],
+        "unexpected": []
+      }
+    },
+    {
+      "index": 4,
+      "startedAtUtc": "2026-09-09T13:32:55.603Z",
+      "endedAtUtc": "2026-09-09T13:32:57.461Z",
+      "window": {
+        "clock": "performance.now",
+        "startMs": 1953.2999999970198,
+        "endMs": 2025
+      },
+      "sampleCounts": {
+        "disposedLiveResources": 25,
+        "disposedDiagnosticListeners": 25,
+        "disposedPendingCallbacks": 25,
+        "recoveryReadyMs": 1,
+        "recoveryFirstSubmissionMs": 1,
+        "recoveryGpuCompletionMs": 1,
+        "initializedPhysicalWidths": 28,
+        "initializedPhysicalHeights": 28,
+        "initializedDevicePixelRatios": 28
+      },
+      "samples": {
+        "disposedLiveResources": [
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ],
+        "disposedDiagnosticListeners": [
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ],
+        "disposedPendingCallbacks": [
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ],
+        "recoveryReadyMs": [49],
+        "recoveryFirstSubmissionMs": [70.09999999403954],
+        "recoveryGpuCompletionMs": [71.70000000298023],
+        "initializedPhysicalWidths": [
+          1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280,
+          1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280
+        ],
+        "initializedPhysicalHeights": [
+          720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720,
+          720, 720, 720, 720, 720, 720, 720, 720, 720, 720
+        ],
+        "initializedDevicePixelRatios": [
+          1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+        ]
+      },
+      "metrics": {
+        "maximumLiveResourcesAfterDispose": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "cycle-dispose",
+          "endEvent": "cycle-snapshot",
+          "observation": "engine resource counters"
+        },
+        "maximumDiagnosticListenersAfterDispose": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "cycle-dispose",
+          "endEvent": "cycle-snapshot",
+          "observation": "diagnostic channel count"
+        },
+        "maximumPendingCallbacksAfterDispose": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "cycle-dispose",
+          "endEvent": "cycle-snapshot",
+          "observation": "scheduler statistics"
+        },
+        "recoveryReady": {
+          "availability": "available",
+          "value": 49,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "recovery.succeeded",
+          "observation": "diagnostic monotonic timestamps"
+        },
+        "recoveryFirstSubmission": {
+          "availability": "available",
+          "value": 70.1,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "rebuilt-generation framesSubmitted increment",
+          "observation": "backend statistics observation"
+        },
+        "recoveryGpuCompletion": {
+          "availability": "available",
+          "value": 71.7,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "GPUQueue.onSubmittedWorkDone resolution",
+          "observation": "queue completion promise; timestamp sampled in the resolving page task is a conservative observation upper bound"
+        },
+        "observedPresentation": {
+          "availability": "unavailable",
+          "reason": "browser-webgpu-no-presentation-timestamp",
+          "unit": "ms",
+          "clock": "unavailable",
+          "startEvent": "device-loss.detected",
+          "endEvent": "physical-display-presentation",
+          "observation": "unavailable"
+        },
+        "recoveryAttempts": {
+          "availability": "available",
+          "value": 1,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "recovery.succeeded",
+          "observation": "backend statistics"
+        },
+        "staleGenerationSubmissions": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "recovery.succeeded",
+          "observation": "diagnostic counter; deterministic spy evidence is separate"
+        },
+        "actualPhysicalWidth": {
+          "availability": "available",
+          "value": 1280,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "recovery.succeeded",
+          "endEvent": "recovered-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualPhysicalHeight": {
+          "availability": "available",
+          "value": 720,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "recovery.succeeded",
+          "endEvent": "recovered-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualDevicePixelRatio": {
+          "availability": "available",
+          "value": 1,
+          "unit": "ratio",
+          "clock": "performance.now",
+          "startEvent": "recovery.succeeded",
+          "endEvent": "recovered-surface-snapshot",
+          "observation": "backend surface snapshot"
+        }
+      },
+      "diagnostics": {
+        "expected": [
+          {
+            "code": "device-loss.detected",
+            "message": "The active WebGPU device was lost.",
+            "severity": "error",
+            "generation": 1,
+            "context": {
+              "reason": "destroyed",
+              "message": "Device was destroyed."
+            },
+            "sequence": 0,
+            "timestampMs": 1953.2999999970198
+          },
+          {
+            "code": "recovery.started",
+            "message": "WebGPU device recovery started.",
+            "severity": "info",
+            "generation": 2,
+            "context": {
+              "lostGeneration": 1
+            },
+            "sequence": 1,
+            "timestampMs": 1953.5999999940395
+          },
+          {
+            "code": "recovery.succeeded",
+            "message": "WebGPU device recovery succeeded.",
+            "severity": "info",
+            "generation": 2,
+            "context": {
+              "lostGeneration": 1
+            },
+            "sequence": 2,
+            "timestampMs": 2002.2999999970198
+          }
+        ],
+        "unexpected": []
+      }
+    },
+    {
+      "index": 5,
+      "startedAtUtc": "2026-09-09T13:32:57.656Z",
+      "endedAtUtc": "2026-09-09T13:32:59.610Z",
+      "window": {
+        "clock": "performance.now",
+        "startMs": 2065.2999999970198,
+        "endMs": 2139.5
+      },
+      "sampleCounts": {
+        "disposedLiveResources": 25,
+        "disposedDiagnosticListeners": 25,
+        "disposedPendingCallbacks": 25,
+        "recoveryReadyMs": 1,
+        "recoveryFirstSubmissionMs": 1,
+        "recoveryGpuCompletionMs": 1,
+        "initializedPhysicalWidths": 28,
+        "initializedPhysicalHeights": 28,
+        "initializedDevicePixelRatios": 28
+      },
+      "samples": {
+        "disposedLiveResources": [
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ],
+        "disposedDiagnosticListeners": [
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ],
+        "disposedPendingCallbacks": [
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ],
+        "recoveryReadyMs": [49],
+        "recoveryFirstSubmissionMs": [72.59999999403954],
+        "recoveryGpuCompletionMs": [74.20000000298023],
+        "initializedPhysicalWidths": [
+          1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280,
+          1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280, 1280
+        ],
+        "initializedPhysicalHeights": [
+          720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720, 720,
+          720, 720, 720, 720, 720, 720, 720, 720, 720, 720
+        ],
+        "initializedDevicePixelRatios": [
+          1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+        ]
+      },
+      "metrics": {
+        "maximumLiveResourcesAfterDispose": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "cycle-dispose",
+          "endEvent": "cycle-snapshot",
+          "observation": "engine resource counters"
+        },
+        "maximumDiagnosticListenersAfterDispose": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "cycle-dispose",
+          "endEvent": "cycle-snapshot",
+          "observation": "diagnostic channel count"
+        },
+        "maximumPendingCallbacksAfterDispose": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "cycle-dispose",
+          "endEvent": "cycle-snapshot",
+          "observation": "scheduler statistics"
+        },
+        "recoveryReady": {
+          "availability": "available",
+          "value": 49,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "recovery.succeeded",
+          "observation": "diagnostic monotonic timestamps"
+        },
+        "recoveryFirstSubmission": {
+          "availability": "available",
+          "value": 72.6,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "rebuilt-generation framesSubmitted increment",
+          "observation": "backend statistics observation"
+        },
+        "recoveryGpuCompletion": {
+          "availability": "available",
+          "value": 74.2,
+          "unit": "ms",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "GPUQueue.onSubmittedWorkDone resolution",
+          "observation": "queue completion promise; timestamp sampled in the resolving page task is a conservative observation upper bound"
+        },
+        "observedPresentation": {
+          "availability": "unavailable",
+          "reason": "browser-webgpu-no-presentation-timestamp",
+          "unit": "ms",
+          "clock": "unavailable",
+          "startEvent": "device-loss.detected",
+          "endEvent": "physical-display-presentation",
+          "observation": "unavailable"
+        },
+        "recoveryAttempts": {
+          "availability": "available",
+          "value": 1,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "recovery.succeeded",
+          "observation": "backend statistics"
+        },
+        "staleGenerationSubmissions": {
+          "availability": "available",
+          "value": 0,
+          "unit": "count",
+          "clock": "performance.now",
+          "startEvent": "device-loss.detected",
+          "endEvent": "recovery.succeeded",
+          "observation": "diagnostic counter; deterministic spy evidence is separate"
+        },
+        "actualPhysicalWidth": {
+          "availability": "available",
+          "value": 1280,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "recovery.succeeded",
+          "endEvent": "recovered-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualPhysicalHeight": {
+          "availability": "available",
+          "value": 720,
+          "unit": "px",
+          "clock": "performance.now",
+          "startEvent": "recovery.succeeded",
+          "endEvent": "recovered-surface-snapshot",
+          "observation": "backend surface snapshot"
+        },
+        "actualDevicePixelRatio": {
+          "availability": "available",
+          "value": 1,
+          "unit": "ratio",
+          "clock": "performance.now",
+          "startEvent": "recovery.succeeded",
+          "endEvent": "recovered-surface-snapshot",
+          "observation": "backend surface snapshot"
+        }
+      },
+      "diagnostics": {
+        "expected": [
+          {
+            "code": "device-loss.detected",
+            "message": "The active WebGPU device was lost.",
+            "severity": "error",
+            "generation": 1,
+            "context": {
+              "reason": "destroyed",
+              "message": "Device was destroyed."
+            },
+            "sequence": 0,
+            "timestampMs": 2065.2999999970198
+          },
+          {
+            "code": "recovery.started",
+            "message": "WebGPU device recovery started.",
+            "severity": "info",
+            "generation": 2,
+            "context": {
+              "lostGeneration": 1
+            },
+            "sequence": 1,
+            "timestampMs": 2065.5
+          },
+          {
+            "code": "recovery.succeeded",
+            "message": "WebGPU device recovery succeeded.",
+            "severity": "info",
+            "generation": 2,
+            "context": {
+              "lostGeneration": 1
+            },
+            "sequence": 2,
+            "timestampMs": 2114.2999999970198
+          }
+        ],
+        "unexpected": []
+      }
+    }
+  ]
+}
