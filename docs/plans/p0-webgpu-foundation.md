@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.5 integrated; P0.5a unit modules and T006a integration complete locally; T006b headed evidence pending
+Status: P0.5 integrated; P0.5a A13-A15 complete with clean-source headed evidence; PR integration pending; P0 gate open
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -350,9 +350,9 @@ P0.5.3 implementation evidence:
 
 These items restore the existing P0 roadmap scope; the foundation triangle and a single owned vertex buffer do not prove them. Implement as a separately reviewable checkpoint after P0.5 and before P0.6.
 
-- [ ] **P0-A13 camera transform:** centralize document/CSS/physical conversions with inverse mapping; define matrix order and invalid-input handling. Unit fixtures cover translation, zoom, DPR 1/1.5/2, negative positions, and inverse round trips with absolute error at most `1e-8` over the fixture domain (coordinates within +/-10,000 and zoom 0.01 to 64). A headed triangle fixture verifies known transformed screen positions within one physical pixel. This is a fixture domain, not the editor's final coordinate limit.
-- [ ] **P0-A14 buffer suballocation experiment:** exercise deterministic allocate/free/reuse over a shared buffer with alignment, non-overlap, exhaustion, and invalid-free assertions; retain CPU allocation descriptors and rebuild on recovery. Record capacity, requested/allocated/live/peak bytes and buffer creation count; a headed draw fixture reads distinct allocation ranges and disposal returns ownership counters to zero. Define safe reuse relative to submitted GPU work before implementing the allocator. No speedup claim is required.
-- [ ] **P0-A15 keyed pipeline cache:** define keys for shader/layout, target format, sample count, and relevant render state. Identical requests reuse one entry, incompatible keys do not alias, and loss invalidates the generation's entries. Unit tests plus headed resource counters show no steady-state creation and successful rebuild; a single pipeline created at startup alone is insufficient cache evidence.
+- [x] **P0-A13 camera transform:** centralize document/CSS/physical conversions with inverse mapping; define matrix order and invalid-input handling. Unit fixtures cover translation, zoom, DPR 1/1.5/2, negative positions, and inverse round trips with absolute error at most `1e-8` over the fixture domain (coordinates within +/-10,000 and zoom 0.01 to 64). A headed triangle fixture verifies known transformed screen positions within one physical pixel. This is a fixture domain, not the editor's final coordinate limit.
+- [x] **P0-A14 buffer suballocation experiment:** exercise deterministic allocate/free/reuse over a shared buffer with alignment, non-overlap, exhaustion, and invalid-free assertions; retain CPU allocation descriptors and rebuild on recovery. Record capacity, requested/allocated/live/peak bytes and buffer creation count; a headed draw fixture reads distinct allocation ranges and disposal returns ownership counters to zero. Define safe reuse relative to submitted GPU work before implementing the allocator. No speedup claim is required.
+- [x] **P0-A15 keyed pipeline cache:** define keys for shader/layout, target format, sample count, and relevant render state. Identical requests reuse one entry, incompatible keys do not alias, and loss invalidates the generation's entries. Unit tests plus headed resource counters show no steady-state creation and successful rebuild; a single pipeline created at startup alone is insufficient cache evidence.
 
 Evidence: `pnpm check`, `pnpm build`, headed Chrome/Edge fixture artifacts, and counters linked individually to P0-A13/A14/A15. Record any changed benchmark configuration as a successor scenario before final measurement.
 
@@ -459,7 +459,7 @@ T006b is now executable: fix the independent document-coordinate headed fixture 
 
 #### T006b headed foundation evidence contract (2026-09-09)
 
-Status: **LOCAL VALIDATION PASS; CLEAN-SOURCE EVIDENCE PENDING** after locally reviewed T006a. This batch completes only the remaining P0.5a A13/A14/A15 evidence and its checkpoint workflow. It does not run P0 performance benchmarks, resolve physical-presentation/native-OOM measurement gaps, or authorize P1.
+Status: **COMPLETE WITH CLEAN-SOURCE EVIDENCE; PR INTEGRATION PENDING** after locally reviewed T006a. This batch completes only the remaining P0.5a A13/A14/A15 evidence and its checkpoint workflow. It does not run P0 performance benchmarks, resolve physical-presentation/native-OOM measurement gaps, or authorize P1.
 
 Contracts fixed before implementation:
 
@@ -481,6 +481,8 @@ T006b local review before the source checkpoint:
 - The first headed attempt timed out because a completion wait compared against an earlier submission serial while the scheduler retained its final queued RAF after switching to on-demand. The corrected wait requires no pending RAF, completion at least through the captured serial, and completion equal to the current submitted serial. The next attempt exposed fractional locator clipping after dashboard scrollbar growth. Fixture-only layout now anchors the canvas at CSS `(44,84)` using start alignment, no stage border, 24 px padding and a 24 px heading line height; these origins map to integers at all three tested DPRs. Default scene/layout and the exact image-size/one-pixel acceptance oracle are unchanged. Failed traces/screenshots were retained locally under ignored `playwright-report/t006b-*-failure-20260909/`.
 - `pnpm test:gpu` - final routine PASS: 10 headed Chrome/Edge tests (16.6 s). All six fixture cases rendered initial/recovered positions with maximum coordinate error 0 px at DPR 1/2 and 0.5 px at DPR 1.5. Initial and recovered creation counts were 1 and 2 respectively for both buffer and pipeline, steady creation/request counts did not increase, and disposed ownership returned to zero. Primary inspected numeric records and representative recovered PNGs in both browsers. Routine artifacts are dirty-source local checks, not the pending immutable clean-source evidence.
 - Evidence JSON is formatted with the already pinned development formatter before exclusive creation; existing GPU writers now await it. This avoids rewriting observation files after capture. No dependency, editor-facing contract, or benchmark scenario changed. A13/A14/A15 remain unchecked until the clean-source run is reviewed below.
+
+T006b clean-source outcome (2026-09-09): **COMPLETE**. Source checkpoint `11314b52ddb23f6d43c69d5cce20870caa9fb211` passed the clean-source `pnpm test:gpu` capture (10/10, 17.1 s). All ten JSON records report that revision and a clean source worktree. [Evidence index](../evidence/p0.5a/2026-09-09T061400Z/README.md) links six DPR/browser fixture records, twelve fixture PNGs and the existing recovery/dashboard artifacts. Every initial/recovered fixture PNG pair is byte-identical; maximum coordinate error is 0.5 physical pixel. All six cases show steady reuse, generation reconstruction and zero ownership after disposal. Primary reviewed numeric/image evidence and marks **P0-A13 PASS, P0-A14 PASS and P0-A15 PASS** for this source. The measured source is preserved by `evidence/p0.5a-20260909-061400`; evidence indexing/plan changes are a separate commit. Remote CI and PR review remain integration gates.
 
 ### P0.6 Final validation and gate review
 
@@ -515,7 +517,7 @@ Evidence: completed acceptance matrix and linked result files.
 
 P0 passes only when all P0-A criteria are PASS. A criterion cannot be waived by a good benchmark number.
 
-At this review, P0-A01 through A12 retain partial historical evidence, not a final-current-revision PASS. P0-A07's hardware OOM path, presentation timing, complete benchmark metadata/scenarios, and A13-A15 are explicitly UNVERIFIED. P0.6 must add a per-ID outcome with evidence revision/artifact links for all fifteen criteria and all five scenarios in both browsers. A numeric scenario result and evidence validity are separate evaluations.
+At this review, P0-A01 through A12 retain partial historical evidence, not a final-current-revision PASS. P0-A07's hardware OOM path, presentation timing, and complete benchmark metadata/scenarios remain explicitly UNVERIFIED. P0-A13 through A15 are PASS on source `11314b52ddb23f6d43c69d5cce20870caa9fb211` with [reviewed P0.5a evidence](../evidence/p0.5a/2026-09-09T061400Z/README.md); this does not complete the final-current-revision P0.6 review. P0.6 must add a per-ID outcome with evidence revision/artifact links for all fifteen criteria and all five scenarios in both browsers. A numeric scenario result and evidence validity are separate evaluations.
 
 ## P0 benchmark scenarios and thresholds
 
@@ -649,4 +651,4 @@ Documentation review update, 2026-09-05: reconciled the dependency graph (ADR 00
 
 ## Gate outcome
 
-Current outcome remains **P0 OPEN; P0.5 INTEGRATED; P0.5A UNIT MODULES AND T006A COMPLETE LOCALLY, T006B HEADED EVIDENCE PENDING**. This batch makes no new P0 gate judgment. The clean-revision smoke records and dashboard/GPU artifacts prove the measurement workflow, but the shortened smoke profile is not an accepted performance baseline. P0.5a headed A13/A14/A15 evidence still precedes the P0.6 full gate review; the earlier terminal-recovery correction is already integrated as P0.4a. P1 may not begin until the complete P0 gate passes or the owning design is explicitly revised before implementation.
+Current outcome remains **P0 OPEN; P0.5 INTEGRATED; P0.5A A13-A15 COMPLETE WITH CLEAN-SOURCE EVIDENCE, PR INTEGRATION PENDING**. This batch makes no new P0 gate judgment. The [P0.5a evidence](../evidence/p0.5a/2026-09-09T061400Z/README.md) completes the camera, shared-buffer and pipeline-cache checkpoint. The earlier shortened benchmark smoke profile is still not an accepted performance baseline. After P0.5a PR integration, P0.6 full gate review is next; the terminal-recovery correction is already integrated as P0.4a. P1 may not begin until the complete P0 gate passes or the owning design is explicitly revised before implementation.
