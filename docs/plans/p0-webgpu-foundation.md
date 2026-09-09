@@ -1,6 +1,6 @@
 # P0 execution plan: WebGPU foundation
 
-Status: P0.5a integrated; P0.6 readiness reviewed; presentation/OOM measurement procedures pending; P0 gate open
+Status: P0.5a integrated; P0.6 measurement feasibility investigated; instrumentation/acceptance direction requires user decision; P0 gate open
 
 This is the source of truth for P0 scope, execution order, progress, acceptance criteria, and required evidence. Cross-project validation rules come from `docs/validation.md`; benchmark measurement and result formatting come from `docs/benchmarks/README.md`.
 
@@ -488,6 +488,8 @@ T006b clean-source outcome (2026-09-09): **COMPLETE**. Source checkpoint `11314b
 
 P0.5a was integrated through [PR #22](https://github.com/npclown/vector-studio/pull/22) as `1c64eab878dd004891971da86f359814e44daebc`. The [2026-09-09 readiness review](../evidence/p0-6-readiness-2026-09-09.md) verifies squash/source equivalence, audits the five-scenario runner, and records the remaining presentation/native-OOM decisions and reference-environment preparation. Existing A13-A15 evidence retains its measured revision; no new benchmark or final gate result is inferred from the merge. Next, investigate feasible presentation/native-OOM observation procedures under the existing criteria. Read-only investigation needs no new approval; escalate only if a criterion, dependency, architecture or operational-risk change is necessary. Before an acceptance run, resolve the actual observation method or obtain an explicit prospective criterion revision. Current thresholds remain unchanged.
 
+The [measurement-feasibility investigation](../evidence/p0-6-measurement-feasibility-2026-09-09.md) is complete. Standard browser APIs and generic presentation feedback do not establish the required physical-display endpoint; no guaranteed bounded native-hardware-OOM method was identified for the stock-browser public API. A read-only machine audit also found two active monitors, so controller-reported 60 Hz is not sufficient to identify the benchmark display. The report contains a bounded external-instrumentation proposal and an explicitly unapproved alternative for revising P0 verification to observable SDK boundaries. Neither external tooling nor acceptance-semantic changes are authorized by this investigation. Current criteria and scenario versions remain in force; obtain the user's direction before either proposed implementation path.
+
 - [ ] Run the complete static/unit/contract/browser validation surface.
 - [ ] Run headed Chrome and Edge GPU validation on the reference machine.
 - [ ] Execute five repetitions of every P0 benchmark scenario.
@@ -653,4 +655,4 @@ Documentation review update, 2026-09-05: reconciled the dependency graph (ADR 00
 
 ## Gate outcome
 
-Current outcome remains **P0 OPEN; P0.5A INTEGRATED; P0.6 MEASUREMENT PROCEDURES PENDING**. This batch makes no new P0 gate judgment. The [P0.5a evidence](../evidence/p0.5a/2026-09-09T061400Z/README.md) completes the camera, shared-buffer and pipeline-cache checkpoint. The earlier shortened benchmark smoke profile is still not an accepted performance baseline. P0.5a PR #22 is integrated; the [P0.6 readiness review](../evidence/p0-6-readiness-2026-09-09.md) identifies the next measurement and environment decisions before the full gate run; the terminal-recovery correction is already integrated as P0.4a. P1 may not begin until the complete P0 gate passes or the owning design is explicitly revised before implementation.
+Current outcome remains **P0 OPEN; P0.5A INTEGRATED; P0.6 FEASIBILITY COMPLETE, USER DIRECTION PENDING**. This batch makes no new P0 gate judgment. The [P0.5a evidence](../evidence/p0.5a/2026-09-09T061400Z/README.md) completes the camera, shared-buffer and pipeline-cache checkpoint. The earlier shortened benchmark smoke profile is still not an accepted performance baseline. P0.5a PR #22 is integrated; the [P0.6 readiness review](../evidence/p0-6-readiness-2026-09-09.md) identifies the next measurement and environment decisions before the full gate run; the terminal-recovery correction is already integrated as P0.4a. P1 may not begin until the complete P0 gate passes or the owning design is explicitly revised before implementation.
