@@ -1,0 +1,190 @@
+{
+  "schema": "p1.5-recovery-review-v1",
+  "command": "pnpm test:gpu --grep 'P1 (visual|latest-scene)'",
+  "result": "16 passed (1.4m)",
+  "sourceManifestSha256": "69b2225fec82145341ea00eb275c7cf14b66bc461ae187e77e0e6aa36abf1f97",
+  "changedFilesSinceMatrix": [
+    "apps/playground/src/p1-fixture.ts",
+    "tests/gpu/p1-primitives.spec.ts"
+  ],
+  "visualFixtures": 240,
+  "recoveryFixtures": 4,
+  "reports": [
+    {
+      "directory": "chrome/P1_latest-scene_recovery_samples1",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "observations": 1,
+      "kind": "recovery",
+      "reportSha256": "a460082224576ff1ea96294379c25583587bec24b2eb3349a3b728deff56ae6c",
+      "pass": true
+    },
+    {
+      "directory": "chrome/P1_latest-scene_recovery_samples4",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "observations": 1,
+      "kind": "recovery",
+      "reportSha256": "0c940082bab4698813fb5a4988e376ad94ea67f6745fbb42e9e009985931a426",
+      "pass": true
+    },
+    {
+      "directory": "chrome/P1_visual_samples1_dpr1",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "observations": 20,
+      "kind": "visual",
+      "reportSha256": "b1d3f6060d62756235f82143d1c8f57b676c66d55370f0a678651b41873ab4bd",
+      "pass": true
+    },
+    {
+      "directory": "chrome/P1_visual_samples1_dpr1.5",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "observations": 20,
+      "kind": "visual",
+      "reportSha256": "f7cc8a9b951d7df1584b78a1483abc56827dfe2dc8b8bf2be0a1ed5df13e26c3",
+      "pass": true
+    },
+    {
+      "directory": "chrome/P1_visual_samples1_dpr2",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "observations": 20,
+      "kind": "visual",
+      "reportSha256": "080b472ed0639aa0d09ec8ccb2dab168239a695c37da9d1e6ddc9d57deb75608",
+      "pass": true
+    },
+    {
+      "directory": "chrome/P1_visual_samples4_dpr1",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "observations": 20,
+      "kind": "visual",
+      "reportSha256": "36ba40f6ed4f07a22489ec3fb2cea53d2c40e46c617509029b63f7eb22f17dcf",
+      "pass": true
+    },
+    {
+      "directory": "chrome/P1_visual_samples4_dpr1.5",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "observations": 20,
+      "kind": "visual",
+      "reportSha256": "f6a322833d3245f314d2bb7b64ac35764fb228f7cef99fc32ae68597b8ea78f4",
+      "pass": true
+    },
+    {
+      "directory": "chrome/P1_visual_samples4_dpr2",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "observations": 20,
+      "kind": "visual",
+      "reportSha256": "07e6e2e6596e9f0c7b6a936d7a7d6f0f56273d0f79be990750b0c3ef7b3708c7",
+      "pass": true
+    },
+    {
+      "directory": "edge/P1_latest-scene_recovery_samples1",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "observations": 1,
+      "kind": "recovery",
+      "reportSha256": "3f2b5ce44112866c79eaf5f305efd604e98d2229fd576e2bea0fdc96368d8863",
+      "pass": true
+    },
+    {
+      "directory": "edge/P1_latest-scene_recovery_samples4",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "observations": 1,
+      "kind": "recovery",
+      "reportSha256": "6dce89c61afc8929ab7b9977b0fdd12bb48face0166907be81dcc5d2c3aacbc1",
+      "pass": true
+    },
+    {
+      "directory": "edge/P1_visual_samples1_dpr1",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "observations": 20,
+      "kind": "visual",
+      "reportSha256": "72ec5360bb4a9031ba349c31f306a099039b76244254f7a7be1bc79f96f8068f",
+      "pass": true
+    },
+    {
+      "directory": "edge/P1_visual_samples1_dpr1.5",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "observations": 20,
+      "kind": "visual",
+      "reportSha256": "f5d9cb261a92f29e663da3eb8c432cfd058a7bccf7dc3bee35b574c98028b2a2",
+      "pass": true
+    },
+    {
+      "directory": "edge/P1_visual_samples1_dpr2",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "observations": 20,
+      "kind": "visual",
+      "reportSha256": "5495c2e01d18204a5511ec508b10bfab742cc8c974bac1bb84b4a9acf716498f",
+      "pass": true
+    },
+    {
+      "directory": "edge/P1_visual_samples4_dpr1",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "observations": 20,
+      "kind": "visual",
+      "reportSha256": "37b61a6ea97327ae265981e0ca425d17dfe6b0672d990f0345329a1e7e713403",
+      "pass": true
+    },
+    {
+      "directory": "edge/P1_visual_samples4_dpr1.5",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "observations": 20,
+      "kind": "visual",
+      "reportSha256": "9a045c0dfbae34a8bbb5b4efe4f1b95d8e6af77c9713311c5c3114a37a7ea96a",
+      "pass": true
+    },
+    {
+      "directory": "edge/P1_visual_samples4_dpr2",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "observations": 20,
+      "kind": "visual",
+      "reportSha256": "6da300abb00dfc08fbed7338b4b770f3a58b243bb6ebb78dec257afa86d7f71b",
+      "pass": true
+    }
+  ]
+}

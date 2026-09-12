@@ -5,6 +5,7 @@ const smoke = process.env.P0_BENCHMARK_PROFILE === 'smoke';
 
 export default defineConfig({
   testDir: './tests/benchmark',
+  outputDir: './test-results/p0-benchmark',
   testMatch: 'p0-foundation.spec.ts',
   fullyParallel: false,
   workers: 1,
