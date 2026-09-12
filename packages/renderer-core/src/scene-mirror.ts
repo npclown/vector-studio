@@ -24,6 +24,7 @@ import {
 } from './scene-validation.js';
 
 export type RetainedSceneView = Readonly<{
+  sceneEpoch: symbol;
   version: SceneVersion;
   nodes: readonly RenderNodeSnapshot[];
   rootOrder: readonly string[];
@@ -41,6 +42,7 @@ type CameraTransition =
   | Readonly<{ status: 'invalid-camera'; reason: 'invalid-value' | 'revision-overflow' }>;
 
 type OwnedScene = Readonly<{
+  sceneEpoch: symbol;
   identity: SceneIdentity;
   revision: number;
   nodes: ReadonlyMap<string, RenderNodeSnapshot>;
@@ -172,6 +174,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       input.revision,
       candidate.nodes,
       candidate.rootOrder,
+      this.#scene.sceneEpoch,
     );
     return appliedResult(published);
   }
@@ -209,6 +212,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     const scene = this.#scene;
     if (scene === null || this.#synchronizationStatus === 'disposed') return null;
     return Object.freeze({
+      sceneEpoch: scene.sceneEpoch,
       version: copyVersion(scene),
       nodes: scene.nodeList,
       rootOrder: scene.rootOrder,
@@ -240,10 +244,18 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     revision: number,
     nodes: ReadonlyMap<string, RenderNodeSnapshot>,
     rootOrder: readonly string[],
+    sceneEpoch: symbol = Symbol('scene-epoch'),
   ): OwnedScene {
     const ownedNodes = new Map(nodes);
     const nodeList = Object.freeze([...ownedNodes.values()].sort(compareNodes));
-    const published = Object.freeze({ identity, revision, nodes: ownedNodes, nodeList, rootOrder });
+    const published = Object.freeze({
+      sceneEpoch,
+      identity,
+      revision,
+      nodes: ownedNodes,
+      nodeList,
+      rootOrder,
+    });
     this.#scene = published;
     this.#synchronizationStatus = 'synchronized';
     this.#sceneChanged = true;

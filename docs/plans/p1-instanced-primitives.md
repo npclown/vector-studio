@@ -1,6 +1,6 @@
 # P1 execution plan: Instanced primitives
 
-Status: **D1/D2 APPROVED on 2026-09-09; D4 entry/exit separation APPROVED on 2026-09-12. P1.0b and P1.1 COMPLETE locally; P1.2/P1.3 are next after checkpoint integration; A09/A10 remain UNVERIFIED exit gates.**
+Status: **D1/D2 APPROVED on 2026-09-09; D4 entry/exit separation APPROVED on 2026-09-12. P1.0b and P1.1 integrated; P1.2 COMPLETE locally; P1.3 reviewed on its isolated checkpoint branch; A09/A10 remain UNVERIFIED exit gates.**
 
 This document owns P1 task order, approved D1/D2 contract details, acceptance and evidence. The user approved the D1 scene/camera API and D2 visual behavior on 2026-09-09 in response to the explicit approval question for PR #26 source `49c3bfd`. That 2026-09-09 approval did not change D3, measurement thresholds or the milestone entry rule. The later D4 approval below changes implementation entry only. The [roadmap](../prototype-plan.md#p1-instanced-primitives), [system boundaries](../../ARCHITECTURE.md), [graphics design gates](../graphics-engine-architecture.md#design-gates-before-later-implementation), [validation policy](../validation.md) and [benchmark policy](../benchmarks/README.md) retain their responsibilities.
 
@@ -176,7 +176,7 @@ The [P1.0b private contract](p1-private-contract.md) freezes literal fixture dat
 
 ## Acceptance and evidence map
 
-P1-A01 is PASS at the CPU scene-synchronization boundary with the P1.1 evidence below. P1-A09 and P1-A10 remain **UNVERIFIED — measurement methods unresolved**; P1-A02 through A08 remain TODO. Shared numeric helpers and type declarations do not establish GPU rendering, packet recovery or performance acceptance.
+P1-A01 is PASS at the CPU scene-synchronization boundary with the P1.1 evidence below. P1-A09 and P1-A10 remain **UNVERIFIED — measurement methods unresolved**; P1-A02/A04 have P1.2 CPU evidence; A03/A05 are PARTIAL and A06-A08 remain TODO. CPU packet evidence does not establish native GPU rendering, recovery or performance acceptance.
 
 | ID     | Required result                                                                                                                                                                                                                                                    | Evidence / owning task                                                                         |
 | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
@@ -229,9 +229,9 @@ Minimum topology: one Primary supervisor, one implementation worker by default, 
 ## Next batch and implementation entry
 
 1. D1/D2 and D4 approval are recorded. Continue P1.0m measurement/configuration readiness independently; external tools or a change to acceptance semantics require a separate concrete user decision. Missing measurement evidence continues to block P1.6/P1.7 and P2 entry. Report unresolved methods instead of rerunning P0 proxies.
-2. P1.0b private contract freeze and P1.1 CPU mirror/type foundation are complete locally. Complete their protected PR integration before dispatching the next implementation work.
-3. Next implementation batch: independent Sol medium workers may perform P1.2 core derivation/packing and P1.3 webgpu-local analytic primitives using the frozen packet types. Primary retains shared exports and contract ownership; no concurrent lifecycle edits. Each checkpoint requires applicable root static/unit/build validation and protected PR integration.
-4. Only after P1.1 integrates, dispatch P1.2 and P1.3 in parallel with non-overlapping files. P1.4 remains a single-owner integration task.
+2. P1.0b private contract freeze and P1.1 CPU mirror/type foundation are integrated. [PR #31](https://github.com/npclown/vector-studio/pull/31) merged P1.1 as `355d03f`; required CI passed and its integrated tree matched the reviewed source.
+3. P1.2 and P1.3 are reviewed as independent checkpoint branches using frozen packet v1. Complete local validation and protected PR integration for both before P1.4. Primary retains shared exports and contract ownership.
+4. Next implementation task after both integrations: P1.4, one Sol high owner for renderer service composition, native packet upload/submission, acknowledgment, recovery and accounting, with Primary review.
 
 D4 changes execution order only. D1/D2 alone did not authorize this entry change; the separate 2026-09-12 user approval does. A09/A10 and the complete P1 exit gate are unchanged.
 
@@ -305,3 +305,16 @@ Actual delegation: Sol medium for implementation/protocol tests, Luna low for se
 - Browser/GPU/benchmark commands — NOT RUN: CPU/type-only P1.1; no backend integration or performance claim.
 
 P1-A01 passes at its CPU boundary. P1.2/P1.3 can start after this PR integrates; P1.4 remains the single-owner integration task. P1.0m and A09/A10 remain unresolved under unchanged D4 exit policy.
+
+## P1.2 checkpoint: 2026-09-12
+
+P1.2 implements cached hierarchy/bounds, guarded culling and stable paint order, slot/record packing, bounded receipt ownership and reconstruction. [Primary review and evidence](../evidence/p1.2-packet-review-2026-09-12.md) explain the fixed-vertex continuous precision model and independent tests. Public D1 and packet v1 types are unchanged. Sol medium implemented core-local behavior; Primary owned epoch/export wiring, final numeric proof/model and independent regressions; Luna low ran root validation. No recursive delegation.
+
+P1-A02/A04 have CPU evidence. N04/S4 uses 10,000 nodes, asserts 1,032 visible and exactly one 32-byte transform write after warming, with zero geometry/style/order writes. This is structural unit evidence, not a native upload or performance result. A05 remains PARTIAL until P1.4/P1.7. P1.3 is developed on an isolated branch; P1.4 requires both checkpoint integrations. A09/A10 remain UNVERIFIED.
+
+- `pnpm check` — PASS: formatting, lint, TypeScript, 144 tests across 20 files and package boundaries.
+- `pnpm build` — PASS: all three libraries and playground production build (27 modules).
+- Browser/GPU/benchmark commands — NOT RUN: CPU packet checkpoint only.
+- `pnpm exec prettier --check --ignore-path .gitignore docs/plans/p1-instanced-primitives.md docs/evidence/p1.2-packet-review-2026-09-12.md` — PASS: both changed Markdown files.
+- Heading/HTML-anchor link checker from the P1.0b review — PASS: 257 local links/anchors across 63 Markdown files.
+- `git diff --check` and scope/type/dependency review — PASS: unchanged public scene and packet v1 declarations; no backend lifecycle, dependency or historical artifact changes.
