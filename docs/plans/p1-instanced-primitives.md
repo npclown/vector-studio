@@ -253,3 +253,21 @@ The initial draft above was reviewed before approval. On 2026-09-09 the user exp
 The [bounded PresentMon attempt](../evidence/p1.0m/20260912-presentmon-access/README.md) was blocked by Windows ETW privileges before CSV acquisition. No Edge attempt, automatic elevation, performance acceptance or product implementation followed. The prepared test-only fixture and original failed evidence cross this investigation checkpoint; the next external action requires one-time elevated PresentMon authorization. A09 memory and A10 display correlation remain unresolved; P1.0b and P1.1 remain unstarted.
 
 The user subsequently approved the PresentMon-only elevation. The [elevated retry review](../evidence/p1.0m/20260912-presentmon-elevated/README.md) establishes one bounded Chrome acquisition under its actual default CSV schema; Edge UAC was canceled before process creation. Both outcomes and a preceding prelaunch tooling failure are preserved. A09/A10 remain UNVERIFIED; no P1 implementation entry or performance acceptance follows. Continue P1.0m method analysis; a new Edge consent request requires a new user instruction.
+
+## D4: proposed entry/exit separation: pending user decision
+
+Status: **PROPOSED, NOT APPROVED. The current graph and implementation block above remain in force.**
+
+The [2026-09-12 method assessment](../evidence/p1.0m-method-assessment-2026-09-12.md) identifies conditional memory bounds, two missing presentation-identity joins and unresolved endpoint provenance. Primary recommends separating implementation entry from measurement-method completion to allow implementation progress on the approved D1/D2 renderer design while explicitly accepting possible rework. This is a project execution-policy decision; merely merging the proposal does not authorize it.
+
+If and only if the user approves D4:
+
+1. Keep approved D1/D2 and all P1-A01 through A10 behavior, thresholds and required evidence unchanged. A09 remains simultaneous combined peak <= 256,000,000 bytes; A10 remains pointer-to-present p95 < 50 ms. Neither proxies nor missing evidence can pass these gates.
+2. Allow P1.0b private packet, literals, precision/rebase and validation-contract freeze to proceed while P1.0m is unresolved. P1.0b still must complete before P1.1; implementation workers cannot invent shared contracts.
+3. Permit P1.1 through P1.5 in their existing order and scope after that freeze. P1.2/P1.3 can overlap only with independent files; P1.4 remains a single-owner integration task. Every checkpoint retains its local correctness/review/PR gates and is labeled partial P1 progress.
+4. Continue P1.0m independently. P1.6 still requires P1.4 and executable, prospectively accepted measurement methods. P1.7 still requires P1.5, P1.6 and all acceptance evidence. P1 completion and P2 entry remain blocked until the full P1 gate passes or a separate explicit prospective decision changes it.
+5. Do not authorize further UAC/captures, a browser fork, new dependencies, optical hardware or a change to public API/product scope. Those require their own concrete decisions where applicable.
+
+Proposed dependency delta: remove only `P1.0m -> P1.0b`; preserve `P1.0m -> P1.6 -> P1.7` and every implementation/exit dependency. On approval, first update this plan's D3/entry text, the measurement contract's entry status and the roadmap's current-position statement consistently, then execute P1.0b. Requirements, architecture and benchmark semantics need no change for this proposal.
+
+Alternative: retain the current entry block and continue version-matched instrumentation design until an unchanged-gate method is executable. The tradeoff is investigation time and possibly browser/tool/hardware work before renderer implementation. No option is selected on the user's behalf in this checkpoint.
