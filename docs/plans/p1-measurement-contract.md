@@ -90,7 +90,7 @@ The following is a **proposal requiring separate approval**, not work authorized
 | A08 frame-time endpoint        | Frozen by Primary: `rafCallbackIntervalMs` plus successful submission invariant | Definition ready; runtime acceptance remains TODO                            |
 | A09 combined peak memory       | UNVERIFIED                                                                      | Method must cover JS overhead and simultaneous peaks                         |
 | A10 physical presentation      | UNVERIFIED                                                                      | Separate bounded instrumentation decision required to attempt this candidate |
-| P1.0m / P1.0b / implementation | PARTIAL / frozen / P1.1 ready after checkpoint integration                      | D4 separates implementation entry from unchanged exit gates                  |
+| P1.0m / P1.0b / implementation | PARTIAL / frozen / implementation status in active plan                         | D4 separates implementation entry from unchanged exit gates                  |
 
 Primary reviews the independent Terra medium workload arithmetic and Sol medium memory-method investigation. Approval of the design documentation permits its protected PR integration; it does not authorize the unapproved experiment above. Validation of this document is limited to source/claim consistency, links, formatting and arithmetic; no runtime or performance result is claimed.
 

@@ -1,6 +1,6 @@
 # P1 execution plan: Instanced primitives
 
-Status: **D1/D2 APPROVED on 2026-09-09; D4 entry/exit separation APPROVED on 2026-09-12. P1.0b private contract freeze COMPLETE; P1.1 is ready after checkpoint integration; A09/A10 remain UNVERIFIED exit gates.**
+Status: **D1/D2 APPROVED on 2026-09-09; D4 entry/exit separation APPROVED on 2026-09-12. P1.0b and P1.1 COMPLETE locally; P1.2/P1.3 are next after checkpoint integration; A09/A10 remain UNVERIFIED exit gates.**
 
 This document owns P1 task order, approved D1/D2 contract details, acceptance and evidence. The user approved the D1 scene/camera API and D2 visual behavior on 2026-09-09 in response to the explicit approval question for PR #26 source `49c3bfd`. That 2026-09-09 approval did not change D3, measurement thresholds or the milestone entry rule. The later D4 approval below changes implementation entry only. The [roadmap](../prototype-plan.md#p1-instanced-primitives), [system boundaries](../../ARCHITECTURE.md), [graphics design gates](../graphics-engine-architecture.md#design-gates-before-later-implementation), [validation policy](../validation.md) and [benchmark policy](../benchmarks/README.md) retain their responsibilities.
 
@@ -35,7 +35,7 @@ Primary owns the shared contracts. Workers may implement only a frozen checkpoin
 
 ### D1 — approved scene and packet contract
 
-**Approved by the user on 2026-09-09:** the scene-facing API semantics and exported TypeScript shape below are fixed for P1. This approval does not claim that exports or implementation exist. Internal packet byte layouts remain Primary-owned implementation decisions; meaningful changes to this public shape require a new decision.
+**Approved by the user on 2026-09-09:** the scene-facing API semantics and exported TypeScript shape below are fixed for P1. The approval itself was a design decision; P1.1 now implements the CPU synchronization surface with evidence below. Internal packet byte layouts remain Primary-owned implementation decisions; meaningful changes to this public shape require a new decision.
 
 1. A renderer service accepts one active document/page snapshot at a time. Identity contains opaque nonempty `documentId` and `pageId`; revision is a nonnegative safe integer. A full snapshot supplies all nodes and an explicit ordered root-child list. A valid full snapshot is the only initialization/resynchronization operation and may switch identity. Callers serialize snapshot delivery; revisions are comparable only within one document/page identity. For the same active identity, a lower revision rejects as `stale-snapshot`; an equal revision succeeds as an idempotent replay only if all node values and authoritative child orders match (node-array enumeration order is irrelevant), otherwise it rejects as `revision-conflict`. A higher revision replaces the entire scene. An identical replay can complete resynchronization. A different identity starts a new scene revision domain.
 2. A node snapshot contains opaque ID, parent ID or root membership, local affine transform, visibility, primitive geometry and style, or an ordered structural container. Geometry is a discriminated rectangle/ellipse/line payload. Structural containers carry ordered child IDs, explicit opacity and transform/visibility; they do not create editor/group commands. Authoritative order is explicit child lists, not insertion order in a map or a globally sorted style list.
@@ -48,7 +48,7 @@ Primary owns the shared contracts. Workers may implement only a frozen checkpoin
 
 #### Approved exported scene synchronization surface
 
-The planned file is `packages/contracts/src/scene.ts`; it is not created in this checkpoint. These plain readonly types describe renderer input, not a durable document schema. `SceneAffine` is structurally compatible with the existing camera tuple without importing renderer-core into contracts. Unexpected fields and runtime values outside the declared types reject as `invalid-value`; runtime validation is required even for typed callers. No browser/GPU surface or renderer lifecycle replacement is added here. Host composition supplies the scene service separately from the existing concrete backend lifecycle.
+P1.1 implements these exact types in `packages/contracts/src/scene.ts`. These plain readonly types describe renderer input, not a durable document schema. `SceneAffine` is structurally compatible with the existing camera tuple without importing renderer-core into contracts. Unexpected fields and runtime values outside the declared types reject as `invalid-value`; runtime validation is required even for typed callers. No browser/GPU surface or renderer lifecycle replacement is added here. Host composition supplies the scene service separately from the existing concrete backend lifecycle.
 
 ```typescript
 export type SceneAffine = readonly [number, number, number, number, number, number];
@@ -176,11 +176,11 @@ The [P1.0b private contract](p1-private-contract.md) freezes literal fixture dat
 
 ## Acceptance and evidence map
 
-All implementation criteria below lack implementation evidence. P1-A09 and P1-A10 are specifically **UNVERIFIED — measurement methods unresolved**; the remaining criteria are TODO. Approved design and prospective fixtures are not runtime evidence.
+P1-A01 is PASS at the CPU scene-synchronization boundary with the P1.1 evidence below. P1-A09 and P1-A10 remain **UNVERIFIED — measurement methods unresolved**; P1-A02 through A08 remain TODO. Shared numeric helpers and type declarations do not establish GPU rendering, packet recovery or performance acceptance.
 
 | ID     | Required result                                                                                                                                                                                                                                                    | Evidence / owning task                                                                         |
 | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| P1-A01 | D1 atomic initialization/change/resync rules, identity/revisions, ownership and terminal disposal hold. Malformed graph fixtures never publish partial state.                                                                                                      | Shared unit/contract corpus; P1.1                                                              |
+| P1-A01 | D1 atomic initialization/change/resync rules, identity/revisions, ownership and terminal disposal hold. Malformed graph fixtures never publish partial state.                                                                                                      | PASS: [P1.1 CPU corpus/review](../evidence/p1.1-scene-review-2026-09-12.md)                    |
 | P1-A02 | Hierarchical world transforms, conservative stroke-aware bounds, hidden ancestry and stable paint order match an independent CPU oracle; supported precision fixtures pass.                                                                                        | Unit numeric/bounds/packing fixtures; P1.2                                                     |
 | P1-A03 | Rectangles, independent radii, ellipses and simple lines satisfy D2, overlap order and declared numeric/visual tolerances in Chrome and Edge.                                                                                                                      | Shader/packing unit tests plus headed PNG and numeric records; P1.3/P1.5                       |
 | P1-A04 | Culling omits only conservatively outside nodes and preserves relative order of all visible nodes. Reparent/transform/style/removal update only affected derived state.                                                                                            | Unit brute-force bounds/order oracle, viewport-edge fixtures; P1.2                             |
@@ -229,8 +229,8 @@ Minimum topology: one Primary supervisor, one implementation worker by default, 
 ## Next batch and implementation entry
 
 1. D1/D2 and D4 approval are recorded. Continue P1.0m measurement/configuration readiness independently; external tools or a change to acceptance semantics require a separate concrete user decision. Missing measurement evidence continues to block P1.6/P1.7 and P2 entry. Report unresolved methods instead of rerunning P0 proxies.
-2. Primary completes P1.0b: owning graphics design, exact private packet layout, fixture literals and precision/rebase budget. Verify its contract freeze before dispatching P1.1.
-3. First implementation batch: one Sol medium worker performs P1.1 and unit/contract fixtures. Primary reviews atomicity, copy ownership, resync and revision rules directly. Run root static/unit/build validation and checkpoint through a protected PR.
+2. P1.0b private contract freeze and P1.1 CPU mirror/type foundation are complete locally. Complete their protected PR integration before dispatching the next implementation work.
+3. Next implementation batch: independent Sol medium workers may perform P1.2 core derivation/packing and P1.3 webgpu-local analytic primitives using the frozen packet types. Primary retains shared exports and contract ownership; no concurrent lifecycle edits. Each checkpoint requires applicable root static/unit/build validation and protected PR integration.
 4. Only after P1.1 integrates, dispatch P1.2 and P1.3 in parallel with non-overlapping files. P1.4 remains a single-owner integration task.
 
 D4 changes execution order only. D1/D2 alone did not authorize this entry change; the separate 2026-09-12 user approval does. A09/A10 and the complete P1 exit gate are unchanged.
@@ -290,3 +290,18 @@ Local validation:
 - Local product unit/build/browser/GPU/benchmark commands — NOT RUN: documentation-only freeze; required remote static/unit/build CI is tracked on the checkpoint PR.
 
 P1.0b is complete as a design checkpoint, with runtime validation obligations assigned to P1.1-P1.5. Next task is P1.1 with one Sol medium implementation worker and Primary review, after this scoped PR integrates. P1.0m remains PARTIAL; A09/A10 remain UNVERIFIED, and no P1 exit or P2 entry is claimed.
+
+## P1.1 checkpoint: 2026-09-12
+
+P1.1 is complete locally: exact D1 scene exports, atomic retained mirror, deterministic candidate validation, immutable copy ownership, independent camera state, shared Float64 numeric validation and private packet declarations. [Review, source mapping and validation evidence](../evidence/p1.1-scene-review-2026-09-12.md) cover S01-S09 and independent numeric/transaction fixtures. Primary corrected overflow-sentinel and global rejection-precedence issues, reviewed Map/callback ownership, and verified the frozen type shapes.
+
+Actual delegation: Sol medium for implementation/protocol tests, Luna low for sequential root validation, Primary for packet declarations, independent tests, integration and review. No additional delegation.
+
+- `pnpm check` — PASS: formatting, lint, TypeScript, 126 tests across 16 files, package boundaries.
+- `pnpm build` — PASS: three library packages and playground production build (25 modules).
+- Explicit Markdown Prettier check — PASS for all five changed Markdown files; exact command in the review.
+- `node --input-type=module` with the documented link check — PASS: 255 local links/anchors across 62 Markdown files.
+- `git diff --check` — PASS; scoped source/dependency/artifact review complete.
+- Browser/GPU/benchmark commands — NOT RUN: CPU/type-only P1.1; no backend integration or performance claim.
+
+P1-A01 passes at its CPU boundary. P1.2/P1.3 can start after this PR integrates; P1.4 remains the single-owner integration task. P1.0m and A09/A10 remain unresolved under unchanged D4 exit policy.
