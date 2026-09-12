@@ -43,7 +43,7 @@ Path records
 
 The editor sends incremental semantic changes, not framework objects or GPU commands.
 
-The user-approved [P1 D1 contract](plans/p1-instanced-primitives.md#d1--approved-scene-and-packet-contract) replaces the earlier reserved example. It defines full snapshot initialization, document/page identity, atomic base/result-revision changes, deterministic graph validation, replay/resynchronization and CPU-copy ownership. The approved camera operation has a separate transient revision; surface/DPR ownership stays with the concrete backend. These are design decisions, not implemented exports.
+The user-approved [P1 D1 contract](plans/p1-instanced-primitives.md#d1--approved-scene-and-packet-contract) replaces the earlier reserved example. It defines full snapshot initialization, document/page identity, atomic base/result-revision changes, deterministic graph validation, replay/resynchronization and CPU-copy ownership. The approved camera operation has a separate transient revision; surface/DPR ownership stays with the concrete backend. P1.1 implements the CPU scene synchronization exports and retained mirror; [its review](evidence/p1.1-scene-review-2026-09-12.md) bounds the evidence. Native packet consumption and renderer service/backend integration remain P1.4.
 
 The renderer maintains a mirror keyed by node ID and updates affected transforms, styles, geometry, ordering and bounds. Device recovery rebuilds the latest accepted CPU state without replaying document commands. Private draw-packet layouts and precision/rebase budgets are fixed in the [P1.0b contract](plans/p1-private-contract.md) before implementation.
 
