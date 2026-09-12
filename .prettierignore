@@ -5,3 +5,5 @@ playwright-report
 test-results
 pnpm-lock.yaml
 **/*.md
+# Preserve captured P1.5 source manifests and observations byte-for-byte.
+docs/evidence/p1.5/**/*.json

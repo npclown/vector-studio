@@ -4,6 +4,7 @@ const webGpuArguments = ['--enable-unsafe-webgpu'];
 
 export default defineConfig({
   testDir: './tests/gpu',
+  outputDir: './test-results/gpu',
   fullyParallel: false,
   workers: 1,
   retries: 0,

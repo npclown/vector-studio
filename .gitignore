@@ -3,4 +3,5 @@ dist/
 coverage/
 playwright-report/
 test-results/
+artifacts/p1.5/
 *.tsbuildinfo

@@ -1,0 +1,661 @@
+{
+  "schema": "p1.5-matrix-review-v1",
+  "command": "pnpm test:gpu",
+  "commandDisposition": "Matrix subset only; full invocation has four deliberate-loss harness failures requiring recovery-only successor validation.",
+  "matrixTests": 24,
+  "visualFixtures": 240,
+  "precisionFixtures": 6048,
+  "maximumPositionError": 0.07497283827566124,
+  "maximumEdgeError": 0.5562500000000057,
+  "checkedPixelCount": 60530420,
+  "matrices": [
+    {
+      "directory": "chrome/P1_visual_samples1_dpr1",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:30:45.020Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 1,
+      "dpr": 1,
+      "family": "visual",
+      "count": 20,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "0593f620c24aa3363700c484a238cb048809ecf9701d13c862408af2a417ade4",
+      "maximumPositionError": 0,
+      "maximumEdgeError": 0.17423907714754935,
+      "checkedPixelCount": 365772,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "chrome/P1_precision_samples1_dpr1",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:31:29.532Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 1,
+      "dpr": 1,
+      "family": "precision",
+      "count": 504,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "a28e70a39cb880c299b0b606778718ca0c6828e43e231d1a941c69064dc66a5a",
+      "maximumPositionError": 0.0300005378333575,
+      "maximumEdgeError": 0.5377082930481277,
+      "checkedPixelCount": 2942972,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "chrome/P1_visual_samples1_dpr1.5",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:31:35.385Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 1,
+      "dpr": 1.5,
+      "family": "visual",
+      "count": 20,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "15e510b42119ee879f51820940309f74d3e031971c5fbf5e6f6004b904af228f",
+      "maximumPositionError": 0,
+      "maximumEdgeError": 0.13315744357564113,
+      "checkedPixelCount": 716746,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "chrome/P1_precision_samples1_dpr1.5",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:32:56.417Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 1,
+      "dpr": 1.5,
+      "family": "precision",
+      "count": 504,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "463ff9e22d1cc8f08bdd72dab21f2821afbe1c922b48266b8b4de2c336271e7b",
+      "maximumPositionError": 0.07497283827566124,
+      "maximumEdgeError": 0.5562500000000057,
+      "checkedPixelCount": 4288264,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "chrome/P1_visual_samples1_dpr2",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:33:05.100Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 1,
+      "dpr": 2,
+      "family": "visual",
+      "count": 20,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "9cd79a173ec1258284a7e9982b339337c9f2d6e87a96962c13cc93fd18818ede",
+      "maximumPositionError": 0,
+      "maximumEdgeError": 0.0915329820399894,
+      "checkedPixelCount": 1179387,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "chrome/P1_precision_samples1_dpr2",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:35:19.820Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 1,
+      "dpr": 2,
+      "family": "precision",
+      "count": 504,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "0bde4075b1b396a843fd7d4cdd74875de153b90601d65e82add252a2d3daf912",
+      "maximumPositionError": 0.05575596453665718,
+      "maximumEdgeError": 0.4950999887349988,
+      "checkedPixelCount": 5639464,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "chrome/P1_visual_samples4_dpr1",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:35:26.451Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 4,
+      "dpr": 1,
+      "family": "visual",
+      "count": 20,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "1562a02ec098fa6dde3024880b97f75543ac3f54f0bd4326995ae513b95448ec",
+      "maximumPositionError": 0,
+      "maximumEdgeError": 0.17423907714754935,
+      "checkedPixelCount": 365772,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "chrome/P1_precision_samples4_dpr1",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:36:12.778Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 4,
+      "dpr": 1,
+      "family": "precision",
+      "count": 504,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "1a6f3861136d8e3d8e4d21270b00e1a951f6eab128cbcd8619cd91521618163b",
+      "maximumPositionError": 0.0300005378333575,
+      "maximumEdgeError": 0.5377082930481277,
+      "checkedPixelCount": 2942972,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "chrome/P1_visual_samples4_dpr1.5",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:36:19.058Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 4,
+      "dpr": 1.5,
+      "family": "visual",
+      "count": 20,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "135394c622bf79b6c7c9b8aba705974622b45a90b5634d5fae4dc20877acdabc",
+      "maximumPositionError": 0,
+      "maximumEdgeError": 0.13315744357564113,
+      "checkedPixelCount": 716746,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "chrome/P1_precision_samples4_dpr1.5",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:37:39.460Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 4,
+      "dpr": 1.5,
+      "family": "precision",
+      "count": 504,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "d11c5b8434dfe0fcc61c1c5d0cfac994604583d8bd03e1f06193d59d565d0613",
+      "maximumPositionError": 0.07497283827566124,
+      "maximumEdgeError": 0.5562500000000057,
+      "checkedPixelCount": 4288264,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "chrome/P1_visual_samples4_dpr2",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:37:47.851Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 4,
+      "dpr": 2,
+      "family": "visual",
+      "count": 20,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "24597d4bc3939c85cf6ace7683487de77595d9cd1d3682fb2a8d78d4dfaeefed",
+      "maximumPositionError": 0,
+      "maximumEdgeError": 0.0915329820399894,
+      "checkedPixelCount": 1179387,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "chrome/P1_precision_samples4_dpr2",
+      "browser": {
+        "channel": "chrome",
+        "version": "152.0.7977.83"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:45:26.535Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 4,
+      "dpr": 2,
+      "family": "precision",
+      "count": 504,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "6e37ee276b8983807ede2d4030bee58ec2f028f49307576ef5f950dd8ce3c8b8",
+      "maximumPositionError": 0.05575596453665718,
+      "maximumEdgeError": 0.4950999887349988,
+      "checkedPixelCount": 5639464,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "edge/P1_visual_samples1_dpr1",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:45:41.964Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 1,
+      "dpr": 1,
+      "family": "visual",
+      "count": 20,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "d690829ff7da5eec95f816f0982019276132495d7ac9c3749857ff55ab3d5a36",
+      "maximumPositionError": 0,
+      "maximumEdgeError": 0.17423907714754935,
+      "checkedPixelCount": 365772,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "edge/P1_precision_samples1_dpr1",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:46:31.301Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 1,
+      "dpr": 1,
+      "family": "precision",
+      "count": 504,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "55d30c3aec33b25e421d52b187ce2f5ab664b3e76ecb99f39b2fb4614b884df8",
+      "maximumPositionError": 0.0300005378333575,
+      "maximumEdgeError": 0.5377082930481277,
+      "checkedPixelCount": 2942972,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "edge/P1_visual_samples1_dpr1.5",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:46:37.637Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 1,
+      "dpr": 1.5,
+      "family": "visual",
+      "count": 20,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "2ef5af8149bdc088b386c1dedad78c5dd8d54eaa24136467badc55631266583d",
+      "maximumPositionError": 0,
+      "maximumEdgeError": 0.13315744357564113,
+      "checkedPixelCount": 716746,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "edge/P1_precision_samples1_dpr1.5",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:48:08.668Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 1,
+      "dpr": 1.5,
+      "family": "precision",
+      "count": 504,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "25b40c978ea25512bcb9d9ebc6509b229ef3115611e324d8e40dd5d34a32618a",
+      "maximumPositionError": 0.07497283827566124,
+      "maximumEdgeError": 0.5562500000000057,
+      "checkedPixelCount": 4288264,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "edge/P1_visual_samples1_dpr2",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:48:18.154Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 1,
+      "dpr": 2,
+      "family": "visual",
+      "count": 20,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "407a6ef1b637de9c290f3832d0145e8a6f235d81c1428b91df81f0252be27196",
+      "maximumPositionError": 0,
+      "maximumEdgeError": 0.0915329820399894,
+      "checkedPixelCount": 1179387,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "edge/P1_precision_samples1_dpr2",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:50:43.369Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 1,
+      "dpr": 2,
+      "family": "precision",
+      "count": 504,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "e63bdda594ab8a0f67ffd2137ddc62019c0ef68c0740f5274932caff93e3df78",
+      "maximumPositionError": 0.05575596453665718,
+      "maximumEdgeError": 0.4950999887349988,
+      "checkedPixelCount": 5639464,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "edge/P1_visual_samples4_dpr1",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:50:51.178Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 4,
+      "dpr": 1,
+      "family": "visual",
+      "count": 20,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "3ea572691361e082beae37f8939db3222b87dfb306372512157eaca51a9f7205",
+      "maximumPositionError": 0,
+      "maximumEdgeError": 0.17423907714754935,
+      "checkedPixelCount": 365772,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "edge/P1_precision_samples4_dpr1",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:51:42.397Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 4,
+      "dpr": 1,
+      "family": "precision",
+      "count": 504,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "36f7e706ba63ffeacf8a23afc898d88e7a0a5bdb8910ad32d1a586cd0250c462",
+      "maximumPositionError": 0.0300005378333575,
+      "maximumEdgeError": 0.5377082930481277,
+      "checkedPixelCount": 2942972,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "edge/P1_visual_samples4_dpr1.5",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:51:48.728Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 4,
+      "dpr": 1.5,
+      "family": "visual",
+      "count": 20,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "2be9bda590514794fd55282388b762a4b6de187e82597f754641e9cbd2934c88",
+      "maximumPositionError": 0,
+      "maximumEdgeError": 0.13315744357564113,
+      "checkedPixelCount": 716746,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "edge/P1_precision_samples4_dpr1.5",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:53:17.863Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 4,
+      "dpr": 1.5,
+      "family": "precision",
+      "count": 504,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "43497352b638088a3a86dbaeb7959141a6bf36a94d5f92184f5144542064b941",
+      "maximumPositionError": 0.07497283827566124,
+      "maximumEdgeError": 0.5562500000000057,
+      "checkedPixelCount": 4288264,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "edge/P1_visual_samples4_dpr2",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:53:27.366Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 4,
+      "dpr": 2,
+      "family": "visual",
+      "count": 20,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "1191e8681d3d4eaccb7b87c5453e16ee1724bfca04684022ae5641c21a3a8f3d",
+      "maximumPositionError": 0,
+      "maximumEdgeError": 0.0915329820399894,
+      "checkedPixelCount": 1179387,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    },
+    {
+      "directory": "edge/P1_precision_samples4_dpr2",
+      "browser": {
+        "channel": "edge",
+        "version": "153.0.4234.32"
+      },
+      "adapter": {
+        "architecture": "turing",
+        "description": "",
+        "vendor": "nvidia"
+      },
+      "timestampUtc": "2026-09-12T07:55:48.036Z",
+      "operatingSystem": "win32 10.0.26200 x64",
+      "samples": 4,
+      "dpr": 2,
+      "family": "precision",
+      "count": 504,
+      "manifestSha256": "4595378df84f44df996d870dbb49338058dccf38e5fca53d68d4040617f45b77",
+      "reportSha256": "46ceb0a81dec5495a3e43ae9f22e57f3b307e73e40835938f38471e8b5abfdfc",
+      "maximumPositionError": 0.05575596453665718,
+      "maximumEdgeError": 0.4950999887349988,
+      "checkedPixelCount": 5639464,
+      "failures": 0,
+      "pageErrors": 0,
+      "unexpectedDiagnostics": 0,
+      "terminalLiveResources": 0
+    }
+  ]
+}

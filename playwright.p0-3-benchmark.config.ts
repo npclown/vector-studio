@@ -4,6 +4,7 @@ const webGpuArguments = ['--enable-unsafe-webgpu'];
 
 export default defineConfig({
   testDir: './tests/benchmark',
+  outputDir: './test-results/p0-3-benchmark',
   testMatch: 'p0-3-foundation.spec.ts',
   fullyParallel: false,
   // Headed benchmark windows must remain foreground-visible; parallel browsers are throttled.
