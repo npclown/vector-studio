@@ -305,3 +305,15 @@ Actual delegation: Sol medium for implementation/protocol tests, Luna low for se
 - Browser/GPU/benchmark commands — NOT RUN: CPU/type-only P1.1; no backend integration or performance claim.
 
 P1-A01 passes at its CPU boundary. P1.2/P1.3 can start after this PR integrates; P1.4 remains the single-owner integration task. P1.0m and A09/A10 remain unresolved under unchanged D4 exit policy.
+
+## P1.3 checkpoint: 2026-09-12
+
+P1.3 is complete locally on its isolated branch: shared unit quad, packet binding descriptors, analytic WGSL and exact existing-cache pipeline variants. [Primary review and component evidence](../evidence/p1.3-analytic-review-2026-09-12.md) distinguish production descriptor tests from independent scalar/f32 references. Sol medium implemented and validated; Primary corrected ellipse/rounded-corner and derivative-control-flow issues and reviewed the numeric handoff. No recursive delegation.
+
+- `pnpm check` — PASS: formatting, lint, TypeScript, 135 tests across 17 files and package boundaries.
+- `pnpm build` — PASS: library packages and playground production build.
+- `pnpm test:unit tests/unit/primitive-analytic.test.ts` — PASS: 9 component/reference tests.
+- `git diff --check` — PASS; no lifecycle, dependency, manifest or lockfile changes.
+- Browser/GPU/benchmark commands — NOT RUN: native consumption remains P1.4 and headed shader/visual acceptance remains P1.5.
+
+P1-A03 is PARTIAL, not a native-rendering PASS. P1.4 starts only after both P1.2 and P1.3 integrate. A09/A10 remain UNVERIFIED under D4.
