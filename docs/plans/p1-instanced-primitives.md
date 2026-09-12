@@ -1,8 +1,8 @@
 # P1 execution plan: Instanced primitives
 
-Status: **D1/D2 APPROVED on 2026-09-09; P1 implementation BLOCKED on measurement readiness and private contract freeze.**
+Status: **D1/D2 APPROVED on 2026-09-09; D4 entry/exit separation APPROVED on 2026-09-12. P1.0b private contract freeze COMPLETE; P1.1 is ready after checkpoint integration; A09/A10 remain UNVERIFIED exit gates.**
 
-This document owns P1 task order, approved D1/D2 contract details, acceptance and evidence. The user approved the D1 scene/camera API and D2 visual behavior on 2026-09-09 in response to the explicit approval question for PR #26 source `49c3bfd`. That approval does not change D3, measurement thresholds or the milestone entry rule. The [roadmap](../prototype-plan.md#p1-instanced-primitives), [system boundaries](../../ARCHITECTURE.md), [graphics design gates](../graphics-engine-architecture.md#design-gates-before-later-implementation), [validation policy](../validation.md) and [benchmark policy](../benchmarks/README.md) retain their responsibilities.
+This document owns P1 task order, approved D1/D2 contract details, acceptance and evidence. The user approved the D1 scene/camera API and D2 visual behavior on 2026-09-09 in response to the explicit approval question for PR #26 source `49c3bfd`. That 2026-09-09 approval did not change D3, measurement thresholds or the milestone entry rule. The later D4 approval below changes implementation entry only. The [roadmap](../prototype-plan.md#p1-instanced-primitives), [system boundaries](../../ARCHITECTURE.md), [graphics design gates](../graphics-engine-architecture.md#design-gates-before-later-implementation), [validation policy](../validation.md) and [benchmark policy](../benchmarks/README.md) retain their responsibilities.
 
 ## Entry state and scope
 
@@ -144,7 +144,7 @@ CSS surface size and DPR remain inputs to the existing concrete backend resize/l
 
 Apply node operations to a candidate first, then order replacements. A container insert/update already carries its full child order; an `orders` entry for the same container in that transaction is a `conflicting-operation`, even if equal. A root order replacement uses `parentId: null`; absent orders preserve existing order. Removing/reparenting nodes requires explicit affected orders unless the parent's full replacement supplies them. All final graph consistency checks still apply.
 
-Validation precedence is deterministic: terminal disposal; input shape/numeric validity (except incremental calls already requiring resync); identity/base synchronization; duplicate/conflicting operations; unknown node references; parent validity; cycles; order consistency; supported visual behavior. Within a category report the first field/node in a documented stable field order and lexicographic node-ID order. Exact failure fixtures freeze in P1.0b; they must not add new public result variants without review.
+Validation precedence is deterministic: terminal disposal; input shape/numeric validity (except incremental calls already requiring resync); identity/base synchronization; duplicate/conflicting operations; unknown node references; parent validity; cycles; order consistency; supported visual behavior. Within a category report the first field/node in a documented stable field order and lexicographic node-ID order. Exact failure fixtures are frozen in the P1.0b companion; they must not add new public result variants without review.
 
 ### D2 — approved P1 visual behavior
 
@@ -160,16 +160,16 @@ Validation precedence is deterministic: terminal disposal; input shape/numeric v
 
 The roadmap still requires **pointer-to-present p95 < 50 ms**. No current fixture proves that endpoint. The [existing feasibility investigation](../evidence/p0-6-measurement-feasibility-2026-09-09.md#presentation-candidates-and-limits) is evidence of an unresolved method, not a new measurement on P1.
 
-Retain this gate as **UNVERIFIED**. Only planning and read-only feasibility work can proceed. Under the roadmap entry rule, P1 product implementation (including P1.1) remains BLOCKED until measurement contracts are executable and D1/D2 are approved. P1 cannot pass or authorize P2 until the actual required evidence exists or the user explicitly approves a prospective acceptance revision. No external tool installation or timing substitution is part of this checkpoint. In particular, `framesPresented`, RAF callbacks, screenshots and queue completion do not satisfy it.
+Retain this gate as **UNVERIFIED**. The user-approved [D4 entry/exit separation](#d4-approved-entryexit-separation) permits P1.0b and then P1.1-P1.5 while measurement methods remain unresolved. P1.6 still requires executable, prospectively accepted methods. P1 cannot pass or authorize P2 until the actual required evidence exists or the user explicitly approves a prospective acceptance revision. No external tool installation or timing substitution is authorized by D4. In particular, `framesPresented`, RAF callbacks, screenshots and queue completion do not satisfy it.
 
 At P1.0m, prepare either a separately approved bounded instrumentation proof of concept with content/frame and clock correlation, or an explicit change to the owning roadmap before a successor timing scenario. Keep any pointer-dispatch-to-submission/queue-completion measurements separately named and diagnostic. Synthetic input also does not prove hardware input latency. There is no need to choose or fund instrumentation to review D1/D2 now.
 
-## Numeric and visual fixture contract proposal
+## Numeric and visual fixture contract
 
-P1.0b must freeze literal fixture data and CPU-to-GPU packet layouts before workers start. The following bounds are **P1 acceptance coverage**, not global product limits or a change to the P0 camera API.
+The [P1.0b private contract](p1-private-contract.md) freezes literal fixture data, CPU-to-GPU byte layouts, ownership/receipt rules and the precision/rebase budget before workers start. The following bounds are **P1 acceptance coverage**, not global product limits or a change to the P0 camera API.
 
 - Quality envelope: document/camera translation through ±1e9, primitive dimensions 0 through 4096, zoom 0.01 through 64 and DPR 1, 1.5, 2. Include positive/negative large origins, fractional translations, rotations 0/15/45/90 degrees, nonuniform scale 0.5/2 and shear 0.25. Arithmetic that becomes nonfinite rejects the candidate explicitly. Finite scenes outside tested quality coverage receive no P1 precision claim.
-- Compute world composition in Float64 and subtract the camera origin before Float32 conversion; never cast large world translations to Float32 and subtract afterward. Camera-only changes update camera/projection state, not primitive geometry. A precision rebase may repack transform fields when necessary; record that as transform upload and preserve the one-node steady-drag invariant. P1.0b must freeze the anchor, trigger/hysteresis, analytic error budget and maximum per-rebase transform upload range, and tie them to A02/A05 before code; naive per-pan full instance repacking is not an accepted substitute.
+- Compute world composition in Float64 and subtract the camera origin before Float32 conversion; never cast large world translations to Float32 and subtract afterward. Camera-only changes update camera/projection state, not primitive geometry. A precision rebase may repack transform fields when necessary; record that as transform upload and preserve the one-node steady-drag invariant. The P1.0b companion freezes the anchor, trigger/hysteresis, error budget and maximum per-rebase transform upload range for A02/A05 before code; naive per-pan full instance repacking is not an accepted substitute.
 - Unit coordinate comparisons use independently calculated Float64 expected points, absolute error ≤ `1e-5` CSS px within the fixture corpus. GPU packing reconstruction error for visible points within the viewport plus a two-physical-pixel guard band must be ≤ 0.25 physical pixel, tested independently of the implementation's matrix helpers. This defines P1 instance-position precision only; it does not redefine P2/P3 path flattening tolerance.
 - Visual fixtures use a fixed 640x360 CSS surface, defined clear colors, literal shape data and DPR 1/1.5/2. Compare interior/exterior sample RGBA values to an independent scalar analytic source-over oracle, tolerance 2 per 8-bit channel at points at least two physical pixels from any edge. Geometry edge location must be within one physical pixel of the analytic contour. Preserve full PNGs and numeric sampled positions; Primary inspects edge artifacts separately. Do not use implementation-generated golden images as the sole oracle.
 - Fixtures include asymmetric corner radii, radius normalization, narrow strokes, fill/stroke overlap at opacity 0.5, transparent red over blue and reversed order, hidden ancestors, touching viewport edges, negative/reflected transforms and degenerate geometry. Unsupported container opacity must be an explicit rejection fixture. Add 1x and 4x sampling evidence separately; no claim that one proves the other.
@@ -195,42 +195,45 @@ Run `pnpm check` and `pnpm build` for every implementation checkpoint; use root 
 
 ## Benchmark specification and remaining freeze work
 
-The [P1 measurement readiness contract](p1-measurement-contract.md) owns the exact four workload formulas, scene identities, fixed 1032-visible population, reference sampling and frozen frame-interval definition, memory accounting investigation and bounded presentation-instrumentation proposal. It preserves the roadmap's numeric thresholds. P1.0m is PARTIAL: workload arithmetic and the A08 endpoint are fixed, while A09/A10 evidence methods remain unresolved. All must be executable before P1.0b completes and product implementation starts.
+The [P1 measurement readiness contract](p1-measurement-contract.md) owns the exact four workload formulas, scene identities, fixed 1032-visible population, reference sampling and frozen frame-interval definition, memory accounting investigation and bounded presentation-instrumentation proposal. It preserves the roadmap's numeric thresholds. P1.0m is PARTIAL: workload arithmetic and the A08 endpoint are fixed, while A09/A10 evidence methods remain unresolved. Under approved D4, all methods must be executable before P1.6 starts; they no longer block P1.0b or P1.1-P1.5.
 
 ## Task graph, ownership and routing
 
 Each row is an independently reviewable checkpoint unless marked as a subtask of the shared integration checkpoint. No worker starts behind an unmet predecessor. All estimates are relative engineering judgments, not promises of duration.
 
-| Task  | Purpose / expected change scope                                                                                                                 | Predecessors                                  | Parallelism                                                                             | Difficulty / risk | Model / effort and reason                                                  |
-| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------- | ----------------- | -------------------------------------------------------------------------- |
-| P1.0a | This design proposal, source comparison and review; docs only                                                                                   | Integrated P0                                 | Two independent read-only audits                                                        | High / medium     | Primary Astra high: cross-module meaning and approval boundaries           |
-| P1.0m | Read-only measurement feasibility and exact workload/memory/event contract; separately approved experiments only if needed                      | P1.0a                                         | Independent method analysis may overlap D1/D2 review; no product implementation         | High / high       | Primary Astra high: acceptance meaning and evidence feasibility            |
-| P1.0b | Record approved D1/D2 in owning graphics design; freeze private packets, primitive literals and precision/rebase budget                         | User D1/D2 approval, P1.0m                    | Single owner                                                                            | High / high       | Primary Astra high: public contract and project consistency                |
-| P1.1  | Scene protocol/types and atomic retained mirror; `contracts/src/scene.ts`, `renderer-core/src/scene-*`, contract tests                          | P1.0b                                         | Sequential contract foundation                                                          | High / high       | Sol medium: candidate-graph validation, revisions and ownership            |
-| P1.2  | Derived transforms/bounds/order/culling and dirty instance/style plan; core-local files/tests                                                   | P1.1                                          | Can overlap P1.3 with frozen packet layout                                              | High / medium     | Sol medium: precision, hierarchy and incremental invariants                |
-| P1.3  | Unit geometry, analytic primitive shader/style packing and pipeline variants; new webgpu-local files/tests                                      | P1.1                                          | Can overlap P1.2; no shared backend lifecycle edits                                     | High / high       | Sol medium: analytic edge/stroke/compositing correctness                   |
-| P1.4  | Renderer service composition and native packet integration, upload/recovery/acknowledgment and accounting; shared backend/platform/export files | P1.2, P1.3                                    | Single owner; serial integration                                                        | High / high       | Sol high with Primary review: async lifetime and broad regression exposure |
-| P1.5  | Headed deterministic primitive/overlap/precision/recovery fixtures and independent oracles; tests/gpu and playground fixture                    | P1.4                                          | GPU runs serial across browsers; fixture implementation may use Terra under frozen spec | Medium / medium   | Terra medium: bounded fixture work; Primary visual/acceptance review       |
-| P1.6  | Implement the frozen P1.0m workload/memory/event contract; benchmark runner/schema/fixtures                                                     | P1.0m, P1.4                                   | Can overlap P1.5 only with distinct playground/fixture ownership; hardware runs serial  | High / medium     | Sol medium: approved measurement implementation; Primary reviews semantics |
-| P1.7  | Production reference runs, raw artifact capture, complete A01-A10 review and PR evidence                                                        | P1.5, P1.6, all measurement blockers resolved | Serial hardware runs                                                                    | Medium / high     | Luna low: commands/collection; Primary Astra high: interpretation and gate |
+| Task  | Purpose / expected change scope                                                                                                                            | Predecessors                                  | Parallelism                                                                             | Difficulty / risk | Model / effort and reason                                                  |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------- | ----------------- | -------------------------------------------------------------------------- |
+| P1.0a | This design proposal, source comparison and review; docs only                                                                                              | Integrated P0                                 | Two independent read-only audits                                                        | High / medium     | Primary Astra high: cross-module meaning and approval boundaries           |
+| P1.0m | Read-only measurement feasibility and exact workload/memory/event contract; separately approved experiments only if needed                                 | P1.0a                                         | Independent method analysis may overlap D1/D2 review; no product implementation         | High / high       | Primary Astra high: acceptance meaning and evidence feasibility            |
+| P1.0b | Record approved D1/D2 in owning graphics design; freeze private packets, primitive literals and precision/rebase budget                                    | User D1/D2 and D4 approval                    | Single owner                                                                            | High / high       | Primary Astra high: public contract and project consistency                |
+| P1.1  | Scene protocol/types, frozen private packet declarations and atomic retained mirror; `contracts/src/scene.ts`, `renderer-core/src/scene-*`, contract tests | P1.0b                                         | Sequential contract foundation                                                          | High / high       | Sol medium: candidate-graph validation, revisions and ownership            |
+| P1.2  | Derived transforms/bounds/order/culling and dirty instance/style plan; core-local files/tests                                                              | P1.1                                          | Can overlap P1.3 with frozen packet layout                                              | High / medium     | Sol medium: precision, hierarchy and incremental invariants                |
+| P1.3  | Unit geometry, analytic primitive shader/style packing and pipeline variants; new webgpu-local files/tests                                                 | P1.1                                          | Can overlap P1.2; no shared backend lifecycle edits                                     | High / high       | Sol medium: analytic edge/stroke/compositing correctness                   |
+| P1.4  | Renderer service composition and native packet integration, upload/recovery/acknowledgment and accounting; shared backend/platform/export files            | P1.2, P1.3                                    | Single owner; serial integration                                                        | High / high       | Sol high with Primary review: async lifetime and broad regression exposure |
+| P1.5  | Headed deterministic primitive/overlap/precision/recovery fixtures and independent oracles; tests/gpu and playground fixture                               | P1.4                                          | GPU runs serial across browsers; fixture implementation may use Terra under frozen spec | Medium / medium   | Terra medium: bounded fixture work; Primary visual/acceptance review       |
+| P1.6  | Implement the frozen P1.0m workload/memory/event contract; benchmark runner/schema/fixtures                                                                | P1.0m, P1.4                                   | Can overlap P1.5 only with distinct playground/fixture ownership; hardware runs serial  | High / medium     | Sol medium: approved measurement implementation; Primary reviews semantics |
+| P1.7  | Production reference runs, raw artifact capture, complete A01-A10 review and PR evidence                                                                   | P1.5, P1.6, all measurement blockers resolved | Serial hardware runs                                                                    | Medium / high     | Luna low: commands/collection; Primary Astra high: interpretation and gate |
 
 ```text
 P0 integrated -> P1.0a
-P1.0a -> { user D1/D2 approval, P1.0m measurement resolution } -> P1.0b
+P1.0a -> user D1/D2 approval -> P1.0b
+P1.0a -> P1.0m measurement resolution
 P1.0b -> P1.1 -> { P1.2, P1.3 } -> P1.4
-P1.4 -> { P1.5, P1.6 } -> P1.7
+P1.4 -> P1.5
+{ P1.0m, P1.4 } -> P1.6
+{ P1.5, P1.6, all A01-A10 evidence } -> P1.7 -> P2 entry
 ```
 
 Minimum topology: one Primary supervisor, one implementation worker by default, two implementation workers only during independent P1.2/P1.3. Use a Luna command worker only when it frees the Primary for useful independent review. No fixed extra architecture/test agents, recursive delegation or concurrent GPU runs. Shared exports, scene/packet contracts and lifecycle files have one named owner per batch.
 
 ## Next batch and implementation entry
 
-1. D1/D2 approval is recorded. Continue P1.0m measurement/configuration readiness from the linked companion contract; external tools or a change to acceptance semantics require a separate concrete user decision. No product code is permitted while A08/A09/A10 methods are unresolved. If feasible observation cannot be established, report the blocker instead of rerunning P0 proxies.
-2. After P1.0m and D1/D2 are resolved, Primary completes P1.0b: owning graphics design, exact private packet layout, fixture literals and precision/rebase budget. Verify all milestone entry conditions before dispatch.
+1. D1/D2 and D4 approval are recorded. Continue P1.0m measurement/configuration readiness independently; external tools or a change to acceptance semantics require a separate concrete user decision. Missing measurement evidence continues to block P1.6/P1.7 and P2 entry. Report unresolved methods instead of rerunning P0 proxies.
+2. Primary completes P1.0b: owning graphics design, exact private packet layout, fixture literals and precision/rebase budget. Verify its contract freeze before dispatching P1.1.
 3. First implementation batch: one Sol medium worker performs P1.1 and unit/contract fixtures. Primary reviews atomicity, copy ownership, resync and revision rules directly. Run root static/unit/build validation and checkpoint through a protected PR.
 4. Only after P1.1 integrates, dispatch P1.2 and P1.3 in parallel with non-overlapping files. P1.4 remains a single-owner integration task.
 
-D3 is not a request to change the gate today. Approval of D1/D2 alone does not authorize implementation while measurement prerequisites remain blocked.
+D4 changes execution order only. D1/D2 alone did not authorize this entry change; the separate 2026-09-12 user approval does. A09/A10 and the complete P1 exit gate are unchanged.
 
 ## Checkpoint evidence and status
 
@@ -254,13 +257,15 @@ The [bounded PresentMon attempt](../evidence/p1.0m/20260912-presentmon-access/RE
 
 The user subsequently approved the PresentMon-only elevation. The [elevated retry review](../evidence/p1.0m/20260912-presentmon-elevated/README.md) establishes one bounded Chrome acquisition under its actual default CSV schema; Edge UAC was canceled before process creation. Both outcomes and a preceding prelaunch tooling failure are preserved. A09/A10 remain UNVERIFIED; no P1 implementation entry or performance acceptance follows. Continue P1.0m method analysis; a new Edge consent request requires a new user instruction.
 
-## D4: proposed entry/exit separation: pending user decision
+<a id="d4-proposed-entryexit-separation-pending-user-decision"></a>
 
-Status: **PROPOSED, NOT APPROVED. The current graph and implementation block above remain in force.**
+## D4: approved entry/exit separation
 
-The [2026-09-12 method assessment](../evidence/p1.0m-method-assessment-2026-09-12.md) identifies conditional memory bounds, two missing presentation-identity joins and unresolved endpoint provenance. Primary recommends separating implementation entry from measurement-method completion to allow implementation progress on the approved D1/D2 renderer design while explicitly accepting possible rework. This is a project execution-policy decision; merely merging the proposal does not authorize it.
+Status: **APPROVED by the user on 2026-09-12 in response to the explicit D4 approval question following PR #29.**
 
-If and only if the user approves D4:
+The [2026-09-12 method assessment](../evidence/p1.0m-method-assessment-2026-09-12.md) identifies conditional memory bounds, two missing presentation-identity joins and unresolved endpoint provenance. The user approved separating implementation entry from measurement-method completion to allow implementation of the approved D1/D2 design while accepting possible rework. Approval changes execution policy, not measurement semantics.
+
+The approved decision is:
 
 1. Keep approved D1/D2 and all P1-A01 through A10 behavior, thresholds and required evidence unchanged. A09 remains simultaneous combined peak <= 256,000,000 bytes; A10 remains pointer-to-present p95 < 50 ms. Neither proxies nor missing evidence can pass these gates.
 2. Allow P1.0b private packet, literals, precision/rebase and validation-contract freeze to proceed while P1.0m is unresolved. P1.0b still must complete before P1.1; implementation workers cannot invent shared contracts.
@@ -268,6 +273,20 @@ If and only if the user approves D4:
 4. Continue P1.0m independently. P1.6 still requires P1.4 and executable, prospectively accepted measurement methods. P1.7 still requires P1.5, P1.6 and all acceptance evidence. P1 completion and P2 entry remain blocked until the full P1 gate passes or a separate explicit prospective decision changes it.
 5. Do not authorize further UAC/captures, a browser fork, new dependencies, optical hardware or a change to public API/product scope. Those require their own concrete decisions where applicable.
 
-Proposed dependency delta: remove only `P1.0m -> P1.0b`; preserve `P1.0m -> P1.6 -> P1.7` and every implementation/exit dependency. On approval, first update this plan's D3/entry text, the measurement contract's entry status and the roadmap's current-position statement consistently, then execute P1.0b. Requirements, architecture and benchmark semantics need no change for this proposal.
+Approved dependency delta: remove only `P1.0m -> P1.0b`; preserve `P1.0m -> P1.6 -> P1.7` and every implementation/exit dependency. This plan's D3/entry text, the measurement contract's entry status and the roadmap's current-position statement are updated together. Requirements and benchmark semantics are unchanged.
 
-Alternative: retain the current entry block and continue version-matched instrumentation design until an unchanged-gate method is executable. The tradeoff is investigation time and possibly browser/tool/hardware work before renderer implementation. No option is selected on the user's behalf in this checkpoint.
+The alternative of retaining the implementation entry block was not selected. New measurement experiments retain their separate authorization boundaries.
+
+## P1.0b checkpoint: 2026-09-12
+
+The user approved D4 after PR #29. Primary completed the [private packet and fixture freeze](p1-private-contract.md): stable slots/order indirection, byte layouts and callable seam, shared arena ownership, identity-token receipts, origin/hysteresis/upload budget, numeric/visual literals and S01-S09 atomic failure precedence. Approved public D1/D2 types/behavior are unchanged. [Review and reproducible scalar checks](../evidence/p1.0b-contract-review-2026-09-12.md) record limitations and Primary dispositions. One Sol medium agent performed independent read-only review; no further delegation.
+
+Local validation:
+
+- `pnpm exec prettier --check --ignore-path .gitignore docs/graphics-engine-architecture.md docs/prototype-plan.md docs/plans/p1-instanced-primitives.md docs/plans/p1-measurement-contract.md docs/plans/p1-private-contract.md docs/evidence/p1.0b-contract-review-2026-09-12.md` — PASS: six scoped Markdown files.
+- `node --input-type=module` with the review record's scalar script — PASS: 62,360 coordinate components; max simulated error 0.03998337851953693 physical pixel, quantization 0.022342012031003833, arithmetic/projection 0.028309672139585018. This is numeric feasibility only, not shader/continuous-contour acceptance.
+- `node --input-type=module` with the documented heading/HTML-anchor link check — PASS: 248 local links/anchors across 61 Markdown files, including the preserved historical D4 proposal anchor.
+- `git diff --check` and scoped path/ownership review — PASS: six Markdown files only; no product, dependency, historical result or machine-local artifact edits.
+- Local product unit/build/browser/GPU/benchmark commands — NOT RUN: documentation-only freeze; required remote static/unit/build CI is tracked on the checkpoint PR.
+
+P1.0b is complete as a design checkpoint, with runtime validation obligations assigned to P1.1-P1.5. Next task is P1.1 with one Sol medium implementation worker and Primary review, after this scoped PR integrates. P1.0m remains PARTIAL; A09/A10 remain UNVERIFIED, and no P1 exit or P2 entry is claimed.

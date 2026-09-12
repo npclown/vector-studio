@@ -1,8 +1,8 @@
 # P1 measurement readiness contract
 
-Status: **PARTIAL — deterministic workloads specified; memory and physical-presentation methods unresolved. No P1 implementation entry or acceptance run is authorized.**
+Status: **PARTIAL — deterministic workloads specified; memory and physical-presentation methods unresolved. Approved D4 permits implementation after P1.0b; measurement implementation and acceptance runs remain blocked.**
 
-Owner: P1.0m in the [active plan](p1-instanced-primitives.md). This supplements its measurement details without changing the [roadmap thresholds](../prototype-plan.md#p1-instanced-primitives) or [benchmark policy](../benchmarks/README.md). The user's 2026-09-09 approval covers D1/D2 only. The definitions below are prospective specifications, not performance observations. No product code, benchmark, external tool installation or capture was performed for this checkpoint.
+Owner: P1.0m in the [active plan](p1-instanced-primitives.md). This supplements its measurement details without changing the [roadmap thresholds](../prototype-plan.md#p1-instanced-primitives) or [benchmark policy](../benchmarks/README.md). The user's 2026-09-09 approval covers D1/D2; the separate 2026-09-12 [D4 approval](p1-instanced-primitives.md#d4-approved-entryexit-separation) changes implementation entry only. The definitions below are prospective specifications, not performance observations. No product code, benchmark, external tool installation or capture was performed for this checkpoint.
 
 ## Common deterministic scene definition
 
@@ -90,7 +90,7 @@ The following is a **proposal requiring separate approval**, not work authorized
 | A08 frame-time endpoint        | Frozen by Primary: `rafCallbackIntervalMs` plus successful submission invariant | Definition ready; runtime acceptance remains TODO                            |
 | A09 combined peak memory       | UNVERIFIED                                                                      | Method must cover JS overhead and simultaneous peaks                         |
 | A10 physical presentation      | UNVERIFIED                                                                      | Separate bounded instrumentation decision required to attempt this candidate |
-| P1.0m / P1.0b / implementation | PARTIAL / not started / BLOCKED                                                 | Preserve milestone entry rule                                                |
+| P1.0m / P1.0b / implementation | PARTIAL / frozen / P1.1 ready after checkpoint integration                      | D4 separates implementation entry from unchanged exit gates                  |
 
 Primary reviews the independent Terra medium workload arithmetic and Sol medium memory-method investigation. Approval of the design documentation permits its protected PR integration; it does not authorize the unapproved experiment above. Validation of this document is limited to source/claim consistency, links, formatting and arithmetic; no runtime or performance result is claimed.
 
@@ -153,4 +153,4 @@ Outcome: the [new immutable review](../evidence/p1.0m/20260912-presentmon-elevat
 
 ## Source-method assessment: 2026-09-12
 
-The [read-only method assessment](../evidence/p1.0m-method-assessment-2026-09-12.md) records a conditional complete-memory upper bound, unresolved shared-storage coverage, missing WebGPU-content/compositor/PresentMon identity joins and hardware endpoint provenance. No new runtime observation or executable method is accepted. A09/A10 remain UNVERIFIED. The linked active plan contains a pending D4 proposal to separate implementation entry from measurement completion while preserving exit gates; it requires explicit user approval and changes no current dependency or scope here.
+The [read-only method assessment](../evidence/p1.0m-method-assessment-2026-09-12.md) records a conditional complete-memory upper bound, unresolved shared-storage coverage, missing WebGPU-content/compositor/PresentMon identity joins and hardware endpoint provenance. No new runtime observation or executable method is accepted. A09/A10 remain UNVERIFIED. The user subsequently approved [D4](p1-instanced-primitives.md#d4-approved-entryexit-separation). P1.0b and then P1.1-P1.5 may proceed while this method investigation remains unresolved. P1.6/P1.7 and P2 entry remain blocked on the unchanged required measurement evidence; no additional experiment is authorized.
