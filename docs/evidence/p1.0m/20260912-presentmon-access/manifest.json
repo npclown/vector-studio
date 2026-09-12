@@ -1,0 +1,30 @@
+[
+  {
+    "file": "chrome-acquisition.json",
+    "sha256": "a76eb501cf8212bc8c43613758ce07f5a191b87431ba218a0b7c97ac6deffd1a"
+  },
+  {
+    "file": "chrome-fixture.png",
+    "sha256": "6cd28e6f9f736048e8928d80d462b73ed7070cb2d6bed2e292f3c77ea978c13f"
+  },
+  {
+    "file": "chrome-markers.json",
+    "sha256": "da626f8d393efe0e5febe1afc88ab15c42df9ec1eb5f2b5cf8d01141663c06bf"
+  },
+  {
+    "file": "p1-presentmon-feasibility.mjs.txt",
+    "sha256": "a0ba9c7c88795c2d01ff95ab4dc56fd49b8d681e982328bdbc8455f00ede4df8"
+  },
+  {
+    "file": "p1-presentmon-preflight.ps1.txt",
+    "sha256": "3ea3ef6dbe52f11f7b2ad2628283167a3e520ab75d85eab03669e760361cdf13"
+  },
+  {
+    "file": "preflight.json",
+    "sha256": "40d1f626cd6342a5c131867877958e4edebb494845a7776b396565b24d98837d"
+  },
+  {
+    "file": "source.json",
+    "sha256": "6fa10067cff4b13668de480ad239c8aaf4cdad9d1ee8a40fe24b0580796ffb23"
+  }
+]

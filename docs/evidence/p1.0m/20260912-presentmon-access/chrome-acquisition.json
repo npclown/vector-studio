@@ -1,0 +1,81 @@
+{
+  "channel": "chrome",
+  "status": "UNVERIFIED",
+  "captureAttempted": true,
+  "browserVersion": "152.0.7977.83",
+  "ownership": {
+    "ProcessId": 25832,
+    "ParentProcessId": 17596,
+    "Name": "chrome.exe"
+  },
+  "browserPid": 17596,
+  "observedProcessInfo": [
+    {
+      "type": "browser",
+      "id": 17596,
+      "cpuTime": 1.303915
+    },
+    {
+      "type": "GPU",
+      "id": 25832,
+      "cpuTime": 0.806163
+    }
+  ],
+  "windowInfo": {
+    "windowId": 668549635,
+    "bounds": {
+      "left": 10,
+      "top": 10,
+      "width": 900,
+      "height": 650,
+      "windowState": "normal"
+    }
+  },
+  "monitor": {
+    "device": "\\\\.\\DISPLAY1",
+    "primary": true,
+    "x": 0,
+    "y": 0,
+    "width": 1920,
+    "height": 1080,
+    "activeModeAvailable": true,
+    "activeWidth": 1920,
+    "activeHeight": 1080,
+    "refreshHz": 60
+  },
+  "pageErrors": [],
+  "command": {
+    "executable": "D:\\GIT\\vector-studio\\test-results\\p1-tools\\presentmon-2.5.1\\PresentMon-2.5.1-x64.exe",
+    "args": [
+      "--process_id",
+      "25832",
+      "--timed",
+      "25",
+      "--terminate_after_timed",
+      "--terminate_on_proc_exit",
+      "--session_name",
+      "vector-studio-chrome-1789183953998",
+      "--qpc_time",
+      "--no_console_stats",
+      "--output_file",
+      "D:\\GIT\\vector-studio\\test-results\\p1-presentmon-20260912-01\\chrome.csv"
+    ]
+  },
+  "startedUtc": "2026-09-12T03:32:33.998Z",
+  "exit": {
+    "code": 6,
+    "signal": null
+  },
+  "endedUtc": "2026-09-12T03:32:34.136Z",
+  "stdout": "",
+  "stderr": "warning: PresentMon requires elevated privilege in order to query processes that are\r\n         short-running or started on another account.  Without it, those processes will\r\n         be listed as '<unknown>' and they can't be targeted by --process_name nor trigger\r\n         --terminate_on_proc_exit.\r\nerror: failed to start trace session: access denied.\r\n       PresentMon requires either administrative privileges or to be run by a user in the\r\n       \"Performance Log Users\" user group.  View the readme for more details.\r\n",
+  "processExitSucceeded": false,
+  "acquisitionValid": false,
+  "limits": [
+    "No proven content-to-PresentMon-row linkage",
+    "No established browser/QPC clock map",
+    "Synthetic input, not physical-pointer timing",
+    "Background load not operator-confirmed"
+  ],
+  "remainingBrowser": "NOT RUN: acquisition precondition failed; no elevation or retry"
+}
