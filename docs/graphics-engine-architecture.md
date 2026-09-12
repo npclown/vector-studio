@@ -45,7 +45,7 @@ The editor sends incremental semantic changes, not framework objects or GPU comm
 
 The user-approved [P1 D1 contract](plans/p1-instanced-primitives.md#d1--approved-scene-and-packet-contract) replaces the earlier reserved example. It defines full snapshot initialization, document/page identity, atomic base/result-revision changes, deterministic graph validation, replay/resynchronization and CPU-copy ownership. The approved camera operation has a separate transient revision; surface/DPR ownership stays with the concrete backend. These are design decisions, not implemented exports.
 
-The renderer maintains a mirror keyed by node ID and updates affected transforms, styles, geometry, ordering and bounds. Device recovery rebuilds the latest accepted CPU state without replaying document commands. Private draw-packet layouts and precision/rebase budgets still require P1.0b before implementation.
+The renderer maintains a mirror keyed by node ID and updates affected transforms, styles, geometry, ordering and bounds. Device recovery rebuilds the latest accepted CPU state without replaying document commands. Private draw-packet layouts and precision/rebase budgets are fixed in the [P1.0b contract](plans/p1-private-contract.md) before implementation.
 
 ### Backend contract
 
@@ -57,7 +57,7 @@ The common boundary is a render scene and draw packets, not a lowest-common-deno
 | Renderer core -> backend             | Ordered draw packets and resource descriptors prepared from the retained mirror |
 | Composition root -> concrete backend | Browser surface acquisition and concrete adapter construction                   |
 
-`applyChanges(RenderChangeSet)` belongs to the renderer service, not the low-level GPU backend. GPU resource types stay private to `renderer-webgpu`; concrete surface acquisition must not introduce DOM types into editor-facing contracts. Exact packet types will be fixed in the P1 execution plan before implementation. P0's `WebGpuBackend` combines lifecycle and foundation-scene orchestration temporarily; it does not define the final scene port. See [ADR 0001](decisions/0001-port-composition.md).
+`applyChanges(RenderChangeSet)` belongs to the renderer service, not the low-level GPU backend. GPU resource types stay private to `renderer-webgpu`; concrete surface acquisition must not introduce DOM types into editor-facing contracts. The [P1.0b contract](plans/p1-private-contract.md) fixes the private packet envelope and byte layouts before implementation. P0's `WebGpuBackend` combines lifecycle and foundation-scene orchestration temporarily; it does not define the final scene port. See [ADR 0001](decisions/0001-port-composition.md).
 
 ## Coordinate and numeric policy
 
@@ -195,7 +195,7 @@ P1 structural containers support transform/visibility and require opacity 1. Non
 
 ## Design gates before later implementation
 
-The remaining decisions below must be resolved with acceptance fixtures in the owning milestone plan. P1 D1/D2 are approved above; their private layouts, precision/rebase budget and executable measurement methods remain entry gates. They are not implemented features or permission to choose silent fallback behavior.
+The remaining decisions below must be resolved with acceptance fixtures in the owning milestone plan. P1 D1/D2 are approved above; their private layouts and precision/rebase budget are frozen in the [P1.0b contract](plans/p1-private-contract.md) before implementation. Under user-approved [D4](plans/p1-instanced-primitives.md#d4-approved-entryexit-separation), executable measurement methods remain prerequisites for measurement implementation and final acceptance, rather than renderer implementation entry. They are not implemented features or permission to choose silent fallback behavior.
 
 | Owner             | Decision required before implementation                                                                                                                                                              |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
