@@ -1,0 +1,10 @@
+{
+  "revision": "d9dc084643a778a0471979b25bc1bee8c02f4bf1",
+  "worktree": " M docs/plans/p1-measurement-contract.md\n M tooling/p1-presentmon-feasibility.mjs\n?? tooling/p1-presentmon-elevated.ps1\n",
+  "runnerSha256": "ac5a96ce9b20ce36bac5b468eb6374f3ede42a024023e8fb339a475b1604e15b",
+  "preflightSha256": "f70efad7b326a69e0cd7b78c134d0e7322ab61474ce3b094ec3db225caee6e3f",
+  "toolSha256": "9bec3083069f58f911e6a512f4806db51a27bd096103087bc1d05ef54c80a191",
+  "elevation": "Explicitly authorized PresentMon child only",
+  "elevationHelperSha256": "9f832b8aa125047cc9d621da6693f96068a224576864b656254e2d105c6f37dd",
+  "scope": "At most one 30-second capture per browser; feasibility only"
+}

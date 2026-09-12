@@ -1,0 +1,168 @@
+{
+  "base": "d9dc084643a778a0471979b25bc1bee8c02f4bf1",
+  "scope": "One successful Chrome capture; Edge UAC canceled; preceding prelaunch failure retained",
+  "artifacts": [
+    {
+      "path": "prelaunch/chrome-acquisition.json",
+      "original": "test-results/p1-presentmon-20260912-elevated-01/chrome-acquisition.json",
+      "bytes": 1954,
+      "sha256": "3779a1308537315f34253f836f4c957a0aecd3a4829025f81b02e930b840c0b7"
+    },
+    {
+      "path": "prelaunch/p1-presentmon-elevated.ps1.txt",
+      "original": "test-results/p1-presentmon-20260912-elevated-01/p1-presentmon-elevated.ps1.txt",
+      "bytes": 3880,
+      "sha256": "9f832b8aa125047cc9d621da6693f96068a224576864b656254e2d105c6f37dd"
+    },
+    {
+      "path": "prelaunch/p1-presentmon-feasibility.mjs.txt",
+      "original": "test-results/p1-presentmon-20260912-elevated-01/p1-presentmon-feasibility.mjs.txt",
+      "bytes": 18865,
+      "sha256": "ac5a96ce9b20ce36bac5b468eb6374f3ede42a024023e8fb339a475b1604e15b"
+    },
+    {
+      "path": "prelaunch/p1-presentmon-preflight.ps1.txt",
+      "original": "test-results/p1-presentmon-20260912-elevated-01/p1-presentmon-preflight.ps1.txt",
+      "bytes": 2483,
+      "sha256": "f70efad7b326a69e0cd7b78c134d0e7322ab61474ce3b094ec3db225caee6e3f"
+    },
+    {
+      "path": "prelaunch/preflight.json",
+      "original": "test-results/p1-presentmon-20260912-elevated-01/preflight.json",
+      "bytes": 984,
+      "sha256": "001c282831e62bf24770734a2264a428394723ee145e4b9de7d70b92a9892e30"
+    },
+    {
+      "path": "prelaunch/prelaunch-reproduction.json",
+      "original": "test-results/p1-presentmon-20260912-elevated-01/prelaunch-reproduction.json",
+      "bytes": 661,
+      "sha256": "fbdd94e51f936896b08ff164ea053b1edcc7f3710214f1f99cecc98b5cc0733d"
+    },
+    {
+      "path": "prelaunch/source.json",
+      "original": "test-results/p1-presentmon-20260912-elevated-01/source.json",
+      "bytes": 692,
+      "sha256": "dae2bb8411e20adc755e4ba26a4610fd251c9a47d31cc869a7760a11a24c8709"
+    },
+    {
+      "path": "chrome/chrome-acquisition.json",
+      "original": "test-results/p1-presentmon-20260912-elevated-02/chrome-acquisition.json",
+      "bytes": 4490,
+      "sha256": "681be12d13d1cc45e464156e8bbea422c6c8c34b32aa7539b7aaa98378d232ab"
+    },
+    {
+      "path": "chrome/chrome-elevated-result.json.txt",
+      "original": "test-results/p1-presentmon-20260912-elevated-02/chrome-elevated-result.json",
+      "bytes": 1122,
+      "sha256": "ae9c0fd134aff12bd0cc8ebbd5362fc5cab73e5a8f21e7fca4d2efbee497884c"
+    },
+    {
+      "path": "chrome/chrome-elevated-start.json.txt",
+      "original": "test-results/p1-presentmon-20260912-elevated-02/chrome-elevated-start.json",
+      "bytes": 1075,
+      "sha256": "3393adcf2e3e4d37ec21bbde0ae5904a475211ef25d60daff95efa43bee81eca"
+    },
+    {
+      "path": "chrome/chrome-fixture.png",
+      "original": "test-results/p1-presentmon-20260912-elevated-02/chrome-fixture.png",
+      "bytes": 7084,
+      "sha256": "91df03d3eaed80c147730ab34cf308adfe47bf7a7c7d6f75e5888a375e866260"
+    },
+    {
+      "path": "chrome/chrome-markers.json",
+      "original": "test-results/p1-presentmon-20260912-elevated-02/chrome-markers.json",
+      "bytes": 275315,
+      "sha256": "3b80f51d56e25a65f091c59e54d1d74729e54a80ae0869206d13ca4a5b8fd808"
+    },
+    {
+      "path": "chrome/chrome.csv",
+      "original": "test-results/p1-presentmon-20260912-elevated-02/chrome.csv",
+      "bytes": 400476,
+      "sha256": "c8c60f44392545030ff6c9a9bb0ad2525f4c14d88d884c55892d9faea03d5a03"
+    },
+    {
+      "path": "chrome/p1-presentmon-elevated.ps1.txt",
+      "original": "test-results/p1-presentmon-20260912-elevated-02/p1-presentmon-elevated.ps1.txt",
+      "bytes": 4241,
+      "sha256": "39407b4dbc13249a85daecbb90ca2edb94c0e0f04dca7be5c0d1cd5a5ad7aef0"
+    },
+    {
+      "path": "chrome/p1-presentmon-feasibility.mjs.txt",
+      "original": "test-results/p1-presentmon-20260912-elevated-02/p1-presentmon-feasibility.mjs.txt",
+      "bytes": 18865,
+      "sha256": "207420031b9c7a7044bdf097cf49aac69a8d37bd90e978cf70493037da82e905"
+    },
+    {
+      "path": "chrome/p1-presentmon-preflight.ps1.txt",
+      "original": "test-results/p1-presentmon-20260912-elevated-02/p1-presentmon-preflight.ps1.txt",
+      "bytes": 2483,
+      "sha256": "f70efad7b326a69e0cd7b78c134d0e7322ab61474ce3b094ec3db225caee6e3f"
+    },
+    {
+      "path": "chrome/preflight.json",
+      "original": "test-results/p1-presentmon-20260912-elevated-02/preflight.json",
+      "bytes": 984,
+      "sha256": "b7caf6ef89a956aed101d7b01d2b471b764c6f958cd2412b72a6f5b420138e76"
+    },
+    {
+      "path": "chrome/source.json",
+      "original": "test-results/p1-presentmon-20260912-elevated-02/source.json",
+      "bytes": 692,
+      "sha256": "217b843d0e7d775f132418492e9bd558361729da9d76f081cadd31156234f857"
+    },
+    {
+      "path": "edge/msedge-acquisition.json",
+      "original": "test-results/p1-presentmon-20260912-elevated-edge/msedge-acquisition.json",
+      "bytes": 3229,
+      "sha256": "63668b17f5db34448a3671ae4ba614a211978f38d579faf96562ffee0ceeabf4"
+    },
+    {
+      "path": "edge/msedge-elevated-result.json.txt",
+      "original": "test-results/p1-presentmon-20260912-elevated-edge/msedge-elevated-result.json",
+      "bytes": 1208,
+      "sha256": "435696b1b6876ed52a6fbd29e65e3037e8f420c0e6841dc403a737d139976f5c"
+    },
+    {
+      "path": "edge/msedge-fixture.png",
+      "original": "test-results/p1-presentmon-20260912-elevated-edge/msedge-fixture.png",
+      "bytes": 7014,
+      "sha256": "56368c2e4615f893d025620ee823a9ea7f8d8eec72526cebaf161c5718e37ea9"
+    },
+    {
+      "path": "edge/msedge-markers.json",
+      "original": "test-results/p1-presentmon-20260912-elevated-edge/msedge-markers.json",
+      "bytes": 760472,
+      "sha256": "151ab43ca3236aafd716272eb701f019c6b11b056e989baae7eb83d6471cea91"
+    },
+    {
+      "path": "edge/p1-presentmon-elevated.ps1.txt",
+      "original": "test-results/p1-presentmon-20260912-elevated-edge/p1-presentmon-elevated.ps1.txt",
+      "bytes": 4257,
+      "sha256": "606d873c21341232cf7d2d5cfb8eb2663ba418a035aabd670915932ef9f0e3e9"
+    },
+    {
+      "path": "edge/p1-presentmon-feasibility.mjs.txt",
+      "original": "test-results/p1-presentmon-20260912-elevated-edge/p1-presentmon-feasibility.mjs.txt",
+      "bytes": 19145,
+      "sha256": "07275d78c9ee17e9ca150ff666e571f2ee0e359d8fd2d596afa87a4a55c9bd6d"
+    },
+    {
+      "path": "edge/p1-presentmon-preflight.ps1.txt",
+      "original": "test-results/p1-presentmon-20260912-elevated-edge/p1-presentmon-preflight.ps1.txt",
+      "bytes": 2483,
+      "sha256": "f70efad7b326a69e0cd7b78c134d0e7322ab61474ce3b094ec3db225caee6e3f"
+    },
+    {
+      "path": "edge/preflight.json",
+      "original": "test-results/p1-presentmon-20260912-elevated-edge/preflight.json",
+      "bytes": 984,
+      "sha256": "197a8fbe03bbc8f2b5d09583efa23e4ffecac2149727947b0ce1aee85f87398e"
+    },
+    {
+      "path": "edge/source.json.txt",
+      "original": "test-results/p1-presentmon-20260912-elevated-edge/source.json",
+      "bytes": 772,
+      "sha256": "86fc986f6c3922d292518d5d29ae60e3f4cdc91ccba0984a5b618c23247b8ef2"
+    }
+  ]
+}

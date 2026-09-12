@@ -1,0 +1,4 @@
+# Preserve exact captured bytes across Git checkouts for manifest verification.
+chrome/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+edge/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+prelaunch/** -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

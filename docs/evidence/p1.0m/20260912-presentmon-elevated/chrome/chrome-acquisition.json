@@ -1,0 +1,159 @@
+{
+  "channel": "chrome",
+  "status": "UNVERIFIED",
+  "captureAttempted": true,
+  "browserVersion": "152.0.7977.83",
+  "ownership": {
+    "ProcessId": 24952,
+    "ParentProcessId": 4928,
+    "Name": "chrome.exe",
+    "CreationUtc": "2026-09-12T03:55:27.1647420Z"
+  },
+  "browserPid": 4928,
+  "observedProcessInfo": [
+    {
+      "type": "browser",
+      "id": 4928,
+      "cpuTime": 1.189176
+    },
+    {
+      "type": "GPU",
+      "id": 24952,
+      "cpuTime": 0.771855
+    }
+  ],
+  "windowInfo": {
+    "windowId": 457490223,
+    "bounds": {
+      "left": 10,
+      "top": 10,
+      "width": 900,
+      "height": 650,
+      "windowState": "normal"
+    }
+  },
+  "monitor": {
+    "device": "\\\\.\\DISPLAY1",
+    "primary": true,
+    "x": 0,
+    "y": 0,
+    "width": 1920,
+    "height": 1080,
+    "activeModeAvailable": true,
+    "activeWidth": 1920,
+    "activeHeight": 1080,
+    "refreshHz": 60
+  },
+  "pageErrors": [],
+  "command": {
+    "executable": "D:\\GIT\\vector-studio\\test-results\\p1-tools\\presentmon-2.5.1\\PresentMon-2.5.1-x64.exe",
+    "args": [
+      "--process_id",
+      "24952",
+      "--timed",
+      "25",
+      "--terminate_after_timed",
+      "--terminate_on_proc_exit",
+      "--session_name",
+      "vector-studio-chrome-9f8fa7c8f01f4010867462d9bbc651a4",
+      "--qpc_time",
+      "--no_console_stats",
+      "--output_file",
+      "\"D:\\GIT\\vector-studio\\test-results\\p1-presentmon-20260912-elevated-02\\chrome.csv\""
+    ]
+  },
+  "launcherRequestedUtc": "2026-09-12T03:55:28.536Z",
+  "elevatedStart": {
+    "launcherElevated": false,
+    "executable": "D:\\GIT\\vector-studio\\test-results\\p1-tools\\presentmon-2.5.1\\PresentMon-2.5.1-x64.exe",
+    "arguments": [
+      "--process_id",
+      "24952",
+      "--timed",
+      "25",
+      "--terminate_after_timed",
+      "--terminate_on_proc_exit",
+      "--session_name",
+      "vector-studio-chrome-9f8fa7c8f01f4010867462d9bbc651a4",
+      "--qpc_time",
+      "--no_console_stats",
+      "--output_file",
+      "\"D:\\GIT\\vector-studio\\test-results\\p1-presentmon-20260912-elevated-02\\chrome.csv\""
+    ],
+    "requestedUtc": "2026-09-12T03:55:28.9646722Z",
+    "pid": 29476,
+    "exitCode": null,
+    "timedOut": false,
+    "error": null,
+    "stderrAvailability": "Unavailable: ShellExecute RunAs cannot redirect child streams",
+    "startedUtc": "2026-09-12T03:55:41.8406054Z"
+  },
+  "postConsentOwnership": {
+    "ProcessId": 24952,
+    "ParentProcessId": 4928,
+    "Name": "chrome.exe",
+    "CreationUtc": "2026-09-12T03:55:27.1647420Z"
+  },
+  "postConsentVisibility": "visible",
+  "postConsentWindow": {
+    "windowId": 457490223,
+    "bounds": {
+      "left": 10,
+      "top": 10,
+      "width": 900,
+      "height": 650,
+      "windowState": "normal"
+    }
+  },
+  "postConsentValidated": true,
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "endedUtc": "2026-09-12T03:56:07.111Z",
+  "stdout": "",
+  "stderr": "",
+  "streamScope": "Unprivileged launcher only; child stdout/stderr unavailable with RunAs",
+  "launcherExit": {
+    "code": 0,
+    "signal": null
+  },
+  "elevatedResult": {
+    "launcherElevated": false,
+    "executable": "D:\\GIT\\vector-studio\\test-results\\p1-tools\\presentmon-2.5.1\\PresentMon-2.5.1-x64.exe",
+    "arguments": [
+      "--process_id",
+      "24952",
+      "--timed",
+      "25",
+      "--terminate_after_timed",
+      "--terminate_on_proc_exit",
+      "--session_name",
+      "vector-studio-chrome-9f8fa7c8f01f4010867462d9bbc651a4",
+      "--qpc_time",
+      "--no_console_stats",
+      "--output_file",
+      "\"D:\\GIT\\vector-studio\\test-results\\p1-presentmon-20260912-elevated-02\\chrome.csv\""
+    ],
+    "requestedUtc": "2026-09-12T03:55:28.9646722Z",
+    "pid": 29476,
+    "exitCode": 0,
+    "timedOut": false,
+    "error": null,
+    "stderrAvailability": "Unavailable: ShellExecute RunAs cannot redirect child streams",
+    "startedUtc": "2026-09-12T03:55:41.8406054Z",
+    "endedUtc": "2026-09-12T03:56:07.0002930Z"
+  },
+  "processExitSucceeded": true,
+  "acquisitionValid": false,
+  "csvError": "Error: Missing CSV columns",
+  "limits": [
+    "No proven content-to-PresentMon-row linkage",
+    "No established browser/QPC clock map",
+    "Synthetic input, not physical-pointer timing",
+    "Background load not operator-confirmed",
+    "Early rows may include the UAC/foreground transition; feasibility only"
+  ],
+  "remainingBrowser": "NOT RUN: acquisition precondition failed; no further attempt",
+  "elevatedProcessAfterCleanup": "Absent"
+}

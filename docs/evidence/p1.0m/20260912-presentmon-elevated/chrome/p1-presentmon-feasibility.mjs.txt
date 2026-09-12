@@ -10,16 +10,9 @@ import { chromium } from '@playwright/test';
 
 const expectedDigest = '9bec3083069f58f911e6a512f4806db51a27bd096103087bc1d05ef54c80a191';
 const tool = path.resolve('test-results/p1-tools/presentmon-2.5.1/PresentMon-2.5.1-x64.exe');
-const options = process.argv.slice(3);
-const elevated = options.includes('--elevated');
-if (
-  new Set(options).size !== options.length ||
-  options.some((option) => !['--elevated', '--edge-only'].includes(option))
-)
-  throw new Error(
-    'Usage: node tooling/p1-presentmon-feasibility.mjs <new-output> [--elevated] [--edge-only]',
-  );
-const channels = options.includes('--edge-only') ? ['msedge'] : ['chrome', 'msedge'];
+const elevated = process.argv[3] === '--elevated';
+if (process.argv.length > 4 || (process.argv[3] && !elevated))
+  throw new Error('Usage: node tooling/p1-presentmon-feasibility.mjs <new-output> [--elevated]');
 const output = path.resolve(process.argv[2] ?? '');
 const allowedRoot = path.resolve('test-results') + path.sep;
 if (!output.startsWith(allowedRoot)) throw new Error('Use a new directory inside test-results.');
@@ -53,8 +46,6 @@ await save('source.json', {
     .digest('hex'),
   toolSha256: expectedDigest,
   elevation: elevated ? 'Explicitly authorized PresentMon child only' : 'None',
-  channels,
-  csvMetrics: 'v2 (explicit --v2_metrics)',
   elevationHelperSha256: elevated
     ? createHash('sha256')
         .update(await readFile('tooling/p1-presentmon-elevated.ps1'))
@@ -103,7 +94,7 @@ server.listen(0, '127.0.0.1');
 await once(server, 'listening');
 const url = `http://127.0.0.1:${server.address().port}`;
 try {
-  for (const channel of channels) {
+  for (const channel of ['chrome', 'msedge']) {
     const record = { channel, status: 'UNVERIFIED', captureAttempted: false };
     let browser;
     let capture;
@@ -171,7 +162,6 @@ try {
         '--session_name',
         `vector-studio-${channel}-${Date.now()}`,
         '--qpc_time',
-        '--v2_metrics',
         '--no_console_stats',
         '--output_file',
         path.join(output, `${channel}.csv`),

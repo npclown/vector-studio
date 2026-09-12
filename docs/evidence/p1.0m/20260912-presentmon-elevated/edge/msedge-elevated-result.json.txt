@@ -1,0 +1,26 @@
+{
+    "launcherElevated":  false,
+    "executable":  "D:\\GIT\\vector-studio\\test-results\\p1-tools\\presentmon-2.5.1\\PresentMon-2.5.1-x64.exe",
+    "arguments":  [
+                      "--process_id",
+                      "18108",
+                      "--timed",
+                      "25",
+                      "--terminate_after_timed",
+                      "--terminate_on_proc_exit",
+                      "--session_name",
+                      "vector-studio-msedge-c6ad977cd81a4c60bb84f986bd42cdcb",
+                      "--qpc_time",
+                      "--v2_metrics",
+                      "--no_console_stats",
+                      "--output_file",
+                      "\"D:\\GIT\\vector-studio\\test-results\\p1-presentmon-20260912-elevated-edge\\msedge.csv\""
+                  ],
+    "requestedUtc":  "2026-09-12T03:58:01.9246261Z",
+    "pid":  null,
+    "exitCode":  null,
+    "timedOut":  false,
+    "error":  "The operation was canceled by the user 오류로 인해 이 명령을 실행할 수 없습니다.",
+    "stderrAvailability":  "Unavailable: ShellExecute RunAs cannot redirect child streams",
+    "endedUtc":  "2026-09-12T04:00:04.2646735Z"
+}

@@ -1,0 +1,47 @@
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public static class P1DisplayMode {
+  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+  public struct Mode {
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst=32)] public string device;
+    public ushort spec, driver, size, extra;
+    public uint fields;
+    public int x, y;
+    public uint orientation, fixedOutput;
+    public short color, duplex, yResolution, ttOption, collate;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst=32)] public string form;
+    public ushort logPixels;
+    public uint bits, width, height, flags, frequency;
+    public uint icmMethod, icmIntent, media, dither, reserved1, reserved2, panWidth, panHeight;
+  }
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)]
+  public static extern bool EnumDisplaySettings(string device, int mode, ref Mode result);
+}
+'@
+$p1Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$p1Principal = New-Object Security.Principal.WindowsPrincipal($p1Identity)
+$p1Screens = @([Windows.Forms.Screen]::AllScreens | ForEach-Object {
+    $p1Mode = New-Object P1DisplayMode+Mode
+    $p1Mode.size = [Runtime.InteropServices.Marshal]::SizeOf($p1Mode)
+    $p1ModeAvailable = [P1DisplayMode]::EnumDisplaySettings($_.DeviceName, -1, [ref]$p1Mode)
+    [pscustomobject]@{
+      device = $_.DeviceName; primary = $_.Primary
+      x = $_.Bounds.X; y = $_.Bounds.Y; width = $_.Bounds.Width; height = $_.Bounds.Height
+      activeModeAvailable = $p1ModeAvailable
+      activeWidth = $p1Mode.width; activeHeight = $p1Mode.height; refreshHz = $p1Mode.frequency
+    }
+  })
+[pscustomobject]@{
+  utc = [DateTime]::UtcNow.ToString('o')
+  elevatedAdministrator = $p1Principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+  performanceLogUsersToken = $p1Identity.Groups.Value.Contains('S-1-5-32-559')
+  qpcFrequency = [Diagnostics.Stopwatch]::Frequency
+  monitors = $p1Screens
+  powerSource = [Windows.Forms.SystemInformation]::PowerStatus.PowerLineStatus.ToString()
+  powerSchemeGuid = [regex]::Match((powercfg /getactivescheme | Out-String), '[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}').Value
+  gpu = @(Get-CimInstance Win32_VideoController | Select-Object Name, DriverVersion)
+  backgroundLoad = 'Not operator-confirmed for this feasibility attempt; no performance acceptance claim'
+} | ConvertTo-Json -Depth 5
