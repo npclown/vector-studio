@@ -1,6 +1,6 @@
 # P1 execution plan: Instanced primitives
 
-Status: **D1/D2 APPROVED on 2026-09-09; D4 entry/exit separation APPROVED on 2026-09-12. P1.0b and P1.1 integrated; P1.2 integrated; P1.3 COMPLETE locally; P1.4 follows protected integration; A09/A10 remain UNVERIFIED exit gates.**
+Status: **D1/D2 APPROVED on 2026-09-09; D4 entry/exit separation APPROVED on 2026-09-12. P1.0b through P1.3 integrated; P1.4 COMPLETE locally; P1.5 follows protected integration; A09/A10 remain UNVERIFIED exit gates.**
 
 This document owns P1 task order, approved D1/D2 contract details, acceptance and evidence. The user approved the D1 scene/camera API and D2 visual behavior on 2026-09-09 in response to the explicit approval question for PR #26 source `49c3bfd`. That 2026-09-09 approval did not change D3, measurement thresholds or the milestone entry rule. The later D4 approval below changes implementation entry only. The [roadmap](../prototype-plan.md#p1-instanced-primitives), [system boundaries](../../ARCHITECTURE.md), [graphics design gates](../graphics-engine-architecture.md#design-gates-before-later-implementation), [validation policy](../validation.md) and [benchmark policy](../benchmarks/README.md) retain their responsibilities.
 
@@ -176,7 +176,7 @@ The [P1.0b private contract](p1-private-contract.md) freezes literal fixture dat
 
 ## Acceptance and evidence map
 
-P1-A01 is PASS at the CPU scene-synchronization boundary with the P1.1 evidence below. P1-A09 and P1-A10 remain **UNVERIFIED — measurement methods unresolved**; P1-A02/A04 have P1.2 CPU evidence; A03/A05 are PARTIAL and A06-A08 remain TODO. CPU packet evidence does not establish native GPU rendering, recovery or performance acceptance.
+P1-A01 is PASS at the CPU scene-synchronization boundary with the P1.1 evidence below. P1-A09 and P1-A10 remain **UNVERIFIED — measurement methods unresolved**; P1-A02/A04 have P1.2 CPU evidence; A03/A05/A06/A07 are PARTIAL and A08 remains TODO. [P1.4 native-call and lifecycle evidence](../evidence/p1.4-integration-review-2026-09-12.md) extends A05-A07 at the unit boundary; it does not establish native GPU rendering, recovery images or performance acceptance.
 
 | ID     | Required result                                                                                                                                                                                                                                                    | Evidence / owning task                                                                                         |
 | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
@@ -230,8 +230,8 @@ Minimum topology: one Primary supervisor, one implementation worker by default, 
 
 1. D1/D2 and D4 approval are recorded. Continue P1.0m measurement/configuration readiness independently; external tools or a change to acceptance semantics require a separate concrete user decision. Missing measurement evidence continues to block P1.6/P1.7 and P2 entry. Report unresolved methods instead of rerunning P0 proxies.
 2. P1.0b private contract freeze and P1.1 CPU mirror/type foundation are integrated. [PR #31](https://github.com/npclown/vector-studio/pull/31) merged P1.1 as `355d03f`; required CI passed and its integrated tree matched the reviewed source.
-3. P1.2 integrated through [PR #32](https://github.com/npclown/vector-studio/pull/32). P1.3 is complete locally and has been reconciled with that main. Complete its protected PR integration before P1.4. Primary retains shared exports and contract ownership.
-4. Next implementation task after both integrations: P1.4, one Sol high owner for renderer service composition, native packet upload/submission, acknowledgment, recovery and accounting, with Primary review.
+3. P1.2 integrated through [PR #32](https://github.com/npclown/vector-studio/pull/32); P1.3 integrated through [PR #33](https://github.com/npclown/vector-studio/pull/33) as `8682663`. Primary retains shared exports and contract ownership.
+4. P1.4 is complete locally with [unit-level integration evidence](../evidence/p1.4-integration-review-2026-09-12.md). After protected PR integration, P1.5 is the next executable checkpoint: headed deterministic primitive, overlap, precision and recovery fixtures. P1.6 remains blocked on executable P1.0m methods.
 
 D4 changes execution order only. D1/D2 alone did not authorize this entry change; the separate 2026-09-12 user approval does. A09/A10 and the complete P1 exit gate are unchanged.
 
@@ -330,5 +330,22 @@ P1.3 is complete locally on its isolated branch: shared unit quad, packet bindin
 - Browser/GPU/benchmark commands — NOT RUN: native consumption remains P1.4 and headed shader/visual acceptance remains P1.5.
 
 P1-A03 is PARTIAL, not a native-rendering PASS. P1.4 starts only after both P1.2 and P1.3 integrate. A09/A10 remain UNVERIFIED under D4.
+
+## P1.4 checkpoint: 2026-09-12
+
+Entry: clean `main` at `868266350d36118532ee062e27a303b204508ef0`, equal to fetched `origin/main`. Work branch: `codex/p1-4-native-integration`. This checkpoint implements the existing private contract; it does not change public D1, D2, packet v1, measurement methods or thresholds.
+
+Required local evidence before completion:
+
+- B01 verifies actual logical-to-arena binding/write offsets and capacities, ordered draws and preflight rejection before any write.
+- N03/N04 verify native write ranges for rebase and warmed isolated edits, including unchanged shared geometry and cached pipelines.
+- L01 verifies later edits survive older receipts, edits during recovery rebuild from the latest mirror, and old-generation completions cannot publish or reclaim new resources.
+- L02 verifies queue-ordered logical-slot reuse, retirement after the last submitted use, old/new arena accounting overlap, partial-write retries and terminal disposal during pending creation.
+- Renderer service composition uses one existing backend scheduler/device lifetime; existing P0 unit lifecycle and native-double fixtures remain regression tests.
+- Root `pnpm check`, `pnpm build`, changed-Markdown formatting/link checks and Primary scope/ownership review must pass. Required remote CI remains a separate protected PR gate.
+
+Headed browser/GPU images and actual recovery output remain P1.5. These native-call doubles do not establish P1-A03/A06/A07 in full or the P1 exit gate. P1.6 still requires executable P1.0m measurement methods.
+
+Local completion evidence: [P1.4 integration review](../evidence/p1.4-integration-review-2026-09-12.md). One Sol high implementation owner and Primary independent review/fixtures completed the service/native integration without changing D1/D2 or packet v1. Luna low ran `pnpm check` — PASS: 172 tests in 24 files, formatting, lint, TypeScript and boundaries — and `pnpm build` — PASS: all libraries and playground. The three new targeted fixture files contain 19 tests. Existing P0 unit/native-double regression tests remain passing. No browser/GPU/benchmark run or P1 exit claim is made; required remote CI is a separate protected PR gate.
 
 P1.3 combined validation after incorporating P1.2 main `c878b54`: Luna low ran `pnpm check` (PASS: 153 tests, 21 files, all static/boundary checks) and `pnpm build` (PASS: all libraries/playground). Primary resolved the plan-only append conflict and preserved both checkpoint records; product sources had no conflict. Final explicit Markdown formatting passed three files; the heading/HTML-anchor checker passed 263 local links/anchors across 64 Markdown files. `git diff --check` and final source/scope review passed. This combined validation supersedes the isolated-base unit count above for PR integration, without adding native GPU or performance claims.

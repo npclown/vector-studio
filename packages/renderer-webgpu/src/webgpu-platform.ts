@@ -4,8 +4,10 @@ import type {
   RendererAdapterInfo,
   ResourceDescriptor,
 } from '@vector-studio/contracts';
+import type { PrimitivePacketConsumer, PrimitiveTarget } from '@vector-studio/renderer-core';
 import type { FoundationBindingSource } from './foundation-experiment.js';
 import { createNativeFoundationSceneCreation } from './native-foundation-scene.js';
+import { createNativePrimitiveSceneCreation } from './native-primitive-scene.js';
 
 const COPY_SOURCE_AND_DESTINATION_USAGE = 0x0c;
 
@@ -48,6 +50,30 @@ export interface WebGpuFoundationSceneCreationPort {
   dispose(): void;
 }
 
+export interface WebGpuResourceTracker {
+  track(id: string, descriptor: ResourceDescriptor): void;
+  release(id: string): void;
+}
+
+export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
+  readonly sampleCount: 1 | 4;
+  readonly shaderModulesCreated: number;
+  readonly pipelinesCreated: number;
+  setTarget(target: PrimitiveTarget): void;
+  submitPrimitivePacket: PrimitivePacketConsumer['submitPrimitivePacket'];
+  dispose(): void;
+}
+
+export interface WebGpuPrimitiveSceneResult {
+  readonly scene: WebGpuPrimitiveScenePort;
+  readonly fellBackFrom4x: boolean;
+}
+
+export interface WebGpuPrimitiveSceneCreationPort {
+  readonly result: Promise<WebGpuPrimitiveSceneResult>;
+  dispose(): void;
+}
+
 export interface WebGpuDevicePort {
   readonly features: readonly string[];
   readonly limits: Readonly<Record<string, number>>;
@@ -56,6 +82,12 @@ export interface WebGpuDevicePort {
     format: string,
     source: FoundationBindingSource,
   ): WebGpuFoundationSceneCreationPort;
+  createPrimitiveScene?(
+    context: WebGpuCanvasContextPort,
+    format: 'bgra8unorm' | 'rgba8unorm',
+    generation: number,
+    resources: WebGpuResourceTracker,
+  ): WebGpuPrimitiveSceneCreationPort;
   waitForSubmittedWork(): Promise<void>;
   subscribeErrors(listener: (error: WebGpuDeviceError) => void): Disposable;
   triggerValidationErrorForTesting(): void;
@@ -120,6 +152,15 @@ class BrowserDevicePort implements WebGpuDevicePort {
     source: FoundationBindingSource,
   ): WebGpuFoundationSceneCreationPort {
     return createNativeFoundationSceneCreation(this.native, format, source);
+  }
+
+  createPrimitiveScene(
+    context: WebGpuCanvasContextPort,
+    format: 'bgra8unorm' | 'rgba8unorm',
+    generation: number,
+    resources: WebGpuResourceTracker,
+  ): WebGpuPrimitiveSceneCreationPort {
+    return createNativePrimitiveSceneCreation(this.native, context, format, generation, resources);
   }
 
   waitForSubmittedWork(): Promise<void> {
@@ -198,6 +239,7 @@ class BrowserCanvasContextPort implements WebGpuCanvasContextPort {
       device: configuration.device.native,
       format: configuration.format as GPUTextureFormat,
       alphaMode: configuration.alphaMode,
+      colorSpace: 'srgb',
     });
   }
 
