@@ -1,0 +1,284 @@
+// Test-only acquisition probe. Does not implement the P1 renderer or accept latency.
+import { createHash } from 'node:crypto';
+import { execFileSync, spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
+import { chromium } from '@playwright/test';
+
+const expectedDigest = '9bec3083069f58f911e6a512f4806db51a27bd096103087bc1d05ef54c80a191';
+const tool = path.resolve('test-results/p1-tools/presentmon-2.5.1/PresentMon-2.5.1-x64.exe');
+const output = path.resolve(process.argv[2] ?? '');
+const allowedRoot = path.resolve('test-results') + path.sep;
+if (!output.startsWith(allowedRoot)) throw new Error('Use a new directory inside test-results.');
+if (
+  createHash('sha256')
+    .update(await readFile(tool))
+    .digest('hex') !== expectedDigest
+) {
+  throw new Error('PresentMon digest mismatch.');
+}
+await mkdir(output); // Exclusive run identity; no reuse or overwrites.
+const save = (name, value) =>
+  writeFile(path.join(output, name), JSON.stringify(value, null, 2) + '\n', { flag: 'wx' });
+const preflight = JSON.parse(
+  execFileSync('powershell.exe', ['-NoProfile', '-File', 'tooling/p1-presentmon-preflight.ps1'], {
+    encoding: 'utf8',
+    windowsHide: true,
+  }),
+);
+await save('preflight.json', preflight);
+await save('source.json', {
+  revision: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+  worktree: execFileSync('git', ['status', '--short'], { encoding: 'utf8' }),
+  runnerSha256: createHash('sha256')
+    .update(await readFile(import.meta.filename))
+    .digest('hex'),
+  toolSha256: expectedDigest,
+  scope: 'At most one 30-second capture per browser; feasibility only',
+});
+
+const shader = `struct Values { frame:u32, inputId:u32, a:u32, b:u32 }; @group(0) @binding(0) var<uniform> v:Values;
+@vertex fn vs(@builtin(vertex_index) i:u32)->@builtin(position) vec4f {
+var p=array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3));return vec4f(p[i],0,1);}
+@fragment fn fs(@builtin(position) p:vec4f)->@location(0) vec4f {
+let bit=u32(p.x)/40u;let id=select(v.frame,v.inputId,p.y<80.0);
+let c=f32((id>>bit)&1u);return vec4f(c,c,c,1);}`;
+const html = `<!doctype html><meta charset="utf-8"><title>P1 presentation feasibility</title>
+<style>body{margin:0;background:#222;color:white}canvas{display:block;width:640px;height:360px}</style>
+<canvas width="640" height="360"></canvas><p>Test-only WebGPU frame/input marker</p>
+<script type="module">
+const canvas=document.querySelector('canvas');
+const log={frames:[],inputs:[],errors:[],visibility:[],ready:false};globalThis.probe=log;
+const adapter=await navigator.gpu.requestAdapter();if(!adapter)throw Error('No GPU adapter');
+const device=await adapter.requestDevice();
+device.addEventListener('uncapturederror',e=>log.errors.push(String(e.error.message)));
+device.lost.then(x=>log.errors.push('lost:'+x.reason));
+const context=canvas.getContext('webgpu');const format=navigator.gpu.getPreferredCanvasFormat();
+context.configure({device,format,alphaMode:'opaque'});
+const code=${JSON.stringify(shader)};
+const module=device.createShaderModule({code});
+const pipeline=device.createRenderPipeline({layout:'auto',vertex:{module,entryPoint:'vs'},fragment:{module,entryPoint:'fs',targets:[{format}]}});
+const buffer=device.createBuffer({size:16,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+const bind=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer}}]});
+let frame=0,input=0;log.adapter={...adapter.info};log.format=format;
+canvas.addEventListener('pointermove',e=>log.inputs.push({id:++input,eventTimeStamp:e.timeStamp,observed:performance.now(),trusted:e.isTrusted,x:e.offsetX,y:e.offsetY}));
+document.addEventListener('visibilitychange',()=>log.visibility.push({time:performance.now(),state:globalThis.document.visibilityState}));
+function tick(t){if(log.stop)return;const id=++frame;device.queue.writeBuffer(buffer,0,new Uint32Array([id,input,0,0]));
+const encoder=device.createCommandEncoder();const pass=encoder.beginRenderPass({colorAttachments:[{view:context.getCurrentTexture().createView(),loadOp:'clear',storeOp:'store',clearValue:[0,0,0,1]}]});
+pass.setPipeline(pipeline);pass.setBindGroup(0,bind);pass.draw(3);pass.end();device.queue.submit([encoder.finish()]);
+log.frames.push({id,input,raf:t,submit:performance.now()});requestAnimationFrame(tick);}
+log.ready=true;requestAnimationFrame(tick);
+</script>`;
+const server = createServer((_req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/html' });
+  res.end(html);
+});
+server.listen(0, '127.0.0.1');
+await once(server, 'listening');
+const url = `http://127.0.0.1:${server.address().port}`;
+try {
+  for (const channel of ['chrome', 'msedge']) {
+    const record = { channel, status: 'UNVERIFIED', captureAttempted: false };
+    let browser;
+    let capture;
+    try {
+      browser = await chromium.launch({
+        channel,
+        headless: false,
+        args: ['--enable-unsafe-webgpu', '--window-position=10,10', '--window-size=900,650'],
+      });
+      const page = await browser.newPage({ viewport: null });
+      const pageErrors = [];
+      page.on('pageerror', (error) => pageErrors.push(error.message));
+      await page.goto(url);
+      await page.waitForFunction(() => globalThis.probe?.ready, null, { timeout: 15000 });
+      const cdp = await browser.newBrowserCDPSession();
+      const processes = (await cdp.send('SystemInfo.getProcessInfo')).processInfo;
+      const root = processes.find((p) => p.type === 'browser');
+      const gpus = processes.filter((p) => p.type === 'GPU');
+      if (!root || gpus.length !== 1)
+        throw new Error('Cannot isolate one browser GPU producer candidate.');
+      const target = gpus[0].id;
+      const ownership = JSON.parse(
+        execFileSync(
+          'powershell.exe',
+          [
+            '-NoProfile',
+            '-Command',
+            `Get-CimInstance Win32_Process -Filter 'ProcessId = ${target}' | Select-Object ProcessId,ParentProcessId,Name | ConvertTo-Json`,
+          ],
+          { encoding: 'utf8', windowsHide: true },
+        ),
+      );
+      if (ownership.ParentProcessId !== root.id)
+        throw new Error('GPU process is not owned by this isolated browser.');
+      const pageCdp = await page.context().newCDPSession(page);
+      const windowInfo = await pageCdp.send('Browser.getWindowForTarget');
+      const bounds = windowInfo.bounds;
+      const monitor = preflight.monitors.find(
+        (m) =>
+          bounds.left >= m.x &&
+          bounds.top >= m.y &&
+          bounds.left + bounds.width <= m.x + m.width &&
+          bounds.top + bounds.height <= m.y + m.height,
+      );
+      if (!monitor?.activeModeAvailable || monitor.refreshHz <= 1)
+        throw new Error('Window/display association unresolved.');
+      Object.assign(record, {
+        browserVersion: browser.version(),
+        ownership,
+        browserPid: root.id,
+        observedProcessInfo: [root, ...gpus],
+        windowInfo,
+        monitor,
+        pageErrors,
+      });
+      await page.bringToFront();
+      const args = [
+        '--process_id',
+        String(target),
+        '--timed',
+        '25',
+        '--terminate_after_timed',
+        '--terminate_on_proc_exit',
+        '--session_name',
+        `vector-studio-${channel}-${Date.now()}`,
+        '--qpc_time',
+        '--no_console_stats',
+        '--output_file',
+        path.join(output, `${channel}.csv`),
+      ];
+      record.command = { executable: tool, args };
+      record.startedUtc = new Date().toISOString();
+      record.captureAttempted = true;
+      capture = spawn(tool, args, { windowsHide: true, timeout: 30000 });
+      let stdout = '',
+        stderr = '';
+      capture.stdout.on('data', (chunk) => {
+        stdout += chunk;
+      });
+      capture.stderr.on('data', (chunk) => {
+        stderr += chunk;
+      });
+      let ended = false;
+      const completion = once(capture, 'close').then(([code, signal]) => {
+        ended = true;
+        return { code, signal };
+      });
+      const start = Date.now();
+      while (!ended && Date.now() - start < 30000) {
+        await page.mouse.move(40 + ((Date.now() - start) % 500), 180);
+        await delay(100);
+      }
+      if (!ended) {
+        record.watchdogTerminated = true;
+        capture.kill();
+      }
+      record.exit = await completion;
+      record.endedUtc = new Date().toISOString();
+      record.stdout = stdout;
+      record.stderr = stderr;
+      record.processExitSucceeded = record.exit.code === 0;
+      record.acquisitionValid = false;
+      if (record.processExitSucceeded) {
+        try {
+          const csv = await readFile(path.join(output, channel + '.csv'), 'utf8');
+          const rows = csv
+            .trim()
+            .replace(/^\uFEFF/, '')
+            .split(/\r?\n/)
+            .map((line) => {
+              const fields = [];
+              let value = '',
+                quoted = false;
+              for (let i = 0; i < line.length; i++) {
+                if (line[i] === '"') {
+                  if (quoted && line[i + 1] === '"') {
+                    value += '"';
+                    i++;
+                  } else quoted = !quoted;
+                } else if (line[i] === ',' && !quoted) {
+                  fields.push(value);
+                  value = '';
+                } else value += line[i];
+              }
+              if (quoted) throw new Error('Incomplete CSV quoting');
+              fields.push(value);
+              return fields;
+            });
+          const headers = rows.shift();
+          const required = [
+            'ProcessID',
+            'SwapChainAddress',
+            'CPUStartQPC',
+            'DisplayLatency',
+            'DisplayedTime',
+          ];
+          if (!headers || required.some((key) => !headers.includes(key)))
+            throw new Error('Missing CSV columns');
+          if (
+            !rows.length ||
+            rows.some(
+              (row) =>
+                row.length !== headers.length ||
+                Number(row[headers.indexOf('ProcessID')]) !== target,
+            )
+          )
+            throw new Error('Empty or foreign-PID CSV');
+          const displayed = rows.filter((row) =>
+            ['DisplayLatency', 'DisplayedTime'].every((key) => {
+              const raw = row[headers.indexOf(key)];
+              return raw !== '' && Number.isFinite(Number(raw)) && Number(raw) >= 0;
+            }),
+          );
+          if (!displayed.length) throw new Error('No displayed target-PID row');
+          record.csv = {
+            headers,
+            rows: rows.length,
+            displayedRows: displayed.length,
+            swapChains: [...new Set(rows.map((row) => row[headers.indexOf('SwapChainAddress')]))],
+          };
+          record.acquisitionValid = true;
+        } catch (error) {
+          record.csvError = String(error);
+        }
+      }
+      await page.evaluate(() => {
+        globalThis.probe.stop = true;
+      });
+      await save(
+        `${channel}-markers.json`,
+        await page.evaluate(() => ({
+          ...globalThis.probe,
+          timeOrigin: globalThis.performance.timeOrigin,
+          visibilityState: globalThis.document.visibilityState,
+        })),
+      );
+      await page.screenshot({ path: path.join(output, `${channel}-fixture.png`) });
+      record.limits = [
+        'No proven content-to-PresentMon-row linkage',
+        'No established browser/QPC clock map',
+        'Synthetic input, not physical-pointer timing',
+        'Background load not operator-confirmed',
+      ];
+      console.log(`${channel}: exit=${record.exit.code}; presentation remains UNVERIFIED`);
+      if (!record.acquisitionValid) {
+        process.exitCode = 2;
+        record.remainingBrowser = 'NOT RUN: acquisition precondition failed; no elevation or retry';
+        break;
+      }
+    } catch (error) {
+      record.error = String(error);
+      throw error;
+    } finally {
+      if (capture && capture.exitCode === null) capture.kill();
+      if (browser) await browser.close();
+      await save(`${channel}-acquisition.json`, record);
+    }
+  }
+} finally {
+  server.close();
+}

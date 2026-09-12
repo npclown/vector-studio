@@ -247,3 +247,7 @@ Local validation on 2026-09-09:
 - Local unit/build/browser/GPU/benchmark commands — NOT RUN: this is a documentation-only proposal with no new runtime/performance claim. Required remote static/unit/build CI applies to the draft PR; do not infer its result before it completes.
 
 The initial draft above was reviewed before approval. On 2026-09-09 the user explicitly approved D1/D2. P1.0a contract review is complete; P1.0m measurement preparation follows in the [measurement readiness contract](p1-measurement-contract.md). P1.0b and every implementation task remain unstarted. The approved design checkpoint does not imply that P1 is implementation-ready or its exit gate passes.
+
+## P1.0m acquisition checkpoint: 2026-09-12
+
+The [bounded PresentMon attempt](../evidence/p1.0m/20260912-presentmon-access/README.md) was blocked by Windows ETW privileges before CSV acquisition. No Edge attempt, automatic elevation, performance acceptance or product implementation followed. The prepared test-only fixture and original failed evidence cross this investigation checkpoint; the next external action requires one-time elevated PresentMon authorization. A09 memory and A10 display correlation remain unresolved; P1.0b and P1.1 remain unstarted.

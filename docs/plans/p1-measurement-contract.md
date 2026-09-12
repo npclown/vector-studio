@@ -138,3 +138,7 @@ console.log(
 - Local unit/build/browser/GPU/benchmark/capture commands — NOT RUN: no implementation or performance claim. Required remote static/unit/build CI remains a separate PR gate.
 
 Actual delegation: Terra medium supplied and reviewed workload formulas; Sol medium investigated memory API coverage and reviewed measurement boundaries. Neither edited files, ran captures nor delegated again. Primary corrected local-origin packing and the minimum-viewport arithmetic, independently ran the arithmetic and reviewed the source/approval boundary. P1.0m is PARTIAL; accepting this documentation does not approve the external-tool experiment or relax a gate.
+
+## Bounded acquisition attempt on 2026-09-12
+
+After the user continued the concrete experiment proposal, Primary verified the pinned portable binary and attempted a 25-second, isolated-PID Chrome capture with a 30-second process timeout. Windows denied ETW session creation (PresentMon exit 6); no CSV was produced, Edge was skipped and no elevation was attempted. The [attempt record and immutable artifacts](../evidence/p1.0m/20260912-presentmon-access/README.md) include the exact dirty-source inputs, metadata, failure, cleanup and review. A one-time elevated PresentMon retry now requires a separate user decision. P1.0m remains PARTIAL; A09/A10 remain UNVERIFIED and P1 implementation remains BLOCKED. This update does not revise the 2026-09-09 observations or thresholds.
