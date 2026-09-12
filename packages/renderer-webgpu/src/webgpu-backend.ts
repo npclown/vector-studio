@@ -22,6 +22,8 @@ import {
   ResourceAccounting,
   type AnimationFrameClock,
   type DiagnosticClock,
+  type PrimitiveFrameSource,
+  type PrimitiveTarget,
 } from '@vector-studio/renderer-core';
 
 import { computeSurfaceSize } from './surface-size.js';
@@ -40,6 +42,8 @@ import {
   type WebGpuFoundationScenePort,
   type WebGpuFoundationSceneCreationPort,
   type WebGpuPlatform,
+  type WebGpuPrimitiveSceneCreationPort,
+  type WebGpuPrimitiveScenePort,
 } from './webgpu-platform.js';
 
 export interface WebGpuSurface {
@@ -85,6 +89,10 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   readonly #scheduler: FrameScheduler;
   readonly #now: () => number;
   readonly #foundationFixture: FoundationFixture | undefined;
+  #primitiveFrameSource: PrimitiveFrameSource | undefined;
+  #primitiveMode = false;
+  #primitiveCreation: WebGpuPrimitiveSceneCreationPort | undefined;
+  #primitiveScene: WebGpuPrimitiveScenePort | undefined;
   #capabilityResult: RendererCapabilityResult | undefined;
   #canvas: HTMLCanvasElement | undefined;
   #context: WebGpuCanvasContextPort | undefined;
@@ -171,6 +179,29 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     return this.#diagnostics.subscribe(listener);
   }
 
+  attachPrimitiveFrameSource(source: PrimitiveFrameSource): Disposable {
+    if (this.#state !== 'idle') {
+      throw new Error('A primitive frame source must be attached before initialization.');
+    }
+    if (this.#primitiveFrameSource !== undefined) {
+      throw new Error('A primitive frame source is already attached.');
+    }
+    this.#primitiveFrameSource = source;
+    let disposed = false;
+    return {
+      get disposed() {
+        return disposed;
+      },
+      dispose: () => {
+        if (disposed) return;
+        disposed = true;
+        if (this.#primitiveFrameSource === source) {
+          this.#primitiveFrameSource = undefined;
+        }
+      },
+    };
+  }
+
   initialize(surface: WebGpuSurface): Promise<RendererCapabilityResult> {
     if (this.#state === 'disposed') {
       return Promise.resolve(
@@ -193,6 +224,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     }
 
     this.#state = 'initializing';
+    this.#primitiveMode = this.#primitiveFrameSource !== undefined;
     const token = ++this.#operationToken;
     const generation = this.#generation + 1;
     const initialization = this.#initializeAttempt(surface, token, generation);
@@ -353,6 +385,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     this.#surfaceSize = undefined;
     this.#presentationFormat = undefined;
     this.#capabilityResult = undefined;
+    this.#primitiveFrameSource = undefined;
     this.#resetFrameMeasurementState();
     this.#resources.clear();
     this.#emit(
@@ -461,6 +494,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     }
 
     let creation: WebGpuFoundationSceneCreationPort | undefined;
+    let primitiveCreation: WebGpuPrimitiveSceneCreationPort | undefined;
     let binding: FoundationBindingSource | undefined;
     let contextConfigured = false;
     let attemptReleased = false;
@@ -469,6 +503,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       attemptReleased = true;
       const actions: readonly (() => void)[] = [
         () => creation?.dispose(),
+        () => primitiveCreation?.dispose(),
         () => binding?.detach(),
         ...(contextConfigured ? [() => context.unconfigure()] : []),
         () => device.destroy(),
@@ -519,20 +554,39 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     }
 
     let foundation;
+    let primitive;
     try {
-      const experiment =
-        this.#experiment ?? new FoundationExperiment(generation, this.#foundationFixture);
-      if (this.#experiment === undefined) {
-        this.#experiment = experiment;
+      if (!this.#primitiveMode) {
+        const experiment =
+          this.#experiment ?? new FoundationExperiment(generation, this.#foundationFixture);
+        if (this.#experiment === undefined) {
+          this.#experiment = experiment;
+        }
+        const size = this.#surfaceSize;
+        if (size === undefined) {
+          throw new Error('The foundation surface size is unavailable.');
+        }
+        binding = experiment.createBinding(generation, size.physical, size.devicePixelRatio);
+        creation = device.createFoundationScene(format, binding);
+        foundation = await creation.result;
+        binding.creationSettled();
+      } else {
+        if (
+          (format !== 'bgra8unorm' && format !== 'rgba8unorm') ||
+          device.createPrimitiveScene === undefined
+        ) {
+          throw new Error('The device cannot create the required primitive scene.');
+        }
+        primitiveCreation = device.createPrimitiveScene(context, format, generation, {
+          track: (id, descriptor) => {
+            this.#resources.track(id, descriptor);
+          },
+          release: (id) => {
+            this.#resources.release(id);
+          },
+        });
+        primitive = await primitiveCreation.result;
       }
-      const size = this.#surfaceSize;
-      if (size === undefined) {
-        throw new Error('The foundation surface size is unavailable.');
-      }
-      binding = experiment.createBinding(generation, size.physical, size.devicePixelRatio);
-      creation = device.createFoundationScene(format, binding);
-      foundation = await creation.result;
-      binding.creationSettled();
     } catch (error: unknown) {
       binding?.creationSettled();
       releaseAttempt();
@@ -541,7 +595,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       this.#abortExperimentAttempt(generation);
       return this.#failed(
         DIAGNOSTIC_CODES.FOUNDATION_SCENE_FAILED,
-        'The WebGPU foundation scene could not be created.',
+        'The WebGPU render scene could not be created.',
         token,
         generation,
         errorContext(error),
@@ -554,18 +608,30 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     }
 
     try {
-      this.#foundationCreation = creation;
-      this.#scene = foundation.scene;
-      this.#foundationBinding = binding;
-      this.#resizeScene(this.#surfaceSize?.physical ?? { width: 0, height: 0 });
-      this.#shaderModulesCreated += foundation.scene.shaderModulesCreated;
-      this.#pipelinesCreated += foundation.scene.pipelinesCreated;
-      for (const resource of foundation.scene.staticResources) {
-        this.#resources.track(`${generation}/${resource.id}`, resource.descriptor);
+      if (primitive !== undefined) {
+        this.#primitiveCreation = primitiveCreation;
+        this.#primitiveScene = primitive.scene;
+        this.#setPrimitiveTarget(primitive.scene, generation, format);
+        this.#shaderModulesCreated += primitive.scene.shaderModulesCreated;
+        this.#pipelinesCreated += primitive.scene.pipelinesCreated;
+      } else if (foundation !== undefined) {
+        this.#foundationCreation = creation;
+        this.#scene = foundation.scene;
+        this.#foundationBinding = binding;
+        this.#resizeScene(this.#surfaceSize?.physical ?? { width: 0, height: 0 });
+        this.#shaderModulesCreated += foundation.scene.shaderModulesCreated;
+        this.#pipelinesCreated += foundation.scene.pipelinesCreated;
+        for (const resource of foundation.scene.staticResources) {
+          this.#resources.track(`${generation}/${resource.id}`, resource.descriptor);
+        }
+      } else {
+        throw new Error('Render scene creation returned no scene.');
       }
     } catch (error: unknown) {
       releaseAttempt();
       this.#scene = undefined;
+      this.#primitiveScene = undefined;
+      if (this.#primitiveCreation === primitiveCreation) this.#primitiveCreation = undefined;
       this.#foundationBinding = undefined;
       if (this.#foundationCreation === creation) this.#foundationCreation = undefined;
       if (this.#pendingAttemptRelease === releaseAttempt) this.#pendingAttemptRelease = undefined;
@@ -580,10 +646,11 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         errorContext(error),
       );
     }
-    if (foundation.fellBackFrom4x) {
+    const fellBackFrom4x = foundation?.fellBackFrom4x ?? primitive?.fellBackFrom4x ?? false;
+    if (fellBackFrom4x) {
       this.#emit(
         DIAGNOSTIC_CODES.MSAA_FALLBACK,
-        '4x MSAA was unavailable; the foundation scene uses 1x sampling.',
+        '4x MSAA was unavailable; the render scene uses 1x sampling.',
         'warning',
         generation,
         Object.freeze({ requestedSampleCount: 4, selectedSampleCount: 1 }),
@@ -602,7 +669,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       adapter: Object.freeze({ ...adapter.info }),
       selectedFeatures: Object.freeze([...device.features]),
       limits: Object.freeze({ ...device.limits }),
-      sampleCount: foundation.scene.sampleCount,
+      sampleCount: primitive?.scene.sampleCount ?? foundation?.scene.sampleCount ?? 1,
     });
     const result: RendererCapabilityResult = Object.freeze({ supported: true, capabilities });
 
@@ -808,13 +875,19 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     this.#deviceErrorSubscription?.dispose();
     this.#deviceErrorSubscription = undefined;
     const creation = this.#foundationCreation;
+    const primitiveCreation = this.#primitiveCreation;
     const scene = this.#scene;
+    const primitiveScene = this.#primitiveScene;
     const binding = this.#foundationBinding;
     this.#foundationCreation = undefined;
+    this.#primitiveCreation = undefined;
     this.#scene = undefined;
+    this.#primitiveScene = undefined;
     this.#foundationBinding = undefined;
     const actions: readonly (() => void)[] = [
       () => (creation === undefined ? scene?.dispose() : creation.dispose()),
+      () =>
+        primitiveCreation === undefined ? primitiveScene?.dispose() : primitiveCreation.dispose(),
       () => binding?.detach(),
       () => this.#context?.unconfigure(),
       ...(destroyDevice ? [() => this.#device?.destroy()] : []),
@@ -846,7 +919,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   #render(timestampMs: number): void {
     if (
       this.#state !== 'ready' ||
-      !this.#scene ||
+      (!this.#scene && !this.#primitiveScene) ||
       !this.#context ||
       this.#surfaceSize?.suspended !== false
     ) {
@@ -866,7 +939,52 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
 
     const startedMs = this.#now();
     try {
-      this.#scene.render(this.#context);
+      if (this.#primitiveScene !== undefined) {
+        const scene = this.#primitiveScene;
+        const source = this.#primitiveFrameSource;
+        const generation = this.#generation;
+        if (source === undefined) return;
+        const target = this.#primitiveTarget();
+        scene.setTarget(target);
+        let packet;
+        try {
+          packet = source.prepare(target);
+        } catch (error: unknown) {
+          this.#emit(
+            DIAGNOSTIC_CODES.RENDER_SUBMISSION_FAILED,
+            'Primitive packet preparation failed.',
+            'error',
+            this.#generation,
+            errorContext(error),
+          );
+          return;
+        }
+        if (packet === null) return;
+        if (
+          this.#state !== 'ready' ||
+          this.#primitiveScene !== scene ||
+          this.#primitiveFrameSource !== source ||
+          this.#generation !== generation
+        ) {
+          return;
+        }
+        const submission = scene.submitPrimitivePacket(packet);
+        if (submission.status !== 'submitted') {
+          this.#reportPrimitiveSubmission(submission);
+          return;
+        }
+        if (
+          this.#state !== 'ready' ||
+          this.#primitiveScene !== scene ||
+          this.#primitiveFrameSource !== source ||
+          this.#generation !== generation
+        ) {
+          return;
+        }
+        source.acknowledge(submission.receipt);
+      } else {
+        this.#scene?.render(this.#context);
+      }
       this.#framesSubmitted += 1;
       this.#framesPresented += 1;
       if (this.#measurementActive) {
@@ -888,6 +1006,13 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   }
 
   #resizeScene(size: PixelSize): void {
+    if (this.#primitiveScene !== undefined) {
+      if (this.#presentationFormat === undefined) {
+        throw new Error('Primitive target format is unavailable.');
+      }
+      this.#setPrimitiveTarget(this.#primitiveScene, this.#generation, this.#presentationFormat);
+      return;
+    }
     if (!this.#scene) {
       return;
     }
@@ -905,6 +1030,74 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         bytesPerTexel: 4,
       });
     }
+  }
+
+  #primitiveTarget(): PrimitiveTarget {
+    const size = this.#surfaceSize;
+    const format = this.#presentationFormat;
+    const scene = this.#primitiveScene;
+    if (
+      size === undefined ||
+      format === undefined ||
+      scene === undefined ||
+      (format !== 'bgra8unorm' && format !== 'rgba8unorm')
+    ) {
+      throw new Error('Primitive target metadata is unavailable.');
+    }
+    return Object.freeze({
+      generation: this.#generation,
+      surfaceRevision: this.#surfaceRevision,
+      width: size.physical.width,
+      height: size.physical.height,
+      devicePixelRatio: size.devicePixelRatio,
+      sampleCount: scene.sampleCount,
+      targetFormat: format,
+    });
+  }
+
+  #setPrimitiveTarget(scene: WebGpuPrimitiveScenePort, generation: number, format: string): void {
+    const size = this.#surfaceSize;
+    if (size === undefined || (format !== 'bgra8unorm' && format !== 'rgba8unorm')) {
+      throw new Error('Primitive target metadata is unavailable.');
+    }
+    scene.setTarget(
+      Object.freeze({
+        generation,
+        surfaceRevision: this.#surfaceRevision,
+        width: size.physical.width,
+        height: size.physical.height,
+        devicePixelRatio: size.devicePixelRatio,
+        sampleCount: scene.sampleCount,
+        targetFormat: format,
+      }),
+    );
+  }
+
+  #reportPrimitiveSubmission(
+    result: Exclude<
+      ReturnType<WebGpuPrimitiveScenePort['submitPrimitivePacket']>,
+      { status: 'submitted' }
+    >,
+  ): void {
+    if (result.status === 'not-ready') return;
+    if (result.status === 'stale-generation') {
+      this.#staleGenerationSubmissions += 1;
+      this.#emit(
+        DIAGNOSTIC_CODES.STALE_GENERATION_SKIPPED,
+        'A stale primitive packet was skipped.',
+        'warning',
+        this.#generation,
+      );
+      return;
+    }
+    if (result.status !== 'failed') return;
+    const code =
+      result.reason === 'allocation-failed'
+        ? DIAGNOSTIC_CODES.ALLOCATION_FAILED
+        : DIAGNOSTIC_CODES.RENDER_SUBMISSION_FAILED;
+    this.#emit(code, 'Primitive packet submission failed.', 'error', this.#generation, {
+      reason: result.reason,
+    });
   }
 
   #applySurfaceSize(

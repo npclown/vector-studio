@@ -6,3 +6,4 @@ export type * from './primitive-packet.js';
 export { RetainedSceneMirror } from './scene-mirror.js';
 export type { RetainedSceneView, ScenePendingChangeState } from './scene-mirror.js';
 export { PrimitiveSceneSource } from './primitive-scene-source.js';
+export { PrimitiveRendererService } from './primitive-renderer-service.js';
