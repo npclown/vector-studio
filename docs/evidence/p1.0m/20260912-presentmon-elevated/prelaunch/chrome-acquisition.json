@@ -1,0 +1,76 @@
+{
+  "channel": "chrome",
+  "status": "UNVERIFIED",
+  "captureAttempted": true,
+  "browserVersion": "152.0.7977.83",
+  "ownership": {
+    "ProcessId": 21008,
+    "ParentProcessId": 10024,
+    "Name": "chrome.exe",
+    "CreationUtc": "2026-09-12T03:53:39.7092650Z"
+  },
+  "browserPid": 10024,
+  "observedProcessInfo": [
+    {
+      "type": "browser",
+      "id": 10024,
+      "cpuTime": 1.273454
+    },
+    {
+      "type": "GPU",
+      "id": 21008,
+      "cpuTime": 0.848664
+    }
+  ],
+  "windowInfo": {
+    "windowId": 1001028216,
+    "bounds": {
+      "left": 10,
+      "top": 10,
+      "width": 900,
+      "height": 650,
+      "windowState": "normal"
+    }
+  },
+  "monitor": {
+    "device": "\\\\.\\DISPLAY1",
+    "primary": true,
+    "x": 0,
+    "y": 0,
+    "width": 1920,
+    "height": 1080,
+    "activeModeAvailable": true,
+    "activeWidth": 1920,
+    "activeHeight": 1080,
+    "refreshHz": 60
+  },
+  "pageErrors": [],
+  "command": {
+    "executable": "D:\\GIT\\vector-studio\\test-results\\p1-tools\\presentmon-2.5.1\\PresentMon-2.5.1-x64.exe",
+    "args": [
+      "--process_id",
+      "21008",
+      "--timed",
+      "25",
+      "--terminate_after_timed",
+      "--terminate_on_proc_exit",
+      "--session_name",
+      "vector-studio-chrome-1789185221107",
+      "--qpc_time",
+      "--no_console_stats",
+      "--output_file",
+      "D:\\GIT\\vector-studio\\test-results\\p1-presentmon-20260912-elevated-01\\chrome.csv"
+    ]
+  },
+  "launcherRequestedUtc": "2026-09-12T03:53:41.107Z",
+  "exit": {
+    "code": 1,
+    "signal": null
+  },
+  "launcherExit": {
+    "code": 1,
+    "signal": null
+  },
+  "error": "Error: ENOENT: no such file or directory, open 'D:\\GIT\\vector-studio\\test-results\\p1-presentmon-20260912-elevated-01\\chrome-elevated-result.json'",
+  "elevatedResultReadError": "Error: ENOENT: no such file or directory, open 'D:\\GIT\\vector-studio\\test-results\\p1-presentmon-20260912-elevated-01\\chrome-elevated-result.json'"
+}

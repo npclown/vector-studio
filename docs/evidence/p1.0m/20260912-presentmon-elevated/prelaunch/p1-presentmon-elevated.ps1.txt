@@ -1,0 +1,61 @@
+param(
+  [Parameter(Mandatory=$true)][ValidateRange(1,2147483647)][int]$TargetProcessId,
+  [Parameter(Mandatory=$true)][string]$OutputDirectory,
+  [Parameter(Mandatory=$true)][ValidateSet('chrome','msedge')][string]$Channel
+)
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+$p1Root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$p1Output = [IO.Path]::GetFullPath($OutputDirectory)
+$p1Allowed = [IO.Path]::Combine($p1Root, 'test-results') + [IO.Path]::DirectorySeparatorChar
+if (-not $p1Output.StartsWith($p1Allowed, [StringComparison]::OrdinalIgnoreCase) -or $p1Output.Contains('"')) {
+  throw 'Output must be inside repository test-results.'
+}
+$p1Tool = Join-Path $p1Root 'test-results/p1-tools/presentmon-2.5.1/PresentMon-2.5.1-x64.exe'
+if ((Get-FileHash -LiteralPath $p1Tool -Algorithm SHA256).Hash.ToLowerInvariant() -ne '9bec3083069f58f911e6a512f4806db51a27bd096103087bc1d05ef54c80a191') {
+  throw 'PresentMon digest mismatch.'
+}
+$p1Principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if ($p1Principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Launcher must remain unprivileged.' }
+function Write-P1Record($Name, $Value) {
+  $p1Bytes = [Text.UTF8Encoding]::new($false).GetBytes(($Value | ConvertTo-Json -Depth 8) + "`n")
+  $p1Pending = Join-Path $p1Output ($Name + '.pending')
+  $p1Stream = [IO.File]::Open($p1Pending, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+  try { $p1Stream.Write($p1Bytes, 0, $p1Bytes.Length) } finally { $p1Stream.Dispose() }
+  [IO.File]::Move($p1Pending, (Join-Path $p1Output $Name))
+}
+$p1Session = 'vector-studio-' + $Channel + '-' + [Guid]::NewGuid().ToString('N')
+$p1Csv = Join-Path $p1Output ($Channel + '.csv')
+if (Test-Path -LiteralPath $p1Csv) { throw 'Output already exists.' }
+$p1Args = @('--process_id', "$TargetProcessId", '--timed', '25', '--terminate_after_timed', '--terminate_on_proc_exit', '--session_name', $p1Session, '--qpc_time', '--no_console_stats', '--output_file', ('"' + $p1Csv + '"'))
+$p1Result = [ordered]@{ launcherElevated = $false; executable = $p1Tool; arguments = $p1Args; requestedUtc = [DateTime]::UtcNow.ToString('o'); pid = $null; exitCode = $null; timedOut = $false; error = $null; stderrAvailability = 'Unavailable: ShellExecute RunAs cannot redirect child streams' }
+$p1Process = $null
+$p1Clock = $null
+try {
+  # Only this pinned executable is elevated. UAC is user-controlled; no retry or group change.
+  $p1Process = Start-Process -FilePath $p1Tool -ArgumentList $p1Args -Verb RunAs -WindowStyle Hidden -PassThru
+  $p1Clock = [Diagnostics.Stopwatch]::StartNew()
+  $p1Result.pid = $p1Process.Id
+  $p1Result.startedUtc = [DateTime]::UtcNow.ToString('o')
+  Write-P1Record ($Channel + '-elevated-start.json') $p1Result
+} catch {
+  $p1Result.error = $_.Exception.Message
+} finally {
+  # A start-record error must not abandon a successfully launched process.
+  if ($null -ne $p1Process) {
+    try {
+      $p1Remaining = [int][Math]::Max(0, 30000 - $p1Clock.ElapsedMilliseconds)
+      if (-not $p1Process.WaitForExit($p1Remaining)) {
+        $p1Result.timedOut = $true
+        # The returned handle may permit terminating only our own child. No new elevation.
+        try { $p1Process.Kill(); $p1Process.WaitForExit(2000) | Out-Null } catch { $p1Result.cleanupError = $_.Exception.Message }
+      }
+      $p1Process.Refresh()
+      if ($p1Process.HasExited) { $p1Result.exitCode = $p1Process.ExitCode }
+    } catch { $p1Result.cleanupError = $_.Exception.Message }
+  }
+  $p1Result.endedUtc = [DateTime]::UtcNow.ToString('o')
+  Write-P1Record ($Channel + '-elevated-result.json') $p1Result
+  if ($null -ne $p1Process) { $p1Process.Dispose() }
+}
+if ($p1Result.error -or $p1Result.timedOut -or $p1Result.exitCode -ne 0) { exit 2 }

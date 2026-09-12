@@ -251,3 +251,5 @@ The initial draft above was reviewed before approval. On 2026-09-09 the user exp
 ## P1.0m acquisition checkpoint: 2026-09-12
 
 The [bounded PresentMon attempt](../evidence/p1.0m/20260912-presentmon-access/README.md) was blocked by Windows ETW privileges before CSV acquisition. No Edge attempt, automatic elevation, performance acceptance or product implementation followed. The prepared test-only fixture and original failed evidence cross this investigation checkpoint; the next external action requires one-time elevated PresentMon authorization. A09 memory and A10 display correlation remain unresolved; P1.0b and P1.1 remain unstarted.
+
+The user subsequently approved the PresentMon-only elevation. The [elevated retry review](../evidence/p1.0m/20260912-presentmon-elevated/README.md) establishes one bounded Chrome acquisition under its actual default CSV schema; Edge UAC was canceled before process creation. Both outcomes and a preceding prelaunch tooling failure are preserved. A09/A10 remain UNVERIFIED; no P1 implementation entry or performance acceptance follows. Continue P1.0m method analysis; a new Edge consent request requires a new user instruction.

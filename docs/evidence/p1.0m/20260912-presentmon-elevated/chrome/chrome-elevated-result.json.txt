@@ -1,0 +1,26 @@
+{
+    "launcherElevated":  false,
+    "executable":  "D:\\GIT\\vector-studio\\test-results\\p1-tools\\presentmon-2.5.1\\PresentMon-2.5.1-x64.exe",
+    "arguments":  [
+                      "--process_id",
+                      "24952",
+                      "--timed",
+                      "25",
+                      "--terminate_after_timed",
+                      "--terminate_on_proc_exit",
+                      "--session_name",
+                      "vector-studio-chrome-9f8fa7c8f01f4010867462d9bbc651a4",
+                      "--qpc_time",
+                      "--no_console_stats",
+                      "--output_file",
+                      "\"D:\\GIT\\vector-studio\\test-results\\p1-presentmon-20260912-elevated-02\\chrome.csv\""
+                  ],
+    "requestedUtc":  "2026-09-12T03:55:28.9646722Z",
+    "pid":  29476,
+    "exitCode":  0,
+    "timedOut":  false,
+    "error":  null,
+    "stderrAvailability":  "Unavailable: ShellExecute RunAs cannot redirect child streams",
+    "startedUtc":  "2026-09-12T03:55:41.8406054Z",
+    "endedUtc":  "2026-09-12T03:56:07.0002930Z"
+}

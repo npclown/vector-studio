@@ -1,0 +1,41 @@
+{
+  "utc": "2026-09-12T03:57:59.4272959Z",
+  "elevatedAdministrator": false,
+  "performanceLogUsersToken": false,
+  "qpcFrequency": 10000000,
+  "monitors": [
+    {
+      "device": "\\\\.\\DISPLAY1",
+      "primary": true,
+      "x": 0,
+      "y": 0,
+      "width": 1920,
+      "height": 1080,
+      "activeModeAvailable": true,
+      "activeWidth": 1920,
+      "activeHeight": 1080,
+      "refreshHz": 60
+    },
+    {
+      "device": "\\\\.\\DISPLAY2",
+      "primary": false,
+      "x": 1920,
+      "y": 0,
+      "width": 1920,
+      "height": 1080,
+      "activeModeAvailable": true,
+      "activeWidth": 1920,
+      "activeHeight": 1080,
+      "refreshHz": 60
+    }
+  ],
+  "powerSource": "Online",
+  "powerSchemeGuid": "381b4222-f694-41f0-9685-ff5bb260df2e",
+  "gpu": [
+    {
+      "Name": "NVIDIA GeForce GTX 1660 SUPER",
+      "DriverVersion": "32.0.15.9186"
+    }
+  ],
+  "backgroundLoad": "Not operator-confirmed for this feasibility attempt; no performance acceptance claim"
+}

@@ -1,0 +1,115 @@
+{
+  "channel": "msedge",
+  "status": "UNVERIFIED",
+  "captureAttempted": true,
+  "browserVersion": "153.0.4234.32",
+  "ownership": {
+    "ProcessId": 18108,
+    "ParentProcessId": 2916,
+    "Name": "msedge.exe",
+    "CreationUtc": "2026-09-12T03:58:00.0755050Z"
+  },
+  "browserPid": 2916,
+  "observedProcessInfo": [
+    {
+      "type": "browser",
+      "id": 2916,
+      "cpuTime": 2.029883
+    },
+    {
+      "type": "GPU",
+      "id": 18108,
+      "cpuTime": 0.865807
+    }
+  ],
+  "windowInfo": {
+    "windowId": 1784903286,
+    "bounds": {
+      "left": 10,
+      "top": 10,
+      "width": 900,
+      "height": 650,
+      "windowState": "normal"
+    }
+  },
+  "monitor": {
+    "device": "\\\\.\\DISPLAY1",
+    "primary": true,
+    "x": 0,
+    "y": 0,
+    "width": 1920,
+    "height": 1080,
+    "activeModeAvailable": true,
+    "activeWidth": 1920,
+    "activeHeight": 1080,
+    "refreshHz": 60
+  },
+  "pageErrors": [],
+  "command": {
+    "executable": "D:\\GIT\\vector-studio\\test-results\\p1-tools\\presentmon-2.5.1\\PresentMon-2.5.1-x64.exe",
+    "args": [
+      "--process_id",
+      "18108",
+      "--timed",
+      "25",
+      "--terminate_after_timed",
+      "--terminate_on_proc_exit",
+      "--session_name",
+      "vector-studio-msedge-c6ad977cd81a4c60bb84f986bd42cdcb",
+      "--qpc_time",
+      "--v2_metrics",
+      "--no_console_stats",
+      "--output_file",
+      "\"D:\\GIT\\vector-studio\\test-results\\p1-presentmon-20260912-elevated-edge\\msedge.csv\""
+    ]
+  },
+  "launcherRequestedUtc": "2026-09-12T03:58:01.567Z",
+  "exit": {
+    "code": null,
+    "signal": null
+  },
+  "endedUtc": "2026-09-12T04:00:04.423Z",
+  "stdout": "",
+  "stderr": "",
+  "streamScope": "Unprivileged launcher only; child stdout/stderr unavailable with RunAs",
+  "launcherExit": {
+    "code": 2,
+    "signal": null
+  },
+  "elevatedResult": {
+    "launcherElevated": false,
+    "executable": "D:\\GIT\\vector-studio\\test-results\\p1-tools\\presentmon-2.5.1\\PresentMon-2.5.1-x64.exe",
+    "arguments": [
+      "--process_id",
+      "18108",
+      "--timed",
+      "25",
+      "--terminate_after_timed",
+      "--terminate_on_proc_exit",
+      "--session_name",
+      "vector-studio-msedge-c6ad977cd81a4c60bb84f986bd42cdcb",
+      "--qpc_time",
+      "--v2_metrics",
+      "--no_console_stats",
+      "--output_file",
+      "\"D:\\GIT\\vector-studio\\test-results\\p1-presentmon-20260912-elevated-edge\\msedge.csv\""
+    ],
+    "requestedUtc": "2026-09-12T03:58:01.9246261Z",
+    "pid": null,
+    "exitCode": null,
+    "timedOut": false,
+    "error": "The operation was canceled by the user 오류로 인해 이 명령을 실행할 수 없습니다.",
+    "stderrAvailability": "Unavailable: ShellExecute RunAs cannot redirect child streams",
+    "endedUtc": "2026-09-12T04:00:04.2646735Z"
+  },
+  "processExitSucceeded": false,
+  "acquisitionValid": false,
+  "limits": [
+    "No proven content-to-PresentMon-row linkage",
+    "No established browser/QPC clock map",
+    "Synthetic input, not physical-pointer timing",
+    "Background load not operator-confirmed",
+    "Early rows may include the UAC/foreground transition; feasibility only"
+  ],
+  "remainingBrowser": "NOT RUN: acquisition precondition failed; no further attempt"
+}
