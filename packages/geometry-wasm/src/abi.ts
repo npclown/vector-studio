@@ -334,10 +334,13 @@ export function decodeOutput(bytes: Uint8Array, expected: readonly PackedPath[])
       throw new AbiContractError('output contains an unsupported verb');
     }
     const points = new Float64Array(pointEnd - pointStart);
+    let hasNonfinitePoint = false;
     for (let scalar = pointStart; scalar < pointEnd; scalar += 1) {
-      points[scalar - pointStart] = view.getFloat64(pointsOffset + scalar * 8, true);
+      const point = view.getFloat64(pointsOffset + scalar * 8, true);
+      points[scalar - pointStart] = point;
+      if (!Number.isFinite(point)) hasNonfinitePoint = true;
     }
-    if (points.some((point) => !Number.isFinite(point))) {
+    if (hasNonfinitePoint) {
       throw new AbiContractError('successful output contains a nonfinite coordinate');
     }
     const provenance = new Uint32Array((verbEnd - verbStart) * 3);
