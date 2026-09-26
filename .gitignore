@@ -7,3 +7,5 @@ artifacts/p1.5/
 artifacts/p1.6a/
 artifacts/p1.6b/
 *.tsbuildinfo
+.tools/
+target/

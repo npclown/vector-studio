@@ -164,6 +164,32 @@ describe('canonical packed path reference', () => {
 });
 
 describe('screen tolerance and continuous physical error', () => {
+  it('accepts the approved 8192-line limit and rejects a valid 8193-leaf partition', () => {
+    const cubic: Cubic = [
+      [0, 0],
+      [1, 0],
+      [2, 0],
+      [3, 0],
+    ];
+    const accepted = uniformLeaves(cubic, 13);
+    expect(validateContinuousCubicError(cubic, accepted, IDENTITY).ok).toBe(true);
+    const excessive = [
+      {
+        end: evaluateCubic(cubic, 1 / 16384),
+        provenance: { sourceVerbOrdinal: 0, endNumerator: 1, depth: 14 },
+      },
+      {
+        end: evaluateCubic(cubic, 2 / 16384),
+        provenance: { sourceVerbOrdinal: 0, endNumerator: 2, depth: 14 },
+      },
+      ...accepted.slice(1),
+    ];
+    expect(excessive).toHaveLength(8193);
+    expect(validateContinuousCubicError(cubic, excessive, IDENTITY).findings).toEqual([
+      'cubic emits more than 8192 lines',
+    ]);
+  });
+
   it('computes stable singular values and downward power-of-two buckets', () => {
     expect(screenTolerance(IDENTITY, 1, 1)).toMatchObject({
       ok: true,

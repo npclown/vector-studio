@@ -9,6 +9,8 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/playwright-report/**',
       '**/test-results/**',
+      '**/.tools/**',
+      '**/target/**',
     ],
   },
   eslint.configs.recommended,

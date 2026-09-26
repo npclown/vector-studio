@@ -1,0 +1,38 @@
+{
+  "purpose": "Contract feasibility diagnostic; not acceptance or performance evidence",
+  "scriptSha256": "8c19c9152429bdc6e19d4a4226aeede56a518ffa67b6db4025e8f1482645f4ad",
+  "corpusVersion": "p2-geometry/v1",
+  "cases": 10000,
+  "frozenLineCap": 4096,
+  "exceededCount": 51,
+  "exceededIndices": [
+    209, 434, 659, 884, 1034, 1109, 1339, 1559, 1564, 1714, 1789, 2009, 2014, 2234, 2239, 2614,
+    3364, 3589, 4034, 4039, 4259, 4264, 4484, 4489, 4714, 4939, 5159, 5164, 5384, 5614, 5834, 5989,
+    6059, 6734, 6739, 6959, 7184, 7414, 7631, 7634, 7864, 8089, 8309, 8314, 8759, 8984, 8989, 9214,
+    9434, 9439, 9889
+  ],
+  "firstFailure": {
+    "index": 209,
+    "seed": 1,
+    "leaves": 4873,
+    "visits": 9745,
+    "maxDepth": 13,
+    "depths": {
+      "10": 35,
+      "11": 318,
+      "12": 2120,
+      "13": 2400
+    }
+  },
+  "worst": {
+    "index": 6059,
+    "seed": 2654435769,
+    "leaves": 8192,
+    "visits": 16383,
+    "maxDepth": 13,
+    "depths": {
+      "13": 8192
+    }
+  },
+  "allFit8192": true
+}
