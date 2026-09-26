@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "verified": 10034,
+  "categories": {
+    "corpus": 10000,
+    "named-cubic": 12,
+    "named-packed": 10,
+    "metamorphic": 3,
+    "subdivision": 1,
+    "edge": 8
+  },
+  "exactSizeRetries": 1,
+  "positiveControls": {
+    "attempted": 12,
+    "rejected": 12
+  }
+}

@@ -22,6 +22,7 @@
     "test:browser": "playwright test --config playwright.config.ts",
     "test:gpu": "playwright test --config playwright.gpu.config.ts",
     "test:geometry": "node tooling/test-geometry.mjs",
+    "test:geometry:browser": "node tooling/test-geometry-browser.mjs",
     "test:unit": "vitest run",
     "typecheck": "tsc --build"
   },
