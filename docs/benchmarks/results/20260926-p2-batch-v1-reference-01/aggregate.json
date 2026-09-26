@@ -1,0 +1,271 @@
+{
+  "schema": "p2-aggregate/v1",
+  "profile": "reference",
+  "disposition": "FAIL",
+  "acceptance": "Requires Primary review; not full P2/P1 acceptance",
+  "performanceDisposition": "FAIL",
+  "findings": [],
+  "worstMedianPairedSpeedup": 0.9873617693503538,
+  "repetitions": [
+    {
+      "project": "chrome",
+      "repetition": 1,
+      "analysis": {
+        "disposition": "FAIL",
+        "findings": [],
+        "unverified": [],
+        "batch": {
+          "count": 30,
+          "median": 383.19999999925494,
+          "p95": 391.0999999977648,
+          "p99": 396.6000000014901,
+          "min": 364.19999999925494,
+          "max": 396.6000000014901
+        },
+        "perPath": {
+          "count": 30,
+          "median": 386,
+          "p95": 396.1000000014901,
+          "p99": 401.5999999977648,
+          "min": 368,
+          "max": 401.5999999977648
+        },
+        "medianPairedSpeedup": 1.0088610893888024
+      }
+    },
+    {
+      "project": "chrome",
+      "repetition": 2,
+      "analysis": {
+        "disposition": "FAIL",
+        "findings": [],
+        "unverified": [],
+        "batch": {
+          "count": 30,
+          "median": 383.79999999701977,
+          "p95": 391.69999999925494,
+          "p99": 421.30000000074506,
+          "min": 368.19999999925494,
+          "max": 421.30000000074506
+        },
+        "perPath": {
+          "count": 30,
+          "median": 384.1000000014901,
+          "p95": 403.5,
+          "p99": 420,
+          "min": 369.69999999925494,
+          "max": 420
+        },
+        "medianPairedSpeedup": 0.9997394476347952
+      }
+    },
+    {
+      "project": "chrome",
+      "repetition": 3,
+      "analysis": {
+        "disposition": "FAIL",
+        "findings": [],
+        "unverified": [],
+        "batch": {
+          "count": 30,
+          "median": 389.30000000074506,
+          "p95": 397.80000000074506,
+          "p99": 398.70000000298023,
+          "min": 374.0999999977648,
+          "max": 398.70000000298023
+        },
+        "perPath": {
+          "count": 30,
+          "median": 385.19999999925494,
+          "p95": 394.5,
+          "p99": 402.80000000074506,
+          "min": 367,
+          "max": 402.80000000074506
+        },
+        "medianPairedSpeedup": 0.9938493080509624
+      }
+    },
+    {
+      "project": "chrome",
+      "repetition": 4,
+      "analysis": {
+        "disposition": "FAIL",
+        "findings": [],
+        "unverified": [],
+        "batch": {
+          "count": 30,
+          "median": 379.79999999701977,
+          "p95": 395.3999999985099,
+          "p99": 410.30000000074506,
+          "min": 364.69999999925494,
+          "max": 410.30000000074506
+        },
+        "perPath": {
+          "count": 30,
+          "median": 379.19999999925494,
+          "p95": 394.3999999985099,
+          "p99": 402.70000000298023,
+          "min": 368.8999999985099,
+          "max": 402.70000000298023
+        },
+        "medianPairedSpeedup": 1.0010781671118865
+      }
+    },
+    {
+      "project": "chrome",
+      "repetition": 5,
+      "analysis": {
+        "disposition": "FAIL",
+        "findings": [],
+        "unverified": [],
+        "batch": {
+          "count": 30,
+          "median": 386.80000000074506,
+          "p95": 399.80000000074506,
+          "p99": 409,
+          "min": 370.9000000022352,
+          "max": 409
+        },
+        "perPath": {
+          "count": 30,
+          "median": 385.4000000022352,
+          "p95": 399.8999999985099,
+          "p99": 404.1000000014901,
+          "min": 370,
+          "max": 404.1000000014901
+        },
+        "medianPairedSpeedup": 0.9873617693503538
+      }
+    },
+    {
+      "project": "edge",
+      "repetition": 1,
+      "analysis": {
+        "disposition": "FAIL",
+        "findings": [],
+        "unverified": [],
+        "batch": {
+          "count": 30,
+          "median": 384.70000000298023,
+          "p95": 390.80000000074506,
+          "p99": 395.1000000014901,
+          "min": 366.9000000022352,
+          "max": 395.1000000014901
+        },
+        "perPath": {
+          "count": 30,
+          "median": 387.69999999925494,
+          "p95": 398.4000000022352,
+          "p99": 401.1000000014901,
+          "min": 368.70000000298023,
+          "max": 401.1000000014901
+        },
+        "medianPairedSpeedup": 1.0064918203161253
+      }
+    },
+    {
+      "project": "edge",
+      "repetition": 2,
+      "analysis": {
+        "disposition": "FAIL",
+        "findings": [],
+        "unverified": [],
+        "batch": {
+          "count": 30,
+          "median": 380.69999999925494,
+          "p95": 389.80000000074506,
+          "p99": 390.80000000074506,
+          "min": 364.69999999925494,
+          "max": 390.80000000074506
+        },
+        "perPath": {
+          "count": 30,
+          "median": 385.3999999985099,
+          "p95": 393,
+          "p99": 398.80000000074506,
+          "min": 369.30000000074506,
+          "max": 398.80000000074506
+        },
+        "medianPairedSpeedup": 1.0075955997865484
+      }
+    },
+    {
+      "project": "edge",
+      "repetition": 3,
+      "analysis": {
+        "disposition": "FAIL",
+        "findings": [],
+        "unverified": [],
+        "batch": {
+          "count": 30,
+          "median": 378,
+          "p95": 391.69999999925494,
+          "p99": 395.4000000022352,
+          "min": 365.3999999985099,
+          "max": 395.4000000022352
+        },
+        "perPath": {
+          "count": 30,
+          "median": 385.8999999985099,
+          "p95": 412.30000000074506,
+          "p99": 436.5999999977648,
+          "min": 369.19999999925494,
+          "max": 436.5999999977648
+        },
+        "medianPairedSpeedup": 1.0097666847572218
+      }
+    },
+    {
+      "project": "edge",
+      "repetition": 4,
+      "analysis": {
+        "disposition": "FAIL",
+        "findings": [],
+        "unverified": [],
+        "batch": {
+          "count": 30,
+          "median": 385,
+          "p95": 393.5,
+          "p99": 425.6000000014901,
+          "min": 368,
+          "max": 425.6000000014901
+        },
+        "perPath": {
+          "count": 30,
+          "median": 384.0999999977648,
+          "p95": 398.19999999925494,
+          "p99": 415.69999999925494,
+          "min": 371,
+          "max": 415.69999999925494
+        },
+        "medianPairedSpeedup": 0.9987043275460039
+      }
+    },
+    {
+      "project": "edge",
+      "repetition": 5,
+      "analysis": {
+        "disposition": "FAIL",
+        "findings": [],
+        "unverified": [],
+        "batch": {
+          "count": 30,
+          "median": 381.9000000022352,
+          "p95": 390.69999999925494,
+          "p99": 391.6000000014901,
+          "min": 363.5999999977648,
+          "max": 391.6000000014901
+        },
+        "perPath": {
+          "count": 30,
+          "median": 386.6000000014901,
+          "p95": 394.5,
+          "p99": 399.6000000014901,
+          "min": 371.3999999985099,
+          "max": 399.6000000014901
+        },
+        "medianPairedSpeedup": 1.015167364018744
+      }
+    }
+  ]
+}
