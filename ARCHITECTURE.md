@@ -108,7 +108,9 @@ The host composition root constructs the concrete renderer, geometry, and persis
 
 This diagram reserves boundaries; it does not require every box to become a package immediately. A package is created only when a boundary needs independent compilation, dependency isolation, testing, or distribution.
 
-At P0.4, only `contracts`, `renderer-core`, `renderer-webgpu`, and `playground` exist. The current boundary checker covers those four packages; future packages must extend the checker and contract tests before use. The reserved dependency graph is not evidence that the editor, model, or geometry services have been implemented.
+At P0.4, only `contracts`, `renderer-core`, `renderer-webgpu`, and `playground` existed. That checkpoint covered those four packages in the boundary checker; later packages must extend the checker and contract tests before use. The reserved dependency graph is not evidence that the editor, model, or geometry services have been implemented.
+
+P2.1 adds `geometry-reference` as an independently compiled test-only package and extends the boundary checker to cover it, including relative cross-package imports. No production package may import this oracle. The concrete Rust/WASM adapter and public geometry service remain unimplemented at this checkpoint; test composition imports the oracle's private numeric data directly.
 
 Forbidden dependency examples:
 

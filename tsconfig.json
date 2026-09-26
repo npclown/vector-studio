@@ -8,6 +8,7 @@
   "include": ["playwright*.config.ts", "tests/**/*.ts", "vitest.config.ts"],
   "references": [
     { "path": "./packages/contracts" },
+    { "path": "./packages/geometry-reference" },
     { "path": "./packages/renderer-core" },
     { "path": "./packages/renderer-webgpu" },
     { "path": "./apps/playground" }

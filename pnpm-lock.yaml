@@ -59,6 +59,8 @@ importers:
 
   packages/contracts: {}
 
+  packages/geometry-reference: {}
+
   packages/renderer-core:
     dependencies:
       '@vector-studio/contracts':
