@@ -1,0 +1,60 @@
+# P1.6b execution plan: CPU activity and reference-duration observations
+
+Status: contract frozen by Primary on 2026-09-26 under user-approved [D6](p1-follow-on-entry-proposal.md). Implementation follows protected integration of this checkpoint. A09/A10 and complete P1 acceptance remain UNVERIFIED.
+
+## Scope and task order
+
+The [measurement contract](p1-measurement-contract.md) owns exact scenario formulas, five repetitions, warm-up `[0,5000)` ms, measured `[5000,15000)` ms, nearest-rank aggregation and unchanged S1/S3 16.7 ms and S2 33.3 ms ceilings. This plan implements those prospective observations plus direct CPU geometry construction counts. It does not add a pointer event proxy, memory acceptance, new dependency or public editor contract.
+
+| Task | Scope / owner                                                                                                   | Dependencies                                            | Acceptance                     |
+| ---- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------ |
+| B01  | Core-local CPU activity counters and unit fixtures; Sol medium                                                  | This freeze                                             | C01-C03                        |
+| B02  | Shared native host, callback windows and pure metrics; Primary                                                  | B01 contract; integration after B01                     | C04-C05                        |
+| B03  | CLI, immutable records, serial reference configuration and fixture validation; Terra medium                     | B02 types frozen                                        | C06-C07                        |
+| B04  | Primary review, functional regressions, production build, protected PR                                          | B01-B03                                                 | C01-C07 with evidence          |
+| B05  | Separate criterion-specific headed reference runs and interpretation; Primary, optional Luna low command worker | B04 integrated, fresh reference environment established | C08; all-P1 remains UNVERIFIED |
+
+No parallel edits to source/service exports, shared host or record interfaces. B01 may run beside pure host/metrics work after the exact statistics contract below is frozen. B03 starts only on the final B02 interface. P2 planning can proceed independently under D6; no renderer/P2 integration belongs here.
+
+## Core internal observation contract
+
+Keep `RendererSceneSynchronization`, public scene behavior, packet v1 and resource ownership unchanged. Add a read-only engine-internal `getPreparationStatistics()` on the already exported `PrimitiveSceneSource`, forwarded by `PrimitiveRendererService`. This diagnostic seam returns a detached frozen object with cumulative `geometryBuilds: number` and frozen `recordWrites: {transforms, geometry, styles, order, frame}` counts. No injected callbacks, global singleton, DOM/GPU objects, new public contracts export or second lifecycle is introduced.
+
+`geometryBuilds` increments immediately before each actual `packGeometry` invocation, including an attempted build whose later numeric preparation fails. A subsequent unchanged-record early return must not hide the computation. `recordWrites` increments only after actual backing-buffer writes: one per transform/geometry/style packed record; one per changed order u32; one per complete changed frame record. These are counts, not memory bytes. Strides remain packet v1 (32/48/48/4/32). Do not derive build counts from writes, packets, receipts or native uploads.
+
+Counters belong to one source lifetime, start at zero, and never reset on snapshot, growth, rebase, generation change or acknowledge. Dispose retains the final scalar snapshot and prevents further preparation activity; repeated reads/dispose are inert. Reads expose no mutable internals. Existing behavior for invalid input/preparation errors remains unchanged; no fabricated successful record accompanies a failed attempt. Shared static quad reuse remains supported by existing native creation/write evidence; CPU instance geometry construction is observed independently.
+
+The host takes snapshots immediately before and in `finally` after its synchronous `service.prepare`, records the nonnegative deltas per callback even when preparation throws, and retains totals at completion. Failed preparation remains a failed observation with its actual work retained. Warm-up must contain actual positive geometry builds for the initial population; an always-zero/disconnected observer fails validation. Measured S1-S4 must have zero geometry builds and zero geometry writes. Color/opacity-specific zero rebuild invariants are proved with positive-control unit/native fixtures rather than changing the four reference trajectories. S4 transform builds/writes and native ranges remain target-only; rebase/growth/reconstruction are explicitly distinguishable from ordinary warmed updates by existing packet/generation/revision evidence.
+
+## Host, intervals and profiles
+
+Retain the original backend scheduler and native shader path. The same page supports `functional` (three warm-up + five observed callbacks) and `reference` (the frozen 5s/10s windows). A reference run records every callback from the first ready callback through the first callback at or beyond 15000 ms, stops continuous scheduling and keeps that boundary sample. Do not count its interval in the measured half-open window. Keep failed callbacks and long intervals. Record an error for deadline, hidden state, loss, missing submission or invalid observations; do not filter those events into a passing sample set.
+
+Use one pure window/profile definition shared by browser host and result validation. Metrics remain ordinary numeric calculations; they must not promote a functional profile into reference evidence. CPU counts are separate from GPU writes. Reuse interval calculations, source manifests and canonical hashing already in P1.6a; do not fork a second independent definition of percentiles or workload arithmetic.
+
+Reference profile means criterion-specific candidate evidence for A05/A08, not complete P1 acceptance. CLI must still reject `acceptance` and unknown profiles. Keep functional compatibility. Evolve runner/schema identity prospectively to distinguish newly observed CPU data from P1.6a records, without changing the frozen workload `/v1` identities. The full hashed run configuration contains workload configuration, runner/profile version, windows and repetition count. Historical records remain immutable.
+
+## Records and command guard
+
+`pnpm benchmark:p1 --profile functional` remains available. `--profile reference` requires explicit nonempty, provenance-bearing observations for display refresh, power source/mode, background load, GPU driver and unobscured window/selected monitor. Preserve actual browser/OS/adapter/limits/features, CSS/physical sizes/DPR/sample count, browser window bounds, time origin and observed timer increments, launch/instrumentation flags, command, source hashes, configuration and every raw callback/write/CPU count. Missing acceptance-sensitive metadata prevents candidate reference eligibility; do not invent a value or reuse a stale observation.
+
+The production reference configuration runs four scenarios, five fresh pages per browser/scenario, Chrome then Edge, headed, worker count one; use no trace/video/screenshot during timed windows. Output is an exclusive fresh directory under a dedicated ignored `artifacts/p1.6b/` root, outside Playwright cleanup. Preserve failures and all repetitions. The aggregate groups compatible scenario/browser/profile/configuration only, verifies exactly five unique repetitions and computes the maximum per-repetition nearest-rank p95 for timed S1-S3. S4 has no new frame ceiling. Empty/invalid groups are UNVERIFIED or FAIL with reasons, never numeric zero/PASS. Every record/aggregate keeps P1/A09/A10 UNVERIFIED. A05/A08 fields distinguish measured criterion disposition from Primary acceptance review.
+
+No source change during a reference group; capture and compare source at its start/end and every repetition. Raw records, failed attempts and aggregate must use exclusive writes and source/configuration integrity checks. A command failure should preserve the captured evidence before exiting nonzero. Disposal requires zero tracked live resources and pending callbacks; counters are not physical-presentation or combined-memory proof.
+
+## Acceptance and validation
+
+- C01: an initial two-primitive positive control calls geometry construction twice and writes exact resource records. Subsequent unchanged preparation has zero geometry builds/writes. A changed geometry whose normalized packed lanes happen to be unchanged still records the actual build call, exposing the distinction from backing writes.
+- C02: acknowledged camera-only, separate color and opacity edits, single transform, N03 rebase, growth, snapshot replacement and generation reconstruction fixtures distinguish CPU builds, writes and native upload ranges. Color/opacity/transform/camera/rebase cause zero geometry builds once warm. Recovery may upload retained geometry with zero CPU geometry builds. No unrelated transform/style upload is tolerated for S4.
+- C03: detached snapshots, source independence, failed numeric preparation, counter lifetime across reset/recovery and terminal disposal fixtures. Existing scene/packet/native lifecycle tests remain unchanged regression obligations.
+- C04: synthetic callback fixtures verify exact 5000/15000 half-open bounds, final boundary retention, long/failed intervals, generation/submission/visibility checks, CPU positive warm-up, invalid/negative counts and no functional-to-reference promotion.
+- C05: short native Chrome/Edge runs through all four scenarios prove actual CPU observation plus native writes/draws/submissions, one RAF owner and clean disposal. Short runs remain functional only.
+- C06: CLI fixtures reject invalid/missing profile/reference metadata before build, output collisions and cleanup paths; record mutation fixtures reject missing/duplicate/incompatible repetitions, changed source/configuration, tampered metrics and false overall acceptance. Retain failing raw observations.
+- C07: `pnpm check`, `pnpm build`, `pnpm test:browser`, production functional runner, changed Markdown links/formatting, Primary scope review and required CI pass. A reference-duration synthetic test does not substitute for an actual reference hardware run.
+- C08: after B04, establish current operator/shell environment and execute the declared headed five repetitions per scenario/browser, preserving all outputs and each threshold comparison. Missing environment or observers blocks reference eligibility while independent P2 planning/work may continue. Performance results require committed records and a Primary review; no overall P1/P2 gate is fabricated.
+
+## Contract checkpoint review
+
+Reviewed base: clean fetched `main` at `1fb9a88` after PR #37. Primary applied the user's explicit D6 approval and owns this contract. Terra medium independently examined the A05 observation seam; Primary rejected a write-only build count because actual geometry computation can precede an unchanged-write early return. The final contract separates those events and preserves thrown-call observations through `finally`. Sol medium independently researched the P2 private contract/toolchain boundary; no P2 implementation or dependency was added here. Neither worker edited files or delegated further.
+
+Documentation validation: explicit Prettier check of the five changed Markdown files PASS; read-only Node link/anchor check PASS (70 local links); `git diff --check` and Primary requirements/architecture/scope review PASS. No unit/build/browser/GPU/benchmark was run locally for this contract-only checkpoint; required remote CI is separate. C01-C08 above remain implementation/evidence obligations, not results.

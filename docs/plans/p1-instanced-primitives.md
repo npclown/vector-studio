@@ -1,6 +1,6 @@
 # P1 execution plan: Instanced primitives
 
-Status: **D1/D2 and D4 APPROVED; D5 P1.6a exception APPROVED on 2026-09-26. P1.0b through P1.6a integrated; A09/A10 remain UNVERIFIED exit gates. D6 follow-on entry is proposed, not approved.**
+Status: **D1/D2 and D4 APPROVED; D5 P1.6a exception APPROVED on 2026-09-26. P1.0b through P1.6a integrated; A09/A10 remain UNVERIFIED exit gates. D6 follow-on entry APPROVED on 2026-09-26; P1.6b and separately planned P2 may proceed.**
 
 This document owns P1 task order, approved D1/D2 contract details, acceptance and evidence. The user approved the D1 scene/camera API and D2 visual behavior on 2026-09-09 in response to the explicit approval question for PR #26 source `49c3bfd`. That 2026-09-09 approval did not change D3, measurement thresholds or the milestone entry rule. The later D4 approval below changes implementation entry only. The [roadmap](../prototype-plan.md#p1-instanced-primitives), [system boundaries](../../ARCHITECTURE.md), [graphics design gates](../graphics-engine-architecture.md#design-gates-before-later-implementation), [validation policy](../validation.md) and [benchmark policy](../benchmarks/README.md) retain their responsibilities.
 
@@ -222,7 +222,9 @@ P1.0b -> P1.1 -> { P1.2, P1.3 } -> P1.4
 P1.4 -> P1.5
 { P1.5, D5 } -> P1.6a functional runner
 { P1.0m, P1.6a } -> full P1.6
-{ P1.5, P1.6, all A01-A10 evidence } -> P1.7 -> P2 entry
+{ P1.5, P1.6, all A01-A10 evidence } -> P1.7 final acceptance
+{ P1.6a, D6 } -> P1.6b A05/A08 plan -> implementation/validation
+{ P1.6a, D6 } -> P2 plan -> private contract/validation freeze -> P2 implementation
 ```
 
 Minimum topology: one Primary supervisor, one implementation worker by default, two implementation workers only for independent files, as in P1.2/P1.3 or the P1.6a workload/metrics modules. Use a Luna command worker only when it frees the Primary for useful independent review. No fixed extra architecture/test agents, recursive delegation or concurrent GPU runs. Shared exports, scene/packet contracts and lifecycle files have one named owner per batch.
@@ -388,3 +390,11 @@ Next: P1.0m A09/A10 method resolution before completing P1.6. D5 does not permit
 P1.6a integrated through [PR #36](https://github.com/npclown/vector-studio/pull/36) as `fe84ce2`; required CI passed and the integrated tree matched the locally reviewed head. The [current-code coverage audit](../evidence/p1.0m-current-coverage-2026-09-26.md) maps actual CPU copies/transients and GPU descriptor lifetimes against A09, and checks the still-missing A10 content/display correlation. No new capture, product code or threshold change followed. A09/A10 remain UNVERIFIED.
 
 The [D6 proposal](p1-follow-on-entry-proposal.md) is a concrete user-decision option to allow separately planned A05/A08 work and P2 entry while keeping P1 final acceptance blocked. It is **not approved or applied**. Until an explicit decision, the operative graph remains D5; generic autonomous continuation does not waive this product-level sequencing decision.
+
+## D6 approval and next implementation entry (2026-09-26)
+
+The user explicitly answered "approved" to the concrete follow-on entry question after PR #37. [D6](p1-follow-on-entry-proposal.md) is now operative; the preceding pending-proposal checkpoint is historical. It permits a separate P1.6b A05/A08 implementation and independently planned P2 entry, while preserving A09/A10 thresholds and all-P1-evidence -> P1.7 final acceptance. P2 requires its own execution plan, private contracts, independent oracle and validation methods before code. P3-P5 implementation is not authorized by this decision.
+
+Apply this later decision to earlier D3/D4/D5 blanket entry statements: no extra approval is needed for ordinary technical work within the newly approved scope. Public API meaning, core architecture, dependencies, acceptance semantics and additional external acquisition retain their existing user-decision requirements. Primary owns the next contract freeze and shared integration.
+
+Next executable checkpoint: [P1.6b CPU activity and observed runner](p1-observed-runner.md), with B01-B05 dependencies and C01-C08 prospective acceptance. Core activity counters and host work may overlap only after their shared statistics shape is frozen. B05 hardware acceptance requires fresh environment observations. P2 contract research can run independently; no Rust toolchain was found on PATH or common installation paths during read-only planning, so installation requires a separately specified tool-acquisition decision.
