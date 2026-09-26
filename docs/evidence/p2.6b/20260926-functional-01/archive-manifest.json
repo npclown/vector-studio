@@ -1,0 +1,40 @@
+{
+  "sourceDirectory": "artifacts/p2.5/20260926-p2-6b-functional-01",
+  "files": [
+    {
+      "path": "aggregate.json",
+      "bytes": 1637,
+      "sha256": "41040a70e4f0c0a1fcc9cb4226edc7da3b8767220fe4f499c06e300a9b3b1bb8"
+    },
+    {
+      "path": "build.json",
+      "bytes": 1138,
+      "sha256": "e8c10cdabc3edd27cc0668a30848893ee2a9a26375600ff3f4590bcdb74201dc"
+    },
+    {
+      "path": "chrome-r1.json",
+      "bytes": 167437,
+      "sha256": "e039b163e1110114c3903d703a238a9e069e8b9e09cdb055992acec7c1b55846"
+    },
+    {
+      "path": "completion.json",
+      "bytes": 5912,
+      "sha256": "199797f2c92556adb63ee6cc0dd7ea4a8d852953b9460d999b98b82764622c9c"
+    },
+    {
+      "path": "edge-r1.json",
+      "bytes": 167465,
+      "sha256": "4a821137ac0fdef1624ac6559fbf5918a54b0b5012abfb6211d3369debe90353"
+    },
+    {
+      "path": "invocation.json",
+      "bytes": 5834,
+      "sha256": "fe9a148ba8f05e167afbe7a62384cbf876ae0c7711b8f9b4a22b1a79807f1b76"
+    },
+    {
+      "path": "runner-status.json",
+      "bytes": 120,
+      "sha256": "2134972629ecdce2c638f3dc69d2a5664e391093153a6254f5c428ebdee48307"
+    }
+  ]
+}

@@ -1,0 +1,163 @@
+{
+  "schema": "p2-run/v1",
+  "command": [
+    "pnpm",
+    "benchmark:p2",
+    "--profile",
+    "functional",
+    "--output-dir",
+    "artifacts/p2.5/20260926-p2-6b-functional-01"
+  ],
+  "profile": "functional",
+  "observedAt": "2026-09-26T11:37:52.955Z",
+  "timezone": "Asia/Seoul",
+  "environment": null,
+  "host": {
+    "os": "win32",
+    "release": "10.0.26200",
+    "arch": "x64",
+    "cpu": "AMD Ryzen 7 3700X 8-Core Processor             ",
+    "logicalCores": 16,
+    "memoryBytes": 34291060736,
+    "node": "v24.15.0"
+  },
+  "source": {
+    "head": "24f8597e78eb8445886283001430f13713a1b5e3",
+    "dirty": true,
+    "files": [
+      {
+        "path": ".node-version",
+        "sha256": "b911698dc3cf3227d34d0ad6727f1c4408791203c9665de99ab959331a1fb07d"
+      },
+      {
+        "path": "package.json",
+        "sha256": "284639d0aad4539d230c6a518b42819aa58db14c2ae5a1ece49c4c4724e7b72c"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/Cargo.lock",
+        "sha256": "9fe57a4ac37015b8d04d17d59400314156ca748d16a6a1892582887dc2f64a8d"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/Cargo.toml",
+        "sha256": "5eb5f4725fc22b6bf7fe0b070214a07d6bd755bcb78aa4ec0835d02394be5d9c"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/codec.rs",
+        "sha256": "72b6695d8be6a587cd3ef958c7e1e95326d51ff9cb64e74da170163980a88622"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/engine.rs",
+        "sha256": "2b32e31b095764dbe707434f0d0faa393376a4dc4b0e4fa6a642d309cc0f30c9"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/geometry.rs",
+        "sha256": "abc025367dfc4fd41303fb77a70af97d6152611eab89a0560dea2ca2b455e866"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/lib.rs",
+        "sha256": "401812c5af60481d21e0253f7595551943350b26ecb1c2bd19ead775ae28500d"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/native_differential.rs",
+        "sha256": "c19605855fcc06a2041452729ebd100deebfe863e28f9b009e14e792a708558b"
+      },
+      {
+        "path": "packages/geometry-wasm/package.json",
+        "sha256": "00d4a5a505021bcabed619d936a01a144e30207570ae87848bd1fe5634334778"
+      },
+      {
+        "path": "packages/geometry-wasm/src/abi.ts",
+        "sha256": "a57b7c55ae61e58f7a108f6fd52f678c5615c2aacafddfbf516e39b2a0fdad66"
+      },
+      {
+        "path": "packages/geometry-wasm/src/adapter.ts",
+        "sha256": "4d5333e2dc95797beb3d467e188423d2302e051fbc939db518b3570c28b17a22"
+      },
+      {
+        "path": "packages/geometry-wasm/src/index.ts",
+        "sha256": "b545ab05ba347c54230627b2c435133a4b78cdc76c329d82905b2ffce403550a"
+      },
+      {
+        "path": "packages/geometry-wasm/src/types.ts",
+        "sha256": "17df9b9c58fe84b8dcdecd1991fd5dfe6fb89a3406703ee7ffa7d3cac31ce506"
+      },
+      {
+        "path": "packages/geometry-wasm/tsconfig.json",
+        "sha256": "ada6fc91668f377fd38c212bf500aec9378b7a7d1dfd042ce3b061bd54f46004"
+      },
+      {
+        "path": "playwright.p2-benchmark.config.ts",
+        "sha256": "833279acec054e3dd11d244937b28af4d45e8744ff14a9924350ea4fcab6d2b3"
+      },
+      {
+        "path": "pnpm-lock.yaml",
+        "sha256": "b524d4bfc8be0d870824568cfbd1df68330d140990498ea1e443c70f337d7d81"
+      },
+      {
+        "path": "tests/geometry-benchmark/benchmark.spec.ts",
+        "sha256": "da913ab6384c35353078d891dbd7bb10dc80ab16430c41cb1b3adbf08bd53fa6"
+      },
+      {
+        "path": "tests/geometry-benchmark/index.html",
+        "sha256": "f93eefe033af58c8cd22b491f4032379a086557c8cf343b13df486cbf626d7f1"
+      },
+      {
+        "path": "tests/geometry-benchmark/main.ts",
+        "sha256": "1f4a3b766d5cc4081813838db44c843335b40f634defdacf0566cb42c2cfa354"
+      },
+      {
+        "path": "tests/geometry-benchmark/measure.ts",
+        "sha256": "447c1b3f273a79db77147bcd3fa0f09412dc87d7d0fc90c3aedcdd7a1904be21"
+      },
+      {
+        "path": "tests/geometry-benchmark/records.test.ts",
+        "sha256": "b94492be90c250becab4a691584ef59a7a7af6272044b73fdae0eb2300a38dcb"
+      },
+      {
+        "path": "tests/geometry-benchmark/types.ts",
+        "sha256": "5c581bc97f731529dd37317828101442e4726f2cefa915bfa7ca74ab1217c5fd"
+      },
+      {
+        "path": "tests/geometry-benchmark/vite.config.ts",
+        "sha256": "9f62c67029c7e1edf105ebf76cb907b561975ff524ffcbc6db97e0e7b0861ed9"
+      },
+      {
+        "path": "tests/geometry-benchmark/workload.ts",
+        "sha256": "4b7c69f0ab513a28e778416a85c7bcd36a84bb7900071e5fb31c21e7d27bc1bc"
+      },
+      {
+        "path": "tests/support/p2-benchmark-record.ts",
+        "sha256": "0fb0e422ab0d5a41b71f64d4e23d3ac9556911c4565cc93bb902e61fa6464966"
+      },
+      {
+        "path": "tooling/install-rust.ps1",
+        "sha256": "3be5d4d26960c42ad5a47e267b70a6ff0c0a7087cb424a57427b6ae6b921602c"
+      },
+      {
+        "path": "tooling/run-p1-benchmark.mjs",
+        "sha256": "ea42855762716605d3acecacfcb2e37c668323a9f30f2ed2b6ceea757cb19582"
+      },
+      {
+        "path": "tooling/run-p2-benchmark.mjs",
+        "sha256": "e095318bfd18596a5df8affbca2f192a6eacd2fc57bbcdcd9570f5c5c2059bf9"
+      },
+      {
+        "path": "tooling/test-geometry.mjs",
+        "sha256": "937e87e408fcbefe589337c3f03e1dde6a35d4334b17103393068ca37d00fd0f"
+      },
+      {
+        "path": "tsconfig.base.json",
+        "sha256": "54a4732d04c541cd21b6dff7f677691da27c66d8b71d182baa5b6f76f5184b15"
+      },
+      {
+        "path": "tsconfig.json",
+        "sha256": "107f6812f460d6d74d57d8dbabfc905e43c8d377c969a54af6a81928988976df"
+      },
+      {
+        "path": "vitest.p2-records.config.ts",
+        "sha256": "b22e19bd0ce96d1ce795f0598152aec966930ee54e8d8ac3641bb7b4562c376a"
+      }
+    ],
+    "sha256": "732d2a8a32b1f7f77c7a6ea93c0bfff2f2832c132a41dafa0d9c31ad1b137b94"
+  }
+}

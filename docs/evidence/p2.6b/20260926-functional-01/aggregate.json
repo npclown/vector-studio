@@ -1,0 +1,63 @@
+{
+  "schema": "p2-aggregate/v1",
+  "profile": "functional",
+  "disposition": "FUNCTIONAL_PASS",
+  "acceptance": "Requires Primary review; not full P2/P1 acceptance",
+  "performanceDisposition": "NOT_APPLICABLE",
+  "findings": [],
+  "worstMedianPairedSpeedup": 0.9213042412407891,
+  "repetitions": [
+    {
+      "project": "chrome",
+      "repetition": 1,
+      "analysis": {
+        "disposition": "FUNCTIONAL_PASS",
+        "findings": [],
+        "unverified": [],
+        "batch": {
+          "count": 2,
+          "median": 395.0999999977648,
+          "p95": 396,
+          "p99": 396,
+          "min": 395.0999999977648,
+          "max": 396
+        },
+        "perPath": {
+          "count": 2,
+          "median": 392.80000000074506,
+          "p95": 393.5,
+          "p99": 393.5,
+          "min": 392.80000000074506,
+          "max": 393.5
+        },
+        "medianPairedSpeedup": 0.9919191919210734
+      }
+    },
+    {
+      "project": "edge",
+      "repetition": 1,
+      "analysis": {
+        "disposition": "FUNCTIONAL_PASS",
+        "findings": [],
+        "unverified": [],
+        "batch": {
+          "count": 2,
+          "median": 395.4000000022352,
+          "p95": 407.8999999985099,
+          "p99": 407.8999999985099,
+          "min": 395.4000000022352,
+          "max": 407.8999999985099
+        },
+        "perPath": {
+          "count": 2,
+          "median": 375.80000000074506,
+          "p95": 381.20000000298023,
+          "p99": 381.20000000298023,
+          "min": 375.80000000074506,
+          "max": 381.20000000298023
+        },
+        "medianPairedSpeedup": 0.9213042412407891
+      }
+    }
+  ]
+}

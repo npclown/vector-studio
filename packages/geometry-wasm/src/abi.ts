@@ -536,8 +536,8 @@ function validateProvenance(
 
     const first = outputIndex;
     let cubicLineCount = 0;
-    let previousNumerator = 0n;
-    let previousDenominator = 1n;
+    let previousNumerator = 0;
+    let previousDenominator = 1;
     while (outputIndex < outputVerbs.length && provenance[outputIndex * 3] === sourceOrdinal) {
       if (outputVerbs[outputIndex] !== 1) {
         throw new AbiContractError('cubic provenance is attached to a non-LINE output');
@@ -547,12 +547,12 @@ function validateProvenance(
       if (numerator === undefined || depth === undefined || depth > 20) {
         throw new AbiContractError('cubic provenance depth is invalid');
       }
-      const denominator = 1n << BigInt(depth);
-      const currentNumerator = BigInt(numerator);
-      if (currentNumerator === 0n || currentNumerator > denominator) {
+      const denominator = 2 ** depth;
+      const currentNumerator = numerator;
+      if (currentNumerator === 0 || currentNumerator > denominator) {
         throw new AbiContractError('cubic provenance numerator is invalid');
       }
-      if (previousNumerator * denominator !== (currentNumerator - 1n) * previousDenominator) {
+      if (previousNumerator * denominator !== (currentNumerator - 1) * previousDenominator) {
         throw new AbiContractError('cubic provenance intervals are not contiguous');
       }
       previousNumerator = currentNumerator;
