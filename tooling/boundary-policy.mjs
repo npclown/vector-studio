@@ -3,6 +3,7 @@ import path from 'node:path';
 export const boundaries = new Map([
   ['@vector-studio/contracts', new Set()],
   ['@vector-studio/geometry-reference', new Set(['@vector-studio/contracts'])],
+  ['@vector-studio/geometry-wasm', new Set(['@vector-studio/contracts'])],
   ['@vector-studio/renderer-core', new Set(['@vector-studio/contracts'])],
   [
     '@vector-studio/renderer-webgpu',
@@ -21,6 +22,7 @@ export const boundaries = new Map([
 export const packageDirectories = [
   'packages/contracts',
   'packages/geometry-reference',
+  'packages/geometry-wasm',
   'packages/renderer-core',
   'packages/renderer-webgpu',
   'apps/playground',

@@ -1,6 +1,6 @@
 # P2 Rust/WASM geometry kernel execution plan
 
-Status: P2.0 integrated through [PR #40](https://github.com/npclown/vector-studio/pull/40) as `972ec13` after required CI; P2.1 integrated through PR #41 as `844e41d`; P2.2 local validation is complete after the user-approved per-cubic LINE cap revision to 8,192 on 2026-09-26; protected PR checks/integration remain pending. The [earlier conflict evidence](../evidence/p2.2-cap-conflict-2026-09-26/README.md) remains historical. Rust installation is approved and complete. Entry is authorized by [D6](p1-follow-on-entry-proposal.md). P1 A09/A10 and full P1 acceptance remain UNVERIFIED; this plan does not authorize P3-P5.
+Status: P2.0 integrated through [PR #40](https://github.com/npclown/vector-studio/pull/40) as `972ec13`; P2.1 through PR #41 as `844e41d`; P2.2 through [PR #42](https://github.com/npclown/vector-studio/pull/42) as `3447b4a` after required CI. P2.3 adapter/cache is locally complete, pending required PR checks and integration. The user-approved per-cubic LINE cap is 8,192; the [earlier conflict evidence](../evidence/p2.2-cap-conflict-2026-09-26/README.md) remains historical. Rust installation is approved and complete. Entry is authorized by [D6](p1-follow-on-entry-proposal.md). P1 A09/A10 and full P1 acceptance remain UNVERIFIED; this plan does not authorize P3-P5.
 
 ## Scope and contract
 
@@ -12,12 +12,12 @@ The user explicitly approved the pending Rust acquisition on 2026-09-26. `toolin
 
 | ID  | Required evidence                                                                                                                                                                            | Status                                           |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| A01 | Packed v1 input/output exact layout, terminal offsets, aligned/range-checked sections, source echoes, empty/multiple subpaths; malformed envelope versus per-path atomic failures            | PARTIAL (kernel + reference; later gates remain) |
+| A01 | Packed v1 input/output exact layout, terminal offsets, aligned/range-checked sections, source echoes, empty/multiple subpaths; malformed envelope versus per-path atomic failures            | PASS (local P2.2/P2.3 evidence)                  |
 | A02 | Analytic and independent bracketed bounds agree within private tolerances; extrema, near-linear roots, repeated roots, large/small translated inputs, nonfinite/uncertain rejection          | PARTIAL (kernel + reference; later gates remain) |
 | A03 | Every successful flattened cubic passes independent continuous <=0.25 physical-pixel check; zoom/world scale/shear/DPR bucket transitions and positive controls                              | PARTIAL (kernel + reference; later gates remain) |
-| A04 | Bounded adversarial work, deterministic output/errors, no trap/partial failed-path output; valid path after failed path still succeeds                                                       | TODO                                             |
-| A05 | Reserve/growth/relocation/view invalidation, insufficient-output retry, allocation-failure seam, disposal and recreated-instance isolation                                                   | TODO                                             |
-| A06 | One of 10,000 paths edited builds exactly one path; unchanged calls hit, bucket change affects only changed requests; stale/revision conflict, LRU/oversize/byte accounting/dispose fixtures | TODO                                             |
+| A04 | Bounded adversarial work, deterministic output/errors, no trap/partial failed-path output; valid path after failed path still succeeds                                                       | PASS (local P2.2/P2.3 evidence)                  |
+| A05 | Reserve/growth/relocation/view invalidation, insufficient-output retry, allocation-failure seam, disposal and recreated-instance isolation                                                   | PASS (local P2.2/P2.3 evidence)                  |
+| A06 | One of 10,000 paths edited builds exactly one path; unchanged calls hit, bucket change affects only changed requests; stale/revision conflict, LRU/oversize/byte accounting/dispose fixtures | PASS (local P2.2/P2.3 evidence)                  |
 | A07 | At least 10,000 seeded cubics plus named adversarial/metamorphic corpus; native Rust and browser WASM agree with independent reference without production helper imports                     | PARTIAL (kernel + reference; later gates remain) |
 | A08 | Fair end-to-end batch/per-path benchmark meets frozen speedup below with every repetition, failure, source/environment record retained                                                       | TODO                                             |
 
@@ -85,3 +85,20 @@ At that observation the private contract, kernel cap, reference validator, manda
 ## P2.2 validated local checkpoint (2026-09-26)
 
 [Kernel review and reproducible evidence](../evidence/p2.2-kernel-review-2026-09-26.md) records the approved cap revision, exact commands, compiler identity and WASM hash. All 25 native tests, six raw Node WASM tests (including all 10,000 ordinary corpus curves), 275 root tests, static/boundary checks and builds pass. The initial failure record above is historical. P2.2 is locally complete; required remote CI and protected PR integration remain. P2.3 adapter/cache is the next task; A06 remains TODO, A01-A05 retain adapter-side obligations, A07 retains native/browser differential and A08 retains benchmark obligations. No full P2 or P1 gate is claimed.
+
+## P2.3 implementation checkpoint
+
+Entry: clean main `3447b4a8f13c66b36ed7af9890ce0cb80b4efca6`, with P2.2 required CI and protected integration complete. This checkpoint implements the existing private adapter/cache contract only; no editor-facing GeometryPort, renderer integration, dependency acquisition or P3 work.
+
+One Sol high worker owns `packages/geometry-wasm/src/**` and its focused unit fixtures. Primary owns package/build/boundary wiring, real-WASM integration fixtures, numerical/ownership review and evidence. Shared adapter/cache lifetime has one implementation owner. No recursive delegation.
+
+Acceptance before commit:
+
+- A01/A04: pack batches with checked lengths, preserve request order and token echoes, isolate per-path errors, reject malformed results/ABI, and never return partial output for a failed batch.
+- A05: refresh buffer/pointers/epoch after every mutation; keep owned input across exact-size output reserve/retry; copied results survive subsequent work/growth/dispose; fail closed on unexpected process growth or epoch anomalies; aggregate every retry's work. Initialization failures release the instance and disposal is terminal/idempotent.
+- A06: 10,000 initial paths build as one batch; unchanged requests hit; one revised path causes exactly one kernel path build. Same bucket reuses geometry; finer zoom/DPR/shear buckets affect only relevant requests. Revision/conflict checks are independent of style/fill/bucket, stale work cannot repopulate newer cache state, and failed newer revisions invalidate old variants. Test node-LRU, 10,000 node/variant and 16 MiB payload caps, oversize input/result admission, mutation isolation, correct byte/counter accounting and disposal/recreation.
+- Use synchronous input-order request processing and source echoes. Before publishing a computed cache entry, verify its node revision is still resident/current; earlier requests in the same batch cannot overwrite a later accepted revision. Returned results own copies separate from private cache/input storage.
+- Production geometry-wasm remains independent of the oracle. Extend package compilation and dependency-policy tests; do not expose WASM pointers through contracts or import the adapter into renderer packages.
+- Validation: `pnpm check`, `pnpm build`, `pnpm test:geometry` with actual release WASM plus deterministic injected lifetime/error fixtures, and changed-document/link checks. Browser differential and benchmark execution remain P2.4 onward.
+
+Local outcome: [adapter review and evidence](../evidence/p2.3-adapter-review-2026-09-26.md) records 282 root tests, 25 native tests, 22 final release-WASM integration tests, static/boundary checks and five library plus playground builds. Primary and independent review findings are corrected. A01/A04/A05/A06 have local checkpoint evidence; required CI and protected integration remain. P2.4 native/browser differential is next; no full P2/P1 gate or performance result is claimed.

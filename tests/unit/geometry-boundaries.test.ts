@@ -12,12 +12,24 @@ const resolveImport = workspaceImportTarget as (
 const root = path.resolve(import.meta.dirname, '../..');
 const roots = new Map([
   ['@vector-studio/geometry-reference', path.join(root, 'packages/geometry-reference')],
+  ['@vector-studio/geometry-wasm', path.join(root, 'packages/geometry-wasm')],
   ['@vector-studio/renderer-core', path.join(root, 'packages/renderer-core')],
   ['@vector-studio/contracts', path.join(root, 'packages/contracts')],
 ]);
 const referenceSource = path.join(root, 'packages/geometry-reference/src/index.ts');
 
 describe('test-only geometry package boundary', () => {
+  it('keeps the production adapter independent of the reference and renderer', () => {
+    expect([...policy.get('@vector-studio/geometry-wasm')!]).toEqual(['@vector-studio/contracts']);
+    const adapter = path.join(root, 'packages/geometry-wasm/src/index.ts');
+    expect(resolveImport('../../geometry-reference/src/index.js', adapter, roots)).toBe(
+      '@vector-studio/geometry-reference',
+    );
+    expect(resolveImport('../../geometry-wasm/src/index.js', referenceSource, roots)).toBe(
+      '@vector-studio/geometry-wasm',
+    );
+  });
+
   it('keeps the oracle independent and absent from every production dependency allowlist', () => {
     expect([...policy.get('@vector-studio/geometry-reference')!]).toEqual([
       '@vector-studio/contracts',
