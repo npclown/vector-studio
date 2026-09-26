@@ -1,6 +1,6 @@
 # P1 execution plan: Instanced primitives
 
-Status: **D1/D2 and D4 APPROVED; D5 P1.6a exception APPROVED on 2026-09-26. P1.0b through P1.5 integrated; P1.6a locally complete with functional evidence; A09/A10 remain UNVERIFIED exit gates.**
+Status: **D1/D2 and D4 APPROVED; D5 P1.6a exception APPROVED on 2026-09-26. P1.0b through P1.6a integrated; A09/A10 remain UNVERIFIED exit gates. D6 follow-on entry is proposed, not approved.**
 
 This document owns P1 task order, approved D1/D2 contract details, acceptance and evidence. The user approved the D1 scene/camera API and D2 visual behavior on 2026-09-09 in response to the explicit approval question for PR #26 source `49c3bfd`. That 2026-09-09 approval did not change D3, measurement thresholds or the milestone entry rule. The later D4 approval below changes implementation entry only. The [roadmap](../prototype-plan.md#p1-instanced-primitives), [system boundaries](../../ARCHITECTURE.md), [graphics design gates](../graphics-engine-architecture.md#design-gates-before-later-implementation), [validation policy](../validation.md) and [benchmark policy](../benchmarks/README.md) retain their responsibilities.
 
@@ -382,3 +382,9 @@ Local completion: [functional runner review and immutable records](../evidence/p
 Validation: `pnpm check` PASS (221 tests/30 files plus static/boundary checks); `pnpm test:browser` PASS (20 serial Chrome/Edge tests); `pnpm benchmark:p1 --profile functional --output-dir artifacts/p1.6a/20260926-final-functional` PASS (production build, 42 playground modules, eight native functional cases). Each final case has eight callbacks, correct 1000/10000/1032 draw populations, valid warmed writes, one RAF owner and zero tracked live resources after disposal. All 42 local records, including two exploratory failures, are preserved. Primary corrected observation gaps and reviewed all worker outputs; product packages/public API/dependencies remain unchanged. Required CI/integration remains a separate gate.
 
 Next: P1.0m A09/A10 method resolution before completing P1.6. D5 does not permit P1.7 reference acceptance or P2 entry.
+
+## P1.0m current coverage checkpoint (2026-09-26)
+
+P1.6a integrated through [PR #36](https://github.com/npclown/vector-studio/pull/36) as `fe84ce2`; required CI passed and the integrated tree matched the locally reviewed head. The [current-code coverage audit](../evidence/p1.0m-current-coverage-2026-09-26.md) maps actual CPU copies/transients and GPU descriptor lifetimes against A09, and checks the still-missing A10 content/display correlation. No new capture, product code or threshold change followed. A09/A10 remain UNVERIFIED.
+
+The [D6 proposal](p1-follow-on-entry-proposal.md) is a concrete user-decision option to allow separately planned A05/A08 work and P2 entry while keeping P1 final acceptance blocked. It is **not approved or applied**. Until an explicit decision, the operative graph remains D5; generic autonomous continuation does not waive this product-level sequencing decision.

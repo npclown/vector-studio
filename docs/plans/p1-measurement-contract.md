@@ -160,3 +160,7 @@ The [read-only method assessment](../evidence/p1.0m-method-assessment-2026-09-12
 ## Approved partial runner entry (2026-09-26)
 
 User-approved [D5](p1-instanced-primitives.md#d5-approved-p16a-runner-entry-exception-2026-09-26) permits the bounded [P1.6a functional runner](p1-runner-contract.md) while A09/A10 remain unresolved. Workload formulas, reference repetitions/windows and every acceptance threshold above are unchanged. This later decision permits runner implementation and non-accepting functional checks only; full measurement readiness and reference acceptance remain blocked.
+
+## Post-implementation coverage audit (2026-09-26)
+
+P1.6a is integrated at `fe84ce2`. The [current ownership/coverage audit](../evidence/p1.0m-current-coverage-2026-09-26.md) identifies actual deep copies, candidate/publication overlap, typed and JS caches, upload copies, native preflight storage and GPU descriptor lifetime limits. Existing functional records do not close either A09 or A10. No new measurement was performed. A [follow-on entry proposal](p1-follow-on-entry-proposal.md) is pending a user decision; it has no effect on current acceptance or execution permissions.
