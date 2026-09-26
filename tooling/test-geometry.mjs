@@ -135,5 +135,6 @@ run(
   ],
   {
     P2_WASM_PATH: wasm,
+    P2_NATIVE_RUSTUP: rustup,
   },
 );

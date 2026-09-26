@@ -506,6 +506,10 @@ impl<'a> OutputWriter<'a> {
 }
 
 #[cfg(test)]
+#[path = "native_differential.rs"]
+mod native_differential;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::codec::{align_up, read_f64, read_u32, INPUT_MAGIC};
