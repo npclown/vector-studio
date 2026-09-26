@@ -20,6 +20,12 @@ Every new run needs a collision-free identity, such as a UTC time/run-ID suffix 
 
 ## Reproducibility requirements
 
+### P1.6a functional runner
+
+Run `pnpm benchmark:p1 --profile functional` (optional `--output-dir artifacts/p1.6a/<fresh-id>`). It first reserves an exclusive run directory, then builds production assets and runs four native workloads in each of headless Chrome and Edge. Missing/acceptance/reference profiles are rejected before build or browser launch. It records three warm-up and five observed callbacks, not the reference protocol; every result retains `P1/A05/A08/A09/A10: UNVERIFIED` regardless of functional outcome. See the [runner contract](../plans/p1-runner-contract.md). A09/A10 methods and full reference acceptance remain blocked. Raw functional records and failed attempts are immutable observations; they are not benchmark PASS records.
+
+### Accepted reference runs
+
 Every accepted run records:
 
 - Git commit or explicit dirty-worktree marker

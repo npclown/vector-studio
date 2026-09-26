@@ -15,6 +15,8 @@ This document is the source of truth for test layers, validation evidence, and t
 
 ## Validation layers
 
+The [P1.6a runner contract](plans/p1-runner-contract.md) adds eight native functional cases (four frozen workloads in Chrome/Edge) to `pnpm test:browser`. `pnpm benchmark:p1 --profile functional` builds production assets and runs the same cases serially with separate output. Its three warm-up/five observed callbacks validate instrumentation and cleanup only; headless diagnostic intervals and upload records do not pass P1 performance, memory or pointer-to-present acceptance. Records remain outside Playwright cleanup under `artifacts/p1.6a/`.
+
 ### Static validation
 
 Applies to every implementation change:

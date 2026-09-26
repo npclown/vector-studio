@@ -1,10 +1,12 @@
 # P1 measurement readiness contract
 
-Status: **PARTIAL — deterministic workloads specified; memory and physical-presentation methods unresolved. Approved D4 permits implementation after P1.0b; measurement implementation and acceptance runs remain blocked.**
+Status: **PARTIAL — deterministic workloads specified; memory and physical-presentation methods unresolved. Approved D4 permits implementation after P1.0b; D5 permits the bounded P1.6a functional runner; complete measurement implementation and acceptance runs remain blocked.**
 
 Owner: P1.0m in the [active plan](p1-instanced-primitives.md). This supplements its measurement details without changing the [roadmap thresholds](../prototype-plan.md#p1-instanced-primitives) or [benchmark policy](../benchmarks/README.md). The user's 2026-09-09 approval covers D1/D2; the separate 2026-09-12 [D4 approval](p1-instanced-primitives.md#d4-approved-entryexit-separation) changes implementation entry only. The definitions below are prospective specifications, not performance observations. No product code, benchmark, external tool installation or capture was performed for this checkpoint.
 
 ## Common deterministic scene definition
+
+P1.6a implements these formulas in the bounded functional profile under [D5](p1-instanced-primitives.md#d5-approved-p16a-runner-entry-exception-2026-09-26), with [functional evidence](../evidence/p1.6a/20260926-functional/README.md). Reference sampling and A09/A10 readiness below are unchanged; this partial implementation is not reference acceptance.
 
 Configuration version: `p1-primitives-workloads/v1`. The eventual runner must store the full expanded configuration and canonical hash, not just this version/seed. Any later workload/trajectory/method change receives a new scenario version before measurement.
 
@@ -154,3 +156,7 @@ Outcome: the [new immutable review](../evidence/p1.0m/20260912-presentmon-elevat
 ## Source-method assessment: 2026-09-12
 
 The [read-only method assessment](../evidence/p1.0m-method-assessment-2026-09-12.md) records a conditional complete-memory upper bound, unresolved shared-storage coverage, missing WebGPU-content/compositor/PresentMon identity joins and hardware endpoint provenance. No new runtime observation or executable method is accepted. A09/A10 remain UNVERIFIED. The user subsequently approved [D4](p1-instanced-primitives.md#d4-approved-entryexit-separation). P1.0b and then P1.1-P1.5 may proceed while this method investigation remains unresolved. P1.6/P1.7 and P2 entry remain blocked on the unchanged required measurement evidence; no additional experiment is authorized.
+
+## Approved partial runner entry (2026-09-26)
+
+User-approved [D5](p1-instanced-primitives.md#d5-approved-p16a-runner-entry-exception-2026-09-26) permits the bounded [P1.6a functional runner](p1-runner-contract.md) while A09/A10 remain unresolved. Workload formulas, reference repetitions/windows and every acceptance threshold above are unchanged. This later decision permits runner implementation and non-accepting functional checks only; full measurement readiness and reference acceptance remain blocked.

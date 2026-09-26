@@ -1,6 +1,6 @@
 # P1 execution plan: Instanced primitives
 
-Status: **D1/D2 APPROVED on 2026-09-09; D4 entry/exit separation APPROVED on 2026-09-12. P1.0b through P1.4 integrated; P1.5 locally complete; A09/A10 remain UNVERIFIED exit gates.**
+Status: **D1/D2 and D4 APPROVED; D5 P1.6a exception APPROVED on 2026-09-26. P1.0b through P1.5 integrated; P1.6a locally complete with functional evidence; A09/A10 remain UNVERIFIED exit gates.**
 
 This document owns P1 task order, approved D1/D2 contract details, acceptance and evidence. The user approved the D1 scene/camera API and D2 visual behavior on 2026-09-09 in response to the explicit approval question for PR #26 source `49c3bfd`. That 2026-09-09 approval did not change D3, measurement thresholds or the milestone entry rule. The later D4 approval below changes implementation entry only. The [roadmap](../prototype-plan.md#p1-instanced-primitives), [system boundaries](../../ARCHITECTURE.md), [graphics design gates](../graphics-engine-architecture.md#design-gates-before-later-implementation), [validation policy](../validation.md) and [benchmark policy](../benchmarks/README.md) retain their responsibilities.
 
@@ -191,11 +191,11 @@ P1-A01 is PASS at the CPU scene-synchronization boundary. A02/A04 retain their C
 | P1-A09 | Peak simultaneous combined working memory for 10k scenes ≤ 256,000,000 bytes, with the categories below present and overlap demonstrated.                                                                                                                          | CPU inventory/heap method plus actual GPU accounting, per-phase snapshots; P1.6/P1.7                                                               |
 | P1-A10 | Pointer-to-present p95 < 50 ms with a validated event/clock/content-correlation method.                                                                                                                                                                            | Method approval if needed, raw correlated observations; P1.6/P1.7; currently UNVERIFIED                                                            |
 
-Run `pnpm check` and `pnpm build` for every implementation checkpoint; use root `pnpm test:unit` for scoped deterministic iterations. `pnpm test:browser` remains the integration regression command. P1.5 must add explicitly scoped P1 headed coverage behind the existing root `pnpm test:gpu` command without overwriting P0 records. P1.6 implements the prospectively frozen new root `pnpm benchmark:p1` command; **it does not exist yet** and cannot be listed as executed validation. GPU/performance evidence must identify actual test names, browser versions, measured source, artifact paths and command flags.
+Run `pnpm check` and `pnpm build` for every implementation checkpoint; use root `pnpm test:unit` for scoped deterministic iterations. `pnpm test:browser` remains the integration regression command. P1.5 must add explicitly scoped P1 headed coverage behind the existing root `pnpm test:gpu` command without overwriting P0 records. P1.6a implements the D5-approved functional-only `pnpm benchmark:p1 --profile functional` command; full reference measurement remains blocked by P1.0m. See the [runner contract](p1-runner-contract.md). GPU/performance evidence must identify actual test names, browser versions, measured source, artifact paths and command flags.
 
 ## Benchmark specification and remaining freeze work
 
-The [P1 measurement readiness contract](p1-measurement-contract.md) owns the exact four workload formulas, scene identities, fixed 1032-visible population, reference sampling and frozen frame-interval definition, memory accounting investigation and bounded presentation-instrumentation proposal. It preserves the roadmap's numeric thresholds. P1.0m is PARTIAL: workload arithmetic and the A08 endpoint are fixed, while A09/A10 evidence methods remain unresolved. Under approved D4, all methods must be executable before P1.6 starts; they no longer block P1.0b or P1.1-P1.5.
+The [P1 measurement readiness contract](p1-measurement-contract.md) owns the exact four workload formulas, scene identities, fixed 1032-visible population, reference sampling and frozen frame-interval definition, memory accounting investigation and bounded presentation-instrumentation proposal. It preserves the roadmap's numeric thresholds. P1.0m is PARTIAL: workload arithmetic and the A08 endpoint are fixed, while A09/A10 evidence methods remain unresolved. D5 permits the bounded P1.6a functional runner while those methods remain unresolved. They still block full P1.6, P1.7 and P2; no acceptance threshold changes.
 
 ## Task graph, ownership and routing
 
@@ -220,18 +220,19 @@ P1.0a -> user D1/D2 approval -> P1.0b
 P1.0a -> P1.0m measurement resolution
 P1.0b -> P1.1 -> { P1.2, P1.3 } -> P1.4
 P1.4 -> P1.5
-{ P1.0m, P1.4 } -> P1.6
+{ P1.5, D5 } -> P1.6a functional runner
+{ P1.0m, P1.6a } -> full P1.6
 { P1.5, P1.6, all A01-A10 evidence } -> P1.7 -> P2 entry
 ```
 
-Minimum topology: one Primary supervisor, one implementation worker by default, two implementation workers only during independent P1.2/P1.3. Use a Luna command worker only when it frees the Primary for useful independent review. No fixed extra architecture/test agents, recursive delegation or concurrent GPU runs. Shared exports, scene/packet contracts and lifecycle files have one named owner per batch.
+Minimum topology: one Primary supervisor, one implementation worker by default, two implementation workers only for independent files, as in P1.2/P1.3 or the P1.6a workload/metrics modules. Use a Luna command worker only when it frees the Primary for useful independent review. No fixed extra architecture/test agents, recursive delegation or concurrent GPU runs. Shared exports, scene/packet contracts and lifecycle files have one named owner per batch.
 
 ## Next batch and implementation entry
 
-1. D1/D2 and D4 approval are recorded. Continue P1.0m measurement/configuration readiness independently; external tools or a change to acceptance semantics require a separate concrete user decision. Missing measurement evidence continues to block P1.6/P1.7 and P2 entry. Report unresolved methods instead of rerunning P0 proxies.
+1. D1/D2 and D4 approval are recorded. Continue P1.0m measurement/configuration readiness independently; external tools or a change to acceptance semantics require a separate concrete user decision. Missing measurement evidence continues to block full P1.6/P1.7 and P2 entry; D5 permits only P1.6a functional implementation. Report unresolved methods instead of rerunning P0 proxies.
 2. P1.0b private contract freeze and P1.1 CPU mirror/type foundation are integrated. [PR #31](https://github.com/npclown/vector-studio/pull/31) merged P1.1 as `355d03f`; required CI passed and its integrated tree matched the reviewed source.
 3. P1.2 integrated through [PR #32](https://github.com/npclown/vector-studio/pull/32); P1.3 integrated through [PR #33](https://github.com/npclown/vector-studio/pull/33) as `8682663`. Primary retains shared exports and contract ownership.
-4. P1.4 integrated through [PR #34](https://github.com/npclown/vector-studio/pull/34) as `c3e1246` with [unit-level integration evidence](../evidence/p1.4-integration-review-2026-09-12.md). P1.5 is locally complete with [headed primitive, overlap, precision and recovery evidence](../evidence/p1.5-visual-review-2026-09-12.md). P1.6 remains blocked on executable P1.0m methods.
+4. P1.4 integrated through [PR #34](https://github.com/npclown/vector-studio/pull/34) as `c3e1246` with [unit-level integration evidence](../evidence/p1.4-integration-review-2026-09-12.md). P1.5 is integrated through [PR #35](https://github.com/npclown/vector-studio/pull/35) as `941e448`, with [headed evidence](../evidence/p1.5-visual-review-2026-09-12.md). D5 authorizes P1.6a; full P1.6 remains blocked on executable P1.0m methods.
 
 D4 changes execution order only. D1/D2 alone did not authorize this entry change; the separate 2026-09-12 user approval does. A09/A10 and the complete P1 exit gate are unchanged.
 
@@ -365,3 +366,19 @@ Headed browser/GPU images and actual recovery output remain P1.5. These native-c
 Local completion evidence: [P1.4 integration review](../evidence/p1.4-integration-review-2026-09-12.md). One Sol high implementation owner and Primary independent review/fixtures completed the service/native integration without changing D1/D2 or packet v1. Luna low ran `pnpm check` — PASS: 172 tests in 24 files, formatting, lint, TypeScript and boundaries — and `pnpm build` — PASS: all libraries and playground. The three new targeted fixture files contain 19 tests. Existing P0 unit/native-double regression tests remain passing. No browser/GPU/benchmark run or P1 exit claim is made; required remote CI is a separate protected PR gate.
 
 P1.3 combined validation after incorporating P1.2 main `c878b54`: Luna low ran `pnpm check` (PASS: 153 tests, 21 files, all static/boundary checks) and `pnpm build` (PASS: all libraries/playground). Primary resolved the plan-only append conflict and preserved both checkpoint records; product sources had no conflict. Final explicit Markdown formatting passed three files; the heading/HTML-anchor checker passed 263 local links/anchors across 64 Markdown files. `git diff --check` and final source/scope review passed. This combined validation supersedes the isolated-base unit count above for PR integration, without adding native GPU or performance claims.
+
+## D5: approved P1.6a runner entry exception (2026-09-26)
+
+The user explicitly approved separating P1.6a: implement the four frozen workloads and A05 upload/A08 RAF observation runner, then perform functional validation. P1.5 is integrated through PR #35 at `941e448`. The [partial runner contract](p1-runner-contract.md) fixes this checkpoint acceptance and file ownership before implementation.
+
+This changes only the dependency for that bounded runner subset: `P1.5 + D5 -> P1.6a`. A09/A10 and all numeric thresholds remain unchanged and UNVERIFIED; P1.0m still blocks completion of full P1.6, P1.7 reference acceptance and P2 entry. No new capture/UAC, dependency, public API or product architecture is approved. Only a clearly non-accepting functional profile may execute now. Earlier D4 statements blocking all P1.6 work are narrowed solely by this later explicit decision.
+
+P1.6a is a subtask of P1.6 with predecessors P1.5 and D5, medium difficulty/risk, disjoint workload/metrics ownership and one Primary host owner. Pure workloads/CLI fixtures used Terra medium; numeric summaries/record fixtures and read-only host review used Sol medium. Primary retained native observation/lifecycle integration, shared configuration, evidence and acceptance. No recursive delegation.
+
+## P1.6a checkpoint (2026-09-26)
+
+Local completion: [functional runner review and immutable records](../evidence/p1.6a/20260926-functional/README.md). Exact frozen 1k/10k scenes, A05 native upload ranges and A08 callback calculations are implemented behind a functional-only command; reference/acceptance profiles fail before build or browser launch. Every record remains non-accepting. Neither CPU geometry rebuilds nor A09/A10 are inferred from proxies.
+
+Validation: `pnpm check` PASS (221 tests/30 files plus static/boundary checks); `pnpm test:browser` PASS (20 serial Chrome/Edge tests); `pnpm benchmark:p1 --profile functional --output-dir artifacts/p1.6a/20260926-final-functional` PASS (production build, 42 playground modules, eight native functional cases). Each final case has eight callbacks, correct 1000/10000/1032 draw populations, valid warmed writes, one RAF owner and zero tracked live resources after disposal. All 42 local records, including two exploratory failures, are preserved. Primary corrected observation gaps and reviewed all worker outputs; product packages/public API/dependencies remain unchanged. Required CI/integration remains a separate gate.
+
+Next: P1.0m A09/A10 method resolution before completing P1.6. D5 does not permit P1.7 reference acceptance or P2 entry.
