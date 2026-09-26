@@ -1,0 +1,61 @@
+{
+  "sourceDirectory": "artifacts/p2.5/20260926-p2-6e-functional-01",
+  "files": [
+    {
+      "originalName": "aggregate.json",
+      "storedName": "aggregate.json",
+      "originalBytes": 1643,
+      "storedBytes": 1643,
+      "originalSha256": "378efdcb962ff5e0bd1f4de43c2a77dc379bca96d724a92023c6f96953e02366",
+      "storedSha256": "378efdcb962ff5e0bd1f4de43c2a77dc379bca96d724a92023c6f96953e02366"
+    },
+    {
+      "originalName": "build.json",
+      "storedName": "build.json",
+      "originalBytes": 1138,
+      "storedBytes": 1138,
+      "originalSha256": "073df5d73b060ae89707f6987a3172c0cad5433a1d041cf6a25d4a9f743bd5fe",
+      "storedSha256": "073df5d73b060ae89707f6987a3172c0cad5433a1d041cf6a25d4a9f743bd5fe"
+    },
+    {
+      "originalName": "chrome-r1.json",
+      "storedName": "chrome-r1.json.gz",
+      "originalBytes": 167450,
+      "storedBytes": 6198,
+      "originalSha256": "0bb6c39e0f5144094ccb0f8b29d53795f08155921d6dc8b70ade48308f63fe27",
+      "storedSha256": "cefacf2ec68abce1f5d9d657927918812a094a6d01c3a58ac12ca15d1d141b0f"
+    },
+    {
+      "originalName": "completion.json",
+      "storedName": "completion.json",
+      "originalBytes": 5912,
+      "storedBytes": 5912,
+      "originalSha256": "d0d90733d36fc568c20f17986bc9e9d96c5c46809d8766d43461502494073203",
+      "storedSha256": "d0d90733d36fc568c20f17986bc9e9d96c5c46809d8766d43461502494073203"
+    },
+    {
+      "originalName": "edge-r1.json",
+      "storedName": "edge-r1.json.gz",
+      "originalBytes": 167510,
+      "storedBytes": 6251,
+      "originalSha256": "6b92d95f5e73794c9513362f44c3365a61834d2277c4308b3fb93f18e0b0c661",
+      "storedSha256": "6c3ca0f59d0412e83b326ed3708ef3a4fc6550ee4fe4b81445dfebe78906cd7c"
+    },
+    {
+      "originalName": "invocation.json",
+      "storedName": "invocation.json",
+      "originalBytes": 5834,
+      "storedBytes": 5834,
+      "originalSha256": "755d111f91e6e1ac0eec7d819c9f536dc75ce3a80d2f94f77d3f6d8f57852313",
+      "storedSha256": "755d111f91e6e1ac0eec7d819c9f536dc75ce3a80d2f94f77d3f6d8f57852313"
+    },
+    {
+      "originalName": "runner-status.json",
+      "storedName": "runner-status.json",
+      "originalBytes": 120,
+      "storedBytes": 120,
+      "originalSha256": "efeea42e65019b0dfbb7696f213c6b386d34da9a3d7b4c443e2a7f9ef9b0ed9d",
+      "storedSha256": "efeea42e65019b0dfbb7696f213c6b386d34da9a3d7b4c443e2a7f9ef9b0ed9d"
+    }
+  ]
+}
