@@ -1,0 +1,1 @@
+export default { test: { include: ['.tools/p2-phase-profile.test.ts'], testTimeout: 60000 } };

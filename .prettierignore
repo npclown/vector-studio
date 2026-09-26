@@ -17,3 +17,5 @@ docs/evidence/p1.6b/**/*.json
 docs/evidence/p2.5/**/*.json
 # Preserve the P2.6 Windows preflight observation byte-for-byte.
 docs/evidence/p2.6-preflight-2026-09-26.json
+# Preserve P2.6 reference records and their archived byte hashes.
+docs/benchmarks/results/20260926-p2-batch-v1-reference-01/**/*.json

@@ -1,0 +1,59 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { expect, it } from 'vitest';
+import { GeometrySession, type GeometryKernelExports } from '../packages/geometry-wasm/src/index.js';
+import { createP2Workload } from '../tests/geometry-benchmark/workload.js';
+import { measureVariant, observeKernel } from '../tests/geometry-benchmark/measure.js';
+
+it('records non-accepting process/adapter/consumer attribution', async () => {
+  const bytes = readFileSync('.tools/geometry-build/wasm32-unknown-unknown/release/vector_studio_geometry_kernel.wasm');
+  const module = await WebAssembly.compile(bytes);
+  const requests = createP2Workload().requests;
+  const setup = async () => {
+    const raw = (await WebAssembly.instantiate(module, {})).exports as unknown as GeometryKernelExports;
+    const time = { processMs: 0, adapterMs: 0, reserveMs: 0 };
+    const observer = observeKernel({ ...raw,
+      process(length) { const start = performance.now(); try { return raw.process(length); } finally { time.processMs += performance.now() - start; } },
+      reserve(input, output) { const start = performance.now(); try { return raw.reserve(input, output); } finally { time.reserveMs += performance.now() - start; } },
+    });
+    const session = new GeometrySession(observer.kernel, { cache: { maxNodes: 0, maxVariants: 0, maxPayloadBytes: 0 } });
+    const batch = session.batch.bind(session);
+    session.batch = (input) => { const start = performance.now(); try { return batch(input); } finally { time.adapterMs += performance.now() - start; } };
+    return { session, observer, time };
+  };
+  const runtimes = { batch: await setup(), 'per-path': await setup() };
+  const samples: unknown[] = [];
+  try {
+    for (const phase of ['preparation', 'warmup', 'diagnostic'] as const) {
+      for (let index = 0; index < (phase === 'diagnostic' ? 5 : 1); index++) {
+        for (const variant of (index % 2 === 0 ? ['batch', 'per-path'] : ['per-path', 'batch']) as Array<'batch' | 'per-path'>) {
+          const r = runtimes[variant];
+          r.time.processMs = r.time.adapterMs = r.time.reserveMs = 0;
+          const sample = measureVariant(variant, r.session, r.observer, requests);
+          samples.push({ phase, index, variant, ...r.time,
+            adapterExcludingProcessAndReserveMs: r.time.adapterMs - r.time.processMs - r.time.reserveMs,
+            nonAdapterTimedWorkMs: sample.timing.durationMs - r.time.adapterMs,
+            sample });
+          expect(sample.errors).toEqual([]);
+          expect(sample.checksum).toBe('0062bfe5bfe9d864');
+          if (phase !== 'preparation') {
+            expect(sample.calls.reserveStatuses).toEqual([]);
+            expect(sample.calls.processStatuses).toHaveLength(variant === 'batch' ? 1 : 1000);
+            expect(sample.work.logicalCubics).toBe('32000');
+          }
+        }
+      }
+    }
+  } finally {
+    runtimes.batch.session.dispose(); runtimes['per-path'].session.dispose();
+    writeFileSync('.tools/p2-phase-profile-01.json', JSON.stringify({
+      schema: 'p2-phase-diagnostic/v1', acceptance: 'NOT_APPLICABLE',
+      host: 'Node '+process.version, observedAt: new Date().toISOString(),
+      sourceHead: execFileSync('git', ['rev-parse', 'HEAD'], {encoding:'utf8'}).trim(),
+      wasmSha256: createHash('sha256').update(bytes).digest('hex'),
+      limitations: 'Instrumented Node run, one warmup and five pairs. Adapter timer includes injected process timing and observer overhead; residual non-adapter time includes checksum and benchmark loops/wrappers. No CPU profile or GC attribution. Not a reference benchmark.',
+      samples,
+    }, null, 2)+'\n', {flag:'wx'});
+  }
+});

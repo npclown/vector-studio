@@ -1,0 +1,32 @@
+{
+  "files": [
+    {
+      "path": "assets/index-C910TEPF.js",
+      "sha256": "d74d7f1c8b95c1a8bc471a230244d50f53e38d97cafc8ec445a82b16cdbbee8a"
+    },
+    {
+      "path": "geometry.wasm",
+      "sha256": "861762ca8d5e48d6cc5c602e82ef98652b9d7fa326068a0756d4e301497d25cc"
+    },
+    {
+      "path": "index.html",
+      "sha256": "2ac5e0ff69e3a27eb300cf8781c88562668c2d936bf455d88f56aeed73cff1ac"
+    }
+  ],
+  "sha256": "5960fb3bea300ca2fbbe56794abab11c0715dc2b0c1d01954d9b31a54248a3de",
+  "wasmSha256": "861762ca8d5e48d6cc5c602e82ef98652b9d7fa326068a0756d4e301497d25cc",
+  "buildMode": "production",
+  "compilerObservation": "rustc 1.94.1 (e408947bf 2026-03-25)\nbinary: rustc\ncommit-hash: e408947bfd200af42db322daf0fadfe7e26d3bd1\ncommit-date: 2026-03-25\nhost: x86_64-pc-windows-msvc\nrelease: 1.94.1\nLLVM version: 21.1.8\n",
+  "rust": {
+    "version": "1.94.1",
+    "commit": "e408947bfd200af42db322daf0fadfe7e26d3bd1",
+    "target": "wasm32-unknown-unknown",
+    "profile": "release",
+    "optLevel": 3,
+    "lto": true,
+    "codegenUnits": 1,
+    "panic": "abort",
+    "strip": true,
+    "remapPathPrefix": "<repository>=."
+  }
+}

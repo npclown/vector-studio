@@ -5,3 +5,6 @@
 *.jpeg binary
 *.png binary
 *.webp binary
+
+# Preserve the hashed Windows collector output including its CRLF line endings.
+docs/benchmarks/results/20260926-p2-batch-v1-reference-01/hardware-preflight.json -text whitespace=cr-at-eol
