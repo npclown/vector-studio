@@ -1,6 +1,6 @@
 # P2.5 production benchmark runner
 
-Status: local implementation/functional validation complete, pending required CI and protected PR integration; [review and evidence](../evidence/p2.5/README.md). Entry was clean main `0c777c71c4d7da483438aee10ab3b3a7b64d3360` after P2.4 PR #44. The [P2 plan](p2-geometry-kernel.md#prospective-benchmark-contract) owns the workload, reference sampling protocol and performance thresholds; this document defines runner mechanics and functional acceptance. No P2.6 performance execution or P3 authorization follows from completing this checkpoint.
+Status: integrated through [PR #45](https://github.com/npclown/vector-studio/pull/45) as `7a3065e` after required CI passed; [review and evidence](../evidence/p2.5/README.md). Entry was clean main `0c777c71c4d7da483438aee10ab3b3a7b64d3360` after P2.4 PR #44. The [P2 plan](p2-geometry-kernel.md#prospective-benchmark-contract) owns the workload, reference sampling protocol and performance thresholds; this document defines runner mechanics and functional acceptance. No P2.6 performance execution or P3 authorization follows from completing this checkpoint.
 
 ## Measurement implementation
 
