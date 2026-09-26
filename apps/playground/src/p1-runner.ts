@@ -8,10 +8,18 @@ import {
 } from '@vector-studio/renderer-webgpu';
 import { cameraAt, createP1Workload, nodeAt, type P1Scenario } from './p1-workloads.js';
 import {
-  summarizeP1Frames,
+  zeroP1CpuStatistics,
   type P1FrameObservation,
   type P1WriteObservation,
 } from './p1-run-metrics.js';
+import {
+  P1_PROFILES,
+  p1LastCallback,
+  p1MeasurementWindow,
+  p1RunConfiguration,
+  summarizeP1RunFrames,
+  type P1ProfileName,
+} from './p1-run-profiles.js';
 
 type MutableFrame = { -readonly [K in keyof P1FrameObservation]: P1FrameObservation[K] } & {
   writes: P1WriteObservation[];
@@ -19,7 +27,6 @@ type MutableFrame = { -readonly [K in keyof P1FrameObservation]: P1FrameObservat
 };
 type Binding = { resource: PrimitiveResourceId; offset: number; size: number };
 const resourceIds = ['transforms', 'geometry', 'styles', 'order', 'frame'] as const;
-const profile = { name: 'functional', warmupFrames: 3, measuredFrames: 5 } as const;
 let used = false;
 
 function member(target: object, key: string | symbol): unknown {
@@ -27,18 +34,30 @@ function member(target: object, key: string | symbol): unknown {
   return typeof value === 'function' ? value.bind(target) : value;
 }
 
-async function run(scenario: P1Scenario) {
-  if (used) throw new Error('Use a fresh page for every functional case.');
+async function run(scenario: P1Scenario, profileName: P1ProfileName = 'functional') {
+  if (profileName !== 'functional' && profileName !== 'reference')
+    throw new Error('Unknown observation profile.');
+  if (used) throw new Error('Use a fresh page for every observation case.');
   used = true;
+  const profile = P1_PROFILES[profileName];
   const workload = createP1Workload(scenario);
   const frames: P1FrameObservation[] = [];
   const diagnostics: RendererDiagnostic[] = [];
   const errors: string[] = [];
   const visibility: { time: number; state: string }[] = [];
   const initialWrites: { label: string; offset: number; bytes: number }[] = [];
+  const observedTimerIncrementsMs: number[] = [];
+  // Observe actual clock increments before timed callbacks; this is not a resolution claim.
+  let previousClock = performance.now();
+  for (let probe = 0; probe < 4096 && observedTimerIncrementsMs.length < 64; probe += 1) {
+    const nextClock = performance.now();
+    if (nextClock > previousClock) observedTimerIncrementsMs.push(nextClock - previousClock);
+    previousClock = nextClock;
+  }
   const bindings = new WeakMap<GPUBuffer, Binding[]>();
   let current: MutableFrame | undefined;
   let active = false;
+  let finished = false;
   let origin: number | undefined;
   let revision = 0;
   let observedDevice: WebGpuDevicePort | undefined;
@@ -223,7 +242,7 @@ async function run(scenario: P1Scenario) {
         const handle = requestAnimationFrame((timestampMs) => {
           pendingCallbacks.delete(handle);
           if (!active) {
-            callback(timestampMs);
+            if (!finished) callback(timestampMs);
             return;
           }
           origin ??= timestampMs;
@@ -238,6 +257,7 @@ async function run(scenario: P1Scenario) {
             visibleCount: null,
             drawInstanceCount: 0,
             writes: [],
+            cpu: zeroP1CpuStatistics(),
             pipelineCreations: 0,
             shaderCreations: 0,
             visible: document.visibilityState === 'visible',
@@ -261,7 +281,7 @@ async function run(scenario: P1Scenario) {
               if (applied.status !== 'applied') throw new Error(JSON.stringify(applied));
               revision += 1;
             }
-            if (frames.length === profile.warmupFrames + profile.measuredFrames - 1)
+            if (p1LastCallback(profileName, frames.length, current.elapsedMs))
               backend.setMode('on-demand');
             callback(timestampMs);
           } catch (error) {
@@ -271,8 +291,9 @@ async function run(scenario: P1Scenario) {
           }
           frames.push(current);
           current = undefined;
-          if (!active || frames.length === profile.warmupFrames + profile.measuredFrames) {
+          if (!active || p1LastCallback(profileName, frames.length - 1, frames.at(-1)!.elapsedMs)) {
             active = false;
+            finished = true;
             complete!();
           }
         });
@@ -289,20 +310,39 @@ async function run(scenario: P1Scenario) {
   const service = new PrimitiveRendererService(backend);
   backend.attachPrimitiveFrameSource({
     prepare(target) {
-      const packet = service.prepare(target);
-      if (current !== undefined && packet !== null) {
-        current.packetCount += 1;
-        current.sceneRevision = packet.scene.revision;
-        current.cameraRevision = packet.cameraRevision;
-        current.visibleCount = packet.draws.reduce((sum, draw) => sum + draw.count, 0);
+      const before = service.getPreparationStatistics();
+      try {
+        const packet = service.prepare(target);
+        if (current !== undefined && packet !== null) {
+          current.packetCount += 1;
+          current.sceneRevision = packet.scene.revision;
+          current.cameraRevision = packet.cameraRevision;
+          current.visibleCount = packet.draws.reduce((sum, draw) => sum + draw.count, 0);
+        }
+        return packet;
+      } finally {
+        // Retain actual CPU work even if preparation fails before returning a packet.
+        const after = service.getPreparationStatistics();
+        if (current !== undefined) {
+          const writes = { ...current.cpu.recordWrites };
+          for (const resource of resourceIds)
+            writes[resource] += after.recordWrites[resource] - before.recordWrites[resource];
+          current.cpu = {
+            geometryBuilds:
+              current.cpu.geometryBuilds + after.geometryBuilds - before.geometryBuilds,
+            recordWrites: writes,
+          };
+        }
       }
-      return packet;
     },
     acknowledge: (receipt) => service.acknowledge(receipt),
   });
   backend.subscribeDiagnostics((event) => {
     diagnostics.push(event);
-    if (event.severity === 'error') current?.errors.push(event.code);
+    if (event.severity === 'error') {
+      if (current !== undefined) current.errors.push(event.code);
+      else errors.push(event.code);
+    }
   });
   try {
     capability = await backend.initialize({
@@ -311,40 +351,48 @@ async function run(scenario: P1Scenario) {
       devicePixelRatio: 1,
     });
     if (!capability.supported || capability.capabilities.sampleCount !== 4)
-      throw new Error('Functional reference workload requires native 4x support.');
+      throw new Error('Observation workload requires native 4x support.');
     const applied = service.replaceSnapshot(workload.snapshot);
     if (applied.status !== 'applied') throw new Error(JSON.stringify(applied));
     active = true;
     backend.setMode('continuous');
     timer = window.setTimeout(() => {
-      errors.push('Functional callback deadline exceeded.');
+      errors.push('Observation callback deadline exceeded.');
+      backend.setMode('on-demand');
+      active = false;
+      finished = true;
       complete!();
     }, 30_000);
     await done;
-    await observedDevice?.waitForSubmittedWork();
+    if (timer !== undefined) clearTimeout(timer);
+    // Bound post-window draining so a lost/stalled queue cannot hide captured failures.
+    await Promise.race([
+      observedDevice?.waitForSubmittedWork(),
+      new Promise<never>((_resolve, reject) => {
+        timer = window.setTimeout(() => reject(new Error('Queue drain deadline exceeded.')), 5_000);
+      }),
+    ]);
     // Let native uncaptured-error events dispatch before removing device listeners.
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
   } catch (error) {
     errors.push(String(error));
   } finally {
     active = false;
+    finished = true;
     if (timer !== undefined) clearTimeout(timer);
     service.dispose();
     backend.dispose();
     document.removeEventListener('visibilitychange', onVisibility);
   }
-  const measurementWindow = {
-    scenario,
-    startMs: frames[profile.warmupFrames]?.elapsedMs ?? 0,
-    endMs: (frames.at(-1)?.elapsedMs ?? 0) + 1,
-  };
+  const measurementWindow = p1MeasurementWindow(scenario, profileName, frames);
   return {
     profile,
     scenario,
-    configuration: workload.configuration,
+    configuration: p1RunConfiguration(profileName),
     frames,
+    cpuTotals: service.getPreparationStatistics(),
     window: measurementWindow,
-    metrics: summarizeP1Frames(frames, measurementWindow),
+    metrics: summarizeP1RunFrames(frames, scenario, profileName),
     capability,
     diagnostics,
     errors,
@@ -355,6 +403,20 @@ async function run(scenario: P1Scenario) {
     disposed: backend.getStatistics(),
     environment: {
       timeOrigin: performance.timeOrigin,
+      observedTimerIncrementsMs,
+      windowBounds: {
+        screenX: window.screenX,
+        screenY: window.screenY,
+        outerWidth: window.outerWidth,
+        outerHeight: window.outerHeight,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+      },
+      instrumentation: [
+        'native queue writes/submissions and shader/pipeline/draw proxy',
+        'CPU preparation statistics before/after each synchronous prepare',
+        'single backend RAF callback timestamps and visibility',
+      ],
       userAgent: navigator.userAgent,
       cssSize: {
         width: document.querySelector<HTMLCanvasElement>('#surface')!.getBoundingClientRect().width,
@@ -369,7 +431,6 @@ async function run(scenario: P1Scenario) {
       visibilityState: document.visibilityState,
     },
     unavailable: {
-      cpuGeometryRebuilds: 'Upload absence does not observe CPU geometry rebuild events.',
       A09: 'No accepted complete simultaneous CPU/GPU peak method.',
       A10: 'No verified pointer/content/physical-presentation and clock linkage.',
     },

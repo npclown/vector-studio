@@ -68,6 +68,10 @@ export class PrimitiveRendererService
     this.#source.acknowledge(receipt);
   }
 
+  public getPreparationStatistics(): ReturnType<PrimitiveSceneSource['getPreparationStatistics']> {
+    return this.#source.getPreparationStatistics();
+  }
+
   public dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;

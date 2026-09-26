@@ -1,6 +1,6 @@
 # P1.6b execution plan: CPU activity and reference-duration observations
 
-Status: contract frozen by Primary on 2026-09-26 under user-approved [D6](p1-follow-on-entry-proposal.md). Implementation follows protected integration of this checkpoint. A09/A10 and complete P1 acceptance remain UNVERIFIED.
+Status: contract frozen by Primary on 2026-09-26 under user-approved [D6](p1-follow-on-entry-proposal.md), integrated in [PR #38](https://github.com/npclown/vector-studio/pull/38) as `07db0a8`. B01-B04 local validation is complete with [C01-C07 evidence](../evidence/p1.6b/20260926-functional/README.md); protected CI/integration is separate. B05/C08 and A05/A08 acceptance remain UNVERIFIED. A09/A10 and complete P1 acceptance remain UNVERIFIED.
 
 ## Scope and task order
 
@@ -58,3 +58,7 @@ No source change during a reference group; capture and compare source at its sta
 Reviewed base: clean fetched `main` at `1fb9a88` after PR #37. Primary applied the user's explicit D6 approval and owns this contract. Terra medium independently examined the A05 observation seam; Primary rejected a write-only build count because actual geometry computation can precede an unchanged-write early return. The final contract separates those events and preserves thrown-call observations through `finally`. Sol medium independently researched the P2 private contract/toolchain boundary; no P2 implementation or dependency was added here. Neither worker edited files or delegated further.
 
 Documentation validation: explicit Prettier check of the five changed Markdown files PASS; read-only Node link/anchor check PASS (70 local links); `git diff --check` and Primary requirements/architecture/scope review PASS. No unit/build/browser/GPU/benchmark was run locally for this contract-only checkpoint; required remote CI is separate. C01-C08 above remain implementation/evidence obligations, not results.
+
+## B01-B04 implementation checkpoint (2026-09-26)
+
+The [implementation review and immutable functional observations](../evidence/p1.6b/20260926-functional/README.md) record 250 passing unit tests, 20 browser regressions, eight production functional cases and source provenance. Direct CPU counts observe positive initial construction and zero warmed geometry construction. The reference host, five-repetition aggregation, metadata guards and failure preservation have deterministic validation; no headed reference result is claimed. B05 is the next measurement task after protected integration and fresh operator environment confirmation. P2 planning remains independent under D6.

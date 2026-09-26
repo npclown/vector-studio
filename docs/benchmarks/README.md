@@ -20,9 +20,15 @@ Every new run needs a collision-free identity, such as a UTC time/run-ID suffix 
 
 ## Reproducibility requirements
 
-### P1.6a functional runner
+### P1.6b observation runner
 
-Run `pnpm benchmark:p1 --profile functional` (optional `--output-dir artifacts/p1.6a/<fresh-id>`). It first reserves an exclusive run directory, then builds production assets and runs four native workloads in each of headless Chrome and Edge. Missing/acceptance/reference profiles are rejected before build or browser launch. It records three warm-up and five observed callbacks, not the reference protocol; every result retains `P1/A05/A08/A09/A10: UNVERIFIED` regardless of functional outcome. See the [runner contract](../plans/p1-runner-contract.md). A09/A10 methods and full reference acceptance remain blocked. Raw functional records and failed attempts are immutable observations; they are not benchmark PASS records.
+Run `pnpm benchmark:p1 --profile functional` (optional `--output-dir artifacts/p1.6b/<fresh-id>`). It reserves an exclusive run directory, builds production assets and runs four native workloads in each of headless Chrome and Edge. Its three warm-up and five observed callbacks validate instrumentation only. Historical P1.6a observations remain immutable.
+
+The [P1.6b contract](../plans/p1-observed-runner.md) separately permits `pnpm benchmark:p1 --profile reference --environment-json <observations.json>`. This runs headed Chrome then Edge, one worker, five fresh repetitions of every scenario, with the unchanged five-second warm-up and ten-second measurement windows. No trace, video or screenshot runs during the timed windows. Missing/unknown/acceptance profiles and incomplete reference metadata are rejected before build or browser launch.
+
+The environment JSON supplies `observedAt` (ISO timestamp) and provenance-bearing observations: `displayRefreshHz: {value: <positive number>, source: <observation provenance>}`, plus `power`, `backgroundLoad`, `driver` and `display`, each `{value: <nonempty observation>, source: <provenance>}`. Power includes source and mode; display identifies the selected monitor and unobscured-window conditions. These fields record actual current observations, not defaults or inferred operator actions.
+
+Raw records, failures and per-browser/scenario aggregates remain immutable. Reference results distinguish measured A05/A08 disposition from Primary acceptance review; functional results never become performance evidence. Every record retains overall P1, A09 and A10 as UNVERIFIED. The CPU counters observe geometry construction separately from backing writes and GPU uploads; neither counts memory or physical presentation.
 
 ### Accepted reference runs
 
