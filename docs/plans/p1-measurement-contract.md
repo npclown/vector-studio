@@ -164,3 +164,9 @@ User-approved [D5](p1-instanced-primitives.md#d5-approved-p16a-runner-entry-exce
 ## Post-implementation coverage audit (2026-09-26)
 
 P1.6a is integrated at `fe84ce2`. The [current ownership/coverage audit](../evidence/p1.0m-current-coverage-2026-09-26.md) identifies actual deep copies, candidate/publication overlap, typed and JS caches, upload copies, native preflight storage and GPU descriptor lifetime limits. Existing functional records do not close either A09 or A10. No new measurement was performed. A [follow-on entry proposal](p1-follow-on-entry-proposal.md) is pending a user decision; it has no effect on current acceptance or execution permissions.
+
+## D6 follow-on approval (2026-09-26)
+
+The user explicitly approved the [D6 decision](p1-follow-on-entry-proposal.md) after the preceding audit. A05/A08 implementation and criterion-specific measurement may proceed under their own plan without waiting for A09/A10. P2 entry likewise requires its own contract/validation freeze. The pending-status paragraphs above describe historical checkpoints; D6 changes those entry dependencies only. All A09/A10 definitions, all-P1 final acceptance and reference metadata/sample/threshold rules remain unchanged.
+
+The [P1.6b execution contract](p1-observed-runner.md) now freezes direct CPU geometry-build versus backing-write counters, the existing reference windows, criterion-specific result disposition, metadata guards and B01-B05 validation. It does not supply new runtime evidence by being recorded.
