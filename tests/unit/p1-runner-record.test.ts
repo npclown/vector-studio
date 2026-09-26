@@ -7,10 +7,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { P1FunctionalCapture } from '../../apps/playground/src/p1-runner.js';
 import {
-  summarizeP1Frames,
   type P1FrameObservation,
+  zeroP1CpuStatistics,
 } from '../../apps/playground/src/p1-run-metrics.js';
-import { P1_CONFIGURATION } from '../../apps/playground/src/p1-workloads.js';
+import {
+  p1RunConfiguration,
+  summarizeP1RunFrames,
+} from '../../apps/playground/src/p1-run-profiles.js';
 import { p1Source } from '../support/p1-evidence.js';
 import {
   createP1FunctionalRecord,
@@ -62,6 +65,7 @@ function frame(index: number, overrides: Partial<P1FrameObservation> = {}): P1Fr
     shaderCreations: 0,
     visible: true,
     errors: [],
+    cpu: zeroP1CpuStatistics(),
     ...overrides,
   };
 }
@@ -103,15 +107,41 @@ function disposedStatistics(): RendererStatistics {
 }
 
 function capture(overrides: Partial<P1FunctionalCapture> = {}): P1FunctionalCapture {
-  const frames = Array.from({ length: 8 }, (_, index) => frame(index));
+  const frames = Array.from({ length: 8 }, (_, index) =>
+    frame(
+      index,
+      index === 0
+        ? {
+            cpu: {
+              ...zeroP1CpuStatistics(),
+              geometryBuilds: 1000,
+              recordWrites: { ...zeroP1CpuStatistics().recordWrites, geometry: 1000 },
+            },
+          }
+        : {},
+    ),
+  );
   const window = { scenario, startMs: frames[3]!.elapsedMs, endMs: frames[7]!.elapsedMs + 1 };
   return {
-    profile: { name: 'functional', warmupFrames: 3, measuredFrames: 5 },
+    profile: { name: 'functional', warmupFrames: 3, measuredFrames: 5, repetitions: 1 },
     scenario,
-    configuration: P1_CONFIGURATION,
+    configuration: p1RunConfiguration('functional'),
     frames,
+    cpuTotals: frames.reduce(
+      (total, item) => ({
+        geometryBuilds: total.geometryBuilds + item.cpu.geometryBuilds,
+        recordWrites: {
+          transforms: total.recordWrites.transforms + item.cpu.recordWrites.transforms,
+          geometry: total.recordWrites.geometry + item.cpu.recordWrites.geometry,
+          styles: total.recordWrites.styles + item.cpu.recordWrites.styles,
+          order: total.recordWrites.order + item.cpu.recordWrites.order,
+          frame: total.recordWrites.frame + item.cpu.recordWrites.frame,
+        },
+      }),
+      zeroP1CpuStatistics(),
+    ),
     window,
-    metrics: summarizeP1Frames(frames, window),
+    metrics: summarizeP1RunFrames(frames, scenario, 'functional'),
     capability: {
       supported: true,
       capabilities: {
@@ -131,6 +161,16 @@ function capture(overrides: Partial<P1FunctionalCapture> = {}): P1FunctionalCapt
     disposed: disposedStatistics(),
     environment: {
       timeOrigin: 1_000,
+      observedTimerIncrementsMs: [0.01],
+      windowBounds: {
+        screenX: 0,
+        screenY: 0,
+        outerWidth: 1280,
+        outerHeight: 720,
+        innerWidth: 1280,
+        innerHeight: 720,
+      },
+      instrumentation: ['synthetic'],
       userAgent: 'synthetic-p1-record-test',
       cssSize: { width: 1280, height: 720 },
       physicalSize: { width: 1280, height: 720 },
@@ -138,7 +178,6 @@ function capture(overrides: Partial<P1FunctionalCapture> = {}): P1FunctionalCapt
       visibilityState: 'visible',
     },
     unavailable: {
-      cpuGeometryRebuilds: 'Upload absence does not observe CPU geometry rebuild events.',
       A09: 'No accepted complete simultaneous CPU/GPU peak method.',
       A10: 'No verified pointer/content/physical-presentation and clock linkage.',
     },
@@ -157,17 +196,12 @@ describe('P1 functional runner record', () => {
 
     expect(functionalFindings(value)).toEqual([]);
     expect(result.disposition).toBe('FUNCTIONAL_PASS');
-    expect(Object.values(result.acceptance)).toEqual([
-      'UNVERIFIED',
-      'UNVERIFIED',
-      'UNVERIFIED',
-      'UNVERIFIED',
-      'UNVERIFIED',
-    ]);
+    expect(Object.values(result.acceptance)).toEqual(['UNVERIFIED', 'UNVERIFIED', 'UNVERIFIED']);
   });
 
   it('recomputes metrics from raw callbacks and rejects recorded-metric tampering', () => {
     const result = record();
+    const directory = path.join(temporaryRoot(), 'tampered');
     Object.assign(result.capture, {
       metrics: { ...result.capture.metrics, intervals: [999] },
     });
@@ -175,19 +209,32 @@ describe('P1 functional runner record', () => {
     expect(functionalFindings(result.capture)).toContain(
       'Recorded metrics disagree with raw callbacks.',
     );
-    expect(() =>
-      writeP1FunctionalRecord(path.join(temporaryRoot(), 'tampered'), result, source()),
-    ).toThrow('Inconsistent functional evidence or acceptance claim.');
+    expect(() => writeP1FunctionalRecord(directory, result, source())).toThrow(
+      'Inconsistent runner evidence or acceptance claim.',
+    );
+    expect(readFileSync(path.join(directory, 'record.json'), 'utf8')).toContain('999');
+    expect(JSON.parse(readFileSync(path.join(directory, 'source-end.json'), 'utf8'))).toEqual(
+      source(),
+    );
+    expect(readFileSync(path.join(directory, 'validation.json'), 'utf8')).toContain(
+      'Record findings disagree with raw capture.',
+    );
   });
 
-  it('rejects source drift before creating evidence', () => {
+  it('rejects source drift while retaining raw evidence and both source observations', () => {
     const root = temporaryRoot();
     const directory = path.join(root, 'source-drift');
 
     expect(() => writeP1FunctionalRecord(directory, record(), source('b'))).toThrow(
-      'Source drift during functional capture.',
+      'Source drift during runner capture.',
     );
-    expect(() => readFileSync(path.join(directory, 'record.json'), 'utf8')).toThrow();
+    expect(readFileSync(path.join(directory, 'record.json'), 'utf8')).toContain(
+      'p1-observed-run/v2',
+    );
+    expect(JSON.parse(readFileSync(path.join(directory, 'source-drift.json'), 'utf8'))).toEqual({
+      start: source(),
+      end: source('b'),
+    });
   });
 
   it('detects callback-count and functional-window mismatches', () => {
@@ -201,7 +248,7 @@ describe('P1 functional runner record', () => {
       window: { ...base.window, startMs: base.window.startMs + 1 },
     });
     expect(functionalFindings(windowMismatch)).toContain(
-      'Window differs from functional callback boundaries.',
+      'Window differs from frozen profile boundaries.',
     );
   });
 
@@ -211,7 +258,7 @@ describe('P1 functional runner record', () => {
 
     expect(() =>
       writeP1FunctionalRecord(path.join(temporaryRoot(), 'promoted'), result, source()),
-    ).toThrow('Inconsistent functional evidence or acceptance claim.');
+    ).toThrow('Inconsistent runner evidence or acceptance claim.');
   });
 
   it('preserves the first record when its exclusive case directory collides', () => {
@@ -233,7 +280,7 @@ describe('P1 functional runner record', () => {
     );
     const failedCapture = capture({
       frames,
-      metrics: summarizeP1Frames(frames, base.window),
+      metrics: summarizeP1RunFrames(frames, scenario, 'functional'),
     });
     const failedRecord = record(failedCapture);
     const directory = path.join(temporaryRoot(), 'failed-capture');

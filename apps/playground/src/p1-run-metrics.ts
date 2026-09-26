@@ -7,6 +7,35 @@ export type P1WriteObservation = Readonly<{
   nativeBufferOffset: number;
 }>;
 
+/**
+ * Per-callback CPU preparation work, recorded as a delta from the scene
+ * source's cumulative counters. These counters deliberately describe CPU
+ * record preparation rather than native GPU uploads.
+ */
+export type P1CpuStatistics = Readonly<{
+  geometryBuilds: number;
+  recordWrites: Readonly<{
+    transforms: number;
+    geometry: number;
+    styles: number;
+    order: number;
+    frame: number;
+  }>;
+}>;
+
+export function zeroP1CpuStatistics(): P1CpuStatistics {
+  return {
+    geometryBuilds: 0,
+    recordWrites: {
+      transforms: 0,
+      geometry: 0,
+      styles: 0,
+      order: 0,
+      frame: 0,
+    },
+  };
+}
+
 export type P1FrameObservation = Readonly<{
   timestampMs: number;
   elapsedMs: number;
@@ -22,6 +51,7 @@ export type P1FrameObservation = Readonly<{
   shaderCreations: number;
   visible: boolean;
   errors: readonly string[];
+  cpu: P1CpuStatistics;
 }>;
 
 export type P1IntervalSummary = Readonly<{
@@ -66,6 +96,69 @@ function summarize(intervals: readonly number[]): P1IntervalSummary | null {
 
 function isNonNegativeInteger(value: number): boolean {
   return Number.isInteger(value) && value >= 0;
+}
+
+function isNonNegativeSafeInteger(value: number): boolean {
+  return Number.isSafeInteger(value) && value >= 0;
+}
+
+function validateCpuStatistics(cpu: P1CpuStatistics, frameIndex: number, findings: string[]): void {
+  const values = [
+    ['geometryBuilds', cpu.geometryBuilds],
+    ['recordWrites.transforms', cpu.recordWrites.transforms],
+    ['recordWrites.geometry', cpu.recordWrites.geometry],
+    ['recordWrites.styles', cpu.recordWrites.styles],
+    ['recordWrites.order', cpu.recordWrites.order],
+    ['recordWrites.frame', cpu.recordWrites.frame],
+  ] as const;
+
+  for (const [name, value] of values) {
+    if (!isNonNegativeSafeInteger(value)) {
+      findings.push(`frame ${frameIndex} has an invalid CPU ${name} count`);
+    }
+  }
+}
+
+function validateMeasuredCpuStatistics(
+  scenario: P1Scenario,
+  cpu: P1CpuStatistics,
+  frameIndex: number,
+  findings: string[],
+): void {
+  if (cpu.geometryBuilds !== 0) {
+    findings.push(`frame ${frameIndex} rebuilds geometry during measurement`);
+  }
+  if (cpu.recordWrites.geometry !== 0) {
+    findings.push(`frame ${frameIndex} writes geometry records during measurement`);
+  }
+
+  const writes = cpu.recordWrites;
+  if (scenario === 'p1-cull-10k/v1') {
+    if (
+      writes.transforms !== 0 ||
+      writes.geometry !== 0 ||
+      writes.styles !== 0 ||
+      writes.order !== 0 ||
+      writes.frame !== 0
+    ) {
+      findings.push(`frame ${frameIndex} writes CPU records during warmed S3`);
+    }
+    return;
+  }
+
+  if (scenario === 'p1-single-transform-10k/v1') {
+    if (writes.transforms > 1) {
+      findings.push(`frame ${frameIndex} writes more than one S4 transform record`);
+    }
+    if (writes.styles !== 0 || writes.order !== 0 || writes.frame !== 0) {
+      findings.push(`frame ${frameIndex} writes a non-transform CPU record during warmed S4`);
+    }
+    return;
+  }
+
+  if (writes.styles !== 0 || writes.order !== 0) {
+    findings.push(`frame ${frameIndex} writes a non-transform/frame CPU record during measurement`);
+  }
 }
 
 function validateWriteShape(
@@ -150,6 +243,7 @@ export function summarizeP1Frames(
       findings.push(`frame ${frameIndex} timestamp is not finite`);
     if (!Number.isFinite(frame.elapsedMs))
       findings.push(`frame ${frameIndex} elapsed time is not finite`);
+    validateCpuStatistics(frame.cpu, frameIndex, findings);
 
     if (previous !== undefined) {
       if (
@@ -231,6 +325,7 @@ export function summarizeP1Frames(
       if (frame.shaderCreations !== 0) findings.push(`frame ${frameIndex} creates warmed shaders`);
 
       validateWrites(options.scenario, frame.writes, frameIndex, findings);
+      validateMeasuredCpuStatistics(options.scenario, frame.cpu, frameIndex, findings);
     }
 
     previous = frame;

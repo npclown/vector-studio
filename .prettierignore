@@ -9,3 +9,5 @@ pnpm-lock.yaml
 docs/evidence/p1.5/**/*.json
 # Preserve P1.6a functional observations byte-for-byte.
 docs/evidence/p1.6a/**/*.json
+# Preserve P1.6b CPU/native observation records byte-for-byte.
+docs/evidence/p1.6b/**/*.json

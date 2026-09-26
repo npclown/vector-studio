@@ -25,6 +25,16 @@ import {
 } from './scene-numeric.js';
 
 type InstanceResource = 'transforms' | 'geometry' | 'styles';
+type PrimitivePreparationStatistics = Readonly<{
+  geometryBuilds: number;
+  recordWrites: Readonly<{
+    transforms: number;
+    geometry: number;
+    styles: number;
+    order: number;
+    frame: number;
+  }>;
+}>;
 type Origin = Readonly<{ x: number; y: number }>;
 type DerivedPrimitive = Readonly<{
   id: string;
@@ -93,6 +103,14 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   #pending: PendingPacket | null = null;
   #derivedCache = new Map<string, DerivedCacheEntry>();
   #packingKeys = new Map<string, PackingKeys>();
+  #geometryBuilds = 0;
+  #recordWrites: Record<PrimitiveResourceId, number> = {
+    transforms: 0,
+    geometry: 0,
+    styles: 0,
+    order: 0,
+    frame: 0,
+  };
   #disposed = false;
 
   public constructor(mirror: RetainedSceneMirror) {
@@ -197,6 +215,13 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       this.#reconstructedEpoch = receipt.sceneEpoch;
       this.#reconstructedIncarnation = this.#incarnations.transforms;
     }
+  }
+
+  public getPreparationStatistics(): PrimitivePreparationStatistics {
+    return Object.freeze({
+      geometryBuilds: this.#geometryBuilds,
+      recordWrites: Object.freeze({ ...this.#recordWrites }),
+    });
   }
 
   public dispose(): void {
@@ -376,6 +401,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
         );
       }
       if (!numericArraysEqual(previous?.geometry, geometryKey)) {
+        this.#geometryBuilds += 1;
         this.#setInstanceRecord('geometry', primitive.slot, packGeometry(primitive.node), false);
       }
       if (!numericArraysEqual(previous?.style, styleKey)) {
@@ -403,6 +429,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       throw new PrimitiveNumericPreparationError(`${resource} cannot be represented in packet v1`);
     }
     writePackedRecord(this.#buffers[resource], slot * PRIMITIVE_STRIDES[resource], resource, lanes);
+    this.#recordWrites[resource] += 1;
     this.#values[resource][slot] = lanes;
     this.#versions[resource][slot] = Symbol(`${resource}-${slot}`);
   }
@@ -413,6 +440,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     for (let index = 0; index < order.length; index += 1) {
       if (this.#orderValues[index] === order[index]) continue;
       view.setUint32(index * 4, order[index]!, true);
+      this.#recordWrites.order += 1;
       this.#versions.order[index] = Symbol(`order-${index}`);
     }
     this.#orderValues = [...order];
@@ -445,6 +473,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     if (numericArraysEqual(this.#frameValues, lanes)) return;
     const view = new DataView(this.#buffers.frame.buffer, this.#buffers.frame.byteOffset);
     lanes.forEach((value, index) => view.setFloat32(index * 4, value, true));
+    this.#recordWrites.frame += 1;
     this.#frameValues = Object.freeze(lanes);
     this.#versions.frame[0] = Symbol('frame-0');
   }

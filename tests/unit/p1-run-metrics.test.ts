@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   summarizeP1Frames,
   type P1FrameObservation,
+  zeroP1CpuStatistics,
   type P1WriteObservation,
 } from '../../apps/playground/src/p1-run-metrics.js';
 
@@ -24,6 +25,7 @@ function frame(elapsedMs: number, overrides: Partial<P1FrameObservation> = {}): 
     shaderCreations: 0,
     visible: true,
     errors: [],
+    cpu: zeroP1CpuStatistics(),
     ...overrides,
   };
 }
@@ -252,6 +254,92 @@ describe('summarizeP1Frames', () => {
         expect.stringContaining('invalid resource offset'),
         expect.stringContaining('invalid byte length'),
         expect.stringContaining('invalid native buffer offset'),
+      ]),
+    );
+  });
+
+  it('validates safe CPU counters on every callback, including outside the window', () => {
+    const result = summarizeP1Frames(
+      [
+        frame(4_999, {
+          cpu: { geometryBuilds: -1, recordWrites: { ...zeroP1CpuStatistics().recordWrites } },
+        }),
+        frame(5_016, {
+          cpu: {
+            geometryBuilds: 0,
+            recordWrites: {
+              ...zeroP1CpuStatistics().recordWrites,
+              frame: Number.MAX_SAFE_INTEGER + 1,
+            },
+          },
+        }),
+      ],
+      REFERENCE_WINDOW,
+    );
+
+    expect(result.findings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('invalid CPU geometryBuilds count'),
+        expect.stringContaining('invalid CPU recordWrites.frame count'),
+      ]),
+    );
+  });
+
+  it('enforces warmed CPU record invariants without conflating them with native writes', () => {
+    const s1 = summarizeP1Frames(
+      [
+        frame(5_000, {
+          cpu: {
+            geometryBuilds: 1,
+            recordWrites: { transforms: 2, geometry: 1, styles: 1, order: 1, frame: 1 },
+          },
+        }),
+        frame(5_016),
+      ],
+      REFERENCE_WINDOW,
+    );
+    expect(s1.findings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('rebuilds geometry'),
+        expect.stringContaining('writes geometry records'),
+        expect.stringContaining('non-transform/frame CPU record'),
+      ]),
+    );
+
+    const s3 = summarizeP1Frames(
+      [
+        frame(5_000, {
+          visibleCount: 1_032,
+          drawInstanceCount: 1_032,
+          cpu: {
+            geometryBuilds: 0,
+            recordWrites: { transforms: 1, geometry: 0, styles: 0, order: 0, frame: 0 },
+          },
+        }),
+        frame(5_016, { visibleCount: 1_032, drawInstanceCount: 1_032 }),
+      ],
+      { ...REFERENCE_WINDOW, scenario: 'p1-cull-10k/v1' },
+    );
+    expect(s3.findings).toContain('frame 0 writes CPU records during warmed S3');
+
+    const s4 = summarizeP1Frames(
+      [
+        frame(5_000, {
+          visibleCount: 1_032,
+          drawInstanceCount: 1_032,
+          cpu: {
+            geometryBuilds: 0,
+            recordWrites: { transforms: 2, geometry: 0, styles: 0, order: 0, frame: 1 },
+          },
+        }),
+        frame(5_016, { visibleCount: 1_032, drawInstanceCount: 1_032 }),
+      ],
+      { ...REFERENCE_WINDOW, scenario: 'p1-single-transform-10k/v1' },
+    );
+    expect(s4.findings).toEqual(
+      expect.arrayContaining([
+        'frame 0 writes more than one S4 transform record',
+        'frame 0 writes a non-transform CPU record during warmed S4',
       ]),
     );
   });

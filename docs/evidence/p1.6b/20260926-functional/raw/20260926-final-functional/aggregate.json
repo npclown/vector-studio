@@ -1,0 +1,137 @@
+{
+  "schema": "p1-observed-run-aggregate/v1",
+  "createdAt": "2026-09-26T06:37:19.534Z",
+  "acceptance": {
+    "P1": "UNVERIFIED",
+    "A09": "UNVERIFIED",
+    "A10": "UNVERIFIED"
+  },
+  "profile": "functional",
+  "criteria": {
+    "A05": "UNVERIFIED",
+    "A08": "UNVERIFIED"
+  },
+  "groups": [
+    {
+      "scenario": "p1-pan-zoom-1k/v1",
+      "browser": "chrome",
+      "profile": "functional",
+      "repetitions": [
+        1
+      ],
+      "maxP95Ms": null,
+      "ceilingMs": 16.7,
+      "criteria": {
+        "A05": "UNVERIFIED",
+        "A08": "UNVERIFIED"
+      },
+      "findings": []
+    },
+    {
+      "scenario": "p1-pan-zoom-1k/v1",
+      "browser": "edge",
+      "profile": "functional",
+      "repetitions": [
+        1
+      ],
+      "maxP95Ms": null,
+      "ceilingMs": 16.7,
+      "criteria": {
+        "A05": "UNVERIFIED",
+        "A08": "UNVERIFIED"
+      },
+      "findings": []
+    },
+    {
+      "scenario": "p1-pan-zoom-10k/v1",
+      "browser": "chrome",
+      "profile": "functional",
+      "repetitions": [
+        1
+      ],
+      "maxP95Ms": null,
+      "ceilingMs": 33.3,
+      "criteria": {
+        "A05": "UNVERIFIED",
+        "A08": "UNVERIFIED"
+      },
+      "findings": []
+    },
+    {
+      "scenario": "p1-pan-zoom-10k/v1",
+      "browser": "edge",
+      "profile": "functional",
+      "repetitions": [
+        1
+      ],
+      "maxP95Ms": null,
+      "ceilingMs": 33.3,
+      "criteria": {
+        "A05": "UNVERIFIED",
+        "A08": "UNVERIFIED"
+      },
+      "findings": []
+    },
+    {
+      "scenario": "p1-cull-10k/v1",
+      "browser": "chrome",
+      "profile": "functional",
+      "repetitions": [
+        1
+      ],
+      "maxP95Ms": null,
+      "ceilingMs": 16.7,
+      "criteria": {
+        "A05": "UNVERIFIED",
+        "A08": "UNVERIFIED"
+      },
+      "findings": []
+    },
+    {
+      "scenario": "p1-cull-10k/v1",
+      "browser": "edge",
+      "profile": "functional",
+      "repetitions": [
+        1
+      ],
+      "maxP95Ms": null,
+      "ceilingMs": 16.7,
+      "criteria": {
+        "A05": "UNVERIFIED",
+        "A08": "UNVERIFIED"
+      },
+      "findings": []
+    },
+    {
+      "scenario": "p1-single-transform-10k/v1",
+      "browser": "chrome",
+      "profile": "functional",
+      "repetitions": [
+        1
+      ],
+      "maxP95Ms": null,
+      "ceilingMs": null,
+      "criteria": {
+        "A05": "UNVERIFIED",
+        "A08": "UNVERIFIED"
+      },
+      "findings": []
+    },
+    {
+      "scenario": "p1-single-transform-10k/v1",
+      "browser": "edge",
+      "profile": "functional",
+      "repetitions": [
+        1
+      ],
+      "maxP95Ms": null,
+      "ceilingMs": null,
+      "criteria": {
+        "A05": "UNVERIFIED",
+        "A08": "UNVERIFIED"
+      },
+      "findings": []
+    }
+  ],
+  "findings": []
+}
