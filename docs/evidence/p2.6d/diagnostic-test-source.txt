@@ -1,0 +1,447 @@
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { expect, it } from 'vitest';
+import { GeometrySession, type GeometryKernelExports } from '../packages/geometry-wasm/src/index.js';
+import {
+  measureVariant,
+  observeKernel,
+  sessionCounters,
+} from '../tests/geometry-benchmark/measure.js';
+import {
+  createP2Workload,
+  createP2WorkloadFixture,
+} from '../tests/geometry-benchmark/workload.js';
+// @ts-expect-error The benchmark orchestrator is intentionally authored as .mjs.
+import * as p2RunnerEntry from '../tooling/run-p2-benchmark.mjs';
+import {
+  ABI_SOURCE_PATH,
+  DIAGNOSTIC_HOOK,
+  REGION_NAMES,
+  instrumentAbiSource,
+  sha256,
+  stripDiagnosticInsertions,
+  type DiagnosticRegionName,
+  type InstrumentedAbiSource,
+} from './p2-decode-instrumentation.js';
+
+const OUTPUT = '.tools/p2-decode-diagnostic-01.json';
+const WASM =
+  '.tools/geometry-build/wasm32-unknown-unknown/release/vector_studio_geometry_kernel.wasm';
+const EXPECTED_WASM_SHA256 =
+  '861762ca8d5e48d6cc5c602e82ef98652b9d7fa326068a0756d4e301497d25cc';
+const EXPECTED_CHECKSUM = '0062bfe5bfe9d864';
+const EXPECTED_PAYLOAD_BYTES = 26_856_175;
+const TOOLING_PATHS = [
+  '.tools/p2-decode-diagnostic.test.ts',
+  '.tools/p2-decode-diagnostic.config.ts',
+  '.tools/p2-decode-instrumentation.ts',
+] as const;
+const captureP2Source = (p2RunnerEntry as {
+  captureP2Source(repositoryRoot?: string): SourceManifest;
+}).captureP2Source;
+
+interface SourceManifest {
+  readonly head: string;
+  readonly dirty: boolean;
+  readonly files: ReadonlyArray<{ readonly path: string; readonly sha256: string }>;
+  readonly sha256: string;
+}
+
+interface RegionObservation {
+  milliseconds: number;
+  count: number;
+}
+
+type RegionSnapshot = Record<DiagnosticRegionName, RegionObservation>;
+
+function emptyRegions(): RegionSnapshot {
+  return Object.fromEntries(
+    REGION_NAMES.map((name) => [name, { milliseconds: 0, count: 0 }]),
+  ) as RegionSnapshot;
+}
+
+const hook = {
+  regions: emptyRegions(),
+  reset(): void {
+    this.regions = emptyRegions();
+  },
+  record(name: string, durationMs: number): void {
+    if (!REGION_NAMES.includes(name as DiagnosticRegionName)) {
+      throw new Error(`Unknown P2 diagnostic region ${name}`);
+    }
+    if (!Number.isFinite(durationMs) || durationMs < 0) {
+      throw new Error(`Invalid P2 diagnostic duration for ${name}: ${durationMs}`);
+    }
+    const observation = this.regions[name as DiagnosticRegionName];
+    observation.milliseconds += durationMs;
+    observation.count += 1;
+  },
+  snapshot(): RegionSnapshot {
+    return Object.fromEntries(
+      REGION_NAMES.map((name) => [name, { ...this.regions[name] }]),
+    ) as RegionSnapshot;
+  },
+};
+
+(globalThis as unknown as Record<string, unknown>)[DIAGNOSTIC_HOOK] = hook;
+
+function fail(message: string): never {
+  throw new Error(message);
+}
+
+function check(condition: unknown, message: string): asserts condition {
+  if (!condition) fail(message);
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+}
+
+function sourceManifest(): SourceManifest {
+  return captureP2Source(process.cwd());
+}
+
+function toolingHashes(): Record<string, string> {
+  return Object.fromEntries(
+    TOOLING_PATHS.map((file) => [path.basename(file), sha256(readFileSync(file))]),
+  );
+}
+
+function validateRegions(regions: RegionSnapshot, variant: 'batch' | 'per-path'): void {
+  for (const name of REGION_NAMES) {
+    const region = regions[name];
+    check(Number.isFinite(region.milliseconds) && region.milliseconds >= 0, `${name} time invalid`);
+    check(Number.isSafeInteger(region.count) && region.count >= 0, `${name} count invalid`);
+  }
+  const totalCalls = variant === 'batch' ? 1 : 1_000;
+  check(regions['packInput.total'].count === totalCalls, 'packInput count mismatch');
+  check(regions['decodeOutput.total'].count === totalCalls, 'decodeOutput count mismatch');
+  for (const name of REGION_NAMES.slice(2)) {
+    check(regions[name].count === 1_000, `${name} count mismatch`);
+  }
+}
+
+function validateSample(
+  phase: 'preparation' | 'warmup' | 'diagnostic',
+  variant: 'batch' | 'per-path',
+  sample: ReturnType<typeof measureVariant>,
+  regions: RegionSnapshot,
+): void {
+  check(sample.errors.length === 0, `sample errors: ${sample.errors.join('; ')}`);
+  check(sample.checksum === EXPECTED_CHECKSUM, 'checksum mismatch');
+  check(sample.resultCount === 1_000, 'result count mismatch');
+  check(sample.copiedPayloadBytes === EXPECTED_PAYLOAD_BYTES, 'copied payload mismatch');
+  check(sample.pathStatuses.OK === 1_000, 'OK path count mismatch');
+  check(Object.keys(sample.pathStatuses).length === 1, 'unexpected path status');
+  for (const statistics of [sample.statisticsBefore, sample.statisticsAfter]) {
+    check(statistics.hits === 0, 'cache hit observed');
+    check(statistics.retainedPayloadBytes === 0, 'retained cache payload observed');
+    check(statistics.residentNodes === 0, 'resident cache node observed');
+    check(statistics.variantEntries === 0, 'cache variant observed');
+  }
+  if (phase !== 'preparation') {
+    const calls = variant === 'batch' ? 1 : 1_000;
+    check(sample.calls.reserveStatuses.length === 0, 'steady reserve call observed');
+    check(sample.calls.growths === 0, 'steady memory growth observed');
+    check(sample.calls.processStatuses.length === calls, 'process call count mismatch');
+    check(sample.calls.processStatuses.every((status) => status === 0), 'process status mismatch');
+    check(sample.calls.sizingPasses === calls, 'sizing pass count mismatch');
+    check(sample.calls.emissionPasses === calls, 'emission pass count mismatch');
+    check(sample.work.logicalCubics === '32000', 'logical cubic work mismatch');
+    check(sample.work.sizingVisits === '1818150', 'sizing work mismatch');
+    check(sample.work.emissionVisits === '1818150', 'emission work mismatch');
+    check(sample.work.emittedCubicLines === '925075', 'emitted line work mismatch');
+    check(sample.work.attemptedPaths === '1000', 'attempted path work mismatch');
+    check(sample.work.failedPaths === '0', 'failed path work mismatch');
+    validateRegions(regions, variant);
+  }
+}
+
+it('validates instrumentation guards and a small real-WASM decoder path', async () => {
+  const source = readFileSync(ABI_SOURCE_PATH, 'utf8');
+  const transformed = instrumentAbiSource(source);
+  expect(stripDiagnosticInsertions(transformed.code)).toBe(source);
+  expect(() => instrumentAbiSource(`${source} `)).toThrow('ABI source mismatch');
+  expect(() =>
+    stripDiagnosticInsertions(transformed.code.replace('/* p2-decode-diagnostic:end:verbs-end */', '')),
+  ).toThrow('marker verbs-end end is absent or ambiguous');
+
+  const wasmBytes = readFileSync(WASM);
+  expect(createHash('sha256').update(wasmBytes).digest('hex')).toBe(EXPECTED_WASM_SHA256);
+  const module = await WebAssembly.compile(wasmBytes);
+  const raw = (await WebAssembly.instantiate(module, {})).exports as unknown as GeometryKernelExports;
+  const session = new GeometrySession(raw, {
+    cache: { maxNodes: 0, maxVariants: 0, maxPayloadBytes: 0 },
+  });
+  try {
+    hook.reset();
+    const result = session.batch(createP2WorkloadFixture(1, 1).requests);
+    expect(result.status).toBe('OK');
+    if (result.status !== 'OK') fail('small real-WASM batch failed');
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0]?.status).toBe('OK');
+    const regions = hook.snapshot();
+    for (const name of REGION_NAMES) {
+      expect(regions[name].count, name).toBe(1);
+      expect(Number.isFinite(regions[name].milliseconds), name).toBe(true);
+      expect(regions[name].milliseconds, name).toBeGreaterThanOrEqual(0);
+    }
+  } finally {
+    session.dispose();
+    expect(session.snapshotStatistics().liveLinearMemoryBytes).toBe(0);
+  }
+});
+
+it('records non-accepting ABI packing and decoder region costs', async () => {
+  if (existsSync(OUTPUT)) fail(`${OUTPUT} already exists; refusing to overwrite a diagnostic run`);
+  const startedAt = new Date().toISOString();
+  let sourceStart: SourceManifest | null = null;
+  let toolingStart: Record<string, string> | null = null;
+  let originalSource: string | null = null;
+  let instrumentation: InstrumentedAbiSource | null = null;
+  let wasmBytes: Uint8Array<ArrayBuffer> | null = null;
+  let wasmSha256: string | null = null;
+  let failure: string | null = null;
+  const samples: unknown[] = [];
+  const cleanup: Record<string, unknown> = {};
+  const runtimes = new Map<
+    'batch' | 'per-path',
+    Awaited<ReturnType<typeof setupRuntime>>
+  >();
+
+  async function setupRuntime() {
+    const bytes = wasmBytes;
+    check(bytes, 'release WASM was not loaded');
+    const module = await WebAssembly.compile(bytes);
+    const raw = (await WebAssembly.instantiate(module, {})).exports as unknown as GeometryKernelExports;
+    const time = { processMs: 0, adapterMs: 0, reserveMs: 0 };
+    const observer = observeKernel({
+      ...raw,
+      process(length) {
+        const start = performance.now();
+        try {
+          return raw.process(length);
+        } finally {
+          time.processMs += performance.now() - start;
+        }
+      },
+      reserve(input, output) {
+        const start = performance.now();
+        try {
+          return raw.reserve(input, output);
+        } finally {
+          time.reserveMs += performance.now() - start;
+        }
+      },
+    });
+    const session = new GeometrySession(observer.kernel, {
+      cache: { maxNodes: 0, maxVariants: 0, maxPayloadBytes: 0 },
+    });
+    const batch = session.batch.bind(session);
+    session.batch = (input) => {
+      const start = performance.now();
+      try {
+        return batch(input);
+      } finally {
+        time.adapterMs += performance.now() - start;
+      }
+    };
+    return { session, observer, time };
+  }
+
+  try {
+    sourceStart = sourceManifest();
+    toolingStart = toolingHashes();
+    originalSource = readFileSync(ABI_SOURCE_PATH, 'utf8');
+    instrumentation = instrumentAbiSource(originalSource);
+    check(stripDiagnosticInsertions(instrumentation.code) === originalSource, 'round trip mismatch');
+    wasmBytes = Uint8Array.from(readFileSync(WASM));
+    wasmSha256 = createHash('sha256').update(wasmBytes).digest('hex');
+    check(wasmSha256 === EXPECTED_WASM_SHA256, 'release WASM SHA-256 mismatch');
+    runtimes.set('batch', await setupRuntime());
+    runtimes.set('per-path', await setupRuntime());
+    const requests = createP2Workload().requests;
+    for (const phase of ['preparation', 'warmup', 'diagnostic'] as const) {
+      const repetitions = phase === 'diagnostic' ? 5 : 1;
+      for (let index = 0; index < repetitions; index += 1) {
+        const order: readonly ('batch' | 'per-path')[] =
+          index % 2 === 0 ? ['batch', 'per-path'] : ['per-path', 'batch'];
+        for (const variant of order) {
+          const runtime = runtimes.get(variant);
+          check(runtime, `missing ${variant} runtime`);
+          runtime.time.processMs = 0;
+          runtime.time.adapterMs = 0;
+          runtime.time.reserveMs = 0;
+          hook.reset();
+          const sample = measureVariant(variant, runtime.session, runtime.observer, requests);
+          const regions = hook.snapshot();
+          const decoderRegionMs = REGION_NAMES.slice(2).reduce(
+            (sum, name) => sum + regions[name].milliseconds,
+            0,
+          );
+          const decoderResidualMs = regions['decodeOutput.total'].milliseconds - decoderRegionMs;
+          const adapterExcludingProcessAndReserveMs =
+            runtime.time.adapterMs - runtime.time.processMs - runtime.time.reserveMs;
+          const nonAdapterTimedWorkMs = sample.timing.durationMs - runtime.time.adapterMs;
+          const record = {
+            phase,
+            index,
+            variant,
+            processMs: runtime.time.processMs,
+            reserveMs: runtime.time.reserveMs,
+            adapterMs: runtime.time.adapterMs,
+            adapterExcludingProcessAndReserveMs,
+            nonAdapterTimedWorkMs,
+            instrumentation: {
+              regions,
+              decoderOtherWorkAndTimerOverheadMs: decoderResidualMs,
+            },
+            sample,
+          };
+          samples.push(record);
+          for (const [name, duration] of Object.entries(runtime.time)) {
+            check(Number.isFinite(duration) && duration >= 0, `${name} duration invalid`);
+          }
+          check(
+            Number.isFinite(sample.timing.durationMs) && sample.timing.durationMs >= 0,
+            'sample duration invalid',
+          );
+          check(
+            Number.isFinite(adapterExcludingProcessAndReserveMs) &&
+              adapterExcludingProcessAndReserveMs >= 0,
+            'adapter residual invalid',
+          );
+          check(
+            Number.isFinite(nonAdapterTimedWorkMs) && nonAdapterTimedWorkMs >= 0,
+            'non-adapter residual invalid',
+          );
+          check(
+            Number.isFinite(decoderResidualMs) && decoderResidualMs >= 0,
+            'decoder residual invalid',
+          );
+          validateSample(phase, variant, sample, regions);
+        }
+      }
+    }
+  } catch (error) {
+    failure = errorText(error);
+  } finally {
+    for (const variant of ['batch', 'per-path'] as const) {
+      const runtime = runtimes.get(variant);
+      if (!runtime) continue;
+      try {
+        runtime.session.dispose();
+        const statistics = sessionCounters(runtime.session.snapshotStatistics());
+        const calls = runtime.observer.snapshot();
+        cleanup[variant] = { statistics, calls };
+        check(calls.disposeStatuses.length === 1 && calls.disposeStatuses[0] === 0, 'dispose mismatch');
+        check(statistics.liveLinearMemoryBytes === 0, 'live linear memory remains after dispose');
+        check(statistics.retainedPayloadBytes === 0, 'retained payload remains after dispose');
+      } catch (error) {
+        failure = [failure, `cleanup ${variant}: ${errorText(error)}`].filter(Boolean).join('; ');
+      }
+    }
+    let sourceEnd: ReturnType<typeof sourceManifest> | null = null;
+    try {
+      sourceEnd = sourceManifest();
+      check(
+        sourceStart !== null &&
+          sourceEnd.head === sourceStart.head &&
+          sourceEnd.sha256 === sourceStart.sha256,
+        'source start/end manifest mismatch',
+      );
+    } catch (error) {
+      failure = [failure, `source end: ${errorText(error)}`].filter(Boolean).join('; ');
+    }
+    const finishedAt = new Date().toISOString();
+    let toolingEnd: Record<string, string> | null = null;
+    try {
+      toolingEnd = toolingHashes();
+      check(
+        toolingStart !== null && JSON.stringify(toolingEnd) === JSON.stringify(toolingStart),
+        'tooling start/end hash mismatch',
+      );
+    } catch (error) {
+      failure = [failure, `tooling end: ${errorText(error)}`].filter(Boolean).join('; ');
+    }
+    try {
+      writeFileSync(
+        OUTPUT,
+        JSON.stringify(
+          {
+            schema: 'p2-decode-diagnostic/v1',
+            acceptance: 'NOT_APPLICABLE',
+            startedAt,
+            finishedAt,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            host: {
+              platform: os.platform(),
+              release: os.release(),
+              arch: os.arch(),
+              cpu: os.cpus()[0]?.model ?? 'unavailable',
+              logicalCores: os.cpus().length,
+              memoryBytes: os.totalmem(),
+              node: process.version,
+            },
+            command: [
+              'pnpm',
+              'exec',
+              'vitest',
+              'run',
+              '--config',
+              '.tools/p2-decode-diagnostic.config.ts',
+            ],
+            sourceHead: sourceStart?.head ?? null,
+            sourceStart,
+            sourceEnd,
+            sourceMatches:
+              sourceStart !== null &&
+              sourceEnd !== null &&
+              sourceEnd.head === sourceStart.head &&
+              sourceEnd.sha256 === sourceStart.sha256,
+            tooling: {
+              start: toolingStart,
+              end: toolingEnd,
+              matches:
+                toolingStart !== null &&
+                toolingEnd !== null &&
+                JSON.stringify(toolingEnd) === JSON.stringify(toolingStart),
+            },
+            abiSource:
+              instrumentation === null || originalSource === null
+                ? null
+                : {
+                    path: ABI_SOURCE_PATH,
+                    originalSha256: instrumentation.originalSha256,
+                    transformedSha256: instrumentation.transformedSha256,
+                    roundTripByteExact:
+                      stripDiagnosticInsertions(instrumentation.code) === originalSource,
+                  },
+            wasm: { path: WASM, sha256: wasmSha256, expectedSha256: EXPECTED_WASM_SHA256 },
+            protocol: {
+              workload: 'p2-batch/v1',
+              preparationPairs: 1,
+              warmupPairs: 1,
+              diagnosticPairs: 5,
+              cache: { maxNodes: 0, maxVariants: 0, maxPayloadBytes: 0 },
+            },
+            limitations:
+              'Instrumented Node-only diagnostic. Whole-function try/finally wrappers can affect JIT behavior, so observations describe instrumented costs and do not establish exact original-code attribution, browser performance, GC causality, speedup, or A08 acceptance. Decoder residual includes uninstrumented checks and timer/recording overhead.',
+            samples,
+            cleanup,
+            errors: failure === null ? [] : [failure],
+          },
+          null,
+          2,
+        ) + '\n',
+        { flag: 'wx' },
+      );
+    } catch (error) {
+      failure = [failure, `raw record: ${errorText(error)}`].filter(Boolean).join('; ');
+    }
+  }
+
+  expect(failure).toBeNull();
+});
