@@ -121,6 +121,8 @@ The cache key includes node geometry revision, stroke-style hash, fill rule, and
 
 Before P2 implementation, its plan must define ABI versioning, offset units and terminal offsets, bounds checks, allocation ownership/release, and typed-view lifetimes after reserve, growth, or another batch. Results carry source revisions so stale work cannot replace newer geometry. A transform-only cache hit is valid only while the required screen-space tolerance remains in the cached bucket; scale, shear, or DPR changes may require a finer mesh. Numeric fixtures must include those transitions and non-finite input rejection.
 
+P2 concretizes these obligations in the [private geometry contract](plans/p2-private-contract.md) and [execution plan](plans/p2-geometry-kernel.md). Its results are local Float64 flattened paths, bounds and validation provenance; the mesh example above remains a later tessellation boundary. P2 introduces no public GeometryPort or renderer dependency. The kernel owns one explicitly reserved arena; host-retained results and caches own copies, and every mutating kernel call invalidates borrowed views.
+
 ## Retained render scene
 
 The render scene stores only data needed for output:
@@ -172,6 +174,8 @@ The initial quality strategy is:
 - Zoom-aware flattening tolerance targeting no more than 0.25 screen pixel of geometric error
 
 MSAA-only output is not considered sufficient for the final path renderer. Quality is tested at fractional positions, rotations, thin strokes, extreme zoom, and high device-pixel ratio.
+
+For P2 flattening, the geometric target is 0.25 **physical display pixel**, accounting for world linear transform, camera zoom and DPR using the largest singular value. The private contract specifies conservative downward tolerance buckets, bounded de Casteljau flattening and an independent continuous-error oracle. This resolves the flattening portion of the P2/P3 design gate; P3 still needs its own tessellation/coverage error budget and adversarial-work contract before implementation.
 
 ## Clipping
 
