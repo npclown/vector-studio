@@ -1,0 +1,259 @@
+import { createHash } from 'node:crypto';
+
+export const ABI_SOURCE_PATH = 'packages/geometry-wasm/src/abi.ts';
+export const ABI_SOURCE_SHA256 = 'a57b7c55ae61e58f7a108f6fd52f678c5615c2aacafddfbf516e39b2a0fdad66';
+export const DIAGNOSTIC_HOOK = '__vectorStudioP2DecodeDiagnostic';
+
+export const REGION_NAMES = [
+  'packInput.total',
+  'decodeOutput.total',
+  'decodeOutput.verbsCopy',
+  'decodeOutput.pointsCopy',
+  'decodeOutput.pointsFiniteCheck',
+  'decodeOutput.provenanceCopy',
+  'decodeOutput.provenanceValidation',
+] as const;
+
+export type DiagnosticRegionName = (typeof REGION_NAMES)[number];
+
+const START_PREFIX = '/* p2-decode-diagnostic:start:';
+const END_PREFIX = '/* p2-decode-diagnostic:end:';
+
+export function sha256(value: string | Uint8Array): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function occurrences(source: string, anchor: string): number {
+  let count = 0;
+  let offset = 0;
+  while ((offset = source.indexOf(anchor, offset)) !== -1) {
+    count += 1;
+    offset += anchor.length;
+  }
+  return count;
+}
+
+function insertAfter(source: string, anchor: string, insertion: string, label: string): string {
+  if (occurrences(source, anchor) !== 1) {
+    throw new Error(`P2 diagnostic anchor ${label} is absent or ambiguous`);
+  }
+  const offset = source.indexOf(anchor) + anchor.length;
+  return source.slice(0, offset) + insertion + source.slice(offset);
+}
+
+function insertBefore(source: string, anchor: string, insertion: string, label: string): string {
+  if (occurrences(source, anchor) !== 1) {
+    throw new Error(`P2 diagnostic anchor ${label} is absent or ambiguous`);
+  }
+  const offset = source.indexOf(anchor);
+  return source.slice(0, offset) + insertion + source.slice(offset);
+}
+
+function marked(label: string, code: string): string {
+  return `${START_PREFIX}${label} */${code}${END_PREFIX}${label} */`;
+}
+
+function timerStart(label: string, variable: string): string {
+  return marked(label, `const ${variable}=performance.now();try{`);
+}
+
+function timerEnd(label: string, variable: string, region: DiagnosticRegionName): string {
+  return marked(
+    label,
+    `}finally{(globalThis as unknown as {${DIAGNOSTIC_HOOK}:{record:(name:string,durationMs:number)=>void}}).${DIAGNOSTIC_HOOK}.record('${region}',performance.now()-${variable});}`,
+  );
+}
+
+function regionStart(label: string, variable: string): string {
+  return marked(label, `const ${variable}=performance.now();`);
+}
+
+function regionEnd(label: string, variable: string, region: DiagnosticRegionName): string {
+  return marked(
+    label,
+    `(globalThis as unknown as {${DIAGNOSTIC_HOOK}:{record:(name:string,durationMs:number)=>void}}).${DIAGNOSTIC_HOOK}.record('${region}',performance.now()-${variable});`,
+  );
+}
+
+export interface InstrumentedAbiSource {
+  readonly code: string;
+  readonly originalSha256: string;
+  readonly transformedSha256: string;
+}
+
+export function stripDiagnosticInsertions(source: string): string {
+  let stripped = source;
+  for (const label of [
+    'pack-total-start',
+    'pack-total-end',
+    'decode-total-start',
+    'decode-total-end',
+    'verbs-start',
+    'verbs-end',
+    'points-copy-start',
+    'points-copy-end',
+    'points-finite-start',
+    'points-finite-end',
+    'provenance-copy-start',
+    'provenance-copy-end',
+    'provenance-validation-start',
+    'provenance-validation-end',
+  ]) {
+    const start = `${START_PREFIX}${label} */`;
+    const end = `${END_PREFIX}${label} */`;
+    const startOffset = stripped.indexOf(start);
+    if (startOffset === -1 || stripped.indexOf(start, startOffset + start.length) !== -1) {
+      throw new Error(`P2 diagnostic marker ${label} start is absent or ambiguous`);
+    }
+    const endOffset = stripped.indexOf(end, startOffset + start.length);
+    if (endOffset === -1 || stripped.indexOf(end, endOffset + end.length) !== -1) {
+      throw new Error(`P2 diagnostic marker ${label} end is absent or ambiguous`);
+    }
+    stripped = stripped.slice(0, startOffset) + stripped.slice(endOffset + end.length);
+  }
+  if (stripped.includes(START_PREFIX) || stripped.includes(END_PREFIX)) {
+    throw new Error('P2 diagnostic source contains an unknown insertion marker');
+  }
+  return stripped;
+}
+
+export function instrumentAbiSource(source: string): InstrumentedAbiSource {
+  const originalSha256 = sha256(source);
+  if (originalSha256 !== ABI_SOURCE_SHA256) {
+    throw new Error(
+      `P2 diagnostic ABI source mismatch: expected ${ABI_SOURCE_SHA256}, observed ${originalSha256}`,
+    );
+  }
+
+  let code = source;
+  code = insertAfter(
+    code,
+    'export function packInput(paths: readonly PackedPath[]): Uint8Array {',
+    timerStart('pack-total-start', '__p2PackStart'),
+    'packInput opening',
+  );
+  code = insertBefore(
+    code,
+    '\n}\n\nexport function validatePackedInputSize',
+    timerEnd('pack-total-end', '__p2PackStart', 'packInput.total'),
+    'packInput closing',
+  );
+  code = insertAfter(
+    code,
+    'export function decodeOutput(bytes: Uint8Array, expected: readonly PackedPath[]): DecodedPath[] {',
+    timerStart('decode-total-start', '__p2DecodeStart'),
+    'decodeOutput opening',
+  );
+  code = insertBefore(
+    code,
+    '\n}\n\nexport function readKernelWork',
+    timerEnd('decode-total-end', '__p2DecodeStart', 'decodeOutput.total'),
+    'decodeOutput closing',
+  );
+
+  const verbs = '    const verbs = bytes.slice(verbsOffset + verbStart, verbsOffset + verbEnd);';
+  code = insertBefore(
+    code,
+    verbs,
+    regionStart('verbs-start', '__p2VerbsStart'),
+    'verb slice start',
+  );
+  code = insertAfter(
+    code,
+    verbs,
+    regionEnd('verbs-end', '__p2VerbsStart', 'decodeOutput.verbsCopy'),
+    'verb slice end',
+  );
+
+  const pointsCopy = [
+    '    const points = new Float64Array(pointEnd - pointStart);',
+    '    for (let scalar = pointStart; scalar < pointEnd; scalar += 1) {',
+    '      points[scalar - pointStart] = view.getFloat64(pointsOffset + scalar * 8, true);',
+    '    }',
+  ].join('\n');
+  code = insertBefore(
+    code,
+    pointsCopy,
+    regionStart('points-copy-start', '__p2PointsCopyStart'),
+    'point copy start',
+  );
+  code = insertAfter(
+    code,
+    pointsCopy,
+    regionEnd('points-copy-end', '__p2PointsCopyStart', 'decodeOutput.pointsCopy'),
+    'point copy end',
+  );
+
+  const pointsFinite = [
+    '    if (points.some((point) => !Number.isFinite(point))) {',
+    "      throw new AbiContractError('successful output contains a nonfinite coordinate');",
+    '    }',
+  ].join('\n');
+  code = insertBefore(
+    code,
+    pointsFinite,
+    regionStart('points-finite-start', '__p2PointsFiniteStart'),
+    'point finite check start',
+  );
+  code = insertAfter(
+    code,
+    pointsFinite,
+    regionEnd(
+      'points-finite-end',
+      '__p2PointsFiniteStart',
+      'decodeOutput.pointsFiniteCheck',
+    ),
+    'point finite check end',
+  );
+
+  const provenanceCopy = [
+    '    const provenance = new Uint32Array((verbEnd - verbStart) * 3);',
+    '    for (let verb = verbStart; verb < verbEnd; verb += 1) {',
+    '      const sourceOffset = provenanceOffset + verb * PROVENANCE_BYTES;',
+    '      const targetOffset = (verb - verbStart) * 3;',
+    '      provenance[targetOffset] = view.getUint32(sourceOffset, true);',
+    '      provenance[targetOffset + 1] = view.getUint32(sourceOffset + 4, true);',
+    '      provenance[targetOffset + 2] = view.getUint32(sourceOffset + 8, true);',
+    '    }',
+  ].join('\n');
+  code = insertBefore(
+    code,
+    provenanceCopy,
+    regionStart('provenance-copy-start', '__p2ProvenanceCopyStart'),
+    'provenance copy start',
+  );
+  code = insertAfter(
+    code,
+    provenanceCopy,
+    regionEnd(
+      'provenance-copy-end',
+      '__p2ProvenanceCopyStart',
+      'decodeOutput.provenanceCopy',
+    ),
+    'provenance copy end',
+  );
+
+  const provenanceValidation =
+    '      validateProvenance(verbs, points, provenance, source.verbs, source.points);';
+  code = insertBefore(
+    code,
+    provenanceValidation,
+    regionStart('provenance-validation-start', '__p2ProvenanceValidationStart'),
+    'provenance validation start',
+  );
+  code = insertAfter(
+    code,
+    provenanceValidation,
+    regionEnd(
+      'provenance-validation-end',
+      '__p2ProvenanceValidationStart',
+      'decodeOutput.provenanceValidation',
+    ),
+    'provenance validation end',
+  );
+
+  if (stripDiagnosticInsertions(code) !== source) {
+    throw new Error('P2 diagnostic insertion round trip did not reproduce ABI source byte-for-byte');
+  }
+  return { code, originalSha256, transformedSha256: sha256(code) };
+}

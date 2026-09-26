@@ -1,0 +1,36 @@
+{
+  "records": [
+    {
+      "source": ".tools/p2-decode-diagnostic-01.json",
+      "storedName": "diagnostic-01.json.gz",
+      "originalBytes": 370585,
+      "storedBytes": 11931,
+      "originalSha256": "ca7ba5bba399c41c0747c5af1624e51485296efa1a3753a001848108182c9449",
+      "storedSha256": "ad5bde6bd839b0f20fd24bc5bb805ab2a505acef70ea7eba16705265106869ef"
+    },
+    {
+      "source": ".tools/p2-decode-diagnostic.test.ts",
+      "storedName": "diagnostic-test-source.txt",
+      "originalBytes": 17897,
+      "storedBytes": 17897,
+      "originalSha256": "7ce93c2ddd95c3e8866b9b58a2ac68e9444ab01411c729634618bc3eeb7ba15d",
+      "storedSha256": "7ce93c2ddd95c3e8866b9b58a2ac68e9444ab01411c729634618bc3eeb7ba15d"
+    },
+    {
+      "source": ".tools/p2-decode-diagnostic.config.ts",
+      "storedName": "diagnostic-config-source.txt",
+      "originalBytes": 692,
+      "storedBytes": 692,
+      "originalSha256": "95c44513d009de802c21380c9ac13419bb04b2a3dcf05b0147f2bef747318cfb",
+      "storedSha256": "95c44513d009de802c21380c9ac13419bb04b2a3dcf05b0147f2bef747318cfb"
+    },
+    {
+      "source": ".tools/p2-decode-instrumentation.ts",
+      "storedName": "instrumentation-source.txt",
+      "originalBytes": 8547,
+      "storedBytes": 8547,
+      "originalSha256": "e37d0a4c9e922f9a049753960621f44727868b5e53bc6432328452467e33ae2e",
+      "storedSha256": "e37d0a4c9e922f9a049753960621f44727868b5e53bc6432328452467e33ae2e"
+    }
+  ]
+}

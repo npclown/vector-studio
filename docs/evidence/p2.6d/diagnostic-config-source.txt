@@ -1,0 +1,23 @@
+import path from 'node:path';
+import { defineConfig } from 'vitest/config';
+import { ABI_SOURCE_PATH, instrumentAbiSource } from './p2-decode-instrumentation.js';
+
+const abiPath = path.resolve(ABI_SOURCE_PATH).replaceAll('\\', '/');
+
+export default defineConfig({
+  plugins: [
+    {
+      name: 'p2-decode-diagnostic-instrumentation',
+      enforce: 'pre',
+      transform(source, id) {
+        if (id.split('?', 1)[0]?.replaceAll('\\', '/') !== abiPath) return null;
+        return { code: instrumentAbiSource(source).code, map: null };
+      },
+    },
+  ],
+  test: {
+    coverage: { enabled: false },
+    include: ['.tools/p2-decode-diagnostic.test.ts'],
+    testTimeout: 120_000,
+  },
+});
