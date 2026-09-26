@@ -1,0 +1,141 @@
+{
+  "sourceDirectory": "artifacts/p2.5/20260926-reference-02",
+  "files": [
+    {
+      "originalName": "aggregate.json",
+      "storedName": "aggregate.json",
+      "originalBytes": 7103,
+      "storedBytes": 7103,
+      "originalSha256": "e6935e46b002079f36272a727917881a60ef4fdd88278e158afa20cfb17c748b",
+      "storedSha256": "e6935e46b002079f36272a727917881a60ef4fdd88278e158afa20cfb17c748b"
+    },
+    {
+      "originalName": "build.json",
+      "storedName": "build.json",
+      "originalBytes": 1138,
+      "storedBytes": 1138,
+      "originalSha256": "e8c10cdabc3edd27cc0668a30848893ee2a9a26375600ff3f4590bcdb74201dc",
+      "storedSha256": "e8c10cdabc3edd27cc0668a30848893ee2a9a26375600ff3f4590bcdb74201dc"
+    },
+    {
+      "originalName": "chrome-r1.json",
+      "storedName": "chrome-r1.json.gz",
+      "originalBytes": 1632162,
+      "storedBytes": 32890,
+      "originalSha256": "136aaa45a072332886d82dad99c8c93571abdb743b00a55300aeae7cee2f8bb0",
+      "storedSha256": "f40c250ec0c088cbdfe9a91cf042c9c523a438e485bd7cb9fa16fd084f033ea8"
+    },
+    {
+      "originalName": "chrome-r2.json",
+      "storedName": "chrome-r2.json.gz",
+      "originalBytes": 1632094,
+      "storedBytes": 32862,
+      "originalSha256": "4249d6eed79b86d4083ba5588f63cd2b03e838b5fafac28ce886fa9190321c09",
+      "storedSha256": "cec75056e0defe2f4b72e207e2fdfe6c587ffb1de079d1d305a37e749fde1b8a"
+    },
+    {
+      "originalName": "chrome-r3.json",
+      "storedName": "chrome-r3.json.gz",
+      "originalBytes": 1632071,
+      "storedBytes": 32850,
+      "originalSha256": "f286c68269816d5be1a0672d4b1b07814d43aca742c76a8399fe08dcf5d21344",
+      "storedSha256": "cf181ad0142720ac5a549352da9e189afb6bedcb9fe0ad1c53eb1254348db709"
+    },
+    {
+      "originalName": "chrome-r4.json",
+      "storedName": "chrome-r4.json.gz",
+      "originalBytes": 1632045,
+      "storedBytes": 32838,
+      "originalSha256": "8da846ee9b690de519ce30a4554c8391e5dd9fc0367d0f538bfb0d925f73e6e3",
+      "storedSha256": "36eed681703095b14a5d639ff66432cc57e06147b34ca2ed0b9b423fbfdfaa50"
+    },
+    {
+      "originalName": "chrome-r5.json",
+      "storedName": "chrome-r5.json.gz",
+      "originalBytes": 1632071,
+      "storedBytes": 32902,
+      "originalSha256": "4e6c0434488fa59f020c5656bcc68d45416655e53ba17c56b0f748a972078baa",
+      "storedSha256": "598681fe045bb343d412db278f8e8ed91c4e4d71e598bd92123f581ec4255420"
+    },
+    {
+      "originalName": "completion.json",
+      "storedName": "completion.json",
+      "originalBytes": 5913,
+      "storedBytes": 5913,
+      "originalSha256": "b42d802f0adf8506f3d76fdda14b0e85090eb33728b7ff023aead4b5e35e76a1",
+      "storedSha256": "b42d802f0adf8506f3d76fdda14b0e85090eb33728b7ff023aead4b5e35e76a1"
+    },
+    {
+      "originalName": "edge-r1.json",
+      "storedName": "edge-r1.json.gz",
+      "originalBytes": 1632066,
+      "storedBytes": 32829,
+      "originalSha256": "c8f48a5d1ce115736f5a9101265b14022d5420d59c2c5246e750b71cecbceb2d",
+      "storedSha256": "942b9766908068ba4bd09fc70863b9cd137ce736cdb01bd4532248580239154c"
+    },
+    {
+      "originalName": "edge-r2.json",
+      "storedName": "edge-r2.json.gz",
+      "originalBytes": 1632037,
+      "storedBytes": 32832,
+      "originalSha256": "d13cbd16fc0b74d3e855c2c267c759833d75deece33b3919fb3c3b3f9602bad4",
+      "storedSha256": "d12250079ab350b79364ea5ea12fc94624a7d4f6f3b1ab39ba938aeb39ec6da3"
+    },
+    {
+      "originalName": "edge-r3.json",
+      "storedName": "edge-r3.json.gz",
+      "originalBytes": 1632064,
+      "storedBytes": 32858,
+      "originalSha256": "33f0b36d90f1d50e9993687401780ad1a1aab67b425ff0285a568ad05c51f988",
+      "storedSha256": "6be46408f677bae5bc2b7edcc7ae1a41b145405ca6a4950c1bf27d6aaea9f29a"
+    },
+    {
+      "originalName": "edge-r4.json",
+      "storedName": "edge-r4.json.gz",
+      "originalBytes": 1632194,
+      "storedBytes": 32923,
+      "originalSha256": "8048514de47a0b155c8b29a2efbe5a7668d44a2acda08cfe441046228bcbf401",
+      "storedSha256": "08e58b5efd4903e41587bfa6364c5692b665942e842d60089ec478acc178c212"
+    },
+    {
+      "originalName": "edge-r5.json",
+      "storedName": "edge-r5.json.gz",
+      "originalBytes": 1632180,
+      "storedBytes": 32924,
+      "originalSha256": "b462115ab766d70b597b45a2f759b186a8976cdc898341b0150692e98bf37f1a",
+      "storedSha256": "4516789c70cef1c6c3c43fcaebe25401900691ec11c97b829b4cf03d0362511f"
+    },
+    {
+      "originalName": "environment.json",
+      "storedName": "environment.json",
+      "originalBytes": 1386,
+      "storedBytes": 1386,
+      "originalSha256": "9a7bfd9e6df987ee871235b6bf1a056c20813448dfb0cc8a9725d846d5d98877",
+      "storedSha256": "9a7bfd9e6df987ee871235b6bf1a056c20813448dfb0cc8a9725d846d5d98877"
+    },
+    {
+      "originalName": "hardware-preflight.json",
+      "storedName": "hardware-preflight.json",
+      "originalBytes": 1558,
+      "storedBytes": 1558,
+      "originalSha256": "fe20d01eb553367cb2b083758b8dd091909f80c7a33f6f1cd800735601b1fc02",
+      "storedSha256": "fe20d01eb553367cb2b083758b8dd091909f80c7a33f6f1cd800735601b1fc02"
+    },
+    {
+      "originalName": "invocation.json",
+      "storedName": "invocation.json",
+      "originalBytes": 7327,
+      "storedBytes": 7327,
+      "originalSha256": "dfaf780dbbeece626993557aa4ca041ec39715629d0f463057f802d77bc1837b",
+      "storedSha256": "dfaf780dbbeece626993557aa4ca041ec39715629d0f463057f802d77bc1837b"
+    },
+    {
+      "originalName": "runner-status.json",
+      "storedName": "runner-status.json",
+      "originalBytes": 202,
+      "storedBytes": 202,
+      "originalSha256": "e20cfa3686b432d3e53ce2222d202b9fa57286f29add008e7ea39ee4fa50f65c",
+      "storedSha256": "e20cfa3686b432d3e53ce2222d202b9fa57286f29add008e7ea39ee4fa50f65c"
+    }
+  ]
+}

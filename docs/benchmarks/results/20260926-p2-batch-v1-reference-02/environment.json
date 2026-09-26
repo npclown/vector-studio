@@ -1,0 +1,23 @@
+{
+  "observedAt": "2026-09-26T11:52:33.8874141Z",
+  "displayRefreshHz": {
+    "value": 60,
+    "source": "tooling/p1-presentmon-preflight.ps1, observed 2026-09-26T11:52:33.8874141Z; per-device EnumDisplaySettings"
+  },
+  "power": {
+    "value": "AC online; active scheme 381b4222-f694-41f0-9685-ff5bb260df2e",
+    "source": "tooling/p1-presentmon-preflight.ps1, observed 2026-09-26T11:52:33.8874141Z; Windows Forms PowerStatus and powercfg"
+  },
+  "backgroundLoad": {
+    "value": "Operator confirmed video, recording and other high-load work are stopped and can remain stopped during this run. No concurrent local build/test or subagent work during browser timing.",
+    "source": "Current conversation reply confirming readiness and requesting measurement immediately before this preflight."
+  },
+  "driver": {
+    "value": "NVIDIA GeForce GTX 1660 SUPER / 32.0.15.9186",
+    "source": "tooling/p1-presentmon-preflight.ps1, observed 2026-09-26T11:52:33.8874141Z; Win32_VideoController"
+  },
+  "display": {
+    "value": "Primary \\\\.\\DISPLAY1 at (0,0), 1920x1080; operator confirmed measurement windows can remain unobscured for approximately six minutes. Verify captured window bounds remain on this monitor.",
+    "source": "tooling/p1-presentmon-preflight.ps1, observed 2026-09-26T11:52:33.8874141Z; Screen.AllScreens/EnumDisplaySettings and current operator confirmation."
+  }
+}
