@@ -1,0 +1,16 @@
+{
+  "name": "@vector-studio/geometry-wasm",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private P2 WASM geometry adapter and reconstructible cache.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build"
+  }
+}

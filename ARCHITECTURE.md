@@ -112,6 +112,8 @@ At P0.4, only `contracts`, `renderer-core`, `renderer-webgpu`, and `playground` 
 
 P2.1 adds `geometry-reference` as an independently compiled test-only package and extends the boundary checker to cover it, including relative cross-package imports. No production package may import this oracle. The concrete Rust/WASM adapter and public geometry service remain unimplemented at this checkpoint; test composition imports the oracle's private numeric data directly.
 
+P2.3 adds the private `geometry-wasm` TypeScript adapter/cache over the owned Rust kernel, with independent compilation and boundary coverage. It has no external or oracle dependency. Renderer packages do not import it; test composition supplies WASM and compares plain results. Its factory and batch types are private implementation contracts, not the editor's public `GeometryPort`. See the [adapter review and evidence](docs/evidence/p2.3-adapter-review-2026-09-26.md).
+
 Forbidden dependency examples:
 
 - `model -> renderer-webgpu`
