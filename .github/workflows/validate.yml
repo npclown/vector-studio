@@ -33,3 +33,9 @@ jobs:
 
       - name: Build production artifacts
         run: pnpm build
+
+      - name: Install approved pinned Rust toolchain
+        run: pwsh -NoProfile -File tooling/install-rust.ps1
+
+      - name: Validate native Rust and independent WASM fixtures
+        run: pnpm test:geometry

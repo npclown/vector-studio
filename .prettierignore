@@ -3,6 +3,8 @@ dist
 coverage
 playwright-report
 test-results
+.tools
+target
 pnpm-lock.yaml
 **/*.md
 # Preserve captured P1.5 source manifests and observations byte-for-byte.

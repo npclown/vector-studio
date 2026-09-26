@@ -124,6 +124,7 @@ The toolchain exists as of P0.4. `package.json` owns exact commands and pinned v
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pnpm check`             | Formatting (Markdown excluded), ESLint, TypeScript, unit/contract tests, package boundaries                                                                      |
 | `pnpm test:unit`         | Deterministic Vitest tests without a physical GPU                                                                                                                |
+| `pnpm test:geometry`     | Pinned Rust format/Clippy/native checks, two reproducible release WASM builds and independent raw Node WASM fixtures; not browser or performance acceptance      |
 | `pnpm test:browser`      | Chrome/Edge browser integration; headless by default, not hardware acceptance                                                                                    |
 | `pnpm test:gpu`          | Headed Chrome/Edge validation error, device-loss recovery and P1 primitive/overlap/precision fixtures; not native OOM or performance evidence                    |
 | `pnpm benchmark:p0:p0-3` | Legacy production steady/idle runner; fixed historical output filenames must be corrected before reuse in the tracked checkout                                   |

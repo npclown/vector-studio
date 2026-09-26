@@ -12,7 +12,7 @@ const EPSILON = 2 ** -52;
 const TARGET = 0.25;
 const MAX_VERIFICATION_DEPTH = 24;
 const MAX_CELLS = 1_048_576;
-const MAX_LINES = 4096;
+const MAX_LINES = 8192;
 
 function transform(matrix: Matrix2, point: Point): Point {
   return [matrix[0] * point[0] + matrix[1] * point[1], matrix[2] * point[0] + matrix[3] * point[1]];
@@ -53,7 +53,7 @@ export function validateContinuousCubicError(
 ): ContinuousErrorResult {
   const findings: string[] = [];
   if (lines.length === 0) findings.push('cubic must emit at least one line');
-  if (lines.length > MAX_LINES) findings.push('cubic emits more than 4096 lines');
+  if (lines.length > MAX_LINES) findings.push('cubic emits more than 8192 lines');
   if (!screen.every(Number.isFinite)) findings.push('screen matrix must be finite');
   if (!cubic.flat().every(Number.isFinite)) findings.push('cubic controls must be finite');
   const sigma = matrixSigmaMax(screen);
