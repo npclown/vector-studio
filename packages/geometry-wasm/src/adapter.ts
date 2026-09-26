@@ -553,11 +553,13 @@ export class GeometrySession {
     }
 
     try {
-      const reserveStatus = this.mutate(kernel, 'reserve', true, () =>
-        kernel.reserve(input.byteLength, this.memoryState.outputCapacity),
-      );
-      if (reserveStatus !== BATCH_STATUS.OK)
-        return this.handleBatchStatus(reserveStatus, 'reserve');
+      if (input.byteLength > this.memoryState.inputCapacity) {
+        const reserveStatus = this.mutate(kernel, 'reserve', true, () =>
+          kernel.reserve(input.byteLength, this.memoryState.outputCapacity),
+        );
+        if (reserveStatus !== BATCH_STATUS.OK)
+          return this.handleBatchStatus(reserveStatus, 'reserve');
+      }
       this.copyInput(input);
 
       let processStatus = this.process(kernel, input.byteLength, misses.length);

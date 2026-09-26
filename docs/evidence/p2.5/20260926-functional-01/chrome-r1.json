@@ -1,0 +1,21 @@
+{
+  "schema": "p2-record/v1",
+  "project": "chrome",
+  "browserVersion": "153.0.8010.53",
+  "launchFlags": [],
+  "profile": "functional",
+  "repetition": 1,
+  "recordedAt": "2026-09-26T09:35:43.788Z",
+  "instrumentation": {
+    "headed": false,
+    "tracing": false,
+    "video": false,
+    "devtools": false
+  },
+  "sourceSha256": "d4afd09f46e46e2241288bce1ab9ae387f95c6d7d0c7edf5a60b9ac2244c065e",
+  "buildSha256": "5960fb3bea300ca2fbbe56794abab11c0715dc2b0c1d01954d9b31a54248a3de",
+  "wasmSha256": "861762ca8d5e48d6cc5c602e82ef98652b9d7fa326068a0756d4e301497d25cc",
+  "configurationSha256": null,
+  "capture": null,
+  "error": "Error: cdpSession.send: Protocol error (Browser.getBrowserCommandLine): Command line not returned because --enable-automation not set."
+}

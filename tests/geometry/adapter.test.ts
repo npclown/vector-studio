@@ -5,6 +5,7 @@ import {
   createGeometrySession,
   GeometrySession,
   type GeometryRequest,
+  type GeometryKernelExports,
 } from '../../packages/geometry-wasm/src/index.js';
 
 let module: WebAssembly.Module;
@@ -37,6 +38,47 @@ function batch(session: GeometrySession, requests: readonly GeometryRequest[]) {
 }
 
 describe('P2 private adapter with real release WASM', () => {
+  it('reuses sufficient arenas without reserve and still grows/retries when capacity is exhausted', async () => {
+    const instance = await WebAssembly.instantiate(module, {});
+    const kernel = instance.exports as unknown as GeometryKernelExports;
+    let reserveCalls = 0;
+    let processCalls = 0;
+    const session = new GeometrySession(
+      {
+        ...kernel,
+        reserve: (input, output) => {
+          reserveCalls++;
+          return kernel.reserve(input, output);
+        },
+        process: (length) => {
+          processCalls++;
+          return kernel.process(length);
+        },
+      },
+      { cache: { maxNodes: 0, maxVariants: 0, maxPayloadBytes: 0 } },
+    );
+    const prepared = batch(session, [request()]);
+    expect(reserveCalls).toBe(2);
+    expect(processCalls).toBe(2);
+    reserveCalls = 0;
+    processCalls = 0;
+    const epoch = kernel.memory_epoch();
+    expect(batch(session, [request()])).toEqual(prepared);
+    expect(reserveCalls).toBe(0);
+    expect(processCalls).toBe(1);
+    expect(kernel.memory_epoch()).toBe(epoch + 1);
+    const more = [request('one'), request('two')];
+    expect(batch(session, more)).toHaveLength(2);
+    expect(reserveCalls).toBe(2);
+    expect(processCalls).toBe(3);
+    reserveCalls = 0;
+    processCalls = 0;
+    expect(batch(session, more)).toHaveLength(2);
+    expect(reserveCalls).toBe(0);
+    expect(processCalls).toBe(1);
+    session.dispose();
+  });
+
   it('accounts typed payload exactly and separates style/fill/bucket variants before an epoch reset', async () => {
     const session = await createGeometrySession(module);
     const a = request('a', 100);

@@ -13,3 +13,5 @@ docs/evidence/p1.5/**/*.json
 docs/evidence/p1.6a/**/*.json
 # Preserve P1.6b CPU/native observation records byte-for-byte.
 docs/evidence/p1.6b/**/*.json
+# Preserve P2.5 functional observations byte-for-byte.
+docs/evidence/p2.5/**/*.json
