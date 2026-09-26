@@ -81,7 +81,7 @@ Exit gate:
 
 P2's execution plan must set the required batch speedup, minimum workload/sample count, and absolute/relative tolerances before benchmarking. Include packing, copying, and output-consumption costs in both variants and keep the TypeScript oracle independent from the Rust implementation.
 
-The [P2 execution plan](plans/p2-geometry-kernel.md) and [private geometry contract](plans/p2-private-contract.md) now specify those prospective obligations under D6. P1.6b B01-B04 integrated through [PR #39](https://github.com/npclown/vector-studio/pull/39) as `c599d39`; headed B05 remains separate. P2 runtime evidence is not yet available, and tooling acquisition remains a separately pending decision. P3-P5 implementation remains unauthorized by D6.
+The [P2 execution plan](plans/p2-geometry-kernel.md) and [private geometry contract](plans/p2-private-contract.md) now specify those prospective obligations under D6. P1.6b B01-B04 integrated through [PR #39](https://github.com/npclown/vector-studio/pull/39) as `c599d39`; headed B05 remains separate. The user approved the pinned Rust acquisition on 2026-09-26. P2.1-P2.5 are integrated through PRs #41-#45, with [kernel/adapter correctness and independent native/browser differential evidence](plans/p2-geometry-kernel.md#acceptance-and-deterministic-fixtures) plus [production runner functional evidence](evidence/p2.5/README.md). P2 A08 reference benchmarking and final P2 acceptance remain open. P3-P5 implementation remains unauthorized by D6.
 
 ## P3: Fill and stroke meshes
 

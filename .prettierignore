@@ -15,3 +15,5 @@ docs/evidence/p1.6a/**/*.json
 docs/evidence/p1.6b/**/*.json
 # Preserve P2.5 functional observations byte-for-byte.
 docs/evidence/p2.5/**/*.json
+# Preserve the P2.6 Windows preflight observation byte-for-byte.
+docs/evidence/p2.6-preflight-2026-09-26.json
