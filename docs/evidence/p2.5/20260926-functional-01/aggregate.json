@@ -1,0 +1,75 @@
+{
+  "schema": "p2-aggregate/v1",
+  "profile": "functional",
+  "disposition": "FUNCTIONAL_FAIL",
+  "acceptance": "Requires Primary review; not full P2/P1 acceptance",
+  "performanceDisposition": "NOT_APPLICABLE",
+  "findings": [
+    "Error: Command failed (1): D:\\GIT\\vector-studio\\node_modules\\@playwright\\test\\cli.js",
+    "chrome/1: incompatible instrumentation.",
+    "chrome/1: Error: cdpSession.send: Protocol error (Browser.getBrowserCommandLine): Command line not returned because --enable-automation not set.",
+    "chrome/1: configuration hash differs.",
+    "edge/1: incompatible instrumentation.",
+    "edge/1: Error: cdpSession.send: Protocol error (Browser.getBrowserCommandLine): Command line not returned because --enable-automation not set.",
+    "edge/1: configuration hash differs."
+  ],
+  "worstMedianPairedSpeedup": null,
+  "repetitions": [
+    {
+      "project": "chrome",
+      "repetition": 1,
+      "analysis": {
+        "disposition": "FUNCTIONAL_FAIL",
+        "findings": [
+          "Malformed/incomplete capture: TypeError: Cannot read properties of null (reading 'schema')"
+        ],
+        "unverified": [],
+        "batch": {
+          "count": 0,
+          "median": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null
+        },
+        "perPath": {
+          "count": 0,
+          "median": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null
+        },
+        "medianPairedSpeedup": null
+      }
+    },
+    {
+      "project": "edge",
+      "repetition": 1,
+      "analysis": {
+        "disposition": "FUNCTIONAL_FAIL",
+        "findings": [
+          "Malformed/incomplete capture: TypeError: Cannot read properties of null (reading 'schema')"
+        ],
+        "unverified": [],
+        "batch": {
+          "count": 0,
+          "median": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null
+        },
+        "perPath": {
+          "count": 0,
+          "median": null,
+          "p95": null,
+          "p99": null,
+          "min": null,
+          "max": null
+        },
+        "medianPairedSpeedup": null
+      }
+    }
+  ]
+}

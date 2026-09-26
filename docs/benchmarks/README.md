@@ -30,6 +30,12 @@ The environment JSON supplies `observedAt` (ISO timestamp) and provenance-bearin
 
 Raw records, failures and per-browser/scenario aggregates remain immutable. Reference results distinguish measured A05/A08 disposition from Primary acceptance review; functional results never become performance evidence. Every record retains overall P1, A09 and A10 as UNVERIFIED. The CPU counters observe geometry construction separately from backing writes and GPU uploads; neither counts memory or physical presentation.
 
+### P2.5 geometry runner
+
+Run `pnpm benchmark:p2 --profile functional` (optional `--output-dir artifacts/p2.5/<fresh-id>`) for production CPU/WASM instrumentation validation in headless Chrome then Edge. It runs the real adapter/kernel on the frozen 1,000-path workload, with separate preparation, one warm-up pair and two observed pairs. FUNCTIONAL_PASS has no performance disposition.
+
+`pnpm benchmark:p2 --profile reference --environment-json <observations.json>` requires the same provenance-bearing environment shape described above. The [P2 plan](../plans/p2-geometry-kernel.md#prospective-benchmark-contract) owns the headed five-repetition sampling schedule and speedup thresholds; the [runner contract](../plans/p2-benchmark-runner.md) owns mechanics and functional acceptance. Each run first validates/rebuilds the pinned release WASM, builds a separate production page, and retains source/build/configuration hashes, raw records, source-end integrity, independent aggregate and final runner status. Output is exclusive and outside Playwright cleanup. P2 measurements do not establish P1 A09/A10 or authorize P3.
+
 ### Accepted reference runs
 
 Every accepted run records:

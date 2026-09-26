@@ -9,6 +9,7 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/playwright-report/**',
       '**/test-results/**',
+      'artifacts/p2.5/**',
       '**/.tools/**',
       '**/target/**',
     ],

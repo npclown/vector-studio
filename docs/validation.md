@@ -120,17 +120,18 @@ Markdown is excluded by the current `.prettierignore`. Consequently `pnpm check`
 
 The toolchain exists as of P0.4. `package.json` owns exact commands and pinned versions; the responsibilities and current limitations are:
 
-| Command                      | Current responsibility / limitation                                                                                                                              |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm check`                 | Formatting (Markdown excluded), ESLint, TypeScript, unit/contract tests, package boundaries                                                                      |
-| `pnpm test:unit`             | Deterministic Vitest tests without a physical GPU                                                                                                                |
-| `pnpm test:geometry`         | Pinned Rust format/Clippy/native checks, two reproducible release WASM builds, explicit native differential bridge and Node WASM fixtures; no performance claim  |
-| `pnpm test:geometry:browser` | Rebuilds and runs geometry checks, then independent CPU/WASM differential fixtures in installed Chrome/Edge; headless correctness only, no GPU/performance claim |
-| `pnpm test:browser`          | Chrome/Edge browser integration; headless by default, not hardware acceptance                                                                                    |
-| `pnpm test:gpu`              | Headed Chrome/Edge validation error, device-loss recovery and P1 primitive/overlap/precision fixtures; not native OOM or performance evidence                    |
-| `pnpm benchmark:p0:p0-3`     | Legacy production steady/idle runner; fixed historical output filenames must be corrected before reuse in the tracked checkout                                   |
-| `pnpm benchmark:p0`          | P0.5 five-scenario production headed runner; defaults to acceptance and requires `--display-refresh-hz`, with an explicit non-accepting `--profile smoke` option |
-| `pnpm build`                 | Workspace package declarations/JavaScript and playground production build                                                                                        |
+| Command                                  | Current responsibility / limitation                                                                                                                              |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm check`                             | Formatting (Markdown excluded), ESLint, TypeScript, unit/contract tests, package boundaries                                                                      |
+| `pnpm test:unit`                         | Deterministic Vitest tests without a physical GPU                                                                                                                |
+| `pnpm test:geometry`                     | Pinned Rust format/Clippy/native checks, two reproducible release WASM builds, explicit native differential bridge and Node WASM fixtures; no performance claim  |
+| `pnpm test:geometry:browser`             | Rebuilds and runs geometry checks, then independent CPU/WASM differential fixtures in installed Chrome/Edge; headless correctness only, no GPU/performance claim |
+| `pnpm benchmark:p2 --profile functional` | Production CPU/WASM runner and independent raw-record validation in Chrome/Edge; no performance acceptance                                                       |
+| `pnpm test:browser`                      | Chrome/Edge browser integration; headless by default, not hardware acceptance                                                                                    |
+| `pnpm test:gpu`                          | Headed Chrome/Edge validation error, device-loss recovery and P1 primitive/overlap/precision fixtures; not native OOM or performance evidence                    |
+| `pnpm benchmark:p0:p0-3`                 | Legacy production steady/idle runner; fixed historical output filenames must be corrected before reuse in the tracked checkout                                   |
+| `pnpm benchmark:p0`                      | P0.5 five-scenario production headed runner; defaults to acceptance and requires `--display-refresh-hz`, with an explicit non-accepting `--profile smoke` option |
+| `pnpm build`                             | Workspace package declarations/JavaScript and playground production build                                                                                        |
 
 Agents must use repository commands once they exist rather than bypassing them with ad hoc package-local commands when claiming repository-wide validation.
 
