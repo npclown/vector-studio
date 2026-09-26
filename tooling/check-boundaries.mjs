@@ -2,36 +2,19 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { boundaries, packageDirectories, workspaceImportTarget } from './boundary-policy.mjs';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-const boundaries = new Map([
-  ['@vector-studio/contracts', new Set()],
-  ['@vector-studio/renderer-core', new Set(['@vector-studio/contracts'])],
-  [
-    '@vector-studio/renderer-webgpu',
-    new Set(['@vector-studio/contracts', '@vector-studio/renderer-core']),
-  ],
-  [
-    '@vector-studio/playground',
-    new Set([
-      '@vector-studio/contracts',
-      '@vector-studio/renderer-core',
-      '@vector-studio/renderer-webgpu',
-    ]),
-  ],
-]);
-
-const packageDirectories = [
-  'packages/contracts',
-  'packages/renderer-core',
-  'packages/renderer-webgpu',
-  'apps/playground',
-];
-
-const sourceImportPattern = /(?:from\s+|import\s*\(|import\s+)["'](@vector-studio\/[^"']+)["']/g;
+const sourceImportPattern = /(?:from\s+|import\s*\(\s*|import\s+)["']([^"']+)["']/g;
 const failures = [];
 const graphLines = [];
+const packageRoots = new Map();
+for (const directory of packageDirectories) {
+  const root = path.join(repositoryRoot, directory);
+  const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
+  packageRoots.set(manifest.name, root);
+}
 
 async function collectTypeScriptFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -82,8 +65,8 @@ for (const relativeDirectory of packageDirectories) {
   for (const sourcePath of await collectTypeScriptFiles(sourceDirectory)) {
     const source = await readFile(sourcePath, 'utf8');
     for (const match of source.matchAll(sourceImportPattern)) {
-      const dependency = match[1];
-      if (dependency && !allowedDependencies.has(dependency)) {
+      const dependency = workspaceImportTarget(match[1], sourcePath, packageRoots);
+      if (dependency && dependency !== manifest.name && !allowedDependencies.has(dependency)) {
         failures.push(
           `${path.relative(repositoryRoot, sourcePath)}: source import of ${dependency} is forbidden`,
         );
