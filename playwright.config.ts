@@ -1,11 +1,14 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const webGpuArguments = ['--enable-unsafe-webgpu'];
+// Preserve the actual Playwright invocation in direct functional-run records.
+process.env.P1_RUNNER_COMMAND ??= JSON.stringify([process.execPath, ...process.argv.slice(1)]);
 
 export default defineConfig({
   testDir: './tests/browser',
   outputDir: './test-results/browser',
   fullyParallel: false,
+  workers: 1,
   retries: 0,
   reporter: 'line',
   use: {

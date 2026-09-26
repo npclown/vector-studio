@@ -6,6 +6,7 @@ export default defineConfig({
       input: {
         main: `${import.meta.dirname}/index.html`,
         primitives: `${import.meta.dirname}/p1-fixture.html`,
+        runner: `${import.meta.dirname}/p1-runner.html`,
       },
     },
   },
