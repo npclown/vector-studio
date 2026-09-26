@@ -175,7 +175,7 @@ The initial quality strategy is:
 
 MSAA-only output is not considered sufficient for the final path renderer. Quality is tested at fractional positions, rotations, thin strokes, extreme zoom, and high device-pixel ratio.
 
-For P2 flattening, the geometric target is 0.25 **physical display pixel**, accounting for world linear transform, camera zoom and DPR using the largest singular value. The private contract specifies conservative downward tolerance buckets, bounded de Casteljau flattening and an independent continuous-error oracle. This resolves the flattening portion of the P2/P3 design gate; P3 still needs its own tessellation/coverage error budget and adversarial-work contract before implementation.
+For P2 flattening, the geometric target is 0.25 **physical display pixel**, accounting for world linear transform, camera zoom and DPR using the largest singular value. The private contract specifies conservative downward tolerance buckets, bounded de Casteljau flattening and an independent continuous-error oracle. This resolves the flattening portion of the P2/P3 design gate; P3 still needs its own tessellation/coverage error budget and adversarial-work contract before implementation. These unresolved gates are tracked in the [P3 execution plan](plans/p3-fill-stroke-meshes.md), opened for planning under [D7](plans/p2-follow-on-entry.md); its entry exception does not supply the missing contracts.
 
 ## Clipping
 

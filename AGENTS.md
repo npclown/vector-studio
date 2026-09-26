@@ -11,7 +11,7 @@ Before changing the repository, read the documents relevant to the task in this 
 3. `ARCHITECTURE.md` for system boundaries and allowed dependency direction.
 4. The relevant subsystem design, currently `docs/graphics-engine-architecture.md`.
 5. `docs/prototype-plan.md` for milestone order and exit gates.
-6. The active plans under `docs/plans/`: `docs/plans/p1-instanced-primitives.md` and its linked measurement contracts, plus `docs/plans/p2-geometry-kernel.md` and its private contract under approved D6 entry. P0 history remains in `docs/plans/p0-webgpu-foundation.md`.
+6. The active plans under `docs/plans/`: `docs/plans/p1-instanced-primitives.md` and its linked measurement contracts, plus `docs/plans/p2-geometry-kernel.md` and its private contract under approved D6 entry. P3 planning is tracked in `docs/plans/p3-fill-stroke-meshes.md` under the D7 provisional entry decision. P0 history remains in `docs/plans/p0-webgpu-foundation.md`.
 7. `docs/validation.md` and `docs/benchmarks/README.md` before claiming verification or performance results.
 
 When instructions conflict, the narrower document owns details inside its declared responsibility. A product requirement cannot be changed implicitly by an implementation plan, and a benchmark result cannot redefine its acceptance threshold.
