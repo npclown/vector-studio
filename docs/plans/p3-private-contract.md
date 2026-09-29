@@ -1,6 +1,6 @@
 # P3 private mesh contract: preparation draft
 
-Status: PARTIAL, 2026-09-29. This is the technical owner for P3 C03-C05, not a completed implementation freeze. [Visible semantics](p3-visible-semantics-proposal.md) were approved on 2026-09-29. The independent [line-fill oracle slice](p3-line-oracle-contract.md) can proceed under its own frozen test-only contract while remaining mesh/stroke/GPU obligations stay open. The [execution plan](p3-fill-stroke-meshes.md) owns task status and entry. No product code, private mesh ABI export or public GeometryPort is introduced here.
+Status: PARTIAL, 2026-09-29. This is the technical owner for P3 C03-C05, not a completed implementation freeze. [Visible semantics](p3-visible-semantics-proposal.md) were approved on 2026-09-29. The independent [line-fill oracle slice](p3-line-oracle-contract.md) and [triangle-mesh invariant slice](p3-mesh-oracle-contract.md) have separate test-only contracts while remaining mesh/stroke/GPU obligations stay open. The [execution plan](p3-fill-stroke-meshes.md) owns task status, the user-directed deferral of further stroke-bound refinement and independent slice entry. No product code, private mesh ABI export or public GeometryPort is introduced here.
 
 ## Inherited boundaries and resolved technical constraints
 

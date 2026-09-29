@@ -1,6 +1,6 @@
 # P3 fill and stroke meshes execution plan
 
-Status: P3.0a integrated through [PR #52](https://github.com/npclown/vector-studio/pull/52) as `4928a88` after required CI (run 36246634960). P3.0b contract preparation is IN PROGRESS under [D7](p2-follow-on-entry.md); the [private-contract draft](p3-private-contract.md) is PARTIAL and [visible behavior](p3-visible-semantics-proposal.md) is APPROVED. The separately frozen [P3.1a test-only line oracle](p3-line-oracle-contract.md) is integrated through PR #54 as `f040265` after required CI (run 36559942597). The [regular stroke certificate review](p3-stroke-boundary-certificate.md) is integrated through PR #55 as `5f16301`; the [bounded numerical experiment](p3-stroke-numeric-experiment.md) is IN PROGRESS. No P3 runtime implementation acceptance or public API extension is claimed.
+Status: P3.0a integrated through [PR #52](https://github.com/npclown/vector-studio/pull/52) as `4928a88` after required CI (run 36246634960). P3.0b contract preparation is IN PROGRESS under [D7](p2-follow-on-entry.md); the [private-contract draft](p3-private-contract.md) is PARTIAL and [visible behavior](p3-visible-semantics-proposal.md) is APPROVED. The separately frozen [P3.1a test-only line oracle](p3-line-oracle-contract.md) is integrated through PR #54 as `f040265` after required CI (run 36559942597). The [regular stroke certificate review](p3-stroke-boundary-certificate.md) is integrated through PR #55 as `5f16301`; the [bounded numerical experiment](p3-stroke-numeric-experiment.md) is integrated through PR #56 as `28d815b`, with candidate-wide feasibility PARTIAL. Further stroke-bound refinement is DEFERRED by the user; the independent [P3.1b triangle-mesh invariant oracle](p3-mesh-oracle-contract.md) is the active slice. No P3 runtime implementation acceptance or public API extension is claimed.
 
 ## Scope and current seams
 
@@ -162,3 +162,28 @@ Local experiment outcome: [source, raw results and Primary review](../evidence/p
 Before execution, Primary/independent source review corrected candidate-depth trust, incomplete failure provenance, guard test coverage and arithmetic-validation order. Primary's separate raw audit and the independent worker's read-only result audit both passed, including exact upper-bound comparisons, corpus/matrix metadata, output suppression and source/contract hashes. No rerun was necessary. The observed limiting mechanism is candidate visit 1024 after the allowed 1023 visits, not observed geometric error above the target. Next technical work is a tighter continuously justified candidate bound under a new prospective experiment; stationary/topology/coverage/transport and C03-C05 remain open.
 
 Local validation: syntax checks of diagnostic/capture/audit PASS; `node .tools/p3-stroke-capture.cjs p3-stroke-numeric-run-01` exit 0; `node .tools/p3-stroke-audit.cjs .tools/p3-stroke-numeric-run-01` PASS. Manifest verification of seven archived files and decompressed raw bytes PASS; restoring the archived data and running the archived audit also PASS without rerunning the experiment. Explicit Prettier check of four changed Markdown files PASS; local link/anchor check PASS (534 links across 98 Markdown files); `git diff --check` PASS. Local runtime unit/build/native/browser/GPU/benchmark commands are NOT RUN because no product source changed. Protected CI/integration remain required for checkpoint completion; candidate-wide feasibility remains PARTIAL independently of that workflow outcome.
+
+Protected outcome: required CI passed on `089039348d5e1dba40a16c3f22849f9c046170de` (run 36564332601); [PR #56](https://github.com/npclown/vector-studio/pull/56) integrated as `28d815b6e2e96277ea09bf03b450f00b9538b7db`. P3.0b-s2 experimental checkpoint is complete; its candidate-wide feasibility remains PARTIAL.
+
+## User deferral and independent P3.1b entry: 2026-09-29
+
+The user instructed that the current error-refinement work be left for later and work move forward. Defer the proposed tighter regular-stroke candidate bound and its follow-up numerical experiment. No s3 implementation or measurement was started. Preserve the s2 observations: nine cases exhausted candidate work before certification; they are not measured error violations or newly certified successes. Historical artifacts, the total physical error target and final runtime acceptance remain unchanged.
+
+Deferred follow-up: revisit the conservative stroke-bound/work tradeoff, production Float64 guards and the uncertified ordinary cases when resuming stroke numeric readiness. Do not automatically reopen that precision-only iteration ahead of independent work. This scheduling decision does not resolve stationary/join behavior or permit coarse successful production output. C03-C05 and dependent production gates retain their unresolved items.
+
+Primary selects P3.1b, the [triangle-mesh invariant oracle contract](p3-mesh-oracle-contract.md), as the next independent slice. It checks malformed structure, orientation, bounds, overlapping interiors and optional exact analytic area on a plain test carrier. It does not choose a production ABI, GPU culling, fringe or public path API. Complete region equivalence remains separate; equal area alone is insufficient. This replaces the full P3.0b prerequisite only for the frozen M01-M06 test-only slice, like P3.1a; all affected production prerequisites remain.
+
+```text
+P3.1a + frozen P3.1b contract -> mesh invariant oracle + independent fixtures
+                            -> local validation -> Primary review -> protected PR
+deferred stroke refinement ---------------------> future stroke numeric readiness
+remaining topology/coverage/ABI + full oracles --> production P3.2-P3.7 gates
+```
+
+Base: clean `28d815b`, equal to fetched origin/main; branch `codex/p3-1b-mesh-oracle`. Primary owns contract, exports, documentation and integration. Sol high owns only `triangle-mesh.ts`; Terra medium owns only `geometry-triangle-mesh.test.ts`, with no recursive delegation. Acceptance is M01-M06 plus focused/root validation, Primary review and protected CI. No stroke experiment or benchmark is run in this slice.
+
+### P3.1b local acceptance
+
+The [Primary review and evidence](../evidence/p3.1b-mesh-oracle-review-2026-09-29.md) map M01-M06 to literal fixtures and the normal 256-triangle work boundary. Focused Vitest passes 13 tests; `pnpm check` passes formatting, lint, TypeScript, 340 tests across 45 files and dependency boundaries; `pnpm build` passes workspace packages and the production playground. Primary reviewed exact binary64 arithmetic, separating-edge overlap checks, validation precedence and test-carrier independence. Fixture corrections and the intermediate helper-rename failure are preserved in the review; stable-source validation passes.
+
+Explicit Prettier check of the four changed Markdown files PASS; local link/anchor check PASS (541 links across 100 Markdown files); `git diff --check` PASS. No runtime/API/dependency/lifecycle change or historical-result edit is included. Local native/WASM/browser/GPU/benchmark commands are NOT RUN for this independent TypeScript slice. Protected CI/integration still apply. Further stroke-bound refinement remains deferred; the next independent technical work is line-region coverage/topology verification and remaining coverage/transport contract preparation.
