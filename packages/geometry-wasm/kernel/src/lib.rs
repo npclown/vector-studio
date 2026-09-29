@@ -5,16 +5,24 @@ mod engine;
 // P3 symbolic ordering has no P2 v1 caller or WASM export.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 mod fill_event_order;
+// Shared fixed-width arithmetic for private P3 geometry; no P2 export.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+mod fill_exact;
 // P3 placement is private preparation; no P2 v1 caller or WASM export.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 mod fill_intersections;
 // P3 predicates are prepared independently; P2 v1 has no fill caller or new export.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 mod fill_predicates;
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+mod fill_sections;
 mod geometry;
 // P3 exact-output line meshes remain private and have no P2 v1 export.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 mod line_fill;
+// P3 rounded meshes are private and preserve the existing P2 ABI.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+mod rounded_line_fill;
 
 #[cfg(test)]
 mod fill_event_order_tests;
@@ -24,6 +32,8 @@ mod fill_intersections_tests;
 mod fill_predicates_tests;
 #[cfg(test)]
 mod line_fill_tests;
+#[cfg(test)]
+mod rounded_line_fill_tests;
 
 #[cfg(target_arch = "wasm32")]
 use core::cell::UnsafeCell;
