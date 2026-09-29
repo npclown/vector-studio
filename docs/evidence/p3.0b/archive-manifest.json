@@ -1,0 +1,19 @@
+{
+  "schema": "p3-0b-feasibility-archive-v1",
+  "entries": [
+    {
+      "file": "topology.cjs.txt",
+      "originalBytes": 27829,
+      "originalSha256": "e065573caa339c405a7abfdf49142167fad508b710639b7e3f0ded88c8a6bb1e",
+      "storedBytes": 27829,
+      "storedSha256": "e065573caa339c405a7abfdf49142167fad508b710639b7e3f0ded88c8a6bb1e"
+    },
+    {
+      "file": "topology-01.json.gz",
+      "originalBytes": 310605,
+      "originalSha256": "3a349ff6e11e97beb1766156469d579e3bb244eee093495e23540bf6061909e6",
+      "storedBytes": 7557,
+      "storedSha256": "cea1eed90eff9029c5c1ec334e6fea4ff6fe9d9a7ed6deb167ad3d9ba91c513c"
+    }
+  ]
+}
