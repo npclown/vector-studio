@@ -39,6 +39,10 @@ if (!existsSync(rustup)) {
   );
 }
 const cargo = (...args) => run(rustup, ['run', '1.94.1', 'cargo', ...args]);
+run(process.execPath, [
+  path.join(root, 'tooling/generate-p3-fill-predicate-fixtures.mjs'),
+  '--check',
+]);
 const compiler = spawnSync(rustup, ['run', '1.94.1', 'rustc', '--version', '--verbose'], {
   cwd: root,
   env,
