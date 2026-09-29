@@ -1,6 +1,6 @@
 # P3 fill and stroke meshes execution plan
 
-Status: P3.0a integrated through [PR #52](https://github.com/npclown/vector-studio/pull/52) as `4928a88` after required CI (run 36246634960). P3.0b contract preparation is IN PROGRESS under [D7](p2-follow-on-entry.md); the [private-contract draft](p3-private-contract.md) is PARTIAL and [visible behavior](p3-visible-semantics-proposal.md) is APPROVED. The separately frozen [P3.1a test-only line oracle](p3-line-oracle-contract.md) is integrated through PR #54 as `f040265` after required CI (run 36559942597). The [regular stroke certificate review](p3-stroke-boundary-certificate.md) is integrated through PR #55 as `5f16301`; the [bounded numerical experiment](p3-stroke-numeric-experiment.md) is integrated through PR #56 as `28d815b`, with candidate-wide feasibility PARTIAL. Further stroke-bound refinement is DEFERRED by the user; the independent [P3.1b triangle-mesh invariant oracle](p3-mesh-oracle-contract.md) is the active slice. No P3 runtime implementation acceptance or public API extension is claimed.
+Status: P3.0a integrated through [PR #52](https://github.com/npclown/vector-studio/pull/52) as `4928a88` after required CI (run 36246634960). P3.0b contract preparation is IN PROGRESS under [D7](p2-follow-on-entry.md); the [private-contract draft](p3-private-contract.md) is PARTIAL and [visible behavior](p3-visible-semantics-proposal.md) is APPROVED. The separately frozen [P3.1a test-only line oracle](p3-line-oracle-contract.md) is integrated through PR #54 as `f040265` after required CI (run 36559942597). The [regular stroke certificate review](p3-stroke-boundary-certificate.md) is integrated through PR #55 as `5f16301`; the [bounded numerical experiment](p3-stroke-numeric-experiment.md) is integrated through PR #56 as `28d815b`, with candidate-wide feasibility PARTIAL. Further stroke-bound refinement is DEFERRED by the user; [P3.1b mesh invariants](p3-mesh-oracle-contract.md) integrated through PR #57 as `0b991e8`. The independent [P3.1c fill-region equality oracle](p3-fill-region-oracle-contract.md) is the active slice. No P3 runtime implementation acceptance or public API extension is claimed.
 
 ## Scope and current seams
 
@@ -187,3 +187,26 @@ Base: clean `28d815b`, equal to fetched origin/main; branch `codex/p3-1b-mesh-or
 The [Primary review and evidence](../evidence/p3.1b-mesh-oracle-review-2026-09-29.md) map M01-M06 to literal fixtures and the normal 256-triangle work boundary. Focused Vitest passes 13 tests; `pnpm check` passes formatting, lint, TypeScript, 340 tests across 45 files and dependency boundaries; `pnpm build` passes workspace packages and the production playground. Primary reviewed exact binary64 arithmetic, separating-edge overlap checks, validation precedence and test-carrier independence. Fixture corrections and the intermediate helper-rename failure are preserved in the review; stable-source validation passes.
 
 Explicit Prettier check of the four changed Markdown files PASS; local link/anchor check PASS (541 links across 100 Markdown files); `git diff --check` PASS. No runtime/API/dependency/lifecycle change or historical-result edit is included. Local native/WASM/browser/GPU/benchmark commands are NOT RUN for this independent TypeScript slice. Protected CI/integration still apply. Further stroke-bound refinement remains deferred; the next independent technical work is line-region coverage/topology verification and remaining coverage/transport contract preparation.
+
+Protected outcome: required CI passed on `42d8a3ac3b66619b802d3c7dcac64c6694932a3e` (run 36566409383); [PR #57](https://github.com/npclown/vector-studio/pull/57) integrated as `0b991e8d751da2bb8cb4a5fffa7e0bf838c8109f`. P3.1b is complete within its invariant-only scope.
+
+## P3.1c independent line-fill region equality
+
+Base: clean `0b991e8`, equal to fetched origin/main; branch `codex/p3-1c-fill-region-oracle`. The user's continued-work instruction authorizes proceeding directly from integrated checkpoints to executable independent tasks. Primary selects the [P3.1c contract](p3-fill-region-oracle-contract.md): compare a supplied triangle mesh with the entire regularized source line-fill region, closing the known equal-area/wrong-region gap in P3.1b. Frozen rational arrangement cells provide complete coverage inside the bounded test-carrier envelope, rather than a finite arbitrary grid.
+
+This test-only slice depends on P3.1a/P3.1b and its own contract; it does not depend on deferred stroke refinement or choose a production mesh layout. Primary owns the contract, exports, review and integration. Sol high first audits the contract and then owns only `fill-region.ts`; Terra medium owns only `geometry-fill-region.test.ts` with literal expected meshes. No recursive delegation. R01-R06, focused/root checks, Primary review and protected CI are required before completion.
+
+```text
+P3.1a + P3.1b -> P3.1c frozen contract -> independent implementation + literal fixtures
+                                      -> Primary review + validation -> protected PR
+remaining production topology/coverage/ABI contracts -> affected runtime gates
+stroke-bound refinement remains a deferred follow-up
+```
+
+No test-only limit becomes a production work cap, and exact line-region equality does not prove an unflattened cubic/stroke or coverage/shader result. P3.0b C03-C05, remaining P3.1 and runtime acceptance remain open.
+
+### P3.1c local acceptance
+
+The [Primary review and evidence](../evidence/p3.1c-fill-region-review-2026-09-29.md) map R01-R06 to independent analytic fixtures and rejecting controls. Focused Vitest passes eight grouped tests; `pnpm check` passes formatting, ESLint, TypeScript, 348 tests across 46 files and dependency boundaries; `pnpm build` passes workspace packages and the production playground. Primary corrected the internal/external unit correspondence and literal fixture construction/limits before the first stable-source test run, then reviewed all exact intersection and membership logic.
+
+Explicit Prettier check of four changed Markdown files PASS; local links/anchors PASS (550 links across 102 Markdown files); `git diff --check` PASS. Local native/WASM/browser/GPU/benchmark commands are NOT RUN for this test-only slice. Protected CI/integration remain required. Next work is fill-only private numeric implementation readiness, including independent production predicate/topology evidence and concrete work limits; it does not resume deferred stroke-bound refinement or bypass public path/renderer decisions.
