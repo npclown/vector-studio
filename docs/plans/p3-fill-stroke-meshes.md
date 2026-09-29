@@ -1,6 +1,26 @@
 # P3 fill and stroke meshes execution plan
 
-Current isolated checkpoint: P3.2a predicates integrated through [PR #59](https://github.com/npclown/vector-studio/pull/59) as `c6202102db0ec1443800eadc6839d7e1dd34a021` after required CI on `ec8515332b713edb78b8da71a47a2aa88f0d5385` (run 36572052900, job 109418206929). P3.2b [certified intersection placement](p3-fill-intersections-contract.md) is now IN PROGRESS. Earlier checkpoint status paragraphs below retain their contemporaneous gate context; complete P3 acceptance remains open.
+Current isolated checkpoint: P3.2a predicates integrated through [PR #59](https://github.com/npclown/vector-studio/pull/59) as `c6202102db0ec1443800eadc6839d7e1dd34a021` after required CI on `ec8515332b713edb78b8da71a47a2aa88f0d5385` (run 36572052900, job 109418206929). P3.2b [certified intersection placement](p3-fill-intersections-contract.md) integrated through [PR #60](https://github.com/npclown/vector-studio/pull/60) as `a1990a7bbb0b2c13593832f6e110cf5255f39fa8` after required CI on `d64d9d67457b7a8e17eb5c4ed304489ea726a631` (run 36573761967, job 109423973683). P3.2c [exact event positions](p3-fill-event-order-contract.md) is now IN PROGRESS. Earlier checkpoint status paragraphs below retain their contemporaneous gate context; complete P3 acceptance remains open.
+
+## P3.2c exact symbolic event positions
+
+Base: clean `a1990a7`, equal to updated origin/main; branch `codex/p3-2c-fill-event-order`. Primary selects the next private topology dependency: exact lexicographic comparison of endpoint/proper-crossing positions. The frozen [contract](p3-fill-event-order-contract.md) owns E01-E06 and the 528-row independent corpus. This exact-only helper is deliberately independent of Float64 placement: overlapping enclosures and equal rounded coordinates cannot establish event equality. Comparison success never certifies coordinate emission or connectivity.
+
+Primary and a separate Sol medium read-only audit checked bounded homogeneous widths, canonical signed magnitude, proper-crossing validation, near-coincident representative collision and four-line concurrence. Sol high owns only the implementation/internal arithmetic fixtures; independent Sol medium owns generator/corpus/external native tests. Primary owns shared lib/runner wiring, documentation, review and integration. No recursive delegation. No accepted predicate/placement code is refactored, and no public or P2 v1 meaning changes.
+
+```text
+P3.2a exact relations -> frozen P3.2c contract -> exact pairwise position comparison
+    -> independent rational corpus + native/P2 regressions -> protected PR
+P3.2b placement + P3.2c comparison -> later bounded arrangement/edge attribution
+```
+
+The user's continuous-work authorization covers this ordinary private algorithm choice inside the approved roadmap. Mandatory validation is generator --check, `pnpm test:geometry`, `pnpm check`, `pnpm build`, changed-Markdown format/links, Primary review and protected CI. This does not create an event arena, define path limits or complete C03-C05. Deferred stroke refinement stays deferred; public path/coverage/transport decisions remain separate.
+
+### P3.2c local acceptance
+
+The [Primary review and evidence](../evidence/p3.2c-fill-event-order-review-2026-09-29.md) map E01-E06 to 528 independently generated pairs, 34026 permutation/antisymmetry comparisons, exact four-line concurrence, a rejecting representative-collision control, extreme inputs and zero-allocation proof fixtures. `pnpm test:geometry` PASS: Rust fmt/Clippy, 58 native tests, existing explicitly invoked intersection certificate checks, reproducible release WASM and 25 differential/adapter tests. `pnpm check` PASS: formatting, lint, TypeScript, 348 unit tests in 46 files and boundaries. `pnpm build` PASS. No public API, dependency or P2 export/caller changes.
+
+Primary and independent stable-source review found no runtime defect; strengthened literal arithmetic/validation fixtures preceded the first stable full test run. Explicit Prettier check of four changed Markdown files PASS; local links/anchors PASS (573 links across 108 Markdown files); whitespace PASS. Browser/GPU/benchmark NOT RUN, with no performance claim. Protected integration remains required. Next work combines bounded event/source handling, x columns, active-edge ordering, winding and mesh output in a coherent private line-fill slice; it does not reopen deferred stroke refinement.
 
 ## P3.2b certified pairwise placement
 
