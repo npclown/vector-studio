@@ -1,6 +1,20 @@
 # P3 fill and stroke meshes execution plan
 
-Current isolated checkpoint: P3.2a predicates integrated through [PR #59](https://github.com/npclown/vector-studio/pull/59) as `c6202102db0ec1443800eadc6839d7e1dd34a021` after required CI on `ec8515332b713edb78b8da71a47a2aa88f0d5385` (run 36572052900, job 109418206929). P3.2b [certified intersection placement](p3-fill-intersections-contract.md) integrated through [PR #60](https://github.com/npclown/vector-studio/pull/60) as `a1990a7bbb0b2c13593832f6e110cf5255f39fa8` after required CI on `d64d9d67457b7a8e17eb5c4ed304489ea726a631` (run 36573761967, job 109423973683). P3.2c [exact event positions](p3-fill-event-order-contract.md) is now IN PROGRESS. Earlier checkpoint status paragraphs below retain their contemporaneous gate context; complete P3 acceptance remains open.
+Current isolated checkpoint: P3.2d [bounded private line-fill mesh](p3-line-fill-mesh-contract.md) is IN PROGRESS after P3.2a predicates (PR #59), P3.2b certified placement (PR #60) and P3.2c exact event positions (PR #61) integrated through protected CI. Earlier checkpoint paragraphs below retain their contemporaneous gate context; complete P3 acceptance remains open.
+
+## P3.2d bounded private line-fill mesh v0
+
+P3.2c integrated through [PR #61](https://github.com/npclown/vector-studio/pull/61) as `cb8210797da879d5a4d9a57294d573ffce2c878a`, after required CI on `9b3c8a7c906bfb842904207f62b2f68041639113` (run 36575233344, job 109429024669). P3.2d starts from that clean updated main on `codex/p3-2d-line-fill-mesh` and is IN PROGRESS.
+
+The frozen [line-fill contract](p3-line-fill-mesh-contract.md) owns L01-L05: bounded workspace, exact event columns/cuts, coincident winding, nonoverlapping triangle output, atomic failures and 32 independently checked source/rule fixtures. This is an unexported exact-output subset; nonrepresentable coordinates explicitly remain unresolved. P3.2b remains available for later rounded output. No public API, P2 arena/export, dependency, renderer or error threshold changes are authorized by this slice. Deferred stroke refinement stays deferred and full C03-C05 remain open.
+
+Primary owns shared x-comparison seam/lib wiring, contract, review and integration. Sol high owns only line_fill.rs; independent Sol medium owns native fixtures and TypeScript mesh bridge. A separate Sol medium audit reviews stable sources. No recursive delegation. The continuous-work authorization covers this private implementation after the acceptance contract is frozen. Required validation: `pnpm test:geometry`, `pnpm check`, `pnpm build`, unchanged exports, Markdown formatting/links, diff review and protected CI. Browser/GPU/benchmark NOT RUN for this numeric checkpoint.
+
+### P3.2d local acceptance
+
+The [Primary review and evidence](../evidence/p3.2d-line-fill-mesh-review-2026-09-29.md) map L01-L05 to all 32 independently checked native meshes, seven corruption controls, exact searches, deterministic caps and atomic failure/zero allocation. `pnpm test:geometry` PASS: 75 native tests, unchanged intersection certificates, reproducible release WASM and 27 differential/bridge tests in four files. `pnpm check` PASS: formatting/lint/TypeScript, 348 unit tests in 46 files and boundaries. `pnpm build` PASS. A final test-only strengthening to strictly negative search ranges passed all five focused internal tests and Rust formatting. P2 exports and public/dependency boundaries remain unchanged.
+
+Primary and independent final review found no runtime defect; two fixture lint errors and missing extreme-search coverage were corrected before acceptance. Explicit Prettier check of four changed Markdown files PASS; local links/anchors PASS (582 links across 110 Markdown files); whitespace PASS. Protected CI/integration remains required; this exact-output slice does not pass full C03-C05. Next work is a coherent rounded-fill contract with boundary correspondence/displacement evidence, not deferred stroke refinement.
 
 ## P3.2c exact symbolic event positions
 

@@ -43,6 +43,14 @@ pub(crate) fn compare_event_positions(
     Ok(compare_ratios(left.y, left.w, right.y, right.w))
 }
 
+pub(crate) fn compare_event_x(left: FillEvent, right: FillEvent) -> Result<Ordering, EventError> {
+    validate_event(left)?;
+    validate_event(right)?;
+    let left = event_position(left)?;
+    let right = event_position(right)?;
+    Ok(compare_ratios(left.x, left.w, right.x, right.w))
+}
+
 fn validate_event(event: FillEvent) -> Result<(), EventError> {
     let finite = match event {
         FillEvent::Endpoint(point) => point_is_finite(point),

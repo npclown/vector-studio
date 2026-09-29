@@ -12,6 +12,9 @@ mod fill_intersections;
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 mod fill_predicates;
 mod geometry;
+// P3 exact-output line meshes remain private and have no P2 v1 export.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+mod line_fill;
 
 #[cfg(test)]
 mod fill_event_order_tests;
@@ -19,6 +22,8 @@ mod fill_event_order_tests;
 mod fill_intersections_tests;
 #[cfg(test)]
 mod fill_predicates_tests;
+#[cfg(test)]
+mod line_fill_tests;
 
 #[cfg(target_arch = "wasm32")]
 use core::cell::UnsafeCell;
