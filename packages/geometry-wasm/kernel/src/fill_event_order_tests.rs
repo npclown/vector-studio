@@ -9,6 +9,68 @@ fn point(x: f64, y: f64) -> Point {
     Point { x, y }
 }
 
+#[test]
+fn x_comparison_ignores_y_without_changing_lexicographic_order() {
+    let low = FillEvent::Endpoint(point(1.0, -5.0));
+    let high = crossing(
+        point(0.0, 3.0),
+        point(2.0, 5.0),
+        point(0.0, 5.0),
+        point(2.0, 3.0),
+    );
+    assert_eq!(compare_event_positions(low, high), Ok(Ordering::Less));
+    assert_eq!(compare_event_x(low, high), Ok(Ordering::Equal));
+    assert_eq!(compare_event_x(high, low), Ok(Ordering::Equal));
+    for (a, b, expected) in [
+        (low, FillEvent::Endpoint(point(2.0, -100.0)), Ordering::Less),
+        (
+            FillEvent::Endpoint(point(-0.0, 1.0)),
+            FillEvent::Endpoint(point(0.0, -1.0)),
+            Ordering::Equal,
+        ),
+    ] {
+        assert_eq!(compare_event_x(a, b), Ok(expected));
+        assert_eq!(compare_event_x(b, a), Ok(expected.reverse()));
+    }
+}
+
+#[test]
+fn x_comparison_validates_both_events_before_classification() {
+    let invalid = crossing(
+        point(0.0, 0.0),
+        point(1.0, 0.0),
+        point(0.0, 1.0),
+        point(1.0, 1.0),
+    );
+    let endpoint = FillEvent::Endpoint(point(0.0, 0.0));
+    for nonfinite in [
+        FillEvent::Endpoint(point(0.0, f64::NAN)),
+        crossing(
+            point(0.0, 0.0),
+            point(1.0, 0.0),
+            point(f64::INFINITY, 1.0),
+            point(1.0, 1.0),
+        ),
+    ] {
+        assert_eq!(
+            compare_event_x(invalid, nonfinite),
+            Err(EventError::NonFinite)
+        );
+        assert_eq!(
+            compare_event_x(nonfinite, invalid),
+            Err(EventError::NonFinite)
+        );
+    }
+    assert_eq!(
+        compare_event_x(invalid, endpoint),
+        Err(EventError::NotProperCrossing)
+    );
+    assert_eq!(
+        compare_event_x(endpoint, invalid),
+        Err(EventError::NotProperCrossing)
+    );
+}
+
 fn crossing(a: Point, b: Point, c: Point, d: Point) -> FillEvent {
     FillEvent::Crossing { a, b, c, d }
 }
