@@ -1,0 +1,108 @@
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
+const path = require('node:path');
+const runPath = process.argv[2];
+const raw = fs.readFileSync(path.join(runPath, 'raw.json'));
+const result = JSON.parse(raw);
+const capture = JSON.parse(fs.readFileSync(path.join(runPath, 'capture.json')));
+const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
+const ratio = (text) => {
+  assert.match(text, /^-?\d+\/[1-9]\d*$/);
+  const [n, d] = text.split('/').map(BigInt);
+  return { n, d };
+};
+const withinTarget = (text) => {
+  const { n, d } = ratio(text);
+  assert(n >= 0n && 8n * n <= d, `bound exceeds 1/8: ${text}`);
+};
+assert.equal(capture.exitCode, 0);
+assert.equal(capture.timedOut, false);
+assert.equal(capture.sourceSha256Before, capture.sourceSha256After);
+assert.equal(capture.contractSha256Before, capture.contractSha256After);
+assert.equal(hash(raw), capture.stdoutSha256);
+assert.equal(hash(fs.readFileSync(path.join(runPath, 'source.cjs'))), capture.sourceSha256Before);
+assert.equal(hash(fs.readFileSync(path.join(runPath, 'contract.md.txt'))), capture.contractSha256Before);
+assert.equal(result.source.sha256, capture.sourceSha256Before);
+assert.equal(result.baseSha, '5f163017a3e56ed0dfec709006f6ac9d1615a9d3');
+assert.equal(result.contract, 'p3.0b-s2');
+assert.equal(result.caps.physicalTarget, '1/8');
+assert.equal(result.caps.candidateVisitedNodes, 1023);
+assert.equal(result.caps.candidateEmittedLeaves, 512);
+assert.equal(result.caps.verifierCellsBothSides, 8192);
+assert.equal(result.caps.arithmeticOperationsPerCaseOrControl, 2000000);
+assert.equal(result.arithmeticChecks.pass, true);
+assert.equal(result.cases.length, 62);
+assert.equal(new Set(result.cases.map((c) => c.id)).size, 62);
+const byId = new Map(result.cases.map((c) => [c.id, c]));
+const expectedZoom = { '0.01': '5764607523034235/576460752303423488', '1': '1/1', '64': '64/1' };
+const familyControls = {
+  R1: [['0/1','0/1'],['1/1','0/1'],['2/1','0/1'],['3/1','0/1']],
+  R3: [['0/1','0/1'],['1/1','0/1'],['2/1','1/64'],['3/1','3/64']],
+  R5: [['0/1','0/1'],['1/1','1/1'],['2/1','-1/1'],['3/1','0/1']],
+  R6: [['3/1','-3/64'],['-1/1','-1/64'],['-1/1','1/64'],['3/1','3/64']],
+};
+familyControls.R2 = familyControls.R1;
+familyControls.R4 = familyControls.R3;
+const outcomes = {};
+for (let family = 1; family <= 6; family += 1) {
+  for (const zoom of ['0.01', '1', '64']) {
+    for (const dpr of [1, 2, 3]) {
+      const item = byId.get(`R${family}-z${zoom}-dpr${dpr}`);
+      assert(item, 'missing fixed family/scale case');
+      assert.equal(item.inputs.zoom, expectedZoom[zoom]);
+      assert.equal(item.inputs.dpr, `${dpr}/1`);
+      assert.equal(item.inputs.width, family === 2 || family === 4 ? '64/1' : '2/1');
+      assert.deepEqual(item.inputs.controls, familyControls[`R${family}`]);
+      assert.deepEqual(item.inputs.worldLinear, [['1/1', '0/1'], ['0/1', '1/1']]);
+    }
+  }
+}
+for (const suffix of ['reverse', 'reflection', 'quarter-turn', 'shear', 'translated']) assert(byId.has(`R4-${suffix}`));
+for (const item of result.cases) {
+  outcomes[item.outcome] = (outcomes[item.outcome] || 0) + 1;
+  assert(item.arithmetic.operations <= 2000000);
+  assert(item.candidate.nodesVisited <= 1023);
+  assert(item.candidate.leavesEmitted <= 512);
+  assert(item.verifier.cellsVisited <= 8192);
+  if (item.outcome === 'CANDIDATE_LIMIT') {
+    const failure = item.candidate.firstFailure;
+    assert.equal(failure.reason, 'NODE_VISIT_CAP');
+    assert.equal(failure.nextVisit, 1024);
+    assert.equal(item.candidate.nodesVisited, 1023);
+    const t0 = ratio(failure.t0), t1 = ratio(failure.t1);
+    assert((t1.n*t0.d-t0.n*t1.d)*(1n<<BigInt(failure.depth)) === t1.d*t0.d);
+  }
+  for (const bound of [item.candidate.maxAcceptedBound, item.verifier.maxAcceptedBound]) if (bound !== null) withinTarget(bound);
+  if (item.outcome === 'CERTIFIED') {
+    assert(item.candidate.maxAcceptedBound !== null && item.verifier.maxAcceptedBound !== null);
+    assert(item.outputCount > 0 && item.outputCount === item.candidate.leavesEmitted);
+    assert(item.verifier.cellsAccepted >= 2 * item.outputCount);
+    assert.match(item.outputDigest, /^[a-f0-9]{64}$/);
+  } else {
+    assert.equal(item.outputCount, 0);
+    assert.equal(item.outputDigest, null);
+  }
+}
+const required = result.cases.filter((c) => c.role === 'required');
+assert.equal(required.length, 20);
+assert(required.every((c) => c.outcome === 'CERTIFIED'));
+const stationary = result.cases.filter((c) => c.role === 'stationary-probe');
+assert.equal(stationary.length, 3);
+assert(stationary.every((c) => c.outcome === 'STATIONARY_UNSUPPORTED'));
+assert.equal(result.controls.length, 5);
+for (const control of result.controls) {
+  assert.equal(control.pass, true);
+  assert.equal(control.baseline.outcome, 'CERTIFIED');
+  assert.equal(control.outcome, control.expectedOutcome);
+  assert.equal(control.rejection.reason, control.expectedReason);
+  if (control.outcome === 'GEOMETRIC_REJECTION') {
+    const { n, d } = ratio(control.rejection.endpointErrorLower);
+    assert(8n * n > d);
+  }
+}
+assert.equal(result.summary.experimentalCompletion, 'PASS');
+const regular = result.cases.filter((c) => c.role !== 'stationary-probe');
+assert.equal(regular.length, 59);
+assert.equal(result.summary.candidateWideFeasibility, regular.every((c) => c.outcome === 'CERTIFIED') ? 'COMPLETE' : 'PARTIAL');
+process.stdout.write(JSON.stringify({ audit: 'PASS', required: required.length, controls: result.controls.length, outcomes, summary: result.summary }, null, 2) + '\n');

@@ -1,0 +1,20 @@
+{
+  "command": "node .tools/p3-stroke-numeric.cjs",
+  "startedAt": "2026-09-29T11:44:48.655Z",
+  "sourceSha256Before": "593053f4bc14bf0b4b378ee6188348c18a37ea31ce1e51290b799fd3d1118431",
+  "contractSha256Before": "746d4970ac573749bd1e53f0e4202ca61a68f153536634878f9ae3bbf1defa74",
+  "base": "5f163017a3e56ed0dfec709006f6ac9d1615a9d3",
+  "node": "v24.15.0",
+  "platform": "win32",
+  "arch": "x64",
+  "timeoutMs": 600000,
+  "completedAt": "2026-09-29T11:44:57.322Z",
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "spawnError": null,
+  "sourceSha256After": "593053f4bc14bf0b4b378ee6188348c18a37ea31ce1e51290b799fd3d1118431",
+  "contractSha256After": "746d4970ac573749bd1e53f0e4202ca61a68f153536634878f9ae3bbf1defa74",
+  "stdoutSha256": "5a303173902170db2f28f576aaf0551454e3782aac482a7524ea309db8af8b66",
+  "stderrSha256": "1379007ef34e4414320e3ce2a028c16df3a765a4a6c38db831b99cb9201e7a4b"
+}

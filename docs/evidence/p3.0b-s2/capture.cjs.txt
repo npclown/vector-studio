@@ -1,0 +1,63 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const cp = require('node:child_process');
+const crypto = require('node:crypto');
+
+const runName = process.argv[2];
+if (!/^p3-stroke-numeric-run-\d{2}$/.test(runName || '')) {
+  throw new Error('Expected a fresh p3-stroke-numeric-run-NN directory name');
+}
+const sourcePath = '.tools/p3-stroke-numeric.cjs';
+const runPath = path.join('.tools', runName);
+const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
+const source = fs.readFileSync(sourcePath);
+const contractPath = 'docs/plans/p3-stroke-numeric-experiment.md';
+const contract = fs.readFileSync(contractPath);
+fs.mkdirSync(runPath);
+fs.writeFileSync(path.join(runPath, 'source.cjs'), source, { flag: 'wx' });
+fs.writeFileSync(path.join(runPath, 'contract.md.txt'), contract, { flag: 'wx' });
+const stdoutFd = fs.openSync(path.join(runPath, 'raw.json'), 'wx');
+const stderrFd = fs.openSync(path.join(runPath, 'stderr.txt'), 'wx');
+const meta = {
+  command: `node ${sourcePath}`,
+  startedAt: new Date().toISOString(),
+  sourceSha256Before: hash(source),
+  contractSha256Before: hash(contract),
+  base: cp.execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+  node: process.version,
+  platform: process.platform,
+  arch: process.arch,
+  timeoutMs: 600000,
+};
+const child = cp.spawn(process.execPath, [sourcePath], { stdio: ['ignore', 'pipe', 'pipe'] });
+let timedOut = false;
+let spawnError = null;
+const timeout = setTimeout(() => {
+  timedOut = true;
+  child.kill();
+}, meta.timeoutMs);
+child.stdout.on('data', (chunk) => fs.writeSync(stdoutFd, chunk));
+child.stderr.on('data', (chunk) => {
+  fs.writeSync(stderrFd, chunk);
+  process.stderr.write(chunk);
+});
+child.on('error', (error) => { spawnError = String(error); });
+child.on('close', (exitCode, signal) => {
+  clearTimeout(timeout);
+  fs.closeSync(stdoutFd);
+  fs.closeSync(stderrFd);
+  Object.assign(meta, {
+    completedAt: new Date().toISOString(),
+    exitCode,
+    signal,
+    timedOut,
+    spawnError,
+    sourceSha256After: hash(fs.readFileSync(sourcePath)),
+    contractSha256After: hash(fs.readFileSync(contractPath)),
+    stdoutSha256: hash(fs.readFileSync(path.join(runPath, 'raw.json'))),
+    stderrSha256: hash(fs.readFileSync(path.join(runPath, 'stderr.txt'))),
+  });
+  fs.writeFileSync(path.join(runPath, 'capture.json'), JSON.stringify(meta, null, 2) + '\n', { flag: 'wx' });
+  process.stdout.write(JSON.stringify({ runPath, ...meta }, null, 2) + '\n');
+  process.exitCode = exitCode === 0 && !timedOut && !spawnError && meta.sourceSha256Before === meta.sourceSha256After && meta.contractSha256Before === meta.contractSha256After ? 0 : 1;
+});

@@ -1,0 +1,1499 @@
+'use strict';
+
+// P3.0b-s2 isolated, non-accepting diagnostic. This file deliberately imports
+// no repository or package code. Review it before its first execution.
+
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+
+const CONTRACT = 'p3.0b-s2';
+const VERSION = 1;
+const BASE_SHA = '5f163017a3e56ed0dfec709006f6ac9d1615a9d3';
+const TARGET = Object.freeze({ n: 1n, d: 8n });
+const ZERO = Object.freeze({ n: 0n, d: 1n });
+const ONE = Object.freeze({ n: 1n, d: 1n });
+const TWO = Object.freeze({ n: 2n, d: 1n });
+const THREE = Object.freeze({ n: 3n, d: 1n });
+const FOUR = Object.freeze({ n: 4n, d: 1n });
+const SIX = Object.freeze({ n: 6n, d: 1n });
+const EIGHT = Object.freeze({ n: 8n, d: 1n });
+const SQRT_DENOMINATOR = 1n << 80n;
+const ARITHMETIC_LIMIT = 2_000_000;
+const REDUCED_BITS = 4096;
+const TEMP_BITS = 8193;
+const CANDIDATE_DEPTH = 20;
+const CANDIDATE_NODES = 1023;
+const CANDIDATE_LEAVES = 512;
+const VERIFIER_DEPTH = 24;
+const VERIFIER_CELLS = 8192;
+
+class ArithmeticLimitError extends Error {
+  constructor(reason) {
+    super(reason);
+    this.name = 'ArithmeticLimitError';
+    this.code = 'ARITHMETIC_LIMIT';
+  }
+}
+
+class CertificationError extends Error {
+  constructor(reason) {
+    super(reason);
+    this.name = 'CertificationError';
+    this.code = 'UNCERTIFIED';
+  }
+}
+
+class Budget {
+  constructor(limit = ARITHMETIC_LIMIT) {
+    this.limit = limit;
+    this.operations = 0;
+    this.sqrtCalls = 0;
+    this.attemptedExcess = 0;
+  }
+
+  operation() {
+    if (this.operations >= this.limit) {
+      this.attemptedExcess += 1;
+      throw new ArithmeticLimitError('rational operation limit exceeded');
+    }
+    this.operations += 1;
+  }
+
+  sqrt() {
+    this.operation();
+    this.sqrtCalls += 1;
+  }
+}
+
+function inclusiveGuard(attemptedValue, limit) {
+  return Object.freeze({ allowed: attemptedValue <= limit, attemptedValue, limit });
+}
+
+function budgetRecord(budget) {
+  return {
+    operations: budget.operations,
+    sqrtCalls: budget.sqrtCalls,
+    attemptedExcess: budget.attemptedExcess,
+  };
+}
+
+let activeBudget = null;
+
+function withBudget(budget, work) {
+  const previous = activeBudget;
+  activeBudget = budget;
+  try {
+    return work();
+  } finally {
+    activeBudget = previous;
+  }
+}
+
+function countOperation() {
+  if (!activeBudget) throw new Error('rational operation outside a budget');
+  activeBudget.operation();
+}
+
+function absBig(value) {
+  return value < 0n ? -value : value;
+}
+
+function bitLength(value) {
+  const magnitude = absBig(value);
+  return magnitude === 0n ? 0 : magnitude.toString(2).length;
+}
+
+function ensureTemporary(value, label) {
+  if (bitLength(value) > TEMP_BITS) {
+    throw new ArithmeticLimitError(`${label} exceeds ${TEMP_BITS} temporary bits`);
+  }
+  return value;
+}
+
+function gcd(left, right) {
+  let a = absBig(left);
+  let b = absBig(right);
+  while (b !== 0n) {
+    const remainder = a % b;
+    a = b;
+    b = remainder;
+  }
+  return a;
+}
+
+function rational(numerator, denominator = 1n) {
+  if (denominator === 0n) throw new CertificationError('division by zero');
+  let n = numerator;
+  let d = denominator;
+  if (d < 0n) {
+    n = -n;
+    d = -d;
+  }
+  if (n === 0n) return ZERO;
+  const divisor = gcd(n, d);
+  n /= divisor;
+  d /= divisor;
+  if (bitLength(n) > REDUCED_BITS || bitLength(d) > REDUCED_BITS) {
+    throw new ArithmeticLimitError(`reduced rational exceeds ${REDUCED_BITS} bits`);
+  }
+  return Object.freeze({ n, d });
+}
+
+function exactBinary64(value) {
+  countOperation();
+  if (!Number.isFinite(value)) throw new CertificationError('non-finite binary64 input');
+  const bytes = new ArrayBuffer(8);
+  const view = new DataView(bytes);
+  view.setFloat64(0, value, false);
+  const bits = view.getBigUint64(0, false);
+  const negative = (bits >> 63n) !== 0n;
+  const exponentBits = (bits >> 52n) & 0x7ffn;
+  const fraction = bits & ((1n << 52n) - 1n);
+  if (exponentBits === 0n && fraction === 0n) return ZERO;
+  let significand;
+  let exponent;
+  if (exponentBits === 0n) {
+    significand = fraction;
+    exponent = -1074n;
+  } else {
+    significand = (1n << 52n) | fraction;
+    exponent = exponentBits - 1023n - 52n;
+  }
+  if (negative) significand = -significand;
+  return exponent >= 0n
+    ? rational(significand << exponent, 1n)
+    : rational(significand, 1n << -exponent);
+}
+
+function qadd(a, b) {
+  countOperation();
+  const left = ensureTemporary(a.n * b.d, 'addition left product');
+  const right = ensureTemporary(b.n * a.d, 'addition right product');
+  const numerator = ensureTemporary(left + right, 'addition numerator');
+  const denominator = ensureTemporary(a.d * b.d, 'addition denominator');
+  return rational(numerator, denominator);
+}
+
+function qsub(a, b) {
+  countOperation();
+  const left = ensureTemporary(a.n * b.d, 'subtraction left product');
+  const right = ensureTemporary(b.n * a.d, 'subtraction right product');
+  const numerator = ensureTemporary(left - right, 'subtraction numerator');
+  const denominator = ensureTemporary(a.d * b.d, 'subtraction denominator');
+  return rational(numerator, denominator);
+}
+
+function qmul(a, b) {
+  countOperation();
+  const numerator = ensureTemporary(a.n * b.n, 'multiplication numerator');
+  const denominator = ensureTemporary(a.d * b.d, 'multiplication denominator');
+  return rational(numerator, denominator);
+}
+
+function qdiv(a, b) {
+  countOperation();
+  if (b.n === 0n) throw new CertificationError('division by zero');
+  const numerator = ensureTemporary(a.n * b.d, 'division numerator');
+  const denominator = ensureTemporary(a.d * b.n, 'division denominator');
+  return rational(numerator, denominator);
+}
+
+function qcmp(a, b) {
+  countOperation();
+  const left = ensureTemporary(a.n * b.d, 'comparison left product');
+  const right = ensureTemporary(b.n * a.d, 'comparison right product');
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function qneg(value) {
+  return value.n === 0n ? ZERO : Object.freeze({ n: -value.n, d: value.d });
+}
+
+function qabs(value) {
+  return value.n < 0n ? qneg(value) : value;
+}
+
+function qmin(a, b) {
+  return qcmp(a, b) <= 0 ? a : b;
+}
+
+function qmax(a, b) {
+  return qcmp(a, b) >= 0 ? a : b;
+}
+
+function qstr(value) {
+  return `${value.n}/${value.d}`;
+}
+
+function validRationalShape(value) {
+  return Boolean(value)
+    && typeof value.n === 'bigint'
+    && typeof value.d === 'bigint'
+    && value.d > 0n
+    && (value.n !== 0n || value.d === 1n)
+    && bitLength(value.n) <= REDUCED_BITS
+    && bitLength(value.d) <= REDUCED_BITS
+    && gcd(value.n, value.d) === 1n;
+}
+
+function integerSqrt(value) {
+  if (value < 0n) throw new CertificationError('integer square root of negative value');
+  if (value < 2n) return value;
+  let estimate = 1n << BigInt((bitLength(value) + 1) >> 1);
+  for (;;) {
+    const next = (estimate + value / estimate) >> 1n;
+    if (next >= estimate) return estimate;
+    estimate = next;
+  }
+}
+
+function sqrtEnclosure(value) {
+  if (!activeBudget) throw new Error('square root outside a budget');
+  activeBudget.sqrt();
+  if (value.n < 0n) throw new CertificationError('square root of negative rational');
+  if (value.n === 0n) return intervalUnchecked(ZERO, ZERO);
+  const scaledNumerator = value.n << 160n;
+  if (bitLength(scaledNumerator) > 4256) {
+    throw new ArithmeticLimitError('square-root scaled numerator exceeds 4256 bits');
+  }
+  const quotient = scaledNumerator / value.d;
+  const k = integerSqrt(quotient);
+  const lowerProduct = k * k * value.d;
+  const upperK = k + 1n;
+  const upperProduct = upperK * upperK * value.d;
+  if (bitLength(lowerProduct) > 4258 || bitLength(upperProduct) > 4258) {
+    throw new ArithmeticLimitError('square-root bracket exceeds 4258 temporary bits');
+  }
+  if (!(lowerProduct <= scaledNumerator && scaledNumerator < upperProduct)) {
+    throw new Error('integer square-root bracket invariant failed');
+  }
+  const lower = rational(k, SQRT_DENOMINATOR);
+  if (lowerProduct === scaledNumerator) return intervalUnchecked(lower, lower);
+  return intervalUnchecked(lower, rational(upperK, SQRT_DENOMINATOR));
+}
+
+function intervalUnchecked(lower, upper) {
+  return Object.freeze({ lo: lower, hi: upper });
+}
+
+function interval(lower, upper) {
+  if (qcmp(lower, upper) > 0) throw new Error('reversed interval');
+  return intervalUnchecked(lower, upper);
+}
+
+function pointInterval(value) {
+  return intervalUnchecked(value, value);
+}
+
+function iadd(a, b) {
+  return interval(qadd(a.lo, b.lo), qadd(a.hi, b.hi));
+}
+
+function isub(a, b) {
+  return interval(qsub(a.lo, b.hi), qsub(a.hi, b.lo));
+}
+
+function imul(a, b) {
+  const values = [
+    qmul(a.lo, b.lo),
+    qmul(a.lo, b.hi),
+    qmul(a.hi, b.lo),
+    qmul(a.hi, b.hi),
+  ];
+  let lower = values[0];
+  let upper = values[0];
+  for (let index = 1; index < values.length; index += 1) {
+    lower = qmin(lower, values[index]);
+    upper = qmax(upper, values[index]);
+  }
+  return interval(lower, upper);
+}
+
+function idiv(a, b) {
+  if (qcmp(b.lo, ZERO) <= 0 && qcmp(b.hi, ZERO) >= 0) {
+    throw new CertificationError('normalization divisor interval contains zero');
+  }
+  const values = [
+    qdiv(a.lo, b.lo),
+    qdiv(a.lo, b.hi),
+    qdiv(a.hi, b.lo),
+    qdiv(a.hi, b.hi),
+  ];
+  let lower = values[0];
+  let upper = values[0];
+  for (let index = 1; index < values.length; index += 1) {
+    lower = qmin(lower, values[index]);
+    upper = qmax(upper, values[index]);
+  }
+  return interval(lower, upper);
+}
+
+function intervalMidpoint(value) {
+  return qdiv(qadd(value.lo, value.hi), TWO);
+}
+
+function intervalContainsZero(value) {
+  return qcmp(value.lo, ZERO) <= 0 && qcmp(value.hi, ZERO) >= 0;
+}
+
+function intervalDistanceFromZero(value) {
+  if (intervalContainsZero(value)) return ZERO;
+  return qcmp(value.lo, ZERO) > 0 ? value.lo : qneg(value.hi);
+}
+
+function intervalMaximumAbsolute(value) {
+  return qmax(qabs(value.lo), qabs(value.hi));
+}
+
+function normExact(vector) {
+  return sqrtEnclosure(qadd(qmul(vector[0], vector[0]), qmul(vector[1], vector[1])));
+}
+
+function normBoxLower(vector) {
+  const x = intervalDistanceFromZero(vector[0]);
+  const y = intervalDistanceFromZero(vector[1]);
+  return sqrtEnclosure(qadd(qmul(x, x), qmul(y, y))).lo;
+}
+
+function normBoxUpper(vector) {
+  const x = intervalMaximumAbsolute(vector[0]);
+  const y = intervalMaximumAbsolute(vector[1]);
+  return sqrtEnclosure(qadd(qmul(x, x), qmul(y, y))).hi;
+}
+
+function pointAdd(a, b) {
+  return [qadd(a[0], b[0]), qadd(a[1], b[1])];
+}
+
+function pointSub(a, b) {
+  return [qsub(a[0], b[0]), qsub(a[1], b[1])];
+}
+
+function pointScale(value, scalar) {
+  return [qmul(value[0], scalar), qmul(value[1], scalar)];
+}
+
+function pointLerp(a, b, t) {
+  return pointAdd(a, pointScale(pointSub(b, a), t));
+}
+
+function dot(a, b) {
+  return qadd(qmul(a[0], b[0]), qmul(a[1], b[1]));
+}
+
+function cross(a, b) {
+  return qsub(qmul(a[0], b[1]), qmul(a[1], b[0]));
+}
+
+function pointToInterval(point) {
+  return [pointInterval(point[0]), pointInterval(point[1])];
+}
+
+function pointIntervalAdd(a, b) {
+  return [iadd(a[0], b[0]), iadd(a[1], b[1])];
+}
+
+function pointIntervalSub(a, b) {
+  return [isub(a[0], b[0]), isub(a[1], b[1])];
+}
+
+function pointIntervalScale(a, scalar) {
+  return [imul(a[0], scalar), imul(a[1], scalar)];
+}
+
+function convertPoint(point) {
+  return [exactBinary64(point[0]), exactBinary64(point[1])];
+}
+
+function convertMatrix(matrix) {
+  return [
+    [exactBinary64(matrix[0][0]), exactBinary64(matrix[0][1])],
+    [exactBinary64(matrix[1][0]), exactBinary64(matrix[1][1])],
+  ];
+}
+
+function physicalMatrix(world, zoom, dpr) {
+  const scale = qmul(zoom, dpr);
+  return [
+    [qmul(world[0][0], scale), qmul(world[0][1], scale)],
+    [qmul(world[1][0], scale), qmul(world[1][1], scale)],
+  ];
+}
+
+function sigmaUpper(matrix) {
+  let tau = ZERO;
+  for (const row of matrix) {
+    for (const entry of row) tau = qadd(tau, qmul(entry, entry));
+  }
+  const determinant = qsub(qmul(matrix[0][0], matrix[1][1]), qmul(matrix[0][1], matrix[1][0]));
+  const discriminant = qsub(qmul(tau, tau), qmul(FOUR, qmul(determinant, determinant)));
+  if (qcmp(discriminant, ZERO) < 0) {
+    throw new Error('negative 2x2 operator-norm discriminant');
+  }
+  const root = sqrtEnclosure(discriminant);
+  const lambdaUpper = qdiv(qadd(tau, root.hi), TWO);
+  return sqrtEnclosure(lambdaUpper).hi;
+}
+
+function transformInterval(matrix, vector) {
+  const x = iadd(imul(pointInterval(matrix[0][0]), vector[0]), imul(pointInterval(matrix[0][1]), vector[1]));
+  const y = iadd(imul(pointInterval(matrix[1][0]), vector[0]), imul(pointInterval(matrix[1][1]), vector[1]));
+  return [x, y];
+}
+
+function deCasteljauPoint(controls, t) {
+  const a = pointLerp(controls[0], controls[1], t);
+  const b = pointLerp(controls[1], controls[2], t);
+  const c = pointLerp(controls[2], controls[3], t);
+  const d = pointLerp(a, b, t);
+  const e = pointLerp(b, c, t);
+  return pointLerp(d, e, t);
+}
+
+function deCasteljauDerivative(controls, t) {
+  const derivatives = [
+    pointScale(pointSub(controls[1], controls[0]), THREE),
+    pointScale(pointSub(controls[2], controls[1]), THREE),
+    pointScale(pointSub(controls[3], controls[2]), THREE),
+  ];
+  return pointLerp(pointLerp(derivatives[0], derivatives[1], t), pointLerp(derivatives[1], derivatives[2], t), t);
+}
+
+function splitCubicHalf(controls) {
+  const p01 = pointLerp(controls[0], controls[1], rational(1n, 2n));
+  const p12 = pointLerp(controls[1], controls[2], rational(1n, 2n));
+  const p23 = pointLerp(controls[2], controls[3], rational(1n, 2n));
+  const p012 = pointLerp(p01, p12, rational(1n, 2n));
+  const p123 = pointLerp(p12, p23, rational(1n, 2n));
+  const midpoint = pointLerp(p012, p123, rational(1n, 2n));
+  return [
+    [controls[0], p01, p012, midpoint],
+    [midpoint, p123, p23, controls[3]],
+  ];
+}
+
+function candidateEndpointSample(originalControls, t, radius) {
+  const point = deCasteljauPoint(originalControls, t);
+  const derivative = deCasteljauDerivative(originalControls, t);
+  const length = normExact(derivative);
+  if (qcmp(length.lo, ZERO) <= 0) throw new CertificationError('candidate endpoint derivative cannot be normalized');
+  const normal = [
+    idiv(pointInterval(qneg(derivative[1])), length),
+    idiv(pointInterval(derivative[0]), length),
+  ];
+  const offset = pointIntervalScale(normal, pointInterval(radius));
+  const center = pointToInterval(point);
+  const leftTrue = pointIntervalAdd(center, offset);
+  const rightTrue = pointIntervalSub(center, offset);
+  const left = [intervalMidpoint(leftTrue[0]), intervalMidpoint(leftTrue[1])];
+  const right = [intervalMidpoint(rightTrue[0]), intervalMidpoint(rightTrue[1])];
+  const leftError = normBoxUpper(pointIntervalSub(leftTrue, pointToInterval(left)));
+  const rightError = normBoxUpper(pointIntervalSub(rightTrue, pointToInterval(right)));
+  return { left, right, gOffset: qmax(leftError, rightError) };
+}
+
+function candidateLeafBound(controls, radius, sigma, gOffset) {
+  const q1 = pointSub(controls[1], pointScale(pointAdd(pointScale(controls[0], TWO), controls[3]), rational(1n, 3n)));
+  const q2 = pointSub(controls[2], pointScale(pointAdd(controls[0], pointScale(controls[3], TWO)), rational(1n, 3n)));
+  const deltaUpper = qmax(normExact(q1).hi, normExact(q2).hi);
+  const chord = pointSub(controls[3], controls[0]);
+  if (qcmp(dot(chord, chord), ZERO) === 0) return { needsSplit: true, reason: 'ZERO_CHORD' };
+  const derivatives = [
+    pointScale(pointSub(controls[1], controls[0]), THREE),
+    pointScale(pointSub(controls[2], controls[1]), THREE),
+    pointScale(pointSub(controls[3], controls[2]), THREE),
+  ];
+  let a = dot(chord, derivatives[0]);
+  let b = qabs(cross(chord, derivatives[0]));
+  for (let index = 1; index < derivatives.length; index += 1) {
+    a = qmin(a, dot(chord, derivatives[index]));
+    b = qmax(b, qabs(cross(chord, derivatives[index])));
+  }
+  if (qcmp(a, ZERO) <= 0) return { needsSplit: true, reason: 'NONPOSITIVE_CONE_PROJECTION' };
+  let sinUpper = ZERO;
+  if (qcmp(b, ZERO) > 0) {
+    const denominator = sqrtEnclosure(qadd(qmul(a, a), qmul(b, b)));
+    if (qcmp(denominator.lo, ZERO) <= 0) throw new CertificationError('candidate cone denominator has no positive lower bound');
+    sinUpper = qdiv(b, denominator.lo);
+  }
+  const normalTerm = qmul(qmul(TWO, radius), sinUpper);
+  const local = qadd(qadd(deltaUpper, normalTerm), gOffset);
+  const physical = qmul(sigma, local);
+  return { needsSplit: qcmp(physical, TARGET) > 0, reason: 'BOUND_EXCEEDS_TARGET', physical };
+}
+
+function runCandidate(originalControls, radius, sigma, stats) {
+  const samples = new Map();
+  function sample(t) {
+    const key = qstr(t);
+    let value = samples.get(key);
+    if (!value) {
+      value = candidateEndpointSample(originalControls, t, radius);
+      samples.set(key, value);
+    }
+    return value;
+  }
+
+  const stack = [{ controls: originalControls, t0: ZERO, t1: ONE, depth: 0 }];
+  const leaves = [];
+  while (stack.length > 0) {
+    const visitGuard = inclusiveGuard(stats.nodesVisited + 1, CANDIDATE_NODES);
+    if (!visitGuard.allowed) {
+      const next = stack[stack.length - 1];
+      stats.firstFailure = {
+        reason: 'NODE_VISIT_CAP',
+        nextVisit: visitGuard.attemptedValue,
+        t0: qstr(next.t0),
+        t1: qstr(next.t1),
+        depth: next.depth,
+      };
+      return { outcome: 'CANDIDATE_LIMIT' };
+    }
+    const node = stack.pop();
+    stats.current = { t0: qstr(node.t0), t1: qstr(node.t1), depth: node.depth };
+    stats.nodesVisited += 1;
+    const start = sample(node.t0);
+    const end = sample(node.t1);
+    const gOffset = qmax(start.gOffset, end.gOffset);
+    const bound = candidateLeafBound(node.controls, radius, sigma, gOffset);
+    if (!bound.needsSplit) {
+      const emissionGuard = inclusiveGuard(stats.leavesEmitted + 1, CANDIDATE_LEAVES);
+      if (!emissionGuard.allowed) {
+        stats.firstFailure = {
+          reason: 'LEAF_EMISSION_CAP',
+          nextEmission: emissionGuard.attemptedValue,
+          t0: qstr(node.t0),
+          t1: qstr(node.t1),
+          depth: node.depth,
+          bound: qstr(bound.physical),
+        };
+        return { outcome: 'CANDIDATE_LIMIT' };
+      }
+      stats.leavesEmitted += 1;
+      stats.maxAcceptedBound = stats.maxAcceptedBound === null ? bound.physical : qmax(stats.maxAcceptedBound, bound.physical);
+      leaves.push({
+        t0: node.t0,
+        t1: node.t1,
+        depth: node.depth,
+        left: [start.left, end.left],
+        right: [start.right, end.right],
+      });
+      continue;
+    }
+    const childDepthGuard = inclusiveGuard(node.depth + 1, CANDIDATE_DEPTH);
+    if (!childDepthGuard.allowed) {
+      stats.firstFailure = {
+        reason: 'DEPTH_CAP',
+        t0: qstr(node.t0),
+        t1: qstr(node.t1),
+        depth: node.depth,
+        bound: bound.physical ? qstr(bound.physical) : null,
+        splitReason: bound.reason,
+      };
+      return { outcome: 'CANDIDATE_LIMIT' };
+    }
+    const halves = splitCubicHalf(node.controls);
+    const tm = qdiv(qadd(node.t0, node.t1), TWO);
+    stack.push({ controls: halves[1], t0: tm, t1: node.t1, depth: node.depth + 1 });
+    stack.push({ controls: halves[0], t0: node.t0, t1: tm, depth: node.depth + 1 });
+  }
+  return { outcome: 'CANDIDATE_COMPLETE', leaves };
+}
+
+// The verifier begins here. It intentionally derives and evaluates a power
+// polynomial and never calls candidateLeafBound, deCasteljauPoint, or
+// deCasteljauDerivative.
+
+function powerCoefficients(controls) {
+  const coefficients = [];
+  for (let coordinate = 0; coordinate < 2; coordinate += 1) {
+    const p0 = controls[0][coordinate];
+    const p1 = controls[1][coordinate];
+    const p2 = controls[2][coordinate];
+    const p3 = controls[3][coordinate];
+    const a = qadd(qsub(qmul(THREE, p1), qmul(THREE, p2)), qsub(p3, p0));
+    const b = qadd(qsub(qmul(THREE, p0), qmul(SIX, p1)), qmul(THREE, p2));
+    const c = qmul(THREE, qsub(p1, p0));
+    coefficients.push({ a, b, c, d: p0 });
+  }
+  return coefficients;
+}
+
+function powerPoint(coefficients, t) {
+  return coefficients.map((coefficient) =>
+    qadd(qmul(qadd(qmul(qadd(qmul(coefficient.a, t), coefficient.b), t), coefficient.c), t), coefficient.d));
+}
+
+function powerDerivative(coefficients, t) {
+  return coefficients.map((coefficient) =>
+    qadd(qmul(qadd(qmul(qmul(THREE, coefficient.a), t), qmul(TWO, coefficient.b)), t), coefficient.c));
+}
+
+function derivativeBox(coefficients, tCell) {
+  return coefficients.map((coefficient) => {
+    const first = iadd(imul(pointInterval(qmul(THREE, coefficient.a)), tCell), pointInterval(qmul(TWO, coefficient.b)));
+    return iadd(imul(first, tCell), pointInterval(coefficient.c));
+  });
+}
+
+function accelerationBox(coefficients, tCell) {
+  return coefficients.map((coefficient) =>
+    iadd(imul(pointInterval(qmul(SIX, coefficient.a)), tCell), pointInterval(qmul(TWO, coefficient.b))));
+}
+
+function jerkVector(coefficients) {
+  return coefficients.map((coefficient) => qmul(SIX, coefficient.a));
+}
+
+function verifierOffsetEndpoint(coefficients, t, radius, side) {
+  const center = powerPoint(coefficients, t);
+  const derivative = powerDerivative(coefficients, t);
+  const length = normExact(derivative);
+  if (qcmp(length.lo, ZERO) <= 0) throw new CertificationError('verifier endpoint derivative cannot be normalized');
+  const normal = [
+    idiv(pointInterval(qneg(derivative[1])), length),
+    idiv(pointInterval(derivative[0]), length),
+  ];
+  const offset = pointIntervalScale(normal, pointInterval(radius));
+  return side === 'left'
+    ? pointIntervalAdd(pointToInterval(center), offset)
+    : pointIntervalSub(pointToInterval(center), offset);
+}
+
+function chordPoint(leaf, side, t) {
+  const span = qsub(leaf.t1, leaf.t0);
+  const local = qdiv(qsub(t, leaf.t0), span);
+  return pointLerp(leaf[side][0], leaf[side][1], local);
+}
+
+function endpointPhysicalError(coefficients, radius, matrix, leaf, side, t) {
+  const actual = verifierOffsetEndpoint(coefficients, t, radius, side);
+  const emitted = chordPoint(leaf, side, t);
+  const localError = pointIntervalSub(actual, pointToInterval(emitted));
+  const physicalError = transformInterval(matrix, localError);
+  return {
+    lower: normBoxLower(physicalError),
+    upper: normBoxUpper(physicalError),
+    box: physicalError,
+  };
+}
+
+function derivedDyadicDepth(t0, t1) {
+  if (!validRationalShape(t0) || !validRationalShape(t1)) return null;
+  const span = qsub(t1, t0);
+  if (qcmp(span, ZERO) <= 0) return null;
+  for (let depth = 0; depth <= VERIFIER_DEPTH; depth += 1) {
+    const denominator = 1n << BigInt(depth);
+    const expectedSpan = rational(1n, denominator);
+    if (qcmp(span, expectedSpan) !== 0) continue;
+    const scaledStartNumerator = ensureTemporary(t0.n * denominator, 'dyadic provenance numerator');
+    if (scaledStartNumerator % t0.d !== 0n) return null;
+    return depth;
+  }
+  return null;
+}
+
+function structuralCheck(leaves) {
+  if (!Array.isArray(leaves) || leaves.length === 0) {
+    return { outcome: 'STRUCTURAL_REJECTION', reason: 'EMPTY_OUTPUT' };
+  }
+  let expected = ZERO;
+  let previous = null;
+  for (let index = 0; index < leaves.length; index += 1) {
+    const leaf = leaves[index];
+    if (!leaf || !Array.isArray(leaf.left) || !Array.isArray(leaf.right) || leaf.left.length !== 2 || leaf.right.length !== 2) {
+      return { outcome: 'STRUCTURAL_REJECTION', reason: 'INVALID_LEAF_SHAPE', leafIndex: index };
+    }
+    if (!validRationalShape(leaf.t0) || !validRationalShape(leaf.t1)) {
+      return { outcome: 'STRUCTURAL_REJECTION', reason: 'INVALID_PARAMETER_RATIONAL', leafIndex: index };
+    }
+    const derivedDepth = derivedDyadicDepth(leaf.t0, leaf.t1);
+    if (derivedDepth === null || !Number.isInteger(leaf.depth) || leaf.depth !== derivedDepth) {
+      return {
+        outcome: 'STRUCTURAL_REJECTION',
+        reason: 'INVALID_DYADIC_DEPTH_PROVENANCE',
+        leafIndex: index,
+        declaredDepth: leaf.depth,
+        derivedDepth,
+      };
+    }
+    const order = qcmp(leaf.t0, expected);
+    if (order > 0) return { outcome: 'STRUCTURAL_REJECTION', reason: index === 0 ? 'INITIAL_COVERAGE_GAP' : 'COVERAGE_GAP', leafIndex: index };
+    if (order < 0) return { outcome: 'STRUCTURAL_REJECTION', reason: 'OVERLAP_OR_ORDER', leafIndex: index };
+    if (qcmp(leaf.t0, leaf.t1) >= 0) return { outcome: 'STRUCTURAL_REJECTION', reason: 'NONPOSITIVE_INTERVAL', leafIndex: index };
+    for (const side of ['left', 'right']) {
+      for (let endpoint = 0; endpoint < 2; endpoint += 1) {
+        const point = leaf[side][endpoint];
+        if (!Array.isArray(point) || point.length !== 2 || !point.every(validRationalShape)) {
+          return { outcome: 'STRUCTURAL_REJECTION', reason: 'INVALID_RATIONAL_POINT', leafIndex: index, side, endpoint };
+        }
+      }
+    }
+    if (previous) {
+      for (const side of ['left', 'right']) {
+        for (let coordinate = 0; coordinate < 2; coordinate += 1) {
+          if (qcmp(previous[side][1][coordinate], leaf[side][0][coordinate]) !== 0) {
+            return { outcome: 'STRUCTURAL_REJECTION', reason: 'UNSHARED_SEAM_SAMPLE', leafIndex: index, side, coordinate };
+          }
+        }
+      }
+    }
+    expected = leaf.t1;
+    previous = leaf;
+  }
+  if (qcmp(expected, ONE) !== 0) return { outcome: 'STRUCTURAL_REJECTION', reason: 'FINAL_COVERAGE_GAP' };
+  return { outcome: 'STRUCTURE_VALID' };
+}
+
+function verifierFirstFailure(cell, side, reason, fields = {}) {
+  return {
+    reason,
+    side,
+    t0: qstr(cell.t0),
+    t1: qstr(cell.t1),
+    depth: cell.depth,
+    ...fields,
+  };
+}
+
+function verifyPaths(originalControls, radius, matrix, sigma, leaves, stats) {
+  const structure = structuralCheck(leaves);
+  if (structure.outcome !== 'STRUCTURE_VALID') {
+    stats.firstFailure = structure;
+    return { outcome: 'STRUCTURAL_REJECTION', firstFailure: structure };
+  }
+  const coefficients = powerCoefficients(originalControls);
+  const jerkUpper = normExact(jerkVector(coefficients)).hi;
+
+  for (let leafIndex = 0; leafIndex < leaves.length; leafIndex += 1) {
+    const leaf = leaves[leafIndex];
+    for (const side of ['left', 'right']) {
+      const stack = [{ t0: leaf.t0, t1: leaf.t1, depth: leaf.depth }];
+      while (stack.length > 0) {
+        const visitGuard = inclusiveGuard(stats.cellsVisited + 1, VERIFIER_CELLS);
+        if (!visitGuard.allowed) {
+          const next = stack[stack.length - 1];
+          const firstFailure = {
+            reason: 'CELL_VISIT_CAP',
+            nextVisit: visitGuard.attemptedValue,
+            leafIndex,
+            side,
+            t0: qstr(next.t0),
+            t1: qstr(next.t1),
+            depth: next.depth,
+          };
+          stats.firstFailure = firstFailure;
+          return { outcome: 'VERIFIER_LIMIT', firstFailure };
+        }
+        const cell = stack.pop();
+        stats.current = {
+          leafIndex,
+          side,
+          t0: qstr(cell.t0),
+          t1: qstr(cell.t1),
+          depth: cell.depth,
+        };
+        stats.cellsVisited += 1;
+
+        // Endpoint rejection is deliberately evaluated before deciding whether
+        // this admitted cell needs subdivision.
+        for (const endpoint of [cell.t0, cell.t1]) {
+          const error = endpointPhysicalError(coefficients, radius, matrix, leaf, side, endpoint);
+          if (qcmp(error.lower, TARGET) > 0) {
+            const firstFailure = verifierFirstFailure(cell, side, 'ENDPOINT_ERROR_LOWER_EXCEEDS_TARGET', {
+              endpoint: qstr(endpoint),
+              endpointErrorLower: qstr(error.lower),
+              endpointErrorUpper: qstr(error.upper),
+            });
+            stats.firstFailure = firstFailure;
+            return { outcome: 'GEOMETRIC_REJECTION', firstFailure, _lower: error.lower };
+          }
+        }
+
+        const tCell = interval(cell.t0, cell.t1);
+        const velocity = derivativeBox(coefficients, tCell);
+        const speedLower = normBoxLower(velocity);
+        let errorUpper = null;
+        let splitReason = 'SPEED_NOT_POSITIVE';
+        if (qcmp(speedLower, ZERO) > 0) {
+          const accelerationUpper = normBoxUpper(accelerationBox(coefficients, tCell));
+          const firstNormal = qdiv(qmul(TWO, jerkUpper), speedLower);
+          const speedSquared = qmul(speedLower, speedLower);
+          const accelerationSquared = qmul(accelerationUpper, accelerationUpper);
+          const secondNormal = qdiv(qmul(SIX, accelerationSquared), speedSquared);
+          const mUpper = qadd(accelerationUpper, qmul(radius, qadd(firstNormal, secondNormal)));
+          const leftError = endpointPhysicalError(coefficients, radius, matrix, leaf, side, cell.t0).upper;
+          const rightError = endpointPhysicalError(coefficients, radius, matrix, leaf, side, cell.t1).upper;
+          const endpointUpper = qmax(leftError, rightError);
+          const h = qsub(cell.t1, cell.t0);
+          const remainder = qdiv(qmul(qmul(qmul(sigma, mUpper), h), h), EIGHT);
+          errorUpper = qadd(endpointUpper, remainder);
+          if (qcmp(errorUpper, TARGET) <= 0) {
+            stats.cellsAccepted += 1;
+            stats.maxAcceptedBound = stats.maxAcceptedBound === null ? errorUpper : qmax(stats.maxAcceptedBound, errorUpper);
+            continue;
+          }
+          splitReason = 'CONTINUOUS_BOUND_EXCEEDS_TARGET';
+        }
+
+        const childDepthGuard = inclusiveGuard(cell.depth + 1, VERIFIER_DEPTH);
+        if (!childDepthGuard.allowed) {
+          const firstFailure = verifierFirstFailure(cell, side, 'DEPTH_CAP', {
+            splitReason,
+            speedLower: qstr(speedLower),
+            errorUpper: errorUpper ? qstr(errorUpper) : null,
+          });
+          stats.firstFailure = firstFailure;
+          return { outcome: 'VERIFIER_LIMIT', firstFailure };
+        }
+        const tm = qdiv(qadd(cell.t0, cell.t1), TWO);
+        stack.push({ t0: tm, t1: cell.t1, depth: cell.depth + 1 });
+        stack.push({ t0: cell.t0, t1: tm, depth: cell.depth + 1 });
+      }
+    }
+  }
+  return { outcome: 'CERTIFIED' };
+}
+
+function stationaryAtFixedProbe(controls) {
+  for (const t of [ZERO, rational(1n, 2n), ONE]) {
+    const derivative = deCasteljauDerivative(controls, t);
+    if (qcmp(derivative[0], ZERO) === 0 && qcmp(derivative[1], ZERO) === 0) return qstr(t);
+  }
+  return null;
+}
+
+function publicCandidateStats(stats) {
+  return {
+    nodesVisited: stats.nodesVisited,
+    leavesEmitted: stats.leavesEmitted,
+    maxAcceptedBound: stats.maxAcceptedBound ? qstr(stats.maxAcceptedBound) : null,
+    firstFailure: stats.firstFailure,
+  };
+}
+
+function publicVerifierStats(stats) {
+  return {
+    cellsVisited: stats.cellsVisited,
+    cellsAccepted: stats.cellsAccepted,
+    maxAcceptedBound: stats.maxAcceptedBound ? qstr(stats.maxAcceptedBound) : null,
+    firstFailure: stats.firstFailure,
+  };
+}
+
+function makeCandidateStats() {
+  return { nodesVisited: 0, leavesEmitted: 0, maxAcceptedBound: null, firstFailure: null };
+}
+
+function makeVerifierStats() {
+  return { cellsVisited: 0, cellsAccepted: 0, maxAcceptedBound: null, firstFailure: null };
+}
+
+function encodedPoint(point) {
+  return [qstr(point[0]), qstr(point[1])];
+}
+
+function encodedLeaves(leaves) {
+  return leaves.map((leaf) => ({
+    t0: qstr(leaf.t0),
+    t1: qstr(leaf.t1),
+    left: [encodedPoint(leaf.left[0]), encodedPoint(leaf.left[1])],
+    right: [encodedPoint(leaf.right[0]), encodedPoint(leaf.right[1])],
+  }));
+}
+
+function outputDigest(leaves) {
+  return crypto.createHash('sha256').update(JSON.stringify(encodedLeaves(leaves)), 'utf8').digest('hex');
+}
+
+function encodedInputs(controls, width, zoom, dpr, world, matrix = null, sigma = null) {
+  const encoded = {
+    controls: controls.map(encodedPoint),
+    width: qstr(width),
+    zoom: qstr(zoom),
+    dpr: qstr(dpr),
+    worldLinear: world.map((row) => row.map(qstr)),
+  };
+  if (matrix) encoded.physicalMatrix = matrix.map((row) => row.map(qstr));
+  if (sigma) encoded.sigmaUpper = qstr(sigma);
+  return encoded;
+}
+
+function runCorpusCase(specification) {
+  const budget = new Budget();
+  const candidateStats = makeCandidateStats();
+  const verifierStats = makeVerifierStats();
+  let inputs = null;
+  let activeStage = 'input-conversion';
+  try {
+    return withBudget(budget, () => {
+      const controls = specification.controls.map(convertPoint);
+      const width = exactBinary64(specification.width);
+      const zoom = exactBinary64(specification.zoom);
+      const dpr = exactBinary64(specification.dpr);
+      const world = convertMatrix(specification.worldLinear);
+      inputs = encodedInputs(controls, width, zoom, dpr, world);
+      const radius = qdiv(width, TWO);
+      const matrix = physicalMatrix(world, zoom, dpr);
+      const sigma = sigmaUpper(matrix);
+      inputs = encodedInputs(controls, width, zoom, dpr, world, matrix, sigma);
+
+      if (specification.stationaryProbe) {
+        activeStage = 'stationary-preflight';
+        const stationaryT = stationaryAtFixedProbe(controls);
+        if (stationaryT === null) {
+          return {
+            id: specification.id,
+            family: specification.family,
+            role: 'stationary-probe',
+            inputs,
+            outcome: 'UNCERTIFIED',
+            reason: 'FIXED_STATIONARY_PROBE_NOT_DETECTED',
+            outputCount: 0,
+            outputDigest: null,
+            candidate: publicCandidateStats(candidateStats),
+            verifier: publicVerifierStats(verifierStats),
+            arithmetic: budgetRecord(budget),
+          };
+        }
+        return {
+          id: specification.id,
+          family: specification.family,
+          role: 'stationary-probe',
+          inputs,
+          outcome: 'STATIONARY_UNSUPPORTED',
+          stationaryT,
+          outputCount: 0,
+          outputDigest: null,
+          candidate: publicCandidateStats(candidateStats),
+          verifier: publicVerifierStats(verifierStats),
+          arithmetic: budgetRecord(budget),
+        };
+      }
+
+      activeStage = 'candidate';
+      const candidate = runCandidate(controls, radius, sigma, candidateStats);
+      if (candidate.outcome !== 'CANDIDATE_COMPLETE') {
+        return {
+          id: specification.id,
+          family: specification.family,
+          role: specification.role,
+          inputs,
+          outcome: candidate.outcome,
+          outputCount: 0,
+          outputDigest: null,
+          candidate: publicCandidateStats(candidateStats),
+          verifier: publicVerifierStats(verifierStats),
+          arithmetic: budgetRecord(budget),
+        };
+      }
+      activeStage = 'verifier';
+      const verification = verifyPaths(controls, radius, matrix, sigma, candidate.leaves, verifierStats);
+      if (verification.outcome === 'CERTIFIED') {
+        if (candidateStats.maxAcceptedBound === null || verifierStats.maxAcceptedBound === null
+          || qcmp(candidateStats.maxAcceptedBound, TARGET) > 0
+          || qcmp(verifierStats.maxAcceptedBound, TARGET) > 0) {
+          throw new CertificationError('certified result lacks bounded candidate/verifier maxima');
+        }
+      }
+      const certified = verification.outcome === 'CERTIFIED';
+      return {
+        id: specification.id,
+        family: specification.family,
+        role: specification.role,
+        inputs,
+        outcome: verification.outcome,
+        outputCount: certified ? candidate.leaves.length : 0,
+        outputDigest: certified ? outputDigest(candidate.leaves) : null,
+        candidate: publicCandidateStats(candidateStats),
+        verifier: publicVerifierStats(verifierStats),
+        arithmetic: budgetRecord(budget),
+      };
+    });
+  } catch (error) {
+    if (!(error instanceof ArithmeticLimitError) && !(error instanceof CertificationError)) throw error;
+    const activeStats = activeStage === 'verifier' ? verifierStats : activeStage === 'candidate' ? candidateStats : null;
+    if (activeStats && !activeStats.firstFailure) {
+      activeStats.firstFailure = {
+        reason: error.code,
+        message: error.message,
+        ...(activeStats.current || {}),
+      };
+    }
+    return {
+      id: specification.id,
+      family: specification.family,
+      role: specification.stationaryProbe ? 'stationary-probe' : specification.role,
+      inputs,
+      outcome: error.code,
+      reason: error.message,
+      outputCount: 0,
+      outputDigest: null,
+      candidate: publicCandidateStats(candidateStats),
+      verifier: publicVerifierStats(verifierStats),
+      arithmetic: budgetRecord(budget),
+    };
+  }
+}
+
+function independentBaselineLeaves(coefficients, radius, boundaries) {
+  const samples = new Map();
+  function sample(t) {
+    const key = qstr(t);
+    let result = samples.get(key);
+    if (!result) {
+      const leftTrue = verifierOffsetEndpoint(coefficients, t, radius, 'left');
+      const rightTrue = verifierOffsetEndpoint(coefficients, t, radius, 'right');
+      result = {
+        left: [intervalMidpoint(leftTrue[0]), intervalMidpoint(leftTrue[1])],
+        right: [intervalMidpoint(rightTrue[0]), intervalMidpoint(rightTrue[1])],
+      };
+      samples.set(key, result);
+    }
+    return result;
+  }
+  const leaves = [];
+  for (let index = 0; index + 1 < boundaries.length; index += 1) {
+    const start = sample(boundaries[index]);
+    const end = sample(boundaries[index + 1]);
+    leaves.push({
+      t0: boundaries[index],
+      t1: boundaries[index + 1],
+      depth: boundaries.length === 2 ? 0 : 1,
+      left: [start.left, end.left],
+      right: [start.right, end.right],
+    });
+  }
+  return leaves;
+}
+
+function cloneLeaf(leaf) {
+  return {
+    t0: leaf.t0,
+    t1: leaf.t1,
+    depth: leaf.depth,
+    left: [[...leaf.left[0]], [...leaf.left[1]]],
+    right: [[...leaf.right[0]], [...leaf.right[1]]],
+  };
+}
+
+function chordNormalMutation(coefficients, radius, leaf) {
+  const root = sqrtEnclosure(rational(4097n, 1n));
+  const normal = [idiv(pointInterval(rational(-1n, 1n)), root), idiv(pointInterval(rational(64n, 1n)), root)];
+  const mutated = cloneLeaf(leaf);
+  for (const endpoint of [0, 1]) {
+    const t = endpoint === 0 ? leaf.t0 : leaf.t1;
+    const center = pointToInterval(powerPoint(coefficients, t));
+    const offset = pointIntervalScale(normal, pointInterval(radius));
+    const left = pointIntervalAdd(center, offset);
+    const right = pointIntervalSub(center, offset);
+    mutated.left[endpoint] = [intervalMidpoint(left[0]), intervalMidpoint(left[1])];
+    mutated.right[endpoint] = [intervalMidpoint(right[0]), intervalMidpoint(right[1])];
+  }
+  return mutated;
+}
+
+function stripPrivateVerification(verification) {
+  return { outcome: verification.outcome, firstFailure: verification.firstFailure || null };
+}
+
+function runRejectingControl(specification) {
+  const budget = new Budget();
+  let inputs = null;
+  let baselineStats = makeVerifierStats();
+  let mutationStats = makeVerifierStats();
+  let activeStage = 'input-conversion';
+  try {
+    return withBudget(budget, () => {
+      const controls = specification.controls.map(convertPoint);
+      const width = exactBinary64(specification.width);
+      const zoom = exactBinary64(1);
+      const dpr = exactBinary64(1);
+      const world = convertMatrix([[1, 0], [0, 1]]);
+      inputs = encodedInputs(controls, width, zoom, dpr, world);
+      const radius = qdiv(width, TWO);
+      const matrix = physicalMatrix(world, zoom, dpr);
+      const sigma = sigmaUpper(matrix);
+      inputs = encodedInputs(controls, width, zoom, dpr, world, matrix, sigma);
+      const coefficients = powerCoefficients(controls);
+      const boundaries = specification.twoIntervals ? [ZERO, rational(1n, 2n), ONE] : [ZERO, ONE];
+      const baseline = independentBaselineLeaves(coefficients, radius, boundaries);
+      activeStage = 'baseline-verifier';
+      const baselineVerification = verifyPaths(controls, radius, matrix, sigma, baseline, baselineStats);
+      const baselineMaximaValid = baselineVerification.outcome === 'CERTIFIED'
+        && baselineStats.maxAcceptedBound !== null
+        && qcmp(baselineStats.maxAcceptedBound, TARGET) <= 0;
+      if (!baselineMaximaValid) {
+        return {
+          id: specification.id,
+          inputs,
+          pass: false,
+          outcome: 'BASELINE_FAILURE',
+          baseline: stripPrivateVerification(baselineVerification),
+          baselineVerifier: publicVerifierStats(baselineStats),
+          mutationVerifier: publicVerifierStats(mutationStats),
+          arithmetic: budgetRecord(budget),
+        };
+      }
+
+      activeStage = 'mutation-construction';
+      mutationStats.current = {
+        t0: qstr(baseline[0].t0),
+        t1: qstr(baseline[baseline.length - 1].t1),
+        depth: baseline[0].depth,
+      };
+      let mutated;
+      if (specification.mutation === 'chord-normal') {
+        mutated = [chordNormalMutation(coefficients, radius, baseline[0])];
+      } else if (specification.mutation === 'r3-flip-left-start') {
+        mutated = baseline.map(cloneLeaf);
+        mutated[0].left[0] = [rational(0n), rational(-1n)];
+      } else if (specification.mutation === 'r1-shift-left-start') {
+        mutated = baseline.map(cloneLeaf);
+        mutated[0].left[0] = [rational(1n), rational(1n)];
+      } else if (specification.mutation === 'remove-first') {
+        mutated = [cloneLeaf(baseline[1])];
+      } else if (specification.mutation === 'duplicate-first') {
+        mutated = [cloneLeaf(baseline[0]), cloneLeaf(baseline[0]), cloneLeaf(baseline[1])];
+      } else {
+        throw new Error(`unknown control mutation ${specification.mutation}`);
+      }
+
+      activeStage = 'mutation-verifier';
+      const mutationVerification = verifyPaths(controls, radius, matrix, sigma, mutated, mutationStats);
+      let pass = mutationVerification.outcome === specification.expectedOutcome
+        && mutationVerification.firstFailure
+        && mutationVerification.firstFailure.reason === specification.expectedReason;
+      if (pass && specification.minimumLower) {
+        pass = Boolean(mutationVerification._lower)
+          && qcmp(mutationVerification._lower, specification.minimumLower) >= 0;
+      }
+      return {
+        id: specification.id,
+        inputs,
+        pass,
+        outcome: mutationVerification.outcome,
+        expectedOutcome: specification.expectedOutcome,
+        expectedReason: specification.expectedReason,
+        baseline: { outcome: 'CERTIFIED', outputCount: baseline.length, outputDigest: outputDigest(baseline) },
+        rejection: mutationVerification.firstFailure || null,
+        baselineVerifier: publicVerifierStats(baselineStats),
+        mutationVerifier: publicVerifierStats(mutationStats),
+        arithmetic: budgetRecord(budget),
+      };
+    });
+  } catch (error) {
+    if (!(error instanceof ArithmeticLimitError) && !(error instanceof CertificationError)) throw error;
+    const activeStats = activeStage === 'baseline-verifier'
+      ? baselineStats
+      : activeStage === 'mutation-verifier' || activeStage === 'mutation-construction'
+        ? mutationStats
+        : null;
+    if (activeStats && !activeStats.firstFailure) {
+      activeStats.firstFailure = {
+        reason: error.code,
+        message: error.message,
+        ...(activeStats.current || {}),
+      };
+    }
+    return {
+      id: specification.id,
+      inputs,
+      pass: false,
+      outcome: error.code,
+      reason: error.message,
+      baselineVerifier: publicVerifierStats(baselineStats),
+      mutationVerifier: publicVerifierStats(mutationStats),
+      arithmetic: budgetRecord(budget),
+    };
+  }
+}
+
+function assertCheck(condition, message) {
+  if (!condition) throw new Error(`arithmetic self-check failed: ${message}`);
+}
+
+function arithmeticSelfChecks() {
+  const budget = new Budget();
+  const checks = [];
+  try {
+    withBudget(budget, () => {
+      const positiveZero = exactBinary64(0);
+      const negativeZero = exactBinary64(-0);
+      assertCheck(qcmp(positiveZero, ZERO) === 0 && qcmp(negativeZero, ZERO) === 0, 'signed zero canonicalization');
+      checks.push({ name: 'signed-zero-and-binary64', pass: true });
+
+      const oneThird = rational(1n, 3n);
+      assertCheck(qcmp(qadd(oneThird, qadd(oneThird, oneThird)), ONE) === 0, 'exact addition');
+      assertCheck(qcmp(qdiv(qmul(rational(-7n, 5n), rational(15n, 14n)), rational(-3n, 2n)), ONE) === 0, 'exact multiply/divide');
+      let divisionRejected = false;
+      try { qdiv(ONE, ZERO); } catch (error) { divisionRejected = error instanceof CertificationError; }
+      assertCheck(divisionRejected, 'division by zero rejection');
+      checks.push({ name: 'rational-arithmetic', pass: true });
+
+      const roots = [ZERO, ONE, TWO, rational(1n, 4n), rational(1n, 1n << 160n), rational(1n << 80n)];
+      for (const value of roots) {
+        const enclosure = sqrtEnclosure(value);
+        assertCheck(qcmp(qmul(enclosure.lo, enclosure.lo), value) <= 0, `sqrt lower bracket ${qstr(value)}`);
+        assertCheck(qcmp(qmul(enclosure.hi, enclosure.hi), value) >= 0, `sqrt upper bracket ${qstr(value)}`);
+      }
+      checks.push({ name: 'sqrt-grid-brackets', pass: true, inputs: roots.map(qstr) });
+
+      const positive = interval(rational(1n), rational(2n));
+      const negative = interval(rational(-3n), rational(-2n));
+      const product = imul(positive, negative);
+      assertCheck(qcmp(product.lo, rational(-6n)) === 0 && qcmp(product.hi, rational(-2n)) === 0, 'signed interval multiplication');
+      const quotient = idiv(negative, positive);
+      assertCheck(qcmp(quotient.lo, rational(-3n)) === 0 && qcmp(quotient.hi, rational(-1n)) === 0, 'signed interval division');
+      const oppositeQuotient = idiv(positive, negative);
+      assertCheck(qcmp(oppositeQuotient.lo, rational(-1n)) === 0
+        && qcmp(oppositeQuotient.hi, rational(-1n, 3n)) === 0, 'positive by negative interval division');
+      let zeroIntervalRejected = false;
+      try { idiv(positive, interval(rational(-1n), rational(1n))); } catch (error) { zeroIntervalRejected = error instanceof CertificationError; }
+      assertCheck(zeroIntervalRejected, 'zero-containing denominator rejection');
+      checks.push({ name: 'interval-signs-and-zero-divisor', pass: true });
+    });
+
+    const guard = new Budget(1);
+    guard.operation();
+    let excessRejected = false;
+    try { guard.operation(); } catch (error) { excessRejected = error instanceof ArithmeticLimitError; }
+    assertCheck(guard.operations === 1 && guard.attemptedExcess === 1 && excessRejected, 'counter at limit and first excess');
+    checks.push({ name: 'arithmetic-counter-guard', pass: true, limit: 1, completedAtLimit: 1, attemptedExcess: 1 });
+
+    const workGuards = [
+      ['candidate-node-visit', CANDIDATE_NODES],
+      ['candidate-leaf-emission', CANDIDATE_LEAVES],
+      ['candidate-depth', CANDIDATE_DEPTH],
+      ['verifier-cell-visit', VERIFIER_CELLS],
+      ['verifier-depth', VERIFIER_DEPTH],
+    ];
+    for (const [name, limit] of workGuards) {
+      assertCheck(inclusiveGuard(limit, limit).allowed, `${name} rejects limit`);
+      assertCheck(!inclusiveGuard(limit + 1, limit).allowed, `${name} accepts first excess`);
+    }
+    checks.push({ name: 'candidate-and-verifier-inclusive-guards', pass: true, guards: workGuards.map(([name, limit]) => ({ name, limit })) });
+
+    assertCheck(bitLength(rational(1n << 4095n).n) === REDUCED_BITS, 'reduced boundary rejected');
+    let reducedExcessRejected = false;
+    try { rational(1n << 4096n); } catch (error) { reducedExcessRejected = error instanceof ArithmeticLimitError; }
+    assertCheck(reducedExcessRejected, 'reduced first excess accepted');
+    assertCheck(bitLength(ensureTemporary(1n << 8192n, 'self-check')) === TEMP_BITS, 'temporary boundary rejected');
+    let temporaryExcessRejected = false;
+    try { ensureTemporary(1n << 8193n, 'self-check'); } catch (error) { temporaryExcessRejected = error instanceof ArithmeticLimitError; }
+    assertCheck(temporaryExcessRejected, 'temporary first excess accepted');
+    checks.push({ name: 'integer-bit-envelope-guards', pass: true, reducedBits: REDUCED_BITS, temporaryBits: TEMP_BITS });
+    return { pass: true, checks, arithmetic: budgetRecord(budget) };
+  } catch (error) {
+    return {
+      pass: false,
+      checks,
+      failure: { name: error.name, message: error.message },
+      arithmetic: budgetRecord(budget),
+    };
+  }
+}
+
+const FAMILY = Object.freeze({
+  R1: { controls: [[0, 0], [1, 0], [2, 0], [3, 0]], width: 2 },
+  R2: { controls: [[0, 0], [1, 0], [2, 0], [3, 0]], width: 64 },
+  R3: { controls: [[0, 0], [1, 0], [2, 1 / 64], [3, 3 / 64]], width: 2 },
+  R4: { controls: [[0, 0], [1, 0], [2, 1 / 64], [3, 3 / 64]], width: 64 },
+  R5: { controls: [[0, 0], [1, 1], [2, -1], [3, 0]], width: 2 },
+  R6: { controls: [[3, -3 / 64], [-1, -1 / 64], [-1, 1 / 64], [3, 3 / 64]], width: 2 },
+});
+
+function corpusSpecifications() {
+  const cases = [];
+  for (const family of ['R1', 'R2', 'R3', 'R4', 'R5', 'R6']) {
+    for (const zoom of [0.01, 1, 64]) {
+      for (const dpr of [1, 2, 3]) {
+        const required = family === 'R1' || family === 'R2' || ((family === 'R3' || family === 'R4') && zoom === 1 && dpr === 1);
+        cases.push({
+          id: `${family}-z${zoom}-dpr${dpr}`,
+          family,
+          controls: FAMILY[family].controls,
+          width: FAMILY[family].width,
+          zoom,
+          dpr,
+          worldLinear: [[1, 0], [0, 1]],
+          role: required ? 'required' : 'feasibility',
+        });
+      }
+    }
+  }
+
+  const reverse = [...FAMILY.R4.controls].reverse();
+  const translated = FAMILY.R4.controls.map(([x, y]) => [x + 2 ** 30, y - 2 ** 30]);
+  const variants = [
+    ['R4-reverse', reverse, [[1, 0], [0, 1]]],
+    ['R4-reflection', FAMILY.R4.controls, [[-1, 0], [0, 1]]],
+    ['R4-quarter-turn', FAMILY.R4.controls, [[0, -1], [1, 0]]],
+    ['R4-shear', FAMILY.R4.controls, [[1, 1 / 4], [0, 1]]],
+    ['R4-translated', translated, [[1, 0], [0, 1]]],
+  ];
+  for (const [id, controls, worldLinear] of variants) {
+    cases.push({ id, family: 'R4', controls, width: 64, zoom: 1, dpr: 1, worldLinear, role: 'feasibility' });
+  }
+
+  cases.push(
+    {
+      id: 'stationary-endpoint', family: 'S1', controls: [[0, 0], [0, 0], [1, 0], [3, 1]], width: 2,
+      zoom: 1, dpr: 1, worldLinear: [[1, 0], [0, 1]], stationaryProbe: true,
+    },
+    {
+      id: 'stationary-interior-reversal', family: 'S2', controls: [[3, 0], [-1, 0], [-1, 0], [3, 0]], width: 2,
+      zoom: 1, dpr: 1, worldLinear: [[1, 0], [0, 1]], stationaryProbe: true,
+    },
+    {
+      id: 'stationary-interior-continuation', family: 'S3', controls: [[-1, 0], [1, 0], [-1, 0], [1, 0]], width: 2,
+      zoom: 1, dpr: 1, worldLinear: [[1, 0], [0, 1]], stationaryProbe: true,
+    },
+  );
+  return cases;
+}
+
+function controlSpecifications() {
+  return [
+    {
+      id: 'wrong-chord-normal-r4', controls: FAMILY.R4.controls, width: 64, mutation: 'chord-normal',
+      expectedOutcome: 'GEOMETRIC_REJECTION', expectedReason: 'ENDPOINT_ERROR_LOWER_EXCEEDS_TARGET',
+    },
+    {
+      id: 'flipped-left-start-r3', controls: FAMILY.R3.controls, width: 2, mutation: 'r3-flip-left-start',
+      expectedOutcome: 'GEOMETRIC_REJECTION', expectedReason: 'ENDPOINT_ERROR_LOWER_EXCEEDS_TARGET', minimumLower: TWO,
+    },
+    {
+      id: 'shifted-left-start-r1', controls: FAMILY.R1.controls, width: 2, mutation: 'r1-shift-left-start',
+      expectedOutcome: 'GEOMETRIC_REJECTION', expectedReason: 'ENDPOINT_ERROR_LOWER_EXCEEDS_TARGET', minimumLower: ONE,
+    },
+    {
+      id: 'missing-first-r4', controls: FAMILY.R4.controls, width: 64, mutation: 'remove-first', twoIntervals: true,
+      expectedOutcome: 'STRUCTURAL_REJECTION', expectedReason: 'INITIAL_COVERAGE_GAP',
+    },
+    {
+      id: 'duplicate-first-r4', controls: FAMILY.R4.controls, width: 64, mutation: 'duplicate-first', twoIntervals: true,
+      expectedOutcome: 'STRUCTURAL_REJECTION', expectedReason: 'OVERLAP_OR_ORDER',
+    },
+  ];
+}
+
+function initialRecord(sourceBytes) {
+  return {
+    contract: CONTRACT,
+    version: VERSION,
+    baseSha: BASE_SHA,
+    source: {
+      file: '.tools/p3-stroke-numeric.cjs',
+      sha256: crypto.createHash('sha256').update(sourceBytes).digest('hex'),
+      byteLength: sourceBytes.length,
+    },
+    runtime: { node: process.version, platform: process.platform, arch: process.arch },
+    provenance: {
+      purpose: 'isolated non-accepting exact-rational regular-stroke diagnostic',
+      dependencies: ['node:crypto', 'node:fs'],
+      randomSeed: null,
+      candidateTraversal: 'depth-first left-before-right',
+      verifierTraversal: 'leaves in order, left then right, depth-first left-before-right',
+      resultEncoding: 'JSON.stringify with two-space indentation and final LF',
+      digestEncoding: 'compact JSON.stringify of ordered t0,t1,left,right leaf objects',
+    },
+    caps: {
+      reducedRationalBits: REDUCED_BITS,
+      temporaryIntegerBits: TEMP_BITS,
+      sqrtGridBits: 80,
+      arithmeticOperationsPerCaseOrControl: ARITHMETIC_LIMIT,
+      candidateDepth: CANDIDATE_DEPTH,
+      candidateVisitedNodes: CANDIDATE_NODES,
+      candidateEmittedLeaves: CANDIDATE_LEAVES,
+      verifierAbsoluteDepth: VERIFIER_DEPTH,
+      verifierCellsBothSides: VERIFIER_CELLS,
+      physicalTarget: qstr(TARGET),
+    },
+    arithmeticChecks: null,
+    cases: [],
+    controls: [],
+    summary: {
+      primaryCases: 0,
+      regularCases: 0,
+      stationaryProbes: 0,
+      requiredCases: 0,
+      requiredCertified: 0,
+      stationaryExpected: 0,
+      controlsPassed: 0,
+      experimentalCompletion: 'FAIL',
+      candidateWideFeasibility: 'PARTIAL',
+    },
+  };
+}
+
+function updateSummary(record) {
+  const required = record.cases.filter((entry) => entry.role === 'required');
+  const regular = record.cases.filter((entry) => entry.role !== 'stationary-probe');
+  const stationary = record.cases.filter((entry) => entry.role === 'stationary-probe');
+  const requiredCertified = required.filter((entry) => entry.outcome === 'CERTIFIED').length;
+  const controlsPassed = record.controls.filter((entry) => entry.pass).length;
+  const stationaryExpected = stationary.filter((entry) => entry.outcome === 'STATIONARY_UNSUPPORTED').length;
+  const completeCorpus = record.cases.length === 62;
+  const allRegularCertified = completeCorpus && regular.every((entry) => entry.outcome === 'CERTIFIED');
+  const experimentalComplete = !record.fatal
+    && Boolean(record.arithmeticChecks && record.arithmeticChecks.pass)
+    && completeCorpus
+    && required.length === 20
+    && requiredCertified === 20
+    && stationaryExpected === 3
+    && controlsPassed === 5;
+  record.summary = {
+    primaryCases: record.cases.length,
+    regularCases: regular.length,
+    stationaryProbes: stationary.length,
+    requiredCases: required.length,
+    requiredCertified,
+    stationaryExpected,
+    controlsPassed,
+    experimentalCompletion: experimentalComplete ? 'PASS' : 'FAIL',
+    candidateWideFeasibility: allRegularCertified ? 'COMPLETE' : 'PARTIAL',
+  };
+  return experimentalComplete;
+}
+
+let preservedRecord = null;
+
+function execute() {
+  const sourceBytes = fs.readFileSync(__filename);
+  preservedRecord = initialRecord(sourceBytes);
+  preservedRecord.arithmeticChecks = arithmeticSelfChecks();
+  if (!preservedRecord.arithmeticChecks.pass) {
+    updateSummary(preservedRecord);
+    process.stdout.write(`${JSON.stringify(preservedRecord, null, 2)}\n`);
+    process.exitCode = 1;
+    return;
+  }
+  const specifications = corpusSpecifications();
+  for (let index = 0; index < specifications.length; index += 1) {
+    const specification = specifications[index];
+    process.stderr.write(`case ${index + 1}/62 ${specification.id}\n`);
+    preservedRecord.cases.push(runCorpusCase(specification));
+  }
+  const controlSpecs = controlSpecifications();
+  for (let index = 0; index < controlSpecs.length; index += 1) {
+    process.stderr.write(`control ${index + 1}/5 ${controlSpecs[index].id}\n`);
+    preservedRecord.controls.push(runRejectingControl(controlSpecs[index]));
+  }
+  const experimentalComplete = updateSummary(preservedRecord);
+  process.stdout.write(`${JSON.stringify(preservedRecord, null, 2)}\n`);
+  if (!experimentalComplete) process.exitCode = 1;
+}
+
+try {
+  execute();
+} catch (error) {
+  if (!preservedRecord) preservedRecord = initialRecord(fs.readFileSync(__filename));
+  preservedRecord.fatal = {
+    name: error && error.name ? error.name : 'Error',
+    message: error && error.message ? error.message : String(error),
+  };
+  updateSummary(preservedRecord);
+  process.stdout.write(`${JSON.stringify(preservedRecord, null, 2)}\n`);
+  process.exitCode = 1;
+}
