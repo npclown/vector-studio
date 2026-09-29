@@ -6,3 +6,4 @@ export * from './continuous-error.js';
 export * from './corpus.js';
 export * from './line-fill.js';
 export * from './triangle-mesh.js';
+export * from './fill-region.js';
