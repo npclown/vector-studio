@@ -1,14 +1,14 @@
-# P3 visible path semantics: decision proposal
+# P3 approved visible path semantics
 
-Status: PROPOSED, 2026-09-29. No user approval or implementation is asserted. The [P3 private-contract draft](p3-private-contract.md) separates these visible choices from ordinary technical decisions.
+Status: APPROVED by the user on 2026-09-29, replying to the concrete proposal and confirmation question after PR #53. Approval fixes visible semantics; no implementation acceptance is asserted. The [P3 private-contract draft](p3-private-contract.md) separates these visible choices from ordinary technical decisions.
 
-## Decision needed
+## Approved decision
 
 The accepted scope requires open/closed paths, both fill rules and butt/square/round caps with miter/bevel/round joins. It does not yet define open-contour fill closure, point-like stroked subpaths or miter cutoff behavior. These choices change visible output and the expected test images. The user's autonomous-work policy reserves product-level decisions and meaningful public API changes for explicit approval.
 
-Approve the following behavior for P3 numeric fixtures and future path rendering. This is not a public scene API proposal; the existing primitive-only API remains unchanged.
+The following behavior is approved for P3 numeric fixtures and future path rendering. This is not a public scene API proposal; the existing primitive-only API remains unchanged.
 
-| Case                                                     | Proposed output                                                                                                                                                                                                               | Concrete fixture                                                                                                                                              |
+| Case                                                     | Approved output                                                                                                                                                                                                               | Concrete fixture                                                                                                                                              |
 | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Open subpath with a fill                                 | Close only for fill classification; preserve the original open endpoints for stroke/caps                                                                                                                                      | MOVE(0,0), LINE(8,0), LINE(0,8): triangular fill of area 32, with an open two-segment stroke                                                                  |
 | Open/closed stroke seams                                 | Cap each open subpath separately. CLOSE connects to the first point and joins the last/first nonzero directions, with no caps                                                                                                 | Fill's implicit closing edge never becomes a stroke edge                                                                                                      |
@@ -24,7 +24,7 @@ Approve the following behavior for P3 numeric fixtures and future path rendering
 
 Centered local-space stroke transformed by the node affine, width-zero behavior and color/opacity composition follow the existing P1 direction. This proposal does not add constant-screen-width strokes, stroke outlining as an editor command, Boolean editing, isolated group opacity or arbitrary fallback rendering.
 
-The inherited fill-rule choices, centered local units and color direction are shown for context, not requested again. The new decisions are implicit fill closure, closed seam/cap rules, miter limit/fallback, zero-length and reversal output. Solid-only P3 follows the existing roadmap; dash behavior remains explicitly outside this checkpoint rather than receiving invented units/phase.
+The inherited fill-rule choices, centered local units and color direction are shown for context, not requested again. The newly approved decisions are implicit fill closure, closed seam/cap rules, miter limit/fallback, zero-length and reversal output. Solid-only P3 follows the existing roadmap; dash behavior remains explicitly outside this checkpoint rather than receiving invented units/phase.
 
 ## Composition invariant and technical work
 
@@ -40,4 +40,4 @@ The remaining technical decisions stay with Primary: independent oracle, bounded
 
 Approval fixes the rows above as the P3 visible-behavior baseline and allows their exact fixtures to be frozen in the private contract. It does not pass P3 acceptance, change P2 benchmark thresholds, create a public path/GeometryPort API, authorize a third-party tessellator or bypass the contract/oracle readiness gates.
 
-Alternative: revise the specific rows before fixture implementation. Keep the private-contract freeze incomplete while a visible output is undecided; do not infer an answer from a reference renderer or a convenient implementation.
+The unselected alternative was to revise the rows before fixture implementation. The user selected the table above; do not ask for the same visible choices again. The private-contract freeze remains incomplete for technical obligations, rather than pending this resolved product decision.

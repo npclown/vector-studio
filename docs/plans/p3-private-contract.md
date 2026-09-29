@@ -1,6 +1,6 @@
 # P3 private mesh contract: preparation draft
 
-Status: PARTIAL, 2026-09-29. This is the technical owner for P3 C03-C05, not a completed implementation freeze. [Visible semantics](p3-visible-semantics-proposal.md) await a product decision. The [execution plan](p3-fill-stroke-meshes.md) owns task status and entry. No product code, private mesh ABI export or public GeometryPort is introduced here.
+Status: PARTIAL, 2026-09-29. This is the technical owner for P3 C03-C05, not a completed implementation freeze. [Visible semantics](p3-visible-semantics-proposal.md) were approved on 2026-09-29. The independent [line-fill oracle slice](p3-line-oracle-contract.md) can proceed under its own frozen test-only contract while remaining mesh/stroke/GPU obligations stay open. The [execution plan](p3-fill-stroke-meshes.md) owns task status and entry. No product code, private mesh ABI export or public GeometryPort is introduced here.
 
 ## Inherited boundaries and resolved technical constraints
 
@@ -38,7 +38,7 @@ A connectivity change cannot be excused by a small positional bound. Finalize a 
 
 ## Fill topology and independent verification
 
-Classify all contours of a path together using the explicitly selected fill rule. Nonzero uses signed winding; evenodd uses parity. Do not infer holes only from contour orientation or triangulate each contour independently. Exact coincident/reversed edges, touching vertices, T-junctions, crossings and zero-area contours are mandatory cases. Product-sensitive closure/degenerate behavior is proposed separately and is not assumed approved.
+Classify all contours of a path together using the explicitly selected fill rule. Nonzero uses signed winding; evenodd uses parity. Do not infer holes only from contour orientation or triangulate each contour independently. Exact coincident/reversed edges, touching vertices, T-junctions, crossings and zero-area contours are mandatory cases. Closure/degenerate behavior follows the separately approved visible-semantics decision.
 
 The independent oracle should classify sample points by a direct ray-crossing/winding calculation on source line contours, with a separate exact-on-edge result and a fixed half-open endpoint convention. Use exact integer/rational fixtures for topology where practical; the production topology algorithm must not supply the oracle's intersections or classification. Preserve boundary samples as boundary, not arbitrary inside/outside successes. Add analytic areas and region coverage/multiplicity checks; matching a finite point grid alone cannot prove no holes or overlapping triangle interiors.
 
@@ -46,7 +46,7 @@ The production-algorithm feasibility review must compare a bounded arrangement/d
 
 A deterministic vertical-slab decomposition is a candidate: use endpoint/intersection x events, group coincident directed crossings, apply winding/parity inside each open slab and triangulate the resulting disjoint regions. This is not a selected or validated implementation. Pairwise intersection enumeration has quadratic per-path cost; limits cannot be frozen from the average path size. Preserve a zero-signed-area self-intersecting contour when its lobes have filled area. Robust predicates, near-degenerate intersection placement and worst-case corpus work remain feasibility obligations.
 
-Exact analytic fixture candidates follow. Closed-contour fill cases use already accepted nonzero/evenodd meaning; open-contour and stroke rows remain conditional on the visible-semantics decision:
+Exact analytic fixture candidates follow. Closed-contour fill cases use already accepted nonzero/evenodd meaning; open-contour and stroke rows follow the approved visible-semantics decision:
 
 | ID  | Input                                                                   | Independent expected result                                                                                                                                                                |
 | --- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -57,13 +57,13 @@ Exact analytic fixture candidates follow. Closed-contour fill cases use already 
 | F05 | F01 followed by its reversed contour                                    | Empty under both rules                                                                                                                                                                     |
 | F06 | Closed bowtie (0,0),(4,4),(0,4),(4,0)                                   | Area 8 under both rules; crossing (2,2) is boundary; (2,1) and (2,3) inside                                                                                                                |
 | F07 | Adjacent closed squares [0,0]-[2,2] and [2,0]-[4,2]                     | Area 8; shared edge must not create a visible internal fringe                                                                                                                              |
-| F08 | Open triangle (0,0),(8,0),(0,8)                                         | Proposed fill area 32; its stroke stays open                                                                                                                                               |
+| F08 | Open triangle (0,0),(8,0),(0,8)                                         | Fill area 32; its stroke stays open                                                                                                                                                        |
 | F09 | Exact repeated point on F01, then contour-order permutation of F02      | Region unchanged; no zero-length normalization may change winding                                                                                                                          |
 | F10 | Same-oriented squares A=[0,0]-[4,4], B=[2,0]-[6,4]                      | Nonzero area 24; evenodd area 16. (3,2) is inside only for nonzero; (1,2),(5,2) are inside both. Reverse B: area 16 under both rules                                                       |
 | F11 | Same-oriented squares A=[0,0]-[4,4], B=[2,4]-[6,8]                      | Area 32 under both rules; (3,3.5),(3,4.5) and shared span point (3,4) are interior to the resolved region, with no internal fringe                                                         |
 | S01 | Open line (0,0)-(10,0), width 2                                         | Butt area 20; square area 24; round area 20+pi                                                                                                                                             |
 | S02 | Open L (0,0),(4,0),(4,4), width 2, butt caps                            | Miter area 16 at limit 2; bevel area 15.5 at limit 1 or explicit bevel; round area 15+pi/4. All have bounds [0,-1,5,4]; verify independent regions, not summed overlapping rectangle areas |
-| S03 | MOVE-only, all-zero open and all-zero closed subpaths at (4,5), width 2 | Exact proposed empty/disk/square cases in the visible-semantics table                                                                                                                      |
+| S03 | MOVE-only, all-zero open and all-zero closed subpaths at (4,5), width 2 | Approved empty/disk/square cases in the visible-semantics table                                                                                                                            |
 
 Add rational near-collinear, partial coincident overlap, endpoint-on-edge, reversed traversal and area-preserving translation/reflection cases before freezing the corpus. Round shapes need analytic arc/area comparisons with declared numerical allowance; do not demand exact polygonal area equal to pi. Continuous curve/stroke fixtures and seeded corpus remain to be specified; these small examples do not replace the roadmap's 1,000 paths x 32 cubics and 1%-6400% zoom.
 
@@ -88,12 +88,12 @@ Primary review rejects treating the union of fill and stroke as one undifferenti
 
 ## Validation map and freeze conditions
 
-| Contract area                             | Validation after freeze                                                                                                | Readiness now                                               |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Line-contour membership/analytic fixtures | Focused geometry-reference unit tests with positive controls; `pnpm check` and `pnpm build`                            | Fixture candidates recorded; product-sensitive rows pending |
-| Fill/stroke native numeric implementation | `pnpm test:geometry` extended with named native and real-WASM cases; independent continuous/region verification        | Algorithm, exact caps and stroke error proof pending        |
-| Browser WASM parity                       | `pnpm test:geometry:browser` with the same frozen corpus in installed Chrome/Edge                                      | Future; no browser result claimed                           |
-| Ownership/cache/lifecycle                 | Exact malformed-buffer, reserve/growth, epoch/revision, eviction/dispose fixtures through real and controlled adapters | Layout/limits pending                                       |
-| Coverage/paint order/device recovery      | Frozen headed fixtures using `pnpm test:gpu`, independent expected colors/edges and preserved images                   | Public scene API and visual/composition contract pending    |
+| Contract area                             | Validation after freeze                                                                                                | Readiness now                                                   |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Line-contour membership/analytic fixtures | Focused geometry-reference unit tests with positive controls; `pnpm check` and `pnpm build`                            | Line subset frozen separately; continuous/mesh fixtures pending |
+| Fill/stroke native numeric implementation | `pnpm test:geometry` extended with named native and real-WASM cases; independent continuous/region verification        | Algorithm, exact caps and stroke error proof pending            |
+| Browser WASM parity                       | `pnpm test:geometry:browser` with the same frozen corpus in installed Chrome/Edge                                      | Future; no browser result claimed                               |
+| Ownership/cache/lifecycle                 | Exact malformed-buffer, reserve/growth, epoch/revision, eviction/dispose fixtures through real and controlled adapters | Layout/limits pending                                           |
+| Coverage/paint order/device recovery      | Frozen headed fixtures using `pnpm test:gpu`, independent expected colors/edges and preserved images                   | Public scene API and visual/composition contract pending        |
 
 Before marking C03-C05 complete, replace every pending item with exact decisions and evidence methods, set versioned corpus/seeds/expected failures and validate feasibility. Any newly required command must be introduced and documented in its own runner checkpoint before use. Current root commands alone do not imply these future fixtures exist. No performance run or benchmark acceptance follows from this draft.

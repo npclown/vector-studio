@@ -199,6 +199,8 @@ P1 structural containers support transform/visibility and require opacity 1. Non
 
 ## Design gates before later implementation
 
+On 2026-09-29 the user approved the [P3 visible path semantics](plans/p3-visible-semantics-proposal.md), including fill-only implicit closure, cap/closed-seam rules, miter fallback and degenerate/reversal cases. Their exact table owns those details. This resolves those visible choices but not the [P3 private mesh](plans/p3-private-contract.md) numeric/coverage/ABI gates. The [test-only line-membership slice](plans/p3-line-oracle-contract.md) may establish independent expected fill regions before the remaining mesh implementation contracts are ready.
+
 The remaining decisions below must be resolved with acceptance fixtures in the owning milestone plan. P1 D1/D2 are approved above; their private layouts and precision/rebase budget are frozen in the [P1.0b contract](plans/p1-private-contract.md) before implementation. Under user-approved [D4](plans/p1-instanced-primitives.md#d4-approved-entryexit-separation), executable measurement methods remain prerequisites for measurement implementation and final acceptance, rather than renderer implementation entry. They are not implemented features or permission to choose silent fallback behavior.
 
 | Owner             | Decision required before implementation                                                                                                                                                              |
