@@ -1,0 +1,43 @@
+{
+  "kind": "FEASIBILITY_ONLY",
+  "run": "stroke-numeric-01",
+  "files": [
+    {
+      "path": "stroke-numeric.cjs.txt",
+      "bytes": 56293,
+      "sha256": "593053f4bc14bf0b4b378ee6188348c18a37ea31ce1e51290b799fd3d1118431"
+    },
+    {
+      "path": "contract.md.txt",
+      "bytes": 15619,
+      "sha256": "746d4970ac573749bd1e53f0e4202ca61a68f153536634878f9ae3bbf1defa74"
+    },
+    {
+      "path": "capture-01.json",
+      "bytes": 900,
+      "sha256": "f6a944e391d15fdb8b4239c7182de78e73e4f89c3dc3495f38507aeffdbe8ee7"
+    },
+    {
+      "path": "stderr-01.txt",
+      "bytes": 1647,
+      "sha256": "1379007ef34e4414320e3ce2a028c16df3a765a4a6c38db831b99cb9201e7a4b"
+    },
+    {
+      "path": "capture.cjs.txt",
+      "bytes": 2685,
+      "sha256": "058951259c686aa44cefc71baf25d9d8263a31912c89bedc41c928a767d7279e"
+    },
+    {
+      "path": "audit.cjs.txt",
+      "bytes": 5578,
+      "sha256": "1e092904f43f2ac4fc641babc50b757827ef3bb247e5c334b6145e701553400e"
+    },
+    {
+      "path": "raw-01.json.gz",
+      "bytes": 8240,
+      "sha256": "1ef9fe27ee67203ea98031a44cd80994b0efe538ac1d8d4de6dc632ef7dcf712",
+      "decompressedBytes": 107979,
+      "decompressedSha256": "5a303173902170db2f28f576aaf0551454e3782aac482a7524ea309db8af8b66"
+    }
+  ]
+}
