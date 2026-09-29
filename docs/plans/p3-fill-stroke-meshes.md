@@ -1,5 +1,28 @@
 # P3 fill and stroke meshes execution plan
 
+Current isolated checkpoint: P3.2a predicates integrated through [PR #59](https://github.com/npclown/vector-studio/pull/59) as `c6202102db0ec1443800eadc6839d7e1dd34a021` after required CI on `ec8515332b713edb78b8da71a47a2aa88f0d5385` (run 36572052900, job 109418206929). P3.2b [certified intersection placement](p3-fill-intersections-contract.md) is now IN PROGRESS. Earlier checkpoint status paragraphs below retain their contemporaneous gate context; complete P3 acceptance remains open.
+
+## P3.2b certified pairwise placement
+
+Base: clean `c620210`, equal to updated origin/main; branch `codex/p3-2b-fill-intersections`. Primary selects the next private numeric dependency after exact predicates: bounded outward Float64 construction of one segment-pair intersection, with exact endpoint/overlap branches and explicit failure when certification is unavailable. The frozen [contract](p3-fill-intersections-contract.md) owns I01-I06, error precedence, canonicalization, arithmetic, independent corpus and evidence. It does not select global event order/equality, arrangement, mesh limits, ABI or renderer behavior.
+
+The separate Sol medium read-only audit found no architecture or mathematical blocker and required returning an enclosure plus independently checking the actual native representative's exact L1 error. Primary adopted both, checked all four parametrizations and froze the constructive 260-case ordinary-success corpus before code. Sol high owns only the private implementation/internal arithmetic tests; independent Sol medium owns generator/corpus/external native fixtures. Primary owns lib/runner wiring, review, evidence and integration. No recursive delegation or shared worker edits.
+
+```text
+P3.2a exact predicates -> frozen P3.2b contract + independent rational fixtures
+    -> certified pairwise placement -> native exact-certificate review + P2 regressions
+    -> protected PR -> later exact event identity/order and bounded topology
+deferred stroke refinement remains outside this dependency
+```
+
+The existing continuous-work authorization covers this ordinary private implementation. Required local commands are generator --check, native emission with independent --verify-native, `pnpm test:geometry`, `pnpm check`, `pnpm build`, changed-Markdown format/links and diff review. Protected CI follows. Unresolved extreme/ill-conditioned cases are explicit helper limitations, not newly rejected product cases or waiver of the future full ordinary corpus. Full C03-C05 remain open.
+
+### P3.2b local acceptance
+
+The [Primary review and evidence](../evidence/p3.2b-fill-intersections-review-2026-09-29.md) map I01-I06 to 260 independent exact intersections, 2080 permutation comparisons, two geometric corruption controls, exact relations, invalid inputs, arithmetic transitions and zero-allocation fixtures. `pnpm test:geometry` PASS: Rust fmt/Clippy, 45 native tests, explicitly invoked emission/exact-certificate verification, reproducible release WASM and 25 existing differential/adapter tests. `pnpm check` PASS: formatting, lint, TypeScript, 348 tests across 46 files and dependency boundaries. `pnpm build` PASS. No P2 export/caller or public API changed.
+
+Primary corrected expected-value units, corruption-control specificity and missing native relation/error cases before the first stable full test run. Independent read-only source audits found no remaining defect. Explicit Prettier check of four changed Markdown files PASS; local links/anchors PASS (565 links across 106 Markdown files); whitespace review PASS. Browser/GPU/benchmark commands are NOT RUN and no performance claim is made. Protected CI/integration remain checkpoint requirements. Next dependency is exact symbolic event position equality/order, followed by bounded arrangement work; deferred stroke refinement remains deferred.
+
 Status: P3.0a integrated through [PR #52](https://github.com/npclown/vector-studio/pull/52) as `4928a88` after required CI (run 36246634960). P3.0b contract preparation is IN PROGRESS under [D7](p2-follow-on-entry.md); the [private-contract draft](p3-private-contract.md) is PARTIAL and [visible behavior](p3-visible-semantics-proposal.md) is APPROVED. The separately frozen [P3.1a test-only line oracle](p3-line-oracle-contract.md) is integrated through PR #54 as `f040265` after required CI (run 36559942597). The [regular stroke certificate review](p3-stroke-boundary-certificate.md) is integrated through PR #55 as `5f16301`; the [bounded numerical experiment](p3-stroke-numeric-experiment.md) is integrated through PR #56 as `28d815b`, with candidate-wide feasibility PARTIAL. Further stroke-bound refinement is DEFERRED by the user; [P3.1b mesh invariants](p3-mesh-oracle-contract.md) integrated through PR #57 as `0b991e8`, and [P3.1c region equality](p3-fill-region-oracle-contract.md) through PR #58 as `62c53bc`. [P3.2a private fill predicates](p3-fill-predicates-contract.md) is the active isolated implementation slice. No complete P3 runtime acceptance or public API extension is claimed.
 
 ## Scope and current seams
