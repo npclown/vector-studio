@@ -42,6 +42,8 @@ A connectivity change cannot be excused by a small positional bound. Finalize a 
 
 ## Fill topology and independent verification
 
+The separately frozen [P3.2a fill predicate contract](p3-fill-predicates-contract.md) prepares exact orientation and segment relations inside the private Rust kernel without changing P2 v1 or selecting intersection placement, event sorting, tessellation, coverage or transport. Its fixed unsigned scratch implements exact signs of Float64 inputs; it is not a new document representation, arbitrary-precision dependency or mesh arena. The active plan owns the narrowed implementation entry and P01-P06 evidence. All subsequent topology and full-corpus obligations below remain open.
+
 Classify all contours of a path together using the explicitly selected fill rule. Nonzero uses signed winding; evenodd uses parity. Do not infer holes only from contour orientation or triangulate each contour independently. Exact coincident/reversed edges, touching vertices, T-junctions, crossings and zero-area contours are mandatory cases. Closure/degenerate behavior follows the separately approved visible-semantics decision.
 
 The independent oracle should classify sample points by a direct ray-crossing/winding calculation on source line contours, with a separate exact-on-edge result and a fixed half-open endpoint convention. Use exact integer/rational fixtures for topology where practical; the production topology algorithm must not supply the oracle's intersections or classification. Preserve boundary samples as boundary, not arbitrary inside/outside successes. Add analytic areas and region coverage/multiplicity checks; matching a finite point grid alone cannot prove no holes or overlapping triangle interiors.
