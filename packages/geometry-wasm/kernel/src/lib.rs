@@ -2,11 +2,16 @@
 
 mod codec;
 mod engine;
+// P3 placement is private preparation; no P2 v1 caller or WASM export.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+mod fill_intersections;
 // P3 predicates are prepared independently; P2 v1 has no fill caller or new export.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 mod fill_predicates;
 mod geometry;
 
+#[cfg(test)]
+mod fill_intersections_tests;
 #[cfg(test)]
 mod fill_predicates_tests;
 

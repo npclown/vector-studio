@@ -43,6 +43,10 @@ run(process.execPath, [
   path.join(root, 'tooling/generate-p3-fill-predicate-fixtures.mjs'),
   '--check',
 ]);
+run(process.execPath, [
+  path.join(root, 'tooling/generate-p3-fill-intersection-fixtures.mjs'),
+  '--check',
+]);
 const compiler = spawnSync(rustup, ['run', '1.94.1', 'rustc', '--version', '--verbose'], {
   cwd: root,
   env,
@@ -107,6 +111,43 @@ cargo(
   'warnings',
 );
 cargo('test', '--manifest-path', manifest, '--locked', '--offline');
+const intersections = spawnSync(
+  rustup,
+  [
+    'run',
+    '1.94.1',
+    'cargo',
+    'test',
+    '--manifest-path',
+    manifest,
+    '--locked',
+    '--offline',
+    'fill_intersections_tests::emit_certified_intersections',
+    '--',
+    '--ignored',
+    '--exact',
+    '--nocapture',
+  ],
+  { cwd: root, env, encoding: 'utf8', maxBuffer: 1024 * 1024 },
+);
+if (intersections.error) throw intersections.error;
+if (intersections.status !== 0)
+  throw new Error(intersections.stderr || 'Native intersection certificate capture failed.');
+const certificateCheck = spawnSync(
+  process.execPath,
+  [path.join(root, 'tooling/generate-p3-fill-intersection-fixtures.mjs'), '--verify-native'],
+  {
+    cwd: root,
+    env,
+    encoding: 'utf8',
+    input: intersections.stdout,
+    maxBuffer: 1024 * 1024,
+  },
+);
+if (certificateCheck.error) throw certificateCheck.error;
+if (certificateCheck.status !== 0)
+  throw new Error(certificateCheck.stderr || 'Exact intersection certificate verification failed.');
+console.log(certificateCheck.stdout.trim());
 const build = [
   'build',
   '--manifest-path',

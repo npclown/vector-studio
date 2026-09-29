@@ -42,6 +42,8 @@ A connectivity change cannot be excused by a small positional bound. Finalize a 
 
 ## Fill topology and independent verification
 
+The separately frozen [P3.2b intersection contract](p3-fill-intersections-contract.md) follows exact predicates with certified local Float64 point placement and exact endpoint/overlap handling. Its outward boxes and explicit Unresolved result do not establish event equality/order or connectivity. No uncertain events may be epsilon-merged, and the later topology/arc caller still owns the combined physical error allocation. This isolated private module is not a mesh operation or P2 v1 behavior change.
+
 The separately frozen [P3.2a fill predicate contract](p3-fill-predicates-contract.md) prepares exact orientation and segment relations inside the private Rust kernel without changing P2 v1 or selecting intersection placement, event sorting, tessellation, coverage or transport. Its fixed unsigned scratch implements exact signs of Float64 inputs; it is not a new document representation, arbitrary-precision dependency or mesh arena. The active plan owns the narrowed implementation entry and P01-P06 evidence. All subsequent topology and full-corpus obligations below remain open.
 
 Classify all contours of a path together using the explicitly selected fill rule. Nonzero uses signed winding; evenodd uses parity. Do not infer holes only from contour orientation or triangulate each contour independently. Exact coincident/reversed edges, touching vertices, T-junctions, crossings and zero-area contours are mandatory cases. Closure/degenerate behavior follows the separately approved visible-semantics decision.
