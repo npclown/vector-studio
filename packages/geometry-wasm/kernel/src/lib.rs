@@ -2,6 +2,9 @@
 
 mod codec;
 mod engine;
+// P3 symbolic ordering has no P2 v1 caller or WASM export.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+mod fill_event_order;
 // P3 placement is private preparation; no P2 v1 caller or WASM export.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 mod fill_intersections;
@@ -10,6 +13,8 @@ mod fill_intersections;
 mod fill_predicates;
 mod geometry;
 
+#[cfg(test)]
+mod fill_event_order_tests;
 #[cfg(test)]
 mod fill_intersections_tests;
 #[cfg(test)]
