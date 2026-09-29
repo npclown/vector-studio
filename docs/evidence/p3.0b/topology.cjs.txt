@@ -1,0 +1,823 @@
+'use strict';
+
+const { createHash } = require('node:crypto');
+const { execFileSync } = require('node:child_process');
+const { readFileSync } = require('node:fs');
+
+const LIMITS = Object.freeze({
+  directedEdges: 16,
+  pairChecks: 120,
+  xEvents: 256,
+  cellsPerRule: 4096,
+});
+
+const RULES = Object.freeze(['nonzero', 'evenodd']);
+
+function point(x, y) {
+  return Object.freeze({ x: BigInt(x), y: BigInt(y) });
+}
+
+function square(x0, y0, x1, y1) {
+  return [point(x0, y0), point(x1, y0), point(x1, y1), point(x0, y1)];
+}
+
+function reverse(contour) {
+  return [...contour].reverse();
+}
+
+const OUTER_10 = square(0, 0, 10, 10);
+const INNER_4 = square(3, 3, 7, 7);
+const A_4 = square(0, 0, 4, 4);
+const B_OVERLAP = square(2, 0, 6, 4);
+const B_ADJACENT = square(2, 4, 6, 8);
+
+// Frozen private fixture table. Every contour is closed; no open-path product
+// choice is exercised by this diagnostic.
+const FIXTURES = Object.freeze([
+  {
+    id: 'F01',
+    contours: [OUTER_10],
+    area: { nonzero: 100, evenodd: 100 },
+    samples: [
+      ['interior', [1, 1], { nonzero: 'inside', evenodd: 'inside' }],
+      ['exterior', [11, 1], { nonzero: 'outside', evenodd: 'outside' }],
+      ['source-boundary', [0, 5], { nonzero: 'boundary', evenodd: 'boundary' }],
+    ],
+  },
+  {
+    id: 'F02',
+    contours: [OUTER_10, INNER_4],
+    area: { nonzero: 100, evenodd: 84 },
+    samples: [
+      ['outer-band', [1, 1], { nonzero: 'inside', evenodd: 'inside' }],
+      ['center', [5, 5], { nonzero: 'inside', evenodd: 'outside' }],
+      ['exterior', [11, 1], { nonzero: 'outside', evenodd: 'outside' }],
+    ],
+  },
+  {
+    id: 'F03',
+    contours: [OUTER_10, reverse(INNER_4)],
+    area: { nonzero: 84, evenodd: 84 },
+    samples: [
+      ['outer-band', [1, 1], { nonzero: 'inside', evenodd: 'inside' }],
+      ['hole', [5, 5], { nonzero: 'outside', evenodd: 'outside' }],
+    ],
+  },
+  {
+    id: 'F04',
+    contours: [OUTER_10, OUTER_10],
+    area: { nonzero: 100, evenodd: 0 },
+    samples: [['center', [5, 5], { nonzero: 'inside', evenodd: 'outside' }]],
+  },
+  {
+    id: 'F05',
+    contours: [OUTER_10, reverse(OUTER_10)],
+    area: { nonzero: 0, evenodd: 0 },
+    samples: [['center', [5, 5], { nonzero: 'outside', evenodd: 'outside' }]],
+  },
+  {
+    id: 'F06',
+    contours: [[point(0, 0), point(4, 4), point(0, 4), point(4, 0)]],
+    area: { nonzero: 8, evenodd: 8 },
+    samples: [
+      ['lower-lobe', [2, 1], { nonzero: 'inside', evenodd: 'inside' }],
+      ['upper-lobe', [2, 3], { nonzero: 'inside', evenodd: 'inside' }],
+      ['between-lobes', ['1/2', 2], { nonzero: 'outside', evenodd: 'outside' }],
+      ['crossing', [2, 2], { nonzero: 'boundary', evenodd: 'boundary' }],
+    ],
+  },
+  {
+    id: 'F07',
+    contours: [square(0, 0, 2, 2), square(2, 0, 4, 2)],
+    area: { nonzero: 8, evenodd: 8 },
+    samples: [
+      ['left', [1, 1], { nonzero: 'inside', evenodd: 'inside' }],
+      ['right', [3, 1], { nonzero: 'inside', evenodd: 'inside' }],
+      ['exterior', [5, 1], { nonzero: 'outside', evenodd: 'outside' }],
+    ],
+    resolvedSharedEdge: { kind: 'vertical-event', at: [2, 1] },
+  },
+  {
+    id: 'F09-repeated-point',
+    contours: [[point(0, 0), point(10, 0), point(10, 0), point(10, 10), point(0, 10)]],
+    area: { nonzero: 100, evenodd: 100 },
+    samples: [
+      ['interior', [5, 5], { nonzero: 'inside', evenodd: 'inside' }],
+      ['exterior', [11, 1], { nonzero: 'outside', evenodd: 'outside' }],
+    ],
+  },
+  {
+    id: 'F09-contour-permutation',
+    contours: [INNER_4, OUTER_10],
+    area: { nonzero: 100, evenodd: 84 },
+    samples: [
+      ['outer-band', [1, 1], { nonzero: 'inside', evenodd: 'inside' }],
+      ['center', [5, 5], { nonzero: 'inside', evenodd: 'outside' }],
+    ],
+  },
+  {
+    id: 'F10-same',
+    contours: [A_4, B_OVERLAP],
+    area: { nonzero: 24, evenodd: 16 },
+    samples: [
+      ['left-only', [1, 2], { nonzero: 'inside', evenodd: 'inside' }],
+      ['overlap', [3, 2], { nonzero: 'inside', evenodd: 'outside' }],
+      ['right-only', [5, 2], { nonzero: 'inside', evenodd: 'inside' }],
+    ],
+  },
+  {
+    id: 'F10-reversed',
+    contours: [A_4, reverse(B_OVERLAP)],
+    area: { nonzero: 16, evenodd: 16 },
+    samples: [
+      ['left-only', [1, 2], { nonzero: 'inside', evenodd: 'inside' }],
+      ['cancelled-overlap', [3, 2], { nonzero: 'outside', evenodd: 'outside' }],
+      ['right-only', [5, 2], { nonzero: 'inside', evenodd: 'inside' }],
+    ],
+  },
+  {
+    id: 'F11',
+    contours: [A_4, B_ADJACENT],
+    area: { nonzero: 32, evenodd: 32 },
+    samples: [
+      ['lower', [3, '7/2'], { nonzero: 'inside', evenodd: 'inside' }],
+      ['upper', [3, '9/2'], { nonzero: 'inside', evenodd: 'inside' }],
+      ['exterior', [7, 4], { nonzero: 'outside', evenodd: 'outside' }],
+    ],
+    resolvedSharedEdge: { kind: 'interior-point', at: [3, 4] },
+  },
+]);
+
+function abs(value) {
+  return value < 0n ? -value : value;
+}
+
+function gcd(a, b) {
+  let left = abs(a);
+  let right = abs(b);
+  while (right !== 0n) [left, right] = [right, left % right];
+  return left;
+}
+
+function rat(numerator, denominator = 1n) {
+  let n = BigInt(numerator);
+  let d = BigInt(denominator);
+  if (d === 0n) throw new Error('zero rational denominator');
+  if (d < 0n) {
+    n = -n;
+    d = -d;
+  }
+  const divisor = gcd(n, d);
+  return Object.freeze({ n: n / divisor, d: d / divisor });
+}
+
+function parseRat(value) {
+  if (typeof value === 'number') return rat(BigInt(value));
+  if (typeof value !== 'string') throw new Error(`unsupported rational literal ${String(value)}`);
+  const parts = value.split('/');
+  if (parts.length === 1) return rat(BigInt(parts[0]));
+  if (parts.length === 2) return rat(BigInt(parts[0]), BigInt(parts[1]));
+  throw new Error(`invalid rational literal ${value}`);
+}
+
+function add(a, b) {
+  return rat(a.n * b.d + b.n * a.d, a.d * b.d);
+}
+
+function sub(a, b) {
+  return rat(a.n * b.d - b.n * a.d, a.d * b.d);
+}
+
+function mul(a, b) {
+  return rat(a.n * b.n, a.d * b.d);
+}
+
+function div(a, b) {
+  return rat(a.n * b.d, a.d * b.n);
+}
+
+function compare(a, b) {
+  const difference = a.n * b.d - b.n * a.d;
+  return difference < 0n ? -1 : difference > 0n ? 1 : 0;
+}
+
+function equal(a, b) {
+  return a.n === b.n && a.d === b.d;
+}
+
+function midpoint(a, b) {
+  return div(add(a, b), rat(2n));
+}
+
+function interpolate(a, b, numerator, denominator) {
+  return add(a, mul(sub(b, a), rat(BigInt(numerator), BigInt(denominator))));
+}
+
+function key(value) {
+  return `${value.n}/${value.d}`;
+}
+
+function textRat(value) {
+  return value.d === 1n ? value.n.toString() : `${value.n}/${value.d}`;
+}
+
+function rpoint(source) {
+  return { x: parseRat(source[0]), y: parseRat(source[1]) };
+}
+
+function cross(ax, ay, bx, by) {
+  return ax * by - ay * bx;
+}
+
+function pointOnIntegerSegment(candidate, edge) {
+  const dx = edge.b.x - edge.a.x;
+  const dy = edge.b.y - edge.a.y;
+  const px = candidate.x - edge.a.x;
+  const py = candidate.y - edge.a.y;
+  if (cross(dx, dy, px, py) !== 0n) return false;
+  return (
+    candidate.x >= (edge.a.x < edge.b.x ? edge.a.x : edge.b.x) &&
+    candidate.x <= (edge.a.x > edge.b.x ? edge.a.x : edge.b.x) &&
+    candidate.y >= (edge.a.y < edge.b.y ? edge.a.y : edge.b.y) &&
+    candidate.y <= (edge.a.y > edge.b.y ? edge.a.y : edge.b.y)
+  );
+}
+
+function pointOnRationalSegment(candidate, edge) {
+  const ax = rat(edge.a.x);
+  const ay = rat(edge.a.y);
+  const bx = rat(edge.b.x);
+  const by = rat(edge.b.y);
+  const dx = sub(bx, ax);
+  const dy = sub(by, ay);
+  const px = sub(candidate.x, ax);
+  const py = sub(candidate.y, ay);
+  if (!equal(sub(mul(dx, py), mul(dy, px)), rat(0n))) return false;
+  return (
+    compare(candidate.x, compare(ax, bx) < 0 ? ax : bx) >= 0 &&
+    compare(candidate.x, compare(ax, bx) > 0 ? ax : bx) <= 0 &&
+    compare(candidate.y, compare(ay, by) < 0 ? ay : by) >= 0 &&
+    compare(candidate.y, compare(ay, by) > 0 ? ay : by) <= 0
+  );
+}
+
+function buildEdges(fixture) {
+  const edges = [];
+  fixture.contours.forEach((contour, contourIndex) => {
+    for (let edgeIndex = 0; edgeIndex < contour.length; edgeIndex += 1) {
+      if (edges.length >= LIMITS.directedEdges) {
+        throw new Error(`${fixture.id}: directed edge limit exceeded`);
+      }
+      edges.push({
+        a: contour[edgeIndex],
+        b: contour[(edgeIndex + 1) % contour.length],
+        contourIndex,
+        edgeIndex,
+      });
+    }
+  });
+  return edges;
+}
+
+function collectEvents(fixture, edges) {
+  const events = new Map();
+  let pairChecks = 0;
+
+  function addEvent(value) {
+    const eventKey = key(value);
+    if (events.has(eventKey)) return;
+    if (events.size >= LIMITS.xEvents) throw new Error(`${fixture.id}: x-event limit exceeded`);
+    events.set(eventKey, value);
+  }
+
+  for (const edge of edges) {
+    addEvent(rat(edge.a.x));
+    addEvent(rat(edge.b.x));
+  }
+
+  for (let left = 0; left < edges.length; left += 1) {
+    for (let right = left + 1; right < edges.length; right += 1) {
+      if (pairChecks >= LIMITS.pairChecks) throw new Error(`${fixture.id}: pair-check limit exceeded`);
+      pairChecks += 1;
+      addIntersectionEvents(edges[left], edges[right], addEvent);
+    }
+  }
+
+  return {
+    pairChecks,
+    xEvents: [...events.values()].sort(compare),
+  };
+}
+
+function addIntersectionEvents(first, second, addEvent) {
+  const rx = first.b.x - first.a.x;
+  const ry = first.b.y - first.a.y;
+  const sx = second.b.x - second.a.x;
+  const sy = second.b.y - second.a.y;
+  const qpx = second.a.x - first.a.x;
+  const qpy = second.a.y - first.a.y;
+  const denominator = cross(rx, ry, sx, sy);
+  const firstPoint = rx === 0n && ry === 0n;
+  const secondPoint = sx === 0n && sy === 0n;
+
+  if (firstPoint) {
+    if (pointOnIntegerSegment(first.a, second)) addEvent(rat(first.a.x));
+    return;
+  }
+  if (secondPoint) {
+    if (pointOnIntegerSegment(second.a, first)) addEvent(rat(second.a.x));
+    return;
+  }
+
+  if (denominator !== 0n) {
+    const t = rat(cross(qpx, qpy, sx, sy), denominator);
+    const u = rat(cross(qpx, qpy, rx, ry), denominator);
+    if (compare(t, rat(0n)) < 0 || compare(t, rat(1n)) > 0) return;
+    if (compare(u, rat(0n)) < 0 || compare(u, rat(1n)) > 0) return;
+    addEvent(add(rat(first.a.x), mul(t, rat(rx))));
+    return;
+  }
+
+  if (cross(qpx, qpy, rx, ry) !== 0n) return;
+  for (const candidate of [first.a, first.b]) {
+    if (pointOnIntegerSegment(candidate, second)) addEvent(rat(candidate.x));
+  }
+  for (const candidate of [second.a, second.b]) {
+    if (pointOnIntegerSegment(candidate, first)) addEvent(rat(candidate.x));
+  }
+}
+
+function yAt(edge, x) {
+  const dx = edge.b.x - edge.a.x;
+  if (dx === 0n) throw new Error('vertical segment has no single y at x');
+  const t = div(sub(x, rat(edge.a.x)), rat(dx));
+  return add(rat(edge.a.y), mul(t, rat(edge.b.y - edge.a.y)));
+}
+
+function includesRule(rule, winding, parity) {
+  return rule === 'nonzero' ? winding !== 0 : parity % 2 !== 0;
+}
+
+function buildCells(fixture, edges, xEvents, rule) {
+  const cells = [];
+  const slabs = [];
+  for (let index = 0; index + 1 < xEvents.length; index += 1) {
+    const xLeft = xEvents[index];
+    const xRight = xEvents[index + 1];
+    if (equal(xLeft, xRight)) continue;
+    const xMiddle = midpoint(xLeft, xRight);
+    const groups = new Map();
+
+    for (const edge of edges) {
+      if (edge.a.x === edge.b.x) continue;
+      const minimumX = rat(edge.a.x < edge.b.x ? edge.a.x : edge.b.x);
+      const maximumX = rat(edge.a.x > edge.b.x ? edge.a.x : edge.b.x);
+      if (compare(xMiddle, minimumX) <= 0 || compare(xMiddle, maximumX) >= 0) continue;
+      const y = yAt(edge, xMiddle);
+      const groupKey = key(y);
+      const group = groups.get(groupKey) ?? { y, windingDelta: 0, parityDelta: 0, edge };
+      group.windingDelta += edge.b.x > edge.a.x ? 1 : -1;
+      group.parityDelta += 1;
+      groups.set(groupKey, group);
+    }
+
+    const ordered = [...groups.values()].sort((a, b) => compare(a.y, b.y));
+    let winding = 0;
+    let parity = 0;
+    let start = null;
+    const slabCells = [];
+    for (const group of ordered) {
+      const before = includesRule(rule, winding, parity);
+      winding += group.windingDelta;
+      parity += group.parityDelta;
+      const after = includesRule(rule, winding, parity);
+      if (!before && after) start = group.edge;
+      if (before && !after) {
+        if (start === null) throw new Error(`${fixture.id}/${rule}: interval ended without a start`);
+        const cell = {
+          xLeft,
+          xRight,
+          bottomLeft: yAt(start, xLeft),
+          bottomRight: yAt(start, xRight),
+          topLeft: yAt(group.edge, xLeft),
+          topRight: yAt(group.edge, xRight),
+        };
+        if (compare(yAt(start, xMiddle), yAt(group.edge, xMiddle)) < 0) {
+          if (cells.length >= LIMITS.cellsPerRule) {
+            throw new Error(`${fixture.id}/${rule}: cell limit exceeded`);
+          }
+          cells.push(cell);
+          slabCells.push(cell);
+        }
+        start = null;
+      }
+    }
+    if (winding !== 0 || parity % 2 !== 0 || start !== null) {
+      throw new Error(`${fixture.id}/${rule}: open classification state after slab`);
+    }
+    assertNonoverlap(fixture.id, rule, slabCells);
+    slabs.push({ xLeft, xRight, cells: slabCells });
+  }
+  return { cells, slabs };
+}
+
+function cellBoundsAt(cell, x) {
+  const fraction = div(sub(x, cell.xLeft), sub(cell.xRight, cell.xLeft));
+  return {
+    bottom: add(cell.bottomLeft, mul(fraction, sub(cell.bottomRight, cell.bottomLeft))),
+    top: add(cell.topLeft, mul(fraction, sub(cell.topRight, cell.topLeft))),
+  };
+}
+
+function assertNonoverlap(fixtureId, rule, cells) {
+  if (cells.length < 2) return;
+  const x = midpoint(cells[0].xLeft, cells[0].xRight);
+  const ordered = [...cells].sort((a, b) => compare(cellBoundsAt(a, x).bottom, cellBoundsAt(b, x).bottom));
+  for (let index = 1; index < ordered.length; index += 1) {
+    const previous = cellBoundsAt(ordered[index - 1], x);
+    const current = cellBoundsAt(ordered[index], x);
+    if (compare(previous.top, current.bottom) > 0) {
+      throw new Error(`${fixtureId}/${rule}: overlapping emitted intervals`);
+    }
+  }
+}
+
+function cellArea(cell) {
+  const leftHeight = sub(cell.topLeft, cell.bottomLeft);
+  const rightHeight = sub(cell.topRight, cell.bottomRight);
+  return div(mul(sub(cell.xRight, cell.xLeft), add(leftHeight, rightHeight)), rat(2n));
+}
+
+function totalArea(cells) {
+  return cells.reduce((sum, cell) => add(sum, cellArea(cell)), rat(0n));
+}
+
+function directOracle(edges, candidate, rule) {
+  for (const edge of edges) {
+    if (pointOnRationalSegment(candidate, edge)) return 'boundary';
+  }
+
+  let winding = 0;
+  let crossings = 0;
+  for (const edge of edges) {
+    if (edge.a.y === edge.b.y) continue;
+    const ay = rat(edge.a.y);
+    const by = rat(edge.b.y);
+    const upward = compare(ay, candidate.y) <= 0 && compare(candidate.y, by) < 0;
+    const downward = compare(by, candidate.y) <= 0 && compare(candidate.y, ay) < 0;
+    if (!upward && !downward) continue;
+    const crossingX = add(
+      rat(edge.a.x),
+      mul(div(sub(candidate.y, ay), sub(by, ay)), rat(edge.b.x - edge.a.x)),
+    );
+    if (compare(crossingX, candidate.x) <= 0) continue;
+    crossings += 1;
+    winding += upward ? 1 : -1;
+  }
+  return includesRule(rule, winding, crossings) ? 'inside' : 'outside';
+}
+
+function resolvedCellContains(slabs, candidate) {
+  return slabs.some((slab) => {
+    if (compare(slab.xLeft, candidate.x) > 0 || compare(candidate.x, slab.xRight) > 0) {
+      return false;
+    }
+    return slab.cells.some((cell) => {
+      const bounds = cellBoundsAt(cell, candidate.x);
+      return compare(bounds.bottom, candidate.y) < 0 && compare(candidate.y, bounds.top) < 0;
+    });
+  });
+}
+
+function sourceCrossingsAt(edges, x) {
+  const groups = new Map();
+  for (const edge of edges) {
+    if (edge.a.x === edge.b.x) continue;
+    const minimumX = rat(edge.a.x < edge.b.x ? edge.a.x : edge.b.x);
+    const maximumX = rat(edge.a.x > edge.b.x ? edge.a.x : edge.b.x);
+    if (compare(x, minimumX) <= 0 || compare(x, maximumX) >= 0) continue;
+    const y = yAt(edge, x);
+    const crossingKey = key(y);
+    const group = groups.get(crossingKey) ?? { y, multiplicity: 0, windingDelta: 0 };
+    group.multiplicity += 1;
+    group.windingDelta += edge.b.x > edge.a.x ? 1 : -1;
+    groups.set(crossingKey, group);
+  }
+  return [...groups.values()].sort((a, b) => compare(a.y, b.y));
+}
+
+function chooseProbe(edges, x, low, high, rule, expected, kind) {
+  let skippedSourceEdgeCandidates = 0;
+  for (const [numerator, denominator] of [[1, 3], [1, 2], [2, 3]]) {
+    const candidate = { x, y: interpolate(low, high, numerator, denominator) };
+    const oracle = directOracle(edges, candidate, rule);
+    if (oracle === 'boundary') {
+      skippedSourceEdgeCandidates += 1;
+      continue;
+    }
+    if (oracle !== expected) {
+      throw new Error(`generated ${kind} probe: oracle ${oracle} != ${expected}`);
+    }
+    return {
+      kind,
+      point: [textRat(candidate.x), textRat(candidate.y)],
+      expected,
+      oracle,
+      skippedSourceEdgeCandidates,
+    };
+  }
+  return {
+    kind,
+    point: null,
+    expected,
+    oracle: 'SKIPPED_SOURCE_EDGE',
+    skippedSourceEdgeCandidates,
+  };
+}
+
+function generatedIntervalProbes(fixture, edges, slabs, rule) {
+  const records = [];
+  let attempted = 0;
+  let checked = 0;
+  let skippedSourceEdge = 0;
+
+  for (const slab of slabs) {
+    const xSamples = [
+      interpolate(slab.xLeft, slab.xRight, 1, 4),
+      midpoint(slab.xLeft, slab.xRight),
+      interpolate(slab.xLeft, slab.xRight, 3, 4),
+    ];
+    for (const x of xSamples) {
+      const crossings = sourceCrossingsAt(edges, x);
+      const intervals = slab.cells
+        .map((cell) => cellBoundsAt(cell, x))
+        .sort((a, b) => compare(a.bottom, b.bottom));
+      const probes = [];
+
+      for (const interval of intervals) {
+        attempted += 1;
+        const probe = chooseProbe(edges, x, interval.bottom, interval.top, rule, 'inside', 'interior');
+        skippedSourceEdge += probe.skippedSourceEdgeCandidates;
+        if (probe.point === null) {
+          throw new Error(`${fixture.id}/${rule}: no non-boundary interior probe for resolved interval`);
+        }
+        const resolved = resolvedCellContains([slab], rpoint(probe.point));
+        if (!resolved) throw new Error(`${fixture.id}/${rule}: interior probe missing from cell union`);
+        checked += 1;
+        probes.push(probe);
+      }
+
+      const gaps = [];
+      if (intervals.length === 0 && crossings.length >= 2) {
+        gaps.push({ low: crossings[0].y, high: crossings[crossings.length - 1].y });
+      }
+      if (intervals.length > 0 && crossings.length > 0) {
+        if (compare(crossings[0].y, intervals[0].bottom) < 0) {
+          gaps.push({ low: crossings[0].y, high: intervals[0].bottom });
+        }
+        if (compare(intervals[intervals.length - 1].top, crossings[crossings.length - 1].y) < 0) {
+          gaps.push({
+            low: intervals[intervals.length - 1].top,
+            high: crossings[crossings.length - 1].y,
+          });
+        }
+      }
+      for (let index = 1; index < intervals.length; index += 1) {
+        if (compare(intervals[index - 1].top, intervals[index].bottom) < 0) {
+          gaps.push({ low: intervals[index - 1].top, high: intervals[index].bottom });
+        }
+      }
+      for (const gap of gaps) {
+        attempted += 1;
+        const probe = chooseProbe(edges, x, gap.low, gap.high, rule, 'outside', 'gap');
+        skippedSourceEdge += probe.skippedSourceEdgeCandidates;
+        if (probe.point === null) {
+          continue;
+        }
+        if (resolvedCellContains([slab], rpoint(probe.point))) {
+          throw new Error(`${fixture.id}/${rule}: gap probe present in cell union`);
+        }
+        checked += 1;
+        probes.push(probe);
+      }
+
+      const envelope = crossings.length > 0
+        ? { low: crossings[0].y, high: crossings[crossings.length - 1].y }
+        : { low: rat(0n), high: rat(0n) };
+      for (const [kind, y] of [
+        ['outside-below', sub(envelope.low, rat(1n))],
+        ['outside-above', add(envelope.high, rat(1n))],
+      ]) {
+        attempted += 1;
+        const candidate = { x, y };
+        const oracle = directOracle(edges, candidate, rule);
+        if (oracle !== 'outside' || resolvedCellContains([slab], candidate)) {
+          throw new Error(`${fixture.id}/${rule}: generated outside probe was not outside`);
+        }
+        checked += 1;
+        probes.push({ kind, point: [textRat(x), textRat(y)], expected: 'outside', oracle });
+      }
+
+      records.push({
+        slab: [textRat(slab.xLeft), textRat(slab.xRight)],
+        x: textRat(x),
+        sourceCrossings: crossings.map((crossing) => ({
+          y: textRat(crossing.y),
+          multiplicity: crossing.multiplicity,
+          windingDelta: crossing.windingDelta,
+        })),
+        resolvedIntervals: intervals.map((interval) => [textRat(interval.bottom), textRat(interval.top)]),
+        probes,
+      });
+    }
+  }
+
+  return { attempted, checked, skippedSourceEdge, records };
+}
+
+function checkResolvedSharedEdge(fixture, edges, slabs, rule) {
+  if (fixture.resolvedSharedEdge === undefined) return null;
+  const candidate = rpoint(fixture.resolvedSharedEdge.at);
+  const sourceClassification = directOracle(edges, candidate, rule);
+  if (sourceClassification !== 'boundary') {
+    throw new Error(`${fixture.id}/${rule}: shared sample is not on a source edge`);
+  }
+
+  let resolvedInterior;
+  if (fixture.resolvedSharedEdge.kind === 'interior-point') {
+    resolvedInterior = resolvedCellContains(slabs, candidate);
+  } else {
+    const leftSlab = [...slabs]
+      .reverse()
+      .find((entry) => equal(entry.xRight, candidate.x));
+    const rightSlab = slabs.find((entry) => equal(entry.xLeft, candidate.x));
+    if (leftSlab === undefined || rightSlab === undefined) {
+      throw new Error(`${fixture.id}/${rule}: shared vertical edge lacks adjacent slabs`);
+    }
+    resolvedInterior =
+      resolvedCellContains([leftSlab], { x: midpoint(leftSlab.xLeft, leftSlab.xRight), y: candidate.y }) &&
+      resolvedCellContains([rightSlab], { x: midpoint(rightSlab.xLeft, rightSlab.xRight), y: candidate.y });
+  }
+  if (!resolvedInterior) throw new Error(`${fixture.id}/${rule}: source edge remained a resolved boundary`);
+  return { sourceClassification, resolvedClassification: 'interior' };
+}
+
+function serializeCell(cell) {
+  return Object.fromEntries(
+    Object.entries(cell).map(([name, value]) => [name, textRat(value)]),
+  );
+}
+
+function validateFixture(fixture) {
+  const edges = buildEdges(fixture);
+  const eventWork = collectEvents(fixture, edges);
+  const ruleResults = {};
+
+  for (const rule of RULES) {
+    const built = buildCells(fixture, edges, eventWork.xEvents, rule);
+    const area = totalArea(built.cells);
+    const expectedArea = rat(BigInt(fixture.area[rule]));
+    if (!equal(area, expectedArea)) {
+      throw new Error(`${fixture.id}/${rule}: area ${textRat(area)} != ${textRat(expectedArea)}`);
+    }
+
+    const samples = fixture.samples.map(([name, coordinates, expected]) => {
+      const candidate = rpoint(coordinates);
+      const oracle = directOracle(edges, candidate, rule);
+      if (oracle !== expected[rule]) {
+        throw new Error(`${fixture.id}/${rule}/${name}: oracle ${oracle} != ${expected[rule]}`);
+      }
+      if (oracle !== 'boundary') {
+        const resolved = resolvedCellContains(built.slabs, candidate) ? 'inside' : 'outside';
+        if (resolved !== oracle) {
+          throw new Error(`${fixture.id}/${rule}/${name}: slab ${resolved} != oracle ${oracle}`);
+        }
+      }
+      return { name, point: coordinates.map(String), expected: expected[rule], oracle };
+    });
+
+    ruleResults[rule] = {
+      area: textRat(area),
+      expectedArea: textRat(expectedArea),
+      emittedCells: built.cells.length,
+      intervalsNonoverlapping: true,
+      samples,
+      generatedIntervalProbes: generatedIntervalProbes(fixture, edges, built.slabs, rule),
+      resolvedSharedEdge: checkResolvedSharedEdge(fixture, edges, built.slabs, rule),
+      cells: built.cells.map(serializeCell),
+    };
+  }
+
+  return {
+    id: fixture.id,
+    work: {
+      directedEdges: edges.length,
+      pairChecks: eventWork.pairChecks,
+      xEvents: eventWork.xEvents.length,
+    },
+    rules: ruleResults,
+  };
+}
+
+function hasInteriorOverlap(cells) {
+  for (let left = 0; left < cells.length; left += 1) {
+    for (let right = left + 1; right < cells.length; right += 1) {
+      const xLeft = compare(cells[left].xLeft, cells[right].xLeft) > 0 ? cells[left].xLeft : cells[right].xLeft;
+      const xRight = compare(cells[left].xRight, cells[right].xRight) < 0 ? cells[left].xRight : cells[right].xRight;
+      if (compare(xLeft, xRight) >= 0) continue;
+      const x = midpoint(xLeft, xRight);
+      const first = cellBoundsAt(cells[left], x);
+      const second = cellBoundsAt(cells[right], x);
+      const bottom = compare(first.bottom, second.bottom) > 0 ? first.bottom : second.bottom;
+      const top = compare(first.top, second.top) < 0 ? first.top : second.top;
+      if (compare(bottom, top) < 0) return true;
+    }
+  }
+  return false;
+}
+
+function candidateChecks(cells, expectedArea) {
+  return {
+    areaMatches: equal(totalArea(cells), expectedArea),
+    multiplicityValid: !hasInteriorOverlap(cells),
+  };
+}
+
+function positiveControls() {
+  const fixture = FIXTURES[0];
+  const edges = buildEdges(fixture);
+  const eventWork = collectEvents(fixture, edges);
+  const original = buildCells(fixture, edges, eventWork.xEvents, 'nonzero').cells;
+  if (original.length === 0 || compare(cellArea(original[0]), rat(0n)) <= 0) {
+    throw new Error('positive control requires a nonzero-area F01 cell');
+  }
+  const expectedArea = rat(100n);
+  const removed = candidateChecks(original.slice(1), expectedArea);
+  const duplicated = candidateChecks([...original, original[0]], expectedArea);
+  if (removed.areaMatches && removed.multiplicityValid) {
+    throw new Error('removed-cell positive control was accepted');
+  }
+  if (duplicated.areaMatches && duplicated.multiplicityValid) {
+    throw new Error('duplicated-cell positive control was accepted');
+  }
+  if (duplicated.multiplicityValid) {
+    throw new Error('duplicated-cell multiplicity control did not detect overlap');
+  }
+  return {
+    removeNonzeroAreaCell: { rejected: true, checks: removed },
+    duplicateCell: { rejected: true, checks: duplicated },
+  };
+}
+
+function repositoryRevision() {
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return 'UNAVAILABLE';
+  }
+}
+
+function runMetadata() {
+  const sourceBytes = readFileSync(__filename);
+  return {
+    invocation: process.argv.join(' '),
+    baseRevision: repositoryRevision(),
+    sourceSha256: createHash('sha256').update(sourceBytes).digest('hex'),
+  };
+}
+
+function main() {
+  const result = {
+    schema: 'p3-0b-closed-topology-feasibility-v1',
+    status: 'PASS',
+    classification: 'FEASIBILITY_ONLY',
+    limitations: [
+      'closed integer-coordinate line contours only',
+      'does not prove Float64 Rust predicates, cubic or stroke behavior',
+      'does not prove GPU, browser, ABI, performance or 1000x32-cubic acceptance',
+    ],
+    ...runMetadata(),
+    limits: LIMITS,
+    fixtureCount: FIXTURES.length,
+    fixtures: FIXTURES.map(validateFixture),
+    positiveControls: positiveControls(),
+  };
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+}
+
+try {
+  main();
+} catch (error) {
+  const failure = {
+    schema: 'p3-0b-closed-topology-feasibility-v1',
+    status: 'FAIL',
+    classification: 'FEASIBILITY_ONLY',
+    ...runMetadata(),
+    error: error instanceof Error ? error.message : String(error),
+  };
+  process.stdout.write(`${JSON.stringify(failure, null, 2)}\n`);
+  process.exitCode = 1;
+}
