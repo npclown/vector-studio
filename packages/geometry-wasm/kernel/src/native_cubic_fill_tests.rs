@@ -6,8 +6,8 @@ use std::io::Read;
 use crate::codec::{PathInput, Request};
 use crate::cubic_fill::{
     CubicFillDiagnostics as AttemptDiagnostics, CubicFillError as BridgeError,
-    CubicFillOutput as BridgeOutput, CubicFillWorkspace as BridgeWorkspace, EdgeOwner, FlatCommand,
-    MAX_FLAT_COMMANDS as MAX_COMMANDS,
+    CubicFillOutput as BridgeOutput, CubicFillWorkspace as BridgeWorkspace, DecodedSource,
+    EdgeOwner, FlatCommand, MAX_FLAT_COMMANDS as MAX_COMMANDS,
 };
 use crate::geometry::{
     Plan, Point, WorkStatistics, PATH_EMPTY, PATH_INVALID, PATH_INVALID_TOLERANCE,
@@ -420,6 +420,9 @@ fn print_owners(owners: &[EdgeOwner]) {
             print!(",");
         }
         match owner {
+            EdgeOwner::Line { source_verb } => {
+                print!("{{\"kind\":\"Line\",\"source_verb\":{source_verb}}}")
+            }
             EdgeOwner::CubicLeaf {
                 source_verb,
                 end_numerator,
@@ -476,15 +479,19 @@ fn assert_decoded_sources(row: &SourceRow, verbs: &[u8], output: BridgeOutput<'_
         let mut canonical_start = contour.cubics.first().unwrap().points[0];
         for cubic in &contour.cubics {
             let decoded = output.sources[source_index];
-            assert_eq!(decoded.contour, contour_index, "{}", row.id);
-            assert_eq!(decoded.source_verb, source_ordinal, "{}", row.id);
+            assert_eq!(decoded.contour(), contour_index, "{}", row.id);
+            assert_eq!(decoded.source_verb(), source_ordinal, "{}", row.id);
             let canonical = [
                 canonical_start,
                 cubic.points[1],
                 cubic.points[2],
                 cubic.points[3],
             ];
-            for (actual, expected) in decoded.points.iter().zip(canonical) {
+            let points = match decoded {
+                DecodedSource::Cubic { points, .. } => points,
+                DecodedSource::Line { .. } => panic!("{} decoded cubic as line", row.id),
+            };
+            for (actual, expected) in points.iter().zip(canonical) {
                 assert_eq!(actual.x.to_bits(), expected.x.to_bits(), "{}", row.id);
                 assert_eq!(actual.y.to_bits(), expected.y.to_bits(), "{}", row.id);
             }
@@ -883,6 +890,13 @@ mod tests {
         Point { x, y }
     }
 
+    fn cubic_points(source: DecodedSource) -> [Point; 4] {
+        match source {
+            DecodedSource::Cubic { points, .. } => points,
+            DecodedSource::Line { .. } => panic!("expected cubic source"),
+        }
+    }
+
     fn append_linear(path: &mut RawPath, start: Point, end: Point) {
         path.cubic_to(
             point(
@@ -978,6 +992,82 @@ mod tests {
     fn raw_triangle(returning: bool, closed: bool) -> RawPath {
         let mut path = RawPath::default();
         append_triangle(&mut path, 0.0, returning, closed);
+        path
+    }
+
+    fn append_mixed_triangle(
+        path: &mut RawPath,
+        dx: f64,
+        returning: bool,
+        closed: bool,
+        line_mask: u8,
+    ) {
+        let vertices = [point(dx, 0.0), point(dx + 3.0, 0.0), point(dx, 3.0)];
+        path.move_to(vertices[0]);
+        let segment_count = if returning { 3 } else { 2 };
+        for index in 0..segment_count {
+            let start = vertices[index];
+            let end = vertices[(index + 1) % vertices.len()];
+            if line_mask & (1 << index) != 0 {
+                path.line_to(end);
+            } else {
+                append_linear(path, start, end);
+            }
+        }
+        if closed {
+            path.close();
+        }
+    }
+
+    fn raw_mixed_triangle(returning: bool, closed: bool, line_mask: u8) -> RawPath {
+        let mut path = RawPath::default();
+        append_mixed_triangle(&mut path, 0.0, returning, closed, line_mask);
+        path
+    }
+
+    fn append_segment(path: &mut RawPath, start: Point, end: Point, line: bool) {
+        if line {
+            path.line_to(end);
+        } else {
+            append_linear(path, start, end);
+        }
+    }
+
+    fn mixed_sixteen_square(all_cubic: bool, seventeenth: bool) -> RawPath {
+        let vertices = [
+            point(0.0, 0.0),
+            point(3.0, 0.0),
+            point(6.0, 0.0),
+            point(9.0, 0.0),
+            point(12.0, 0.0),
+            point(12.0, 3.0),
+            point(12.0, 6.0),
+            point(12.0, 9.0),
+            point(12.0, 12.0),
+            point(9.0, 12.0),
+            point(6.0, 12.0),
+            point(3.0, 12.0),
+            point(0.0, 12.0),
+            point(0.0, 9.0),
+            point(0.0, 6.0),
+            point(0.0, 3.0),
+            point(0.0, 0.0),
+        ];
+        let mut path = RawPath::default();
+        path.move_to(vertices[0]);
+        for index in 0..16 {
+            append_segment(
+                &mut path,
+                vertices[index],
+                vertices[index + 1],
+                !all_cubic && index % 2 == 0,
+            );
+        }
+        if seventeenth {
+            path.line_to(point(-3.0, 0.0));
+        } else {
+            path.close();
+        }
         path
     }
 
@@ -1098,8 +1188,8 @@ mod tests {
         assert_eq!(output.commands.len(), 72);
         assert_eq!(output.sources.len(), 16);
         assert_eq!(output.owners.len(), 64);
-        assert_eq!(output.sources[0].source_verb, 1);
-        assert_eq!(output.sources[4].source_verb, 7);
+        assert_eq!(output.sources[0].source_verb(), 1);
+        assert_eq!(output.sources[4].source_verb(), 7);
 
         let mut seventeen = RawPath::default();
         let mut current = point(0.0, 0.0);
@@ -1270,36 +1360,33 @@ mod tests {
         .unwrap();
         assert_eq!(diagnostics.flat_status, PATH_EMPTY);
 
-        let mut line = RawPath::default();
-        line.move_to(point(0.0, 0.0));
-        line.line_to(point(1.0, 0.0));
         let mut consecutive_moves = RawPath::default();
         consecutive_moves.move_to(point(0.0, 0.0));
         consecutive_moves.move_to(point(1.0, 0.0));
-        for unsupported in [&line, &consecutive_moves] {
-            assert_eq!(
-                measured_raw_attempt(
-                    &mut workspace,
-                    unsupported,
-                    FLATTEN_TOLERANCE,
-                    TOPOLOGY_TOLERANCE,
-                    MAX_COMMANDS,
-                ),
-                Err(BridgeError::UnsupportedSource)
-            );
-            assert!(workspace.diagnostics().sizing_invoked);
-            assert!(!workspace.diagnostics().emission_invoked);
-        }
+        assert_eq!(
+            measured_raw_attempt(
+                &mut workspace,
+                &consecutive_moves,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::UnsupportedSource)
+        );
+        assert!(workspace.diagnostics().sizing_invoked);
+        assert!(!workspace.diagnostics().emission_invoked);
 
         let mut line_before_fifth = RawPath::default();
         line_before_fifth.move_to(point(0.0, 0.0));
-        append_linear(&mut line_before_fifth, point(0.0, 0.0), point(3.0, 0.0));
+        line_before_fifth.move_to(point(3.0, 0.0));
         line_before_fifth.line_to(point(6.0, 0.0));
-        for index in 1..5 {
-            let start = point(f64::from(index * 12), 0.0);
+        for x in [12.0, 24.0, 36.0, 48.0] {
+            let start = point(x, 0.0);
             line_before_fifth.move_to(start);
-            append_linear(&mut line_before_fifth, start, point(start.x + 3.0, 0.0));
+            line_before_fifth.line_to(point(start.x + 3.0, 0.0));
         }
+        assert_eq!(line_before_fifth.verbs.len(), 11);
+        assert_eq!(line_before_fifth.point_count(), 22);
         assert_eq!(
             measured_raw_attempt(
                 &mut workspace,
@@ -1315,7 +1402,7 @@ mod tests {
         for index in 0..4 {
             let start = point(f64::from(index * 12), 0.0);
             fifth_before_line.move_to(start);
-            append_linear(&mut fifth_before_line, start, point(start.x + 3.0, 0.0));
+            fifth_before_line.line_to(point(start.x + 3.0, 0.0));
         }
         fifth_before_line.move_to(point(48.0, 0.0));
         fifth_before_line.line_to(point(51.0, 0.0));
@@ -1355,18 +1442,24 @@ mod tests {
         .unwrap();
         let output = workspace.output().unwrap();
         assert_eq!(output.sources.len(), 3);
-        assert_eq!(output.sources[0].source_verb, 1);
-        assert_eq!(output.sources[1].source_verb, 2);
-        assert_eq!(output.sources[2].source_verb, 3);
+        assert_eq!(output.sources[0].source_verb(), 1);
+        assert_eq!(output.sources[1].source_verb(), 2);
+        assert_eq!(output.sources[2].source_verb(), 3);
         for index in 1..output.sources.len() {
-            assert_eq!(
-                output.sources[index].points[0].x.to_bits(),
-                output.sources[index - 1].points[3].x.to_bits()
-            );
-            assert_eq!(
-                output.sources[index].points[0].y.to_bits(),
-                output.sources[index - 1].points[3].y.to_bits()
-            );
+            let DecodedSource::Cubic {
+                points: current, ..
+            } = output.sources[index]
+            else {
+                panic!("expected cubic source")
+            };
+            let DecodedSource::Cubic {
+                points: previous, ..
+            } = output.sources[index - 1]
+            else {
+                panic!("expected cubic source")
+            };
+            assert_eq!(current[0].x.to_bits(), previous[3].x.to_bits());
+            assert_eq!(current[0].y.to_bits(), previous[3].y.to_bits());
         }
         assert_eq!(
             output.owners.last(),
@@ -1464,6 +1557,171 @@ mod tests {
         }
     }
 
+    fn assert_mixed_triangle_source(
+        output: BridgeOutput<'_>,
+        returning: bool,
+        closed: bool,
+        line_mask: u8,
+    ) {
+        let vertices = [point(0.0, 0.0), point(3.0, 0.0), point(0.0, 3.0)];
+        let cubics = [
+            [
+                point(0.0, 0.0),
+                point(1.0, 0.0),
+                point(2.0, 0.0),
+                point(3.0, 0.0),
+            ],
+            [
+                point(3.0, 0.0),
+                point(2.0, 1.0),
+                point(1.0, 2.0),
+                point(0.0, 3.0),
+            ],
+            [
+                point(0.0, 3.0),
+                point(0.0, 2.0),
+                point(0.0, 1.0),
+                point(0.0, 0.0),
+            ],
+        ];
+        let segment_count = if returning { 3 } else { 2 };
+        assert_eq!(output.sources.len(), segment_count);
+        assert_eq!(
+            output.commands.len(),
+            1 + segment_count + usize::from(closed)
+        );
+        assert_eq!(output.commands[0].verb, VERB_MOVE);
+        assert_eq!(output.commands[0].provenance.source_verb, 0);
+        assert_eq!(output.commands[0].provenance.end_numerator, 1);
+        assert_eq!(output.commands[0].provenance.depth, 0);
+        let move_point = output.commands[0].point.unwrap();
+        assert_eq!(move_point.x.to_bits(), 0.0f64.to_bits());
+        assert_eq!(move_point.y.to_bits(), 0.0f64.to_bits());
+        for index in 0..segment_count {
+            let ordinal = u32::try_from(index + 1).unwrap();
+            let start = vertices[index];
+            let end = vertices[(index + 1) % vertices.len()];
+            let command = output.commands[index + 1];
+            assert_eq!(command.verb, crate::geometry::VERB_LINE);
+            assert_eq!(command.provenance.source_verb, ordinal);
+            assert_eq!(command.provenance.end_numerator, 1);
+            assert_eq!(command.provenance.depth, 0);
+            let command_end = command.point.unwrap();
+            assert_eq!(command_end.x.to_bits(), end.x.to_bits());
+            assert_eq!(command_end.y.to_bits(), end.y.to_bits());
+            if line_mask & (1 << index) != 0 {
+                let DecodedSource::Line {
+                    points,
+                    source_verb,
+                    contour,
+                } = output.sources[index]
+                else {
+                    panic!("expected LINE source")
+                };
+                assert_eq!(source_verb, ordinal);
+                assert_eq!(contour, 0);
+                for (actual, expected) in points.iter().zip([start, end]) {
+                    assert_eq!(actual.x.to_bits(), expected.x.to_bits());
+                    assert_eq!(actual.y.to_bits(), expected.y.to_bits());
+                }
+                assert_eq!(
+                    output.owners[index],
+                    EdgeOwner::Line {
+                        source_verb: ordinal
+                    }
+                );
+            } else {
+                let DecodedSource::Cubic {
+                    points,
+                    source_verb,
+                    contour,
+                } = output.sources[index]
+                else {
+                    panic!("expected CUBIC source")
+                };
+                assert_eq!(source_verb, ordinal);
+                assert_eq!(contour, 0);
+                let expected = cubics[index];
+                for (actual, expected) in points.iter().zip(expected) {
+                    assert_eq!(actual.x.to_bits(), expected.x.to_bits());
+                    assert_eq!(actual.y.to_bits(), expected.y.to_bits());
+                }
+                assert_eq!(
+                    output.owners[index],
+                    EdgeOwner::CubicLeaf {
+                        source_verb: ordinal,
+                        end_numerator: 1,
+                        depth: 0,
+                    }
+                );
+            }
+        }
+        if closed {
+            let close = output.commands.last().unwrap();
+            assert_eq!(close.verb, VERB_CLOSE);
+            assert_eq!(
+                close.provenance.source_verb,
+                u32::try_from(segment_count + 1).unwrap()
+            );
+            assert_eq!(close.provenance.end_numerator, 1);
+            assert_eq!(close.provenance.depth, 0);
+            assert!(close.point.is_none());
+        }
+        if !returning {
+            assert_eq!(
+                output.owners[2],
+                if closed {
+                    EdgeOwner::ExplicitClose { source_verb: 3 }
+                } else {
+                    EdgeOwner::ImplicitClosure { contour: 0 }
+                }
+            );
+        }
+        assert_literal_triangle(output, 0.0);
+        let triangle = output.rounded.indices;
+        let a = output.rounded.vertices[usize::try_from(triangle[0]).unwrap()];
+        let b = output.rounded.vertices[usize::try_from(triangle[1]).unwrap()];
+        let c = output.rounded.vertices[usize::try_from(triangle[2]).unwrap()];
+        let twice_area = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+        assert_eq!(twice_area.abs(), 9.0);
+    }
+
+    #[test]
+    fn every_triangle_source_kind_mask_matches_the_all_cubic_mesh() {
+        let mut attempts = 0usize;
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+        for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
+            for returning in [true, false] {
+                for closed in [false, true] {
+                    let mask_count = if returning { 8 } else { 4 };
+                    let mut all_cubic = None;
+                    for line_mask in 0..mask_count {
+                        let path = raw_mixed_triangle(returning, closed, line_mask);
+                        measured_raw_rule_attempt(
+                            &mut workspace,
+                            &path,
+                            rule,
+                            FLATTEN_TOLERANCE,
+                            TOPOLOGY_TOLERANCE,
+                            MAX_COMMANDS,
+                        )
+                        .unwrap();
+                        let output = workspace.output().unwrap();
+                        assert_mixed_triangle_source(output, returning, closed, line_mask);
+                        let current = snapshot(output);
+                        if let Some(expected) = &all_cubic {
+                            assert_eq!(&current, expected);
+                        } else {
+                            all_cubic = Some(current);
+                        }
+                        attempts += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(attempts, 48);
+    }
+
     #[test]
     fn next_move_finalizes_open_forms_and_preserves_shifted_ordinals() {
         let mut returning_then_explicit = RawPath::default();
@@ -1492,7 +1750,7 @@ mod tests {
             output.owners[5],
             EdgeOwner::ExplicitClose { source_verb: 7 }
         );
-        assert_eq!(output.sources[3].source_verb, 5);
+        assert_eq!(output.sources[3].source_verb(), 5);
 
         let mut implicit_then_returning = RawPath::default();
         append_triangle(&mut implicit_then_returning, 0.0, false, false);
@@ -1515,7 +1773,263 @@ mod tests {
                 depth: 0,
             }
         );
-        assert_eq!(output.sources[2].source_verb, 4);
+        assert_eq!(output.sources[2].source_verb(), 4);
+    }
+
+    #[test]
+    fn mixed_next_move_ordinals_and_signed_zero_line_bits_are_exact() {
+        let mut two = RawPath::default();
+        append_mixed_triangle(&mut two, 0.0, true, false, 0b101);
+        append_mixed_triangle(&mut two, 9.0, false, true, 0b010);
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+        measured_raw_attempt(
+            &mut workspace,
+            &two,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        let output = workspace.output().unwrap();
+        assert_eq!(output.ranges.len(), 2);
+        assert_eq!(output.sources.len(), 5);
+        assert_eq!(output.sources[0].source_verb(), 1);
+        assert_eq!(output.sources[1].source_verb(), 2);
+        assert_eq!(output.sources[2].source_verb(), 3);
+        assert_eq!(output.sources[3].source_verb(), 5);
+        assert_eq!(output.sources[4].source_verb(), 6);
+        assert_eq!(output.owners[0], EdgeOwner::Line { source_verb: 1 });
+        assert_eq!(output.owners[2], EdgeOwner::Line { source_verb: 3 });
+        assert_eq!(output.owners[4], EdgeOwner::Line { source_verb: 6 });
+        assert_eq!(
+            output.owners[5],
+            EdgeOwner::ExplicitClose { source_verb: 7 }
+        );
+
+        let mut signed = RawPath::default();
+        signed.move_to(point(-0.0, 0.0));
+        signed.line_to(point(3.0, 0.0));
+        signed.cubic_to(point(2.0, 1.0), point(1.0, 2.0), point(0.0, 3.0));
+        signed.line_to(point(0.0, -0.0));
+        measured_raw_attempt(
+            &mut workspace,
+            &signed,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        let output = workspace.output().unwrap();
+        assert_eq!(output.points[0].x.to_bits(), 1u64 << 63);
+        let move_point = output.commands[0].point.unwrap();
+        assert_eq!(move_point.x.to_bits(), 1u64 << 63);
+        assert_eq!(move_point.y.to_bits(), 0);
+        let DecodedSource::Line {
+            points: first_line, ..
+        } = output.sources[0]
+        else {
+            panic!("expected first LINE source")
+        };
+        assert_eq!(first_line[0].x.to_bits(), 1u64 << 63);
+        assert_eq!(first_line[0].y.to_bits(), 0);
+        let DecodedSource::Line { points, .. } = output.sources[2] else {
+            panic!("expected final LINE source")
+        };
+        assert_eq!(points[1].x.to_bits(), 0);
+        assert_eq!(points[1].y.to_bits(), 1u64 << 63);
+        let final_line = output
+            .commands
+            .iter()
+            .find(|command| command.provenance.source_verb == 3)
+            .unwrap()
+            .point
+            .unwrap();
+        assert_eq!(final_line.x.to_bits(), 0);
+        assert_eq!(final_line.y.to_bits(), 1u64 << 63);
+        assert_eq!(output.owners[2], EdgeOwner::Line { source_verb: 3 });
+        signed.point_bytes.fill(0xff);
+        drop(signed);
+        let output = workspace.output().unwrap();
+        let DecodedSource::Line { points, .. } = output.sources[2] else {
+            panic!("expected retained final LINE source")
+        };
+        assert_eq!(points[1].x.to_bits(), 0);
+        assert_eq!(points[1].y.to_bits(), 1u64 << 63);
+    }
+
+    #[test]
+    fn mixed_sixteen_segment_limit_and_geometry_are_exact() {
+        let mixed = mixed_sixteen_square(false, false);
+        let all_cubic = mixed_sixteen_square(true, false);
+        let seventeenth = mixed_sixteen_square(false, true);
+        assert!(seventeenth.verbs.len() <= 24);
+        assert!(seventeenth.point_count() <= 104);
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+
+        for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
+            measured_raw_rule_attempt(
+                &mut workspace,
+                &all_cubic,
+                rule,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            let cubic_snapshot = snapshot(workspace.output().unwrap());
+            measured_raw_rule_attempt(
+                &mut workspace,
+                &mixed,
+                rule,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            let output = workspace.output().unwrap();
+            assert_eq!(output.commands.len(), 18);
+            assert_eq!(output.sources.len(), 16);
+            assert_eq!(output.points.len(), 16);
+            assert_eq!(output.owners.len(), 16);
+            for index in 0..16 {
+                let ordinal = u32::try_from(index + 1).unwrap();
+                if index % 2 == 0 {
+                    assert!(matches!(output.sources[index], DecodedSource::Line { .. }));
+                    assert_eq!(
+                        output.owners[index],
+                        EdgeOwner::Line {
+                            source_verb: ordinal
+                        }
+                    );
+                } else {
+                    assert!(matches!(output.sources[index], DecodedSource::Cubic { .. }));
+                    assert_eq!(
+                        output.owners[index],
+                        EdgeOwner::CubicLeaf {
+                            source_verb: ordinal,
+                            end_numerator: 1,
+                            depth: 0,
+                        }
+                    );
+                }
+            }
+            let mut twice_area = 0.0;
+            for index in 0..output.points.len() {
+                let a = output.points[index];
+                let b = output.points[(index + 1) % output.points.len()];
+                twice_area += a.x * b.y - a.y * b.x;
+            }
+            assert_eq!(twice_area.abs(), 288.0);
+            assert_eq!(snapshot(output), cubic_snapshot);
+
+            assert_eq!(
+                measured_raw_rule_attempt(
+                    &mut workspace,
+                    &seventeenth,
+                    rule,
+                    FLATTEN_TOLERANCE,
+                    TOPOLOGY_TOLERANCE,
+                    MAX_COMMANDS,
+                ),
+                Err(BridgeError::SourceLimit)
+            );
+            let diagnostics = workspace.diagnostics();
+            assert!(diagnostics.sizing_invoked);
+            assert!(!diagnostics.emission_invoked);
+            assert!(!diagnostics.topology_invoked);
+            assert!(!diagnostics.rounded_invoked);
+            assert!(workspace.output().is_none());
+            measured_raw_rule_attempt(
+                &mut workspace,
+                &mixed,
+                rule,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            assert!(workspace.output().is_some());
+        }
+    }
+
+    #[test]
+    fn line_two_edge_forms_and_zero_line_reach_the_expected_stage() {
+        let success = raw_mixed_triangle(true, true, 0b111);
+        let mut one_line_close = RawPath::default();
+        one_line_close.move_to(point(0.0, 0.0));
+        one_line_close.line_to(point(3.0, 0.0));
+        one_line_close.close();
+        let mut two_line_open = RawPath::default();
+        two_line_open.move_to(point(0.0, 0.0));
+        two_line_open.line_to(point(3.0, 0.0));
+        two_line_open.line_to(point(0.0, 0.0));
+        let mut zero_line = RawPath::default();
+        zero_line.move_to(point(0.0, 0.0));
+        zero_line.line_to(point(0.0, 0.0));
+        zero_line.line_to(point(3.0, 0.0));
+        zero_line.line_to(point(0.0, 3.0));
+        zero_line.line_to(point(0.0, 0.0));
+        zero_line.close();
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+
+        for failure in [&one_line_close, &two_line_open] {
+            measured_raw_attempt(
+                &mut workspace,
+                &success,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            assert_eq!(
+                measured_raw_attempt(
+                    &mut workspace,
+                    failure,
+                    FLATTEN_TOLERANCE,
+                    TOPOLOGY_TOLERANCE,
+                    MAX_COMMANDS,
+                ),
+                Err(BridgeError::Topology(TopologyError::Unresolved))
+            );
+            let diagnostics = workspace.diagnostics();
+            assert!(diagnostics.emission_invoked);
+            assert!(diagnostics.topology_invoked);
+            assert!(!diagnostics.rounded_invoked);
+            assert!(workspace.output().is_none());
+            measured_raw_attempt(
+                &mut workspace,
+                &success,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+        }
+
+        assert_eq!(
+            measured_raw_attempt(
+                &mut workspace,
+                &zero_line,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::ZeroLengthLeaf)
+        );
+        let diagnostics = workspace.diagnostics();
+        assert!(diagnostics.emission_invoked);
+        assert!(!diagnostics.topology_invoked);
+        assert!(!diagnostics.rounded_invoked);
+        assert!(workspace.output().is_none());
+        measured_raw_attempt(
+            &mut workspace,
+            &success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(workspace.output().is_some());
     }
 
     #[test]
@@ -1537,8 +2051,14 @@ mod tests {
         let output = workspace.output().unwrap();
         assert_eq!(output.points.len(), 3);
         assert_eq!(output.points[0].x.to_bits(), 1u64 << 63);
-        assert_eq!(output.sources[0].points[0].x.to_bits(), 1u64 << 63);
-        assert_eq!(output.sources[2].points[3].y.to_bits(), 1u64 << 63);
+        let DecodedSource::Cubic { points: first, .. } = output.sources[0] else {
+            panic!("expected cubic source")
+        };
+        let DecodedSource::Cubic { points: last, .. } = output.sources[2] else {
+            panic!("expected cubic source")
+        };
+        assert_eq!(first[0].x.to_bits(), 1u64 << 63);
+        assert_eq!(last[3].y.to_bits(), 1u64 << 63);
         assert_eq!(output.owners.len(), 3);
     }
 
@@ -1684,7 +2204,8 @@ mod tests {
         };
         let mut unsupported = RawPath::default();
         unsupported.move_to(point(0.0, 0.0));
-        unsupported.line_to(point(1.0, 0.0));
+        unsupported.move_to(point(3.0, 0.0));
+        unsupported.line_to(point(6.0, 0.0));
         let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
 
         measured_raw_attempt(
@@ -1825,22 +2346,30 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            first.output().unwrap().sources[0].points[0].x.to_bits(),
+            cubic_points(first.output().unwrap().sources[0])[0]
+                .x
+                .to_bits(),
             1u64 << 63
         );
         assert_eq!(
-            first.output().unwrap().sources[2].points[3].y.to_bits(),
+            cubic_points(first.output().unwrap().sources[2])[3]
+                .y
+                .to_bits(),
             1u64 << 63
         );
 
         signed.point_bytes.fill(0xff);
         assert_eq!(
-            first.output().unwrap().sources[0].points[0].x.to_bits(),
+            cubic_points(first.output().unwrap().sources[0])[0]
+                .x
+                .to_bits(),
             1u64 << 63
         );
         drop(signed);
         assert_eq!(
-            first.output().unwrap().sources[0].points[0].x.to_bits(),
+            cubic_points(first.output().unwrap().sources[0])[0]
+                .x
+                .to_bits(),
             1u64 << 63
         );
         assert!(second.output().is_some());

@@ -2,7 +2,7 @@
 
 Status: FROZEN after Primary/independent contract review, 2026-10-02. This slice follows [P3.2g](p3-native-cubic-topology-contract.md) and moves its tested composition into a crate-private Rust workspace. The [active plan](p3-fill-stroke-meshes.md) owns execution; the [private mesh contract](p3-private-contract.md) retains full C03-C05. No public API, WASM operation/export, mesh ABI, dependency, P2 behavior, renderer or product rejection policy is introduced. User-deferred stroke refinement stays deferred.
 
-The two temporary returning/open and nonreturning/CLOSE restrictions below are superseded by the separately frozen [P3.2i closure contract](p3-cubic-closure-contract.md). All other ownership, caps and precedence remain in force; historical P3.2h evidence is unchanged.
+The two temporary returning/open and nonreturning/CLOSE restrictions below are superseded by the separately frozen [P3.2i closure contract](p3-cubic-closure-contract.md). The remaining LINE-only restriction is superseded by the [P3.2j mixed-source contract](p3-canonical-mixed-contract.md), which preserves all numeric caps while counting LINE/CUBIC together as source segments. All other ownership and precedence remain in force; historical P3.2h evidence is unchanged.
 
 ## Ownership and input
 
