@@ -1,6 +1,16 @@
 # P3 fill and stroke meshes execution plan
 
-Current isolated checkpoint: P3.1d independent continuous cubic boundary certificate follows P3.2e [rounded line-fill](p3-rounded-fill-mesh-contract.md), integrated through [PR #63](https://github.com/npclown/vector-studio/pull/63) as `c7fd5c70091aae5599089495d4018bbb60aa860f` after required CI on `ddb4cb0e2ad33ab2501bd4f461fea5021a92361a` (run 36588525050, job 109475189176). Earlier checkpoint paragraphs below retain their contemporaneous gate context; complete P3 acceptance remains open.
+Current isolated checkpoint: P3.1e restricted simple cubic topology certificate follows P3.1d [continuous boundary verification](p3-cubic-boundary-oracle-contract.md), integrated through [PR #64](https://github.com/npclown/vector-studio/pull/64) as `d42dfb2f18152d003c5957d859c52b1355078f13` after required CI on `833d5a730bc193404302449ca4764f3cff895d4f` (run 36959253670, job 110689045097). Earlier checkpoint paragraphs below retain their contemporaneous gate context; complete P3 acceptance remains open.
+
+## P3.1e restricted simple cubic topology
+
+Base: clean updated `d42dfb2`, branch `codex/p3-1e-simple-cubic-topology`. Primary selects the next test-only topology prerequisite under resumed continuous execution. The [frozen contract](p3-simple-cubic-topology-contract.md) fixes an exact-knot, monotone-projection/control-hull proof, closed/open implicit closure, a 47-case analytic corpus, resource ceilings and rejecting controls. This is a sufficient certificate for a restricted simple-contour family; unresolved crossings, tangencies, rounded knots and close hull bands remain open rather than becoming product rejection rules.
+
+A Sol medium independent mathematical audit agrees that the simultaneous linear homotopy remains embedded under the proposed exact separation conditions. Primary retains the 1/8 boundary share through P3.1d and the original 1/4 total budget. Source/contract review precedes fixture execution and implementation freeze. Primary owns shared test-fixture extraction and integration; after freeze, Sol high may implement the oracle and Sol medium the disjoint fixtures/tests, with independent read-only review. No production, public API, ABI, external dependency or deferred stroke work is included.
+
+Local T01-T04 acceptance and Primary/independent review PASS; the [review record](../evidence/p3.1e-simple-cubic-topology-review-2026-10-02.md) links the proof, source review, fixes and limitations. The focused suite passes 65 tests, including all 47 analytic topology certificates and each source cubic's P3.1d positional check. `pnpm check` passes formatting/lint/types, 445 tests in 49 files and dependency boundaries; `pnpm build` passes. Review corrected leaf-cap precedence after an earlier implicit closure and added a reproducing control. An aggregate-test timeout was resolved by individually naming all 47 unchanged cases with unchanged assertions/default timeout. No acceptance, corpus density or error budget changed. Protected CI/integration remain required.
+
+Final document checks PASS: explicit Prettier check of four changed Markdown files, the existing local-link/anchor checker (604 references across 116 Markdown files), whitespace and scope review. Eight files contain only test support, unit fixtures and owning documentation; no product source, dependencies, generated binary, local cache or unrelated changes are included.
 
 ## P3.1d continuous cubic boundary certificate
 
