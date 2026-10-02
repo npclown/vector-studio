@@ -1,0 +1,9 @@
+{
+  "scenario": "p2-geometry/v1",
+  "disposition": "FAIL",
+  "project": "chrome",
+  "browserName": "chromium",
+  "browserVersion": "154.0.8037.58",
+  "wasmSha256": "3f20b4e93597bff852c0cd4e978495b73bed2568a25e39c9d87daffa7148b17a",
+  "error": "page.evaluate: Execution context was destroyed, most likely because of a navigation"
+}

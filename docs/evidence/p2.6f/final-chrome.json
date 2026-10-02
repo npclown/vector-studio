@@ -1,0 +1,25 @@
+{
+  "scenario": "p2-geometry/v1",
+  "wasmSha256": "3f20b4e93597bff852c0cd4e978495b73bed2568a25e39c9d87daffa7148b17a",
+  "caseCount": 10048,
+  "corpusCount": 10000,
+  "categoryCounts": {
+    "corpus": 10000,
+    "named-cubic": 12,
+    "named-packed": 10,
+    "metamorphic": 3,
+    "subdivision": 1,
+    "endpoint-hull": 14,
+    "edge": 8
+  },
+  "successfulPaths": 10046,
+  "emittedLines": 5235805,
+  "exactSizeRetries": 26,
+  "positiveControls": {
+    "attempted": 12,
+    "rejected": 12
+  },
+  "project": "chrome",
+  "browserName": "chromium",
+  "browserVersion": "154.0.8037.58"
+}

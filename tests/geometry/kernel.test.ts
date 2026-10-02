@@ -8,6 +8,7 @@ import {
   validateReferenceBounds,
   type ReferenceFlattenedLine,
 } from '../../packages/geometry-reference/src/index.js';
+import { createDifferentialCases, encodeCase, verifyCase } from './differential/index.js';
 
 type Kernel = {
   memory: WebAssembly.Memory;
@@ -380,6 +381,31 @@ describe('P2 raw WASM contract without a production adapter', () => {
       { verbs: [0], points: [7, 8] },
     ]);
     expect(failed.map((result) => result.status)).toEqual([5, 0]);
+    kernel.dispose();
+  });
+
+  it('matches the frozen endpoint-hull differential additions in real WASM', async () => {
+    const kernel = await freshKernel();
+    const fixtures = createDifferentialCases().filter(
+      ({ category }) => category === 'endpoint-hull',
+    );
+    expect(fixtures).toHaveLength(14);
+    for (const fixture of fixtures) {
+      const input = encodeCase(fixture);
+      expect(kernel.reserve(input.length, 256 * 1024), fixture.id).toBe(0);
+      writeInput(kernel, input);
+      const batchStatus = kernel.process(input.length);
+      const length = kernel.result_len() >>> 0;
+      const bytes = new Uint8Array(length);
+      if (length > 0) {
+        bytes.set(new Uint8Array(kernel.memory.buffer, kernel.output_ptr() >>> 0, length));
+      }
+      const summary = verifyCase(fixture, batchStatus, bytes);
+      expect(summary.pathCount, fixture.id).toBe(fixture.paths.length);
+      expect(summary.successfulPaths, fixture.id).toBe(
+        fixture.paths.filter(({ status }) => status === 0).length,
+      );
+    }
     kernel.dispose();
   });
 
