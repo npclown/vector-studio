@@ -32,6 +32,8 @@ Each stage's stated bound includes its numerical guards; guards cannot be added 
 
 For fill-only flattening, start with a downward power-of-two local bucket <=0.125/sigmaMax(S), with S=DPR*zoom*worldLinear. Keep finite/positive checks, underflow/overflow rejection and conservative guards. Stroke refinement additionally needs tangent/offset analysis: positional closeness of centerlines alone does not bound wide-stroke edges or miter tips. Cusps, near reversals and endpoint tangents require explicit handling. Do not mark C03 complete by substituting the P2 centerline oracle for a stroke-boundary proof.
 
+The separately frozen [P3.1d cubic boundary oracle](p3-cubic-boundary-oracle-contract.md) specifies test-only exact rational verification of the 0.125 physical-pixel curve-to-polyline share. It retains independent local knot/provenance checks and leaves P2's oracle unchanged. Positional certification does not establish curved fill topology, stroke-offset error or production cubic integration; those obligations remain open.
+
 The [P3.0b-s1 regular stroke certificate](p3-stroke-boundary-certificate.md) derives a width-aware bound for raw regular offset generators, an independent second-derivative verifier and an exact counterexample to centerline-only refinement. This analytic review does not freeze machine-arithmetic guards, work limits, stationary/cusp handling or resolved-region topology. C03 remains incomplete; the next bounded numerical experiment needs those executable details specified prospectively.
 
 The [P3.0b-s2 experiment contract](p3-stroke-numeric-experiment.md) supplies exact rational/outward arithmetic, independent interval verification, a fixed 62-case diagnostic corpus, limits and evidence rules for the next bounded experiment. Its emitted samples are rational diagnostic data, not production Float64 vertices. Experimental completion and candidate-wide feasibility are separate outcomes; no failed family or downstream gate is waived.
@@ -41,6 +43,8 @@ Coverage fringe changes sample coverage around the geometric boundary; it is not
 A connectivity change cannot be excused by a small positional bound. Finalize a distinguishable topology-ambiguity failure and exact precedence before ABI freeze; generic NUMERIC_RANGE/WORK_LIMIT is not permission to reject supported coincident edges. The geometric edge convention (including the existing P1 region-transition approach where applicable), ramp/reference, corner rule and permitted coverage/color errors are still C03/C04 blockers.
 
 ## Fill topology and independent verification
+
+The separately frozen [P3.2e rounded line-fill contract](p3-rounded-fill-mesh-contract.md) extends the private line subset with shared monotone Float64 embedding and exact source/boundary displacement certificates. Its bounded line-contour evidence does not certify the topology of a preceding cubic flattening stage. The active plan records its integrated acceptance separately from full C03-C05.
 
 The separately frozen [P3.2d line-fill contract](p3-line-fill-mesh-contract.md) composes exact predicates/event positions into bounded private line-contour meshes, with independent complete-region checks on 32 fixed cases. Exact representability is a private v0 restriction, not a product rejection envelope. No P2 arena/export, public mesh ABI, stroke or coverage behavior changes; full C03-C05 remain open.
 
