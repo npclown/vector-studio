@@ -1,0 +1,81 @@
+{
+  "schema": "p3-cubic-readiness-census/v1",
+  "mode": "FULL",
+  "status": "PASS",
+  "censusSha256": "869c93b782d833cb6e28503bf4e80ee65155edfc6e68e5fe06c38af8d34cf803",
+  "rowsSha256": "e9536c9b8c51aa6bc5132692c8bb506b367da8e010ffbabd80e800b873a2d634",
+  "rows": 1000,
+  "summary": {
+    "rows": 1000,
+    "boundaryStatusCounts": {
+      "CERTIFIED": 32000
+    },
+    "preparationStatusCounts": {
+      "KNOT_MISMATCH": 1000
+    },
+    "sourceCapCounts": {
+      "EXCEEDS_CHEAP_CAPS": 1000
+    },
+    "boundaryCells": {
+      "total": 1327342,
+      "max": {
+        "value": 64,
+        "index": 9,
+        "sourceVerbOrdinal": 26
+      }
+    },
+    "maxCertifiedSquared": {
+      "value": {
+        "numerator": "18888890647396521515625",
+        "denominator": "1208925819614629174706176"
+      },
+      "index": 287,
+      "sourceVerbOrdinal": 28
+    },
+    "emittedLines": {
+      "min": 1202,
+      "max": 1461,
+      "total": 1326192
+    },
+    "depthHistogram": [
+      0,
+      0,
+      0,
+      322,
+      30918,
+      626800,
+      668152,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "maxDepth": 6,
+    "implicitClosureEdges": 1000,
+    "prospectiveEdges": {
+      "total": 1327192,
+      "max": {
+        "value": 1462,
+        "index": 463
+      }
+    },
+    "prospectivePairs": {
+      "total": 881038654,
+      "max": {
+        "value": 1067991,
+        "index": 463
+      }
+    }
+  },
+  "failure": null
+}

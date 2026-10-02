@@ -1,6 +1,14 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: private canonical fill composition is integrated through P3.2l [PR #73](https://github.com/npclown/vector-studio/pull/73). P3.2m1 bounded32-cubic readiness tooling is the current checkpoint. Earlier sections retain their contemporaneous gate context and integration evidence; complete P3 acceptance remains open. Stroke refinement stays user-deferred.
+Current status: private canonical fill composition is integrated through P3.2l [PR #73](https://github.com/npclown/vector-studio/pull/73), and bounded cubic readiness tooling through P3.2m1 [PR #74](https://github.com/npclown/vector-studio/pull/74). P3.2m2 full observation and audit are complete locally; protected integration is pending. Earlier sections retain their contemporaneous gate context and integration evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.2m2 full cubic readiness evidence
+
+Base: clean updated `9508a6615f6b6e941aee26802a49eb9ca1b9dbd0`, after PR #74 and required CI on `55c2203d89e87b4b13dc6ba11db3cb26fb15e7c3` (run36985763300, job110770307120). Branch: `codex/p3-2m2-cubic-readiness-evidence`. M01-M04 are integrated. M05 executes the unchanged [census contract](p3-cubic-census-contract.md) once from clean source and preserves the [immutable full observation and audit](../evidence/p3.2m2-cubic-readiness-2026-10-02/README.md).
+
+M05 local PASS: all1000 rows complete, all32000 source-cubic boundary proofs CERTIFIED, separate full-frame AUDIT PASS and independent journal/source arithmetic review PASS. All1000 preparations report KNOT_MISMATCH and exceed existing cheap source caps. Pair topology, intersections, rounded fill and meshes are NOT_EVALUATED; no capacity increase or topology acceptance is inferred. Primary reviewed the fixed-source run, concrete findings, byte hashes and scope. No production code, API, architecture, dependency or numeric threshold changes.
+
+After evidence integration, the next proposed private prerequisite is a separately frozen test-only rounded-internal-knot topology certificate, retaining exact source endpoints and the existing position proof. Independent proof/analytic fixture review must precede implementation. Larger capacities and general crossings remain subsequent work, not part of M05. Historical P2 A08 FAIL, latest-source performance UNVERIFIED and user-deferred stroke stay unchanged.
 
 ## P3.2m bounded cubic readiness
 

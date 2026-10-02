@@ -1,0 +1,307 @@
+{
+  "schema": "p3-cubic-readiness-census/v1",
+  "mode": "FULL",
+  "metadata": {
+    "source": {
+      "head": "9508a6615f6b6e941aee26802a49eb9ca1b9dbd0",
+      "dirty": false,
+      "manifest": [
+        {
+          "path": ".node-version",
+          "sha256": "b911698dc3cf3227d34d0ad6727f1c4408791203c9665de99ab959331a1fb07d"
+        },
+        {
+          "path": "docs/plans/p3-cubic-census-contract.md",
+          "sha256": "49b39ad9e141e9af7fc5251b7daf7e3291798145e93a32f666347c988b3fd1d0"
+        },
+        {
+          "path": "eslint.config.mjs",
+          "sha256": "0394a6431b56b7f8b08a24e6ce5ec5904d7a26c93667c5c17bacb0edeab8cb08"
+        },
+        {
+          "path": "package.json",
+          "sha256": "284639d0aad4539d230c6a518b42819aa58db14c2ae5a1ece49c4c4724e7b72c"
+        },
+        {
+          "path": "packages/geometry-reference/src/continuous-error.ts",
+          "sha256": "6b1cba877303766d51eccea934587b9eff4fd21268a87310532325a645964ee8"
+        },
+        {
+          "path": "packages/geometry-reference/src/corpus.ts",
+          "sha256": "0fd960275e38d14bd300cd1a0e8f296814539f3659e556a373251951f7999111"
+        },
+        {
+          "path": "packages/geometry-reference/src/cubic.ts",
+          "sha256": "3199788d9f6e8da7ee071f3415257da1a50a5ca255018bf6cd551c78f6cce583"
+        },
+        {
+          "path": "packages/geometry-reference/src/fill-region.ts",
+          "sha256": "756985406e3220a7f4875d79693d57861e9670bb3fa017d8f32ee1af473f6fc9"
+        },
+        {
+          "path": "packages/geometry-reference/src/index.ts",
+          "sha256": "a01efec750520cb99a1f1d08dd471473942e806028ecb7c53384b7155af27324"
+        },
+        {
+          "path": "packages/geometry-reference/src/line-fill.ts",
+          "sha256": "96dd8a6df84f22feb399d3ca70196ba2956b79c45e22111454aab75ccf763d8b"
+        },
+        {
+          "path": "packages/geometry-reference/src/packed-reference.ts",
+          "sha256": "ddf36dca699ad4ce349143f4e276789f4625cf5cdec0b2dba722f922f8532f0b"
+        },
+        {
+          "path": "packages/geometry-reference/src/tolerance.ts",
+          "sha256": "46abb165e7e23775e0dc3f233ee06fdc763520b57e77755566191c2525a36b15"
+        },
+        {
+          "path": "packages/geometry-reference/src/triangle-mesh.ts",
+          "sha256": "c49bb1d2a9cedbbe5e9da887a65cabb3b68c2bdb91d45f52f6a8956192cd6fb3"
+        },
+        {
+          "path": "packages/geometry-reference/src/types.ts",
+          "sha256": "eb6b9f2fa16b59c3f7db2738233efee4331751023845ebcc0c00868d13d9019c"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/Cargo.lock",
+          "sha256": "9fe57a4ac37015b8d04d17d59400314156ca748d16a6a1892582887dc2f64a8d"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/Cargo.toml",
+          "sha256": "5eb5f4725fc22b6bf7fe0b070214a07d6bd755bcb78aa4ec0835d02394be5d9c"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/codec.rs",
+          "sha256": "72b6695d8be6a587cd3ef958c7e1e95326d51ff9cb64e74da170163980a88622"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/cubic_fill.rs",
+          "sha256": "3f36db214b8bc292e54ba13349aeb3a3292a3ffe73de9b051f5204bb7e9bab1a"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/engine.rs",
+          "sha256": "2b32e31b095764dbe707434f0d0faa393376a4dc4b0e4fa6a642d309cc0f30c9"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/fill_event_order.rs",
+          "sha256": "9a83f3f363a5eb3a80a8a5ba9125ae1d31c30c03ba095a85a2a6e33a17257776"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/fill_event_order_tests.rs",
+          "sha256": "4ac42dc7b361c8690822c8a45bb69966b3e52ab99968d38e27877253ea7fa8d0"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/fill_exact.rs",
+          "sha256": "768d4ad09917a84261a141da2360b8ada653d26f66fa107ff6e3ed6804c661c5"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/fill_intersections.rs",
+          "sha256": "cb5ce6b3168018094b86d7ab00fec9416f7159c2e50436eb3035683f62ebab05"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/fill_intersections_tests.rs",
+          "sha256": "95812bf43d786a47447cf77599366150d4573f661b52f4963d9c49a61d9adf85"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/fill_predicates.rs",
+          "sha256": "d49c53b25196fc29e159d75ab347cdd9bac5b2ed59ec8a8308816b9adbc6558c"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/fill_predicates_tests.rs",
+          "sha256": "c4fb8fb703d7d8c7ff49a98bef2e0f56ebdfb20a6b1071baeb78a1b691a652e6"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/fill_sections.rs",
+          "sha256": "c20f9e1b3aba0bb6494b603399b194ee3857d55075bed649dac3c56c35d42fed"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/geometry.rs",
+          "sha256": "5312209a58dd7595b9c27ec12843d60fc0dae1a5dbc7026ac4b1f32b6a59915a"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/lib.rs",
+          "sha256": "84bfb7a8119b393ae74c4d7e49ff115490c2c817437adadf12c8417e6208d7ab"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/line_fill.rs",
+          "sha256": "9ed0d914b970a09c51fbc204d480adaeab3c208f1059b02f8d8135688f6f911c"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/line_fill_tests.rs",
+          "sha256": "8bb612d38f0de863800f22d57a4dea4ef29431cb8a67a51062f9bf70fc1fad40"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/native_cubic_fill_tests.rs",
+          "sha256": "9b3686c563f5dfb839ceea9d07e38192c8e64f409e30832857ec3b868b7abe1d"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/native_differential.rs",
+          "sha256": "c99fdb350a665b5c174ffac7ed9869b272df258d6662d3703fdf2df051d27808"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/rounded_line_fill.rs",
+          "sha256": "f6f8cf8b9b2b28334af908c395890c44baf2224bd29980bc33e5b855e285484e"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/rounded_line_fill_tests.rs",
+          "sha256": "70a18df0a8fb7fbe255c4e41f67835759698a5493b82d75f658a4cf6fae61f49"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/simple_cubic_topology.rs",
+          "sha256": "e00d8887f65bb743563fcf61ef627695a04ad4d1ebe511706344d8f363460d45"
+        },
+        {
+          "path": "packages/geometry-wasm/kernel/src/simple_cubic_topology_tests.rs",
+          "sha256": "13ea4ecffbe03147fb1a72dbc296bf280e61b5f8eaa068fa93e129c7b988de40"
+        },
+        {
+          "path": "packages/geometry-wasm/src/abi.ts",
+          "sha256": "6803ed38c3806d6f003e32378705661e707c8707e6698cc7a220a627244c1fa3"
+        },
+        {
+          "path": "packages/geometry-wasm/src/adapter.ts",
+          "sha256": "4d5333e2dc95797beb3d467e188423d2302e051fbc939db518b3570c28b17a22"
+        },
+        {
+          "path": "packages/geometry-wasm/src/index.ts",
+          "sha256": "b545ab05ba347c54230627b2c435133a4b78cdc76c329d82905b2ffce403550a"
+        },
+        {
+          "path": "packages/geometry-wasm/src/types.ts",
+          "sha256": "17df9b9c58fe84b8dcdecd1991fd5dfe6fb89a3406703ee7ffa7d3cac31ce506"
+        },
+        {
+          "path": "pnpm-lock.yaml",
+          "sha256": "b524d4bfc8be0d870824568cfbd1df68330d140990498ea1e443c70f337d7d81"
+        },
+        {
+          "path": "tests/geometry-benchmark/workload.ts",
+          "sha256": "4b7c69f0ab513a28e778416a85c7bcd36a84bb7900071e5fb31c21e7d27bc1bc"
+        },
+        {
+          "path": "tests/geometry/cubic-boundary/fixtures.ts",
+          "sha256": "41141ea2cbe7f0fe041271b6cb19704019c45310e5ef70f180974f50541890fc"
+        },
+        {
+          "path": "tests/geometry/cubic-boundary/oracle.ts",
+          "sha256": "4d6f5c9cdd917030e085dd8df2c419847b4c04b247f6e25720e1b9cc8be5c690"
+        },
+        {
+          "path": "tests/geometry/differential/endpoint-hull.ts",
+          "sha256": "55c945b3c528245206c60d52077a24368a800e7c050626ffa0083506517d6e07"
+        },
+        {
+          "path": "tests/geometry/differential/index.ts",
+          "sha256": "664986be98e764347b5bcde0c1a98c494cc6c5ea8e4db4f0f21867ca8eba11f6"
+        },
+        {
+          "path": "tests/geometry/rounded-fill/exact.ts",
+          "sha256": "108d98e7af78435738d943fe9473cfc26f5d2d662a5b6484ecc6f91bb3885c90"
+        },
+        {
+          "path": "tests/geometry/simple-cubic-topology/fixtures.ts",
+          "sha256": "14ca28984bb115c982ca9a8e5d9147be62784c4a35fb839ffd5846aa3520a5f1"
+        },
+        {
+          "path": "tests/geometry/simple-cubic-topology/oracle.ts",
+          "sha256": "dbf50f3a5d36f0e7036c1c021cef1331c91b8ac3981116c4a0beb627411d6ac8"
+        },
+        {
+          "path": "tests/p3-census/artifact.d.mts",
+          "sha256": "6b8785e0f58c80575304ff519f7c5667ed517b61dd7d877bbec170789953c62b"
+        },
+        {
+          "path": "tests/p3-census/artifact.mjs",
+          "sha256": "9c2b6474f38242b4f8c9a790c58a9368ad6f50b93eef8eb06c8179effd59a636"
+        },
+        {
+          "path": "tests/p3-census/census.test.ts",
+          "sha256": "389e1fe911b68c82fa5d485c14c6580f50c4ce4b511117d7484c5660d9ede3bf"
+        },
+        {
+          "path": "tests/p3-census/fixtures.ts",
+          "sha256": "23e89455662a5b30db2ec15d95b72650c30357de32a74773894cd0631cb1c005"
+        },
+        {
+          "path": "tests/p3-census/mechanics.test.ts",
+          "sha256": "a352e4d38672200d07bf1bb96475cffb49c9f6228e5471f07dd425d1be07a201"
+        },
+        {
+          "path": "tests/p3-census/schema.ts",
+          "sha256": "098f7669fefb34bc09a60c78498edc7de66b9c6ae624dfc842b833e5fe397794"
+        },
+        {
+          "path": "tooling/run-p3-cubic-census.d.mts",
+          "sha256": "46f1b33bcae3a3f1db167fe1b4d954b5740042e83afc442d0216feddace00232"
+        },
+        {
+          "path": "tooling/run-p3-cubic-census.mjs",
+          "sha256": "d23d9c130e1a716e7e558fa3295b82d18e32dd08e07e5c0ca566f81ca28c8910"
+        },
+        {
+          "path": "tooling/test-geometry.mjs",
+          "sha256": "3b2eb0bb75bf02d5844c9387d035af4e49b0dd715a1227209be12242ead0e754"
+        },
+        {
+          "path": "tsconfig.base.json",
+          "sha256": "54a4732d04c541cd21b6dff7f677691da27c66d8b71d182baa5b6f76f5184b15"
+        },
+        {
+          "path": "tsconfig.json",
+          "sha256": "55f452a895652274bbc32f75f19a0225f64dc27657a848c567209c2b8d5e10ea"
+        },
+        {
+          "path": "vitest.p3-cubic-census.config.ts",
+          "sha256": "bee68a8d82bb6218b86184e74f8b27a158fd26c6ee41639220bee2bb1aef3ee1"
+        }
+      ],
+      "manifestStartSha256": "d443f5e5e18d5b60c11cb546cbaa15e36da5abec1bc8f58cd1df4f27b5507f0b",
+      "manifestEndSha256": null
+    },
+    "nodeVersion": "v24.15.0",
+    "rust": {
+      "release": "1.94.1",
+      "commit": "e408947bfd200af42db322daf0fadfe7e26d3bd1",
+      "host": "x86_64-pc-windows-msvc"
+    },
+    "executionRole": "NATIVE_ONLY"
+  },
+  "policy": {
+    "scenario": "p2-batch/v1",
+    "seed": 305419896,
+    "paths": 1000,
+    "cubicsPerPath": 32,
+    "smokeFixtures": null,
+    "toleranceBits": "3fc0000000000000",
+    "screenBits": [
+      "3ff0000000000000",
+      "0000000000000000",
+      "0000000000000000",
+      "3ff0000000000000"
+    ],
+    "inspector": {
+      "maxCubics": 32,
+      "maxLines": 4096,
+      "maxDepth": 20
+    },
+    "transport": {
+      "maxFrames": 1000,
+      "maxInputFrameBytes": 4096,
+      "maxTotalInputBytes": 4194304,
+      "maxOutputFrameBytes": 262144,
+      "maxTotalOutputBytes": 134217728,
+      "maxJournalRowBytes": 65536,
+      "maxJournalBytes": 67108864
+    },
+    "timeoutsMs": {
+      "native": 300000,
+      "verification": 900000
+    },
+    "excludedStages": [
+      "PAIR_TOPOLOGY",
+      "INTERSECTIONS",
+      "ROUNDED_FILL",
+      "MESH"
+    ]
+  }
+}

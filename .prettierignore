@@ -27,3 +27,7 @@ docs/evidence/p2.6-preflight-2026-09-26.json
 docs/benchmarks/results/20260926-p2-batch-v1-reference-01/**/*.json
 # Preserve P2.6c reference records and their archived byte hashes.
 docs/benchmarks/results/20260926-p2-batch-v1-reference-02/**/*.json
+
+# Preserve P3.2m2 immutable cubic readiness records.
+docs/evidence/p3.2m2-cubic-readiness-2026-10-02/*.json
+docs/evidence/p3.2m2-cubic-readiness-2026-10-02/*.ndjson
