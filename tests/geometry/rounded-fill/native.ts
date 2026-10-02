@@ -260,7 +260,11 @@ function parseOutput(value: unknown, label: string): ExpectedCarrier {
 }
 
 export function parseNativeRoundedRow(line: string, index: number): NativeRoundedRow {
-  const item = record(JSON.parse(line) as unknown, `row ${index}`, [
+  return parseNativeRoundedValue(JSON.parse(line) as unknown, index);
+}
+
+export function parseNativeRoundedValue(value: unknown, index: number): NativeRoundedRow {
+  const item = record(value, `row ${index}`, [
     'id',
     'rule',
     'tau_bits',
