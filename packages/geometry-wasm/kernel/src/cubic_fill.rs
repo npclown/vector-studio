@@ -18,7 +18,7 @@ const MAX_SOURCE_SCALARS: usize = 104;
 const MAX_CONTOUR_POINTS: usize = 68;
 const MAX_CONTOURS: usize = 4;
 const MAX_EDGE_OWNERS: usize = 64;
-const MAX_SOURCE_CUBICS: usize = 16;
+const MAX_SOURCE_SEGMENTS: usize = 16;
 const MAX_COMBINED_HEAP_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -36,6 +36,9 @@ pub(crate) struct ContourRange {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum EdgeOwner {
+    Line {
+        source_verb: u32,
+    },
     CubicLeaf {
         source_verb: u32,
         end_numerator: u32,
@@ -49,11 +52,42 @@ pub(crate) enum EdgeOwner {
     },
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub(crate) struct DecodedCubic {
-    pub(crate) points: [Point; 4],
-    pub(crate) source_verb: u32,
-    pub(crate) contour: usize,
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum DecodedSource {
+    Line {
+        points: [Point; 2],
+        source_verb: u32,
+        contour: usize,
+    },
+    Cubic {
+        points: [Point; 4],
+        source_verb: u32,
+        contour: usize,
+    },
+}
+
+impl Default for DecodedSource {
+    fn default() -> Self {
+        Self::Line {
+            points: [Point::default(); 2],
+            source_verb: 0,
+            contour: 0,
+        }
+    }
+}
+
+impl DecodedSource {
+    pub(crate) fn source_verb(self) -> u32 {
+        match self {
+            Self::Line { source_verb, .. } | Self::Cubic { source_verb, .. } => source_verb,
+        }
+    }
+
+    pub(crate) fn contour(self) -> usize {
+        match self {
+            Self::Line { contour, .. } | Self::Cubic { contour, .. } => contour,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -96,7 +130,7 @@ pub(crate) struct CubicFillOutput<'a> {
     pub(crate) ranges: &'a [ContourRange],
     pub(crate) points: &'a [Point],
     pub(crate) owners: &'a [EdgeOwner],
-    pub(crate) sources: &'a [DecodedCubic],
+    pub(crate) sources: &'a [DecodedSource],
     pub(crate) rounded: RoundedFillOutput<'a>,
     pub(crate) rounded_stats: RoundedFillStats,
 }
@@ -105,6 +139,7 @@ pub(crate) struct CubicFillOutput<'a> {
 enum SourceVerb {
     Unused,
     Move { contour: usize, point: Point },
+    Line { contour: usize, end: Point },
     Cubic { contour: usize },
     Close { contour: usize },
 }
@@ -112,7 +147,7 @@ enum SourceVerb {
 #[derive(Clone, Copy, Debug)]
 struct ActiveSourceContour {
     contour: usize,
-    cubic_start: usize,
+    segment_start: usize,
     current: Point,
 }
 
@@ -128,7 +163,7 @@ pub(crate) struct CubicFillWorkspace {
     topology: SimpleCubicTopologyWorkspace,
     source_verbs: [SourceVerb; MAX_SOURCE_VERBS],
     source_verb_len: usize,
-    sources: [DecodedCubic; MAX_SOURCE_CUBICS],
+    sources: [DecodedSource; MAX_SOURCE_SEGMENTS],
     source_len: usize,
     source_ranges: [TopologyRange; MAX_CONTOURS],
     source_range_len: usize,
@@ -152,7 +187,7 @@ impl CubicFillWorkspace {
                 .map_err(CubicFillError::Topology)?,
             source_verbs: [SourceVerb::Unused; MAX_SOURCE_VERBS],
             source_verb_len: 0,
-            sources: [DecodedCubic::default(); MAX_SOURCE_CUBICS],
+            sources: [DecodedSource::default(); MAX_SOURCE_SEGMENTS],
             source_len: 0,
             source_ranges: [TopologyRange::default(); MAX_CONTOURS],
             source_range_len: 0,
@@ -291,13 +326,35 @@ impl CubicFillWorkspace {
                     self.source_verbs[ordinal] = SourceVerb::Move { contour, point };
                     active = Some(ActiveSourceContour {
                         contour,
-                        cubic_start: self.source_len,
+                        segment_start: self.source_len,
                         current: point,
                     });
                 }
+                VERB_LINE => {
+                    let mut open = active.ok_or(CubicFillError::UnsupportedSource)?;
+                    if self.source_len >= MAX_SOURCE_SEGMENTS {
+                        return Err(CubicFillError::SourceLimit);
+                    }
+                    let end = read_source_point(input, scalar)?;
+                    scalar = scalar
+                        .checked_add(2)
+                        .ok_or(CubicFillError::UnsupportedSource)?;
+                    self.sources[self.source_len] = DecodedSource::Line {
+                        points: [open.current, end],
+                        source_verb,
+                        contour: open.contour,
+                    };
+                    self.source_len += 1;
+                    self.source_verbs[ordinal] = SourceVerb::Line {
+                        contour: open.contour,
+                        end,
+                    };
+                    open.current = end;
+                    active = Some(open);
+                }
                 VERB_CUBIC => {
                     let mut open = active.ok_or(CubicFillError::UnsupportedSource)?;
-                    if self.source_len >= MAX_SOURCE_CUBICS {
+                    if self.source_len >= MAX_SOURCE_SEGMENTS {
                         return Err(CubicFillError::SourceLimit);
                     }
                     let one = read_source_point(input, scalar)?;
@@ -316,7 +373,7 @@ impl CubicFillWorkspace {
                     scalar = scalar
                         .checked_add(6)
                         .ok_or(CubicFillError::UnsupportedSource)?;
-                    self.sources[self.source_len] = DecodedCubic {
+                    self.sources[self.source_len] = DecodedSource::Cubic {
                         points: [open.current, one, two, end],
                         source_verb,
                         contour: open.contour,
@@ -335,7 +392,6 @@ impl CubicFillWorkspace {
                     };
                     self.finish_source(open)?;
                 }
-                VERB_LINE => return Err(CubicFillError::UnsupportedSource),
                 _ => return Err(CubicFillError::UnsupportedSource),
             }
         }
@@ -350,12 +406,12 @@ impl CubicFillWorkspace {
     }
 
     fn finish_source(&mut self, open: ActiveSourceContour) -> Result<(), CubicFillError> {
-        if self.source_len == open.cubic_start {
+        if self.source_len == open.segment_start {
             return Err(CubicFillError::UnsupportedSource);
         }
         self.push_source_range(TopologyRange {
-            start: open.cubic_start,
-            count: self.source_len - open.cubic_start,
+            start: open.segment_start,
+            count: self.source_len - open.segment_start,
         })
     }
 
@@ -425,14 +481,14 @@ impl CubicFillWorkspace {
     }
 
     fn certify_topology(&mut self) -> Result<(), CubicFillError> {
-        let mut cubics = [TopologyCubic::default(); MAX_SOURCE_CUBICS];
+        let mut cubics = [TopologyCubic::default(); MAX_SOURCE_SEGMENTS];
         let mut leaves = [TopologyLeaf::default(); MAX_EDGE_OWNERS];
         let mut leaf_len = 0usize;
         for (index, source) in self.sources[..self.source_len].iter().copied().enumerate() {
+            let source_verb = source.source_verb();
             let leaf_start = leaf_len;
             for command in &self.commands[..self.command_len] {
-                if command.verb != VERB_LINE || command.provenance.source_verb != source.source_verb
-                {
+                if command.verb != VERB_LINE || command.provenance.source_verb != source_verb {
                     continue;
                 }
                 if leaf_len >= MAX_EDGE_OWNERS {
@@ -444,9 +500,13 @@ impl CubicFillWorkspace {
                 };
                 leaf_len += 1;
             }
+            let points = match source {
+                DecodedSource::Line { points: [a, b], .. } => [a, a, b, b],
+                DecodedSource::Cubic { points, .. } => points,
+            };
             cubics[index] = TopologyCubic {
-                points: source.points,
-                source_verb: source.source_verb,
+                points,
+                source_verb,
                 leaves: TopologyRange {
                     start: leaf_start,
                     count: leaf_len - leaf_start,
@@ -535,18 +595,32 @@ impl CubicFillWorkspace {
                     if !finite_point(point) {
                         return Err(CubicFillError::InvalidCommand);
                     }
-                    match self.source_verb(command.provenance.source_verb)? {
-                        SourceVerb::Cubic { contour } if contour == open.source_contour => {}
+                    let owner = match self.source_verb(command.provenance.source_verb)? {
+                        SourceVerb::Line {
+                            contour,
+                            end: expected,
+                        } if contour == open.source_contour
+                            && command.provenance.end_numerator == 1
+                            && command.provenance.depth == 0
+                            && same_point_bits(point, expected) =>
+                        {
+                            EdgeOwner::Line {
+                                source_verb: command.provenance.source_verb,
+                            }
+                        }
+                        SourceVerb::Cubic { contour } if contour == open.source_contour => {
+                            EdgeOwner::CubicLeaf {
+                                source_verb: command.provenance.source_verb,
+                                end_numerator: command.provenance.end_numerator,
+                                depth: command.provenance.depth,
+                            }
+                        }
                         _ => return Err(CubicFillError::InvalidProvenance),
-                    }
+                    };
                     if same_point(open.previous, point) {
                         return Err(CubicFillError::ZeroLengthLeaf);
                     }
-                    self.push_owner(EdgeOwner::CubicLeaf {
-                        source_verb: command.provenance.source_verb,
-                        end_numerator: command.provenance.end_numerator,
-                        depth: command.provenance.depth,
-                    })?;
+                    self.push_owner(owner)?;
                     self.push_point(point)?;
                     open.previous = point;
                     active = Some(open);
@@ -662,12 +736,12 @@ impl CubicFillWorkspace {
             previous_source = Some(command.provenance.source_verb);
         }
         for source in &self.sources[..self.source_len] {
+            let source_verb = source.source_verb();
             let mut previous_numerator = 0u64;
             let mut previous_denominator = 1u64;
             let mut count = 0usize;
             for command in &self.commands[..self.command_len] {
-                if command.verb != VERB_LINE || command.provenance.source_verb != source.source_verb
-                {
+                if command.verb != VERB_LINE || command.provenance.source_verb != source_verb {
                     continue;
                 }
                 if command.provenance.depth > 20 {
@@ -685,7 +759,15 @@ impl CubicFillWorkspace {
                 previous_denominator = denominator;
                 count += 1;
             }
-            if count == 0 || previous_numerator != previous_denominator {
+            let valid = match source {
+                DecodedSource::Line { .. } => {
+                    count == 1 && previous_numerator == 1 && previous_denominator == 1
+                }
+                DecodedSource::Cubic { .. } => {
+                    count != 0 && previous_numerator == previous_denominator
+                }
+            };
+            if !valid {
                 return Err(CubicFillError::InvalidProvenance);
             }
         }
@@ -718,6 +800,26 @@ impl CubicFillWorkspace {
                     return Err(CubicFillError::RoundedOwnership);
                 }
                 match self.edge_owners[edge_index] {
+                    EdgeOwner::Line { source_verb } => {
+                        let expected = match self.source_verb(source_verb)? {
+                            SourceVerb::Line {
+                                contour: owner,
+                                end,
+                            } if owner == contour => end,
+                            _ => return Err(CubicFillError::RoundedOwnership),
+                        };
+                        if !self.commands[..self.command_len].iter().any(|command| {
+                            command.verb == VERB_LINE
+                                && command.provenance.source_verb == source_verb
+                                && command.provenance.end_numerator == 1
+                                && command.provenance.depth == 0
+                                && command
+                                    .point
+                                    .is_some_and(|point| same_point_bits(point, expected))
+                        }) {
+                            return Err(CubicFillError::RoundedOwnership);
+                        }
+                    }
                     EdgeOwner::CubicLeaf { source_verb, .. } => {
                         if !self.commands[..self.command_len].iter().any(|command| {
                             command.verb == VERB_LINE
