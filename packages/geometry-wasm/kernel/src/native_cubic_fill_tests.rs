@@ -14,7 +14,10 @@ use crate::geometry::{
     PATH_NUMERIC_RANGE, PATH_OK, VERB_CLOSE, VERB_CUBIC, VERB_MOVE,
 };
 use crate::line_fill::LineFillRule;
-use crate::rounded_line_fill::{RoundedFillError, RoundedFillLimits};
+use crate::rounded_line_fill::{
+    RoundedBoundary, RoundedCell, RoundedColumnSpan, RoundedFillError, RoundedFillLimits,
+    RoundedFillStats, RoundedSection, RoundedSourceEdge,
+};
 use crate::rounded_line_fill_tests::{print_output, print_points, print_stats};
 use crate::simple_cubic_topology::TopologyError;
 
@@ -68,6 +71,46 @@ struct SourceRow {
     contours: Vec<SourceContour>,
     verbs: Vec<u8>,
     point_bytes: Vec<u8>,
+}
+
+#[derive(Debug)]
+struct PreparedPath {
+    verbs: Vec<u8>,
+    point_bytes: Vec<u8>,
+}
+
+impl PreparedPath {
+    fn path_input(&self) -> PathInput<'_> {
+        PathInput::from_test_parts(
+            Request {
+                request_id: 0,
+                source_epoch: 0,
+                source_revision: 0,
+                tolerance: FLATTEN_TOLERANCE,
+            },
+            &self.verbs,
+            &self.point_bytes,
+        )
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct NormalizedSnapshot {
+    ranges: Vec<crate::cubic_fill::ContourRange>,
+    point_bits: Vec<[u64; 2]>,
+    vertex_bits: Vec<[u64; 2]>,
+    indices: Vec<u32>,
+    bounds_bits: [u64; 4],
+    source_edges: Vec<RoundedSourceEdge>,
+    columns: Vec<(u64, usize, usize)>,
+    nodes: Vec<([u64; 2], usize, Option<u32>)>,
+    sections: Vec<RoundedSection>,
+    cells: Vec<RoundedCell>,
+    boundaries: Vec<RoundedBoundary>,
+    spans: Vec<RoundedColumnSpan>,
+    contributors: Vec<usize>,
+    error_bound_bits: u64,
+    stats: RoundedFillStats,
 }
 
 impl SourceRow {
@@ -260,6 +303,33 @@ fn prepare_path(row: &mut SourceRow) -> Result<(), String> {
     Ok(())
 }
 
+fn prepare_toggled_path(row: &SourceRow) -> PreparedPath {
+    let mut verbs = Vec::new();
+    let mut point_bytes = Vec::new();
+    for contour in &row.contours {
+        let first = contour.cubics.first().unwrap().points[0];
+        verbs.push(VERB_MOVE);
+        push_point_bytes(&mut point_bytes, first);
+        for cubic in &contour.cubics {
+            verbs.push(VERB_CUBIC);
+            for point in &cubic.points[1..] {
+                push_point_bytes(&mut point_bytes, *point);
+            }
+        }
+        let last = contour.cubics.last().unwrap().points[3];
+        if !same_point(first, last) {
+            verbs.push(VERB_CLOSE);
+        }
+    }
+    assert!(verbs.len() <= 24, "{} alternate verb cap", row.id);
+    assert!(
+        point_bytes.len() / 8 <= 104,
+        "{} alternate scalar cap",
+        row.id
+    );
+    PreparedPath { verbs, point_bytes }
+}
+
 fn push_point_bytes(bytes: &mut Vec<u8>, point: Point) {
     bytes.extend_from_slice(&point.x.to_le_bytes());
     bytes.extend_from_slice(&point.y.to_le_bytes());
@@ -358,6 +428,9 @@ fn print_owners(owners: &[EdgeOwner]) {
             EdgeOwner::ImplicitClosure { contour } => print!(
                 "{{\"kind\":\"ImplicitClosure\",\"contour\":{contour}}}"
             ),
+            EdgeOwner::ExplicitClose { source_verb } => print!(
+                "{{\"kind\":\"ExplicitClose\",\"source_verb\":{source_verb}}}"
+            ),
         }
     }
     print!("]");
@@ -389,7 +462,7 @@ fn print_rounded(row: &SourceRow, output: BridgeOutput<'_>) {
     print!("}}");
 }
 
-fn assert_decoded_sources(row: &SourceRow, output: BridgeOutput<'_>) {
+fn assert_decoded_sources(row: &SourceRow, verbs: &[u8], output: BridgeOutput<'_>) {
     let expected_count: usize = row
         .contours
         .iter()
@@ -419,13 +492,117 @@ fn assert_decoded_sources(row: &SourceRow, output: BridgeOutput<'_>) {
             source_index += 1;
             source_ordinal += 1;
         }
-        let first = contour.cubics.first().unwrap().points[0];
-        let last = contour.cubics.last().unwrap().points[3];
-        if same_point(first, last) {
+        if verbs.get(usize::try_from(source_ordinal).unwrap()) == Some(&VERB_CLOSE) {
             source_ordinal += 1;
         }
     }
-    assert_eq!(usize::try_from(source_ordinal).unwrap(), row.verbs.len());
+    assert_eq!(usize::try_from(source_ordinal).unwrap(), verbs.len());
+}
+
+fn assert_input_owners(row: &SourceRow, verbs: &[u8], output: BridgeOutput<'_>) {
+    let mut expected = Vec::new();
+    let mut source_ordinal = 0u32;
+    let mut command_cursor = 0usize;
+    for (contour_index, contour) in row.contours.iter().enumerate() {
+        assert_eq!(verbs[usize::try_from(source_ordinal).unwrap()], VERB_MOVE);
+        source_ordinal += 1;
+        for _ in &contour.cubics {
+            assert_eq!(verbs[usize::try_from(source_ordinal).unwrap()], VERB_CUBIC);
+            while command_cursor < output.commands.len() {
+                let command = output.commands[command_cursor];
+                command_cursor += 1;
+                if command.verb == crate::geometry::VERB_LINE
+                    && command.provenance.source_verb == source_ordinal
+                {
+                    expected.push(EdgeOwner::CubicLeaf {
+                        source_verb: source_ordinal,
+                        end_numerator: command.provenance.end_numerator,
+                        depth: command.provenance.depth,
+                    });
+                }
+                if command_cursor == output.commands.len()
+                    || output.commands[command_cursor].provenance.source_verb > source_ordinal
+                {
+                    break;
+                }
+            }
+            source_ordinal += 1;
+        }
+        let first = contour.cubics.first().unwrap().points[0];
+        let last = contour.cubics.last().unwrap().points[3];
+        let has_close = verbs.get(usize::try_from(source_ordinal).unwrap()) == Some(&VERB_CLOSE);
+        if !same_point(first, last) {
+            expected.push(if has_close {
+                EdgeOwner::ExplicitClose {
+                    source_verb: source_ordinal,
+                }
+            } else {
+                EdgeOwner::ImplicitClosure {
+                    contour: contour_index,
+                }
+            });
+        }
+        if has_close {
+            source_ordinal += 1;
+        }
+    }
+    assert_eq!(
+        usize::try_from(source_ordinal).unwrap(),
+        verbs.len(),
+        "{}",
+        row.id
+    );
+    assert_eq!(output.owners, expected, "{}", row.id);
+}
+
+fn snapshot(output: BridgeOutput<'_>) -> NormalizedSnapshot {
+    NormalizedSnapshot {
+        ranges: output.ranges.to_vec(),
+        point_bits: output
+            .points
+            .iter()
+            .map(|point| [point.x.to_bits(), point.y.to_bits()])
+            .collect(),
+        vertex_bits: output
+            .rounded
+            .vertices
+            .iter()
+            .map(|point| [point.x.to_bits(), point.y.to_bits()])
+            .collect(),
+        indices: output.rounded.indices.to_vec(),
+        bounds_bits: [
+            output.rounded.bounds.min_x.to_bits(),
+            output.rounded.bounds.min_y.to_bits(),
+            output.rounded.bounds.max_x.to_bits(),
+            output.rounded.bounds.max_y.to_bits(),
+        ],
+        source_edges: output.rounded.source_edges.to_vec(),
+        columns: output
+            .rounded
+            .columns
+            .iter()
+            .map(|column| (column.x.to_bits(), column.node_start, column.node_count))
+            .collect(),
+        nodes: output
+            .rounded
+            .nodes
+            .iter()
+            .map(|node| {
+                (
+                    [node.point.x.to_bits(), node.point.y.to_bits()],
+                    node.column,
+                    node.vertex,
+                )
+            })
+            .collect(),
+        sections: output.rounded.sections.to_vec(),
+        cells: output.rounded.cells.to_vec(),
+        boundaries: output.rounded.boundaries.to_vec(),
+        spans: output.rounded.spans.to_vec(),
+        contributors: output.rounded.contributors.to_vec(),
+        error_bound_bits: output.rounded.error_bound.to_bits(),
+        stats: output.rounded_stats,
+    }
 }
 
 #[test]
@@ -437,7 +614,61 @@ fn emit_native_cubic_fill() {
     let inline_bytes = size_of::<BridgeWorkspace>();
     assert!(inline_bytes < 64 * 1024);
     println!("P3_NATIVE_CUBIC_BEGIN");
+    let mut paired_rows = 0usize;
+    let mut paired_successes = 0usize;
+    let mut paired_numeric_ranges = 0usize;
     for row in &rows {
+        paired_rows += 1;
+        let alternate = prepare_toggled_path(row);
+        assert_eq!(alternate.point_bytes, row.point_bytes, "{}", row.id);
+        assert!(row.verbs.len() <= 24, "{} original verb cap", row.id);
+        assert!(
+            row.point_bytes.len() / 8 <= 104,
+            "{} original scalar cap",
+            row.id
+        );
+        crate::allocation_test_support::start();
+        let alternate_attempt = workspace.attempt(
+            alternate.path_input(),
+            row.rule,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        );
+        let alternate_allocations = crate::allocation_test_support::stop();
+        let alternate_diagnostics = alternate_attempt
+            .unwrap_or_else(|error| panic!("{} alternate failed: {error:?}", row.id));
+        let alternate_output = workspace.output();
+        match row.expectation {
+            ExpectedStatus::Ok => {
+                paired_successes += 1;
+                assert_eq!(alternate_diagnostics.flat_status, PATH_OK, "{}", row.id);
+                let output = alternate_output.expect("successful alternate output");
+                assert_decoded_sources(row, &alternate.verbs, output);
+                assert_input_owners(row, &alternate.verbs, output);
+            }
+            ExpectedStatus::PathNumericRange => {
+                paired_numeric_ranges += 1;
+                assert_eq!(
+                    alternate_diagnostics.flat_status, PATH_NUMERIC_RANGE,
+                    "{}",
+                    row.id
+                );
+                assert!(alternate_diagnostics.emission_plan.is_none(), "{}", row.id);
+                assert!(!alternate_diagnostics.emission_invoked, "{}", row.id);
+                assert!(!alternate_diagnostics.topology_invoked, "{}", row.id);
+                assert!(!alternate_diagnostics.rounded_invoked, "{}", row.id);
+                assert!(alternate_output.is_none(), "{}", row.id);
+            }
+        }
+        assert_eq!(
+            alternate_allocations, 0,
+            "{} alternate allocated during attempt",
+            row.id
+        );
+        assert_eq!(workspace.allocated_bytes(), allocated_bytes);
+        let alternate_snapshot = alternate_output.map(snapshot);
+        let alternate_topology_stats = workspace.topology_stats();
+
         crate::allocation_test_support::start();
         let attempt =
             workspace.attempt(row.path_input(), row.rule, TOPOLOGY_TOLERANCE, MAX_COMMANDS);
@@ -449,10 +680,36 @@ fn emit_native_cubic_fill() {
                 assert_eq!(diagnostics.flat_status, PATH_OK, "{}", row.id);
                 assert!(diagnostics.emission_plan.is_some(), "{}", row.id);
                 assert!(output.is_some(), "{}", row.id);
+                let output = output.unwrap();
+                assert_decoded_sources(row, &row.verbs, output);
+                assert_input_owners(row, &row.verbs, output);
+                assert_eq!(alternate_snapshot, Some(snapshot(output)), "{}", row.id);
+                assert_eq!(
+                    workspace.topology_stats(),
+                    alternate_topology_stats,
+                    "{}",
+                    row.id
+                );
+                assert_eq!(
+                    diagnostics.statistics, alternate_diagnostics.statistics,
+                    "{}",
+                    row.id
+                );
+                if row.id == "C05" || row.id.starts_with("C05/") {
+                    assert_eq!(output.commands.len(), 72, "{}", row.id);
+                    assert_eq!(
+                        alternate_diagnostics.sizing_plan.verb_count, 68,
+                        "{}",
+                        row.id
+                    );
+                }
             }
             ExpectedStatus::PathNumericRange => {
                 assert_eq!(diagnostics.flat_status, PATH_NUMERIC_RANGE, "{}", row.id);
                 assert!(diagnostics.emission_plan.is_none(), "{}", row.id);
+                assert!(!diagnostics.emission_invoked, "{}", row.id);
+                assert!(!diagnostics.topology_invoked, "{}", row.id);
+                assert!(!diagnostics.rounded_invoked, "{}", row.id);
                 assert!(output.is_none(), "{}", row.id);
             }
         }
@@ -480,7 +737,6 @@ fn emit_native_cubic_fill() {
         print!(",\"statistics\":");
         print_statistics(diagnostics.statistics);
         if let Some(output) = output {
-            assert_decoded_sources(row, output);
             let bounds = diagnostics.flat_bounds.expect("successful flat bounds");
             print!(
                 ",\"flat_bounds\":[{},{},{},{}],\"commands\":",
@@ -498,6 +754,9 @@ fn emit_native_cubic_fill() {
             ",\"allocations\":{allocations},\"allocated_bytes\":{allocated_bytes},\"inline_bytes\":{inline_bytes}}}"
         );
     }
+    assert_eq!(paired_rows, EXPECTED_ROWS);
+    assert_eq!(paired_successes, 92);
+    assert_eq!(paired_numeric_ranges, 2);
     println!("P3_NATIVE_CUBIC_END");
 }
 
@@ -578,11 +837,29 @@ mod tests {
         topology_tolerance: f64,
         command_capacity: usize,
     ) -> Result<AttemptDiagnostics, BridgeError> {
+        measured_raw_rule_attempt(
+            workspace,
+            path,
+            LineFillRule::Nonzero,
+            flatten_tolerance,
+            topology_tolerance,
+            command_capacity,
+        )
+    }
+
+    fn measured_raw_rule_attempt(
+        workspace: &mut BridgeWorkspace,
+        path: &RawPath,
+        rule: LineFillRule,
+        flatten_tolerance: f64,
+        topology_tolerance: f64,
+        command_capacity: usize,
+    ) -> Result<AttemptDiagnostics, BridgeError> {
         let bytes = workspace.allocated_bytes();
         crate::allocation_test_support::start();
         let result = workspace.attempt(
             path.input(flatten_tolerance),
-            LineFillRule::Nonzero,
+            rule,
             topology_tolerance,
             command_capacity,
         );
@@ -679,6 +956,28 @@ mod tests {
             path.cubic_to(quarter[1], quarter[2], quarter[3]);
             quarter = quarter.map(rotate);
         }
+        path
+    }
+
+    fn append_triangle(path: &mut RawPath, dx: f64, returning: bool, closed: bool) {
+        path.move_to(point(dx, 0.0));
+        path.cubic_to(
+            point(dx + 1.0, 0.0),
+            point(dx + 2.0, 0.0),
+            point(dx + 3.0, 0.0),
+        );
+        path.cubic_to(point(dx + 2.0, 1.0), point(dx + 1.0, 2.0), point(dx, 3.0));
+        if returning {
+            path.cubic_to(point(dx, 2.0), point(dx, 1.0), point(dx, 0.0));
+        }
+        if closed {
+            path.close();
+        }
+    }
+
+    fn raw_triangle(returning: bool, closed: bool) -> RawPath {
+        let mut path = RawPath::default();
+        append_triangle(&mut path, 0.0, returning, closed);
         path
     }
 
@@ -977,20 +1276,7 @@ mod tests {
         let mut consecutive_moves = RawPath::default();
         consecutive_moves.move_to(point(0.0, 0.0));
         consecutive_moves.move_to(point(1.0, 0.0));
-        let mut nonreturning_close = RawPath::default();
-        nonreturning_close.move_to(point(0.0, 0.0));
-        append_linear(&mut nonreturning_close, point(0.0, 0.0), point(3.0, 0.0));
-        nonreturning_close.close();
-        let mut returning_open = RawPath::default();
-        returning_open.move_to(point(0.0, 0.0));
-        append_linear(&mut returning_open, point(0.0, 0.0), point(3.0, 0.0));
-        append_linear(&mut returning_open, point(3.0, 0.0), point(0.0, 0.0));
-        for unsupported in [
-            &line,
-            &consecutive_moves,
-            &nonreturning_close,
-            &returning_open,
-        ] {
+        for unsupported in [&line, &consecutive_moves] {
             assert_eq!(
                 measured_raw_attempt(
                     &mut workspace,
@@ -1086,6 +1372,303 @@ mod tests {
             output.owners.last(),
             Some(&EdgeOwner::ImplicitClosure { contour: 0 })
         );
+    }
+
+    fn assert_literal_triangle(output: BridgeOutput<'_>, dx: f64) {
+        assert_eq!(output.ranges.len(), 1);
+        assert_eq!(output.ranges[0].start, 0);
+        assert_eq!(output.ranges[0].count, 3);
+        assert_eq!(output.points.len(), 3);
+        let expected = [point(dx, 0.0), point(dx + 3.0, 0.0), point(dx, 3.0)];
+        for (actual, expected) in output.points.iter().zip(expected) {
+            assert_eq!(actual.x.to_bits(), expected.x.to_bits());
+            assert_eq!(actual.y.to_bits(), expected.y.to_bits());
+        }
+        assert_eq!(output.rounded.vertices.len(), 3);
+        assert_eq!(output.rounded.indices.len(), 3);
+        let mut triangle: Vec<(u64, u64)> = output
+            .rounded
+            .indices
+            .iter()
+            .map(|index| output.rounded.vertices[usize::try_from(*index).unwrap()])
+            .map(|point| (point.x.to_bits(), point.y.to_bits()))
+            .collect();
+        triangle.sort_unstable();
+        let mut expected_bits: Vec<(u64, u64)> = expected
+            .iter()
+            .map(|point| (point.x.to_bits(), point.y.to_bits()))
+            .collect();
+        expected_bits.sort_unstable();
+        assert_eq!(triangle, expected_bits);
+    }
+
+    #[test]
+    fn all_four_closure_forms_normalize_to_the_literal_triangle() {
+        for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
+            for (returning, closed, command_count, final_owner) in [
+                (
+                    true,
+                    false,
+                    4,
+                    EdgeOwner::CubicLeaf {
+                        source_verb: 3,
+                        end_numerator: 1,
+                        depth: 0,
+                    },
+                ),
+                (
+                    true,
+                    true,
+                    5,
+                    EdgeOwner::CubicLeaf {
+                        source_verb: 3,
+                        end_numerator: 1,
+                        depth: 0,
+                    },
+                ),
+                (false, false, 3, EdgeOwner::ImplicitClosure { contour: 0 }),
+                (false, true, 4, EdgeOwner::ExplicitClose { source_verb: 3 }),
+            ] {
+                let path = raw_triangle(returning, closed);
+                let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+                let diagnostics = measured_raw_rule_attempt(
+                    &mut workspace,
+                    &path,
+                    rule,
+                    FLATTEN_TOLERANCE,
+                    TOPOLOGY_TOLERANCE,
+                    MAX_COMMANDS,
+                )
+                .unwrap();
+                assert_eq!(diagnostics.flat_status, PATH_OK);
+                let output = workspace.output().unwrap();
+                assert_eq!(output.commands.len(), command_count);
+                assert_literal_triangle(output, 0.0);
+                assert_eq!(
+                    output.owners,
+                    [
+                        EdgeOwner::CubicLeaf {
+                            source_verb: 1,
+                            end_numerator: 1,
+                            depth: 0,
+                        },
+                        EdgeOwner::CubicLeaf {
+                            source_verb: 2,
+                            end_numerator: 1,
+                            depth: 0,
+                        },
+                        final_owner,
+                    ]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn next_move_finalizes_open_forms_and_preserves_shifted_ordinals() {
+        let mut returning_then_explicit = RawPath::default();
+        append_triangle(&mut returning_then_explicit, 0.0, true, false);
+        append_triangle(&mut returning_then_explicit, 9.0, false, true);
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+        measured_raw_attempt(
+            &mut workspace,
+            &returning_then_explicit,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        let output = workspace.output().unwrap();
+        assert_eq!(output.ranges.len(), 2);
+        assert_eq!(
+            output.owners[2],
+            EdgeOwner::CubicLeaf {
+                source_verb: 3,
+                end_numerator: 1,
+                depth: 0,
+            }
+        );
+        assert_eq!(
+            output.owners[5],
+            EdgeOwner::ExplicitClose { source_verb: 7 }
+        );
+        assert_eq!(output.sources[3].source_verb, 5);
+
+        let mut implicit_then_returning = RawPath::default();
+        append_triangle(&mut implicit_then_returning, 0.0, false, false);
+        append_triangle(&mut implicit_then_returning, 9.0, true, true);
+        measured_raw_attempt(
+            &mut workspace,
+            &implicit_then_returning,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        let output = workspace.output().unwrap();
+        assert_eq!(output.owners[2], EdgeOwner::ImplicitClosure { contour: 0 });
+        assert_eq!(
+            output.owners[5],
+            EdgeOwner::CubicLeaf {
+                source_verb: 6,
+                end_numerator: 1,
+                depth: 0,
+            }
+        );
+        assert_eq!(output.sources[2].source_verb, 4);
+    }
+
+    #[test]
+    fn signed_zero_returning_endpoint_is_geometrically_equal_but_bit_exact_in_sources() {
+        let mut path = RawPath::default();
+        path.move_to(point(-0.0, 0.0));
+        path.cubic_to(point(1.0, 0.0), point(2.0, 0.0), point(3.0, 0.0));
+        path.cubic_to(point(2.0, 1.0), point(1.0, 2.0), point(0.0, 3.0));
+        path.cubic_to(point(0.0, 2.0), point(0.0, 1.0), point(0.0, -0.0));
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+        measured_raw_attempt(
+            &mut workspace,
+            &path,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        let output = workspace.output().unwrap();
+        assert_eq!(output.points.len(), 3);
+        assert_eq!(output.points[0].x.to_bits(), 1u64 << 63);
+        assert_eq!(output.sources[0].points[0].x.to_bits(), 1u64 << 63);
+        assert_eq!(output.sources[2].points[3].y.to_bits(), 1u64 << 63);
+        assert_eq!(output.owners.len(), 3);
+    }
+
+    #[test]
+    fn legacy_two_edge_forms_reach_topology_and_recover_atomically() {
+        let success = raw_triangle(true, true);
+        let mut nonreturning_close = RawPath::default();
+        nonreturning_close.move_to(point(0.0, 0.0));
+        append_linear(&mut nonreturning_close, point(0.0, 0.0), point(3.0, 0.0));
+        nonreturning_close.close();
+        let mut returning_open = RawPath::default();
+        returning_open.move_to(point(0.0, 0.0));
+        append_linear(&mut returning_open, point(0.0, 0.0), point(3.0, 0.0));
+        append_linear(&mut returning_open, point(3.0, 0.0), point(0.0, 0.0));
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+
+        for failure in [&nonreturning_close, &returning_open] {
+            measured_raw_attempt(
+                &mut workspace,
+                &success,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            assert!(workspace.output().is_some());
+            assert_eq!(
+                measured_raw_attempt(
+                    &mut workspace,
+                    failure,
+                    FLATTEN_TOLERANCE,
+                    TOPOLOGY_TOLERANCE,
+                    MAX_COMMANDS,
+                ),
+                Err(BridgeError::Topology(TopologyError::Unresolved))
+            );
+            let diagnostics = workspace.diagnostics();
+            assert!(diagnostics.sizing_invoked);
+            assert!(diagnostics.emission_invoked);
+            assert!(diagnostics.topology_invoked);
+            assert!(!diagnostics.rounded_invoked);
+            assert!(workspace.output().is_none());
+            measured_raw_attempt(
+                &mut workspace,
+                &success,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            assert!(workspace.output().is_some());
+        }
+    }
+
+    #[test]
+    fn malformed_close_and_zero_length_leaf_fail_without_stale_output() {
+        let success = raw_triangle(true, true);
+        let invalid_close = RawPath {
+            verbs: vec![VERB_CLOSE],
+            point_bytes: Vec::new(),
+        };
+        let mut repeated_close = success.clone();
+        repeated_close.close();
+        let mut zero_leaf = RawPath::default();
+        zero_leaf.move_to(point(0.0, 0.0));
+        zero_leaf.cubic_to(point(0.0, 0.0), point(0.0, 0.0), point(0.0, 0.0));
+        zero_leaf.cubic_to(point(1.0, 0.0), point(2.0, 0.0), point(3.0, 0.0));
+        zero_leaf.cubic_to(point(2.0, 1.0), point(1.0, 2.0), point(0.0, 3.0));
+        zero_leaf.cubic_to(point(0.0, 2.0), point(0.0, 1.0), point(0.0, 0.0));
+        zero_leaf.close();
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+
+        for malformed in [&invalid_close, &repeated_close] {
+            measured_raw_attempt(
+                &mut workspace,
+                &success,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            let diagnostics = measured_raw_attempt(
+                &mut workspace,
+                malformed,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            assert_eq!(diagnostics.flat_status, PATH_INVALID);
+            assert!(!diagnostics.emission_invoked);
+            assert!(!diagnostics.topology_invoked);
+            assert!(!diagnostics.rounded_invoked);
+            assert!(workspace.output().is_none());
+            measured_raw_attempt(
+                &mut workspace,
+                &success,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            assert!(workspace.output().is_some());
+        }
+
+        assert_eq!(
+            measured_raw_attempt(
+                &mut workspace,
+                &zero_leaf,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::ZeroLengthLeaf)
+        );
+        let diagnostics = workspace.diagnostics();
+        assert!(diagnostics.sizing_invoked);
+        assert!(diagnostics.emission_invoked);
+        assert!(!diagnostics.topology_invoked);
+        assert!(!diagnostics.rounded_invoked);
+        assert!(workspace.output().is_none());
+        measured_raw_attempt(
+            &mut workspace,
+            &success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(workspace.output().is_some());
     }
 
     #[test]
