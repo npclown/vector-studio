@@ -1,6 +1,9 @@
 #![cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 
 mod codec;
+// Private canonical cubic composition has no P2 v1 caller or WASM export.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+mod cubic_fill;
 mod engine;
 // P3 symbolic ordering has no P2 v1 caller or WASM export.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]

@@ -40,6 +40,8 @@ The [P3.2f native compatibility bridge](p3-native-cubic-bridge-contract.md) prep
 
 The [P3.2g native topology contract](p3-native-cubic-topology-contract.md) freezes a bounded private implementation of the P3.1e sufficient condition and a dependent test-only guard for the compatibility bridge. Its exact common-grid arithmetic adds no dependency or product rejection policy. General cubic topology and the production operation/source/transport contract remain open.
 
+The [P3.2h workspace contract](p3-native-cubic-workspace-contract.md) prepares a private canonical-input composition of these validated helpers, replacing the test-only composition with a thin fixture adapter. Its restricted source grammar and resource caps are private preparation limits; it creates no exported operation, ABI or final product rejection envelope.
+
 The [P3.0b-s1 regular stroke certificate](p3-stroke-boundary-certificate.md) derives a width-aware bound for raw regular offset generators, an independent second-derivative verifier and an exact counterexample to centerline-only refinement. This analytic review does not freeze machine-arithmetic guards, work limits, stationary/cusp handling or resolved-region topology. C03 remains incomplete; the next bounded numerical experiment needs those executable details specified prospectively.
 
 The [P3.0b-s2 experiment contract](p3-stroke-numeric-experiment.md) supplies exact rational/outward arithmetic, independent interval verification, a fixed 62-case diagnostic corpus, limits and evidence rules for the next bounded experiment. Its emitted samples are rational diagnostic data, not production Float64 vertices. Experimental completion and candidate-wide feasibility are separate outcomes; no failed family or downstream gate is waived.
