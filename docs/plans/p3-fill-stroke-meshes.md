@@ -1,6 +1,16 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: private canonical fill composition is integrated through P3.2l [PR #73](https://github.com/npclown/vector-studio/pull/73), and bounded cubic readiness tooling through P3.2m1 [PR #74](https://github.com/npclown/vector-studio/pull/74). P3.2m2 full observation and audit are complete locally; protected integration is pending. Earlier sections retain their contemporaneous gate context and integration evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.2m2 full readiness observation and audit are integrated through [PR #75](https://github.com/npclown/vector-studio/pull/75). P3.1f rounded internal-knot topology is the current test-only prerequisite. Earlier sections retain their contemporaneous gate context and integration evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.1f rounded internal-knot topology
+
+Base: clean updated `5f4fece1629343d4ef054b41e9cb8c2730ad0b0c`, after P3.2m2 PR #75 and required CI on `ca360f82e4fea7dba7bc3c2d21e5a9c256b1e9b7` (run36988360168, job110778488068). Branch: `codex/p3-1f-rounded-knot-topology`. The [new contract](p3-rounded-knot-topology-contract.md) is FROZEN after Primary and independent mathematical/interface/literal-fixture review; implementation may now begin, with numeric execution still gated by stable-source review.
+
+K01-K04 add a separate sufficient topology certificate for rounded internal subdivision knots with exact source endpoints. Expanded hull disjointness and directed cyclic common projection preserve a simultaneous embedding; existing P3.1d position proof and P3.1e exact-knot certificate remain unchanged. Freeze11 literal positive carriers, rejecting controls and bounded stage/counter semantics before implementation; stable source review precedes execution. This does not claim acceptance of the1000-path census or general crossing support.
+
+Primary owns proof contract/shared decisions/evidence/integration. Sol high owns the coupled test-only oracle and shared preflight extraction; Sol medium owns disjoint fixtures/unit tests. Astra high reviews the mathematical proof and prospective fixtures; an independent Sol medium checks stable code and Primary reviews both workers. No recursive delegation. Runtime/native/API/ABI/dependency/cap changes, browser/GPU/performance runs and deferred stroke are excluded. The [review record](../evidence/p3.1f-rounded-knot-topology-review-2026-10-02.md) retains prospective decisions and forthcoming validation. Local evidence is recorded below; protected CI/integration remains pending.
+
+K01-K04 local PASS: all11 new positive carriers and positional proofs, all fixed controls and old-oracle counterparts pass. Focused tests pass124 units; bounded two-worker `pnpm check` passes483 units across50 files and all static/boundary checks; build passes. Primary/independent pre-execution review preserved old semantics and corrected the cyclic fixture's provenance before any numeric run. No numerical failure or post-result tuning occurred. Required CI/protected integration remain pending. The next candidate is a separately contracted native counterpart before any private workspace adoption; no runtime or capacity readiness is inferred from this test-only checkpoint.
 
 ## P3.2m2 full cubic readiness evidence
 
