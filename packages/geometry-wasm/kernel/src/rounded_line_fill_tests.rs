@@ -620,7 +620,7 @@ fn print_point(value: Point) {
     print!("[{},{}]", value.x, value.y);
 }
 
-fn print_points(values: &[Point]) {
+pub(super) fn print_points(values: &[Point]) {
     print!("[");
     for (index, value) in values.iter().copied().enumerate() {
         if index != 0 {
@@ -646,7 +646,7 @@ fn print_usizes(values: &[usize]) {
     print!("]");
 }
 
-fn print_output(output: RoundedFillOutput<'_>) {
+pub(super) fn print_output(output: RoundedFillOutput<'_>) {
     print!("{{\"vertices\":");
     print_points(output.vertices);
     print!(",\"indices\":[");
@@ -767,7 +767,7 @@ fn print_contours(contours: &[Vec<Point>]) {
     print!("]");
 }
 
-fn print_stats(stats: RoundedFillStats) {
+pub(super) fn print_stats(stats: RoundedFillStats) {
     print!("{{\"input_vertices\":{},\"edges\":{},\"pair_checks\":{},\"events\":{},\"columns\":{},\"sections\":{},\"nodes\":{},\"cells\":{},\"boundaries\":{},\"contributors\":{},\"work_units\":{}}}", stats.input_vertices, stats.edges, stats.pair_checks, stats.events, stats.columns, stats.sections, stats.nodes, stats.cells, stats.boundaries, stats.contributors, stats.work_units);
 }
 

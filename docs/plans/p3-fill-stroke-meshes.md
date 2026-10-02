@@ -1,6 +1,20 @@
 # P3 fill and stroke meshes execution plan
 
-Current isolated checkpoint: P3.1e restricted simple cubic topology certificate follows P3.1d [continuous boundary verification](p3-cubic-boundary-oracle-contract.md), integrated through [PR #64](https://github.com/npclown/vector-studio/pull/64) as `d42dfb2f18152d003c5957d859c52b1355078f13` after required CI on `833d5a730bc193404302449ca4764f3cff895d4f` (run 36959253670, job 110689045097). Earlier checkpoint paragraphs below retain their contemporaneous gate context; complete P3 acceptance remains open.
+Current isolated checkpoint: P3.2f native cubic fill compatibility bridge follows P3.1e, integrated through [PR #65](https://github.com/npclown/vector-studio/pull/65) as `1eac46fdc2ab04aa8852246a543ac00c2cbf4d62` after required CI on `5be209d9e6b8c563729465cefd9cdfd5184f530c` (run 36961562928, job 110696166877). Earlier checkpoint paragraphs below retain their contemporaneous gate context; complete P3 acceptance remains open.
+
+## P3.2f native cubic fill compatibility
+
+Base: clean updated `1eac46f`, branch `codex/p3-2f-native-cubic-bridge`. Primary selects actual-kernel compatibility before a production cubic mesh operation, following independent dependency review. The [frozen bridge contract](p3-native-cubic-bridge-contract.md) composes actual Rust flattening at1/8 and rounded fill at1/16 under identity screen, then independently verifies original-source position/topology, provenance/closure ownership and complete mesh output. Its prospective94 rows reuse the47 frozen source cases under both rules:92 mandatory successes and two analytically required large-coordinate sizing failures.
+
+Contract/source/limit review must precede the first new geometry execution. All composition remains test-only; absent native topology acceptance and incomplete operation/transport contracts prohibit publishing this as a general runtime operation. No P2 behavior, public API, ABI, dependency, renderer or user-deferred stroke work is included. Primary owns shared seams; only after freeze may native and TS workers implement disjoint files.
+
+Primary and independent contract/proof review PASS. Native dyadic flattening, separated hulls, monotone rounded-window feasibility and convex-family output bounds were established before execution. Review clarified failed sizing-plan retention and avoided stringify/reparse loss of signed zero. The contract is FROZEN; Sol high owned only the new cfg(test) native bridge, Sol medium owned disjoint TS fixtures/parser/checks, and Primary owned lib/serializer/parser seams. Stable-source review preceded the first geometry execution.
+
+Local N01-N05 acceptance and Primary review PASS; the [review record](../evidence/p3.2f-native-cubic-bridge-review-2026-10-02.md) maps the fixed cases, publication/allocation tests and review corrections. `pnpm test:geometry` passes 102 native tests, 129 TypeScript geometry tests in six files and unchanged reproducible WASM. All 94 new actual rows match the frozen expectations: 92 certified meshes and two sizing failures. `pnpm check` passes formatting/lint/types, 445 unit tests in 49 files and boundaries; `pnpm build` passes. Source review preceded execution, and no observed result changed a source, tolerance, cap or expected outcome. Protected CI/integration remain required.
+
+Final independent stable-source audit and Primary review PASS with no remaining implementation must-fix. Explicit Markdown formatting, the existing local-link/anchor checker (612 references across 118 Markdown files), whitespace and scope review PASS. The 11-file change is limited to test support, fixtures and owning documents; generated inputs remain ignored. The next private dependency is native topology acceptance and remaining operation/transport readiness, not the user-deferred stroke refinement or an implicit public path API.
+
+P3.1d was integrated through [PR #64](https://github.com/npclown/vector-studio/pull/64) as `d42dfb2f18152d003c5957d859c52b1355078f13` after required CI on `833d5a730bc193404302449ca4764f3cff895d4f` (run36959253670, job110689045097).
 
 ## P3.1e restricted simple cubic topology
 

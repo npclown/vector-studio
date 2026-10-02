@@ -33,6 +33,8 @@ mod fill_predicates_tests;
 #[cfg(test)]
 mod line_fill_tests;
 #[cfg(test)]
+mod native_cubic_fill_tests;
+#[cfg(test)]
 mod rounded_line_fill_tests;
 
 #[cfg(target_arch = "wasm32")]
