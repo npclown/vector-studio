@@ -1,6 +1,18 @@
 # P3 fill and stroke meshes execution plan
 
-Current isolated checkpoint: P3.2e rounded line-fill implementation follows P3.2d [bounded private line-fill mesh](p3-line-fill-mesh-contract.md), integrated through [PR #62](https://github.com/npclown/vector-studio/pull/62) as `514e3b6fe823ce03e915819a4feca9706c059f74` after required CI on `eede4091d8e9c45ded6804db030002ab33b3124d` (run 36578636512, job 109440674392). Earlier checkpoint paragraphs below retain their contemporaneous gate context; complete P3 acceptance remains open.
+Current isolated checkpoint: P3.1d independent continuous cubic boundary certificate follows P3.2e [rounded line-fill](p3-rounded-fill-mesh-contract.md), integrated through [PR #63](https://github.com/npclown/vector-studio/pull/63) as `c7fd5c70091aae5599089495d4018bbb60aa860f` after required CI on `ddb4cb0e2ad33ab2501bd4f461fea5021a92361a` (run 36588525050, job 109475189176). Earlier checkpoint paragraphs below retain their contemporaneous gate context; complete P3 acceptance remains open.
+
+## P3.1d continuous cubic boundary certificate
+
+On 2026-10-02 the user resumed continuous execution, superseding the stop after P3.2e. Base is clean `c7fd5c7`, equal to freshly fetched origin/main; branch `codex/p3-1d-cubic-boundary-oracle`. The [test-only contract](p3-cubic-boundary-oracle-contract.md) owns B01-B04 and the fixed 1/8 physical-pixel target. Primary selects this independent oracle before cubic integration because P2's unchanged 1/4-pixel verifier cannot prove the P3 boundary share. A Sol medium read-only audit independently confirmed this dependency and the remaining curved-topology gap.
+
+Contract/source review precedes the first fixture execution. Primary owns decisions, shared plan/evidence and review. Disjoint Sol medium workers may implement the oracle and fixed fixtures/tests after contract/interface freeze; no recursive delegation. Required validation is focused units, `pnpm check`, `pnpm build`, changed-Markdown checks and protected CI. No runtime, P2 verifier, public API, ABI, dependency, browser/GPU or benchmark change is included. The user-deferred stroke refinement remains deferred.
+
+Dependency order: P3.1d continuous positional certificate -> separately frozen curved-region/topology oracle -> private P3-budget flattening/contour/source-provenance composition with rounded fill. A distance bound alone cannot certify crossings, tangencies or region connectivity. Full cubic workload limits, mesh transport, coverage and GPU validation remain later gates.
+
+Local B01-B04 acceptance and Primary/independent review PASS; the [review record](../evidence/p3.1d-cubic-boundary-review-2026-10-02.md) maps the evidence and its limits. Focused units pass 22 tests with all 106 fixed cases / 22,912 intervals. `pnpm check` passes formatting/lint/types, 380 tests in 48 files and dependency boundaries; `pnpm build` passes. Fixture source was reviewed before first execution; unit conversion, explicit status/precedence, literal carriers, sparse-input validation and successful-refinement coverage were clarified or corrected before acceptance without changing the fixed corpus, densities or budget. Protected CI/integration remain required.
+
+Final document validation PASS: explicit Prettier check of four changed Markdown files, the existing local-link/anchor checker (596 references across 114 Markdown files), whitespace and source-of-truth/scope review. The seven-file change contains only test support, unit fixtures and owning documentation; no product code, P2 verifier, dependency, generated binary, local cache or unrelated change is included.
 
 ## P3.2e rounded line-fill mesh
 
