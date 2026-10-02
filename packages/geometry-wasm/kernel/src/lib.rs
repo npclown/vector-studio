@@ -23,6 +23,9 @@ mod line_fill;
 // P3 rounded meshes are private and preserve the existing P2 ABI.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 mod rounded_line_fill;
+// Restricted cubic topology is private preparation with no P2 v1 export.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+mod simple_cubic_topology;
 
 #[cfg(test)]
 mod fill_event_order_tests;
@@ -36,6 +39,8 @@ mod line_fill_tests;
 mod native_cubic_fill_tests;
 #[cfg(test)]
 mod rounded_line_fill_tests;
+#[cfg(test)]
+mod simple_cubic_topology_tests;
 
 #[cfg(target_arch = "wasm32")]
 use core::cell::UnsafeCell;
