@@ -144,7 +144,11 @@ function exactBernsteinCoordinate(
   return boundedDyadicToNumber(numerator, CONTROL_SCALE_POWER + 3 * depth);
 }
 
-function uniformLines(cubic: Cubic, depth: number): readonly ReferenceFlattenedLine[] {
+export function uniformCubicFixtureLines(
+  cubic: Cubic,
+  depth: number,
+  sourceVerbOrdinal = SOURCE_VERB_ORDINAL,
+): readonly ReferenceFlattenedLine[] {
   const count = 2 ** depth;
   const xs = cubic.map(([x]) => x) as [number, number, number, number];
   const ys = cubic.map(([, y]) => y) as [number, number, number, number];
@@ -155,7 +159,7 @@ function uniformLines(cubic: Cubic, depth: number): readonly ReferenceFlattenedL
         exactBernsteinCoordinate(xs, endNumerator, depth),
         exactBernsteinCoordinate(ys, endNumerator, depth),
       ],
-      provenance: { sourceVerbOrdinal: SOURCE_VERB_ORDINAL, endNumerator, depth },
+      provenance: { sourceVerbOrdinal, endNumerator, depth },
     };
   });
 }
@@ -167,7 +171,7 @@ function fixture(id: string, cubic: Cubic, screen: Matrix2, depth: number): Cubi
     screen,
     depth,
     sourceVerbOrdinal: SOURCE_VERB_ORDINAL,
-    lines: uniformLines(cubic, depth),
+    lines: uniformCubicFixtureLines(cubic, depth),
   };
 }
 
