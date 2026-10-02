@@ -2,6 +2,8 @@
 
 Status: FROZEN after Primary/independent contract review, 2026-10-02. This slice follows [P3.2g](p3-native-cubic-topology-contract.md) and moves its tested composition into a crate-private Rust workspace. The [active plan](p3-fill-stroke-meshes.md) owns execution; the [private mesh contract](p3-private-contract.md) retains full C03-C05. No public API, WASM operation/export, mesh ABI, dependency, P2 behavior, renderer or product rejection policy is introduced. User-deferred stroke refinement stays deferred.
 
+The two temporary returning/open and nonreturning/CLOSE restrictions below are superseded by the separately frozen [P3.2i closure contract](p3-cubic-closure-contract.md). All other ownership, caps and precedence remain in force; historical P3.2h evidence is unchanged.
+
 ## Ownership and input
 
 Add `cubic_fill.rs` inside the existing Rust kernel. Reuse `codec::PathInput`, its bit-preserving `point()` accessor and `geometry::run_path`; do not duplicate or alter P2 validation/flattening. Accept the existing private fill-rule enum and a separate local rounded-topology tolerance. The PathInput request's tolerance is the flattening tolerance. No hidden zoom/DPR multiplier, screen-budget derivation or operation identity is selected here.

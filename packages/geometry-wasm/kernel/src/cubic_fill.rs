@@ -44,6 +44,9 @@ pub(crate) enum EdgeOwner {
     ImplicitClosure {
         contour: usize,
     },
+    ExplicitClose {
+        source_verb: u32,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -110,7 +113,6 @@ enum SourceVerb {
 struct ActiveSourceContour {
     contour: usize,
     cubic_start: usize,
-    first: Point,
     current: Point,
 }
 
@@ -276,7 +278,7 @@ impl CubicFillWorkspace {
             match verb {
                 VERB_MOVE => {
                     if let Some(open) = active.take() {
-                        self.finish_open_source(open)?;
+                        self.finish_source(open)?;
                     }
                     if self.source_range_len >= MAX_CONTOURS {
                         return Err(CubicFillError::SourceLimit);
@@ -290,7 +292,6 @@ impl CubicFillWorkspace {
                     active = Some(ActiveSourceContour {
                         contour,
                         cubic_start: self.source_len,
-                        first: point,
                         current: point,
                     });
                 }
@@ -332,14 +333,14 @@ impl CubicFillWorkspace {
                     self.source_verbs[ordinal] = SourceVerb::Close {
                         contour: open.contour,
                     };
-                    self.finish_closed_source(open)?;
+                    self.finish_source(open)?;
                 }
                 VERB_LINE => return Err(CubicFillError::UnsupportedSource),
                 _ => return Err(CubicFillError::UnsupportedSource),
             }
         }
         if let Some(open) = active {
-            self.finish_open_source(open)?;
+            self.finish_source(open)?;
         }
         if scalar != input.point_count() || self.source_range_len == 0 {
             return Err(CubicFillError::UnsupportedSource);
@@ -348,18 +349,8 @@ impl CubicFillWorkspace {
         Ok(())
     }
 
-    fn finish_closed_source(&mut self, open: ActiveSourceContour) -> Result<(), CubicFillError> {
-        if self.source_len == open.cubic_start || !same_point(open.current, open.first) {
-            return Err(CubicFillError::UnsupportedSource);
-        }
-        self.push_source_range(TopologyRange {
-            start: open.cubic_start,
-            count: self.source_len - open.cubic_start,
-        })
-    }
-
-    fn finish_open_source(&mut self, open: ActiveSourceContour) -> Result<(), CubicFillError> {
-        if self.source_len == open.cubic_start || same_point(open.current, open.first) {
+    fn finish_source(&mut self, open: ActiveSourceContour) -> Result<(), CubicFillError> {
+        if self.source_len == open.cubic_start {
             return Err(CubicFillError::UnsupportedSource);
         }
         self.push_source_range(TopologyRange {
@@ -572,7 +563,7 @@ impl CubicFillWorkspace {
                         SourceVerb::Close { contour } if contour == open.source_contour => {}
                         _ => return Err(CubicFillError::InvalidProvenance),
                     }
-                    self.finish_closed_contour(open)?;
+                    self.finish_closed_contour(open, command.provenance.source_verb)?;
                 }
                 _ => return Err(CubicFillError::InvalidCommand),
             }
@@ -592,15 +583,22 @@ impl CubicFillWorkspace {
         Ok(())
     }
 
-    fn finish_closed_contour(&mut self, open: ActiveContour) -> Result<(), CubicFillError> {
+    fn finish_closed_contour(
+        &mut self,
+        open: ActiveContour,
+        close_source_verb: u32,
+    ) -> Result<(), CubicFillError> {
         let first = self.contour_points[open.point_start];
-        if !same_point(first, open.previous)
-            || self.point_len <= open.point_start + 1
-            || open.source_contour != self.range_len
-        {
+        if self.point_len <= open.point_start + 1 || open.source_contour != self.range_len {
             return Err(CubicFillError::InvalidCommand);
         }
-        self.point_len -= 1;
+        if same_point(first, open.previous) {
+            self.point_len -= 1;
+        } else {
+            self.push_owner(EdgeOwner::ExplicitClose {
+                source_verb: close_source_verb,
+            })?;
+        }
         self.push_range(ContourRange {
             start: open.point_start,
             count: self.point_len - open.point_start,
@@ -609,15 +607,16 @@ impl CubicFillWorkspace {
 
     fn finish_open_contour(&mut self, open: ActiveContour) -> Result<(), CubicFillError> {
         let first = self.contour_points[open.point_start];
-        if same_point(first, open.previous)
-            || self.point_len <= open.point_start + 1
-            || open.source_contour != self.range_len
-        {
+        if self.point_len <= open.point_start + 1 || open.source_contour != self.range_len {
             return Err(CubicFillError::InvalidCommand);
         }
-        self.push_owner(EdgeOwner::ImplicitClosure {
-            contour: open.source_contour,
-        })?;
+        if same_point(first, open.previous) {
+            self.point_len -= 1;
+        } else {
+            self.push_owner(EdgeOwner::ImplicitClosure {
+                contour: open.source_contour,
+            })?;
+        }
         self.push_range(ContourRange {
             start: open.point_start,
             count: self.point_len - open.point_start,
@@ -727,8 +726,22 @@ impl CubicFillWorkspace {
                             return Err(CubicFillError::RoundedOwnership);
                         }
                     }
-                    EdgeOwner::ImplicitClosure { contour: owner } if owner == contour => {}
+                    EdgeOwner::ImplicitClosure { contour: owner }
+                        if owner == contour && start_vertex + 1 == range.count => {}
                     EdgeOwner::ImplicitClosure { .. } => {
+                        return Err(CubicFillError::RoundedOwnership);
+                    }
+                    EdgeOwner::ExplicitClose { source_verb }
+                        if start_vertex + 1 == range.count
+                            && matches!(
+                                self.source_verb(source_verb)?,
+                                SourceVerb::Close { contour: owner } if owner == contour
+                            )
+                            && self.commands[..self.command_len].iter().any(|command| {
+                                command.verb == VERB_CLOSE
+                                    && command.provenance.source_verb == source_verb
+                            }) => {}
+                    EdgeOwner::ExplicitClose { .. } => {
                         return Err(CubicFillError::RoundedOwnership);
                     }
                 }
