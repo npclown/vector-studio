@@ -14,11 +14,11 @@ use crate::simple_cubic_topology::{
 const INPUT_LIMIT_BYTES: u64 = 512 * 1024;
 const EXPECTED_ROWS: usize = 54;
 
-struct SourceRow {
-    id: String,
-    contours: Vec<TopologyRange>,
-    cubics: Vec<TopologyCubic>,
-    leaves: Vec<TopologyLeaf>,
+pub(crate) struct SourceRow {
+    pub(crate) id: String,
+    pub(crate) contours: Vec<TopologyRange>,
+    pub(crate) cubics: Vec<TopologyCubic>,
+    pub(crate) leaves: Vec<TopologyLeaf>,
 }
 
 fn exact_tokens<'a>(line: &'a str, expected: usize, label: &str) -> Vec<&'a str> {
@@ -56,6 +56,18 @@ fn finite_bits(token: &str, label: &str) -> f64 {
 
 fn parse_fixture() -> Vec<SourceRow> {
     let path = env::var("P3_NATIVE_TOPOLOGY_INPUT").expect("P3_NATIVE_TOPOLOGY_INPUT required");
+    read_topology_fixture(&path, "# p3-native-topology-v1", EXPECTED_ROWS)
+}
+
+pub(crate) fn read_topology_fixture(
+    path: &str,
+    expected_header: &str,
+    expected_rows: usize,
+) -> Vec<SourceRow> {
+    assert!(
+        (1..=EXPECTED_ROWS).contains(&expected_rows),
+        "fixture row limit"
+    );
     let mut bytes = Vec::new();
     File::open(path)
         .expect("native topology fixture open")
@@ -70,12 +82,13 @@ fn parse_fixture() -> Vec<SourceRow> {
     assert!(!text.contains('\r'), "fixture must use LF");
     assert!(text.ends_with('\n'), "fixture terminal LF");
     let mut lines = text.lines();
-    assert_eq!(lines.next(), Some("# p3-native-topology-v1"));
-    assert_eq!(lines.next(), Some("# rows 54"));
+    assert_eq!(lines.next(), Some(expected_header));
+    let row_header = format!("# rows {expected_rows}");
+    assert_eq!(lines.next(), Some(row_header.as_str()));
 
-    let mut rows = Vec::with_capacity(EXPECTED_ROWS);
-    let mut ids = HashSet::with_capacity(EXPECTED_ROWS);
-    for row_index in 0..EXPECTED_ROWS {
+    let mut rows = Vec::with_capacity(expected_rows);
+    let mut ids = HashSet::with_capacity(expected_rows);
+    for row_index in 0..expected_rows {
         let header = exact_tokens(
             lines.next().expect("row header"),
             3,
@@ -189,7 +202,7 @@ fn parse_fixture() -> Vec<SourceRow> {
     rows
 }
 
-fn status_name(result: Result<(), TopologyError>) -> &'static str {
+pub(crate) fn status_name(result: Result<(), TopologyError>) -> &'static str {
     match result {
         Ok(()) => "Certified",
         Err(TopologyError::InvalidLimits) => "InvalidLimits",
@@ -223,7 +236,7 @@ fn print_bits(value: f64, first: &mut bool) {
     print_token(&format!("{:016x}", value.to_bits()), first);
 }
 
-fn print_input_tokens(row: &SourceRow) {
+pub(crate) fn print_input_tokens(row: &SourceRow) {
     print!("[");
     let mut first = true;
     print_token("row", &mut first);
@@ -265,7 +278,7 @@ fn print_ranges(ranges: &[TopologyRange]) {
     print!("]");
 }
 
-fn print_output(output: TopologyOutput<'_>) {
+pub(crate) fn print_output(output: TopologyOutput<'_>) {
     print!("{{\"points\":");
     print_points(output.points);
     print!(",\"contours\":");

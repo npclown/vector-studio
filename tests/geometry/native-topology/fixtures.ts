@@ -27,7 +27,7 @@ function unsigned(value: number, label: string): string {
   return String(value);
 }
 
-function tokens(
+export function topologyInputTokens(
   id: string,
   contours: readonly (readonly CubicTopologySegmentFixture[])[],
 ): readonly string[] {
@@ -82,7 +82,7 @@ export function fixedNativeTopologyFixtureRows(): readonly NativeTopologyFixture
       expectation: 'Certified' as const,
       orientations: fixture.expected.orientations,
       winding: fixture.expected.winding,
-      inputTokens: tokens(fixture.id, fixture.contours),
+      inputTokens: topologyInputTokens(fixture.id, fixture.contours),
     })),
     ...rejections.map((fixture) => ({
       id: fixture.id,
@@ -90,12 +90,12 @@ export function fixedNativeTopologyFixtureRows(): readonly NativeTopologyFixture
       expectation: 'Unresolved' as const,
       orientations: null,
       winding: null,
-      inputTokens: tokens(fixture.id, fixture.contours),
+      inputTokens: topologyInputTokens(fixture.id, fixture.contours),
     })),
   ];
 }
 
-function encodeTokens(row: NativeTopologyFixtureRow): string {
+export function encodeTopologyTokens(row: Readonly<{ inputTokens: readonly string[] }>): string {
   const lines: string[] = [];
   let index = 0;
   lines.push(row.inputTokens.slice(index, 3).join(' '));
@@ -125,7 +125,9 @@ function encodeTokens(row: NativeTopologyFixtureRow): string {
 export function encodeNativeTopologyFixture(rows: readonly NativeTopologyFixtureRow[]): string {
   if (rows.length !== 54)
     throw new Error(`expected 54 native topology rows, received ${rows.length}`);
-  const text = ['# p3-native-topology-v1', '# rows 54', ...rows.map(encodeTokens), ''].join('\n');
+  const text = ['# p3-native-topology-v1', '# rows 54', ...rows.map(encodeTopologyTokens), ''].join(
+    '\n',
+  );
   if (Buffer.byteLength(text, 'utf8') > 512 * 1024)
     throw new Error('native topology fixture exceeds the 512 KiB protocol ceiling');
   return text;

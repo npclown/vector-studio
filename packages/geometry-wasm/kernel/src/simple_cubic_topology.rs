@@ -108,9 +108,39 @@ struct ExactLeaf {
     ordinary_start: Point,
 }
 
+struct RoundedExactLeaf {
+    points: [ExactPoint; 6],
+    hull: [u8; 6],
+    hull_len: usize,
+    contour: usize,
+    contour_leaf: usize,
+    ordinary_start: Point,
+    closure: bool,
+}
+
+#[derive(Clone, Copy)]
+struct ExactHull<'a> {
+    points: &'a [ExactPoint],
+    indices: &'a [u8],
+}
+
 pub(crate) struct SimpleCubicTopologyWorkspace {
     limits: TopologyLimits,
     exact_leaves: Vec<ExactLeaf>,
+    points: [Point; ABSOLUTE_MAX_LEAVES],
+    point_len: usize,
+    contours: [TopologyRange; ABSOLUTE_MAX_CONTOURS],
+    contour_len: usize,
+    orientations: [i8; ABSOLUTE_MAX_CONTOURS],
+    winding: [[i8; ABSOLUTE_MAX_CONTOURS]; ABSOLUTE_MAX_CONTOURS],
+    stats: TopologyStats,
+    allocated_bytes: usize,
+    published: bool,
+}
+
+pub(crate) struct RoundedKnotCubicTopologyWorkspace {
+    limits: TopologyLimits,
+    exact_leaves: Vec<RoundedExactLeaf>,
     points: [Point; ABSOLUTE_MAX_LEAVES],
     point_len: usize,
     contours: [TopologyRange; ABSOLUTE_MAX_CONTOURS],
@@ -160,7 +190,7 @@ impl SimpleCubicTopologyWorkspace {
 
     pub(crate) fn certify(&mut self, input: TopologyInput<'_>) -> Result<(), TopologyError> {
         self.begin_attempt();
-        self.validate_counts(input)?;
+        validate_counts(self.limits, input)?;
         validate_structure(input)?;
         validate_provenance(input)?;
         preflight_knots(input)?;
@@ -198,19 +228,6 @@ impl SimpleCubicTopologyWorkspace {
         self.published = false;
     }
 
-    fn validate_counts(&self, input: TopologyInput<'_>) -> Result<(), TopologyError> {
-        if input.contours.is_empty() || input.cubics.is_empty() || input.leaves.is_empty() {
-            return Err(TopologyError::InvalidInput);
-        }
-        if input.contours.len() > self.limits.max_contours
-            || input.cubics.len() > self.limits.max_cubics
-            || input.leaves.len() > self.limits.max_leaves
-        {
-            return Err(TopologyError::WorkLimit);
-        }
-        Ok(())
-    }
-
     fn build_leaves(&mut self, input: TopologyInput<'_>) -> Result<(), TopologyError> {
         for (contour_index, contour_range) in input.contours.iter().copied().enumerate() {
             let output_start = self.exact_leaves.len();
@@ -235,7 +252,7 @@ impl SimpleCubicTopologyWorkspace {
                     if !projected_monotone(controls) {
                         return Err(TopologyError::Unresolved);
                     }
-                    let (hull, hull_len) = convex_hull(controls);
+                    let (hull, hull_len) = convex_hull(&controls);
                     self.exact_leaves.push(ExactLeaf {
                         controls,
                         hull,
@@ -257,7 +274,7 @@ impl SimpleCubicTopologyWorkspace {
                     return Err(TopologyError::WorkLimit);
                 }
                 let controls = [last_exact, last_exact, first_exact, first_exact];
-                let (hull, hull_len) = convex_hull(controls);
+                let (hull, hull_len) = convex_hull(&controls);
                 self.exact_leaves.push(ExactLeaf {
                     controls,
                     hull,
@@ -288,13 +305,17 @@ impl SimpleCubicTopologyWorkspace {
                     return Err(TopologyError::WorkLimit);
                 }
                 self.stats.pairs += 1;
-                let left = self.exact_leaves[left_index];
-                let right = self.exact_leaves[right_index];
-                if let Some(shared) = adjacent_shared_point(left, right, &self.contours) {
-                    if !hull_intersection_is_only(left, right, shared) {
+                let left = &self.exact_leaves[left_index];
+                let right = &self.exact_leaves[right_index];
+                if let Some(shared) = adjacent_shared_point(*left, *right, &self.contours) {
+                    if !hull_intersection_is_only(
+                        exact_leaf_hull(left),
+                        exact_leaf_hull(right),
+                        shared,
+                    ) {
                         return Err(TopologyError::Unresolved);
                     }
-                } else if closed_hulls_intersect(left, right) {
+                } else if closed_hulls_intersect(exact_leaf_hull(left), exact_leaf_hull(right)) {
                     return Err(TopologyError::Unresolved);
                 }
             }
@@ -345,6 +366,250 @@ impl SimpleCubicTopologyWorkspace {
     }
 }
 
+impl RoundedKnotCubicTopologyWorkspace {
+    pub(crate) fn new(limits: TopologyLimits) -> Result<Self, TopologyError> {
+        validate_limits(limits)?;
+        let requested = limits
+            .max_leaves
+            .checked_mul(size_of::<RoundedExactLeaf>())
+            .ok_or(TopologyError::InvalidLimits)?;
+        if requested > limits.max_bytes {
+            return Err(TopologyError::ByteLimit);
+        }
+        let mut exact_leaves = Vec::new();
+        exact_leaves
+            .try_reserve_exact(limits.max_leaves)
+            .map_err(|_| TopologyError::AllocationFailed)?;
+        let allocated_bytes = exact_leaves
+            .capacity()
+            .checked_mul(size_of::<RoundedExactLeaf>())
+            .ok_or(TopologyError::InvalidLimits)?;
+        if allocated_bytes > limits.max_bytes {
+            return Err(TopologyError::ByteLimit);
+        }
+        Ok(Self {
+            limits,
+            exact_leaves,
+            points: [Point::default(); ABSOLUTE_MAX_LEAVES],
+            point_len: 0,
+            contours: [TopologyRange::default(); ABSOLUTE_MAX_CONTOURS],
+            contour_len: 0,
+            orientations: [0; ABSOLUTE_MAX_CONTOURS],
+            winding: [[0; ABSOLUTE_MAX_CONTOURS]; ABSOLUTE_MAX_CONTOURS],
+            stats: TopologyStats::default(),
+            allocated_bytes,
+            published: false,
+        })
+    }
+
+    pub(crate) fn certify(&mut self, input: TopologyInput<'_>) -> Result<(), TopologyError> {
+        self.begin_attempt();
+        validate_counts(self.limits, input)?;
+        validate_structure(input)?;
+        validate_provenance(input)?;
+        preflight_source_final(input)?;
+        self.build_leaves(input)?;
+        self.validate_minimum_leaves()?;
+        self.validate_pairs()?;
+        self.derive_output()?;
+        self.published = true;
+        Ok(())
+    }
+
+    pub(crate) fn stats(&self) -> TopologyStats {
+        self.stats
+    }
+
+    pub(crate) fn output(&self) -> Option<TopologyOutput<'_>> {
+        self.published.then_some(TopologyOutput {
+            points: &self.points[..self.point_len],
+            contours: &self.contours[..self.contour_len],
+            orientations: &self.orientations[..self.contour_len],
+            winding: &self.winding[..self.contour_len],
+        })
+    }
+
+    pub(crate) fn allocated_bytes(&self) -> usize {
+        self.allocated_bytes
+    }
+
+    fn begin_attempt(&mut self) {
+        self.exact_leaves.clear();
+        self.point_len = 0;
+        self.contour_len = 0;
+        self.contours.fill(TopologyRange::default());
+        self.orientations.fill(0);
+        self.winding.fill([0; ABSOLUTE_MAX_CONTOURS]);
+        self.stats = TopologyStats::default();
+        self.published = false;
+    }
+
+    fn build_leaves(&mut self, input: TopologyInput<'_>) -> Result<(), TopologyError> {
+        // A conservative source-level inventory stays below 32 KiB: at most 32 ExactPoints cover
+        // the source, restricted controls, first/carried/actual endpoints, six hull candidates,
+        // and a transient record copy; eight ExactProducts cover the largest predicate; five
+        // six-byte index arrays and 512 bytes cover hull/scalar metadata. split_half has fourteen
+        // ExactPoints across its argument, midpoint locals, and result. This is not a claim about
+        // compiler-generated stack frames. Pair helpers borrow retained records.
+        for (contour_index, contour_range) in input.contours.iter().copied().enumerate() {
+            let output_start = self.exact_leaves.len();
+            let first = input.cubics[contour_range.start].points[0];
+            let first_exact = exact_point(first);
+            let mut actual_start = first_exact;
+            let mut ordinary_start = first;
+            let mut contour_leaf = 0usize;
+
+            for cubic in &input.cubics[range(contour_range)] {
+                let exact_source = exact_cubic(cubic.points);
+                for leaf in &input.leaves[range(cubic.leaves)] {
+                    if self.exact_leaves.len() >= self.limits.max_leaves {
+                        return Err(TopologyError::WorkLimit);
+                    }
+                    let controls = restrict_cell(
+                        exact_source,
+                        leaf.provenance.end_numerator,
+                        leaf.provenance.depth,
+                    );
+                    let actual_end = exact_point(leaf.end);
+                    let points = [
+                        controls[0],
+                        controls[1],
+                        controls[2],
+                        controls[3],
+                        actual_start,
+                        actual_end,
+                    ];
+                    let (hull, hull_len) = convex_hull(&points);
+                    self.exact_leaves.push(RoundedExactLeaf {
+                        points,
+                        hull,
+                        hull_len,
+                        contour: contour_index,
+                        contour_leaf,
+                        ordinary_start,
+                        closure: false,
+                    });
+                    self.stats.leaves += 1;
+                    contour_leaf += 1;
+                    actual_start = actual_end;
+                    ordinary_start = leaf.end;
+                }
+            }
+
+            if actual_start != first_exact {
+                if self.exact_leaves.len() >= self.limits.max_leaves {
+                    return Err(TopologyError::WorkLimit);
+                }
+                let points = [
+                    actual_start,
+                    actual_start,
+                    first_exact,
+                    first_exact,
+                    actual_start,
+                    first_exact,
+                ];
+                let (hull, hull_len) = convex_hull(&points);
+                self.exact_leaves.push(RoundedExactLeaf {
+                    points,
+                    hull,
+                    hull_len,
+                    contour: contour_index,
+                    contour_leaf,
+                    ordinary_start,
+                    closure: true,
+                });
+                self.stats.leaves += 1;
+                contour_leaf += 1;
+            }
+            self.contours[contour_index] = TopologyRange {
+                start: output_start,
+                count: contour_leaf,
+            };
+            self.contour_len += 1;
+        }
+        Ok(())
+    }
+
+    fn validate_minimum_leaves(&self) -> Result<(), TopologyError> {
+        if self.contours[..self.contour_len]
+            .iter()
+            .any(|contour| contour.count < 3)
+        {
+            return Err(TopologyError::Unresolved);
+        }
+        Ok(())
+    }
+
+    fn validate_pairs(&mut self) -> Result<(), TopologyError> {
+        for left_index in 0..self.exact_leaves.len() {
+            for right_index in (left_index + 1)..self.exact_leaves.len() {
+                if self.stats.pairs == self.limits.max_pairs {
+                    return Err(TopologyError::WorkLimit);
+                }
+                self.stats.pairs += 1;
+                let left = &self.exact_leaves[left_index];
+                let right = &self.exact_leaves[right_index];
+                if let Some((previous, next)) =
+                    directed_rounded_adjacent(left, right, &self.contours)
+                {
+                    let direction = point_sub(next.points[3], previous.points[0]);
+                    if !rounded_projected_monotone(previous, direction)
+                        || !rounded_projected_monotone(next, direction)
+                    {
+                        return Err(TopologyError::Unresolved);
+                    }
+                } else if closed_hulls_intersect(rounded_leaf_hull(left), rounded_leaf_hull(right))
+                {
+                    return Err(TopologyError::Unresolved);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn derive_output(&mut self) -> Result<(), TopologyError> {
+        self.point_len = self.exact_leaves.len();
+        for (index, leaf) in self.exact_leaves.iter().enumerate() {
+            self.points[index] = leaf.ordinary_start;
+        }
+        for contour_index in 0..self.contour_len {
+            let contour = self.contours[contour_index];
+            let mut area = ExactProduct::zero();
+            for offset in 0..contour.count {
+                let current = self.exact_leaves[contour.start + offset].points[4];
+                let next =
+                    self.exact_leaves[contour.start + (offset + 1) % contour.count].points[4];
+                area = area.add(cross_points(current, next));
+            }
+            self.orientations[contour_index] = match area.cmp_zero() {
+                Ordering::Less => -1,
+                Ordering::Greater => 1,
+                Ordering::Equal => return Err(TopologyError::Unresolved),
+            };
+        }
+
+        for query_index in 0..self.contour_len {
+            let query_range = self.contours[query_index];
+            let query = self.exact_leaves[query_range.start].points[4];
+            for container_index in 0..self.contour_len {
+                if query_index == container_index {
+                    continue;
+                }
+                let container = self.contours[container_index];
+                match classify_rounded_polygon(&self.exact_leaves, container, query) {
+                    PolygonLocation::Boundary => return Err(TopologyError::Unresolved),
+                    PolygonLocation::Inside => {
+                        self.winding[query_index][container_index] =
+                            self.orientations[container_index];
+                    }
+                    PolygonLocation::Outside => {}
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 fn validate_limits(limits: TopologyLimits) -> Result<(), TopologyError> {
     if !(1..=ABSOLUTE_MAX_CONTOURS).contains(&limits.max_contours)
         || !(1..=ABSOLUTE_MAX_CUBICS).contains(&limits.max_cubics)
@@ -353,6 +618,19 @@ fn validate_limits(limits: TopologyLimits) -> Result<(), TopologyError> {
         || limits.max_bytes > ABSOLUTE_MAX_BYTES
     {
         return Err(TopologyError::InvalidLimits);
+    }
+    Ok(())
+}
+
+fn validate_counts(limits: TopologyLimits, input: TopologyInput<'_>) -> Result<(), TopologyError> {
+    if input.contours.is_empty() || input.cubics.is_empty() || input.leaves.is_empty() {
+        return Err(TopologyError::InvalidInput);
+    }
+    if input.contours.len() > limits.max_contours
+        || input.cubics.len() > limits.max_cubics
+        || input.leaves.len() > limits.max_leaves
+    {
+        return Err(TopologyError::WorkLimit);
     }
     Ok(())
 }
@@ -437,6 +715,19 @@ fn validate_provenance(input: TopologyInput<'_>) -> Result<(), TopologyError> {
         }
         if previous_numerator != previous_denominator {
             return Err(TopologyError::InvalidProvenance);
+        }
+    }
+    Ok(())
+}
+
+fn preflight_source_final(input: TopologyInput<'_>) -> Result<(), TopologyError> {
+    for cubic in input.cubics {
+        let final_actual = input.leaves[range(cubic.leaves)]
+            .last()
+            .expect("validated nonempty leaf range")
+            .end;
+        if !same_point(final_actual, cubic.points[3]) {
+            return Err(TopologyError::KnotMismatch);
         }
     }
     Ok(())
@@ -581,6 +872,28 @@ fn projected_monotone(controls: ExactCubic) -> bool {
         && projections.contains(&Ordering::Greater)
 }
 
+fn rounded_projected_monotone(leaf: &RoundedExactLeaf, direction: ExactPoint) -> bool {
+    let source_progresses = if leaf.closure {
+        dot(point_sub(leaf.points[3], leaf.points[0]), direction).cmp_zero() == Ordering::Greater
+    } else {
+        let mut total = ExactProduct::zero();
+        let mut nonnegative = true;
+        for index in 0..3 {
+            let projection = dot(
+                point_sub(leaf.points[index + 1], leaf.points[index]),
+                direction,
+            );
+            if projection.cmp_zero() == Ordering::Less {
+                nonnegative = false;
+            }
+            total = total.add(projection);
+        }
+        nonnegative && total.cmp_zero() == Ordering::Greater
+    };
+    source_progresses
+        && dot(point_sub(leaf.points[5], leaf.points[4]), direction).cmp_zero() == Ordering::Greater
+}
+
 fn compare_coordinate(left: ExactCoordinate, right: ExactCoordinate) -> Ordering {
     if left.negative != right.negative {
         return if left.negative {
@@ -604,8 +917,9 @@ fn compare_points(left: ExactPoint, right: ExactPoint) -> Ordering {
     }
 }
 
-fn convex_hull(points: ExactCubic) -> ([u8; 4], usize) {
-    let mut sorted = [0u8, 1, 2, 3];
+fn convex_hull<const N: usize>(points: &[ExactPoint; N]) -> ([u8; N], usize) {
+    assert!(N <= usize::from(u8::MAX), "hull index capacity");
+    let mut sorted: [u8; N] = core::array::from_fn(|index| index as u8);
     for index in 1..sorted.len() {
         let value = sorted[index];
         let mut cursor = index;
@@ -618,7 +932,7 @@ fn convex_hull(points: ExactCubic) -> ([u8; 4], usize) {
         }
         sorted[cursor] = value;
     }
-    let mut unique = [0u8; 4];
+    let mut unique = [0u8; N];
     let mut unique_len = 0usize;
     for value in sorted {
         if unique_len == 0 || points[value as usize] != points[unique[unique_len - 1] as usize] {
@@ -630,7 +944,7 @@ fn convex_hull(points: ExactCubic) -> ([u8; 4], usize) {
         return (unique, unique_len);
     }
 
-    let mut lower = [0u8; 4];
+    let mut lower = [0u8; N];
     let mut lower_len = 0usize;
     for value in unique[..unique_len].iter().copied() {
         while lower_len >= 2
@@ -645,7 +959,7 @@ fn convex_hull(points: ExactCubic) -> ([u8; 4], usize) {
         lower[lower_len] = value;
         lower_len += 1;
     }
-    let mut upper = [0u8; 4];
+    let mut upper = [0u8; N];
     let mut upper_len = 0usize;
     for value in unique[..unique_len].iter().rev().copied() {
         while upper_len >= 2
@@ -660,7 +974,7 @@ fn convex_hull(points: ExactCubic) -> ([u8; 4], usize) {
         upper[upper_len] = value;
         upper_len += 1;
     }
-    let mut hull = [0u8; 4];
+    let mut hull = [0u8; N];
     let mut hull_len = 0usize;
     for value in lower[..lower_len - 1]
         .iter()
@@ -673,25 +987,39 @@ fn convex_hull(points: ExactCubic) -> ([u8; 4], usize) {
     (hull, hull_len)
 }
 
-fn hull_point(leaf: ExactLeaf, index: usize) -> ExactPoint {
-    leaf.controls[leaf.hull[index] as usize]
+fn exact_leaf_hull(leaf: &ExactLeaf) -> ExactHull<'_> {
+    ExactHull {
+        points: &leaf.controls,
+        indices: &leaf.hull[..leaf.hull_len],
+    }
 }
 
-fn edge_count(leaf: ExactLeaf) -> usize {
-    match leaf.hull_len {
+fn rounded_leaf_hull(leaf: &RoundedExactLeaf) -> ExactHull<'_> {
+    ExactHull {
+        points: &leaf.points,
+        indices: &leaf.hull[..leaf.hull_len],
+    }
+}
+
+fn hull_point(hull: ExactHull<'_>, index: usize) -> ExactPoint {
+    hull.points[hull.indices[index] as usize]
+}
+
+fn edge_count(hull: ExactHull<'_>) -> usize {
+    match hull.indices.len() {
         0 | 1 => 0,
         2 => 1,
         value => value,
     }
 }
 
-fn hull_edge(leaf: ExactLeaf, index: usize) -> (ExactPoint, ExactPoint) {
-    if leaf.hull_len == 2 {
-        return (hull_point(leaf, 0), hull_point(leaf, 1));
+fn hull_edge(hull: ExactHull<'_>, index: usize) -> (ExactPoint, ExactPoint) {
+    if hull.indices.len() == 2 {
+        return (hull_point(hull, 0), hull_point(hull, 1));
     }
     (
-        hull_point(leaf, index),
-        hull_point(leaf, (index + 1) % leaf.hull_len),
+        hull_point(hull, index),
+        hull_point(hull, (index + 1) % hull.indices.len()),
     )
 }
 
@@ -732,8 +1060,8 @@ fn segments_intersect(a: ExactPoint, b: ExactPoint, c: ExactPoint, d: ExactPoint
         || (opposite(abc, abd) && opposite(cda, cdb))
 }
 
-fn point_in_closed_hull(point: ExactPoint, hull: ExactLeaf) -> bool {
-    match hull.hull_len {
+fn point_in_closed_hull(point: ExactPoint, hull: ExactHull<'_>) -> bool {
+    match hull.indices.len() {
         0 => false,
         1 => point == hull_point(hull, 0),
         2 => on_segment(point, hull_point(hull, 0), hull_point(hull, 1)),
@@ -747,7 +1075,7 @@ fn point_in_closed_hull(point: ExactPoint, hull: ExactLeaf) -> bool {
     }
 }
 
-fn closed_hulls_intersect(left: ExactLeaf, right: ExactLeaf) -> bool {
+fn closed_hulls_intersect(left: ExactHull<'_>, right: ExactHull<'_>) -> bool {
     for left_edge in 0..edge_count(left) {
         let (a, b) = hull_edge(left, left_edge);
         for right_edge in 0..edge_count(right) {
@@ -781,17 +1109,21 @@ fn segment_intersection_has_point_other_than(
         .any(|point| point != allowed && on_segment(point, a, b) && on_segment(point, c, d))
 }
 
-fn hull_intersection_is_only(left: ExactLeaf, right: ExactLeaf, allowed: ExactPoint) -> bool {
+fn hull_intersection_is_only(
+    left: ExactHull<'_>,
+    right: ExactHull<'_>,
+    allowed: ExactPoint,
+) -> bool {
     if !point_in_closed_hull(allowed, left) || !point_in_closed_hull(allowed, right) {
         return false;
     }
-    for index in 0..left.hull_len {
+    for index in 0..left.indices.len() {
         let point = hull_point(left, index);
         if point != allowed && point_in_closed_hull(point, right) {
             return false;
         }
     }
-    for index in 0..right.hull_len {
+    for index in 0..right.indices.len() {
         let point = hull_point(right, index);
         if point != allowed && point_in_closed_hull(point, left) {
             return false;
@@ -822,6 +1154,24 @@ fn adjacent_shared_point(
         Some(left.controls[3])
     } else if left.contour_leaf == 0 && right.contour_leaf == count - 1 {
         Some(left.controls[0])
+    } else {
+        None
+    }
+}
+
+fn directed_rounded_adjacent<'a>(
+    left: &'a RoundedExactLeaf,
+    right: &'a RoundedExactLeaf,
+    contours: &[TopologyRange; ABSOLUTE_MAX_CONTOURS],
+) -> Option<(&'a RoundedExactLeaf, &'a RoundedExactLeaf)> {
+    if left.contour != right.contour {
+        return None;
+    }
+    let count = contours[left.contour].count;
+    if right.contour_leaf == left.contour_leaf + 1 {
+        Some((left, right))
+    } else if left.contour_leaf == 0 && right.contour_leaf == count - 1 {
+        Some((right, left))
     } else {
         None
     }
@@ -864,12 +1214,104 @@ fn classify_polygon(
     }
 }
 
+fn classify_rounded_polygon(
+    leaves: &[RoundedExactLeaf],
+    contour: TopologyRange,
+    query: ExactPoint,
+) -> PolygonLocation {
+    let mut winding = 0i32;
+    for offset in 0..contour.count {
+        let start = leaves[contour.start + offset].points[4];
+        let end = leaves[contour.start + (offset + 1) % contour.count].points[4];
+        let side = orient(start, end, query);
+        if side == Ordering::Equal && within_bounds(query, start, end) {
+            return PolygonLocation::Boundary;
+        }
+        let upward = compare_coordinate(start.y, query.y) != Ordering::Greater
+            && compare_coordinate(end.y, query.y) == Ordering::Greater;
+        let downward = compare_coordinate(start.y, query.y) == Ordering::Greater
+            && compare_coordinate(end.y, query.y) != Ordering::Greater;
+        if upward && side == Ordering::Greater {
+            winding += 1;
+        } else if downward && side == Ordering::Less {
+            winding -= 1;
+        }
+    }
+    if winding == 0 {
+        PolygonLocation::Outside
+    } else {
+        PolygonLocation::Inside
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn point(x: f64, y: f64) -> Point {
         Point { x, y }
+    }
+
+    #[test]
+    fn rounded_six_point_hull_uses_every_vertex_in_lexicographic_cycle() {
+        let points = [
+            exact_point(point(0.0, 0.0)),
+            exact_point(point(2.0, 0.0)),
+            exact_point(point(3.0, 1.0)),
+            exact_point(point(2.0, 2.0)),
+            exact_point(point(0.0, 2.0)),
+            exact_point(point(-1.0, 1.0)),
+        ];
+        let (indices, len) = convex_hull(&points);
+        assert_eq!(len, 6);
+        assert_eq!(&indices[..len], &[5, 0, 1, 2, 3, 4]);
+        for index in 0..len {
+            assert_eq!(
+                orient(
+                    points[indices[index] as usize],
+                    points[indices[(index + 1) % len] as usize],
+                    points[indices[(index + 2) % len] as usize],
+                ),
+                Ordering::Greater
+            );
+        }
+    }
+
+    #[test]
+    fn rounded_exact_storage_and_source_scratch_fit_frozen_byte_bounds() {
+        let retained = ABSOLUTE_MAX_LEAVES * size_of::<RoundedExactLeaf>();
+        let source_scratch = 32 * size_of::<ExactPoint>()
+            + 8 * size_of::<ExactProduct>()
+            + 5 * 6 * size_of::<u8>()
+            + 512;
+        let split_scratch = 14 * size_of::<ExactPoint>();
+        assert!(retained < ABSOLUTE_MAX_BYTES);
+        assert!(source_scratch < 32 * 1024);
+        assert!(split_scratch < 32 * 1024);
+        let old_bytes = SimpleCubicTopologyWorkspace::new(TopologyLimits::default())
+            .unwrap()
+            .allocated_bytes();
+        let rounded_bytes = RoundedKnotCubicTopologyWorkspace::new(TopologyLimits::default())
+            .unwrap()
+            .allocated_bytes();
+        assert!(old_bytes >= ABSOLUTE_MAX_LEAVES * size_of::<ExactLeaf>());
+        assert!(old_bytes <= ABSOLUTE_MAX_BYTES);
+        assert!(rounded_bytes >= retained);
+        assert!(rounded_bytes <= ABSOLUTE_MAX_BYTES);
+    }
+
+    #[test]
+    fn rounded_extreme_grid_decode_and_dot_stay_within_fixed_width() {
+        let maximum = exact_point(point(f64::MAX, -f64::MAX));
+        let minimum = exact_point(point(f64::from_bits(1), -f64::from_bits(1)));
+        let difference = point_sub(maximum, minimum);
+        let squared = dot(difference, difference);
+        assert!(!maximum.x.is_zero());
+        assert!(!minimum.x.is_zero());
+        assert!(maximum.x.used <= COORDINATE_LIMBS);
+        assert!(minimum.x.used <= COORDINATE_LIMBS);
+        assert!(squared.used <= PRODUCT_LIMBS);
+        assert_eq!(squared.cmp_zero(), Ordering::Greater);
     }
 
     fn linear(start: Point, end: Point) -> [Point; 4] {
