@@ -16,6 +16,7 @@ import {
   type Matrix2,
   type ReferenceFlattenedLine,
 } from '../../../packages/geometry-reference/src/index.js';
+import { endpointHullFixtures } from './endpoint-hull.js';
 
 const INPUT_MAGIC = 0x3253_4756;
 const OUTPUT_MAGIC = 0x3252_4756;
@@ -36,7 +37,14 @@ type PathExpectation = Readonly<{
 
 export type DifferentialCase = Readonly<{
   id: string;
-  category: 'corpus' | 'named-cubic' | 'named-packed' | 'metamorphic' | 'subdivision' | 'edge';
+  category:
+    | 'corpus'
+    | 'named-cubic'
+    | 'named-packed'
+    | 'metamorphic'
+    | 'subdivision'
+    | 'endpoint-hull'
+    | 'edge';
   input: CanonicalPackedInput;
   metadata: Readonly<Record<string, unknown>>;
   expectedBatchStatus: number;
@@ -201,6 +209,17 @@ function subdivisionCase(): DifferentialCase {
   };
 }
 
+function endpointHullCases(): DifferentialCase[] {
+  return endpointHullFixtures().map((fixture) => ({
+    id: `endpoint-hull/${fixture.id}`,
+    category: 'endpoint-hull',
+    input: fixture.input,
+    metadata: { fixture: fixture.id, ...fixture.metadata },
+    expectedBatchStatus: BATCH_OK,
+    paths: fixture.paths.map(({ status, cubics }) => ({ status, cubics, screen: identity })),
+  }));
+}
+
 function edgeCases(): DifferentialCase[] {
   const base: Cubic = [
     [0, 0],
@@ -335,6 +354,7 @@ export function createDifferentialCases(): DifferentialCase[] {
     ...namedPackedCases(),
     ...metamorphicCases(),
     subdivisionCase(),
+    ...endpointHullCases(),
     ...edgeCases(),
   ];
 }

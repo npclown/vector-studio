@@ -426,6 +426,12 @@ fn extrema(mut p: [f64; 4], guard: f64, mut include: impl FnMut(f64)) -> Result<
     if !a.is_finite() || !b.is_finite() || !c.is_finite() {
         return Err(PATH_NUMERIC_RANGE);
     }
+    let endpoint_min = p[0].min(p[3]);
+    let endpoint_max = p[0].max(p[3]);
+    if p[1] >= endpoint_min && p[1] <= endpoint_max && p[2] >= endpoint_min && p[2] <= endpoint_max
+    {
+        return Ok(());
+    }
     let scale = a.abs().max(b.abs()).max(c.abs());
     if scale == 0.0 {
         return Ok(());
@@ -701,6 +707,317 @@ mod tests {
             .iter()
             .flat_map(|value| value.to_le_bytes())
             .collect()
+    }
+
+    fn cubic_points(x: [f64; 4], y: [f64; 4]) -> Vec<u8> {
+        let mut values = Vec::with_capacity(8);
+        for index in 0..4 {
+            values.push(x[index]);
+            values.push(y[index]);
+        }
+        points(&values)
+    }
+
+    fn measured_run(
+        verbs: &[u8],
+        point_bytes: &[u8],
+        tolerance: f64,
+        pass: Pass,
+    ) -> (Plan, Bounds, WorkStatistics) {
+        let mut statistics = WorkStatistics::default();
+        crate::allocation_test_support::start();
+        let (plan, bounds) = run_path(
+            path(verbs, point_bytes, tolerance),
+            pass,
+            &mut statistics,
+            |_, _, _| true,
+        );
+        let allocations = crate::allocation_test_support::stop();
+        assert_eq!(allocations, 0, "geometry pass allocated");
+        (plan, bounds, statistics)
+    }
+
+    fn endpoint_bounds(x: [f64; 4], y: [f64; 4]) -> Bounds {
+        let controls = core::array::from_fn(|index| Point {
+            x: x[index],
+            y: y[index],
+        });
+        let cubic = Cubic::relative(controls).unwrap();
+        let guard = cubic.guard(0).unwrap();
+        Bounds {
+            min_x: controls[0].x + (cubic.points[0].x.min(cubic.points[3].x) - guard),
+            min_y: controls[0].y + (cubic.points[0].y.min(cubic.points[3].y) - guard),
+            max_x: controls[0].x + (cubic.points[0].x.max(cubic.points[3].x) + guard),
+            max_y: controls[0].y + (cubic.points[0].y.max(cubic.points[3].y) + guard),
+        }
+    }
+
+    fn translated_thirds() -> [f64; 4] {
+        [
+            1.0,
+            f64::from_bits(0x3ff5_5555_5555_5555),
+            f64::from_bits(0x3ffa_aaaa_aaaa_aaaa),
+            2.0,
+        ]
+    }
+
+    #[test]
+    fn endpoint_hull_certifies_translated_reverse_reflected_and_axis_cases() {
+        let translated = translated_thirds();
+        let reverse = [
+            1.0,
+            f64::from_bits(0x3fe5_5555_5555_5556),
+            f64::from_bits(0x3fd5_5555_5555_5556),
+            0.0,
+        ];
+        let reflected = translated.map(|value| -value);
+        let shifted = translated.map(|value| value + 8.0);
+        let zero = [0.0; 4];
+        for (x, y) in [
+            (translated, zero),
+            (reverse, zero),
+            (reflected, zero),
+            (shifted, zero),
+            (zero, translated),
+            (translated, [-0.0, 0.0, -0.0, 0.0]),
+        ] {
+            let bytes = cubic_points(x, y);
+            for pass in [Pass::Sizing, Pass::Emission] {
+                let (plan, bounds, _) = measured_run(&[VERB_MOVE, VERB_CUBIC], &bytes, 0.25, pass);
+                assert_eq!(plan.status, PATH_OK);
+                assert_eq!(bounds, endpoint_bounds(x, y));
+            }
+        }
+
+        let cubic = Cubic::relative(core::array::from_fn(|index| Point {
+            x: translated[index],
+            y: 0.0,
+        }))
+        .unwrap();
+        assert_eq!(cubic.guard(0).unwrap(), 384.0 * EPSILON);
+    }
+
+    #[test]
+    fn endpoint_hull_is_inclusive_and_does_not_require_control_order() {
+        for x in [[0.0, 3.0, 1.0, 4.0], [0.0, 0.0, 1.0, 1.0]] {
+            let y = [0.0; 4];
+            let bytes = cubic_points(x, y);
+            let (plan, bounds, _) =
+                measured_run(&[VERB_MOVE, VERB_CUBIC], &bytes, 0.25, Pass::Sizing);
+            assert_eq!(plan.status, PATH_OK);
+            assert_eq!(bounds, endpoint_bounds(x, y));
+        }
+    }
+
+    #[test]
+    fn endpoint_hull_is_per_axis_and_non_hull_fallback_remains_active() {
+        let translated = translated_thirds();
+        let arch = [0.0, 3.0, 3.0, 0.0];
+        let bytes = cubic_points(translated, arch);
+        let (plan, bounds, _) = measured_run(&[VERB_MOVE, VERB_CUBIC], &bytes, 0.25, Pass::Sizing);
+        assert_eq!(plan.status, PATH_OK);
+        let guard = Cubic::relative(core::array::from_fn(|index| Point {
+            x: translated[index],
+            y: arch[index],
+        }))
+        .unwrap()
+        .guard(0)
+        .unwrap();
+        assert_eq!(bounds.min_x, 1.0 - guard);
+        assert_eq!(bounds.max_x, 2.0 + guard);
+        assert_eq!(bounds.min_y, -guard);
+        assert_eq!(bounds.max_y, 2.25 + guard);
+
+        let repeated_root = [0.0, 1.0 / 16.0, -1.0 / 8.0, 7.0 / 16.0];
+        let bytes = cubic_points(repeated_root, [0.0; 4]);
+        let (plan, bounds, _) = measured_run(&[VERB_MOVE, VERB_CUBIC], &bytes, 0.25, Pass::Sizing);
+        assert_eq!(plan.status, PATH_OK);
+        assert_eq!(bounds, endpoint_bounds(repeated_root, [0.0; 4]));
+    }
+
+    #[test]
+    fn endpoint_hull_preserves_overflow_and_guard_failure_precedence() {
+        let huge = cubic_points([f64::MAX, -f64::MAX, f64::MAX, -f64::MAX], [0.0; 4]);
+        let (plan, bounds, _) = measured_run(&[VERB_MOVE, VERB_CUBIC], &huge, 0.25, Pass::Sizing);
+        assert_eq!(plan, failure(PATH_NUMERIC_RANGE));
+        assert_eq!(bounds, Bounds::default());
+
+        let coefficient_overflow = f64::from_bits(0x7fd8_0000_0000_0000);
+        let finite_coefficient = 2.0f64.powi(1022);
+        let overflow_cubic = Cubic::relative([
+            Point { x: 0.0, y: 0.0 },
+            Point {
+                x: coefficient_overflow,
+                y: 0.0,
+            },
+            Point {
+                x: coefficient_overflow,
+                y: 0.0,
+            },
+            Point {
+                x: coefficient_overflow,
+                y: 0.0,
+            },
+        ])
+        .unwrap();
+        let overflow_guard = overflow_cubic.guard(0).unwrap();
+        assert!(overflow_guard.is_finite());
+        assert!(overflow_guard < 2.0f64.powi(1000));
+        assert_eq!(
+            extrema(
+                [
+                    0.0,
+                    coefficient_overflow,
+                    coefficient_overflow,
+                    coefficient_overflow,
+                ],
+                0.0,
+                |_| {}
+            ),
+            Err(PATH_NUMERIC_RANGE)
+        );
+        assert_eq!(
+            extrema(
+                [
+                    0.0,
+                    finite_coefficient,
+                    finite_coefficient,
+                    finite_coefficient,
+                ],
+                0.0,
+                |_| {}
+            ),
+            Ok(())
+        );
+        let overflow_bytes = cubic_points(
+            [
+                0.0,
+                coefficient_overflow,
+                coefficient_overflow,
+                coefficient_overflow,
+            ],
+            [0.0; 4],
+        );
+        let (plan, bounds, _) = measured_run(
+            &[VERB_MOVE, VERB_CUBIC],
+            &overflow_bytes,
+            2.0f64.powi(1000),
+            Pass::Sizing,
+        );
+        assert_eq!(plan, failure(PATH_NUMERIC_RANGE));
+        assert_eq!(bounds, Bounds::default());
+
+        let translated = cubic_points(translated_thirds(), [0.0; 4]);
+        let (plan, bounds, statistics) = measured_run(
+            &[VERB_MOVE, VERB_CUBIC],
+            &translated,
+            2.0f64.powi(-50),
+            Pass::Sizing,
+        );
+        assert_eq!(plan, failure(PATH_NUMERIC_RANGE));
+        assert_eq!(bounds, Bounds::default());
+        assert_eq!(statistics.sizing_visits, 0);
+    }
+
+    #[test]
+    fn uncertain_non_hull_seam_rejects_without_publishing_a_candidate() {
+        let mut candidate = None;
+        assert_eq!(
+            extrema([0.0, 1.0 / 16.0, -1.0 / 8.0, 7.0 / 16.0], 0.0, |value| {
+                candidate = Some(value)
+            },),
+            Err(PATH_NUMERIC_RANGE)
+        );
+        assert_eq!(candidate, None);
+    }
+
+    #[test]
+    fn endpoint_hull_success_and_failure_passes_do_not_allocate() {
+        let translated = cubic_points(translated_thirds(), [0.0; 4]);
+        let overflow = f64::from_bits(0x7fd8_0000_0000_0000);
+        let coefficient_overflow = cubic_points([0.0, overflow, overflow, overflow], [0.0; 4]);
+        for pass in [Pass::Sizing, Pass::Emission] {
+            let (success, _, _) = measured_run(&[VERB_MOVE, VERB_CUBIC], &translated, 0.25, pass);
+            assert_eq!(success.status, PATH_OK);
+            let (failure_plan, bounds, _) = measured_run(
+                &[VERB_MOVE, VERB_CUBIC],
+                &coefficient_overflow,
+                2.0f64.powi(1000),
+                pass,
+            );
+            assert_eq!(failure_plan, failure(PATH_NUMERIC_RANGE));
+            assert_eq!(bounds, Bounds::default());
+        }
+    }
+
+    #[test]
+    fn earlier_path_failure_retains_later_path_progress() {
+        let first = points(&[
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            f64::MAX,
+            0.0,
+            -f64::MAX,
+            0.0,
+            f64::MAX,
+            0.0,
+            -f64::MAX,
+            0.0,
+        ]);
+        let (first_plan, first_bounds, first_statistics) = measured_run(
+            &[VERB_MOVE, VERB_LINE, VERB_MOVE, VERB_CUBIC],
+            &first,
+            0.25,
+            Pass::Sizing,
+        );
+        assert_eq!(first_plan, failure(PATH_NUMERIC_RANGE));
+        assert_eq!(first_bounds, Bounds::default());
+        assert_eq!(first_statistics.logical_cubics, 1);
+
+        let second = cubic_points(translated_thirds(), [0.0; 4]);
+        let (second_plan, second_bounds, _) =
+            measured_run(&[VERB_MOVE, VERB_CUBIC], &second, 0.25, Pass::Sizing);
+        assert_eq!(second_plan.status, PATH_OK);
+        assert_eq!(
+            second_bounds,
+            endpoint_bounds(translated_thirds(), [0.0; 4])
+        );
+    }
+
+    #[test]
+    fn translated_endpoint_hull_emission_keeps_endpoint_and_provenance() {
+        let bytes = cubic_points(translated_thirds(), [0.0; 4]);
+        let mut endpoint = None;
+        let mut provenance = None;
+        let mut statistics = WorkStatistics::default();
+        crate::allocation_test_support::start();
+        let (plan, _) = run_path(
+            path(&[VERB_MOVE, VERB_CUBIC], &bytes, 0.25),
+            Pass::Emission,
+            &mut statistics,
+            |verb, point, source| {
+                if verb == VERB_LINE {
+                    endpoint = point;
+                    provenance = Some(source);
+                }
+                true
+            },
+        );
+        let allocations = crate::allocation_test_support::stop();
+        assert_eq!(allocations, 0);
+        assert_eq!(plan.status, PATH_OK);
+        assert_eq!(endpoint, Some(Point { x: 2.0, y: 0.0 }));
+        assert_eq!(
+            provenance,
+            Some(Provenance {
+                source_verb: 1,
+                end_numerator: 1,
+                depth: 0,
+            })
+        );
+        assert_eq!(statistics.emitted_cubic_lines, 1);
     }
 
     #[test]

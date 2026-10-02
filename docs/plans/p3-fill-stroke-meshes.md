@@ -1,6 +1,6 @@
 # P3 fill and stroke meshes execution plan
 
-Current isolated checkpoint: P3.2h private native cubic-fill workspace local acceptance is complete; protected integration remains required. P3.2g integrated through [PR #67](https://github.com/npclown/vector-studio/pull/67) as `7bc0fdd5f76ceeb1f753412d0e101a1806045a44` after required CI on `d1d861b6620a7e8e3e619837c42dc9500f2797db` (run36967646156, job110714750373). Earlier checkpoint paragraphs below retain their contemporaneous gate context; complete P3 acceptance remains open.
+Current status: P3.2h private native cubic-fill workspace is integrated through [PR #68](https://github.com/npclown/vector-studio/pull/68) as `c224f980fe45e9d4173ef2334df5723eb503cca7`, after required CI on `89aa75264814a7fa6a6b130327804f485debcc04` (run36970139907, job110722206046). The next proposed common-cause correction is the [P2 endpoint-hull certificate](p2-endpoint-hull-proposal.md), approved by the user on 2026-10-02. Its bounded P2.6f [execution contract](p2-endpoint-hull-execution.md) is fixed before implementation and verification. P3.2g integrated through [PR #67](https://github.com/npclown/vector-studio/pull/67) as `7bc0fdd5f76ceeb1f753412d0e101a1806045a44` after required CI on `d1d861b6620a7e8e3e619837c42dc9500f2797db` (run36967646156, job110714750373). Earlier checkpoint paragraphs below retain their contemporaneous gate context; complete P3 acceptance remains open.
 
 ## P3.2h private native cubic-fill workspace
 
