@@ -258,8 +258,10 @@ impl CubicFillWorkspace {
         self.emit(input, sizing_plan, sizing_bounds, command_capacity)?;
         self.collect_contours()?;
         self.validate_leaf_partitions()?;
-        self.diagnostics.topology_invoked = true;
-        self.certify_topology()?;
+        if !self.has_line_identity() {
+            self.diagnostics.topology_invoked = true;
+            self.certify_topology()?;
+        }
 
         let mut references: [&[Point]; MAX_CONTOURS] = [&[]; MAX_CONTOURS];
         for (index, range) in self.contour_ranges[..self.range_len]
@@ -276,6 +278,16 @@ impl CubicFillWorkspace {
         self.validate_rounded_ownership()?;
         self.published = true;
         Ok(self.diagnostics)
+    }
+
+    fn has_line_identity(&self) -> bool {
+        self.source_len != 0
+            && self.sources[..self.source_len]
+                .iter()
+                .all(|source| matches!(source, DecodedSource::Line { .. }))
+            && self.contour_ranges[..self.range_len]
+                .iter()
+                .all(|range| range.count >= 3)
     }
 
     pub(crate) fn output(&self) -> Option<CubicFillOutput<'_>> {

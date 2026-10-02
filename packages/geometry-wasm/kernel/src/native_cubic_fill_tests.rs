@@ -16,7 +16,7 @@ use crate::geometry::{
 use crate::line_fill::LineFillRule;
 use crate::rounded_line_fill::{
     RoundedBoundary, RoundedCell, RoundedColumnSpan, RoundedFillError, RoundedFillLimits,
-    RoundedFillStats, RoundedSection, RoundedSourceEdge,
+    RoundedFillOutput, RoundedFillStats, RoundedFillWorkspace, RoundedSection, RoundedSourceEdge,
 };
 use crate::rounded_line_fill_tests::{print_output, print_points, print_stats};
 use crate::simple_cubic_topology::TopologyError;
@@ -98,6 +98,11 @@ impl PreparedPath {
 struct NormalizedSnapshot {
     ranges: Vec<crate::cubic_fill::ContourRange>,
     point_bits: Vec<[u64; 2]>,
+    rounded: RoundedCarrierSnapshot,
+}
+
+#[derive(Debug, PartialEq)]
+struct RoundedCarrierSnapshot {
     vertex_bits: Vec<[u64; 2]>,
     indices: Vec<u32>,
     bounds_bits: [u64; 4],
@@ -570,28 +575,34 @@ fn snapshot(output: BridgeOutput<'_>) -> NormalizedSnapshot {
             .iter()
             .map(|point| [point.x.to_bits(), point.y.to_bits()])
             .collect(),
+        rounded: rounded_carrier_snapshot(output.rounded, output.rounded_stats),
+    }
+}
+
+fn rounded_carrier_snapshot(
+    output: RoundedFillOutput<'_>,
+    stats: RoundedFillStats,
+) -> RoundedCarrierSnapshot {
+    RoundedCarrierSnapshot {
         vertex_bits: output
-            .rounded
             .vertices
             .iter()
             .map(|point| [point.x.to_bits(), point.y.to_bits()])
             .collect(),
-        indices: output.rounded.indices.to_vec(),
+        indices: output.indices.to_vec(),
         bounds_bits: [
-            output.rounded.bounds.min_x.to_bits(),
-            output.rounded.bounds.min_y.to_bits(),
-            output.rounded.bounds.max_x.to_bits(),
-            output.rounded.bounds.max_y.to_bits(),
+            output.bounds.min_x.to_bits(),
+            output.bounds.min_y.to_bits(),
+            output.bounds.max_x.to_bits(),
+            output.bounds.max_y.to_bits(),
         ],
-        source_edges: output.rounded.source_edges.to_vec(),
+        source_edges: output.source_edges.to_vec(),
         columns: output
-            .rounded
             .columns
             .iter()
             .map(|column| (column.x.to_bits(), column.node_start, column.node_count))
             .collect(),
         nodes: output
-            .rounded
             .nodes
             .iter()
             .map(|node| {
@@ -602,13 +613,13 @@ fn snapshot(output: BridgeOutput<'_>) -> NormalizedSnapshot {
                 )
             })
             .collect(),
-        sections: output.rounded.sections.to_vec(),
-        cells: output.rounded.cells.to_vec(),
-        boundaries: output.rounded.boundaries.to_vec(),
-        spans: output.rounded.spans.to_vec(),
-        contributors: output.rounded.contributors.to_vec(),
-        error_bound_bits: output.rounded.error_bound.to_bits(),
-        stats: output.rounded_stats,
+        sections: output.sections.to_vec(),
+        cells: output.cells.to_vec(),
+        boundaries: output.boundaries.to_vec(),
+        spans: output.spans.to_vec(),
+        contributors: output.contributors.to_vec(),
+        error_bound_bits: output.error_bound.to_bits(),
+        stats,
     }
 }
 
@@ -2519,5 +2530,690 @@ mod tests {
             Err(BridgeError::Rounded(RoundedFillError::OutputLimit))
         );
         assert!(output_workspace.output().is_none());
+    }
+
+    #[derive(Debug)]
+    struct LineIdentityFixture {
+        id: &'static str,
+        contours: Vec<Vec<Point>>,
+        areas: [f64; 2],
+    }
+
+    fn bridge_carrier_snapshot(output: BridgeOutput<'_>) -> RoundedCarrierSnapshot {
+        rounded_carrier_snapshot(output.rounded, output.rounded_stats)
+    }
+
+    fn line_identity_fixtures() -> Vec<LineIdentityFixture> {
+        let outer = vec![
+            point(0.0, 0.0),
+            point(10.0, 0.0),
+            point(10.0, 10.0),
+            point(0.0, 10.0),
+        ];
+        let inner = vec![
+            point(3.0, 3.0),
+            point(7.0, 3.0),
+            point(7.0, 7.0),
+            point(3.0, 7.0),
+        ];
+        let reversed_inner = vec![
+            point(3.0, 7.0),
+            point(7.0, 7.0),
+            point(7.0, 3.0),
+            point(3.0, 3.0),
+        ];
+        let reversed_outer = vec![
+            point(0.0, 10.0),
+            point(10.0, 10.0),
+            point(10.0, 0.0),
+            point(0.0, 0.0),
+        ];
+        let square_a = vec![
+            point(0.0, 0.0),
+            point(4.0, 0.0),
+            point(4.0, 4.0),
+            point(0.0, 4.0),
+        ];
+        let reversed_square_a = vec![
+            point(0.0, 4.0),
+            point(4.0, 4.0),
+            point(4.0, 0.0),
+            point(0.0, 0.0),
+        ];
+        let overlap_b = vec![
+            point(2.0, 0.0),
+            point(6.0, 0.0),
+            point(6.0, 4.0),
+            point(2.0, 4.0),
+        ];
+        let reversed_overlap_b = vec![
+            point(2.0, 4.0),
+            point(6.0, 4.0),
+            point(6.0, 0.0),
+            point(2.0, 0.0),
+        ];
+        let shared_b = vec![
+            point(2.0, 4.0),
+            point(6.0, 4.0),
+            point(6.0, 8.0),
+            point(2.0, 8.0),
+        ];
+        let bowtie = vec![
+            point(0.0, 0.0),
+            point(4.0, 4.0),
+            point(0.0, 4.0),
+            point(4.0, 0.0),
+        ];
+        let reversed_bowtie = vec![
+            point(4.0, 0.0),
+            point(0.0, 4.0),
+            point(4.0, 4.0),
+            point(0.0, 0.0),
+        ];
+        vec![
+            LineIdentityFixture {
+                id: "F01",
+                contours: vec![outer.clone()],
+                areas: [100.0, 100.0],
+            },
+            LineIdentityFixture {
+                id: "F02",
+                contours: vec![outer.clone(), inner.clone()],
+                areas: [100.0, 84.0],
+            },
+            LineIdentityFixture {
+                id: "F03",
+                contours: vec![outer.clone(), reversed_inner],
+                areas: [84.0, 84.0],
+            },
+            LineIdentityFixture {
+                id: "F04",
+                contours: vec![outer.clone(), outer.clone()],
+                areas: [100.0, 0.0],
+            },
+            LineIdentityFixture {
+                id: "F05",
+                contours: vec![outer.clone(), reversed_outer.clone()],
+                areas: [0.0, 0.0],
+            },
+            LineIdentityFixture {
+                id: "F06",
+                contours: vec![bowtie.clone()],
+                areas: [8.0, 8.0],
+            },
+            LineIdentityFixture {
+                id: "F07",
+                contours: vec![
+                    vec![
+                        point(0.0, 0.0),
+                        point(2.0, 0.0),
+                        point(2.0, 2.0),
+                        point(0.0, 2.0),
+                    ],
+                    vec![
+                        point(2.0, 0.0),
+                        point(4.0, 0.0),
+                        point(4.0, 2.0),
+                        point(2.0, 2.0),
+                    ],
+                ],
+                areas: [8.0, 8.0],
+            },
+            LineIdentityFixture {
+                id: "F08",
+                contours: vec![vec![point(0.0, 0.0), point(8.0, 0.0), point(0.0, 8.0)]],
+                areas: [32.0, 32.0],
+            },
+            LineIdentityFixture {
+                id: "F09-permuted",
+                contours: vec![inner, outer.clone()],
+                areas: [100.0, 84.0],
+            },
+            LineIdentityFixture {
+                id: "F10",
+                contours: vec![square_a.clone(), overlap_b.clone()],
+                areas: [24.0, 16.0],
+            },
+            LineIdentityFixture {
+                id: "F10-reversed",
+                contours: vec![square_a.clone(), reversed_overlap_b.clone()],
+                areas: [16.0, 16.0],
+            },
+            LineIdentityFixture {
+                id: "F11",
+                contours: vec![square_a, shared_b],
+                areas: [32.0, 32.0],
+            },
+            LineIdentityFixture {
+                id: "F03-global-reversed",
+                contours: vec![
+                    reversed_outer,
+                    vec![
+                        point(3.0, 3.0),
+                        point(7.0, 3.0),
+                        point(7.0, 7.0),
+                        point(3.0, 7.0),
+                    ],
+                ],
+                areas: [84.0, 84.0],
+            },
+            LineIdentityFixture {
+                id: "F06-global-reversed",
+                contours: vec![reversed_bowtie],
+                areas: [8.0, 8.0],
+            },
+            LineIdentityFixture {
+                id: "F10-global-reversed",
+                contours: vec![reversed_square_a, reversed_overlap_b],
+                areas: [24.0, 16.0],
+            },
+        ]
+    }
+
+    fn line_path(contours: &[Vec<Point>], returning: bool, closed: bool) -> RawPath {
+        let mut path = RawPath::default();
+        for contour in contours {
+            path.move_to(contour[0]);
+            for endpoint in &contour[1..] {
+                path.line_to(*endpoint);
+            }
+            if returning {
+                path.line_to(contour[0]);
+            }
+            if closed {
+                path.close();
+            }
+        }
+        path
+    }
+
+    fn assert_line_identity_source(
+        path: &RawPath,
+        contours: &[Vec<Point>],
+        returning: bool,
+        closed: bool,
+        output: BridgeOutput<'_>,
+    ) {
+        assert_eq!(output.commands.len(), path.verbs.len());
+        assert_eq!(output.ranges.len(), contours.len());
+        let mut ordinal = 0u32;
+        let mut command_index = 0usize;
+        let mut source_index = 0usize;
+        let mut point_index = 0usize;
+        let mut expected_owners = Vec::new();
+        for (contour_index, contour) in contours.iter().enumerate() {
+            let move_command = output.commands[command_index];
+            assert_eq!(move_command.verb, VERB_MOVE);
+            assert_eq!(move_command.provenance.source_verb, ordinal);
+            assert_eq!(move_command.provenance.end_numerator, 1);
+            assert_eq!(move_command.provenance.depth, 0);
+            let actual_move = move_command.point.unwrap();
+            assert_eq!(actual_move.x.to_bits(), contour[0].x.to_bits());
+            assert_eq!(actual_move.y.to_bits(), contour[0].y.to_bits());
+            ordinal += 1;
+            command_index += 1;
+
+            let endpoint_count = contour.len() - 1 + usize::from(returning);
+            let mut start = contour[0];
+            for endpoint_index in 0..endpoint_count {
+                let end = if endpoint_index + 1 < contour.len() {
+                    contour[endpoint_index + 1]
+                } else {
+                    contour[0]
+                };
+                let command = output.commands[command_index];
+                assert_eq!(command.verb, crate::geometry::VERB_LINE);
+                assert_eq!(command.provenance.source_verb, ordinal);
+                assert_eq!(command.provenance.end_numerator, 1);
+                assert_eq!(command.provenance.depth, 0);
+                let actual_end = command.point.unwrap();
+                assert_eq!(actual_end.x.to_bits(), end.x.to_bits());
+                assert_eq!(actual_end.y.to_bits(), end.y.to_bits());
+                let DecodedSource::Line {
+                    points,
+                    source_verb,
+                    contour: source_contour,
+                } = output.sources[source_index]
+                else {
+                    panic!("expected LINE source")
+                };
+                assert_eq!(source_verb, ordinal);
+                assert_eq!(source_contour, contour_index);
+                assert_eq!(points[0].x.to_bits(), start.x.to_bits());
+                assert_eq!(points[0].y.to_bits(), start.y.to_bits());
+                assert_eq!(points[1].x.to_bits(), end.x.to_bits());
+                assert_eq!(points[1].y.to_bits(), end.y.to_bits());
+                expected_owners.push(EdgeOwner::Line {
+                    source_verb: ordinal,
+                });
+                start = end;
+                ordinal += 1;
+                command_index += 1;
+                source_index += 1;
+            }
+            if closed {
+                let close = output.commands[command_index];
+                assert_eq!(close.verb, VERB_CLOSE);
+                assert_eq!(close.provenance.source_verb, ordinal);
+                assert_eq!(close.provenance.end_numerator, 1);
+                assert_eq!(close.provenance.depth, 0);
+                assert!(close.point.is_none());
+                if !returning {
+                    expected_owners.push(EdgeOwner::ExplicitClose {
+                        source_verb: ordinal,
+                    });
+                }
+                ordinal += 1;
+                command_index += 1;
+            } else if !returning {
+                expected_owners.push(EdgeOwner::ImplicitClosure {
+                    contour: contour_index,
+                });
+            }
+
+            let range = output.ranges[contour_index];
+            assert_eq!(range.start, point_index);
+            assert_eq!(range.count, contour.len());
+            for expected in contour {
+                let actual = output.points[point_index];
+                assert_eq!(actual.x.to_bits(), expected.x.to_bits());
+                assert_eq!(actual.y.to_bits(), expected.y.to_bits());
+                point_index += 1;
+            }
+        }
+        assert_eq!(command_index, output.commands.len());
+        assert_eq!(source_index, output.sources.len());
+        assert_eq!(point_index, output.points.len());
+        assert_eq!(expected_owners, output.owners);
+    }
+
+    fn mesh_area(output: RoundedFillOutput<'_>) -> f64 {
+        assert_eq!(output.indices.len() % 3, 0);
+        output
+            .indices
+            .chunks_exact(3)
+            .map(|triangle| {
+                let a = output.vertices[usize::try_from(triangle[0]).unwrap()];
+                let b = output.vertices[usize::try_from(triangle[1]).unwrap()];
+                let c = output.vertices[usize::try_from(triangle[2]).unwrap()];
+                ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)).abs() / 2.0
+            })
+            .sum()
+    }
+
+    fn assert_direct_rounded_identity(
+        direct: &mut RoundedFillWorkspace,
+        contours: &[Vec<Point>],
+        rule: LineFillRule,
+        bridge: BridgeOutput<'_>,
+    ) {
+        let references: Vec<&[Point]> = contours.iter().map(|contour| contour.as_slice()).collect();
+        direct
+            .tessellate(&references, rule, TOPOLOGY_TOLERANCE)
+            .unwrap();
+        let direct_snapshot = rounded_carrier_snapshot(direct.output().unwrap(), direct.stats());
+        assert_eq!(bridge_carrier_snapshot(bridge), direct_snapshot);
+    }
+
+    #[test]
+    fn all_line_identity_matches_literal_rounded_carriers_in_all_closure_forms() {
+        let fixtures = line_identity_fixtures();
+        let mut bridge = BridgeWorkspace::new(LIMITS).unwrap();
+        let mut direct = RoundedFillWorkspace::new(LIMITS).unwrap();
+        let mut attempts = 0usize;
+        for fixture in &fixtures {
+            for (rule_index, rule) in [LineFillRule::Nonzero, LineFillRule::Evenodd]
+                .into_iter()
+                .enumerate()
+            {
+                for (returning, closed) in
+                    [(false, false), (false, true), (true, false), (true, true)]
+                {
+                    let path = line_path(&fixture.contours, returning, closed);
+                    let diagnostics = measured_raw_rule_attempt(
+                        &mut bridge,
+                        &path,
+                        rule,
+                        FLATTEN_TOLERANCE,
+                        TOPOLOGY_TOLERANCE,
+                        MAX_COMMANDS,
+                    )
+                    .unwrap_or_else(|error| panic!("{} failed: {error:?}", fixture.id));
+                    assert_eq!(diagnostics.flat_status, PATH_OK, "{}", fixture.id);
+                    assert!(diagnostics.emission_invoked, "{}", fixture.id);
+                    assert!(!diagnostics.topology_invoked, "{}", fixture.id);
+                    assert!(diagnostics.rounded_invoked, "{}", fixture.id);
+                    let output = bridge.output().unwrap();
+                    assert_line_identity_source(
+                        &path,
+                        &fixture.contours,
+                        returning,
+                        closed,
+                        output,
+                    );
+                    assert_eq!(
+                        mesh_area(output.rounded),
+                        fixture.areas[rule_index],
+                        "{}",
+                        fixture.id
+                    );
+                    assert_direct_rounded_identity(&mut direct, &fixture.contours, rule, output);
+                    attempts += 1;
+                }
+            }
+        }
+        assert_eq!(fixtures.len(), 15);
+        assert_eq!(attempts, 120);
+    }
+
+    fn transform_contours(
+        contours: &[Vec<Point>],
+        transform: fn(Point) -> Point,
+    ) -> Vec<Vec<Point>> {
+        contours
+            .iter()
+            .map(|contour| contour.iter().copied().map(transform).collect())
+            .collect()
+    }
+
+    fn translate_identity(point: Point) -> Point {
+        Point {
+            x: point.x + 32.0,
+            y: point.y - 16.0,
+        }
+    }
+
+    fn reflect_identity(point: Point) -> Point {
+        Point {
+            x: -point.x,
+            y: point.y,
+        }
+    }
+
+    #[test]
+    fn translated_and_reflected_line_identity_matches_direct_rounded_carriers() {
+        let fixtures = line_identity_fixtures();
+        let mut bridge = BridgeWorkspace::new(LIMITS).unwrap();
+        let mut direct = RoundedFillWorkspace::new(LIMITS).unwrap();
+        let mut attempts = 0usize;
+        for id in ["F06", "F10", "F11"] {
+            let fixture = fixtures.iter().find(|fixture| fixture.id == id).unwrap();
+            for transform in [
+                translate_identity as fn(Point) -> Point,
+                reflect_identity as fn(Point) -> Point,
+            ] {
+                let contours = transform_contours(&fixture.contours, transform);
+                for (rule_index, rule) in [LineFillRule::Nonzero, LineFillRule::Evenodd]
+                    .into_iter()
+                    .enumerate()
+                {
+                    let path = line_path(&contours, false, false);
+                    let diagnostics = measured_raw_rule_attempt(
+                        &mut bridge,
+                        &path,
+                        rule,
+                        FLATTEN_TOLERANCE,
+                        TOPOLOGY_TOLERANCE,
+                        MAX_COMMANDS,
+                    )
+                    .unwrap();
+                    assert!(!diagnostics.topology_invoked);
+                    assert!(diagnostics.rounded_invoked);
+                    let output = bridge.output().unwrap();
+                    assert_line_identity_source(&path, &contours, false, false, output);
+                    assert_eq!(mesh_area(output.rounded), fixture.areas[rule_index]);
+                    assert_direct_rounded_identity(&mut direct, &contours, rule, output);
+                    attempts += 1;
+                }
+            }
+        }
+        assert_eq!(attempts, 12);
+    }
+
+    fn mixed_fallback_path(all_lines: bool) -> RawPath {
+        let mut path = RawPath::default();
+        path.move_to(point(0.0, 0.0));
+        if all_lines {
+            path.line_to(point(12.0, 12.0));
+        } else {
+            path.cubic_to(point(4.0, 4.0), point(8.0, 8.0), point(12.0, 12.0));
+        }
+        path.line_to(point(0.0, 12.0));
+        path.line_to(point(12.0, 0.0));
+        path
+    }
+
+    #[test]
+    fn line_identity_does_not_bypass_mixed_cubic_topology() {
+        let mixed = mixed_fallback_path(false);
+        let lines = mixed_fallback_path(true);
+        let contours = vec![vec![
+            point(0.0, 0.0),
+            point(12.0, 12.0),
+            point(0.0, 12.0),
+            point(12.0, 0.0),
+        ]];
+        let mut bridge = BridgeWorkspace::new(LIMITS).unwrap();
+        let mut direct = RoundedFillWorkspace::new(LIMITS).unwrap();
+        for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
+            assert_eq!(
+                measured_raw_rule_attempt(
+                    &mut bridge,
+                    &mixed,
+                    rule,
+                    FLATTEN_TOLERANCE,
+                    TOPOLOGY_TOLERANCE,
+                    MAX_COMMANDS,
+                ),
+                Err(BridgeError::Topology(TopologyError::Unresolved))
+            );
+            assert!(bridge.diagnostics().topology_invoked);
+            assert!(!bridge.diagnostics().rounded_invoked);
+            assert!(bridge.output().is_none());
+
+            let diagnostics = measured_raw_rule_attempt(
+                &mut bridge,
+                &lines,
+                rule,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            assert!(!diagnostics.topology_invoked);
+            assert!(diagnostics.rounded_invoked);
+            let output = bridge.output().unwrap();
+            assert_eq!(mesh_area(output.rounded), 72.0);
+            assert_line_identity_source(&lines, &contours, false, false, output);
+            assert_direct_rounded_identity(&mut direct, &contours, rule, output);
+        }
+    }
+
+    #[test]
+    fn repeated_and_short_line_contours_keep_preparation_and_topology_failures() {
+        let fixtures = line_identity_fixtures();
+        let f01 = fixtures.iter().find(|fixture| fixture.id == "F01").unwrap();
+        let mut repeated = RawPath::default();
+        repeated.move_to(point(0.0, 0.0));
+        repeated.line_to(point(10.0, 0.0));
+        repeated.line_to(point(10.0, 10.0));
+        repeated.line_to(point(10.0, 10.0));
+        repeated.line_to(point(0.0, 10.0));
+        let mut one_line = RawPath::default();
+        one_line.move_to(point(0.0, 0.0));
+        one_line.line_to(point(3.0, 0.0));
+        one_line.close();
+        let mut two_lines = RawPath::default();
+        two_lines.move_to(point(0.0, 0.0));
+        two_lines.line_to(point(3.0, 0.0));
+        two_lines.line_to(point(0.0, 0.0));
+        let success = line_path(&f01.contours, false, false);
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+
+        assert_eq!(
+            measured_raw_attempt(
+                &mut workspace,
+                &repeated,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::ZeroLengthLeaf)
+        );
+        assert!(workspace.diagnostics().emission_invoked);
+        assert!(!workspace.diagnostics().topology_invoked);
+        assert!(!workspace.diagnostics().rounded_invoked);
+        assert!(workspace.output().is_none());
+        for path in [&one_line, &two_lines] {
+            assert_eq!(
+                measured_raw_attempt(
+                    &mut workspace,
+                    path,
+                    FLATTEN_TOLERANCE,
+                    TOPOLOGY_TOLERANCE,
+                    MAX_COMMANDS,
+                ),
+                Err(BridgeError::Topology(TopologyError::Unresolved))
+            );
+            assert!(workspace.diagnostics().topology_invoked);
+            assert!(!workspace.diagnostics().rounded_invoked);
+            assert!(workspace.output().is_none());
+        }
+        measured_raw_attempt(
+            &mut workspace,
+            &success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(!workspace.diagnostics().topology_invoked);
+        assert!(workspace.output().is_some());
+    }
+
+    #[test]
+    fn skipped_topology_retains_stats_and_line_rounding_failures_recover_atomically() {
+        let cubic_success = raw_square();
+        let fixtures = line_identity_fixtures();
+        let f01 = fixtures.iter().find(|fixture| fixture.id == "F01").unwrap();
+        let line_success = line_path(&f01.contours, false, false);
+        let mixed_failure = mixed_fallback_path(false);
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+
+        measured_raw_attempt(
+            &mut workspace,
+            &cubic_success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        let retained = workspace.topology_stats();
+        assert!(retained.leaves > 0);
+        measured_raw_attempt(
+            &mut workspace,
+            &line_success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(!workspace.diagnostics().topology_invoked);
+        assert!(workspace.diagnostics().rounded_invoked);
+        assert_eq!(workspace.topology_stats(), retained);
+        assert!(workspace.output().is_some());
+
+        assert_eq!(
+            measured_raw_attempt(
+                &mut workspace,
+                &mixed_failure,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::Topology(TopologyError::Unresolved))
+        );
+        assert!(workspace.diagnostics().topology_invoked);
+        assert!(!workspace.diagnostics().rounded_invoked);
+        assert!(workspace.output().is_none());
+        measured_raw_attempt(
+            &mut workspace,
+            &cubic_success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(workspace.diagnostics().topology_invoked);
+        assert!(workspace.diagnostics().rounded_invoked);
+        assert!(workspace.output().is_some());
+
+        assert_eq!(
+            measured_raw_attempt(
+                &mut workspace,
+                &line_success,
+                FLATTEN_TOLERANCE,
+                0.0,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::Rounded(RoundedFillError::InvalidTolerance))
+        );
+        assert!(!workspace.diagnostics().topology_invoked);
+        assert!(workspace.diagnostics().rounded_invoked);
+        assert!(workspace.output().is_none());
+        measured_raw_attempt(
+            &mut workspace,
+            &line_success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(!workspace.diagnostics().topology_invoked);
+        assert!(workspace.output().is_some());
+
+        for (limits, expected) in [
+            (
+                RoundedFillLimits {
+                    max_work: 0,
+                    ..LIMITS
+                },
+                RoundedFillError::WorkLimit,
+            ),
+            (
+                RoundedFillLimits {
+                    max_triangles: 0,
+                    ..LIMITS
+                },
+                RoundedFillError::OutputLimit,
+            ),
+        ] {
+            let mut limited = BridgeWorkspace::new(limits).unwrap();
+            assert_eq!(
+                measured_raw_attempt(
+                    &mut limited,
+                    &line_success,
+                    FLATTEN_TOLERANCE,
+                    TOPOLOGY_TOLERANCE,
+                    MAX_COMMANDS,
+                ),
+                Err(BridgeError::Rounded(expected))
+            );
+            assert!(!limited.diagnostics().topology_invoked);
+            assert!(limited.diagnostics().rounded_invoked);
+            assert!(limited.output().is_none());
+
+            measured_raw_attempt(
+                &mut workspace,
+                &line_success,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            assert!(!workspace.diagnostics().topology_invoked);
+            assert!(workspace.diagnostics().rounded_invoked);
+            assert!(workspace.output().is_some());
+        }
     }
 }
