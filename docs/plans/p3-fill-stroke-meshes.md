@@ -1,6 +1,22 @@
 # P3 fill and stroke meshes execution plan
 
-Current isolated checkpoint: P3.2g native simple cubic topology local acceptance is complete; protected integration remains required. P3.2f integrated through [PR #66](https://github.com/npclown/vector-studio/pull/66) as `63daad21463ac5cdc67ec96987f4adb2d008aa11` after required CI on `73baa825c52d052404c3e850c053078d8b6b5f80` (run36964410591, job110704906113). Earlier checkpoint paragraphs below retain their contemporaneous gate context; complete P3 acceptance remains open.
+Current isolated checkpoint: P3.2h private native cubic-fill workspace local acceptance is complete; protected integration remains required. P3.2g integrated through [PR #67](https://github.com/npclown/vector-studio/pull/67) as `7bc0fdd5f76ceeb1f753412d0e101a1806045a44` after required CI on `d1d861b6620a7e8e3e619837c42dc9500f2797db` (run36967646156, job110714750373). Earlier checkpoint paragraphs below retain their contemporaneous gate context; complete P3 acceptance remains open.
+
+## P3.2h private native cubic-fill workspace
+
+Base: clean updated `7bc0fdd`, branch `codex/p3-2h-native-cubic-workspace`. Primary selects the [workspace contract](p3-native-cubic-workspace-contract.md) to move the validated composition from a cfg(test) fixture model into a private canonical-input Rust operation. An independent dependency/seam audit confirms that existing PathInput accessors and run_path validation suffice. Cheap source caps precede sizing; inherited P2 error precedence applies within that envelope, while P2 itself remains unchanged. The current restricted grammar is explicit and does not define final product rejection behavior.
+
+Contract review and freeze precede implementation; stable source/raw fixture review precedes execution. One Sol high owner will migrate the coupled module/test adapter, with a separate Sol medium read-only reviewer; Primary owns the shared lib seam, contracts and integration. W01-W05 and protected CI are required. Existing 94-row oracles/expectations are reused without a new test-only composition. No public API, mesh ABI, WASM export, dependency, renderer or deferred stroke change is included.
+
+Primary/independent contract review PASS and FROZEN. Review resolved unconditional reset before cheap caps, deterministic restricted-decode error order and min(requested,72) command-capacity behavior. The [review record](../evidence/p3.2h-native-cubic-workspace-review-2026-10-02.md) tracks evidence; implementation and validation remain pending.
+
+Local W01-W05 and Primary/independent review PASS. The runtime workspace reads canonical PathInput; the previous cfg(test) composition is replaced by a thin adapter. Final `pnpm test:geometry` passes 121 native tests and 189 TypeScript geometry tests across seven files, preserving all 94 original outcomes and the release WASM hash. `pnpm check` passes formatting/lint/types, 445 unit tests across 49 files and boundaries; `pnpm build` passes. The first native run exposed two incorrectly constructed raw linear fixtures; independent bit-level analysis and exact integer-trisection correction are retained in the review record. No runtime workaround, expectation relaxation, tolerance/cap change or original-corpus edit was made.
+
+Protected CI/integration remain required. A separate source audit found that an axis-wise endpoint convex-hull certificate could avoid the existing P2 near-linear bounds rejection while retaining the guard and independent oracle. Because the frozen P2 root/uncertainty acceptance rule currently requires rejection, a concrete prospective contract decision must precede any such follow-up; this checkpoint does not change it. General grammar, topology, operation/transport and full C03-C05 remain open; deferred stroke refinement stays deferred.
+
+Final document checks PASS: explicit formatting of four changed Markdown files, local links/anchors (631 references across 122 files), whitespace and seven-file scope review. No generated binary/cache, public export, dependency or unrelated change is included.
+
+P3.2f integrated through [PR #66](https://github.com/npclown/vector-studio/pull/66) as `63daad21463ac5cdc67ec96987f4adb2d008aa11` after required CI on `73baa825c52d052404c3e850c053078d8b6b5f80` (run36964410591, job110704906113).
 
 ## P3.2g native simple cubic topology
 
