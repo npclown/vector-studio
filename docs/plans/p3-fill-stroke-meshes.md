@@ -1,6 +1,16 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.2m2 full readiness observation and audit are integrated through [PR #75](https://github.com/npclown/vector-studio/pull/75). P3.1f rounded internal-knot topology is the current test-only prerequisite. Earlier sections retain their contemporaneous gate context and integration evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.1f rounded internal-knot topology is integrated through [PR #76](https://github.com/npclown/vector-studio/pull/76). P3.2n native rounded-knot helper is the current private prerequisite, with contract frozen before implementation. Earlier sections retain their contemporaneous gate context and integration evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.2n native rounded internal-knot topology
+
+Base: clean updated `8645b0dfac6e9a9d69593cc19bf6f9db8e790ac5`, after P3.1f PR #76 and required CI on `3b55b4e82845add4bf87a9b7354ae1914aac341b` (run36990548139, job110785481020). Branch: `codex/p3-2n-native-rounded-topology`. The [native rounded contract](p3-native-rounded-topology-contract.md) is FROZEN after Primary and independent arithmetic/proof/interface/carrier review. Implementation may begin; stable-source review still precedes numeric execution.
+
+N01-N04 add a separate private native workspace with fixed-width exact arithmetic and accounted allocation, then compare29 fixed source carriers against the independent P3.1f oracle. Existing exact-knot helper/layout/accounting and old54-row transport remain unchanged. The new helper computes area and winding from actual carried knots; it cannot reuse the old controls[0] publication assumption. No CubicFillWorkspace adoption, runtime cap/API/dependency/ABI change, general crossings, browser/GPU/performance run or deferred stroke work is included.
+
+Primary owns contract/shared test transport/lib wiring/review/evidence/integration. Sol high owns the numeric helper and its separate Rust units/emitter; Sol medium owns disjoint TS carrier/transport/verification files. Astra high reviews arithmetic and proof; separate Sol medium reviews stable source. No recursive delegation. Source freeze precedes implementation, stable review precedes numeric execution, and local evidence plus protected CI precede integration. The [review record](../evidence/p3.2n-native-rounded-topology-review-2026-10-02.md) retains prospective decisions and validation evidence. Adoption semantics for the two non-equivalent certificates remain a later separately contracted checkpoint.
+
+Local N01-N04 and corrective final source review PASS:163 native tests,238 TypeScript geometry tests,483 root unit tests, static/boundary checks and build pass. All29 new carriers match fixed12/2/15 statuses, literal output/counters and independent oracle; old54 topology and94 cubic-fill rows remain passing. Retained bytes224256, inline1216, zero certify allocations; independent release WASM identity is unchanged. The review record explicitly retains the preliminary dispatch sequencing gap and subsequent fixture isolation correction/final validation. Protected CI/integration remain pending. Next private dependency is separately frozen old/new certificate selection and accounting before CubicFillWorkspace adoption; no full-workload readiness is inferred.
 
 ## P3.1f rounded internal-knot topology
 

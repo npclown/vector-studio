@@ -41,6 +41,8 @@ mod line_fill_tests;
 #[cfg(test)]
 mod native_cubic_fill_tests;
 #[cfg(test)]
+mod rounded_cubic_topology_tests;
+#[cfg(test)]
 mod rounded_line_fill_tests;
 #[cfg(test)]
 mod simple_cubic_topology_tests;
