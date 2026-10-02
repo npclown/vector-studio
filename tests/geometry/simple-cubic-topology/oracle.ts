@@ -109,6 +109,13 @@ type PreparedSegment = Readonly<{
   lines: readonly ProvenanceLine[];
 }>;
 type PreparedContour = readonly PreparedSegment[];
+type TopologyPreflight =
+  | Readonly<{ ok: false; result: SimpleCubicTopologyResult }>
+  | Readonly<{
+      ok: true;
+      limits: CheckedLimits;
+      contours: readonly PreparedContour[];
+    }>;
 type ShapedLine = Readonly<{ end: Point; provenance: unknown }>;
 type ShapedSegment = Readonly<{
   cubic: Cubic;
@@ -143,6 +150,17 @@ type LeafHull = Readonly<{
   start: ExactPoint;
   end: ExactPoint;
   ordinaryStart: Point;
+}>;
+type RoundedLeaf = Readonly<{
+  contour: number;
+  contourLeaf: number;
+  hull: readonly ExactPoint[];
+  start: ExactPoint;
+  end: ExactPoint;
+  ordinaryStart: Point;
+  sourceStart: ExactPoint;
+  sourceEnd: ExactPoint;
+  sourceDifferences: readonly ExactPoint[];
 }>;
 
 const MAX_CONTOURS = 4;
@@ -486,6 +504,38 @@ function adjacentSharedPoint(
   return null;
 }
 
+function cubicDifferences(controls: ExactCubic): readonly ExactPoint[] {
+  return [
+    pointSub(controls[1], controls[0]),
+    pointSub(controls[2], controls[1]),
+    pointSub(controls[3], controls[2]),
+  ];
+}
+
+function roundedLeafProgresses(leaf: RoundedLeaf, direction: ExactPoint): boolean {
+  let total = ZERO;
+  for (const difference of leaf.sourceDifferences) {
+    const projection = dot(difference, direction);
+    if (compare(projection, ZERO) < 0) return false;
+    total = add(total, projection);
+  }
+  return (
+    compare(total, ZERO) > 0 && compare(dot(pointSub(leaf.end, leaf.start), direction), ZERO) > 0
+  );
+}
+
+function directedCyclicAdjacent(
+  left: RoundedLeaf,
+  right: RoundedLeaf,
+  contourLeafCounts: readonly number[],
+): readonly [previous: RoundedLeaf, next: RoundedLeaf] | null {
+  if (left.contour !== right.contour) return null;
+  const count = contourLeafCounts[left.contour]!;
+  if (right.contourLeaf === left.contourLeaf + 1) return [left, right];
+  if (left.contourLeaf === 0 && right.contourLeaf === count - 1) return [right, left];
+  return null;
+}
+
 /**
  * Checks only the bounded exact preparation needed by the P3 cubic census.
  * A prepared result makes no claim about closure, hulls, or fill topology.
@@ -730,39 +780,52 @@ export function inspectCubicPreparation(
   return { status: 'PREPARED', finding: null };
 }
 
-/**
- * Certifies the frozen P3.1e simple-cubic sufficient topology condition.
- * This test-only oracle intentionally uses exact rational work throughout.
- */
-export function certifySimpleCubicTopology(
+function prepareTopologyInput(
   contours: readonly (readonly CubicTopologySegment[])[],
-  limits?: SimpleCubicTopologyLimits,
-): SimpleCubicTopologyResult {
+  limits: SimpleCubicTopologyLimits | undefined,
+): TopologyPreflight {
   const checkedLimits = readLimits(limits);
-  if (!checkedLimits.ok) return failure('INVALID_LIMITS', checkedLimits.finding);
+  if (!checkedLimits.ok) {
+    return { ok: false, result: failure('INVALID_LIMITS', checkedLimits.finding) };
+  }
   const bounded = checkedLimits.limits;
 
   const runtimeContours: unknown = contours;
   if (!isUnknownArray(runtimeContours) || runtimeContours.length === 0) {
-    return failure('INVALID_INPUT', 'contours must be a nonempty array');
+    return {
+      ok: false,
+      result: failure('INVALID_INPUT', 'contours must be a nonempty array'),
+    };
   }
   if (runtimeContours.length > bounded.maxContours) {
-    return failure('WORK_LIMIT', `input exceeds ${bounded.maxContours} contours`);
+    return {
+      ok: false,
+      result: failure('WORK_LIMIT', `input exceeds ${bounded.maxContours} contours`),
+    };
   }
 
   let cubicCount = 0;
   const runtimeContourArrays: (readonly unknown[])[] = [];
   for (let contourIndex = 0; contourIndex < runtimeContours.length; contourIndex += 1) {
     if (!hasIndex(runtimeContours, contourIndex)) {
-      return failure('INVALID_INPUT', `contour ${contourIndex} is missing`);
+      return {
+        ok: false,
+        result: failure('INVALID_INPUT', `contour ${contourIndex} is missing`),
+      };
     }
     const contour: unknown = runtimeContours[contourIndex];
     if (!isUnknownArray(contour) || contour.length === 0) {
-      return failure('INVALID_INPUT', `contour ${contourIndex} must be a nonempty array`);
+      return {
+        ok: false,
+        result: failure('INVALID_INPUT', `contour ${contourIndex} must be a nonempty array`),
+      };
     }
     cubicCount += contour.length;
     if (cubicCount > bounded.maxCubics) {
-      return failure('WORK_LIMIT', `input exceeds ${bounded.maxCubics} source cubics`);
+      return {
+        ok: false,
+        result: failure('WORK_LIMIT', `input exceeds ${bounded.maxCubics} source cubics`),
+      };
     }
     runtimeContourArrays.push(contour);
   }
@@ -774,27 +837,42 @@ export function certifySimpleCubicTopology(
     const structured: StructuredSegment[] = [];
     for (let segmentIndex = 0; segmentIndex < contour.length; segmentIndex += 1) {
       if (!hasIndex(contour, segmentIndex)) {
-        return failure(
-          'INVALID_INPUT',
-          `contour ${contourIndex} source segment ${segmentIndex} is missing`,
-        );
+        return {
+          ok: false,
+          result: failure(
+            'INVALID_INPUT',
+            `contour ${contourIndex} source segment ${segmentIndex} is missing`,
+          ),
+        };
       }
       const candidate: unknown = contour[segmentIndex];
       if (!isRecord(candidate) || !isUnknownArray(candidate.lines)) {
-        return failure(
-          'INVALID_INPUT',
-          `contour ${contourIndex} source segment ${segmentIndex} must contain a lines array`,
-        );
+        return {
+          ok: false,
+          result: failure(
+            'INVALID_INPUT',
+            `contour ${contourIndex} source segment ${segmentIndex} must contain a lines array`,
+          ),
+        };
       }
       declaredLeaves += candidate.lines.length;
       if (declaredLeaves > bounded.maxLeaves) {
-        return failure('WORK_LIMIT', `input declares more than ${bounded.maxLeaves} source lines`);
+        return {
+          ok: false,
+          result: failure(
+            'WORK_LIMIT',
+            `input declares more than ${bounded.maxLeaves} source lines`,
+          ),
+        };
       }
       if (candidate.lines.length === 0) {
-        return failure(
-          'INVALID_INPUT',
-          `contour ${contourIndex} source segment ${segmentIndex} must emit at least one line`,
-        );
+        return {
+          ok: false,
+          result: failure(
+            'INVALID_INPUT',
+            `contour ${contourIndex} source segment ${segmentIndex} must emit at least one line`,
+          ),
+        };
       }
       structured.push({ record: candidate, lines: candidate.lines });
     }
@@ -810,10 +888,13 @@ export function certifySimpleCubicTopology(
     for (let segmentIndex = 0; segmentIndex < contour.length; segmentIndex += 1) {
       const candidate = contour[segmentIndex]!;
       if (!isFiniteCubic(candidate.record.cubic)) {
-        return failure(
-          'INVALID_INPUT',
-          `contour ${contourIndex} source segment ${segmentIndex} must contain a finite cubic`,
-        );
+        return {
+          ok: false,
+          result: failure(
+            'INVALID_INPUT',
+            `contour ${contourIndex} source segment ${segmentIndex} must contain a finite cubic`,
+          ),
+        };
       }
       const ordinal: unknown = candidate.record.sourceVerbOrdinal;
       if (
@@ -822,36 +903,51 @@ export function certifySimpleCubicTopology(
         ordinal < 0 ||
         ordinal > MAX_U32
       ) {
-        return failure(
-          'INVALID_INPUT',
-          `contour ${contourIndex} source segment ${segmentIndex} ordinal must be u32`,
-        );
+        return {
+          ok: false,
+          result: failure(
+            'INVALID_INPUT',
+            `contour ${contourIndex} source segment ${segmentIndex} ordinal must be u32`,
+          ),
+        };
       }
       if (ordinals.has(ordinal)) {
-        return failure('INVALID_INPUT', `source ordinal ${ordinal} is duplicated`);
+        return {
+          ok: false,
+          result: failure('INVALID_INPUT', `source ordinal ${ordinal} is duplicated`),
+        };
       }
       ordinals.add(ordinal);
       if (previousEnd && !equalOrdinaryPoint(previousEnd, candidate.record.cubic[0])) {
-        return failure(
-          'INVALID_INPUT',
-          `contour ${contourIndex} source segment ${segmentIndex} is disconnected`,
-        );
+        return {
+          ok: false,
+          result: failure(
+            'INVALID_INPUT',
+            `contour ${contourIndex} source segment ${segmentIndex} is disconnected`,
+          ),
+        };
       }
       previousEnd = candidate.record.cubic[3];
       const shapedLines: ShapedLine[] = [];
       for (let lineIndex = 0; lineIndex < candidate.lines.length; lineIndex += 1) {
         if (!hasIndex(candidate.lines, lineIndex)) {
-          return failure(
-            'INVALID_INPUT',
-            `contour ${contourIndex} source segment ${segmentIndex} line ${lineIndex} is missing`,
-          );
+          return {
+            ok: false,
+            result: failure(
+              'INVALID_INPUT',
+              `contour ${contourIndex} source segment ${segmentIndex} line ${lineIndex} is missing`,
+            ),
+          };
         }
         const line: unknown = candidate.lines[lineIndex];
         if (!isRecord(line) || !isFinitePoint(line.end)) {
-          return failure(
-            'INVALID_INPUT',
-            `contour ${contourIndex} source segment ${segmentIndex} line ${lineIndex} must have a finite endpoint`,
-          );
+          return {
+            ok: false,
+            result: failure(
+              'INVALID_INPUT',
+              `contour ${contourIndex} source segment ${segmentIndex} line ${lineIndex} must have a finite endpoint`,
+            ),
+          };
         }
         shapedLines.push({
           end: [line.end[0], line.end[1]],
@@ -880,19 +976,25 @@ export function certifySimpleCubicTopology(
         const line = segment.lines[lineIndex]!;
         const provenance: unknown = line.provenance;
         if (!isRecord(provenance)) {
-          return failure(
-            'INVALID_PROVENANCE',
-            `contour ${contourIndex} source segment ${segmentIndex} line ${lineIndex} lacks provenance`,
-          );
+          return {
+            ok: false,
+            result: failure(
+              'INVALID_PROVENANCE',
+              `contour ${contourIndex} source segment ${segmentIndex} line ${lineIndex} lacks provenance`,
+            ),
+          };
         }
         const source = provenance.sourceVerbOrdinal;
         const numerator = provenance.endNumerator;
         const depth = provenance.depth;
         if (source !== segment.sourceVerbOrdinal) {
-          return failure(
-            'INVALID_PROVENANCE',
-            `contour ${contourIndex} source segment ${segmentIndex} line ${lineIndex} has the wrong ordinal`,
-          );
+          return {
+            ok: false,
+            result: failure(
+              'INVALID_PROVENANCE',
+              `contour ${contourIndex} source segment ${segmentIndex} line ${lineIndex} has the wrong ordinal`,
+            ),
+          };
         }
         if (
           typeof depth !== 'number' ||
@@ -904,19 +1006,25 @@ export function certifySimpleCubicTopology(
           numerator < 1 ||
           numerator > 2 ** depth
         ) {
-          return failure(
-            'INVALID_PROVENANCE',
-            `contour ${contourIndex} source segment ${segmentIndex} line ${lineIndex} has invalid dyadic provenance`,
-          );
+          return {
+            ok: false,
+            result: failure(
+              'INVALID_PROVENANCE',
+              `contour ${contourIndex} source segment ${segmentIndex} line ${lineIndex} has invalid dyadic provenance`,
+            ),
+          };
         }
         const denominator = 1n << BigInt(depth);
         const endNumerator = BigInt(numerator);
         const startNumerator = endNumerator - 1n;
         if (previousNumerator * denominator !== startNumerator * previousDenominator) {
-          return failure(
-            'INVALID_PROVENANCE',
-            `contour ${contourIndex} source segment ${segmentIndex} line ${lineIndex} is not adjacent`,
-          );
+          return {
+            ok: false,
+            result: failure(
+              'INVALID_PROVENANCE',
+              `contour ${contourIndex} source segment ${segmentIndex} line ${lineIndex} is not adjacent`,
+            ),
+          };
         }
         provenanceLines.push({
           ordinaryEnd: [line.end[0], line.end[1]],
@@ -928,10 +1036,13 @@ export function certifySimpleCubicTopology(
         previousDenominator = denominator;
       }
       if (previousNumerator !== previousDenominator) {
-        return failure(
-          'INVALID_PROVENANCE',
-          `contour ${contourIndex} source segment ${segmentIndex} does not terminate at one`,
-        );
+        return {
+          ok: false,
+          result: failure(
+            'INVALID_PROVENANCE',
+            `contour ${contourIndex} source segment ${segmentIndex} does not terminate at one`,
+          ),
+        };
       }
       prepared.push({
         cubic: segment.cubic,
@@ -941,6 +1052,77 @@ export function certifySimpleCubicTopology(
     }
     preparedContours.push(prepared);
   }
+
+  return { ok: true, limits: bounded, contours: preparedContours };
+}
+
+function publishTopology(
+  leaves: readonly LeafHull[],
+  contourCount: number,
+  pairs: number,
+): SimpleCubicTopologyResult {
+  const exactPolygons: ExactPoint[][] = Array.from({ length: contourCount }, () => []);
+  const polygons: Point[][] = Array.from({ length: contourCount }, () => []);
+  for (const leaf of leaves) {
+    exactPolygons[leaf.contour]!.push(leaf.start);
+    polygons[leaf.contour]!.push([leaf.ordinaryStart[0], leaf.ordinaryStart[1]]);
+  }
+
+  const orientations: (-1 | 1)[] = [];
+  for (let contourIndex = 0; contourIndex < exactPolygons.length; contourIndex += 1) {
+    const orientation = polygonOrientation(exactPolygons[contourIndex]!);
+    if (orientation === 0) {
+      return failure(
+        'UNRESOLVED',
+        `contour ${contourIndex} has zero exact polygon area`,
+        leaves.length,
+        pairs,
+      );
+    }
+    orientations.push(orientation);
+  }
+
+  const winding: (-1 | 0 | 1)[][] = [];
+  for (let queryIndex = 0; queryIndex < polygons.length; queryIndex += 1) {
+    const row: (-1 | 0 | 1)[] = [];
+    for (let containerIndex = 0; containerIndex < polygons.length; containerIndex += 1) {
+      if (queryIndex === containerIndex) {
+        row.push(0);
+        continue;
+      }
+      const location = classifyLineFill(
+        [polygons[containerIndex]!],
+        polygons[queryIndex]![0]!,
+        'evenodd',
+      );
+      if (location === 'boundary') {
+        return failure(
+          'UNRESOLVED',
+          `contour ${queryIndex} initial knot is on contour ${containerIndex}'s polygon boundary`,
+          leaves.length,
+          pairs,
+        );
+      }
+      row.push(location === 'inside' ? orientations[containerIndex]! : 0);
+    }
+    winding.push(row);
+  }
+
+  return success(leaves.length, pairs, { polygons, orientations, winding });
+}
+
+/**
+ * Certifies the frozen P3.1e simple-cubic sufficient topology condition.
+ * This test-only oracle intentionally uses exact rational work throughout.
+ */
+export function certifySimpleCubicTopology(
+  contours: readonly (readonly CubicTopologySegment[])[],
+  limits?: SimpleCubicTopologyLimits,
+): SimpleCubicTopologyResult {
+  const preflight = prepareTopologyInput(contours, limits);
+  if (!preflight.ok) return preflight.result;
+  const bounded = preflight.limits;
+  const preparedContours = preflight.contours;
 
   const restrictedContours: RestrictedLeaf[][] = [];
   for (let contourIndex = 0; contourIndex < preparedContours.length; contourIndex += 1) {
@@ -1065,52 +1247,145 @@ export function certifySimpleCubicTopology(
     }
   }
 
-  const exactPolygons: ExactPoint[][] = Array.from({ length: restrictedContours.length }, () => []);
-  const polygons: Point[][] = Array.from({ length: restrictedContours.length }, () => []);
-  for (const leaf of leaves) {
-    exactPolygons[leaf.contour]!.push(leaf.start);
-    polygons[leaf.contour]!.push([leaf.ordinaryStart[0], leaf.ordinaryStart[1]]);
+  return publishTopology(leaves, restrictedContours.length, pairs);
+}
+
+/**
+ * Certifies the frozen P3.1f sufficient condition for rounded internal knots.
+ * Source-final endpoints remain exact; internal actual knots may be rounded.
+ */
+export function certifyRoundedKnotCubicTopology(
+  contours: readonly (readonly CubicTopologySegment[])[],
+  limits?: SimpleCubicTopologyLimits,
+): SimpleCubicTopologyResult {
+  const preflight = prepareTopologyInput(contours, limits);
+  if (!preflight.ok) return preflight.result;
+  const bounded = preflight.limits;
+  const preparedContours = preflight.contours;
+
+  for (let contourIndex = 0; contourIndex < preparedContours.length; contourIndex += 1) {
+    const contour = preparedContours[contourIndex]!;
+    for (let segmentIndex = 0; segmentIndex < contour.length; segmentIndex += 1) {
+      const segment = contour[segmentIndex]!;
+      const finalActual = segment.lines[segment.lines.length - 1]!.exactEnd;
+      if (!equalPoint(finalActual, segment.exactCubic[3])) {
+        return failure(
+          'KNOT_MISMATCH',
+          `contour ${contourIndex} source segment ${segmentIndex} final endpoint differs from the exact source endpoint`,
+        );
+      }
+    }
   }
 
-  const orientations: (-1 | 1)[] = [];
-  for (let contourIndex = 0; contourIndex < exactPolygons.length; contourIndex += 1) {
-    const orientation = polygonOrientation(exactPolygons[contourIndex]!);
-    if (orientation === 0) {
+  const leaves: RoundedLeaf[] = [];
+  const contourLeafCounts: number[] = [];
+  for (let contourIndex = 0; contourIndex < preparedContours.length; contourIndex += 1) {
+    const contour = preparedContours[contourIndex]!;
+    const firstOrdinary = contour[0]!.cubic[0];
+    const firstExact = exactPoint(firstOrdinary);
+    let ordinaryStart: Point = [firstOrdinary[0], firstOrdinary[1]];
+    let actualStart = firstExact;
+    let contourLeaf = 0;
+
+    for (let segmentIndex = 0; segmentIndex < contour.length; segmentIndex += 1) {
+      const segment = contour[segmentIndex]!;
+      for (let lineIndex = 0; lineIndex < segment.lines.length; lineIndex += 1) {
+        if (leaves.length >= bounded.maxLeaves) {
+          return failure(
+            'WORK_LIMIT',
+            `topology exceeds ${bounded.maxLeaves} leaves`,
+            leaves.length,
+          );
+        }
+        const line = segment.lines[lineIndex]!;
+        const controls = restrictCubic(segment.exactCubic, line.start, line.end);
+        leaves.push({
+          contour: contourIndex,
+          contourLeaf,
+          hull: convexHull([...controls, actualStart, line.exactEnd]),
+          start: actualStart,
+          end: line.exactEnd,
+          ordinaryStart: [ordinaryStart[0], ordinaryStart[1]],
+          sourceStart: controls[0],
+          sourceEnd: controls[3],
+          sourceDifferences: cubicDifferences(controls),
+        });
+        contourLeaf += 1;
+        actualStart = line.exactEnd;
+        ordinaryStart = line.ordinaryEnd;
+      }
+    }
+
+    if (!equalPoint(actualStart, firstExact)) {
+      if (leaves.length >= bounded.maxLeaves) {
+        return failure('WORK_LIMIT', `topology exceeds ${bounded.maxLeaves} leaves`, leaves.length);
+      }
+      const difference = pointSub(firstExact, actualStart);
+      leaves.push({
+        contour: contourIndex,
+        contourLeaf,
+        hull: convexHull([actualStart, firstExact]),
+        start: actualStart,
+        end: firstExact,
+        ordinaryStart: [ordinaryStart[0], ordinaryStart[1]],
+        sourceStart: actualStart,
+        sourceEnd: firstExact,
+        sourceDifferences: [difference],
+      });
+      contourLeaf += 1;
+    }
+    contourLeafCounts.push(contourLeaf);
+  }
+
+  for (let contourIndex = 0; contourIndex < contourLeafCounts.length; contourIndex += 1) {
+    if (contourLeafCounts[contourIndex]! < 3) {
       return failure(
         'UNRESOLVED',
-        `contour ${contourIndex} has zero exact polygon area`,
+        `contour ${contourIndex} has fewer than three leaves after closure`,
         leaves.length,
-        pairs,
       );
     }
-    orientations.push(orientation);
   }
 
-  const winding: (-1 | 0 | 1)[][] = [];
-  for (let queryIndex = 0; queryIndex < polygons.length; queryIndex += 1) {
-    const row: (-1 | 0 | 1)[] = [];
-    for (let containerIndex = 0; containerIndex < polygons.length; containerIndex += 1) {
-      if (queryIndex === containerIndex) {
-        row.push(0);
-        continue;
-      }
-      const location = classifyLineFill(
-        [polygons[containerIndex]!],
-        polygons[queryIndex]![0]!,
-        'evenodd',
-      );
-      if (location === 'boundary') {
+  let pairs = 0;
+  for (let leftIndex = 0; leftIndex < leaves.length; leftIndex += 1) {
+    const left = leaves[leftIndex]!;
+    for (let rightIndex = leftIndex + 1; rightIndex < leaves.length; rightIndex += 1) {
+      if (pairs >= bounded.maxPairs) {
         return failure(
-          'UNRESOLVED',
-          `contour ${queryIndex} initial knot is on contour ${containerIndex}'s polygon boundary`,
+          'WORK_LIMIT',
+          `topology exceeds ${bounded.maxPairs} hull pairs`,
           leaves.length,
           pairs,
         );
       }
-      row.push(location === 'inside' ? orientations[containerIndex]! : 0);
+      const right = leaves[rightIndex]!;
+      pairs += 1;
+      const adjacent = directedCyclicAdjacent(left, right, contourLeafCounts);
+      if (adjacent) {
+        const [previous, next] = adjacent;
+        const direction = pointSub(next.sourceEnd, previous.sourceStart);
+        if (
+          !roundedLeafProgresses(previous, direction) ||
+          !roundedLeafProgresses(next, direction)
+        ) {
+          return failure(
+            'UNRESOLVED',
+            `adjacent hull pair ${leftIndex},${rightIndex} lacks a common directed projection`,
+            leaves.length,
+            pairs,
+          );
+        }
+      } else if (closedHullsIntersect(left.hull, right.hull)) {
+        return failure(
+          'UNRESOLVED',
+          `nonadjacent hull pair ${leftIndex},${rightIndex} intersects`,
+          leaves.length,
+          pairs,
+        );
+      }
     }
-    winding.push(row);
   }
 
-  return success(leaves.length, pairs, { polygons, orientations, winding });
+  return publishTopology(leaves, preparedContours.length, pairs);
 }
