@@ -49,6 +49,10 @@ Each JSON row has exactly these fields:
 
 All numbers are finite, counters are nonnegative safe integers, enum/status values are checked and unexpected keys or extra/missing rows fail. Primary may expose only the existing test-local `print_points`, `print_output` and `print_stats` as `pub(super)` for byte-equivalent serializer reuse. Primary also extracts `parseNativeRoundedValue(value,index)` from the existing strict `parseNativeRoundedRow` body; the row function continues to JSON.parse then delegate with identical checks. The new outer parser passes its parsed nested value directly, never through JSON.stringify, which would silently replace negative zero. Product Rust modules and existing native JSON meanings stay unchanged.
 
+### P3.2g dependent accounting extension
+
+The [P3.2g contract](p3-native-cubic-topology-contract.md) prepares a separately validated native topology guard before rounded processing. When that guard is integrated, the existing `allocated_bytes` field becomes the combined actual heap capacity of the rounded and topology workspaces, under the unchanged16 MiB bridge ceiling. `inline_bytes` remains the complete bridge object's inline size below64 KiB. The JSON schema,94 source rows,92/two outcomes, error budgets and zero-allocation obligations do not change. Before that integration, P3.2f observations retain their original rounded-only accounting meaning; historical evidence is not reinterpreted. The extension introduces no production operation or export.
+
 ## Prospective limits and evidence
 
 At most 16 cubics with four leaves each give 64 source leaves, 112 sizing visits and 112 emission visits; the corpus's single open C04 has only 12 leaves plus closure. Hence at most 64 normalized polygon edges. P3.1e separation proves no proper crossing, so at most 128 raw endpoint events and 2016 pair checks. A generic event/edge bound permits 128*64+2*64=8320 section records.

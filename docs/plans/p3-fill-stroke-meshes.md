@@ -1,6 +1,20 @@
 # P3 fill and stroke meshes execution plan
 
-Current isolated checkpoint: P3.2f native cubic fill compatibility bridge follows P3.1e, integrated through [PR #65](https://github.com/npclown/vector-studio/pull/65) as `1eac46fdc2ab04aa8852246a543ac00c2cbf4d62` after required CI on `5be209d9e6b8c563729465cefd9cdfd5184f530c` (run 36961562928, job 110696166877). Earlier checkpoint paragraphs below retain their contemporaneous gate context; complete P3 acceptance remains open.
+Current isolated checkpoint: P3.2g native simple cubic topology local acceptance is complete; protected integration remains required. P3.2f integrated through [PR #66](https://github.com/npclown/vector-studio/pull/66) as `63daad21463ac5cdc67ec96987f4adb2d008aa11` after required CI on `73baa825c52d052404c3e850c053078d8b6b5f80` (run36964410591, job110704906113). Earlier checkpoint paragraphs below retain their contemporaneous gate context; complete P3 acceptance remains open.
+
+## P3.2g native simple cubic topology
+
+Base: clean updated `63daad2`, branch `codex/p3-2g-native-cubic-topology`. Primary selects the missing native topology guard after the actual-kernel compatibility checkpoint. The [frozen contract](p3-native-cubic-topology-contract.md) ports the existing exact-knot sufficient condition using bounded34/68-limb arithmetic, without new dependencies or Float64-control representability restrictions. A Sol high read-only feasibility audit confirms the integer width and bounded-memory approach; Primary chooses two restriction passes to preserve all-knots-before-hulls precedence using one pre-reserved vector.
+
+Primary/independent contract review PASS; the contract is FROZEN. Review resolved control-source identity, token-array encoding, inclusive byte/pair limits and the linked prospective combined accounting field without changing historical evidence. Sol high may implement the private module; Sol medium owns disjoint transport fixtures/emitter. Stable source and fixed54-row fixture review precede execution. Standalone certificate validation precedes Primary's dependent test-only P3.2f guard. No production operation/source model, public API, ABI, P2 behavior, renderer, acceptance-budget or deferred stroke change. G01-G05 and protected integration are required; full C03-C05 remain open.
+
+Local G01-G05 and Primary/independent review PASS; the [review record](../evidence/p3.2g-native-cubic-topology-review-2026-10-02.md) maps exact arithmetic, all 54 fixed certificate rows, limits, publication/allocation and guarded bridge evidence. Standalone validation passed before Primary added the dependent guard; final `pnpm test:geometry` passes 116 native tests and 189 TypeScript geometry tests across seven files, including all 94 unchanged actual cubic-mesh expectations. `pnpm check` passes formatting/lint/types, 445 unit tests across 49 files and boundaries; `pnpm build` passes. Independent release WASM builds preserve the existing hash. Source/fixture and guard review preceded their executions; no observed result changes a corpus, cap, expectation or error budget. Protected CI/integration remain required.
+
+Next meaningful private dependency is a native cubic-fill workspace composed from the now-validated helpers and existing canonical input, with a separately frozen narrow contract before implementation. Public path/mesh ABI, cache/transport, renderer and full curved-topology/coverage obligations remain later gates; deferred stroke refinement stays deferred.
+
+Final explicit Markdown formatting, local links/anchors (622 references across 120 files), whitespace and 12-file scope review PASS. No generated inputs, local caches, dependencies, public exports or unrelated work are included.
+
+P3.1e was integrated through [PR #65](https://github.com/npclown/vector-studio/pull/65) as `1eac46fdc2ab04aa8852246a543ac00c2cbf4d62` after required CI on `5be209d9e6b8c563729465cefd9cdfd5184f530c` (run36961562928, job110696166877).
 
 ## P3.2f native cubic fill compatibility
 

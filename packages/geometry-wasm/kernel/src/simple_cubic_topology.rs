@@ -1,0 +1,1823 @@
+use core::cmp::Ordering;
+use core::mem::size_of;
+
+use crate::fill_exact::{multiply, Signed};
+use crate::geometry::{Point, Provenance};
+
+const ABSOLUTE_MAX_CONTOURS: usize = 4;
+const ABSOLUTE_MAX_CUBICS: usize = 16;
+const ABSOLUTE_MAX_LEAVES: usize = 64;
+const ABSOLUTE_MAX_PAIRS: usize = 2_016;
+const ABSOLUTE_MAX_BYTES: usize = 1024 * 1024;
+const MAX_DEPTH: u32 = 20;
+const COORDINATE_LIMBS: usize = 34;
+const PRODUCT_LIMBS: usize = 68;
+const GRID_SHIFT: usize = 60;
+
+type ExactCoordinate = Signed<COORDINATE_LIMBS>;
+type ExactProduct = Signed<PRODUCT_LIMBS>;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct TopologyRange {
+    pub(crate) start: usize,
+    pub(crate) count: usize,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct TopologyCubic {
+    pub(crate) points: [Point; 4],
+    pub(crate) source_verb: u32,
+    pub(crate) leaves: TopologyRange,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct TopologyLeaf {
+    pub(crate) end: Point,
+    pub(crate) provenance: Provenance,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct TopologyInput<'a> {
+    pub(crate) contours: &'a [TopologyRange],
+    pub(crate) cubics: &'a [TopologyCubic],
+    pub(crate) leaves: &'a [TopologyLeaf],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct TopologyLimits {
+    pub(crate) max_contours: usize,
+    pub(crate) max_cubics: usize,
+    pub(crate) max_leaves: usize,
+    pub(crate) max_pairs: usize,
+    pub(crate) max_bytes: usize,
+}
+
+impl Default for TopologyLimits {
+    fn default() -> Self {
+        Self {
+            max_contours: ABSOLUTE_MAX_CONTOURS,
+            max_cubics: ABSOLUTE_MAX_CUBICS,
+            max_leaves: ABSOLUTE_MAX_LEAVES,
+            max_pairs: ABSOLUTE_MAX_PAIRS,
+            max_bytes: ABSOLUTE_MAX_BYTES,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TopologyError {
+    InvalidLimits,
+    AllocationFailed,
+    ByteLimit,
+    InvalidInput,
+    InvalidProvenance,
+    KnotMismatch,
+    Unresolved,
+    WorkLimit,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct TopologyStats {
+    pub(crate) leaves: usize,
+    pub(crate) pairs: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TopologyOutput<'a> {
+    pub(crate) points: &'a [Point],
+    pub(crate) contours: &'a [TopologyRange],
+    pub(crate) orientations: &'a [i8],
+    pub(crate) winding: &'a [[i8; ABSOLUTE_MAX_CONTOURS]],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ExactPoint {
+    x: ExactCoordinate,
+    y: ExactCoordinate,
+}
+
+type ExactCubic = [ExactPoint; 4];
+
+#[derive(Clone, Copy)]
+struct ExactLeaf {
+    controls: ExactCubic,
+    hull: [u8; 4],
+    hull_len: usize,
+    contour: usize,
+    contour_leaf: usize,
+    ordinary_start: Point,
+}
+
+pub(crate) struct SimpleCubicTopologyWorkspace {
+    limits: TopologyLimits,
+    exact_leaves: Vec<ExactLeaf>,
+    points: [Point; ABSOLUTE_MAX_LEAVES],
+    point_len: usize,
+    contours: [TopologyRange; ABSOLUTE_MAX_CONTOURS],
+    contour_len: usize,
+    orientations: [i8; ABSOLUTE_MAX_CONTOURS],
+    winding: [[i8; ABSOLUTE_MAX_CONTOURS]; ABSOLUTE_MAX_CONTOURS],
+    stats: TopologyStats,
+    allocated_bytes: usize,
+    published: bool,
+}
+
+impl SimpleCubicTopologyWorkspace {
+    pub(crate) fn new(limits: TopologyLimits) -> Result<Self, TopologyError> {
+        validate_limits(limits)?;
+        let requested = limits
+            .max_leaves
+            .checked_mul(size_of::<ExactLeaf>())
+            .ok_or(TopologyError::InvalidLimits)?;
+        if requested > limits.max_bytes {
+            return Err(TopologyError::ByteLimit);
+        }
+        let mut exact_leaves = Vec::new();
+        exact_leaves
+            .try_reserve_exact(limits.max_leaves)
+            .map_err(|_| TopologyError::AllocationFailed)?;
+        let allocated_bytes = exact_leaves
+            .capacity()
+            .checked_mul(size_of::<ExactLeaf>())
+            .ok_or(TopologyError::InvalidLimits)?;
+        if allocated_bytes > limits.max_bytes {
+            return Err(TopologyError::ByteLimit);
+        }
+        Ok(Self {
+            limits,
+            exact_leaves,
+            points: [Point::default(); ABSOLUTE_MAX_LEAVES],
+            point_len: 0,
+            contours: [TopologyRange::default(); ABSOLUTE_MAX_CONTOURS],
+            contour_len: 0,
+            orientations: [0; ABSOLUTE_MAX_CONTOURS],
+            winding: [[0; ABSOLUTE_MAX_CONTOURS]; ABSOLUTE_MAX_CONTOURS],
+            stats: TopologyStats::default(),
+            allocated_bytes,
+            published: false,
+        })
+    }
+
+    pub(crate) fn certify(&mut self, input: TopologyInput<'_>) -> Result<(), TopologyError> {
+        self.begin_attempt();
+        self.validate_counts(input)?;
+        validate_structure(input)?;
+        validate_provenance(input)?;
+        preflight_knots(input)?;
+        self.build_leaves(input)?;
+        self.validate_pairs()?;
+        self.derive_output()?;
+        self.published = true;
+        Ok(())
+    }
+
+    pub(crate) fn stats(&self) -> TopologyStats {
+        self.stats
+    }
+
+    pub(crate) fn output(&self) -> Option<TopologyOutput<'_>> {
+        self.published.then_some(TopologyOutput {
+            points: &self.points[..self.point_len],
+            contours: &self.contours[..self.contour_len],
+            orientations: &self.orientations[..self.contour_len],
+            winding: &self.winding[..self.contour_len],
+        })
+    }
+
+    pub(crate) fn allocated_bytes(&self) -> usize {
+        self.allocated_bytes
+    }
+
+    fn begin_attempt(&mut self) {
+        self.exact_leaves.clear();
+        self.point_len = 0;
+        self.contour_len = 0;
+        self.orientations.fill(0);
+        self.winding.fill([0; ABSOLUTE_MAX_CONTOURS]);
+        self.stats = TopologyStats::default();
+        self.published = false;
+    }
+
+    fn validate_counts(&self, input: TopologyInput<'_>) -> Result<(), TopologyError> {
+        if input.contours.is_empty() || input.cubics.is_empty() || input.leaves.is_empty() {
+            return Err(TopologyError::InvalidInput);
+        }
+        if input.contours.len() > self.limits.max_contours
+            || input.cubics.len() > self.limits.max_cubics
+            || input.leaves.len() > self.limits.max_leaves
+        {
+            return Err(TopologyError::WorkLimit);
+        }
+        Ok(())
+    }
+
+    fn build_leaves(&mut self, input: TopologyInput<'_>) -> Result<(), TopologyError> {
+        for (contour_index, contour_range) in input.contours.iter().copied().enumerate() {
+            let output_start = self.exact_leaves.len();
+            let first = input.cubics[contour_range.start].points[0];
+            let first_exact = exact_point(first);
+            let mut last_exact = first_exact;
+            let mut last_ordinary = first;
+            let mut contour_leaf = 0usize;
+
+            for cubic in &input.cubics[range(contour_range)] {
+                let exact_source = exact_cubic(cubic.points);
+                let mut ordinary_start = cubic.points[0];
+                for leaf in &input.leaves[range(cubic.leaves)] {
+                    if self.exact_leaves.len() >= self.limits.max_leaves {
+                        return Err(TopologyError::WorkLimit);
+                    }
+                    let controls = restrict_cell(
+                        exact_source,
+                        leaf.provenance.end_numerator,
+                        leaf.provenance.depth,
+                    );
+                    if !projected_monotone(controls) {
+                        return Err(TopologyError::Unresolved);
+                    }
+                    let (hull, hull_len) = convex_hull(controls);
+                    self.exact_leaves.push(ExactLeaf {
+                        controls,
+                        hull,
+                        hull_len,
+                        contour: contour_index,
+                        contour_leaf,
+                        ordinary_start,
+                    });
+                    self.stats.leaves += 1;
+                    contour_leaf += 1;
+                    ordinary_start = leaf.end;
+                    last_ordinary = leaf.end;
+                    last_exact = exact_point(leaf.end);
+                }
+            }
+
+            if last_exact != first_exact {
+                if self.exact_leaves.len() >= self.limits.max_leaves {
+                    return Err(TopologyError::WorkLimit);
+                }
+                let controls = [last_exact, last_exact, first_exact, first_exact];
+                let (hull, hull_len) = convex_hull(controls);
+                self.exact_leaves.push(ExactLeaf {
+                    controls,
+                    hull,
+                    hull_len,
+                    contour: contour_index,
+                    contour_leaf,
+                    ordinary_start: last_ordinary,
+                });
+                self.stats.leaves += 1;
+                contour_leaf += 1;
+            }
+            if contour_leaf < 3 {
+                return Err(TopologyError::Unresolved);
+            }
+            self.contours[contour_index] = TopologyRange {
+                start: output_start,
+                count: contour_leaf,
+            };
+            self.contour_len += 1;
+        }
+        Ok(())
+    }
+
+    fn validate_pairs(&mut self) -> Result<(), TopologyError> {
+        for left_index in 0..self.exact_leaves.len() {
+            for right_index in (left_index + 1)..self.exact_leaves.len() {
+                if self.stats.pairs == self.limits.max_pairs {
+                    return Err(TopologyError::WorkLimit);
+                }
+                self.stats.pairs += 1;
+                let left = self.exact_leaves[left_index];
+                let right = self.exact_leaves[right_index];
+                if let Some(shared) = adjacent_shared_point(left, right, &self.contours) {
+                    if !hull_intersection_is_only(left, right, shared) {
+                        return Err(TopologyError::Unresolved);
+                    }
+                } else if closed_hulls_intersect(left, right) {
+                    return Err(TopologyError::Unresolved);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn derive_output(&mut self) -> Result<(), TopologyError> {
+        self.point_len = self.exact_leaves.len();
+        for (index, leaf) in self.exact_leaves.iter().copied().enumerate() {
+            self.points[index] = leaf.ordinary_start;
+        }
+        for contour_index in 0..self.contour_len {
+            let contour = self.contours[contour_index];
+            let mut area = ExactProduct::zero();
+            for offset in 0..contour.count {
+                let current = self.exact_leaves[contour.start + offset].controls[0];
+                let next =
+                    self.exact_leaves[contour.start + (offset + 1) % contour.count].controls[0];
+                area = area.add(cross_points(current, next));
+            }
+            self.orientations[contour_index] = match area.cmp_zero() {
+                Ordering::Less => -1,
+                Ordering::Greater => 1,
+                Ordering::Equal => return Err(TopologyError::Unresolved),
+            };
+        }
+
+        for query_index in 0..self.contour_len {
+            let query_range = self.contours[query_index];
+            let query = self.exact_leaves[query_range.start].controls[0];
+            for container_index in 0..self.contour_len {
+                if query_index == container_index {
+                    continue;
+                }
+                let container = self.contours[container_index];
+                match classify_polygon(&self.exact_leaves, container, query) {
+                    PolygonLocation::Boundary => return Err(TopologyError::Unresolved),
+                    PolygonLocation::Inside => {
+                        self.winding[query_index][container_index] =
+                            self.orientations[container_index];
+                    }
+                    PolygonLocation::Outside => {}
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+fn validate_limits(limits: TopologyLimits) -> Result<(), TopologyError> {
+    if !(1..=ABSOLUTE_MAX_CONTOURS).contains(&limits.max_contours)
+        || !(1..=ABSOLUTE_MAX_CUBICS).contains(&limits.max_cubics)
+        || !(1..=ABSOLUTE_MAX_LEAVES).contains(&limits.max_leaves)
+        || limits.max_pairs > ABSOLUTE_MAX_PAIRS
+        || limits.max_bytes > ABSOLUTE_MAX_BYTES
+    {
+        return Err(TopologyError::InvalidLimits);
+    }
+    Ok(())
+}
+
+fn validate_structure(input: TopologyInput<'_>) -> Result<(), TopologyError> {
+    validate_partition(input.contours, input.cubics.len())?;
+    let leaf_ranges = input.cubics.iter().map(|cubic| cubic.leaves);
+    validate_partition_iter(leaf_ranges, input.leaves.len())?;
+
+    for cubic in input.cubics {
+        if cubic.points.iter().copied().any(|point| !finite(point)) {
+            return Err(TopologyError::InvalidInput);
+        }
+    }
+    if input.leaves.iter().any(|leaf| !finite(leaf.end)) {
+        return Err(TopologyError::InvalidInput);
+    }
+    for left in 0..input.cubics.len() {
+        for right in (left + 1)..input.cubics.len() {
+            if input.cubics[left].source_verb == input.cubics[right].source_verb {
+                return Err(TopologyError::InvalidInput);
+            }
+        }
+    }
+    for contour in input.contours.iter().copied() {
+        let cubics = &input.cubics[range(contour)];
+        for pair in cubics.windows(2) {
+            if !same_point(pair[0].points[3], pair[1].points[0]) {
+                return Err(TopologyError::InvalidInput);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_partition(ranges: &[TopologyRange], total: usize) -> Result<(), TopologyError> {
+    validate_partition_iter(ranges.iter().copied(), total)
+}
+
+fn validate_partition_iter(
+    ranges: impl IntoIterator<Item = TopologyRange>,
+    total: usize,
+) -> Result<(), TopologyError> {
+    let mut expected_start = 0usize;
+    for value in ranges {
+        if value.count == 0 || value.start != expected_start {
+            return Err(TopologyError::InvalidInput);
+        }
+        expected_start = value
+            .start
+            .checked_add(value.count)
+            .ok_or(TopologyError::InvalidInput)?;
+        if expected_start > total {
+            return Err(TopologyError::InvalidInput);
+        }
+    }
+    if expected_start != total {
+        return Err(TopologyError::InvalidInput);
+    }
+    Ok(())
+}
+
+fn validate_provenance(input: TopologyInput<'_>) -> Result<(), TopologyError> {
+    for cubic in input.cubics {
+        let mut previous_numerator = 0u64;
+        let mut previous_denominator = 1u64;
+        for leaf in &input.leaves[range(cubic.leaves)] {
+            let provenance = leaf.provenance;
+            if provenance.source_verb != cubic.source_verb || provenance.depth > MAX_DEPTH {
+                return Err(TopologyError::InvalidProvenance);
+            }
+            let denominator = 1u64 << provenance.depth;
+            let numerator = u64::from(provenance.end_numerator);
+            if numerator == 0
+                || numerator > denominator
+                || previous_numerator * denominator != (numerator - 1) * previous_denominator
+            {
+                return Err(TopologyError::InvalidProvenance);
+            }
+            previous_numerator = numerator;
+            previous_denominator = denominator;
+        }
+        if previous_numerator != previous_denominator {
+            return Err(TopologyError::InvalidProvenance);
+        }
+    }
+    Ok(())
+}
+
+fn preflight_knots(input: TopologyInput<'_>) -> Result<(), TopologyError> {
+    for cubic in input.cubics {
+        let exact_source = exact_cubic(cubic.points);
+        let mut actual_start = exact_source[0];
+        for leaf in &input.leaves[range(cubic.leaves)] {
+            let controls = restrict_cell(
+                exact_source,
+                leaf.provenance.end_numerator,
+                leaf.provenance.depth,
+            );
+            let actual_end = exact_point(leaf.end);
+            if controls[0] != actual_start || controls[3] != actual_end {
+                return Err(TopologyError::KnotMismatch);
+            }
+            actual_start = actual_end;
+        }
+    }
+    Ok(())
+}
+
+fn range(value: TopologyRange) -> core::ops::Range<usize> {
+    value.start..value.start + value.count
+}
+
+fn finite(point: Point) -> bool {
+    point.x.is_finite() && point.y.is_finite()
+}
+
+fn same_point(left: Point, right: Point) -> bool {
+    left.x == right.x && left.y == right.y
+}
+
+fn exact_cubic(points: [Point; 4]) -> ExactCubic {
+    points.map(exact_point)
+}
+
+fn exact_point(point: Point) -> ExactPoint {
+    ExactPoint {
+        x: scale_coordinate(ExactCoordinate::from_finite(point.x)),
+        y: scale_coordinate(ExactCoordinate::from_finite(point.y)),
+    }
+}
+
+fn scale_coordinate(value: ExactCoordinate) -> ExactCoordinate {
+    if value.is_zero() {
+        return value;
+    }
+    let mut result = ExactCoordinate::zero();
+    result.negative = value.negative;
+    for index in 0..value.used {
+        let word = value.limbs[index];
+        let target = index;
+        result.limbs[target] |= word << GRID_SHIFT;
+        if word >> (64 - GRID_SHIFT) != 0 {
+            assert!(
+                target + 1 < COORDINATE_LIMBS,
+                "scaled coordinate capacity overflow"
+            );
+            result.limbs[target + 1] |= word >> (64 - GRID_SHIFT);
+        }
+    }
+    result.used = value.used + usize::from(value.limbs[value.used - 1] >> (64 - GRID_SHIFT) != 0);
+    result
+}
+
+fn restrict_cell(mut cubic: ExactCubic, end_numerator: u32, depth: u32) -> ExactCubic {
+    let cell = end_numerator - 1;
+    for bit in (0..depth).rev() {
+        cubic = split_half(cubic, (cell & (1u32 << bit)) != 0);
+    }
+    cubic
+}
+
+fn split_half(points: ExactCubic, right: bool) -> ExactCubic {
+    let p01 = midpoint(points[0], points[1]);
+    let p12 = midpoint(points[1], points[2]);
+    let p23 = midpoint(points[2], points[3]);
+    let p012 = midpoint(p01, p12);
+    let p123 = midpoint(p12, p23);
+    let middle = midpoint(p012, p123);
+    if right {
+        [middle, p123, p23, points[3]]
+    } else {
+        [points[0], p01, p012, middle]
+    }
+}
+
+fn midpoint(left: ExactPoint, right: ExactPoint) -> ExactPoint {
+    ExactPoint {
+        x: left.x.add(right.x).shift_right(1),
+        y: left.y.add(right.y).shift_right(1),
+    }
+}
+
+fn point_sub(left: ExactPoint, right: ExactPoint) -> ExactPoint {
+    ExactPoint {
+        x: left.x.add(right.x.negated()),
+        y: left.y.add(right.y.negated()),
+    }
+}
+
+fn dot(left: ExactPoint, right: ExactPoint) -> ExactProduct {
+    multiply::<COORDINATE_LIMBS, COORDINATE_LIMBS, PRODUCT_LIMBS>(left.x, right.x).add(multiply::<
+        COORDINATE_LIMBS,
+        COORDINATE_LIMBS,
+        PRODUCT_LIMBS,
+    >(
+        left.y, right.y,
+    ))
+}
+
+fn cross_vectors(left: ExactPoint, right: ExactPoint) -> ExactProduct {
+    multiply::<COORDINATE_LIMBS, COORDINATE_LIMBS, PRODUCT_LIMBS>(left.x, right.y).add(
+        multiply::<COORDINATE_LIMBS, COORDINATE_LIMBS, PRODUCT_LIMBS>(left.y, right.x).negated(),
+    )
+}
+
+fn cross_points(left: ExactPoint, right: ExactPoint) -> ExactProduct {
+    cross_vectors(left, right)
+}
+
+fn orient(start: ExactPoint, end: ExactPoint, query: ExactPoint) -> Ordering {
+    cross_vectors(point_sub(end, start), point_sub(query, start)).cmp_zero()
+}
+
+fn projected_monotone(controls: ExactCubic) -> bool {
+    let chord = point_sub(controls[3], controls[0]);
+    if chord.x.is_zero() && chord.y.is_zero() {
+        return false;
+    }
+    let projections = [
+        dot(point_sub(controls[1], controls[0]), chord).cmp_zero(),
+        dot(point_sub(controls[2], controls[1]), chord).cmp_zero(),
+        dot(point_sub(controls[3], controls[2]), chord).cmp_zero(),
+    ];
+    projections.iter().all(|value| *value != Ordering::Less)
+        && projections.contains(&Ordering::Greater)
+}
+
+fn compare_coordinate(left: ExactCoordinate, right: ExactCoordinate) -> Ordering {
+    if left.negative != right.negative {
+        return if left.negative {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        };
+    }
+    let magnitude = left.compare_magnitude(right);
+    if left.negative {
+        magnitude.reverse()
+    } else {
+        magnitude
+    }
+}
+
+fn compare_points(left: ExactPoint, right: ExactPoint) -> Ordering {
+    match compare_coordinate(left.x, right.x) {
+        Ordering::Equal => compare_coordinate(left.y, right.y),
+        value => value,
+    }
+}
+
+fn convex_hull(points: ExactCubic) -> ([u8; 4], usize) {
+    let mut sorted = [0u8, 1, 2, 3];
+    for index in 1..sorted.len() {
+        let value = sorted[index];
+        let mut cursor = index;
+        while cursor > 0
+            && compare_points(points[value as usize], points[sorted[cursor - 1] as usize])
+                == Ordering::Less
+        {
+            sorted[cursor] = sorted[cursor - 1];
+            cursor -= 1;
+        }
+        sorted[cursor] = value;
+    }
+    let mut unique = [0u8; 4];
+    let mut unique_len = 0usize;
+    for value in sorted {
+        if unique_len == 0 || points[value as usize] != points[unique[unique_len - 1] as usize] {
+            unique[unique_len] = value;
+            unique_len += 1;
+        }
+    }
+    if unique_len <= 2 {
+        return (unique, unique_len);
+    }
+
+    let mut lower = [0u8; 4];
+    let mut lower_len = 0usize;
+    for value in unique[..unique_len].iter().copied() {
+        while lower_len >= 2
+            && orient(
+                points[lower[lower_len - 2] as usize],
+                points[lower[lower_len - 1] as usize],
+                points[value as usize],
+            ) != Ordering::Greater
+        {
+            lower_len -= 1;
+        }
+        lower[lower_len] = value;
+        lower_len += 1;
+    }
+    let mut upper = [0u8; 4];
+    let mut upper_len = 0usize;
+    for value in unique[..unique_len].iter().rev().copied() {
+        while upper_len >= 2
+            && orient(
+                points[upper[upper_len - 2] as usize],
+                points[upper[upper_len - 1] as usize],
+                points[value as usize],
+            ) != Ordering::Greater
+        {
+            upper_len -= 1;
+        }
+        upper[upper_len] = value;
+        upper_len += 1;
+    }
+    let mut hull = [0u8; 4];
+    let mut hull_len = 0usize;
+    for value in lower[..lower_len - 1]
+        .iter()
+        .chain(&upper[..upper_len - 1])
+        .copied()
+    {
+        hull[hull_len] = value;
+        hull_len += 1;
+    }
+    (hull, hull_len)
+}
+
+fn hull_point(leaf: ExactLeaf, index: usize) -> ExactPoint {
+    leaf.controls[leaf.hull[index] as usize]
+}
+
+fn edge_count(leaf: ExactLeaf) -> usize {
+    match leaf.hull_len {
+        0 | 1 => 0,
+        2 => 1,
+        value => value,
+    }
+}
+
+fn hull_edge(leaf: ExactLeaf, index: usize) -> (ExactPoint, ExactPoint) {
+    if leaf.hull_len == 2 {
+        return (hull_point(leaf, 0), hull_point(leaf, 1));
+    }
+    (
+        hull_point(leaf, index),
+        hull_point(leaf, (index + 1) % leaf.hull_len),
+    )
+}
+
+fn between_closed(value: ExactCoordinate, left: ExactCoordinate, right: ExactCoordinate) -> bool {
+    let (minimum, maximum) = if compare_coordinate(left, right) == Ordering::Greater {
+        (right, left)
+    } else {
+        (left, right)
+    };
+    compare_coordinate(value, minimum) != Ordering::Less
+        && compare_coordinate(value, maximum) != Ordering::Greater
+}
+
+fn within_bounds(point: ExactPoint, start: ExactPoint, end: ExactPoint) -> bool {
+    between_closed(point.x, start.x, end.x) && between_closed(point.y, start.y, end.y)
+}
+
+fn on_segment(point: ExactPoint, start: ExactPoint, end: ExactPoint) -> bool {
+    orient(start, end, point) == Ordering::Equal && within_bounds(point, start, end)
+}
+
+fn opposite(left: Ordering, right: Ordering) -> bool {
+    matches!(
+        (left, right),
+        (Ordering::Less, Ordering::Greater) | (Ordering::Greater, Ordering::Less)
+    )
+}
+
+fn segments_intersect(a: ExactPoint, b: ExactPoint, c: ExactPoint, d: ExactPoint) -> bool {
+    let abc = orient(a, b, c);
+    let abd = orient(a, b, d);
+    let cda = orient(c, d, a);
+    let cdb = orient(c, d, b);
+    (abc == Ordering::Equal && within_bounds(c, a, b))
+        || (abd == Ordering::Equal && within_bounds(d, a, b))
+        || (cda == Ordering::Equal && within_bounds(a, c, d))
+        || (cdb == Ordering::Equal && within_bounds(b, c, d))
+        || (opposite(abc, abd) && opposite(cda, cdb))
+}
+
+fn point_in_closed_hull(point: ExactPoint, hull: ExactLeaf) -> bool {
+    match hull.hull_len {
+        0 => false,
+        1 => point == hull_point(hull, 0),
+        2 => on_segment(point, hull_point(hull, 0), hull_point(hull, 1)),
+        count => (0..count).all(|index| {
+            orient(
+                hull_point(hull, index),
+                hull_point(hull, (index + 1) % count),
+                point,
+            ) != Ordering::Less
+        }),
+    }
+}
+
+fn closed_hulls_intersect(left: ExactLeaf, right: ExactLeaf) -> bool {
+    for left_edge in 0..edge_count(left) {
+        let (a, b) = hull_edge(left, left_edge);
+        for right_edge in 0..edge_count(right) {
+            let (c, d) = hull_edge(right, right_edge);
+            if segments_intersect(a, b, c, d) {
+                return true;
+            }
+        }
+    }
+    point_in_closed_hull(hull_point(left, 0), right)
+        || point_in_closed_hull(hull_point(right, 0), left)
+}
+
+fn segment_intersection_has_point_other_than(
+    a: ExactPoint,
+    b: ExactPoint,
+    c: ExactPoint,
+    d: ExactPoint,
+    allowed: ExactPoint,
+) -> bool {
+    if !segments_intersect(a, b, c, d) {
+        return false;
+    }
+    let collinear = orient(a, b, c) == Ordering::Equal && orient(a, b, d) == Ordering::Equal;
+    if !collinear {
+        return !(on_segment(allowed, a, b) && on_segment(allowed, c, d));
+    }
+    [a, b, c, d]
+        .iter()
+        .copied()
+        .any(|point| point != allowed && on_segment(point, a, b) && on_segment(point, c, d))
+}
+
+fn hull_intersection_is_only(left: ExactLeaf, right: ExactLeaf, allowed: ExactPoint) -> bool {
+    if !point_in_closed_hull(allowed, left) || !point_in_closed_hull(allowed, right) {
+        return false;
+    }
+    for index in 0..left.hull_len {
+        let point = hull_point(left, index);
+        if point != allowed && point_in_closed_hull(point, right) {
+            return false;
+        }
+    }
+    for index in 0..right.hull_len {
+        let point = hull_point(right, index);
+        if point != allowed && point_in_closed_hull(point, left) {
+            return false;
+        }
+    }
+    for left_edge in 0..edge_count(left) {
+        let (a, b) = hull_edge(left, left_edge);
+        for right_edge in 0..edge_count(right) {
+            let (c, d) = hull_edge(right, right_edge);
+            if segment_intersection_has_point_other_than(a, b, c, d, allowed) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+fn adjacent_shared_point(
+    left: ExactLeaf,
+    right: ExactLeaf,
+    contours: &[TopologyRange; ABSOLUTE_MAX_CONTOURS],
+) -> Option<ExactPoint> {
+    if left.contour != right.contour {
+        return None;
+    }
+    let count = contours[left.contour].count;
+    if right.contour_leaf == left.contour_leaf + 1 {
+        Some(left.controls[3])
+    } else if left.contour_leaf == 0 && right.contour_leaf == count - 1 {
+        Some(left.controls[0])
+    } else {
+        None
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PolygonLocation {
+    Inside,
+    Outside,
+    Boundary,
+}
+
+fn classify_polygon(
+    leaves: &[ExactLeaf],
+    contour: TopologyRange,
+    query: ExactPoint,
+) -> PolygonLocation {
+    let mut winding = 0i32;
+    for offset in 0..contour.count {
+        let start = leaves[contour.start + offset].controls[0];
+        let end = leaves[contour.start + (offset + 1) % contour.count].controls[0];
+        let side = orient(start, end, query);
+        if side == Ordering::Equal && within_bounds(query, start, end) {
+            return PolygonLocation::Boundary;
+        }
+        let upward = compare_coordinate(start.y, query.y) != Ordering::Greater
+            && compare_coordinate(end.y, query.y) == Ordering::Greater;
+        let downward = compare_coordinate(start.y, query.y) == Ordering::Greater
+            && compare_coordinate(end.y, query.y) != Ordering::Greater;
+        if upward && side == Ordering::Greater {
+            winding += 1;
+        } else if downward && side == Ordering::Less {
+            winding -= 1;
+        }
+    }
+    if winding == 0 {
+        PolygonLocation::Outside
+    } else {
+        PolygonLocation::Inside
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn point(x: f64, y: f64) -> Point {
+        Point { x, y }
+    }
+
+    fn linear(start: Point, end: Point) -> [Point; 4] {
+        [
+            start,
+            point((2.0 * start.x + end.x) / 3.0, (2.0 * start.y + end.y) / 3.0),
+            point((start.x + 2.0 * end.x) / 3.0, (start.y + 2.0 * end.y) / 3.0),
+            end,
+        ]
+    }
+
+    fn square() -> ([TopologyRange; 1], [TopologyCubic; 4], [TopologyLeaf; 4]) {
+        let points = [
+            point(0.0, 0.0),
+            point(3.0, 0.0),
+            point(3.0, 3.0),
+            point(0.0, 3.0),
+        ];
+        let cubics = core::array::from_fn(|index| TopologyCubic {
+            points: linear(points[index], points[(index + 1) % points.len()]),
+            source_verb: (index + 1) as u32,
+            leaves: TopologyRange {
+                start: index,
+                count: 1,
+            },
+        });
+        let leaves = core::array::from_fn(|index| TopologyLeaf {
+            end: points[(index + 1) % points.len()],
+            provenance: Provenance {
+                source_verb: (index + 1) as u32,
+                end_numerator: 1,
+                depth: 0,
+            },
+        });
+        ([TopologyRange { start: 0, count: 4 }], cubics, leaves)
+    }
+
+    fn input<'a>(
+        contours: &'a [TopologyRange],
+        cubics: &'a [TopologyCubic],
+        leaves: &'a [TopologyLeaf],
+    ) -> TopologyInput<'a> {
+        TopologyInput {
+            contours,
+            cubics,
+            leaves,
+        }
+    }
+
+    fn measured_certify(
+        workspace: &mut SimpleCubicTopologyWorkspace,
+        input: TopologyInput<'_>,
+    ) -> Result<(), TopologyError> {
+        let bytes = workspace.allocated_bytes();
+        crate::allocation_test_support::start();
+        let result = workspace.certify(input);
+        let allocations = crate::allocation_test_support::stop();
+        assert_eq!(allocations, 0, "topology certification allocated");
+        assert_eq!(workspace.allocated_bytes(), bytes);
+        result
+    }
+
+    fn triangle(offset: f64, ordinal: u32) -> ([TopologyCubic; 3], [TopologyLeaf; 3]) {
+        let corners = [
+            point(offset, 0.0),
+            point(offset + 3.0, 0.0),
+            point(offset, 3.0),
+        ];
+        let cubics = core::array::from_fn(|index| TopologyCubic {
+            points: linear(corners[index], corners[(index + 1) % corners.len()]),
+            source_verb: ordinal + index as u32,
+            leaves: TopologyRange {
+                start: index,
+                count: 1,
+            },
+        });
+        let leaves = core::array::from_fn(|index| TopologyLeaf {
+            end: corners[(index + 1) % corners.len()],
+            provenance: Provenance {
+                source_verb: ordinal + index as u32,
+                end_numerator: 1,
+                depth: 0,
+            },
+        });
+        (cubics, leaves)
+    }
+
+    #[test]
+    fn exact_square_certifies_owned_orientation_and_winding() {
+        let (contours, cubics, leaves) = square();
+        let mut workspace = SimpleCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
+        workspace
+            .certify(input(&contours, &cubics, &leaves))
+            .unwrap();
+        assert_eq!(
+            workspace.stats(),
+            TopologyStats {
+                leaves: 4,
+                pairs: 6
+            }
+        );
+        let output = workspace.output().unwrap();
+        assert_eq!(
+            output.points,
+            &[
+                point(0.0, 0.0),
+                point(3.0, 0.0),
+                point(3.0, 3.0),
+                point(0.0, 3.0)
+            ]
+        );
+        assert_eq!(output.contours, &[TopologyRange { start: 0, count: 4 }]);
+        assert_eq!(output.orientations, &[1]);
+        assert_eq!(output.winding, &[[0, 0, 0, 0]]);
+    }
+
+    #[test]
+    fn validation_precedence_and_atomic_publication_are_stable() {
+        let (contours, cubics, leaves) = square();
+        let mut workspace = SimpleCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
+        measured_certify(&mut workspace, input(&contours, &cubics, &leaves)).unwrap();
+        assert!(workspace.output().is_some());
+
+        let mut invalid_cubics = cubics;
+        invalid_cubics[1].source_verb = invalid_cubics[0].source_verb;
+        let mut bad_leaves = leaves;
+        bad_leaves[0].provenance.depth = MAX_DEPTH + 1;
+        assert_eq!(
+            measured_certify(
+                &mut workspace,
+                input(&contours, &invalid_cubics, &bad_leaves),
+            ),
+            Err(TopologyError::InvalidInput)
+        );
+        assert_eq!(workspace.stats(), TopologyStats::default());
+        assert!(workspace.output().is_none());
+        measured_certify(&mut workspace, input(&contours, &cubics, &leaves)).unwrap();
+        assert!(workspace.output().is_some());
+
+        assert_eq!(
+            measured_certify(&mut workspace, input(&contours, &cubics, &bad_leaves)),
+            Err(TopologyError::InvalidProvenance)
+        );
+        assert!(workspace.output().is_none());
+        measured_certify(&mut workspace, input(&contours, &cubics, &leaves)).unwrap();
+        assert!(workspace.output().is_some());
+
+        bad_leaves = leaves;
+        bad_leaves[0].end.x = 3.0f64.next_up();
+        assert_eq!(
+            measured_certify(&mut workspace, input(&contours, &cubics, &bad_leaves)),
+            Err(TopologyError::KnotMismatch)
+        );
+        assert!(workspace.output().is_none());
+        measured_certify(&mut workspace, input(&contours, &cubics, &leaves)).unwrap();
+        assert!(workspace.output().is_some());
+
+        let loop_contours = [TopologyRange { start: 0, count: 1 }];
+        let loop_cubics = [TopologyCubic {
+            points: [
+                point(0.0, 0.0),
+                point(1.0 / 16.0, 1.0 / 16.0),
+                point(-1.0 / 16.0, 1.0 / 16.0),
+                point(0.0, 0.0),
+            ],
+            source_verb: 7,
+            leaves: TopologyRange { start: 0, count: 1 },
+        }];
+        let loop_leaves = [TopologyLeaf {
+            end: point(0.0, 0.0),
+            provenance: Provenance {
+                source_verb: 7,
+                end_numerator: 1,
+                depth: 0,
+            },
+        }];
+        assert_eq!(
+            measured_certify(
+                &mut workspace,
+                input(&loop_contours, &loop_cubics, &loop_leaves),
+            ),
+            Err(TopologyError::Unresolved)
+        );
+        assert!(workspace.output().is_none());
+        measured_certify(&mut workspace, input(&contours, &cubics, &leaves)).unwrap();
+        assert!(workspace.output().is_some());
+    }
+
+    #[test]
+    fn exact_depth_twenty_and_extreme_grid_widths_are_literal() {
+        let minimum = f64::from_bits(1);
+        let maximum = f64::MAX;
+        let low = exact_point(point(minimum, -0.0));
+        let high = exact_point(point(maximum, -maximum));
+        assert_eq!(low.x.trailing_zeros(), GRID_SHIFT);
+        assert_eq!(low.x.limbs[0], 1u64 << GRID_SHIFT);
+        assert_eq!(high.x.used, COORDINATE_LIMBS);
+        assert_eq!(high.x.limbs[32], 0xfe00_0000_0000_0000);
+        assert_eq!(high.x.limbs[33], 0x0000_3fff_ffff_ffff);
+        let opposite = exact_point(point(-maximum, maximum));
+        assert_eq!(
+            midpoint(high, opposite),
+            ExactPoint {
+                x: ExactCoordinate::zero(),
+                y: ExactCoordinate::zero(),
+            }
+        );
+        let mixed_x = ExactPoint {
+            x: high.x,
+            y: low.x,
+        };
+        let mixed_y = ExactPoint {
+            x: low.x,
+            y: high.x,
+        };
+        assert_eq!(dot(mixed_x, mixed_x).cmp_zero(), Ordering::Greater);
+        assert_eq!(
+            cross_vectors(mixed_x, mixed_y).cmp_zero(),
+            Ordering::Greater
+        );
+
+        let extreme_source = exact_cubic([
+            point(maximum, maximum),
+            point(minimum, -minimum),
+            point(-maximum, -maximum),
+            point(-minimum, minimum),
+        ]);
+        let first_half = restrict_cell(extreme_source, 1, 1);
+        let x = high.x;
+        let m = low.x;
+        let q1 = ExactPoint {
+            x: x.add(m).shift_right(1),
+            y: x.add(m.negated()).shift_right(1),
+        };
+        let q2 = ExactPoint {
+            x: m.shift_right(1),
+            y: m.negated().shift_right(1),
+        };
+        let q3 = ExactPoint {
+            x: x.negated().add(m).shift_right(2),
+            y: x.negated().add(m.negated()).shift_right(2),
+        };
+        assert_eq!(first_half, [extreme_source[0], q1, q2, q3]);
+        assert_eq!(q2.x.used, 1);
+        assert_eq!(q2.x.limbs[0], 1u64 << 59);
+        assert!(!q2.x.negative);
+        assert_eq!(q2.y.used, 1);
+        assert_eq!(q2.y.limbs[0], 1u64 << 59);
+        assert!(q2.y.negative);
+
+        let extreme_square = [
+            exact_point(point(-maximum, -maximum)),
+            exact_point(point(maximum, -maximum)),
+            exact_point(point(maximum, maximum)),
+            exact_point(point(-maximum, maximum)),
+        ];
+        let mut exact_area = ExactProduct::zero();
+        for index in 0..extreme_square.len() {
+            exact_area = exact_area.add(cross_points(
+                extreme_square[index],
+                extreme_square[(index + 1) % extreme_square.len()],
+            ));
+        }
+        assert_eq!(exact_area.cmp_zero(), Ordering::Greater);
+        assert_eq!(exact_area.used, PRODUCT_LIMBS);
+        assert_eq!(exact_area.trailing_zeros(), 4_213);
+
+        let source = exact_cubic([
+            point(0.0, 0.0),
+            point(1.0, 0.0),
+            point(2.0, 0.0),
+            point(3.0, 0.0),
+        ]);
+        let leaf = restrict_cell(source, 1, MAX_DEPTH);
+        assert_eq!(leaf[0], source[0]);
+        assert_eq!(
+            leaf[3].x.trailing_zeros(),
+            1_074 + GRID_SHIFT - MAX_DEPTH as usize
+        );
+        assert!(projected_monotone(leaf));
+    }
+
+    #[test]
+    fn limits_are_inclusive_and_byte_accounting_uses_actual_capacity() {
+        let workspace = SimpleCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
+        assert_eq!(
+            workspace.allocated_bytes(),
+            workspace.exact_leaves.capacity() * size_of::<ExactLeaf>()
+        );
+        assert!(size_of::<SimpleCubicTopologyWorkspace>() < 64 * 1024);
+        let exact_bytes = workspace.allocated_bytes();
+        assert_eq!(
+            SimpleCubicTopologyWorkspace::new(TopologyLimits {
+                max_bytes: exact_bytes,
+                ..TopologyLimits::default()
+            })
+            .unwrap()
+            .allocated_bytes(),
+            exact_bytes
+        );
+        assert!(matches!(
+            SimpleCubicTopologyWorkspace::new(TopologyLimits {
+                max_bytes: exact_bytes - 1,
+                ..TopologyLimits::default()
+            }),
+            Err(TopologyError::ByteLimit)
+        ));
+        assert!(matches!(
+            SimpleCubicTopologyWorkspace::new(TopologyLimits {
+                max_bytes: 0,
+                ..TopologyLimits::default()
+            }),
+            Err(TopologyError::ByteLimit)
+        ));
+        assert!(matches!(
+            SimpleCubicTopologyWorkspace::new(TopologyLimits {
+                max_bytes: ABSOLUTE_MAX_BYTES + 1,
+                ..TopologyLimits::default()
+            }),
+            Err(TopologyError::InvalidLimits)
+        ));
+    }
+
+    #[test]
+    fn pair_and_leaf_caps_fail_before_excess_work() {
+        let (contours, cubics, leaves) = square();
+        let (triangle_cubics, triangle_leaves) = triangle(0.0, 1);
+        let triangle_contours = [TopologyRange { start: 0, count: 3 }];
+        let mut pair_workspace = SimpleCubicTopologyWorkspace::new(TopologyLimits {
+            max_pairs: 5,
+            ..TopologyLimits::default()
+        })
+        .unwrap();
+        measured_certify(
+            &mut pair_workspace,
+            input(&triangle_contours, &triangle_cubics, &triangle_leaves),
+        )
+        .unwrap();
+        assert_eq!(
+            measured_certify(&mut pair_workspace, input(&contours, &cubics, &leaves)),
+            Err(TopologyError::WorkLimit)
+        );
+        assert!(pair_workspace.output().is_none());
+        assert_eq!(
+            pair_workspace.stats(),
+            TopologyStats {
+                leaves: 4,
+                pairs: 5
+            }
+        );
+        measured_certify(
+            &mut pair_workspace,
+            input(&triangle_contours, &triangle_cubics, &triangle_leaves),
+        )
+        .unwrap();
+
+        let mut leaf_workspace = SimpleCubicTopologyWorkspace::new(TopologyLimits {
+            max_leaves: 3,
+            ..TopologyLimits::default()
+        })
+        .unwrap();
+        measured_certify(
+            &mut leaf_workspace,
+            input(&triangle_contours, &triangle_cubics, &triangle_leaves),
+        )
+        .unwrap();
+        assert_eq!(
+            measured_certify(&mut leaf_workspace, input(&contours, &cubics, &leaves)),
+            Err(TopologyError::WorkLimit)
+        );
+        assert_eq!(leaf_workspace.stats(), TopologyStats::default());
+        assert!(leaf_workspace.output().is_none());
+        measured_certify(
+            &mut leaf_workspace,
+            input(&triangle_contours, &triangle_cubics, &triangle_leaves),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn malformed_ranges_nonfinite_values_and_provenance_are_distinct() {
+        let (contours, cubics, leaves) = square();
+        let mut workspace = SimpleCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
+
+        let bad_contours = [TopologyRange { start: 1, count: 4 }];
+        assert_eq!(
+            measured_certify(&mut workspace, input(&bad_contours, &cubics, &leaves)),
+            Err(TopologyError::InvalidInput)
+        );
+        let mut bad_cubics = cubics;
+        bad_cubics[1].leaves.start = 2;
+        assert_eq!(
+            measured_certify(&mut workspace, input(&contours, &bad_cubics, &leaves)),
+            Err(TopologyError::InvalidInput)
+        );
+        bad_cubics = cubics;
+        bad_cubics[2].points[1].x = f64::INFINITY;
+        assert_eq!(
+            measured_certify(&mut workspace, input(&contours, &bad_cubics, &leaves)),
+            Err(TopologyError::InvalidInput)
+        );
+        let mut bad_leaves = leaves;
+        bad_leaves[2].end.y = f64::NAN;
+        assert_eq!(
+            measured_certify(&mut workspace, input(&contours, &cubics, &bad_leaves)),
+            Err(TopologyError::InvalidInput)
+        );
+
+        bad_leaves = leaves;
+        bad_leaves[1].provenance.source_verb = 99;
+        assert_eq!(
+            measured_certify(&mut workspace, input(&contours, &cubics, &bad_leaves)),
+            Err(TopologyError::InvalidProvenance)
+        );
+        bad_leaves = leaves;
+        bad_leaves[0].provenance = Provenance {
+            source_verb: 1,
+            end_numerator: 1,
+            depth: 1,
+        };
+        assert_eq!(
+            measured_certify(&mut workspace, input(&contours, &cubics, &bad_leaves)),
+            Err(TopologyError::InvalidProvenance)
+        );
+
+        assert_eq!(
+            validate_partition_iter(
+                [
+                    TopologyRange {
+                        start: 0,
+                        count: usize::MAX,
+                    },
+                    TopologyRange {
+                        start: usize::MAX,
+                        count: 1,
+                    },
+                ],
+                usize::MAX,
+            ),
+            Err(TopologyError::InvalidInput)
+        );
+
+        let mut disconnected = cubics;
+        disconnected[1].points[0].x = disconnected[1].points[0].x.next_up();
+        assert_eq!(
+            measured_certify(&mut workspace, input(&contours, &disconnected, &leaves)),
+            Err(TopologyError::InvalidInput)
+        );
+        measured_certify(&mut workspace, input(&contours, &cubics, &leaves)).unwrap();
+
+        let provenance_cubic = [TopologyCubic {
+            points: linear(point(0.0, 0.0), point(3.0, 0.0)),
+            source_verb: 17,
+            leaves: TopologyRange { start: 0, count: 2 },
+        }];
+        let reordered = [
+            TopologyLeaf {
+                end: point(3.0, 0.0),
+                provenance: Provenance {
+                    source_verb: 17,
+                    end_numerator: 2,
+                    depth: 1,
+                },
+            },
+            TopologyLeaf {
+                end: point(1.5, 0.0),
+                provenance: Provenance {
+                    source_verb: 17,
+                    end_numerator: 1,
+                    depth: 1,
+                },
+            },
+        ];
+        assert_eq!(
+            validate_provenance(input(
+                &[TopologyRange { start: 0, count: 1 }],
+                &provenance_cubic,
+                &reordered,
+            )),
+            Err(TopologyError::InvalidProvenance)
+        );
+        let gapped = [
+            TopologyLeaf {
+                end: point(0.75, 0.0),
+                provenance: Provenance {
+                    source_verb: 17,
+                    end_numerator: 1,
+                    depth: 2,
+                },
+            },
+            TopologyLeaf {
+                end: point(3.0, 0.0),
+                provenance: Provenance {
+                    source_verb: 17,
+                    end_numerator: 2,
+                    depth: 1,
+                },
+            },
+        ];
+        assert_eq!(
+            validate_provenance(input(
+                &[TopologyRange { start: 0, count: 1 }],
+                &provenance_cubic,
+                &gapped,
+            )),
+            Err(TopologyError::InvalidProvenance)
+        );
+    }
+
+    #[test]
+    fn all_knots_precede_every_projection_failure() {
+        let contours = [TopologyRange { start: 0, count: 2 }];
+        let cubics = [
+            TopologyCubic {
+                points: [
+                    point(0.0, 0.0),
+                    point(2.0, 0.0),
+                    point(-1.0, 0.0),
+                    point(1.0, 0.0),
+                ],
+                source_verb: 1,
+                leaves: TopologyRange { start: 0, count: 1 },
+            },
+            TopologyCubic {
+                points: linear(point(1.0, 0.0), point(2.0, 0.0)),
+                source_verb: 2,
+                leaves: TopologyRange { start: 1, count: 1 },
+            },
+        ];
+        let leaves = [
+            TopologyLeaf {
+                end: point(1.0, 0.0),
+                provenance: Provenance {
+                    source_verb: 1,
+                    end_numerator: 1,
+                    depth: 0,
+                },
+            },
+            TopologyLeaf {
+                end: point(2.0f64.next_up(), 0.0),
+                provenance: Provenance {
+                    source_verb: 2,
+                    end_numerator: 1,
+                    depth: 0,
+                },
+            },
+        ];
+        let mut workspace = SimpleCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
+        assert_eq!(
+            measured_certify(&mut workspace, input(&contours, &cubics, &leaves)),
+            Err(TopologyError::KnotMismatch)
+        );
+        assert_eq!(workspace.stats(), TopologyStats::default());
+    }
+
+    #[test]
+    fn contour_and_cubic_count_limits_are_exact() {
+        let (left_cubics, left_leaves) = triangle(0.0, 1);
+        let (mut right_cubics, right_leaves) = triangle(16.0, 4);
+        for cubic in &mut right_cubics {
+            cubic.leaves.start += 3;
+        }
+        let mut cubics = [TopologyCubic::default(); 6];
+        cubics[..3].copy_from_slice(&left_cubics);
+        cubics[3..].copy_from_slice(&right_cubics);
+        let mut leaves = [TopologyLeaf::default(); 6];
+        leaves[..3].copy_from_slice(&left_leaves);
+        leaves[3..].copy_from_slice(&right_leaves);
+        let contours = [
+            TopologyRange { start: 0, count: 3 },
+            TopologyRange { start: 3, count: 3 },
+        ];
+
+        let mut exact = SimpleCubicTopologyWorkspace::new(TopologyLimits {
+            max_contours: 2,
+            max_cubics: 6,
+            max_leaves: 6,
+            max_pairs: 15,
+            max_bytes: ABSOLUTE_MAX_BYTES,
+        })
+        .unwrap();
+        measured_certify(&mut exact, input(&contours, &cubics, &leaves)).unwrap();
+        assert_eq!(
+            exact.stats(),
+            TopologyStats {
+                leaves: 6,
+                pairs: 15
+            }
+        );
+
+        let mut contour_short = SimpleCubicTopologyWorkspace::new(TopologyLimits {
+            max_contours: 1,
+            max_cubics: 6,
+            max_leaves: 6,
+            max_pairs: 15,
+            max_bytes: ABSOLUTE_MAX_BYTES,
+        })
+        .unwrap();
+        assert_eq!(
+            measured_certify(&mut contour_short, input(&contours, &cubics, &leaves)),
+            Err(TopologyError::WorkLimit)
+        );
+        assert_eq!(contour_short.stats(), TopologyStats::default());
+        measured_certify(
+            &mut contour_short,
+            input(
+                &[TopologyRange { start: 0, count: 3 }],
+                &left_cubics,
+                &left_leaves,
+            ),
+        )
+        .unwrap();
+
+        let (square_contours, square_cubics, square_leaves) = square();
+        let mut cubic_exact = SimpleCubicTopologyWorkspace::new(TopologyLimits {
+            max_cubics: 4,
+            max_leaves: 4,
+            max_pairs: 6,
+            ..TopologyLimits::default()
+        })
+        .unwrap();
+        measured_certify(
+            &mut cubic_exact,
+            input(&square_contours, &square_cubics, &square_leaves),
+        )
+        .unwrap();
+        let mut cubic_short = SimpleCubicTopologyWorkspace::new(TopologyLimits {
+            max_cubics: 3,
+            ..TopologyLimits::default()
+        })
+        .unwrap();
+        measured_certify(
+            &mut cubic_short,
+            input(
+                &[TopologyRange { start: 0, count: 3 }],
+                &left_cubics,
+                &left_leaves,
+            ),
+        )
+        .unwrap();
+        assert_eq!(
+            measured_certify(
+                &mut cubic_short,
+                input(&square_contours, &square_cubics, &square_leaves),
+            ),
+            Err(TopologyError::WorkLimit)
+        );
+        assert!(cubic_short.output().is_none());
+        measured_certify(
+            &mut cubic_short,
+            input(
+                &[TopologyRange { start: 0, count: 3 }],
+                &left_cubics,
+                &left_leaves,
+            ),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn earlier_implicit_closure_consumes_capacity_before_later_projection() {
+        let contours = [
+            TopologyRange { start: 0, count: 2 },
+            TopologyRange { start: 2, count: 1 },
+        ];
+        let cubics = [
+            TopologyCubic {
+                points: linear(point(0.0, 0.0), point(2.0, 0.0)),
+                source_verb: 1,
+                leaves: TopologyRange { start: 0, count: 1 },
+            },
+            TopologyCubic {
+                points: linear(point(2.0, 0.0), point(1.0, 1.0)),
+                source_verb: 2,
+                leaves: TopologyRange { start: 1, count: 1 },
+            },
+            TopologyCubic {
+                points: [
+                    point(10.0, 0.0),
+                    point(12.0, 0.0),
+                    point(9.0, 0.0),
+                    point(11.0, 0.0),
+                ],
+                source_verb: 4,
+                leaves: TopologyRange { start: 2, count: 1 },
+            },
+        ];
+        let leaves = [
+            TopologyLeaf {
+                end: point(2.0, 0.0),
+                provenance: Provenance {
+                    source_verb: 1,
+                    end_numerator: 1,
+                    depth: 0,
+                },
+            },
+            TopologyLeaf {
+                end: point(1.0, 1.0),
+                provenance: Provenance {
+                    source_verb: 2,
+                    end_numerator: 1,
+                    depth: 0,
+                },
+            },
+            TopologyLeaf {
+                end: point(11.0, 0.0),
+                provenance: Provenance {
+                    source_verb: 4,
+                    end_numerator: 1,
+                    depth: 0,
+                },
+            },
+        ];
+        let mut capped = SimpleCubicTopologyWorkspace::new(TopologyLimits {
+            max_contours: 2,
+            max_cubics: 3,
+            max_leaves: 3,
+            max_pairs: 3,
+            max_bytes: ABSOLUTE_MAX_BYTES,
+        })
+        .unwrap();
+        assert_eq!(
+            capped.certify(input(&contours, &cubics, &leaves)),
+            Err(TopologyError::WorkLimit)
+        );
+        assert_eq!(
+            capped.stats(),
+            TopologyStats {
+                leaves: 3,
+                pairs: 0
+            }
+        );
+
+        let mut uncapped = SimpleCubicTopologyWorkspace::new(TopologyLimits {
+            max_contours: 2,
+            max_cubics: 3,
+            max_leaves: 4,
+            max_pairs: 6,
+            max_bytes: ABSOLUTE_MAX_BYTES,
+        })
+        .unwrap();
+        assert_eq!(
+            uncapped.certify(input(&contours, &cubics, &leaves)),
+            Err(TopologyError::Unresolved)
+        );
+        assert_eq!(
+            uncapped.stats(),
+            TopologyStats {
+                leaves: 3,
+                pairs: 0
+            }
+        );
+    }
+
+    #[test]
+    fn stationary_endpoint_tangents_and_signed_zero_preserve_owned_points() {
+        let corners = [point(-0.0, 0.0), point(3.0, 0.0), point(0.0, 3.0)];
+        let mut cubics: [TopologyCubic; 3] = core::array::from_fn(|index| {
+            let start = corners[index];
+            let end = corners[(index + 1) % corners.len()];
+            TopologyCubic {
+                points: [start, start, end, end],
+                source_verb: (index + 1) as u32,
+                leaves: TopologyRange {
+                    start: index,
+                    count: 1,
+                },
+            }
+        });
+        let leaves: [TopologyLeaf; 3] = core::array::from_fn(|index| TopologyLeaf {
+            end: corners[(index + 1) % corners.len()],
+            provenance: Provenance {
+                source_verb: (index + 1) as u32,
+                end_numerator: 1,
+                depth: 0,
+            },
+        });
+        let contours = [TopologyRange { start: 0, count: 3 }];
+        let mut workspace = SimpleCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
+        measured_certify(&mut workspace, input(&contours, &cubics, &leaves)).unwrap();
+        assert_eq!(
+            workspace.output().unwrap().points[0].x.to_bits(),
+            1u64 << 63
+        );
+        cubics[0].points[0].x = 99.0;
+        assert_eq!(cubics[0].points[0].x, 99.0);
+        assert_eq!(
+            workspace.output().unwrap().points[0].x.to_bits(),
+            1u64 << 63
+        );
+    }
+
+    #[test]
+    fn depth_twenty_partition_certifies_with_bounded_leaf_and_pair_counts() {
+        let scale = 2.0f64.powi(20);
+        let corners = [
+            point(0.0, 0.0),
+            point(3.0 * scale, 0.0),
+            point(3.0 * scale, 3.0 * scale),
+            point(0.0, 3.0 * scale),
+        ];
+        let mut leaves = Vec::new();
+        leaves.push(TopologyLeaf {
+            end: point(3.0, 0.0),
+            provenance: Provenance {
+                source_verb: 1,
+                end_numerator: 1,
+                depth: 20,
+            },
+        });
+        leaves.push(TopologyLeaf {
+            end: point(6.0, 0.0),
+            provenance: Provenance {
+                source_verb: 1,
+                end_numerator: 2,
+                depth: 20,
+            },
+        });
+        for depth in (1..20).rev() {
+            leaves.push(TopologyLeaf {
+                end: point(3.0 * 2.0f64.powi(20 - depth as i32 + 1), 0.0),
+                provenance: Provenance {
+                    source_verb: 1,
+                    end_numerator: 2,
+                    depth,
+                },
+            });
+        }
+        for index in 1..4 {
+            leaves.push(TopologyLeaf {
+                end: corners[(index + 1) % corners.len()],
+                provenance: Provenance {
+                    source_verb: (index + 1) as u32,
+                    end_numerator: 1,
+                    depth: 0,
+                },
+            });
+        }
+        let cubics = [
+            TopologyCubic {
+                points: [
+                    corners[0],
+                    point(scale, 0.0),
+                    point(2.0 * scale, 0.0),
+                    corners[1],
+                ],
+                source_verb: 1,
+                leaves: TopologyRange {
+                    start: 0,
+                    count: 21,
+                },
+            },
+            TopologyCubic {
+                points: linear(corners[1], corners[2]),
+                source_verb: 2,
+                leaves: TopologyRange {
+                    start: 21,
+                    count: 1,
+                },
+            },
+            TopologyCubic {
+                points: linear(corners[2], corners[3]),
+                source_verb: 3,
+                leaves: TopologyRange {
+                    start: 22,
+                    count: 1,
+                },
+            },
+            TopologyCubic {
+                points: linear(corners[3], corners[0]),
+                source_verb: 4,
+                leaves: TopologyRange {
+                    start: 23,
+                    count: 1,
+                },
+            },
+        ];
+        let contours = [TopologyRange { start: 0, count: 4 }];
+        let mut workspace = SimpleCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
+        workspace
+            .certify(input(&contours, &cubics, &leaves))
+            .unwrap();
+        assert_eq!(
+            workspace.stats(),
+            TopologyStats {
+                leaves: 24,
+                pairs: 276
+            }
+        );
+        assert_eq!(workspace.output().unwrap().orientations, &[1]);
+    }
+
+    #[test]
+    fn certify_is_allocation_free_and_workspaces_are_isolated() {
+        let (contours, cubics, leaves) = square();
+        let mut first = SimpleCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
+        let mut second = SimpleCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
+        measured_certify(&mut first, input(&contours, &cubics, &leaves)).unwrap();
+        measured_certify(&mut second, input(&contours, &cubics, &leaves)).unwrap();
+        assert!(first.output().is_some());
+        assert!(second.output().is_some());
+
+        let mut bad = leaves;
+        bad[0].end.x = 3.0f64.next_up();
+        assert_eq!(
+            measured_certify(&mut first, input(&contours, &cubics, &bad)),
+            Err(TopologyError::KnotMismatch)
+        );
+        assert!(first.output().is_none());
+        assert!(second.output().is_some());
+        measured_certify(&mut first, input(&contours, &cubics, &leaves)).unwrap();
+        assert!(first.output().is_some());
+        assert!(second.output().is_some());
+    }
+
+    #[test]
+    fn knot_mismatch_precedes_projection_and_copies_signed_zero_on_success() {
+        let contours = [TopologyRange { start: 0, count: 1 }];
+        let cubic = TopologyCubic {
+            points: [
+                point(-0.0, 0.0),
+                point(1.0, 0.0),
+                point(-1.0, 0.0),
+                point(0.0, 0.0),
+            ],
+            source_verb: 7,
+            leaves: TopologyRange { start: 0, count: 1 },
+        };
+        let mut leaf = TopologyLeaf {
+            end: point(f64::from_bits(1), 0.0),
+            provenance: Provenance {
+                source_verb: 7,
+                end_numerator: 1,
+                depth: 0,
+            },
+        };
+        let mut workspace = SimpleCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
+        assert_eq!(
+            workspace.certify(input(&contours, &[cubic], &[leaf])),
+            Err(TopologyError::KnotMismatch)
+        );
+        assert_eq!(workspace.stats(), TopologyStats::default());
+
+        leaf.end = point(0.0, 0.0);
+        assert_eq!(
+            workspace.certify(input(&contours, &[cubic], &[leaf])),
+            Err(TopologyError::Unresolved)
+        );
+        assert_eq!(workspace.stats(), TopologyStats::default());
+    }
+}
