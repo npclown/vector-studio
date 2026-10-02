@@ -6,6 +6,8 @@ The two temporary returning/open and nonreturning/CLOSE restrictions below are s
 
 ## Ownership and input
 
+The separately frozen [P3.2l repeated LINE contract](p3-zero-line-contract.md) supersedes zero-LINE collection rejection inside otherwise drawable contours. Original commands/source identities and cap charging remain intact; only zero LINE geometry is omitted from normalized/proof inputs. Constant-CUBIC zero leaves and fully collapsed LINE contours remain explicit private limitations.
+
 The separately frozen [P3.2k LINE identity contract](p3-line-identity-contract.md) composes all-LINE contours with at least three normalized edges directly into rounded topology after exact source/provenance validation. Mixed/curved and shorter contours keep the original certificate route; skipped-helper diagnostics retain their meaning. Numeric caps and all remaining preparation restrictions are unchanged.
 
 Add `cubic_fill.rs` inside the existing Rust kernel. Reuse `codec::PathInput`, its bit-preserving `point()` accessor and `geometry::run_path`; do not duplicate or alter P2 validation/flattening. Accept the existing private fill-rule enum and a separate local rounded-topology tolerance. The PathInput request's tolerance is the flattening tolerance. No hidden zoom/DPR multiplier, screen-budget derivation or operation identity is selected here.

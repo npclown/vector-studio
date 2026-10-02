@@ -1964,7 +1964,7 @@ mod tests {
     }
 
     #[test]
-    fn line_two_edge_forms_and_zero_line_reach_the_expected_stage() {
+    fn line_two_edge_forms_fail_but_zero_line_triangle_normalizes() {
         let success = raw_mixed_triangle(true, true, 0b111);
         let mut one_line_close = RawPath::default();
         one_line_close.move_to(point(0.0, 0.0));
@@ -2017,21 +2017,21 @@ mod tests {
             .unwrap();
         }
 
-        assert_eq!(
-            measured_raw_attempt(
-                &mut workspace,
-                &zero_line,
-                FLATTEN_TOLERANCE,
-                TOPOLOGY_TOLERANCE,
-                MAX_COMMANDS,
-            ),
-            Err(BridgeError::ZeroLengthLeaf)
-        );
-        let diagnostics = workspace.diagnostics();
+        let diagnostics = measured_raw_attempt(
+            &mut workspace,
+            &zero_line,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
         assert!(diagnostics.emission_invoked);
         assert!(!diagnostics.topology_invoked);
-        assert!(!diagnostics.rounded_invoked);
-        assert!(workspace.output().is_none());
+        assert!(diagnostics.rounded_invoked);
+        let output = workspace.output().unwrap();
+        assert_eq!(output.sources.len(), 4);
+        assert_eq!(output.points.len(), 3);
+        assert_eq!(output.owners.len(), 3);
         measured_raw_attempt(
             &mut workspace,
             &success,
@@ -3030,7 +3030,7 @@ mod tests {
     }
 
     #[test]
-    fn repeated_and_short_line_contours_keep_preparation_and_topology_failures() {
+    fn repeated_line_square_normalizes_but_short_contours_still_fail() {
         let fixtures = line_identity_fixtures();
         let f01 = fixtures.iter().find(|fixture| fixture.id == "F01").unwrap();
         let mut repeated = RawPath::default();
@@ -3050,20 +3050,22 @@ mod tests {
         let success = line_path(&f01.contours, false, false);
         let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
 
-        assert_eq!(
-            measured_raw_attempt(
-                &mut workspace,
-                &repeated,
-                FLATTEN_TOLERANCE,
-                TOPOLOGY_TOLERANCE,
-                MAX_COMMANDS,
-            ),
-            Err(BridgeError::ZeroLengthLeaf)
-        );
+        measured_raw_attempt(
+            &mut workspace,
+            &repeated,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
         assert!(workspace.diagnostics().emission_invoked);
         assert!(!workspace.diagnostics().topology_invoked);
-        assert!(!workspace.diagnostics().rounded_invoked);
-        assert!(workspace.output().is_none());
+        assert!(workspace.diagnostics().rounded_invoked);
+        let repeated_output = workspace.output().unwrap();
+        assert_eq!(repeated_output.sources.len(), 4);
+        assert_eq!(repeated_output.points.len(), 4);
+        assert_eq!(repeated_output.owners.len(), 4);
+        assert_eq!(mesh_area(repeated_output.rounded), 100.0);
         for path in [&one_line, &two_lines] {
             assert_eq!(
                 measured_raw_attempt(
@@ -3213,6 +3215,806 @@ mod tests {
             .unwrap();
             assert!(!workspace.diagnostics().topology_invoked);
             assert!(workspace.diagnostics().rounded_invoked);
+            assert!(workspace.output().is_some());
+        }
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    enum ZeroTriangleKind {
+        Cubic,
+        Mixed,
+        Line,
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    enum ZeroPosition {
+        AfterMove,
+        AfterAb,
+        Final,
+    }
+
+    fn raw_points(path: &RawPath) -> Vec<Point> {
+        assert_eq!(path.point_bytes.len() % 16, 0);
+        path.point_bytes
+            .chunks_exact(16)
+            .map(|bytes| Point {
+                x: f64::from_le_bytes(bytes[..8].try_into().unwrap()),
+                y: f64::from_le_bytes(bytes[8..].try_into().unwrap()),
+            })
+            .collect()
+    }
+
+    fn assert_point_bits(actual: Point, expected: Point) {
+        assert_eq!(actual.x.to_bits(), expected.x.to_bits());
+        assert_eq!(actual.y.to_bits(), expected.y.to_bits());
+    }
+
+    fn assert_depth_zero_original_identity(path: &RawPath, output: BridgeOutput<'_>) {
+        let input_points = raw_points(path);
+        let mut point_index = 0usize;
+        let mut source_index = 0usize;
+        let mut command_index = 0usize;
+        let mut contour_index = 0usize;
+        let mut original_current = None;
+        let mut geometric_first = None;
+        let mut geometric_current = None;
+        let mut expected_owners = Vec::new();
+
+        for (ordinal, verb) in path.verbs.iter().copied().enumerate() {
+            let ordinal = u32::try_from(ordinal).unwrap();
+            match verb {
+                VERB_MOVE => {
+                    if let (Some(first), Some(current)) = (geometric_first, geometric_current) {
+                        if !same_point(first, current) {
+                            expected_owners.push(EdgeOwner::ImplicitClosure {
+                                contour: contour_index,
+                            });
+                        }
+                        contour_index += 1;
+                    }
+                    let point = input_points[point_index];
+                    point_index += 1;
+                    let command = output.commands[command_index];
+                    command_index += 1;
+                    assert_eq!(command.verb, VERB_MOVE);
+                    assert_eq!(command.provenance.source_verb, ordinal);
+                    assert_eq!(command.provenance.end_numerator, 1);
+                    assert_eq!(command.provenance.depth, 0);
+                    assert_point_bits(command.point.unwrap(), point);
+                    original_current = Some(point);
+                    geometric_first = Some(point);
+                    geometric_current = Some(point);
+                }
+                crate::geometry::VERB_LINE => {
+                    let start = original_current.unwrap();
+                    let end = input_points[point_index];
+                    point_index += 1;
+                    let command = output.commands[command_index];
+                    command_index += 1;
+                    assert_eq!(command.verb, crate::geometry::VERB_LINE);
+                    assert_eq!(command.provenance.source_verb, ordinal);
+                    assert_eq!(command.provenance.end_numerator, 1);
+                    assert_eq!(command.provenance.depth, 0);
+                    assert_point_bits(command.point.unwrap(), end);
+                    let DecodedSource::Line {
+                        points,
+                        source_verb,
+                        contour,
+                    } = output.sources[source_index]
+                    else {
+                        panic!("expected original LINE source")
+                    };
+                    assert_eq!(source_verb, ordinal);
+                    assert_eq!(contour, contour_index);
+                    assert_point_bits(points[0], start);
+                    assert_point_bits(points[1], end);
+                    if !same_point(start, end) {
+                        expected_owners.push(EdgeOwner::Line {
+                            source_verb: ordinal,
+                        });
+                        geometric_current = Some(end);
+                    }
+                    original_current = Some(end);
+                    source_index += 1;
+                }
+                VERB_CUBIC => {
+                    let start = original_current.unwrap();
+                    let one = input_points[point_index];
+                    let two = input_points[point_index + 1];
+                    let end = input_points[point_index + 2];
+                    point_index += 3;
+                    let command = output.commands[command_index];
+                    command_index += 1;
+                    assert_eq!(command.verb, crate::geometry::VERB_LINE);
+                    assert_eq!(command.provenance.source_verb, ordinal);
+                    assert_eq!(command.provenance.end_numerator, 1);
+                    assert_eq!(command.provenance.depth, 0);
+                    assert_point_bits(command.point.unwrap(), end);
+                    let DecodedSource::Cubic {
+                        points,
+                        source_verb,
+                        contour,
+                    } = output.sources[source_index]
+                    else {
+                        panic!("expected original CUBIC source")
+                    };
+                    assert_eq!(source_verb, ordinal);
+                    assert_eq!(contour, contour_index);
+                    for (actual, expected) in points.iter().copied().zip([start, one, two, end]) {
+                        assert_point_bits(actual, expected);
+                    }
+                    expected_owners.push(EdgeOwner::CubicLeaf {
+                        source_verb: ordinal,
+                        end_numerator: 1,
+                        depth: 0,
+                    });
+                    original_current = Some(end);
+                    geometric_current = Some(end);
+                    source_index += 1;
+                }
+                VERB_CLOSE => {
+                    let command = output.commands[command_index];
+                    command_index += 1;
+                    assert_eq!(command.verb, VERB_CLOSE);
+                    assert_eq!(command.provenance.source_verb, ordinal);
+                    assert_eq!(command.provenance.end_numerator, 1);
+                    assert_eq!(command.provenance.depth, 0);
+                    assert!(command.point.is_none());
+                    if !same_point(geometric_first.unwrap(), geometric_current.unwrap()) {
+                        expected_owners.push(EdgeOwner::ExplicitClose {
+                            source_verb: ordinal,
+                        });
+                    }
+                    original_current = None;
+                    geometric_first = None;
+                    geometric_current = None;
+                    contour_index += 1;
+                }
+                _ => panic!("unexpected raw verb"),
+            }
+        }
+        if let (Some(first), Some(current)) = (geometric_first, geometric_current) {
+            if !same_point(first, current) {
+                expected_owners.push(EdgeOwner::ImplicitClosure {
+                    contour: contour_index,
+                });
+            }
+            contour_index += 1;
+        }
+        assert_eq!(point_index, input_points.len());
+        assert_eq!(source_index, output.sources.len());
+        assert_eq!(command_index, output.commands.len());
+        assert_eq!(contour_index, output.ranges.len());
+        assert_eq!(expected_owners, output.owners);
+    }
+
+    fn append_zero_triangle_segment(
+        path: &mut RawPath,
+        kind: ZeroTriangleKind,
+        index: usize,
+        start: Point,
+        end: Point,
+    ) {
+        let line = match kind {
+            ZeroTriangleKind::Cubic => false,
+            ZeroTriangleKind::Mixed => index != 1,
+            ZeroTriangleKind::Line => true,
+        };
+        append_segment(path, start, end, line);
+    }
+
+    fn zero_triangle_path(
+        kind: ZeroTriangleKind,
+        zero: Option<ZeroPosition>,
+        returning: bool,
+        closed: bool,
+    ) -> RawPath {
+        let vertices = [point(0.0, 0.0), point(3.0, 0.0), point(0.0, 3.0)];
+        let mut path = RawPath::default();
+        path.move_to(vertices[0]);
+        if matches!(zero, Some(ZeroPosition::AfterMove)) {
+            path.line_to(vertices[0]);
+        }
+        let segment_count = if returning { 3 } else { 2 };
+        for index in 0..segment_count {
+            append_zero_triangle_segment(
+                &mut path,
+                kind,
+                index,
+                vertices[index],
+                vertices[(index + 1) % vertices.len()],
+            );
+            if index == 0 && matches!(zero, Some(ZeroPosition::AfterAb)) {
+                path.line_to(vertices[1]);
+            }
+        }
+        if matches!(zero, Some(ZeroPosition::Final)) {
+            path.line_to(if returning { vertices[0] } else { vertices[2] });
+        }
+        if closed {
+            path.close();
+        }
+        path
+    }
+
+    #[test]
+    fn zero_line_triangle_matrix_preserves_normalized_geometry_and_original_identity() {
+        let mut attempts = 0usize;
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+        for kind in [
+            ZeroTriangleKind::Cubic,
+            ZeroTriangleKind::Mixed,
+            ZeroTriangleKind::Line,
+        ] {
+            for zero in [
+                ZeroPosition::AfterMove,
+                ZeroPosition::AfterAb,
+                ZeroPosition::Final,
+            ] {
+                for (returning, closed) in
+                    [(false, false), (false, true), (true, false), (true, true)]
+                {
+                    let baseline = zero_triangle_path(kind, None, returning, closed);
+                    let repeated = zero_triangle_path(kind, Some(zero), returning, closed);
+                    for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
+                        let baseline_diagnostics = measured_raw_rule_attempt(
+                            &mut workspace,
+                            &baseline,
+                            rule,
+                            FLATTEN_TOLERANCE,
+                            TOPOLOGY_TOLERANCE,
+                            MAX_COMMANDS,
+                        )
+                        .unwrap();
+                        let baseline_topology = workspace.topology_stats();
+                        let baseline_snapshot = snapshot(workspace.output().unwrap());
+                        let diagnostics = measured_raw_rule_attempt(
+                            &mut workspace,
+                            &repeated,
+                            rule,
+                            FLATTEN_TOLERANCE,
+                            TOPOLOGY_TOLERANCE,
+                            MAX_COMMANDS,
+                        )
+                        .unwrap();
+                        assert_eq!(
+                            diagnostics.topology_invoked,
+                            baseline_diagnostics.topology_invoked
+                        );
+                        assert!(diagnostics.rounded_invoked);
+                        assert_eq!(workspace.topology_stats(), baseline_topology);
+                        let output = workspace.output().unwrap();
+                        assert_eq!(snapshot(output), baseline_snapshot);
+                        assert_eq!(mesh_area(output.rounded), 4.5);
+                        assert_depth_zero_original_identity(&repeated, output);
+                        attempts += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(attempts, 72);
+    }
+
+    fn repeated_f01(returning: bool, closed: bool) -> RawPath {
+        let mut path = RawPath::default();
+        path.move_to(point(0.0, 0.0));
+        path.line_to(point(10.0, 0.0));
+        path.line_to(point(10.0, 10.0));
+        path.line_to(point(10.0, 10.0));
+        path.line_to(point(0.0, 10.0));
+        if returning {
+            path.line_to(point(0.0, 0.0));
+        }
+        if closed {
+            path.close();
+        }
+        path
+    }
+
+    #[test]
+    fn f09_repeat_matches_f01_in_all_rules_and_closure_forms() {
+        let f01 = line_identity_fixtures()
+            .into_iter()
+            .find(|fixture| fixture.id == "F01")
+            .unwrap();
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+        let mut attempts = 0usize;
+        for (returning, closed) in [(false, false), (false, true), (true, false), (true, true)] {
+            let baseline = line_path(&f01.contours, returning, closed);
+            let repeated = repeated_f01(returning, closed);
+            for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
+                measured_raw_rule_attempt(
+                    &mut workspace,
+                    &baseline,
+                    rule,
+                    FLATTEN_TOLERANCE,
+                    TOPOLOGY_TOLERANCE,
+                    MAX_COMMANDS,
+                )
+                .unwrap();
+                let expected = snapshot(workspace.output().unwrap());
+                let diagnostics = measured_raw_rule_attempt(
+                    &mut workspace,
+                    &repeated,
+                    rule,
+                    FLATTEN_TOLERANCE,
+                    TOPOLOGY_TOLERANCE,
+                    MAX_COMMANDS,
+                )
+                .unwrap();
+                assert!(!diagnostics.topology_invoked);
+                assert!(diagnostics.rounded_invoked);
+                let output = workspace.output().unwrap();
+                assert_eq!(snapshot(output), expected);
+                assert_eq!(mesh_area(output.rounded), 100.0);
+                assert_depth_zero_original_identity(&repeated, output);
+                attempts += 1;
+            }
+        }
+        assert_eq!(attempts, 8);
+    }
+
+    #[test]
+    fn consecutive_and_signed_zero_lines_preserve_shifted_owners_and_compact_proof() {
+        let baseline = zero_triangle_path(ZeroTriangleKind::Mixed, None, true, false);
+        let mut consecutive = RawPath::default();
+        consecutive.move_to(point(0.0, 0.0));
+        consecutive.line_to(point(0.0, 0.0));
+        consecutive.line_to(point(0.0, 0.0));
+        consecutive.line_to(point(3.0, 0.0));
+        consecutive.cubic_to(point(2.0, 1.0), point(1.0, 2.0), point(0.0, 3.0));
+        consecutive.line_to(point(0.0, 0.0));
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+        for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
+            measured_raw_rule_attempt(
+                &mut workspace,
+                &baseline,
+                rule,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            let expected = snapshot(workspace.output().unwrap());
+            measured_raw_rule_attempt(
+                &mut workspace,
+                &consecutive,
+                rule,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            let output = workspace.output().unwrap();
+            assert_eq!(snapshot(output), expected);
+            assert_eq!(
+                output.owners,
+                [
+                    EdgeOwner::Line { source_verb: 3 },
+                    EdgeOwner::CubicLeaf {
+                        source_verb: 4,
+                        end_numerator: 1,
+                        depth: 0,
+                    },
+                    EdgeOwner::Line { source_verb: 5 },
+                ]
+            );
+            assert_depth_zero_original_identity(&consecutive, output);
+        }
+
+        for closed in [false, true] {
+            let mut signed = RawPath::default();
+            signed.move_to(point(-0.0, 0.0));
+            signed.line_to(point(0.0, -0.0));
+            signed.line_to(point(3.0, 0.0));
+            signed.cubic_to(point(2.0, 1.0), point(1.0, 2.0), point(0.0, 3.0));
+            signed.line_to(point(0.0, -0.0));
+            signed.line_to(point(-0.0, 0.0));
+            if closed {
+                signed.close();
+            }
+            measured_raw_attempt(
+                &mut workspace,
+                &signed,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            assert!(workspace.diagnostics().topology_invoked);
+            assert_eq!(workspace.topology_stats().leaves, 3);
+            let output = workspace.output().unwrap();
+            assert_eq!(output.sources.len(), 5);
+            assert_eq!(
+                output.owners,
+                [
+                    EdgeOwner::Line { source_verb: 2 },
+                    EdgeOwner::CubicLeaf {
+                        source_verb: 3,
+                        end_numerator: 1,
+                        depth: 0,
+                    },
+                    EdgeOwner::Line { source_verb: 4 },
+                ]
+            );
+            assert_depth_zero_original_identity(&signed, output);
+            let retained = output.sources;
+            let DecodedSource::Line { points, .. } = retained[0] else {
+                panic!("expected signed zero LINE")
+            };
+            assert_eq!(points[0].x.to_bits(), 1u64 << 63);
+            assert_eq!(points[1].x.to_bits(), 0);
+            assert_eq!(points[1].y.to_bits(), 1u64 << 63);
+            signed.point_bytes.fill(0xff);
+            drop(signed);
+            let DecodedSource::Line { points, .. } = workspace.output().unwrap().sources[0] else {
+                panic!("expected retained signed zero LINE")
+            };
+            assert_eq!(points[0].x.to_bits(), 1u64 << 63);
+            assert_eq!(points[1].y.to_bits(), 1u64 << 63);
+        }
+    }
+
+    #[test]
+    fn two_contour_zero_lines_preserve_global_ordinals_and_fill_rules() {
+        let contours = [
+            vec![
+                point(0.0, 0.0),
+                point(10.0, 0.0),
+                point(10.0, 10.0),
+                point(0.0, 10.0),
+            ],
+            vec![
+                point(3.0, 3.0),
+                point(7.0, 3.0),
+                point(7.0, 7.0),
+                point(3.0, 7.0),
+            ],
+        ];
+        let mut repeated = RawPath::default();
+        repeated.move_to(point(0.0, 0.0));
+        repeated.line_to(point(0.0, 0.0));
+        repeated.line_to(point(10.0, 0.0));
+        repeated.line_to(point(10.0, 10.0));
+        repeated.line_to(point(0.0, 10.0));
+        repeated.move_to(point(3.0, 3.0));
+        repeated.line_to(point(7.0, 3.0));
+        repeated.line_to(point(7.0, 7.0));
+        repeated.line_to(point(7.0, 7.0));
+        repeated.line_to(point(3.0, 7.0));
+        repeated.close();
+        let baseline = {
+            let mut path = RawPath::default();
+            path.move_to(contours[0][0]);
+            for point in &contours[0][1..] {
+                path.line_to(*point);
+            }
+            path.move_to(contours[1][0]);
+            for point in &contours[1][1..] {
+                path.line_to(*point);
+            }
+            path.close();
+            path
+        };
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+        for (rule, area) in [
+            (LineFillRule::Nonzero, 100.0),
+            (LineFillRule::Evenodd, 84.0),
+        ] {
+            measured_raw_rule_attempt(
+                &mut workspace,
+                &baseline,
+                rule,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            let expected = snapshot(workspace.output().unwrap());
+            measured_raw_rule_attempt(
+                &mut workspace,
+                &repeated,
+                rule,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            let output = workspace.output().unwrap();
+            assert_eq!(snapshot(output), expected);
+            assert_eq!(mesh_area(output.rounded), area);
+            assert_eq!(
+                output.owners,
+                [
+                    EdgeOwner::Line { source_verb: 2 },
+                    EdgeOwner::Line { source_verb: 3 },
+                    EdgeOwner::Line { source_verb: 4 },
+                    EdgeOwner::ImplicitClosure { contour: 0 },
+                    EdgeOwner::Line { source_verb: 6 },
+                    EdgeOwner::Line { source_verb: 7 },
+                    EdgeOwner::Line { source_verb: 9 },
+                    EdgeOwner::ExplicitClose { source_verb: 10 },
+                ]
+            );
+            assert_depth_zero_original_identity(&repeated, output);
+        }
+    }
+
+    #[test]
+    fn collapsed_lines_and_decode_precedence_remain_bounded_and_atomic() {
+        let success = zero_triangle_path(ZeroTriangleKind::Line, None, true, true);
+        let mut collapsed_open = RawPath::default();
+        collapsed_open.move_to(point(0.0, 0.0));
+        collapsed_open.line_to(point(0.0, 0.0));
+        let mut collapsed_closed = collapsed_open.clone();
+        collapsed_closed.close();
+        let mut two_edges = RawPath::default();
+        two_edges.move_to(point(0.0, 0.0));
+        two_edges.line_to(point(0.0, 0.0));
+        two_edges.line_to(point(3.0, 0.0));
+        two_edges.line_to(point(0.0, 0.0));
+        let mut collapsed_then_valid = collapsed_open.clone();
+        append_mixed_triangle(&mut collapsed_then_valid, 9.0, true, true, 0b111);
+        let mut fifth_move = collapsed_open.clone();
+        for x in [12.0, 24.0, 36.0, 48.0] {
+            fifth_move.move_to(point(x, 0.0));
+            fifth_move.line_to(point(x + 3.0, 0.0));
+        }
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+
+        for failure in [&collapsed_open, &collapsed_closed] {
+            measured_raw_attempt(
+                &mut workspace,
+                &success,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            assert_eq!(
+                measured_raw_attempt(
+                    &mut workspace,
+                    failure,
+                    FLATTEN_TOLERANCE,
+                    TOPOLOGY_TOLERANCE,
+                    MAX_COMMANDS,
+                ),
+                Err(BridgeError::ZeroLengthLeaf)
+            );
+            assert!(workspace.diagnostics().emission_invoked);
+            assert!(!workspace.diagnostics().topology_invoked);
+            assert!(!workspace.diagnostics().rounded_invoked);
+            assert!(workspace.output().is_none());
+            measured_raw_attempt(
+                &mut workspace,
+                &success,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            assert!(workspace.output().is_some());
+        }
+        assert_eq!(
+            measured_raw_attempt(
+                &mut workspace,
+                &two_edges,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::Topology(TopologyError::Unresolved))
+        );
+        assert!(workspace.diagnostics().emission_invoked);
+        assert!(workspace.diagnostics().topology_invoked);
+        assert!(!workspace.diagnostics().rounded_invoked);
+        assert!(workspace.output().is_none());
+        measured_raw_attempt(
+            &mut workspace,
+            &success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(workspace.output().is_some());
+        assert_eq!(
+            measured_raw_attempt(
+                &mut workspace,
+                &collapsed_then_valid,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::ZeroLengthLeaf)
+        );
+        assert!(workspace.diagnostics().emission_invoked);
+        assert!(!workspace.diagnostics().topology_invoked);
+        assert!(!workspace.diagnostics().rounded_invoked);
+        assert!(workspace.output().is_none());
+        measured_raw_attempt(
+            &mut workspace,
+            &success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(workspace.output().is_some());
+        assert_eq!(
+            measured_raw_attempt(
+                &mut workspace,
+                &fifth_move,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::SourceLimit)
+        );
+        assert!(workspace.diagnostics().sizing_invoked);
+        assert_eq!(workspace.diagnostics().flat_status, PATH_OK);
+        assert!(!workspace.diagnostics().emission_invoked);
+        assert!(!workspace.diagnostics().topology_invoked);
+        assert!(!workspace.diagnostics().rounded_invoked);
+        assert!(workspace.output().is_none());
+        measured_raw_attempt(
+            &mut workspace,
+            &success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(workspace.output().is_some());
+    }
+
+    fn rounded_cubic_endpoint_line(original_zero: bool) -> RawPath {
+        let endpoint = f64::from_bits(0x3c90_0000_0000_0000);
+        let mut path = RawPath::default();
+        path.move_to(point(1.0, 0.0));
+        path.cubic_to(point(0.75, 0.0), point(0.25, 0.0), point(endpoint, 0.0));
+        path.line_to(if original_zero {
+            point(endpoint, 0.0)
+        } else {
+            point(0.0, 0.0)
+        });
+        path.line_to(point(0.0, 3.0));
+        path.line_to(point(1.0, 0.0));
+        path.close();
+        path
+    }
+
+    #[test]
+    fn zero_line_classification_uses_original_source_endpoints() {
+        let success = zero_triangle_path(ZeroTriangleKind::Line, None, true, true);
+        let original_zero = rounded_cubic_endpoint_line(true);
+        let emitted_zero = rounded_cubic_endpoint_line(false);
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+
+        measured_raw_attempt(
+            &mut workspace,
+            &success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert_eq!(
+            measured_raw_attempt(
+                &mut workspace,
+                &original_zero,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::Topology(TopologyError::KnotMismatch))
+        );
+        assert!(workspace.diagnostics().sizing_invoked);
+        assert_eq!(workspace.diagnostics().flat_status, PATH_OK);
+        assert!(workspace.diagnostics().emission_invoked);
+        assert!(workspace.diagnostics().topology_invoked);
+        assert!(!workspace.diagnostics().rounded_invoked);
+        assert!(workspace.output().is_none());
+        measured_raw_attempt(
+            &mut workspace,
+            &success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(workspace.output().is_some());
+
+        assert_eq!(
+            measured_raw_attempt(
+                &mut workspace,
+                &emitted_zero,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::ZeroLengthLeaf)
+        );
+        assert!(workspace.diagnostics().sizing_invoked);
+        assert_eq!(workspace.diagnostics().flat_status, PATH_OK);
+        assert!(workspace.diagnostics().emission_invoked);
+        assert!(!workspace.diagnostics().topology_invoked);
+        assert!(!workspace.diagnostics().rounded_invoked);
+        assert!(workspace.output().is_none());
+        measured_raw_attempt(
+            &mut workspace,
+            &success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(workspace.output().is_some());
+    }
+
+    fn zero_line_source_ceiling(zero_count: usize) -> RawPath {
+        let mut path = RawPath::default();
+        path.move_to(point(0.0, 0.0));
+        for _ in 0..zero_count {
+            path.line_to(point(0.0, 0.0));
+        }
+        path.line_to(point(3.0, 0.0));
+        path.line_to(point(0.0, 3.0));
+        path.line_to(point(0.0, 0.0));
+        path.close();
+        path
+    }
+
+    #[test]
+    fn zero_lines_still_charge_the_shared_sixteen_source_limit() {
+        let ceiling = zero_line_source_ceiling(13);
+        let overflow = zero_line_source_ceiling(14);
+        assert_eq!(ceiling.verbs.len(), 18);
+        assert_eq!(ceiling.point_count(), 34);
+        assert_eq!(overflow.verbs.len(), 19);
+        assert_eq!(overflow.point_count(), 36);
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+        for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
+            let diagnostics = measured_raw_rule_attempt(
+                &mut workspace,
+                &ceiling,
+                rule,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            assert!(!diagnostics.topology_invoked);
+            assert!(diagnostics.rounded_invoked);
+            let output = workspace.output().unwrap();
+            assert_eq!(output.sources.len(), 16);
+            assert_eq!(output.owners.len(), 3);
+            assert_eq!(mesh_area(output.rounded), 4.5);
+            assert_depth_zero_original_identity(&ceiling, output);
+
+            assert_eq!(
+                measured_raw_rule_attempt(
+                    &mut workspace,
+                    &overflow,
+                    rule,
+                    FLATTEN_TOLERANCE,
+                    TOPOLOGY_TOLERANCE,
+                    MAX_COMMANDS,
+                ),
+                Err(BridgeError::SourceLimit)
+            );
+            assert!(workspace.diagnostics().sizing_invoked);
+            assert!(!workspace.diagnostics().emission_invoked);
+            assert!(workspace.output().is_none());
+            measured_raw_rule_attempt(
+                &mut workspace,
+                &ceiling,
+                rule,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
             assert!(workspace.output().is_some());
         }
     }

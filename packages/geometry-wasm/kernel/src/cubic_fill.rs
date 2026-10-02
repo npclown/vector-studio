@@ -493,42 +493,63 @@ impl CubicFillWorkspace {
     }
 
     fn certify_topology(&mut self) -> Result<(), CubicFillError> {
+        let mut contours = [TopologyRange::default(); MAX_CONTOURS];
         let mut cubics = [TopologyCubic::default(); MAX_SOURCE_SEGMENTS];
         let mut leaves = [TopologyLeaf::default(); MAX_EDGE_OWNERS];
+        let mut cubic_len = 0usize;
         let mut leaf_len = 0usize;
-        for (index, source) in self.sources[..self.source_len].iter().copied().enumerate() {
-            let source_verb = source.source_verb();
-            let leaf_start = leaf_len;
-            for command in &self.commands[..self.command_len] {
-                if command.verb != VERB_LINE || command.provenance.source_verb != source_verb {
+        for (contour_index, source_range) in self.source_ranges[..self.source_range_len]
+            .iter()
+            .copied()
+            .enumerate()
+        {
+            let cubic_start = cubic_len;
+            for source in self.sources[source_range.start..source_range.start + source_range.count]
+                .iter()
+                .copied()
+            {
+                if matches!(source, DecodedSource::Line { points: [a, b], .. } if same_point(a, b))
+                {
                     continue;
                 }
-                if leaf_len >= MAX_EDGE_OWNERS {
-                    return Err(CubicFillError::OwnerLimit);
+                let source_verb = source.source_verb();
+                let leaf_start = leaf_len;
+                for command in &self.commands[..self.command_len] {
+                    if command.verb != VERB_LINE || command.provenance.source_verb != source_verb {
+                        continue;
+                    }
+                    if leaf_len >= MAX_EDGE_OWNERS {
+                        return Err(CubicFillError::OwnerLimit);
+                    }
+                    leaves[leaf_len] = TopologyLeaf {
+                        end: command.point.ok_or(CubicFillError::InvalidCommand)?,
+                        provenance: command.provenance,
+                    };
+                    leaf_len += 1;
                 }
-                leaves[leaf_len] = TopologyLeaf {
-                    end: command.point.ok_or(CubicFillError::InvalidCommand)?,
-                    provenance: command.provenance,
+                let points = match source {
+                    DecodedSource::Line { points: [a, b], .. } => [a, a, b, b],
+                    DecodedSource::Cubic { points, .. } => points,
                 };
-                leaf_len += 1;
+                cubics[cubic_len] = TopologyCubic {
+                    points,
+                    source_verb,
+                    leaves: TopologyRange {
+                        start: leaf_start,
+                        count: leaf_len - leaf_start,
+                    },
+                };
+                cubic_len += 1;
             }
-            let points = match source {
-                DecodedSource::Line { points: [a, b], .. } => [a, a, b, b],
-                DecodedSource::Cubic { points, .. } => points,
-            };
-            cubics[index] = TopologyCubic {
-                points,
-                source_verb,
-                leaves: TopologyRange {
-                    start: leaf_start,
-                    count: leaf_len - leaf_start,
-                },
+            contours[contour_index] = TopologyRange {
+                start: cubic_start,
+                count: cubic_len - cubic_start,
             };
         }
         self.topology
             .certify(TopologyInput {
-                contours: &self.source_ranges[..self.source_range_len],
-                cubics: &cubics[..self.source_len],
+                contours: &contours[..self.source_range_len],
+                cubics: &cubics[..cubic_len],
                 leaves: &leaves[..leaf_len],
             })
             .map_err(CubicFillError::Topology)?;
@@ -607,7 +628,9 @@ impl CubicFillWorkspace {
                     if !finite_point(point) {
                         return Err(CubicFillError::InvalidCommand);
                     }
-                    let owner = match self.source_verb(command.provenance.source_verb)? {
+                    let (owner, original_zero_line) = match self
+                        .source_verb(command.provenance.source_verb)?
+                    {
                         SourceVerb::Line {
                             contour,
                             end: expected,
@@ -616,19 +639,36 @@ impl CubicFillWorkspace {
                             && command.provenance.depth == 0
                             && same_point_bits(point, expected) =>
                         {
-                            EdgeOwner::Line {
-                                source_verb: command.provenance.source_verb,
-                            }
+                            let original_zero_line =
+                                match self.sources[..self.source_len].iter().copied().find(
+                                    |source| source.source_verb() == command.provenance.source_verb,
+                                ) {
+                                    Some(DecodedSource::Line { points: [a, b], .. }) => {
+                                        same_point(a, b)
+                                    }
+                                    _ => return Err(CubicFillError::InvalidProvenance),
+                                };
+                            (
+                                EdgeOwner::Line {
+                                    source_verb: command.provenance.source_verb,
+                                },
+                                original_zero_line,
+                            )
                         }
-                        SourceVerb::Cubic { contour } if contour == open.source_contour => {
+                        SourceVerb::Cubic { contour } if contour == open.source_contour => (
                             EdgeOwner::CubicLeaf {
                                 source_verb: command.provenance.source_verb,
                                 end_numerator: command.provenance.end_numerator,
                                 depth: command.provenance.depth,
-                            }
-                        }
+                            },
+                            false,
+                        ),
                         _ => return Err(CubicFillError::InvalidProvenance),
                     };
+                    if original_zero_line {
+                        active = Some(open);
+                        continue;
+                    }
                     if same_point(open.previous, point) {
                         return Err(CubicFillError::ZeroLengthLeaf);
                     }
@@ -675,8 +715,11 @@ impl CubicFillWorkspace {
         close_source_verb: u32,
     ) -> Result<(), CubicFillError> {
         let first = self.contour_points[open.point_start];
-        if self.point_len <= open.point_start + 1 || open.source_contour != self.range_len {
+        if open.source_contour != self.range_len {
             return Err(CubicFillError::InvalidCommand);
+        }
+        if self.point_len <= open.point_start + 1 {
+            return Err(CubicFillError::ZeroLengthLeaf);
         }
         if same_point(first, open.previous) {
             self.point_len -= 1;
@@ -693,8 +736,11 @@ impl CubicFillWorkspace {
 
     fn finish_open_contour(&mut self, open: ActiveContour) -> Result<(), CubicFillError> {
         let first = self.contour_points[open.point_start];
-        if self.point_len <= open.point_start + 1 || open.source_contour != self.range_len {
+        if open.source_contour != self.range_len {
             return Err(CubicFillError::InvalidCommand);
+        }
+        if self.point_len <= open.point_start + 1 {
+            return Err(CubicFillError::ZeroLengthLeaf);
         }
         if same_point(first, open.previous) {
             self.point_len -= 1;
