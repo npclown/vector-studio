@@ -1,6 +1,16 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: private canonical fill composition is integrated through P3.2k [PR #72](https://github.com/npclown/vector-studio/pull/72), following P2.6f endpoint hull, P3.2i closure forms and P3.2j source-kind support. P3.2l repeated LINE normalization is the current checkpoint. Earlier sections retain their contemporaneous gate context and integration evidence; complete P3 acceptance remains open. Stroke refinement stays user-deferred.
+Current status: private canonical fill composition is integrated through P3.2l [PR #73](https://github.com/npclown/vector-studio/pull/73). P3.2m1 bounded32-cubic readiness tooling is the current checkpoint. Earlier sections retain their contemporaneous gate context and integration evidence; complete P3 acceptance remains open. Stroke refinement stays user-deferred.
+
+## P3.2m bounded cubic readiness
+
+Base: clean updated `c3b0c6f655844e83c1802f0e2c248a4a26745c83`, after P3.2l PR #73 and required CI on `7f35806bc9756d79a94137eb4ecce5c2dd34b331` (run36981514875, job110756885866). Branch: `codex/p3-2m1-cubic-readiness-tooling`. The [census contract](p3-cubic-census-contract.md) owns the bounded inspector, runner, immutable observations and audit. No production capacity/algorithm/API change is included.
+
+M01 freezes the contract after independent mathematical/interface review; M02 adds the preparation-only inspector and analytic/precedence/limit fixtures; M03 adds bounded native transport, isolated wrapper/schema/audit and four native smoke sources; M04 requires stable-source review, smoke/mechanics, geometry/root/build/docs validation and protected CI/integration. Full1000-path observation is explicitly NOT RUN in m1. Separate m2 M05 must start from clean integrated tooling, execute the frozen workload once, retain every observation/failure and independently audit it before drawing readiness conclusions. Existing P2 performance evidence and deferred stroke are unchanged.
+
+Primary owns contracts, native transport and CI; Sol high owns inspector/focused fixtures, Sol medium owns isolated runner/reporting/smoke, and another Sol medium performs independent source review. No recursive delegation. M01 is frozen after prospective review; M02-M04 implementation/validation are in progress. The [review record](../evidence/p3.2m1-cubic-readiness-tooling-review-2026-10-02.md) retains decisions, corrections and evidence.
+
+Local M01-M04 and Primary/independent review PASS. Preparation11 fixtures and full geometry152 native/201 TypeScript tests pass; release WASM identity remains unchanged. Smoke passes9 mechanics controls, four native observations and separate full-row/source/hash audit. Root check passes446 tests and all static/boundary checks; build passes. The first smoke stopped at an incorrectly located negative path fixture before any numeric execution; evidence retains the failed attempt and reviewed correction. Required CI/protected integration remain pending. M05 full1000 observation remains NOT RUN until m1 integration.
 
 ## P3.2l repeated canonical LINE normalization
 

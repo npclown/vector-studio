@@ -54,6 +54,41 @@ export type SimpleCubicTopologyResult = Readonly<{
   certificate: SimpleCubicTopologyCertificate | null;
 }>;
 
+export type CubicPreparationStatus =
+  | 'PREPARED'
+  | 'INVALID_INPUT'
+  | 'INVALID_PROVENANCE'
+  | 'KNOT_MISMATCH'
+  | 'PROJECTION_UNRESOLVED'
+  | 'WORK_LIMIT';
+
+export type CubicPreparationFindingCode =
+  | 'CONTOUR_SHAPE'
+  | 'SEGMENT_SHAPE'
+  | 'LINE_SHAPE'
+  | 'SOURCE_CAP'
+  | 'LINE_CAP'
+  | 'CUBIC'
+  | 'ORDINAL'
+  | 'CONNECTIVITY'
+  | 'ENDPOINT'
+  | 'PROVENANCE'
+  | 'KNOT'
+  | 'PROJECTION';
+
+export type CubicPreparationFinding = Readonly<{
+  code: CubicPreparationFindingCode;
+  segmentIndex: number | null;
+  sourceVerbOrdinal: number | null;
+  lineIndex: number | null;
+  endpoint: 'start' | 'end' | null;
+}>;
+
+export type CubicPreparationResult = Readonly<{
+  status: CubicPreparationStatus;
+  finding: CubicPreparationFinding | null;
+}>;
+
 type ExactPoint = readonly [x: Rational, y: Rational];
 type ExactCubic = readonly [p0: ExactPoint, p1: ExactPoint, p2: ExactPoint, p3: ExactPoint];
 type CheckedLimits = Readonly<{
@@ -84,6 +119,16 @@ type StructuredSegment = Readonly<{
   record: Record<string, unknown>;
   lines: readonly unknown[];
 }>;
+type PreparationLine = Readonly<{
+  exactEnd: ExactPoint;
+  start: Rational;
+  end: Rational;
+}>;
+type PreparationSegment = Readonly<{
+  exactCubic: ExactCubic;
+  sourceVerbOrdinal: number;
+  lines: readonly PreparationLine[];
+}>;
 type RestrictedLeaf = Readonly<{
   controls: ExactCubic;
   exactStart: ExactPoint;
@@ -106,6 +151,8 @@ const MAX_LEAVES = 64;
 const MAX_PAIRS = 2016;
 const MAX_PROVENANCE_DEPTH = 20;
 const MAX_U32 = 0xffff_ffff;
+const MAX_PREPARATION_CUBICS = 32;
+const MAX_PREPARATION_LINES = 4096;
 const UNIT = rational(1n, 1n << 1074n);
 const ONE = rational(1n);
 
@@ -124,6 +171,20 @@ function success(
   certificate: SimpleCubicTopologyCertificate,
 ): SimpleCubicTopologyResult {
   return { ok: true, status: 'CERTIFIED', leaves, pairs, finding: null, certificate };
+}
+
+function preparationFailure(
+  status: Exclude<CubicPreparationStatus, 'PREPARED'>,
+  code: CubicPreparationFindingCode,
+  segmentIndex: number | null = null,
+  sourceVerbOrdinal: number | null = null,
+  lineIndex: number | null = null,
+  endpoint: 'start' | 'end' | null = null,
+): CubicPreparationResult {
+  return {
+    status,
+    finding: { code, segmentIndex, sourceVerbOrdinal, lineIndex, endpoint },
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -146,6 +207,10 @@ function isFinitePoint(value: unknown): value is Point {
     if (typeof component !== 'number' || !Number.isFinite(component)) return false;
   }
   return true;
+}
+
+function isPointShape(value: unknown): value is readonly [unknown, unknown] {
+  return isUnknownArray(value) && value.length === 2 && hasIndex(value, 0) && hasIndex(value, 1);
 }
 
 function isFiniteCubic(value: unknown): value is Cubic {
@@ -419,6 +484,250 @@ function adjacentSharedPoint(
   if (right.contourLeaf === left.contourLeaf + 1) return left.end;
   if (left.contourLeaf === 0 && right.contourLeaf === count - 1) return left.start;
   return null;
+}
+
+/**
+ * Checks only the bounded exact preparation needed by the P3 cubic census.
+ * A prepared result makes no claim about closure, hulls, or fill topology.
+ */
+export function inspectCubicPreparation(
+  segments: readonly CubicTopologySegment[],
+): CubicPreparationResult {
+  const runtimeSegments: unknown = segments;
+  if (!isUnknownArray(runtimeSegments) || runtimeSegments.length === 0) {
+    return preparationFailure('INVALID_INPUT', 'CONTOUR_SHAPE');
+  }
+  if (runtimeSegments.length > MAX_PREPARATION_CUBICS) {
+    return preparationFailure('WORK_LIMIT', 'SOURCE_CAP', MAX_PREPARATION_CUBICS);
+  }
+
+  let declaredLines = 0;
+  const structured: StructuredSegment[] = [];
+  for (let segmentIndex = 0; segmentIndex < runtimeSegments.length; segmentIndex += 1) {
+    if (!hasIndex(runtimeSegments, segmentIndex)) {
+      return preparationFailure('INVALID_INPUT', 'SEGMENT_SHAPE', segmentIndex);
+    }
+    const candidate: unknown = runtimeSegments[segmentIndex];
+    if (!isRecord(candidate) || !isUnknownArray(candidate.lines)) {
+      return preparationFailure('INVALID_INPUT', 'SEGMENT_SHAPE', segmentIndex);
+    }
+    if (candidate.lines.length === 0) {
+      return preparationFailure('INVALID_INPUT', 'LINE_SHAPE', segmentIndex);
+    }
+    const remainingLines = MAX_PREPARATION_LINES - declaredLines;
+    if (candidate.lines.length > remainingLines) {
+      return preparationFailure('WORK_LIMIT', 'LINE_CAP', segmentIndex, null, remainingLines);
+    }
+    declaredLines += candidate.lines.length;
+    structured.push({ record: candidate, lines: candidate.lines });
+  }
+
+  for (let segmentIndex = 0; segmentIndex < structured.length; segmentIndex += 1) {
+    const segment = structured[segmentIndex]!;
+    for (let lineIndex = 0; lineIndex < segment.lines.length; lineIndex += 1) {
+      if (!hasIndex(segment.lines, lineIndex)) {
+        return preparationFailure('INVALID_INPUT', 'LINE_SHAPE', segmentIndex, null, lineIndex);
+      }
+      const line: unknown = segment.lines[lineIndex];
+      if (!isRecord(line) || !isPointShape(line.end)) {
+        return preparationFailure('INVALID_INPUT', 'LINE_SHAPE', segmentIndex, null, lineIndex);
+      }
+    }
+  }
+
+  const numericSegments: Readonly<{
+    cubic: Cubic;
+    ordinal: unknown;
+    lines: readonly Readonly<{ end: Point; provenance: unknown }>[];
+  }>[] = [];
+  for (let segmentIndex = 0; segmentIndex < structured.length; segmentIndex += 1) {
+    const segment = structured[segmentIndex]!;
+    if (!isFiniteCubic(segment.record.cubic)) {
+      return preparationFailure('INVALID_INPUT', 'CUBIC', segmentIndex);
+    }
+    const ordinal = segment.record.sourceVerbOrdinal;
+    const findingOrdinal =
+      typeof ordinal === 'number' &&
+      Number.isSafeInteger(ordinal) &&
+      ordinal >= 0 &&
+      ordinal <= MAX_U32
+        ? ordinal
+        : null;
+    const lines: Readonly<{ end: Point; provenance: unknown }>[] = [];
+    for (let lineIndex = 0; lineIndex < segment.lines.length; lineIndex += 1) {
+      const line = segment.lines[lineIndex] as Record<string, unknown>;
+      if (!isFinitePoint(line.end)) {
+        return preparationFailure(
+          'INVALID_INPUT',
+          'ENDPOINT',
+          segmentIndex,
+          findingOrdinal,
+          lineIndex,
+          'end',
+        );
+      }
+      lines.push({ end: [line.end[0], line.end[1]], provenance: line.provenance });
+    }
+    numericSegments.push({
+      cubic: segment.record.cubic,
+      ordinal,
+      lines,
+    });
+  }
+
+  const ordinals = new Set<number>();
+  const shaped: ShapedSegment[] = [];
+  let previousEnd: Point | null = null;
+  for (let segmentIndex = 0; segmentIndex < numericSegments.length; segmentIndex += 1) {
+    const segment = numericSegments[segmentIndex]!;
+    const ordinal = segment.ordinal;
+    if (
+      typeof ordinal !== 'number' ||
+      !Number.isSafeInteger(ordinal) ||
+      ordinal < 0 ||
+      ordinal > MAX_U32
+    ) {
+      return preparationFailure('INVALID_INPUT', 'ORDINAL', segmentIndex);
+    }
+    if (ordinals.has(ordinal)) {
+      return preparationFailure('INVALID_INPUT', 'ORDINAL', segmentIndex, ordinal);
+    }
+    ordinals.add(ordinal);
+    if (previousEnd && !equalOrdinaryPoint(previousEnd, segment.cubic[0])) {
+      return preparationFailure('INVALID_INPUT', 'CONNECTIVITY', segmentIndex, ordinal);
+    }
+    previousEnd = segment.cubic[3];
+    shaped.push({
+      cubic: segment.cubic,
+      sourceVerbOrdinal: ordinal,
+      lines: segment.lines,
+    });
+  }
+
+  const prepared: PreparationSegment[] = [];
+  for (let segmentIndex = 0; segmentIndex < shaped.length; segmentIndex += 1) {
+    const segment = shaped[segmentIndex]!;
+    const lines: PreparationLine[] = [];
+    let previousNumerator = 0n;
+    let previousDenominator = 1n;
+    for (let lineIndex = 0; lineIndex < segment.lines.length; lineIndex += 1) {
+      const line = segment.lines[lineIndex]!;
+      const provenance: unknown = line.provenance;
+      if (!isRecord(provenance)) {
+        return preparationFailure(
+          'INVALID_PROVENANCE',
+          'PROVENANCE',
+          segmentIndex,
+          segment.sourceVerbOrdinal,
+          lineIndex,
+        );
+      }
+      const source = provenance.sourceVerbOrdinal;
+      const numerator = provenance.endNumerator;
+      const depth = provenance.depth;
+      if (
+        source !== segment.sourceVerbOrdinal ||
+        typeof depth !== 'number' ||
+        !Number.isSafeInteger(depth) ||
+        depth < 0 ||
+        depth > MAX_PROVENANCE_DEPTH ||
+        typeof numerator !== 'number' ||
+        !Number.isSafeInteger(numerator) ||
+        numerator < 1 ||
+        numerator > 2 ** depth
+      ) {
+        return preparationFailure(
+          'INVALID_PROVENANCE',
+          'PROVENANCE',
+          segmentIndex,
+          segment.sourceVerbOrdinal,
+          lineIndex,
+        );
+      }
+      const denominator = 1n << BigInt(depth);
+      const endNumerator = BigInt(numerator);
+      const startNumerator = endNumerator - 1n;
+      if (previousNumerator * denominator !== startNumerator * previousDenominator) {
+        return preparationFailure(
+          'INVALID_PROVENANCE',
+          'PROVENANCE',
+          segmentIndex,
+          segment.sourceVerbOrdinal,
+          lineIndex,
+        );
+      }
+      lines.push({
+        exactEnd: exactPoint(line.end),
+        start: rational(startNumerator, denominator),
+        end: rational(endNumerator, denominator),
+      });
+      previousNumerator = endNumerator;
+      previousDenominator = denominator;
+    }
+    if (previousNumerator !== previousDenominator) {
+      return preparationFailure(
+        'INVALID_PROVENANCE',
+        'PROVENANCE',
+        segmentIndex,
+        segment.sourceVerbOrdinal,
+        segment.lines.length - 1,
+      );
+    }
+    prepared.push({
+      exactCubic: exactCubic(segment.cubic),
+      sourceVerbOrdinal: segment.sourceVerbOrdinal,
+      lines,
+    });
+  }
+
+  for (let segmentIndex = 0; segmentIndex < prepared.length; segmentIndex += 1) {
+    const segment = prepared[segmentIndex]!;
+    let actualStart = segment.exactCubic[0];
+    for (let lineIndex = 0; lineIndex < segment.lines.length; lineIndex += 1) {
+      const line = segment.lines[lineIndex]!;
+      const controls = restrictCubic(segment.exactCubic, line.start, line.end);
+      if (!equalPoint(actualStart, controls[0])) {
+        return preparationFailure(
+          'KNOT_MISMATCH',
+          'KNOT',
+          segmentIndex,
+          segment.sourceVerbOrdinal,
+          lineIndex,
+          'start',
+        );
+      }
+      if (!equalPoint(line.exactEnd, controls[3])) {
+        return preparationFailure(
+          'KNOT_MISMATCH',
+          'KNOT',
+          segmentIndex,
+          segment.sourceVerbOrdinal,
+          lineIndex,
+          'end',
+        );
+      }
+      actualStart = line.exactEnd;
+    }
+  }
+
+  for (let segmentIndex = 0; segmentIndex < prepared.length; segmentIndex += 1) {
+    const segment = prepared[segmentIndex]!;
+    for (let lineIndex = 0; lineIndex < segment.lines.length; lineIndex += 1) {
+      const line = segment.lines[lineIndex]!;
+      const controls = restrictCubic(segment.exactCubic, line.start, line.end);
+      if (!projectedMonotone(controls)) {
+        return preparationFailure(
+          'PROJECTION_UNRESOLVED',
+          'PROJECTION',
+          segmentIndex,
+          segment.sourceVerbOrdinal,
+          lineIndex,
+        );
+      }
+    }
+  }
+
+  return { status: 'PREPARED', finding: null };
 }
 
 /**

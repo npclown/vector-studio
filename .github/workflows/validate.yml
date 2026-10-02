@@ -39,3 +39,6 @@ jobs:
 
       - name: Validate native Rust and independent WASM fixtures
         run: pnpm test:geometry
+
+      - name: Validate bounded P3 cubic readiness tooling
+        run: node tooling/run-p3-cubic-census.mjs --smoke
