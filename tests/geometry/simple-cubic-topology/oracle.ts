@@ -136,6 +136,11 @@ type TopologyPreflight =
       limits: CheckedLimits;
       contours: readonly PreparedContour[];
     }>;
+type SuccessfulTopologyPreflight = Extract<TopologyPreflight, Readonly<{ ok: true }>>;
+type PreparedSourceKinds = readonly (readonly boolean[])[];
+type SourceKindsValidation =
+  | Readonly<{ ok: false; result: TopologyFailureResult }>
+  | Readonly<{ ok: true; kinds: PreparedSourceKinds }>;
 type ShapedLine = Readonly<{ end: Point; provenance: unknown }>;
 type ShapedSegment = Readonly<{
   cubic: Cubic;
@@ -587,8 +592,9 @@ function segmentsProperlyIntersect(
 
 function transverseGenerators(leaf: RoundedLeaf): readonly ExactPoint[] {
   // Cubic source differences omit their positive factor of three only for sign comparisons.
-  // Closure differences are already the true constant derivative. Retain the duplicate chord
-  // generator in both cases, as required by the derivative-cone proof.
+  // True-closure and explicitly marked affine-LINE differences are already their constant
+  // derivatives. Retain the duplicate chord generator in every case, as required by the
+  // derivative-cone proof.
   return [...leaf.sourceDifferences, pointSub(leaf.end, leaf.start)];
 }
 
@@ -1140,12 +1146,92 @@ function prepareTopologyInput(
   return { ok: true, limits: bounded, contours: preparedContours };
 }
 
-function prepareRoundedTopology(
-  contours: readonly (readonly CubicTopologySegment[])[],
-  limits: SimpleCubicTopologyLimits | undefined,
+function validateSourceKinds(
+  preflight: SuccessfulTopologyPreflight,
+  sourceKinds: readonly boolean[],
+): SourceKindsValidation {
+  const supplied: unknown = sourceKinds;
+  if (!isUnknownArray(supplied)) {
+    return {
+      ok: false,
+      result: failure('INVALID_INPUT', 'source kinds must be an array'),
+    };
+  }
+
+  const sourceCount = preflight.contours.reduce((sum, contour) => sum + contour.length, 0);
+  if (supplied.length !== sourceCount) {
+    return {
+      ok: false,
+      result: failure(
+        'INVALID_INPUT',
+        `source kinds length ${supplied.length} does not match ${sourceCount} source descriptors`,
+      ),
+    };
+  }
+
+  const flatKinds: boolean[] = [];
+  for (let sourceIndex = 0; sourceIndex < sourceCount; sourceIndex += 1) {
+    if (!hasIndex(supplied, sourceIndex)) {
+      return {
+        ok: false,
+        result: failure('INVALID_INPUT', `source kinds entry ${sourceIndex} is missing`),
+      };
+    }
+    const kind: unknown = supplied[sourceIndex];
+    if (typeof kind !== 'boolean') {
+      return {
+        ok: false,
+        result: failure(
+          'INVALID_INPUT',
+          `source kinds entry ${sourceIndex} must be a primitive boolean`,
+        ),
+      };
+    }
+    flatKinds.push(kind);
+  }
+
+  const kinds: boolean[][] = [];
+  let sourceIndex = 0;
+  for (let contourIndex = 0; contourIndex < preflight.contours.length; contourIndex += 1) {
+    const contour = preflight.contours[contourIndex]!;
+    const contourKinds: boolean[] = [];
+    for (let segmentIndex = 0; segmentIndex < contour.length; segmentIndex += 1) {
+      const kind = flatKinds[sourceIndex]!;
+      contourKinds.push(kind);
+      if (kind) {
+        const segment = contour[segmentIndex]!;
+        const controls = segment.exactCubic;
+        const line = segment.lines[0];
+        if (
+          !equalPoint(controls[0], controls[1]) ||
+          !equalPoint(controls[2], controls[3]) ||
+          equalPoint(controls[0], controls[3]) ||
+          segment.lines.length !== 1 ||
+          line === undefined ||
+          compare(line.start, ZERO) !== 0 ||
+          compare(line.end, ONE) !== 0
+        ) {
+          return {
+            ok: false,
+            result: failure(
+              'INVALID_INPUT',
+              `contour ${contourIndex} source segment ${segmentIndex} has invalid marked LINE shape`,
+            ),
+          };
+        }
+      }
+      sourceIndex += 1;
+    }
+    kinds.push(contourKinds);
+  }
+
+  return { ok: true, kinds };
+}
+
+function prepareRoundedTopologySuffix(
+  preflight: SuccessfulTopologyPreflight,
+  sourceKinds?: PreparedSourceKinds,
 ): RoundedTopologyPreparation {
-  const preflight = prepareTopologyInput(contours, limits);
-  if (!preflight.ok) return preflight;
   const bounded = preflight.limits;
   const preparedContours = preflight.contours;
 
@@ -1191,6 +1277,9 @@ function prepareRoundedTopology(
         }
         const line = segment.lines[lineIndex]!;
         const controls = restrictCubic(segment.exactCubic, line.start, line.end);
+        const sourceDifferences = sourceKinds?.[contourIndex]?.[segmentIndex]
+          ? [pointSub(controls[3], controls[0])]
+          : cubicDifferences(controls);
         leaves.push({
           contour: contourIndex,
           contourLeaf,
@@ -1200,7 +1289,7 @@ function prepareRoundedTopology(
           ordinaryStart: [ordinaryStart[0], ordinaryStart[1]],
           sourceStart: controls[0],
           sourceEnd: controls[3],
-          sourceDifferences: cubicDifferences(controls),
+          sourceDifferences,
         });
         contourLeaf += 1;
         actualStart = line.exactEnd;
@@ -1250,6 +1339,15 @@ function prepareRoundedTopology(
   }
 
   return { ok: true, limits: bounded, leaves, contourLeafCounts };
+}
+
+function prepareRoundedTopology(
+  contours: readonly (readonly CubicTopologySegment[])[],
+  limits: SimpleCubicTopologyLimits | undefined,
+): RoundedTopologyPreparation {
+  const preflight = prepareTopologyInput(contours, limits);
+  if (!preflight.ok) return preflight;
+  return prepareRoundedTopologySuffix(preflight);
 }
 
 function publishTopology(
@@ -1530,16 +1628,10 @@ export function certifyRoundedKnotCubicTopology(
   return publishTopology(leaves, contourLeafCounts.length, pairs);
 }
 
-/**
- * Certifies the frozen P3.1g test-only transverse arrangement condition.
- * Crossing records preserve complete leaf append and pair-inspection order.
- */
-export function certifyTransverseCubicArrangement(
-  contours: readonly (readonly CubicTopologySegment[])[],
-  limits?: SimpleCubicTopologyLimits,
+/** Shares complete leaf append, pair-inspection, charge, and publication order. */
+function certifyPreparedTransverseArrangement(
+  preparation: Extract<RoundedTopologyPreparation, Readonly<{ ok: true }>>,
 ): TransverseArrangementResult {
-  const preparation = prepareRoundedTopology(contours, limits);
-  if (!preparation.ok) return preparation.result;
   const bounded = preparation.limits;
   const leaves = preparation.leaves;
   const contourLeafCounts = preparation.contourLeafCounts;
@@ -1611,4 +1703,37 @@ export function certifyTransverseCubicArrangement(
   }
 
   return publishTransverseArrangement(leaves, contourLeafCounts.length, pairs, crossings);
+}
+
+/**
+ * Certifies the frozen P3.1g test-only transverse arrangement condition.
+ * Crossing records preserve complete leaf append and pair-inspection order.
+ */
+export function certifyTransverseCubicArrangement(
+  contours: readonly (readonly CubicTopologySegment[])[],
+  limits?: SimpleCubicTopologyLimits,
+): TransverseArrangementResult {
+  const preparation = prepareRoundedTopology(contours, limits);
+  if (!preparation.ok) return preparation.result;
+  return certifyPreparedTransverseArrangement(preparation);
+}
+
+/**
+ * Certifies the frozen P3.1h test-only mixed LINE/cubic transverse arrangement condition.
+ * Source kinds are aligned to supplied descriptors in flat contour/source order.
+ */
+export function certifyMixedTransverseCubicArrangement(
+  contours: readonly (readonly CubicTopologySegment[])[],
+  sourceKinds: readonly boolean[],
+  limits?: SimpleCubicTopologyLimits,
+): TransverseArrangementResult {
+  const preflight = prepareTopologyInput(contours, limits);
+  if (!preflight.ok) return preflight.result;
+
+  const validation = validateSourceKinds(preflight, sourceKinds);
+  if (!validation.ok) return validation.result;
+
+  const preparation = prepareRoundedTopologySuffix(preflight, validation.kinds);
+  if (!preparation.ok) return preparation.result;
+  return certifyPreparedTransverseArrangement(preparation);
 }

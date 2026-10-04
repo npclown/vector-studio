@@ -1,6 +1,12 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.2t explicit private transverse cubic composition is integrated through [PR #85](https://github.com/npclown/vector-studio/pull/85). P3.2u test-only nonlinear composition passes local implementation/validation; final Primary/independent evidence review passes and protected CI/integration remain pending. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.2u nonlinear transverse composition is integrated through [PR #86](https://github.com/npclown/vector-studio/pull/86). P3.1h explicit LINE-kind arrangement oracle has local acceptance PASS; protected integration remains required. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.1h mixed LINE-kind arrangement oracle
+
+Base: clean updated `876787d05ea69750e8a16bd4ab5d4328eea02d84`, after P3.2u PR #86 and required CI run37221004554/job111491158599 PASS on `58c0287636da6636ff0ac379355f29ec5afe43c2`. Branch `codex/p3-1h-mixed-line-arrangement-oracle`. The frozen [contract](p3-mixed-line-arrangement-oracle-contract.md) fixes a separate test-only true-LINE entry, seven analytic positives, packed identity/signed-zero rules and complete preflight precedence. The [review record](../evidence/p3.1h-mixed-line-arrangement-review-2026-10-05.md) tracks decisions/evidence. Full contract/source review precedes implementation/numeric dispatch. Old entry points and stationary-cubic rejection remain unchanged; native mixed-source adoption requires a later contract. No public API/ABI, dependency, cap/tolerance or deferred stroke change.
+
+H01-H03 local PASS: final Primary/independent source review preceded the first numerical dispatch. Seven mixed LINE positives and seven stationary all-false counterparts,39 old-row full-result comparisons, error precedence and ownership/bit controls pass. Focused146 tests,184 native tests,323 geometry tests,527 root tests across52 files, all static/boundary checks and build pass. Independent WASM identity is unchanged. No runtime/API/dependency/cap change or performance claim. Final Primary/independent evidence review PASS; docs/778 links across159 Markdown files/diff checks PASS. Protected CI/integration remain required. Next dependency is a separately frozen native mixed-kind helper; canonical workspace adoption follows later.
 
 ## P3.2u nonlinear transverse composition
 
