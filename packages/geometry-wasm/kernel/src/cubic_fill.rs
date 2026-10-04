@@ -8,8 +8,8 @@ use crate::rounded_line_fill::{
     RoundedFillError, RoundedFillLimits, RoundedFillOutput, RoundedFillStats, RoundedFillWorkspace,
 };
 use crate::simple_cubic_topology::{
-    SimpleCubicTopologyWorkspace, TopologyCubic, TopologyError, TopologyInput, TopologyLeaf,
-    TopologyLimits, TopologyOutput, TopologyRange, TopologyStats,
+    RoundedKnotCubicTopologyWorkspace, SimpleCubicTopologyWorkspace, TopologyCubic, TopologyError,
+    TopologyInput, TopologyLeaf, TopologyLimits, TopologyOutput, TopologyRange, TopologyStats,
 };
 
 pub(crate) const MAX_FLAT_COMMANDS: usize = 72;
@@ -116,6 +116,9 @@ pub(crate) struct CubicFillDiagnostics {
     pub(crate) sizing_invoked: bool,
     pub(crate) emission_invoked: bool,
     pub(crate) topology_invoked: bool,
+    pub(crate) rounded_topology_invoked: bool,
+    pub(crate) rounded_topology_selected: bool,
+    pub(crate) rounded_topology_error: Option<TopologyError>,
     pub(crate) rounded_invoked: bool,
     pub(crate) flat_status: u32,
     pub(crate) sizing_plan: Plan,
@@ -161,6 +164,7 @@ struct ActiveContour {
 pub(crate) struct CubicFillWorkspace {
     rounded: RoundedFillWorkspace,
     topology: SimpleCubicTopologyWorkspace,
+    rounded_topology: RoundedKnotCubicTopologyWorkspace,
     source_verbs: [SourceVerb; MAX_SOURCE_VERBS],
     source_verb_len: usize,
     sources: [DecodedSource; MAX_SOURCE_SEGMENTS],
@@ -176,6 +180,7 @@ pub(crate) struct CubicFillWorkspace {
     edge_owners: [EdgeOwner; MAX_EDGE_OWNERS],
     owner_len: usize,
     diagnostics: CubicFillDiagnostics,
+    topology_stats: TopologyStats,
     published: bool,
 }
 
@@ -184,6 +189,8 @@ impl CubicFillWorkspace {
         let workspace = Self {
             rounded: RoundedFillWorkspace::new(limits).map_err(CubicFillError::Rounded)?,
             topology: SimpleCubicTopologyWorkspace::new(TopologyLimits::default())
+                .map_err(CubicFillError::Topology)?,
+            rounded_topology: RoundedKnotCubicTopologyWorkspace::new(TopologyLimits::default())
                 .map_err(CubicFillError::Topology)?,
             source_verbs: [SourceVerb::Unused; MAX_SOURCE_VERBS],
             source_verb_len: 0,
@@ -200,12 +207,14 @@ impl CubicFillWorkspace {
             edge_owners: [EdgeOwner::ImplicitClosure { contour: 0 }; MAX_EDGE_OWNERS],
             owner_len: 0,
             diagnostics: CubicFillDiagnostics::default(),
+            topology_stats: TopologyStats::default(),
             published: false,
         };
         if workspace
             .rounded
             .allocated_bytes()
             .checked_add(workspace.topology.allocated_bytes())
+            .and_then(|bytes| bytes.checked_add(workspace.rounded_topology.allocated_bytes()))
             .is_none_or(|bytes| bytes > MAX_COMBINED_HEAP_BYTES)
         {
             return Err(CubicFillError::CombinedByteLimit);
@@ -214,7 +223,11 @@ impl CubicFillWorkspace {
     }
 
     pub(crate) fn allocated_bytes(&self) -> usize {
-        self.rounded.allocated_bytes() + self.topology.allocated_bytes()
+        self.rounded
+            .allocated_bytes()
+            .checked_add(self.topology.allocated_bytes())
+            .and_then(|bytes| bytes.checked_add(self.rounded_topology.allocated_bytes()))
+            .expect("constructor validated combined retained capacities")
     }
 
     pub(crate) fn diagnostics(&self) -> CubicFillDiagnostics {
@@ -222,7 +235,7 @@ impl CubicFillWorkspace {
     }
 
     pub(crate) fn topology_stats(&self) -> TopologyStats {
-        self.topology.stats()
+        self.topology_stats
     }
 
     pub(crate) fn rounded_stats(&self) -> RoundedFillStats {
@@ -546,18 +559,47 @@ impl CubicFillWorkspace {
                 count: cubic_len - cubic_start,
             };
         }
-        self.topology
-            .certify(TopologyInput {
-                contours: &contours[..self.source_range_len],
-                cubics: &cubics[..cubic_len],
-                leaves: &leaves[..leaf_len],
-            })
-            .map_err(CubicFillError::Topology)?;
-        let certificate = self
-            .topology
-            .output()
-            .ok_or(CubicFillError::TopologyOwnership)?;
-        self.validate_topology_ownership(certificate)
+        let input = TopologyInput {
+            contours: &contours[..self.source_range_len],
+            cubics: &cubics[..cubic_len],
+            leaves: &leaves[..leaf_len],
+        };
+        match self.topology.certify(input) {
+            Ok(()) => {
+                self.topology_stats = self.topology.stats();
+                let certificate = self
+                    .topology
+                    .output()
+                    .ok_or(CubicFillError::TopologyOwnership)?;
+                self.validate_topology_ownership(certificate)
+            }
+            Err(TopologyError::KnotMismatch) => {
+                let exact_stats = self.topology.stats();
+                self.diagnostics.rounded_topology_invoked = true;
+                match self.rounded_topology.certify(input) {
+                    Ok(()) => {
+                        let rounded_stats = self.rounded_topology.stats();
+                        self.topology_stats = add_topology_stats(exact_stats, rounded_stats);
+                        self.diagnostics.rounded_topology_selected = true;
+                        let certificate = self
+                            .rounded_topology
+                            .output()
+                            .ok_or(CubicFillError::TopologyOwnership)?;
+                        self.validate_topology_ownership(certificate)
+                    }
+                    Err(error) => {
+                        self.topology_stats =
+                            add_topology_stats(exact_stats, self.rounded_topology.stats());
+                        self.diagnostics.rounded_topology_error = Some(error);
+                        Err(CubicFillError::Topology(TopologyError::KnotMismatch))
+                    }
+                }
+            }
+            Err(error) => {
+                self.topology_stats = self.topology.stats();
+                Err(CubicFillError::Topology(error))
+            }
+        }
     }
 
     fn validate_topology_ownership(
@@ -925,6 +967,13 @@ impl CubicFillWorkspace {
             .copied()
             .filter(|_| usize::try_from(ordinal).is_ok_and(|index| index < self.source_verb_len))
             .ok_or(CubicFillError::InvalidProvenance)
+    }
+}
+
+fn add_topology_stats(left: TopologyStats, right: TopologyStats) -> TopologyStats {
+    TopologyStats {
+        leaves: left.leaves + right.leaves,
+        pairs: left.pairs + right.pairs,
     }
 }
 

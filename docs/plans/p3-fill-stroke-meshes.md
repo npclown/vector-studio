@@ -1,6 +1,14 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.1f rounded internal-knot topology is integrated through [PR #76](https://github.com/npclown/vector-studio/pull/76). P3.2n native rounded-knot helper is the current private prerequisite, with contract frozen before implementation. Earlier sections retain their contemporaneous gate context and integration evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.2n native rounded-knot topology is integrated through [PR #77](https://github.com/npclown/vector-studio/pull/77). P3.2o private workspace adoption has passed local acceptance and final source review; protected CI/integration remain pending. Earlier sections retain their contemporaneous gate context and integration evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.2o private rounded-topology adoption
+
+Base: clean updated`6e9f81c84aeae498b550a1727784aa0caa2b9fb6`, after P3.2n PR #77 and required CI run36994842118/job110799086442 on`6af675ac01d0e6c5854a1c3260f947ee3a41c49b`. Branch: codex/p3-2o-rounded-topology-adoption. The [adoption contract](p3-rounded-topology-adoption-contract.md) is FROZEN after final Primary/independent selection, resource, interface and analytic carrier review. Implementation may begin; stable-source review still precedes numeric execution.
+
+O01-O04 select the original exact certificate first and invoke the separate rounded helper only on KnotMismatch. Alternative failure preserves the original error; private diagnostics distinguish the extra work and every retained workspace is accounted under unchanged ceilings. Four new actual-kernel carriers and paired closure runs will complement unchanged94-row transport. Primary owns decisions/evidence/integration; Sol high owns coupled Rust workspace/test adapter, Sol medium owns disjoint TS transport/checks, separate Sol medium reviews stable code. No recursive delegation. The [review record](../evidence/p3.2o-rounded-topology-adoption-review-2026-10-02.md) tracks prospective decisions. No public API/ABI, cap/tolerance, dependency, browser/GPU/performance or deferred stroke work.
+
+O01-O04 local acceptance PASS on resumed2026-10-04:168 native tests,246 geometry tests,483 root unit tests, static/boundary checks and build pass. All four new rows select the frozen route and satisfy complete independent geometry checks; all94 historical rows preserve their outcomes without fallback. Observed combined retained capacity887296 bytes and inline10432 bytes fit unchanged ceilings with zero attempt allocations. Release WASM identity remains unchanged. Primary corrected checked accounting before final independent source clearance and numeric dispatch; no numeric expectation changed after execution. Required protected CI/integration remain pending. Next candidate is a separately frozen offline1000x32 topology/work classification to inform general arrangement and resource feasibility; private caps and full P3 gates remain unchanged.
 
 ## P3.2n native rounded internal-knot topology
 
