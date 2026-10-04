@@ -2,222 +2,38 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { Point } from '../../packages/geometry-reference/src/types.js';
 import { inspectTriangleMesh } from '../../packages/geometry-reference/src/triangle-mesh.js';
 import {
   encodeNativeTransverseCubicFixture,
   fixedNativeTransverseCubicFixtureRows,
-  type NativeTransverseCubicFixtureRow,
 } from './native-transverse-cubic/fixtures.js';
 import {
   parseNativeTransverseCubicRow,
   parseNativeTransverseCubicValue,
   type NativeTransverseCubicRow,
 } from './native-transverse-cubic/native.js';
-import type { NativeCubicCommand, NativeCubicRow } from './native-cubic/native.js';
+import type { NativeCubicCommand } from './native-cubic/native.js';
 import {
   actualSegments,
   assertFixtureIdentity,
-  assertFlatBounds,
   assertOwnerMapping,
   collectedContours,
   expectedOwners,
   roundedFixture,
 } from './native-cubic/verify.js';
-import { bitsOf } from './rounded-fill/exact.js';
 import {
   assertCarrierMatches,
   buildRoundedFillOracle,
   verifyRoundedFillCarrier,
 } from './rounded-fill/oracle.js';
 import {
-  certifyRoundedKnotCubicTopology,
-  certifySimpleCubicTopology,
-  certifyTransverseCubicArrangement,
-} from './simple-cubic-topology/oracle.js';
+  assertLiteralPolygons,
+  assertNativeTransverseCubicCarrier,
+} from './native-transverse-cubic/verify.js';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const manifest = path.join(root, 'packages/geometry-wasm/kernel/Cargo.toml');
 const fixtureRows = fixedNativeTransverseCubicFixtureRows();
-const FLATTEN_BITS = bitsOf(1 / 8)
-  .toString(16)
-  .padStart(16, '0');
-const TOPOLOGY_BITS = bitsOf(1 / 16)
-  .toString(16)
-  .padStart(16, '0');
-
-function pointBitStrings(points: readonly Point[]): readonly (readonly string[])[] {
-  return points.map(([x, y]) => [bitsOf(x).toString(16), bitsOf(y).toString(16)]);
-}
-
-function polygonBitStrings(polygons: readonly (readonly Point[])[]): string {
-  return JSON.stringify(polygons.map(pointBitStrings));
-}
-
-function assertLiteralPolygons(
-  fixture: NativeTransverseCubicFixtureRow,
-  row: NativeCubicRow,
-): void {
-  if (!row.rounded) throw new Error('rounded source polygons missing');
-  if (polygonBitStrings(row.rounded.contours) !== polygonBitStrings(fixture.expectedPolygons))
-    throw new Error('rounded source polygon bits mismatch');
-}
-
-function expectedCrossingNodes(fixture: NativeTransverseCubicFixtureRow): readonly Point[] {
-  if (fixture.id === 'composition/squares')
-    return [
-      [3, 0],
-      [6, 3],
-    ];
-  return [[0, 0]];
-}
-
-function assertCrossingOwnerProvenance(
-  fixture: NativeTransverseCubicFixtureRow,
-  row: NativeCubicRow,
-): void {
-  if (!row.commands || !row.rounded?.output || !row.edge_owners)
-    throw new Error('crossing owner carrier missing');
-  const segments = actualSegments(fixture, row.commands);
-  const owners = expectedOwners(fixture, segments);
-  const output = row.rounded.output;
-  fixture.expectedCrossings.forEach((crossing, crossingIndex) => {
-    const [x, y] = expectedCrossingNodes(fixture)[crossingIndex]!;
-    const nodeIndices = output.nodes.flatMap((node, index) =>
-      node.point[0] === x && node.point[1] === y ? [index] : [],
-    );
-    if (nodeIndices.length === 0) throw new Error('expected crossing node missing');
-    const incidentEdges = new Set(
-      output.sections.filter(({ node }) => nodeIndices.includes(node)).map(({ edge }) => edge),
-    );
-    for (const span of output.spans) {
-      if (!nodeIndices.includes(span.lower) && !nodeIndices.includes(span.upper)) continue;
-      for (const edge of output.contributors.slice(
-        span.vertical_sources.start,
-        span.vertical_sources.start + span.vertical_sources.count,
-      ))
-        incidentEdges.add(edge);
-    }
-    if (!incidentEdges.has(crossing.leftLeaf) || !incidentEdges.has(crossing.rightLeaf))
-      throw new Error('crossing node lost participating owners');
-    if (owners[crossing.leftLeaf] === undefined || owners[crossing.rightLeaf] === undefined)
-      throw new Error('crossing owner identity missing');
-  });
-}
-
-function assertCarrier(
-  fixture: NativeTransverseCubicFixtureRow,
-  actual: NativeTransverseCubicRow,
-): void {
-  const row = actual.carrier;
-  assertFixtureIdentity(fixture, row);
-  expect(actual.topology).toEqual({
-    topology_invoked: true,
-    rounded_topology_invoked: false,
-    rounded_topology_selected: false,
-    rounded_topology_error: null,
-    transverse_topology_invoked: true,
-    transverse_topology_selected: true,
-    transverse_topology_error: null,
-    stats: { leaves: 8, pairs: 28 },
-  });
-  expect(row.flat_status).toBe(0);
-  expect(row.flatten_tolerance_bits).toBe(FLATTEN_BITS);
-  expect(row.topology_tolerance_bits).toBe(TOPOLOGY_BITS);
-  expect(row.allocations).toBe(0);
-  expect(row.inline_bytes).toBeGreaterThan(0);
-  expect(row.inline_bytes).toBeLessThan(64 * 1024);
-  expect(row.allocated_bytes).toBeGreaterThan(0);
-  expect(row.allocated_bytes).toBeLessThanOrEqual(16 * 1024 * 1024);
-  if (!row.commands || !row.emission_plan || !row.rounded?.output)
-    throw new Error('transverse cubic carrier is incomplete');
-
-  const sourceCount = fixture.contours.reduce((sum, contour) => sum + contour.cubics.length, 0);
-  const closeCount = fixture.contours.filter(
-    ({ closeVerbOrdinal }) => closeVerbOrdinal !== null,
-  ).length;
-  const commandCount = fixture.contours.length + sourceCount + closeCount;
-  expect(row.commands).toHaveLength(commandCount);
-  expect(row.sizing_plan).toEqual({
-    status: 0,
-    verb_count: commandCount,
-    point_count: (fixture.contours.length + sourceCount) * 2,
-  });
-  expect(row.emission_plan).toEqual(row.sizing_plan);
-  expect(row.statistics).toEqual({
-    logical_cubics: sourceCount,
-    sizing_visits: sourceCount,
-    emission_visits: sourceCount,
-    emitted_cubic_lines: sourceCount,
-  });
-  assertFlatBounds(row);
-
-  const segments = actualSegments(fixture, row.commands);
-  const lines = segments.flatMap((contour) => contour.flatMap((segment) => segment.lines));
-  expect(lines).toHaveLength(sourceCount);
-  expect(lines.every(({ provenance }) => provenance.depth === 0)).toBe(true);
-  expect(lines.every(({ provenance }) => provenance.endNumerator === 1)).toBe(true);
-  const points = collectedContours(segments);
-  expect(polygonBitStrings(points)).toBe(polygonBitStrings(fixture.expectedPolygons));
-  assertLiteralPolygons(fixture, row);
-
-  const legacy = certifySimpleCubicTopology(segments);
-  const roundedLegacy = certifyRoundedKnotCubicTopology(segments);
-  expect(legacy.status).toBe('UNRESOLVED');
-  expect(roundedLegacy.status).toBe('UNRESOLVED');
-  const arrangement = certifyTransverseCubicArrangement(segments);
-  expect(arrangement.status).toBe('CERTIFIED');
-  expect(arrangement.leaves).toBe(8);
-  expect(arrangement.pairs).toBe(28);
-  expect(polygonBitStrings(arrangement.certificate!.polygons)).toBe(
-    polygonBitStrings(fixture.expectedPolygons),
-  );
-  expect(arrangement.certificate!.crossings).toEqual(fixture.expectedCrossings);
-
-  const owners = expectedOwners(fixture, segments);
-  expect(owners).toHaveLength(8);
-  if (fixture.id === 'composition/closure')
-    expect(owners[7]).toEqual({ kind: 'ImplicitClosure', contour: 0 });
-  else expect(owners.every(({ kind }) => kind === 'CubicLeaf')).toBe(true);
-  assertOwnerMapping(owners, points, row);
-  assertCrossingOwnerProvenance(fixture, row);
-
-  const roundedInput = roundedFixture(row);
-  expect(row.rounded.tau_bits).toBe(TOPOLOGY_BITS);
-  expect(row.rounded.profile).toBe('I');
-  const oracle = buildRoundedFillOracle(roundedInput);
-  if (!oracle.ok) throw new Error(`${fixture.id}:${fixture.rule} oracle failed: ${oracle.reason}`);
-  expect(oracle.properCrossings).toBe(fixture.expectedCrossings.length);
-  verifyRoundedFillCarrier(roundedInput, oracle, row.rounded.output);
-  assertCarrierMatches(oracle.carrier, row.rounded.output);
-  expect(
-    inspectTriangleMesh({ ...row.rounded.output, expectedArea: fixture.expectedArea }),
-  ).toEqual({ valid: true, issue: null });
-  expect(row.rounded.stats).toEqual({
-    input_vertices: 8,
-    edges: 8,
-    pair_checks: 28,
-    events: oracle.rawEvents,
-    columns: row.rounded.output.columns.length,
-    sections: row.rounded.output.sections.length,
-    nodes: row.rounded.output.nodes.length,
-    cells: row.rounded.output.cells.length,
-    boundaries: row.rounded.output.boundaries.length,
-    contributors: row.rounded.output.contributors.length,
-    work_units: row.rounded.stats.work_units,
-  });
-  expect(row.rounded.stats.events).toBeLessThanOrEqual(128);
-  expect(row.rounded.stats.columns).toBeLessThanOrEqual(36);
-  expect(row.rounded.stats.sections).toBeLessThanOrEqual(8320);
-  expect(row.rounded.stats.nodes).toBeLessThanOrEqual(256);
-  expect(row.rounded.stats.cells).toBeLessThanOrEqual(256);
-  expect(row.rounded.stats.boundaries).toBeLessThanOrEqual(512);
-  expect(row.rounded.stats.contributors).toBeLessThanOrEqual(512);
-  expect(row.rounded.stats.work_units).toBeLessThanOrEqual(2_000_000);
-  expect(row.rounded.output.vertices.length).toBeLessThanOrEqual(256);
-  expect(row.rounded.output.indices.length / 3).toBeLessThanOrEqual(256);
-}
-
 function runEmitter(source: string, directoryPrefix: string) {
   const rustup = process.env.P2_NATIVE_RUSTUP;
   if (!rustup) throw new Error('Run pnpm test:geometry to select the pinned native toolchain.');
@@ -339,7 +155,7 @@ describe('P3.2t explicit private transverse cubic composition', () => {
     '$id:$rule preserves source, transverse proof, ownership, and full mesh',
     (fixture) => {
       const row = nativeRows[fixtureRows.indexOf(fixture)]!;
-      expect(() => assertCarrier(fixture, row)).not.toThrow();
+      expect(() => assertNativeTransverseCubicCarrier(fixture, row)).not.toThrow();
     },
   );
 

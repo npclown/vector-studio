@@ -66,9 +66,10 @@ function counter(value: unknown, label: string, maximum: number): number {
   return value as number;
 }
 
-export function parseNativeTransverseCubicValue(
+export function parseNativeTransverseCubicValueWithStats(
   value: unknown,
   index: number,
+  expectedStats: Readonly<{ leaves: number; pairs: number }>,
 ): NativeTransverseCubicRow {
   const label = `row ${index}`;
   const item = record(value, label, ['carrier', 'topology']);
@@ -122,11 +123,19 @@ export function parseNativeTransverseCubicValue(
   const stats = record(topology.stats, `${label}.topology.stats`, ['leaves', 'pairs']);
   const leaves = counter(stats.leaves, `${label}.topology.stats.leaves`, 64);
   const pairs = counter(stats.pairs, `${label}.topology.stats.pairs`, 2016);
-  if (leaves !== 8 || pairs !== 28) throw new Error(`${label}.topology stats mismatch`);
+  if (leaves !== expectedStats.leaves || pairs !== expectedStats.pairs)
+    throw new Error(`${label}.topology stats mismatch`);
   return {
     carrier: parseNativeCubicValue(item.carrier, index),
     topology: { ...parsed, stats: { leaves, pairs } },
   };
+}
+
+export function parseNativeTransverseCubicValue(
+  value: unknown,
+  index: number,
+): NativeTransverseCubicRow {
+  return parseNativeTransverseCubicValueWithStats(value, index, { leaves: 8, pairs: 28 });
 }
 
 export function parseNativeTransverseCubicRow(

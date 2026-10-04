@@ -12,6 +12,11 @@ export type NativeTransverseCubicFixtureRow = NativeCubicSourceFixtureRow &
   Readonly<{
     expectedPolygons: readonly (readonly Point[])[];
     expectedCrossings: readonly TransverseArrangementCrossingFixture[];
+    expectedCrossingNodes: readonly Point[];
+    expectedLeafPartitions: readonly (readonly number[])[];
+    expectedTopology: Readonly<{ leaves: number; pairs: number }>;
+    expectedVisits: number;
+    expectedCommandCount: number;
     expectedArea: number;
   }>;
 
@@ -64,6 +69,11 @@ function rows(
   cubics: readonly (readonly Cubic[])[],
   expectedPolygons: readonly (readonly Point[])[],
   expectedCrossings: readonly TransverseArrangementCrossingFixture[],
+  expectedCrossingNodes: readonly Point[],
+  expectedLeafPartitions: readonly (readonly number[])[],
+  expectedTopology: Readonly<{ leaves: number; pairs: number }>,
+  expectedVisits: number,
+  expectedCommandCount: number,
   areas: Readonly<Record<NativeCubicRule, number>>,
 ): readonly NativeTransverseCubicFixtureRow[] {
   const contours = nativeCubicSourceContours(cubics);
@@ -76,6 +86,11 @@ function rows(
     sourceBits,
     expectedPolygons,
     expectedCrossings,
+    expectedCrossingNodes,
+    expectedLeafPartitions,
+    expectedTopology,
+    expectedVisits,
+    expectedCommandCount,
     expectedArea: areas[rule],
   }));
 }
@@ -88,6 +103,11 @@ export function fixedNativeTransverseCubicFixtureRows(): readonly NativeTransver
       [closedCubics(B)],
       [B],
       [{ leftLeaf: 0, rightLeaf: 4, orientation: -1 }],
+      [[0, 0]],
+      [[1, 1, 1, 1, 1, 1, 1, 1]],
+      { leaves: 8, pairs: 28 },
+      8,
+      10,
       { nonzero: 36, evenodd: 36 },
     ),
     ...rows(
@@ -95,6 +115,11 @@ export function fixedNativeTransverseCubicFixtureRows(): readonly NativeTransver
       [openCubics(R)],
       [R],
       [{ leftLeaf: 3, rightLeaf: 7, orientation: 1 }],
+      [[0, 0]],
+      [[1, 1, 1, 1, 1, 1, 1]],
+      { leaves: 8, pairs: 28 },
+      7,
+      8,
       { nonzero: 36, evenodd: 36 },
     ),
     ...rows(
@@ -105,6 +130,17 @@ export function fixedNativeTransverseCubicFixtureRows(): readonly NativeTransver
         { leftLeaf: 0, rightLeaf: 7, orientation: -1 },
         { leftLeaf: 1, rightLeaf: 6, orientation: 1 },
       ],
+      [
+        [3, 0],
+        [6, 3],
+      ],
+      [
+        [1, 1, 1, 1],
+        [1, 1, 1, 1],
+      ],
+      { leaves: 8, pairs: 28 },
+      8,
+      12,
       { nonzero: 63, evenodd: 54 },
     ),
   ];

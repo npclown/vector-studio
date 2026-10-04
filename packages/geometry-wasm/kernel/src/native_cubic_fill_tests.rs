@@ -27,6 +27,7 @@ use crate::simple_cubic_topology::{
 const INPUT_LIMIT_BYTES: usize = 512 * 1024;
 const EXPECTED_ROWS: usize = 94;
 const TRANSVERSE_ROWS: usize = 6;
+const NONLINEAR_TRANSVERSE_ROWS: usize = 8;
 const FLATTEN_TOLERANCE: f64 = 0.125;
 const TOPOLOGY_TOLERANCE: f64 = 0.0625;
 const MAX_CONTOURS: usize = 4;
@@ -1068,25 +1069,230 @@ fn emit_rounded_native_cubic_fill() {
 #[test]
 #[ignore]
 fn emit_transverse_native_cubic_fill() {
-    let rows = load_fixture_from_env("P3_NATIVE_TRANSVERSE_CUBIC_INPUT", TRANSVERSE_ROWS);
     let expected = [
-        ("composition/bowtie", LineFillRule::Nonzero, 8, 1, 10, 36.0),
-        ("composition/bowtie", LineFillRule::Evenodd, 8, 1, 10, 36.0),
-        ("composition/closure", LineFillRule::Nonzero, 7, 1, 8, 36.0),
-        ("composition/closure", LineFillRule::Evenodd, 7, 1, 8, 36.0),
-        ("composition/squares", LineFillRule::Nonzero, 8, 2, 12, 63.0),
-        ("composition/squares", LineFillRule::Evenodd, 8, 2, 12, 54.0),
+        TransverseExpectation {
+            id: "composition/bowtie",
+            rule: LineFillRule::Nonzero,
+            source_count: 8,
+            contour_count: 1,
+            command_count: 10,
+            emitted_lines: 8,
+            visits: 8,
+            leaves: 8,
+            pairs: 28,
+            area: 36.0,
+        },
+        TransverseExpectation {
+            id: "composition/bowtie",
+            rule: LineFillRule::Evenodd,
+            source_count: 8,
+            contour_count: 1,
+            command_count: 10,
+            emitted_lines: 8,
+            visits: 8,
+            leaves: 8,
+            pairs: 28,
+            area: 36.0,
+        },
+        TransverseExpectation {
+            id: "composition/closure",
+            rule: LineFillRule::Nonzero,
+            source_count: 7,
+            contour_count: 1,
+            command_count: 8,
+            emitted_lines: 7,
+            visits: 7,
+            leaves: 8,
+            pairs: 28,
+            area: 36.0,
+        },
+        TransverseExpectation {
+            id: "composition/closure",
+            rule: LineFillRule::Evenodd,
+            source_count: 7,
+            contour_count: 1,
+            command_count: 8,
+            emitted_lines: 7,
+            visits: 7,
+            leaves: 8,
+            pairs: 28,
+            area: 36.0,
+        },
+        TransverseExpectation {
+            id: "composition/squares",
+            rule: LineFillRule::Nonzero,
+            source_count: 8,
+            contour_count: 2,
+            command_count: 12,
+            emitted_lines: 8,
+            visits: 8,
+            leaves: 8,
+            pairs: 28,
+            area: 63.0,
+        },
+        TransverseExpectation {
+            id: "composition/squares",
+            rule: LineFillRule::Evenodd,
+            source_count: 8,
+            contour_count: 2,
+            command_count: 12,
+            emitted_lines: 8,
+            visits: 8,
+            leaves: 8,
+            pairs: 28,
+            area: 54.0,
+        },
     ];
+    emit_transverse_rows(
+        "P3_NATIVE_TRANSVERSE_CUBIC_INPUT",
+        TRANSVERSE_ROWS,
+        "P3_NATIVE_TRANSVERSE_CUBIC_BEGIN",
+        "P3_NATIVE_TRANSVERSE_CUBIC_END",
+        &expected,
+    );
+}
+
+#[test]
+#[ignore]
+fn emit_nonlinear_transverse_native_cubic_fill() {
+    let expected = [
+        TransverseExpectation {
+            id: "nonlinear/bowtie",
+            rule: LineFillRule::Nonzero,
+            source_count: 8,
+            contour_count: 1,
+            command_count: 10,
+            emitted_lines: 8,
+            visits: 8,
+            leaves: 8,
+            pairs: 28,
+            area: 36.0,
+        },
+        TransverseExpectation {
+            id: "nonlinear/bowtie",
+            rule: LineFillRule::Evenodd,
+            source_count: 8,
+            contour_count: 1,
+            command_count: 10,
+            emitted_lines: 8,
+            visits: 8,
+            leaves: 8,
+            pairs: 28,
+            area: 36.0,
+        },
+        TransverseExpectation {
+            id: "nonlinear/closure",
+            rule: LineFillRule::Nonzero,
+            source_count: 7,
+            contour_count: 1,
+            command_count: 8,
+            emitted_lines: 7,
+            visits: 7,
+            leaves: 8,
+            pairs: 28,
+            area: 36.0,
+        },
+        TransverseExpectation {
+            id: "nonlinear/closure",
+            rule: LineFillRule::Evenodd,
+            source_count: 7,
+            contour_count: 1,
+            command_count: 8,
+            emitted_lines: 7,
+            visits: 7,
+            leaves: 8,
+            pairs: 28,
+            area: 36.0,
+        },
+        TransverseExpectation {
+            id: "nonlinear/reflected",
+            rule: LineFillRule::Nonzero,
+            source_count: 8,
+            contour_count: 1,
+            command_count: 10,
+            emitted_lines: 8,
+            visits: 8,
+            leaves: 8,
+            pairs: 28,
+            area: 9.0,
+        },
+        TransverseExpectation {
+            id: "nonlinear/reflected",
+            rule: LineFillRule::Evenodd,
+            source_count: 8,
+            contour_count: 1,
+            command_count: 10,
+            emitted_lines: 8,
+            visits: 8,
+            leaves: 8,
+            pairs: 28,
+            area: 9.0,
+        },
+        TransverseExpectation {
+            id: "nonlinear/subdivided",
+            rule: LineFillRule::Nonzero,
+            source_count: 8,
+            contour_count: 1,
+            command_count: 11,
+            emitted_lines: 9,
+            visits: 10,
+            leaves: 9,
+            pairs: 36,
+            area: 585.0 / 16.0,
+        },
+        TransverseExpectation {
+            id: "nonlinear/subdivided",
+            rule: LineFillRule::Evenodd,
+            source_count: 8,
+            contour_count: 1,
+            command_count: 11,
+            emitted_lines: 9,
+            visits: 10,
+            leaves: 9,
+            pairs: 36,
+            area: 585.0 / 16.0,
+        },
+    ];
+    emit_transverse_rows(
+        "P3_NATIVE_NONLINEAR_TRANSVERSE_CUBIC_INPUT",
+        NONLINEAR_TRANSVERSE_ROWS,
+        "P3_NATIVE_NONLINEAR_TRANSVERSE_CUBIC_BEGIN",
+        "P3_NATIVE_NONLINEAR_TRANSVERSE_CUBIC_END",
+        &expected,
+    );
+}
+
+#[derive(Clone, Copy)]
+struct TransverseExpectation {
+    id: &'static str,
+    rule: LineFillRule,
+    source_count: usize,
+    contour_count: usize,
+    command_count: usize,
+    emitted_lines: usize,
+    visits: usize,
+    leaves: usize,
+    pairs: usize,
+    area: f64,
+}
+
+fn emit_transverse_rows(
+    environment: &str,
+    row_count: usize,
+    begin_marker: &str,
+    end_marker: &str,
+    expected: &[TransverseExpectation],
+) {
+    let rows = load_fixture_from_env(environment, row_count);
+    assert_eq!(rows.len(), expected.len());
     let mut workspace = BridgeWorkspace::new(LIMITS).expect("construct transverse cubic workspace");
     let allocated_bytes = workspace.allocated_bytes();
     let inline_bytes = size_of::<BridgeWorkspace>();
     assert!(inline_bytes < 64 * 1024);
-    println!("P3_NATIVE_TRANSVERSE_CUBIC_BEGIN");
-    for (row, (expected_id, expected_rule, source_count, contour_count, command_count, area)) in
-        rows.iter().zip(expected)
-    {
-        assert_eq!(row.id, expected_id);
-        assert_eq!(row.rule, expected_rule, "{}", row.id);
+    println!("{begin_marker}");
+    for (row, expectation) in rows.iter().zip(expected) {
+        assert_eq!(row.id, expectation.id);
+        assert_eq!(row.rule, expectation.rule, "{}", row.id);
         assert_eq!(row.expectation, ExpectedStatus::Ok, "{}", row.id);
         let alternate = prepare_toggled_path(row);
         assert_eq!(alternate.point_bytes, row.point_bytes, "{}", row.id);
@@ -1101,23 +1307,64 @@ fn emit_transverse_native_cubic_fill() {
         let alternate_allocations = crate::allocation_test_support::stop();
         let alternate_diagnostics = alternate_attempt
             .unwrap_or_else(|error| panic!("{} alternate failed: {error:?}", row.id));
-        assert_transverse_route(row, alternate_diagnostics, workspace.topology_stats());
+        assert_transverse_route(
+            row,
+            alternate_diagnostics,
+            workspace.topology_stats(),
+            expectation,
+        );
+        assert_eq!(
+            alternate_diagnostics.statistics.logical_cubics as usize,
+            expectation.source_count
+        );
+        assert_eq!(
+            alternate_diagnostics.statistics.sizing_visits as usize,
+            expectation.visits
+        );
+        assert_eq!(
+            alternate_diagnostics.statistics.emission_visits as usize,
+            expectation.visits
+        );
+        assert_eq!(
+            alternate_diagnostics.statistics.emitted_cubic_lines as usize,
+            expectation.emitted_lines
+        );
         let alternate_output = workspace.output().expect("successful alternate output");
         assert_decoded_sources(row, &alternate.verbs, alternate_output);
         assert_input_owners(row, &alternate.verbs, alternate_output);
-        assert_eq!(alternate_output.sources.len(), source_count, "{}", row.id);
-        assert_eq!(alternate_output.ranges.len(), contour_count, "{}", row.id);
-        assert_eq!(alternate_output.points.len(), 8, "{}", row.id);
-        assert_eq!(alternate_output.owners.len(), 8, "{}", row.id);
+        assert_eq!(
+            alternate_output.sources.len(),
+            expectation.source_count,
+            "{}",
+            row.id
+        );
+        assert_eq!(
+            alternate_output.ranges.len(),
+            expectation.contour_count,
+            "{}",
+            row.id
+        );
+        assert_eq!(
+            alternate_output.points.len(),
+            expectation.leaves,
+            "{}",
+            row.id
+        );
+        assert_eq!(
+            alternate_output.owners.len(),
+            expectation.leaves,
+            "{}",
+            row.id
+        );
         assert_eq!(
             alternate_output.commands.len(),
-            alternate.verbs.len(),
+            alternate.verbs.len() + expectation.emitted_lines - expectation.source_count,
             "{}",
             row.id
         );
         assert_eq!(
             adoption_mesh_area(alternate_output.rounded),
-            area,
+            expectation.area,
             "{}",
             row.id
         );
@@ -1135,21 +1382,42 @@ fn emit_transverse_native_cubic_fill() {
         let allocations = crate::allocation_test_support::stop();
         let diagnostics = attempt.unwrap_or_else(|error| panic!("{} failed: {error:?}", row.id));
         let stats = workspace.topology_stats();
-        assert_transverse_route(row, diagnostics, stats);
+        assert_transverse_route(row, diagnostics, stats, expectation);
         let output = workspace.output().expect("successful transverse output");
         assert_decoded_sources(row, &row.verbs, output);
         assert_input_owners(row, &row.verbs, output);
-        assert_eq!(output.sources.len(), source_count, "{}", row.id);
-        assert_eq!(output.ranges.len(), contour_count, "{}", row.id);
-        assert_eq!(output.points.len(), 8, "{}", row.id);
-        assert_eq!(output.owners.len(), 8, "{}", row.id);
-        assert_eq!(output.commands.len(), command_count, "{}", row.id);
-        assert_eq!(diagnostics.statistics.logical_cubics as usize, source_count);
+        assert_eq!(output.sources.len(), expectation.source_count, "{}", row.id);
+        assert_eq!(output.ranges.len(), expectation.contour_count, "{}", row.id);
+        assert_eq!(output.points.len(), expectation.leaves, "{}", row.id);
+        assert_eq!(output.owners.len(), expectation.leaves, "{}", row.id);
+        assert_eq!(
+            output.commands.len(),
+            expectation.command_count,
+            "{}",
+            row.id
+        );
+        assert_eq!(
+            diagnostics.statistics.logical_cubics as usize,
+            expectation.source_count
+        );
+        assert_eq!(
+            diagnostics.statistics.sizing_visits as usize,
+            expectation.visits
+        );
+        assert_eq!(
+            diagnostics.statistics.emission_visits as usize,
+            expectation.visits
+        );
         assert_eq!(
             diagnostics.statistics.emitted_cubic_lines as usize,
-            source_count
+            expectation.emitted_lines
         );
-        assert_eq!(adoption_mesh_area(output.rounded), area, "{}", row.id);
+        assert_eq!(
+            adoption_mesh_area(output.rounded),
+            expectation.area,
+            "{}",
+            row.id
+        );
         assert_eq!(snapshot(output), alternate_snapshot, "{}", row.id);
         assert_eq!(allocations, 0, "{} allocated", row.id);
         assert_eq!(workspace.allocated_bytes(), allocated_bytes);
@@ -1181,13 +1449,14 @@ fn emit_transverse_native_cubic_fill() {
             stats.leaves, stats.pairs
         );
     }
-    println!("P3_NATIVE_TRANSVERSE_CUBIC_END");
+    println!("{end_marker}");
 }
 
 fn assert_transverse_route(
     row: &SourceRow,
     diagnostics: AttemptDiagnostics,
     stats: crate::simple_cubic_topology::TopologyStats,
+    expectation: &TransverseExpectation,
 ) {
     assert_eq!(diagnostics.flat_status, PATH_OK, "{}", row.id);
     assert!(diagnostics.topology_invoked, "{}", row.id);
@@ -1198,8 +1467,8 @@ fn assert_transverse_route(
     assert!(diagnostics.transverse_topology_selected, "{}", row.id);
     assert_eq!(diagnostics.transverse_topology_error, None, "{}", row.id);
     assert!(diagnostics.rounded_invoked, "{}", row.id);
-    assert_eq!(stats.leaves, 8, "{}", row.id);
-    assert_eq!(stats.pairs, 28, "{}", row.id);
+    assert_eq!(stats.leaves, expectation.leaves, "{}", row.id);
+    assert_eq!(stats.pairs, expectation.pairs, "{}", row.id);
 }
 
 fn assert_transverse_skipped(row: &SourceRow, diagnostics: AttemptDiagnostics) {
