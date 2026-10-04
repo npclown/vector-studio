@@ -1,6 +1,14 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.2z local validation and final Primary/independent evidence review pass; protected CI/integration remain required. P3.2y integrated through [PR #92](https://github.com/npclown/vector-studio/pull/92). Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.2z integrated through [PR #93](https://github.com/npclown/vector-studio/pull/93). P3.1j local implementation, validation and final Primary/independent review pass; protected integration remains pending. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.1j conforming mesh refinement oracle
+
+Base clean updated `633f8af7f45ec02d765062572000e509d78af36e`, after Z PR #93 and required CI run37235794184/job111534504909 PASS on `80fcc0dad981c84ae4dc0310035708bffb87a33b`, completed2026-10-05 06:26:05KST. Branch `codex/p3-1j-conforming-mesh-oracle`. The [prospective contract](p3-conforming-mesh-oracle-contract.md) addresses the actual hanging-node contact in the existing slab mesh without coordinate movement or runtime changes. Independent source review found that positive triangle signs and vertex error alone cannot establish projection conformity. A separate affine precision counterexample also prevents relabeling P1's looser proof as P3's1/16 share. Conformity refinement is the next prerequisite; mesh-local origin/split representation, GPU proof, capacities and public transport remain separate. Do not freeze ordinary projection success from existing carrier equality.
+
+P3.1j J01 freeze PASS: Primary/Astra high, Sol high preflight and Sol medium retained-source inventory agree before implementation. All12 W/Y/Z carriers meet input preconditions; source-derived output counts and exact work controls are pinned. The [review record](../evidence/p3.1j-conforming-mesh-oracle-review-2026-10-05.md) preserves the analytic findings and evidence limits. Independent candidate/verifier source review precedes numerical dispatch.
+
+J02-J04 local PASS after Primary/Astra stable-source clearance:16 targeted tests,204 native tests,486 geometry tests and550 root units, all static/boundary checks and build. Seven analytic and12 independent W/Y/Z carriers preserve exact coordinates/region and pass independent conformity verification; all frozen corruption, ownership and inclusive cap controls pass. No runtime changes or numerical expectation adjustments occurred. Independent release WASM identity remains unchanged. Final evidence review and protected CI/integration remain required. Next proposed private prerequisite is a mesh-local-origin precision experiment covering the full storage/shader/projection share; it does not choose an ABI or establish GPU coverage.
 
 ## P3.2z depth-positive triangle-free composition
 
