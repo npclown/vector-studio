@@ -1,6 +1,14 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.1i triangle-free arrangement oracle passes local validation and final Primary/independent evidence review; protected CI/integration remain required. P3.2w is integrated through [PR #89](https://github.com/npclown/vector-studio/pull/89), including the user-approved P2 bounds-expectation correction with preserved initial failure evidence. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.2x private triangle-free arrangement helper passes local validation and final Primary/independent evidence review; protected CI/integration remain required. P3.1i is integrated through [PR #90](https://github.com/npclown/vector-studio/pull/90). Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.2x native triangle-free arrangement helper
+
+Base clean updated `a8602b4a0c43ce154f15c372139e68ea4bb5dc94`, after P3.1i PR #90 and required CI run37229266685/job111515290168 PASS on `fa3bb52e17c7e01aaa0003eb71d11f5f545d3108`. Branch `codex/p3-2x-native-triangle-free-arrangement`. The frozen [contract](p3-native-triangle-free-arrangement-contract.md) reuses the integrated I theorem and existing mixed native workspace, retaining32 crossing records, original modes, resources and input/output schemas. The [review record](../evidence/p3.2x-native-triangle-free-arrangement-review-2026-10-05.md) tracks proof/source/evidence. X01 full contract freeze preceded implementation; stable-source review preceded numerical dispatch. Canonical adoption, public mesh/coverage, capacity changes and deferred stroke remain separate.
+
+X01 contract freeze PASS: Primary, Astra high and Sol medium reviewed proof, unchanged resource ownership,42-row corpus, parser policy and error precedence. Before implementation, the fixed119-pair lifecycle, inherited stationary-cubic regression, new WorkLimit type, exact shared encoder and stage-specific corruption checks were clarified. X02-X03 implementation followed stabilized Primary-owned shared seams; Primary/Astra stable-source/hash/scratch clearance preceded X04 numerical dispatch.
+
+X02-X04 local PASS:198 native tests/14 ignored emitters and448 geometry tests/16 files pass, including all42 new carrier rows with39 Certified/2 Unresolved/1 WorkLimit. Every row has0 attempt allocations and unchanged224256 heap/2512 inline bytes. Full bounded root check passes550 units/53 files plus static/boundary checks; build passes43 modules. Independent release WASM identity is unchanged. Old modes and all prior corpora remain passing. Final Primary/Astra evidence review, explicit Markdown/812-link checks and11-file diff review PASS. Protected CI remains required; canonical composition adoption is the next separately contracted dependency.
 
 ## P3.1i triangle-free transverse arrangement oracle
 

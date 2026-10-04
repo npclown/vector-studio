@@ -288,14 +288,20 @@ pub(crate) struct RoundedKnotCubicTopologyWorkspace {
 }
 
 pub(crate) struct TransverseArrangementWorkspace {
-    // The sole heap owner is rounded. The additional inline matching storage is 64 usize partner
-    // slots, 32 bounded crossing records, one length, and one publication flag; the native unit
-    // freezes the complete wrapper at no more than 4 KiB.
+    // The sole heap owner is rounded. The additional inline arrangement storage is 64 usize
+    // matching-partner slots, 32 bounded crossing records, one length, and one publication flag;
+    // the native unit freezes the complete wrapper at no more than 4 KiB.
     rounded: RoundedKnotCubicTopologyWorkspace,
     partners: [usize; ABSOLUTE_MAX_LEAVES],
     crossings: [ArrangementCrossing; ABSOLUTE_MAX_LEAVES / 2],
     crossing_len: usize,
     published: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ArrangementPolicy {
+    Matching,
+    TriangleFree,
 }
 
 impl SimpleCubicTopologyWorkspace {
@@ -799,6 +805,23 @@ impl TransverseArrangementWorkspace {
         input: TopologyInput<'_>,
         source_kinds: &[bool],
     ) -> Result<(), TopologyError> {
+        self.certify_mixed_with_policy(input, source_kinds, ArrangementPolicy::Matching)
+    }
+
+    pub(crate) fn certify_triangle_free(
+        &mut self,
+        input: TopologyInput<'_>,
+        source_kinds: &[bool],
+    ) -> Result<(), TopologyError> {
+        self.certify_mixed_with_policy(input, source_kinds, ArrangementPolicy::TriangleFree)
+    }
+
+    fn certify_mixed_with_policy(
+        &mut self,
+        input: TopologyInput<'_>,
+        source_kinds: &[bool],
+        policy: ArrangementPolicy,
+    ) -> Result<(), TopologyError> {
         self.begin_attempt();
         self.rounded.prepare_preflight(input)?;
         validate_mixed_source_kinds(input, source_kinds)?;
@@ -806,7 +829,8 @@ impl TransverseArrangementWorkspace {
 
         // This attempt-local map retains no source sidecar or leaf record. Source leaves occupy
         // the prefix of each prepared contour in packed source order; any following closure slot
-        // remains false. The 64 booleans plus scalar indices keep this helper well below 32 KiB.
+        // remains false. A conservative 1 KiB covers the 64 booleans, borrowed input slice pairs,
+        // policy/result values, range iterators, and scalar indices in this nonrecursive helper.
         let mut marked_lines = [false; ABSOLUTE_MAX_LEAVES];
         for (contour_index, source_range) in input.contours.iter().copied().enumerate() {
             let mut retained_index = self.rounded.contours[contour_index].start;
@@ -819,7 +843,7 @@ impl TransverseArrangementWorkspace {
             }
         }
 
-        self.validate_pairs_with_kinds(Some(&marked_lines))?;
+        self.validate_pairs_with_kinds(Some(&marked_lines), policy)?;
         self.rounded.copy_actual_starts();
         self.published = true;
         Ok(())
@@ -848,16 +872,19 @@ impl TransverseArrangementWorkspace {
     }
 
     fn validate_pairs(&mut self) -> Result<(), TopologyError> {
-        self.validate_pairs_with_kinds(None)
+        self.validate_pairs_with_kinds(None, ArrangementPolicy::Matching)
     }
 
     fn validate_pairs_with_kinds(
         &mut self,
         marked_lines: Option<&[bool; ABSOLUTE_MAX_LEAVES]>,
+        policy: ArrangementPolicy,
     ) -> Result<(), TopologyError> {
         // Pair inspection borrows both retained records. Its largest exact scratch is the shared
         // transverse-orientation envelope above; no RoundedExactLeaf or six-point array is copied.
-        // Optional marked-LINE state adds one borrowed 64-boolean array and scalar flags.
+        // Optional marked-LINE state adds one borrowed 64-boolean array and scalar flags. The
+        // triangle-free scan borrows the at-most-32-record prefix and uses two record references,
+        // one witness index, and booleans; it neither copies the array nor allocates graph storage.
         for left_index in 0..self.rounded.exact_leaves.len() {
             for right_index in (left_index + 1)..self.rounded.exact_leaves.len() {
                 if self.rounded.stats.pairs == self.rounded.limits.max_pairs {
@@ -899,17 +926,33 @@ impl TransverseArrangementWorkspace {
                 let Some(orientation) = orientation else {
                     continue;
                 };
-                if self.partners[left_index] != usize::MAX {
-                    return Err(TopologyError::Unresolved);
+                match policy {
+                    ArrangementPolicy::Matching => {
+                        if self.partners[left_index] != usize::MAX {
+                            return Err(TopologyError::Unresolved);
+                        }
+                        if self.partners[right_index] != usize::MAX {
+                            return Err(TopologyError::Unresolved);
+                        }
+                        if self.crossing_len == self.crossings.len() {
+                            return Err(TopologyError::WorkLimit);
+                        }
+                        self.partners[left_index] = right_index;
+                        self.partners[right_index] = left_index;
+                    }
+                    ArrangementPolicy::TriangleFree => {
+                        if closes_crossing_triangle(
+                            &self.crossings[..self.crossing_len],
+                            left_index,
+                            right_index,
+                        ) {
+                            return Err(TopologyError::Unresolved);
+                        }
+                        if self.crossing_len == self.crossings.len() {
+                            return Err(TopologyError::WorkLimit);
+                        }
+                    }
                 }
-                if self.partners[right_index] != usize::MAX {
-                    return Err(TopologyError::Unresolved);
-                }
-                if self.crossing_len == self.crossings.len() {
-                    return Err(TopologyError::WorkLimit);
-                }
-                self.partners[left_index] = right_index;
-                self.partners[right_index] = left_index;
                 self.crossings[self.crossing_len] = ArrangementCrossing {
                     left_leaf: left_index,
                     right_leaf: right_index,
@@ -920,6 +963,35 @@ impl TransverseArrangementWorkspace {
         }
         Ok(())
     }
+}
+
+fn closes_crossing_triangle(
+    crossings: &[ArrangementCrossing],
+    left_leaf: usize,
+    right_leaf: usize,
+) -> bool {
+    // This nonrecursive graph scan borrows the at-most-32-record prefix. Two iterator states,
+    // crossing references, one optional witness index, arguments, and booleans stay below 1 KiB;
+    // no crossing array or retained record is copied.
+    for left_crossing in crossings {
+        let witness = if left_crossing.left_leaf == left_leaf {
+            Some(left_crossing.right_leaf)
+        } else if left_crossing.right_leaf == left_leaf {
+            Some(left_crossing.left_leaf)
+        } else {
+            None
+        };
+        let Some(witness) = witness else {
+            continue;
+        };
+        if crossings.iter().any(|right_crossing| {
+            (right_crossing.left_leaf == right_leaf && right_crossing.right_leaf == witness)
+                || (right_crossing.right_leaf == right_leaf && right_crossing.left_leaf == witness)
+        }) {
+            return true;
+        }
+    }
+    false
 }
 
 fn validate_limits(limits: TopologyLimits) -> Result<(), TopologyError> {

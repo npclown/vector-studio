@@ -52,6 +52,8 @@ mod simple_cubic_topology_tests;
 mod transverse_arrangement_tests;
 #[cfg(test)]
 mod transverse_pair_tests;
+#[cfg(test)]
+mod triangle_free_arrangement_tests;
 
 #[cfg(target_arch = "wasm32")]
 use core::cell::UnsafeCell;

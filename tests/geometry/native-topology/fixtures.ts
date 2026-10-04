@@ -67,6 +67,26 @@ export function topologyInputTokens(
   return result;
 }
 
+/** Adds the existing required-kind sidecar without changing the source-token grammar. */
+export function topologyInputTokensWithKinds(
+  id: string,
+  contours: readonly (readonly CubicTopologySegmentFixture[])[],
+  sourceKinds: readonly boolean[],
+): readonly string[] {
+  const count = contours.reduce((total, contour) => total + contour.length, 0);
+  if (sourceKinds.length !== count)
+    throw new Error(`${id} source-kind count ${sourceKinds.length} differs from ${count} sources`);
+  const tokens = topologyInputTokens(id, contours);
+  if (tokens.at(-1) !== 'end') throw new Error(`${id} topology tokens lack the final end marker`);
+  return [
+    ...tokens.slice(0, -1),
+    'kinds',
+    String(count),
+    ...sourceKinds.map((kind) => (kind ? '1' : '0')),
+    'end',
+  ];
+}
+
 /** Builds the frozen 47-success plus seven-Unresolved transported corpus. */
 export function fixedNativeTopologyFixtureRows(): readonly NativeTopologyFixtureRow[] {
   const successes = fixedSimpleCubicTopologyFixtures();
