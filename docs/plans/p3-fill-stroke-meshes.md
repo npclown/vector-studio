@@ -1,6 +1,12 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.1j integrated through [PR #94](https://github.com/npclown/vector-studio/pull/94). P3.1k test-only mesh-local projection experiment passes local validation and final evidence review; protected CI/integration remain required. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l L00 prepares native vertex projection readiness; its executable contract remains unfrozen. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.1l native vertex projection readiness
+
+Base clean updated `f7c5e6344c916f5db4b10d13209231035d189d11`, after K PR #95 and required CI run37241162224/job111550000719 PASS on `8e86d92e9195fd922c49c0808dd92842e416d1b1`, completed2026-10-05 07:48:49KST. Branch `codex/p3-1l-native-projection-readiness`. The [readiness note](p3-native-projection-readiness.md) selects the next instrumented vertex/readback question and records exact prerequisites before runner implementation. This documentation-only checkpoint retains all158 K mesh inputs as prospective native observations; K's numeric dispositions do not transfer automatically. No GPU dispatch, new native threshold or runtime/API/ABI selection occurs.
+
+L00 local PASS: Primary inspected the P1 probe/configuration/evidence seams and pinned WGSL numeric rules; Sol medium independently inventoried reusable infrastructure and Astra high reviewed the complete written readiness note. No recursive delegation. Review explicitly rejected inheriting K's thin-control outcome as a native requirement and retained raw clip-bit/provenance obligations instead of P1's already converted coordinates. Explicit changed-Markdown Prettier,861 local links/anchors across176 Markdown files, whitespace and two-file scope review PASS. Local product/unit/build/native/browser/GPU/benchmark commands NOT RUN for this documentation-only checkpoint. Required remote CI/protected integration remain pending; L01-L06 contract work follows, then separately gated implementation and observations. User's3% remaining finish-and-stop rule remains active.
 
 ## P3.1k mesh-local projection precision experiment
 
