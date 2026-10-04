@@ -39,6 +39,8 @@ mod fill_predicates_tests;
 #[cfg(test)]
 mod line_fill_tests;
 #[cfg(test)]
+mod mixed_line_arrangement_tests;
+#[cfg(test)]
 mod native_cubic_fill_tests;
 #[cfg(test)]
 mod rounded_cubic_topology_tests;
