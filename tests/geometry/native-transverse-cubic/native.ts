@@ -73,7 +73,20 @@ export function parseNativeTransverseCubicValueWithStats(
 ): NativeTransverseCubicRow {
   const label = `row ${index}`;
   const item = record(value, label, ['carrier', 'topology']);
-  const topology = record(item.topology, `${label}.topology`, [
+  const topology = parseNativeTransverseCubicTopology(item.topology, index, expectedStats);
+  return {
+    carrier: parseNativeCubicValue(item.carrier, index),
+    topology,
+  };
+}
+
+export function parseNativeTransverseCubicTopology(
+  value: unknown,
+  index: number,
+  expectedStats: Readonly<{ leaves: number; pairs: number }>,
+): NativeTransverseCubicTopology {
+  const label = `row ${index}`;
+  const topology = record(value, `${label}.topology`, [
     'topology_invoked',
     'rounded_topology_invoked',
     'rounded_topology_selected',
@@ -125,10 +138,7 @@ export function parseNativeTransverseCubicValueWithStats(
   const pairs = counter(stats.pairs, `${label}.topology.stats.pairs`, 2016);
   if (leaves !== expectedStats.leaves || pairs !== expectedStats.pairs)
     throw new Error(`${label}.topology stats mismatch`);
-  return {
-    carrier: parseNativeCubicValue(item.carrier, index),
-    topology: { ...parsed, stats: { leaves, pairs } },
-  };
+  return { ...parsed, stats: { leaves, pairs } };
 }
 
 export function parseNativeTransverseCubicValue(

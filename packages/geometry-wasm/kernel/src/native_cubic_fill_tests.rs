@@ -21,13 +21,14 @@ use crate::rounded_line_fill::{
 use crate::rounded_line_fill_tests::{print_output, print_points, print_stats};
 use crate::simple_cubic_topology::{
     RoundedKnotCubicTopologyWorkspace, SimpleCubicTopologyWorkspace, TopologyError, TopologyLimits,
-    TransverseArrangementWorkspace,
+    TopologyStats, TransverseArrangementWorkspace,
 };
 
 const INPUT_LIMIT_BYTES: usize = 512 * 1024;
 const EXPECTED_ROWS: usize = 94;
 const TRANSVERSE_ROWS: usize = 6;
 const NONLINEAR_TRANSVERSE_ROWS: usize = 8;
+const MIXED_TRANSVERSE_ROWS: usize = 4;
 const FLATTEN_TOLERANCE: f64 = 0.125;
 const TOPOLOGY_TOLERANCE: f64 = 0.0625;
 const MAX_CONTOURS: usize = 4;
@@ -76,6 +77,7 @@ struct SourceRow {
     contours: Vec<SourceContour>,
     verbs: Vec<u8>,
     point_bytes: Vec<u8>,
+    source_kinds: Option<Vec<bool>>,
 }
 
 #[derive(Debug)]
@@ -150,11 +152,29 @@ fn same_point(left: Point, right: Point) -> bool {
 }
 
 fn parse_fixture(source: &str, expected_rows: usize) -> Result<Vec<SourceRow>, String> {
+    parse_fixture_mode(source, expected_rows, "# p3-native-cubic-v1", false)
+}
+
+fn parse_mixed_fixture(source: &str) -> Result<Vec<SourceRow>, String> {
+    parse_fixture_mode(
+        source,
+        MIXED_TRANSVERSE_ROWS,
+        "# p3-native-mixed-cubic-v1",
+        true,
+    )
+}
+
+fn parse_fixture_mode(
+    source: &str,
+    expected_rows: usize,
+    expected_header: &str,
+    require_kinds: bool,
+) -> Result<Vec<SourceRow>, String> {
     if source.len() > INPUT_LIMIT_BYTES {
         return Err("fixture exceeds 512 KiB".to_owned());
     }
     let mut lines = source.lines();
-    if lines.next() != Some("# p3-native-cubic-v1") {
+    if lines.next() != Some(expected_header) {
         return Err("invalid fixture header".to_owned());
     }
     let count_header = format!("# rows {expected_rows}");
@@ -169,7 +189,7 @@ fn parse_fixture(source: &str, expected_rows: usize) -> Result<Vec<SourceRow>, S
         if rows.len() >= expected_rows {
             return Err("too many fixture rows".to_owned());
         }
-        rows.push(parse_row(line)?);
+        rows.push(parse_row_mode(line, require_kinds)?);
     }
     if rows.len() != expected_rows {
         return Err(format!(
@@ -181,12 +201,17 @@ fn parse_fixture(source: &str, expected_rows: usize) -> Result<Vec<SourceRow>, S
 }
 
 fn parse_row(line: &str) -> Result<SourceRow, String> {
+    parse_row_mode(line, false)
+}
+
+fn parse_row_mode(line: &str, require_kinds: bool) -> Result<SourceRow, String> {
     let pieces: Vec<&str> = line.split(" | ").collect();
     if pieces.len() < 2 {
         return Err("fixture row requires at least one contour".to_owned());
     }
     let fields: Vec<&str> = pieces[0].split_ascii_whitespace().collect();
-    if fields.len() != 3 || !valid_id(fields[0]) {
+    let expected_fields = if require_kinds { 4 } else { 3 };
+    if fields.len() != expected_fields || !valid_id(fields[0]) {
         return Err("invalid fixture row header".to_owned());
     }
     let rule = match fields[1] {
@@ -199,6 +224,7 @@ fn parse_row(line: &str) -> Result<SourceRow, String> {
         "PATH_NUMERIC_RANGE" => ExpectedStatus::PathNumericRange,
         _ => return Err("invalid fixture expectation".to_owned()),
     };
+    let kind_mask = require_kinds.then(|| fields[3]);
     if pieces.len() - 1 > MAX_CONTOURS {
         return Err("too many contours".to_owned());
     }
@@ -237,7 +263,28 @@ fn parse_row(line: &str) -> Result<SourceRow, String> {
         contours,
         verbs: Vec::new(),
         point_bytes: Vec::new(),
+        source_kinds: None,
     };
+    if let Some(mask) = kind_mask {
+        if mask.len() != cubic_count || !mask.bytes().all(|value| value == b'0' || value == b'1') {
+            return Err("invalid source kind mask".to_owned());
+        }
+        let kinds: Vec<bool> = mask.bytes().map(|value| value == b'1').collect();
+        for (cubic, &kind) in row
+            .contours
+            .iter()
+            .flat_map(|contour| &contour.cubics)
+            .zip(&kinds)
+        {
+            if kind
+                && (!same_point(cubic.points[0], cubic.points[1])
+                    || !same_point(cubic.points[2], cubic.points[3]))
+            {
+                return Err("marked LINE source shape invalid".to_owned());
+            }
+        }
+        row.source_kinds = Some(kinds);
+    }
     prepare_path(&mut row)?;
     Ok(row)
 }
@@ -289,6 +336,7 @@ fn parse_cubic(encoded: &str) -> Result<SourceCubic, String> {
 fn prepare_path(row: &mut SourceRow) -> Result<(), String> {
     let mut verbs = Vec::new();
     let mut point_bytes = Vec::new();
+    let mut source_index = 0usize;
     for contour in &row.contours {
         let first = contour
             .cubics
@@ -298,10 +346,20 @@ fn prepare_path(row: &mut SourceRow) -> Result<(), String> {
         verbs.push(VERB_MOVE);
         push_point_bytes(&mut point_bytes, first);
         for cubic in &contour.cubics {
-            verbs.push(VERB_CUBIC);
-            for point in &cubic.points[1..] {
-                push_point_bytes(&mut point_bytes, *point);
+            if row
+                .source_kinds
+                .as_ref()
+                .is_some_and(|kinds| kinds[source_index])
+            {
+                verbs.push(crate::geometry::VERB_LINE);
+                push_point_bytes(&mut point_bytes, cubic.points[3]);
+            } else {
+                verbs.push(VERB_CUBIC);
+                for point in &cubic.points[1..] {
+                    push_point_bytes(&mut point_bytes, *point);
+                }
             }
+            source_index += 1;
         }
         let last = contour.cubics.last().unwrap().points[3];
         if same_point(first, last) {
@@ -340,6 +398,42 @@ fn prepare_toggled_path(row: &SourceRow) -> PreparedPath {
     PreparedPath { verbs, point_bytes }
 }
 
+fn prepare_mixed_toggled_path(row: &SourceRow) -> PreparedPath {
+    let kinds = row.source_kinds.as_ref().expect("mixed source kinds");
+    let mut verbs = Vec::new();
+    let mut point_bytes = Vec::new();
+    let mut source_index = 0usize;
+    for contour in &row.contours {
+        let first = contour.cubics.first().unwrap().points[0];
+        verbs.push(VERB_MOVE);
+        push_point_bytes(&mut point_bytes, first);
+        for cubic in &contour.cubics {
+            if kinds[source_index] {
+                verbs.push(crate::geometry::VERB_LINE);
+                push_point_bytes(&mut point_bytes, cubic.points[3]);
+            } else {
+                verbs.push(VERB_CUBIC);
+                for point in &cubic.points[1..] {
+                    push_point_bytes(&mut point_bytes, *point);
+                }
+            }
+            source_index += 1;
+        }
+        let last = contour.cubics.last().unwrap().points[3];
+        if !same_point(first, last) {
+            verbs.push(VERB_CLOSE);
+        }
+    }
+    assert_eq!(source_index, kinds.len(), "{} kind alignment", row.id);
+    assert!(verbs.len() <= 24, "{} alternate verb cap", row.id);
+    assert!(
+        point_bytes.len() / 8 <= 104,
+        "{} alternate scalar cap",
+        row.id
+    );
+    PreparedPath { verbs, point_bytes }
+}
+
 fn push_point_bytes(bytes: &mut Vec<u8>, point: Point) {
     bytes.extend_from_slice(&point.x.to_le_bytes());
     bytes.extend_from_slice(&point.y.to_le_bytes());
@@ -358,6 +452,14 @@ fn load_fixture() -> Vec<SourceRow> {
 }
 
 fn load_fixture_from_env(variable: &str, expected_rows: usize) -> Vec<SourceRow> {
+    load_fixture_from_env_mode(variable, expected_rows, false)
+}
+
+fn load_mixed_fixture_from_env(variable: &str) -> Vec<SourceRow> {
+    load_fixture_from_env_mode(variable, MIXED_TRANSVERSE_ROWS, true)
+}
+
+fn load_fixture_from_env_mode(variable: &str, expected_rows: usize, mixed: bool) -> Vec<SourceRow> {
     let path = env::var(variable).unwrap_or_else(|_| panic!("{variable} must be set"));
     let file = File::open(path).unwrap_or_else(|_| panic!("open {variable} fixture"));
     let mut bytes = Vec::new();
@@ -366,7 +468,12 @@ fn load_fixture_from_env(variable: &str, expected_rows: usize) -> Vec<SourceRow>
         .unwrap_or_else(|_| panic!("read {variable} fixture"));
     assert!(bytes.len() <= INPUT_LIMIT_BYTES, "fixture exceeds 512 KiB");
     let source = core::str::from_utf8(&bytes).expect("fixture must be UTF-8");
-    parse_fixture(source, expected_rows).unwrap_or_else(|error| panic!("parse {variable}: {error}"))
+    let parsed = if mixed {
+        parse_mixed_fixture(source)
+    } else {
+        parse_fixture(source, expected_rows)
+    };
+    parsed.unwrap_or_else(|error| panic!("parse {variable}: {error}"))
 }
 
 fn print_source_bits(row: &SourceRow) {
@@ -390,6 +497,17 @@ fn print_source_bits(row: &SourceRow) {
             print!("]");
         }
         print!("]");
+    }
+    print!("]");
+}
+
+fn print_source_kinds(kinds: &[bool]) {
+    print!("[");
+    for (index, kind) in kinds.iter().enumerate() {
+        if index != 0 {
+            print!(",");
+        }
+        print!("{kind}");
     }
     print!("]");
 }
@@ -642,6 +760,137 @@ fn assert_input_owners(row: &SourceRow, verbs: &[u8], output: BridgeOutput<'_>) 
         "{}",
         row.id
     );
+    assert_eq!(output.owners, expected, "{}", row.id);
+}
+
+fn assert_mixed_decoded_sources(row: &SourceRow, verbs: &[u8], output: BridgeOutput<'_>) {
+    let kinds = row.source_kinds.as_ref().expect("mixed source kinds");
+    assert_eq!(output.sources.len(), kinds.len(), "{}", row.id);
+    let mut source_index = 0usize;
+    let mut source_ordinal = 0u32;
+    for (contour_index, contour) in row.contours.iter().enumerate() {
+        source_ordinal += 1;
+        let mut canonical_start = contour.cubics.first().unwrap().points[0];
+        for cubic in &contour.cubics {
+            let decoded = output.sources[source_index];
+            assert_eq!(decoded.contour(), contour_index, "{}", row.id);
+            assert_eq!(decoded.source_verb(), source_ordinal, "{}", row.id);
+            match (decoded, kinds[source_index]) {
+                (DecodedSource::Line { points, .. }, true) => {
+                    for (actual, expected) in points.iter().zip([canonical_start, cubic.points[3]])
+                    {
+                        assert_eq!(actual.x.to_bits(), expected.x.to_bits(), "{}", row.id);
+                        assert_eq!(actual.y.to_bits(), expected.y.to_bits(), "{}", row.id);
+                    }
+                }
+                (DecodedSource::Cubic { points, .. }, false) => {
+                    let canonical = [
+                        canonical_start,
+                        cubic.points[1],
+                        cubic.points[2],
+                        cubic.points[3],
+                    ];
+                    for (actual, expected) in points.iter().zip(canonical) {
+                        assert_eq!(actual.x.to_bits(), expected.x.to_bits(), "{}", row.id);
+                        assert_eq!(actual.y.to_bits(), expected.y.to_bits(), "{}", row.id);
+                    }
+                }
+                _ => panic!("{} decoded source kind mismatch", row.id),
+            }
+            canonical_start = cubic.points[3];
+            source_index += 1;
+            source_ordinal += 1;
+        }
+        if verbs.get(usize::try_from(source_ordinal).unwrap()) == Some(&VERB_CLOSE) {
+            source_ordinal += 1;
+        }
+    }
+    assert_eq!(source_index, kinds.len(), "{}", row.id);
+    assert_eq!(usize::try_from(source_ordinal).unwrap(), verbs.len());
+}
+
+fn assert_mixed_input_owners(row: &SourceRow, verbs: &[u8], output: BridgeOutput<'_>) {
+    let kinds = row.source_kinds.as_ref().expect("mixed source kinds");
+    let mut expected = Vec::new();
+    let mut source_index = 0usize;
+    let mut source_ordinal = 0u32;
+    for (contour_index, contour) in row.contours.iter().enumerate() {
+        assert_eq!(verbs[usize::try_from(source_ordinal).unwrap()], VERB_MOVE);
+        source_ordinal += 1;
+        for cubic in &contour.cubics {
+            let marked_line = kinds[source_index];
+            assert_eq!(
+                verbs[usize::try_from(source_ordinal).unwrap()],
+                if marked_line {
+                    crate::geometry::VERB_LINE
+                } else {
+                    VERB_CUBIC
+                }
+            );
+            let source_commands: Vec<_> = output
+                .commands
+                .iter()
+                .copied()
+                .filter(|command| {
+                    command.verb == crate::geometry::VERB_LINE
+                        && command.provenance.source_verb == source_ordinal
+                })
+                .collect();
+            if marked_line {
+                assert_eq!(source_commands.len(), 1, "{}", row.id);
+                let command = source_commands[0];
+                assert_eq!(command.provenance.end_numerator, 1, "{}", row.id);
+                assert_eq!(command.provenance.depth, 0, "{}", row.id);
+                let endpoint = command.point.expect("LINE command endpoint");
+                assert_eq!(
+                    endpoint.x.to_bits(),
+                    cubic.points[3].x.to_bits(),
+                    "{}",
+                    row.id
+                );
+                assert_eq!(
+                    endpoint.y.to_bits(),
+                    cubic.points[3].y.to_bits(),
+                    "{}",
+                    row.id
+                );
+                if !same_point(cubic.points[0], cubic.points[3]) {
+                    expected.push(EdgeOwner::Line {
+                        source_verb: source_ordinal,
+                    });
+                }
+            } else {
+                for command in source_commands {
+                    expected.push(EdgeOwner::CubicLeaf {
+                        source_verb: source_ordinal,
+                        end_numerator: command.provenance.end_numerator,
+                        depth: command.provenance.depth,
+                    });
+                }
+            }
+            source_index += 1;
+            source_ordinal += 1;
+        }
+        let first = contour.cubics.first().unwrap().points[0];
+        let last = contour.cubics.last().unwrap().points[3];
+        let has_close = verbs.get(usize::try_from(source_ordinal).unwrap()) == Some(&VERB_CLOSE);
+        if !same_point(first, last) {
+            expected.push(if has_close {
+                EdgeOwner::ExplicitClose {
+                    source_verb: source_ordinal,
+                }
+            } else {
+                EdgeOwner::ImplicitClosure {
+                    contour: contour_index,
+                }
+            });
+        }
+        if has_close {
+            source_ordinal += 1;
+        }
+    }
+    assert_eq!(source_index, kinds.len(), "{}", row.id);
+    assert_eq!(usize::try_from(source_ordinal).unwrap(), verbs.len());
     assert_eq!(output.owners, expected, "{}", row.id);
 }
 
@@ -1262,6 +1511,197 @@ fn emit_nonlinear_transverse_native_cubic_fill() {
     );
 }
 
+#[test]
+#[ignore]
+fn emit_mixed_native_cubic_fill() {
+    let expected = [
+        MixedTransverseExpectation {
+            id: "mixed/bowtie",
+            rule: LineFillRule::Nonzero,
+            source_kinds: [true, false, false, false, false, false, false, false],
+            logical_cubics: 7,
+            source_scalars: 46,
+            command_count: 10,
+        },
+        MixedTransverseExpectation {
+            id: "mixed/bowtie",
+            rule: LineFillRule::Evenodd,
+            source_kinds: [true, false, false, false, false, false, false, false],
+            logical_cubics: 7,
+            source_scalars: 46,
+            command_count: 10,
+        },
+        MixedTransverseExpectation {
+            id: "mixed/zero-closure",
+            rule: LineFillRule::Nonzero,
+            source_kinds: [true, false, false, false, true, false, false, false],
+            logical_cubics: 6,
+            source_scalars: 42,
+            command_count: 9,
+        },
+        MixedTransverseExpectation {
+            id: "mixed/zero-closure",
+            rule: LineFillRule::Evenodd,
+            source_kinds: [true, false, false, false, true, false, false, false],
+            logical_cubics: 6,
+            source_scalars: 42,
+            command_count: 9,
+        },
+    ];
+    let rows = load_mixed_fixture_from_env("P3_NATIVE_MIXED_CUBIC_INPUT");
+    assert_eq!(rows.len(), expected.len());
+    let mut workspace = BridgeWorkspace::new(LIMITS).expect("construct mixed cubic workspace");
+    let allocated_bytes = workspace.allocated_bytes();
+    let inline_bytes = size_of::<BridgeWorkspace>();
+    assert_eq!(allocated_bytes, 1_111_552);
+    assert_eq!(inline_bytes, 12_952);
+    println!("P3_NATIVE_MIXED_CUBIC_BEGIN");
+    for (row, expectation) in rows.iter().zip(expected) {
+        assert_eq!(row.id, expectation.id);
+        assert_eq!(row.rule, expectation.rule, "{}", row.id);
+        assert_eq!(row.expectation, ExpectedStatus::Ok, "{}", row.id);
+        assert_eq!(
+            row.source_kinds.as_deref(),
+            Some(expectation.source_kinds.as_slice()),
+            "{}",
+            row.id
+        );
+        assert_eq!(row.point_bytes.len() / 8, expectation.source_scalars);
+        let alternate = prepare_mixed_toggled_path(row);
+        assert_eq!(alternate.point_bytes, row.point_bytes, "{}", row.id);
+
+        crate::allocation_test_support::start();
+        let alternate_attempt = workspace.attempt_mixed_transverse(
+            alternate.path_input(),
+            row.rule,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        );
+        let alternate_allocations = crate::allocation_test_support::stop();
+        let alternate_diagnostics = alternate_attempt
+            .unwrap_or_else(|error| panic!("{} alternate failed: {error:?}", row.id));
+        assert_mixed_route(row, alternate_diagnostics, workspace.topology_stats());
+        assert_mixed_work(
+            alternate_diagnostics,
+            expectation.logical_cubics,
+            alternate.verbs.len(),
+        );
+        let alternate_output = workspace
+            .output()
+            .expect("successful mixed alternate output");
+        assert_mixed_decoded_sources(row, &alternate.verbs, alternate_output);
+        assert_mixed_input_owners(row, &alternate.verbs, alternate_output);
+        assert_eq!(alternate_output.commands.len(), alternate.verbs.len());
+        assert_eq!(alternate_output.sources.len(), 8, "{}", row.id);
+        assert_eq!(alternate_output.ranges.len(), 1, "{}", row.id);
+        assert_eq!(alternate_output.points.len(), 8, "{}", row.id);
+        assert_eq!(alternate_output.owners.len(), 8, "{}", row.id);
+        assert_eq!(adoption_mesh_area(alternate_output.rounded), 36.0);
+        assert_eq!(alternate_allocations, 0, "{} alternate allocated", row.id);
+        assert_eq!(workspace.allocated_bytes(), allocated_bytes);
+        let alternate_snapshot = snapshot(alternate_output);
+
+        crate::allocation_test_support::start();
+        let attempt = workspace.attempt_mixed_transverse(
+            row.path_input(),
+            row.rule,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        );
+        let allocations = crate::allocation_test_support::stop();
+        let diagnostics = attempt.unwrap_or_else(|error| panic!("{} failed: {error:?}", row.id));
+        let stats = workspace.topology_stats();
+        assert_mixed_route(row, diagnostics, stats);
+        assert_mixed_work(diagnostics, expectation.logical_cubics, row.verbs.len());
+        let output = workspace.output().expect("successful mixed output");
+        assert_mixed_decoded_sources(row, &row.verbs, output);
+        assert_mixed_input_owners(row, &row.verbs, output);
+        assert_eq!(
+            output.commands.len(),
+            expectation.command_count,
+            "{}",
+            row.id
+        );
+        assert_eq!(output.sources.len(), 8, "{}", row.id);
+        assert_eq!(output.ranges.len(), 1, "{}", row.id);
+        assert_eq!(output.points.len(), 8, "{}", row.id);
+        assert_eq!(output.owners.len(), 8, "{}", row.id);
+        assert_eq!(adoption_mesh_area(output.rounded), 36.0, "{}", row.id);
+        assert_eq!(snapshot(output), alternate_snapshot, "{}", row.id);
+        assert_eq!(allocations, 0, "{} allocated", row.id);
+        assert_eq!(workspace.allocated_bytes(), allocated_bytes);
+
+        print!("{{\"carrier\":");
+        print_native_cubic_row(
+            row,
+            diagnostics,
+            Some(output),
+            allocations,
+            allocated_bytes,
+            inline_bytes,
+        );
+        print!(
+            ",\"topology\":{{\"topology_invoked\":{},\"rounded_topology_invoked\":{},\"rounded_topology_selected\":{},\"rounded_topology_error\":",
+            diagnostics.topology_invoked,
+            diagnostics.rounded_topology_invoked,
+            diagnostics.rounded_topology_selected,
+        );
+        print_topology_error(diagnostics.rounded_topology_error);
+        print!(
+            ",\"transverse_topology_invoked\":{},\"transverse_topology_selected\":{},\"transverse_topology_error\":",
+            diagnostics.transverse_topology_invoked,
+            diagnostics.transverse_topology_selected,
+        );
+        print_topology_error(diagnostics.transverse_topology_error);
+        print!(
+            ",\"stats\":{{\"leaves\":{},\"pairs\":{}}}}},\"source_kinds\":",
+            stats.leaves, stats.pairs
+        );
+        print_source_kinds(row.source_kinds.as_deref().expect("mixed source kinds"));
+        println!("}}");
+    }
+    println!("P3_NATIVE_MIXED_CUBIC_END");
+}
+
+#[derive(Clone, Copy)]
+struct MixedTransverseExpectation {
+    id: &'static str,
+    rule: LineFillRule,
+    source_kinds: [bool; 8],
+    logical_cubics: u64,
+    source_scalars: usize,
+    command_count: usize,
+}
+
+fn assert_mixed_route(row: &SourceRow, diagnostics: AttemptDiagnostics, stats: TopologyStats) {
+    assert_eq!(diagnostics.flat_status, PATH_OK, "{}", row.id);
+    assert!(diagnostics.topology_invoked, "{}", row.id);
+    assert!(!diagnostics.rounded_topology_invoked, "{}", row.id);
+    assert!(!diagnostics.rounded_topology_selected, "{}", row.id);
+    assert_eq!(diagnostics.rounded_topology_error, None, "{}", row.id);
+    assert!(diagnostics.transverse_topology_invoked, "{}", row.id);
+    assert!(diagnostics.transverse_topology_selected, "{}", row.id);
+    assert_eq!(diagnostics.transverse_topology_error, None, "{}", row.id);
+    assert!(diagnostics.rounded_invoked, "{}", row.id);
+    assert_eq!(
+        stats,
+        TopologyStats {
+            leaves: 8,
+            pairs: 28
+        }
+    );
+}
+
+fn assert_mixed_work(diagnostics: AttemptDiagnostics, cubics: u64, verbs: usize) {
+    assert_eq!(diagnostics.sizing_plan.verb_count, verbs as u32);
+    assert_eq!(diagnostics.sizing_plan.point_count, 18);
+    assert_eq!(diagnostics.emission_plan, Some(diagnostics.sizing_plan));
+    assert_eq!(diagnostics.statistics.logical_cubics, cubics);
+    assert_eq!(diagnostics.statistics.sizing_visits, cubics);
+    assert_eq!(diagnostics.statistics.emission_visits, cubics);
+    assert_eq!(diagnostics.statistics.emitted_cubic_lines, cubics);
+}
+
 #[derive(Clone, Copy)]
 struct TransverseExpectation {
     id: &'static str,
@@ -1606,6 +2046,36 @@ mod tests {
         result
     }
 
+    fn measured_mixed_rule_attempt(
+        workspace: &mut BridgeWorkspace,
+        path: &RawPath,
+        rule: LineFillRule,
+        topology_tolerance: f64,
+    ) -> Result<AttemptDiagnostics, BridgeError> {
+        measured_mixed_attempt(workspace, path, rule, topology_tolerance, MAX_COMMANDS)
+    }
+
+    fn measured_mixed_attempt(
+        workspace: &mut BridgeWorkspace,
+        path: &RawPath,
+        rule: LineFillRule,
+        topology_tolerance: f64,
+        command_capacity: usize,
+    ) -> Result<AttemptDiagnostics, BridgeError> {
+        let bytes = workspace.allocated_bytes();
+        crate::allocation_test_support::start();
+        let result = workspace.attempt_mixed_transverse(
+            path.input(FLATTEN_TOLERANCE),
+            rule,
+            topology_tolerance,
+            command_capacity,
+        );
+        let allocations = crate::allocation_test_support::stop();
+        assert_eq!(allocations, 0, "mixed cubic attempt allocated");
+        assert_eq!(workspace.allocated_bytes(), bytes);
+        result
+    }
+
     fn linear(start: Point, one: Point, two: Point, end: Point) -> SourceCubic {
         let points = [start, one, two, end];
         let mut bits = [0u64; 8];
@@ -1734,6 +2204,103 @@ mod tests {
         ];
         let mut path = RawPath::default();
         append_transverse_contour(&mut path, &vertices, true, true);
+        path
+    }
+
+    fn mixed_bowtie(closed: bool) -> RawPath {
+        let vertices = mixed_bowtie_contour();
+        let mut path = RawPath::default();
+        path.move_to(vertices[0]);
+        for index in 0..vertices.len() {
+            let start = vertices[index];
+            let end = vertices[(index + 1) % vertices.len()];
+            if index == 0 {
+                path.line_to(end);
+            } else if index == 4 {
+                path.cubic_to(
+                    point(-1.0, 1.0 + 1.0 / 16.0),
+                    point(1.0, -1.0 - 1.0 / 16.0),
+                    end,
+                );
+            } else {
+                append_trisection(&mut path, start, end);
+            }
+        }
+        if closed {
+            path.close();
+        }
+        path
+    }
+
+    fn mixed_bowtie_contour() -> Vec<Point> {
+        vec![
+            point(-3.0, -3.0),
+            point(3.0, 3.0),
+            point(3.0, 4.5),
+            point(-3.0, 4.5),
+            point(-3.0, 3.0),
+            point(3.0, -3.0),
+            point(3.0, -4.5),
+            point(-3.0, -4.5),
+        ]
+    }
+
+    fn mixed_zero_closure(closed: bool) -> RawPath {
+        let vertices = mixed_zero_closure_contour();
+        let mut path = RawPath::default();
+        path.move_to(vertices[0]);
+        path.line_to(vertices[0]);
+        for index in 0..vertices.len() - 1 {
+            let start = vertices[index];
+            let end = vertices[index + 1];
+            if index == 3 {
+                path.line_to(end);
+            } else {
+                append_trisection(&mut path, start, end);
+            }
+        }
+        if closed {
+            path.close();
+        }
+        path
+    }
+
+    fn mixed_zero_closure_contour() -> Vec<Point> {
+        vec![
+            point(3.0, 3.0),
+            point(3.0, 4.5),
+            point(-3.0, 4.5),
+            point(-3.0, 3.0),
+            point(3.0, -3.0),
+            point(3.0, -4.5),
+            point(-3.0, -4.5),
+            point(-3.0, -3.0),
+        ]
+    }
+
+    fn mixed_multiple_partners() -> RawPath {
+        let vertices = [
+            point(-9.0, 0.0),
+            point(9.0, 0.0),
+            point(9.0, 9.0),
+            point(-3.0, 9.0),
+            point(-3.0, -3.0),
+            point(3.0, -3.0),
+            point(3.0, 6.0),
+            point(-9.0, 6.0),
+        ];
+        let mut path = RawPath::default();
+        path.move_to(vertices[0]);
+        for index in 0..vertices.len() {
+            let start = vertices[index];
+            let end = vertices[(index + 1) % vertices.len()];
+            if index == 1 {
+                append_trisection(&mut path, start, end);
+            } else {
+                path.line_to(end);
+            }
+        }
+        path.close();
         path
     }
 
@@ -1932,6 +2499,7 @@ mod tests {
             }],
             verbs: Vec::new(),
             point_bytes: Vec::new(),
+            source_kinds: None,
         };
         prepare_path(&mut row).unwrap();
         row
@@ -2055,6 +2623,42 @@ mod tests {
     }
 
     #[test]
+    fn mixed_parser_isolates_kind_masks_and_accepts_canonical_zero_lines() {
+        let zero = "0000000000000000,0000000000000000,0000000000000000,0000000000000000,0000000000000000,0000000000000000,0000000000000000,0000000000000000";
+        let cubic = "0000000000000000,0000000000000000,3ff0000000000000,0000000000000000,4000000000000000,0000000000000000,4008000000000000,0000000000000000";
+        let source = format!(
+            "# p3-native-mixed-cubic-v1\n# rows 4\nzero nonzero OK 1 | {zero}\na nonzero OK 0 | {cubic}\nb evenodd OK 0 | {cubic}\nc nonzero OK 0 | {cubic}\n"
+        );
+        let rows = parse_mixed_fixture(&source).unwrap();
+        assert_eq!(rows[0].source_kinds.as_deref(), Some([true].as_slice()));
+        assert_eq!(
+            rows[0].verbs,
+            [VERB_MOVE, crate::geometry::VERB_LINE, VERB_CLOSE]
+        );
+        assert_eq!(rows[0].point_bytes.len(), 4 * 8);
+        assert_eq!(rows[1].source_kinds.as_deref(), Some([false].as_slice()));
+        assert_eq!(rows[1].verbs, [VERB_MOVE, VERB_CUBIC]);
+
+        let old = format!("old nonzero OK | {cubic}");
+        assert!(parse_row(&old).is_ok());
+        assert!(parse_row(&format!("old nonzero OK 0 | {cubic}")).is_err());
+        for invalid in [
+            source.replace("zero nonzero OK 1", "zero nonzero OK"),
+            source.replace("zero nonzero OK 1", "zero nonzero OK 10"),
+            source.replace("zero nonzero OK 1", "zero nonzero OK x"),
+            source.replace("zero nonzero OK 1", "zero nonzero OK 0 extra"),
+            source.replace(
+                &format!("a nonzero OK 0 | {cubic}"),
+                &format!("a nonzero OK 1 | {cubic}"),
+            ),
+        ] {
+            assert!(parse_mixed_fixture(&invalid).is_err());
+        }
+        let old_with_kind = format!("# p3-native-cubic-v1\n# rows 1\nold nonzero OK 0 | {cubic}\n");
+        assert!(parse_fixture(&old_with_kind, 1).is_err());
+    }
+
+    #[test]
     fn constructor_accounts_all_four_retained_workspaces() {
         let workspace = BridgeWorkspace::new(LIMITS).unwrap();
         let rounded = RoundedFillWorkspace::new(LIMITS).unwrap();
@@ -2090,6 +2694,410 @@ mod tests {
         assert_eq!(diagnostics.transverse_topology_selected, selected);
         assert_eq!(diagnostics.transverse_topology_error, error);
         assert_eq!(diagnostics.rounded_invoked, rounded_invoked);
+    }
+
+    fn assert_mixed_bowtie_success(
+        workspace: &mut BridgeWorkspace,
+        rule: LineFillRule,
+    ) -> NormalizedSnapshot {
+        let path = mixed_bowtie(true);
+        let diagnostics =
+            measured_mixed_rule_attempt(workspace, &path, rule, TOPOLOGY_TOLERANCE).unwrap();
+        assert_transverse_diagnostics(diagnostics, true, None, true);
+        assert_eq!(
+            workspace.topology_stats(),
+            TopologyStats {
+                leaves: 8,
+                pairs: 28
+            }
+        );
+        let output = workspace.output().unwrap();
+        assert_depth_zero_original_identity(&path, output);
+        snapshot(output)
+    }
+
+    fn assert_mixed_failure_recovery(
+        workspace: &mut BridgeWorkspace,
+        failure: impl FnOnce(&mut BridgeWorkspace),
+    ) {
+        let expected = assert_mixed_bowtie_success(workspace, LineFillRule::Nonzero);
+        failure(workspace);
+        assert!(workspace.output().is_none());
+        assert_eq!(
+            assert_mixed_bowtie_success(workspace, LineFillRule::Nonzero),
+            expected
+        );
+    }
+
+    #[test]
+    fn mixed_transverse_canonical_families_preserve_sources_owners_and_paired_closures() {
+        type Fixture = fn(bool) -> RawPath;
+        type Contour = fn() -> Vec<Point>;
+        let fixtures: [(Fixture, Contour, bool); 2] = [
+            (mixed_bowtie, mixed_bowtie_contour, true),
+            (mixed_zero_closure, mixed_zero_closure_contour, false),
+        ];
+        for (fixture, contour, returns_to_start) in fixtures {
+            for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
+                let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+                let mut direct = RoundedFillWorkspace::new(LIMITS).unwrap();
+                let mut expected_snapshot = None;
+                for closed in [false, true] {
+                    let path = fixture(closed);
+                    let diagnostics = measured_mixed_rule_attempt(
+                        &mut workspace,
+                        &path,
+                        rule,
+                        TOPOLOGY_TOLERANCE,
+                    )
+                    .unwrap();
+                    assert_transverse_diagnostics(diagnostics, true, None, true);
+                    assert_eq!(
+                        workspace.topology_stats(),
+                        TopologyStats {
+                            leaves: 8,
+                            pairs: 28
+                        }
+                    );
+                    assert_eq!(
+                        diagnostics.sizing_plan.verb_count as usize,
+                        path.verbs.len()
+                    );
+                    assert_eq!(diagnostics.sizing_plan.point_count, 18);
+                    assert_eq!(diagnostics.emission_plan, Some(diagnostics.sizing_plan));
+                    let output = workspace.output().unwrap();
+                    assert_eq!(output.commands.len(), path.verbs.len());
+                    assert_eq!(output.sources.len(), 8);
+                    assert_eq!(output.points.len(), 8);
+                    assert_eq!(output.owners.len(), 8);
+                    assert_depth_zero_original_identity(&path, output);
+                    let contours = vec![contour()];
+                    assert_normalized_contours(output, &contours);
+                    assert_direct_rounded_identity(&mut direct, &contours, rule, output);
+                    assert_eq!(mesh_area(output.rounded), 36.0);
+                    let expected_owners = if returns_to_start {
+                        vec![
+                            EdgeOwner::Line { source_verb: 1 },
+                            EdgeOwner::CubicLeaf {
+                                source_verb: 2,
+                                end_numerator: 1,
+                                depth: 0,
+                            },
+                            EdgeOwner::CubicLeaf {
+                                source_verb: 3,
+                                end_numerator: 1,
+                                depth: 0,
+                            },
+                            EdgeOwner::CubicLeaf {
+                                source_verb: 4,
+                                end_numerator: 1,
+                                depth: 0,
+                            },
+                            EdgeOwner::CubicLeaf {
+                                source_verb: 5,
+                                end_numerator: 1,
+                                depth: 0,
+                            },
+                            EdgeOwner::CubicLeaf {
+                                source_verb: 6,
+                                end_numerator: 1,
+                                depth: 0,
+                            },
+                            EdgeOwner::CubicLeaf {
+                                source_verb: 7,
+                                end_numerator: 1,
+                                depth: 0,
+                            },
+                            EdgeOwner::CubicLeaf {
+                                source_verb: 8,
+                                end_numerator: 1,
+                                depth: 0,
+                            },
+                        ]
+                    } else {
+                        let mut owners = vec![
+                            EdgeOwner::CubicLeaf {
+                                source_verb: 2,
+                                end_numerator: 1,
+                                depth: 0,
+                            },
+                            EdgeOwner::CubicLeaf {
+                                source_verb: 3,
+                                end_numerator: 1,
+                                depth: 0,
+                            },
+                            EdgeOwner::CubicLeaf {
+                                source_verb: 4,
+                                end_numerator: 1,
+                                depth: 0,
+                            },
+                            EdgeOwner::Line { source_verb: 5 },
+                            EdgeOwner::CubicLeaf {
+                                source_verb: 6,
+                                end_numerator: 1,
+                                depth: 0,
+                            },
+                            EdgeOwner::CubicLeaf {
+                                source_verb: 7,
+                                end_numerator: 1,
+                                depth: 0,
+                            },
+                            EdgeOwner::CubicLeaf {
+                                source_verb: 8,
+                                end_numerator: 1,
+                                depth: 0,
+                            },
+                        ];
+                        owners.push(if closed {
+                            EdgeOwner::ExplicitClose { source_verb: 9 }
+                        } else {
+                            EdgeOwner::ImplicitClosure { contour: 0 }
+                        });
+                        owners
+                    };
+                    assert_eq!(output.owners, expected_owners);
+                    let actual_snapshot = snapshot(output);
+                    if let Some(expected) = &expected_snapshot {
+                        assert_eq!(&actual_snapshot, expected);
+                    } else {
+                        expected_snapshot = Some(actual_snapshot);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn mixed_transverse_failures_reset_publication_and_preserve_cached_stats() {
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+
+        assert_mixed_failure_recovery(&mut workspace, |workspace| {
+            let path = mixed_bowtie(true);
+            assert_eq!(
+                measured_transverse_rule_attempt(
+                    workspace,
+                    &path,
+                    LineFillRule::Nonzero,
+                    TOPOLOGY_TOLERANCE,
+                ),
+                Err(BridgeError::Topology(TopologyError::Unresolved))
+            );
+            assert_transverse_diagnostics(
+                workspace.diagnostics(),
+                false,
+                Some(TopologyError::Unresolved),
+                false,
+            );
+            assert_eq!(
+                workspace.topology_stats(),
+                TopologyStats {
+                    leaves: 8,
+                    pairs: 4
+                }
+            );
+        });
+
+        assert_mixed_failure_recovery(&mut workspace, |workspace| {
+            let path = mixed_bowtie(true);
+            assert_eq!(
+                measured_raw_attempt(
+                    workspace,
+                    &path,
+                    FLATTEN_TOLERANCE,
+                    TOPOLOGY_TOLERANCE,
+                    MAX_COMMANDS,
+                ),
+                Err(BridgeError::Topology(TopologyError::Unresolved))
+            );
+            let diagnostics = workspace.diagnostics();
+            assert!(diagnostics.topology_invoked);
+            assert!(!diagnostics.transverse_topology_invoked);
+            assert!(!diagnostics.transverse_topology_selected);
+            assert_eq!(diagnostics.transverse_topology_error, None);
+            assert_eq!(
+                workspace.topology_stats(),
+                TopologyStats {
+                    leaves: 8,
+                    pairs: 4
+                }
+            );
+        });
+
+        assert_mixed_failure_recovery(&mut workspace, |workspace| {
+            let path = mixed_multiple_partners();
+            assert_eq!(
+                measured_mixed_rule_attempt(
+                    workspace,
+                    &path,
+                    LineFillRule::Nonzero,
+                    TOPOLOGY_TOLERANCE,
+                ),
+                Err(BridgeError::Topology(TopologyError::Unresolved))
+            );
+            assert_transverse_diagnostics(
+                workspace.diagnostics(),
+                false,
+                Some(TopologyError::Unresolved),
+                false,
+            );
+            assert_eq!(
+                workspace.topology_stats(),
+                TopologyStats {
+                    leaves: 8,
+                    pairs: 5
+                }
+            );
+        });
+
+        assert_mixed_failure_recovery(&mut workspace, |workspace| {
+            let path = mixed_bowtie(true);
+            assert_eq!(
+                measured_mixed_rule_attempt(workspace, &path, LineFillRule::Nonzero, 0.0),
+                Err(BridgeError::Rounded(RoundedFillError::InvalidTolerance))
+            );
+            assert_transverse_diagnostics(workspace.diagnostics(), true, None, true);
+            assert_eq!(
+                workspace.topology_stats(),
+                TopologyStats {
+                    leaves: 8,
+                    pairs: 28
+                }
+            );
+        });
+
+        assert_mixed_failure_recovery(&mut workspace, |workspace| {
+            let path = mixed_bowtie(true);
+            assert_eq!(
+                measured_mixed_attempt(
+                    workspace,
+                    &path,
+                    LineFillRule::Nonzero,
+                    TOPOLOGY_TOLERANCE,
+                    9,
+                ),
+                Err(BridgeError::CommandLimit)
+            );
+            let diagnostics = workspace.diagnostics();
+            assert!(diagnostics.sizing_invoked);
+            assert!(diagnostics.emission_invoked);
+            assert!(!diagnostics.topology_invoked);
+            assert!(!diagnostics.rounded_topology_invoked);
+            assert!(!diagnostics.transverse_topology_invoked);
+            assert!(!diagnostics.transverse_topology_selected);
+            assert_eq!(diagnostics.transverse_topology_error, None);
+            assert!(!diagnostics.rounded_invoked);
+            assert_eq!(
+                workspace.topology_stats(),
+                TopologyStats {
+                    leaves: 8,
+                    pairs: 28
+                }
+            );
+        });
+
+        assert_mixed_failure_recovery(&mut workspace, |workspace| {
+            let path = RawPath {
+                verbs: vec![VERB_MOVE; 25],
+                point_bytes: vec![0; 50 * 8],
+            };
+            assert_eq!(
+                measured_mixed_rule_attempt(
+                    workspace,
+                    &path,
+                    LineFillRule::Nonzero,
+                    TOPOLOGY_TOLERANCE,
+                ),
+                Err(BridgeError::SourceLimit)
+            );
+            assert_eq!(workspace.diagnostics(), AttemptDiagnostics::default());
+            assert_eq!(
+                workspace.topology_stats(),
+                TopologyStats {
+                    leaves: 8,
+                    pairs: 28
+                }
+            );
+        });
+
+        let retained = assert_mixed_bowtie_success(&mut workspace, LineFillRule::Nonzero);
+        let all_line = topology_skip_triangle();
+        measured_mixed_rule_attempt(
+            &mut workspace,
+            &all_line,
+            LineFillRule::Nonzero,
+            TOPOLOGY_TOLERANCE,
+        )
+        .unwrap();
+        let diagnostics = workspace.diagnostics();
+        assert!(!diagnostics.topology_invoked);
+        assert!(!diagnostics.transverse_topology_invoked);
+        assert!(!diagnostics.transverse_topology_selected);
+        assert_eq!(diagnostics.transverse_topology_error, None);
+        assert!(diagnostics.rounded_invoked);
+        assert_eq!(
+            workspace.topology_stats(),
+            TopologyStats {
+                leaves: 8,
+                pairs: 28
+            }
+        );
+        assert_ne!(snapshot(workspace.output().unwrap()), retained);
+    }
+
+    #[test]
+    fn mixed_transverse_outputs_own_inputs_and_workspaces_are_isolated() {
+        let mut path = mixed_zero_closure(false);
+        let mut first = BridgeWorkspace::new(LIMITS).unwrap();
+        let mut second = BridgeWorkspace::new(LIMITS).unwrap();
+        measured_mixed_rule_attempt(&mut first, &path, LineFillRule::Nonzero, TOPOLOGY_TOLERANCE)
+            .unwrap();
+        let expected_snapshot = snapshot(first.output().unwrap());
+        let expected_commands = first.output().unwrap().commands.to_vec();
+        let expected_sources = first.output().unwrap().sources.to_vec();
+        let expected_owners = first.output().unwrap().owners.to_vec();
+        path.point_bytes.fill(0xff);
+        drop(path);
+        let output = first.output().unwrap();
+        assert_eq!(snapshot(output), expected_snapshot);
+        assert_eq!(output.commands, expected_commands);
+        assert_eq!(output.sources, expected_sources);
+        assert_eq!(output.owners, expected_owners);
+
+        let independent = mixed_bowtie(true);
+        measured_mixed_rule_attempt(
+            &mut second,
+            &independent,
+            LineFillRule::Evenodd,
+            TOPOLOGY_TOLERANCE,
+        )
+        .unwrap();
+        let independent_snapshot = snapshot(second.output().unwrap());
+        let failure = mixed_multiple_partners();
+        assert_eq!(
+            measured_mixed_rule_attempt(
+                &mut first,
+                &failure,
+                LineFillRule::Nonzero,
+                TOPOLOGY_TOLERANCE,
+            ),
+            Err(BridgeError::Topology(TopologyError::Unresolved))
+        );
+        assert!(first.output().is_none());
+        assert_eq!(snapshot(second.output().unwrap()), independent_snapshot);
+
+        let recovered = mixed_zero_closure(false);
+        measured_mixed_rule_attempt(
+            &mut first,
+            &recovered,
+            LineFillRule::Nonzero,
+            TOPOLOGY_TOLERANCE,
+        )
+        .unwrap();
+        let output = first.output().unwrap();
+        assert_eq!(snapshot(output), expected_snapshot);
+        assert_eq!(output.commands, expected_commands);
+        assert_eq!(output.sources, expected_sources);
+        assert_eq!(output.owners, expected_owners);
     }
 
     #[test]

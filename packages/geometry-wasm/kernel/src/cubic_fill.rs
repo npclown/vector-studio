@@ -155,6 +155,7 @@ enum SourceVerb {
 enum TopologyMode {
     Legacy,
     Transverse,
+    MixedTransverse,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -286,6 +287,22 @@ impl CubicFillWorkspace {
             topology_tolerance,
             command_capacity,
             TopologyMode::Transverse,
+        )
+    }
+
+    pub(crate) fn attempt_mixed_transverse(
+        &mut self,
+        input: PathInput<'_>,
+        rule: LineFillRule,
+        topology_tolerance: f64,
+        command_capacity: usize,
+    ) -> Result<CubicFillDiagnostics, CubicFillError> {
+        self.attempt_body(
+            input,
+            rule,
+            topology_tolerance,
+            command_capacity,
+            TopologyMode::MixedTransverse,
         )
     }
 
@@ -556,6 +573,7 @@ impl CubicFillWorkspace {
         let mut contours = [TopologyRange::default(); MAX_CONTOURS];
         let mut cubics = [TopologyCubic::default(); MAX_SOURCE_SEGMENTS];
         let mut leaves = [TopologyLeaf::default(); MAX_EDGE_OWNERS];
+        let mut source_kinds = [false; MAX_SOURCE_SEGMENTS];
         let mut cubic_len = 0usize;
         let mut leaf_len = 0usize;
         for (contour_index, source_range) in self.source_ranges[..self.source_range_len]
@@ -587,10 +605,11 @@ impl CubicFillWorkspace {
                     };
                     leaf_len += 1;
                 }
-                let points = match source {
-                    DecodedSource::Line { points: [a, b], .. } => [a, a, b, b],
-                    DecodedSource::Cubic { points, .. } => points,
+                let (points, source_kind) = match source {
+                    DecodedSource::Line { points: [a, b], .. } => ([a, a, b, b], true),
+                    DecodedSource::Cubic { points, .. } => (points, false),
                 };
+                source_kinds[cubic_len] = source_kind;
                 cubics[cubic_len] = TopologyCubic {
                     points,
                     source_verb,
@@ -613,7 +632,10 @@ impl CubicFillWorkspace {
         };
         match mode {
             TopologyMode::Legacy => self.certify_legacy_topology(input),
-            TopologyMode::Transverse => self.certify_transverse_topology(input),
+            TopologyMode::Transverse => self.certify_transverse_topology(input, None),
+            TopologyMode::MixedTransverse => {
+                self.certify_transverse_topology(input, Some(&source_kinds[..cubic_len]))
+            }
         }
     }
 
@@ -659,9 +681,14 @@ impl CubicFillWorkspace {
     fn certify_transverse_topology(
         &mut self,
         input: TopologyInput<'_>,
+        source_kinds: Option<&[bool]>,
     ) -> Result<(), CubicFillError> {
         self.diagnostics.transverse_topology_invoked = true;
-        match self.transverse_topology.certify(input) {
+        let result = match source_kinds {
+            Some(kinds) => self.transverse_topology.certify_mixed(input, kinds),
+            None => self.transverse_topology.certify(input),
+        };
+        match result {
             Ok(()) => {
                 self.topology_stats = self.transverse_topology.stats();
                 self.diagnostics.transverse_topology_selected = true;
