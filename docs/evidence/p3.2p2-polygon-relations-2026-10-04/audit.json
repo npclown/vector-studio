@@ -1,0 +1,12 @@
+{
+  "schema": "p3-polygon-relations/v1",
+  "status": "PASS",
+  "reportSha256": "41c5ff49ea0aa507ccc469b38e0e85a6df3391c57ea138fd4249cbb860362756",
+  "rowsSha256": "36b6549fc33a19c142b27e2e025f74b3256a69a0681d8e8ee796d0bbea874d18",
+  "rows": 1000,
+  "peakCandidateRecords": {
+    "value": 21,
+    "index": 951
+  },
+  "failure": null
+}

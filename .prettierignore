@@ -31,3 +31,7 @@ docs/benchmarks/results/20260926-p2-batch-v1-reference-02/**/*.json
 # Preserve P3.2m2 immutable cubic readiness records.
 docs/evidence/p3.2m2-cubic-readiness-2026-10-02/*.json
 docs/evidence/p3.2m2-cubic-readiness-2026-10-02/*.ndjson
+
+# Preserve P3.2p2 immutable polygon relation records.
+docs/evidence/p3.2p2-polygon-relations-2026-10-04/*.json
+docs/evidence/p3.2p2-polygon-relations-2026-10-04/*.ndjson

@@ -1,0 +1,323 @@
+{
+  "schema": "p3-polygon-relations/v1",
+  "mode": "FULL",
+  "completion": "COMPLETE",
+  "metadata": {
+    "historical": {
+      "head": "9508a6615f6b6e941aee26802a49eb9ca1b9dbd0",
+      "manifestSha256": "d443f5e5e18d5b60c11cb546cbaa15e36da5abec1bc8f58cd1df4f27b5507f0b",
+      "invocationSha256": "460b63483f0377832674bd9296400940d2c259c003e504df5938228cbd0763d6",
+      "censusSha256": "869c93b782d833cb6e28503bf4e80ee65155edfc6e68e5fe06c38af8d34cf803",
+      "rowsSha256": "e9536c9b8c51aa6bc5132692c8bb506b367da8e010ffbabd80e800b873a2d634",
+      "auditSha256": "ba298dabe8306c233b105a7d25b29323b10962c23dd9e3d0d7e31070e081dd80",
+      "inputBytes": 1684000,
+      "outputBytes": 38612072,
+      "inputSha256": "e45332519703e6c2dd290a3969a00736e0171b870da5ebce0767e8c54c2570dc",
+      "outputSha256": "1e6086e3ef2faa76f112bc9512afc9a175fef3014a2952d6e4021ba5f8aa8973"
+    },
+    "analysis": {
+      "head": "a5764303e27f4bebb8eff7e0711882df3105b3aa",
+      "dirty": false,
+      "nodeVersion": "v24.15.0",
+      "manifest": [
+        {
+          "path": ".node-version",
+          "sha256": "b911698dc3cf3227d34d0ad6727f1c4408791203c9665de99ab959331a1fb07d"
+        },
+        {
+          "path": "docs/plans/p3-polygon-relation-census-contract.md",
+          "sha256": "f74fe42876b97acc903226956520ab0be5e4b68160f59a9101a87b10f96ac42f"
+        },
+        {
+          "path": "eslint.config.mjs",
+          "sha256": "0394a6431b56b7f8b08a24e6ce5ec5904d7a26c93667c5c17bacb0edeab8cb08"
+        },
+        {
+          "path": "package.json",
+          "sha256": "284639d0aad4539d230c6a518b42819aa58db14c2ae5a1ece49c4c4724e7b72c"
+        },
+        {
+          "path": "packages/geometry-reference/src/continuous-error.ts",
+          "sha256": "6b1cba877303766d51eccea934587b9eff4fd21268a87310532325a645964ee8"
+        },
+        {
+          "path": "packages/geometry-reference/src/corpus.ts",
+          "sha256": "0fd960275e38d14bd300cd1a0e8f296814539f3659e556a373251951f7999111"
+        },
+        {
+          "path": "packages/geometry-reference/src/cubic.ts",
+          "sha256": "3199788d9f6e8da7ee071f3415257da1a50a5ca255018bf6cd551c78f6cce583"
+        },
+        {
+          "path": "packages/geometry-reference/src/fill-region.ts",
+          "sha256": "756985406e3220a7f4875d79693d57861e9670bb3fa017d8f32ee1af473f6fc9"
+        },
+        {
+          "path": "packages/geometry-reference/src/index.ts",
+          "sha256": "a01efec750520cb99a1f1d08dd471473942e806028ecb7c53384b7155af27324"
+        },
+        {
+          "path": "packages/geometry-reference/src/line-fill.ts",
+          "sha256": "96dd8a6df84f22feb399d3ca70196ba2956b79c45e22111454aab75ccf763d8b"
+        },
+        {
+          "path": "packages/geometry-reference/src/packed-reference.ts",
+          "sha256": "ddf36dca699ad4ce349143f4e276789f4625cf5cdec0b2dba722f922f8532f0b"
+        },
+        {
+          "path": "packages/geometry-reference/src/tolerance.ts",
+          "sha256": "46abb165e7e23775e0dc3f233ee06fdc763520b57e77755566191c2525a36b15"
+        },
+        {
+          "path": "packages/geometry-reference/src/triangle-mesh.ts",
+          "sha256": "c49bb1d2a9cedbbe5e9da887a65cabb3b68c2bdb91d45f52f6a8956192cd6fb3"
+        },
+        {
+          "path": "packages/geometry-reference/src/types.ts",
+          "sha256": "eb6b9f2fa16b59c3f7db2738233efee4331751023845ebcc0c00868d13d9019c"
+        },
+        {
+          "path": "packages/geometry-wasm/src/abi.ts",
+          "sha256": "6803ed38c3806d6f003e32378705661e707c8707e6698cc7a220a627244c1fa3"
+        },
+        {
+          "path": "packages/geometry-wasm/src/adapter.ts",
+          "sha256": "4d5333e2dc95797beb3d467e188423d2302e051fbc939db518b3570c28b17a22"
+        },
+        {
+          "path": "packages/geometry-wasm/src/index.ts",
+          "sha256": "b545ab05ba347c54230627b2c435133a4b78cdc76c329d82905b2ffce403550a"
+        },
+        {
+          "path": "packages/geometry-wasm/src/types.ts",
+          "sha256": "17df9b9c58fe84b8dcdecd1991fd5dfe6fb89a3406703ee7ffa7d3cac31ce506"
+        },
+        {
+          "path": "pnpm-lock.yaml",
+          "sha256": "b524d4bfc8be0d870824568cfbd1df68330d140990498ea1e443c70f337d7d81"
+        },
+        {
+          "path": "tests/geometry-benchmark/workload.ts",
+          "sha256": "4b7c69f0ab513a28e778416a85c7bcd36a84bb7900071e5fb31c21e7d27bc1bc"
+        },
+        {
+          "path": "tests/geometry/cubic-boundary/fixtures.ts",
+          "sha256": "41141ea2cbe7f0fe041271b6cb19704019c45310e5ef70f180974f50541890fc"
+        },
+        {
+          "path": "tests/geometry/cubic-boundary/oracle.ts",
+          "sha256": "4d6f5c9cdd917030e085dd8df2c419847b4c04b247f6e25720e1b9cc8be5c690"
+        },
+        {
+          "path": "tests/geometry/differential/endpoint-hull.ts",
+          "sha256": "55c945b3c528245206c60d52077a24368a800e7c050626ffa0083506517d6e07"
+        },
+        {
+          "path": "tests/geometry/differential/index.ts",
+          "sha256": "664986be98e764347b5bcde0c1a98c494cc6c5ea8e4db4f0f21867ca8eba11f6"
+        },
+        {
+          "path": "tests/geometry/rounded-fill/exact.ts",
+          "sha256": "108d98e7af78435738d943fe9473cfc26f5d2d662a5b6484ecc6f91bb3885c90"
+        },
+        {
+          "path": "tests/p3-census/artifact.d.mts",
+          "sha256": "6b8785e0f58c80575304ff519f7c5667ed517b61dd7d877bbec170789953c62b"
+        },
+        {
+          "path": "tests/p3-census/artifact.mjs",
+          "sha256": "9c2b6474f38242b4f8c9a790c58a9368ad6f50b93eef8eb06c8179effd59a636"
+        },
+        {
+          "path": "tests/p3-census/census.test.ts",
+          "sha256": "389e1fe911b68c82fa5d485c14c6580f50c4ce4b511117d7484c5660d9ede3bf"
+        },
+        {
+          "path": "tests/p3-census/fixtures.ts",
+          "sha256": "23e89455662a5b30db2ec15d95b72650c30357de32a74773894cd0631cb1c005"
+        },
+        {
+          "path": "tests/p3-census/mechanics.test.ts",
+          "sha256": "a352e4d38672200d07bf1bb96475cffb49c9f6228e5471f07dd425d1be07a201"
+        },
+        {
+          "path": "tests/p3-census/schema.ts",
+          "sha256": "098f7669fefb34bc09a60c78498edc7de66b9c6ae624dfc842b833e5fe397794"
+        },
+        {
+          "path": "tests/p3-polygon-census/artifact.ts",
+          "sha256": "c7d965a0ca870253e75ed9e3f21b981765b8137e25922fc73f5bb2eb44881f01"
+        },
+        {
+          "path": "tests/p3-polygon-census/audit.test.ts",
+          "sha256": "faf04a3339f2c5aed1e443bf8acc4a60665124cb4c9fc30da6bb384b86dbb378"
+        },
+        {
+          "path": "tests/p3-polygon-census/audit.ts",
+          "sha256": "c319e0921733be669dafa372ec6afc0edb9e275c7f47bda4defcafea1fd45114"
+        },
+        {
+          "path": "tests/p3-polygon-census/census.test.ts",
+          "sha256": "f86aea2b26888292c2ab982ba4b390017890faa5df4b92aa607fccf335f32581"
+        },
+        {
+          "path": "tests/p3-polygon-census/classifier.test.ts",
+          "sha256": "3334ecdc5d37ac412fe02f126343c8afe0d815d7c0f1c11033d496bc3db7a095"
+        },
+        {
+          "path": "tests/p3-polygon-census/classifier.ts",
+          "sha256": "0ef644a2cb99b174ea9e5133e16c647020c724e09621edab1510123075fa1d7e"
+        },
+        {
+          "path": "tests/p3-polygon-census/fixtures.ts",
+          "sha256": "c840198cc139e0ed69084b6f81a3b7cb39762ffcd90985bd5976ee2f17cae69d"
+        },
+        {
+          "path": "tests/p3-polygon-census/mechanics.test.ts",
+          "sha256": "07a144a10f18a068c4e66435ff4192dbc0da20e805795f874914fd9874557452"
+        },
+        {
+          "path": "tests/p3-polygon-census/transport.ts",
+          "sha256": "ec345f28b33d86a4ef730254726be6a3744933c3414e7d5605a5019495523942"
+        },
+        {
+          "path": "tests/p3-polygon-census/types.test.ts",
+          "sha256": "5b01eddeab99907fe0eedb8dbb0403f3ad635a7603f5046a063c90f37513fe06"
+        },
+        {
+          "path": "tests/p3-polygon-census/types.ts",
+          "sha256": "f8e9e346fd5f2030ca4ae8f90ebb4fddf62c34d8db3a50d9d26c09f4c69e32a6"
+        },
+        {
+          "path": "tooling/run-p3-polygon-census.d.mts",
+          "sha256": "68175024443603269415f5f69c0f0970eedf182de2a7ca554ddfccd4e6a11f8c"
+        },
+        {
+          "path": "tooling/run-p3-polygon-census.mjs",
+          "sha256": "3856a2c4bbbc6044dd9423b5e4b7e6686df79f7fd7a95eb99011350bf04ddf44"
+        },
+        {
+          "path": "tsconfig.base.json",
+          "sha256": "54a4732d04c541cd21b6dff7f677691da27c66d8b71d182baa5b6f76f5184b15"
+        },
+        {
+          "path": "tsconfig.json",
+          "sha256": "55f452a895652274bbc32f75f19a0225f64dc27657a848c567209c2b8d5e10ea"
+        },
+        {
+          "path": "vitest.p3-polygon-census.config.ts",
+          "sha256": "69621fe3c07e498482af380147e030537c370242be9e57801c506f8da553cbbc"
+        }
+      ],
+      "manifestStartSha256": "ecbb9008fb72eae939dbdde818b02b5f39e90e649fd60359b46d91570dae7bad",
+      "manifestEndSha256": "ecbb9008fb72eae939dbdde818b02b5f39e90e649fd60359b46d91570dae7bad"
+    }
+  },
+  "policy": {
+    "role": "HISTORICAL_POLYGON_ANALYSIS",
+    "scenario": "p2-batch/v1",
+    "seed": 305419896,
+    "paths": 1000,
+    "classes": [
+      "DISJOINT",
+      "PROPER_CROSSING",
+      "ENDPOINT_TOUCH",
+      "T_JUNCTION",
+      "COLLINEAR_POINT",
+      "COINCIDENT_SAME",
+      "COINCIDENT_REVERSED",
+      "COLLINEAR_OVERLAP"
+    ],
+    "digestVersion": 1,
+    "limits": {
+      "rawEmitted": 4096,
+      "edges": 4097,
+      "pairsPerPath": 8390656,
+      "paths": 1000,
+      "inputFrameBytes": 4096,
+      "outputFrameBytes": 262144,
+      "inputBytes": 4194304,
+      "outputBytes": 134217728,
+      "rowBytes": 65536,
+      "journalBytes": 67108864
+    },
+    "timeoutsMs": {
+      "phase": 900000,
+      "child": 960000
+    },
+    "excludedStages": [
+      "CURRENT_KERNEL",
+      "POSITION_PROOF",
+      "CURVED_TOPOLOGY",
+      "MESH",
+      "GPU",
+      "PERFORMANCE"
+    ]
+  },
+  "rows": {
+    "path": "rows.ndjson",
+    "sha256": "36b6549fc33a19c142b27e2e025f74b3256a69a0681d8e8ee796d0bbea874d18",
+    "bytes": 2673169,
+    "count": 1000
+  },
+  "summary": {
+    "rows": 1000,
+    "rawEmitted": 1326192,
+    "omittedZero": 0,
+    "retainedEmitted": 1326192,
+    "closure": 1000,
+    "normalizedEdges": 1327192,
+    "pairs": 881038654,
+    "aabbRejected": 879187942,
+    "exactTested": 1850712,
+    "counts": {
+      "DISJOINT": 879647814,
+      "PROPER_CROSSING": 63648,
+      "ENDPOINT_TOUCH": 1327192,
+      "T_JUNCTION": 0,
+      "COLLINEAR_POINT": 0,
+      "COINCIDENT_SAME": 0,
+      "COINCIDENT_REVERSED": 0,
+      "COLLINEAR_OVERLAP": 0
+    },
+    "adjacent": {
+      "DISJOINT": 0,
+      "PROPER_CROSSING": 0,
+      "ENDPOINT_TOUCH": 1327192,
+      "T_JUNCTION": 0,
+      "COLLINEAR_POINT": 0,
+      "COINCIDENT_SAME": 0,
+      "COINCIDENT_REVERSED": 0,
+      "COLLINEAR_OVERLAP": 0
+    },
+    "nonadjacent": {
+      "DISJOINT": 879647814,
+      "PROPER_CROSSING": 63648,
+      "ENDPOINT_TOUCH": 0,
+      "T_JUNCTION": 0,
+      "COLLINEAR_POINT": 0,
+      "COINCIDENT_SAME": 0,
+      "COINCIDENT_REVERSED": 0,
+      "COLLINEAR_OVERLAP": 0
+    },
+    "maxima": {
+      "normalizedEdges": {
+        "value": 1462,
+        "index": 463
+      },
+      "pairs": {
+        "value": 1067991,
+        "index": 463
+      },
+      "exactTested": {
+        "value": 2914,
+        "index": 874
+      },
+      "peakCandidateRecords": {
+        "value": 0,
+        "index": 0
+      }
+    }
+  },
+  "failure": null
+}
