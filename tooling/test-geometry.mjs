@@ -52,6 +52,10 @@ run(process.execPath, [
   path.join(root, 'tooling/generate-p3-rounded-fill-fixtures.mjs'),
   '--check',
 ]);
+run(process.execPath, [
+  path.join(root, 'tooling/generate-p3-transverse-pair-fixtures.mjs'),
+  '--check',
+]);
 const compiler = spawnSync(rustup, ['run', '1.94.1', 'rustc', '--version', '--verbose'], {
   cwd: root,
   env,

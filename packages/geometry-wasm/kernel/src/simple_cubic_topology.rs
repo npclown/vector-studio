@@ -36,6 +36,19 @@ pub(crate) struct TopologyLeaf {
     pub(crate) provenance: Provenance,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TransverseLeafInput {
+    pub(crate) source: [Point; 4],
+    pub(crate) provenance: Provenance,
+    pub(crate) actual: [Point; 2],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct TransversePairCertificate {
+    pub(crate) leaves: [Provenance; 2],
+    pub(crate) orientation: i8,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct TopologyInput<'a> {
     pub(crate) contours: &'a [TopologyRange],
@@ -122,6 +135,111 @@ struct RoundedExactLeaf {
 struct ExactHull<'a> {
     points: &'a [ExactPoint],
     indices: &'a [u8],
+}
+
+pub(crate) fn certify_transverse_pair(
+    leaves: &[TransverseLeafInput; 2],
+) -> Result<TransversePairCertificate, TopologyError> {
+    for leaf in leaves {
+        if leaf.source.iter().copied().any(|point| !finite(point))
+            || leaf.actual.iter().copied().any(|point| !finite(point))
+        {
+            return Err(TopologyError::InvalidInput);
+        }
+    }
+    for leaf in leaves {
+        if !valid_transverse_provenance(leaf.provenance) {
+            return Err(TopologyError::InvalidProvenance);
+        }
+    }
+    if leaves[0].provenance.source_verb == leaves[1].provenance.source_verb {
+        if !same_cubic_bits(leaves[0].source, leaves[1].source) {
+            return Err(TopologyError::InvalidInput);
+        }
+        if !dyadic_interiors_disjoint(leaves[0].provenance, leaves[1].provenance) {
+            return Err(TopologyError::InvalidProvenance);
+        }
+    }
+
+    // Source-level fixed scratch is bounded per nonrecursive helper. This function's conservative
+    // envelope is 32 ExactPoints (18,432 bytes): eight restricted and twelve expanded points,
+    // eight aggregate-construction/result copies, and four proper-chord argument copies. Add two
+    // six-byte hull-index results and under 512 bytes of certificates/provenance/length metadata.
+    // restrict_cell needs twelve ExactPoints across its cubic and split argument/result;
+    // split_half needs fourteen across its input, six midpoint locals, and returned cubic.
+    // transverse_orientation needs twelve ExactPoints (the eight generators, two loop values,
+    // and two cross arguments) plus four ExactProducts (2,240 bytes) for multiply/negate/add
+    // results. cross_vectors itself needs two ExactPoints, two ExactCoordinates, and four
+    // ExactProducts (3,968 bytes). Proper/closed-hull helpers need at most eight ExactPoints plus
+    // four ExactProducts (6,848 bytes). An endpoint sweep needs four ExactPoints including
+    // construction copies and twelve hull-index bytes; convex_hull needs at most 36 index bytes
+    // and three point arguments. Every envelope is below 32 KiB. These are conservative
+    // source-level counts including by-value arguments/returns, not compiler stack-frame or
+    // whole-call-chain claims.
+    let expanded = {
+        let restricted = [
+            restrict_cell(
+                exact_cubic(leaves[0].source),
+                leaves[0].provenance.end_numerator,
+                leaves[0].provenance.depth,
+            ),
+            restrict_cell(
+                exact_cubic(leaves[1].source),
+                leaves[1].provenance.end_numerator,
+                leaves[1].provenance.depth,
+            ),
+        ];
+        [
+            [
+                restricted[0][0],
+                restricted[0][1],
+                restricted[0][2],
+                restricted[0][3],
+                exact_point(leaves[0].actual[0]),
+                exact_point(leaves[0].actual[1]),
+            ],
+            [
+                restricted[1][0],
+                restricted[1][1],
+                restricted[1][2],
+                restricted[1][3],
+                exact_point(leaves[1].actual[0]),
+                exact_point(leaves[1].actual[1]),
+            ],
+        ]
+    };
+
+    if !segments_properly_intersect(
+        expanded[0][4],
+        expanded[0][5],
+        expanded[1][4],
+        expanded[1][5],
+    ) {
+        return Err(TopologyError::Unresolved);
+    }
+    let orientation =
+        transverse_orientation(&expanded[0], &expanded[1]).ok_or(TopologyError::Unresolved)?;
+
+    let (left_indices, left_len) = convex_hull(&expanded[0]);
+    let (right_indices, right_len) = convex_hull(&expanded[1]);
+    let left_hull = ExactHull {
+        points: &expanded[0],
+        indices: &left_indices[..left_len],
+    };
+    let right_hull = ExactHull {
+        points: &expanded[1],
+        indices: &right_indices[..right_len],
+    };
+    if !endpoint_sweeps_disjoint(&expanded[0], right_hull)
+        || !endpoint_sweeps_disjoint(&expanded[1], left_hull)
+    {
+        return Err(TopologyError::Unresolved);
+    }
+
+    Ok(TransversePairCertificate {
+        leaves: [leaves[0].provenance, leaves[1].provenance],
+        orientation,
+    })
 }
 
 pub(crate) struct SimpleCubicTopologyWorkspace {
@@ -761,8 +879,35 @@ fn finite(point: Point) -> bool {
     point.x.is_finite() && point.y.is_finite()
 }
 
+fn valid_transverse_provenance(provenance: Provenance) -> bool {
+    if provenance.depth > MAX_DEPTH {
+        return false;
+    }
+    let denominator = 1u64 << provenance.depth;
+    let numerator = u64::from(provenance.end_numerator);
+    (1..=denominator).contains(&numerator)
+}
+
 fn same_point(left: Point, right: Point) -> bool {
     left.x == right.x && left.y == right.y
+}
+
+fn same_cubic_bits(left: [Point; 4], right: [Point; 4]) -> bool {
+    left.iter().zip(right.iter()).all(|(left, right)| {
+        left.x.to_bits() == right.x.to_bits() && left.y.to_bits() == right.y.to_bits()
+    })
+}
+
+fn dyadic_interiors_disjoint(left: Provenance, right: Provenance) -> bool {
+    let left_denominator = 1u64 << left.depth;
+    let right_denominator = 1u64 << right.depth;
+    let left_end = u64::from(left.end_numerator);
+    let right_end = u64::from(right.end_numerator);
+    let left_start = left_end - 1;
+    let right_start = right_end - 1;
+
+    left_end * right_denominator <= right_start * left_denominator
+        || right_end * left_denominator <= left_start * right_denominator
 }
 
 fn exact_cubic(points: [Point; 4]) -> ExactCubic {
@@ -1048,6 +1193,10 @@ fn opposite(left: Ordering, right: Ordering) -> bool {
     )
 }
 
+fn segments_properly_intersect(a: ExactPoint, b: ExactPoint, c: ExactPoint, d: ExactPoint) -> bool {
+    opposite(orient(a, b, c), orient(a, b, d)) && opposite(orient(c, d, a), orient(c, d, b))
+}
+
 fn segments_intersect(a: ExactPoint, b: ExactPoint, c: ExactPoint, d: ExactPoint) -> bool {
     let abc = orient(a, b, c);
     let abd = orient(a, b, d);
@@ -1087,6 +1236,59 @@ fn closed_hulls_intersect(left: ExactHull<'_>, right: ExactHull<'_>) -> bool {
     }
     point_in_closed_hull(hull_point(left, 0), right)
         || point_in_closed_hull(hull_point(right, 0), left)
+}
+
+fn transverse_orientation(left: &[ExactPoint; 6], right: &[ExactPoint; 6]) -> Option<i8> {
+    // The true cubic derivative generators have a positive factor of three. Omitting that
+    // factor preserves every cross-product sign used here; these unscaled differences are not
+    // used as a convex-hull representation of the derivatives.
+    let generators = [
+        [
+            point_sub(left[1], left[0]),
+            point_sub(left[2], left[1]),
+            point_sub(left[3], left[2]),
+            point_sub(left[5], left[4]),
+        ],
+        [
+            point_sub(right[1], right[0]),
+            point_sub(right[2], right[1]),
+            point_sub(right[3], right[2]),
+            point_sub(right[5], right[4]),
+        ],
+    ];
+    let mut orientation = 0i8;
+    for &left_generator in &generators[0] {
+        for &right_generator in &generators[1] {
+            let sign = match cross_vectors(left_generator, right_generator).cmp_zero() {
+                Ordering::Less => -1,
+                Ordering::Equal => return None,
+                Ordering::Greater => 1,
+            };
+            if orientation == 0 {
+                orientation = sign;
+            } else if orientation != sign {
+                return None;
+            }
+        }
+    }
+    Some(orientation)
+}
+
+fn endpoint_sweeps_disjoint(leaf: &[ExactPoint; 6], other: ExactHull<'_>) -> bool {
+    for (source, actual_point) in [(0, 4), (3, 5)] {
+        let sweep = [leaf[source], leaf[actual_point]];
+        let (indices, len) = convex_hull(&sweep);
+        if closed_hulls_intersect(
+            ExactHull {
+                points: &sweep,
+                indices: &indices[..len],
+            },
+            other,
+        ) {
+            return false;
+        }
+    }
+    true
 }
 
 fn segment_intersection_has_point_other_than(
