@@ -6,7 +6,7 @@ import type {
 import { certifyCubicBoundary } from '../cubic-boundary/oracle.js';
 import { bitsOf } from '../rounded-fill/exact.js';
 import type { FixtureRow } from '../rounded-fill/types.js';
-import type { NativeCubicFixtureRow } from './fixtures.js';
+import type { NativeCubicSourceFixtureRow } from './fixtures.js';
 import type { NativeCubicCommand, NativeCubicEdgeOwner, NativeCubicRow } from './native.js';
 
 export type ActualSegment = Readonly<{
@@ -23,7 +23,10 @@ export function normalizedPoint([x, y]: Point): Point {
   return [x === 0 ? 0 : x, y === 0 ? 0 : y];
 }
 
-export function assertFixtureIdentity(fixture: NativeCubicFixtureRow, row: NativeCubicRow): void {
+export function assertFixtureIdentity(
+  fixture: NativeCubicSourceFixtureRow,
+  row: NativeCubicRow,
+): void {
   if (row.id !== fixture.id || row.rule !== fixture.rule) throw new Error('row identity mismatch');
   if (JSON.stringify(row.source_bits) !== JSON.stringify(fixture.sourceBits))
     throw new Error('source bits mismatch');
@@ -51,7 +54,7 @@ function assertPreservedCommand(
 }
 
 export function actualSegments(
-  fixture: NativeCubicFixtureRow,
+  fixture: NativeCubicSourceFixtureRow,
   commands: readonly NativeCubicCommand[],
 ): readonly (readonly ActualSegment[])[] {
   let commandIndex = 0;
@@ -124,7 +127,7 @@ export function collectedContours(
 }
 
 export function expectedOwners(
-  fixture: NativeCubicFixtureRow,
+  fixture: NativeCubicSourceFixtureRow,
   contours: readonly (readonly ActualSegment[])[],
 ): readonly NativeCubicEdgeOwner[] {
   const owners: NativeCubicEdgeOwner[] = [];

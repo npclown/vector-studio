@@ -21,10 +21,12 @@ use crate::rounded_line_fill::{
 use crate::rounded_line_fill_tests::{print_output, print_points, print_stats};
 use crate::simple_cubic_topology::{
     RoundedKnotCubicTopologyWorkspace, SimpleCubicTopologyWorkspace, TopologyError, TopologyLimits,
+    TransverseArrangementWorkspace,
 };
 
 const INPUT_LIMIT_BYTES: usize = 512 * 1024;
 const EXPECTED_ROWS: usize = 94;
+const TRANSVERSE_ROWS: usize = 6;
 const FLATTEN_TOLERANCE: f64 = 0.125;
 const TOPOLOGY_TOLERANCE: f64 = 0.0625;
 const MAX_CONTOURS: usize = 4;
@@ -537,6 +539,14 @@ fn topology_error_name(error: TopologyError) -> &'static str {
     }
 }
 
+fn print_topology_error(error: Option<TopologyError>) {
+    if let Some(error) = error {
+        print!("\"{}\"", topology_error_name(error));
+    } else {
+        print!("null");
+    }
+}
+
 fn assert_decoded_sources(row: &SourceRow, verbs: &[u8], output: BridgeOutput<'_>) {
     let expected_count: usize = row
         .contours
@@ -737,6 +747,7 @@ fn emit_native_cubic_fill() {
             "{}",
             row.id
         );
+        assert_transverse_skipped(row, alternate_diagnostics);
         let alternate_output = workspace.output();
         match row.expectation {
             ExpectedStatus::Ok => {
@@ -777,6 +788,7 @@ fn emit_native_cubic_fill() {
         assert!(!diagnostics.rounded_topology_invoked, "{}", row.id);
         assert!(!diagnostics.rounded_topology_selected, "{}", row.id);
         assert_eq!(diagnostics.rounded_topology_error, None, "{}", row.id);
+        assert_transverse_skipped(row, diagnostics);
         let output = workspace.output();
         match row.expectation {
             ExpectedStatus::Ok => {
@@ -871,6 +883,7 @@ fn assert_adoption_output(
         row.id
     );
     assert_eq!(diagnostics.rounded_topology_error, None, "{}", row.id);
+    assert_transverse_skipped(row, diagnostics);
     assert!(diagnostics.rounded_invoked, "{}", row.id);
     assert_eq!(stats.leaves, 12, "{}", row.id);
     assert_eq!(stats.pairs, 66, "{}", row.id);
@@ -1052,6 +1065,149 @@ fn emit_rounded_native_cubic_fill() {
     println!("P3_NATIVE_ROUNDED_CUBIC_END");
 }
 
+#[test]
+#[ignore]
+fn emit_transverse_native_cubic_fill() {
+    let rows = load_fixture_from_env("P3_NATIVE_TRANSVERSE_CUBIC_INPUT", TRANSVERSE_ROWS);
+    let expected = [
+        ("composition/bowtie", LineFillRule::Nonzero, 8, 1, 10, 36.0),
+        ("composition/bowtie", LineFillRule::Evenodd, 8, 1, 10, 36.0),
+        ("composition/closure", LineFillRule::Nonzero, 7, 1, 8, 36.0),
+        ("composition/closure", LineFillRule::Evenodd, 7, 1, 8, 36.0),
+        ("composition/squares", LineFillRule::Nonzero, 8, 2, 12, 63.0),
+        ("composition/squares", LineFillRule::Evenodd, 8, 2, 12, 54.0),
+    ];
+    let mut workspace = BridgeWorkspace::new(LIMITS).expect("construct transverse cubic workspace");
+    let allocated_bytes = workspace.allocated_bytes();
+    let inline_bytes = size_of::<BridgeWorkspace>();
+    assert!(inline_bytes < 64 * 1024);
+    println!("P3_NATIVE_TRANSVERSE_CUBIC_BEGIN");
+    for (row, (expected_id, expected_rule, source_count, contour_count, command_count, area)) in
+        rows.iter().zip(expected)
+    {
+        assert_eq!(row.id, expected_id);
+        assert_eq!(row.rule, expected_rule, "{}", row.id);
+        assert_eq!(row.expectation, ExpectedStatus::Ok, "{}", row.id);
+        let alternate = prepare_toggled_path(row);
+        assert_eq!(alternate.point_bytes, row.point_bytes, "{}", row.id);
+
+        crate::allocation_test_support::start();
+        let alternate_attempt = workspace.attempt_transverse(
+            alternate.path_input(),
+            row.rule,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        );
+        let alternate_allocations = crate::allocation_test_support::stop();
+        let alternate_diagnostics = alternate_attempt
+            .unwrap_or_else(|error| panic!("{} alternate failed: {error:?}", row.id));
+        assert_transverse_route(row, alternate_diagnostics, workspace.topology_stats());
+        let alternate_output = workspace.output().expect("successful alternate output");
+        assert_decoded_sources(row, &alternate.verbs, alternate_output);
+        assert_input_owners(row, &alternate.verbs, alternate_output);
+        assert_eq!(alternate_output.sources.len(), source_count, "{}", row.id);
+        assert_eq!(alternate_output.ranges.len(), contour_count, "{}", row.id);
+        assert_eq!(alternate_output.points.len(), 8, "{}", row.id);
+        assert_eq!(alternate_output.owners.len(), 8, "{}", row.id);
+        assert_eq!(
+            alternate_output.commands.len(),
+            alternate.verbs.len(),
+            "{}",
+            row.id
+        );
+        assert_eq!(
+            adoption_mesh_area(alternate_output.rounded),
+            area,
+            "{}",
+            row.id
+        );
+        assert_eq!(alternate_allocations, 0, "{} alternate allocated", row.id);
+        assert_eq!(workspace.allocated_bytes(), allocated_bytes);
+        let alternate_snapshot = snapshot(alternate_output);
+
+        crate::allocation_test_support::start();
+        let attempt = workspace.attempt_transverse(
+            row.path_input(),
+            row.rule,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        );
+        let allocations = crate::allocation_test_support::stop();
+        let diagnostics = attempt.unwrap_or_else(|error| panic!("{} failed: {error:?}", row.id));
+        let stats = workspace.topology_stats();
+        assert_transverse_route(row, diagnostics, stats);
+        let output = workspace.output().expect("successful transverse output");
+        assert_decoded_sources(row, &row.verbs, output);
+        assert_input_owners(row, &row.verbs, output);
+        assert_eq!(output.sources.len(), source_count, "{}", row.id);
+        assert_eq!(output.ranges.len(), contour_count, "{}", row.id);
+        assert_eq!(output.points.len(), 8, "{}", row.id);
+        assert_eq!(output.owners.len(), 8, "{}", row.id);
+        assert_eq!(output.commands.len(), command_count, "{}", row.id);
+        assert_eq!(diagnostics.statistics.logical_cubics as usize, source_count);
+        assert_eq!(
+            diagnostics.statistics.emitted_cubic_lines as usize,
+            source_count
+        );
+        assert_eq!(adoption_mesh_area(output.rounded), area, "{}", row.id);
+        assert_eq!(snapshot(output), alternate_snapshot, "{}", row.id);
+        assert_eq!(allocations, 0, "{} allocated", row.id);
+        assert_eq!(workspace.allocated_bytes(), allocated_bytes);
+
+        print!("{{\"carrier\":");
+        print_native_cubic_row(
+            row,
+            diagnostics,
+            Some(output),
+            allocations,
+            allocated_bytes,
+            inline_bytes,
+        );
+        print!(
+            ",\"topology\":{{\"topology_invoked\":{},\"rounded_topology_invoked\":{},\"rounded_topology_selected\":{},\"rounded_topology_error\":",
+            diagnostics.topology_invoked,
+            diagnostics.rounded_topology_invoked,
+            diagnostics.rounded_topology_selected,
+        );
+        print_topology_error(diagnostics.rounded_topology_error);
+        print!(
+            ",\"transverse_topology_invoked\":{},\"transverse_topology_selected\":{},\"transverse_topology_error\":",
+            diagnostics.transverse_topology_invoked,
+            diagnostics.transverse_topology_selected,
+        );
+        print_topology_error(diagnostics.transverse_topology_error);
+        println!(
+            ",\"stats\":{{\"leaves\":{},\"pairs\":{}}}}}}}",
+            stats.leaves, stats.pairs
+        );
+    }
+    println!("P3_NATIVE_TRANSVERSE_CUBIC_END");
+}
+
+fn assert_transverse_route(
+    row: &SourceRow,
+    diagnostics: AttemptDiagnostics,
+    stats: crate::simple_cubic_topology::TopologyStats,
+) {
+    assert_eq!(diagnostics.flat_status, PATH_OK, "{}", row.id);
+    assert!(diagnostics.topology_invoked, "{}", row.id);
+    assert!(!diagnostics.rounded_topology_invoked, "{}", row.id);
+    assert!(!diagnostics.rounded_topology_selected, "{}", row.id);
+    assert_eq!(diagnostics.rounded_topology_error, None, "{}", row.id);
+    assert!(diagnostics.transverse_topology_invoked, "{}", row.id);
+    assert!(diagnostics.transverse_topology_selected, "{}", row.id);
+    assert_eq!(diagnostics.transverse_topology_error, None, "{}", row.id);
+    assert!(diagnostics.rounded_invoked, "{}", row.id);
+    assert_eq!(stats.leaves, 8, "{}", row.id);
+    assert_eq!(stats.pairs, 28, "{}", row.id);
+}
+
+fn assert_transverse_skipped(row: &SourceRow, diagnostics: AttemptDiagnostics) {
+    assert!(!diagnostics.transverse_topology_invoked, "{}", row.id);
+    assert!(!diagnostics.transverse_topology_selected, "{}", row.id);
+    assert_eq!(diagnostics.transverse_topology_error, None, "{}", row.id);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1161,6 +1317,26 @@ mod tests {
         result
     }
 
+    fn measured_transverse_rule_attempt(
+        workspace: &mut BridgeWorkspace,
+        path: &RawPath,
+        rule: LineFillRule,
+        topology_tolerance: f64,
+    ) -> Result<AttemptDiagnostics, BridgeError> {
+        let bytes = workspace.allocated_bytes();
+        crate::allocation_test_support::start();
+        let result = workspace.attempt_transverse(
+            path.input(FLATTEN_TOLERANCE),
+            rule,
+            topology_tolerance,
+            MAX_COMMANDS,
+        );
+        let allocations = crate::allocation_test_support::stop();
+        assert_eq!(allocations, 0, "transverse cubic attempt allocated");
+        assert_eq!(workspace.allocated_bytes(), bytes);
+        result
+    }
+
     fn linear(start: Point, one: Point, two: Point, end: Point) -> SourceCubic {
         let points = [start, one, two, end];
         let mut bits = [0u64; 8];
@@ -1194,6 +1370,102 @@ mod tests {
             ),
             end,
         );
+    }
+
+    fn append_trisection(path: &mut RawPath, start: Point, end: Point) {
+        path.cubic_to(
+            point((2.0 * start.x + end.x) / 3.0, (2.0 * start.y + end.y) / 3.0),
+            point((start.x + 2.0 * end.x) / 3.0, (start.y + 2.0 * end.y) / 3.0),
+            end,
+        );
+    }
+
+    fn append_transverse_contour(
+        path: &mut RawPath,
+        vertices: &[Point],
+        returning: bool,
+        closed: bool,
+    ) {
+        path.move_to(vertices[0]);
+        for pair in vertices.windows(2) {
+            append_trisection(path, pair[0], pair[1]);
+        }
+        if returning {
+            append_trisection(path, *vertices.last().unwrap(), vertices[0]);
+        }
+        if closed {
+            path.close();
+        }
+    }
+
+    fn transverse_bowtie(closed: bool) -> (RawPath, Vec<Vec<Point>>) {
+        let vertices = vec![
+            point(-3.0, -3.0),
+            point(3.0, 3.0),
+            point(3.0, 4.5),
+            point(-3.0, 4.5),
+            point(-3.0, 3.0),
+            point(3.0, -3.0),
+            point(3.0, -4.5),
+            point(-3.0, -4.5),
+        ];
+        let mut path = RawPath::default();
+        append_transverse_contour(&mut path, &vertices, true, closed);
+        (path, vec![vertices])
+    }
+
+    fn transverse_closure(closed: bool) -> (RawPath, Vec<Vec<Point>>) {
+        let vertices = vec![
+            point(3.0, 3.0),
+            point(3.0, 4.5),
+            point(-3.0, 4.5),
+            point(-3.0, 3.0),
+            point(3.0, -3.0),
+            point(3.0, -4.5),
+            point(-3.0, -4.5),
+            point(-3.0, -3.0),
+        ];
+        let mut path = RawPath::default();
+        append_transverse_contour(&mut path, &vertices, false, closed);
+        (path, vec![vertices])
+    }
+
+    fn transverse_squares(closed: bool) -> (RawPath, Vec<Vec<Point>>) {
+        let contours = vec![
+            vec![
+                point(0.0, 0.0),
+                point(6.0, 0.0),
+                point(6.0, 6.0),
+                point(0.0, 6.0),
+            ],
+            vec![
+                point(3.0, -3.0),
+                point(9.0, -3.0),
+                point(9.0, 3.0),
+                point(3.0, 3.0),
+            ],
+        ];
+        let mut path = RawPath::default();
+        for contour in &contours {
+            append_transverse_contour(&mut path, contour, true, closed);
+        }
+        (path, contours)
+    }
+
+    fn transverse_multiple_partners() -> RawPath {
+        let vertices = [
+            point(-9.0, 0.0),
+            point(9.0, 0.0),
+            point(9.0, 9.0),
+            point(-3.0, 9.0),
+            point(-3.0, -3.0),
+            point(3.0, -3.0),
+            point(3.0, 6.0),
+            point(-9.0, 6.0),
+        ];
+        let mut path = RawPath::default();
+        append_transverse_contour(&mut path, &vertices, true, true);
+        path
     }
 
     fn rotate(point: Point) -> Point {
@@ -1514,21 +1786,301 @@ mod tests {
     }
 
     #[test]
-    fn constructor_accounts_all_three_retained_workspaces() {
+    fn constructor_accounts_all_four_retained_workspaces() {
         let workspace = BridgeWorkspace::new(LIMITS).unwrap();
         let rounded = RoundedFillWorkspace::new(LIMITS).unwrap();
         let exact = SimpleCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
         let rounded_topology =
             RoundedKnotCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
+        let transverse = TransverseArrangementWorkspace::new(TopologyLimits::default()).unwrap();
         assert_eq!(rounded_topology.allocated_bytes(), 224_256);
+        assert_eq!(transverse.allocated_bytes(), 224_256);
         let expected = rounded
             .allocated_bytes()
             .checked_add(exact.allocated_bytes())
             .and_then(|bytes| bytes.checked_add(rounded_topology.allocated_bytes()))
+            .and_then(|bytes| bytes.checked_add(transverse.allocated_bytes()))
             .unwrap();
+        assert_eq!(expected, 1_111_552);
         assert_eq!(workspace.allocated_bytes(), expected);
         assert!(workspace.allocated_bytes() <= MAX_BRIDGE_HEAP_BYTES);
         assert!(size_of::<BridgeWorkspace>() < 64 * 1024);
+    }
+
+    fn assert_transverse_diagnostics(
+        diagnostics: AttemptDiagnostics,
+        selected: bool,
+        error: Option<TopologyError>,
+        rounded_invoked: bool,
+    ) {
+        assert!(diagnostics.topology_invoked);
+        assert!(!diagnostics.rounded_topology_invoked);
+        assert!(!diagnostics.rounded_topology_selected);
+        assert_eq!(diagnostics.rounded_topology_error, None);
+        assert!(diagnostics.transverse_topology_invoked);
+        assert_eq!(diagnostics.transverse_topology_selected, selected);
+        assert_eq!(diagnostics.transverse_topology_error, error);
+        assert_eq!(diagnostics.rounded_invoked, rounded_invoked);
+    }
+
+    #[test]
+    fn transverse_canonical_families_match_paired_closure_forms_and_direct_meshes() {
+        type Fixture = fn(bool) -> (RawPath, Vec<Vec<Point>>);
+        let fixtures: [(Fixture, [f64; 2], usize); 3] = [
+            (transverse_bowtie, [36.0, 36.0], 8),
+            (transverse_closure, [36.0, 36.0], 7),
+            (transverse_squares, [63.0, 54.0], 8),
+        ];
+        for (fixture, areas, source_count) in fixtures {
+            for (rule_index, rule) in [LineFillRule::Nonzero, LineFillRule::Evenodd]
+                .into_iter()
+                .enumerate()
+            {
+                let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+                let mut direct = RoundedFillWorkspace::new(LIMITS).unwrap();
+                let mut expected_snapshot = None;
+                for closed in [false, true] {
+                    let (path, contours) = fixture(closed);
+                    let diagnostics = measured_transverse_rule_attempt(
+                        &mut workspace,
+                        &path,
+                        rule,
+                        TOPOLOGY_TOLERANCE,
+                    )
+                    .unwrap();
+                    assert_transverse_diagnostics(diagnostics, true, None, true);
+                    assert_eq!(workspace.topology_stats().leaves, 8);
+                    assert_eq!(workspace.topology_stats().pairs, 28);
+                    assert_eq!(diagnostics.statistics.logical_cubics as usize, source_count);
+                    assert_eq!(
+                        diagnostics.statistics.emitted_cubic_lines as usize,
+                        source_count
+                    );
+                    let output = workspace.output().unwrap();
+                    assert_eq!(output.sources.len(), source_count);
+                    assert_eq!(output.points.len(), 8);
+                    assert_eq!(output.owners.len(), 8);
+                    assert_depth_zero_original_identity(&path, output);
+                    assert_normalized_contours(output, &contours);
+                    assert_direct_rounded_identity(&mut direct, &contours, rule, output);
+                    assert_eq!(mesh_area(output.rounded), areas[rule_index]);
+                    let actual_snapshot = snapshot(output);
+                    if let Some(expected) = &expected_snapshot {
+                        assert_eq!(&actual_snapshot, expected);
+                    } else {
+                        expected_snapshot = Some(actual_snapshot);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn transverse_route_failures_cached_stats_and_alternating_modes_are_atomic() {
+        let (bowtie, _) = transverse_bowtie(true);
+        let multiple = transverse_multiple_partners();
+        let line_identity = topology_skip_triangle();
+        let legacy_exact = raw_square();
+        let cheap_failure = RawPath {
+            verbs: vec![VERB_MOVE; 25],
+            point_bytes: vec![0; 50 * 8],
+        };
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+
+        assert_eq!(
+            measured_raw_attempt(
+                &mut workspace,
+                &bowtie,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::Topology(TopologyError::Unresolved))
+        );
+        let legacy_diagnostics = workspace.diagnostics();
+        assert!(legacy_diagnostics.topology_invoked);
+        assert!(!legacy_diagnostics.rounded_topology_invoked);
+        assert!(!legacy_diagnostics.transverse_topology_invoked);
+        assert!(!legacy_diagnostics.transverse_topology_selected);
+        assert_eq!(legacy_diagnostics.transverse_topology_error, None);
+        assert_eq!(workspace.topology_stats().leaves, 8);
+        assert_eq!(workspace.topology_stats().pairs, 4);
+        assert!(workspace.output().is_none());
+
+        let diagnostics = measured_transverse_rule_attempt(
+            &mut workspace,
+            &bowtie,
+            LineFillRule::Nonzero,
+            TOPOLOGY_TOLERANCE,
+        )
+        .unwrap();
+        assert_transverse_diagnostics(diagnostics, true, None, true);
+        assert_eq!(workspace.topology_stats().leaves, 8);
+        assert_eq!(workspace.topology_stats().pairs, 28);
+        assert!(workspace.output().is_some());
+
+        assert_eq!(
+            measured_transverse_rule_attempt(
+                &mut workspace,
+                &multiple,
+                LineFillRule::Nonzero,
+                TOPOLOGY_TOLERANCE,
+            ),
+            Err(BridgeError::Topology(TopologyError::Unresolved))
+        );
+        assert_transverse_diagnostics(
+            workspace.diagnostics(),
+            false,
+            Some(TopologyError::Unresolved),
+            false,
+        );
+        assert_eq!(workspace.topology_stats().leaves, 8);
+        assert_eq!(workspace.topology_stats().pairs, 5);
+        assert!(workspace.output().is_none());
+
+        measured_transverse_rule_attempt(
+            &mut workspace,
+            &bowtie,
+            LineFillRule::Nonzero,
+            TOPOLOGY_TOLERANCE,
+        )
+        .unwrap();
+        let retained = workspace.topology_stats();
+        assert_eq!(retained.leaves, 8);
+        assert_eq!(retained.pairs, 28);
+
+        assert_eq!(
+            measured_transverse_rule_attempt(
+                &mut workspace,
+                &cheap_failure,
+                LineFillRule::Nonzero,
+                TOPOLOGY_TOLERANCE,
+            ),
+            Err(BridgeError::SourceLimit)
+        );
+        assert_eq!(workspace.diagnostics(), AttemptDiagnostics::default());
+        assert_eq!(workspace.topology_stats(), retained);
+        assert!(workspace.output().is_none());
+
+        measured_transverse_rule_attempt(
+            &mut workspace,
+            &line_identity,
+            LineFillRule::Nonzero,
+            TOPOLOGY_TOLERANCE,
+        )
+        .unwrap();
+        let diagnostics = workspace.diagnostics();
+        assert!(!diagnostics.topology_invoked);
+        assert!(!diagnostics.rounded_topology_invoked);
+        assert!(!diagnostics.transverse_topology_invoked);
+        assert!(!diagnostics.transverse_topology_selected);
+        assert_eq!(diagnostics.transverse_topology_error, None);
+        assert!(diagnostics.rounded_invoked);
+        assert_eq!(workspace.topology_stats(), retained);
+
+        measured_raw_attempt(
+            &mut workspace,
+            &legacy_exact,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(workspace.diagnostics().topology_invoked);
+        assert!(!workspace.diagnostics().transverse_topology_invoked);
+        assert!(!workspace.diagnostics().transverse_topology_selected);
+        assert_eq!(workspace.diagnostics().transverse_topology_error, None);
+        assert_eq!(workspace.topology_stats().leaves, 4);
+        assert_eq!(workspace.topology_stats().pairs, 6);
+
+        measured_transverse_rule_attempt(
+            &mut workspace,
+            &bowtie,
+            LineFillRule::Nonzero,
+            TOPOLOGY_TOLERANCE,
+        )
+        .unwrap();
+        assert_transverse_diagnostics(workspace.diagnostics(), true, None, true);
+        assert_eq!(workspace.topology_stats(), retained);
+
+        assert_eq!(
+            measured_transverse_rule_attempt(&mut workspace, &bowtie, LineFillRule::Nonzero, 0.0,),
+            Err(BridgeError::Rounded(RoundedFillError::InvalidTolerance))
+        );
+        assert_transverse_diagnostics(workspace.diagnostics(), true, None, true);
+        assert_eq!(workspace.topology_stats(), retained);
+        assert!(workspace.output().is_none());
+        measured_transverse_rule_attempt(
+            &mut workspace,
+            &bowtie,
+            LineFillRule::Nonzero,
+            TOPOLOGY_TOLERANCE,
+        )
+        .unwrap();
+        assert!(workspace.output().is_some());
+    }
+
+    #[test]
+    fn transverse_output_owns_sources_and_workspaces_remain_isolated() {
+        let (mut bowtie, _) = transverse_bowtie(true);
+        let (squares, _) = transverse_squares(true);
+        let multiple = transverse_multiple_partners();
+        let mut first = BridgeWorkspace::new(LIMITS).unwrap();
+        let mut second = BridgeWorkspace::new(LIMITS).unwrap();
+
+        measured_transverse_rule_attempt(
+            &mut first,
+            &bowtie,
+            LineFillRule::Nonzero,
+            TOPOLOGY_TOLERANCE,
+        )
+        .unwrap();
+        let first_snapshot = snapshot(first.output().unwrap());
+        let first_commands = first.output().unwrap().commands.to_vec();
+        let first_owners = first.output().unwrap().owners.to_vec();
+        let first_sources = first.output().unwrap().sources.to_vec();
+        bowtie.point_bytes.fill(0xff);
+        let output = first.output().unwrap();
+        assert_eq!(snapshot(output), first_snapshot);
+        assert_eq!(output.commands, first_commands);
+        assert_eq!(output.owners, first_owners);
+        assert_eq!(output.sources, first_sources);
+
+        measured_transverse_rule_attempt(
+            &mut second,
+            &squares,
+            LineFillRule::Evenodd,
+            TOPOLOGY_TOLERANCE,
+        )
+        .unwrap();
+        let second_snapshot = snapshot(second.output().unwrap());
+        assert_eq!(mesh_area(second.output().unwrap().rounded), 54.0);
+
+        assert_eq!(
+            measured_transverse_rule_attempt(
+                &mut first,
+                &multiple,
+                LineFillRule::Nonzero,
+                TOPOLOGY_TOLERANCE,
+            ),
+            Err(BridgeError::Topology(TopologyError::Unresolved))
+        );
+        assert!(first.output().is_none());
+        assert_eq!(snapshot(second.output().unwrap()), second_snapshot);
+
+        let (recovered, _) = transverse_bowtie(true);
+        measured_transverse_rule_attempt(
+            &mut first,
+            &recovered,
+            LineFillRule::Nonzero,
+            TOPOLOGY_TOLERANCE,
+        )
+        .unwrap();
+        let output = first.output().unwrap();
+        assert_eq!(snapshot(output), first_snapshot);
+        assert_eq!(output.commands, first_commands);
+        assert_eq!(output.owners, first_owners);
+        assert_eq!(output.sources, first_sources);
     }
 
     #[test]
