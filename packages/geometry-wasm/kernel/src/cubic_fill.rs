@@ -9,7 +9,8 @@ use crate::rounded_line_fill::{
 };
 use crate::simple_cubic_topology::{
     RoundedKnotCubicTopologyWorkspace, SimpleCubicTopologyWorkspace, TopologyCubic, TopologyError,
-    TopologyInput, TopologyLeaf, TopologyLimits, TopologyOutput, TopologyRange, TopologyStats,
+    TopologyInput, TopologyLeaf, TopologyLimits, TopologyRange, TopologyStats,
+    TransverseArrangementWorkspace,
 };
 
 pub(crate) const MAX_FLAT_COMMANDS: usize = 72;
@@ -119,6 +120,9 @@ pub(crate) struct CubicFillDiagnostics {
     pub(crate) rounded_topology_invoked: bool,
     pub(crate) rounded_topology_selected: bool,
     pub(crate) rounded_topology_error: Option<TopologyError>,
+    pub(crate) transverse_topology_invoked: bool,
+    pub(crate) transverse_topology_selected: bool,
+    pub(crate) transverse_topology_error: Option<TopologyError>,
     pub(crate) rounded_invoked: bool,
     pub(crate) flat_status: u32,
     pub(crate) sizing_plan: Plan,
@@ -147,6 +151,12 @@ enum SourceVerb {
     Close { contour: usize },
 }
 
+#[derive(Clone, Copy)]
+enum TopologyMode {
+    Legacy,
+    Transverse,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct ActiveSourceContour {
     contour: usize,
@@ -165,6 +175,7 @@ pub(crate) struct CubicFillWorkspace {
     rounded: RoundedFillWorkspace,
     topology: SimpleCubicTopologyWorkspace,
     rounded_topology: RoundedKnotCubicTopologyWorkspace,
+    transverse_topology: TransverseArrangementWorkspace,
     source_verbs: [SourceVerb; MAX_SOURCE_VERBS],
     source_verb_len: usize,
     sources: [DecodedSource; MAX_SOURCE_SEGMENTS],
@@ -192,6 +203,8 @@ impl CubicFillWorkspace {
                 .map_err(CubicFillError::Topology)?,
             rounded_topology: RoundedKnotCubicTopologyWorkspace::new(TopologyLimits::default())
                 .map_err(CubicFillError::Topology)?,
+            transverse_topology: TransverseArrangementWorkspace::new(TopologyLimits::default())
+                .map_err(CubicFillError::Topology)?,
             source_verbs: [SourceVerb::Unused; MAX_SOURCE_VERBS],
             source_verb_len: 0,
             sources: [DecodedSource::default(); MAX_SOURCE_SEGMENTS],
@@ -215,6 +228,7 @@ impl CubicFillWorkspace {
             .allocated_bytes()
             .checked_add(workspace.topology.allocated_bytes())
             .and_then(|bytes| bytes.checked_add(workspace.rounded_topology.allocated_bytes()))
+            .and_then(|bytes| bytes.checked_add(workspace.transverse_topology.allocated_bytes()))
             .is_none_or(|bytes| bytes > MAX_COMBINED_HEAP_BYTES)
         {
             return Err(CubicFillError::CombinedByteLimit);
@@ -227,6 +241,7 @@ impl CubicFillWorkspace {
             .allocated_bytes()
             .checked_add(self.topology.allocated_bytes())
             .and_then(|bytes| bytes.checked_add(self.rounded_topology.allocated_bytes()))
+            .and_then(|bytes| bytes.checked_add(self.transverse_topology.allocated_bytes()))
             .expect("constructor validated combined retained capacities")
     }
 
@@ -248,6 +263,39 @@ impl CubicFillWorkspace {
         rule: LineFillRule,
         topology_tolerance: f64,
         command_capacity: usize,
+    ) -> Result<CubicFillDiagnostics, CubicFillError> {
+        self.attempt_body(
+            input,
+            rule,
+            topology_tolerance,
+            command_capacity,
+            TopologyMode::Legacy,
+        )
+    }
+
+    pub(crate) fn attempt_transverse(
+        &mut self,
+        input: PathInput<'_>,
+        rule: LineFillRule,
+        topology_tolerance: f64,
+        command_capacity: usize,
+    ) -> Result<CubicFillDiagnostics, CubicFillError> {
+        self.attempt_body(
+            input,
+            rule,
+            topology_tolerance,
+            command_capacity,
+            TopologyMode::Transverse,
+        )
+    }
+
+    fn attempt_body(
+        &mut self,
+        input: PathInput<'_>,
+        rule: LineFillRule,
+        topology_tolerance: f64,
+        command_capacity: usize,
+        topology_mode: TopologyMode,
     ) -> Result<CubicFillDiagnostics, CubicFillError> {
         self.begin_attempt();
         if input.verbs.len() > MAX_SOURCE_VERBS || input.point_count() > MAX_SOURCE_SCALARS {
@@ -274,7 +322,7 @@ impl CubicFillWorkspace {
         self.validate_leaf_partitions()?;
         if !all_line_eligible {
             self.diagnostics.topology_invoked = true;
-            self.certify_topology()?;
+            self.certify_topology(topology_mode)?;
         }
 
         let mut references: [&[Point]; MAX_CONTOURS] = [&[]; MAX_CONTOURS];
@@ -504,7 +552,7 @@ impl CubicFillWorkspace {
         Ok(())
     }
 
-    fn certify_topology(&mut self) -> Result<(), CubicFillError> {
+    fn certify_topology(&mut self, mode: TopologyMode) -> Result<(), CubicFillError> {
         let mut contours = [TopologyRange::default(); MAX_CONTOURS];
         let mut cubics = [TopologyCubic::default(); MAX_SOURCE_SEGMENTS];
         let mut leaves = [TopologyLeaf::default(); MAX_EDGE_OWNERS];
@@ -563,6 +611,13 @@ impl CubicFillWorkspace {
             cubics: &cubics[..cubic_len],
             leaves: &leaves[..leaf_len],
         };
+        match mode {
+            TopologyMode::Legacy => self.certify_legacy_topology(input),
+            TopologyMode::Transverse => self.certify_transverse_topology(input),
+        }
+    }
+
+    fn certify_legacy_topology(&mut self, input: TopologyInput<'_>) -> Result<(), CubicFillError> {
         match self.topology.certify(input) {
             Ok(()) => {
                 self.topology_stats = self.topology.stats();
@@ -570,7 +625,7 @@ impl CubicFillWorkspace {
                     .topology
                     .output()
                     .ok_or(CubicFillError::TopologyOwnership)?;
-                self.validate_topology_ownership(certificate)
+                self.validate_topology_ownership(certificate.points, certificate.contours)
             }
             Err(TopologyError::KnotMismatch) => {
                 let exact_stats = self.topology.stats();
@@ -584,7 +639,7 @@ impl CubicFillWorkspace {
                             .rounded_topology
                             .output()
                             .ok_or(CubicFillError::TopologyOwnership)?;
-                        self.validate_topology_ownership(certificate)
+                        self.validate_topology_ownership(certificate.points, certificate.contours)
                     }
                     Err(error) => {
                         self.topology_stats =
@@ -601,17 +656,40 @@ impl CubicFillWorkspace {
         }
     }
 
+    fn certify_transverse_topology(
+        &mut self,
+        input: TopologyInput<'_>,
+    ) -> Result<(), CubicFillError> {
+        self.diagnostics.transverse_topology_invoked = true;
+        match self.transverse_topology.certify(input) {
+            Ok(()) => {
+                self.topology_stats = self.transverse_topology.stats();
+                self.diagnostics.transverse_topology_selected = true;
+                let certificate = self
+                    .transverse_topology
+                    .output()
+                    .ok_or(CubicFillError::TopologyOwnership)?;
+                self.validate_topology_ownership(certificate.points, certificate.contours)
+            }
+            Err(error) => {
+                self.topology_stats = self.transverse_topology.stats();
+                self.diagnostics.transverse_topology_error = Some(error);
+                Err(CubicFillError::Topology(error))
+            }
+        }
+    }
+
     fn validate_topology_ownership(
         &self,
-        certificate: TopologyOutput<'_>,
+        certificate_points: &[Point],
+        certificate_contours: &[TopologyRange],
     ) -> Result<(), CubicFillError> {
-        if certificate.contours.len() != self.range_len
-            || certificate.points.len() != self.owner_len
+        if certificate_contours.len() != self.range_len
+            || certificate_points.len() != self.owner_len
         {
             return Err(CubicFillError::TopologyOwnership);
         }
-        for (certified, collected) in certificate
-            .contours
+        for (certified, collected) in certificate_contours
             .iter()
             .zip(&self.contour_ranges[..self.range_len])
         {
@@ -620,7 +698,7 @@ impl CubicFillWorkspace {
             }
             for offset in 0..certified.count {
                 if !same_point(
-                    certificate.points[certified.start + offset],
+                    certificate_points[certified.start + offset],
                     self.contour_points[collected.start + offset],
                 ) {
                     return Err(CubicFillError::TopologyOwnership);

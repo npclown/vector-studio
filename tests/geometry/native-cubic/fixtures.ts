@@ -12,15 +12,19 @@ export type NativeCubicSourceContour = Readonly<{
   closeVerbOrdinal: number | null;
 }>;
 
-export type NativeCubicFixtureRow = Readonly<{
+export type NativeCubicSourceFixtureRow = Readonly<{
   id: string;
   rule: NativeCubicRule;
   expectation: NativeCubicExpectation;
   contours: readonly NativeCubicSourceContour[];
   sourceBits: readonly (readonly (readonly string[])[])[];
-  orientations: readonly (-1 | 1)[];
-  winding: readonly (readonly (-1 | 0 | 1)[])[];
 }>;
+
+export type NativeCubicFixtureRow = NativeCubicSourceFixtureRow &
+  Readonly<{
+    orientations: readonly (-1 | 1)[];
+    winding: readonly (readonly (-1 | 0 | 1)[])[];
+  }>;
 
 const RULES = ['nonzero', 'evenodd'] as const;
 const ID = /^[A-Za-z0-9/-]+$/u;
@@ -85,7 +89,7 @@ export function fixedNativeCubicFixtureRows(): readonly NativeCubicFixtureRow[] 
   });
 }
 
-function encodeRow(row: NativeCubicFixtureRow): string {
+function encodeRow(row: NativeCubicSourceFixtureRow): string {
   if (!ID.test(row.id)) throw new Error(`fixture id ${row.id} is not protocol-safe`);
   const contours = row.sourceBits.map((contour) =>
     contour.map((cubic) => cubic.join(',')).join(';'),
@@ -100,7 +104,7 @@ export function encodeNativeCubicFixture(rows: readonly NativeCubicFixtureRow[])
 }
 
 export function encodeNativeCubicRows(
-  rows: readonly NativeCubicFixtureRow[],
+  rows: readonly NativeCubicSourceFixtureRow[],
   expectedRows: number,
 ): string {
   if (rows.length !== expectedRows)
