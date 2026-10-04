@@ -1,0 +1,71 @@
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import assert from 'node:assert/strict';
+const bytes = readFileSync(process.argv[2]);
+const record = JSON.parse(bytes);
+const U = 1n << 1074n;
+const U3 = U ** 3n;
+const DEN = U ** 8n;
+function integer(hex) {
+  assert.match(hex, /^[0-9a-f]{16}$/);
+  const bits = BigInt(`0x${hex}`);
+  const exponent = Number((bits >> 52n) & 2047n);
+  assert.notEqual(exponent, 2047);
+  const fraction = bits & ((1n << 52n) - 1n);
+  const magnitude = exponent === 0 ? fraction : ((1n << 52n) | fraction) << BigInt(exponent - 1);
+  return bits >> 63n ? -magnitude : magnitude;
+}
+assert.equal(record.schema, 'p3-mesh-projection-v1');
+assert.equal(record.rows.length, 159);
+const counts = {};
+let checked = 0;
+for (const row of record.rows) {
+  if (row.kind === 'legacy') {
+    assert.deepEqual(row.componentDelta, [{ n: '-1', d: '16' }, { n: '-3', d: '64' }]);
+    assert.deepEqual(row.squared, { n: '25', d: '4096' });
+    continue;
+  }
+  assert.equal(row.kind, 'mesh');
+  assert.ok(!row.audit.error);
+  counts[row.audit.status] = (counts[row.audit.status] ?? 0) + 1;
+  if (row.disposition === 'REQUIRED_PASS') assert.equal(row.audit.status, 'CERTIFIED', row.id);
+  if (row.disposition === 'REQUIRED_TOPOLOGY_REJECT') {
+    assert.equal(row.audit.status, 'TOPOLOGY_REJECTED', row.id);
+    assert.equal(row.audit.positionPass, true, row.id);
+  }
+  if (row.audit.status === 'NUMERIC_UNRESOLVED') continue;
+  assert.equal(row.candidate.ok, true);
+  const input = row.input;
+  const a = input.affine.map(integer);
+  const camera = input.camera.map(integer);
+  const z = integer(input.zoom), dpr = integer(input.dpr);
+  const used = [...new Set(input.mesh.indices)].sort((a, b) => a - b);
+  let maximum = -1n, worst = -1;
+  for (const index of used) {
+    const [x, y] = input.mesh.vertices[index].map(integer);
+    const actual = row.candidate.recovered[index].map(integer);
+    const deltas = [0, 1].map(axis => actual[axis] * U3 -
+      (a[axis] * x + a[axis + 2] * y + (a[axis + 4] - camera[axis]) * U) * z * dpr);
+    const squared = deltas[0] ** 2n + deltas[1] ** 2n;
+    if (squared > maximum) { maximum = squared; worst = index; }
+  }
+  assert.equal(maximum * BigInt(row.audit.maxSquared.d), BigInt(row.audit.maxSquared.n) * DEN, row.id);
+  assert.equal(row.audit.worstVertex, worst, row.id);
+  assert.equal(row.audit.positionPass, maximum * 256n <= DEN, row.id);
+  if (row.disposition === 'REQUIRED_PASS') assert.equal(row.audit.status, 'CERTIFIED', row.id);
+  if (row.disposition === 'REQUIRED_TOPOLOGY_REJECT') {
+    assert.equal(row.audit.status, 'TOPOLOGY_REJECTED', row.id);
+    assert.equal(row.audit.positionPass, true, row.id);
+    assert.ok(maximum * 256n < DEN, row.id);
+  }
+  checked += 1;
+}
+for (const [file, expected] of Object.entries(record.sourceHashes)) {
+  assert.equal(createHash('sha256').update(readFileSync(file)).digest('hex'), expected, file);
+}
+if (process.argv[3]) {
+  const repeat = JSON.parse(readFileSync(process.argv[3], 'utf8'));
+  assert.deepEqual(repeat.rows, record.rows);
+  assert.deepEqual(repeat.sourceHashes, record.sourceHashes);
+}
+console.log(JSON.stringify({ sha256: createHash('sha256').update(bytes).digest('hex'), checked, counts, repeatEqual: !!process.argv[3] }));
