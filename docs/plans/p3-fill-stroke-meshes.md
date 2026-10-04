@@ -1,6 +1,14 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.2z integrated through [PR #93](https://github.com/npclown/vector-studio/pull/93). P3.1j local implementation, validation and final Primary/independent review pass; protected integration remains pending. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.1j integrated through [PR #94](https://github.com/npclown/vector-studio/pull/94). P3.1k test-only mesh-local projection experiment passes local validation and final evidence review; protected CI/integration remain required. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.1k mesh-local projection precision experiment
+
+Base clean updated d031e3d318ce0cbad4755c2710c19949204784b7 after J PR #94 and required CI run37237985320/job111540839662 PASS on693b23158dd29852553d9c32bf989419d3f8490b, completed2026-10-05 06:59:05KST. Branch codex/p3-1k-mesh-projection-precision. The [prospective experiment](p3-mesh-projection-experiment.md) addresses complete ordered storage/shader/NDC error using fixed mesh-local offsets and the existing origin/frame split. The [review record](../evidence/p3.1k-mesh-projection-review-2026-10-05.md) tracks independent proof/corpus/source/evidence review. Full contract freeze precedes implementation; stable-source review precedes numeric execution. This is one test-only feasibility model, not a new ABI, runtime packing implementation or GPU claim. Keep stress failures as explicit observations and retain all P3 gates.
+
+K01 PASS: Primary/Astra high and both implementation preflights approve the complete159-row contract. Exact integrated-J source inventories prove the required carriers' prospective topology margins and complete vertex use, independently of K projection. Exclusive records preserve every stress or unexpected required failure before assertions. K02/K03 implementation proceeds in disjoint files; stable-source review remains the numerical-dispatch gate.
+
+K02-K04 local PASS after Primary/Astra stable-source clearance:4 targeted tests,204 native tests,490 geometry tests and550 root units, static/boundary checks and build. All40 required and117 observational rows certify; the thin control independently rejects topology despite passing position, and the legacy counter is retained. Maximum observed error is about0.047846 physical pixels versus1/16; this is a finite ordered-JavaScript corpus result, not a universal or GPU bound. Primary independently recomputed158 raw exact-error rows and verified full-suite repeat equality. No runtime/ABI/dependency or numerical expectation change occurred; independent release WASM identity is unchanged. Final Primary/Astra evidence review, explicit Markdown/857-link and scope checks PASS; protected integration remains required. Actual GPU arithmetic/coverage and production mesh transport remain separate prerequisites.
 
 ## P3.1j conforming mesh refinement oracle
 

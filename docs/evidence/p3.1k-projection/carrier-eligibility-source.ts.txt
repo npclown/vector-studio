@@ -1,0 +1,149 @@
+import { writeFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+import { fixedCarrierConformingMeshFixtures } from '../tests/geometry/conforming-mesh/fixtures.js';
+import { refineConformingMesh, verifyConformingRefinement } from '../tests/geometry/conforming-mesh/oracle.js';
+import { bitsOf, exactInteger } from '../tests/geometry/rounded-fill/exact.js';
+
+type P = readonly [bigint, bigint];
+const ETA_NUM = 129n;
+const ETA_DEN_SHIFT = 20n;
+const UNIT_SHIFT = 1074n;
+const ETA_SCALED = ETA_NUM << (UNIT_SHIFT - ETA_DEN_SHIFT);
+
+const abs = (x: bigint) => (x < 0n ? -x : x);
+const sub = (a: P, b: P): P => [a[0] - b[0], a[1] - b[1]];
+const cross = (a: P, b: P) => a[0] * b[1] - a[1] * b[0];
+const dot = (a: P, b: P) => a[0] * b[0] + a[1] * b[1];
+const norm2 = (a: P) => dot(a, a);
+const exact = (p: readonly [number, number]): P => [exactInteger(bitsOf(p[0])), exactInteger(bitsOf(p[1]))];
+
+function determinantErrorBound(u: P, v: P): bigint {
+  return (
+    2n * ETA_SCALED * (abs(u[0]) + abs(u[1]) + abs(v[0]) + abs(v[1])) +
+    8n * ETA_SCALED * ETA_SCALED
+  );
+}
+
+type Rat = { n: bigint; d: bigint };
+function lessRat(a: Rat, b: Rat) { return a.n * b.d < b.n * a.d; }
+function pointSegmentSquared(p: P, a: P, b: P): Rat {
+  const d = sub(b, a);
+  const q = sub(p, a);
+  const dd = norm2(d);
+  const t = dot(q, d);
+  if (t <= 0n) return { n: norm2(q), d: 1n };
+  if (t >= dd) return { n: norm2(sub(p, b)), d: 1n };
+  const c = cross(d, q);
+  return { n: c * c, d: dd };
+}
+
+function edgeDistanceSquared(a: P, b: P, c: P, d: P): Rat {
+  return [pointSegmentSquared(a, c, d), pointSegmentSquared(b, c, d), pointSegmentSquared(c, a, b), pointSegmentSquared(d, a, b)]
+    .reduce((best, item) => lessRat(item, best) ? item : best);
+}
+
+function approximateScaled(x: bigint): number {
+  const sign = x < 0n ? -1 : 1;
+  const a = abs(x);
+  if (a === 0n) return 0;
+  const bits = a.toString(2).length;
+  const shift = Math.max(0, bits - 52);
+  return sign * Number(a >> BigInt(shift)) * 2 ** (shift - 1074);
+}
+
+function approximateSquaredRatio(value: Rat): number {
+  const nBits = value.n.toString(2).length;
+  const dBits = value.d.toString(2).length;
+  const nShift = Math.max(0, nBits - 52);
+  const dShift = Math.max(0, dBits - 52);
+  return (
+    (Number(value.n >> BigInt(nShift)) / Number(value.d >> BigInt(dShift))) *
+    2 ** (nShift - dShift - 2148)
+  );
+}
+
+describe('read-only K carrier eligibility inventory', () => {
+  it('writes exact source-complex margins from integrated J inputs', () => {
+    const rows = fixedCarrierConformingMeshFixtures().map((fixture) => {
+      const result = refineConformingMesh(fixture.mesh);
+      expect(result.status, fixture.id).toBe('CERTIFIED');
+      if (result.status !== 'CERTIFIED') throw new Error(fixture.id);
+      verifyConformingRefinement(fixture.mesh, result.mesh);
+      const points = result.mesh.vertices.map(exact);
+      const referenced = [...new Set(result.mesh.indices)];
+      let minDistinctLInf: bigint | null = null;
+      for (let i = 0; i < referenced.length; i++) for (let j = i + 1; j < referenced.length; j++) {
+        const p = points[referenced[i]!]!;
+        const q = points[referenced[j]!]!;
+        const value = abs(p[0] - q[0]) > abs(p[1] - q[1]) ? abs(p[0] - q[0]) : abs(p[1] - q[1]);
+        if (minDistinctLInf === null || value < minDistinctLInf) minDistinctLInf = value;
+      }
+
+      let minTriangleSlack: bigint | null = null;
+      const edges = new Map<string, readonly [number, number]>();
+      for (let offset = 0; offset < result.mesh.indices.length; offset += 3) {
+        const ids = [result.mesh.indices[offset]!, result.mesh.indices[offset + 1]!, result.mesh.indices[offset + 2]!] as const;
+        const u = sub(points[ids[1]]!, points[ids[0]]!);
+        const v = sub(points[ids[2]]!, points[ids[0]]!);
+        const slack = cross(u, v) - determinantErrorBound(u, v);
+        if (minTriangleSlack === null || slack < minTriangleSlack) minTriangleSlack = slack;
+        for (let k = 0; k < 3; k++) {
+          const x = ids[k]!; const y = ids[(k + 1) % 3]!;
+          const lo = x < y ? x : y; const hi = x < y ? y : x;
+          edges.set(`${lo}:${hi}`, [lo, hi]);
+        }
+      }
+
+      const list = [...edges.values()];
+      let minDisjoint: Rat | null = null;
+      let minSharedSlack: bigint | null = null;
+      let sharedCollinearOpposite = 0;
+      for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+        const left = list[i]!; const right = list[j]!;
+        const shared = left.find((id) => right.includes(id));
+        if (shared === undefined) {
+          const distance = edgeDistanceSquared(points[left[0]]!, points[left[1]]!, points[right[0]]!, points[right[1]]!);
+          if (minDisjoint === null || lessRat(distance, minDisjoint)) minDisjoint = distance;
+        } else {
+          const l = left[0] === shared ? left[1] : left[0];
+          const r = right[0] === shared ? right[1] : right[0];
+          const u = sub(points[l]!, points[shared]!);
+          const v = sub(points[r]!, points[shared]!);
+          const determinant = abs(cross(u, v));
+          const bound = determinantErrorBound(u, v);
+          let slack: bigint;
+          if (determinant === 0n) {
+            sharedCollinearOpposite += 1;
+            slack = -dot(u, v) - bound;
+          } else slack = determinant - bound;
+          if (minSharedSlack === null || slack < minSharedSlack) minSharedSlack = slack;
+        }
+      }
+
+      const distinctPass = minDistinctLInf !== null && minDistinctLInf > 2n * ETA_SCALED;
+      const trianglePass = minTriangleSlack !== null && minTriangleSlack > 0n;
+      const sharedPass = minSharedSlack !== null && minSharedSlack > 0n;
+      const disjointPass =
+        minDisjoint !== null && (minDisjoint.n << 22n) > (minDisjoint.d << 2148n);
+      return {
+        id: fixture.id,
+        vertices: points.length,
+        triangles: result.mesh.indices.length / 3,
+        inputHash: result.mesh.vertices.map((p) => p.map(bitsOf).join(':')).join(','),
+        distinctPass,
+        trianglePass,
+        sharedPass,
+        disjointPass,
+        minDistinctLInfApprox: approximateScaled(minDistinctLInf!),
+        minTriangleSlackPositive: minTriangleSlack! > 0n,
+        minTriangleDoubleAreaSlackApprox: approximateSquaredRatio({ n: minTriangleSlack!, d: 1n }),
+        minSharedSlackPositive: minSharedSlack! > 0n,
+        minSharedPredicateSlackApprox: approximateSquaredRatio({ n: minSharedSlack!, d: 1n }),
+        minDisjointSquaredApprox: minDisjoint ? approximateSquaredRatio(minDisjoint) : null,
+        sharedCollinearOpposite,
+      };
+    });
+    writeFileSync('.tools/k-carrier-eligibility.json', `${JSON.stringify(rows, null, 2)}\n`, { flag: 'wx' });
+    expect(rows.every((row) => row.distinctPass && row.trianglePass && row.sharedPass && row.disjointPass)).toBe(true);
+  });
+});

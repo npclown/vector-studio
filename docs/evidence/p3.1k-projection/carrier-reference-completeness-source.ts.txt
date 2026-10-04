@@ -1,0 +1,69 @@
+import { createHash } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+import { fixedCarrierConformingMeshFixtures } from '../tests/geometry/conforming-mesh/fixtures.js';
+import { refineConformingMesh, verifyConformingRefinement } from '../tests/geometry/conforming-mesh/oracle.js';
+import { bitsOf, exactInteger } from '../tests/geometry/rounded-fill/exact.js';
+
+const ETA_SCALED = 129n << 1054n;
+const abs = (value: bigint) => (value < 0n ? -value : value);
+
+describe('read-only K carrier reference completeness', () => {
+  it('proves every J output vertex is referenced and separated', () => {
+    const rows = fixedCarrierConformingMeshFixtures().map((fixture) => {
+      const result = refineConformingMesh(fixture.mesh);
+      expect(result.status, fixture.id).toBe('CERTIFIED');
+      if (result.status !== 'CERTIFIED') throw new Error(fixture.id);
+      verifyConformingRefinement(fixture.mesh, result.mesh);
+      const referenced = new Set(result.mesh.indices);
+      const unreferenced = result.mesh.vertices.flatMap((_, index) =>
+        referenced.has(index) ? [] : [index],
+      );
+      const exact = result.mesh.vertices.map(([x, y]) => [
+        exactInteger(bitsOf(x)),
+        exactInteger(bitsOf(y)),
+      ] as const);
+      let minAllVerticesLInf: bigint | null = null;
+      for (let left = 0; left < exact.length; left += 1) {
+        for (let right = left + 1; right < exact.length; right += 1) {
+          const dx = abs(exact[left]![0] - exact[right]![0]);
+          const dy = abs(exact[left]![1] - exact[right]![1]);
+          const distance = dx > dy ? dx : dy;
+          if (minAllVerticesLInf === null || distance < minAllVerticesLInf) {
+            minAllVerticesLInf = distance;
+          }
+        }
+      }
+      const vertexBits = result.mesh.vertices.map(([x, y]) => [
+        bitsOf(x).toString(16).padStart(16, '0'),
+        bitsOf(y).toString(16).padStart(16, '0'),
+      ]);
+      const sourceBytes = JSON.stringify({
+        vertexBits,
+        indices: result.mesh.indices,
+        parentTriangle: result.mesh.parentTriangle,
+      });
+      return {
+        id: fixture.id,
+        sourceSha256: createHash('sha256').update(sourceBytes).digest('hex'),
+        vertexCount: result.mesh.vertices.length,
+        referencedVertexCount: referenced.size,
+        unreferenced,
+        minAllVerticesLInf: { n: minAllVerticesLInf!.toString(), scalePower: -1074 },
+        separationPass: minAllVerticesLInf! > 2n * ETA_SCALED,
+      };
+    });
+    const artifact = {
+      schema: 'p3-k-carrier-reference-completeness-v1',
+      coordinateUnits: 'stored integer times 2^-1074',
+      componentPerturbation: { n: '129', d: '1048576' },
+      rows,
+    };
+    writeFileSync(
+      '.tools/k-carrier-reference-completeness.json',
+      `${JSON.stringify(artifact, null, 2)}\n`,
+      { flag: 'wx' },
+    );
+    expect(rows.every((row) => row.unreferenced.length === 0 && row.separationPass)).toBe(true);
+  });
+});
