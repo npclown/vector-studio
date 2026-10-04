@@ -36,7 +36,7 @@ export type NativeCubicEdgeOwner =
     }>
   | Readonly<{ kind: 'ImplicitClosure'; contour: number }>;
 
-export type NativeCubicRow = Readonly<{
+export type NativeCubicCarrier<Owner> = Readonly<{
   id: string;
   rule: NativeCubicRule;
   source_bits: readonly (readonly (readonly string[])[])[];
@@ -48,14 +48,20 @@ export type NativeCubicRow = Readonly<{
   statistics: NativeCubicStatistics;
   flat_bounds: readonly [number, number, number, number] | null;
   commands: readonly NativeCubicCommand[] | null;
-  edge_owners: readonly NativeCubicEdgeOwner[] | null;
+  edge_owners: readonly Owner[] | null;
   rounded: NativeRoundedRow | null;
   allocations: number;
   allocated_bytes: number;
   inline_bytes: number;
 }>;
 
-function record(value: unknown, label: string, keys: readonly string[]): Record<string, unknown> {
+export type NativeCubicRow = NativeCubicCarrier<NativeCubicEdgeOwner>;
+
+export function record(
+  value: unknown,
+  label: string,
+  keys: readonly string[],
+): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value))
     throw new Error(`${label} must be an object`);
   const result = value as Record<string, unknown>;
@@ -76,7 +82,7 @@ function string(value: unknown, label: string): string {
   return value;
 }
 
-function integer(value: unknown, label: string): number {
+export function integer(value: unknown, label: string): number {
   if (
     typeof value !== 'number' ||
     !Number.isFinite(value) ||
@@ -138,7 +144,7 @@ function command(value: unknown, label: string): NativeCubicCommand {
   };
 }
 
-function owner(value: unknown, label: string): NativeCubicEdgeOwner {
+export function parseNativeCubicOwner(value: unknown, label: string): NativeCubicEdgeOwner {
   if (typeof value !== 'object' || value === null || Array.isArray(value))
     throw new Error(`${label} must be an object`);
   const kind = (value as Record<string, unknown>).kind;
@@ -163,6 +169,14 @@ export function parseNativeCubicRow(line: string, index: number): NativeCubicRow
 }
 
 export function parseNativeCubicValue(value: unknown, index: number): NativeCubicRow {
+  return parseNativeCubicCarrier(value, index, parseNativeCubicOwner);
+}
+
+export function parseNativeCubicCarrier<Owner>(
+  value: unknown,
+  index: number,
+  parseOwner: (value: unknown, label: string) => Owner,
+): NativeCubicCarrier<Owner> {
   const label = `row ${index}`;
   const item = record(value, label, [
     'id',
@@ -245,7 +259,7 @@ export function parseNativeCubicValue(value: unknown, index: number): NativeCubi
     item.edge_owners === null
       ? null
       : array(item.edge_owners, `${label}.edge_owners`).map((entry, ownerIndex) =>
-          owner(entry, `${label}.edge_owners[${ownerIndex}]`),
+          parseOwner(entry, `${label}.edge_owners[${ownerIndex}]`),
         );
   if (edge_owners !== null && edge_owners.length > 64)
     throw new Error(`${label}.edge_owners exceeds limit`);

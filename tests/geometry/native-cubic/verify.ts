@@ -169,7 +169,7 @@ export function assertOwnerMapping(
     throw new Error('rounded contributor lost owner attribution');
 }
 
-export function roundedFixture(row: NativeCubicRow): FixtureRow {
+export function roundedFixture(row: Pick<NativeCubicRow, 'id' | 'rule' | 'rounded'>): FixtureRow {
   if (!row.rounded) throw new Error('rounded result missing');
   return {
     id: row.id,
@@ -183,7 +183,7 @@ export function roundedFixture(row: NativeCubicRow): FixtureRow {
   };
 }
 
-export function assertFlatBounds(row: NativeCubicRow): void {
+export function assertFlatBounds(row: Pick<NativeCubicRow, 'flat_bounds' | 'commands'>): void {
   if (!row.flat_bounds || !row.commands) throw new Error('flat bounds output missing');
   const [minX, minY, maxX, maxY] = row.flat_bounds;
   if (minX > maxX || minY > maxY) throw new Error('flat bounds are unordered');
