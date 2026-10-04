@@ -1922,16 +1922,17 @@ mod tests {
         )
         .unwrap();
         assert_eq!(diagnostics.flat_status, PATH_INVALID_TOLERANCE);
-        assert_eq!(
-            measured_raw_attempt(
-                &mut workspace,
-                &move_only,
-                FLATTEN_TOLERANCE,
-                TOPOLOGY_TOLERANCE,
-                MAX_COMMANDS,
-            ),
-            Err(BridgeError::UnsupportedSource)
-        );
+        let diagnostics = measured_raw_attempt(
+            &mut workspace,
+            &move_only,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(!diagnostics.topology_invoked);
+        assert!(diagnostics.rounded_invoked);
+        assert!(workspace.output().is_some());
 
         let empty = RawPath::default();
         let diagnostics = measured_raw_attempt(
@@ -1956,18 +1957,21 @@ mod tests {
         let mut consecutive_moves = RawPath::default();
         consecutive_moves.move_to(point(0.0, 0.0));
         consecutive_moves.move_to(point(1.0, 0.0));
-        assert_eq!(
-            measured_raw_attempt(
-                &mut workspace,
-                &consecutive_moves,
-                FLATTEN_TOLERANCE,
-                TOPOLOGY_TOLERANCE,
-                MAX_COMMANDS,
-            ),
-            Err(BridgeError::UnsupportedSource)
-        );
+        let diagnostics = measured_raw_attempt(
+            &mut workspace,
+            &consecutive_moves,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
         assert!(workspace.diagnostics().sizing_invoked);
-        assert!(!workspace.diagnostics().emission_invoked);
+        assert!(workspace.diagnostics().emission_invoked);
+        assert!(!diagnostics.topology_invoked);
+        assert!(diagnostics.rounded_invoked);
+        let output = workspace.output().unwrap();
+        assert_eq!(output.ranges.len(), 2);
+        assert_eq!(output.owners.len(), 0);
 
         let mut line_before_fifth = RawPath::default();
         line_before_fifth.move_to(point(0.0, 0.0));
@@ -1988,7 +1992,7 @@ mod tests {
                 TOPOLOGY_TOLERANCE,
                 MAX_COMMANDS,
             ),
-            Err(BridgeError::UnsupportedSource)
+            Err(BridgeError::SourceLimit)
         );
 
         let mut fifth_before_line = RawPath::default();
@@ -2546,7 +2550,7 @@ mod tests {
     }
 
     #[test]
-    fn line_two_edge_forms_fail_but_zero_line_triangle_normalizes() {
+    fn line_two_edge_forms_publish_empty_and_zero_line_triangle_normalizes() {
         let success = raw_mixed_triangle(true, true, 0b111);
         let mut one_line_close = RawPath::default();
         one_line_close.move_to(point(0.0, 0.0));
@@ -2565,7 +2569,7 @@ mod tests {
         zero_line.close();
         let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
 
-        for failure in [&one_line_close, &two_line_open] {
+        for degenerate in [&one_line_close, &two_line_open] {
             measured_raw_attempt(
                 &mut workspace,
                 &success,
@@ -2574,21 +2578,22 @@ mod tests {
                 MAX_COMMANDS,
             )
             .unwrap();
-            assert_eq!(
-                measured_raw_attempt(
-                    &mut workspace,
-                    failure,
-                    FLATTEN_TOLERANCE,
-                    TOPOLOGY_TOLERANCE,
-                    MAX_COMMANDS,
-                ),
-                Err(BridgeError::Topology(TopologyError::Unresolved))
-            );
-            let diagnostics = workspace.diagnostics();
+            let diagnostics = measured_raw_attempt(
+                &mut workspace,
+                degenerate,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
             assert!(diagnostics.emission_invoked);
-            assert!(diagnostics.topology_invoked);
-            assert!(!diagnostics.rounded_invoked);
-            assert!(workspace.output().is_none());
+            assert!(!diagnostics.topology_invoked);
+            assert!(diagnostics.rounded_invoked);
+            let output = workspace.output().unwrap();
+            assert!(output.rounded.vertices.is_empty());
+            assert!(output.rounded.indices.is_empty());
+            assert_eq!(output.points.len(), 2);
+            assert_eq!(output.owners.len(), 2);
             measured_raw_attempt(
                 &mut workspace,
                 &success,
@@ -2798,7 +2803,7 @@ mod tests {
         let mut unsupported = RawPath::default();
         unsupported.move_to(point(0.0, 0.0));
         unsupported.move_to(point(3.0, 0.0));
-        unsupported.line_to(point(6.0, 0.0));
+        append_linear(&mut unsupported, point(3.0, 0.0), point(6.0, 0.0));
         let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
 
         measured_raw_attempt(
@@ -3437,6 +3442,410 @@ mod tests {
         assert_eq!(bridge_carrier_snapshot(bridge), direct_snapshot);
     }
 
+    #[derive(Clone, Copy, Debug)]
+    enum DegenerateLineEncoding {
+        Move,
+        Zero,
+        Retrace { returning: bool },
+    }
+
+    fn append_degenerate_line(path: &mut RawPath, encoding: DegenerateLineEncoding, closed: bool) {
+        let start = point(20.0, 0.0);
+        path.move_to(start);
+        match encoding {
+            DegenerateLineEncoding::Move => {}
+            DegenerateLineEncoding::Zero => path.line_to(start),
+            DegenerateLineEncoding::Retrace { returning } => {
+                path.line_to(point(23.0, 0.0));
+                if returning {
+                    path.line_to(start);
+                }
+            }
+        }
+        if closed {
+            path.close();
+        }
+    }
+
+    fn degenerate_line_contour(encoding: DegenerateLineEncoding) -> Vec<Point> {
+        match encoding {
+            DegenerateLineEncoding::Move | DegenerateLineEncoding::Zero => {
+                vec![point(20.0, 0.0)]
+            }
+            DegenerateLineEncoding::Retrace { .. } => {
+                vec![point(20.0, 0.0), point(23.0, 0.0)]
+            }
+        }
+    }
+
+    fn append_open_line_contour(path: &mut RawPath, contour: &[Point]) {
+        path.move_to(contour[0]);
+        for endpoint in &contour[1..] {
+            path.line_to(*endpoint);
+        }
+    }
+
+    fn assert_empty_rounded_mesh(output: RoundedFillOutput<'_>) {
+        assert!(output.vertices.is_empty());
+        assert!(output.indices.is_empty());
+        assert_eq!(output.bounds.min_x.to_bits(), 0);
+        assert_eq!(output.bounds.min_y.to_bits(), 0);
+        assert_eq!(output.bounds.max_x.to_bits(), 0);
+        assert_eq!(output.bounds.max_y.to_bits(), 0);
+        assert_eq!(output.error_bound.to_bits(), 0);
+    }
+
+    fn assert_normalized_contours(output: BridgeOutput<'_>, contours: &[Vec<Point>]) {
+        assert_eq!(output.ranges.len(), contours.len());
+        let mut point_index = 0usize;
+        for (range, contour) in output.ranges.iter().zip(contours) {
+            assert_eq!(range.start, point_index);
+            assert_eq!(range.count, contour.len());
+            for expected in contour {
+                assert_point_bits(output.points[point_index], *expected);
+                point_index += 1;
+            }
+        }
+        assert_eq!(point_index, output.points.len());
+    }
+
+    #[test]
+    fn all_line_degenerates_match_direct_rounded_standalone() {
+        let mut bridge = BridgeWorkspace::new(LIMITS).unwrap();
+        let mut direct = RoundedFillWorkspace::new(LIMITS).unwrap();
+        let mut attempts = 0usize;
+        for encoding in [
+            DegenerateLineEncoding::Move,
+            DegenerateLineEncoding::Zero,
+            DegenerateLineEncoding::Retrace { returning: false },
+            DegenerateLineEncoding::Retrace { returning: true },
+        ] {
+            for closed in [false, true] {
+                let mut path = RawPath::default();
+                append_degenerate_line(&mut path, encoding, closed);
+                let contour = degenerate_line_contour(encoding);
+                let contours = vec![contour.clone()];
+                for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
+                    let diagnostics = measured_raw_rule_attempt(
+                        &mut bridge,
+                        &path,
+                        rule,
+                        FLATTEN_TOLERANCE,
+                        TOPOLOGY_TOLERANCE,
+                        MAX_COMMANDS,
+                    )
+                    .unwrap();
+                    assert_eq!(diagnostics.flat_status, PATH_OK);
+                    assert!(diagnostics.emission_invoked);
+                    assert!(!diagnostics.topology_invoked);
+                    assert!(!diagnostics.rounded_topology_invoked);
+                    assert!(!diagnostics.rounded_topology_selected);
+                    assert_eq!(diagnostics.rounded_topology_error, None);
+                    assert!(diagnostics.rounded_invoked);
+                    let output = bridge.output().unwrap();
+                    assert_normalized_contours(output, &contours);
+                    let expected_edges = if contour.len() >= 2 { contour.len() } else { 0 };
+                    assert_eq!(output.owners.len(), expected_edges);
+                    assert_eq!(output.rounded.source_edges.len(), expected_edges);
+                    assert_depth_zero_original_identity(&path, output);
+                    assert_empty_rounded_mesh(output.rounded);
+                    assert_direct_rounded_identity(&mut direct, &contours, rule, output);
+                    attempts += 1;
+                }
+            }
+        }
+        assert_eq!(attempts, 16);
+    }
+
+    #[test]
+    fn all_line_degenerates_preserve_f02_composition_order_and_carrier() {
+        let f02 = line_identity_fixtures()
+            .into_iter()
+            .find(|fixture| fixture.id == "F02")
+            .unwrap();
+        let mut bridge = BridgeWorkspace::new(LIMITS).unwrap();
+        let mut direct = RoundedFillWorkspace::new(LIMITS).unwrap();
+        let mut attempts = 0usize;
+        for encoding in [
+            DegenerateLineEncoding::Move,
+            DegenerateLineEncoding::Zero,
+            DegenerateLineEncoding::Retrace { returning: false },
+            DegenerateLineEncoding::Retrace { returning: true },
+        ] {
+            for closed in [false, true] {
+                for degenerate_index in 0..3 {
+                    let mut path = RawPath::default();
+                    let mut contours = Vec::new();
+                    let mut ordinary_index = 0usize;
+                    for contour_index in 0..3 {
+                        if contour_index == degenerate_index {
+                            append_degenerate_line(&mut path, encoding, closed);
+                            contours.push(degenerate_line_contour(encoding));
+                        } else {
+                            let contour = &f02.contours[ordinary_index];
+                            append_open_line_contour(&mut path, contour);
+                            contours.push(contour.clone());
+                            ordinary_index += 1;
+                        }
+                    }
+                    for (rule_index, rule) in [LineFillRule::Nonzero, LineFillRule::Evenodd]
+                        .into_iter()
+                        .enumerate()
+                    {
+                        let diagnostics = measured_raw_rule_attempt(
+                            &mut bridge,
+                            &path,
+                            rule,
+                            FLATTEN_TOLERANCE,
+                            TOPOLOGY_TOLERANCE,
+                            MAX_COMMANDS,
+                        )
+                        .unwrap();
+                        assert!(!diagnostics.topology_invoked);
+                        assert!(!diagnostics.rounded_topology_invoked);
+                        assert!(diagnostics.rounded_invoked);
+                        let output = bridge.output().unwrap();
+                        assert_normalized_contours(output, &contours);
+                        let degenerate_edges = if contours[degenerate_index].len() >= 2 {
+                            contours[degenerate_index].len()
+                        } else {
+                            0
+                        };
+                        assert_eq!(output.owners.len(), 8 + degenerate_edges);
+                        assert_eq!(mesh_area(output.rounded), f02.areas[rule_index]);
+                        assert_depth_zero_original_identity(&path, output);
+                        assert_direct_rounded_identity(&mut direct, &contours, rule, output);
+                        attempts += 1;
+                    }
+                }
+            }
+        }
+        assert_eq!(attempts, 48);
+    }
+
+    #[test]
+    fn all_line_degenerate_signed_zero_and_source_caps_are_exact() {
+        let mut bridge = BridgeWorkspace::new(LIMITS).unwrap();
+        let mut direct = RoundedFillWorkspace::new(LIMITS).unwrap();
+        for closed in [false, true] {
+            let mut signed = RawPath::default();
+            signed.move_to(point(-0.0, 0.0));
+            signed.line_to(point(0.0, -0.0));
+            if closed {
+                signed.close();
+            }
+            let contours = vec![vec![point(-0.0, 0.0)]];
+            for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
+                let diagnostics = measured_raw_rule_attempt(
+                    &mut bridge,
+                    &signed,
+                    rule,
+                    FLATTEN_TOLERANCE,
+                    TOPOLOGY_TOLERANCE,
+                    MAX_COMMANDS,
+                )
+                .unwrap();
+                assert!(!diagnostics.topology_invoked);
+                assert!(diagnostics.rounded_invoked);
+                let output = bridge.output().unwrap();
+                assert_eq!(output.ranges[0].count, 1);
+                assert_eq!(output.points[0].x.to_bits(), 1u64 << 63);
+                assert_eq!(output.points[0].y.to_bits(), 0);
+                assert!(output.owners.is_empty());
+                let DecodedSource::Line { points, .. } = output.sources[0] else {
+                    panic!("expected signed-zero LINE source")
+                };
+                assert_eq!(points[0].x.to_bits(), 1u64 << 63);
+                assert_eq!(points[1].x.to_bits(), 0);
+                assert_eq!(points[1].y.to_bits(), 1u64 << 63);
+                assert_depth_zero_original_identity(&signed, output);
+                assert_empty_rounded_mesh(output.rounded);
+                assert_direct_rounded_identity(&mut direct, &contours, rule, output);
+            }
+        }
+
+        let mut four_moves = RawPath::default();
+        for x in 0..4 {
+            four_moves.move_to(point(f64::from(x), 0.0));
+        }
+        let mut five_moves = four_moves.clone();
+        five_moves.move_to(point(4.0, 0.0));
+        for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
+            let diagnostics = measured_raw_rule_attempt(
+                &mut bridge,
+                &four_moves,
+                rule,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            assert!(!diagnostics.topology_invoked);
+            assert!(diagnostics.rounded_invoked);
+            let output = bridge.output().unwrap();
+            assert_eq!(output.ranges.len(), 4);
+            assert!(output.ranges.iter().all(|range| range.count == 1));
+            assert_eq!(output.points.len(), 4);
+            assert!(output.owners.is_empty());
+            assert_empty_rounded_mesh(output.rounded);
+            assert_eq!(
+                measured_raw_rule_attempt(
+                    &mut bridge,
+                    &five_moves,
+                    rule,
+                    FLATTEN_TOLERANCE,
+                    TOPOLOGY_TOLERANCE,
+                    MAX_COMMANDS,
+                ),
+                Err(BridgeError::SourceLimit)
+            );
+            assert!(bridge.diagnostics().sizing_invoked);
+            assert!(!bridge.diagnostics().emission_invoked);
+            assert!(bridge.output().is_none());
+        }
+
+        let mut sixteen_zero_lines = RawPath::default();
+        sixteen_zero_lines.move_to(point(0.0, 0.0));
+        for _ in 0..16 {
+            sixteen_zero_lines.line_to(point(0.0, 0.0));
+        }
+        let mut seventeen_zero_lines = sixteen_zero_lines.clone();
+        seventeen_zero_lines.line_to(point(0.0, 0.0));
+        for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
+            let diagnostics = measured_raw_rule_attempt(
+                &mut bridge,
+                &sixteen_zero_lines,
+                rule,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            assert!(!diagnostics.topology_invoked);
+            assert!(diagnostics.rounded_invoked);
+            let output = bridge.output().unwrap();
+            assert_eq!(output.sources.len(), 16);
+            assert_eq!(output.ranges[0].count, 1);
+            assert!(output.owners.is_empty());
+            assert_empty_rounded_mesh(output.rounded);
+            assert_eq!(
+                measured_raw_rule_attempt(
+                    &mut bridge,
+                    &seventeen_zero_lines,
+                    rule,
+                    FLATTEN_TOLERANCE,
+                    TOPOLOGY_TOLERANCE,
+                    MAX_COMMANDS,
+                ),
+                Err(BridgeError::SourceLimit)
+            );
+            assert!(!bridge.diagnostics().emission_invoked);
+            assert!(bridge.output().is_none());
+        }
+    }
+
+    #[test]
+    fn all_line_a02_retraces_retain_proof_and_rounded_ambiguity() {
+        let next = f64::from_bits(1.0f64.to_bits() + 1);
+        let contours = vec![
+            vec![point(0.0, 1.0), point(2.0, next)],
+            vec![point(1.0, 1.0), point(1.0, next)],
+        ];
+        let mut bridge = BridgeWorkspace::new(LIMITS).unwrap();
+        let mut direct = RoundedFillWorkspace::new(LIMITS).unwrap();
+        let mut attempts = 0usize;
+        for (returning, closed) in [(false, false), (false, true), (true, false), (true, true)] {
+            let path = line_path(&contours, returning, closed);
+            for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
+                let references: Vec<&[Point]> =
+                    contours.iter().map(|contour| contour.as_slice()).collect();
+                assert_eq!(
+                    direct.tessellate(&references, rule, 1.0),
+                    Err(RoundedFillError::TopologyAmbiguous)
+                );
+                let expected_stats = direct.stats();
+                assert_eq!(
+                    measured_raw_rule_attempt(
+                        &mut bridge,
+                        &path,
+                        rule,
+                        FLATTEN_TOLERANCE,
+                        1.0,
+                        MAX_COMMANDS,
+                    ),
+                    Err(BridgeError::Rounded(RoundedFillError::TopologyAmbiguous))
+                );
+                let diagnostics = bridge.diagnostics();
+                assert!(diagnostics.emission_invoked);
+                assert!(!diagnostics.topology_invoked);
+                assert!(!diagnostics.rounded_topology_invoked);
+                assert!(!diagnostics.rounded_topology_selected);
+                assert_eq!(diagnostics.rounded_topology_error, None);
+                assert!(diagnostics.rounded_invoked);
+                assert_eq!(bridge.rounded_stats(), expected_stats);
+                assert!(bridge.output().is_none());
+                attempts += 1;
+            }
+        }
+        assert_eq!(attempts, 8);
+    }
+
+    #[test]
+    fn all_line_eligibility_does_not_migrate_mixed_empty_or_collapsed_contours() {
+        let mut move_before = RawPath::default();
+        move_before.move_to(point(20.0, 0.0));
+        append_mixed_triangle(&mut move_before, 0.0, true, true, 0);
+        let mut move_after = RawPath::default();
+        append_mixed_triangle(&mut move_after, 0.0, true, true, 0);
+        move_after.move_to(point(20.0, 0.0));
+        let mut collapsed_before = RawPath::default();
+        collapsed_before.move_to(point(20.0, 0.0));
+        collapsed_before.line_to(point(20.0, 0.0));
+        append_mixed_triangle(&mut collapsed_before, 0.0, true, true, 0);
+        let mut collapsed_after = RawPath::default();
+        append_mixed_triangle(&mut collapsed_after, 0.0, true, true, 0);
+        collapsed_after.move_to(point(20.0, 0.0));
+        collapsed_after.line_to(point(20.0, 0.0));
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+        for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
+            for path in [&move_before, &move_after] {
+                assert_eq!(
+                    measured_raw_rule_attempt(
+                        &mut workspace,
+                        path,
+                        rule,
+                        FLATTEN_TOLERANCE,
+                        TOPOLOGY_TOLERANCE,
+                        MAX_COMMANDS,
+                    ),
+                    Err(BridgeError::UnsupportedSource)
+                );
+                assert!(workspace.diagnostics().sizing_invoked);
+                assert!(!workspace.diagnostics().emission_invoked);
+                assert!(!workspace.diagnostics().topology_invoked);
+                assert!(!workspace.diagnostics().rounded_invoked);
+                assert!(workspace.output().is_none());
+            }
+            for path in [&collapsed_before, &collapsed_after] {
+                assert_eq!(
+                    measured_raw_rule_attempt(
+                        &mut workspace,
+                        path,
+                        rule,
+                        FLATTEN_TOLERANCE,
+                        TOPOLOGY_TOLERANCE,
+                        MAX_COMMANDS,
+                    ),
+                    Err(BridgeError::ZeroLengthLeaf)
+                );
+                assert!(workspace.diagnostics().emission_invoked);
+                assert!(!workspace.diagnostics().topology_invoked);
+                assert!(!workspace.diagnostics().rounded_invoked);
+                assert!(workspace.output().is_none());
+            }
+        }
+    }
+
     #[test]
     fn all_line_identity_matches_literal_rounded_carriers_in_all_closure_forms() {
         let fixtures = line_identity_fixtures();
@@ -3612,7 +4021,7 @@ mod tests {
     }
 
     #[test]
-    fn repeated_line_square_normalizes_but_short_contours_still_fail() {
+    fn repeated_line_square_normalizes_and_short_contours_publish_empty() {
         let fixtures = line_identity_fixtures();
         let f01 = fixtures.iter().find(|fixture| fixture.id == "F01").unwrap();
         let mut repeated = RawPath::default();
@@ -3649,19 +4058,21 @@ mod tests {
         assert_eq!(repeated_output.owners.len(), 4);
         assert_eq!(mesh_area(repeated_output.rounded), 100.0);
         for path in [&one_line, &two_lines] {
-            assert_eq!(
-                measured_raw_attempt(
-                    &mut workspace,
-                    path,
-                    FLATTEN_TOLERANCE,
-                    TOPOLOGY_TOLERANCE,
-                    MAX_COMMANDS,
-                ),
-                Err(BridgeError::Topology(TopologyError::Unresolved))
-            );
-            assert!(workspace.diagnostics().topology_invoked);
-            assert!(!workspace.diagnostics().rounded_invoked);
-            assert!(workspace.output().is_none());
+            let diagnostics = measured_raw_attempt(
+                &mut workspace,
+                path,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            assert!(!diagnostics.topology_invoked);
+            assert!(diagnostics.rounded_invoked);
+            let output = workspace.output().unwrap();
+            assert!(output.rounded.vertices.is_empty());
+            assert!(output.rounded.indices.is_empty());
+            assert_eq!(output.points.len(), 2);
+            assert_eq!(output.owners.len(), 2);
         }
         measured_raw_attempt(
             &mut workspace,
@@ -3681,6 +4092,14 @@ mod tests {
         let fixtures = line_identity_fixtures();
         let f01 = fixtures.iter().find(|fixture| fixture.id == "F01").unwrap();
         let line_success = line_path(&f01.contours, false, false);
+        let mut degenerate_success = RawPath::default();
+        append_degenerate_line(&mut degenerate_success, DegenerateLineEncoding::Zero, true);
+        let next = f64::from_bits(1.0f64.to_bits() + 1);
+        let ambiguity_contours = vec![
+            vec![point(0.0, 1.0), point(2.0, next)],
+            vec![point(1.0, 1.0), point(1.0, next)],
+        ];
+        let ambiguity = line_path(&ambiguity_contours, false, false);
         let mixed_failure = mixed_fallback_path(false);
         let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
 
@@ -3694,6 +4113,48 @@ mod tests {
         .unwrap();
         let retained = workspace.topology_stats();
         assert!(retained.leaves > 0);
+        measured_raw_attempt(
+            &mut workspace,
+            &degenerate_success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(!workspace.diagnostics().topology_invoked);
+        assert!(!workspace.diagnostics().rounded_topology_invoked);
+        assert!(workspace.diagnostics().rounded_invoked);
+        assert_eq!(workspace.topology_stats(), retained);
+        assert_empty_rounded_mesh(workspace.output().unwrap().rounded);
+        assert_eq!(
+            measured_raw_attempt(
+                &mut workspace,
+                &degenerate_success,
+                FLATTEN_TOLERANCE,
+                0.0,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::Rounded(RoundedFillError::InvalidTolerance))
+        );
+        assert!(!workspace.diagnostics().topology_invoked);
+        assert!(workspace.diagnostics().rounded_invoked);
+        assert_eq!(workspace.topology_stats(), retained);
+        assert!(workspace.output().is_none());
+        assert_eq!(
+            measured_raw_attempt(
+                &mut workspace,
+                &ambiguity,
+                FLATTEN_TOLERANCE,
+                1.0,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::Rounded(RoundedFillError::TopologyAmbiguous))
+        );
+        assert!(!workspace.diagnostics().topology_invoked);
+        assert!(!workspace.diagnostics().rounded_topology_invoked);
+        assert!(workspace.diagnostics().rounded_invoked);
+        assert_eq!(workspace.topology_stats(), retained);
+        assert!(workspace.output().is_none());
         measured_raw_attempt(
             &mut workspace,
             &line_success,
@@ -3799,6 +4260,61 @@ mod tests {
             assert!(workspace.diagnostics().rounded_invoked);
             assert!(workspace.output().is_some());
         }
+    }
+
+    #[test]
+    fn degenerate_output_owns_caller_data_and_workspaces_are_independent() {
+        let mut path = RawPath::default();
+        path.move_to(point(-0.0, 0.0));
+        path.line_to(point(0.0, -0.0));
+        path.close();
+        let mut first = BridgeWorkspace::new(LIMITS).unwrap();
+        let mut second = BridgeWorkspace::new(LIMITS).unwrap();
+
+        measured_raw_attempt(
+            &mut first,
+            &path,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        measured_raw_attempt(
+            &mut second,
+            &path,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        let expected = snapshot(second.output().unwrap());
+        path.point_bytes.fill(0xff);
+        drop(path);
+        let first_output = first.output().unwrap();
+        assert_eq!(snapshot(first_output), expected);
+        assert_eq!(first_output.points[0].x.to_bits(), 1u64 << 63);
+        let DecodedSource::Line { points, .. } = first_output.sources[0] else {
+            panic!("expected retained zero LINE")
+        };
+        assert_eq!(points[0].x.to_bits(), 1u64 << 63);
+        assert_eq!(points[1].y.to_bits(), 1u64 << 63);
+
+        let mut fifth = RawPath::default();
+        for x in 0..5 {
+            fifth.move_to(point(f64::from(x), 0.0));
+        }
+        assert_eq!(
+            measured_raw_attempt(
+                &mut first,
+                &fifth,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::SourceLimit)
+        );
+        assert!(first.output().is_none());
+        assert_eq!(snapshot(second.output().unwrap()), expected);
     }
 
     #[derive(Clone, Copy, Debug)]
@@ -4323,7 +4839,7 @@ mod tests {
     }
 
     #[test]
-    fn collapsed_lines_and_decode_precedence_remain_bounded_and_atomic() {
+    fn collapsed_lines_compose_while_mixed_and_decode_precedence_remain_bounded() {
         let success = zero_triangle_path(ZeroTriangleKind::Line, None, true, true);
         let mut collapsed_open = RawPath::default();
         collapsed_open.move_to(point(0.0, 0.0));
@@ -4335,8 +4851,9 @@ mod tests {
         two_edges.line_to(point(0.0, 0.0));
         two_edges.line_to(point(3.0, 0.0));
         two_edges.line_to(point(0.0, 0.0));
-        let mut collapsed_then_valid = collapsed_open.clone();
-        append_mixed_triangle(&mut collapsed_then_valid, 9.0, true, true, 0b111);
+        let mut collapsed_then_cubic = collapsed_open.clone();
+        append_mixed_triangle(&mut collapsed_then_cubic, 9.0, true, true, 0);
+        assert!(collapsed_then_cubic.verbs.contains(&VERB_CUBIC));
         let mut fifth_move = collapsed_open.clone();
         for x in [12.0, 24.0, 36.0, 48.0] {
             fifth_move.move_to(point(x, 0.0));
@@ -4344,7 +4861,7 @@ mod tests {
         }
         let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
 
-        for failure in [&collapsed_open, &collapsed_closed] {
+        for collapsed in [&collapsed_open, &collapsed_closed] {
             measured_raw_attempt(
                 &mut workspace,
                 &success,
@@ -4353,20 +4870,23 @@ mod tests {
                 MAX_COMMANDS,
             )
             .unwrap();
-            assert_eq!(
-                measured_raw_attempt(
-                    &mut workspace,
-                    failure,
-                    FLATTEN_TOLERANCE,
-                    TOPOLOGY_TOLERANCE,
-                    MAX_COMMANDS,
-                ),
-                Err(BridgeError::ZeroLengthLeaf)
-            );
-            assert!(workspace.diagnostics().emission_invoked);
-            assert!(!workspace.diagnostics().topology_invoked);
-            assert!(!workspace.diagnostics().rounded_invoked);
-            assert!(workspace.output().is_none());
+            let diagnostics = measured_raw_attempt(
+                &mut workspace,
+                collapsed,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            assert!(diagnostics.emission_invoked);
+            assert!(!diagnostics.topology_invoked);
+            assert!(diagnostics.rounded_invoked);
+            let output = workspace.output().unwrap();
+            assert_eq!(output.ranges[0].count, 1);
+            assert_eq!(output.points.len(), 1);
+            assert_eq!(output.owners.len(), 0);
+            assert!(output.rounded.vertices.is_empty());
+            assert!(output.rounded.indices.is_empty());
             measured_raw_attempt(
                 &mut workspace,
                 &success,
@@ -4377,20 +4897,22 @@ mod tests {
             .unwrap();
             assert!(workspace.output().is_some());
         }
-        assert_eq!(
-            measured_raw_attempt(
-                &mut workspace,
-                &two_edges,
-                FLATTEN_TOLERANCE,
-                TOPOLOGY_TOLERANCE,
-                MAX_COMMANDS,
-            ),
-            Err(BridgeError::Topology(TopologyError::Unresolved))
-        );
-        assert!(workspace.diagnostics().emission_invoked);
-        assert!(workspace.diagnostics().topology_invoked);
-        assert!(!workspace.diagnostics().rounded_invoked);
-        assert!(workspace.output().is_none());
+        let diagnostics = measured_raw_attempt(
+            &mut workspace,
+            &two_edges,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(diagnostics.emission_invoked);
+        assert!(!diagnostics.topology_invoked);
+        assert!(diagnostics.rounded_invoked);
+        let output = workspace.output().unwrap();
+        assert_eq!(output.points.len(), 2);
+        assert_eq!(output.owners.len(), 2);
+        assert!(output.rounded.vertices.is_empty());
+        assert!(output.rounded.indices.is_empty());
         measured_raw_attempt(
             &mut workspace,
             &success,
@@ -4403,7 +4925,7 @@ mod tests {
         assert_eq!(
             measured_raw_attempt(
                 &mut workspace,
-                &collapsed_then_valid,
+                &collapsed_then_cubic,
                 FLATTEN_TOLERANCE,
                 TOPOLOGY_TOLERANCE,
                 MAX_COMMANDS,

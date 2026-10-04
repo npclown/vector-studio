@@ -267,11 +267,12 @@ impl CubicFillWorkspace {
             return Ok(self.diagnostics);
         }
 
-        self.decode_sources(input)?;
+        let all_line_eligible = input.verbs.iter().all(|verb| *verb != VERB_CUBIC);
+        self.decode_sources(input, all_line_eligible)?;
         self.emit(input, sizing_plan, sizing_bounds, command_capacity)?;
-        self.collect_contours()?;
+        self.collect_contours(all_line_eligible)?;
         self.validate_leaf_partitions()?;
-        if !self.has_line_identity() {
+        if !all_line_eligible {
             self.diagnostics.topology_invoked = true;
             self.certify_topology()?;
         }
@@ -291,16 +292,6 @@ impl CubicFillWorkspace {
         self.validate_rounded_ownership()?;
         self.published = true;
         Ok(self.diagnostics)
-    }
-
-    fn has_line_identity(&self) -> bool {
-        self.source_len != 0
-            && self.sources[..self.source_len]
-                .iter()
-                .all(|source| matches!(source, DecodedSource::Line { .. }))
-            && self.contour_ranges[..self.range_len]
-                .iter()
-                .all(|range| range.count >= 3)
     }
 
     pub(crate) fn output(&self) -> Option<CubicFillOutput<'_>> {
@@ -330,7 +321,11 @@ impl CubicFillWorkspace {
         self.published = false;
     }
 
-    fn decode_sources(&mut self, input: PathInput<'_>) -> Result<(), CubicFillError> {
+    fn decode_sources(
+        &mut self,
+        input: PathInput<'_>,
+        allow_empty_ranges: bool,
+    ) -> Result<(), CubicFillError> {
         let mut scalar = 0usize;
         let mut active = None;
         for (ordinal, verb) in input.verbs.iter().copied().enumerate() {
@@ -338,7 +333,7 @@ impl CubicFillWorkspace {
             match verb {
                 VERB_MOVE => {
                     if let Some(open) = active.take() {
-                        self.finish_source(open)?;
+                        self.finish_source(open, allow_empty_ranges)?;
                     }
                     if self.source_range_len >= MAX_CONTOURS {
                         return Err(CubicFillError::SourceLimit);
@@ -415,13 +410,13 @@ impl CubicFillWorkspace {
                     self.source_verbs[ordinal] = SourceVerb::Close {
                         contour: open.contour,
                     };
-                    self.finish_source(open)?;
+                    self.finish_source(open, allow_empty_ranges)?;
                 }
                 _ => return Err(CubicFillError::UnsupportedSource),
             }
         }
         if let Some(open) = active {
-            self.finish_source(open)?;
+            self.finish_source(open, allow_empty_ranges)?;
         }
         if scalar != input.point_count() || self.source_range_len == 0 {
             return Err(CubicFillError::UnsupportedSource);
@@ -430,8 +425,12 @@ impl CubicFillWorkspace {
         Ok(())
     }
 
-    fn finish_source(&mut self, open: ActiveSourceContour) -> Result<(), CubicFillError> {
-        if self.source_len == open.segment_start {
+    fn finish_source(
+        &mut self,
+        open: ActiveSourceContour,
+        allow_empty_range: bool,
+    ) -> Result<(), CubicFillError> {
+        if self.source_len == open.segment_start && !allow_empty_range {
             return Err(CubicFillError::UnsupportedSource);
         }
         self.push_source_range(TopologyRange {
@@ -631,14 +630,14 @@ impl CubicFillWorkspace {
         Ok(())
     }
 
-    fn collect_contours(&mut self) -> Result<(), CubicFillError> {
+    fn collect_contours(&mut self, allow_singletons: bool) -> Result<(), CubicFillError> {
         let mut active = None;
         for command_index in 0..self.command_len {
             let command = self.commands[command_index];
             match command.verb {
                 VERB_MOVE => {
                     if let Some(open) = active.take() {
-                        self.finish_open_contour(open)?;
+                        self.finish_open_contour(open, allow_singletons)?;
                     }
                     if self.range_len >= MAX_CONTOURS {
                         return Err(CubicFillError::ContourLimit);
@@ -731,19 +730,23 @@ impl CubicFillWorkspace {
                         SourceVerb::Close { contour } if contour == open.source_contour => {}
                         _ => return Err(CubicFillError::InvalidProvenance),
                     }
-                    self.finish_closed_contour(open, command.provenance.source_verb)?;
+                    self.finish_closed_contour(
+                        open,
+                        command.provenance.source_verb,
+                        allow_singletons,
+                    )?;
                 }
                 _ => return Err(CubicFillError::InvalidCommand),
             }
         }
         if let Some(open) = active {
-            self.finish_open_contour(open)?;
+            self.finish_open_contour(open, allow_singletons)?;
         }
         if self.range_len != self.source_range_len
             || self.owner_len
                 != self.contour_ranges[..self.range_len]
                     .iter()
-                    .map(|range| range.count)
+                    .map(|range| if range.count >= 2 { range.count } else { 0 })
                     .sum()
         {
             return Err(CubicFillError::RoundedOwnership);
@@ -755,20 +758,23 @@ impl CubicFillWorkspace {
         &mut self,
         open: ActiveContour,
         close_source_verb: u32,
+        allow_singleton: bool,
     ) -> Result<(), CubicFillError> {
         let first = self.contour_points[open.point_start];
         if open.source_contour != self.range_len {
             return Err(CubicFillError::InvalidCommand);
         }
-        if self.point_len <= open.point_start + 1 {
+        if self.point_len <= open.point_start + 1 && !allow_singleton {
             return Err(CubicFillError::ZeroLengthLeaf);
         }
-        if same_point(first, open.previous) {
-            self.point_len -= 1;
-        } else {
-            self.push_owner(EdgeOwner::ExplicitClose {
-                source_verb: close_source_verb,
-            })?;
+        if self.point_len > open.point_start + 1 {
+            if same_point(first, open.previous) {
+                self.point_len -= 1;
+            } else {
+                self.push_owner(EdgeOwner::ExplicitClose {
+                    source_verb: close_source_verb,
+                })?;
+            }
         }
         self.push_range(ContourRange {
             start: open.point_start,
@@ -776,20 +782,26 @@ impl CubicFillWorkspace {
         })
     }
 
-    fn finish_open_contour(&mut self, open: ActiveContour) -> Result<(), CubicFillError> {
+    fn finish_open_contour(
+        &mut self,
+        open: ActiveContour,
+        allow_singleton: bool,
+    ) -> Result<(), CubicFillError> {
         let first = self.contour_points[open.point_start];
         if open.source_contour != self.range_len {
             return Err(CubicFillError::InvalidCommand);
         }
-        if self.point_len <= open.point_start + 1 {
+        if self.point_len <= open.point_start + 1 && !allow_singleton {
             return Err(CubicFillError::ZeroLengthLeaf);
         }
-        if same_point(first, open.previous) {
-            self.point_len -= 1;
-        } else {
-            self.push_owner(EdgeOwner::ImplicitClosure {
-                contour: open.source_contour,
-            })?;
+        if self.point_len > open.point_start + 1 {
+            if same_point(first, open.previous) {
+                self.point_len -= 1;
+            } else {
+                self.push_owner(EdgeOwner::ImplicitClosure {
+                    contour: open.source_contour,
+                })?;
+            }
         }
         self.push_range(ContourRange {
             start: open.point_start,
@@ -888,7 +900,8 @@ impl CubicFillWorkspace {
             .copied()
             .enumerate()
         {
-            for start_vertex in 0..range.count {
+            let edge_count = if range.count >= 2 { range.count } else { 0 };
+            for start_vertex in 0..edge_count {
                 let source = output
                     .source_edges
                     .get(edge_index)
