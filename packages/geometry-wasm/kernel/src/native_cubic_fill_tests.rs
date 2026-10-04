@@ -19,7 +19,9 @@ use crate::rounded_line_fill::{
     RoundedFillOutput, RoundedFillStats, RoundedFillWorkspace, RoundedSection, RoundedSourceEdge,
 };
 use crate::rounded_line_fill_tests::{print_output, print_points, print_stats};
-use crate::simple_cubic_topology::TopologyError;
+use crate::simple_cubic_topology::{
+    RoundedKnotCubicTopologyWorkspace, SimpleCubicTopologyWorkspace, TopologyError, TopologyLimits,
+};
 
 const INPUT_LIMIT_BYTES: usize = 512 * 1024;
 const EXPECTED_ROWS: usize = 94;
@@ -349,15 +351,19 @@ fn valid_id(value: &str) -> bool {
 }
 
 fn load_fixture() -> Vec<SourceRow> {
-    let path = env::var("P3_NATIVE_CUBIC_INPUT").expect("P3_NATIVE_CUBIC_INPUT must be set");
-    let file = File::open(path).expect("open P3 native cubic fixture");
+    load_fixture_from_env("P3_NATIVE_CUBIC_INPUT", EXPECTED_ROWS)
+}
+
+fn load_fixture_from_env(variable: &str, expected_rows: usize) -> Vec<SourceRow> {
+    let path = env::var(variable).unwrap_or_else(|_| panic!("{variable} must be set"));
+    let file = File::open(path).unwrap_or_else(|_| panic!("open {variable} fixture"));
     let mut bytes = Vec::new();
     file.take((INPUT_LIMIT_BYTES + 1) as u64)
         .read_to_end(&mut bytes)
-        .expect("read P3 native cubic fixture");
+        .unwrap_or_else(|_| panic!("read {variable} fixture"));
     assert!(bytes.len() <= INPUT_LIMIT_BYTES, "fixture exceeds 512 KiB");
     let source = core::str::from_utf8(&bytes).expect("fixture must be UTF-8");
-    parse_fixture(source, EXPECTED_ROWS).expect("parse P3 native cubic fixture")
+    parse_fixture(source, expected_rows).unwrap_or_else(|error| panic!("parse {variable}: {error}"))
 }
 
 fn print_source_bits(row: &SourceRow) {
@@ -468,6 +474,67 @@ fn print_rounded(row: &SourceRow, output: BridgeOutput<'_>) {
     print!(",\"stats\":");
     print_stats(output.rounded_stats);
     print!("}}");
+}
+
+fn print_native_cubic_row(
+    row: &SourceRow,
+    diagnostics: AttemptDiagnostics,
+    output: Option<BridgeOutput<'_>>,
+    allocations: usize,
+    allocated_bytes: usize,
+    inline_bytes: usize,
+) {
+    print!(
+        "{{\"id\":\"{}\",\"rule\":\"{}\",\"source_bits\":",
+        row.id,
+        row.rule_name()
+    );
+    print_source_bits(row);
+    print!(
+        ",\"flatten_tolerance_bits\":\"{:016x}\",\"topology_tolerance_bits\":\"{:016x}\",\"flat_status\":{},\"sizing_plan\":",
+        FLATTEN_TOLERANCE.to_bits(),
+        TOPOLOGY_TOLERANCE.to_bits(),
+        diagnostics.flat_status
+    );
+    print_plan(diagnostics.sizing_plan);
+    print!(",\"emission_plan\":");
+    if let Some(plan) = diagnostics.emission_plan {
+        print_plan(plan);
+    } else {
+        print!("null");
+    }
+    print!(",\"statistics\":");
+    print_statistics(diagnostics.statistics);
+    if let Some(output) = output {
+        let bounds = diagnostics.flat_bounds.expect("successful flat bounds");
+        print!(
+            ",\"flat_bounds\":[{},{},{},{}],\"commands\":",
+            bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y
+        );
+        print_commands(output.commands);
+        print!(",\"edge_owners\":");
+        print_owners(output.owners);
+        print!(",\"rounded\":");
+        print_rounded(row, output);
+    } else {
+        print!(",\"flat_bounds\":null,\"commands\":null,\"edge_owners\":null,\"rounded\":null");
+    }
+    print!(
+        ",\"allocations\":{allocations},\"allocated_bytes\":{allocated_bytes},\"inline_bytes\":{inline_bytes}}}"
+    );
+}
+
+fn topology_error_name(error: TopologyError) -> &'static str {
+    match error {
+        TopologyError::InvalidLimits => "InvalidLimits",
+        TopologyError::AllocationFailed => "AllocationFailed",
+        TopologyError::ByteLimit => "ByteLimit",
+        TopologyError::InvalidInput => "InvalidInput",
+        TopologyError::InvalidProvenance => "InvalidProvenance",
+        TopologyError::KnotMismatch => "KnotMismatch",
+        TopologyError::Unresolved => "Unresolved",
+        TopologyError::WorkLimit => "WorkLimit",
+    }
 }
 
 fn assert_decoded_sources(row: &SourceRow, verbs: &[u8], output: BridgeOutput<'_>) {
@@ -655,6 +722,21 @@ fn emit_native_cubic_fill() {
         let alternate_allocations = crate::allocation_test_support::stop();
         let alternate_diagnostics = alternate_attempt
             .unwrap_or_else(|error| panic!("{} alternate failed: {error:?}", row.id));
+        assert!(
+            !alternate_diagnostics.rounded_topology_invoked,
+            "{}",
+            row.id
+        );
+        assert!(
+            !alternate_diagnostics.rounded_topology_selected,
+            "{}",
+            row.id
+        );
+        assert_eq!(
+            alternate_diagnostics.rounded_topology_error, None,
+            "{}",
+            row.id
+        );
         let alternate_output = workspace.output();
         match row.expectation {
             ExpectedStatus::Ok => {
@@ -692,6 +774,9 @@ fn emit_native_cubic_fill() {
             workspace.attempt(row.path_input(), row.rule, TOPOLOGY_TOLERANCE, MAX_COMMANDS);
         let allocations = crate::allocation_test_support::stop();
         let diagnostics = attempt.unwrap_or_else(|error| panic!("{} failed: {error:?}", row.id));
+        assert!(!diagnostics.rounded_topology_invoked, "{}", row.id);
+        assert!(!diagnostics.rounded_topology_selected, "{}", row.id);
+        assert_eq!(diagnostics.rounded_topology_error, None, "{}", row.id);
         let output = workspace.output();
         match row.expectation {
             ExpectedStatus::Ok => {
@@ -733,49 +818,238 @@ fn emit_native_cubic_fill() {
         }
         assert_eq!(allocations, 0, "{} allocated during attempt", row.id);
         assert_eq!(workspace.allocated_bytes(), allocated_bytes);
-        print!(
-            "{{\"id\":\"{}\",\"rule\":\"{}\",\"source_bits\":",
-            row.id,
-            row.rule_name()
+        print_native_cubic_row(
+            row,
+            diagnostics,
+            output,
+            allocations,
+            allocated_bytes,
+            inline_bytes,
         );
-        print_source_bits(row);
-        print!(
-            ",\"flatten_tolerance_bits\":\"{:016x}\",\"topology_tolerance_bits\":\"{:016x}\",\"flat_status\":{},\"sizing_plan\":",
-            FLATTEN_TOLERANCE.to_bits(),
-            TOPOLOGY_TOLERANCE.to_bits(),
-            diagnostics.flat_status
-        );
-        print_plan(diagnostics.sizing_plan);
-        print!(",\"emission_plan\":");
-        if let Some(plan) = diagnostics.emission_plan {
-            print_plan(plan);
-        } else {
-            print!("null");
-        }
-        print!(",\"statistics\":");
-        print_statistics(diagnostics.statistics);
-        if let Some(output) = output {
-            let bounds = diagnostics.flat_bounds.expect("successful flat bounds");
-            print!(
-                ",\"flat_bounds\":[{},{},{},{}],\"commands\":",
-                bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y
-            );
-            print_commands(output.commands);
-            print!(",\"edge_owners\":");
-            print_owners(output.owners);
-            print!(",\"rounded\":");
-            print_rounded(row, output);
-        } else {
-            print!(",\"flat_bounds\":null,\"commands\":null,\"edge_owners\":null,\"rounded\":null");
-        }
-        println!(
-            ",\"allocations\":{allocations},\"allocated_bytes\":{allocated_bytes},\"inline_bytes\":{inline_bytes}}}"
-        );
+        println!();
     }
     assert_eq!(paired_rows, EXPECTED_ROWS);
     assert_eq!(paired_successes, 92);
     assert_eq!(paired_numeric_ranges, 2);
     println!("P3_NATIVE_CUBIC_END");
+}
+
+fn adoption_mesh_area(output: RoundedFillOutput<'_>) -> f64 {
+    assert_eq!(output.indices.len() % 3, 0);
+    output
+        .indices
+        .chunks_exact(3)
+        .map(|triangle| {
+            let a = output.vertices[usize::try_from(triangle[0]).unwrap()];
+            let b = output.vertices[usize::try_from(triangle[1]).unwrap()];
+            let c = output.vertices[usize::try_from(triangle[2]).unwrap()];
+            ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)).abs() / 2.0
+        })
+        .sum()
+}
+
+fn assert_adoption_output(
+    row: &SourceRow,
+    verbs: &[u8],
+    diagnostics: AttemptDiagnostics,
+    stats: crate::simple_cubic_topology::TopologyStats,
+    output: BridgeOutput<'_>,
+    rounded_route: bool,
+) {
+    assert_eq!(row.expectation, ExpectedStatus::Ok, "{}", row.id);
+    assert_eq!(diagnostics.flat_status, PATH_OK, "{}", row.id);
+    assert!(diagnostics.emission_invoked, "{}", row.id);
+    assert!(diagnostics.topology_invoked, "{}", row.id);
+    assert_eq!(
+        diagnostics.rounded_topology_invoked, rounded_route,
+        "{}",
+        row.id
+    );
+    assert_eq!(
+        diagnostics.rounded_topology_selected, rounded_route,
+        "{}",
+        row.id
+    );
+    assert_eq!(diagnostics.rounded_topology_error, None, "{}", row.id);
+    assert!(diagnostics.rounded_invoked, "{}", row.id);
+    assert_eq!(stats.leaves, 12, "{}", row.id);
+    assert_eq!(stats.pairs, 66, "{}", row.id);
+    assert_eq!(diagnostics.statistics.logical_cubics, 9, "{}", row.id);
+    assert_eq!(diagnostics.statistics.sizing_visits, 15, "{}", row.id);
+    assert_eq!(diagnostics.statistics.emission_visits, 15, "{}", row.id);
+    assert_eq!(diagnostics.statistics.emitted_cubic_lines, 12, "{}", row.id);
+    assert_eq!(output.sources.len(), 9, "{}", row.id);
+    assert_eq!(output.owners.len(), 12, "{}", row.id);
+    assert_eq!(output.ranges.len(), 1, "{}", row.id);
+    assert_eq!(output.ranges[0].start, 0, "{}", row.id);
+    assert_eq!(output.ranges[0].count, 12, "{}", row.id);
+    assert_eq!(output.points.len(), 12, "{}", row.id);
+    assert_eq!(output.commands.len(), verbs.len() + 3, "{}", row.id);
+    assert_decoded_sources(row, verbs, output);
+    assert_input_owners(row, verbs, output);
+
+    let expected = [
+        Point { x: 0.0, y: 0.0 },
+        Point {
+            x: 0.75,
+            y: 9.0 / 64.0,
+        },
+        Point {
+            x: 1.5,
+            y: 3.0 / 8.0,
+        },
+        Point {
+            x: 2.25,
+            y: 27.0 / 64.0,
+        },
+        Point { x: 3.0, y: 0.0 },
+        Point {
+            x: 21.0 / 8.0,
+            y: -3.0 / 4.0,
+        },
+        Point {
+            x: 9.0 / 4.0,
+            y: -3.0 / 2.0,
+        },
+        Point {
+            x: 15.0 / 8.0,
+            y: -9.0 / 4.0,
+        },
+        Point { x: 1.5, y: -3.0 },
+        Point {
+            x: 9.0 / 8.0,
+            y: -9.0 / 4.0,
+        },
+        Point {
+            x: 3.0 / 4.0,
+            y: -3.0 / 2.0,
+        },
+        Point {
+            x: 3.0 / 8.0,
+            y: -3.0 / 4.0,
+        },
+    ];
+    for (actual, expected) in output.points.iter().zip(expected) {
+        assert_eq!(actual.x.to_bits(), expected.x.to_bits(), "{}", row.id);
+        assert_eq!(actual.y.to_bits(), expected.y.to_bits(), "{}", row.id);
+    }
+    let upper_ends: Vec<Point> = output
+        .commands
+        .iter()
+        .filter(|command| {
+            command.verb == crate::geometry::VERB_LINE && command.provenance.source_verb == 1
+        })
+        .map(|command| command.point.unwrap())
+        .collect();
+    assert_eq!(upper_ends.len(), 4, "{}", row.id);
+    for (actual, expected) in upper_ends.iter().zip(&expected[1..5]) {
+        assert_eq!(actual.x.to_bits(), expected.x.to_bits(), "{}", row.id);
+        assert_eq!(actual.y.to_bits(), expected.y.to_bits(), "{}", row.id);
+    }
+    assert_eq!(
+        adoption_mesh_area(output.rounded),
+        333.0 / 64.0,
+        "{}",
+        row.id
+    );
+}
+
+#[test]
+#[ignore]
+fn emit_rounded_native_cubic_fill() {
+    const ADOPTION_ROWS: usize = 4;
+    let rows = load_fixture_from_env("P3_NATIVE_ROUNDED_CUBIC_INPUT", ADOPTION_ROWS);
+    let expected = [
+        ("adoption/exact", LineFillRule::Nonzero, false),
+        ("adoption/exact", LineFillRule::Evenodd, false),
+        ("adoption/rounded", LineFillRule::Nonzero, true),
+        ("adoption/rounded", LineFillRule::Evenodd, true),
+    ];
+    let mut workspace = BridgeWorkspace::new(LIMITS).expect("construct rounded cubic workspace");
+    let allocated_bytes = workspace.allocated_bytes();
+    let inline_bytes = size_of::<BridgeWorkspace>();
+    assert!(allocated_bytes <= MAX_BRIDGE_HEAP_BYTES);
+    assert!(inline_bytes < 64 * 1024);
+    println!("P3_NATIVE_ROUNDED_CUBIC_BEGIN");
+    for (row, (expected_id, expected_rule, rounded_route)) in rows.iter().zip(expected) {
+        assert_eq!(row.id, expected_id);
+        assert_eq!(row.rule, expected_rule);
+        assert_eq!(row.verbs.last(), Some(&VERB_CLOSE), "{}", row.id);
+        assert_eq!(row.verbs.len(), 11, "{}", row.id);
+        assert_eq!(row.point_bytes.len() / 8, 56, "{}", row.id);
+        let alternate = prepare_toggled_path(row);
+        assert_eq!(alternate.point_bytes, row.point_bytes, "{}", row.id);
+        assert_eq!(alternate.verbs.len(), 10, "{}", row.id);
+        assert_ne!(alternate.verbs.last(), Some(&VERB_CLOSE), "{}", row.id);
+
+        crate::allocation_test_support::start();
+        let alternate_result = workspace.attempt(
+            alternate.path_input(),
+            row.rule,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        );
+        let alternate_allocations = crate::allocation_test_support::stop();
+        let alternate_diagnostics = alternate_result
+            .unwrap_or_else(|error| panic!("{} alternate failed: {error:?}", row.id));
+        let alternate_stats = workspace.topology_stats();
+        let alternate_output = workspace.output().expect("successful alternate output");
+        assert_adoption_output(
+            row,
+            &alternate.verbs,
+            alternate_diagnostics,
+            alternate_stats,
+            alternate_output,
+            rounded_route,
+        );
+        assert_eq!(alternate_allocations, 0, "{}", row.id);
+        assert_eq!(workspace.allocated_bytes(), allocated_bytes);
+        let alternate_snapshot = snapshot(alternate_output);
+
+        crate::allocation_test_support::start();
+        let result =
+            workspace.attempt(row.path_input(), row.rule, TOPOLOGY_TOLERANCE, MAX_COMMANDS);
+        let allocations = crate::allocation_test_support::stop();
+        let diagnostics = result.unwrap_or_else(|error| panic!("{} failed: {error:?}", row.id));
+        let stats = workspace.topology_stats();
+        let output = workspace.output().expect("successful closed output");
+        assert_adoption_output(row, &row.verbs, diagnostics, stats, output, rounded_route);
+        assert_eq!(snapshot(output), alternate_snapshot, "{}", row.id);
+        assert_eq!(
+            diagnostics.statistics, alternate_diagnostics.statistics,
+            "{}",
+            row.id
+        );
+        assert_eq!(allocations, 0, "{}", row.id);
+        assert_eq!(workspace.allocated_bytes(), allocated_bytes);
+
+        print!("{{\"carrier\":");
+        print_native_cubic_row(
+            row,
+            diagnostics,
+            Some(output),
+            allocations,
+            allocated_bytes,
+            inline_bytes,
+        );
+        print!(
+            ",\"topology\":{{\"topology_invoked\":{},\"rounded_topology_invoked\":{},\"rounded_topology_selected\":{},\"rounded_topology_error\":",
+            diagnostics.topology_invoked,
+            diagnostics.rounded_topology_invoked,
+            diagnostics.rounded_topology_selected,
+        );
+        if let Some(error) = diagnostics.rounded_topology_error {
+            print!("\"{}\"", topology_error_name(error));
+        } else {
+            print!("null");
+        }
+        print!(
+            ",\"stats\":{{\"leaves\":{},\"pairs\":{}}}",
+            stats.leaves, stats.pairs
+        );
+        println!("}}}}");
+    }
+    println!("P3_NATIVE_ROUNDED_CUBIC_END");
 }
 
 #[cfg(test)]
@@ -1151,6 +1425,73 @@ mod tests {
         row
     }
 
+    fn adoption_path(endpoint_perturbation: f64, closed: bool) -> RawPath {
+        let a = point(0.0, 0.0);
+        let b = point(3.0, 0.0);
+        let lower = [
+            point(21.0 / 8.0, -3.0 / 4.0),
+            point(9.0 / 4.0, -3.0 / 2.0),
+            point(15.0 / 8.0, -9.0 / 4.0),
+            point(3.0 / 2.0, -3.0),
+            point(9.0 / 8.0, -9.0 / 4.0),
+            point(3.0 / 4.0, -3.0 / 2.0),
+            point(3.0 / 8.0, -3.0 / 4.0),
+            a,
+        ];
+        let mut path = RawPath::default();
+        path.move_to(a);
+        path.cubic_to(point(1.0, endpoint_perturbation), point(2.0, 1.0), b);
+        let mut start = b;
+        for end in lower {
+            append_linear(&mut path, start, end);
+            start = end;
+        }
+        if closed {
+            path.close();
+        }
+        path
+    }
+
+    fn rounded_failure_path() -> RawPath {
+        let a = point(0.0, 0.0);
+        let b = point(3.0, 0.0);
+        let c = point(1.5, -3.0);
+        let mut path = RawPath::default();
+        path.move_to(a);
+        path.cubic_to(point(1.0, 2.0f64.powi(-54)), point(2.0, 1.0), b);
+        append_linear(&mut path, b, c);
+        append_linear(&mut path, c, a);
+        path.close();
+        path
+    }
+
+    fn adoption_bowtie() -> RawPath {
+        let corners = [
+            point(0.0, 0.0),
+            point(3.0, 3.0),
+            point(0.0, 3.0),
+            point(3.0, 0.0),
+            point(0.0, 0.0),
+        ];
+        let mut path = RawPath::default();
+        path.move_to(corners[0]);
+        for pair in corners.windows(2) {
+            append_linear(&mut path, pair[0], pair[1]);
+        }
+        path.close();
+        path
+    }
+
+    fn topology_skip_triangle() -> RawPath {
+        let mut path = RawPath::default();
+        path.move_to(point(0.0, 0.0));
+        path.line_to(point(3.0, 0.0));
+        path.line_to(point(1.5, -3.0));
+        path.line_to(point(0.0, 0.0));
+        path.close();
+        path
+    }
+
     #[test]
     fn strict_parser_preserves_signed_zero_and_rejects_malformed_rows() {
         let row = "signed-zero nonzero OK | 8000000000000000,0000000000000000,3ff0000000000000,0000000000000000,4000000000000000,0000000000000000,4008000000000000,0000000000000000";
@@ -1170,6 +1511,247 @@ mod tests {
         ] {
             assert!(parse_fixture(&invalid, 1).is_err());
         }
+    }
+
+    #[test]
+    fn constructor_accounts_all_three_retained_workspaces() {
+        let workspace = BridgeWorkspace::new(LIMITS).unwrap();
+        let rounded = RoundedFillWorkspace::new(LIMITS).unwrap();
+        let exact = SimpleCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
+        let rounded_topology =
+            RoundedKnotCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
+        assert_eq!(rounded_topology.allocated_bytes(), 224_256);
+        let expected = rounded
+            .allocated_bytes()
+            .checked_add(exact.allocated_bytes())
+            .and_then(|bytes| bytes.checked_add(rounded_topology.allocated_bytes()))
+            .unwrap();
+        assert_eq!(workspace.allocated_bytes(), expected);
+        assert!(workspace.allocated_bytes() <= MAX_BRIDGE_HEAP_BYTES);
+        assert!(size_of::<BridgeWorkspace>() < 64 * 1024);
+    }
+
+    #[test]
+    fn rounded_topology_failure_preserves_exact_knot_mismatch_and_recovers() {
+        let success = adoption_path(0.0, true);
+        let failure = rounded_failure_path();
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+
+        measured_raw_attempt(
+            &mut workspace,
+            &success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(workspace.output().is_some());
+        assert!(!workspace.diagnostics().rounded_topology_invoked);
+        assert_eq!(
+            measured_raw_attempt(
+                &mut workspace,
+                &failure,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::Topology(TopologyError::KnotMismatch))
+        );
+        let diagnostics = workspace.diagnostics();
+        assert!(diagnostics.topology_invoked);
+        assert!(diagnostics.rounded_topology_invoked);
+        assert!(!diagnostics.rounded_topology_selected);
+        assert_eq!(
+            diagnostics.rounded_topology_error,
+            Some(TopologyError::Unresolved)
+        );
+        assert!(!diagnostics.rounded_invoked);
+        assert!(workspace.output().is_none());
+        assert_eq!(workspace.topology_stats().leaves, 6);
+        assert_eq!(workspace.topology_stats().pairs, 5);
+        measured_raw_attempt(
+            &mut workspace,
+            &success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(workspace.output().is_some());
+        assert!(!workspace.diagnostics().rounded_topology_invoked);
+        assert_eq!(workspace.topology_stats().leaves, 12);
+        assert_eq!(workspace.topology_stats().pairs, 66);
+    }
+
+    #[test]
+    fn non_knot_topology_failure_never_invokes_rounded_fallback() {
+        let success = adoption_path(0.0, true);
+        let bowtie = adoption_bowtie();
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+        measured_raw_attempt(
+            &mut workspace,
+            &success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert_eq!(
+            measured_raw_attempt(
+                &mut workspace,
+                &bowtie,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::Topology(TopologyError::Unresolved))
+        );
+        let diagnostics = workspace.diagnostics();
+        assert!(diagnostics.topology_invoked);
+        assert!(!diagnostics.rounded_topology_invoked);
+        assert!(!diagnostics.rounded_topology_selected);
+        assert_eq!(diagnostics.rounded_topology_error, None);
+        assert!(!diagnostics.rounded_invoked);
+        assert!(workspace.output().is_none());
+        assert_eq!(workspace.topology_stats().leaves, 4);
+        assert_eq!(workspace.topology_stats().pairs, 2);
+        measured_raw_attempt(
+            &mut workspace,
+            &success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(workspace.output().is_some());
+    }
+
+    #[test]
+    fn rounded_selection_resets_diagnostics_and_preserves_cached_stats_across_skips() {
+        let rounded_success = adoption_path(2.0f64.powi(-54), true);
+        let exact_success = adoption_path(0.0, true);
+        let line_identity = topology_skip_triangle();
+        let cheap_failure = RawPath {
+            verbs: vec![VERB_MOVE; 25],
+            point_bytes: vec![0; 50 * 8],
+        };
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+
+        measured_raw_attempt(
+            &mut workspace,
+            &rounded_success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(workspace.diagnostics().rounded_topology_invoked);
+        assert!(workspace.diagnostics().rounded_topology_selected);
+        assert_eq!(workspace.diagnostics().rounded_topology_error, None);
+        assert_eq!(workspace.topology_stats().leaves, 12);
+        assert_eq!(workspace.topology_stats().pairs, 66);
+        let retained = workspace.topology_stats();
+
+        assert_eq!(
+            measured_raw_attempt(
+                &mut workspace,
+                &cheap_failure,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::SourceLimit)
+        );
+        assert_eq!(workspace.diagnostics(), AttemptDiagnostics::default());
+        assert_eq!(workspace.topology_stats(), retained);
+        assert!(workspace.output().is_none());
+
+        measured_raw_attempt(
+            &mut workspace,
+            &line_identity,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        let diagnostics = workspace.diagnostics();
+        assert!(!diagnostics.topology_invoked);
+        assert!(!diagnostics.rounded_topology_invoked);
+        assert!(!diagnostics.rounded_topology_selected);
+        assert_eq!(diagnostics.rounded_topology_error, None);
+        assert!(diagnostics.rounded_invoked);
+        assert_eq!(workspace.topology_stats(), retained);
+
+        measured_raw_attempt(
+            &mut workspace,
+            &exact_success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(workspace.diagnostics().topology_invoked);
+        assert!(!workspace.diagnostics().rounded_topology_invoked);
+        assert_eq!(workspace.topology_stats().leaves, 12);
+        assert_eq!(workspace.topology_stats().pairs, 66);
+    }
+
+    #[test]
+    fn rounded_selection_rounding_failure_and_owned_source_recover() {
+        let mut rounded_success = adoption_path(2.0f64.powi(-54), true);
+        let exact_success = adoption_path(0.0, true);
+        let mut first = BridgeWorkspace::new(LIMITS).unwrap();
+        let mut second = BridgeWorkspace::new(LIMITS).unwrap();
+
+        measured_raw_attempt(
+            &mut first,
+            &rounded_success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        measured_raw_attempt(
+            &mut second,
+            &exact_success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert_eq!(
+            measured_raw_attempt(
+                &mut first,
+                &rounded_success,
+                FLATTEN_TOLERANCE,
+                0.0,
+                MAX_COMMANDS,
+            ),
+            Err(BridgeError::Rounded(RoundedFillError::InvalidTolerance))
+        );
+        let diagnostics = first.diagnostics();
+        assert!(diagnostics.topology_invoked);
+        assert!(diagnostics.rounded_topology_invoked);
+        assert!(diagnostics.rounded_topology_selected);
+        assert_eq!(diagnostics.rounded_topology_error, None);
+        assert!(diagnostics.rounded_invoked);
+        assert!(first.output().is_none());
+        assert_eq!(first.topology_stats().leaves, 12);
+        assert_eq!(first.topology_stats().pairs, 66);
+        measured_raw_attempt(
+            &mut first,
+            &rounded_success,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        let retained = first.output().unwrap().sources[0];
+        rounded_success.point_bytes.fill(0xff);
+        drop(rounded_success);
+        assert_eq!(first.output().unwrap().sources[0], retained);
+        assert!(second.output().is_some());
+        assert!(!second.diagnostics().rounded_topology_invoked);
     }
 
     #[test]

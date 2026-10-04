@@ -37,7 +37,7 @@ function cubicBits(cubic: Cubic): readonly string[] {
   return cubic.flatMap(([x, y]) => [hex(x), hex(y)]);
 }
 
-function sourceContours(
+export function nativeCubicSourceContours(
   contours: readonly (readonly Cubic[])[],
 ): readonly NativeCubicSourceContour[] {
   let verbOrdinal = 0;
@@ -56,6 +56,12 @@ function sourceContours(
   });
 }
 
+export function nativeCubicSourceBits(
+  contours: readonly NativeCubicSourceContour[],
+): readonly (readonly (readonly string[])[])[] {
+  return contours.map(({ cubics }) => cubics.map(cubicBits));
+}
+
 /** Builds the frozen 94-row native bridge source without consulting native or oracle output. */
 export function fixedNativeCubicFixtureRows(): readonly NativeCubicFixtureRow[] {
   const fixtures = fixedSimpleCubicTopologyFixtures();
@@ -63,8 +69,8 @@ export function fixedNativeCubicFixtureRows(): readonly NativeCubicFixtureRow[] 
     throw new Error(`expected 47 topology fixtures, received ${fixtures.length}`);
   return fixtures.flatMap((fixture) => {
     const cubics = fixture.contours.map((contour) => contour.map(({ cubic }) => cubic));
-    const contours = sourceContours(cubics);
-    const sourceBits = cubics.map((contour) => contour.map(cubicBits));
+    const contours = nativeCubicSourceContours(cubics);
+    const sourceBits = nativeCubicSourceBits(contours);
     const expectation: NativeCubicExpectation =
       fixture.id === 'extreme/large-square' ? 'PATH_NUMERIC_RANGE' : 'OK';
     return RULES.map((rule) => ({
@@ -90,7 +96,18 @@ function encodeRow(row: NativeCubicFixtureRow): string {
 /** Encodes the reviewed bounded UTF-8 protocol consumed by the ignored native bridge test. */
 export function encodeNativeCubicFixture(rows: readonly NativeCubicFixtureRow[]): string {
   if (rows.length !== 94) throw new Error(`expected 94 native cubic rows, received ${rows.length}`);
-  const text = ['# p3-native-cubic-v1', '# rows 94', ...rows.map(encodeRow), ''].join('\n');
+  return encodeNativeCubicRows(rows, 94);
+}
+
+export function encodeNativeCubicRows(
+  rows: readonly NativeCubicFixtureRow[],
+  expectedRows: number,
+): string {
+  if (rows.length !== expectedRows)
+    throw new Error(`expected ${expectedRows} native cubic rows, received ${rows.length}`);
+  const text = ['# p3-native-cubic-v1', `# rows ${expectedRows}`, ...rows.map(encodeRow), ''].join(
+    '\n',
+  );
   if (Buffer.byteLength(text, 'utf8') > 512 * 1024)
     throw new Error('native cubic fixture exceeds the 512 KiB protocol ceiling');
   return text;
