@@ -6,7 +6,13 @@ import type {
 import { inspectTriangleMesh } from '../../../packages/geometry-reference/src/triangle-mesh.js';
 import { certifyCubicBoundary } from '../cubic-boundary/oracle.js';
 import type { NativeCubicCommand } from '../native-cubic/native.js';
-import { assertFlatBounds, roundedFixture } from '../native-cubic/verify.js';
+import type { NativeCubicSourceFixtureRow } from '../native-cubic/fixtures.js';
+import {
+  assertFlatBounds,
+  decodeActualSegments,
+  roundedFixture,
+  type ActualSegment,
+} from '../native-cubic/verify.js';
 import { bitsOf } from '../rounded-fill/exact.js';
 import {
   assertCarrierMatches,
@@ -76,6 +82,74 @@ export function packedSegments(fixture: MixedSourceFixture): {
   return { contours, kinds };
 }
 
+type ActualMixedSourceFixture = MixedSourceFixture & NativeCubicSourceFixtureRow;
+type ExpectedLeafPartitions = readonly (readonly (readonly ReferenceFlattenedLine[])[])[];
+
+function samePoint(left: Point, right: Point): boolean {
+  return left[0] === right[0] && left[1] === right[1];
+}
+
+export function actualPackedMixedSegments(
+  fixture: ActualMixedSourceFixture,
+  commands: readonly NativeCubicCommand[],
+  expectedPartitions: ExpectedLeafPartitions,
+): {
+  contours: readonly (readonly ActualSegment[])[];
+  kinds: readonly boolean[];
+} {
+  const decoded = decodeActualSegments(fixture, commands);
+  assert.equal(expectedPartitions.length, decoded.length, 'leaf partition contour count');
+  let sourceIndex = 0;
+  const kinds: boolean[] = [];
+  const contours = decoded.map((contour, contourIndex) => {
+    const expectedContour = expectedPartitions[contourIndex];
+    assert.equal(
+      expectedContour?.length,
+      contour.length,
+      `contour ${contourIndex} partition count`,
+    );
+    const packed: ActualSegment[] = [];
+    contour.forEach((segment, contourSourceIndex) => {
+      const kind = fixture.sourceKinds[sourceIndex++];
+      if (kind === undefined) throw new Error('source kind missing');
+      const expectedLines = expectedContour[contourSourceIndex]!;
+      assert.equal(segment.lines.length, expectedLines.length, 'source leaf count mismatch');
+      segment.lines.forEach((line, lineIndex) => {
+        const expected = expectedLines[lineIndex]!;
+        assert.deepEqual(pointBits(line.end), pointBits(expected.end), 'source leaf endpoint bits');
+        assert.deepEqual(line.provenance, expected.provenance, 'source leaf provenance');
+      });
+      if (kind) {
+        assert.equal(segment.lines.length, 1, 'marked LINE leaf count');
+        assert.deepEqual(pointBits(segment.cubic[0]), pointBits(segment.cubic[1]));
+        assert.deepEqual(pointBits(segment.cubic[2]), pointBits(segment.cubic[3]));
+        assert.deepEqual(segment.lines[0]!.provenance, {
+          sourceVerbOrdinal: segment.sourceVerbOrdinal,
+          endNumerator: 1,
+          depth: 0,
+        });
+        assert.deepEqual(pointBits(segment.lines[0]!.end), pointBits(segment.cubic[3]));
+        if (samePoint(segment.cubic[0], segment.cubic[3])) return;
+      } else {
+        const boundary = certifyCubicBoundary({
+          cubic: segment.cubic,
+          lines: segment.lines,
+          screen: [1, 0, 0, 1],
+          sourceVerbOrdinal: segment.sourceVerbOrdinal,
+        });
+        if (!boundary.ok)
+          throw new Error(`source cubic ${segment.sourceVerbOrdinal} boundary ${boundary.status}`);
+      }
+      packed.push(segment);
+      kinds.push(kind);
+    });
+    return packed;
+  });
+  assert.equal(sourceIndex, fixture.sourceKinds.length, 'unconsumed source kinds');
+  assert.deepEqual(kinds, fixture.packedKinds);
+  return { contours, kinds };
+}
+
 export function expectedOwners(
   fixture: MixedSourceFixture,
   packed: ReturnType<typeof packedSegments>,
@@ -84,16 +158,17 @@ export function expectedOwners(
   let packedIndex = 0;
   packed.contours.forEach((contour, contourIndex) => {
     for (const segment of contour) {
-      owners.push(
-        packed.kinds[packedIndex]!
-          ? { kind: 'Line', source_verb: segment.sourceVerbOrdinal }
-          : {
-              kind: 'CubicLeaf',
-              source_verb: segment.sourceVerbOrdinal,
-              end_numerator: 1,
-              depth: 0,
-            },
-      );
+      if (packed.kinds[packedIndex]!) {
+        owners.push({ kind: 'Line', source_verb: segment.sourceVerbOrdinal });
+      } else {
+        for (const line of segment.lines)
+          owners.push({
+            kind: 'CubicLeaf',
+            source_verb: segment.sourceVerbOrdinal,
+            end_numerator: line.provenance.endNumerator,
+            depth: line.provenance.depth,
+          });
+      }
       packedIndex += 1;
     }
     if (fixture.contours[contourIndex]!.closeVerbOrdinal === null)

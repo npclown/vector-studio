@@ -53,7 +53,7 @@ function assertPreservedCommand(
   }
 }
 
-export function actualSegments(
+export function decodeActualSegments(
   fixture: NativeCubicSourceFixtureRow,
   commands: readonly NativeCubicCommand[],
 ): readonly (readonly ActualSegment[])[] {
@@ -89,14 +89,6 @@ export function actualSegments(
       }
       if (lines.length === 0)
         throw new Error(`source cubic ${sourceVerbOrdinal} emitted no leaves`);
-      const boundary = certifyCubicBoundary({
-        cubic,
-        lines,
-        screen: [1, 0, 0, 1],
-        sourceVerbOrdinal,
-      });
-      if (!boundary.ok)
-        throw new Error(`source cubic ${sourceVerbOrdinal} boundary ${boundary.status}`);
       return { cubic, sourceVerbOrdinal, lines };
     });
     if (contour.closeVerbOrdinal !== null) {
@@ -112,6 +104,26 @@ export function actualSegments(
     return segments;
   });
   if (commandIndex !== commands.length) throw new Error('unconsumed native commands');
+  return contours;
+}
+
+export function actualSegments(
+  fixture: NativeCubicSourceFixtureRow,
+  commands: readonly NativeCubicCommand[],
+): readonly (readonly ActualSegment[])[] {
+  const contours = decodeActualSegments(fixture, commands);
+  for (const contour of contours) {
+    for (const { cubic, lines, sourceVerbOrdinal } of contour) {
+      const boundary = certifyCubicBoundary({
+        cubic,
+        lines,
+        screen: [1, 0, 0, 1],
+        sourceVerbOrdinal,
+      });
+      if (!boundary.ok)
+        throw new Error(`source cubic ${sourceVerbOrdinal} boundary ${boundary.status}`);
+    }
+  }
   return contours;
 }
 
