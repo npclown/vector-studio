@@ -26,7 +26,13 @@ export type NativeTransverseArrangementOutput = Readonly<{
 export type NativeTransverseArrangementRow =
   NativeTopologyEnvelope<NativeTransverseArrangementOutput>;
 
-function output(value: unknown, label: string): NativeTransverseArrangementOutput {
+type ArrangementPolicy = 'matching' | 'triangle-free';
+
+function output(
+  value: unknown,
+  label: string,
+  policy: ArrangementPolicy,
+): NativeTransverseArrangementOutput {
   const item = record(value, label, ['points', 'contours', 'crossings']);
   const points = array(item.points, `${label}.points`).map((entry, index) =>
     point(entry, `${label}.points[${index}]`),
@@ -54,8 +60,9 @@ function output(value: unknown, label: string): NativeTransverseArrangementOutpu
   if (end !== points.length) throw new Error(`${label} contour partition incomplete`);
   let previousLeft = -1;
   let previousRight = -1;
-  const partners = new Set<number>();
-  for (const crossing of crossings) {
+  const partners = policy === 'matching' ? new Set<number>() : null;
+  for (let crossingIndex = 0; crossingIndex < crossings.length; crossingIndex += 1) {
+    const crossing = crossings[crossingIndex]!;
     if (crossing.left_leaf >= crossing.right_leaf || crossing.right_leaf >= points.length)
       throw new Error(`${label} crossing index invalid`);
     if (
@@ -63,10 +70,31 @@ function output(value: unknown, label: string): NativeTransverseArrangementOutpu
       (crossing.left_leaf === previousLeft && crossing.right_leaf <= previousRight)
     )
       throw new Error(`${label} crossing order invalid`);
-    if (partners.has(crossing.left_leaf) || partners.has(crossing.right_leaf))
-      throw new Error(`${label} crossing partner repeated`);
-    partners.add(crossing.left_leaf);
-    partners.add(crossing.right_leaf);
+    if (partners !== null) {
+      if (partners.has(crossing.left_leaf) || partners.has(crossing.right_leaf))
+        throw new Error(`${label} crossing partner repeated`);
+      partners.add(crossing.left_leaf);
+      partners.add(crossing.right_leaf);
+    } else {
+      for (let leftIndex = 0; leftIndex < crossingIndex; leftIndex += 1) {
+        const left = crossings[leftIndex]!;
+        const witness =
+          left.left_leaf === crossing.left_leaf
+            ? left.right_leaf
+            : left.right_leaf === crossing.left_leaf
+              ? left.left_leaf
+              : null;
+        if (witness === null) continue;
+        for (let rightIndex = 0; rightIndex < crossingIndex; rightIndex += 1) {
+          const right = crossings[rightIndex]!;
+          if (
+            (right.left_leaf === crossing.right_leaf && right.right_leaf === witness) ||
+            (right.right_leaf === crossing.right_leaf && right.left_leaf === witness)
+          )
+            throw new Error(`${label} crossing triangle`);
+        }
+      }
+    }
     previousLeft = crossing.left_leaf;
     previousRight = crossing.right_leaf;
   }
@@ -84,7 +112,31 @@ export function parseNativeTransverseArrangementValue(
   value: unknown,
   index: number,
 ): NativeTransverseArrangementRow {
-  const row = parseNativeTopologyEnvelope(value, index, output);
+  return parseArrangementValue(value, index, 'matching');
+}
+
+export function parseNativeTriangleFreeArrangementRow(
+  line: string,
+  index: number,
+): NativeTransverseArrangementRow {
+  return parseNativeTriangleFreeArrangementValue(JSON.parse(line) as unknown, index);
+}
+
+export function parseNativeTriangleFreeArrangementValue(
+  value: unknown,
+  index: number,
+): NativeTransverseArrangementRow {
+  return parseArrangementValue(value, index, 'triangle-free');
+}
+
+function parseArrangementValue(
+  value: unknown,
+  index: number,
+  policy: ArrangementPolicy,
+): NativeTransverseArrangementRow {
+  const row = parseNativeTopologyEnvelope(value, index, (value, label) =>
+    output(value, label, policy),
+  );
   if (
     row.output !== null &&
     (row.leaves !== row.output.points.length || row.pairs !== (row.leaves * (row.leaves - 1)) / 2)
