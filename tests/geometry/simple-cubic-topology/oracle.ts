@@ -1628,14 +1628,18 @@ export function certifyRoundedKnotCubicTopology(
   return publishTopology(leaves, contourLeafCounts.length, pairs);
 }
 
+type TransverseArrangementPolicy = 'matching' | 'triangle-free';
+
 /** Shares complete leaf append, pair-inspection, charge, and publication order. */
 function certifyPreparedTransverseArrangement(
   preparation: Extract<RoundedTopologyPreparation, Readonly<{ ok: true }>>,
+  policy: TransverseArrangementPolicy,
 ): TransverseArrangementResult {
   const bounded = preparation.limits;
   const leaves = preparation.leaves;
   const contourLeafCounts = preparation.contourLeafCounts;
-  const partners: (number | null)[] = Array.from({ length: leaves.length }, () => null);
+  const partners: (number | null)[] | null =
+    policy === 'matching' ? Array.from({ length: leaves.length }, () => null) : null;
   const crossings: TransverseArrangementCrossing[] = [];
 
   let pairs = 0;
@@ -1680,24 +1684,49 @@ function certifyPreparedTransverseArrangement(
           pairs,
         );
       }
-      if (partners[leftIndex] !== null) {
-        return failure(
-          'UNRESOLVED',
-          `nonadjacent hull pair ${leftIndex},${rightIndex} has multiple transverse partners at leaf ${leftIndex}`,
-          leaves.length,
-          pairs,
-        );
+      if (policy === 'matching') {
+        if (partners![leftIndex] !== null) {
+          return failure(
+            'UNRESOLVED',
+            `nonadjacent hull pair ${leftIndex},${rightIndex} has multiple transverse partners at leaf ${leftIndex}`,
+            leaves.length,
+            pairs,
+          );
+        }
+        if (partners![rightIndex] !== null) {
+          return failure(
+            'UNRESOLVED',
+            `nonadjacent hull pair ${leftIndex},${rightIndex} has multiple transverse partners at leaf ${rightIndex}`,
+            leaves.length,
+            pairs,
+          );
+        }
+        partners![leftIndex] = rightIndex;
+        partners![rightIndex] = leftIndex;
+      } else {
+        for (const leftCrossing of crossings) {
+          let witness: number | null = null;
+          if (leftCrossing.leftLeaf === leftIndex) witness = leftCrossing.rightLeaf;
+          if (leftCrossing.rightLeaf === leftIndex) witness = leftCrossing.leftLeaf;
+          if (witness === null) continue;
+          const closesTriangle = crossings.some(
+            (rightCrossing) =>
+              (rightCrossing.leftLeaf === rightIndex && rightCrossing.rightLeaf === witness) ||
+              (rightCrossing.rightLeaf === rightIndex && rightCrossing.leftLeaf === witness),
+          );
+          if (closesTriangle) {
+            return failure(
+              'UNRESOLVED',
+              `nonadjacent hull pair ${leftIndex},${rightIndex} closes a crossing triangle`,
+              leaves.length,
+              pairs,
+            );
+          }
+        }
+        if (crossings.length >= 32) {
+          return failure('WORK_LIMIT', `topology exceeds 32 crossings`, leaves.length, pairs);
+        }
       }
-      if (partners[rightIndex] !== null) {
-        return failure(
-          'UNRESOLVED',
-          `nonadjacent hull pair ${leftIndex},${rightIndex} has multiple transverse partners at leaf ${rightIndex}`,
-          leaves.length,
-          pairs,
-        );
-      }
-      partners[leftIndex] = rightIndex;
-      partners[rightIndex] = leftIndex;
       crossings.push({ leftLeaf: leftIndex, rightLeaf: rightIndex, orientation });
     }
   }
@@ -1715,7 +1744,7 @@ export function certifyTransverseCubicArrangement(
 ): TransverseArrangementResult {
   const preparation = prepareRoundedTopology(contours, limits);
   if (!preparation.ok) return preparation.result;
-  return certifyPreparedTransverseArrangement(preparation);
+  return certifyPreparedTransverseArrangement(preparation, 'matching');
 }
 
 /**
@@ -1735,5 +1764,25 @@ export function certifyMixedTransverseCubicArrangement(
 
   const preparation = prepareRoundedTopologySuffix(preflight, validation.kinds);
   if (!preparation.ok) return preparation.result;
-  return certifyPreparedTransverseArrangement(preparation);
+  return certifyPreparedTransverseArrangement(preparation, 'matching');
+}
+
+/**
+ * Certifies the frozen P3.1i triangle-free mixed LINE/cubic arrangement condition.
+ * Crossing records preserve complete leaf append and pair-inspection order.
+ */
+export function certifyTriangleFreeCubicArrangement(
+  contours: readonly (readonly CubicTopologySegment[])[],
+  sourceKinds: readonly boolean[],
+  limits?: SimpleCubicTopologyLimits,
+): TransverseArrangementResult {
+  const preflight = prepareTopologyInput(contours, limits);
+  if (!preflight.ok) return preflight.result;
+
+  const validation = validateSourceKinds(preflight, sourceKinds);
+  if (!validation.ok) return validation.result;
+
+  const preparation = prepareRoundedTopologySuffix(preflight, validation.kinds);
+  if (!preparation.ok) return preparation.result;
+  return certifyPreparedTransverseArrangement(preparation, 'triangle-free');
 }
