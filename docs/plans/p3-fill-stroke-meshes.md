@@ -1,6 +1,12 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.2q private all-LINE degenerate composition is integrated through [PR #81](https://github.com/npclown/vector-studio/pull/81). P3.2r private transverse-crossing pair predicate passes local acceptance and final Primary/independent evidence review; protected integration remains pending. Earlier sections retain their contemporaneous gate context and integration evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.2r private transverse-crossing pair predicate is integrated through [PR #82](https://github.com/npclown/vector-studio/pull/82). P3.1g test-only whole-contour transverse arrangement local acceptance passes; protected CI/integration remain required. Earlier sections retain their contemporaneous gate context and integration evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.1g transverse arrangement preservation
+
+Base: clean updated`7a5a10e907b69516a115b293a09e82ef5db2163d`, after P3.2r PR #82 and required CI run37214127768/job111471076873 PASS on`ef2475ef087b39cc2dd2ce19cc87f248725a0196`. Branch`codex/p3-1g-transverse-arrangement`. The [frozen contract](p3-transverse-arrangement-contract.md) extends the test-only rounded oracle with complete pair coverage, genuine constant-line closure and a single transverse partner per leaf. Its publication avoids invalid simple-contour orientation/nesting assumptions. G01 contract freeze after Primary/independent proof and literal review precedes implementation; stable-source review precedes numerical execution, and all G01-G04 evidence remains required. The [review record](../evidence/p3.1g-transverse-arrangement-review-2026-10-05.md) tracks decisions and evidence. Native adoption, general multiple-partner crossings, larger capacities, position/mesh/coverage composition and deferred stroke remain separate.
+
+G01-G04 local acceptance PASS: stable-source Primary/independent Astra review preceded the first numeric run, with all23 positives and15 geometric rejection candidates frozen in advance. Focused new/old oracle suites pass126 tests; bounded two-worker root check passes507 tests across51 files and all static/boundary checks; build passes43 modules. Primary corrected true-closure fixture construction and malformed-provenance stage coverage before execution, without changing expected outcomes. No runtime/native/API/dependency/cap changes or performance claim. Protected CI/integration remain required. Next dependency is a separately contracted native whole-contour counterpart before workspace adoption; full P3 geometry/coverage/transport gates remain open.
 
 ## P3.2r transverse crossing preservation predicate
 

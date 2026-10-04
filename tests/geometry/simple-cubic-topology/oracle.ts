@@ -54,6 +54,26 @@ export type SimpleCubicTopologyResult = Readonly<{
   certificate: SimpleCubicTopologyCertificate | null;
 }>;
 
+export type TransverseArrangementCrossing = Readonly<{
+  leftLeaf: number;
+  rightLeaf: number;
+  orientation: -1 | 1;
+}>;
+
+export type TransverseArrangementCertificate = Readonly<{
+  polygons: readonly (readonly Point[])[];
+  crossings: readonly TransverseArrangementCrossing[];
+}>;
+
+export type TransverseArrangementResult = Readonly<{
+  ok: boolean;
+  status: SimpleCubicTopologyStatus;
+  leaves: number;
+  pairs: number;
+  finding: string | null;
+  certificate: TransverseArrangementCertificate | null;
+}>;
+
 export type CubicPreparationStatus =
   | 'PREPARED'
   | 'INVALID_INPUT'
@@ -110,7 +130,7 @@ type PreparedSegment = Readonly<{
 }>;
 type PreparedContour = readonly PreparedSegment[];
 type TopologyPreflight =
-  | Readonly<{ ok: false; result: SimpleCubicTopologyResult }>
+  | Readonly<{ ok: false; result: TopologyFailureResult }>
   | Readonly<{
       ok: true;
       limits: CheckedLimits;
@@ -162,6 +182,22 @@ type RoundedLeaf = Readonly<{
   sourceEnd: ExactPoint;
   sourceDifferences: readonly ExactPoint[];
 }>;
+type TopologyFailureResult = Readonly<{
+  ok: false;
+  status: Exclude<SimpleCubicTopologyStatus, 'CERTIFIED'>;
+  leaves: number;
+  pairs: number;
+  finding: string;
+  certificate: null;
+}>;
+type RoundedTopologyPreparation =
+  | Readonly<{ ok: false; result: TopologyFailureResult }>
+  | Readonly<{
+      ok: true;
+      limits: CheckedLimits;
+      leaves: readonly RoundedLeaf[];
+      contourLeafCounts: readonly number[];
+    }>;
 
 const MAX_CONTOURS = 4;
 const MAX_CUBICS = 16;
@@ -179,7 +215,7 @@ function failure(
   finding: string,
   leaves = 0,
   pairs = 0,
-): SimpleCubicTopologyResult {
+): TopologyFailureResult {
   return { ok: false, status, leaves, pairs, finding, certificate: null };
 }
 
@@ -534,6 +570,54 @@ function directedCyclicAdjacent(
   if (right.contourLeaf === left.contourLeaf + 1) return [left, right];
   if (left.contourLeaf === 0 && right.contourLeaf === count - 1) return [right, left];
   return null;
+}
+
+function segmentsProperlyIntersect(
+  a: ExactPoint,
+  b: ExactPoint,
+  c: ExactPoint,
+  d: ExactPoint,
+): boolean {
+  const abc = sign(orient(a, b, c));
+  const abd = sign(orient(a, b, d));
+  const cda = sign(orient(c, d, a));
+  const cdb = sign(orient(c, d, b));
+  return abc !== 0 && abd !== 0 && abc !== abd && cda !== 0 && cdb !== 0 && cda !== cdb;
+}
+
+function transverseGenerators(leaf: RoundedLeaf): readonly ExactPoint[] {
+  // Cubic source differences omit their positive factor of three only for sign comparisons.
+  // Closure differences are already the true constant derivative. Retain the duplicate chord
+  // generator in both cases, as required by the derivative-cone proof.
+  return [...leaf.sourceDifferences, pointSub(leaf.end, leaf.start)];
+}
+
+function endpointSweepsDisjoint(leaf: RoundedLeaf, otherHull: readonly ExactPoint[]): boolean {
+  const startSweep = convexHull([leaf.sourceStart, leaf.start]);
+  if (closedHullsIntersect(startSweep, otherHull)) return false;
+  const endSweep = convexHull([leaf.sourceEnd, leaf.end]);
+  return !closedHullsIntersect(endSweep, otherHull);
+}
+
+function certifyTransverseRoundedPair(left: RoundedLeaf, right: RoundedLeaf): -1 | 1 | null {
+  if (!segmentsProperlyIntersect(left.start, left.end, right.start, right.end)) return null;
+
+  const leftGenerators = transverseGenerators(left);
+  const rightGenerators = transverseGenerators(right);
+  let orientation: -1 | 1 | null = null;
+  for (const leftGenerator of leftGenerators) {
+    for (const rightGenerator of rightGenerators) {
+      const current = sign(crossVectors(leftGenerator, rightGenerator));
+      if (current === 0) return null;
+      if (orientation === null) orientation = current;
+      else if (orientation !== current) return null;
+    }
+  }
+
+  if (!endpointSweepsDisjoint(left, right.hull) || !endpointSweepsDisjoint(right, left.hull)) {
+    return null;
+  }
+  return orientation;
 }
 
 /**
@@ -1056,6 +1140,118 @@ function prepareTopologyInput(
   return { ok: true, limits: bounded, contours: preparedContours };
 }
 
+function prepareRoundedTopology(
+  contours: readonly (readonly CubicTopologySegment[])[],
+  limits: SimpleCubicTopologyLimits | undefined,
+): RoundedTopologyPreparation {
+  const preflight = prepareTopologyInput(contours, limits);
+  if (!preflight.ok) return preflight;
+  const bounded = preflight.limits;
+  const preparedContours = preflight.contours;
+
+  for (let contourIndex = 0; contourIndex < preparedContours.length; contourIndex += 1) {
+    const contour = preparedContours[contourIndex]!;
+    for (let segmentIndex = 0; segmentIndex < contour.length; segmentIndex += 1) {
+      const segment = contour[segmentIndex]!;
+      const finalActual = segment.lines[segment.lines.length - 1]!.exactEnd;
+      if (!equalPoint(finalActual, segment.exactCubic[3])) {
+        return {
+          ok: false,
+          result: failure(
+            'KNOT_MISMATCH',
+            `contour ${contourIndex} source segment ${segmentIndex} final endpoint differs from the exact source endpoint`,
+          ),
+        };
+      }
+    }
+  }
+
+  const leaves: RoundedLeaf[] = [];
+  const contourLeafCounts: number[] = [];
+  for (let contourIndex = 0; contourIndex < preparedContours.length; contourIndex += 1) {
+    const contour = preparedContours[contourIndex]!;
+    const firstOrdinary = contour[0]!.cubic[0];
+    const firstExact = exactPoint(firstOrdinary);
+    let ordinaryStart: Point = [firstOrdinary[0], firstOrdinary[1]];
+    let actualStart = firstExact;
+    let contourLeaf = 0;
+
+    for (let segmentIndex = 0; segmentIndex < contour.length; segmentIndex += 1) {
+      const segment = contour[segmentIndex]!;
+      for (let lineIndex = 0; lineIndex < segment.lines.length; lineIndex += 1) {
+        if (leaves.length >= bounded.maxLeaves) {
+          return {
+            ok: false,
+            result: failure(
+              'WORK_LIMIT',
+              `topology exceeds ${bounded.maxLeaves} leaves`,
+              leaves.length,
+            ),
+          };
+        }
+        const line = segment.lines[lineIndex]!;
+        const controls = restrictCubic(segment.exactCubic, line.start, line.end);
+        leaves.push({
+          contour: contourIndex,
+          contourLeaf,
+          hull: convexHull([...controls, actualStart, line.exactEnd]),
+          start: actualStart,
+          end: line.exactEnd,
+          ordinaryStart: [ordinaryStart[0], ordinaryStart[1]],
+          sourceStart: controls[0],
+          sourceEnd: controls[3],
+          sourceDifferences: cubicDifferences(controls),
+        });
+        contourLeaf += 1;
+        actualStart = line.exactEnd;
+        ordinaryStart = line.ordinaryEnd;
+      }
+    }
+
+    if (!equalPoint(actualStart, firstExact)) {
+      if (leaves.length >= bounded.maxLeaves) {
+        return {
+          ok: false,
+          result: failure(
+            'WORK_LIMIT',
+            `topology exceeds ${bounded.maxLeaves} leaves`,
+            leaves.length,
+          ),
+        };
+      }
+      const difference = pointSub(firstExact, actualStart);
+      leaves.push({
+        contour: contourIndex,
+        contourLeaf,
+        hull: convexHull([actualStart, firstExact]),
+        start: actualStart,
+        end: firstExact,
+        ordinaryStart: [ordinaryStart[0], ordinaryStart[1]],
+        sourceStart: actualStart,
+        sourceEnd: firstExact,
+        sourceDifferences: [difference],
+      });
+      contourLeaf += 1;
+    }
+    contourLeafCounts.push(contourLeaf);
+  }
+
+  for (let contourIndex = 0; contourIndex < contourLeafCounts.length; contourIndex += 1) {
+    if (contourLeafCounts[contourIndex]! < 3) {
+      return {
+        ok: false,
+        result: failure(
+          'UNRESOLVED',
+          `contour ${contourIndex} has fewer than three leaves after closure`,
+          leaves.length,
+        ),
+      };
+    }
+  }
+
+  return { ok: true, limits: bounded, leaves, contourLeafCounts };
+}
+
 function publishTopology(
   leaves: readonly LeafHull[],
   contourCount: number,
@@ -1109,6 +1305,33 @@ function publishTopology(
   }
 
   return success(leaves.length, pairs, { polygons, orientations, winding });
+}
+
+function publishTransverseArrangement(
+  leaves: readonly RoundedLeaf[],
+  contourCount: number,
+  pairs: number,
+  crossings: readonly TransverseArrangementCrossing[],
+): TransverseArrangementResult {
+  const polygons: Point[][] = Array.from({ length: contourCount }, () => []);
+  for (const leaf of leaves) {
+    polygons[leaf.contour]!.push([leaf.ordinaryStart[0], leaf.ordinaryStart[1]]);
+  }
+  return {
+    ok: true,
+    status: 'CERTIFIED',
+    leaves: leaves.length,
+    pairs,
+    finding: null,
+    certificate: {
+      polygons,
+      crossings: crossings.map((crossing) => ({
+        leftLeaf: crossing.leftLeaf,
+        rightLeaf: crossing.rightLeaf,
+        orientation: crossing.orientation,
+      })),
+    },
+  };
 }
 
 /**
@@ -1258,94 +1481,11 @@ export function certifyRoundedKnotCubicTopology(
   contours: readonly (readonly CubicTopologySegment[])[],
   limits?: SimpleCubicTopologyLimits,
 ): SimpleCubicTopologyResult {
-  const preflight = prepareTopologyInput(contours, limits);
-  if (!preflight.ok) return preflight.result;
-  const bounded = preflight.limits;
-  const preparedContours = preflight.contours;
-
-  for (let contourIndex = 0; contourIndex < preparedContours.length; contourIndex += 1) {
-    const contour = preparedContours[contourIndex]!;
-    for (let segmentIndex = 0; segmentIndex < contour.length; segmentIndex += 1) {
-      const segment = contour[segmentIndex]!;
-      const finalActual = segment.lines[segment.lines.length - 1]!.exactEnd;
-      if (!equalPoint(finalActual, segment.exactCubic[3])) {
-        return failure(
-          'KNOT_MISMATCH',
-          `contour ${contourIndex} source segment ${segmentIndex} final endpoint differs from the exact source endpoint`,
-        );
-      }
-    }
-  }
-
-  const leaves: RoundedLeaf[] = [];
-  const contourLeafCounts: number[] = [];
-  for (let contourIndex = 0; contourIndex < preparedContours.length; contourIndex += 1) {
-    const contour = preparedContours[contourIndex]!;
-    const firstOrdinary = contour[0]!.cubic[0];
-    const firstExact = exactPoint(firstOrdinary);
-    let ordinaryStart: Point = [firstOrdinary[0], firstOrdinary[1]];
-    let actualStart = firstExact;
-    let contourLeaf = 0;
-
-    for (let segmentIndex = 0; segmentIndex < contour.length; segmentIndex += 1) {
-      const segment = contour[segmentIndex]!;
-      for (let lineIndex = 0; lineIndex < segment.lines.length; lineIndex += 1) {
-        if (leaves.length >= bounded.maxLeaves) {
-          return failure(
-            'WORK_LIMIT',
-            `topology exceeds ${bounded.maxLeaves} leaves`,
-            leaves.length,
-          );
-        }
-        const line = segment.lines[lineIndex]!;
-        const controls = restrictCubic(segment.exactCubic, line.start, line.end);
-        leaves.push({
-          contour: contourIndex,
-          contourLeaf,
-          hull: convexHull([...controls, actualStart, line.exactEnd]),
-          start: actualStart,
-          end: line.exactEnd,
-          ordinaryStart: [ordinaryStart[0], ordinaryStart[1]],
-          sourceStart: controls[0],
-          sourceEnd: controls[3],
-          sourceDifferences: cubicDifferences(controls),
-        });
-        contourLeaf += 1;
-        actualStart = line.exactEnd;
-        ordinaryStart = line.ordinaryEnd;
-      }
-    }
-
-    if (!equalPoint(actualStart, firstExact)) {
-      if (leaves.length >= bounded.maxLeaves) {
-        return failure('WORK_LIMIT', `topology exceeds ${bounded.maxLeaves} leaves`, leaves.length);
-      }
-      const difference = pointSub(firstExact, actualStart);
-      leaves.push({
-        contour: contourIndex,
-        contourLeaf,
-        hull: convexHull([actualStart, firstExact]),
-        start: actualStart,
-        end: firstExact,
-        ordinaryStart: [ordinaryStart[0], ordinaryStart[1]],
-        sourceStart: actualStart,
-        sourceEnd: firstExact,
-        sourceDifferences: [difference],
-      });
-      contourLeaf += 1;
-    }
-    contourLeafCounts.push(contourLeaf);
-  }
-
-  for (let contourIndex = 0; contourIndex < contourLeafCounts.length; contourIndex += 1) {
-    if (contourLeafCounts[contourIndex]! < 3) {
-      return failure(
-        'UNRESOLVED',
-        `contour ${contourIndex} has fewer than three leaves after closure`,
-        leaves.length,
-      );
-    }
-  }
+  const preparation = prepareRoundedTopology(contours, limits);
+  if (!preparation.ok) return preparation.result;
+  const bounded = preparation.limits;
+  const leaves = preparation.leaves;
+  const contourLeafCounts = preparation.contourLeafCounts;
 
   let pairs = 0;
   for (let leftIndex = 0; leftIndex < leaves.length; leftIndex += 1) {
@@ -1387,5 +1527,88 @@ export function certifyRoundedKnotCubicTopology(
     }
   }
 
-  return publishTopology(leaves, preparedContours.length, pairs);
+  return publishTopology(leaves, contourLeafCounts.length, pairs);
+}
+
+/**
+ * Certifies the frozen P3.1g test-only transverse arrangement condition.
+ * Crossing records preserve complete leaf append and pair-inspection order.
+ */
+export function certifyTransverseCubicArrangement(
+  contours: readonly (readonly CubicTopologySegment[])[],
+  limits?: SimpleCubicTopologyLimits,
+): TransverseArrangementResult {
+  const preparation = prepareRoundedTopology(contours, limits);
+  if (!preparation.ok) return preparation.result;
+  const bounded = preparation.limits;
+  const leaves = preparation.leaves;
+  const contourLeafCounts = preparation.contourLeafCounts;
+  const partners: (number | null)[] = Array.from({ length: leaves.length }, () => null);
+  const crossings: TransverseArrangementCrossing[] = [];
+
+  let pairs = 0;
+  for (let leftIndex = 0; leftIndex < leaves.length; leftIndex += 1) {
+    const left = leaves[leftIndex]!;
+    for (let rightIndex = leftIndex + 1; rightIndex < leaves.length; rightIndex += 1) {
+      if (pairs >= bounded.maxPairs) {
+        return failure(
+          'WORK_LIMIT',
+          `topology exceeds ${bounded.maxPairs} hull pairs`,
+          leaves.length,
+          pairs,
+        );
+      }
+      const right = leaves[rightIndex]!;
+      pairs += 1;
+      const adjacent = directedCyclicAdjacent(left, right, contourLeafCounts);
+      if (adjacent) {
+        const [previous, next] = adjacent;
+        const direction = pointSub(next.sourceEnd, previous.sourceStart);
+        if (
+          !roundedLeafProgresses(previous, direction) ||
+          !roundedLeafProgresses(next, direction)
+        ) {
+          return failure(
+            'UNRESOLVED',
+            `adjacent hull pair ${leftIndex},${rightIndex} lacks a common directed projection`,
+            leaves.length,
+            pairs,
+          );
+        }
+        continue;
+      }
+      if (!closedHullsIntersect(left.hull, right.hull)) continue;
+
+      const orientation = certifyTransverseRoundedPair(left, right);
+      if (orientation === null) {
+        return failure(
+          'UNRESOLVED',
+          `nonadjacent hull pair ${leftIndex},${rightIndex} intersects without a transverse certificate`,
+          leaves.length,
+          pairs,
+        );
+      }
+      if (partners[leftIndex] !== null) {
+        return failure(
+          'UNRESOLVED',
+          `nonadjacent hull pair ${leftIndex},${rightIndex} has multiple transverse partners at leaf ${leftIndex}`,
+          leaves.length,
+          pairs,
+        );
+      }
+      if (partners[rightIndex] !== null) {
+        return failure(
+          'UNRESOLVED',
+          `nonadjacent hull pair ${leftIndex},${rightIndex} has multiple transverse partners at leaf ${rightIndex}`,
+          leaves.length,
+          pairs,
+        );
+      }
+      partners[leftIndex] = rightIndex;
+      partners[rightIndex] = leftIndex;
+      crossings.push({ leftLeaf: leftIndex, rightLeaf: rightIndex, orientation });
+    }
+  }
+
+  return publishTransverseArrangement(leaves, contourLeafCounts.length, pairs, crossings);
 }
