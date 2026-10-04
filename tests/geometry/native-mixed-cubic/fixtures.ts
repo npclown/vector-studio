@@ -121,7 +121,9 @@ export function fixedNativeMixedCubicFixtureRows(): readonly NativeMixedCubicFix
   ];
 }
 
-function encodeRow(row: NativeMixedCubicFixtureRow): string {
+type MixedSourceRow = NativeCubicSourceFixtureRow & Readonly<{ sourceKinds: readonly boolean[] }>;
+
+function encodeRow(row: MixedSourceRow): string {
   if (!ID.test(row.id)) throw new Error(`fixture id ${row.id} is not protocol-safe`);
   const sourceCount = row.sourceBits.reduce((sum, contour) => sum + contour.length, 0);
   if (row.sourceKinds.length !== sourceCount)
@@ -135,9 +137,17 @@ function encodeRow(row: NativeMixedCubicFixtureRow): string {
 
 /** Encodes the strict exact-four mixed native cubic protocol. */
 export function encodeNativeMixedCubicFixture(rows: readonly NativeMixedCubicFixtureRow[]): string {
-  if (rows.length !== 4)
-    throw new Error(`expected 4 native mixed cubic rows, received ${rows.length}`);
-  const text = ['# p3-native-mixed-cubic-v1', '# rows 4', ...rows.map(encodeRow), ''].join('\n');
+  return encodeNativeMixedCubicRows(rows, 4, '# p3-native-mixed-cubic-v1');
+}
+
+export function encodeNativeMixedCubicRows(
+  rows: readonly MixedSourceRow[],
+  expectedRows: number,
+  header: string,
+): string {
+  if (rows.length !== expectedRows)
+    throw new Error(`expected ${expectedRows} native mixed cubic rows, received ${rows.length}`);
+  const text = [header, `# rows ${expectedRows}`, ...rows.map(encodeRow), ''].join('\n');
   if (Buffer.byteLength(text, 'utf8') > 512 * 1024)
     throw new Error('native mixed cubic fixture exceeds the 512 KiB protocol ceiling');
   return text;

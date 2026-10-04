@@ -29,6 +29,7 @@ const EXPECTED_ROWS: usize = 94;
 const TRANSVERSE_ROWS: usize = 6;
 const NONLINEAR_TRANSVERSE_ROWS: usize = 8;
 const MIXED_TRANSVERSE_ROWS: usize = 4;
+const TRIANGLE_FREE_ROWS: usize = 4;
 const FLATTEN_TOLERANCE: f64 = 0.125;
 const TOPOLOGY_TOLERANCE: f64 = 0.0625;
 const MAX_CONTOURS: usize = 4;
@@ -160,6 +161,15 @@ fn parse_mixed_fixture(source: &str) -> Result<Vec<SourceRow>, String> {
         source,
         MIXED_TRANSVERSE_ROWS,
         "# p3-native-mixed-cubic-v1",
+        true,
+    )
+}
+
+fn parse_triangle_free_fixture(source: &str) -> Result<Vec<SourceRow>, String> {
+    parse_fixture_mode(
+        source,
+        TRIANGLE_FREE_ROWS,
+        "# p3-native-triangle-free-cubic-v1",
         true,
     )
 }
@@ -452,14 +462,33 @@ fn load_fixture() -> Vec<SourceRow> {
 }
 
 fn load_fixture_from_env(variable: &str, expected_rows: usize) -> Vec<SourceRow> {
-    load_fixture_from_env_mode(variable, expected_rows, false)
+    load_fixture_from_env_mode(variable, expected_rows, "# p3-native-cubic-v1", false)
 }
 
 fn load_mixed_fixture_from_env(variable: &str) -> Vec<SourceRow> {
-    load_fixture_from_env_mode(variable, MIXED_TRANSVERSE_ROWS, true)
+    load_fixture_from_env_mode(
+        variable,
+        MIXED_TRANSVERSE_ROWS,
+        "# p3-native-mixed-cubic-v1",
+        true,
+    )
 }
 
-fn load_fixture_from_env_mode(variable: &str, expected_rows: usize, mixed: bool) -> Vec<SourceRow> {
+fn load_triangle_free_fixture_from_env(variable: &str) -> Vec<SourceRow> {
+    load_fixture_from_env_mode(
+        variable,
+        TRIANGLE_FREE_ROWS,
+        "# p3-native-triangle-free-cubic-v1",
+        true,
+    )
+}
+
+fn load_fixture_from_env_mode(
+    variable: &str,
+    expected_rows: usize,
+    expected_header: &str,
+    require_kinds: bool,
+) -> Vec<SourceRow> {
     let path = env::var(variable).unwrap_or_else(|_| panic!("{variable} must be set"));
     let file = File::open(path).unwrap_or_else(|_| panic!("open {variable} fixture"));
     let mut bytes = Vec::new();
@@ -468,11 +497,7 @@ fn load_fixture_from_env_mode(variable: &str, expected_rows: usize, mixed: bool)
         .unwrap_or_else(|_| panic!("read {variable} fixture"));
     assert!(bytes.len() <= INPUT_LIMIT_BYTES, "fixture exceeds 512 KiB");
     let source = core::str::from_utf8(&bytes).expect("fixture must be UTF-8");
-    let parsed = if mixed {
-        parse_mixed_fixture(source)
-    } else {
-        parse_fixture(source, expected_rows)
-    };
+    let parsed = parse_fixture_mode(source, expected_rows, expected_header, require_kinds);
     parsed.unwrap_or_else(|error| panic!("parse {variable}: {error}"))
 }
 
@@ -1515,54 +1540,188 @@ fn emit_nonlinear_transverse_native_cubic_fill() {
 #[ignore]
 fn emit_mixed_native_cubic_fill() {
     let expected = [
-        MixedTransverseExpectation {
+        CompositionExpectation {
             id: "mixed/bowtie",
             rule: LineFillRule::Nonzero,
-            source_kinds: [true, false, false, false, false, false, false, false],
+            source_kinds: &[true, false, false, false, false, false, false, false],
             logical_cubics: 7,
             source_scalars: 46,
             command_count: 10,
+            source_count: 8,
+            contour_count: 1,
+            point_count: 18,
+            leaves: 8,
+            pairs: 28,
+            area: 36.0,
         },
-        MixedTransverseExpectation {
+        CompositionExpectation {
             id: "mixed/bowtie",
             rule: LineFillRule::Evenodd,
-            source_kinds: [true, false, false, false, false, false, false, false],
+            source_kinds: &[true, false, false, false, false, false, false, false],
             logical_cubics: 7,
             source_scalars: 46,
             command_count: 10,
+            source_count: 8,
+            contour_count: 1,
+            point_count: 18,
+            leaves: 8,
+            pairs: 28,
+            area: 36.0,
         },
-        MixedTransverseExpectation {
+        CompositionExpectation {
             id: "mixed/zero-closure",
             rule: LineFillRule::Nonzero,
-            source_kinds: [true, false, false, false, true, false, false, false],
+            source_kinds: &[true, false, false, false, true, false, false, false],
             logical_cubics: 6,
             source_scalars: 42,
             command_count: 9,
+            source_count: 8,
+            contour_count: 1,
+            point_count: 18,
+            leaves: 8,
+            pairs: 28,
+            area: 36.0,
         },
-        MixedTransverseExpectation {
+        CompositionExpectation {
             id: "mixed/zero-closure",
             rule: LineFillRule::Evenodd,
-            source_kinds: [true, false, false, false, true, false, false, false],
+            source_kinds: &[true, false, false, false, true, false, false, false],
             logical_cubics: 6,
             source_scalars: 42,
             command_count: 9,
+            source_count: 8,
+            contour_count: 1,
+            point_count: 18,
+            leaves: 8,
+            pairs: 28,
+            area: 36.0,
         },
     ];
     let rows = load_mixed_fixture_from_env("P3_NATIVE_MIXED_CUBIC_INPUT");
+    emit_composition_rows(
+        &rows,
+        CompositionMode::Mixed,
+        "P3_NATIVE_MIXED_CUBIC_BEGIN",
+        "P3_NATIVE_MIXED_CUBIC_END",
+        &expected,
+    );
+}
+
+#[test]
+#[ignore]
+fn emit_triangle_free_native_cubic_fill() {
+    let expected = [
+        CompositionExpectation {
+            id: "triangle-free/star",
+            rule: LineFillRule::Nonzero,
+            source_kinds: &[false, true, true, true, true, true, true],
+            logical_cubics: 1,
+            source_scalars: 22,
+            command_count: 11,
+            source_count: 7,
+            contour_count: 2,
+            point_count: 18,
+            leaves: 7,
+            pairs: 21,
+            // Ordinary binary64 diagnostic; transport verifies the exact dyadic mesh area.
+            area: 963.0 / 32.0,
+        },
+        CompositionExpectation {
+            id: "triangle-free/star",
+            rule: LineFillRule::Evenodd,
+            source_kinds: &[false, true, true, true, true, true, true],
+            logical_cubics: 1,
+            source_scalars: 22,
+            command_count: 11,
+            source_count: 7,
+            contour_count: 2,
+            point_count: 18,
+            leaves: 7,
+            pairs: 21,
+            area: 963.0 / 32.0,
+        },
+        CompositionExpectation {
+            id: "triangle-free/zero-closure",
+            rule: LineFillRule::Nonzero,
+            source_kinds: &[true, false, true, true, true, true],
+            logical_cubics: 1,
+            source_scalars: 20,
+            command_count: 8,
+            source_count: 6,
+            contour_count: 2,
+            point_count: 16,
+            leaves: 7,
+            pairs: 21,
+            area: 963.0 / 32.0,
+        },
+        CompositionExpectation {
+            id: "triangle-free/zero-closure",
+            rule: LineFillRule::Evenodd,
+            source_kinds: &[true, false, true, true, true, true],
+            logical_cubics: 1,
+            source_scalars: 20,
+            command_count: 8,
+            source_count: 6,
+            contour_count: 2,
+            point_count: 16,
+            leaves: 7,
+            pairs: 21,
+            area: 963.0 / 32.0,
+        },
+    ];
+    let rows = load_triangle_free_fixture_from_env("P3_NATIVE_TRIANGLE_FREE_CUBIC_INPUT");
+    emit_composition_rows(
+        &rows,
+        CompositionMode::TriangleFree,
+        "P3_NATIVE_TRIANGLE_FREE_CUBIC_BEGIN",
+        "P3_NATIVE_TRIANGLE_FREE_CUBIC_END",
+        &expected,
+    );
+}
+
+#[derive(Clone, Copy)]
+enum CompositionMode {
+    Mixed,
+    TriangleFree,
+}
+
+#[derive(Clone, Copy)]
+struct CompositionExpectation {
+    id: &'static str,
+    rule: LineFillRule,
+    source_kinds: &'static [bool],
+    logical_cubics: u64,
+    source_scalars: usize,
+    command_count: usize,
+    source_count: usize,
+    contour_count: usize,
+    point_count: u32,
+    leaves: usize,
+    pairs: usize,
+    area: f64,
+}
+
+fn emit_composition_rows(
+    rows: &[SourceRow],
+    mode: CompositionMode,
+    begin_marker: &str,
+    end_marker: &str,
+    expected: &[CompositionExpectation],
+) {
     assert_eq!(rows.len(), expected.len());
     let mut workspace = BridgeWorkspace::new(LIMITS).expect("construct mixed cubic workspace");
     let allocated_bytes = workspace.allocated_bytes();
     let inline_bytes = size_of::<BridgeWorkspace>();
     assert_eq!(allocated_bytes, 1_111_552);
     assert_eq!(inline_bytes, 12_952);
-    println!("P3_NATIVE_MIXED_CUBIC_BEGIN");
+    println!("{begin_marker}");
     for (row, expectation) in rows.iter().zip(expected) {
         assert_eq!(row.id, expectation.id);
         assert_eq!(row.rule, expectation.rule, "{}", row.id);
         assert_eq!(row.expectation, ExpectedStatus::Ok, "{}", row.id);
         assert_eq!(
             row.source_kinds.as_deref(),
-            Some(expectation.source_kinds.as_slice()),
+            Some(expectation.source_kinds),
             "{}",
             row.id
         );
@@ -1571,48 +1730,66 @@ fn emit_mixed_native_cubic_fill() {
         assert_eq!(alternate.point_bytes, row.point_bytes, "{}", row.id);
 
         crate::allocation_test_support::start();
-        let alternate_attempt = workspace.attempt_mixed_transverse(
-            alternate.path_input(),
-            row.rule,
-            TOPOLOGY_TOLERANCE,
-            MAX_COMMANDS,
-        );
+        let alternate_attempt =
+            attempt_composition(&mut workspace, mode, alternate.path_input(), row.rule);
         let alternate_allocations = crate::allocation_test_support::stop();
         let alternate_diagnostics = alternate_attempt
             .unwrap_or_else(|error| panic!("{} alternate failed: {error:?}", row.id));
-        assert_mixed_route(row, alternate_diagnostics, workspace.topology_stats());
-        assert_mixed_work(
+        assert_composition_route(
+            row,
             alternate_diagnostics,
-            expectation.logical_cubics,
-            alternate.verbs.len(),
+            workspace.topology_stats(),
+            expectation,
         );
+        assert_composition_work(alternate_diagnostics, alternate.verbs.len(), expectation);
         let alternate_output = workspace
             .output()
             .expect("successful mixed alternate output");
         assert_mixed_decoded_sources(row, &alternate.verbs, alternate_output);
         assert_mixed_input_owners(row, &alternate.verbs, alternate_output);
         assert_eq!(alternate_output.commands.len(), alternate.verbs.len());
-        assert_eq!(alternate_output.sources.len(), 8, "{}", row.id);
-        assert_eq!(alternate_output.ranges.len(), 1, "{}", row.id);
-        assert_eq!(alternate_output.points.len(), 8, "{}", row.id);
-        assert_eq!(alternate_output.owners.len(), 8, "{}", row.id);
-        assert_eq!(adoption_mesh_area(alternate_output.rounded), 36.0);
+        assert_eq!(
+            alternate_output.sources.len(),
+            expectation.source_count,
+            "{}",
+            row.id
+        );
+        assert_eq!(
+            alternate_output.ranges.len(),
+            expectation.contour_count,
+            "{}",
+            row.id
+        );
+        assert_eq!(
+            alternate_output.points.len(),
+            expectation.leaves,
+            "{}",
+            row.id
+        );
+        assert_eq!(
+            alternate_output.owners.len(),
+            expectation.leaves,
+            "{}",
+            row.id
+        );
+        assert_eq!(
+            adoption_mesh_area(alternate_output.rounded),
+            expectation.area
+        );
+        if matches!(mode, CompositionMode::TriangleFree) {
+            assert_triangle_free_lower_nodes(alternate_output.rounded);
+        }
         assert_eq!(alternate_allocations, 0, "{} alternate allocated", row.id);
         assert_eq!(workspace.allocated_bytes(), allocated_bytes);
         let alternate_snapshot = snapshot(alternate_output);
 
         crate::allocation_test_support::start();
-        let attempt = workspace.attempt_mixed_transverse(
-            row.path_input(),
-            row.rule,
-            TOPOLOGY_TOLERANCE,
-            MAX_COMMANDS,
-        );
+        let attempt = attempt_composition(&mut workspace, mode, row.path_input(), row.rule);
         let allocations = crate::allocation_test_support::stop();
         let diagnostics = attempt.unwrap_or_else(|error| panic!("{} failed: {error:?}", row.id));
         let stats = workspace.topology_stats();
-        assert_mixed_route(row, diagnostics, stats);
-        assert_mixed_work(diagnostics, expectation.logical_cubics, row.verbs.len());
+        assert_composition_route(row, diagnostics, stats, expectation);
+        assert_composition_work(diagnostics, row.verbs.len(), expectation);
         let output = workspace.output().expect("successful mixed output");
         assert_mixed_decoded_sources(row, &row.verbs, output);
         assert_mixed_input_owners(row, &row.verbs, output);
@@ -1622,11 +1799,19 @@ fn emit_mixed_native_cubic_fill() {
             "{}",
             row.id
         );
-        assert_eq!(output.sources.len(), 8, "{}", row.id);
-        assert_eq!(output.ranges.len(), 1, "{}", row.id);
-        assert_eq!(output.points.len(), 8, "{}", row.id);
-        assert_eq!(output.owners.len(), 8, "{}", row.id);
-        assert_eq!(adoption_mesh_area(output.rounded), 36.0, "{}", row.id);
+        assert_eq!(output.sources.len(), expectation.source_count, "{}", row.id);
+        assert_eq!(output.ranges.len(), expectation.contour_count, "{}", row.id);
+        assert_eq!(output.points.len(), expectation.leaves, "{}", row.id);
+        assert_eq!(output.owners.len(), expectation.leaves, "{}", row.id);
+        assert_eq!(
+            adoption_mesh_area(output.rounded),
+            expectation.area,
+            "{}",
+            row.id
+        );
+        if matches!(mode, CompositionMode::TriangleFree) {
+            assert_triangle_free_lower_nodes(output.rounded);
+        }
         assert_eq!(snapshot(output), alternate_snapshot, "{}", row.id);
         assert_eq!(allocations, 0, "{} allocated", row.id);
         assert_eq!(workspace.allocated_bytes(), allocated_bytes);
@@ -1657,23 +1842,38 @@ fn emit_mixed_native_cubic_fill() {
             ",\"stats\":{{\"leaves\":{},\"pairs\":{}}}}},\"source_kinds\":",
             stats.leaves, stats.pairs
         );
-        print_source_kinds(row.source_kinds.as_deref().expect("mixed source kinds"));
+        print_source_kinds(
+            row.source_kinds
+                .as_deref()
+                .expect("composition source kinds"),
+        );
         println!("}}");
     }
-    println!("P3_NATIVE_MIXED_CUBIC_END");
+    println!("{end_marker}");
 }
 
-#[derive(Clone, Copy)]
-struct MixedTransverseExpectation {
-    id: &'static str,
+fn attempt_composition(
+    workspace: &mut BridgeWorkspace,
+    mode: CompositionMode,
+    input: PathInput<'_>,
     rule: LineFillRule,
-    source_kinds: [bool; 8],
-    logical_cubics: u64,
-    source_scalars: usize,
-    command_count: usize,
+) -> Result<AttemptDiagnostics, BridgeError> {
+    match mode {
+        CompositionMode::Mixed => {
+            workspace.attempt_mixed_transverse(input, rule, TOPOLOGY_TOLERANCE, MAX_COMMANDS)
+        }
+        CompositionMode::TriangleFree => {
+            workspace.attempt_triangle_free(input, rule, TOPOLOGY_TOLERANCE, MAX_COMMANDS)
+        }
+    }
 }
 
-fn assert_mixed_route(row: &SourceRow, diagnostics: AttemptDiagnostics, stats: TopologyStats) {
+fn assert_composition_route(
+    row: &SourceRow,
+    diagnostics: AttemptDiagnostics,
+    stats: TopologyStats,
+    expectation: &CompositionExpectation,
+) {
     assert_eq!(diagnostics.flat_status, PATH_OK, "{}", row.id);
     assert!(diagnostics.topology_invoked, "{}", row.id);
     assert!(!diagnostics.rounded_topology_invoked, "{}", row.id);
@@ -1686,20 +1886,59 @@ fn assert_mixed_route(row: &SourceRow, diagnostics: AttemptDiagnostics, stats: T
     assert_eq!(
         stats,
         TopologyStats {
-            leaves: 8,
-            pairs: 28
+            leaves: expectation.leaves,
+            pairs: expectation.pairs
         }
     );
 }
 
-fn assert_mixed_work(diagnostics: AttemptDiagnostics, cubics: u64, verbs: usize) {
+fn assert_composition_work(
+    diagnostics: AttemptDiagnostics,
+    verbs: usize,
+    expectation: &CompositionExpectation,
+) {
     assert_eq!(diagnostics.sizing_plan.verb_count, verbs as u32);
-    assert_eq!(diagnostics.sizing_plan.point_count, 18);
+    assert_eq!(diagnostics.sizing_plan.point_count, expectation.point_count);
     assert_eq!(diagnostics.emission_plan, Some(diagnostics.sizing_plan));
-    assert_eq!(diagnostics.statistics.logical_cubics, cubics);
-    assert_eq!(diagnostics.statistics.sizing_visits, cubics);
-    assert_eq!(diagnostics.statistics.emission_visits, cubics);
-    assert_eq!(diagnostics.statistics.emitted_cubic_lines, cubics);
+    assert_eq!(
+        diagnostics.statistics.logical_cubics,
+        expectation.logical_cubics
+    );
+    assert_eq!(
+        diagnostics.statistics.sizing_visits,
+        expectation.logical_cubics
+    );
+    assert_eq!(
+        diagnostics.statistics.emission_visits,
+        expectation.logical_cubics
+    );
+    assert_eq!(
+        diagnostics.statistics.emitted_cubic_lines,
+        expectation.logical_cubics
+    );
+}
+
+fn assert_triangle_free_lower_nodes(output: RoundedFillOutput<'_>) {
+    const LOWER_BITS: u64 = 0xc01a_caaa_aaaa_aaaa;
+    let mut found = [false; 2];
+    let mut count = 0usize;
+    for node in output.nodes {
+        let side = if node.point.x.to_bits() == (-1.0f64).to_bits() {
+            Some(0)
+        } else if node.point.x.to_bits() == 1.0f64.to_bits() {
+            Some(1)
+        } else {
+            None
+        };
+        if let Some(side) = side {
+            if node.point.y.to_bits() == LOWER_BITS {
+                count += 1;
+                found[side] = true;
+            }
+        }
+    }
+    assert_eq!(count, 2, "triangle-free lower-node count");
+    assert_eq!(found, [true, true], "triangle-free lower-node columns");
 }
 
 #[derive(Clone, Copy)]
@@ -2076,6 +2315,36 @@ mod tests {
         result
     }
 
+    fn measured_triangle_free_rule_attempt(
+        workspace: &mut BridgeWorkspace,
+        path: &RawPath,
+        rule: LineFillRule,
+        topology_tolerance: f64,
+    ) -> Result<AttemptDiagnostics, BridgeError> {
+        measured_triangle_free_attempt(workspace, path, rule, topology_tolerance, MAX_COMMANDS)
+    }
+
+    fn measured_triangle_free_attempt(
+        workspace: &mut BridgeWorkspace,
+        path: &RawPath,
+        rule: LineFillRule,
+        topology_tolerance: f64,
+        command_capacity: usize,
+    ) -> Result<AttemptDiagnostics, BridgeError> {
+        let bytes = workspace.allocated_bytes();
+        crate::allocation_test_support::start();
+        let result = workspace.attempt_triangle_free(
+            path.input(FLATTEN_TOLERANCE),
+            rule,
+            topology_tolerance,
+            command_capacity,
+        );
+        let allocations = crate::allocation_test_support::stop();
+        assert_eq!(allocations, 0, "triangle-free cubic attempt allocated");
+        assert_eq!(workspace.allocated_bytes(), bytes);
+        result
+    }
+
     fn linear(start: Point, one: Point, two: Point, end: Point) -> SourceCubic {
         let points = [start, one, two, end];
         let mut bits = [0u64; 8];
@@ -2300,6 +2569,92 @@ mod tests {
                 path.line_to(end);
             }
         }
+        path.close();
+        path
+    }
+
+    fn triangle_free_star(closed: bool) -> RawPath {
+        let a = [point(-3.0, 0.0), point(3.0, 0.0), point(0.0, -10.0)];
+        let b = [
+            point(-1.0, -1.0),
+            point(1.0, -1.0),
+            point(1.0, 1.0),
+            point(-1.0, 1.0),
+        ];
+        let mut path = RawPath::default();
+        path.move_to(a[0]);
+        path.cubic_to(point(-1.0, 0.0), point(1.0, 0.0), a[1]);
+        path.line_to(a[2]);
+        path.line_to(a[0]);
+        if closed {
+            path.close();
+        }
+        path.move_to(b[0]);
+        path.line_to(b[1]);
+        path.line_to(b[2]);
+        path.line_to(b[3]);
+        path.line_to(b[0]);
+        if closed {
+            path.close();
+        }
+        path
+    }
+
+    fn triangle_free_zero_closure(closed: bool) -> RawPath {
+        let a = [point(-3.0, 0.0), point(3.0, 0.0), point(0.0, -10.0)];
+        let b = [
+            point(-1.0, -1.0),
+            point(1.0, -1.0),
+            point(1.0, 1.0),
+            point(-1.0, 1.0),
+        ];
+        let mut path = RawPath::default();
+        path.move_to(a[0]);
+        path.line_to(a[0]);
+        path.cubic_to(point(-1.0, 0.0), point(1.0, 0.0), a[1]);
+        path.line_to(a[2]);
+        if closed {
+            path.close();
+        }
+        path.move_to(b[0]);
+        path.line_to(b[1]);
+        path.line_to(b[2]);
+        path.line_to(b[3]);
+        if closed {
+            path.close();
+        }
+        path
+    }
+
+    fn triangle_free_contours() -> Vec<Vec<Point>> {
+        vec![
+            vec![point(-3.0, 0.0), point(3.0, 0.0), point(0.0, -10.0)],
+            vec![
+                point(-1.0, -1.0),
+                point(1.0, -1.0),
+                point(1.0, 1.0),
+                point(-1.0, 1.0),
+            ],
+        ]
+    }
+
+    fn triangle_free_concurrent_triangle() -> RawPath {
+        let vertices = [
+            point(0.0, 0.0),
+            point(6.0, 6.0),
+            point(6.0, -2.0),
+            point(-1.0, 5.0),
+            point(7.5, 2.0),
+            point(-2.0, 2.0),
+            point(-3.0, -2.0),
+        ];
+        let mut path = RawPath::default();
+        path.move_to(vertices[0]);
+        path.cubic_to(point(2.0, 2.0), point(4.0, 4.0), vertices[1]);
+        for &end in &vertices[2..] {
+            path.line_to(end);
+        }
+        path.line_to(vertices[0]);
         path.close();
         path
     }
@@ -2656,6 +3011,18 @@ mod tests {
         }
         let old_with_kind = format!("# p3-native-cubic-v1\n# rows 1\nold nonzero OK 0 | {cubic}\n");
         assert!(parse_fixture(&old_with_kind, 1).is_err());
+
+        let triangle_free = source.replace(
+            "# p3-native-mixed-cubic-v1",
+            "# p3-native-triangle-free-cubic-v1",
+        );
+        let triangle_rows = parse_triangle_free_fixture(&triangle_free).unwrap();
+        assert_eq!(
+            triangle_rows[0].source_kinds.as_deref(),
+            Some([true].as_slice())
+        );
+        assert!(parse_mixed_fixture(&triangle_free).is_err());
+        assert!(parse_triangle_free_fixture(&source).is_err());
     }
 
     #[test]
@@ -3087,6 +3454,462 @@ mod tests {
 
         let recovered = mixed_zero_closure(false);
         measured_mixed_rule_attempt(
+            &mut first,
+            &recovered,
+            LineFillRule::Nonzero,
+            TOPOLOGY_TOLERANCE,
+        )
+        .unwrap();
+        let output = first.output().unwrap();
+        assert_eq!(snapshot(output), expected_snapshot);
+        assert_eq!(output.commands, expected_commands);
+        assert_eq!(output.sources, expected_sources);
+        assert_eq!(output.owners, expected_owners);
+    }
+
+    fn assert_triangle_free_success(
+        workspace: &mut BridgeWorkspace,
+        rule: LineFillRule,
+    ) -> NormalizedSnapshot {
+        let path = triangle_free_star(true);
+        let diagnostics =
+            measured_triangle_free_rule_attempt(workspace, &path, rule, TOPOLOGY_TOLERANCE)
+                .unwrap();
+        assert_transverse_diagnostics(diagnostics, true, None, true);
+        assert_eq!(
+            workspace.topology_stats(),
+            TopologyStats {
+                leaves: 7,
+                pairs: 21
+            }
+        );
+        let output = workspace.output().unwrap();
+        assert_depth_zero_original_identity(&path, output);
+        snapshot(output)
+    }
+
+    fn assert_triangle_free_failure_recovery(
+        workspace: &mut BridgeWorkspace,
+        failure: impl FnOnce(&mut BridgeWorkspace),
+    ) {
+        let expected = assert_triangle_free_success(workspace, LineFillRule::Nonzero);
+        failure(workspace);
+        assert!(workspace.output().is_none());
+        assert_eq!(
+            assert_triangle_free_success(workspace, LineFillRule::Nonzero),
+            expected
+        );
+    }
+
+    #[test]
+    fn triangle_free_canonical_families_preserve_sources_owners_and_paired_closures() {
+        type Fixture = fn(bool) -> RawPath;
+        let fixtures: [(Fixture, bool); 2] = [
+            (triangle_free_star, false),
+            (triangle_free_zero_closure, true),
+        ];
+        for (fixture, has_zero_line) in fixtures {
+            for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
+                let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+                let mut direct = RoundedFillWorkspace::new(LIMITS).unwrap();
+                let mut expected_snapshot = None;
+                for closed in [false, true] {
+                    let path = fixture(closed);
+                    let expected_commands = match (has_zero_line, closed) {
+                        (false, false) => 9,
+                        (false, true) => 11,
+                        (true, false) => 8,
+                        (true, true) => 10,
+                    };
+                    assert_eq!(path.verbs.len(), expected_commands);
+                    let diagnostics = measured_triangle_free_rule_attempt(
+                        &mut workspace,
+                        &path,
+                        rule,
+                        TOPOLOGY_TOLERANCE,
+                    )
+                    .unwrap();
+                    assert_transverse_diagnostics(diagnostics, true, None, true);
+                    assert_eq!(
+                        workspace.topology_stats(),
+                        TopologyStats {
+                            leaves: 7,
+                            pairs: 21
+                        }
+                    );
+                    assert_eq!(diagnostics.statistics.logical_cubics, 1);
+                    assert_eq!(diagnostics.statistics.sizing_visits, 1);
+                    assert_eq!(diagnostics.statistics.emission_visits, 1);
+                    assert_eq!(diagnostics.statistics.emitted_cubic_lines, 1);
+                    assert_eq!(
+                        diagnostics.sizing_plan.verb_count as usize,
+                        expected_commands
+                    );
+                    assert_eq!(
+                        diagnostics.sizing_plan.point_count,
+                        if has_zero_line { 16 } else { 18 }
+                    );
+                    assert_eq!(diagnostics.emission_plan, Some(diagnostics.sizing_plan));
+                    let guard = 1152.0 * f64::EPSILON;
+                    let bounds = diagnostics.flat_bounds.unwrap();
+                    assert_eq!(bounds.min_x.to_bits(), (-3.0 - guard).to_bits());
+                    assert_eq!(bounds.min_y.to_bits(), (-10.0f64).to_bits());
+                    assert_eq!(bounds.max_x.to_bits(), (3.0 + guard).to_bits());
+                    assert_eq!(bounds.max_y.to_bits(), 1.0f64.to_bits());
+
+                    let output = workspace.output().unwrap();
+                    assert_eq!(output.commands.len(), path.verbs.len());
+                    assert_eq!(output.sources.len(), if has_zero_line { 6 } else { 7 });
+                    assert_eq!(output.ranges.len(), 2);
+                    assert_eq!(output.points.len(), 7);
+                    assert_eq!(output.owners.len(), 7);
+                    assert_depth_zero_original_identity(&path, output);
+                    let contours = triangle_free_contours();
+                    assert_normalized_contours(output, &contours);
+                    assert_direct_rounded_identity(&mut direct, &contours, rule, output);
+                    assert_triangle_free_lower_nodes(output.rounded);
+                    // This f64 shoelace sum rounds the exact dyadic emitted area upward.
+                    assert_eq!(mesh_area(output.rounded), 963.0 / 32.0);
+
+                    let expected_owners = if has_zero_line {
+                        if closed {
+                            vec![
+                                EdgeOwner::CubicLeaf {
+                                    source_verb: 2,
+                                    end_numerator: 1,
+                                    depth: 0,
+                                },
+                                EdgeOwner::Line { source_verb: 3 },
+                                EdgeOwner::ExplicitClose { source_verb: 4 },
+                                EdgeOwner::Line { source_verb: 6 },
+                                EdgeOwner::Line { source_verb: 7 },
+                                EdgeOwner::Line { source_verb: 8 },
+                                EdgeOwner::ExplicitClose { source_verb: 9 },
+                            ]
+                        } else {
+                            vec![
+                                EdgeOwner::CubicLeaf {
+                                    source_verb: 2,
+                                    end_numerator: 1,
+                                    depth: 0,
+                                },
+                                EdgeOwner::Line { source_verb: 3 },
+                                EdgeOwner::ImplicitClosure { contour: 0 },
+                                EdgeOwner::Line { source_verb: 5 },
+                                EdgeOwner::Line { source_verb: 6 },
+                                EdgeOwner::Line { source_verb: 7 },
+                                EdgeOwner::ImplicitClosure { contour: 1 },
+                            ]
+                        }
+                    } else if closed {
+                        vec![
+                            EdgeOwner::CubicLeaf {
+                                source_verb: 1,
+                                end_numerator: 1,
+                                depth: 0,
+                            },
+                            EdgeOwner::Line { source_verb: 2 },
+                            EdgeOwner::Line { source_verb: 3 },
+                            EdgeOwner::Line { source_verb: 6 },
+                            EdgeOwner::Line { source_verb: 7 },
+                            EdgeOwner::Line { source_verb: 8 },
+                            EdgeOwner::Line { source_verb: 9 },
+                        ]
+                    } else {
+                        vec![
+                            EdgeOwner::CubicLeaf {
+                                source_verb: 1,
+                                end_numerator: 1,
+                                depth: 0,
+                            },
+                            EdgeOwner::Line { source_verb: 2 },
+                            EdgeOwner::Line { source_verb: 3 },
+                            EdgeOwner::Line { source_verb: 5 },
+                            EdgeOwner::Line { source_verb: 6 },
+                            EdgeOwner::Line { source_verb: 7 },
+                            EdgeOwner::Line { source_verb: 8 },
+                        ]
+                    };
+                    assert_eq!(output.owners, expected_owners);
+                    if has_zero_line {
+                        assert_eq!(output.commands[1].verb, crate::geometry::VERB_LINE);
+                        assert_eq!(output.commands[1].provenance.source_verb, 1);
+                        let DecodedSource::Line {
+                            points,
+                            source_verb,
+                            ..
+                        } = output.sources[0]
+                        else {
+                            panic!("expected retained zero LINE")
+                        };
+                        assert_eq!(source_verb, 1);
+                        assert_point_bits(points[0], points[1]);
+                        assert!(!output
+                            .owners
+                            .iter()
+                            .any(|owner| { matches!(owner, EdgeOwner::Line { source_verb: 1 }) }));
+                    }
+                    let actual_snapshot = snapshot(output);
+                    if let Some(expected) = &expected_snapshot {
+                        assert_eq!(&actual_snapshot, expected);
+                    } else {
+                        expected_snapshot = Some(actual_snapshot);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn triangle_free_failures_reset_publication_preserve_cache_and_recover() {
+        let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
+
+        assert_triangle_free_failure_recovery(&mut workspace, |workspace| {
+            let path = triangle_free_star(true);
+            assert_eq!(
+                measured_mixed_rule_attempt(
+                    workspace,
+                    &path,
+                    LineFillRule::Nonzero,
+                    TOPOLOGY_TOLERANCE,
+                ),
+                Err(BridgeError::Topology(TopologyError::Unresolved))
+            );
+            assert_transverse_diagnostics(
+                workspace.diagnostics(),
+                false,
+                Some(TopologyError::Unresolved),
+                false,
+            );
+            assert_eq!(
+                workspace.topology_stats(),
+                TopologyStats {
+                    leaves: 7,
+                    pairs: 6
+                }
+            );
+        });
+
+        assert_triangle_free_failure_recovery(&mut workspace, |workspace| {
+            let path = triangle_free_star(true);
+            assert_eq!(
+                measured_transverse_rule_attempt(
+                    workspace,
+                    &path,
+                    LineFillRule::Nonzero,
+                    TOPOLOGY_TOLERANCE,
+                ),
+                Err(BridgeError::Topology(TopologyError::Unresolved))
+            );
+            assert_transverse_diagnostics(
+                workspace.diagnostics(),
+                false,
+                Some(TopologyError::Unresolved),
+                false,
+            );
+            assert_eq!(
+                workspace.topology_stats(),
+                TopologyStats {
+                    leaves: 7,
+                    pairs: 4
+                }
+            );
+        });
+
+        assert_triangle_free_failure_recovery(&mut workspace, |workspace| {
+            let path = triangle_free_star(true);
+            assert_eq!(
+                measured_raw_attempt(
+                    workspace,
+                    &path,
+                    FLATTEN_TOLERANCE,
+                    TOPOLOGY_TOLERANCE,
+                    MAX_COMMANDS,
+                ),
+                Err(BridgeError::Topology(TopologyError::Unresolved))
+            );
+            let diagnostics = workspace.diagnostics();
+            assert!(diagnostics.topology_invoked);
+            assert!(!diagnostics.rounded_topology_invoked);
+            assert!(!diagnostics.transverse_topology_invoked);
+            assert!(!diagnostics.transverse_topology_selected);
+            assert_eq!(diagnostics.transverse_topology_error, None);
+            assert!(!diagnostics.rounded_invoked);
+            assert_eq!(
+                workspace.topology_stats(),
+                TopologyStats {
+                    leaves: 7,
+                    pairs: 4
+                }
+            );
+        });
+
+        assert_triangle_free_failure_recovery(&mut workspace, |workspace| {
+            let path = triangle_free_concurrent_triangle();
+            assert_eq!(
+                measured_triangle_free_rule_attempt(
+                    workspace,
+                    &path,
+                    LineFillRule::Nonzero,
+                    TOPOLOGY_TOLERANCE,
+                ),
+                Err(BridgeError::Topology(TopologyError::Unresolved))
+            );
+            assert_transverse_diagnostics(
+                workspace.diagnostics(),
+                false,
+                Some(TopologyError::Unresolved),
+                false,
+            );
+            assert_eq!(
+                workspace.topology_stats(),
+                TopologyStats {
+                    leaves: 7,
+                    pairs: 13
+                }
+            );
+        });
+
+        assert_triangle_free_failure_recovery(&mut workspace, |workspace| {
+            let path = triangle_free_star(true);
+            assert_eq!(
+                measured_triangle_free_rule_attempt(workspace, &path, LineFillRule::Nonzero, 0.0,),
+                Err(BridgeError::Rounded(RoundedFillError::InvalidTolerance))
+            );
+            assert_transverse_diagnostics(workspace.diagnostics(), true, None, true);
+            assert_eq!(
+                workspace.topology_stats(),
+                TopologyStats {
+                    leaves: 7,
+                    pairs: 21
+                }
+            );
+        });
+
+        assert_triangle_free_failure_recovery(&mut workspace, |workspace| {
+            let path = triangle_free_star(true);
+            assert_eq!(
+                measured_triangle_free_attempt(
+                    workspace,
+                    &path,
+                    LineFillRule::Nonzero,
+                    TOPOLOGY_TOLERANCE,
+                    10,
+                ),
+                Err(BridgeError::CommandLimit)
+            );
+            let diagnostics = workspace.diagnostics();
+            assert!(diagnostics.sizing_invoked);
+            assert!(diagnostics.emission_invoked);
+            assert!(!diagnostics.topology_invoked);
+            assert!(!diagnostics.transverse_topology_invoked);
+            assert!(!diagnostics.rounded_invoked);
+            assert_eq!(
+                workspace.topology_stats(),
+                TopologyStats {
+                    leaves: 7,
+                    pairs: 21
+                }
+            );
+        });
+
+        assert_triangle_free_failure_recovery(&mut workspace, |workspace| {
+            let path = RawPath {
+                verbs: vec![VERB_MOVE; 25],
+                point_bytes: vec![0; 50 * 8],
+            };
+            assert_eq!(
+                measured_triangle_free_rule_attempt(
+                    workspace,
+                    &path,
+                    LineFillRule::Nonzero,
+                    TOPOLOGY_TOLERANCE,
+                ),
+                Err(BridgeError::SourceLimit)
+            );
+            assert_eq!(workspace.diagnostics(), AttemptDiagnostics::default());
+            assert_eq!(
+                workspace.topology_stats(),
+                TopologyStats {
+                    leaves: 7,
+                    pairs: 21
+                }
+            );
+        });
+
+        let retained = assert_triangle_free_success(&mut workspace, LineFillRule::Nonzero);
+        let all_line = topology_skip_triangle();
+        measured_triangle_free_rule_attempt(
+            &mut workspace,
+            &all_line,
+            LineFillRule::Nonzero,
+            TOPOLOGY_TOLERANCE,
+        )
+        .unwrap();
+        let diagnostics = workspace.diagnostics();
+        assert!(!diagnostics.topology_invoked);
+        assert!(!diagnostics.transverse_topology_invoked);
+        assert!(!diagnostics.transverse_topology_selected);
+        assert_eq!(diagnostics.transverse_topology_error, None);
+        assert!(diagnostics.rounded_invoked);
+        assert_eq!(
+            workspace.topology_stats(),
+            TopologyStats {
+                leaves: 7,
+                pairs: 21
+            }
+        );
+        assert_ne!(snapshot(workspace.output().unwrap()), retained);
+    }
+
+    #[test]
+    fn triangle_free_outputs_own_inputs_and_workspaces_are_isolated() {
+        let mut path = triangle_free_zero_closure(false);
+        let mut first = BridgeWorkspace::new(LIMITS).unwrap();
+        let mut second = BridgeWorkspace::new(LIMITS).unwrap();
+        measured_triangle_free_rule_attempt(
+            &mut first,
+            &path,
+            LineFillRule::Nonzero,
+            TOPOLOGY_TOLERANCE,
+        )
+        .unwrap();
+        let expected_snapshot = snapshot(first.output().unwrap());
+        let expected_commands = first.output().unwrap().commands.to_vec();
+        let expected_sources = first.output().unwrap().sources.to_vec();
+        let expected_owners = first.output().unwrap().owners.to_vec();
+        path.point_bytes.fill(0xff);
+        drop(path);
+        let output = first.output().unwrap();
+        assert_eq!(snapshot(output), expected_snapshot);
+        assert_eq!(output.commands, expected_commands);
+        assert_eq!(output.sources, expected_sources);
+        assert_eq!(output.owners, expected_owners);
+
+        let independent = triangle_free_star(true);
+        measured_triangle_free_rule_attempt(
+            &mut second,
+            &independent,
+            LineFillRule::Evenodd,
+            TOPOLOGY_TOLERANCE,
+        )
+        .unwrap();
+        let independent_snapshot = snapshot(second.output().unwrap());
+        let failure = triangle_free_concurrent_triangle();
+        assert_eq!(
+            measured_triangle_free_rule_attempt(
+                &mut first,
+                &failure,
+                LineFillRule::Nonzero,
+                TOPOLOGY_TOLERANCE,
+            ),
+            Err(BridgeError::Topology(TopologyError::Unresolved))
+        );
+        assert!(first.output().is_none());
+        assert_eq!(snapshot(second.output().unwrap()), independent_snapshot);
+
+        let recovered = triangle_free_zero_closure(false);
+        measured_triangle_free_rule_attempt(
             &mut first,
             &recovered,
             LineFillRule::Nonzero,

@@ -35,7 +35,11 @@ function owner(value: unknown, label: string): NativeMixedCubicEdgeOwner {
   return parseNativeCubicOwner(value, label);
 }
 
-export function parseNativeMixedCubicValue(value: unknown, index: number): NativeMixedCubicRow {
+export function parseNativeMixedCubicValueWithStats(
+  value: unknown,
+  index: number,
+  expectedStats: Readonly<{ leaves: number; pairs: number }>,
+): NativeMixedCubicRow {
   const label = `row ${index}`;
   const item = record(value, label, ['carrier', 'topology', 'source_kinds']);
   const carrier = parseNativeCubicCarrier(item.carrier, index, owner);
@@ -52,12 +56,13 @@ export function parseNativeMixedCubicValue(value: unknown, index: number): Nativ
     throw new Error(`${label}.source_kinds/source_bits count mismatch`);
   return {
     carrier,
-    topology: parseNativeTransverseCubicTopology(item.topology, index, {
-      leaves: 8,
-      pairs: 28,
-    }),
+    topology: parseNativeTransverseCubicTopology(item.topology, index, expectedStats),
     source_kinds: sourceKinds as readonly boolean[],
   };
+}
+
+export function parseNativeMixedCubicValue(value: unknown, index: number): NativeMixedCubicRow {
+  return parseNativeMixedCubicValueWithStats(value, index, { leaves: 8, pairs: 28 });
 }
 
 export function parseNativeMixedCubicRow(line: string, index: number): NativeMixedCubicRow {

@@ -21,6 +21,11 @@ import type { CubicTopologySegmentFixture } from '../simple-cubic-topology/fixtu
 import type { NativeMixedCubicFixtureRow } from './fixtures.js';
 import type { NativeMixedCubicEdgeOwner, NativeMixedCubicRow } from './native.js';
 
+type MixedSourceFixture = Pick<
+  NativeMixedCubicFixtureRow,
+  'contours' | 'sourceKinds' | 'packedKinds'
+>;
+
 const FLATTEN_BITS = bitsOf(1 / 8)
   .toString(16)
   .padStart(16, '0');
@@ -32,7 +37,7 @@ function pointBits([x, y]: Point): readonly [bigint, bigint] {
   return [bitsOf(x), bitsOf(y)];
 }
 
-function polygonBits(polygons: readonly (readonly Point[])[]): string {
+export function polygonBits(polygons: readonly (readonly Point[])[]): string {
   return JSON.stringify(
     polygons.map((polygon) =>
       polygon.map((point) => pointBits(point).map((bits) => bits.toString(16))),
@@ -40,7 +45,7 @@ function polygonBits(polygons: readonly (readonly Point[])[]): string {
   );
 }
 
-function packedSegments(fixture: NativeMixedCubicFixtureRow): {
+export function packedSegments(fixture: MixedSourceFixture): {
   contours: readonly (readonly CubicTopologySegmentFixture[])[];
   kinds: readonly boolean[];
 } {
@@ -71,8 +76,8 @@ function packedSegments(fixture: NativeMixedCubicFixtureRow): {
   return { contours, kinds };
 }
 
-function expectedOwners(
-  fixture: NativeMixedCubicFixtureRow,
+export function expectedOwners(
+  fixture: MixedSourceFixture,
   packed: ReturnType<typeof packedSegments>,
 ): readonly NativeMixedCubicEdgeOwner[] {
   const owners: NativeMixedCubicEdgeOwner[] = [];
@@ -97,7 +102,7 @@ function expectedOwners(
   return owners;
 }
 
-function expectedCommands(fixture: NativeMixedCubicFixtureRow) {
+function expectedCommands(fixture: Pick<MixedSourceFixture, 'contours'>) {
   return fixture.contours.flatMap((contour) => {
     const commands: NativeCubicCommand[] = [
       {
@@ -125,7 +130,10 @@ function expectedCommands(fixture: NativeMixedCubicFixtureRow) {
   });
 }
 
-function assertCommandIdentity(fixture: NativeMixedCubicFixtureRow, actual: NativeMixedCubicRow) {
+export function assertCommandIdentity(
+  fixture: Pick<MixedSourceFixture, 'contours'>,
+  actual: NativeMixedCubicRow,
+) {
   const commands = actual.carrier.commands;
   if (!commands) throw new Error('mixed cubic commands missing');
   const expected = expectedCommands(fixture);
@@ -141,7 +149,9 @@ function assertCommandIdentity(fixture: NativeMixedCubicFixtureRow, actual: Nati
   });
 }
 
-function assertSourcePositionProof(fixture: NativeMixedCubicFixtureRow): void {
+export function assertSourcePositionProof(
+  fixture: Pick<MixedSourceFixture, 'contours' | 'sourceKinds'>,
+): void {
   let sourceIndex = 0;
   fixture.contours.forEach((contour) =>
     contour.cubics.forEach((cubic, contourSourceIndex) => {

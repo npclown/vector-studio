@@ -154,8 +154,14 @@ enum SourceVerb {
 #[derive(Clone, Copy)]
 enum TopologyMode {
     Legacy,
-    Transverse,
-    MixedTransverse,
+    Arrangement(ArrangementMode),
+}
+
+#[derive(Clone, Copy)]
+enum ArrangementMode {
+    Cubic,
+    Mixed,
+    TriangleFree,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -286,7 +292,7 @@ impl CubicFillWorkspace {
             rule,
             topology_tolerance,
             command_capacity,
-            TopologyMode::Transverse,
+            TopologyMode::Arrangement(ArrangementMode::Cubic),
         )
     }
 
@@ -302,7 +308,23 @@ impl CubicFillWorkspace {
             rule,
             topology_tolerance,
             command_capacity,
-            TopologyMode::MixedTransverse,
+            TopologyMode::Arrangement(ArrangementMode::Mixed),
+        )
+    }
+
+    pub(crate) fn attempt_triangle_free(
+        &mut self,
+        input: PathInput<'_>,
+        rule: LineFillRule,
+        topology_tolerance: f64,
+        command_capacity: usize,
+    ) -> Result<CubicFillDiagnostics, CubicFillError> {
+        self.attempt_body(
+            input,
+            rule,
+            topology_tolerance,
+            command_capacity,
+            TopologyMode::Arrangement(ArrangementMode::TriangleFree),
         )
     }
 
@@ -632,9 +654,8 @@ impl CubicFillWorkspace {
         };
         match mode {
             TopologyMode::Legacy => self.certify_legacy_topology(input),
-            TopologyMode::Transverse => self.certify_transverse_topology(input, None),
-            TopologyMode::MixedTransverse => {
-                self.certify_transverse_topology(input, Some(&source_kinds[..cubic_len]))
+            TopologyMode::Arrangement(mode) => {
+                self.certify_arrangement_topology(input, mode, &source_kinds[..cubic_len])
             }
         }
     }
@@ -678,15 +699,19 @@ impl CubicFillWorkspace {
         }
     }
 
-    fn certify_transverse_topology(
+    fn certify_arrangement_topology(
         &mut self,
         input: TopologyInput<'_>,
-        source_kinds: Option<&[bool]>,
+        mode: ArrangementMode,
+        source_kinds: &[bool],
     ) -> Result<(), CubicFillError> {
         self.diagnostics.transverse_topology_invoked = true;
-        let result = match source_kinds {
-            Some(kinds) => self.transverse_topology.certify_mixed(input, kinds),
-            None => self.transverse_topology.certify(input),
+        let result = match mode {
+            ArrangementMode::Cubic => self.transverse_topology.certify(input),
+            ArrangementMode::Mixed => self.transverse_topology.certify_mixed(input, source_kinds),
+            ArrangementMode::TriangleFree => self
+                .transverse_topology
+                .certify_triangle_free(input, source_kinds),
         };
         match result {
             Ok(()) => {
