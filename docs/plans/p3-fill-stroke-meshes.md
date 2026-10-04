@@ -1,6 +1,14 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.2y corrected local validation and final Primary/independent evidence review pass; protected CI/integration remain required. Its initial failure and user-approved exact-area correction remain recorded. P3.2x is integrated through [PR #91](https://github.com/npclown/vector-studio/pull/91). Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.2z local validation and final Primary/independent evidence review pass; protected CI/integration remain required. P3.2y integrated through [PR #92](https://github.com/npclown/vector-studio/pull/92). Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.2z depth-positive triangle-free composition
+
+Base clean updated `80141101ea1904fe1ceb7ee8aa7aa2a4578d96b5`, after Y PR #92 and required CI run37233920239/job111529166018 PASS on `a4a899996e93708044bdc80d163b06cdb571d433`, completed2026-10-05 05:58:54KST. Branch `codex/p3-2z-depth-positive-composition`. The [prospective contract](p3-depth-positive-composition-contract.md) verifies a genuinely split cubic whose right child crosses two LINE boundaries. Existing runtime, capacities and private/public boundaries stay unchanged. Full contract review precedes implementation; stable-source review precedes numerical dispatch. Four source/rule rows cover literal child partitions, both crossing owners, zero-LINE packing, true closures and independently derived exact polygon/embedded areas. Full P3, larger capacities and public mesh/coverage remain separate.
+
+P3.2z Z01 PASS: full Primary/Astra high, Sol high native and Sol medium transport review agreed before implementation. The [review record](../evidence/p3.2z-depth-positive-composition-review-2026-10-05.md) preserves source-level input/proof review and corrected shared-seam ownership. Z02/Z03 are independent native/TypeScript test work; stable-source review is required before numeric execution.
+
+Z02-Z04 local PASS after Primary/Astra stable-source clearance:204 native/470 geometry/550 root unit tests, static/boundary checks and build pass. Four depth-positive source/rule rows retain exact partitions, owners, polygons and independent area checks with0 allocations and unchanged memory/WASM. Extracted W/Y output frames match their prior captures byte-for-byte. Final evidence review and protected CI remain required. Next prospective private prerequisite is mesh packing/projection precision, not another topology mode or public transport.
 
 ## P3.2y canonical triangle-free cubic composition
 
