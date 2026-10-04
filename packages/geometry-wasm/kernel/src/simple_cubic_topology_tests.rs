@@ -19,6 +19,7 @@ pub(crate) struct SourceRow {
     pub(crate) contours: Vec<TopologyRange>,
     pub(crate) cubics: Vec<TopologyCubic>,
     pub(crate) leaves: Vec<TopologyLeaf>,
+    pub(crate) source_kinds: Option<Vec<bool>>,
 }
 
 fn exact_tokens<'a>(line: &'a str, expected: usize, label: &str) -> Vec<&'a str> {
@@ -63,6 +64,23 @@ pub(crate) fn read_topology_fixture(
     path: &str,
     expected_header: &str,
     expected_rows: usize,
+) -> Vec<SourceRow> {
+    read_topology_fixture_mode(path, expected_header, expected_rows, false)
+}
+
+pub(crate) fn read_topology_fixture_with_kinds(
+    path: &str,
+    expected_header: &str,
+    expected_rows: usize,
+) -> Vec<SourceRow> {
+    read_topology_fixture_mode(path, expected_header, expected_rows, true)
+}
+
+fn read_topology_fixture_mode(
+    path: &str,
+    expected_header: &str,
+    expected_rows: usize,
+    required_kinds: bool,
 ) -> Vec<SourceRow> {
     assert!(
         (1..=EXPECTED_ROWS).contains(&expected_rows),
@@ -185,6 +203,27 @@ pub(crate) fn read_topology_fixture(
                 count: cubic_count,
             });
         }
+        let source_kinds = if required_kinds {
+            let kinds = exact_tokens(
+                lines.next().expect("kinds row"),
+                cubics.len() + 2,
+                &format!("row {row_index} kinds"),
+            );
+            assert_eq!(kinds[0], "kinds", "kinds tag");
+            assert_eq!(decimal_usize(kinds[1], "kinds count"), cubics.len());
+            Some(
+                kinds[2..]
+                    .iter()
+                    .map(|kind| match *kind {
+                        "0" => false,
+                        "1" => true,
+                        _ => panic!("kinds canonical bit"),
+                    })
+                    .collect(),
+            )
+        } else {
+            None
+        };
         let end = exact_tokens(
             lines.next().expect("row end"),
             1,
@@ -196,6 +235,7 @@ pub(crate) fn read_topology_fixture(
             contours,
             cubics,
             leaves,
+            source_kinds,
         });
     }
     assert!(lines.next().is_none(), "extra fixture rows");
@@ -261,6 +301,13 @@ pub(crate) fn print_input_tokens(row: &SourceRow) {
                 print_bits(leaf.end.x, &mut first);
                 print_bits(leaf.end.y, &mut first);
             }
+        }
+    }
+    if let Some(kinds) = &row.source_kinds {
+        print_token("kinds", &mut first);
+        print_usize(kinds.len(), &mut first);
+        for kind in kinds {
+            print_token(if *kind { "1" } else { "0" }, &mut first);
         }
     }
     print_token("end", &mut first);

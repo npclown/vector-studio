@@ -114,6 +114,16 @@ export function encodeTopologyTokens(row: Readonly<{ inputTokens: readonly strin
     } else if (tag === 'leaf') {
       lines.push(row.inputTokens.slice(index, index + 6).join(' '));
       index += 6;
+    } else if (tag === 'kinds') {
+      const token = row.inputTokens[index + 1];
+      const count = Number(token);
+      if (!Number.isSafeInteger(count) || count < 1 || count > 16 || String(count) !== token)
+        throw new Error('kinds count must be canonical and within 1..16');
+      const kinds = row.inputTokens.slice(index + 2, index + 2 + count);
+      if (kinds.length !== count || kinds.some((kind) => kind !== '0' && kind !== '1'))
+        throw new Error('kinds must contain the declared canonical bits');
+      lines.push(row.inputTokens.slice(index, index + 2 + count).join(' '));
+      index += 2 + count;
     } else {
       throw new Error(`unexpected fixture token ${String(tag)}`);
     }

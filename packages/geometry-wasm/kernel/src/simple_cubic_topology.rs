@@ -557,10 +557,19 @@ impl RoundedKnotCubicTopologyWorkspace {
     }
 
     fn prepare(&mut self, input: TopologyInput<'_>) -> Result<(), TopologyError> {
+        self.prepare_preflight(input)?;
+        self.prepare_suffix(input)
+    }
+
+    fn prepare_preflight(&mut self, input: TopologyInput<'_>) -> Result<(), TopologyError> {
         self.begin_attempt();
         validate_counts(self.limits, input)?;
         validate_structure(input)?;
         validate_provenance(input)?;
+        Ok(())
+    }
+
+    fn prepare_suffix(&mut self, input: TopologyInput<'_>) -> Result<(), TopologyError> {
         preflight_source_final(input)?;
         self.build_leaves(input)?;
         self.validate_minimum_leaves()?;
@@ -785,6 +794,37 @@ impl TransverseArrangementWorkspace {
         Ok(())
     }
 
+    pub(crate) fn certify_mixed(
+        &mut self,
+        input: TopologyInput<'_>,
+        source_kinds: &[bool],
+    ) -> Result<(), TopologyError> {
+        self.begin_attempt();
+        self.rounded.prepare_preflight(input)?;
+        validate_mixed_source_kinds(input, source_kinds)?;
+        self.rounded.prepare_suffix(input)?;
+
+        // This attempt-local map retains no source sidecar or leaf record. Source leaves occupy
+        // the prefix of each prepared contour in packed source order; any following closure slot
+        // remains false. The 64 booleans plus scalar indices keep this helper well below 32 KiB.
+        let mut marked_lines = [false; ABSOLUTE_MAX_LEAVES];
+        for (contour_index, source_range) in input.contours.iter().copied().enumerate() {
+            let mut retained_index = self.rounded.contours[contour_index].start;
+            for source_index in range(source_range) {
+                let cubic = &input.cubics[source_index];
+                for _ in 0..cubic.leaves.count {
+                    marked_lines[retained_index] = source_kinds[source_index];
+                    retained_index += 1;
+                }
+            }
+        }
+
+        self.validate_pairs_with_kinds(Some(&marked_lines))?;
+        self.rounded.copy_actual_starts();
+        self.published = true;
+        Ok(())
+    }
+
     pub(crate) fn stats(&self) -> TopologyStats {
         self.rounded.stats
     }
@@ -808,8 +848,16 @@ impl TransverseArrangementWorkspace {
     }
 
     fn validate_pairs(&mut self) -> Result<(), TopologyError> {
+        self.validate_pairs_with_kinds(None)
+    }
+
+    fn validate_pairs_with_kinds(
+        &mut self,
+        marked_lines: Option<&[bool; ABSOLUTE_MAX_LEAVES]>,
+    ) -> Result<(), TopologyError> {
         // Pair inspection borrows both retained records. Its largest exact scratch is the shared
         // transverse-orientation envelope above; no RoundedExactLeaf or six-point array is copied.
+        // Optional marked-LINE state adds one borrowed 64-boolean array and scalar flags.
         for left_index in 0..self.rounded.exact_leaves.len() {
             for right_index in (left_index + 1)..self.rounded.exact_leaves.len() {
                 if self.rounded.stats.pairs == self.rounded.limits.max_pairs {
@@ -836,8 +884,14 @@ impl TransverseArrangementWorkspace {
                         None
                     } else {
                         Some(
-                            certify_transverse_rounded_pair(left, right)
-                                .ok_or(TopologyError::Unresolved)?,
+                            certify_transverse_rounded_pair_with_kinds(
+                                left,
+                                left.closure || marked_lines.is_some_and(|kinds| kinds[left_index]),
+                                right,
+                                right.closure
+                                    || marked_lines.is_some_and(|kinds| kinds[right_index]),
+                            )
+                            .ok_or(TopologyError::Unresolved)?,
                         )
                     }
                 };
@@ -973,6 +1027,30 @@ fn validate_provenance(input: TopologyInput<'_>) -> Result<(), TopologyError> {
         }
         if previous_numerator != previous_denominator {
             return Err(TopologyError::InvalidProvenance);
+        }
+    }
+    Ok(())
+}
+
+fn validate_mixed_source_kinds(
+    input: TopologyInput<'_>,
+    source_kinds: &[bool],
+) -> Result<(), TopologyError> {
+    if source_kinds.len() != input.cubics.len() {
+        return Err(TopologyError::InvalidInput);
+    }
+    for (cubic, &marked_line) in input.cubics.iter().zip(source_kinds) {
+        if !marked_line {
+            continue;
+        }
+        let valid_adapter = same_point(cubic.points[0], cubic.points[1])
+            && same_point(cubic.points[2], cubic.points[3])
+            && !same_point(cubic.points[0], cubic.points[3]);
+        let valid_full_leaf = cubic.leaves.count == 1
+            && input.leaves[cubic.leaves.start].provenance.depth == 0
+            && input.leaves[cubic.leaves.start].provenance.end_numerator == 1;
+        if !valid_adapter || !valid_full_leaf {
+            return Err(TopologyError::InvalidInput);
         }
     }
     Ok(())
@@ -1400,8 +1478,9 @@ fn transverse_orientation(
     // The true cubic derivative generators have a positive factor of three. Omitting that
     // factor preserves every cross-product sign used here; these unscaled differences are not
     // used as a convex-hull representation of the derivatives.
-    // Genuine closure records use their endpoint direction plus the equal actual chord, retaining
-    // both generators. They must not be treated as duplicated cubic controls with zero edges.
+    // Genuine closure records and explicitly marked affine LINE records use their endpoint
+    // direction plus the equal actual chord, retaining both generators. They must not be treated
+    // as duplicated cubic controls with zero edges.
     let (left_generators, left_len) = transverse_generators(left, left_closure);
     let (right_generators, right_len) = transverse_generators(right, right_closure);
     let mut orientation = 0i8;
@@ -1426,6 +1505,15 @@ fn certify_transverse_rounded_pair(
     left: &RoundedExactLeaf,
     right: &RoundedExactLeaf,
 ) -> Option<i8> {
+    certify_transverse_rounded_pair_with_kinds(left, left.closure, right, right.closure)
+}
+
+fn certify_transverse_rounded_pair_with_kinds(
+    left: &RoundedExactLeaf,
+    left_affine: bool,
+    right: &RoundedExactLeaf,
+    right_affine: bool,
+) -> Option<i8> {
     if !segments_properly_intersect(
         left.points[4],
         left.points[5],
@@ -1435,7 +1523,7 @@ fn certify_transverse_rounded_pair(
         return None;
     }
     let orientation =
-        transverse_orientation(&left.points, left.closure, &right.points, right.closure)?;
+        transverse_orientation(&left.points, left_affine, &right.points, right_affine)?;
     if !endpoint_sweeps_disjoint(&left.points, rounded_leaf_hull(right))
         || !endpoint_sweeps_disjoint(&right.points, rounded_leaf_hull(left))
     {

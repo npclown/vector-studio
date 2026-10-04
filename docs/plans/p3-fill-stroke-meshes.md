@@ -1,6 +1,12 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.2u nonlinear transverse composition is integrated through [PR #86](https://github.com/npclown/vector-studio/pull/86). P3.1h explicit LINE-kind arrangement oracle has local acceptance PASS; protected integration remains required. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.1h explicit LINE-kind arrangement oracle is integrated through [PR #87](https://github.com/npclown/vector-studio/pull/87). P3.2v native mixed LINE-kind helper has local acceptance PASS; protected integration remains required. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.2v native mixed LINE-kind arrangement helper
+
+Base: clean updated `537f50743ed99e6ed78a1b1be657e0504241e17e`, after P3.1h PR #87 and required CI run37222624299/job111495870337 PASS on `e658e5d91e918d6d6eb0f802e08918ab334d3e0c`. Branch `codex/p3-2v-native-mixed-line-arrangement`. The frozen [contract](p3-native-mixed-line-arrangement-contract.md) fixes a separate private helper, explicit source/leaf flags, unchanged retained layout,53-row independent corpus and required-kinds test transport. The [review record](../evidence/p3.2v-native-mixed-line-arrangement-review-2026-10-05.md) tracks decisions/evidence. Full contract review precedes implementation and stable source review precedes numeric dispatch. Canonical workspace adoption remains separate; no public API/ABI/dependency/cap/tolerance or deferred stroke change.
+
+V01-V04 local implementation/numerical PASS:188 native tests and385 geometry tests across14 files pass. All53 fixed rows match31 Certified/2 KnotMismatch/20 Unresolved with complete kind identity, literal polygon/crossing and independent oracle checks. Every call retains0 allocations and unchanged224256 heap/2512 inline bytes; independent WASM identity is unchanged. Root check passes527 tests/52 files plus all static/boundary checks; build passes43 modules. Final Primary source review preceded numeric dispatch; lifecycle/corruption isolation corrections were made before execution with unchanged expectations. Final Primary/independent evidence review PASS; docs/785 links across161 Markdown files/diff checks PASS. Protected CI/integration remain required. Canonical mixed-source adoption is the next separately contracted dependency.
 
 ## P3.1h mixed LINE-kind arrangement oracle
 
