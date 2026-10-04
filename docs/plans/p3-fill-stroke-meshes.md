@@ -1,6 +1,14 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.2v native mixed LINE-kind helper is integrated through [PR #88](https://github.com/npclown/vector-studio/pull/88). P3.2w W01-W04 local acceptance passes after the user-approved correction to its mistaken unexpanded bounds expectation. Final Primary/independent evidence review passes; protected integration remains. Initial failure evidence remains preserved. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.1i triangle-free arrangement oracle passes local validation and final Primary/independent evidence review; protected CI/integration remain required. P3.2w is integrated through [PR #89](https://github.com/npclown/vector-studio/pull/89), including the user-approved P2 bounds-expectation correction with preserved initial failure evidence. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.1i triangle-free transverse arrangement oracle
+
+Base: clean updated `e56a90f03baffdd9da4f4f9452f7aaea7132ec8f`, after P3.2w PR #89 and required CI run37227221817/job111509276309 PASS on `a95f81a965f5001f58d7ecde1bd76a6aba894a16`. Branch `codex/p3-1i-triangle-free-arrangement`. The prospective [contract](p3-triangle-free-arrangement-contract.md) extends a test-only sufficient topology condition to multiple partners using a triangle-free crossing graph, with unchanged32-record publication ceiling and original entry-point semantics. The [review record](../evidence/p3.1i-triangle-free-arrangement-review-2026-10-05.md) tracks proof, literal fixtures and evidence. Full written review/freeze precedes implementation; stable source review precedes numerical dispatch. Native adoption, public mesh/coverage, capacity changes and deferred stroke remain separate.
+
+I01 PASS: Primary, Astra high and Sol medium independently reviewed the complete theorem, literal corpus, counters, limits and failure precedence before execution. The exact fixture interface and independent rational event-order checks were frozen before isolated implementation; I03 numerical execution remained gated on stable-source review until the clearance recorded below.
+
+I02-I03 local PASS: Primary/Astra stable-source review preceded numerical dispatch. Eight positives including32 crossings certify; two triangles and33rd-record attempt reject atomically at frozen counts.31 inherited positive results and old matching restrictions remain exact. Focused five-file tests pass169; bounded root check passes550 units/53 files plus formatting/lint/types/boundaries; build passes43 modules. No frozen expectation changed. Final Primary/Astra evidence review, explicit Markdown/805-link checks and diff review PASS. Protected CI remains required; native helper adoption is the next dependency, with unchanged public/runtime scope.
 
 ## P3.2w canonical mixed LINE/cubic composition
 
