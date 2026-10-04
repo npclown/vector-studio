@@ -1,6 +1,12 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.2r private transverse-crossing pair predicate is integrated through [PR #82](https://github.com/npclown/vector-studio/pull/82). P3.1g test-only whole-contour transverse arrangement local acceptance passes; protected CI/integration remain required. Earlier sections retain their contemporaneous gate context and integration evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.1g test-only whole-contour transverse arrangement is integrated through [PR #83](https://github.com/npclown/vector-studio/pull/83). P3.2s private native counterpart local implementation and numerical criteria pass; final Primary/independent evidence review passes; protected CI/integration remain required. Earlier sections retain their contemporaneous gate context and integration evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.2s native transverse arrangement preservation
+
+Base: clean updated `c12b4c5823bf970bed4c692535462d42aebc2ef5`, after P3.1g PR #83 and required CI run37215934915/job111476326740 PASS on `6a998ceba3c6df88832fae3000292db74b993d7d`. Branch `codex/p3-2s-native-transverse-arrangement`. The [contract](p3-native-transverse-arrangement-contract.md) freezes the private wrapper, existing rounded preparation/storage reuse, true-line crossing semantics, bounded matching and distinct output. S01 review/freeze precedes implementation; stable source/protocol review precedes numeric execution. The [review record](../evidence/p3.2s-native-transverse-arrangement-review-2026-10-05.md) tracks decisions and evidence. No workspace adoption, public API/ABI, dependency, cap/tolerance change, full-workload claim or deferred stroke work.
+
+S01-S04 local implementation/numerical PASS: first complete geometry run passes181 native tests and294 TypeScript geometry tests; all39 rows match24 Certified/2 KnotMismatch/13 Unresolved with literal/independent checks and zero certify allocations. Retained224256 bytes and inline2512 bytes satisfy frozen limits. Two independent WASM builds retain the old identity. Bounded root check passes507 tests across51 files plus static/boundary checks; build passes43 modules. Primary/independent source review preceded all numeric dispatch; fixture coverage and scratch documentation corrections were completed before execution. Final Primary/independent evidence review PASS; protected CI/integration remain required. Later adoption must separately fix bounded selection/failure/resource semantics and position/mesh composition; no full-workload readiness or cap increase is inferred.
 
 ## P3.1g transverse arrangement preservation
 

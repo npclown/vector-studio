@@ -20,17 +20,19 @@ export type NativeTopologyOutput = Readonly<{
   winding: readonly (readonly (-1 | 0 | 1)[])[];
 }>;
 
-export type NativeTopologyRow = Readonly<{
+export type NativeTopologyEnvelope<T> = Readonly<{
   id: string;
   input_tokens: readonly string[];
   status: NativeTopologyStatus;
   leaves: number;
   pairs: number;
-  output: NativeTopologyOutput | null;
+  output: T | null;
   allocations: number;
   allocated_bytes: number;
   inline_bytes: number;
 }>;
+
+export type NativeTopologyRow = NativeTopologyEnvelope<NativeTopologyOutput>;
 
 const STATUSES = [
   'Certified',
@@ -45,7 +47,11 @@ const STATUSES = [
 ] as const satisfies readonly NativeTopologyStatus[];
 const ID = /^[A-Za-z0-9/-]+$/u;
 
-function record(value: unknown, label: string, keys: readonly string[]): Record<string, unknown> {
+export function record(
+  value: unknown,
+  label: string,
+  keys: readonly string[],
+): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value))
     throw new Error(`${label} must be an object`);
   const result = value as Record<string, unknown>;
@@ -56,7 +62,7 @@ function record(value: unknown, label: string, keys: readonly string[]): Record<
   return result;
 }
 
-function array(value: unknown, label: string): readonly unknown[] {
+export function array(value: unknown, label: string): readonly unknown[] {
   if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
   return value;
 }
@@ -66,7 +72,7 @@ function string(value: unknown, label: string): string {
   return value;
 }
 
-function integer(value: unknown, label: string): number {
+export function integer(value: unknown, label: string): number {
   if (
     typeof value !== 'number' ||
     !Number.isFinite(value) ||
@@ -83,13 +89,13 @@ function finite(value: unknown, label: string): number {
   return value;
 }
 
-function point(value: unknown, label: string): Point {
+export function point(value: unknown, label: string): Point {
   const tuple = array(value, label);
   if (tuple.length !== 2) throw new Error(`${label} must contain two coordinates`);
   return [finite(tuple[0], `${label}[0]`), finite(tuple[1], `${label}[1]`)];
 }
 
-function range(value: unknown, label: string): NativeTopologyRange {
+export function range(value: unknown, label: string): NativeTopologyRange {
   const item = record(value, label, ['start', 'count']);
   return {
     start: integer(item.start, `${label}.start`),
@@ -97,7 +103,7 @@ function range(value: unknown, label: string): NativeTopologyRange {
   };
 }
 
-function orientation(value: unknown, label: string): -1 | 1 {
+export function orientation(value: unknown, label: string): -1 | 1 {
   if (value !== -1 && value !== 1) throw new Error(`${label} must be -1 or 1`);
   return value;
 }
@@ -154,6 +160,14 @@ export function parseNativeTopologyRow(line: string, index: number): NativeTopol
 }
 
 export function parseNativeTopologyValue(value: unknown, index: number): NativeTopologyRow {
+  return parseNativeTopologyEnvelope(value, index, output);
+}
+
+export function parseNativeTopologyEnvelope<T>(
+  value: unknown,
+  index: number,
+  parseOutput: (value: unknown, label: string) => T,
+): NativeTopologyEnvelope<T> {
   const label = `row ${index}`;
   const item = record(value, label, [
     'id',
@@ -169,7 +183,7 @@ export function parseNativeTopologyValue(value: unknown, index: number): NativeT
   const status = string(item.status, `${label}.status`);
   if (!STATUSES.includes(status as NativeTopologyStatus))
     throw new Error(`${label}.status invalid`);
-  const parsedOutput = item.output === null ? null : output(item.output, `${label}.output`);
+  const parsedOutput = item.output === null ? null : parseOutput(item.output, `${label}.output`);
   if ((status === 'Certified') !== (parsedOutput !== null))
     throw new Error(`${label} output/status mismatch`);
   const inputTokens = array(item.input_tokens, `${label}.input_tokens`).map((entry, tokenIndex) =>
