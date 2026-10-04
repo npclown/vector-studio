@@ -103,6 +103,20 @@ pub(crate) struct TopologyOutput<'a> {
     pub(crate) winding: &'a [[i8; ABSOLUTE_MAX_CONTOURS]],
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ArrangementCrossing {
+    pub(crate) left_leaf: usize,
+    pub(crate) right_leaf: usize,
+    pub(crate) orientation: i8,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ArrangementOutput<'a> {
+    pub(crate) points: &'a [Point],
+    pub(crate) contours: &'a [TopologyRange],
+    pub(crate) crossings: &'a [ArrangementCrossing],
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct ExactPoint {
     x: ExactCoordinate,
@@ -167,15 +181,18 @@ pub(crate) fn certify_transverse_pair(
     // six-byte hull-index results and under 512 bytes of certificates/provenance/length metadata.
     // restrict_cell needs twelve ExactPoints across its cubic and split argument/result;
     // split_half needs fourteen across its input, six midpoint locals, and returned cubic.
-    // transverse_orientation needs twelve ExactPoints (the eight generators, two loop values,
-    // and two cross arguments) plus four ExactProducts (2,240 bytes) for multiply/negate/add
-    // results. cross_vectors itself needs two ExactPoints, two ExactCoordinates, and four
-    // ExactProducts (3,968 bytes). Proper/closed-hull helpers need at most eight ExactPoints plus
-    // four ExactProducts (6,848 bytes). An endpoint sweep needs four ExactPoints including
-    // construction copies and twelve hull-index bytes; convex_hull needs at most 36 index bytes
-    // and three point arguments. Every envelope is below 32 KiB. These are conservative
-    // source-level counts including by-value arguments/returns, not compiler stack-frame or
-    // whole-call-chain claims.
+    // transverse_generators needs at most twelve ExactPoints (6,912 bytes) across its actual
+    // local, fixed array, point-subtraction arguments/results, and returned tuple copy.
+    // transverse_orientation conservatively allows twenty ExactPoints (eight generator locals,
+    // eight returned tuple/array copies, two loop values, and two cross arguments) plus four
+    // ExactProducts (2,240 bytes) for
+    // multiply/negate/add results. cross_vectors itself needs two ExactPoints, two
+    // ExactCoordinates, and four ExactProducts (3,968 bytes). Proper/closed-hull helpers need at
+    // most eight ExactPoints plus four ExactProducts (6,848 bytes). An endpoint sweep needs four
+    // ExactPoints including construction copies and twelve hull-index bytes; convex_hull needs at
+    // most 36 index bytes and three point arguments. Every envelope is below 32 KiB. These are
+    // conservative source-level counts including by-value arguments/returns, not compiler
+    // stack-frame or whole-call-chain claims.
     let expanded = {
         let restricted = [
             restrict_cell(
@@ -217,8 +234,8 @@ pub(crate) fn certify_transverse_pair(
     ) {
         return Err(TopologyError::Unresolved);
     }
-    let orientation =
-        transverse_orientation(&expanded[0], &expanded[1]).ok_or(TopologyError::Unresolved)?;
+    let orientation = transverse_orientation(&expanded[0], false, &expanded[1], false)
+        .ok_or(TopologyError::Unresolved)?;
 
     let (left_indices, left_len) = convex_hull(&expanded[0]);
     let (right_indices, right_len) = convex_hull(&expanded[1]);
@@ -267,6 +284,17 @@ pub(crate) struct RoundedKnotCubicTopologyWorkspace {
     winding: [[i8; ABSOLUTE_MAX_CONTOURS]; ABSOLUTE_MAX_CONTOURS],
     stats: TopologyStats,
     allocated_bytes: usize,
+    published: bool,
+}
+
+pub(crate) struct TransverseArrangementWorkspace {
+    // The sole heap owner is rounded. The additional inline matching storage is 64 usize partner
+    // slots, 32 bounded crossing records, one length, and one publication flag; the native unit
+    // freezes the complete wrapper at no more than 4 KiB.
+    rounded: RoundedKnotCubicTopologyWorkspace,
+    partners: [usize; ABSOLUTE_MAX_LEAVES],
+    crossings: [ArrangementCrossing; ABSOLUTE_MAX_LEAVES / 2],
+    crossing_len: usize,
     published: bool,
 }
 
@@ -521,6 +549,14 @@ impl RoundedKnotCubicTopologyWorkspace {
     }
 
     pub(crate) fn certify(&mut self, input: TopologyInput<'_>) -> Result<(), TopologyError> {
+        self.prepare(input)?;
+        self.validate_pairs()?;
+        self.derive_output()?;
+        self.published = true;
+        Ok(())
+    }
+
+    fn prepare(&mut self, input: TopologyInput<'_>) -> Result<(), TopologyError> {
         self.begin_attempt();
         validate_counts(self.limits, input)?;
         validate_structure(input)?;
@@ -528,9 +564,6 @@ impl RoundedKnotCubicTopologyWorkspace {
         preflight_source_final(input)?;
         self.build_leaves(input)?;
         self.validate_minimum_leaves()?;
-        self.validate_pairs()?;
-        self.derive_output()?;
-        self.published = true;
         Ok(())
     }
 
@@ -686,10 +719,7 @@ impl RoundedKnotCubicTopologyWorkspace {
     }
 
     fn derive_output(&mut self) -> Result<(), TopologyError> {
-        self.point_len = self.exact_leaves.len();
-        for (index, leaf) in self.exact_leaves.iter().enumerate() {
-            self.points[index] = leaf.ordinary_start;
-        }
+        self.copy_actual_starts();
         for contour_index in 0..self.contour_len {
             let contour = self.contours[contour_index];
             let mut area = ExactProduct::zero();
@@ -722,6 +752,116 @@ impl RoundedKnotCubicTopologyWorkspace {
                     }
                     PolygonLocation::Outside => {}
                 }
+            }
+        }
+        Ok(())
+    }
+
+    fn copy_actual_starts(&mut self) {
+        self.point_len = self.exact_leaves.len();
+        for (index, leaf) in self.exact_leaves.iter().enumerate() {
+            self.points[index] = leaf.ordinary_start;
+        }
+    }
+}
+
+impl TransverseArrangementWorkspace {
+    pub(crate) fn new(limits: TopologyLimits) -> Result<Self, TopologyError> {
+        Ok(Self {
+            rounded: RoundedKnotCubicTopologyWorkspace::new(limits)?,
+            partners: [usize::MAX; ABSOLUTE_MAX_LEAVES],
+            crossings: [ArrangementCrossing::default(); ABSOLUTE_MAX_LEAVES / 2],
+            crossing_len: 0,
+            published: false,
+        })
+    }
+
+    pub(crate) fn certify(&mut self, input: TopologyInput<'_>) -> Result<(), TopologyError> {
+        self.begin_attempt();
+        self.rounded.prepare(input)?;
+        self.validate_pairs()?;
+        self.rounded.copy_actual_starts();
+        self.published = true;
+        Ok(())
+    }
+
+    pub(crate) fn stats(&self) -> TopologyStats {
+        self.rounded.stats
+    }
+
+    pub(crate) fn output(&self) -> Option<ArrangementOutput<'_>> {
+        self.published.then_some(ArrangementOutput {
+            points: &self.rounded.points[..self.rounded.point_len],
+            contours: &self.rounded.contours[..self.rounded.contour_len],
+            crossings: &self.crossings[..self.crossing_len],
+        })
+    }
+
+    pub(crate) fn allocated_bytes(&self) -> usize {
+        self.rounded.allocated_bytes
+    }
+
+    fn begin_attempt(&mut self) {
+        self.partners.fill(usize::MAX);
+        self.crossing_len = 0;
+        self.published = false;
+    }
+
+    fn validate_pairs(&mut self) -> Result<(), TopologyError> {
+        // Pair inspection borrows both retained records. Its largest exact scratch is the shared
+        // transverse-orientation envelope above; no RoundedExactLeaf or six-point array is copied.
+        for left_index in 0..self.rounded.exact_leaves.len() {
+            for right_index in (left_index + 1)..self.rounded.exact_leaves.len() {
+                if self.rounded.stats.pairs == self.rounded.limits.max_pairs {
+                    return Err(TopologyError::WorkLimit);
+                }
+                self.rounded.stats.pairs += 1;
+                let orientation = {
+                    let left = &self.rounded.exact_leaves[left_index];
+                    let right = &self.rounded.exact_leaves[right_index];
+                    if let Some((previous, next)) =
+                        directed_rounded_adjacent(left, right, &self.rounded.contours)
+                    {
+                        let direction = point_sub(next.points[3], previous.points[0]);
+                        if !rounded_projected_monotone(previous, direction)
+                            || !rounded_projected_monotone(next, direction)
+                        {
+                            return Err(TopologyError::Unresolved);
+                        }
+                        None
+                    } else if !closed_hulls_intersect(
+                        rounded_leaf_hull(left),
+                        rounded_leaf_hull(right),
+                    ) {
+                        None
+                    } else {
+                        Some(
+                            certify_transverse_rounded_pair(left, right)
+                                .ok_or(TopologyError::Unresolved)?,
+                        )
+                    }
+                };
+
+                let Some(orientation) = orientation else {
+                    continue;
+                };
+                if self.partners[left_index] != usize::MAX {
+                    return Err(TopologyError::Unresolved);
+                }
+                if self.partners[right_index] != usize::MAX {
+                    return Err(TopologyError::Unresolved);
+                }
+                if self.crossing_len == self.crossings.len() {
+                    return Err(TopologyError::WorkLimit);
+                }
+                self.partners[left_index] = right_index;
+                self.partners[right_index] = left_index;
+                self.crossings[self.crossing_len] = ArrangementCrossing {
+                    left_leaf: left_index,
+                    right_leaf: right_index,
+                    orientation,
+                };
+                self.crossing_len += 1;
             }
         }
         Ok(())
@@ -1238,27 +1378,35 @@ fn closed_hulls_intersect(left: ExactHull<'_>, right: ExactHull<'_>) -> bool {
         || point_in_closed_hull(hull_point(right, 0), left)
 }
 
-fn transverse_orientation(left: &[ExactPoint; 6], right: &[ExactPoint; 6]) -> Option<i8> {
+fn transverse_generators(points: &[ExactPoint; 6], closure: bool) -> ([ExactPoint; 4], usize) {
+    let actual = point_sub(points[5], points[4]);
+    let mut generators = [actual; 4];
+    if closure {
+        generators[0] = point_sub(points[3], points[0]);
+        return (generators, 2);
+    }
+    generators[0] = point_sub(points[1], points[0]);
+    generators[1] = point_sub(points[2], points[1]);
+    generators[2] = point_sub(points[3], points[2]);
+    (generators, 4)
+}
+
+fn transverse_orientation(
+    left: &[ExactPoint; 6],
+    left_closure: bool,
+    right: &[ExactPoint; 6],
+    right_closure: bool,
+) -> Option<i8> {
     // The true cubic derivative generators have a positive factor of three. Omitting that
     // factor preserves every cross-product sign used here; these unscaled differences are not
     // used as a convex-hull representation of the derivatives.
-    let generators = [
-        [
-            point_sub(left[1], left[0]),
-            point_sub(left[2], left[1]),
-            point_sub(left[3], left[2]),
-            point_sub(left[5], left[4]),
-        ],
-        [
-            point_sub(right[1], right[0]),
-            point_sub(right[2], right[1]),
-            point_sub(right[3], right[2]),
-            point_sub(right[5], right[4]),
-        ],
-    ];
+    // Genuine closure records use their endpoint direction plus the equal actual chord, retaining
+    // both generators. They must not be treated as duplicated cubic controls with zero edges.
+    let (left_generators, left_len) = transverse_generators(left, left_closure);
+    let (right_generators, right_len) = transverse_generators(right, right_closure);
     let mut orientation = 0i8;
-    for &left_generator in &generators[0] {
-        for &right_generator in &generators[1] {
+    for &left_generator in &left_generators[..left_len] {
+        for &right_generator in &right_generators[..right_len] {
             let sign = match cross_vectors(left_generator, right_generator).cmp_zero() {
                 Ordering::Less => -1,
                 Ordering::Equal => return None,
@@ -1272,6 +1420,58 @@ fn transverse_orientation(left: &[ExactPoint; 6], right: &[ExactPoint; 6]) -> Op
         }
     }
     Some(orientation)
+}
+
+fn certify_transverse_rounded_pair(
+    left: &RoundedExactLeaf,
+    right: &RoundedExactLeaf,
+) -> Option<i8> {
+    if !segments_properly_intersect(
+        left.points[4],
+        left.points[5],
+        right.points[4],
+        right.points[5],
+    ) {
+        return None;
+    }
+    let orientation =
+        transverse_orientation(&left.points, left.closure, &right.points, right.closure)?;
+    if !endpoint_sweeps_disjoint(&left.points, rounded_leaf_hull(right))
+        || !endpoint_sweeps_disjoint(&right.points, rounded_leaf_hull(left))
+    {
+        return None;
+    }
+    Some(orientation)
+}
+
+#[cfg(test)]
+pub(crate) fn certify_transverse_test_pair(
+    left: [Point; 6],
+    left_closure: bool,
+    right: [Point; 6],
+    right_closure: bool,
+) -> Option<i8> {
+    // Test-only construction retains two six-point leaf records. Conservatively including one
+    // in-progress map/result copy gives 18 ExactPoints (10,368 bytes), two six-byte hull arrays,
+    // and under 512 bytes of ordinary inputs/metadata before the borrowed pair proof.
+    fn test_leaf(points: [Point; 6], closure: bool) -> RoundedExactLeaf {
+        let points = points.map(exact_point);
+        let (hull, hull_len) = convex_hull(&points);
+        RoundedExactLeaf {
+            points,
+            hull,
+            hull_len,
+            contour: 0,
+            contour_leaf: 0,
+            ordinary_start: Point::default(),
+            closure,
+        }
+    }
+
+    certify_transverse_rounded_pair(
+        &test_leaf(left, left_closure),
+        &test_leaf(right, right_closure),
+    )
 }
 
 fn endpoint_sweeps_disjoint(leaf: &[ExactPoint; 6], other: ExactHull<'_>) -> bool {

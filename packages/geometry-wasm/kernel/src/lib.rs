@@ -47,6 +47,8 @@ mod rounded_line_fill_tests;
 #[cfg(test)]
 mod simple_cubic_topology_tests;
 #[cfg(test)]
+mod transverse_arrangement_tests;
+#[cfg(test)]
 mod transverse_pair_tests;
 
 #[cfg(target_arch = "wasm32")]

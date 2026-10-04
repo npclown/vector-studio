@@ -46,7 +46,7 @@ function row(
   };
 }
 
-function signedZeroCarrier(): Readonly<{
+export function signedZeroCarrier(): Readonly<{
   contours: readonly (readonly CubicTopologySegmentFixture[])[];
   polygons: readonly (readonly Point[])[];
   orientations: readonly (-1 | 1)[];

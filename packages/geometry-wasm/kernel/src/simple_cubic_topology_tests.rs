@@ -267,7 +267,7 @@ pub(crate) fn print_input_tokens(row: &SourceRow) {
     print!("]");
 }
 
-fn print_ranges(ranges: &[TopologyRange]) {
+pub(crate) fn print_ranges(ranges: &[TopologyRange]) {
     print!("[");
     for (index, range) in ranges.iter().enumerate() {
         if index != 0 {
