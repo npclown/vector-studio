@@ -42,3 +42,6 @@ jobs:
 
       - name: Validate bounded P3 cubic readiness tooling
         run: node tooling/run-p3-cubic-census.mjs --smoke
+
+      - name: Validate historical polygon relation tooling
+        run: node tooling/run-p3-polygon-census.mjs --smoke

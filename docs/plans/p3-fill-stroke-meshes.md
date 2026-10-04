@@ -1,6 +1,14 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.2n native rounded-knot topology is integrated through [PR #77](https://github.com/npclown/vector-studio/pull/77). P3.2o private workspace adoption has passed local acceptance and final source review; protected CI/integration remain pending. Earlier sections retain their contemporaneous gate context and integration evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.2o private workspace adoption is integrated through [PR #78](https://github.com/npclown/vector-studio/pull/78). P3.2p1 historical polygon segment-relation tooling is active under its frozen contract. Earlier sections retain their contemporaneous gate context and integration evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.2p historical polygon segment-relation census
+
+Base: clean updated`1488094118ac1be1c3a0724b411779f0561206a7`, after P3.2o PR #78 and required CI run37205671538/job111446234189 on`c5fbf96129892d8067a092d25e365753e4422984`. Branch: codex/p3-2p1-polygon-relation-census. The [relation census contract](p3-polygon-relation-census-contract.md) is FROZEN after Primary and independent Astra high mathematical/interface review, before implementation. P3.2p1 implements and validates tooling/smoke only; P3.2p2 later performs the full immutable observation after p1 integration.
+
+Reuse authenticated historical m2 frames to classify actual polygon edge relations and work counts. Runtime identity remains pinned to m2 and analysis identity is separate. No current kernel/position-proof rerun, curved topology certificate, cap/API/ABI/dependency change, browser/GPU/performance or deferred stroke work. Primary owns contract/shared types/review/integration; disjoint classifier, independent parametric auditor and transport/runner scopes may run in parallel after freeze. Stable-source and supplementary analytic fixture review precede numerical smoke dispatch. Full1000 classification is NOT RUN in p1. The [review record](../evidence/p3.2p1-polygon-relation-tooling-review-2026-10-04.md) tracks decisions and evidence.
+
+P01-P04 local acceptance PASS: final Primary/Astra mathematical review and independent Sol I/O review preceded all numeric dispatch;89 analytic/mechanics tests plus separate RUN/AUDIT phases pass with four COMPLETE smoke rows. Root483 tests/50 files, static/boundary checks and build pass. The review record pins source/capture hashes and corrections made before execution. Required protected CI/integration remain pending. The next dependency-ready checkpoint after integration is p2: one frozen full historical observation and independent audit on a fresh clean evidence branch, followed by immutable archive and evidence review. Complete observation will not establish current-kernel or source-curve topology acceptance.
 
 ## P3.2o private rounded-topology adoption
 
