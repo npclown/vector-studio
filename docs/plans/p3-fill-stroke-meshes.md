@@ -1,6 +1,14 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.2p1 historical polygon segment-relation tooling is integrated through [PR #79](https://github.com/npclown/vector-studio/pull/79). P3.2p2 full historical observation, independent audit and final evidence review PASS; protected integration follows. Earlier sections retain their contemporaneous gate context and integration evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.2p2 historical observation is integrated through [PR #80](https://github.com/npclown/vector-studio/pull/80). P3.2q private canonical all-LINE degenerate composition contract is frozen; implementation is active. Earlier sections retain their contemporaneous gate context and integration evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.2q canonical all-LINE degenerate contour composition
+
+Base: clean updated`28b3cf05ed623b5a18546691f090e636fea2074b`, after P3.2p2 PR #80 and required CI run37209507945/job111457623286 PASS on`a7156b0fae80b1934bf69406f770731e0bc09020`. Branch`codex/p3-2q-line-degenerate-composition`. The [frozen contract](p3-line-degenerate-composition-contract.md), approved by Primary and independent Astra high before implementation, closes temporary all-LINE composition restrictions using approved visible semantics and the existing rounded workspace. It preserves singleton contour identities and cancelled nonzero proof edges, with unchanged caps and all CUBIC/mixed behavior. Primary owns contract/review/integration; one Sol high owns coupled runtime/native tests after freeze, with independent stable-source review before numeric dispatch. Q01-Q05 and protected CI are required. No general curved topology, public API/ABI/dependency change or deferred stroke work.
+
+The [review record](../evidence/p3.2q-line-degenerate-composition-review-2026-10-04.md) tracks prospective decisions, actual delegation, source freeze, validation and remaining gates. Cached last-invoked topology statistics retain the earlier adoption contract; current-attempt flags and publication remain separate.
+
+Q01-Q05 local acceptance PASS:16 standalone/48 composed all-LINE attempts and8 fixed ambiguity rejections, exact ownership and lifecycle/resource controls,174 native tests,246 geometry tests,483 root unit tests, static/boundary checks and build. Independent WASM identity is unchanged. The record preserves one first-run fixture error: a supposedly mixed old carrier used the all-LINE mask; it was corrected to the prospectively required CUBIC carrier with unchanged failure expectation, independently rereviewed, then the entire geometry suite passed. Final Primary/independent evidence review PASS on2026-10-05, changed docs/733 links across147 Markdown files/diff checks PASS; protected integration remains pending. General CUBIC topology/capacity, public transport/coverage and deferred stroke remain separate.
 
 ## P3.2p historical polygon segment-relation census
 
