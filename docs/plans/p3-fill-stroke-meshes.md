@@ -1,6 +1,43 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98, and the P3.1m M00 C04 position readiness note through [PR #99](https://github.com/npclown/vector-studio/pull/99). The P3.1m M01-M06 position certificate contract is FROZEN pending integration. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m M00 is integrated through [PR #99](https://github.com/npclown/vector-studio/pull/99), and the frozen M01-M06 certificate contract through [PR #100](https://github.com/npclown/vector-studio/pull/100). The P3.1m N01-N03 implementation and evidence are recorded below, with protected integration pending. Adoption awaits user decisions U1-U4. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.1m N01-N03 position certificate implementation and evidence
+
+Base: `d9fe6f95371a2fbefd95d159667edfb44d484d60`, the PR #100 squash merge. Its required check passed in run 37461866777, job 112263159166. Branch: `codex/p3-1m-position-certificate-impl`.
+
+| Unit | Owner      | Files                                                                                          |
+| ---- | ---------- | ---------------------------------------------------------------------------------------------- |
+| N01  | Primary    | `tests/geometry/position-certificate/certificate.ts`                                           |
+| N02  | Sol medium | `adversarial.ts`                                                                               |
+| N03  | Sol medium | `corpus.ts`, `tests/geometry/position-certificate.test.ts` and the deterministic `report.json` |
+
+There was no recursive delegation.
+
+The contract gained two amendments during implementation, both independently reviewed:
+
+- **A1:** the input-magnitude row literal now isolates guard check 4.
+- **A2:** documents the shared `Plo` minimum, the overlapping-fan outcome and the window lane bound.
+
+Neither changes a formula, threshold or expectation.
+
+The [evidence review](../evidence/p3.1m-position-certificate-review-2026-10-06.md) records:
+
+- **Dominance:** exact dominance over the K graph, archived L Chrome/Edge and 6,393,600 N02 adversarial evaluations on all 158 fixture rows.
+- **Prospective expectations:** every one was met exactly. Notably, P1's origin rule rejects an on-screen zoom-64 mesh while the physical-window origin admits it.
+- **Admission:** 127 of 158 fixture rows are admitted. Rejected rows are large-extent stress rows, the thin control, and 28 genuine sub-δ carrier clearance failures.
+- **Γ9:** sensitivity flips only EXT-32768.
+
+**Checks:**
+
+- Independent Astra high review: STABLE-SOURCE CLEARED, and EVIDENCE ACCEPTED, with 0 mismatches against its own BigInt recomputation.
+- `pnpm check`: PASS, 550 tests.
+- `pnpm build`: PASS.
+- `pnpm test:geometry`: PASS, 520 passed and 1 env-gated skip. WASM identity is unchanged.
+- The targeted test reproduces `report.json` byte for byte.
+- No GPU run was needed.
+
+Adoption of the carrier, origin rule, domain or failure behavior awaits user decisions U1-U4.
 
 ## P3.1m M01-M06 position certificate contract
 

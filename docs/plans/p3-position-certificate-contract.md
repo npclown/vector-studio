@@ -246,7 +246,7 @@ The prospective values were recomputed independently by both round-1 reviewers.
 - **Overrides.** `gamma: 0` must make the L or N02 dominance check fail on at least one row; the test names the failing rows. `packZero: true` must change E on PACK-R15.
 - **Mutated summaries.** A mutated `dV2` or `ρ̄` must change the THIN or rectangle clearance outcome.
 - **Import test.** A static import test must show that N02 does not import N01.
-- **Input-magnitude boundary.** A 16x8 identity row with one vertex coordinate equal to 2^60 passes guard check 4. The same row with 2^60 + 2^8, the next binary64 value, gives `NOT_ADMITTED:lane-range`.
+- **Input-magnitude boundary.** These rows are as amended by A1 below.
 - **Square-root bounds.** Each upward square-root bound must be at least the exact square root.
 
 ## M06 ownership, interfaces, budget and evidence
@@ -321,3 +321,25 @@ All files below are new and test-only, with no package exports. They make no run
 No GPU or browser run is needed.
 
 **Dependency order:** `M00 integrated -> this contract FROZEN -> N01-N03 implementation -> stable-source review -> exact evaluation and report -> independent evidence review -> user decisions U1-U4 and adoption`.
+
+## Amendment A1 (2026-10-06, during implementation)
+
+The original input-magnitude control described "a 16x8 identity row with one vertex coordinate equal to 2^60". That row cannot isolate guard check 4, for two reasons:
+
+- If the other vertices stay near 0, the midpoint offsets exceed 2^20, so guard check 1 fails first.
+- Binary64 cannot represent a 16-wide rectangle at 2^60. The ULP is 256 above 2^60 and 128 below it.
+
+**Primary ruling.** Replace the row with a 4096x8 identity mesh: vertices `[(2^60 - 4096, 0), (x1, 0), (2^60, 8), (2^60 - 4096, 8)]`, indices `[0, 1, 2, 0, 2, 3]`, translation (0, 0), camera = origin = `(2^60 - 2048, 0)`, zoom 1, DPR 1, size 640x360.
+
+- With `x1 = 2^60`, the row passes guard check 4.
+- With `x1 = 2^60 + 2^8`, the next binary64 value, the outcome is `NOT_ADMITTED:lane-range`.
+
+This changes only the literal used to exercise the stated boundary. No formula, threshold or other expectation changes. It is reviewed in the stable-source and evidence review of the implementation.
+
+## Amendment A2 (2026-10-06, stable-source review clarification)
+
+The implementation makes three clarifications. None changes an outcome in the corpus, and none weakens the certificate.
+
+- **Shared `Plo`.** `Plo` is a single minimum of `‖u‖∞ + ‖v‖∞` over every triangle pair and every fan pair. Every triangle pair is also a fan pair at its first vertex, and the ratio algebra needs only `Plo ≤ ‖u‖₂ + ‖v‖₂` for each pair, so the shared minimum is sound. Reading "`Plo` as above" as the triangle-only minimum would be unsound for fan pairs in general. A separate recomputation found no outcome difference across the 158 fixtures.
+- **Overlapping incident edges.** Two incident edges that overlap in the same direction report `clearance:fan` with `collinear: true`.
+- **Window lane bound.** `certifyWindow` reports the window as not admitted when `Fmax > 2^20`, because the F lane would leave the guard range.
