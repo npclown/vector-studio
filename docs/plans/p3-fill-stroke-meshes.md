@@ -1,6 +1,26 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m M00 is integrated through [PR #99](https://github.com/npclown/vector-studio/pull/99), and the frozen M01-M06 certificate contract through [PR #100](https://github.com/npclown/vector-studio/pull/100). The P3.1m N01-N03 implementation and evidence are recorded below, with protected integration pending. Adoption awaits user decisions U1-U4. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m is integrated through PRs #99-#101: readiness, the frozen certificate contract, and its implementation with accepted exact evidence. On 2026-10-06 the user decided U1-U4, recorded in the [private contract](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06). Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.1m user decisions U1-U4
+
+Base: `4c798b2d1c3878ae77a87fdbe26ad73e4e13e0e8`, the PR #101 squash merge. Its required check passed in run 37465973406, job 112276965614. Branch: `codex/p3-1m-user-decisions`.
+
+The user selected the recommended option for each decision:
+
+- **U1:** a visible-plus-guard position domain.
+- **U2:** decide failure handling only after a separate proposal for alternative paths.
+- **U3:** a mesh-specific physical-window origin.
+- **U4:** reuse of the existing `render.submission-failed` outcome only as a last resort, with no new public variant.
+
+The private contract records the decisions and their consequences. This is a documentation-only checkpoint: no layout, ABI, runtime check or requirement text is changed.
+
+The next units are:
+
+1. A U2 alternative-path proposal.
+2. A successor visible-plus-guard certificate contract that uses the mesh origin.
+
+Both stay test-only until C04 layout and raster contracts exist.
 
 ## P3.1m N01-N03 position certificate implementation and evidence
 
