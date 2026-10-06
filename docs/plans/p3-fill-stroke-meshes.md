@@ -15,10 +15,18 @@ The user selected the recommended option for each decision:
 
 The private contract records the decisions and their consequences. This is a documentation-only checkpoint: no layout, ABI, runtime check or requirement text is changed.
 
-The next units are:
+The reviewed [U2 failure-path proposal](p3-u2-failure-path-proposal.md) had three rounds of independent Astra high review. The fixes were:
 
-1. A U2 alternative-path proposal.
-2. A successor visible-plus-guard certificate contract that uses the mesh origin.
+- R1 was reclassified as a visible-semantics change.
+- The δ0 floor was scoped to the M01 bound.
+- The O-PX class D counts were corrected, with an erratum appended to the P3.1m review record.
+- R0 was limited to generator-induced slivers.
+
+On 2026-10-06 the user chose (a): R3, then R0, then R2, with R5 for residual inputs only. The next units are:
+
+1. An R3 tighter mesh-origin window contract (certificate rerun with rebase counts).
+2. An R0 clearance-aware triangulation contract.
+3. An R2 tiling contract with the visible-plus-guard successor certificate.
 
 Both stay test-only until C04 layout and raster contracts exist.
 
