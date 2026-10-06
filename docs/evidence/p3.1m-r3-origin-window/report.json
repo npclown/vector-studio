@@ -1,0 +1,443 @@
+{
+  "schema": "p3-r3-origin-window-report-v1",
+  "contract": "docs/plans/p3-r3-origin-window-contract.md",
+  "sourceHashes": {
+    "tests/geometry/position-certificate/r3-window.ts": "463a4af1db59a1cbd6d73aeee436690c99d73218caa30b88467fdbc9d664a894",
+    "tests/geometry/position-certificate-r3.test.ts": "ecbbadc2b240ff1899da1fa9cc244984e3995d800309edcbabd4721d2b5e51d6",
+    "tests/geometry/position-certificate/certificate.ts": "dea97bcda4c9fc1380a0f5895ef5eeee9ffffdfd2de7c8415ea05c16e8cc3767",
+    "tests/geometry/position-certificate/corpus.ts": "3b1ee5d2add5bbae7f0ff427285c06db6fb773d26d47707d5c01bb5b3834b311",
+    "tests/geometry/rounded-fill/exact.ts": "108d98e7af78435738d943fe9473cfc26f5d2d662a5b6484ecc6f91bb3885c90",
+    "docs/evidence/p3.1m-position-certificate/report.json": "8bc1eb2d7cb38be6afee114a69817ac22f0d138f9a641024e39489d77b902351"
+  },
+  "admCount": 127,
+  "candidates": [
+    {
+      "target": 1024,
+      "s1Failures": [
+        "carrier/W/mixed/bowtie:nonzero/S4:clearance:triangle",
+        "carrier/W/mixed/bowtie:nonzero/S7:clearance:triangle",
+        "carrier/W/mixed/bowtie:evenodd/S4:clearance:triangle",
+        "carrier/W/mixed/bowtie:evenodd/S7:clearance:triangle",
+        "carrier/W/mixed/zero-closure:nonzero/S4:clearance:triangle",
+        "carrier/W/mixed/zero-closure:nonzero/S7:clearance:triangle",
+        "carrier/W/mixed/zero-closure:evenodd/S4:clearance:triangle",
+        "carrier/W/mixed/zero-closure:evenodd/S7:clearance:triangle",
+        "carrier/Y/triangle-free/star:nonzero/S5:clearance:fan",
+        "carrier/Y/triangle-free/star:evenodd/S5:clearance:fan",
+        "carrier/Y/triangle-free/zero-closure:nonzero/S5:clearance:fan",
+        "carrier/Y/triangle-free/zero-closure:evenodd/S5:clearance:fan"
+      ],
+      "s2Failures": [
+        "carrier/W/mixed/bowtie:nonzero/S1:window-clearance:triangle",
+        "carrier/W/mixed/bowtie:nonzero/S4:window-clearance:triangle",
+        "carrier/W/mixed/bowtie:nonzero/S7:window-clearance:triangle",
+        "carrier/W/mixed/bowtie:evenodd/S1:window-clearance:triangle",
+        "carrier/W/mixed/bowtie:evenodd/S4:window-clearance:triangle",
+        "carrier/W/mixed/bowtie:evenodd/S7:window-clearance:triangle",
+        "carrier/W/mixed/zero-closure:nonzero/S1:window-clearance:triangle",
+        "carrier/W/mixed/zero-closure:nonzero/S4:window-clearance:triangle",
+        "carrier/W/mixed/zero-closure:nonzero/S7:window-clearance:triangle",
+        "carrier/W/mixed/zero-closure:evenodd/S1:window-clearance:triangle",
+        "carrier/W/mixed/zero-closure:evenodd/S4:window-clearance:triangle",
+        "carrier/W/mixed/zero-closure:evenodd/S7:window-clearance:triangle",
+        "carrier/Y/triangle-free/star:nonzero/S0:window-clearance:fan",
+        "carrier/Y/triangle-free/star:nonzero/S5:window-clearance:fan",
+        "carrier/Y/triangle-free/star:evenodd/S0:window-clearance:fan",
+        "carrier/Y/triangle-free/star:evenodd/S5:window-clearance:fan",
+        "carrier/Y/triangle-free/zero-closure:nonzero/S0:window-clearance:fan",
+        "carrier/Y/triangle-free/zero-closure:nonzero/S5:window-clearance:fan",
+        "carrier/Y/triangle-free/zero-closure:evenodd/S0:window-clearance:fan",
+        "carrier/Y/triangle-free/zero-closure:evenodd/S5:window-clearance:fan",
+        "carrier/Z/depth-positive/star:nonzero/S0:window-clearance:fan",
+        "carrier/Z/depth-positive/star:nonzero/S2:window-clearance:fan",
+        "carrier/Z/depth-positive/star:evenodd/S0:window-clearance:fan",
+        "carrier/Z/depth-positive/star:evenodd/S2:window-clearance:fan",
+        "carrier/Z/depth-positive/zero-closure:nonzero/S0:window-clearance:fan",
+        "carrier/Z/depth-positive/zero-closure:nonzero/S2:window-clearance:fan",
+        "carrier/Z/depth-positive/zero-closure:evenodd/S0:window-clearance:fan",
+        "carrier/Z/depth-positive/zero-closure:evenodd/S2:window-clearance:fan"
+      ],
+      "qualifies": false,
+      "minPointSlack": {
+        "n": "-101827006458735747569391541103302817",
+        "d": "21267647932558653966460912964485513216",
+        "approx": "-4.78788e-3",
+        "term": "fan",
+        "id": "carrier/Y/triangle-free/star:nonzero/S5"
+      },
+      "minWindowSlack": {
+        "n": "-596296586627817315726543120857510581",
+        "d": "42535295865117307932921825928971026432",
+        "approx": "-1.40189e-2",
+        "term": "fan",
+        "id": "carrier/Y/triangle-free/star:nonzero/S5"
+      }
+    },
+    {
+      "target": 512,
+      "s1Failures": [],
+      "s2Failures": [
+        "carrier/W/mixed/bowtie:nonzero/S1:window-clearance:triangle",
+        "carrier/W/mixed/bowtie:nonzero/S4:window-clearance:triangle",
+        "carrier/W/mixed/bowtie:nonzero/S7:window-clearance:triangle",
+        "carrier/W/mixed/bowtie:evenodd/S1:window-clearance:triangle",
+        "carrier/W/mixed/bowtie:evenodd/S4:window-clearance:triangle",
+        "carrier/W/mixed/bowtie:evenodd/S7:window-clearance:triangle",
+        "carrier/W/mixed/zero-closure:nonzero/S1:window-clearance:triangle",
+        "carrier/W/mixed/zero-closure:nonzero/S4:window-clearance:triangle",
+        "carrier/W/mixed/zero-closure:nonzero/S7:window-clearance:triangle",
+        "carrier/W/mixed/zero-closure:evenodd/S1:window-clearance:triangle",
+        "carrier/W/mixed/zero-closure:evenodd/S4:window-clearance:triangle",
+        "carrier/W/mixed/zero-closure:evenodd/S7:window-clearance:triangle",
+        "carrier/Y/triangle-free/star:nonzero/S5:window-clearance:fan",
+        "carrier/Y/triangle-free/star:evenodd/S5:window-clearance:fan",
+        "carrier/Y/triangle-free/zero-closure:nonzero/S5:window-clearance:fan",
+        "carrier/Y/triangle-free/zero-closure:evenodd/S5:window-clearance:fan",
+        "carrier/Z/depth-positive/star:nonzero/S0:window-clearance:fan",
+        "carrier/Z/depth-positive/star:nonzero/S2:window-clearance:fan",
+        "carrier/Z/depth-positive/star:evenodd/S0:window-clearance:fan",
+        "carrier/Z/depth-positive/star:evenodd/S2:window-clearance:fan",
+        "carrier/Z/depth-positive/zero-closure:nonzero/S0:window-clearance:fan",
+        "carrier/Z/depth-positive/zero-closure:nonzero/S2:window-clearance:fan",
+        "carrier/Z/depth-positive/zero-closure:evenodd/S0:window-clearance:fan",
+        "carrier/Z/depth-positive/zero-closure:evenodd/S2:window-clearance:fan"
+      ],
+      "qualifies": false,
+      "minPointSlack": {
+        "n": "537449471493605008504720895913763",
+        "d": "191408831393027885698148216680369618944",
+        "approx": "2.80786e-6",
+        "term": "triangle",
+        "id": "carrier/W/mixed/bowtie:nonzero/S7"
+      },
+      "minWindowSlack": {
+        "n": "-79528217230451554492527303180500195548039969397381587",
+        "d": "25825942106323913019612596948709705190514438541152354304",
+        "approx": "-3.07939e-3",
+        "term": "fan",
+        "id": "carrier/Z/depth-positive/star:nonzero/S0"
+      }
+    },
+    {
+      "target": 256,
+      "s1Failures": [],
+      "s2Failures": [
+        "carrier/W/mixed/bowtie:nonzero/S7:window-clearance:triangle",
+        "carrier/W/mixed/bowtie:evenodd/S7:window-clearance:triangle",
+        "carrier/W/mixed/zero-closure:nonzero/S7:window-clearance:triangle",
+        "carrier/W/mixed/zero-closure:evenodd/S7:window-clearance:triangle",
+        "carrier/Z/depth-positive/star:nonzero/S0:window-clearance:fan",
+        "carrier/Z/depth-positive/star:evenodd/S0:window-clearance:fan",
+        "carrier/Z/depth-positive/zero-closure:nonzero/S0:window-clearance:fan",
+        "carrier/Z/depth-positive/zero-closure:evenodd/S0:window-clearance:fan"
+      ],
+      "qualifies": false,
+      "minPointSlack": {
+        "n": "9202325736212946349077859054621717",
+        "d": "765635325572111542792592866721478475776",
+        "approx": "1.20192e-5",
+        "term": "triangle",
+        "id": "carrier/W/mixed/bowtie:nonzero/S7"
+      },
+      "minWindowSlack": {
+        "n": "-633147300766917424903609322810704773437516313571663",
+        "d": "1614121381645244563725787309294356574407152408822022144",
+        "approx": "-3.92255e-4",
+        "term": "fan",
+        "id": "carrier/Z/depth-positive/star:nonzero/S0"
+      }
+    },
+    {
+      "target": 128,
+      "s1Failures": [],
+      "s2Failures": [],
+      "qualifies": true,
+      "minPointSlack": {
+        "n": "12468792944621411691899209765807423",
+        "d": "765635325572111542792592866721478475776",
+        "approx": "1.62856e-5",
+        "term": "triangle",
+        "id": "carrier/W/mixed/bowtie:nonzero/S7"
+      },
+      "minWindowSlack": {
+        "n": "440941517840610595334499917914333",
+        "d": "47852207848256971424537054170092404736",
+        "approx": "9.21465e-6",
+        "term": "triangle",
+        "id": "carrier/W/mixed/bowtie:nonzero/S7"
+      }
+    },
+    {
+      "target": 64,
+      "s1Failures": [],
+      "s2Failures": [],
+      "qualifies": true,
+      "minPointSlack": {
+        "n": "13755445668733574457505809278947933",
+        "d": "765635325572111542792592866721478475776",
+        "approx": "1.79661e-5",
+        "term": "triangle",
+        "id": "carrier/W/mixed/bowtie:nonzero/S7"
+      },
+      "minWindowSlack": {
+        "n": "1867682921073229390543882281541475",
+        "d": "127605887595351923798765477786913079296",
+        "approx": "1.46363e-5",
+        "term": "triangle",
+        "id": "carrier/W/mixed/bowtie:nonzero/S7"
+      }
+    }
+  ],
+  "selected": 128,
+  "literal": [
+    {
+      "id": "P1-CANCEL-64",
+      "origin": [
+        255,
+        0
+      ],
+      "g": 1,
+      "status": "ADMITTED",
+      "reason": null,
+      "delta2Max": {
+        "n": "46955738114227555982486904647074702224948626002804377913490675455903875584946400369436516086083514524773004731274727073",
+        "d": "2644223875160994395807661232131084159313618731857124877138595181097623164945245383300756841758861139390364848100093433217024",
+        "approx": "1.77579e-5"
+      },
+      "windowAdmitted": true,
+      "windowClearance": null
+    },
+    {
+      "id": "PX-CANCEL-64",
+      "origin": [
+        255,
+        0
+      ],
+      "g": 1,
+      "status": "ADMITTED",
+      "reason": null,
+      "delta2Max": {
+        "n": "46955738114227555982486904647074702224948626002804377913490675455903875584946400369436516086083514524773004731274727073",
+        "d": "2644223875160994395807661232131084159313618731857124877138595181097623164945245383300756841758861139390364848100093433217024",
+        "approx": "1.77579e-5"
+      },
+      "windowAdmitted": true,
+      "windowClearance": null
+    },
+    {
+      "id": "WIN-EDGE",
+      "origin": [
+        264,
+        0
+      ],
+      "g": 1,
+      "status": "ADMITTED",
+      "reason": null,
+      "delta2Max": {
+        "n": "22303955725429650448100744573605132959936561274762161309177910555712921085256612249332299591652553413004047680966498033",
+        "d": "2644223875160994395807661232131084159313618731857124877138595181097623164945245383300756841758861139390364848100093433217024",
+        "approx": "8.43497e-6"
+      },
+      "windowAdmitted": true,
+      "windowClearance": null
+    }
+  ],
+  "rebases": [
+    {
+      "id": "TR-PAN/0.01x1",
+      "frames": 1024,
+      "O-P1": {
+        "originChanges": 575,
+        "gChanges": "n/a"
+      },
+      "O-PX(1024)": {
+        "originChanges": 3,
+        "gChanges": 0
+      },
+      "O-PX(512)": {
+        "originChanges": 6,
+        "gChanges": 0
+      },
+      "O-PX(256)": {
+        "originChanges": 12,
+        "gChanges": 0
+      },
+      "O-PX(128)": {
+        "originChanges": 24,
+        "gChanges": 0
+      },
+      "O-PX(64)": {
+        "originChanges": 49,
+        "gChanges": 0
+      }
+    },
+    {
+      "id": "TR-PAN/1x1",
+      "frames": 1024,
+      "O-P1": {
+        "originChanges": 7,
+        "gChanges": "n/a"
+      },
+      "O-PX(1024)": {
+        "originChanges": 1,
+        "gChanges": 0
+      },
+      "O-PX(512)": {
+        "originChanges": 3,
+        "gChanges": 0
+      },
+      "O-PX(256)": {
+        "originChanges": 7,
+        "gChanges": 0
+      },
+      "O-PX(128)": {
+        "originChanges": 15,
+        "gChanges": 0
+      },
+      "O-PX(64)": {
+        "originChanges": 31,
+        "gChanges": 0
+      }
+    },
+    {
+      "id": "TR-PAN/1x2",
+      "frames": 1024,
+      "O-P1": {
+        "originChanges": 3,
+        "gChanges": "n/a"
+      },
+      "O-PX(1024)": {
+        "originChanges": 1,
+        "gChanges": 0
+      },
+      "O-PX(512)": {
+        "originChanges": 3,
+        "gChanges": 0
+      },
+      "O-PX(256)": {
+        "originChanges": 7,
+        "gChanges": 0
+      },
+      "O-PX(128)": {
+        "originChanges": 15,
+        "gChanges": 0
+      },
+      "O-PX(64)": {
+        "originChanges": 31,
+        "gChanges": 0
+      }
+    },
+    {
+      "id": "TR-PAN/64x2",
+      "frames": 1024,
+      "O-P1": {
+        "originChanges": 0,
+        "gChanges": "n/a"
+      },
+      "O-PX(1024)": {
+        "originChanges": 1,
+        "gChanges": 0
+      },
+      "O-PX(512)": {
+        "originChanges": 3,
+        "gChanges": 0
+      },
+      "O-PX(256)": {
+        "originChanges": 7,
+        "gChanges": 0
+      },
+      "O-PX(128)": {
+        "originChanges": 15,
+        "gChanges": 0
+      },
+      "O-PX(64)": {
+        "originChanges": 31,
+        "gChanges": 0
+      }
+    },
+    {
+      "id": "TR-ZOOM",
+      "frames": 512,
+      "O-P1": {
+        "originChanges": 0,
+        "gChanges": "n/a"
+      },
+      "O-PX(1024)": {
+        "originChanges": 13,
+        "gChanges": 13
+      },
+      "O-PX(512)": {
+        "originChanges": 13,
+        "gChanges": 13
+      },
+      "O-PX(256)": {
+        "originChanges": 12,
+        "gChanges": 13
+      },
+      "O-PX(128)": {
+        "originChanges": 12,
+        "gChanges": 13
+      },
+      "O-PX(64)": {
+        "originChanges": 12,
+        "gChanges": 13
+      }
+    },
+    {
+      "id": "TR-N03/N03P",
+      "frames": 7,
+      "O-P1": {
+        "originChanges": 1,
+        "gChanges": "n/a"
+      },
+      "O-PX(1024)": {
+        "originChanges": 0,
+        "gChanges": 0
+      },
+      "O-PX(512)": {
+        "originChanges": 0,
+        "gChanges": 0
+      },
+      "O-PX(256)": {
+        "originChanges": 1,
+        "gChanges": 0
+      },
+      "O-PX(128)": {
+        "originChanges": 1,
+        "gChanges": 0
+      },
+      "O-PX(64)": {
+        "originChanges": 2,
+        "gChanges": 0
+      }
+    },
+    {
+      "id": "TR-N03/N03N",
+      "frames": 5,
+      "O-P1": {
+        "originChanges": 1,
+        "gChanges": "n/a"
+      },
+      "O-PX(1024)": {
+        "originChanges": 0,
+        "gChanges": 0
+      },
+      "O-PX(512)": {
+        "originChanges": 0,
+        "gChanges": 0
+      },
+      "O-PX(256)": {
+        "originChanges": 1,
+        "gChanges": 0
+      },
+      "O-PX(128)": {
+        "originChanges": 1,
+        "gChanges": 0
+      },
+      "O-PX(64)": {
+        "originChanges": 2,
+        "gChanges": 0
+      }
+    }
+  ]
+}

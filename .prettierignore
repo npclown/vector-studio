@@ -44,3 +44,6 @@ docs/evidence/p3.1l-native-projection/**/*.json
 
 # Preserve the P3.1m position certificate report byte-for-byte.
 docs/evidence/p3.1m-position-certificate/*.json
+
+# Preserve the P3.1m R3 origin-window report byte-for-byte.
+docs/evidence/p3.1m-r3-origin-window/*.json
