@@ -1,6 +1,41 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated: L00 through [PR #96](https://github.com/npclown/vector-studio/pull/96), the frozen L01-L06 contract through [PR #97](https://github.com/npclown/vector-studio/pull/97), and the L07-L09 runner with accepted first native observations through [PR #98](https://github.com/npclown/vector-studio/pull/98). P3.1m M00 C04 position readiness passed local and independent review; protected integration is pending. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98, and the P3.1m M00 C04 position readiness note through [PR #99](https://github.com/npclown/vector-studio/pull/99). The P3.1m M01-M06 position certificate contract is FROZEN pending integration. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.1m M01-M06 position certificate contract
+
+Base: `0491340a6859cb9efa86d23be612635780a328ca`, the PR #99 squash merge. Its required check passed in run 37459250400, job 112254419942. Branch: `codex/p3-1m-position-certificate-contract`.
+
+The [contract](p3-position-certificate-contract.md) freezes a test-only sufficient position certificate for K's carrier under the pinned WGSL §15.7 rules:
+
+- a syntactic evaluation family F, with residual risk R1 stated;
+- `E = Pack + Γ8·(absolute monomial sum) + 2^-40`, with proof obligations P1-P5;
+- an exact window-uniform bound comparing P1's origin rule with a physical-window origin;
+- rational clearance transport of K's four eligibility terms;
+- a pinned K/L data corpus plus prospective and term-targeting rows;
+- a deterministic N02 adversarial evaluator (5400 evaluations per vertex-axis);
+- a byte-identical `report.json`;
+- open user decisions U1-U4.
+
+Nothing is adopted.
+
+**Review.** Two independent read-only reviewers reviewed it: Astra high on the proofs and Sol medium on implementability and governance.
+
+- **Round 1.** Both found it not freeze-ready.
+  - Value-defined F did not imply the five-monomial form.
+  - A form with 9 operations would have flipped EXT-32768. This was fixed with the exactness argument for doubling, and Γ9 sensitivity is recorded.
+  - Three window samples could not bound the whole window.
+  - Exports, imports, evidence and the N02 budget were missing.
+- **Round 2.** All round-1 findings were resolved. New findings:
+  - window values omitted the F-lane rounding term;
+  - the Pack64 underflow term was too small;
+  - P4 omitted the subnormal case;
+  - some rows were not literal;
+  - the tables rendered broken;
+  - N02 asserted wall time.
+- **Round 3.** All round-2 findings were fixed. Confirmation added the 2^60 original-input guard and its boundary control. Both reviewers found the contract FREEZE-READY.
+
+**Checks.** Changed-Markdown Prettier, link, whitespace and scope checks PASS. Product, unit, build, GPU and benchmark commands were NOT RUN for this documentation-only checkpoint. Required protected CI still applies.
 
 ## P3.1m C04 position representation readiness
 
