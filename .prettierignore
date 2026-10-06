@@ -41,3 +41,6 @@ docs/evidence/p3.1k-projection/observations-*.json
 
 # Preserve P3.1l immutable native projection records and their archived byte hashes.
 docs/evidence/p3.1l-native-projection/**/*.json
+
+# Preserve the P3.1m position certificate report byte-for-byte.
+docs/evidence/p3.1m-position-certificate/*.json
