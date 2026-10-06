@@ -24,7 +24,7 @@ The reviewed [U2 failure-path proposal](p3-u2-failure-path-proposal.md) had thre
 
 On 2026-10-06 the user chose (a): R3, then R0, then R2, with R5 for residual inputs only. The next units are:
 
-1. An R3 tighter mesh-origin window contract (certificate rerun with rebase counts).
+1. An R3 tighter mesh-origin window contract: certificate rerun with rebase counts. The [contract](p3-r3-origin-window-contract.md) is FROZEN after independent review. Round 1 found that S2 omitted window clearance and that the stress-row exemption was vacuous. A reviewer pre-freeze estimate is disclosed in the contract.
 2. An R0 clearance-aware triangulation contract.
 3. An R2 tiling contract with the visible-plus-guard successor certificate.
 
