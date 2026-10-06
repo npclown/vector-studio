@@ -1,6 +1,53 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l L00 integrated through [PR #96](https://github.com/npclown/vector-studio/pull/96). The P3.1l L01-L06 written contract is FROZEN. Once integrated, it authorizes L07-L09 implementation; GPU dispatch still waits for stable-source review. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l L00 integrated through [PR #96](https://github.com/npclown/vector-studio/pull/96); the L01-L06 contract was frozen and integrated through [PR #97](https://github.com/npclown/vector-studio/pull/97). P3.1l L07-L09 runner implementation and first native observations are recorded below; the independent evidence review accepted them. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.1l L07-L09 native projection runner and observations
+
+Base: `a40459376e1536c741a52d34de6aedafccb146dc`, the PR #97 squash merge. Its required check passed in run 37427848135, job 112151485721. Branch: `codex/p3-1l-l07-native-projection-runner`. The implementation follows the [frozen contract](p3-native-projection-readiness.md#l01-l06-written-contract) without changing any literal. There was no recursive delegation.
+
+| Unit | Owner      | Delivered                                                                                                                                                      |
+| ---- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L07  | Primary    | Config, `pnpm test:gpu:p3-projection`, Vite entry, ignores, the validation.md row, packer, evidence writer, spec, shader-identity test and offline replay test |
+| L08  | Sol high   | The isolated page and shader module                                                                                                                            |
+| L09  | Sol medium | Byte auditor, decoder, classifier and all L01-L03 host controls                                                                                                |
+
+Primary ruled on two points the contract text left open:
+
+- `dispose()` stays idempotent and resolves. Later `init`/`capture` calls reject with `disposed`.
+- `init` reports `DEVICE_LOST:<reason>` for a loss during setup, as L04's `device.lost` rule requires.
+
+Two known nits remain:
+
+- An early prelude failure records empty `rows` instead of `NOT_RUN` skeletons. The case is still `RUNNER_ERROR`.
+- A CRLF checkout fails safe as `contract-identity`.
+
+The stable-source review was by Astra high. Round 1 was NOT CLEARED, because:
+
+- unbounded `goto`/userAgent and unwrapped prelude calls could lose a record;
+- contract identity was recorded but not enforced;
+- shader-text identity had no test;
+- device loss during init was misreported.
+
+All findings were fixed. Round 2 cleared GPU dispatch.
+
+**Local validation on the committed runner `a322a65`:**
+
+- `pnpm check` PASS: 550 tests.
+- `pnpm build` PASS.
+- `pnpm test:geometry` PASS: 504 tests, including the 13 L01-L03 controls and the shader-identity test. The independent release WASM SHA-256 is `3f20b4e93597bff852c0cd4e978495b73bed2568a25e39c9d87daffa7148b17a`.
+
+**Native runs on an NVIDIA Turing hardware adapter, headed Chrome 154.0.8037.98 and Edge 154.0.4258.53:**
+
+- `pnpm test:gpu:p3-projection` passed 4/4, then 4/4 again in the same-machine confirmation run.
+- Runner acceptance PASS for both browsers.
+- Both runs and both browsers produced identical readbacks for all 158 rows.
+- Native classification: 157 CERTIFIED and 1 TOPOLOGY_REJECTED (`thin/collapse`). The worst squared displacement is ≈0.0016036, against the unchanged 1/256 bound.
+- 83 clip words and 24 exact `maxSquared` values differ from K's declared graph, with no status change. This is an observation only.
+- Offline replay reproduced all four classification records byte for byte.
+- The unchanged `pnpm test:gpu` P1 regression passed, 38 tests.
+
+The [evidence review](../evidence/p3.1l-native-projection-review-2026-10-06.md) archives the first complete records and hashes. These per-row results hold only for this browser and adapter. Other adapters and backends remain UNVERIFIED. Production mesh layout, raster coverage, fringe and MSAA, C03-C05, capacity, and deferred stroke work all remain open. The independent Astra high evidence review was EVIDENCE ACCEPTED. It recomputed all 158 rows with its own decoder and classifier, and its should-fix and nits were applied.
 
 ## P3.1l L01-L06 native projection contract
 

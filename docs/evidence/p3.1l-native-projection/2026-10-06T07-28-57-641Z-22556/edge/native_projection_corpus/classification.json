@@ -1,0 +1,2398 @@
+{
+  "schema": "p3-native-projection-classification-v1",
+  "captureSha256": "4b79065e327ea0bed3a8d5d5afec1d6aa3890e66eb99503c38f5c4152cdc0469",
+  "classifierSources": [
+    {
+      "path": "tests/geometry/native-projection/decode.ts",
+      "sha256": "dcc8043b5eccad88435b3b037b5b1d69b6bc81c690490040d210951dae75b998"
+    },
+    {
+      "path": "tests/geometry/native-projection/classify.ts",
+      "sha256": "0ce5d69dca0eeea5496ebf1786e4e3fd2fb558241322dbb96612aa4281f2b654"
+    },
+    {
+      "path": "tests/geometry/conforming-mesh/oracle.ts",
+      "sha256": "c18ba84c190af8949626952173db89db577001ef9c5763fa7c25b36403981b0b"
+    },
+    {
+      "path": "tests/geometry/rounded-fill/exact.ts",
+      "sha256": "108d98e7af78435738d943fe9473cfc26f5d2d662a5b6484ecc6f91bb3885c90"
+    },
+    {
+      "path": "tests/geometry/mesh-projection/audit.ts",
+      "sha256": "98f7e55f1850c0dd65818229309804d49829063aa5fdb582861993c6f54fc481"
+    }
+  ],
+  "rows": [
+    {
+      "id": "carrier/W/mixed/bowtie:nonzero/S0",
+      "rowIndex": 0,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "377",
+          "d": "1099511627776"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/bowtie:nonzero/S1",
+      "rowIndex": 1,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "322664174886886498931175233890373173164553876531102794074925",
+          "d": "431359146674410236714672241392314090778194310760649159697657763987456"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/bowtie:nonzero/S2",
+      "rowIndex": 2,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "8036420177111123178353",
+          "d": "5070602400912917605986812821504"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/bowtie:nonzero/S3",
+      "rowIndex": 3,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "377",
+          "d": "1099511627776"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/bowtie:nonzero/S4",
+      "rowIndex": 4,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "1861428540071257150642771625",
+          "d": "2658455991569831745807614120560689152"
+        },
+        "worstVertex": 8,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/bowtie:nonzero/S5",
+      "rowIndex": 5,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "45",
+          "d": "68719476736"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/bowtie:nonzero/S6",
+      "rowIndex": 6,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "89",
+          "d": "68719476736"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/bowtie:nonzero/S7",
+      "rowIndex": 7,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "153512301996648647345389025",
+          "d": "5316911983139663491615228241121378304"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/bowtie:nonzero/S8",
+      "rowIndex": 8,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "63842215446671052537",
+          "d": "19807040628566084398385987584"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/bowtie:evenodd/S0",
+      "rowIndex": 9,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "377",
+          "d": "1099511627776"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/bowtie:evenodd/S1",
+      "rowIndex": 10,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "322664174886886498931175233890373173164553876531102794074925",
+          "d": "431359146674410236714672241392314090778194310760649159697657763987456"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/bowtie:evenodd/S2",
+      "rowIndex": 11,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "8036420177111123178353",
+          "d": "5070602400912917605986812821504"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/bowtie:evenodd/S3",
+      "rowIndex": 12,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "377",
+          "d": "1099511627776"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/bowtie:evenodd/S4",
+      "rowIndex": 13,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "1861428540071257150642771625",
+          "d": "2658455991569831745807614120560689152"
+        },
+        "worstVertex": 8,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/bowtie:evenodd/S5",
+      "rowIndex": 14,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "45",
+          "d": "68719476736"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/bowtie:evenodd/S6",
+      "rowIndex": 15,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "89",
+          "d": "68719476736"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/bowtie:evenodd/S7",
+      "rowIndex": 16,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "153512301996648647345389025",
+          "d": "5316911983139663491615228241121378304"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/bowtie:evenodd/S8",
+      "rowIndex": 17,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "63842215446671052537",
+          "d": "19807040628566084398385987584"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/zero-closure:nonzero/S0",
+      "rowIndex": 18,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "377",
+          "d": "1099511627776"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/zero-closure:nonzero/S1",
+      "rowIndex": 19,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "322664174886886498931175233890373173164553876531102794074925",
+          "d": "431359146674410236714672241392314090778194310760649159697657763987456"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/zero-closure:nonzero/S2",
+      "rowIndex": 20,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "8036420177111123178353",
+          "d": "5070602400912917605986812821504"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/zero-closure:nonzero/S3",
+      "rowIndex": 21,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "377",
+          "d": "1099511627776"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/zero-closure:nonzero/S4",
+      "rowIndex": 22,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "1861428540071257150642771625",
+          "d": "2658455991569831745807614120560689152"
+        },
+        "worstVertex": 8,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/zero-closure:nonzero/S5",
+      "rowIndex": 23,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "45",
+          "d": "68719476736"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/zero-closure:nonzero/S6",
+      "rowIndex": 24,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "89",
+          "d": "68719476736"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/zero-closure:nonzero/S7",
+      "rowIndex": 25,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "153512301996648647345389025",
+          "d": "5316911983139663491615228241121378304"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/zero-closure:nonzero/S8",
+      "rowIndex": 26,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "63842215446671052537",
+          "d": "19807040628566084398385987584"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/zero-closure:evenodd/S0",
+      "rowIndex": 27,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "377",
+          "d": "1099511627776"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/zero-closure:evenodd/S1",
+      "rowIndex": 28,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "322664174886886498931175233890373173164553876531102794074925",
+          "d": "431359146674410236714672241392314090778194310760649159697657763987456"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/zero-closure:evenodd/S2",
+      "rowIndex": 29,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "8036420177111123178353",
+          "d": "5070602400912917605986812821504"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/zero-closure:evenodd/S3",
+      "rowIndex": 30,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "377",
+          "d": "1099511627776"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/zero-closure:evenodd/S4",
+      "rowIndex": 31,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "1861428540071257150642771625",
+          "d": "2658455991569831745807614120560689152"
+        },
+        "worstVertex": 8,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/zero-closure:evenodd/S5",
+      "rowIndex": 32,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "45",
+          "d": "68719476736"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/zero-closure:evenodd/S6",
+      "rowIndex": 33,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "89",
+          "d": "68719476736"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/zero-closure:evenodd/S7",
+      "rowIndex": 34,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "153512301996648647345389025",
+          "d": "5316911983139663491615228241121378304"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/W/mixed/zero-closure:evenodd/S8",
+      "rowIndex": 35,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "63842215446671052537",
+          "d": "19807040628566084398385987584"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/star:nonzero/S0",
+      "rowIndex": 36,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4385",
+          "d": "17592186044416"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/star:nonzero/S1",
+      "rowIndex": 37,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "84317714616411638338319387952124534085742015543408424798425",
+          "d": "107839786668602559178668060348078522694548577690162289924414440996864"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/star:nonzero/S2",
+      "rowIndex": 38,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "10790417287024463454761",
+          "d": "10141204801825835211973625643008"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/star:nonzero/S3",
+      "rowIndex": 39,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4097",
+          "d": "4398046511104"
+        },
+        "worstVertex": 5,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/star:nonzero/S4",
+      "rowIndex": 40,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "2483447954201600773048647025",
+          "d": "2658455991569831745807614120560689152"
+        },
+        "worstVertex": 11,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/star:nonzero/S5",
+      "rowIndex": 41,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "37305",
+          "d": "70368744177664"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/star:nonzero/S6",
+      "rowIndex": 42,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "3451884019012891081",
+          "d": "309485009821345068724781056"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/star:nonzero/S7",
+      "rowIndex": 43,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "32873323458909266252550555596119763709772374811034222225",
+          "d": "105312291668557186697918027683670432318895095400549111254310977536"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/star:nonzero/S8",
+      "rowIndex": 44,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "67824227061542128935377752639797811191154277753385",
+          "d": "12554203470773361527671578846415332832204710888928069025792"
+        },
+        "worstVertex": 9,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/star:evenodd/S0",
+      "rowIndex": 45,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4385",
+          "d": "17592186044416"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/star:evenodd/S1",
+      "rowIndex": 46,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "84317714616411638338319387952124534085742015543408424798425",
+          "d": "107839786668602559178668060348078522694548577690162289924414440996864"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/star:evenodd/S2",
+      "rowIndex": 47,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "10790417287024463454761",
+          "d": "10141204801825835211973625643008"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/star:evenodd/S3",
+      "rowIndex": 48,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4097",
+          "d": "4398046511104"
+        },
+        "worstVertex": 5,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/star:evenodd/S4",
+      "rowIndex": 49,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "2483447954201600773048647025",
+          "d": "2658455991569831745807614120560689152"
+        },
+        "worstVertex": 11,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/star:evenodd/S5",
+      "rowIndex": 50,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "37305",
+          "d": "70368744177664"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/star:evenodd/S6",
+      "rowIndex": 51,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "3451884019012891081",
+          "d": "309485009821345068724781056"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/star:evenodd/S7",
+      "rowIndex": 52,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "32873323458909266252550555596119763709772374811034222225",
+          "d": "105312291668557186697918027683670432318895095400549111254310977536"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/star:evenodd/S8",
+      "rowIndex": 53,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "67824227061542128935377752639797811191154277753385",
+          "d": "12554203470773361527671578846415332832204710888928069025792"
+        },
+        "worstVertex": 9,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/zero-closure:nonzero/S0",
+      "rowIndex": 54,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4385",
+          "d": "17592186044416"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/zero-closure:nonzero/S1",
+      "rowIndex": 55,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "84317714616411638338319387952124534085742015543408424798425",
+          "d": "107839786668602559178668060348078522694548577690162289924414440996864"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/zero-closure:nonzero/S2",
+      "rowIndex": 56,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "10790417287024463454761",
+          "d": "10141204801825835211973625643008"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/zero-closure:nonzero/S3",
+      "rowIndex": 57,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4097",
+          "d": "4398046511104"
+        },
+        "worstVertex": 5,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/zero-closure:nonzero/S4",
+      "rowIndex": 58,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "2483447954201600773048647025",
+          "d": "2658455991569831745807614120560689152"
+        },
+        "worstVertex": 11,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/zero-closure:nonzero/S5",
+      "rowIndex": 59,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "37305",
+          "d": "70368744177664"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/zero-closure:nonzero/S6",
+      "rowIndex": 60,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "3451884019012891081",
+          "d": "309485009821345068724781056"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/zero-closure:nonzero/S7",
+      "rowIndex": 61,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "32873323458909266252550555596119763709772374811034222225",
+          "d": "105312291668557186697918027683670432318895095400549111254310977536"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/zero-closure:nonzero/S8",
+      "rowIndex": 62,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "67824227061542128935377752639797811191154277753385",
+          "d": "12554203470773361527671578846415332832204710888928069025792"
+        },
+        "worstVertex": 9,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/zero-closure:evenodd/S0",
+      "rowIndex": 63,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4385",
+          "d": "17592186044416"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/zero-closure:evenodd/S1",
+      "rowIndex": 64,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "84317714616411638338319387952124534085742015543408424798425",
+          "d": "107839786668602559178668060348078522694548577690162289924414440996864"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/zero-closure:evenodd/S2",
+      "rowIndex": 65,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "10790417287024463454761",
+          "d": "10141204801825835211973625643008"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/zero-closure:evenodd/S3",
+      "rowIndex": 66,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4097",
+          "d": "4398046511104"
+        },
+        "worstVertex": 5,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/zero-closure:evenodd/S4",
+      "rowIndex": 67,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "2483447954201600773048647025",
+          "d": "2658455991569831745807614120560689152"
+        },
+        "worstVertex": 11,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/zero-closure:evenodd/S5",
+      "rowIndex": 68,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "37305",
+          "d": "70368744177664"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/zero-closure:evenodd/S6",
+      "rowIndex": 69,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "3451884019012891081",
+          "d": "309485009821345068724781056"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/zero-closure:evenodd/S7",
+      "rowIndex": 70,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "32873323458909266252550555596119763709772374811034222225",
+          "d": "105312291668557186697918027683670432318895095400549111254310977536"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Y/triangle-free/zero-closure:evenodd/S8",
+      "rowIndex": 71,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "67824227061542128935377752639797811191154277753385",
+          "d": "12554203470773361527671578846415332832204710888928069025792"
+        },
+        "worstVertex": 9,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/star:nonzero/S0",
+      "rowIndex": 72,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4385",
+          "d": "17592186044416"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/star:nonzero/S1",
+      "rowIndex": 73,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "7658717756239763222459380419181039135659969056057527967025",
+          "d": "26959946667150639794667015087019630673637144422540572481103610249216"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/star:nonzero/S2",
+      "rowIndex": 74,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "8197452507815573664625",
+          "d": "10141204801825835211973625643008"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/star:nonzero/S3",
+      "rowIndex": 75,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4097",
+          "d": "4398046511104"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/star:nonzero/S4",
+      "rowIndex": 76,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "152852399353313468853982419966883127964705932901984468625",
+          "d": "105312291668557186697918027683670432318895095400549111254310977536"
+        },
+        "worstVertex": 7,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/star:nonzero/S5",
+      "rowIndex": 77,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "37305",
+          "d": "70368744177664"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/star:nonzero/S6",
+      "rowIndex": 78,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "3331788029128634825",
+          "d": "309485009821345068724781056"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/star:nonzero/S7",
+      "rowIndex": 79,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "14289669532154019657060749015153580864193485402646740625",
+          "d": "105312291668557186697918027683670432318895095400549111254310977536"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/star:nonzero/S8",
+      "rowIndex": 80,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "67824227061542128935377752639797811191154277753385",
+          "d": "12554203470773361527671578846415332832204710888928069025792"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/star:evenodd/S0",
+      "rowIndex": 81,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4385",
+          "d": "17592186044416"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/star:evenodd/S1",
+      "rowIndex": 82,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "7658717756239763222459380419181039135659969056057527967025",
+          "d": "26959946667150639794667015087019630673637144422540572481103610249216"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/star:evenodd/S2",
+      "rowIndex": 83,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "8197452507815573664625",
+          "d": "10141204801825835211973625643008"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/star:evenodd/S3",
+      "rowIndex": 84,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4097",
+          "d": "4398046511104"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/star:evenodd/S4",
+      "rowIndex": 85,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "152852399353313468853982419966883127964705932901984468625",
+          "d": "105312291668557186697918027683670432318895095400549111254310977536"
+        },
+        "worstVertex": 7,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/star:evenodd/S5",
+      "rowIndex": 86,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "37305",
+          "d": "70368744177664"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/star:evenodd/S6",
+      "rowIndex": 87,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "3331788029128634825",
+          "d": "309485009821345068724781056"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/star:evenodd/S7",
+      "rowIndex": 88,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "14289669532154019657060749015153580864193485402646740625",
+          "d": "105312291668557186697918027683670432318895095400549111254310977536"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/star:evenodd/S8",
+      "rowIndex": 89,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "67824227061542128935377752639797811191154277753385",
+          "d": "12554203470773361527671578846415332832204710888928069025792"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/zero-closure:nonzero/S0",
+      "rowIndex": 90,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4385",
+          "d": "17592186044416"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/zero-closure:nonzero/S1",
+      "rowIndex": 91,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "7658717756239763222459380419181039135659969056057527967025",
+          "d": "26959946667150639794667015087019630673637144422540572481103610249216"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/zero-closure:nonzero/S2",
+      "rowIndex": 92,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "8197452507815573664625",
+          "d": "10141204801825835211973625643008"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/zero-closure:nonzero/S3",
+      "rowIndex": 93,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4097",
+          "d": "4398046511104"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/zero-closure:nonzero/S4",
+      "rowIndex": 94,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "152852399353313468853982419966883127964705932901984468625",
+          "d": "105312291668557186697918027683670432318895095400549111254310977536"
+        },
+        "worstVertex": 7,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/zero-closure:nonzero/S5",
+      "rowIndex": 95,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "37305",
+          "d": "70368744177664"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/zero-closure:nonzero/S6",
+      "rowIndex": 96,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "3331788029128634825",
+          "d": "309485009821345068724781056"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/zero-closure:nonzero/S7",
+      "rowIndex": 97,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "14289669532154019657060749015153580864193485402646740625",
+          "d": "105312291668557186697918027683670432318895095400549111254310977536"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/zero-closure:nonzero/S8",
+      "rowIndex": 98,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "67824227061542128935377752639797811191154277753385",
+          "d": "12554203470773361527671578846415332832204710888928069025792"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/zero-closure:evenodd/S0",
+      "rowIndex": 99,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4385",
+          "d": "17592186044416"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/zero-closure:evenodd/S1",
+      "rowIndex": 100,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "7658717756239763222459380419181039135659969056057527967025",
+          "d": "26959946667150639794667015087019630673637144422540572481103610249216"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/zero-closure:evenodd/S2",
+      "rowIndex": 101,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "8197452507815573664625",
+          "d": "10141204801825835211973625643008"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/zero-closure:evenodd/S3",
+      "rowIndex": 102,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4097",
+          "d": "4398046511104"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/zero-closure:evenodd/S4",
+      "rowIndex": 103,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "152852399353313468853982419966883127964705932901984468625",
+          "d": "105312291668557186697918027683670432318895095400549111254310977536"
+        },
+        "worstVertex": 7,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/zero-closure:evenodd/S5",
+      "rowIndex": 104,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "37305",
+          "d": "70368744177664"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/zero-closure:evenodd/S6",
+      "rowIndex": 105,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "3331788029128634825",
+          "d": "309485009821345068724781056"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/zero-closure:evenodd/S7",
+      "rowIndex": 106,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "14289669532154019657060749015153580864193485402646740625",
+          "d": "105312291668557186697918027683670432318895095400549111254310977536"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "carrier/Z/depth-positive/zero-closure:evenodd/S8",
+      "rowIndex": 107,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "67824227061542128935377752639797811191154277753385",
+          "d": "12554203470773361527671578846415332832204710888928069025792"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x8/I/ordinary",
+      "rowIndex": 108,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "617",
+          "d": "17592186044416"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x8/I/stress",
+      "rowIndex": 109,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "1128646375207620139374048025",
+          "d": "10633823966279326983230456482242756608"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x8/R15/ordinary",
+      "rowIndex": 110,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "182005003000602631161",
+          "d": "1267650600228229401496703205376"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x8/R15/stress",
+      "rowIndex": 111,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4105472822283852315585",
+          "d": "5070602400912917605986812821504"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x8/R45/ordinary",
+      "rowIndex": 112,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "190801189501239435817",
+          "d": "633825300114114700748351602688"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x8/R45/stress",
+      "rowIndex": 113,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "382859486208860713",
+          "d": "38685626227668133590597632"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x8/R90/ordinary",
+      "rowIndex": 114,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "73",
+          "d": "274877906944"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x8/R90/stress",
+      "rowIndex": 115,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "2577531397187744818978321625",
+          "d": "2658455991569831745807614120560689152"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x8/reflectX/ordinary",
+      "rowIndex": 116,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "1385",
+          "d": "17592186044416"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x8/reflectX/stress",
+      "rowIndex": 117,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4145",
+          "d": "17592186044416"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x8/scale/ordinary",
+      "rowIndex": 118,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "145",
+          "d": "4398046511104"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x8/scale/stress",
+      "rowIndex": 119,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "9297",
+          "d": "1099511627776"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x8/shear/ordinary",
+      "rowIndex": 120,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "1385",
+          "d": "17592186044416"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x8/shear/stress",
+      "rowIndex": 121,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "1073",
+          "d": "4398046511104"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x16/I/ordinary",
+      "rowIndex": 122,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "13",
+          "d": "274877906944"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x16/I/stress",
+      "rowIndex": 123,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "1128646375207620139374048025",
+          "d": "10633823966279326983230456482242756608"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x16/R15/ordinary",
+      "rowIndex": 124,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "33730798278340189177",
+          "d": "316912650057057350374175801344"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x16/R15/stress",
+      "rowIndex": 125,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "217121666571069815745",
+          "d": "1267650600228229401496703205376"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x16/R45/ordinary",
+      "rowIndex": 126,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "58857828828934185513",
+          "d": "158456325028528675187087900672"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x16/R45/stress",
+      "rowIndex": 127,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "24543526194651689",
+          "d": "9671406556917033397649408"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x16/R90/ordinary",
+      "rowIndex": 128,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "25",
+          "d": "274877906944"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x16/R90/stress",
+      "rowIndex": 129,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "3627304550499992577087964825",
+          "d": "2658455991569831745807614120560689152"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x16/reflectX/ordinary",
+      "rowIndex": 130,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "25",
+          "d": "274877906944"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x16/reflectX/stress",
+      "rowIndex": 131,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4145",
+          "d": "17592186044416"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x16/scale/ordinary",
+      "rowIndex": 132,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "617",
+          "d": "17592186044416"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x16/scale/stress",
+      "rowIndex": 133,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "9441",
+          "d": "1099511627776"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x16/shear/ordinary",
+      "rowIndex": 134,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "25",
+          "d": "274877906944"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/16x16/shear/stress",
+      "rowIndex": 135,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "1073",
+          "d": "4398046511104"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/4096x4096/I/ordinary",
+      "rowIndex": 136,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "37",
+          "d": "68719476736"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/4096x4096/I/stress",
+      "rowIndex": 137,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "1128646375207620139374048025",
+          "d": "10633823966279326983230456482242756608"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/4096x4096/R15/ordinary",
+      "rowIndex": 138,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "206122723256245241",
+          "d": "2417851639229258349412352"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/4096x4096/R15/stress",
+      "rowIndex": 139,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "6272643854926347201",
+          "d": "9671406556917033397649408"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/4096x4096/R45/ordinary",
+      "rowIndex": 140,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "59222145969824297",
+          "d": "1208925819614629174706176"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/4096x4096/R45/stress",
+      "rowIndex": 141,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "118324428103623209",
+          "d": "73786976294838206464"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/4096x4096/R90/ordinary",
+      "rowIndex": 142,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "265",
+          "d": "17179869184"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/4096x4096/R90/stress",
+      "rowIndex": 143,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "1128646375207620139374048025",
+          "d": "2658455991569831745807614120560689152"
+        },
+        "worstVertex": 0,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/4096x4096/reflectX/ordinary",
+      "rowIndex": 144,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "265",
+          "d": "17179869184"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/4096x4096/reflectX/stress",
+      "rowIndex": 145,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "145",
+          "d": "17179869184"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/4096x4096/scale/ordinary",
+      "rowIndex": 146,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "2473",
+          "d": "17179869184"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/4096x4096/scale/stress",
+      "rowIndex": 147,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "37089",
+          "d": "67108864"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/4096x4096/shear/ordinary",
+      "rowIndex": 148,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "1033",
+          "d": "17179869184"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "rectangle/4096x4096/shear/stress",
+      "rowIndex": 149,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "589873",
+          "d": "4398046511104"
+        },
+        "worstVertex": 1,
+        "reason": null
+      }
+    },
+    {
+      "id": "origin-sequence/0",
+      "rowIndex": 150,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "617",
+          "d": "17592186044416"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "origin-sequence/1",
+      "rowIndex": 151,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "16745",
+          "d": "17592186044416"
+        },
+        "worstVertex": 3,
+        "reason": null
+      }
+    },
+    {
+      "id": "origin-sequence/2",
+      "rowIndex": 152,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "4457",
+          "d": "17592186044416"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "origin-sequence/3",
+      "rowIndex": 153,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "16745",
+          "d": "17592186044416"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "origin-sequence/4",
+      "rowIndex": 154,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "16745",
+          "d": "17592186044416"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "origin-sequence/5",
+      "rowIndex": 155,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "65897",
+          "d": "17592186044416"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "origin-sequence/6",
+      "rowIndex": 156,
+      "result": {
+        "status": "CERTIFIED",
+        "positionPass": true,
+        "topologyPass": true,
+        "maxSquared": {
+          "n": "16745",
+          "d": "17592186044416"
+        },
+        "worstVertex": 2,
+        "reason": null
+      }
+    },
+    {
+      "id": "thin/collapse",
+      "rowIndex": 157,
+      "result": {
+        "status": "TOPOLOGY_REJECTED",
+        "positionPass": true,
+        "topologyPass": false,
+        "maxSquared": {
+          "n": "377",
+          "d": "17592186044416"
+        },
+        "worstVertex": 2,
+        "reason": "topology:orientation:0"
+      }
+    }
+  ]
+}
