@@ -1,6 +1,61 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l L00 prepares native vertex projection readiness; its executable contract remains unfrozen. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l L00 integrated through [PR #96](https://github.com/npclown/vector-studio/pull/96). The P3.1l L01-L06 written contract is FROZEN. Once integrated, it authorizes L07-L09 implementation; GPU dispatch still waits for stable-source review. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.1l L01-L06 native projection contract
+
+Base clean updated `ec6755e394b29c8a8a4db2e6c68238f7fcd82e9e`, the PR #96 squash merge on `main` (2026-10-05 07:58:17 KST). Branch `codex/p3-1l-l01-l06-native-projection-contract`.
+
+PR #96 integration evidence:
+
+- Required check on head `405a348a9a790e580140896dc4cb1daed94ce38e`: run 37241667145, job 111551443454, `success`.
+- Post-merge `main` check: job 111552460682, `success`.
+
+The L00 paragraph below records its contemporaneous pre-merge state; its "pending" CI/integration wording is superseded by this record, not edited.
+
+The [readiness note](p3-native-projection-readiness.md#l01-l06-written-contract) now gives concrete answers for every freeze-checklist row:
+
+- the 158-row identity and the packed binary32 byte layout, with independent provenance checks;
+- the literal WGSL and the row-to-texel capture mapping;
+- the capture-failure taxonomy;
+- exact host-side classification;
+- device preflight and lifecycle;
+- exclusive evidence schemas;
+- the separately named runner command, with its hardware disposition.
+
+All native rows remain OBSERVE, and the 1/16 physical-pixel bound and topology rule are unchanged. This checkpoint is documentation-only: no runner, page, configuration, script or GPU execution is added. L01-L06 FROZEN, local PASS, 2026-10-06. Primary wrote the contract after inspecting the K model/audit/fixtures, the archived K observations, the P1 probe, the GPU/Vite/vitest configurations, the evidence helper and the boundary tooling. There was no recursive delegation. Two independent read-only reviewers then reviewed it:
+
+- **Arithmetic/provenance and WebGPU correctness.** Round 1 found one blocker: the short-draw control could never decode as `missing`, because the decoder used `drawCount`. It also found eight should-fix items:
+  - division in the point position could be inexact, so the shader uses `* 0.125`;
+  - clip texels carried no identity;
+  - texel precedence was not literal;
+  - fallback detection was missing;
+  - vertex-stage storage limits and an explicit layout were missing;
+  - the rounder import conflicted with independence;
+  - the sign of zero lanes was not pinned;
+  - the contract identity was undefined.
+- **Implementability, ownership and governance.** Round 1 found four blockers:
+  - `pnpm check` was wrongly said to run the host controls;
+  - the interfaces between work units were not fixed;
+  - the import rules contradicted each other;
+  - the record could be lost on a hang.
+
+  It also found seven should-fix items: control COMPLETE semantics, root/worker restart, backend and archive metadata, software adapters, ambiguous vertex order, the validation.md row and a port collision (4176 changed to 4177).
+
+Round 2 confirmed that every round-1 finding was resolved. It found three new blockers:
+
+- control COMPLETE contradicted the `capture-invalid` PARTIAL rule;
+- the orientation reason did not reproduce K's `topology:orientation:0`;
+- a type-only import was missing from the allowlist.
+
+It also found should-fix items: a squash-stable contract identity and packer/auditor author independence (the packer moved to Primary L07). Primary applied all of them. Both reviewers stated that the contract is freeze-ready after these one-line fixes.
+
+Validation:
+
+- Changed-Markdown Prettier, local link/anchor, whitespace and two-file scope checks PASS, as recorded in the PR.
+- Product/unit/build/native/browser/GPU/benchmark commands NOT RUN for this documentation-only checkpoint.
+
+Next: L07-L09 implementation from integrated `main`, then stable-source review before any GPU dispatch.
 
 ## P3.1l native vertex projection readiness
 
