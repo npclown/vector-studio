@@ -97,7 +97,7 @@ Positive controls must independently fail a missing triangle, a duplicated overl
 
 ## Private transport and lifetime requirements
 
-C04 remains open until topology, coverage and composition have a feasible representation. Freeze all of the following together before a mesh ABI or renderer packet implementation:
+C04 remains open until topology, coverage and composition have a feasible representation. The [P3.1m position readiness note](p3-c04-position-readiness.md) records what the K/L evidence supports for item 2 and the gaps that must close before adoption; it adopts nothing. Freeze all of the following together before a mesh ABI or renderer packet implementation:
 
 1. Private operation/version identity, request/result header fields, exact byte offsets/alignment/padding, lengths and terminal element offsets. Define checked arithmetic for every range and reject unknown flags/versions/reserved bytes.
 2. Vertex position representation and local origin, coverage or edge-distance attributes, index width, range units, front-face/cull convention, region labels and fill/stroke ordering. Bind layout to the actual composition method; an opaque `vertices` buffer without attributes is insufficient.
