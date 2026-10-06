@@ -38,3 +38,6 @@ docs/evidence/p3.2p2-polygon-relations-2026-10-04/*.ndjson
 
 # Preserve P3.1k immutable projection observations and their archived byte hashes.
 docs/evidence/p3.1k-projection/observations-*.json
+
+# Preserve P3.1l immutable native projection records and their archived byte hashes.
+docs/evidence/p3.1l-native-projection/**/*.json

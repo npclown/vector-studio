@@ -7,6 +7,7 @@ export default defineConfig({
         main: `${import.meta.dirname}/index.html`,
         primitives: `${import.meta.dirname}/p1-fixture.html`,
         runner: `${import.meta.dirname}/p1-runner.html`,
+        p3NativeProjection: `${import.meta.dirname}/p3-native-projection.html`,
       },
     },
   },
