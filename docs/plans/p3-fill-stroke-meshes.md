@@ -1,6 +1,37 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l L00 integrated through [PR #96](https://github.com/npclown/vector-studio/pull/96); the L01-L06 contract was frozen and integrated through [PR #97](https://github.com/npclown/vector-studio/pull/97). P3.1l L07-L09 runner implementation and first native observations are recorded below; the independent evidence review accepted them. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated: L00 through [PR #96](https://github.com/npclown/vector-studio/pull/96), the frozen L01-L06 contract through [PR #97](https://github.com/npclown/vector-studio/pull/97), and the L07-L09 runner with accepted first native observations through [PR #98](https://github.com/npclown/vector-studio/pull/98). P3.1m M00 C04 position readiness passed local and independent review; protected integration is pending. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.1m C04 position representation readiness
+
+Base: `80d8a20a398298ba4da5d56e969558c77d3921ee`, the PR #98 squash merge. Its required check passed in run 37432763718, job 112167254880. Branch: `codex/p3-1m-c04-position-readiness`. On 2026-10-06 the user selected this documentation-only readiness step as the next unit.
+
+The [readiness note](p3-c04-position-readiness.md) does three things:
+
+- It maps the K/L evidence onto C04 item 2.
+- It records that native position error grows with physical extent, consistent with binary32 spacing: about 0.040 pixel on a stress row whose far vertex lies near 741,000 physical pixels, against at most about 0.000106 pixel across the 146 rows within 4096 pixels.
+- It defines M01-M06: an a priori certificate under permitted WGSL evaluation, P1 origin integration, the obligation domain and failure behavior, topology clearance, a prospective corpus, and validation.
+
+Nothing is adopted. No runtime, ABI, API, dependency, threshold or rejection policy changes. Adoption remains a user decision after a frozen and verified certificate. **M00 local PASS, 2026-10-06.** Primary wrote the note after inspecting:
+
+- the C04 obligations and numeric allocation in the private contract;
+- the P1 precision and rebase contract;
+- K's graph and evidence;
+- L's frozen contract and archived records.
+
+Independent read-only Astra high review recomputed every number from the archives. Round 1 was NOT READY, with five should-fix items:
+
+- the two worst rows touch the viewport rather than lying offscreen;
+- the causal wording overclaimed, and the binary32 impossibility argument was missing (spacing 0.25 pixel in [2^21, 2^22));
+- the C04 item 5 attribution was wrong;
+- the P1 recheck triggers and the existing `render.submission-failed` path were missing from M02/M03;
+- the clearance terms did not match the eligibility JSON fields.
+
+All of them and three nits were applied. Round 2 found M00 READY.
+
+Checks: changed-Markdown Prettier PASS. `git diff --check` PASS. Local links/anchors: 874 links across 178 files resolve, apart from the one pre-existing historical anchor in `docs/evidence/p1.0m-method-assessment-2026-09-12.md`. Scope: three plan files.
+
+Product, unit, build, native, browser, GPU and benchmark commands were NOT RUN for this documentation-only checkpoint. Required protected CI still applies. M01-M06 contract work follows only after integration.
 
 ## P3.1l L07-L09 native projection runner and observations
 
