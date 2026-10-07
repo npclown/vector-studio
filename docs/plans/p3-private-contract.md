@@ -129,6 +129,25 @@ A5 realization follow-up, 2026-10-07: these choices were made in chat, after the
 
 This decision does not imply production adoption of the complement triangulation.
 
+R2 mechanism follow-up, 2026-10-07: after the accepted [T01 evidence](../evidence/p3.1p-t01/review-2026-10-07.md), the user decided D1 in chat by choosing the recommended option: **K1**, a local fixed-grid hierarchical tiling with `T_tile = 256` and exact rational Steiner references (D3(a)).
+
+T01 found it to be the only certified candidate that does all three of the following:
+
+- admits the three class A rows K4 fails;
+- loses no row K4 admits;
+- reaches M_max ≥ 40.
+
+The cost is up to 45-66 tiles per frame at 1280 × 720.
+
+This keeps the U2 direction as chosen (R2, tiling). Still open, and owned by the R2 contract:
+
+- the U1 successor certificate;
+- tile-seam watertightness (seam copies move independently);
+- level selection and hysteresis, and the tile cache that bounds builds triggered by panning;
+- clearance across tile seams;
+- the exterior and complement partition;
+- GPU evidence.
+
 These decisions select directions. They do not freeze a layout, ABI, runtime check or requirement change. Each consequence still needs its own contract, independent review and evidence before implementation.
 
 ## Private transport and lifetime requirements

@@ -41,7 +41,7 @@ The stable-source review was CLEARED after one fix round.
 - Larger T or K2c lose rows K4 admits, through δ̄ growth, slivers or lane-range.
 - K5-ASSUMED stops at k 18 at the NDC floor.
 
-Next: the user's D1 decision.
+The user decided D1 on 2026-10-07: [K1 with T_tile = 256](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06). Next is the R2 contract: the U1 successor certificate, tile-seam watertightness, the tile cache and hysteresis, the exterior partition, and GPU evidence.
 
 ## P3.1p R2 bounded-extent and guard readiness
 
