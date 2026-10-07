@@ -210,6 +210,12 @@ The basis is the offline exact [T01 evidence](evidence/p3.1p-t01/review-2026-10-
 
 No runtime dependency or public API changes.
 
+**P3 tiling rules (2026-10-08, user-confirmed, [R2 contract](plans/p3-r2-tiling-contract.md)).**
+
+- **Shared records.** Each level keeps one vertex record per exact position. Every record names its owner cell's carrier. All tiles share these records, so seams are watertight by construction.
+- **Transform-only reuse.** For tiled meshes, a transform-only change builds nothing within an epoch. An epoch spans one origin state, one level, DPR, size and object affine, over a zoom band. An epoch change (rebase, level, DPR, resize, object-affine edit) builds only uncached cells. It does this by clipping the cached tessellation, never by re-tessellating the path.
+- **Coverage reference.** On the production carrier, the coverage reference is the exact reference tiling.
+
 MSAA-only output is not considered sufficient for the final path renderer. Quality is tested at fractional positions, rotations, thin strokes, extreme zoom, and high device-pixel ratio.
 
 For P2 flattening, the geometric target is 0.25 **physical display pixel**, accounting for world linear transform, camera zoom and DPR using the largest singular value. The private contract specifies conservative downward tolerance buckets, bounded de Casteljau flattening and an independent continuous-error oracle. This resolves the flattening portion of the P2/P3 design gate; P3 still needs its own tessellation/coverage error budget and adversarial-work contract before implementation. These unresolved gates are tracked in the [P3 execution plan](plans/p3-fill-stroke-meshes.md), opened for planning under [D7](plans/p2-follow-on-entry.md); its entry exception does not supply the missing contracts.

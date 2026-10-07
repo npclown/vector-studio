@@ -102,12 +102,12 @@ The "D" prefix avoids a clash with O02's gates G1-G3.
 | ID  | Decision | Owner |
 | --- | -------- | ----- |
 | D1  | Mechanism, or a combination. If K2, K5 or K7 is chosen without K1, that departs from the user-chosen R2 text, so D1 revisits the U2 direction itself | DECIDED 2026-10-07 (user): K1, T_tile = 256, D3(a), after [T01](../evidence/p3.1p-t01/review-2026-10-07.md) |
-| D2  | For K2: amend Q1 so that the exact projected boundary is the coverage reference, and define the error budget for features. This changes the basis of the user's Q4 verdict, which was measured under Q1, so O02-style evidence must be re-run | Primary contract (Q1 owner), user check advised |
-| D3  | For K1, how boundary Steiner points are handled. See the options below | Per option |
-| D4  | T_tile, level selection, hysteresis, the interaction with O-PX(128), and the tile cache that bounds pan-triggered builds | Primary contract |
-| D5  | Guard width (Q10), and the clamp threshold and reach as functions of ε | Primary contract |
+| D2  | For K2: amend Q1 so that the exact projected boundary is the coverage reference, and define the error budget for features. This changes the basis of the user's Q4 verdict, which was measured under Q1, so O02-style evidence must be re-run | Not applicable to K1; the K1 analogue is settled by E3 of the [R2 contract](p3-r2-tiling-contract.md) (user, 2026-10-08) |
+| D3  | For K1, how boundary Steiner points are handled. See the options below | DECIDED with D1: (a) |
+| D4  | T_tile, level selection, hysteresis, the interaction with O-PX(128), and the tile cache that bounds pan-triggered builds | Settled by the [R2 contract](p3-r2-tiling-contract.md): no hysteresis state, per-level cache, epoch builds (E2) |
+| D5  | Guard width (Q10), and the clamp threshold and reach as functions of ε | Settled by the [R2 contract](p3-r2-tiling-contract.md): γ = 4, list reach 13/8 px, fringe reach 2 px |
 | D6  | Cache identity and invalidation (Q11), and draw and upload budgets | Primary contract, C04 |
-| D7  | Evidence method | Primary contract |
+| D7  | Evidence method | Settled by the [R2 contract](p3-r2-tiling-contract.md): T02 offline exact, then O03 GPU |
 
 **D3 options.**
 
