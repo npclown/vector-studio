@@ -108,6 +108,16 @@ After the integrated P3.1m [position certificate](p3-position-certificate-contra
 
 U2 follow-up, 2026-10-06: after the reviewed [failure-path proposal](p3-u2-failure-path-proposal.md), the user chose the planning direction R3 (tighter mesh-origin window), then R0 (clearance-aware triangulation for generator-induced slivers), then R2 (bounded-extent tiling with the U1 domain). R5 is limited to documented residual inputs. R1 (bounded region deviation) and R4 (coverage-bounded acceptance) are not opened. Classes B and C may remain uncertified until one of them is decided.
 
+Raster coverage follow-up, 2026-10-07: after the accepted [O01 observations](../evidence/p3.1o-coverage/review-2026-10-07.md), the user made two choices.
+
+- **Q5.** The user chose A5, the symmetric straddling ramp, as the P3 mesh antialiasing mechanism; it is recorded in the [architecture](../../ARCHITECTURE.md) companion [graphics-engine anti-aliasing section](../graphics-engine-architecture.md#anti-aliasing).
+- **Q4.** P3 coverage acceptance inherits P1's thresholds:
+  - interior and exterior error at most 2/255;
+  - edge location within 1 px;
+  - acceptance corpus axes DPR 1, 1.5 and 2, with DPR 3 as an observation only.
+
+No numeric partial-coverage tolerance is adopted yet; it is decided after the next coverage experiment. A5's O01 interior deficit of 30/255 comes from the line-not-segment distance rule. It exceeds 2/255, so the Q3 corner and segment rule must remove it before A5 can pass.
+
 These decisions select directions. They do not freeze a layout, ABI, runtime check or requirement change. Each consequence still needs its own contract, independent review and evidence before implementation.
 
 ## Private transport and lifetime requirements
