@@ -29,7 +29,22 @@ The [R2 tiling contract](p3-r2-tiling-contract.md) is FROZEN.
 
 O03, the GPU evidence, follows under its own contract.
 
-**Next:** T02 implementation (`tests/geometry/extent-t02/`).
+**T02 implementation** (branch `codex/p3-1p-t02-impl`):
+
+- **Primary:** epoch, `E_ep` (S2), pruned merged C2 (S3), lists (S5), camera variants, and the report and replay.
+- **Sol medium:** the merged mesh (E1 records and carriers), `fringeFaces`, S4, and the trajectory cell sets.
+
+Astra high's stable-source review was CLEARED after one fix round. Its evidence review was EVIDENCE ACCEPTED, with 15 of 15 rows independently recomputed.
+
+**Result: T02 FAILS.** See the [review record](../evidence/p3.1p-t02/review-2026-10-08.md); the archived report SHA is `3e89e55a…`.
+
+- **Gates 1 (partition) and 4 (frame coverage):** pass.
+- **Gate 2:** fails. The three class A rows are admitted, but 16 camera variants fail on genuine grid slivers: thin tips that span several cells, and a near-diagonal grid corner.
+- **Gate 3:** fails. 100 of 429 O rows are lost.
+  - The losses are δ- and scale-driven: S3 runs at `s_lo`, and Ē sits 1.4 to 2.3 times above T01's δ̄ because of the zoom band and the record extent. Fringe triangles add to them.
+  - The larger window's geometry passes with T01's δ̄.
+
+**Next:** a user decision on revision 4 of the R2 contract, before O03.
 
 ## P3.1p T01 offline extent experiment contract
 
