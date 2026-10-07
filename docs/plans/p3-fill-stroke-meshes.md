@@ -1,6 +1,19 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m is integrated through PRs #99-#101: readiness, the frozen certificate contract, and its implementation with accepted exact evidence. On 2026-10-06 the user decided U1-U4, recorded in the [private contract](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06). Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m and its [U1-U4](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06), U2 and R3 follow-ups are integrated through PRs #99-#105. P3.1n R0/R0a is integrated through PRs #106-#108: the C2 clearance admits 143 of 158 fixture rows. The P3.1o raster coverage readiness note passed independent review (O00 READY); protected integration is pending. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.1o raster coverage readiness
+
+Base: `4a2853e`, the PR #108 squash merge. Branch: `codex/p3-1o-raster-coverage-readiness`. On 2026-10-07 the user chose this documentation-only unit as the prerequisite for R2 and R4.
+
+The [readiness note](p3-raster-coverage-readiness.md) does four things:
+
+- inventories the inherited P1, architecture, private-contract, visible-semantics and U1 constraints;
+- records that a naive mesh puts triangle edges on the contour, so MSAA mixes unequal coverage unless both sides of the seam evaluate the same function or the seam moves to where coverage is 0 or 1;
+- compares five antialiasing mechanisms, with the A5 symmetric straddling ramp as the leading candidate (not adopted);
+- lists the open decisions Q1-Q14, with owners, together with an observational first experiment, O01, comparing A1, A2 and A5.
+
+No threshold, architecture or behavior is changed.
 
 ## P3.1m user decisions U1-U4
 
