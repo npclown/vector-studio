@@ -26,6 +26,13 @@ The [T01 contract](p3-t01-extent-experiment-contract.md) is FROZEN after indepen
 
 **Not decided.** No candidate is selected. D1 stays a user decision after the evidence.
 
+**Implementation** (branch `codex/p3-1p-t01-impl`):
+
+- **Primary.** `core.ts`, which reproduces the pinned M01/M04/R0a code over rational points; the identity test passes on C, L and O, and the pinned SHA-256s are asserted. Also `synthetic.ts` (S, 360 rows, none skipped), `k5.ts`, `report.ts` with the K2c option, and the report and replay harness.
+- **Sol medium.** `clip.ts`, `tile.ts` and `tile-certificate.ts`, with host tests.
+
+Next: the stable-source review, then the report.
+
 ## P3.1p R2 bounded-extent and guard readiness
 
 The [R2 readiness note](p3-r2-tiling-readiness.md) passed independent Astra high review in two rounds plus confirmation fixes. It is documentation only. It prepares the Q10 clipping and guard contract by recording what O02's evidence does not cover: O02's vertices are host NDC, with no M01 Shader term, which is the class A cause.
