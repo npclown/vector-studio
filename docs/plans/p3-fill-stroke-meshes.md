@@ -1,6 +1,43 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m and its [U1-U4](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06), U2 and R3 follow-ups are integrated through PRs #99-#105. P3.1n R0/R0a is integrated through PRs #106-#108: the C2 clearance admits 143 of 158 fixture rows. The P3.1o raster coverage readiness note passed independent review (O00 READY); protected integration is pending. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m and its [U1-U4](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06), U2 and R3 follow-ups are integrated through PRs #99-#105. P3.1n R0/R0a is integrated through PRs #106-#108: the C2 clearance admits 143 of 158 fixture rows. P3.1o O00 raster coverage readiness is integrated through [PR #109](https://github.com/npclown/vector-studio/pull/109). The O01 observational coverage contract is FROZEN pending integration. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.1o O01 observational coverage contract
+
+Base: `1a6aa2a`, the PR #109 squash merge. Branch: `codex/p3-1o-o01-coverage-contract`.
+
+The [O01 contract](p3-o01-coverage-experiment-contract.md) freezes a test-only headed experiment. It compares A1 (discontinuous outward fringe), A2 (inside-only ramp) and A5 (symmetric straddling ramp) at 1x and 4x against an exact dyadic pixel-area oracle.
+
+**Inputs.** The 143 C2-admitted fixture rows plus literal F07, F11, SQ and THIN rows.
+
+**Precision path.** NDC is rounded once on the CPU. The reference region is the exact preimage. Distance is computed from the fragment position and per-edge coefficients relative to the crop origin.
+
+**Metrics.** These are reported with no thresholds:
+
+- interior and exterior error;
+- band deviation, with and without corner pixels;
+- boundary shift over the inset viewport;
+- seams;
+- the 1x/4x difference;
+- overlap mass, from float `max` and `add` diagnostic passes.
+
+**Runner and evidence.** These follow P3.1l:
+
+- page API;
+- 64-byte vertex record;
+- timeouts and statuses;
+- exclusive records;
+- contract identity;
+- an offline replayable metrics file;
+- a 25 MB archive cap;
+- a confirmation-run rule.
+
+**Review.** Independent Astra high technical review and Sol medium implementability review each ran two rounds, plus confirmation fixes.
+
+- **Round 1** found five problems: pixel-aligned literal rows; precision noise in the shader NDC and distance path; an unstated Q3 rule; an ambiguous A1; and the wrong corpus source. It also found infeasible oracle and archive sizes, and missing page, layout and identity details.
+- **Round 2** found that the A5 fringe conditional broke continuity, that fringe vertex construction was unspecified, that overlap mass mixed quantizations, that classification cost was unbounded, and that pass identity was ambiguous.
+
+Nothing is adopted. Q4 and Q5 remain user decisions after the evidence.
 
 ## P3.1o raster coverage readiness
 
