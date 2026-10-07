@@ -2,6 +2,30 @@
 
 Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m and its [U1-U4](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06), U2 and R3 follow-ups are integrated through PRs #99-#105. P3.1n R0/R0a is integrated through PRs #106-#108: the C2 clearance admits 143 of 158 fixture rows. P3.1o O00 raster coverage readiness is integrated through [PR #109](https://github.com/npclown/vector-studio/pull/109). The O01 observational coverage contract is integrated through [PR #110](https://github.com/npclown/vector-studio/pull/110). Its headed observations are recorded below; the evidence was accepted. The user decided [Q4 and Q5](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06) on 2026-10-07: A5 with inherited P1 thresholds. The [O02 A5 coverage rule contract](p3-o02-a5-coverage-contract.md) is integrated through [PR #113](https://github.com/npclown/vector-studio/pull/113). Its headed evidence gives a **PASS** verdict for the test-only A5 realization. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
 
+## P3.1p T01 offline extent experiment contract
+
+The user chose to start T01 on 2026-10-07.
+
+The [T01 contract](p3-t01-extent-experiment-contract.md) is FROZEN after independent review rounds:
+
+- technical review (Astra high): NOT READY twice, then READY;
+- implementability review (Sol medium): NOT IMPLEMENTABLE twice, then IMPLEMENTABLE.
+
+**Scope.** It compares K1 (fixed-grid tiling with exact Steiner references), K2c (feature-decoupled boundary with coarse tiling) and K5-ASSUMED (an unranked, non-certifiable f32-pair reference). The baseline is the untiled carrier, K4.
+
+**Method.** Offline and exact, under the production M01 error model with O-PX(128). The corpora are C, L and O, plus a synthetic class A family S.
+
+**Measured.**
+
+- admission;
+- M_max, the largest far magnitude admitted;
+- inversions;
+- seam split;
+- Steiner deviation;
+- trajectory cost.
+
+**Not decided.** No candidate is selected. D1 stays a user decision after the evidence.
+
 ## P3.1p R2 bounded-extent and guard readiness
 
 The [R2 readiness note](p3-r2-tiling-readiness.md) passed independent Astra high review in two rounds plus confirmation fixes. It is documentation only. It prepares the Q10 clipping and guard contract by recording what O02's evidence does not cover: O02's vertices are host NDC, with no M01 Shader term, which is the class A cause.
