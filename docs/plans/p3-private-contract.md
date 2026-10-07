@@ -118,6 +118,17 @@ Raster coverage follow-up, 2026-10-07: after the accepted [O01 observations](../
 
 No numeric partial-coverage tolerance is adopted yet; it is decided after the next coverage experiment. A5's O01 interior deficit of 30/255 comes from the line-not-segment distance rule. It exceeds 2/255, so the Q3 corner and segment rule must remove it before A5 can pass.
 
+A5 realization follow-up, 2026-10-07: these choices were made in chat, after the independent reviews of the [O02 contract](p3-o02-a5-coverage-contract.md) draft. The user accepted all three, each as the recommended option.
+
+1. **A5 realization.** The test-only realization of A5 uses:
+   - distance to boundary segments and vertices, not edge lines;
+   - an outer fringe built as a triangulation of the complement within a frame, not per-edge quads;
+   - an analytic ramp width instead of `fwidth`.
+2. **Q3.** Screen-space distance is accepted, including circular corner isolines under nonuniform scale or shear and reflex corners.
+3. **Q12.** P1's encoded-sRGB premultiplied blending applies unchanged.
+
+This decision does not imply production adoption of the complement triangulation.
+
 These decisions select directions. They do not freeze a layout, ABI, runtime check or requirement change. Each consequence still needs its own contract, independent review and evidence before implementation.
 
 ## Private transport and lifetime requirements
