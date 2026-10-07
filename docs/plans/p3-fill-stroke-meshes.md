@@ -26,6 +26,23 @@ The [T01 contract](p3-t01-extent-experiment-contract.md) is FROZEN after indepen
 
 **Not decided.** No candidate is selected. D1 stays a user decision after the evidence.
 
+**Implementation** (branch `codex/p3-1p-t01-impl`):
+
+- **Primary.** `core.ts`, which reproduces the pinned M01/M04/R0a code over rational points; the identity test passes on C, L and O, and the pinned SHA-256s are asserted. Also `synthetic.ts` (S, 360 rows, none skipped), `k5.ts`, `report.ts` with the K2c option, and the report and replay harness.
+- **Sol medium.** `clip.ts`, `tile.ts` and `tile-certificate.ts`, with host tests.
+
+The stable-source review was CLEARED after one fix round.
+
+**Evidence.** See the [review record](../evidence/p3.1p-t01/review-2026-10-07.md). The archived report has SHA `5e49c880…`. Replay is byte-identical, and the independent recomputation matched 227 of 227 records: EVIDENCE ACCEPTED.
+
+**Observed** (nothing adopted):
+
+- K1 @256 admits the three class A rows that K4 fails, with no regression against K4, M_max ≥ 40, and up to 45-66 tiles per frame.
+- Larger T or K2c lose rows K4 admits, through δ̄ growth, slivers or lane-range.
+- K5-ASSUMED stops at k 18 at the NDC floor.
+
+Next: the user's D1 decision.
+
 ## P3.1p R2 bounded-extent and guard readiness
 
 The [R2 readiness note](p3-r2-tiling-readiness.md) passed independent Astra high review in two rounds plus confirmation fixes. It is documentation only. It prepares the Q10 clipping and guard contract by recording what O02's evidence does not cover: O02's vertices are host NDC, with no M01 Shader term, which is the class A cause.

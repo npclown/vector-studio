@@ -10,6 +10,7 @@ artifacts/p2.5/
 artifacts/p3.1l/
 artifacts/p3.1o/
 artifacts/p3.1o-o02/
+artifacts/p3.1p-t01/
 *.tsbuildinfo
 .tools/
 target/
