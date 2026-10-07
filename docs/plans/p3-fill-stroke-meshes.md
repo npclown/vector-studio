@@ -1,6 +1,29 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m and its [U1-U4](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06), U2 and R3 follow-ups are integrated through PRs #99-#105. P3.1n R0/R0a is integrated through PRs #106-#108: the C2 clearance admits 143 of 158 fixture rows. P3.1o O00 raster coverage readiness is integrated through [PR #109](https://github.com/npclown/vector-studio/pull/109). The O01 observational coverage contract is FROZEN pending integration. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m and its [U1-U4](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06), U2 and R3 follow-ups are integrated through PRs #99-#105. P3.1n R0/R0a is integrated through PRs #106-#108: the C2 clearance admits 143 of 158 fixture rows. P3.1o O00 raster coverage readiness is integrated through [PR #109](https://github.com/npclown/vector-studio/pull/109). The O01 observational coverage contract is integrated through [PR #110](https://github.com/npclown/vector-studio/pull/110). Its headed observations are recorded below; the evidence was accepted, and Q4 and Q5 await user decisions. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+
+## P3.1o O01 coverage observations
+
+Base: `cb73d02`, the PR #110 squash merge. Branch: `codex/p3-1o-o01-coverage-impl`. Runner source: `6d3b4a8`.
+
+The [evidence review](../evidence/p3.1o-coverage/review-2026-10-07.md) archives the first headed Chrome/Edge records (NVIDIA Turing), with offline metrics and byte-identical replay. Independent Astra high review recomputed all 143 rows: EVIDENCE ACCEPTED.
+
+**Results**, observation only:
+
+| Candidate         | Mean boundary shift at 1x | Band error | Seams           |
+| ----------------- | ------------------------- | ---------- | --------------- |
+| A5 symmetric ramp | −0.002 px                 | 0.257      | None on F07/F11 |
+| A1 outward fringe | +0.111 px                 | —          | —               |
+| A2 inside ramp    | −0.139 px                 | —          | —               |
+
+Shift covers 83 rows; the remaining 60 rows are `N/A:L=0`.
+
+**Findings:**
+
+- **A2/A5 interior deficit.** A 30/255 deficit on 2 pixels of the Z S8 rows. It comes from the line-not-segment distance rule.
+- **A1 4x nondeterminism.** A 1-LSB difference between runs and between browsers, consistent with implementation-defined resolve rounding.
+
+Nothing is adopted. Next come the user decisions on Q4 and Q5. The Q3 corner and segment rule needs attention before any adoption.
 
 ## P3.1o O01 observational coverage contract
 

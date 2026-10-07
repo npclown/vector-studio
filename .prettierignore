@@ -50,3 +50,6 @@ docs/evidence/p3.1m-r3-origin-window/*.json
 
 # Preserve the P3.1n R0a wedge report byte-for-byte.
 docs/evidence/p3.1n-r0a-wedge/*.json
+
+# Preserve the P3.1o O01 coverage records byte-for-byte.
+docs/evidence/p3.1o-coverage/**/*.json
