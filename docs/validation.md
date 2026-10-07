@@ -133,6 +133,7 @@ The toolchain exists as of P0.4. `package.json` owns exact commands and pinned v
 | `pnpm test:gpu:p3-coverage`              | Headed Chrome/Edge P3.1o O01 coverage observation (A1/A2/A5, 1x/4x); runner gates only; no threshold/performance claim                                           |
 | `pnpm test:gpu:p3-o02` | Headed Chrome/Edge P3.1o O02 A5 coverage rule (DPR 1/1.5/2/3, 1x/4x); runner gates only; G1-G3 offline via `pnpm coverage:p3-o02` |
 | `P3_T01_WRITE=1 pnpm exec vitest run --config vitest.p3-t01.config.ts` | P3.1p T01 offline exact extent comparison report (K4/K1/K2c/K5); replay via `P3_T01_REPLAY=<report>`; manual, not CI |
+| `P3_T02_WRITE=1 pnpm exec vitest run --config vitest.p3-t02.config.ts` | P3.1p T02 offline exact R2 tiling successor-certificate report (gates 1-4); replay via `P3_T02_REPLAY=<report>`; manual, not CI |
 | `pnpm benchmark:p0:p0-3`                 | Legacy production steady/idle runner; fixed historical output filenames must be corrected before reuse in the tracked checkout                                   |
 | `pnpm benchmark:p0`                      | P0.5 five-scenario production headed runner; defaults to acceptance and requires `--display-refresh-hz`, with an explicit non-accepting `--profile smoke` option |
 | `pnpm build`                             | Workspace package declarations/JavaScript and playground production build                                                                                        |
