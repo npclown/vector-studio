@@ -181,10 +181,17 @@ The initial quality strategy is:
 
 The decision rests on the [O01 observations](evidence/p3.1o-coverage/review-2026-10-07.md): mean boundary shift −0.002 px at 1x, and no seams on internal edges. A1 (opaque interior with an outward fringe) and A2 (an inside-only ramp) are not adopted.
 
+On 2026-10-07 the user also accepted a test-only realization of A5. It is recorded in the [private contract](plans/p3-private-contract.md) and specified in the [O02 contract](plans/p3-o02-a5-coverage-contract.md). It uses:
+
+- segment and vertex distance;
+- a complement-triangulation fringe;
+- an analytic ramp width.
+
+Coverage is computed in screen space from the pixel center. It differs from P1's local-space SDF only in corner isolines under nonuniform scale or shear, and in reflex corners.
+
 Still open:
 
-- the corner and segment rule (O01 showed the line-not-segment deficit);
-- the thin-feature rule;
+- the corner, segment and thin-feature rules, now specified by the [O02 contract](plans/p3-o02-a5-coverage-contract.md) and pending its verdict;
 - 4x MSAA and 1x fallback consistency;
 - fringe cache identity;
 - guard clipping.
