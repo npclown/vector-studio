@@ -2,6 +2,35 @@
 
 Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m and its [U1-U4](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06), U2 and R3 follow-ups are integrated through PRs #99-#105. P3.1n R0/R0a is integrated through PRs #106-#108: the C2 clearance admits 143 of 158 fixture rows. P3.1o O00 raster coverage readiness is integrated through [PR #109](https://github.com/npclown/vector-studio/pull/109). The O01 observational coverage contract is integrated through [PR #110](https://github.com/npclown/vector-studio/pull/110). Its headed observations are recorded below; the evidence was accepted. The user decided [Q4 and Q5](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06) on 2026-10-07: A5 with inherited P1 thresholds. The [O02 A5 coverage rule contract](p3-o02-a5-coverage-contract.md) is integrated through [PR #113](https://github.com/npclown/vector-studio/pull/113). Its headed evidence gives a **PASS** verdict for the test-only A5 realization. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
 
+## P3.1p R2 tiling contract
+
+The [R2 tiling contract](p3-r2-tiling-contract.md) is FROZEN.
+
+- **Technical review (Astra high):** NOT READY twice, then READY.
+- **Implementability review (Sol medium):** NOT IMPLEMENTABLE, then IMPLEMENTABLE.
+- **User decisions (2026-10-08, chat):** the user confirmed E1-E3:
+  - shared vertex records with a per-vertex owner-cell carrier, for watertight seams;
+  - builds only at epoch changes, with a per-level cache;
+  - the Q1 coverage reference restated as the exact reference tiling.
+
+**What it fixes.**
+
+- The epoch-based successor certificate:
+  - S1 domain;
+  - S2 epoch position `E_ep`;
+  - S3 merged-mesh C2 at `s_lo`;
+  - S4 exact partition;
+  - S5 lists.
+- The per-cell exterior fringe.
+- The reach constants.
+- γ = 4.
+- A pre-stated thin-tip sliver hazard, which is reported, not gated.
+- The T02 offline exact evidence, with four pre-registered gates.
+
+O03, the GPU evidence, follows under its own contract.
+
+**Next:** T02 implementation (`tests/geometry/extent-t02/`).
+
 ## P3.1p T01 offline extent experiment contract
 
 The user chose to start T01 on 2026-10-07.

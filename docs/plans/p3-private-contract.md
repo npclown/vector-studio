@@ -148,6 +148,12 @@ This keeps the U2 direction as chosen (R2, tiling). Still open, and owned by the
 - the exterior and complement partition;
 - GPU evidence.
 
+R2 contract follow-up, 2026-10-08: the user confirmed three decisions in chat, choosing the recommended option each time, for the [R2 tiling contract](p3-r2-tiling-contract.md), which is now FROZEN:
+
+- **E1.** One shared vertex record per exact position per level, with a per-vertex owner-cell carrier index into a carrier table. This makes tile seams watertight by construction. It changes the C04 position direction from one carrier per mesh to a per-vertex carrier index; the layout itself stays C04 work.
+- **E2.** Within an epoch, nothing is built. An epoch is fixed by the origin state, level, DPR, size, object affine and mesh revision, over a zoom band. At an epoch change, only uncached cells are built incrementally, by clipping the existing tessellation; the path is never re-tessellated. A per-level cache replaces hysteresis.
+- **E3.** The Q1 coverage reference for the production carrier is the exact reference tiling. Fragment features are evaluated from the shared records, with 2Ē margins. Q4 thresholds are unchanged, and the O03 GPU evidence is re-run against it.
+
 These decisions select directions. They do not freeze a layout, ABI, runtime check or requirement change. Each consequence still needs its own contract, independent review and evidence before implementation.
 
 ## Private transport and lifetime requirements
