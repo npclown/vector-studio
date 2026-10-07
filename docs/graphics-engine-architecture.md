@@ -198,6 +198,18 @@ Still open:
 
 These remain contract work in the [raster coverage readiness](plans/p3-raster-coverage-readiness.md). The decision does not add a runtime dependency or change the public API.
 
+**P3 mesh extent decision (2026-10-07).** For meshes whose vertices lie far offscreen (failure class A), the user approved R2 mechanism K1. Region meshes are clipped against a power-of-two grid that is fixed in local space. The level is chosen so that a tile spans at most 256 physical px. Each tile has its own cell-centre carrier, and its Steiner points use exact rational references.
+
+The basis is the offline exact [T01 evidence](evidence/p3.1p-t01/review-2026-10-07.md). The R2 contract still has to settle:
+
+- the U1 successor certificate;
+- tile-seam watertightness;
+- the tile cache and level hysteresis;
+- the exterior partition;
+- GPU validation.
+
+No runtime dependency or public API changes.
+
 MSAA-only output is not considered sufficient for the final path renderer. Quality is tested at fractional positions, rotations, thin strokes, extreme zoom, and high device-pixel ratio.
 
 For P2 flattening, the geometric target is 0.25 **physical display pixel**, accounting for world linear transform, camera zoom and DPR using the largest singular value. The private contract specifies conservative downward tolerance buckets, bounded de Casteljau flattening and an independent continuous-error oracle. This resolves the flattening portion of the P2/P3 design gate; P3 still needs its own tessellation/coverage error budget and adversarial-work contract before implementation. These unresolved gates are tracked in the [P3 execution plan](plans/p3-fill-stroke-meshes.md), opened for planning under [D7](plans/p2-follow-on-entry.md); its entry exception does not supply the missing contracts.

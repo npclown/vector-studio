@@ -101,7 +101,7 @@ The "D" prefix avoids a clash with O02's gates G1-G3.
 
 | ID  | Decision | Owner |
 | --- | -------- | ----- |
-| D1  | Mechanism, or a combination. If K2, K5 or K7 is chosen without K1, that departs from the user-chosen R2 text, so D1 revisits the U2 direction itself | User decision (U2 direction), with architecture approval |
+| D1  | Mechanism, or a combination. If K2, K5 or K7 is chosen without K1, that departs from the user-chosen R2 text, so D1 revisits the U2 direction itself | DECIDED 2026-10-07 (user): K1, T_tile = 256, D3(a), after [T01](../evidence/p3.1p-t01/review-2026-10-07.md) |
 | D2  | For K2: amend Q1 so that the exact projected boundary is the coverage reference, and define the error budget for features. This changes the basis of the user's Q4 verdict, which was measured under Q1, so O02-style evidence must be re-run | Primary contract (Q1 owner), user check advised |
 | D3  | For K1, how boundary Steiner points are handled. See the options below | Per option |
 | D4  | T_tile, level selection, hysteresis, the interaction with O-PX(128), and the tile cache that bounds pan-triggered builds | Primary contract |
