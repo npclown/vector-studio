@@ -173,6 +173,24 @@ The initial quality strategy is:
 - Screen-space coverage fringe for arbitrary path meshes
 - Zoom-aware flattening tolerance targeting no more than 0.25 screen pixel of geometric error
 
+**P3 mesh coverage decision (2026-10-07).** The user approved A5 for path meshes. It is a symmetric straddling ramp:
+
+- Boundary-adjacent interior triangles carry flat per-edge distance coefficients.
+- An outer screen-space fringe extends to where coverage reaches 0.
+- Both sides evaluate the same centered `clamp(0.5 - d / fwidth(d))` ramp as P1's analytic primitives.
+
+The decision rests on the [O01 observations](evidence/p3.1o-coverage/review-2026-10-07.md): mean boundary shift −0.002 px at 1x, and no seams on internal edges. A1 (opaque interior with an outward fringe) and A2 (an inside-only ramp) are not adopted.
+
+Still open:
+
+- the corner and segment rule (O01 showed the line-not-segment deficit);
+- the thin-feature rule;
+- 4x MSAA and 1x fallback consistency;
+- fringe cache identity;
+- guard clipping.
+
+These remain contract work in the [raster coverage readiness](plans/p3-raster-coverage-readiness.md). The decision does not add a runtime dependency or change the public API.
+
 MSAA-only output is not considered sufficient for the final path renderer. Quality is tested at fractional positions, rotations, thin strokes, extreme zoom, and high device-pixel ratio.
 
 For P2 flattening, the geometric target is 0.25 **physical display pixel**, accounting for world linear transform, camera zoom and DPR using the largest singular value. The private contract specifies conservative downward tolerance buckets, bounded de Casteljau flattening and an independent continuous-error oracle. This resolves the flattening portion of the P2/P3 design gate; P3 still needs its own tessellation/coverage error budget and adversarial-work contract before implementation. These unresolved gates are tracked in the [P3 execution plan](plans/p3-fill-stroke-meshes.md), opened for planning under [D7](plans/p2-follow-on-entry.md); its entry exception does not supply the missing contracts.

@@ -1,6 +1,6 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m and its [U1-U4](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06), U2 and R3 follow-ups are integrated through PRs #99-#105. P3.1n R0/R0a is integrated through PRs #106-#108: the C2 clearance admits 143 of 158 fixture rows. P3.1o O00 raster coverage readiness is integrated through [PR #109](https://github.com/npclown/vector-studio/pull/109). The O01 observational coverage contract is integrated through [PR #110](https://github.com/npclown/vector-studio/pull/110). Its headed observations are recorded below; the evidence was accepted, and Q4 and Q5 await user decisions. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m and its [U1-U4](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06), U2 and R3 follow-ups are integrated through PRs #99-#105. P3.1n R0/R0a is integrated through PRs #106-#108: the C2 clearance admits 143 of 158 fixture rows. P3.1o O00 raster coverage readiness is integrated through [PR #109](https://github.com/npclown/vector-studio/pull/109). The O01 observational coverage contract is integrated through [PR #110](https://github.com/npclown/vector-studio/pull/110). Its headed observations are recorded below; the evidence was accepted. The user decided [Q4 and Q5](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06) on 2026-10-07: A5 with inherited P1 thresholds. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
 
 ## P3.1o O01 coverage observations
 
@@ -23,7 +23,19 @@ Shift covers 83 rows; the remaining 60 rows are `N/A:L=0`.
 - **A2/A5 interior deficit.** A 30/255 deficit on 2 pixels of the Z S8 rows. It comes from the line-not-segment distance rule.
 - **A1 4x nondeterminism.** A 1-LSB difference between runs and between browsers, consistent with implementation-defined resolve rounding.
 
-Nothing is adopted. Next come the user decisions on Q4 and Q5. The Q3 corner and segment rule needs attention before any adoption.
+At the time of the observations nothing was adopted. On 2026-10-07 the user decided:
+
+- **Q5:** A5.
+- **Q4:** P1's 2/255 interior and exterior tolerance and 1 px edge location, with DPR 1, 1.5 and 2 as acceptance axes and DPR 3 observed only.
+
+Next is the A5 coverage contract. It covers:
+
+- the Q3 corner and segment rule, which must remove the observed 30/255 deficit;
+- the thin-feature rule;
+- Q6, Q7 and Q9 for seams, attribution and double coverage;
+- the remaining Q items.
+
+That contract needs independent review before any implementation.
 
 ## P3.1o O01 observational coverage contract
 
