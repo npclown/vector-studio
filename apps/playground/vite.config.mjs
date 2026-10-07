@@ -8,6 +8,7 @@ export default defineConfig({
         primitives: `${import.meta.dirname}/p1-fixture.html`,
         runner: `${import.meta.dirname}/p1-runner.html`,
         p3NativeProjection: `${import.meta.dirname}/p3-native-projection.html`,
+        p3Coverage: `${import.meta.dirname}/p3-coverage.html`,
       },
     },
   },
