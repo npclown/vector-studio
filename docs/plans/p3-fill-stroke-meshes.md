@@ -1,6 +1,6 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m and its [U1-U4](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06), U2 and R3 follow-ups are integrated through PRs #99-#105. P3.1n R0/R0a is integrated through PRs #106-#108: the C2 clearance admits 143 of 158 fixture rows. P3.1o O00 raster coverage readiness is integrated through [PR #109](https://github.com/npclown/vector-studio/pull/109). The O01 observational coverage contract is integrated through [PR #110](https://github.com/npclown/vector-studio/pull/110). Its headed observations are recorded below; the evidence was accepted. The user decided [Q4 and Q5](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06) on 2026-10-07: A5 with inherited P1 thresholds. The [O02 A5 coverage rule contract](p3-o02-a5-coverage-contract.md) is FROZEN pending integration. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m and its [U1-U4](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06), U2 and R3 follow-ups are integrated through PRs #99-#105. P3.1n R0/R0a is integrated through PRs #106-#108: the C2 clearance admits 143 of 158 fixture rows. P3.1o O00 raster coverage readiness is integrated through [PR #109](https://github.com/npclown/vector-studio/pull/109). The O01 observational coverage contract is integrated through [PR #110](https://github.com/npclown/vector-studio/pull/110). Its headed observations are recorded below; the evidence was accepted. The user decided [Q4 and Q5](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06) on 2026-10-07: A5 with inherited P1 thresholds. The [O02 A5 coverage rule contract](p3-o02-a5-coverage-contract.md) is integrated through [PR #113](https://github.com/npclown/vector-studio/pull/113). Its headed evidence gives a **PASS** verdict for the test-only A5 realization. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
 
 ## P3.1o O02 A5 coverage rule contract
 
@@ -16,7 +16,38 @@ It gates G1/G2 (Q4) and G3 (Q9) on headed Chrome/Edge at DPR 1, 1.5 and 2, at 1x
 
 The census before freeze, per DPR: 143 renderable and 6 empty crops. 96 rows have degree-4 pinch vertices, and the maximum frame NDC magnitude is 31.2.
 
-Not yet done: implementation, the stable-source review, headed runs, evidence review and the verdict. Production adoption, R2 and C04 are not implied.
+Production adoption, R2 and C04 are not implied.
+
+**Implementation** (branch `codex/p3-1o-o02-impl`):
+
+- Primary wrote the page, the shaders (main, count, readout), the builder, the spec, the evidence helpers and the configs.
+- An independent Sol medium worker wrote the variants, the exact complement triangulator with sectors and the partition check, the exact rule oracle, the capture schema, the metrics and the replay, together with host tests.
+- Sol made three triangulator choices that the contract does not spell out. Astra high ruled all three within the contract, because they only tighten checks that end in the exact partition check:
+  - a hole is bridged by the minimum-distance visible vertex pair, with distinct coordinates, plus an exact wedge check;
+  - the half-edge walk is re-traced after each clip, and segments covered from both sides cancel;
+  - an extra ear is rejected at pinch corners.
+- Verdict precedence, fixed before any evidence exists: INCONCLUSIVE when any INCONCLUSIVE condition holds; otherwise FAIL on any G1-G3 violation; otherwise PASS. Both reason lists are always emitted.
+
+**Stable-source review** (Astra high): CLEARED. Its own float32 shader emulation over all 572 renderable variants (84.8M centers) found a maximum |emulation − rule| of 8.5e-5, and no center covered twice.
+
+**SHOULD-FIX applied:**
+
+- non-rendered rows carry the crop origin;
+- the verdict precedence above;
+- fragment feature-evaluation proxy, `clipOutside` and feature statistics;
+- a committed shader-emulation host test.
+
+**Local checks:** a pre-review WGSL compile check and an `init()` check in the in-app browser, with no draws, both passed.
+
+**Evidence:** [review record](../evidence/p3.1o-o02/review-2026-10-07.md); verdict **PASS**, EVIDENCE ACCEPTED.
+
+- Headed Chrome and Edge (NVIDIA Turing) at DPR 1, 1.5 and 2, 1x and 4x: 143 rendered variants per DPR, with zero G1, G2 or G3 violations.
+- The two browsers and the two runs are byte-identical (596 of 596 crops), and 1x equals 4x.
+- `|obs − rule|` is at most 1 LSB.
+- The O01 line-not-segment deficit is gone.
+- Observations, not gates: an acute-tip boundary-shift outlier of +0.28 px over 0.93 px of boundary, and THIN over-coverage at DPR 1.5.
+
+Next, all needing user direction: production adoption (C04 layout, Q11, R2 clipping), the partial-coverage tolerance, and R1/R4.
 
 ## P3.1o O01 coverage observations
 

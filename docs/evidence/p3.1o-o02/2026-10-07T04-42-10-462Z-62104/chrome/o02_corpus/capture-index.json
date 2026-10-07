@@ -1,0 +1,25 @@
+{
+  "schema": "p3-o02-capture-index-v1",
+  "parts": [
+    {
+      "path": "capture-dpr1-0.json",
+      "sha256": "8d3e3ce0cef8ab81c5ef569087f85162c95f39eaa55caa197fc8a22b817bf9e0",
+      "dpr": 1
+    },
+    {
+      "path": "capture-dpr1_5-0.json",
+      "sha256": "10a7689b15f2aa77406d83af5cd92758aaeebfb84cb6b54e3f8641a23bad9b12",
+      "dpr": 1.5
+    },
+    {
+      "path": "capture-dpr2-0.json",
+      "sha256": "c6380b02c0604842d0823618188889be650894933629ab14192ec1185f7553ff",
+      "dpr": 2
+    },
+    {
+      "path": "capture-dpr3-0.json",
+      "sha256": "e14ea3210b6f6399f1d20df5ff976753b0bc6721fa4dddc96e2fb664f01dabca",
+      "dpr": 3
+    }
+  ]
+}
