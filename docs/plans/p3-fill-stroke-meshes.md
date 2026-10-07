@@ -44,7 +44,21 @@ Astra high's stable-source review was CLEARED after one fix round. Its evidence 
   - The losses are δ- and scale-driven: S3 runs at `s_lo`, and Ē sits 1.4 to 2.3 times above T01's δ̄ because of the zoom band and the record extent. Fringe triangles add to them.
   - The larger window's geometry passes with T01's δ̄.
 
-**Next:** a user decision on revision 4 of the R2 contract, before O03.
+**User decision (2026-10-08, chat).** Both are the recommended options:
+
+- for gate 3: reduce δ and improve the fringe;
+- for gate 2: compare grid-sliver mitigations, then decide.
+
+**R2 revision 4.** The [delta contract](p3-r2-tiling-rev4-contract.md) is FROZEN. Its technical review (Astra high) went NOT READY, then READY; its implementability review (Sol medium) was IMPLEMENTABLE. It adds four deltas:
+
+- **D-A:** localized C2, with best rotation for the triangle term;
+- **D-B:** four certificate sub-bands per epoch;
+- **D-C:** exact Delaunay flips on the fringe, ordered by position;
+- **D-D:** owner carriers centred on the geometrically owned records.
+
+Gates are not relaxed. A pre-registered prediction set R (16 ids, from the disclosed census) defines a FAIL-AS-PREDICTED verdict, which is not acceptance.
+
+**Next:** T03 implementation (`tests/geometry/extent-t03/`). After it, T04 compares grid-sliver mitigations for R.
 
 ## P3.1p T01 offline extent experiment contract
 
