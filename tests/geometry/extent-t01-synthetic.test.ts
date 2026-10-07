@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bboxMidpoint, PHI, type CoreInput, type Q2 } from './extent-t01/core.js';
 import { GAMMA_PAIR, k5Errors, packPairLanes } from './extent-t01/k5.js';
+import { corpusRows, evaluateSpec } from './extent-t01/report.js';
 import { R15, syntheticRows, trajectoryRows } from './extent-t01/synthetic.js';
 import { q } from './position-certificate/certificate.js';
 import { termRows } from './position-certificate/corpus.js';
@@ -84,5 +85,25 @@ describe('P3.1p T01 K5-ASSUMED', () => {
     expect(error.ex).toEqual(add(add(shader, ndc), PHI));
     const rnNdc = mul(rational(1n, 1n << 24n), add(rational(7n), shader));
     expect(rn.get(1)!.ex).toEqual(add(add(shader, rnNdc), PHI));
+  });
+});
+
+describe('P3.1p T01 report rows', () => {
+  it('reports the K4 R3 origin-window delta at Γ8 only, bounding the pointwise delta', () => {
+    const spec = corpusRows('C').find((row) => row.id === 'rectangle/16x8/I/ordinary')!;
+    const rows = evaluateSpec(spec);
+    const k4 = rows.filter((row) => row.candidate === 'K4');
+    const g8 = k4.find((row) => row.gammaModel === 'G8')!;
+    expect(g8.deltaWindow).not.toBeNull();
+    const value = (text: unknown) => {
+      const [n, d] = String(text).split('/');
+      return Number(n) / Number(d ?? '1');
+    };
+    expect(value(g8.deltaWindow)).toBeGreaterThanOrEqual(value(g8.delta));
+    for (const row of rows.filter(
+      (candidate) => candidate.candidate !== 'K4' || candidate.gammaModel === 'G9',
+    ))
+      expect(row.deltaWindow).toBeNull();
+    expect(Object.keys(g8).at(-1)).toBe('flags');
   });
 });

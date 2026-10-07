@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { segmentTriangleDistanceSquared } from '../coverage-oracle/exterior.js';
 import { o02Variants, variantStatus } from '../coverage-oracle/variants.js';
 import type { ProjectionInput, ProjectionPoint } from '../mesh-projection/model.js';
-import { GAMMA9, q, sqrtUp } from '../position-certificate/certificate.js';
+import { certifyWindow, GAMMA9, q, sqrtUp } from '../position-certificate/certificate.js';
 import {
   loadFixtureRows,
   originSequences,
@@ -160,6 +160,7 @@ export type Evaluation = Readonly<{
   counts: Readonly<{ tiles: number; cells: number; triangles: number; vertices: number }>;
   maxE: string | null;
   delta: string | null;
+  deltaWindow: string | null;
   inversions: number | null;
   c2Failures: Readonly<Record<C2Term, number>> | null;
   c2Skipped: string | null;
@@ -180,6 +181,7 @@ function bare(outcome: string, submesh: unknown = null): Evaluation {
     counts: NO_COUNTS,
     maxE: null,
     delta: null,
+    deltaWindow: null,
     inversions: null,
     c2Failures: null,
     c2Skipped: null,
@@ -201,6 +203,7 @@ function evaluateUntiled(
   mode: 'K4' | 'K5',
   gamma: Rational,
   rn = false,
+  halfWidth: number | null = null,
 ): Evaluation {
   const vertices = input.mesh.vertices;
   const midpoint = bboxMidpoint(vertices);
@@ -222,7 +225,7 @@ function evaluateUntiled(
   const core = coreOf(input);
   const used = [...new Set(input.mesh.indices)].sort((a, b) => a - b);
   let errors: Map<number, ErrorPair> | 'lane-range';
-  let uTermMax: Rational | null = null;
+  let uTerms: Map<number, readonly Rational[]> | null = null;
   if (mode === 'K4') errors = certifyLanesCore(core, lanes, used, gamma);
   else {
     const pair = packPairLanes(
@@ -236,9 +239,7 @@ function evaluateUntiled(
     );
     const k5 = k5Errors(core, pair, used, rn);
     if (k5 !== 'lane-range')
-      for (const error of k5.values())
-        for (const value of error.uTerm)
-          if (uTermMax === null || compare(value, uTermMax) > 0) uTermMax = value;
+      uTerms = new Map([...k5].map(([vertex, error]) => [vertex, error.uTerm] as const));
     errors = k5;
   }
   if (errors === 'lane-range') return laneRange;
@@ -251,6 +252,11 @@ function evaluateUntiled(
   const admission = [...new Set(inWindow.flatMap((index) => [...core.triangles[index]!]))].sort(
     (a, b) => a - b,
   );
+  let uTermMax: Rational | null = null;
+  if (uTerms !== null)
+    for (const vertex of admission)
+      for (const value of uTerms.get(vertex)!)
+        if (uTermMax === null || compare(value, uTermMax) > 0) uTermMax = value;
   const viewport = {
     x0: ZERO,
     y0: ZERO,
@@ -343,6 +349,10 @@ function evaluateUntiled(
     counts,
     maxE: r(sqrtUp(max2)),
     delta: r(sqrtUp(max2)),
+    deltaWindow:
+      mode === 'K4' && gamma === GAMMA8 && halfWidth !== null
+        ? windowDelta(input, origin, halfWidth, admission)
+        : null,
     inversions,
     c2Failures,
     c2Skipped: runC2 ? null : 'edges>128',
@@ -408,6 +418,11 @@ function k2cFeatures(
 
 const abs = (value: Rational) => (value.n < 0n ? rational(-value.n, value.d) : value);
 
+/** tile.ts cellCentre: a cell centre that is not exact in binary64 (contract: lane domain). */
+function isCellCentre(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith('cell centre not exact in binary64');
+}
+
 function tiled(
   input: ProjectionInput,
   origin: ProjectionPoint,
@@ -420,25 +435,14 @@ function tiled(
   try {
     tiles = tileRow(input, T, window);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return bare(`NOT_ADMITTED:lane-range`, {
-      ok: null,
-      firstViolation: null,
-      reason: `tile:${message}`,
-    });
-  }
-  let result;
-  try {
-    result = certifyTiles(input, tiles, origin, window, gamma, { k2c });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!message.includes('centre')) throw error;
+    if (!isCellCentre(error)) throw error;
     return bare('NOT_ADMITTED:lane-range', {
       ok: null,
       firstViolation: null,
       reason: 'cell-centre',
     });
   }
+  const result = certifyTiles(input, tiles, origin, window, gamma, { k2c });
   const steiner =
     result.steiner === null
       ? null
@@ -465,6 +469,7 @@ function tiled(
     counts: result.counts,
     maxE: r(result.maxE),
     delta: r(result.delta),
+    deltaWindow: null,
     inversions: result.inversions,
     c2Failures: result.c2Failures,
     c2Skipped: result.c2Skipped,
@@ -474,6 +479,25 @@ function tiled(
     submesh: result.submesh,
     evaluated: result.evaluated,
   };
+}
+
+/** R3 origin-window variant for K4 (pinned certifyWindow, Γ8): sqrtUp(max ewx² + ewy²). */
+function windowDelta(
+  input: ProjectionInput,
+  origin: ProjectionPoint,
+  halfWidth: number,
+  admission: readonly number[],
+): string | null {
+  const window = certifyWindow(input, origin, halfWidth);
+  let max2: Rational | null = null;
+  for (const vertex of admission) {
+    const x = window.ewx[vertex];
+    const y = window.ewy[vertex];
+    if (x === null || x === undefined || y === null || y === undefined) return null;
+    const value = add(mul(x, x), mul(y, y));
+    if (max2 === null || compare(value, max2) > 0) max2 = value;
+  }
+  return max2 === null ? null : r(sqrtUp(max2));
 }
 
 export type ReportRow = Readonly<Record<string, unknown>>;
@@ -489,7 +513,6 @@ function rowRecord(
     corpus: spec.corpus,
     id: spec.id,
     dpr: ratio(spec.input.dpr),
-    flags: spec.flags,
     candidate,
     sweep,
     gammaModel,
@@ -497,6 +520,7 @@ function rowRecord(
     counts: evaluation.counts,
     maxE: evaluation.maxE,
     delta: evaluation.delta,
+    deltaWindow: evaluation.deltaWindow,
     inversions: evaluation.inversions,
     c2Failures: evaluation.c2Failures,
     c2Skipped: evaluation.c2Skipped,
@@ -507,6 +531,7 @@ function rowRecord(
     evaluated: evaluation.evaluated,
     ...(evaluation.rnOutcome === undefined ? {} : { rnOutcome: evaluation.rnOutcome }),
     ...(evaluation.uTermMax === undefined ? {} : { uTermMax: evaluation.uTermMax }),
+    flags: spec.flags,
   };
 }
 
@@ -519,6 +544,7 @@ function positionOnly(evaluation: Evaluation): Evaluation {
   return {
     ...evaluation,
     outcome,
+    deltaWindow: null,
     inversions: null,
     c2Failures: null,
     c2Skipped: null,
@@ -529,7 +555,8 @@ function positionOnly(evaluation: Evaluation): Evaluation {
 /** Every report row for one corpus row, in candidate then sweep then Γ order. */
 export function evaluateSpec(spec: RowSpec): ReportRow[] {
   const input = spec.input;
-  const origin = originPXTarget(input.camera, input.zoom, input.dpr, 128).origin;
+  const originState = originPXTarget(input.camera, input.zoom, input.dpr, 128);
+  const origin = originState.origin;
   const rows: ReportRow[] = [];
   const outOfDomain =
     spec.flags.includes('INPUT_UNSUPPORTED') || !domainOk(input.mesh.vertices, input);
@@ -551,13 +578,27 @@ export function evaluateSpec(spec: RowSpec): ReportRow[] {
     const evaluation = make(GAMMA8);
     rows.push(rowRecord(spec, candidate, sweep, 'G8', evaluation));
     if (gamma9 && evaluation.outcome === 'ADMITTED')
-      rows.push(rowRecord(spec, candidate, sweep, 'G9', positionOnly(make(GAMMA9))));
+      rows.push(
+        rowRecord(spec, candidate, sweep, 'G9', {
+          ...positionOnly(make(GAMMA9)),
+          submesh: evaluation.submesh,
+        }),
+      );
   };
   for (const gamma of GAMMAS)
     push(
       'K4',
       { gamma, tTile: null, tCoarse: null },
-      (g) => evaluateUntiled({ ...input, origin }, origin, windowOf(input, gamma), 'K4', g),
+      (g) =>
+        evaluateUntiled(
+          { ...input, origin },
+          origin,
+          windowOf(input, gamma),
+          'K4',
+          g,
+          false,
+          2 * originState.g,
+        ),
       true,
     );
   for (const gamma of GAMMAS)
@@ -607,8 +648,8 @@ export function evaluateTrajectories(): ReportRow[] {
         ['K1', T_TILES],
         ['K2c', T_COARSES],
       ] as const)
-        for (const T of sizes)
-          for (const gamma of GAMMAS) {
+        for (const gamma of GAMMAS)
+          for (const T of sizes) {
             const seen = new Set<string>();
             let previousOrigin: { origin: ProjectionPoint; g: number } | undefined;
             let previousLevel: number | null | undefined;
@@ -640,7 +681,8 @@ export function evaluateTrajectories(): ReportRow[] {
                 tiles = singularCore(input.affine)
                   ? null
                   : tileRow(input, T, windowOf(input, gamma));
-              } catch {
+              } catch (error) {
+                if (!isCellCentre(error)) throw error;
                 tiles = null;
               }
               const live = tiles?.status === 'OK' ? tiles.cells : [];
@@ -683,7 +725,6 @@ export function evaluateTrajectories(): ReportRow[] {
                 tTile: candidate === 'K1' ? T : null,
                 tCoarse: candidate === 'K2c' ? T : null,
               },
-              frames: path.frames.length,
               frame0Tiles,
               builds: { total: builds, maxPerFrame: maxBuilds },
               tilesPerFrame: {
@@ -693,6 +734,7 @@ export function evaluateTrajectories(): ReportRow[] {
               anchorUploads,
               zoomLevelChanges,
               rebuildsPerChange,
+              frames: path.frames.length,
               capFrames,
             });
           }
@@ -701,6 +743,10 @@ export function evaluateTrajectories(): ReportRow[] {
 
 // ---------------------------------------------------------------------------------------------
 // Summary and document
+
+const CANDIDATES = ['K4', 'K1', 'K2c', 'K5'];
+const SWEEP_ORDER = (sweep: { gamma: number; tTile: number | null; tCoarse: number | null }) =>
+  `${String(sweep.gamma).padStart(6, '0')}/${sweep.tTile === null ? '~' : String(sweep.tTile).padStart(6, '0')}/${sweep.tCoarse === null ? '~' : String(sweep.tCoarse).padStart(6, '0')}`;
 
 const SWEEP_KEY = (sweep: { gamma: number; tTile: number | null; tCoarse: number | null }) =>
   `${sweep.gamma}/${sweep.tTile ?? 'null'}/${sweep.tCoarse ?? 'null'}`;
@@ -789,7 +835,35 @@ export function summarize(rows: readonly ReportRow[], skipped: readonly string[]
     return { ...record, mMax: value };
   });
   const c2Skipped = rows.filter((row) => row.c2Skipped !== null).length;
-  return { admission: [...groups.values()], classA, mMax, skipped: { sRows: skipped, c2Skipped } };
+  const emptyCrop = rows
+    .filter(
+      (row) =>
+        (row.flags as string[]).includes('EMPTY_CROP') &&
+        row.candidate === 'K4' &&
+        (row.sweep as { gamma: number }).gamma === GAMMAS[0] &&
+        row.gammaModel === 'G8',
+    )
+    .map((row) => ({ id: row.id, dpr: row.dpr }));
+  const order = (value: Record<string, unknown>) =>
+    [
+      CORPORA.indexOf(value.corpus as Corpus),
+      CANDIDATES.indexOf(value.candidate as string),
+      SWEEP_ORDER(value.sweep as { gamma: number; tTile: number | null; tCoarse: number | null }),
+      value.gammaModel === 'G9' ? 1 : 0,
+      value.dprGroup === '3' ? 1 : 0,
+    ] as const;
+  const compareKeys = (left: readonly (number | string)[], right: readonly (number | string)[]) => {
+    for (let index = 0; index < left.length; index += 1)
+      if (left[index] !== right[index]) return left[index]! < right[index]! ? -1 : 1;
+    return 0;
+  };
+  const admission = [...groups.values()].sort((a, b) => compareKeys(order(a), order(b)));
+  return {
+    admission,
+    classA,
+    mMax,
+    skipped: { sRows: skipped, c2Skipped, emptyCrop },
+  };
 }
 
 function sha256(data: string | Buffer): string {
@@ -805,6 +879,12 @@ export const T01_SOURCES = [
   'tests/geometry/extent-t01/synthetic.ts',
   'tests/geometry/extent-t01/report.ts',
   'tests/geometry/extent-t01/sources.ts',
+  'tests/geometry/extent-t01-clip.test.ts',
+  'tests/geometry/extent-t01-core.test.ts',
+  'tests/geometry/extent-t01-synthetic.test.ts',
+  'tests/geometry/extent-t01-tile-certificate.test.ts',
+  'tests/p3-t01/report.test.ts',
+  'vitest.p3-t01.config.ts',
 ] as const;
 
 export function documentOf(rows: readonly ReportRow[], trajectoryRecords: readonly ReportRow[]) {
@@ -813,7 +893,7 @@ export function documentOf(rows: readonly ReportRow[], trajectoryRecords: readon
   for (const path of [...T01_SOURCES, ...Object.keys(PINNED_SOURCES)].sort())
     sources[path] = sha256(readFileSync(path, 'utf8').replaceAll('\r\n', '\n'));
   return {
-    contract: { commit: T01_CONTRACT_COMMIT, path: T01_CONTRACT, sha256: sha256(note) },
+    contract: { commit: T01_CONTRACT_COMMIT, sha256: sha256(note) },
     sources,
     sweeps: { gamma: [...GAMMAS], tTile: [...T_TILES], tCoarse: [...T_COARSES] },
     rows,

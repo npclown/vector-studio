@@ -310,6 +310,7 @@ export function certifyTiles(
 ): TileCertificate {
   // K2c (Primary, contract "K2c"): no 1/16-px position gate; C2 at δ = ε; submesh margin + ε.
   const k2c = options.k2c === true;
+  if (k2c && gamma !== GAMMA8) throw new Error('k2c-requires-gamma8');
   if (tiles.status === 'LEVEL_NONE') return early('NOT_ADMITTED:lane-range', ZERO_COUNTS);
   if (tiles.status === 'TILE_CAP_EXCEEDED')
     return early('TILE_CAP_EXCEEDED', { ...ZERO_COUNTS, cells: tiles.materializedCells });
