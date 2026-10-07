@@ -2,6 +2,18 @@
 
 Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m and its [U1-U4](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06), U2 and R3 follow-ups are integrated through PRs #99-#105. P3.1n R0/R0a is integrated through PRs #106-#108: the C2 clearance admits 143 of 158 fixture rows. P3.1o O00 raster coverage readiness is integrated through [PR #109](https://github.com/npclown/vector-studio/pull/109). The O01 observational coverage contract is integrated through [PR #110](https://github.com/npclown/vector-studio/pull/110). Its headed observations are recorded below; the evidence was accepted. The user decided [Q4 and Q5](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06) on 2026-10-07: A5 with inherited P1 thresholds. The [O02 A5 coverage rule contract](p3-o02-a5-coverage-contract.md) is integrated through [PR #113](https://github.com/npclown/vector-studio/pull/113). Its headed evidence gives a **PASS** verdict for the test-only A5 realization. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
 
+## P3.1p R2 bounded-extent and guard readiness
+
+The [R2 readiness note](p3-r2-tiling-readiness.md) passed independent Astra high review in two rounds plus confirmation fixes. It is documentation only. It prepares the Q10 clipping and guard contract by recording what O02's evidence does not cover: O02's vertices are host NDC, with no M01 Shader term, which is the class A cause.
+
+It also contains:
+
+- candidates K1-K7, including the decided R2 tiling (K1) and a feature-decoupled boundary (K2);
+- decisions D1-D7 with their owners;
+- a proposed offline exact experiment, T01, and the items its contract must fix.
+
+Nothing is adopted. The user has not yet selected this unit, and D1 (the mechanism) is a user decision after T01.
+
 ## P3.1o O02 A5 coverage rule contract
 
 The [O02 contract](p3-o02-a5-coverage-contract.md) is FROZEN after independent review rounds. The technical review went NOT READY ×2, then READY. The implementability review went NOT IMPLEMENTABLE ×2, then IMPLEMENTABLE.
