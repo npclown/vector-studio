@@ -1,6 +1,6 @@
 # P3 fill and stroke meshes execution plan
 
-Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m and its [U1-U4](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06), U2 and R3 follow-ups are integrated through PRs #99-#105. P3.1n R0/R0a is integrated through PRs #106-#108: the C2 clearance admits 143 of 158 fixture rows. P3.1o O00 raster coverage readiness is integrated through [PR #109](https://github.com/npclown/vector-studio/pull/109). The O01 observational coverage contract is integrated through [PR #110](https://github.com/npclown/vector-studio/pull/110). Its headed observations are recorded below; the evidence was accepted. The user decided [Q4 and Q5](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06) on 2026-10-07: A5 with inherited P1 thresholds. The [O02 A5 coverage rule contract](p3-o02-a5-coverage-contract.md) is FROZEN pending integration. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
+Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m and its [U1-U4](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06), U2 and R3 follow-ups are integrated through PRs #99-#105. P3.1n R0/R0a is integrated through PRs #106-#108: the C2 clearance admits 143 of 158 fixture rows. P3.1o O00 raster coverage readiness is integrated through [PR #109](https://github.com/npclown/vector-studio/pull/109). The O01 observational coverage contract is integrated through [PR #110](https://github.com/npclown/vector-studio/pull/110). Its headed observations are recorded below; the evidence was accepted. The user decided [Q4 and Q5](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06) on 2026-10-07: A5 with inherited P1 thresholds. The [O02 A5 coverage rule contract](p3-o02-a5-coverage-contract.md) is integrated through [PR #113](https://github.com/npclown/vector-studio/pull/113). Its headed evidence gives a **PASS** verdict for the test-only A5 realization. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
 
 ## P3.1o O02 A5 coverage rule contract
 
@@ -39,7 +39,15 @@ Production adoption, R2 and C04 are not implied.
 
 **Local checks:** a pre-review WGSL compile check and an `init()` check in the in-app browser, with no draws, both passed.
 
-Next: headed runs, offline metrics, the evidence review and the verdict.
+**Evidence:** [review record](../evidence/p3.1o-o02/review-2026-10-07.md); verdict **PASS**, EVIDENCE ACCEPTED.
+
+- Headed Chrome and Edge (NVIDIA Turing) at DPR 1, 1.5 and 2, 1x and 4x: 143 rendered variants per DPR, with zero G1, G2 or G3 violations.
+- The two browsers and the two runs are byte-identical (596 of 596 crops), and 1x equals 4x.
+- `|obs − rule|` is at most 1 LSB.
+- The O01 line-not-segment deficit is gone.
+- Observations, not gates: an acute-tip boundary-shift outlier of +0.28 px over 0.93 px of boundary, and THIN over-coverage at DPR 1.5.
+
+Next, all needing user direction: production adoption (C04 layout, Q11, R2 clipping), the partial-coverage tolerance, and R1/R4.
 
 ## P3.1o O01 coverage observations
 
