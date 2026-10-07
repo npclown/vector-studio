@@ -131,6 +131,7 @@ The toolchain exists as of P0.4. `package.json` owns exact commands and pinned v
 | `pnpm test:gpu`                          | Headed Chrome/Edge validation error, device-loss recovery and P1 primitive/overlap/precision fixtures; not native OOM or performance evidence                    |
 | `pnpm test:gpu:p3-projection`            | Headed Chrome/Edge P3.1l native projection control and 158-row corpus; runner gates only, rows OBSERVE; no raster/performance claim                              |
 | `pnpm test:gpu:p3-coverage`              | Headed Chrome/Edge P3.1o O01 coverage observation (A1/A2/A5, 1x/4x); runner gates only; no threshold/performance claim                                           |
+| `pnpm test:gpu:p3-o02` | Headed Chrome/Edge P3.1o O02 A5 coverage rule (DPR 1/1.5/2/3, 1x/4x); runner gates only; G1-G3 offline via `pnpm coverage:p3-o02` |
 | `pnpm benchmark:p0:p0-3`                 | Legacy production steady/idle runner; fixed historical output filenames must be corrected before reuse in the tracked checkout                                   |
 | `pnpm benchmark:p0`                      | P0.5 five-scenario production headed runner; defaults to acceptance and requires `--display-refresh-hz`, with an explicit non-accepting `--profile smoke` option |
 | `pnpm build`                             | Workspace package declarations/JavaScript and playground production build                                                                                        |

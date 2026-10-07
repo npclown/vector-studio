@@ -16,7 +16,30 @@ It gates G1/G2 (Q4) and G3 (Q9) on headed Chrome/Edge at DPR 1, 1.5 and 2, at 1x
 
 The census before freeze, per DPR: 143 renderable and 6 empty crops. 96 rows have degree-4 pinch vertices, and the maximum frame NDC magnitude is 31.2.
 
-Not yet done: implementation, the stable-source review, headed runs, evidence review and the verdict. Production adoption, R2 and C04 are not implied.
+Production adoption, R2 and C04 are not implied.
+
+**Implementation** (branch `codex/p3-1o-o02-impl`):
+
+- Primary wrote the page, the shaders (main, count, readout), the builder, the spec, the evidence helpers and the configs.
+- An independent Sol medium worker wrote the variants, the exact complement triangulator with sectors and the partition check, the exact rule oracle, the capture schema, the metrics and the replay, together with host tests.
+- Sol made three triangulator choices that the contract does not spell out. Astra high ruled all three within the contract, because they only tighten checks that end in the exact partition check:
+  - a hole is bridged by the minimum-distance visible vertex pair, with distinct coordinates, plus an exact wedge check;
+  - the half-edge walk is re-traced after each clip, and segments covered from both sides cancel;
+  - an extra ear is rejected at pinch corners.
+- Verdict precedence, fixed before any evidence exists: INCONCLUSIVE when any INCONCLUSIVE condition holds; otherwise FAIL on any G1-G3 violation; otherwise PASS. Both reason lists are always emitted.
+
+**Stable-source review** (Astra high): CLEARED. Its own float32 shader emulation over all 572 renderable variants (84.8M centers) found a maximum |emulation − rule| of 8.5e-5, and no center covered twice.
+
+**SHOULD-FIX applied:**
+
+- non-rendered rows carry the crop origin;
+- the verdict precedence above;
+- fragment feature-evaluation proxy, `clipOutside` and feature statistics;
+- a committed shader-emulation host test.
+
+**Local checks:** a pre-review WGSL compile check and an `init()` check in the in-app browser, with no draws, both passed.
+
+Next: headed runs, offline metrics, the evidence review and the verdict.
 
 ## P3.1o O01 coverage observations
 
