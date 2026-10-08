@@ -114,6 +114,8 @@ P2.1 adds `geometry-reference` as an independently compiled test-only package an
 
 P2.3 adds the private `geometry-wasm` TypeScript adapter/cache over the owned Rust kernel, with independent compilation and boundary coverage. It has no external or oracle dependency. Renderer packages do not import it; test composition supplies WASM and compares plain results. Its factory and batch types are private implementation contracts, not the editor's public `GeometryPort`. See the [adapter review and evidence](docs/evidence/p2.3-adapter-review-2026-09-26.md).
 
+P3 V1 ([ADR 0002](docs/decisions/0002-path-scene-and-fill-mesh-port.md)) adds the first concrete geometry port. `contracts` defines a fill-mesh port with plain-data requests and results; `geometry-wasm` implements it beside its P2 private session; the host composition root obtains that adapter from a `geometry-wasm` factory and injects it into `renderer-core`. Among current packages, only the playground, as host composition, may depend on `geometry-wasm`. The scene contract gains a path node whose fill rule is part of its geometry. The port is fill only until stroke has its own approved contract. These contracts are accepted; their code lands in D8 checkpoints V2 and V3.
+
 Forbidden dependency examples:
 
 - `model -> renderer-webgpu`
