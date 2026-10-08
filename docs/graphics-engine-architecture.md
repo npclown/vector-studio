@@ -196,7 +196,7 @@ Still open:
 - fringe cache identity;
 - guard clipping.
 
-These remain contract work in the [raster coverage readiness](plans/p3-raster-coverage-readiness.md). The decision does not add a runtime dependency or change the public API.
+These remain contract work in the [raster coverage readiness](plans/p3-raster-coverage-readiness.md). The decision does not add a runtime dependency or change the public API. Whether the O02 test-only realization becomes the production fringe is decided at [D8](plans/p3-d8-parallel-tracks.md) checkpoint V3. V3 runs on the untiled carrier as an interim; K1 with the tiling rules below remains the production carrier direction.
 
 **P3 mesh extent decision (2026-10-07).** For meshes whose vertices lie far offscreen (failure class A), the user approved R2 mechanism K1. Region meshes are clipped against a power-of-two grid that is fixed in local space. The level is chosen so that a tile spans at most 256 physical px. Each tile has its own cell-centre carrier, and its Steiner points use exact rational references.
 
