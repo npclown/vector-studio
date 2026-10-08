@@ -125,12 +125,12 @@ Rules:
 
 Work runs in Claude Code. The Primary session owns plans, contracts, integration and acceptance. It may delegate bounded work to subagents defined in `.claude/agents/`:
 
-| Role | Agent | Model | Use |
-| --- | --- | --- | --- |
-| Primary | main session | Opus 5.5 | Plans, contracts, cross-module design, review disposition, acceptance |
-| Independent reviewer | `reviewer` | Opus 5.5 | Fresh-context technical, contract or evidence review; read-only |
-| Implementer | `implementer` | Sonnet 5.5 | A bounded implementation scope in named files, after its contract is fixed |
-| Command runner | `runner` | Haiku 4.5 | Running fixed validation commands and reporting their output |
+| Role                 | Agent         | Model                                                 | Use                                                                        |
+| -------------------- | ------------- | ----------------------------------------------------- | -------------------------------------------------------------------------- |
+| Primary              | main session  | The session's model, Opus 5.5 or a more capable model | Plans, contracts, cross-module design, review disposition, acceptance      |
+| Independent reviewer | `reviewer`    | Opus 5.5                                              | Fresh-context technical, contract or evidence review; read-only            |
+| Implementer          | `implementer` | Sonnet 5.5                                            | A bounded implementation scope in named files, after its contract is fixed |
+| Command runner       | `runner`      | Haiku 4.5                                             | Running fixed validation commands and reporting their output               |
 
 The Primary may run a high-risk numeric or lifecycle implementation on Opus 5.5 instead. Subagents do not delegate further. Their findings are inputs; the Primary decides adoption.
 

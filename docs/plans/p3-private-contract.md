@@ -127,7 +127,7 @@ A5 realization follow-up, 2026-10-07: these choices were made in chat, after the
 2. **Q3.** Screen-space distance is accepted, including circular corner isolines under nonuniform scale or shear and reflex corners.
 3. **Q12.** P1's encoded-sRGB premultiplied blending applies unchanged.
 
-This decision does not imply production adoption of the complement triangulation.
+This decision does not imply production adoption of the complement triangulation. Under [D8](p3-d8-parallel-tracks.md), that adoption is a user decision taken in the V3 contract.
 
 R2 mechanism follow-up, 2026-10-07: after the accepted [T01 evidence](../evidence/p3.1p-t01/review-2026-10-07.md), the user decided D1 in chat by choosing the recommended option: **K1**, a local fixed-grid hierarchical tiling with `T_tile = 256` and exact rational Steiner references (D3(a)).
 
@@ -166,6 +166,13 @@ C04 remains open until topology, coverage and composition have a feasible repres
 4. Per-instance reserve/view epochs, owned-copy publication, terminal idempotent disposal, new-instance isolation and stale/revision conflict behavior. If mesh and P2 operations share an arena, both invalidate each other's borrowed views, while owned results remain valid. No second hidden unaccounted arena.
 5. Cache identity for all mesh-affecting inputs, explicit byte accounting, failed-result exclusion and bounded eviction. Actual stroke values require identity checking; a caller's unchecked hash cannot substitute for equality. Color/opacity changes must avoid geometry rebuild. Derived boundary data and any screen-space fringe data have distinct invalidation obligations.
 6. Single-owner GPU upload/incarnation receipts, completion-safe retirement, latest-scene reconstruction, simultaneous old/new backing accounting and dispose races. Preserve existing P1/P0 allocator and generation meanings.
+
+**D8 carve-out (2026-10-08).** Under [D8](p3-d8-parallel-tracks.md), and only for its V2 and V3 checkpoints, a mesh transport and a renderer packet may be implemented before the joint freeze of items 1-6 above, under these conditions:
+
+- V2 is a **functional transport v0**. Its contract states, for each item 1-6 above, what v0 fixes and what it leaves open. It is not the C04 layout, it carries no position or coverage certificate, and its output is a reconstructible cache that a later C04 layout may replace without a requirement change.
+- V3 is fill only, on the untiled carrier K4, as an interim. K1 with E1-E3 remains the production carrier direction; V3 does not realize E1-E3 and does not change them. Whether the O02 complement-triangulation fringe becomes the production realization of A5 is a user decision taken in the V3 contract; the 2026-10-07 acceptance of the test-only realization does not imply it.
+- Every V2-V4 result is labelled UNVERIFIED against the 0.25-pixel target until the A04 corpus measurement (D8 checkpoint B4) has evidence. V2-V4 results close no A01-A08 criterion; acceptance evidence counts only after C03-C05 are complete, on the frozen layout and carrier.
+- The joint freeze above still gates C04 completion, P3 A05/A06 and any certificate claim. Nothing else in this section is narrowed.
 
 Candidate safe composition directions are region-partitioned fill/stroke evaluation or another proven single-opacity mesh scheme. Independent full-alpha draws with node opacity applied twice are excluded by the inherited contract. No offscreen isolation, stencil reinterpretation or alternative path-renderer architecture is approved here. If feasibility requires one, stop with a concrete architecture proposal.
 
