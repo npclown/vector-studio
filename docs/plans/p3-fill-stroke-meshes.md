@@ -75,7 +75,26 @@ Astra high's stable-source review was CLEARED after one fix, an unpruned oracle 
   - O losses fell from 100 to 4 and C losses from 32 to 0.
   - Six admitted rows pass only some sub-bands. They are instances of the zoom-only U4 case.
 
-**Next:** the T04 contract (grid-sliver mitigation comparison for R), then a user decision.
+**T04 contract.** The [T04 grid-sliver mitigation comparison contract](p3-t04-sliver-mitigation-contract.md) is FROZEN.
+
+- **Reviews.** Astra high: NOT READY four times, then READY with one verbatim fix. Sol medium: NOT IMPLEMENTABLE twice, then IMPLEMENTABLE.
+- **User decisions, all 2026-10-08 in chat:**
+  - evaluate needle-tip truncation; this was later withdrawn because it removes a visible line;
+  - evaluate M-D, needle-as-fringe, instead;
+  - evaluate a relaxed coverage meaning for features narrower than 2Ē.
+
+T04 compares these configurations against C0, the T03 control:
+
+| Configuration | Adds |
+| --- | --- |
+| C1 | K = 8 sub-bands |
+| C2 | + M-B, per-cell region retriangulation |
+| C3(w) | + M-D, for `w` in {1/32, 1/16, 1/8} |
+| C4(w) | M-D without M-B |
+
+It adopts nothing.
+
+**Next:** T04 implementation (`tests/geometry/extent-t04/`), the evidence, then a user decision. Adopting anything leads to R2 revision 5; adopting the relaxed semantics also needs a requirements update.
 
 ## P3.1p T01 offline extent experiment contract
 
