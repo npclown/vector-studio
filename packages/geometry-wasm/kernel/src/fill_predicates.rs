@@ -22,6 +22,14 @@ pub(crate) enum SegmentRelation {
 }
 
 pub(crate) fn orient2d(a: Point, b: Point, c: Point) -> Result<Ordering, PredicateError> {
+    #[cfg(p3_b0_diag)]
+    let _diag = crate::p3_b0_diag::enter("fill_predicates::orient2d", "", move || {
+        let _ = core::hint::black_box(orient2d(
+            core::hint::black_box(a),
+            core::hint::black_box(b),
+            core::hint::black_box(c),
+        ));
+    });
     validate_points(&[a, b, c])?;
     Ok(orient2d_finite(a, b, c))
 }
@@ -41,6 +49,15 @@ pub(crate) fn segment_relation(
     c: Point,
     d: Point,
 ) -> Result<SegmentRelation, PredicateError> {
+    #[cfg(p3_b0_diag)]
+    let _diag = crate::p3_b0_diag::enter("fill_predicates::segment_relation", "", move || {
+        let _ = core::hint::black_box(segment_relation(
+            core::hint::black_box(a),
+            core::hint::black_box(b),
+            core::hint::black_box(c),
+            core::hint::black_box(d),
+        ));
+    });
     validate_points(&[a, b, c, d])?;
 
     let ab_is_point = same_point(a, b);

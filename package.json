@@ -13,6 +13,7 @@
     "benchmark:p0": "node tooling/run-p0-benchmark.mjs",
     "benchmark:p1": "node tooling/run-p1-benchmark.mjs",
     "benchmark:p2": "node tooling/run-p2-benchmark.mjs",
+    "benchmark:p3-b0": "node tooling/run-p3-b0-benchmark.mjs",
     "benchmark:p0:p0-3": "pnpm build && playwright test --config playwright.p0-3-benchmark.config.ts",
     "build": "pnpm --recursive --if-present run build",
     "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test:unit && pnpm run check:boundaries",

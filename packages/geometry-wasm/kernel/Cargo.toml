@@ -16,6 +16,8 @@ strip = true
 
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
+# P3 B0 diagnostic instrumentation (docs/plans/p3-b0-feasibility-benchmark-contract.md).
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(p3_b0_diag)"] }
 
 [lints.clippy]
 all = "deny"
