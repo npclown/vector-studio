@@ -19,6 +19,7 @@
     "check:boundaries": "node tooling/check-boundaries.mjs",
     "coverage:p3-o01": "node tooling/run-p3-coverage-metrics.mjs",
     "coverage:p3-o02": "node tooling/run-p3-o02-metrics.mjs",
+    "report:p3-t03": "vitest run --config vitest.p3-t03.config.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
