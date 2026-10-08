@@ -58,7 +58,24 @@ Astra high's stable-source review was CLEARED after one fix round. Its evidence 
 
 Gates are not relaxed. A pre-registered prediction set R (16 ids, from the disclosed census) defines a FAIL-AS-PREDICTED verdict, which is not acceptance.
 
-**Next:** T03 implementation (`tests/geometry/extent-t03/`). After it, T04 compares grid-sliver mitigations for R.
+**T03 implementation** (branch `codex/p3-1p-t03-impl`):
+
+- **Primary:** D-A and D-B (`local.ts`), the report with its gates, prediction and verdict, and the replay.
+- **Sol medium:** D-C (`delaunay.ts`) and D-D (`owner.ts`), with their locality tests.
+
+Astra high's stable-source review was CLEARED after one fix, an unpruned oracle test. Its evidence review returned EVIDENCE ACCEPTED, with 14 of 14 rows independently recomputed.
+
+**Result: FAIL-AS-PREDICTED, which is not acceptance.** See the [review record](../evidence/p3.1p-t03/review-2026-10-08.md); the archived report SHA is `5679e76e…`.
+
+- **Gates 1 and 4:** pass.
+- **Gates 2 and 3:** fail on exactly the pre-registered set R, with the predicted outcomes:
+  - 12 class A variants on `vertex`, which are full grid-sliver clearance failures;
+  - 4 `Z/depth-positive …/S5` O rows at DPR 1 on `triangle`.
+- **Against T01:**
+  - O losses fell from 100 to 4 and C losses from 32 to 0.
+  - Six admitted rows pass only some sub-bands. They are instances of the zoom-only U4 case.
+
+**Next:** the T04 contract (grid-sliver mitigation comparison for R), then a user decision.
 
 ## P3.1p T01 offline extent experiment contract
 
