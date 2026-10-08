@@ -11,21 +11,21 @@ The P3.1p precision-certificate line below is **parked** at its frozen T04 contr
 
 **Status index.** Checkpoints under D8, with their state and evidence. Pre-D8 sections below keep their contemporaneous text.
 
-| Checkpoint                           | Tier                                           | State                                      | Evidence or contract                                               |
-| ------------------------------------ | ---------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------ |
-| V1 path scene and port proposal      | Full                                           | APPROVED 2026-10-08; ADR 0002 accepted     | [V1 proposal](p3-v1-path-scene-port-proposal.md)                   |
-| V2 fill-mesh export, transport v0    | Full (ABI)                                     | Not started; after V1                      | —                                                                  |
-| V3 renderer mesh pipeline, fill only | Full (draw contract)                           | Not started; after V1                      | —                                                                  |
-| V4 playground path page              | Light                                          | Not started; after V2 and V3               | —                                                                  |
-| B0 performance feasibility           | Full (benchmark contract with a decision rule) | Not started; may start in parallel with V1 | —                                                                  |
-| B1 kernel caps                       | Light                                          | Not started; after B0                      | —                                                                  |
-| B2 stroke contract proposal          | Full                                           | Not started; needs approval                | —                                                                  |
-| B3 kernel defects from Track A       | Light                                          | Open as found                              | —                                                                  |
-| B4 A04 corpus and measurement        | Full                                           | Not started; after V2 and V3               | —                                                                  |
-| P3.1p T04 sliver mitigation          | Full                                           | Parked, contract FROZEN                    | [T04 contract](p3-t04-sliver-mitigation-contract.md)               |
-| P3 A01-A08                           | —                                              | All TODO; see the acceptance table         | [acceptance table](#runtime-acceptance-coverage-to-freeze-in-p30b) |
+| Checkpoint                           | Tier                                           | State                                   | Evidence or contract                                               |
+| ------------------------------------ | ---------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------ |
+| V1 path scene and port proposal      | Full                                           | APPROVED 2026-10-08; ADR 0002 accepted  | [V1 proposal](p3-v1-path-scene-port-proposal.md)                   |
+| V2 fill-mesh export, transport v0    | Full (ABI)                                     | Not started; after V1                   | —                                                                  |
+| V3 renderer mesh pipeline, fill only | Full (draw contract)                           | Not started; after V1                   | —                                                                  |
+| V4 playground path page              | Light                                          | Not started; after V2 and V3            | —                                                                  |
+| B0 performance feasibility           | Full (benchmark contract with a decision rule) | Contract FROZEN 2026-10-08; runner next | [B0 contract](p3-b0-feasibility-benchmark-contract.md)             |
+| B1 kernel caps                       | Light                                          | Not started; after B0                   | —                                                                  |
+| B2 stroke contract proposal          | Full                                           | Not started; needs approval             | —                                                                  |
+| B3 kernel defects from Track A       | Light                                          | Open as found                           | —                                                                  |
+| B4 A04 corpus and measurement        | Full                                           | Not started; after V2 and V3            | —                                                                  |
+| P3.1p T04 sliver mitigation          | Full                                           | Parked, contract FROZEN                 | [T04 contract](p3-t04-sliver-mitigation-contract.md)               |
+| P3 A01-A08                           | —                                              | All TODO; see the acceptance table      | [acceptance table](#runtime-acceptance-coverage-to-freeze-in-p30b) |
 
-**Next:** the B0 benchmark contract; V2 and V3 contracts may start from the [V1 proposal](p3-v1-path-scene-port-proposal.md#f-items-v2-and-v3-inherit).
+**Next:** the B0 runner (light tier) under the [frozen B0 contract](p3-b0-feasibility-benchmark-contract.md#9-follow-on-work-units), and the V2 and V3 contracts from the [V1 proposal](p3-v1-path-scene-port-proposal.md#f-items-v2-and-v3-inherit).
 
 Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m and its [U1-U4](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06), U2 and R3 follow-ups are integrated through PRs #99-#105. P3.1n R0/R0a is integrated through PRs #106-#108: the C2 clearance admits 143 of 158 fixture rows. P3.1o O00 raster coverage readiness is integrated through [PR #109](https://github.com/npclown/vector-studio/pull/109). The O01 observational coverage contract is integrated through [PR #110](https://github.com/npclown/vector-studio/pull/110). Its headed observations are recorded below; the evidence was accepted. The user decided [Q4 and Q5](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06) on 2026-10-07: A5 with inherited P1 thresholds. The [O02 A5 coverage rule contract](p3-o02-a5-coverage-contract.md) is integrated through [PR #113](https://github.com/npclown/vector-studio/pull/113). Its headed evidence gives a **PASS** verdict for the test-only A5 realization. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
 
