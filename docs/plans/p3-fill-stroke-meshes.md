@@ -1,5 +1,16 @@
 # P3 fill and stroke meshes execution plan
 
+## D8: parallel visualization and engine tracks
+
+Under [D8](p3-d8-parallel-tracks.md), user-approved on 2026-10-08, P3 runs two tracks:
+
+- **Track A, visualization, leads:** V1 path scene and port proposal (needs user approval), V2 fill-mesh WASM export, V3 renderer mesh pipeline, V4 playground path page.
+- **Track B, engine:** B0 performance feasibility, B1 kernel caps, B2 stroke contract, B3 defects that Track A finds.
+
+The P3.1p precision-certificate line below is **parked** at its frozen T04 contract. A04 is now evidenced by measurement on a frozen corpus against an independent oracle; the 0.25-pixel target is unchanged. Process tiers and agent roles are owned by [`AGENTS.md`](../../AGENTS.md#agent-roles).
+
+**Next:** V1, the path scene and port proposal, for user approval. B0 can start in parallel.
+
 Current status: P3.1k integrated through [PR #95](https://github.com/npclown/vector-studio/pull/95). P3.1l is integrated through PRs #96-#98. P3.1m and its [U1-U4](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06), U2 and R3 follow-ups are integrated through PRs #99-#105. P3.1n R0/R0a is integrated through PRs #106-#108: the C2 clearance admits 143 of 158 fixture rows. P3.1o O00 raster coverage readiness is integrated through [PR #109](https://github.com/npclown/vector-studio/pull/109). The O01 observational coverage contract is integrated through [PR #110](https://github.com/npclown/vector-studio/pull/110). Its headed observations are recorded below; the evidence was accepted. The user decided [Q4 and Q5](p3-private-contract.md#user-decisions-on-mesh-position-representation-2026-10-06) on 2026-10-07: A5 with inherited P1 thresholds. The [O02 A5 coverage rule contract](p3-o02-a5-coverage-contract.md) is integrated through [PR #113](https://github.com/npclown/vector-studio/pull/113). Its headed evidence gives a **PASS** verdict for the test-only A5 realization. Earlier sections retain their contemporaneous gate context and evidence. Complete P3 acceptance remains open; stroke refinement stays user-deferred.
 
 ## P3.1p R2 tiling contract
@@ -94,7 +105,7 @@ T04 compares these configurations against C0, the T03 control:
 
 It adopts nothing.
 
-**Next:** T04 implementation (`tests/geometry/extent-t04/`), the evidence, then a user decision. Adopting anything leads to R2 revision 5; adopting the relaxed semantics also needs a requirements update.
+**Parked under [D8](p3-d8-parallel-tracks.md).** T04 implementation (`tests/geometry/extent-t04/`) would come next, then the evidence and a user decision. Adopting anything would lead to R2 revision 5; adopting the relaxed semantics would also need a requirements update. The residual set R stays an open risk.
 
 ## P3.1p T01 offline extent experiment contract
 
@@ -900,7 +911,7 @@ These IDs reserve required evidence; they are not executable acceptance until C0
 | A01 | Valid mesh/index/range structure, deterministic failure isolation and bounded adversarial work                            | TODO                              |
 | A02 | Both fill rules, holes, intersections and winding agree with independent analytic/membership and image fixtures           | TODO                              |
 | A03 | Required caps/joins, open/closed paths, thin strokes and miter/degenerate cases match fixed semantics                     | TODO                              |
-| A04 | Combined geometric error <=0.25 physical pixel across declared transforms/zoom/DPR, with rejecting positive controls      | TODO                              |
+| A04 | Combined geometric error <=0.25 physical pixel across declared transforms/zoom/DPR, with rejecting positive controls      | TODO; measured on a frozen corpus against an independent oracle (D8) |
 | A05 | ABI capacity/growth/view ownership, copied results, stale work, disposal and recreation                                   | TODO                              |
 | A06 | Stable mesh reuse; only affected geometry rebuilds across revision/style/bucket changes; color/opacity avoid mesh rebuild | TODO                              |
 | A07 | Ordered path/primitive integration, upload/resource lifetime and latest-scene device recovery                             | TODO; scene/API decision required |
@@ -913,14 +924,14 @@ P3 defines no new performance multiplier here. A later performance assertion req
 | Task  | Purpose and expected files                                                                     | Predecessors                                                        | Parallelism / owner                                                                        | Risk / model and effort                                       |
 | ----- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
 | P3.0a | Entry decision, roadmap/navigation and this plan                                               | D7                                                                  | Primary; read-only independent review                                                      | Medium consistency; Primary                                   |
-| P3.0b | Private contract, topology/error-budget feasibility and fixture specification under docs/plans | P3.0a                                                               | Primary single owner; bounded independent review                                           | High cross-module/numeric; Primary, Sol medium audit          |
-| P3.1  | Independent mesh oracle/corpus in geometry-reference and test support                          | P3.0b                                                               | Oracle and positive controls precede production fill                                       | High verification; Sol medium; Terra medium analytic fixtures |
-| P3.2  | Fill topology/tessellation in geometry-wasm/kernel private modules                             | P3.0b + P3.1                                                        | After independent oracle review; no shared ABI edits                                       | High algorithm/numeric; Sol high                              |
-| P3.3  | Stroke mesh generation in geometry-wasm/kernel private modules                                 | P3.2 shared topology review + P3.0b                                 | Sequential by default until reuse boundary is proven independent                           | High degeneracy/overlap; Sol high                             |
-| P3.4  | Mesh ABI/adapter/cache integration in geometry-wasm and tests                                  | P3.2 + P3.3                                                         | Single owner of engine/codec/adapter; no concurrent lifecycle edits                        | High ownership/regression; Sol high with Primary review       |
-| P3.5  | Native/WASM/browser differential acceptance                                                    | P3.1 + P3.4                                                         | Independent audits after integration; validation commands may run separately               | High numeric interpretation; Sol medium; Primary acceptance   |
-| P3.6  | Concrete path scene/port proposal, then ordered core/backend composition and coverage          | P3.0b for proposal; P3.5 + explicit API decision before integration | Primary owns contracts and lifecycle; only disjoint shader/fixture delegation after freeze | High API/lifecycle; Primary, Sol high bounded implementation  |
-| P3.7  | Headed visual/cache/recovery corpus and milestone review                                       | P3.6 + frozen visual contract + valid environment                   | Serial hardware execution, then independent evidence audit                                 | High acceptance; Primary; Luna low command collection         |
+| P3.0b | Private contract, topology/error-budget feasibility and fixture specification under docs/plans | P3.0a                                                               | Primary single owner; bounded independent review                                           | High cross-module/numeric; Primary, reviewer audit |
+| P3.1  | Independent mesh oracle/corpus in geometry-reference and test support                          | P3.0b                                                               | Oracle and positive controls precede production fill                                       | High verification; implementer; analytic fixtures |
+| P3.2  | Fill topology/tessellation in geometry-wasm/kernel private modules                             | P3.0b + P3.1                                                        | After independent oracle review; no shared ABI edits                                       | High algorithm/numeric; implementer on Opus |
+| P3.3  | Stroke mesh generation in geometry-wasm/kernel private modules                                 | P3.2 shared topology review + P3.0b                                 | Sequential by default until reuse boundary is proven independent                           | High degeneracy/overlap; implementer on Opus |
+| P3.4  | Mesh ABI/adapter/cache integration in geometry-wasm and tests                                  | P3.2 + P3.3                                                         | Single owner of engine/codec/adapter; no concurrent lifecycle edits                        | High ownership/regression; implementer on Opus, Primary review |
+| P3.5  | Native/WASM/browser differential acceptance                                                    | P3.1 + P3.4                                                         | Independent audits after integration; validation commands may run separately               | High numeric interpretation; reviewer; Primary acceptance |
+| P3.6  | Concrete path scene/port proposal, then ordered core/backend composition and coverage          | P3.0b for proposal; P3.5 + explicit API decision before integration | Primary owns contracts and lifecycle; only disjoint shader/fixture delegation after freeze | High API/lifecycle; Primary, bounded implementer |
+| P3.7  | Headed visual/cache/recovery corpus and milestone review                                       | P3.6 + frozen visual contract + valid environment                   | Serial hardware execution, then independent evidence audit                                 | High acceptance; Primary; runner for commands |
 
 ```text
 D7 -> P3.0a -> P3.0b -> implementation-entry scope review

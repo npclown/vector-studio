@@ -50,7 +50,7 @@ When instructions conflict, the narrower document owns details inside its declar
 For each independently reviewable work unit:
 
 1. Start from an up-to-date `main` with a clean worktree.
-2. Create an agent branch named `codex/<plan-item>-<short-slug>`, for example `codex/p0-0-repository-foundation`.
+2. Create an agent branch named `claude/<plan-item>-<short-slug>`, for example `claude/p3-v1-path-scene-proposal`. Branches before 2026-10-08 used the `codex/` prefix; history keeps those names.
 3. Keep the branch scoped to one execution-plan checkpoint or one tightly coupled correction.
 4. Make changes and run the validation required by the active plan while changes are still uncommitted.
 5. Review the diff for scope, generated files, secrets, dependency changes, and unrelated edits.
@@ -121,7 +121,29 @@ Rules:
 - Do not add empty, irrelevant, or speculative sections merely to fill a template.
 - Prefer creating the PR body from a Markdown file or another method that preserves real line breaks and lists. Do not pass a compressed one-paragraph body when using GitHub CLI.
 
+## Agent roles
+
+Work runs in Claude Code. The Primary session owns plans, contracts, integration and acceptance. It may delegate bounded work to subagents defined in `.claude/agents/`:
+
+| Role | Agent | Model | Use |
+| --- | --- | --- | --- |
+| Primary | main session | Opus 5.5 | Plans, contracts, cross-module design, review disposition, acceptance |
+| Independent reviewer | `reviewer` | Opus 5.5 | Fresh-context technical, contract or evidence review; read-only |
+| Implementer | `implementer` | Sonnet 5.5 | A bounded implementation scope in named files, after its contract is fixed |
+| Command runner | `runner` | Haiku 4.5 | Running fixed validation commands and reporting their output |
+
+The Primary may run a high-risk numeric or lifecycle implementation on Opus 5.5 instead. Subagents do not delegate further. Their findings are inputs; the Primary decides adoption.
+
+**Legacy names.** Records before 2026-10-08 were written under Codex and use its worker names: Astra (independent technical review), Sol (implementation or implementability audit), Terra (implementation and fixtures) and Luna (command execution), each with an effort level. Those records stay unchanged.
+
 ## Change workflow
+
+Pick the process tier before starting:
+
+- **Full tier.** Use it for a change to a public API, a package boundary, an ABI, an acceptance criterion or threshold, or user-visible behavior. It needs a written contract, an independent review before implementation, and an independent review of the evidence.
+- **Light tier.** Use it for internal kernel or renderer work, tests, fixtures, tooling and demos that keep every contract above unchanged. It needs a one-line plan entry with its acceptance check, then a PR with CI and one independent review of the diff.
+
+When unsure, use the full tier. Either tier follows the steps below.
 
 1. Identify the owning source-of-truth document.
 2. Check the active plan and its current gate.
