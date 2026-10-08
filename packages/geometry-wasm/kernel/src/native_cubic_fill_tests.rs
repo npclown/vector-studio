@@ -31,13 +31,13 @@ const NONLINEAR_TRANSVERSE_ROWS: usize = 8;
 const MIXED_TRANSVERSE_ROWS: usize = 4;
 const TRIANGLE_FREE_ROWS: usize = 4;
 const DEPTH_POSITIVE_ROWS: usize = 4;
-const FLATTEN_TOLERANCE: f64 = 0.125;
-const TOPOLOGY_TOLERANCE: f64 = 0.0625;
+pub(crate) const FLATTEN_TOLERANCE: f64 = 0.125;
+pub(crate) const TOPOLOGY_TOLERANCE: f64 = 0.0625;
 const MAX_CONTOURS: usize = 4;
 const MAX_SOURCE_CUBICS: usize = 16;
 const MAX_BRIDGE_HEAP_BYTES: usize = 16 * 1024 * 1024;
 
-const LIMITS: RoundedFillLimits = RoundedFillLimits {
+pub(crate) const LIMITS: RoundedFillLimits = RoundedFillLimits {
     max_contours: 4,
     max_input_vertices: 64,
     max_edges: 64,

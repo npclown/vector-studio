@@ -30,6 +30,10 @@ mod rounded_line_fill;
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 mod simple_cubic_topology;
 
+// P3 B0 diagnostic counters and stage marker; only under --cfg p3_b0_diag.
+#[cfg(p3_b0_diag)]
+mod p3_b0_diag;
+
 #[cfg(test)]
 mod fill_event_order_tests;
 #[cfg(test)]
@@ -42,6 +46,8 @@ mod line_fill_tests;
 mod mixed_line_arrangement_tests;
 #[cfg(test)]
 mod native_cubic_fill_tests;
+#[cfg(test)]
+mod p3_b0_bench;
 #[cfg(test)]
 mod rounded_cubic_topology_tests;
 #[cfg(test)]

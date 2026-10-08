@@ -119,6 +119,16 @@ impl<const N: usize> Signed<N> {
     }
 
     pub(crate) fn compare_magnitude(self, other: Self) -> Ordering {
+        #[cfg(p3_b0_diag)]
+        let _diag = crate::p3_b0_diag::enter(
+            "fill_exact::compare_magnitude",
+            core::any::type_name::<Self>(),
+            move || {
+                core::hint::black_box(
+                    core::hint::black_box(self).compare_magnitude(core::hint::black_box(other)),
+                );
+            },
+        );
         match self.used.cmp(&other.used) {
             Ordering::Equal => {
                 for index in (0..self.used).rev() {
@@ -252,6 +262,17 @@ pub(crate) fn multiply<const A: usize, const B: usize, const OUT: usize>(
     left: Signed<A>,
     right: Signed<B>,
 ) -> Signed<OUT> {
+    #[cfg(p3_b0_diag)]
+    let _diag = crate::p3_b0_diag::enter(
+        "fill_exact::multiply",
+        core::any::type_name::<(Signed<A>, Signed<B>, Signed<OUT>)>(),
+        move || {
+            core::hint::black_box(multiply::<A, B, OUT>(
+                core::hint::black_box(left),
+                core::hint::black_box(right),
+            ));
+        },
+    );
     if left.is_zero() || right.is_zero() {
         return Signed::zero();
     }
@@ -298,6 +319,19 @@ pub(crate) fn compare_ratios<
     right_numerator: Signed<RN>,
     right_weight: Signed<RD>,
 ) -> Ordering {
+    #[cfg(p3_b0_diag)]
+    let _diag = crate::p3_b0_diag::enter(
+        "fill_exact::compare_ratios",
+        core::any::type_name::<(Signed<LN>, Signed<LD>, Signed<RN>, Signed<RD>, Signed<OUT>)>(),
+        move || {
+            core::hint::black_box(compare_ratios::<LN, LD, RN, RD, OUT>(
+                core::hint::black_box(left_numerator),
+                core::hint::black_box(left_weight),
+                core::hint::black_box(right_numerator),
+                core::hint::black_box(right_weight),
+            ));
+        },
+    );
     debug_assert!(!left_weight.negative && !left_weight.is_zero());
     debug_assert!(!right_weight.negative && !right_weight.is_zero());
     let left = multiply::<LN, RD, OUT>(left_numerator, right_weight);

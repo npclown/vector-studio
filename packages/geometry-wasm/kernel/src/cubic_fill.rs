@@ -359,9 +359,17 @@ impl CubicFillWorkspace {
         self.emit(input, sizing_plan, sizing_bounds, command_capacity)?;
         self.collect_contours(all_line_eligible)?;
         self.validate_leaf_partitions()?;
+        #[cfg(p3_b0_diag)]
+        if crate::p3_b0_diag::stop_stage() == crate::p3_b0_diag::STAGE_S1 {
+            return Ok(self.diagnostics);
+        }
         if !all_line_eligible {
             self.diagnostics.topology_invoked = true;
             self.certify_topology(topology_mode)?;
+        }
+        #[cfg(p3_b0_diag)]
+        if crate::p3_b0_diag::stop_stage() == crate::p3_b0_diag::STAGE_S2 {
+            return Ok(self.diagnostics);
         }
 
         let mut references: [&[Point]; MAX_CONTOURS] = [&[]; MAX_CONTOURS];
