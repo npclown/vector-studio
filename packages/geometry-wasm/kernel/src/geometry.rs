@@ -173,7 +173,7 @@ fn failure(status: u32) -> Plan {
     }
 }
 
-fn validate_path(input: PathInput<'_>) -> Result<(), ()> {
+pub(crate) fn validate_path(input: PathInput<'_>) -> Result<(), ()> {
     let mut point_index = 0usize;
     let mut open = false;
     for verb in input.verbs {

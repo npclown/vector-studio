@@ -36,8 +36,13 @@ describe('test-only geometry package boundary', () => {
     ]);
     for (const [name, dependencies] of policy) {
       expect(dependencies.has('@vector-studio/geometry-reference'), name).toBe(false);
-      expect(dependencies.has('@vector-studio/geometry-wasm'), name).toBe(false);
     }
+    // P3 V2 P-B1: among current packages only the playground host may use geometry-wasm.
+    expect(
+      [...policy]
+        .filter(([, dependencies]) => dependencies.has('@vector-studio/geometry-wasm'))
+        .map(([name]) => name),
+    ).toEqual(['@vector-studio/playground']);
   });
 
   it('recognizes forbidden imports through relative paths and package subpaths', () => {

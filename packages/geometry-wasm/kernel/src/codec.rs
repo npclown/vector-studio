@@ -256,6 +256,16 @@ impl PathInput<'_> {
     }
 }
 
+impl<'a> PathInput<'a> {
+    pub(crate) fn from_parts(request: Request, verbs: &'a [u8], point_bytes: &'a [u8]) -> Self {
+        Self {
+            request,
+            verbs,
+            point_bytes,
+        }
+    }
+}
+
 #[cfg(test)]
 impl<'a> PathInput<'a> {
     pub fn from_test_parts(request: Request, verbs: &'a [u8], point_bytes: &'a [u8]) -> Self {

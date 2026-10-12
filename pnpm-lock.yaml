@@ -61,7 +61,11 @@ importers:
 
   packages/geometry-reference: {}
 
-  packages/geometry-wasm: {}
+  packages/geometry-wasm:
+    dependencies:
+      '@vector-studio/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/renderer-core:
     dependencies:
