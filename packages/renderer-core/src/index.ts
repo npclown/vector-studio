@@ -12,11 +12,12 @@ export type {
 export { PrimitiveSceneSource } from './primitive-scene-source.js';
 export { PrimitiveRendererService } from './primitive-renderer-service.js';
 export type { PrimitiveRendererServiceOptions } from './primitive-renderer-service.js';
+export { pathMeshNoticeDiagnostic } from './path-mesh-pipeline.js';
 export type {
   PathMeshDraw,
   PathMeshFailureCode,
   PathMeshFailureScope,
-  PathMeshFrame,
   PathMeshNotice,
   PathMeshStatistics,
 } from './path-mesh-pipeline.js';
+export { MESH_RESOURCE_ORDER, MESH_STRIDES } from './path-mesh-packet.js';

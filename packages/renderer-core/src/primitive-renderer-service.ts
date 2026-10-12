@@ -35,6 +35,8 @@ export class PrimitiveRendererService
   readonly #mirror: RetainedSceneMirror;
   readonly #source: PrimitiveSceneSource;
   #disposed = false;
+  /** P3 V3 section f: true exactly when a fill-mesh port is given; read by the backend at attach. */
+  public readonly requiresMeshPipeline: boolean;
 
   public constructor(
     invalidationTarget: RendererInvalidationTarget,
@@ -47,6 +49,7 @@ export class PrimitiveRendererService
       throw new TypeError('fillMeshMemoryBytes must be a function.');
     }
     this.#invalidationTarget = invalidationTarget;
+    this.requiresMeshPipeline = port !== undefined;
     // P3 V3 section a: path nodes are supported exactly when a port is given.
     this.#mirror = new RetainedSceneMirror(undefined, {
       pathNodes: port === undefined ? 'unsupported' : 'supported',

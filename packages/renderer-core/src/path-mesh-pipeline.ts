@@ -8,6 +8,7 @@ import {
   type FillMeshRequest,
   type RenderNodeSnapshot,
   type SceneAffine,
+  type SceneColor,
   type SceneFillRule,
 } from '@vector-studio/contracts';
 import {
@@ -25,9 +26,10 @@ import {
   type SceneBounds,
 } from './scene-numeric.js';
 
-// CPU path-mesh pipeline of the P3 V3 contract, unit V3a: port consumption, batch isolation,
-// exact buckets, the mesh cache, the failure memo and the D8-interim notice queue. It emits no
-// GPU data; V3b adds the packet mesh part and V3c the fringe builder.
+// CPU path-mesh pipeline of the P3 V3 contract: port consumption, batch isolation, exact
+// buckets, the mesh cache, the failure memo and the D8-interim notice queue (unit V3a), plus the
+// geometry-owned K4 offsets and the transform-owned instance lanes of section f (unit V3b). The
+// packet mesh part itself is assembled by path-mesh-packet.ts; V3c adds the fringe builder.
 
 type PathNode = Extract<RenderNodeSnapshot, { kind: 'path' }>;
 
@@ -68,15 +70,20 @@ export type PathMeshDraw = Readonly<{
   slot: number;
   /** The served entry's e', not the requested e (section c reuse rule). */
   toleranceExponent: number;
-  /** The served fringe variant's f', or null when no fringe builder is installed (V3a). */
+  /** The served fringe variant's f', or null when no fringe builder is installed. */
   fringeBucket: number | null;
   orientation: 1 | -1;
   mesh: FillMesh;
-}>;
-
-export type PathMeshFrame = Readonly<{
-  draws: readonly PathMeshDraw[];
-  notices: readonly PathMeshNotice[];
+  /** Identity of the served cache entry; its GPU ranges live while it is resident. */
+  entryId: symbol;
+  /** Geometry-owned K4 offsets u = fround(v - m), two per port vertex (section f). */
+  offsets: Float32Array;
+  /** Transform-owned f32 lanes a, b, c, d of the world linear map. */
+  linear: readonly [number, number, number, number];
+  /** Transform-owned anchor B = fround(W(m) - O_m). */
+  anchor: readonly [number, number];
+  opacity: number;
+  fill: SceneColor;
 }>;
 
 export type PathMeshStatistics = Readonly<{
@@ -139,12 +146,21 @@ export type PathMeshPrepareInput = Readonly<{
   geometryRevision: (id: string) => number | undefined;
   camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>;
   target: Readonly<{ width: number; height: number; devicePixelRatio: number }>;
+  /**
+   * Section f packing inputs: the per-view mesh origin O_m and whether the shared meshFrame
+   * lanes are finite. A nonfinite meshFrame makes every drawable path packing-range.
+   */
+  packing: Readonly<{ origin: Readonly<{ x: number; y: number }>; frameFinite: boolean }>;
 }>;
 
 type FringeVariant = Readonly<{ f: number; arrays: readonly ArrayBufferView[]; bytes: number }>;
 type MeshEntry = {
+  readonly id: symbol;
   readonly e: number;
   readonly mesh: FillMesh | null;
+  /** Packed K4 offsets of the port vertices; null when one is not a finite binary32 value. */
+  readonly offsets: Float32Array | null;
+  readonly midpoint: Readonly<{ x: number; y: number }>;
   readonly meshBytes: number;
   readonly variants: Map<number, FringeVariant | 'unsupported'>;
   lastServed: number;
@@ -320,15 +336,26 @@ export class PathMeshPipeline {
     // Steps 5-7: one batch, isolation of a failed batch, response validation and publication.
     if (port.ok) this.#resolveMissing(missing, now);
 
-    // Step 8: serve meshes and fringe variants in paint order.
+    // Step 8: serve meshes and fringe variants in paint order, then pack the section f lanes.
     const draws: PathMeshDraw[] = [];
     const working = new Set<MeshEntry>();
+    const { origin, frameFinite } = input.packing;
     for (const item of evaluated) {
       const entry = this.#lookup(item.path.id, item.e);
       if (entry === undefined) continue;
       entry.lastServed = now;
       working.add(entry);
       if (entry.mesh === null) continue;
+      // The shared meshFrame failing makes every drawable path packing-range (section f).
+      if (!frameFinite) {
+        frameStates.set(item.path.id, 'packing-range');
+        continue;
+      }
+      const lanes = packInstanceLanes(item.path.world, entry, origin);
+      if (lanes === null) {
+        frameStates.set(item.path.id, 'packing-range');
+        continue;
+      }
       let fringeBucket: number | null = null;
       if (this.#fringeBuilder !== undefined) {
         const served = this.#serveFringe(item, entry, this.#fringeBuilder);
@@ -347,6 +374,12 @@ export class PathMeshPipeline {
           fringeBucket,
           orientation: item.orientation,
           mesh: entry.mesh,
+          entryId: entry.id,
+          offsets: lanes.offsets,
+          linear: lanes.linear,
+          anchor: lanes.anchor,
+          opacity: item.path.node.opacity,
+          fill: item.path.node.style.fill!,
         }),
       );
     }
@@ -369,6 +402,20 @@ export class PathMeshPipeline {
     this.#evictToBudget(working);
     this.#evictMemo(now);
     return Object.freeze(draws);
+  }
+
+  /** Occupied path slots by node id, including hidden and culled path nodes. */
+  public getPathSlots(): ReadonlyMap<string, number> {
+    return this.#slots;
+  }
+
+  /** Identities of every entry currently resident in the mesh cache. */
+  public getResidentEntryIds(): ReadonlySet<symbol> {
+    const ids = new Set<symbol>();
+    for (const nodeCache of this.#cache.values()) {
+      for (const entry of nodeCache.entries.values()) ids.add(entry.id);
+    }
+    return ids;
   }
 
   /** At most `noticesPerPacket` queued notices, oldest first; the rest stay queued. */
@@ -656,10 +703,16 @@ export class PathMeshPipeline {
       };
       this.#cache.set(request.nodeId, nodeCache);
     }
+    const mesh = result?.mesh ?? null;
+    const packed = mesh === null ? null : packOffsets(mesh);
     nodeCache.entries.set(request.e, {
+      id: Symbol(`path-mesh-${request.nodeId}`),
       e: request.e,
-      mesh: result?.mesh ?? null,
-      meshBytes: result?.bytes ?? 0,
+      mesh,
+      offsets: packed?.offsets ?? null,
+      midpoint: packed?.midpoint ?? { x: 0, y: 0 },
+      // Section d: the packed Float32 offsets of the port vertices are owned by the entry.
+      meshBytes: (result?.bytes ?? 0) + (packed?.offsets?.byteLength ?? 0),
       variants: new Map(),
       lastServed: 0,
     });
@@ -910,6 +963,59 @@ function validateMesh(value: unknown): Readonly<{ mesh: FillMesh; bytes: number 
     }),
     bytes: positions.byteLength + indices.byteLength + boundaryEdges.byteLength,
   });
+}
+
+/**
+ * Section f, geometry-owned: m from V2's exact bounds (minX/2 + maxX/2, which cannot overflow)
+ * and one binary32 offset u = fround(v - m) per port vertex, the difference taken in Float64.
+ */
+function packOffsets(mesh: FillMesh): Readonly<{
+  midpoint: Readonly<{ x: number; y: number }>;
+  offsets: Float32Array | null;
+}> {
+  const midpoint = Object.freeze({
+    x: mesh.bounds.minX / 2 + mesh.bounds.maxX / 2,
+    y: mesh.bounds.minY / 2 + mesh.bounds.maxY / 2,
+  });
+  const offsets = new Float32Array(mesh.positions.length);
+  for (let index = 0; index < mesh.positions.length; index += 2) {
+    offsets[index] = mesh.positions[index]! - midpoint.x;
+    offsets[index + 1] = mesh.positions[index + 1]! - midpoint.y;
+    if (!Number.isFinite(offsets[index]!) || !Number.isFinite(offsets[index + 1]!)) {
+      return Object.freeze({ midpoint, offsets: null });
+    }
+  }
+  return Object.freeze({ midpoint, offsets });
+}
+
+/**
+ * Section f, transform-owned: the f32 lanes a, b, c, d of L and the anchor
+ * B = fround(W(m) - O_m) with W(m) in Float64. Null when the entry's offsets or one of these
+ * lanes is not a finite binary32 value (state failure packing-range).
+ */
+function packInstanceLanes(
+  world: SceneAffine,
+  entry: MeshEntry,
+  origin: Readonly<{ x: number; y: number }>,
+): Readonly<{
+  offsets: Float32Array;
+  linear: readonly [number, number, number, number];
+  anchor: readonly [number, number];
+}> | null {
+  if (entry.offsets === null) return null;
+  const { x, y } = entry.midpoint;
+  const linear = Object.freeze([
+    Math.fround(world[0]),
+    Math.fround(world[1]),
+    Math.fround(world[2]),
+    Math.fround(world[3]),
+  ] as const);
+  const anchor = Object.freeze([
+    Math.fround(world[0] * x + world[2] * y + world[4] - origin.x),
+    Math.fround(world[1] * x + world[3] * y + world[5] - origin.y),
+  ] as const);
+  if (![...linear, ...anchor].every((lane) => Number.isFinite(lane))) return null;
+  return Object.freeze({ offsets: entry.offsets, linear, anchor });
 }
 
 function entryBytes(entry: MeshEntry): number {

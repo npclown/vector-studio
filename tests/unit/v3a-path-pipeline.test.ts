@@ -368,9 +368,9 @@ describe('V3a cache accounting and eviction', () => {
     h.prepare();
     expect(reads).toBe(1);
     expect(h.statistics()).toMatchObject({
-      bytes: 120,
+      bytes: 152,
       portLinearMemoryBytes: 65_536,
-      pathMeshMemoryBytes: 65_656,
+      pathMeshMemoryBytes: 65_688,
     });
     const invalidation: RendererInvalidationTarget = {
       invalidate: () => undefined,
@@ -383,9 +383,9 @@ describe('V3a cache accounting and eviction', () => {
     service.replaceSnapshot({ identity, revision: 1, nodes: [pathNode('a', 0)], rootOrder: ['a'] });
     service.prepare(target);
     expect(service.getPathMeshStatistics()).toMatchObject({
-      bytes: 120,
+      bytes: 152,
       portLinearMemoryBytes: 1_024,
-      pathMeshMemoryBytes: 1_144,
+      pathMeshMemoryBytes: 1_176,
     });
     expect(new PrimitiveRendererService(invalidation).getPathMeshStatistics()).toBeNull();
   });
@@ -397,10 +397,10 @@ describe('V3a cache accounting and eviction', () => {
     expect(h.statistics().entries).toBe(2);
     h.replace([pathNode('a', 0)]);
     h.prepare();
-    expect(h.statistics()).toMatchObject({ entries: 1, bytes: 120 });
+    expect(h.statistics()).toMatchObject({ entries: 1, bytes: 152 });
     h.replace([pathNode('a', 0, { points: [0, 0, 10, 0, 10, 12] })]);
     h.prepare();
-    expect(h.statistics()).toMatchObject({ entries: 1, bytes: 120 });
+    expect(h.statistics()).toMatchObject({ entries: 1, bytes: 152 });
     h.replace([pathNode('a', 0, { points: [0, 0, 10, 0, 10, 12], fillRule: 'evenodd' })]);
     h.prepare();
     expect(h.statistics()).toMatchObject({ entries: 1 });
@@ -445,7 +445,7 @@ describe('V3a cache accounting and eviction', () => {
     }
     expect(built).toEqual([1, 2, 3]);
     expect(port.callCount).toBe(1);
-    expect(h.statistics().bytes).toBe(120 + fringeBytes(2) + fringeBytes(3));
+    expect(h.statistics().bytes).toBe(152 + fringeBytes(2) + fringeBytes(3));
     // f = 1 is served by the f' = 2 variant (f <= f' <= f + 1) without a rebuild.
     h.setZoom(1);
     expect(h.prepare().draws.map((draw) => draw.fringeBucket)).toEqual([2]);
@@ -455,12 +455,12 @@ describe('V3a cache accounting and eviction', () => {
   it('V3-A7: budget eviction is least-recently-drawn outside the working set; a working set above budget is kept and counted', () => {
     const port = createCountingPort();
     const nodes = [pathNode('a', 0), pathNode('b', 20), pathNode('c', 40)];
-    const h = createPathHarness({ port, nodes, limits: { byteBudget: 300 } });
+    const h = createPathHarness({ port, nodes, limits: { byteBudget: 400 } });
     expect(h.drawnIds()).toEqual(['a', 'b', 'c']);
     expect(h.statistics()).toMatchObject({
       entries: 3,
-      bytes: 360,
-      peakBytes: 360,
+      bytes: 456,
+      peakBytes: 456,
       evictions: 0,
       overBudgetFrames: 1,
     });
@@ -472,7 +472,7 @@ describe('V3a cache accounting and eviction', () => {
     h.prepare();
     expect(h.statistics()).toMatchObject({
       entries: 2,
-      bytes: 240,
+      bytes: 304,
       evictions: 1,
       overBudgetFrames: 1,
     });
@@ -677,9 +677,7 @@ describe('V3a failure classes, memo and notices', () => {
       transform: [1, 1 + 2 ** -40, 1, 1, 0, 0] as const,
     };
     h.replace([...forty, pathNode(ids[40]!, tags[40]!), bad]);
-    const frameBefore = h.source.getPathMeshFrame();
     expect(() => h.source.prepare(target)).toThrow();
-    expect(h.source.getPathMeshFrame()).toBe(frameBefore);
     expect(h.statistics().noticesQueued).toBe(9);
     // The port result of the throwing prepare was published before packing: no repeat call.
     const calls = port.callCount;
@@ -760,7 +758,7 @@ describe('V3a failure classes, memo and notices', () => {
     });
     expect(h.prepare()).toEqual({ draws: [], notices: [] });
     expect(built).toEqual([1]);
-    expect(h.statistics()).toMatchObject({ entries: 1, bytes: 120 });
+    expect(h.statistics()).toMatchObject({ entries: 1, bytes: 152 });
     h.setZoom(0.5);
     expect(h.prepare().draws.map((draw) => [draw.toleranceExponent, draw.fringeBucket])).toEqual([
       [-3, 2],
@@ -790,7 +788,7 @@ describe('V3a failure classes, memo and notices', () => {
     h.setZoom(2 ** 20);
     expect(h.prepare().notices).toEqual([notice('a', 'renderer', 'tolerance-range', null)]);
     expect(h.prepare().notices).toEqual([]);
-    expect(h.statistics()).toMatchObject({ entries: 1, bytes: 120 });
+    expect(h.statistics()).toMatchObject({ entries: 1, bytes: 152 });
     h.replace([plain]);
     h.setZoom(1);
     expect(h.drawnIds()).toEqual(['a']);
