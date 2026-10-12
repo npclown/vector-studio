@@ -461,6 +461,7 @@ Evidence counts only after C03-C05 on the frozen layout and carrier, as the carv
 2. **V1 d, "A change of `e` is a cache miss".** It holds for the exact key. The finer-variant fallback of section c is the reuse rule V1 d delegated to V3; it never serves a coarser mesh.
 3. **V1 rule 3, one call per frame and "no per-path port call".** It holds for normal preparation. Bisection after `internal-error` or `resource-limit` is the bounded recovery that V2 section l assigns to V3 and that V2 section a permits; its single-request leaves are per-path calls made only to isolate a failure. Because this reads an approved V1 rule narrowly, it is **reported to the user**: the V3-C2 chat record and every V3 PR description state it explicitly. It is not a separate decision; if the user objects, the contract returns to review.
 4. **V1 d, "never enters the mesh cache".** It governs `failed` and `batch-failed` port results. Fringe and state failures concern derived or per-frame data; they keep a successful port result cached and are not drawn.
+5. **Erratum to V3-A16, recorded at the V3a review.** Adding the section a union member forces type narrowing edits; P1 tests change only by those two type-only edits (`tests/support/p1-visual-oracle.ts` guard, `tests/unit/primitive-native-integration.test.ts` cast); runtime and primitive packet bytes are identical, proven by the golden SHA test reproduced on main 4e6e40d by the reviewer.
 
 **For the implementation.** Unit fixtures use test doubles of `FillMeshPort`: a **counting** double that records every batch and returns meshes from a fixed table, a **failing** double configurable per request and per batch (including a batch `internal-error` triggered by one marked path, as V2's kernel behaves), and a **range** double that answers `invalid-tolerance` outside a configured range. `geometry-reference` may back a double in tests only. Section o assigns each criterion to a unit.
 
@@ -622,4 +623,5 @@ Primary owns this contract, the packet and draw design, the fringe builder's exa
 
   Interpretation 3 under V3-C1 (batch bisection read against V1 rule 3) was reported to the user in the same message.
 
+- **V3a review notes.** Section c's guard row "`e > E_MAX`: request `E_MAX`" is dead in practice: `e > E_MAX` needs `sigmaMax(S) < 2^-1026`, so `sigmaMin ≤ sigmaMax` gives `f ≥ 1028 > F_MAX`, and the `fringe-range` state applies first. The row stays as written; no contract change. The V3-A16 erratum is interpretation 5 under V3-C1.
 - **What approval does not do.** It closes no A01-A08 criterion and no C03-C05 item. V3-Q1's adoption stays conditional on its three follow-up results: V3-A14, B0's E4 draw cost and the R2 per-tile partition.

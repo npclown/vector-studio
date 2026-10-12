@@ -19,6 +19,8 @@ import {
   validateCandidateGraph,
   validateChangesShape,
   validateSnapshotShape,
+  pathDataEquals,
+  type PathNodeSupport,
   type ValidatedChangesInput,
   type ValidatedSnapshotInput,
 } from './scene-validation.js';
@@ -29,7 +31,11 @@ export type RetainedSceneView = Readonly<{
   nodes: readonly RenderNodeSnapshot[];
   rootOrder: readonly string[];
   getNode(id: string): RenderNodeSnapshot | undefined;
+  /** The mirror-derived geometry revision of a path node; never carried by the scene contract. */
+  getGeometryRevision(id: string): number | undefined;
 }>;
+
+export type RetainedSceneMirrorOptions = Readonly<{ pathNodes: PathNodeSupport }>;
 
 export type ScenePendingChangeState = Readonly<{
   sceneChanged: boolean;
@@ -48,7 +54,10 @@ type OwnedScene = Readonly<{
   nodes: ReadonlyMap<string, RenderNodeSnapshot>;
   nodeList: readonly RenderNodeSnapshot[];
   rootOrder: readonly string[];
+  geometryRevisions: ReadonlyMap<string, number>;
 }>;
+
+let injectNextGeometryRevision: (mirror: RetainedSceneMirror, next: number) => void;
 
 export class RetainedSceneMirror implements RendererSceneSynchronization {
   #scene: OwnedScene | null = null;
@@ -61,9 +70,22 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
   #cameraChanged = false;
   #invalidationToken: symbol | null = null;
   #onInvalidate: () => void;
+  readonly #pathNodes: PathNodeSupport;
+  #nextGeometryRevision = 1;
 
-  public constructor(onInvalidate: () => void = () => undefined) {
+  static {
+    injectNextGeometryRevision = (mirror, next) => {
+      mirror.#nextGeometryRevision = next;
+    };
+  }
+
+  public constructor(
+    onInvalidate: () => void = () => undefined,
+    options: RetainedSceneMirrorOptions = { pathNodes: 'unsupported' },
+  ) {
     this.#onInvalidate = onInvalidate;
+    // Fixed at construction, so validation and replay equality stay stable for the mirror's life.
+    this.#pathNodes = options.pathNodes === 'supported' ? 'supported' : 'unsupported';
   }
 
   public replaceSnapshot(snapshot: RenderSceneSnapshot): SceneApplyResult {
@@ -71,7 +93,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
 
     let input: ValidatedSnapshotInput | null;
     try {
-      input = validateSnapshotShape(snapshot);
+      input = validateSnapshotShape(snapshot, this.#pathNodes);
     } catch {
       input = null;
     }
@@ -117,6 +139,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       candidateNodes,
       input.rootOrder,
     );
+    if (published === null) return this.#invalidScene('invalid-value');
     return appliedResult(published);
   }
 
@@ -129,7 +152,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
 
     let input: ValidatedChangesInput | null;
     try {
-      input = validateChangesShape(changes);
+      input = validateChangesShape(changes, this.#pathNodes);
     } catch {
       input = null;
     }
@@ -176,6 +199,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       candidate.rootOrder,
       this.#scene.sceneEpoch,
     );
+    if (published === null) return this.#invalidScene('invalid-value');
     return appliedResult(published);
   }
 
@@ -217,6 +241,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       nodes: scene.nodeList,
       rootOrder: scene.rootOrder,
       getNode: (id: string) => scene.nodes.get(id),
+      getGeometryRevision: (id: string) => scene.geometryRevisions.get(id),
     });
   }
 
@@ -245,8 +270,11 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     nodes: ReadonlyMap<string, RenderNodeSnapshot>,
     rootOrder: readonly string[],
     sceneEpoch: symbol = Symbol('scene-epoch'),
-  ): OwnedScene {
+  ): OwnedScene | null {
     const ownedNodes = new Map(nodes);
+    const revisions = assignGeometryRevisions(this.#scene, ownedNodes, this.#nextGeometryRevision);
+    // Overflow publishes nothing (P3 V3 contract, section b).
+    if (revisions === null) return null;
     const nodeList = Object.freeze([...ownedNodes.values()].sort(compareNodes));
     const published = Object.freeze({
       sceneEpoch,
@@ -255,7 +283,9 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       nodes: ownedNodes,
       nodeList,
       rootOrder,
+      geometryRevisions: revisions.revisions,
     });
+    this.#nextGeometryRevision = revisions.next;
     this.#scene = published;
     this.#synchronizationStatus = 'synchronized';
     this.#sceneChanged = true;
@@ -271,6 +301,43 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
   #invalidScene(reason: SceneRejectionReason): SceneApplyResult {
     return invalidSceneResult(reason, this.#scene);
   }
+}
+
+/** Test seam for the V3-A2 overflow fixture; not exported from the package index. */
+export function setNextGeometryRevisionForTesting(mirror: RetainedSceneMirror, next: number): void {
+  injectNextGeometryRevision(mirror, next);
+}
+
+/**
+ * P3 V3 contract, section b: a published path node keeps the resident node's revision when the
+ * resident node with the same id is a path with equal verbs and points; otherwise it takes the
+ * next counter value. Returns null when a value above Number.MAX_SAFE_INTEGER would be needed.
+ */
+function assignGeometryRevisions(
+  resident: OwnedScene | null,
+  nodes: ReadonlyMap<string, RenderNodeSnapshot>,
+  nextRevision: number,
+): Readonly<{ revisions: ReadonlyMap<string, number>; next: number }> | null {
+  const revisions = new Map<string, number>();
+  let next = nextRevision;
+  for (const id of [...nodes.keys()].sort(compareOrdinal)) {
+    const node = nodes.get(id)!;
+    if (node.kind !== 'path') continue;
+    const previous = resident?.nodes.get(id);
+    const previousRevision = resident?.geometryRevisions.get(id);
+    if (
+      previous?.kind === 'path' &&
+      previousRevision !== undefined &&
+      pathDataEquals(previous.geometry, node.geometry)
+    ) {
+      revisions.set(id, previousRevision);
+      continue;
+    }
+    if (next > Number.MAX_SAFE_INTEGER) return null;
+    revisions.set(id, next);
+    next += 1;
+  }
+  return Object.freeze({ revisions, next });
 }
 
 /** Production transition logic is separately callable for the controlled overflow fixture. */
@@ -461,6 +528,10 @@ function identitiesEqual(left: SceneIdentity, right: SceneIdentity): boolean {
 function intersects<T>(left: ReadonlySet<T>, right: ReadonlySet<T>): boolean {
   for (const value of left) if (right.has(value)) return true;
   return false;
+}
+
+function compareOrdinal(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function compareNodes(left: RenderNodeSnapshot, right: RenderNodeSnapshot): number {

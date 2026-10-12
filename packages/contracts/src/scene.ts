@@ -23,6 +23,16 @@ export type PrimitiveGeometry =
     }>
   | Readonly<{ kind: 'ellipse'; width: number; height: number }>
   | Readonly<{ kind: 'line'; start: ScenePoint; end: ScenePoint }>;
+export type ScenePathVerb = 'move' | 'line' | 'cubic' | 'close';
+export type SceneFillRule = 'nonzero' | 'evenodd';
+export type ScenePathGeometry = Readonly<{
+  kind: 'path';
+  verbs: readonly ScenePathVerb[];
+  /** Interleaved node-local x, y. move and line take one point, cubic three, close none. */
+  points: readonly number[];
+  fillRule: SceneFillRule;
+}>;
+export type PathStyle = Readonly<{ fill: SceneColor | null }>;
 export type SceneNodeBase = Readonly<{
   id: string;
   parentId: string | null;
@@ -33,6 +43,7 @@ export type SceneNodeBase = Readonly<{
 export type RenderNodeSnapshot = SceneNodeBase &
   (
     | Readonly<{ kind: 'primitive'; geometry: PrimitiveGeometry; style: PrimitiveStyle }>
+    | Readonly<{ kind: 'path'; geometry: ScenePathGeometry; style: PathStyle }>
     | Readonly<{ kind: 'container'; children: readonly string[] }>
   );
 export type RenderSceneSnapshot = SceneVersion &

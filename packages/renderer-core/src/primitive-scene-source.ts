@@ -16,6 +16,13 @@ import {
   normalizeRectangleRadii,
   writePackedRecord,
 } from './primitive-packing.js';
+import type {
+  DerivedPath,
+  PathMeshDraw,
+  PathMeshFrame,
+  PathMeshPipeline,
+  PathMeshStatistics,
+} from './path-mesh-pipeline.js';
 import type { RetainedSceneMirror, RetainedSceneView } from './scene-mirror.js';
 import {
   composeSceneAffine,
@@ -112,9 +119,12 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     frame: 0,
   };
   #disposed = false;
+  readonly #pathMeshes: PathMeshPipeline | undefined;
+  #pathMeshFrame: PathMeshFrame | null = null;
 
-  public constructor(mirror: RetainedSceneMirror) {
+  public constructor(mirror: RetainedSceneMirror, pathMeshes?: PathMeshPipeline) {
     this.#mirror = mirror;
+    this.#pathMeshes = pathMeshes;
   }
 
   public prepare(target: PrimitiveTarget): PrimitivePacket | null {
@@ -128,12 +138,22 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     if (epochChanged) this.#resetForSnapshot(scene);
     else this.#reconcileSlots(scene);
 
-    const derived = derivePrimitives(scene, this.#slots, this.#derivedCache);
+    const paths: DerivedPath[] = [];
+    const derived = derivePrimitives(scene, this.#slots, this.#derivedCache, paths);
     const visible = cullPrimitives(
       derived.filter((entry) => !entry.hidden && !entry.omitted),
       cameraState.camera,
       target,
     );
+    // P3 V3 section b: port results are published before any packing, so a later packing
+    // error never repeats a port call.
+    const pathDraws: readonly PathMeshDraw[] =
+      this.#pathMeshes?.prepare({
+        paths,
+        geometryRevision: (id) => scene.getGeometryRevision(id),
+        camera: cameraState.camera,
+        target,
+      }) ?? [];
     let origin = this.#selectOrigin(cameraState.camera, visible, target);
     let rebased =
       this.#origin === null || origin.x !== this.#origin.x || origin.y !== this.#origin.y;
@@ -194,7 +214,28 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       frame: Object.freeze({ ...target }),
     });
     this.#pending = Object.freeze({ packet, expected: expectedRecords(writes) });
+    if (this.#pathMeshes !== undefined) {
+      // V3a keeps the served paths and the notices of this packet on the CPU side; V3b moves
+      // them into the optional packet mesh part. Notices leave the queue only here, so a
+      // throwing prepare keeps them for the next packet.
+      this.#pathMeshFrame = Object.freeze({
+        draws: pathDraws,
+        notices: this.#pathMeshes.takePacketNotices(),
+      });
+    }
     return packet;
+  }
+
+  /**
+   * V3a CPU view of the latest packet's path meshes and notices; null before the first one.
+   * @internal Replaced by the V3b packet mesh part.
+   */
+  public getPathMeshFrame(): PathMeshFrame | null {
+    return this.#pathMeshFrame;
+  }
+
+  public getPathMeshStatistics(): PathMeshStatistics | null {
+    return this.#pathMeshes?.getStatistics() ?? null;
   }
 
   public acknowledge(receipt: PrimitiveReceipt): void {
@@ -244,6 +285,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     this.#pending = null;
     this.#derivedCache.clear();
     this.#packingKeys.clear();
+    this.#pathMeshes?.dispose();
+    this.#pathMeshFrame = null;
   }
 
   #resetForSnapshot(scene: RetainedSceneView): void {
@@ -530,6 +573,7 @@ function derivePrimitives(
   scene: RetainedSceneView,
   slots: ReadonlyMap<string, number>,
   cache: Map<string, DerivedCacheEntry>,
+  paths: DerivedPath[],
 ): DerivedPrimitive[] {
   const result: DerivedPrimitive[] = [];
   const present = new Set<string>();
@@ -577,6 +621,24 @@ function derivePrimitives(
           parentHidden: hidden,
         });
       }
+      continue;
+    }
+    if (node.kind === 'path') {
+      cache.set(
+        node.id,
+        Object.freeze({
+          transform: node.transform,
+          parentWorldVersion: item.parentWorldVersion,
+          worldVersion,
+          world,
+          hidden,
+          localKey: null,
+          localBounds: null,
+          worldBounds: null,
+          omitted: false,
+        }),
+      );
+      paths.push(Object.freeze({ id: node.id, node, world, hidden }));
       continue;
     }
     const localKey = primitiveBoundsKey(node);

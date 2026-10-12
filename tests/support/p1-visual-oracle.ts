@@ -346,6 +346,7 @@ function collectShapes(fixture: VisualFixture): Shape[] {
       for (const child of node.children) visit(child, world, true, opacity * node.opacity);
       return;
     }
+    if (node.kind !== 'primitive') return;
     const geometry = node.geometry;
     const drawableGeometry =
       geometry.kind === 'line'
