@@ -472,6 +472,7 @@ describe('V3b range management (V3-A13, renderer-core part)', () => {
       slot,
       toleranceExponent: -3,
       fringeBucket: null,
+      fringe: null,
       orientation: 1,
       mesh: {
         positions: new Float64Array(2 * vertices),

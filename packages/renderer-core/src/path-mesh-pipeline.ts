@@ -21,6 +21,12 @@ import {
   type PathLinearMap,
 } from './path-buckets.js';
 import {
+  pathFringeBytes,
+  type PathFringe,
+  type PathFringeBuilder,
+  type PathFringeBuildResult,
+} from './path-fringe.js';
+import {
   getPathLocalPointBounds,
   transformSceneBounds,
   type SceneBounds,
@@ -28,8 +34,11 @@ import {
 
 // CPU path-mesh pipeline of the P3 V3 contract: port consumption, batch isolation, exact
 // buckets, the mesh cache, the failure memo and the D8-interim notice queue (unit V3a), plus the
-// geometry-owned K4 offsets and the transform-owned instance lanes of section f (unit V3b). The
-// packet mesh part itself is assembled by path-mesh-packet.ts; V3c adds the fringe builder.
+// geometry-owned K4 offsets and the transform-owned instance lanes of section f (unit V3b), and
+// the fringe variants of section e (unit V3c). The packet mesh part itself is assembled by
+// path-mesh-packet.ts; the exact fringe builder lives in path-fringe.ts.
+
+export type { PathFringe, PathFringeBuilder, PathFringeBuildResult };
 
 type PathNode = Extract<RenderNodeSnapshot, { kind: 'path' }>;
 
@@ -72,6 +81,11 @@ export type PathMeshDraw = Readonly<{
   toleranceExponent: number;
   /** The served fringe variant's f', or null when no fringe builder is installed. */
   fringeBucket: number | null;
+  /**
+   * The served fringe variant (section e), or null for a region-only draw. Only tests install
+   * no builder; the region-only seam is also V4's MSAA baseline of section k.
+   */
+  fringe: Readonly<{ id: symbol; data: PathFringe }> | null;
   orientation: 1 | -1;
   mesh: FillMesh;
   /** Identity of the served cache entry; its GPU ranges live while it is resident. */
@@ -101,13 +115,6 @@ export type PathMeshStatistics = Readonly<{
   portLinearMemoryBytes?: number;
   pathMeshMemoryBytes?: number;
 }>;
-
-/** Fringe-builder seam: V3c installs the exact builder; tests install doubles. */
-export type PathFringeBuildResult =
-  | Readonly<{ status: 'built'; arrays: readonly ArrayBufferView[] }>
-  | Readonly<{ status: 'unsupported' }>
-  | Readonly<{ status: 'range' }>;
-export type PathFringeBuilder = (mesh: FillMesh, fringeBucket: number) => PathFringeBuildResult;
 
 export type PathMeshLimits = Readonly<{
   byteBudget: number;
@@ -153,7 +160,7 @@ export type PathMeshPrepareInput = Readonly<{
   packing: Readonly<{ origin: Readonly<{ x: number; y: number }>; frameFinite: boolean }>;
 }>;
 
-type FringeVariant = Readonly<{ f: number; arrays: readonly ArrayBufferView[]; bytes: number }>;
+type FringeVariant = Readonly<{ id: symbol; f: number; fringe: PathFringe; bytes: number }>;
 type MeshEntry = {
   readonly id: symbol;
   readonly e: number;
@@ -357,6 +364,7 @@ export class PathMeshPipeline {
         continue;
       }
       let fringeBucket: number | null = null;
+      let fringe: PathMeshDraw['fringe'] = null;
       if (this.#fringeBuilder !== undefined) {
         const served = this.#serveFringe(item, entry, this.#fringeBuilder);
         if (served === 'range') {
@@ -365,6 +373,7 @@ export class PathMeshPipeline {
         }
         if (served === 'unsupported') continue;
         fringeBucket = served.f;
+        fringe = Object.freeze({ id: served.id, data: served.fringe });
       }
       draws.push(
         Object.freeze({
@@ -372,6 +381,7 @@ export class PathMeshPipeline {
           slot: this.#slots.get(item.path.id)!,
           toleranceExponent: entry.e,
           fringeBucket,
+          fringe,
           orientation: item.orientation,
           mesh: entry.mesh,
           entryId: entry.id,
@@ -409,11 +419,16 @@ export class PathMeshPipeline {
     return this.#slots;
   }
 
-  /** Identities of every entry currently resident in the mesh cache. */
-  public getResidentEntryIds(): ReadonlySet<symbol> {
+  /** Identities of every resident cache entry and of each entry's built fringe variants. */
+  public getResidentIds(): ReadonlySet<symbol> {
     const ids = new Set<symbol>();
     for (const nodeCache of this.#cache.values()) {
-      for (const entry of nodeCache.entries.values()) ids.add(entry.id);
+      for (const entry of nodeCache.entries.values()) {
+        ids.add(entry.id);
+        for (const variant of entry.variants.values()) {
+          if (variant !== 'unsupported') ids.add(variant.id);
+        }
+      }
     }
     return ids;
   }
@@ -763,9 +778,10 @@ export class PathMeshPipeline {
     const variant =
       built.status === 'built'
         ? Object.freeze({
+            id: Symbol(`path-fringe-${item.path.id}`),
             f: item.f,
-            arrays: Object.freeze([...built.arrays]),
-            bytes: built.arrays.reduce((sum, array) => sum + array.byteLength, 0),
+            fringe: built.fringe,
+            bytes: pathFringeBytes(built.fringe),
           })
         : ('unsupported' as const);
     entry.variants.set(item.f, variant);

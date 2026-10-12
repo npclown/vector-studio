@@ -400,7 +400,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       generation,
       draws: pathDraws,
       slots,
-      resident: pipeline.getResidentEntryIds(),
+      resident: pipeline.getResidentIds(),
       frameLanes: meshFrame,
     });
     return Object.freeze({

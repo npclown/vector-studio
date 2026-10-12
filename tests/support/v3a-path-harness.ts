@@ -17,6 +17,7 @@ import {
   type PathMeshLimits,
   type PathMeshNotice,
 } from '../../packages/renderer-core/src/path-mesh-pipeline.js';
+import type { PathFringe } from '../../packages/renderer-core/src/path-fringe.js';
 import { PrimitiveSceneSource } from '../../packages/renderer-core/src/primitive-scene-source.js';
 import { RetainedSceneMirror } from '../../packages/renderer-core/src/scene-mirror.js';
 
@@ -287,4 +288,22 @@ export function createPathHarness(
     statistics: () => pipeline.getStatistics(),
     setZoom: (zoom: number, position = { x: 0, y: 0 }) => mirror.setCamera({ position, zoom }),
   };
+}
+
+/** A fringe-builder double's variant: the given owned arrays and no real geometry. */
+export function fringeDouble(
+  corners: Float32Array,
+  triangles: Uint32Array,
+  lists: Uint32Array = new Uint32Array(0),
+  features: Uint32Array = new Uint32Array(0),
+): PathFringe {
+  return Object.freeze({
+    corners,
+    triangles,
+    lists,
+    features,
+    regionTriangles: triangles.length / 8,
+    exteriorTriangles: 0,
+    droppedExterior: 0,
+  });
 }

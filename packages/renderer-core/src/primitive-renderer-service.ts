@@ -17,6 +17,7 @@ import type {
   PrimitiveReceipt,
   PrimitiveTarget,
 } from './primitive-packet.js';
+import { buildPathFringe } from './path-fringe.js';
 import { PathMeshPipeline, type PathMeshStatistics } from './path-mesh-pipeline.js';
 import { PrimitiveSceneSource } from './primitive-scene-source.js';
 import { RetainedSceneMirror } from './scene-mirror.js';
@@ -58,7 +59,12 @@ export class PrimitiveRendererService
       this.#mirror,
       port === undefined
         ? undefined
-        : new PathMeshPipeline(memoryBytes === undefined ? { port } : { port, memoryBytes }),
+        : new PathMeshPipeline({
+            port,
+            // P3 V3 section e: the exact fringe builder, a D8-interim placement (V3-Q3 c).
+            fringeBuilder: buildPathFringe,
+            ...(memoryBytes === undefined ? {} : { memoryBytes }),
+          }),
     );
   }
 

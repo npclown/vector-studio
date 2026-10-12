@@ -9,6 +9,7 @@ import {
 } from '@vector-studio/contracts';
 import { describe, expect, it } from 'vitest';
 import { E_MAX } from '../../packages/renderer-core/src/path-buckets.js';
+import { buildPathFringe, pathFringeBytes } from '../../packages/renderer-core/src/path-fringe.js';
 import {
   PATH_MESH_LIMITS,
   pathMeshNoticeDiagnostic,
@@ -24,6 +25,7 @@ import {
   createPathHarness,
   createRangePort,
   failedResult,
+  fringeDouble,
   identity,
   meshBytes,
   okResult,
@@ -329,6 +331,16 @@ describe('V3a cache accounting and eviction', () => {
   ];
   const fringeBytes = (f: number) =>
     fringeArrays(f).reduce((sum, array) => sum + array.byteLength, 0);
+  // V3c: the seam returns a structured fringe; the double's four arrays are its owned arrays.
+  const fringeOf = (f: number) => {
+    const [corners, triangles, lists, features] = fringeArrays(f) as [
+      Float32Array,
+      Uint32Array,
+      Uint32Array,
+      Uint32Array,
+    ];
+    return fringeDouble(corners, triangles, lists, features);
+  };
 
   it('V3-A7: bytes equal the sum of owned byteLengths per entry and per fringe variant, corners included', () => {
     const meshes = new Map([
@@ -344,7 +356,7 @@ describe('V3a cache accounting and eviction', () => {
     expect(h.statistics()).toMatchObject({ entries: 2, bytes: expected, peakBytes: expected });
     expect(h.statistics()).not.toHaveProperty('portLinearMemoryBytes');
 
-    const builder: PathFringeBuilder = (_mesh, f) => ({ status: 'built', arrays: fringeArrays(f) });
+    const builder: PathFringeBuilder = (_mesh, f) => ({ status: 'built', fringe: fringeOf(f) });
     const withFringe = createPathHarness({
       port: createCountingPort(),
       nodes: [pathNode('a', 0)],
@@ -382,10 +394,14 @@ describe('V3a cache accounting and eviction', () => {
     });
     service.replaceSnapshot({ identity, revision: 1, nodes: [pathNode('a', 0)], rootOrder: ['a'] });
     service.prepare(target);
+    // V3c: the service installs the exact fringe builder, so its entry also owns one variant.
+    const fringe = buildPathFringe(squareMesh(), 1);
+    if (fringe.status !== 'built') throw new Error('square fringe not built');
+    const bytes = 152 + pathFringeBytes(fringe.fringe);
     expect(service.getPathMeshStatistics()).toMatchObject({
-      bytes: 152,
+      bytes,
       portLinearMemoryBytes: 1_024,
-      pathMeshMemoryBytes: 1_176,
+      pathMeshMemoryBytes: bytes + 1_024,
     });
     expect(new PrimitiveRendererService(invalidation).getPathMeshStatistics()).toBeNull();
   });
@@ -435,7 +451,7 @@ describe('V3a cache accounting and eviction', () => {
     const built: number[] = [];
     const builder: PathFringeBuilder = (_mesh, f) => {
       built.push(f);
-      return { status: 'built', arrays: fringeArrays(f) };
+      return { status: 'built', fringe: fringeOf(f) };
     };
     const port = createCountingPort();
     const h = createPathHarness({ port, nodes: [pathNode('a', 0)], fringeBuilder: builder });
@@ -748,7 +764,7 @@ describe('V3a failure classes, memo and notices', () => {
       built.push(f);
       return f === 1
         ? { status: 'unsupported' }
-        : { status: 'built', arrays: [new Float32Array(8)] };
+        : { status: 'built', fringe: fringeDouble(new Float32Array(8), new Uint32Array(8)) };
     };
     const port = createCountingPort();
     const h = createPathHarness({ port, nodes: [pathNode('a', 0)], fringeBuilder: builder });
@@ -986,7 +1002,13 @@ describe('V3a device loss, ownership and host injection', () => {
     };
     walk(root);
     expect(files.length).toBeGreaterThan(0);
-    for (const file of files) {
+    // V3c: the V3-A14 smoke fixture page is a test fixture with a static test-double port, not
+    // a host; it must not reach a real port (no geometry-wasm). V4 replaces this exemption.
+    const fixture = files.filter((file) => /p3-v3-mesh\.(ts|html)$/.test(file));
+    expect(fixture).toHaveLength(2);
+    for (const file of fixture)
+      expect(readFileSync(file, 'utf8'), file).not.toMatch(/geometry-wasm/);
+    for (const file of files.filter((candidate) => !fixture.includes(candidate))) {
       expect(readFileSync(file, 'utf8'), file).not.toMatch(/fillMesh|geometry-wasm/);
     }
   });
