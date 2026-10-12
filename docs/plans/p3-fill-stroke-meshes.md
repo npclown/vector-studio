@@ -14,7 +14,7 @@ The P3.1p precision-certificate line below is **parked** at its frozen T04 contr
 | Checkpoint                           | Tier                                           | State                                                                                                           | Evidence or contract                                                                    |
 | ------------------------------------ | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | V1 path scene and port proposal      | Full                                           | APPROVED 2026-10-08; ADR 0002 accepted                                                                          | [V1 proposal](p3-v1-path-scene-port-proposal.md)                                        |
-| V2 fill-mesh export, transport v0    | Full (ABI)                                     | Contract FROZEN 2026-10-12, no user decisions; implementation next                                              | [V2 contract](p3-v2-fill-mesh-transport-contract.md)                                    |
+| V2 fill-mesh export, transport v0    | Full (ABI)                                     | Contract FROZEN 2026-10-12; implemented locally, evidence review and PR pending; precision UNVERIFIED           | [V2 contract](p3-v2-fill-mesh-transport-contract.md), [evidence](#v2-implementation)    |
 | V3 renderer mesh pipeline, fill only | Full (draw contract)                           | Contract APPROVED 2026-10-12 (V3-Q1 a, V3-Q2 a, V3-Q3 c); implementation in units V3a, V3b, V3c                 | [V3 contract](p3-v3-renderer-mesh-pipeline-contract.md)                                 |
 | V4 playground path page              | Light                                          | Not started; after V2 and V3                                                                                    | —                                                                                       |
 | B0 performance feasibility           | Full (benchmark contract with a decision rule) | Contract FROZEN; runner merged; reference run pending (a 2026-10-12 attempt was stopped by the user, no record) | [B0 contract](p3-b0-feasibility-benchmark-contract.md), [runner](#b0-runner-light-tier) |
@@ -25,7 +25,28 @@ The P3.1p precision-certificate line below is **parked** at its frozen T04 contr
 | P3.1p T04 sliver mitigation          | Full                                           | Parked, contract FROZEN                                                                                         | [T04 contract](p3-t04-sliver-mitigation-contract.md)                                    |
 | P3 A01-A08                           | —                                              | All TODO; see the acceptance table                                                                              | [acceptance table](#runtime-acceptance-coverage-to-freeze-in-p30b)                      |
 
-**Next:** V2 implementation under the [frozen V2 contract](p3-v2-fill-mesh-transport-contract.md); V3a after V2 merges, under the [approved V3 contract](p3-v3-renderer-mesh-pipeline-contract.md); the B0 reference run and its independent evidence review, under the [frozen B0 contract](p3-b0-feasibility-benchmark-contract.md#9-follow-on-work-units), when the user schedules it.
+**Next:** the V2 evidence review and PR, then V3a after V2 merges, under the [approved V3 contract](p3-v3-renderer-mesh-pipeline-contract.md); the B0 reference run and its independent evidence review, under the [frozen B0 contract](p3-b0-feasibility-benchmark-contract.md#9-follow-on-work-units), when the user schedules it.
+
+### V2 implementation
+
+Full tier, under the [frozen V2 contract](p3-v2-fill-mesh-transport-contract.md). Functional evidence only: precision is **UNVERIFIED** against the 0.25 physical-pixel target until B4 has A04 evidence. V2 closes no A01-A08 criterion and no C03-C05 item.
+
+Landed: the V1 section b port types in `packages/contracts/src/geometry.ts`; the kernel `fill_v0_*` family (`fill_export.rs`, `FillEngine`, `FILL_V0_LIMITS`, revision 1) beside the unchanged P2 exports, with only the two additive P2-side items of section k item 3; the `createFillMeshPort` adapter in `packages/geometry-wasm/src/fill-adapter.ts`; the P-B1 policy entry and P-B2 contracts purity check with exported evaluation functions; the shared conformance suite C01-C18 with its test double; and `tooling/compare-p2-wasm.mjs` (`pnpm test:p2-identity`) for section k item 6.
+
+Local evidence, 2026-10-12, Windows 11, pinned Rust 1.94.1, Node 24.15.0:
+
+- `pnpm test:geometry`: PASS. Kernel fmt and clippy clean; native `cargo test` 227 passed, 18 ignored, including 21 `fill_export_tests` (framing rejections, the exhaustive mapping table and one fixture per reachable row, cascade order, capacity retry with exact `required_output_bytes`, transport caps at limit and limit + 1, epochs and exhaustion, dispose, workspace construction failure, self-check recovery, zero allocation in `process`, both hanging fixtures); geometry vitest 43 files passed, 4 skipped; 733 tests passed, 6 skipped, including `fill-adapter.test.ts` (52) and the WASM conformance run (20). The independent-build reproducibility check passed.
+- `pnpm test:unit`: 57 files, 600 tests passed, including the double conformance run (20), the mesh-check positive controls (5) and the P-B1/P-B2 fixtures (`fill-port-boundaries.test.ts`).
+- `pnpm check:boundaries`: PASS, including contracts purity.
+- `pnpm test:p2-identity`: PASS. Merge base c4f2560; 10,048 differential batches, 10,047 with published output, 153,299,036 output bytes identical between main's and V2's release WASM.
+
+Interpretations recorded for review:
+
+- Mapping rows reached by a native fixture: sizing `NUMERIC_RANGE` and `WORK_LIMIT`, `SourceLimit`, `CommandLimit`, `UnsupportedSource`, `ZeroLengthLeaf`, `Topology(Unresolved)` in both cascade steps, `Topology(KnotMismatch)` retried, and `Rounded(TopologyAmbiguous)`. No fixture was found for the topology and rounded work-limit rows under today's caps; those rows, and every internal row, are covered by the exhaustive table test of the mapping function.
+- The section f test-side check uses the exact `inspectTriangleMesh` and `classifyLineFill` of `geometry-reference` as oracles and recomputes orientation, conformity and the used-once edge multiset in exact integer arithmetic in the test helper, because the reference package does not export a bare orientation predicate. Region-boundary equality is checked by exact samples on each listed edge and by coverage of every oracle-boundary span of the source edges.
+- The kernel zeroes the output header at the start of each `fill_v0_process`, so a stale header never survives a failed call; the adapter never reads it without `result_len > 0`.
+- The P2 identity comparison drives the P2 v1 exports directly so that whole output byte streams are compared.
+- `pnpm check` stops at `format:check` on the untracked, user-owned `.claude/launch.json`; every other step of it passes when run individually.
 
 ### B0 runner (light tier)
 

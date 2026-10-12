@@ -5,6 +5,8 @@ mod codec;
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 mod cubic_fill;
 mod engine;
+// P3 D8 V2 fill-mesh transport v0, beside the unchanged P2 ABI v1.
+mod fill_export;
 // P3 symbolic ordering has no P2 v1 caller or WASM export.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 mod fill_event_order;
@@ -36,6 +38,8 @@ mod p3_b0_diag;
 
 #[cfg(test)]
 mod fill_event_order_tests;
+#[cfg(test)]
+mod fill_export_tests;
 #[cfg(test)]
 mod fill_intersections_tests;
 #[cfg(test)]
@@ -159,6 +163,98 @@ pub extern "C" fn statistics_ptr() -> u32 {
 #[no_mangle]
 pub extern "C" fn dispose() -> u32 {
     with_engine(Engine::dispose)
+}
+
+// P3 D8 V2 fill-mesh transport v0 (docs/plans/p3-v2-fill-mesh-transport-contract.md).
+// A second module-level engine; it shares no state with GLOBAL_ENGINE.
+#[cfg(target_arch = "wasm32")]
+struct GlobalFillEngine(UnsafeCell<fill_export::FillEngine>);
+
+// Same single-threaded, non-reentrant rule as GlobalEngine.
+#[cfg(target_arch = "wasm32")]
+unsafe impl Sync for GlobalFillEngine {}
+
+#[cfg(target_arch = "wasm32")]
+static GLOBAL_FILL_ENGINE: GlobalFillEngine =
+    GlobalFillEngine(UnsafeCell::new(fill_export::FillEngine::new()));
+
+#[cfg(target_arch = "wasm32")]
+fn with_fill_engine<T>(f: impl FnOnce(&mut fill_export::FillEngine) -> T) -> T {
+    // SAFETY: the fill ABI permits one single-threaded, non-reentrant caller.
+    // No reference to the FillEngine escapes this function.
+    unsafe { f(&mut *GLOBAL_FILL_ENGINE.0.get()) }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn fill_v0_version() -> u32 {
+    fill_export::FILL_V0_VERSION
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn fill_v0_revision() -> u32 {
+    fill_export::FILL_V0_REVISION
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn fill_v0_reserve(input_bytes: u32, output_bytes: u32) -> u32 {
+    with_fill_engine(|engine| engine.reserve(input_bytes, output_bytes))
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn fill_v0_input_ptr() -> u32 {
+    with_fill_engine(fill_export::FillEngine::input_ptr)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn fill_v0_input_capacity() -> u32 {
+    with_fill_engine(fill_export::FillEngine::input_capacity)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn fill_v0_output_ptr() -> u32 {
+    with_fill_engine(fill_export::FillEngine::output_ptr)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn fill_v0_output_capacity() -> u32 {
+    with_fill_engine(fill_export::FillEngine::output_capacity)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn fill_v0_memory_epoch() -> u32 {
+    with_fill_engine(fill_export::FillEngine::memory_epoch)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn fill_v0_process(input_length: u32) -> u32 {
+    with_fill_engine(|engine| engine.process(input_length))
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn fill_v0_result_len() -> u32 {
+    with_fill_engine(fill_export::FillEngine::result_len)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn fill_v0_required_output_bytes() -> u32 {
+    with_fill_engine(fill_export::FillEngine::required_output_bytes)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn fill_v0_dispose() -> u32 {
+    with_fill_engine(fill_export::FillEngine::dispose)
 }
 
 #[cfg(test)]

@@ -31,6 +31,7 @@
     "test:gpu:p3-o02": "playwright test --config playwright.p3-o02.config.ts",
     "test:geometry": "node tooling/test-geometry.mjs",
     "test:geometry:browser": "node tooling/test-geometry-browser.mjs",
+    "test:p2-identity": "node tooling/compare-p2-wasm.mjs",
     "test:unit": "vitest run",
     "typecheck": "tsc --build"
   },
