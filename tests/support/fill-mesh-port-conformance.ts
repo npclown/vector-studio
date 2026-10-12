@@ -538,7 +538,10 @@ export function describeFillMeshPortConformance(
         }));
     }
 
-    it('C16 reports work-limit for 65,537 LINE verbs', () =>
+    // MOVE + 65,536 LINE = 65,537 output verbs, one above P2's frozen 65,536 output verbs per
+    // path (P2 counts the MOVE). Today the fill export's cheap source cap (SourceLimit) fires
+    // first; both map to work-limit, so the case holds whatever B1 does to the caps.
+    it('C16 reports work-limit for MOVE + 65,536 LINE (65,537 output verbs)', () =>
       withPort(({ port }) => {
         expect(FILL_CONFORMANCE_PATHS.longLines.verbs).toHaveLength(65_537);
         expect(single(port, request(1, 'longLines', 'nonzero', 0))).toEqual({

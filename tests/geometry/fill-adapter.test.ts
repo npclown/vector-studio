@@ -4,11 +4,13 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   createFillMeshPort,
   createGeometrySession,
+} from '../../packages/geometry-wasm/src/index.js';
+import {
+  createFillMeshPortFromExports,
   FILL_V0_OPERATION_ID,
   FILL_V0_REVISION,
   type FillKernelExports,
-} from '../../packages/geometry-wasm/src/index.js';
-import { createFillMeshPortFromExports } from '../../packages/geometry-wasm/src/fill-adapter.js';
+} from '../../packages/geometry-wasm/src/fill-adapter.js';
 
 // P3 V2 contract section h: adapter validation, batch-level precedence, the
 // kernel self-check rule and every fail-closed trigger through wrapped export
@@ -278,18 +280,24 @@ describe('fill-v0 adapter batch rules', () => {
 type Wrap = (real: FillKernelExports) => Partial<FillKernelExports>;
 
 /** Runs one batch through wrapped exports and expects a fail-closed outcome. */
-async function expectFailClosed(name: string, wrap: Wrap): Promise<void> {
+async function expectFailClosed(name: string, reason: string, wrap: Wrap): Promise<void> {
   const real = await kernel();
   let disposes = 0;
-  const adapter = createFillMeshPortFromExports({
-    ...real,
-    ...wrap(real),
-    fill_v0_dispose: () => {
-      disposes += 1;
-      return real.fill_v0_dispose();
+  const reasons: string[] = [];
+  const adapter = createFillMeshPortFromExports(
+    {
+      ...real,
+      ...wrap(real),
+      fill_v0_dispose: () => {
+        disposes += 1;
+        return real.fill_v0_dispose();
+      },
     },
-  });
+    { onFailClosed: (breach) => reasons.push(breach) },
+  );
   expect(adapter.buildFillMeshes([square(), grammarError()]), name).toEqual(INTERNAL);
+  expect(reasons, name).toHaveLength(1);
+  expect(reasons[0], name).toContain(reason);
   expect(disposes, name).toBe(1);
   expect(adapter.buildFillMeshes([square()]), name).toEqual(DISPOSED);
   expect(adapter.buildFillMeshes([]), name).toEqual(DISPOSED);
@@ -330,21 +338,29 @@ describe('fill-v0 adapter fails closed', () => {
   const FAILED_RECORD = 144;
   const BLOCK = 224;
 
-  const triggers: readonly [string, Wrap][] = [
+  // Each trigger names the adapter check it must reach, so a different
+  // breach cannot satisfy it.
+  const COUNTS = 'an OK record has inconsistent counts or offsets';
+  const HEADER = 'output header is inconsistent';
+  const NON_OK = 'a non-OK record carries mesh fields';
+  const REQUIREMENT = 'OUTPUT_CAPACITY without a larger exact requirement';
+  const triggers: readonly [string, string, Wrap][] = [
     [
       'WASM trap',
+      'unreachable',
       () => ({
         fill_v0_process: () => {
           throw new WebAssembly.RuntimeError('unreachable');
         },
       }),
     ],
-    ['non-u32 status', fakeProcess(-1)],
-    ['fractional status', fakeProcess(1.5)],
-    ['unknown status', fakeProcess(7)],
-    ['INVALID_BATCH', fakeProcess(1)],
+    ['non-u32 status', 'kernel returned a non-u32 status', fakeProcess(-1)],
+    ['fractional status', 'kernel returned a non-u32 status', fakeProcess(1.5)],
+    ['unknown status', 'process returned status 7', fakeProcess(7)],
+    ['INVALID_BATCH', 'process returned status 1', fakeProcess(1)],
     [
       'reserve INTERNAL_ERROR',
+      'reserve returned status 6',
       (real) => ({
         fill_v0_reserve: () => {
           real.fill_v0_reserve(0, 0);
@@ -354,6 +370,7 @@ describe('fill-v0 adapter fails closed', () => {
     ],
     [
       'reserve INVALID_BATCH',
+      'reserve returned status 1',
       (real) => ({
         fill_v0_reserve: () => {
           real.fill_v0_reserve(0, 0);
@@ -363,6 +380,7 @@ describe('fill-v0 adapter fails closed', () => {
     ],
     [
       'second OUTPUT_CAPACITY',
+      'second OUTPUT_CAPACITY after an exact reserve',
       (real) => {
         let converted = false;
         return {
@@ -379,24 +397,29 @@ describe('fill-v0 adapter fails closed', () => {
     ],
     [
       'OUTPUT_CAPACITY with zero requirement',
+      REQUIREMENT,
       fakeProcess(2, () => ({ fill_v0_required_output_bytes: () => 0 })),
     ],
     [
       'OUTPUT_CAPACITY not larger than the capacity',
+      REQUIREMENT,
       fakeProcess(2, (real) => ({
         fill_v0_required_output_bytes: () => real.fill_v0_output_capacity(),
       })),
     ],
     [
       'OUTPUT_CAPACITY above the cap',
+      REQUIREMENT,
       fakeProcess(2, () => ({ fill_v0_required_output_bytes: () => 256 * 1024 * 1024 + 8 })),
     ],
     [
       'RESOURCE_LIMIT with a requirement',
+      'RESOURCE_LIMIT published an output requirement',
       fakeProcess(5, () => ({ fill_v0_required_output_bytes: () => 8 })),
     ],
     [
       'epoch advanced twice',
+      'memory epoch did not advance exactly once',
       (real) => ({
         fill_v0_process: (length) => {
           idleProcess(real);
@@ -404,42 +427,129 @@ describe('fill-v0 adapter fails closed', () => {
         },
       }),
     ],
-    ['epoch not advanced', () => ({ fill_v0_process: () => 0 })],
+    [
+      'epoch not advanced',
+      'memory epoch did not advance exactly once',
+      (real) => {
+        let reported: number | null = null;
+        return {
+          fill_v0_process: (length) => {
+            const before = real.fill_v0_memory_epoch();
+            const status = real.fill_v0_process(length);
+            reported = before;
+            return status;
+          },
+          fill_v0_memory_epoch: () => reported ?? real.fill_v0_memory_epoch(),
+        };
+      },
+    ],
     [
       'storage changed during process',
+      'process changed linear-memory storage',
       (real) => ({
-        fill_v0_process: () => real.fill_v0_reserve(1 << 20, 1 << 20),
+        fill_v0_process: (length) => {
+          const status = real.fill_v0_process(length);
+          real.memory.grow(1);
+          return status;
+        },
       }),
     ],
-    ['failure published a result', fakeProcess(6, () => ({ fill_v0_result_len: () => 64 }))],
-    ['result length below the header', corrupt(() => undefined)],
-    ['header magic', corrupt((view) => view.setUint32(0, 0, true))],
-    ['header version', corrupt((view) => view.setUint32(4, 1, true))],
-    ['header total', corrupt((view) => view.setUint32(8, 0, true))],
-    ['header path count', corrupt((view) => view.setUint32(12, 3, true))],
-    ['header results offset', corrupt((view) => view.setUint32(16, 72, true))],
-    ['header data offset', corrupt((view) => view.setUint32(20, BLOCK + 8, true))],
-    ['header reserved', corrupt((view) => view.setUint32(24, 1, true))],
-    ['request echo', corrupt((view) => view.setUint32(OK_RECORD, 99, true))],
-    ['exponent echo', corrupt((view) => view.setInt32(OK_RECORD + 8, 5, true))],
-    ['unknown path status', corrupt((view) => view.setUint32(FAILED_RECORD + 4, 9, true))],
-    ['record reserved', corrupt((view) => view.setUint32(OK_RECORD + 12, 1, true))],
-    ['record tail reserved', corrupt((view) => view.setUint32(OK_RECORD + 40, 1, true))],
-    ['OK with zero vertices', corrupt((view) => view.setUint32(OK_RECORD + 20, 0, true))],
-    ['OK with zero indices', corrupt((view) => view.setUint32(OK_RECORD + 24, 0, true))],
-    ['index count not a multiple of 3', corrupt((view) => view.setUint32(OK_RECORD + 24, 5, true))],
-    ['odd boundary count', corrupt((view) => view.setUint32(OK_RECORD + 28, 7, true))],
-    ['non-contiguous block', corrupt((view) => view.setUint32(OK_RECORD + 16, BLOCK + 8, true))],
-    ['wrong block bytes', corrupt((view) => view.setUint32(OK_RECORD + 32, 128, true))],
-    ['OK status turned empty', corrupt((view) => view.setUint32(OK_RECORD + 4, 1, true))],
-    ['non-OK record count', corrupt((view) => view.setUint32(FAILED_RECORD + 20, 1, true))],
-    ['non-OK record bounds', corrupt((view) => view.setFloat64(FAILED_RECORD + 48, 1, true))],
-    ['index out of range', corrupt((view) => view.setUint32(BLOCK + 64, 4, true))],
-    ['boundary index out of range', corrupt((view) => view.setUint32(BLOCK + 88, 4, true))],
-    ['non-finite position', corrupt((view) => view.setFloat64(BLOCK, Number.NaN, true))],
-    ['bounds mismatch', corrupt((view) => view.setFloat64(OK_RECORD + 48, -1, true))],
+    [
+      'failure published a result',
+      'a failure published a readable result',
+      fakeProcess(6, () => ({ fill_v0_result_len: () => 64 })),
+    ],
+    [
+      'result length below the header',
+      'OK published an invalid result length',
+      (real) => ({
+        fill_v0_result_len: () => (real.fill_v0_result_len() === 0 ? 0 : 8),
+      }),
+    ],
+    ['header magic', HEADER, corrupt((view) => view.setUint32(0, 0, true))],
+    ['header version', HEADER, corrupt((view) => view.setUint32(4, 1, true))],
+    ['header total', HEADER, corrupt((view) => view.setUint32(8, 0, true))],
+    ['header path count', HEADER, corrupt((view) => view.setUint32(12, 3, true))],
+    ['header results offset', HEADER, corrupt((view) => view.setUint32(16, 72, true))],
+    ['header data offset', HEADER, corrupt((view) => view.setUint32(20, BLOCK + 8, true))],
+    [
+      'header reserved',
+      'output header reserved field is set',
+      corrupt((view) => view.setUint32(24, 1, true)),
+    ],
+    [
+      'request echo',
+      'result echo differs from the request',
+      corrupt((view) => view.setUint32(OK_RECORD, 99, true)),
+    ],
+    [
+      'exponent echo',
+      'result echo differs from the request',
+      corrupt((view) => view.setInt32(OK_RECORD + 8, 5, true)),
+    ],
+    [
+      'unknown path status',
+      'unknown path status 9',
+      corrupt((view) => view.setUint32(FAILED_RECORD + 4, 9, true)),
+    ],
+    [
+      'record reserved',
+      'record reserved field is set',
+      corrupt((view) => view.setUint32(OK_RECORD + 12, 1, true)),
+    ],
+    [
+      'record tail reserved',
+      'record reserved field is set',
+      corrupt((view) => view.setUint32(OK_RECORD + 40, 1, true)),
+    ],
+    ['OK with zero vertices', COUNTS, corrupt((view) => view.setUint32(OK_RECORD + 20, 0, true))],
+    ['OK with zero indices', COUNTS, corrupt((view) => view.setUint32(OK_RECORD + 24, 0, true))],
+    [
+      'index count not a multiple of 3',
+      COUNTS,
+      corrupt((view) => view.setUint32(OK_RECORD + 24, 5, true)),
+    ],
+    ['odd boundary count', COUNTS, corrupt((view) => view.setUint32(OK_RECORD + 28, 7, true))],
+    [
+      'non-contiguous block',
+      COUNTS,
+      corrupt((view) => view.setUint32(OK_RECORD + 16, BLOCK + 8, true)),
+    ],
+    [
+      'wrong block bytes',
+      'an OK block has an inconsistent size',
+      corrupt((view) => view.setUint32(OK_RECORD + 32, 128, true)),
+    ],
+    ['OK status turned empty', NON_OK, corrupt((view) => view.setUint32(OK_RECORD + 4, 1, true))],
+    ['non-OK record count', NON_OK, corrupt((view) => view.setUint32(FAILED_RECORD + 20, 1, true))],
+    [
+      'non-OK record bounds',
+      NON_OK,
+      corrupt((view) => view.setFloat64(FAILED_RECORD + 48, 1, true)),
+    ],
+    [
+      'index out of range',
+      'an index is outside the vertices',
+      corrupt((view) => view.setUint32(BLOCK + 64, 4, true)),
+    ],
+    [
+      'boundary index out of range',
+      'a boundary index is outside the vertices',
+      corrupt((view) => view.setUint32(BLOCK + 88, 4, true)),
+    ],
+    [
+      'non-finite position',
+      'a position is not finite',
+      corrupt((view) => view.setFloat64(BLOCK, Number.NaN, true)),
+    ],
+    [
+      'bounds mismatch',
+      'bounds differ from the recomputed vertex bounds',
+      corrupt((view) => view.setFloat64(OK_RECORD + 48, -1, true)),
+    ],
     [
       'total beyond the blocks',
+      'output total differs from the blocks',
       (real) => ({
         fill_v0_reserve: (input, output) => real.fill_v0_reserve(input, output + 64),
         fill_v0_process: (length) => {
@@ -458,25 +568,19 @@ describe('fill-v0 adapter fails closed', () => {
     ],
   ];
 
-  for (const [name, wrap] of triggers) {
-    it(name, async () => {
-      if (name === 'result length below the header') {
-        await expectFailClosed(name, (real) => ({
-          fill_v0_result_len: () => (real.fill_v0_result_len() === 0 ? 0 : 8),
-        }));
-        return;
-      }
-      await expectFailClosed(name, wrap);
-    });
+  for (const [name, reason, wrap] of triggers) {
+    it(name, () => expectFailClosed(name, reason, wrap));
   }
 
   it('fails closed before calling the kernel on an exhausted epoch', async () => {
     const real = await kernel();
-    const adapter = createFillMeshPortFromExports({
-      ...real,
-      fill_v0_memory_epoch: () => 0xffff_ffff,
-    });
+    const reasons: string[] = [];
+    const adapter = createFillMeshPortFromExports(
+      { ...real, fill_v0_memory_epoch: () => 0xffff_ffff },
+      { onFailClosed: (breach) => reasons.push(breach) },
+    );
     expect(adapter.buildFillMeshes([square()])).toEqual(INTERNAL);
+    expect(reasons).toEqual(['fill memory epoch is exhausted']);
     expect(adapter.buildFillMeshes([square()])).toEqual(DISPOSED);
   });
 });

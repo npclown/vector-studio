@@ -678,7 +678,9 @@ fn reachable_mapping_rows_have_fixtures() {
         .cubic_to([0.0, 64.0, 64.0, 64.0, 64.0, 0.0])
         .close();
     assert_eq!(status_of(fine), FILL_PATH_WORK_LIMIT);
-    // P2's frozen 65,536 output verbs per path, independent of B1.
+    // MOVE + 65,536 LINE = 65,537 output verbs, above P2's frozen 65,536 per
+    // path (P2 counts the MOVE); today SourceLimit fires first. Both map to
+    // work-limit, independent of B1.
     let mut long = TestPath::new(4, NONZERO, 0).move_to(0.0, 0.0);
     for index in 0..65_536 {
         long = long.line_to(f64::from(index % 7), f64::from(index % 5));
@@ -1326,6 +1328,19 @@ fn request_echo_and_record_fields_are_little_endian() {
     assert_eq!(decoded[2].exponent, 7);
 }
 
+/// The line-only star polygon {13/6}, radius 100, rounded to integers.
+fn star_13_6() -> TestPath {
+    let points = [
+        100.0, 0.0, -97.0, 24.0, 89.0, -46.0, -75.0, 66.0, 57.0, -82.0, -35.0, 94.0, 12.0, -99.0,
+        12.0, 99.0, -35.0, -94.0, 57.0, 82.0, -75.0, -66.0, 89.0, 46.0, -97.0, -24.0,
+    ];
+    let mut path = TestPath::new(1, NONZERO, -3).move_to(points[0], points[1]);
+    for pair in points[2..].chunks_exact(2) {
+        path = path.line_to(pair[0], pair[1]);
+    }
+    path.close()
+}
+
 /// The legacy attempt's kernel value: `Ok(flat_status)` or the error.
 fn legacy_value(path: &TestPath) -> Result<u32, CubicFillError> {
     let mut workspace = CubicFillWorkspace::new(FILL_V0_LIMITS).unwrap();
@@ -1387,6 +1402,14 @@ fn mapping_row_fixtures_reach_their_kernel_values() {
                 .cubic_to([0.0, 64.0, 64.0, 64.0, 64.0, 0.0])
                 .close(),
             Err(CubicFillError::CommandLimit),
+            FILL_PATH_WORK_LIMIT,
+        ),
+        (
+            // Current-cap fixture (B1 may re-baseline): the line-only star
+            // polygon {13/6} of radius 100 exceeds the rounded node cap.
+            "Rounded(NodeLimit) (star polygon {13/6})",
+            star_13_6(),
+            Err(CubicFillError::Rounded(RoundedFillError::NodeLimit)),
             FILL_PATH_WORK_LIMIT,
         ),
         (

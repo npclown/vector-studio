@@ -284,7 +284,10 @@ class FillMeshKernelAdapter implements FillMeshAdapter {
   private state: MemoryState | null = null;
   private needsReserve = true;
 
-  constructor(kernel: FillKernelExports) {
+  constructor(
+    kernel: FillKernelExports,
+    private readonly onFailClosed: ((reason: string) => void) | undefined,
+  ) {
     this.kernel = kernel;
     this.memory = kernel.memory;
   }
@@ -321,7 +324,7 @@ class FillMeshKernelAdapter implements FillMeshAdapter {
       return this.run(kernel, validated, layout);
     } catch (error) {
       if (error instanceof HostAllocationFailure) return batchFailed('resource-limit');
-      return this.failClosed();
+      return this.failClosed(error);
     }
   }
 
@@ -663,7 +666,12 @@ class FillMeshKernelAdapter implements FillMeshAdapter {
     return { status: 'ok', results };
   }
 
-  private failClosed(): FillMeshBatchResult {
+  private failClosed(error: unknown): FillMeshBatchResult {
+    try {
+      this.onFailClosed?.(error instanceof Error ? error.message : String(error));
+    } catch {
+      // A diagnostic observer cannot keep a breached adapter open.
+    }
     this.dispose();
     return batchFailed('internal-error');
   }
@@ -678,7 +686,10 @@ function isLittleEndianHost(): boolean {
  * exists and that the version and revision match; on any failure it disposes
  * the kernel and throws. Tests use it to wrap export objects.
  */
-export function createFillMeshPortFromExports(exports: FillKernelExports): FillMeshAdapter {
+export function createFillMeshPortFromExports(
+  exports: FillKernelExports,
+  options: Readonly<{ onFailClosed?: (reason: string) => void }> = {},
+): FillMeshAdapter {
   const candidate = exports as unknown as Record<string, unknown>;
   const dispose = (): void => {
     try {
@@ -708,7 +719,7 @@ export function createFillMeshPortFromExports(exports: FillKernelExports): FillM
     dispose();
     throw error;
   }
-  return new FillMeshKernelAdapter(exports);
+  return new FillMeshKernelAdapter(exports, options.onFailClosed);
 }
 
 /**
