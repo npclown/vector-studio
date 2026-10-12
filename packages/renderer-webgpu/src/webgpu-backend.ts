@@ -20,8 +20,10 @@ import {
   DiagnosticChannel,
   FrameScheduler,
   ResourceAccounting,
+  pathMeshNoticeDiagnostic,
   type AnimationFrameClock,
   type DiagnosticClock,
+  type PathMeshNotice,
   type PrimitiveFrameSource,
   type PrimitiveTarget,
 } from '@vector-studio/renderer-core';
@@ -74,6 +76,13 @@ export interface WebGpuFrameMeasurements {
 }
 
 const DEFAULT_MEASUREMENT_CAPACITY = 4096;
+/** A packet carries at most this many D8-interim notices (P3 V3 contract, section h). */
+const NOTICES_PER_PACKET = 32;
+
+/** An array check that does not narrow a typed value to any[]. */
+function isList(value: unknown): boolean {
+  return Array.isArray(value);
+}
 
 function errorContext(error: unknown): DiagnosticContext {
   if (error instanceof Error) {
@@ -90,6 +99,8 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   readonly #now: () => number;
   readonly #foundationFixture: FoundationFixture | undefined;
   #primitiveFrameSource: PrimitiveFrameSource | undefined;
+  /** P3 V3 section f: read once when the source is attached, before any device exists. */
+  #meshPipelineRequired = false;
   #primitiveMode = false;
   #primitiveCreation: WebGpuPrimitiveSceneCreationPort | undefined;
   #primitiveScene: WebGpuPrimitiveScenePort | undefined;
@@ -187,6 +198,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       throw new Error('A primitive frame source is already attached.');
     }
     this.#primitiveFrameSource = source;
+    this.#meshPipelineRequired = source.requiresMeshPipeline === true;
     let disposed = false;
     return {
       get disposed() {
@@ -197,6 +209,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         disposed = true;
         if (this.#primitiveFrameSource === source) {
           this.#primitiveFrameSource = undefined;
+          this.#meshPipelineRequired = false;
         }
       },
     };
@@ -577,14 +590,20 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         ) {
           throw new Error('The device cannot create the required primitive scene.');
         }
-        primitiveCreation = device.createPrimitiveScene(context, format, generation, {
-          track: (id, descriptor) => {
+        const tracker = {
+          track: (id: string, descriptor: Parameters<ResourceAccounting['track']>[1]) => {
             this.#resources.track(id, descriptor);
           },
-          release: (id) => {
+          release: (id: string) => {
             this.#resources.release(id);
           },
-        });
+        };
+        // The mesh pipeline is requested only for a source that sets requiresMeshPipeline.
+        primitiveCreation = this.#meshPipelineRequired
+          ? device.createPrimitiveScene(context, format, generation, tracker, {
+              meshPipeline: true,
+            })
+          : device.createPrimitiveScene(context, format, generation, tracker);
         primitive = await primitiveCreation.result;
       }
     } catch (error: unknown) {
@@ -654,6 +673,33 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         'warning',
         generation,
         Object.freeze({ requestedSampleCount: 4, selectedSampleCount: 1 }),
+      );
+      if (!this.#isCurrent(token)) {
+        releaseAttempt();
+        if (this.#pendingAttemptRelease === releaseAttempt) {
+          this.#pendingAttemptRelease = undefined;
+        }
+        return this.#stale(generation);
+      }
+    }
+
+    if (
+      primitive !== undefined &&
+      this.#meshPipelineRequired &&
+      primitive.scene.meshPipelineAvailable !== true
+    ) {
+      // P3 V3 section f: once per generation, outside the notice queue and its caps.
+      this.#diagnostics.emit(
+        pathMeshNoticeDiagnostic(
+          Object.freeze({
+            interim: 'd8',
+            nodeId: null,
+            failureScope: 'renderer',
+            failureCode: 'mesh-pipeline-unavailable',
+            toleranceExponent: null,
+          }),
+          generation,
+        ),
       );
       if (!this.#isCurrent(token)) {
         releaseAttempt();
@@ -960,6 +1006,9 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
           return;
         }
         if (packet === null) return;
+        // P3 V3 section h: notices describe CPU state, so they are emitted right after a
+        // non-null prepare, before the generation and submission checks.
+        this.#emitPathMeshNotices(packet.mesh?.notices, generation);
         if (
           this.#state !== 'ready' ||
           this.#primitiveScene !== scene ||
@@ -1002,6 +1051,13 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         this.#generation,
         errorContext(error),
       );
+    }
+  }
+
+  #emitPathMeshNotices(notices: readonly PathMeshNotice[] | undefined, generation: number): void {
+    if (notices === undefined || !isList(notices)) return;
+    for (const notice of notices.slice(0, NOTICES_PER_PACKET)) {
+      this.#diagnostics.emit(pathMeshNoticeDiagnostic(notice, generation));
     }
   }
 

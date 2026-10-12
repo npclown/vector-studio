@@ -13,7 +13,9 @@ import type { PrimitiveTarget } from '../../packages/renderer-core/src/primitive
 import {
   PathMeshPipeline,
   type PathFringeBuilder,
+  type PathMeshDraw,
   type PathMeshLimits,
+  type PathMeshNotice,
 } from '../../packages/renderer-core/src/path-mesh-pipeline.js';
 import { PrimitiveSceneSource } from '../../packages/renderer-core/src/primitive-scene-source.js';
 import { RetainedSceneMirror } from '../../packages/renderer-core/src/scene-mirror.js';
@@ -55,9 +57,21 @@ export function squareMesh(size = 10, extraVertices = 0): FillMesh {
   };
 }
 
+/** Owned bytes of a cache entry: the port arrays plus the V3b packed Float32 offsets. */
 export function meshBytes(mesh: FillMesh): number {
-  return mesh.positions.byteLength + mesh.indices.byteLength + mesh.boundaryEdges.byteLength;
+  return (
+    mesh.positions.byteLength +
+    mesh.indices.byteLength +
+    mesh.boundaryEdges.byteLength +
+    mesh.positions.length * 4
+  );
 }
+
+/** The CPU draws the pipeline served in a packet, with the notices of its mesh part. */
+export type PathMeshFrame = Readonly<{
+  draws: readonly PathMeshDraw[];
+  notices: readonly PathMeshNotice[];
+}>;
 
 export type PortScript = {
   /** Per-request answer; the default is an owned square mesh. */
@@ -234,6 +248,14 @@ export function createPathHarness(
     ...(options.memoryBytes === undefined ? {} : { memoryBytes: options.memoryBytes }),
   });
   const source = new PrimitiveSceneSource(mirror, pipeline);
+  // V3b moved the served paths into the packet mesh part; the harness keeps observing the
+  // pipeline's CPU draws so V3a's assertions on node ids, exponents and meshes still apply.
+  let served: readonly PathMeshDraw[] = [];
+  const pipelinePrepare = pipeline.prepare.bind(pipeline);
+  pipeline.prepare = (input) => {
+    served = pipelinePrepare(input);
+    return served;
+  };
   let revision = 0;
   const replace = (nodes: readonly RenderNodeSnapshot[], rootOrder?: readonly string[]) => {
     revision += 1;
@@ -248,9 +270,10 @@ export function createPathHarness(
     const result = replace(options.nodes);
     if (result.status !== 'applied') throw new Error(`setup failed: ${JSON.stringify(result)}`);
   }
-  const prepare = (nextTarget: PrimitiveTarget = target) => {
-    source.prepare(nextTarget);
-    return source.getPathMeshFrame()!;
+  const prepare = (nextTarget: PrimitiveTarget = target): PathMeshFrame => {
+    const packet = source.prepare(nextTarget);
+    if (packet === null) throw new Error('prepare returned no packet');
+    return Object.freeze({ draws: served, notices: packet.mesh?.notices ?? [] });
   };
   const drawnIds = (nextTarget: PrimitiveTarget = target) =>
     prepare(nextTarget).draws.map((draw) => draw.nodeId);

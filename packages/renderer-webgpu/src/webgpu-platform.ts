@@ -59,6 +59,11 @@ export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
   readonly sampleCount: 1 | 4;
   readonly shaderModulesCreated: number;
   readonly pipelinesCreated: number;
+  /**
+   * P3 V3 section f: true when this generation created the mesh pipeline. Absent or false means
+   * the mesh path is unavailable: mesh draws and writes are skipped with a skipped mesh receipt.
+   */
+  readonly meshPipelineAvailable?: boolean;
   setTarget(target: PrimitiveTarget): void;
   submitPrimitivePacket: PrimitivePacketConsumer['submitPrimitivePacket'];
   dispose(): void;
@@ -74,6 +79,11 @@ export interface WebGpuPrimitiveSceneCreationPort {
   dispose(): void;
 }
 
+/** Creation options; the mesh pipeline is created with the P1 pipeline, never on the frame path. */
+export interface WebGpuPrimitiveSceneOptions {
+  readonly meshPipeline?: boolean;
+}
+
 export interface WebGpuDevicePort {
   readonly features: readonly string[];
   readonly limits: Readonly<Record<string, number>>;
@@ -87,6 +97,7 @@ export interface WebGpuDevicePort {
     format: 'bgra8unorm' | 'rgba8unorm',
     generation: number,
     resources: WebGpuResourceTracker,
+    options?: WebGpuPrimitiveSceneOptions,
   ): WebGpuPrimitiveSceneCreationPort;
   waitForSubmittedWork(): Promise<void>;
   subscribeErrors(listener: (error: WebGpuDeviceError) => void): Disposable;
@@ -159,8 +170,16 @@ class BrowserDevicePort implements WebGpuDevicePort {
     format: 'bgra8unorm' | 'rgba8unorm',
     generation: number,
     resources: WebGpuResourceTracker,
+    options?: WebGpuPrimitiveSceneOptions,
   ): WebGpuPrimitiveSceneCreationPort {
-    return createNativePrimitiveSceneCreation(this.native, context, format, generation, resources);
+    return createNativePrimitiveSceneCreation(
+      this.native,
+      context,
+      format,
+      generation,
+      resources,
+      options,
+    );
   }
 
   waitForSubmittedWork(): Promise<void> {

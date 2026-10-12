@@ -1,5 +1,9 @@
 import type { RenderNodeSnapshot, SceneAffine, SceneVersion } from '@vector-studio/contracts';
 import type {
+  MeshFillDraw,
+  MeshPacketPart,
+  MeshResourceId,
+  PrimitiveDraw,
   PrimitiveFrameSource,
   PrimitivePacket,
   PrimitiveReceipt,
@@ -19,10 +23,15 @@ import {
 import type {
   DerivedPath,
   PathMeshDraw,
-  PathMeshFrame,
   PathMeshPipeline,
   PathMeshStatistics,
 } from './path-mesh-pipeline.js';
+import {
+  PathMeshPacker,
+  meshFrameLanes,
+  selectMeshOrigin,
+  type MeshOrigin,
+} from './path-mesh-packet.js';
 import type { RetainedSceneMirror, RetainedSceneView } from './scene-mirror.js';
 import {
   composeSceneAffine,
@@ -52,6 +61,8 @@ type DerivedPrimitive = Readonly<{
   worldBounds: SceneBounds;
   hidden: boolean;
   omitted: boolean;
+  /** Position in the authoritative depth-first order of primitive and path leaves. */
+  sequence: number;
 }>;
 type VersionedRecords = {
   transforms: Array<symbol | undefined>;
@@ -63,6 +74,7 @@ type VersionedRecords = {
 type PendingPacket = Readonly<{
   packet: PrimitivePacket;
   expected: ReadonlyMap<PrimitiveResourceId, ReadonlyMap<number, symbol>>;
+  meshExpected: ReadonlyMap<MeshResourceId, ReadonlyMap<number, symbol>> | null;
 }>;
 type PackingKeys = Readonly<{
   transform: readonly number[];
@@ -120,11 +132,18 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   };
   #disposed = false;
   readonly #pathMeshes: PathMeshPipeline | undefined;
-  #pathMeshFrame: PathMeshFrame | null = null;
+  readonly #meshPacker = new PathMeshPacker();
+  #meshOrigin: MeshOrigin | null = null;
+  #meshOriginRevision = Symbol('mesh-origin');
+  /** The generation whose first skipped mesh receipt stopped mesh draws and writes. */
+  #meshStoppedGeneration: number | null = null;
+  /** P3 V3 section f: true exactly when this source consumes a fill-mesh port. */
+  public readonly requiresMeshPipeline: boolean;
 
   public constructor(mirror: RetainedSceneMirror, pathMeshes?: PathMeshPipeline) {
     this.#mirror = mirror;
     this.#pathMeshes = pathMeshes;
+    this.requiresMeshPipeline = pathMeshes !== undefined;
   }
 
   public prepare(target: PrimitiveTarget): PrimitivePacket | null {
@@ -139,12 +158,33 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     else this.#reconcileSlots(scene);
 
     const paths: DerivedPath[] = [];
-    const derived = derivePrimitives(scene, this.#slots, this.#derivedCache, paths);
+    const pathSequences = new Map<string, number>();
+    const derived = derivePrimitives(scene, this.#slots, this.#derivedCache, paths, pathSequences);
     const visible = cullPrimitives(
       derived.filter((entry) => !entry.hidden && !entry.omitted),
       cameraState.camera,
       target,
     );
+    // P3 V3 section f: the per-view mesh origin O_m, separate from the primitive origin.
+    let meshFrame: readonly number[] | null = null;
+    if (this.#pathMeshes !== undefined) {
+      const meshOrigin = selectMeshOrigin(
+        cameraState.camera.position,
+        cameraState.camera.zoom,
+        target.devicePixelRatio,
+        this.#meshOrigin,
+      );
+      if (meshOrigin !== null && meshOrigin !== this.#meshOrigin) {
+        this.#meshOrigin = meshOrigin;
+        this.#meshOriginRevision = Symbol('mesh-origin');
+      }
+      meshFrame = meshFrameLanes(
+        meshOrigin,
+        cameraState.camera.position,
+        cameraState.camera.zoom,
+        target,
+      );
+    }
     // P3 V3 section b: port results are published before any packing, so a later packing
     // error never repeats a port call.
     const pathDraws: readonly PathMeshDraw[] =
@@ -153,6 +193,10 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
         geometryRevision: (id) => scene.getGeometryRevision(id),
         camera: cameraState.camera,
         target,
+        packing: {
+          origin: this.#meshOrigin ?? { x: 0, y: 0 },
+          frameFinite: meshFrame !== null,
+        },
       }) ?? [];
     let origin = this.#selectOrigin(cameraState.camera, visible, target);
     let rebased =
@@ -193,6 +237,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       this.#reconstructedEpoch !== scene.sceneEpoch ||
       this.#reconstructedIncarnation !== this.#incarnations.transforms;
     const writes = this.#makeWrites(reconstruct);
+    const mesh = this.#prepareMeshPart(target.generation, pathDraws, meshFrame, pathSequences);
+    const draws = interleaveDraws(visible, mesh?.draws.map((draw) => draw.sequence) ?? []);
     const packetId = Symbol('primitive-packet');
     const packet: PrimitivePacket = Object.freeze({
       layoutVersion: 1,
@@ -206,32 +252,31 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       mode: reconstruct ? 'reconstruct' : 'incremental',
       resources: Object.freeze(this.#resources()),
       writes: Object.freeze(writes),
-      draws: Object.freeze(
-        visible.length === 0
-          ? []
-          : [Object.freeze({ first: 0, count: visible.length, variant: 'analytic-v1' as const })],
-      ),
+      draws: Object.freeze(draws.analytic),
       frame: Object.freeze({ ...target }),
+      ...(mesh === undefined
+        ? {}
+        : {
+            mesh: Object.freeze({
+              layoutVersion: mesh.part.layoutVersion,
+              originRevision: mesh.part.originRevision,
+              resources: mesh.part.resources,
+              writes: mesh.part.writes,
+              draws: Object.freeze(
+                mesh.draws.map((draw, index) =>
+                  Object.freeze({ position: draws.positions[index]!, ...draw.draw }),
+                ),
+              ),
+              notices: mesh.part.notices,
+            }),
+          }),
     });
-    this.#pending = Object.freeze({ packet, expected: expectedRecords(writes) });
-    if (this.#pathMeshes !== undefined) {
-      // V3a keeps the served paths and the notices of this packet on the CPU side; V3b moves
-      // them into the optional packet mesh part. Notices leave the queue only here, so a
-      // throwing prepare keeps them for the next packet.
-      this.#pathMeshFrame = Object.freeze({
-        draws: pathDraws,
-        notices: this.#pathMeshes.takePacketNotices(),
-      });
-    }
+    this.#pending = Object.freeze({
+      packet,
+      expected: expectedRecords(writes),
+      meshExpected: mesh?.expected ?? null,
+    });
     return packet;
-  }
-
-  /**
-   * V3a CPU view of the latest packet's path meshes and notices; null before the first one.
-   * @internal Replaced by the V3b packet mesh part.
-   */
-  public getPathMeshFrame(): PathMeshFrame | null {
-    return this.#pathMeshFrame;
   }
 
   public getPathMeshStatistics(): PathMeshStatistics | null {
@@ -241,9 +286,35 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   public acknowledge(receipt: PrimitiveReceipt): void {
     const pending = this.#pending;
     if (pending === null || !receiptMatchesPacket(receipt, pending.packet)) return;
+    // P3 V3 section f: the receipt has a mesh part exactly when the packet has one; a packet
+    // with a mesh part is acknowledged only when both parts validate.
+    const meshPacket = pending.packet.mesh;
+    const meshReceipt = receipt.mesh;
+    if ((meshPacket === undefined) !== (meshReceipt === undefined)) return;
+    let meshReceived: NonNullable<ReturnType<PathMeshPacker['validateReceipt']>> | null = null;
+    let meshSkipped = false;
+    if (meshPacket !== undefined && meshReceipt !== undefined) {
+      if (meshReceipt.status === 'skipped') {
+        meshSkipped = true;
+      } else if (meshReceipt.status === 'submitted') {
+        if (meshReceipt.originRevision !== meshPacket.originRevision) return;
+        meshReceived = this.#meshPacker.validateReceipt(
+          meshReceipt.resources,
+          pending.meshExpected ?? new Map(),
+          meshPacket.resources.length,
+        );
+        if (meshReceived === null) return;
+      } else {
+        return;
+      }
+    }
     const received = validateReceiptResources(receipt, pending.expected, this.#incarnations);
     if (received === null) return;
     this.#pending = null;
+    // A skipped part acknowledges only the P1 part and leaves every mesh record dirty; the
+    // source stops producing mesh draws and writes for the rest of that generation.
+    if (meshSkipped) this.#meshStoppedGeneration = receipt.generation;
+    if (meshReceived !== null) this.#meshPacker.acknowledge(meshReceived);
     for (const [resourceId, records] of received) {
       for (const record of records) {
         if (this.#versions[resourceId][record.index] === record.version) {
@@ -286,7 +357,75 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     this.#derivedCache.clear();
     this.#packingKeys.clear();
     this.#pathMeshes?.dispose();
-    this.#pathMeshFrame = null;
+    this.#meshPacker.dispose();
+  }
+
+  /**
+   * The optional mesh part (P3 V3 section f). It is absent without a port, and with a port
+   * when the scene has no path slot and no pending notice, so a primitive-only packet keeps
+   * P1's exact shape. Notices leave the queue only here, so a throwing prepare keeps them.
+   */
+  #prepareMeshPart(
+    generation: number,
+    pathDraws: readonly PathMeshDraw[],
+    meshFrame: readonly number[] | null,
+    sequences: ReadonlyMap<string, number>,
+  ):
+    | Readonly<{
+        part: Omit<MeshPacketPart, 'draws'>;
+        draws: ReadonlyArray<Readonly<{ sequence: number; draw: Omit<MeshFillDraw, 'position'> }>>;
+        expected: ReturnType<PathMeshPacker['prepare']>['expected'] | null;
+      }>
+    | undefined {
+    const pipeline = this.#pathMeshes;
+    if (pipeline === undefined) return undefined;
+    const slots = pipeline.getPathSlots();
+    const notices = pipeline.takePacketNotices();
+    if (slots.size === 0 && notices.length === 0) return undefined;
+    if (slots.size === 0 || this.#meshStoppedGeneration === generation) {
+      // A part holding notices only: no resources, writes or draws.
+      return Object.freeze({
+        part: Object.freeze({
+          layoutVersion: 0 as const,
+          originRevision: this.#meshOriginRevision,
+          resources: Object.freeze([]),
+          writes: Object.freeze([]),
+          notices,
+        }),
+        draws: Object.freeze([]),
+        expected: null,
+      });
+    }
+    const output = this.#meshPacker.prepare({
+      generation,
+      draws: pathDraws,
+      slots,
+      resident: pipeline.getResidentEntryIds(),
+      frameLanes: meshFrame,
+    });
+    return Object.freeze({
+      part: Object.freeze({
+        layoutVersion: 0 as const,
+        originRevision: this.#meshOriginRevision,
+        resources: output.resources,
+        writes: output.writes,
+        notices,
+      }),
+      draws: Object.freeze(
+        pathDraws.map((draw) => {
+          const placement = output.placements.get(draw.nodeId)!;
+          return Object.freeze({
+            sequence: sequences.get(draw.nodeId)!,
+            draw: Object.freeze({
+              instance: draw.slot,
+              firstTriangle: placement.firstTriangle,
+              triangleCount: placement.triangleCount,
+            }),
+          });
+        }),
+      ),
+      expected: output.expected,
+    });
   }
 
   #resetForSnapshot(scene: RetainedSceneView): void {
@@ -574,9 +713,11 @@ function derivePrimitives(
   slots: ReadonlyMap<string, number>,
   cache: Map<string, DerivedCacheEntry>,
   paths: DerivedPath[],
+  pathSequences: Map<string, number>,
 ): DerivedPrimitive[] {
   const result: DerivedPrimitive[] = [];
   const present = new Set<string>();
+  let sequence = 0;
   const rootWorldVersion = Symbol.for('vector-studio.primitive-root-world');
   const stack = [...scene.rootOrder].reverse().map((id) => ({
     id,
@@ -639,6 +780,8 @@ function derivePrimitives(
         }),
       );
       paths.push(Object.freeze({ id: node.id, node, world, hidden }));
+      pathSequences.set(node.id, sequence);
+      sequence += 1;
       continue;
     }
     const localKey = primitiveBoundsKey(node);
@@ -675,11 +818,45 @@ function derivePrimitives(
         worldBounds,
         hidden,
         omitted,
+        sequence,
       }),
     );
+    sequence += 1;
   }
   for (const id of cache.keys()) if (!present.has(id)) cache.delete(id);
   return result;
+}
+
+/**
+ * P3 V3 section g: visible primitives append to the order stream as in P1; a path that emits a
+ * mesh draw closes the current analytic run, and its position is the number of analytic draws
+ * so far. Paths without a draw split nothing, so a scene without drawn paths emits P1's single
+ * analytic draw over the whole visible order stream.
+ */
+function interleaveDraws(
+  visible: readonly DerivedPrimitive[],
+  meshSequences: readonly number[],
+): Readonly<{ analytic: PrimitiveDraw[]; positions: number[] }> {
+  const analytic: PrimitiveDraw[] = [];
+  const positions: number[] = [];
+  let runStart = 0;
+  let next = 0;
+  const close = () => {
+    if (next > runStart) {
+      analytic.push(
+        Object.freeze({ first: runStart, count: next - runStart, variant: 'analytic-v1' as const }),
+      );
+      runStart = next;
+    }
+  };
+  for (const sequence of meshSequences) {
+    while (next < visible.length && visible[next]!.sequence < sequence) next += 1;
+    close();
+    positions.push(analytic.length);
+  }
+  next = visible.length;
+  close();
+  return { analytic, positions };
 }
 
 function primitiveBoundsKey(

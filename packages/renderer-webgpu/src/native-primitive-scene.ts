@@ -1,5 +1,10 @@
 import type { ResourceDescriptor } from '@vector-studio/contracts';
 import type {
+  MeshFillDraw,
+  MeshPacketPart,
+  MeshReceiptPart,
+  MeshReceiptResource,
+  MeshResourceId,
   PrimitivePacket,
   PrimitiveReceipt,
   PrimitiveRecordVersion,
@@ -8,6 +13,19 @@ import type {
   PrimitiveTarget,
 } from '@vector-studio/renderer-core';
 
+import { MESH_FILL_SHADER } from './mesh-fill-shader.js';
+import {
+  MESH_FRAME_SIZE,
+  MESH_PACKET_BINDINGS,
+  MESH_PACKET_LAYOUT_VERSION,
+  MESH_REQUIRED_BINDINGS_PER_BIND_GROUP,
+  MESH_REQUIRED_STORAGE_BUFFERS_PER_STAGE,
+  MESH_RESOURCE_IDS,
+  MESH_RESOURCE_STRIDES,
+  createMeshBindGroupLayoutDescriptor,
+  createMeshPipelineDescriptor,
+  meshPipelineKey,
+} from './mesh-pipeline.js';
 import { PipelineCache } from './pipeline-cache.js';
 import { PRIMITIVE_ANALYTIC_SHADER } from './primitive-analytic-shader.js';
 import {
@@ -30,6 +48,7 @@ import { createPrimitiveUnitQuadData } from './primitive-unit-geometry.js';
 import type {
   WebGpuCanvasContextPort,
   WebGpuPrimitiveSceneCreationPort,
+  WebGpuPrimitiveSceneOptions,
   WebGpuPrimitiveScenePort,
   WebGpuPrimitiveSceneResult,
   WebGpuResourceTracker,
@@ -54,12 +73,20 @@ interface NativeCanvasContextPort extends WebGpuCanvasContextPort {
   readonly native: GPUCanvasContext;
 }
 
-interface ArenaState {
+interface ArenaBase {
   readonly id: string;
   readonly bindGroupId: string;
   readonly buffer: GPUBuffer;
   readonly bindGroup: GPUBindGroup;
   readonly allocator: SharedBufferAllocator;
+  /** Every allocation of the arena, in region order; each submission marks all of them. */
+  readonly allocationList: readonly SharedBufferAllocation[];
+  lastSubmittedSerial: number;
+  retired: boolean;
+  released: boolean;
+}
+
+interface ArenaState extends ArenaBase {
   readonly allocations: Readonly<Record<PrimitiveResourceId, SharedBufferAllocation>>;
   readonly incarnations: Readonly<Record<PrimitiveResourceId, symbol>>;
   readonly capacities: Readonly<Record<PrimitiveResourceId, number>>;
@@ -67,10 +94,35 @@ interface ArenaState {
   order: ReadonlyMap<number, number>;
   frameInitialized: boolean;
   sceneEpoch: symbol | null;
-  lastSubmittedSerial: number;
-  retired: boolean;
-  released: boolean;
 }
+
+/** The generation-owned mesh arena of P3 V3 section f, under P1's allocator rules. */
+interface MeshArenaState extends ArenaBase {
+  readonly allocations: Readonly<Record<MeshResourceId, SharedBufferAllocation>>;
+  readonly incarnations: Readonly<Record<MeshResourceId, symbol>>;
+  readonly capacities: Readonly<Record<MeshResourceId, number>>;
+  instances: ReadonlySet<number>;
+  frameInitialized: boolean;
+}
+
+/** The mesh pipeline created at initialization or recovery; null when unavailable. */
+interface MeshPipelineState {
+  readonly pipeline: GPURenderPipeline;
+  readonly bindGroupLayout: GPUBindGroupLayout;
+}
+
+type ValidatedMesh =
+  | Readonly<{ skipped: true }>
+  | Readonly<{
+      skipped: false;
+      /** Null for a part that carries notices only. */
+      arena: MeshArenaState | null;
+      createdArena: boolean;
+      instances: ReadonlySet<number>;
+      frameInitialized: boolean;
+      draws: readonly MeshFillDraw[];
+      receiptResources: readonly MeshReceiptResource[];
+    }>;
 
 interface ValidatedPacket {
   readonly arena: ArenaState;
@@ -141,8 +193,9 @@ function frozenResult(
 }
 
 class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
-  readonly shaderModulesCreated = 1;
-  readonly pipelinesCreated = 1;
+  readonly shaderModulesCreated: number;
+  readonly pipelinesCreated: number;
+  readonly meshPipelineAvailable: boolean;
   readonly sampleCount: 1 | 4;
   readonly #device: GPUDevice;
   readonly #context: NativeCanvasContextPort;
@@ -159,7 +212,9 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   #attachment: GPUTexture | undefined;
   #attachmentId: string | undefined;
   #currentArena: ArenaState | undefined;
-  #retiredArenas: ArenaState[] = [];
+  readonly #mesh: MeshPipelineState | null;
+  #currentMeshArena: MeshArenaState | undefined;
+  #retiredArenas: ArenaBase[] = [];
   #nextArenaId = 1;
   #nextSubmissionSerial = 1;
   #latestSubmittedSerial = 0;
@@ -179,7 +234,13 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     indexBuffer: GPUBuffer,
     resources: WebGpuResourceTracker,
     staticResourceIds: readonly string[],
+    mesh: MeshPipelineState | null = null,
+    meshShaderModulesCreated = 0,
   ) {
+    this.#mesh = mesh;
+    this.meshPipelineAvailable = mesh !== null;
+    this.shaderModulesCreated = 1 + meshShaderModulesCreated;
+    this.pipelinesCreated = mesh === null ? 1 : 2;
     this.#device = device;
     this.#context = context;
     this.#format = format;
@@ -280,6 +341,19 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     }
 
     const { arena } = validated;
+    let mesh: ValidatedMesh | null = null;
+    if (packet.mesh !== undefined) {
+      try {
+        mesh = this.#preflightMesh(packet.mesh, packet.draws.length);
+      } catch (error) {
+        if (validated.createdArena) this.#releaseArena(arena);
+        return frozenResult(
+          error instanceof AllocationError ? 'allocation-failed' : 'invalid-packet',
+        );
+      }
+    }
+    const meshArena = mesh !== null && !mesh.skipped ? mesh.arena : null;
+    const meshDraws = mesh !== null && !mesh.skipped ? mesh.draws : [];
     try {
       for (const write of packet.writes) {
         const allocation = arena.allocations[write.resourceId];
@@ -290,6 +364,18 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           0,
           write.bytes.byteLength,
         );
+      }
+      if (meshArena !== null) {
+        for (const write of packet.mesh!.writes) {
+          const allocation = meshArena.allocations[write.resourceId];
+          this.#device.queue.writeBuffer(
+            meshArena.buffer,
+            allocation.offset + write.byteOffset,
+            write.bytes,
+            0,
+            write.bytes.byteLength,
+          );
+        }
       }
 
       if (!Number.isSafeInteger(this.#nextSubmissionSerial)) {
@@ -310,13 +396,38 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           },
         ],
       });
-      pass.setPipeline(this.#pipeline);
-      pass.setBindGroup(0, arena.bindGroup);
-      pass.setVertexBuffer(0, this.#vertexBuffer, 0, 32);
-      pass.setIndexBuffer(this.#indexBuffer, 'uint16', 0, 12);
-      for (const draw of packet.draws) {
+      const bindAnalytic = () => {
+        pass.setPipeline(this.#pipeline);
+        pass.setBindGroup(0, arena.bindGroup);
+        pass.setVertexBuffer(0, this.#vertexBuffer, 0, 32);
+        pass.setIndexBuffer(this.#indexBuffer, 'uint16', 0, 12);
+      };
+      bindAnalytic();
+      // P3 V3 section g: draws are encoded in merged paint order; the pipeline and bind group
+      // switch only at a variant change.
+      let analyticBound = true;
+      let nextMeshDraw = 0;
+      const drawMeshesAt = (position: number) => {
+        while (meshDraws[nextMeshDraw]?.position === position) {
+          const draw = meshDraws[nextMeshDraw]!;
+          if (analyticBound) {
+            pass.setPipeline(this.#mesh!.pipeline);
+            pass.setBindGroup(0, meshArena!.bindGroup);
+            analyticBound = false;
+          }
+          pass.draw(3 * draw.triangleCount, 1, 3 * draw.firstTriangle, draw.instance);
+          nextMeshDraw += 1;
+        }
+      };
+      packet.draws.forEach((draw, index) => {
+        drawMeshesAt(index);
+        if (!analyticBound) {
+          bindAnalytic();
+          analyticBound = true;
+        }
         pass.drawIndexed(6, draw.count, 0, 0, draw.first);
-      }
+      });
+      drawMeshesAt(packet.draws.length);
       pass.end();
       const commandBuffer = encoder.finish();
       this.#device.queue.submit([commandBuffer]);
@@ -329,15 +440,28 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         RESOURCE_ORDER.map((id) => arena.allocations[id]),
       );
       arena.lastSubmittedSerial = serial;
+      if (meshArena !== null) {
+        meshArena.allocator.markSubmitted(this.#generation, serial, meshArena.allocationList);
+        meshArena.lastSubmittedSerial = serial;
+      }
       this.#latestSubmittedSerial = serial;
       this.#commitPacket(packet, validated);
+      if (mesh !== null && !mesh.skipped) this.#commitMesh(mesh);
       this.#observeCompletion();
       return Object.freeze({
         status: 'submitted',
-        receipt: createReceipt(packet, serial, validated.receiptResources),
+        receipt: createReceipt(
+          packet,
+          serial,
+          validated.receiptResources,
+          mesh === null ? undefined : meshReceipt(packet.mesh!, mesh),
+        ),
       });
     } catch {
       if (validated.createdArena) this.#releaseArena(arena);
+      if (mesh !== null && !mesh.skipped && mesh.createdArena && mesh.arena !== null) {
+        this.#releaseArena(mesh.arena);
+      }
       return frozenResult('submission-failed');
     }
   }
@@ -356,6 +480,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     release(() => this.#releaseAttachment());
     if (this.#currentArena !== undefined) release(() => this.#releaseArena(this.#currentArena!));
     this.#currentArena = undefined;
+    if (this.#currentMeshArena !== undefined) {
+      release(() => this.#releaseArena(this.#currentMeshArena!));
+    }
+    this.#currentMeshArena = undefined;
     for (const arena of this.#retiredArenas) release(() => this.#releaseArena(arena));
     this.#retiredArenas = [];
     release(() => this.#pipelineCache.dispose());
@@ -588,6 +716,275 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     });
   }
 
+  /**
+   * P3 V3 section f. A part with no resources carries notices only. Otherwise the six resources
+   * come in fixed order; writes follow P1's write rules; every draw has a valid position, an
+   * initialized instance and a nonempty triangle range inside the meshTriangles capacity.
+   */
+  #preflightMesh(part: MeshPacketPart, analyticDraws: number): ValidatedMesh {
+    if (
+      typeof part !== 'object' ||
+      part === null ||
+      part.layoutVersion !== MESH_PACKET_LAYOUT_VERSION ||
+      typeof part.originRevision !== 'symbol' ||
+      !isArrayValue(part.resources) ||
+      !isArrayValue(part.writes) ||
+      !isArrayValue(part.draws) ||
+      !isArrayValue(part.notices)
+    ) {
+      throw new TypeError('Invalid mesh packet part.');
+    }
+    // The mesh path is unavailable for this generation: skip mesh writes and draws.
+    if (this.#mesh === null) return Object.freeze({ skipped: true as const });
+    if (part.resources.length === 0) {
+      if (part.writes.length !== 0 || part.draws.length !== 0) {
+        throw new TypeError('A mesh part without resources carries notices only.');
+      }
+      return Object.freeze({
+        skipped: false as const,
+        arena: null,
+        createdArena: false,
+        instances: new Set<number>(),
+        frameInitialized: false,
+        draws: Object.freeze([]),
+        receiptResources: Object.freeze([]),
+      });
+    }
+    if (part.resources.length !== MESH_RESOURCE_IDS.length) {
+      throw new TypeError('Invalid mesh resource list.');
+    }
+    const capacities = {} as Record<MeshResourceId, number>;
+    const incarnations = {} as Record<MeshResourceId, symbol>;
+    MESH_RESOURCE_IDS.forEach((id, index) => {
+      const resource = part.resources[index];
+      if (
+        resource === undefined ||
+        resource.id !== id ||
+        typeof resource.incarnation !== 'symbol' ||
+        !isPositiveSafeInteger(resource.capacityBytes) ||
+        resource.capacityBytes % MESH_RESOURCE_STRIDES[id] !== 0 ||
+        (id === 'meshFrame' && resource.capacityBytes !== MESH_FRAME_SIZE)
+      ) {
+        throw new TypeError('Invalid mesh resource descriptor.');
+      }
+      capacities[id] = resource.capacityBytes;
+      incarnations[id] = resource.incarnation;
+    });
+    this.#validateMeshCapabilities(capacities);
+
+    const current = this.#currentMeshArena;
+    const backingMatches =
+      current !== undefined &&
+      MESH_RESOURCE_IDS.every(
+        (id) =>
+          current.incarnations[id] === incarnations[id] &&
+          current.capacities[id] === capacities[id],
+      );
+    let instances: ReadonlySet<number> = backingMatches ? current.instances : new Set<number>();
+    let frameInitialized = backingMatches ? current.frameInitialized : false;
+    const writeRecords = new Map<MeshResourceId, PrimitiveRecordVersion[]>(
+      MESH_RESOURCE_IDS.map((id) => [id, []]),
+    );
+    let previousResource = -1;
+    let previousEnd = 0;
+    for (const write of part.writes) {
+      const resourceIndex = MESH_RESOURCE_IDS.indexOf(write.resourceId);
+      if (
+        resourceIndex < 0 ||
+        write.incarnation !== incarnations[write.resourceId] ||
+        !Number.isSafeInteger(write.byteOffset) ||
+        write.byteOffset < 0 ||
+        write.byteOffset % 4 !== 0 ||
+        !(write.bytes instanceof Uint8Array) ||
+        write.bytes.byteLength === 0 ||
+        write.bytes.byteLength % 4 !== 0 ||
+        write.byteOffset + write.bytes.byteLength > capacities[write.resourceId] ||
+        resourceIndex < previousResource ||
+        (resourceIndex === previousResource && write.byteOffset < previousEnd)
+      ) {
+        throw new TypeError('Invalid mesh write range.');
+      }
+      previousResource = resourceIndex;
+      previousEnd = write.byteOffset + write.bytes.byteLength;
+      const stride = MESH_RESOURCE_STRIDES[write.resourceId];
+      const firstIndex = write.byteOffset / stride;
+      if (
+        !Number.isInteger(firstIndex) ||
+        write.bytes.byteLength % stride !== 0 ||
+        !isArrayValue(write.records) ||
+        write.records.length !== write.bytes.byteLength / stride
+      ) {
+        throw new TypeError('Mesh write records do not cover the write range.');
+      }
+      write.records.forEach((record, offset) => {
+        if (record.index !== firstIndex + offset || typeof record.version !== 'symbol') {
+          throw new TypeError('Invalid mesh record receipt.');
+        }
+        writeRecords.get(write.resourceId)!.push(Object.freeze({ ...record }));
+      });
+      if (write.resourceId === 'meshInstances') {
+        const next = new Set(instances);
+        for (const record of write.records) next.add(record.index);
+        instances = next;
+      } else if (write.resourceId === 'meshFrame') {
+        frameInitialized = true;
+      }
+    }
+
+    const instanceCapacity = capacities.meshInstances / MESH_RESOURCE_STRIDES.meshInstances;
+    const triangleCapacity = capacities.meshTriangles / MESH_RESOURCE_STRIDES.meshTriangles;
+    let previousPosition = 0;
+    for (const draw of part.draws) {
+      if (
+        typeof draw !== 'object' ||
+        draw === null ||
+        !Number.isSafeInteger(draw.position) ||
+        draw.position < previousPosition ||
+        draw.position > analyticDraws ||
+        !Number.isSafeInteger(draw.instance) ||
+        draw.instance < 0 ||
+        draw.instance >= instanceCapacity ||
+        !instances.has(draw.instance) ||
+        !Number.isSafeInteger(draw.firstTriangle) ||
+        draw.firstTriangle < 0 ||
+        !Number.isSafeInteger(draw.triangleCount) ||
+        draw.triangleCount <= 0 ||
+        draw.firstTriangle + draw.triangleCount > triangleCapacity
+      ) {
+        throw new TypeError('Invalid mesh draw.');
+      }
+      previousPosition = draw.position;
+    }
+    if (part.draws.length > 0 && !frameInitialized) {
+      throw new TypeError('Mesh frame data is uninitialized.');
+    }
+
+    let arena = current;
+    let createdArena = false;
+    if (!backingMatches) {
+      arena = this.#createMeshArena(capacities, incarnations);
+      createdArena = true;
+    }
+    return Object.freeze({
+      skipped: false as const,
+      arena: arena!,
+      createdArena,
+      instances,
+      frameInitialized,
+      draws: part.draws,
+      receiptResources: Object.freeze(
+        MESH_RESOURCE_IDS.map((resourceId) =>
+          Object.freeze({
+            resourceId,
+            incarnation: incarnations[resourceId],
+            records: Object.freeze(writeRecords.get(resourceId) ?? []),
+          }),
+        ),
+      ),
+    });
+  }
+
+  #validateMeshCapabilities(capacities: Readonly<Record<MeshResourceId, number>>): void {
+    const limits = this.#device.limits;
+    const storageLimit = safeLimit(limits.maxStorageBufferBindingSize, 0);
+    if (
+      MESH_RESOURCE_IDS.slice(0, 5).some((id) => capacities[id] > storageLimit) ||
+      capacities.meshFrame > safeLimit(limits.maxUniformBufferBindingSize, 0) ||
+      this.#layoutCapacity(MESH_RESOURCE_IDS.map((id) => capacities[id])) >
+        safeLimit(limits.maxBufferSize, 0)
+    ) {
+      throw new AllocationError();
+    }
+  }
+
+  #createMeshArena(
+    capacities: Readonly<Record<MeshResourceId, number>>,
+    incarnations: Readonly<Record<MeshResourceId, symbol>>,
+  ): MeshArenaState {
+    const alignment = this.#requiredAlignment();
+    const capacity = this.#layoutCapacity(MESH_RESOURCE_IDS.map((id) => capacities[id]));
+    const allocator = new SharedBufferAllocator({
+      capacityBytes: capacity,
+      alignment,
+      generation: this.#generation,
+    });
+    const allocations = {} as Record<MeshResourceId, SharedBufferAllocation>;
+    for (const id of MESH_RESOURCE_IDS) {
+      const allocation = allocator.allocate(capacities[id]);
+      if (allocation === undefined) {
+        allocator.dispose();
+        throw new AllocationError();
+      }
+      allocations[id] = allocation;
+    }
+    const arenaNumber = this.#nextArenaId;
+    this.#nextArenaId += 1;
+    const id = `primitive/${this.#generation}/mesh-arena-${arenaNumber}`;
+    const bindGroupId = `${id}/bind-group`;
+    let buffer: GPUBuffer | undefined;
+    let bufferTracked = false;
+    let bindGroupTracked = false;
+    try {
+      buffer = this.#device.createBuffer({
+        label: id,
+        size: capacity,
+        usage: STORAGE_BUFFER_USAGE | UNIFORM_BUFFER_USAGE | COPY_DESTINATION_USAGE,
+      });
+      this.#resources.track(id, { category: 'buffer', size: capacity });
+      bufferTracked = true;
+      const bindGroup = this.#device.createBindGroup({
+        label: bindGroupId,
+        layout: this.#mesh!.bindGroupLayout,
+        entries: MESH_RESOURCE_IDS.map((resourceId) => ({
+          binding: MESH_PACKET_BINDINGS[resourceId],
+          resource: {
+            buffer: buffer as GPUBuffer,
+            offset: allocations[resourceId].offset,
+            size: capacities[resourceId],
+          },
+        })),
+      });
+      this.#resources.track(bindGroupId, { category: 'bind-group' });
+      bindGroupTracked = true;
+      return {
+        id,
+        bindGroupId,
+        buffer,
+        bindGroup,
+        allocator,
+        allocations: Object.freeze(allocations),
+        allocationList: Object.freeze(
+          MESH_RESOURCE_IDS.map((resourceId) => allocations[resourceId]),
+        ),
+        incarnations: Object.freeze({ ...incarnations }),
+        capacities: Object.freeze({ ...capacities }),
+        instances: new Set<number>(),
+        frameInitialized: false,
+        lastSubmittedSerial: 0,
+        retired: false,
+        released: false,
+      };
+    } catch (error) {
+      if (bindGroupTracked) this.#resources.release(bindGroupId);
+      if (bufferTracked) this.#resources.release(id);
+      buffer?.destroy();
+      allocator.dispose();
+      throw new AllocationError(error);
+    }
+  }
+
+  #commitMesh(mesh: Extract<ValidatedMesh, { skipped: false }>): void {
+    const arena = mesh.arena;
+    if (arena === null) return;
+    arena.instances = mesh.instances;
+    arena.frameInitialized = mesh.frameInitialized;
+    if (mesh.createdArena) {
+      const previous = this.#currentMeshArena;
+      this.#currentMeshArena = arena;
+      if (previous !== undefined) this.#retireArena(previous);
+    }
+  }
+
   #validateCapabilities(capacities: Readonly<Record<PrimitiveResourceId, number>>): void {
     const limits = this.#device.limits;
     const storageLimit = safeLimit(limits.maxStorageBufferBindingSize, 0);
@@ -607,10 +1004,15 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   }
 
   #arenaCapacity(capacities: Readonly<Record<PrimitiveResourceId, number>>): number {
+    return this.#layoutCapacity(RESOURCE_ORDER.map((id) => capacities[id]));
+  }
+
+  /** Aligned regions in resource order inside one power-of-two buffer. */
+  #layoutCapacity(sizes: readonly number[]): number {
     const alignment = this.#requiredAlignment();
     let end = 0;
-    for (const id of RESOURCE_ORDER) {
-      end = align(end, alignment) + align(capacities[id], alignment);
+    for (const size of sizes) {
+      end = align(end, alignment) + align(size, alignment);
     }
     const capacity = nextPowerOfTwo(end);
     if (!Number.isSafeInteger(capacity)) throw new AllocationError();
@@ -673,6 +1075,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         bindGroup,
         allocator,
         allocations: Object.freeze(allocations),
+        allocationList: Object.freeze(RESOURCE_ORDER.map((resourceId) => allocations[resourceId])),
         incarnations: Object.freeze({ ...incarnations }),
         capacities: Object.freeze({ ...capacities }),
         initialized: Object.freeze({
@@ -723,10 +1126,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     return Math.max(4, storage, uniform);
   }
 
-  #retireArena(arena: ArenaState): void {
+  #retireArena(arena: ArenaBase): void {
     if (arena.released || arena.retired) return;
     arena.retired = true;
-    for (const id of RESOURCE_ORDER) arena.allocator.free(arena.allocations[id]);
+    for (const allocation of arena.allocationList) arena.allocator.free(allocation);
     if (arena.allocator.snapshot().reservedBytes === 0) this.#releaseArena(arena);
     else this.#retiredArenas.push(arena);
   }
@@ -746,14 +1149,14 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       () => {
         this.#completionObserverPending = false;
         if (this.#disposed) return;
-        const arenas = [this.#currentArena, ...this.#retiredArenas].filter(
-          (arena): arena is ArenaState => arena !== undefined,
+        const arenas = [this.#currentArena, this.#currentMeshArena, ...this.#retiredArenas].filter(
+          (arena): arena is ArenaBase => arena !== undefined,
         );
         for (const arena of arenas) {
           const completed = Math.min(observedSerial, arena.lastSubmittedSerial);
           if (completed > 0) arena.allocator.completeThrough(this.#generation, completed);
         }
-        const retained: ArenaState[] = [];
+        const retained: ArenaBase[] = [];
         for (const arena of this.#retiredArenas) {
           if (arena.allocator.snapshot().reservedBytes === 0) this.#releaseArena(arena);
           else retained.push(arena);
@@ -767,7 +1170,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     );
   }
 
-  #releaseArena(arena: ArenaState): void {
+  #releaseArena(arena: ArenaBase): void {
     if (arena.released) return;
     arena.released = true;
     let firstError: unknown;
@@ -824,10 +1227,21 @@ function sameSet(...sets: readonly ReadonlySet<number>[]): boolean {
     );
 }
 
+/** The receipt's mesh part: skipped when the mesh path is unavailable for this generation. */
+function meshReceipt(part: MeshPacketPart, mesh: ValidatedMesh): MeshReceiptPart {
+  if (mesh.skipped) return Object.freeze({ status: 'skipped' as const });
+  return Object.freeze({
+    status: 'submitted' as const,
+    originRevision: part.originRevision,
+    resources: mesh.receiptResources,
+  });
+}
+
 function createReceipt(
   packet: PrimitivePacket,
   submissionSerial: number,
   resources: PrimitiveReceipt['resources'],
+  mesh?: MeshReceiptPart,
 ): PrimitiveReceipt {
   return Object.freeze({
     scene: Object.freeze({
@@ -842,6 +1256,7 @@ function createReceipt(
     packetId: packet.packetId,
     submissionSerial,
     resources,
+    ...(mesh === undefined ? {} : { mesh }),
   });
 }
 
@@ -851,6 +1266,7 @@ export function createNativePrimitiveSceneCreation(
   format: PrimitiveTargetFormat,
   generation: number,
   resources: WebGpuResourceTracker,
+  options: WebGpuPrimitiveSceneOptions = {},
 ): WebGpuPrimitiveSceneCreationPort {
   let disposed = false;
   let scene: NativePrimitiveScene | undefined;
@@ -958,10 +1374,66 @@ export function createNativePrimitiveSceneCreation(
       fellBackFrom4x = true;
       pipeline = await createPipeline(1);
     }
+    if (disposed) throw new Error('Primitive scene creation completed after disposal.');
+    track(`${prefix}/pipeline`, { category: 'render-pipeline' });
+    // P3 V3 section f: the mesh pipeline is created here, at initialization and at each
+    // recovery, next to the P1 pipeline, and never on the frame path.
+    let mesh: MeshPipelineState | null = null;
+    let meshShaderModulesCreated = 0;
+    if (options.meshPipeline === true) {
+      const meshTracked: string[] = [];
+      const trackMesh = (id: string, descriptor: ResourceDescriptor) => {
+        track(id, descriptor);
+        meshTracked.push(id);
+      };
+      const limits = device.limits;
+      if (
+        safeLimit(limits.maxStorageBuffersPerShaderStage, 0) >=
+          MESH_REQUIRED_STORAGE_BUFFERS_PER_STAGE &&
+        safeLimit(limits.maxBindingsPerBindGroup, 0) >= MESH_REQUIRED_BINDINGS_PER_BIND_GROUP
+      ) {
+        try {
+          const meshBindGroupLayout = device.createBindGroupLayout(
+            createMeshBindGroupLayoutDescriptor(),
+          );
+          trackMesh(`${prefix}/mesh-bind-group-layout`, { category: 'bind-group-layout' });
+          const meshPipelineLayout = device.createPipelineLayout({
+            label: `${prefix}/mesh-pipeline-layout`,
+            bindGroupLayouts: [meshBindGroupLayout],
+          });
+          trackMesh(`${prefix}/mesh-pipeline-layout`, { category: 'pipeline-layout' });
+          const meshShader = device.createShaderModule({
+            label: `${prefix}/mesh-shader`,
+            code: MESH_FILL_SHADER,
+          });
+          meshShaderModulesCreated = 1;
+          trackMesh(`${prefix}/mesh-shader`, { category: 'shader-module' });
+          const meshPipeline = await pipelineCache.getOrCreate(
+            meshPipelineKey(format, sampleCount),
+            () =>
+              device.createRenderPipelineAsync(
+                createMeshPipelineDescriptor(meshShader, meshPipelineLayout, format, sampleCount),
+              ),
+          );
+          trackMesh(`${prefix}/mesh-pipeline`, { category: 'render-pipeline' });
+          mesh = Object.freeze({ pipeline: meshPipeline, bindGroupLayout: meshBindGroupLayout });
+        } catch {
+          // The mesh path is unavailable for this generation; primitives still draw.
+          for (const id of meshTracked) {
+            tracked.delete(id);
+            try {
+              resources.release(id);
+            } catch {
+              // Accounting cleanup is best effort.
+            }
+          }
+          mesh = null;
+        }
+      }
+    }
     if (disposed || vertexBuffer === undefined || indexBuffer === undefined) {
       throw new Error('Primitive scene creation completed after disposal.');
     }
-    track(`${prefix}/pipeline`, { category: 'render-pipeline' });
     const staticIds = Object.freeze([...tracked]);
     scene = new NativePrimitiveScene(
       device,
@@ -976,6 +1448,8 @@ export function createNativePrimitiveSceneCreation(
       indexBuffer,
       resources,
       staticIds,
+      mesh,
+      meshShaderModulesCreated,
     );
     vertexBuffer = undefined;
     indexBuffer = undefined;
