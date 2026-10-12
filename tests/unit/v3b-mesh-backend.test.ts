@@ -668,7 +668,13 @@ describe('V3b host injection (V3-A18)', () => {
     };
     walk(root);
     expect(files.length).toBeGreaterThan(0);
-    for (const file of files) {
+    // V3c: the V3-A14 smoke fixture page is a test fixture with a static test-double port, not
+    // a host; it must not reach a real port (no geometry-wasm). V4 replaces this exemption.
+    const fixture = files.filter((file) => /p3-v3-mesh\.(ts|html)$/.test(file));
+    expect(fixture).toHaveLength(2);
+    for (const file of fixture)
+      expect(readFileSync(file, 'utf8'), file).not.toMatch(/geometry-wasm/);
+    for (const file of files.filter((candidate) => !fixture.includes(candidate))) {
       expect(readFileSync(file, 'utf8'), file).not.toMatch(
         /fillMesh|geometry-wasm|requiresMeshPipeline|meshPipeline/,
       );

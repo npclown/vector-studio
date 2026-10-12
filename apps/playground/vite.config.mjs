@@ -10,6 +10,7 @@ export default defineConfig({
         p3NativeProjection: `${import.meta.dirname}/p3-native-projection.html`,
         p3Coverage: `${import.meta.dirname}/p3-coverage.html`,
         p3O02: `${import.meta.dirname}/p3-o02.html`,
+        p3V3Mesh: `${import.meta.dirname}/p3-v3-mesh.html`,
       },
     },
   },

@@ -14,6 +14,7 @@ artifacts/p3.1o-o02/
 artifacts/p3.1p-t01/
 artifacts/p3.1p-t02/
 artifacts/p3.1p-t03/
+artifacts/p3-v3-mesh/
 *.tsbuildinfo
 .tools/
 target/

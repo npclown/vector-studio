@@ -6,13 +6,15 @@ import type {
   PrimitiveRecordVersion,
 } from './primitive-packet.js';
 import { toDyadic } from './path-buckets.js';
+import type { PathFringe } from './path-fringe.js';
 import type { PathMeshDraw } from './path-mesh-pipeline.js';
 
 // The packet mesh part of the P3 V3 contract, section f, unit V3b: the per-view O-PX(128) mesh
 // origin, the six mesh resources with their byte layouts, first-fit range management with
-// fragmentation repacking, record versions, receipts and latest-state reconstruction. V3b
-// packs region-only variants: the port's triangles with role 0 and no lists or features. V3c
-// adds the fringe variants (frame corners, exterior triangles, lists and features).
+// fragmentation repacking, record versions, receipts and latest-state reconstruction. Each
+// served fringe variant (unit V3c) has its own ranges in the four geometry regions: the port
+// vertices then its four frame corners, its region and exterior triangle records, its lists and
+// its features. Without a fringe builder (tests only) a variant is region-only, as in V3b.
 
 export const MESH_RESOURCE_ORDER = [
   'meshPositions',
@@ -228,11 +230,17 @@ class RangeList {
   }
 }
 
-/** A served region-only variant placed in the arena (V3b). */
+/**
+ * A served variant placed in the arena: a fringe variant (V3c: port vertices then the four frame
+ * corners, region and exterior triangle records, lists and features) or, without a fringe
+ * builder, a region-only variant (V3b: port vertices and region triangles with role 0).
+ */
 type ResidentVariant = {
-  readonly entryId: symbol;
+  /** The fringe variant's identity, or the entry's for a region-only variant. */
+  readonly id: symbol;
   readonly offsets: Float32Array;
   readonly indices: Uint32Array;
+  readonly fringe: PathFringe | null;
   readonly sizes: Readonly<Record<GeometryRegion, number>>;
   readonly bases: Record<GeometryRegion, number>;
 };
@@ -306,7 +314,7 @@ export class PathMeshPacker {
         this.#setVersion('meshInstances', slot, undefined);
         continue;
       }
-      if (record.variant !== null && !input.resident.has(record.variant.entryId)) {
+      if (record.variant !== null && !input.resident.has(record.variant.id)) {
         this.#releaseVariant(record);
       }
     }
@@ -326,7 +334,7 @@ export class PathMeshPacker {
         record = { nodeId: draw.nodeId, variant: null, instance: null };
         this.#records.set(draw.slot, record);
       }
-      if (record.variant?.entryId !== draw.entryId) {
+      if (record.variant?.id !== (draw.fringe?.id ?? draw.entryId)) {
         this.#releaseVariant(record);
         record.variant = this.#placeVariant(draw);
       }
@@ -436,16 +444,27 @@ export class PathMeshPacker {
   }
 
   #placeVariant(draw: PathMeshDraw): ResidentVariant {
-    const sizes = Object.freeze({
-      meshPositions: draw.offsets.length / 2,
-      meshTriangles: draw.mesh.indices.length / 3,
-      meshFeatureLists: 0,
-      meshFeatures: 0,
-    });
+    const fringe = draw.fringe?.data ?? null;
+    const sizes = Object.freeze(
+      fringe === null
+        ? {
+            meshPositions: draw.offsets.length / 2,
+            meshTriangles: draw.mesh.indices.length / 3,
+            meshFeatureLists: 0,
+            meshFeatures: 0,
+          }
+        : {
+            meshPositions: draw.offsets.length / 2 + fringe.corners.length / 2,
+            meshTriangles: (4 * fringe.triangles.length) / MESH_STRIDES.meshTriangles,
+            meshFeatureLists: fringe.lists.length,
+            meshFeatures: (4 * fringe.features.length) / MESH_STRIDES.meshFeatures,
+          },
+    );
     const variant: ResidentVariant = {
-      entryId: draw.entryId,
+      id: draw.fringe?.id ?? draw.entryId,
       offsets: draw.offsets,
       indices: draw.mesh.indices,
+      fringe,
       sizes,
       bases: { meshPositions: 0, meshTriangles: 0, meshFeatureLists: 0, meshFeatures: 0 },
     };
@@ -553,10 +572,14 @@ export class PathMeshPacker {
     const positions = new DataView(this.#buffers.meshPositions.buffer);
     const vertexBase = variant.bases.meshPositions;
     const version = Symbol('meshPositions-range');
+    // The port vertices, packed once per entry, then a fringe variant's four frame corners.
+    const portVertices = variant.offsets.length / 2;
     for (let index = 0; index < variant.sizes.meshPositions; index += 1) {
       const byte = (vertexBase + index) * MESH_STRIDES.meshPositions;
-      positions.setFloat32(byte, variant.offsets[2 * index]!, true);
-      positions.setFloat32(byte + 4, variant.offsets[2 * index + 1]!, true);
+      const lanes = index < portVertices ? variant.offsets : variant.fringe!.corners;
+      const lane = index < portVertices ? 2 * index : 2 * (index - portVertices);
+      positions.setFloat32(byte, lanes[lane]!, true);
+      positions.setFloat32(byte + 4, lanes[lane + 1]!, true);
       this.#setVersion('meshPositions', vertexBase + index, version);
     }
     const triangles = new DataView(this.#buffers.meshTriangles.buffer);
@@ -564,13 +587,42 @@ export class PathMeshPacker {
     const triangleVersion = Symbol('meshTriangles-range');
     for (let index = 0; index < variant.sizes.meshTriangles; index += 1) {
       const byte = (triangleBase + index) * MESH_STRIDES.meshTriangles;
-      // u32 i0, i1, i2 (variant-relative, counter-clockwise as the port gives them); listOffset,
-      // listCount, role 0 (region); two zero words. V3b variants have no lists.
-      triangles.setUint32(byte, variant.indices[3 * index]!, true);
-      triangles.setUint32(byte + 4, variant.indices[3 * index + 1]!, true);
-      triangles.setUint32(byte + 8, variant.indices[3 * index + 2]!, true);
-      for (let word = 3; word < 8; word += 1) triangles.setUint32(byte + 4 * word, 0, true);
+      if (variant.fringe !== null) {
+        // The fringe's records: i0, i1, i2, listOffset, listCount, role, two zero words.
+        for (let word = 0; word < 8; word += 1) {
+          triangles.setUint32(byte + 4 * word, variant.fringe.triangles[8 * index + word]!, true);
+        }
+      } else {
+        // Region-only: u32 i0, i1, i2 (variant-relative, counter-clockwise as the port gives
+        // them); listOffset, listCount, role 0 (region); two zero words; no lists.
+        triangles.setUint32(byte, variant.indices[3 * index]!, true);
+        triangles.setUint32(byte + 4, variant.indices[3 * index + 1]!, true);
+        triangles.setUint32(byte + 8, variant.indices[3 * index + 2]!, true);
+        for (let word = 3; word < 8; word += 1) triangles.setUint32(byte + 4 * word, 0, true);
+      }
       this.#setVersion('meshTriangles', triangleBase + index, triangleVersion);
+    }
+    if (variant.fringe === null) return;
+    const lists = new DataView(this.#buffers.meshFeatureLists.buffer);
+    const listBase = variant.bases.meshFeatureLists;
+    const listVersion = Symbol('meshFeatureLists-range');
+    for (let index = 0; index < variant.sizes.meshFeatureLists; index += 1) {
+      lists.setUint32(
+        (listBase + index) * MESH_STRIDES.meshFeatureLists,
+        variant.fringe.lists[index]!,
+        true,
+      );
+      this.#setVersion('meshFeatureLists', listBase + index, listVersion);
+    }
+    const features = new DataView(this.#buffers.meshFeatures.buffer);
+    const featureBase = variant.bases.meshFeatures;
+    const featureVersion = Symbol('meshFeatures-range');
+    for (let index = 0; index < variant.sizes.meshFeatures; index += 1) {
+      const byte = (featureBase + index) * MESH_STRIDES.meshFeatures;
+      for (let word = 0; word < 16; word += 1) {
+        features.setUint32(byte + 4 * word, variant.fringe.features[16 * index + word]!, true);
+      }
+      this.#setVersion('meshFeatures', featureBase + index, featureVersion);
     }
   }
 
