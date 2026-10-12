@@ -1,4 +1,5 @@
 import type {
+  PathStyle,
   PrimitiveGeometry,
   PrimitiveStyle,
   RenderChildOrder,
@@ -6,11 +7,16 @@ import type {
   SceneAffine,
   SceneColor,
   SceneIdentity,
+  ScenePathGeometry,
+  ScenePathVerb,
   ScenePoint,
   SceneRejectionReason,
   SceneStroke,
 } from '@vector-studio/contracts';
 import { hasFiniteSceneArithmetic } from './scene-numeric.js';
+
+/** Port presence, fixed when a mirror is constructed (P3 V3 contract, section a). */
+export type PathNodeSupport = 'supported' | 'unsupported';
 
 export type ValidatedNode = Readonly<{
   node: RenderNodeSnapshot;
@@ -34,14 +40,17 @@ export type ValidatedChangesInput = Readonly<{
   orders: readonly RenderChildOrder[];
 }>;
 
-export function validateSnapshotShape(input: unknown): ValidatedSnapshotInput | null {
+export function validateSnapshotShape(
+  input: unknown,
+  pathNodes: PathNodeSupport = 'unsupported',
+): ValidatedSnapshotInput | null {
   if (!hasExactFields(input, ['identity', 'revision', 'nodes', 'rootOrder'])) {
     return null;
   }
   const record = input as Record<string, unknown>;
   const identity = copyIdentity(record.identity);
   const revision = copyRevision(record.revision);
-  const nodes = copyArray(record.nodes, copyNode);
+  const nodes = copyArray(record.nodes, (entry) => copyNode(entry, pathNodes));
   const rootOrder = copyArray(record.rootOrder, copyId);
   if (identity === null || revision === null || nodes === null || rootOrder === null) {
     return null;
@@ -49,7 +58,10 @@ export function validateSnapshotShape(input: unknown): ValidatedSnapshotInput | 
   return Object.freeze({ identity, revision, nodes, rootOrder });
 }
 
-export function validateChangesShape(input: unknown): ValidatedChangesInput | null {
+export function validateChangesShape(
+  input: unknown,
+  pathNodes: PathNodeSupport = 'unsupported',
+): ValidatedChangesInput | null {
   if (
     !hasExactFields(input, [
       'identity',
@@ -67,8 +79,8 @@ export function validateChangesShape(input: unknown): ValidatedChangesInput | nu
   const identity = copyIdentity(record.identity);
   const revision = copyRevision(record.revision);
   const baseRevision = copyRevision(record.baseRevision);
-  const inserted = copyArray(record.inserted, copyNode);
-  const updated = copyArray(record.updated, copyNode);
+  const inserted = copyArray(record.inserted, (entry) => copyNode(entry, pathNodes));
+  const updated = copyArray(record.updated, (entry) => copyNode(entry, pathNodes));
   const removed = copyArray(record.removed, copyId);
   const orders = copyArray(record.orders, copyOrder);
   if (
@@ -159,13 +171,13 @@ export function snapshotsEqual(
   return true;
 }
 
-function copyNode(value: unknown): ValidatedNode | null {
+function copyNode(value: unknown, pathNodes: PathNodeSupport): ValidatedNode | null {
   if (!isRecord(value)) {
     return null;
   }
   const kind = value.kind;
   const fields =
-    kind === 'primitive'
+    kind === 'primitive' || kind === 'path'
       ? ['id', 'parentId', 'transform', 'visible', 'opacity', 'kind', 'geometry', 'style']
       : kind === 'container'
         ? ['id', 'parentId', 'transform', 'visible', 'opacity', 'kind', 'children']
@@ -204,6 +216,27 @@ function copyNode(value: unknown): ValidatedNode | null {
       children,
     });
     return Object.freeze({ node, unsupported: opacity !== 1 });
+  }
+
+  if (kind === 'path') {
+    // P3 V3 contract, section a: path content is validated here, so it precedes graph
+    // checks; a path without a port is reported last as unsupported-feature.
+    const geometry = copyPathGeometry(value.geometry);
+    const style = copyPathStyle(value.style);
+    if (geometry === null || style === null) {
+      return null;
+    }
+    const node = Object.freeze({
+      id,
+      parentId,
+      transform,
+      visible,
+      opacity,
+      kind: 'path' as const,
+      geometry,
+      style,
+    });
+    return Object.freeze({ node, unsupported: pathNodes !== 'supported' });
   }
 
   const geometry = copyGeometry(value.geometry);
@@ -256,6 +289,57 @@ function copyGeometry(value: unknown): PrimitiveGeometry | null {
     return start === null || end === null ? null : Object.freeze({ kind: 'line', start, end });
   }
   return null;
+}
+
+const PATH_VERB_POINTS: Readonly<Record<ScenePathVerb, number>> = Object.freeze({
+  move: 1,
+  line: 1,
+  cubic: 3,
+  close: 0,
+});
+
+function copyPathGeometry(value: unknown): ScenePathGeometry | null {
+  if (!hasExactFields(value, ['kind', 'verbs', 'points', 'fillRule'])) return null;
+  const record = value as Record<string, unknown>;
+  if (record.kind !== 'path') return null;
+  if (record.fillRule !== 'nonzero' && record.fillRule !== 'evenodd') return null;
+  const verbs = copyArray(record.verbs, copyPathVerb);
+  const points = copyArray(record.points, copyFiniteNumber);
+  if (verbs === null || points === null || !hasPathGrammar(verbs)) return null;
+  let pointCount = 0;
+  for (const verb of verbs) pointCount += PATH_VERB_POINTS[verb];
+  if (points.length !== pointCount * 2) return null;
+  return Object.freeze({ kind: 'path', verbs, points, fillRule: record.fillRule });
+}
+
+function copyPathVerb(value: unknown): ScenePathVerb | null {
+  return value === 'move' || value === 'line' || value === 'cubic' || value === 'close'
+    ? value
+    : null;
+}
+
+/** The P2 v1 grammar: MOVE opens a subpath; LINE and CUBIC need one; CLOSE ends one. */
+function hasPathGrammar(verbs: readonly ScenePathVerb[]): boolean {
+  let open = false;
+  for (const verb of verbs) {
+    if (verb === 'move') {
+      open = true;
+    } else if (verb === 'close') {
+      if (!open) return false;
+      open = false;
+    } else if (!open) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function copyPathStyle(value: unknown): PathStyle | null {
+  if (!hasExactFields(value, ['fill'])) return null;
+  const record = value as Record<string, unknown>;
+  const fill = record.fill === null ? null : copyColor(record.fill);
+  if (record.fill !== null && fill === null) return null;
+  return Object.freeze({ fill });
 }
 
 function copyStyle(value: unknown): PrimitiveStyle | null {
@@ -448,8 +532,20 @@ function nodeEquals(left: RenderNodeSnapshot, right: RenderNodeSnapshot): boolea
   if (left.kind === 'container' && right.kind === 'container') {
     return arraysEqual(left.children, right.children);
   }
+  if (left.kind === 'path' && right.kind === 'path') {
+    return (
+      pathDataEquals(left.geometry, right.geometry) &&
+      left.geometry.fillRule === right.geometry.fillRule &&
+      nullableColorEquals(left.style.fill, right.style.fill)
+    );
+  }
   if (left.kind !== 'primitive' || right.kind !== 'primitive') return false;
   return geometryEquals(left.geometry, right.geometry) && styleEquals(left.style, right.style);
+}
+
+/** Path data equality under the replay rule (`===`); it also decides geometry-revision reuse. */
+export function pathDataEquals(left: ScenePathGeometry, right: ScenePathGeometry): boolean {
+  return arraysEqual(left.verbs, right.verbs) && arraysEqual(left.points, right.points);
 }
 
 function geometryEquals(left: PrimitiveGeometry, right: PrimitiveGeometry): boolean {

@@ -46,6 +46,27 @@ export function getPrimitiveLocalStrokeBounds(
     : null;
 }
 
+/**
+ * The box of a path's points, which contains every cubic by the convex-hull property.
+ * An empty path has no points and so no bounds (P3 V3 contract, section a).
+ */
+export function getPathLocalPointBounds(points: readonly number[]): SceneBounds | null {
+  if (points.length === 0) return null;
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (let index = 0; index < points.length; index += 2) {
+    const x = points[index]!;
+    const y = points[index + 1]!;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  return Object.freeze({ minX, minY, maxX, maxY });
+}
+
 export function transformSceneBounds(
   bounds: SceneBounds,
   transform: SceneAffine,
@@ -140,6 +161,12 @@ export function hasFiniteSceneArithmetic(nodes: ReadonlyMap<string, RenderNodeSn
       }
       worldTransforms.set(node.id, world);
       parentWorld = world;
+      if (node.kind === 'path') {
+        // P1's arithmetic rule on the point box; an empty path is exempt.
+        const pathBounds = getPathLocalPointBounds(node.geometry.points);
+        if (pathBounds !== null && transformSceneBounds(pathBounds, world) === null) return false;
+        continue;
+      }
       const bounds = getPrimitiveLocalStrokeBounds(node);
       if (
         bounds === null ||

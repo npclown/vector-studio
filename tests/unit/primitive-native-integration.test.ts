@@ -585,7 +585,7 @@ describe('native primitive packet integration', () => {
     };
     scene.setTarget(target);
     const wide = {
-      ...rectangle('a', -1000),
+      ...(rectangle('a', -1000) as Extract<RenderNodeSnapshot, { kind: 'primitive' }>),
       geometry: {
         kind: 'rectangle' as const,
         width: 2200,

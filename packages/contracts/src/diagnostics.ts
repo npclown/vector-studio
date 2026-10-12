@@ -20,6 +20,8 @@ export const DIAGNOSTIC_CODES = Object.freeze({
   ALLOCATION_ACCOUNTING_ERROR: 'allocation.accounting-error',
   RENDER_SUBMISSION_FAILED: 'render.submission-failed',
   STALE_GENERATION_SKIPPED: 'render.stale-generation-skipped',
+  /** D8-interim (P3 V3 contract, section h); removed or replaced before P3 acceptance. */
+  PATH_MESH_INTERIM_FAILURE: 'render.path-mesh-interim-failure',
   DISPOSAL_COMPLETED: 'disposal.completed',
   DISPOSAL_FAILED: 'disposal.failed',
 } as const);
