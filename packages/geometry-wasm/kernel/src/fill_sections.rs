@@ -5,7 +5,9 @@ use crate::fill_exact::{
     compare_ratios, line, multiply, Signed, COORDINATE_LIMBS, EVENT_COMPARISON_LIMBS,
     HOMOGENEOUS_LIMBS, LINE_LIMBS,
 };
-use crate::fill_filter::{self, compare_enclosures, enclose_ratio, FilterId, Interval};
+use crate::fill_filter::{
+    self, compare_enclosures, enclose_ratio, Fault, FilterId, Interval, UNDECIDED,
+};
 use crate::geometry::Point;
 
 pub(crate) const SECTION_NUMERATOR_LIMBS: usize = 132;
@@ -452,9 +454,59 @@ pub(crate) enum SectionSource {
         end: Point,
         column: FillEvent,
     },
+    /// T3 (U5): an `Edge` whose column is an `Endpoint` event at the x of one of the edge's
+    /// endpoints, built only by `SectionSource::edge`. `value` is that endpoint's y, the exact
+    /// value of the section; `build` is the `Edge` construction, unchanged.
+    EdgeEndpoint {
+        start: Point,
+        end: Point,
+        column: FillEvent,
+        value: f64,
+    },
 }
 
 impl SectionSource {
+    /// T3 (U5, docs/plans/p3-b0r-kernel-performance-contract.md section 5.2): the section of the
+    /// nonvertical edge from `start` to `end` at the column of `column`, the source of
+    /// `section_at_column(start, end, event_column(column))`.
+    ///
+    /// When `column` is an `Endpoint` event whose x equals `start.x` (binary64 `==`), the
+    /// section's value is `start.y`; likewise for `end`. The line through a and b, evaluated at
+    /// x = a.x, is a.y exactly, and `event_column` of an endpoint is (x, 1) exactly. Every
+    /// consumer compares values only: signed zeros compare equal, as `from_finite` maps both to
+    /// zero, and an embedded coordinate is `rank_finite(rank)` in both versions, so T3 cannot
+    /// change a zero's sign. The identity needs every coordinate finite and `start.x != end.x`;
+    /// otherwise the plain `Edge` keeps the eager behaviour, including the vertical-edge
+    /// assertion of `section_at_column`. T3 is used only for sections at event columns
+    /// (`exact_section`'s sources); the slab samples of `build_cells` are strict interior
+    /// points of a slab and never an endpoint x.
+    pub(crate) fn edge(start: Point, end: Point, column: FillEvent) -> Self {
+        if let FillEvent::Endpoint(at) = column {
+            let finite = [start, end, at]
+                .iter()
+                .all(|point| point.x.is_finite() && point.y.is_finite());
+            if finite && start.x != end.x {
+                let value = if t3_matches(at.x, start.x) {
+                    Some(start.y)
+                } else if t3_matches(at.x, end.x) {
+                    Some(end.y)
+                } else {
+                    None
+                };
+                if let Some(value) = value {
+                    fill_filter::record(FilterId::EndpointSection, true);
+                    return Self::EdgeEndpoint {
+                        start,
+                        end,
+                        column,
+                        value,
+                    };
+                }
+            }
+        }
+        Self::Edge { start, end, column }
+    }
+
     /// F0.5: the exact value when it is a binary64 endpoint coordinate. `endpoint_section(v)`
     /// is (v, 1), and an endpoint event's column is (x, 1), which `normalize` and
     /// `column_as_section` leave unchanged. Non-finite data gives `None`, so the eager
@@ -467,6 +519,8 @@ impl SectionSource {
             {
                 Some(point.x)
             }
+            // T3: `SectionSource::edge` checked finiteness and the endpoint identity.
+            Self::EdgeEndpoint { value, .. } => Some(value),
             _ => None,
         }
     }
@@ -490,13 +544,9 @@ impl SectionSource {
             Self::Endpoint(value) => Interval::point(value),
             Self::Column(event) => x_enclosure(event),
             Self::Edge { start, end, column } => {
-                let x = x_enclosure(column);
-                let ax = Interval::point(start.x);
-                let ay = Interval::point(start.y);
-                let rise = Interval::point(end.y).sub(ay);
-                let run = Interval::point(end.x).sub(ax);
-                x.sub(ax).mul(rise).div(run).add(ay)
+                edge_section_enclosure(start, end, x_enclosure(column))
             }
+            Self::EdgeEndpoint { value, .. } => Interval::point(value),
         }
     }
 
@@ -505,11 +555,33 @@ impl SectionSource {
         match self {
             Self::Endpoint(value) => Ok(endpoint_section(value)),
             Self::Column(event) => Ok(column_as_section(event_column(event)?)),
-            Self::Edge { start, end, column } => {
-                Ok(section_at_column(start, end, event_column(column)?))
-            }
+            Self::Edge { start, end, column }
+            | Self::EdgeEndpoint {
+                start, end, column, ..
+            } => Ok(section_at_column(start, end, event_column(column)?)),
         }
     }
+}
+
+/// T3's condition: binary64 equality of the column x and the endpoint x. The O8 (8) fault
+/// also accepts a column x one ulp away (test builds only).
+fn t3_matches(column: f64, endpoint: f64) -> bool {
+    column == endpoint
+        || (fill_filter::fault_active(Fault::T3OneUlp)
+            && (column.next_up() == endpoint || column.next_down() == endpoint))
+}
+
+/// An enclosure of the nonvertical edge from `start` to `end` at the abscissas in `x`, by
+/// interval evaluation (R1, R2) of start.y + (x - start.x) * (end.y - start.y) / (end.x -
+/// start.x), the same real number as `section_at_column`'s -(Lx * x + Lz) / Ly (see
+/// `SectionSource::enclosure`). The run must enclose a nonzero interval, or the result is
+/// undecided.
+fn edge_section_enclosure(start: Point, end: Point, x: Interval) -> Interval {
+    let ax = Interval::point(start.x);
+    let ay = Interval::point(start.y);
+    let rise = Interval::point(end.y).sub(ay);
+    let run = Interval::point(end.x).sub(ax);
+    x.sub(ax).mul(rise).div(run).add(ay)
 }
 
 /// T1: the order of two sections given by their sources, with the precondition of
@@ -660,6 +732,201 @@ impl SectionTarget {
                 == Ok(result)
         });
         Ok(result)
+    }
+}
+
+// T5 (U5): slab samples and active sections, built lazily.
+
+impl ExactSection {
+    /// T5: the zero-weight "not built" sentinel of an active edge's section. A valid section
+    /// never has zero weight (`section_at_column` asserts it), so the sentinel cannot be
+    /// confused with a value. It is never compared: the consumer rule of
+    /// `compare_slab_sections` resolves it first.
+    pub(crate) fn unbuilt() -> Self {
+        Self {
+            numerator: Signed::zero(),
+            weight: Signed::zero(),
+        }
+    }
+
+    /// Whether this is the T5 sentinel (zero weight).
+    pub(crate) fn is_unbuilt(&self) -> bool {
+        self.weight.used == 0
+    }
+}
+
+/// T5: the mediant sample of one slab, `mediant(event_column(left), event_column(right))`,
+/// built exactly only when a comparison falls back, and at most once per slab.
+///
+/// Its enclosure comes from the defining binary64 data. For two endpoint columns (x1, 1) and
+/// (x2, 1) the mediant is (x1 + x2) / 2 exactly, enclosed by interval evaluation (R1, R2). If
+/// either column is a crossing, the mediant's interval formula over the two columns'
+/// enclosures is used: a mediant (N1 + N2) / (W1 + W2) of two ratios with positive weights lies
+/// between the two values whatever the weights, so the hull of the two column enclosures
+/// (`x_enclosure`, F2.5) encloses it. Soundness rests on R1-R3 only.
+///
+/// Precondition, met by every slab of the rounded tessellation: both events are in the
+/// column list, so they passed `compare_event_x` and the eager construction cannot fail
+/// (`compare_column_value` gives the argument).
+pub(crate) struct SlabSample {
+    left: FillEvent,
+    right: FillEvent,
+    enclosure: Interval,
+    built: Option<ExactColumn>,
+}
+
+impl SlabSample {
+    pub(crate) fn new(left: FillEvent, right: FillEvent) -> Self {
+        let enclosure = match (left, right) {
+            (FillEvent::Endpoint(left), FillEvent::Endpoint(right))
+                if left.y.is_finite() && right.y.is_finite() =>
+            {
+                Interval::point(left.x)
+                    .add(Interval::point(right.x))
+                    .mul(Interval::point(0.5))
+            }
+            (FillEvent::Endpoint(_), FillEvent::Endpoint(_)) => UNDECIDED,
+            _ => hull(x_enclosure(left), x_enclosure(right)),
+        };
+        Self {
+            left,
+            right,
+            enclosure,
+            built: None,
+        }
+    }
+
+    /// The sample's enclosure (consumer rule step 1).
+    pub(crate) fn enclosure(&self) -> Interval {
+        self.enclosure
+    }
+
+    /// The exact sample, built on first use with the eager code's function.
+    pub(crate) fn column(&mut self) -> Result<ExactColumn, EventError> {
+        if let Some(column) = self.built {
+            return Ok(column);
+        }
+        let column = mediant(event_column(self.left)?, event_column(self.right)?);
+        self.built = Some(column);
+        Ok(column)
+    }
+
+    /// Whether a fallback built the exact sample (O2 decided controls, test builds only).
+    #[cfg(test)]
+    pub(crate) fn is_built(&self) -> bool {
+        self.built.is_some()
+    }
+
+    /// O10: the eager sample, built afresh.
+    #[cfg(test)]
+    pub(crate) fn eager(&self) -> Result<ExactColumn, EventError> {
+        Ok(mediant(event_column(self.left)?, event_column(self.right)?))
+    }
+
+    /// An enclosure of the section of the nonvertical edge from `start` to `end` at the
+    /// sample, from the edge endpoints and the sample's enclosure, never from a stored
+    /// representation.
+    pub(crate) fn section_enclosure(&self, start: Point, end: Point) -> Interval {
+        edge_section_enclosure(start, end, self.enclosure)
+    }
+
+    /// Consumer rule step 2: replaces a sentinel by `section_at_column(start, end, sample)`, the
+    /// eager value; a built section is kept. Under the O8 (9) fault (test builds only) the
+    /// sentinel is left in place and read as a value.
+    fn resolve(
+        &mut self,
+        start: Point,
+        end: Point,
+        section: &mut ExactSection,
+    ) -> Result<(), EventError> {
+        if section.is_unbuilt() && !fill_filter::fault_active(Fault::T5SentinelAsValue) {
+            *section = section_at_column(start, end, self.column()?);
+        }
+        Ok(())
+    }
+}
+
+/// The hull of two enclosures, or `UNDECIDED` if either is not finite.
+fn hull(left: Interval, right: Interval) -> Interval {
+    if !left.is_finite() || !right.is_finite() {
+        return UNDECIDED;
+    }
+    Interval {
+        lo: left.lo.min(right.lo),
+        hi: left.hi.max(right.hi),
+    }
+}
+
+/// T5 consumer rule (section 5.2): the order of the active sections `left` and `right` of the
+/// nonvertical edges `left_edge` and `right_edge` at the slab sample, each either built or the
+/// sentinel. The result is `compare_sections` of the two eager sections.
+///
+/// 1. The two sections' enclosures, from the edge endpoints and the sample's enclosure, are
+///    compared; a decision here is final and builds nothing.
+/// 2. Otherwise both operands are resolved, left first: a sentinel is replaced, in place, by
+///    `section_at_column(edge.a, edge.b, sample)`. The caller stores the built value in the
+///    `active` element, or in the moving local copy of `sort_active`.
+/// 3. Only then `compare_sections` runs F0.6 on the two built representations, then F2.7 and the
+///    exact routine. F0.6 is never applied to a sentinel: two sentinels have identical
+///    representations and would wrongly compare `Equal`.
+pub(crate) fn compare_slab_sections(
+    sample: &mut SlabSample,
+    left_edge: (Point, Point),
+    left: &mut ExactSection,
+    right_edge: (Point, Point),
+    right: &mut ExactSection,
+) -> Result<Ordering, EventError> {
+    let decision = compare_enclosures(
+        sample.section_enclosure(left_edge.0, left_edge.1),
+        sample.section_enclosure(right_edge.0, right_edge.1),
+    );
+    fill_filter::record(FilterId::SlabSection, decision.is_some());
+    let order = match decision {
+        Some(order) => order,
+        None if fill_filter::fault_active(Fault::T5SentinelIdentity)
+            && left.is_unbuilt()
+            && right.is_unbuilt() =>
+        {
+            // O8 (10), test builds only: F0.6 applied to two sentinels.
+            Ordering::Equal
+        }
+        None => {
+            sample.resolve(left_edge.0, left_edge.1, left)?;
+            sample.resolve(right_edge.0, right_edge.1, right)?;
+            #[cfg(test)]
+            shadow_slab_operands(sample, left_edge, left, right_edge, right);
+            compare_sections(*left, *right)
+        }
+    };
+    #[cfg(test)]
+    shadow(|| {
+        let eager = sample.eager().map(|column| {
+            exact_compare_sections(
+                section_at_column(left_edge.0, left_edge.1, column),
+                section_at_column(right_edge.0, right_edge.1, column),
+            )
+        });
+        eager == Ok(order)
+    });
+    Ok(order)
+}
+
+/// O10: every operand that reaches step 3 is built, and equals the eager section of its edge.
+#[cfg(test)]
+fn shadow_slab_operands(
+    sample: &SlabSample,
+    left_edge: (Point, Point),
+    left: &ExactSection,
+    right_edge: (Point, Point),
+    right: &ExactSection,
+) {
+    if fill_filter::shadow_active() {
+        for (edge, section) in [(left_edge, left), (right_edge, right)] {
+            let eager = sample
+                .eager()
+                .map(|column| section_at_column(edge.0, edge.1, column));
+            fill_filter::shadow_check(!section.is_unbuilt() && eager == Ok(*section));
+        }
     }
 }
 

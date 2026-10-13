@@ -299,6 +299,12 @@ pub(crate) enum FilterId {
     EmbedStep,
     /// T2 with F2.8, a window-search step decided by the target's per-call enclosure.
     EmbedHalfStep,
+    /// T3, a nonvertical edge's section at an endpoint column whose x equals one of the edge's
+    /// endpoint x coordinates: its value is that endpoint's y (an identity, counted as decided).
+    EndpointSection,
+    /// T5, two active sections of one slab compared on enclosures from the edge endpoints and
+    /// the slab sample's enclosure (consumer rule step 1).
+    SlabSection,
 }
 
 /// The number of U1 topology filter identities, the first variants of `FilterId`. U1's test
@@ -311,8 +317,12 @@ pub(crate) const BINARY64_FILTER_COUNT: usize = 5;
 /// The number of U4 column and section filter identities, which follow the U3 ones.
 pub(crate) const SECTION_FILTER_COUNT: usize = 9;
 
+/// The number of U5 tessellation identities (T3 and T5), which follow the U4 ones.
+pub(crate) const SLAB_FILTER_COUNT: usize = 2;
+
 #[cfg(test)]
-const COUNTER_SLOTS: usize = FILTER_COUNT + BINARY64_FILTER_COUNT + SECTION_FILTER_COUNT;
+const COUNTER_SLOTS: usize =
+    FILTER_COUNT + BINARY64_FILTER_COUNT + SECTION_FILTER_COUNT + SLAB_FILTER_COUNT;
 
 /// Fault switches of oracle O8 that act inside this module.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -325,6 +335,12 @@ pub(crate) enum Fault {
     RatioFixedNumeratorUnit,
     /// O8 (2): the F1 error bound multiplied by 0.5.
     F1BoundHalved,
+    /// O8 (8): T3 also applied when the column x differs from the endpoint x by one ulp.
+    T3OneUlp,
+    /// O8 (9): the T5 sentinel read as a value (consumer rule step 2 skipped).
+    T5SentinelAsValue,
+    /// O8 (10): F0.6 applied to two T5 sentinels before they are resolved.
+    T5SentinelIdentity,
 }
 
 #[cfg(test)]

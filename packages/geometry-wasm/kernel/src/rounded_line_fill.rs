@@ -4,10 +4,11 @@ use core::mem::size_of;
 use crate::fill_event_order::{compare_event_x, EventError, FillEvent};
 use crate::fill_predicates::{orient2d, segment_relation, SegmentRelation};
 use crate::fill_sections::{
-    compare_column_source_f64, compare_section_sources, compare_sections, event_column, mediant,
-    rank_finite, section_at_column, ExactColumn, ExactSection, SectionSource, SectionTarget,
-    MAX_FINITE_RANK, MIN_FINITE_RANK,
+    compare_column_source_f64, compare_section_sources, compare_slab_sections, rank_finite,
+    ExactSection, SectionSource, SectionTarget, SlabSample, MAX_FINITE_RANK, MIN_FINITE_RANK,
 };
+#[cfg(test)]
+use crate::fill_sections::{event_column, section_at_column, ExactColumn};
 use crate::geometry::{Bounds, Point};
 use crate::line_fill::LineFillRule;
 
@@ -906,6 +907,8 @@ impl RoundedFillWorkspace {
         Ok(())
     }
 
+    /// The eager column, kept as the O10 shadow reference (T1 and T5 build columns lazily).
+    #[cfg(test)]
     fn exact_column(&self, index: usize) -> Result<ExactColumn, RoundedFillError> {
         event_column(self.exact_columns[index]).map_err(map_event_error)
     }
@@ -930,15 +933,17 @@ impl RoundedFillWorkspace {
     }
 
     /// T1: the defining data of a section record, with the eager code's endpoint-code check.
-    /// Its value is `exact_section(section)`'s, built by the same function when needed.
+    /// Its value is `exact_section(section)`'s, built by the same function when needed. A
+    /// nonvertical edge's section at an endpoint column at one of its endpoint x coordinates
+    /// carries that endpoint's y as its exact value (T3, `SectionSource::edge`).
     fn section_source(&self, section: RoundedSection) -> Result<SectionSource, RoundedFillError> {
         let edge = self.edges[section.edge];
         match section.endpoint {
-            0 => Ok(SectionSource::Edge {
-                start: edge.a,
-                end: edge.b,
-                column: self.exact_columns[section.column],
-            }),
+            0 => Ok(SectionSource::edge(
+                edge.a,
+                edge.b,
+                self.exact_columns[section.column],
+            )),
             1 => Ok(SectionSource::Endpoint(edge.a.y)),
             2 => Ok(SectionSource::Endpoint(edge.b.y)),
             _ => Err(RoundedFillError::InternalInvariant),
@@ -1120,7 +1125,11 @@ impl RoundedFillWorkspace {
 
     fn build_cells(&mut self, rule: LineFillRule) -> Result<(), RoundedFillError> {
         for slab in 0..self.exact_columns.len().saturating_sub(1) {
-            let sample = mediant(self.exact_column(slab)?, self.exact_column(slab + 1)?);
+            // T5: the mediant sample and the active sections are built only when a comparison
+            // falls back (`compare_slab_sections`). Both columns passed `compare_event_x`, so
+            // the eager `exact_column` calls that preceded this slab's charges could not fail.
+            let mut sample =
+                SlabSample::new(self.exact_columns[slab], self.exact_columns[slab + 1]);
             self.active.clear();
             for edge_index in 0..self.edges.len() {
                 self.charge()?;
@@ -1128,25 +1137,25 @@ impl RoundedFillWorkspace {
                 if edge.a.x != edge.b.x && edge.low_column <= slab && slab < edge.high_column {
                     self.active.push(ActiveEdge {
                         edge: edge_index,
-                        section: section_at_column(edge.a, edge.b, sample),
+                        section: ExactSection::unbuilt(),
                     });
                 }
             }
-            self.sort_active()?;
-            self.build_slab_cells(slab, rule)?;
+            self.sort_active(&mut sample)?;
+            self.build_slab_cells(slab, rule, &mut sample)?;
         }
         Ok(())
     }
 
-    fn sort_active(&mut self) -> Result<(), RoundedFillError> {
+    fn sort_active(&mut self, sample: &mut SlabSample) -> Result<(), RoundedFillError> {
         for index in 1..self.active.len() {
-            let value = self.active[index];
+            // T5: a section built for the moving copy is stored in `value.section` and written
+            // back below; shifts copy whatever an element holds, built or sentinel.
+            let mut value = self.active[index];
             let mut cursor = index;
             while cursor > 0 {
                 self.charge()?;
-                if compare_sections(self.active[cursor - 1].section, value.section)
-                    != Ordering::Greater
-                {
+                if self.compare_active(sample, cursor - 1, &mut value)? != Ordering::Greater {
                     break;
                 }
                 self.active[cursor] = self.active[cursor - 1];
@@ -1157,10 +1166,53 @@ impl RoundedFillWorkspace {
         Ok(())
     }
 
+    /// T5 consumer rule for `self.active[left]` and the moving copy `right` of `sort_active`;
+    /// a section built for either is stored in it.
+    fn compare_active(
+        &mut self,
+        sample: &mut SlabSample,
+        left: usize,
+        right: &mut ActiveEdge,
+    ) -> Result<Ordering, RoundedFillError> {
+        let left_edge = self.edges[self.active[left].edge];
+        let right_edge = self.edges[right.edge];
+        compare_slab_sections(
+            sample,
+            (left_edge.a, left_edge.b),
+            &mut self.active[left].section,
+            (right_edge.a, right_edge.b),
+            &mut right.section,
+        )
+        .map_err(map_event_error)
+    }
+
+    /// T5 consumer rule for `self.active[left]` and `self.active[right]`, `left < right`; a
+    /// section built for either is stored in its element.
+    fn compare_active_elements(
+        &mut self,
+        sample: &mut SlabSample,
+        left: usize,
+        right: usize,
+    ) -> Result<Ordering, RoundedFillError> {
+        debug_assert!(left < right);
+        let left_edge = self.edges[self.active[left].edge];
+        let right_edge = self.edges[self.active[right].edge];
+        let (head, tail) = self.active.split_at_mut(right);
+        compare_slab_sections(
+            sample,
+            (left_edge.a, left_edge.b),
+            &mut head[left].section,
+            (right_edge.a, right_edge.b),
+            &mut tail[0].section,
+        )
+        .map_err(map_event_error)
+    }
+
     fn build_slab_cells(
         &mut self,
         slab: usize,
         rule: LineFillRule,
+        sample: &mut SlabSample,
     ) -> Result<(), RoundedFillError> {
         let mut winding = 0i64;
         let mut pending = None;
@@ -1169,9 +1221,7 @@ impl RoundedFillWorkspace {
             let mut group_end = cursor + 1;
             while group_end < self.active.len() {
                 self.charge()?;
-                if compare_sections(self.active[cursor].section, self.active[group_end].section)
-                    != Ordering::Equal
-                {
+                if self.compare_active_elements(sample, cursor, group_end)? != Ordering::Equal {
                     break;
                 }
                 group_end += 1;
