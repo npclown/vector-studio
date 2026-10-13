@@ -2,6 +2,8 @@
 
 Status: FROZEN after Primary/independent contract review, 2026-10-02. This private slice implements the existing [P3.1e sufficient condition](p3-simple-cubic-topology-contract.md) after the [P3.2f compatibility bridge](p3-native-cubic-bridge-contract.md). The [active plan](p3-fill-stroke-meshes.md) owns execution and the [private contract](p3-private-contract.md) retains full C03-C05. No public API, ABI, P2 behavior, dependency, renderer or error-budget change; user-deferred stroke refinement stays deferred.
 
+B0R pointer, 2026-10-13: unit U1 of the [B0R contract](p3-b0r-kernel-performance-contract.md#62-frozen-clauses-this-contract-amends) puts the binary64 filters F0.1 and F2.1-F2.3 before the exact topology predicates, with the unchanged exact routine as fallback. They are not a recursion, subdivision, epsilon merge, retry or allocation (B0R section 6.2), and every certificate outcome is unchanged.
+
 ## Scope and mathematical ownership
 
 Add an unexported Rust `simple_cubic_topology` module using existing `fill_exact::Signed` and multiplication. It certifies the same restricted exact-knot/monotone-projection/disjoint-hull condition as P3.1e, including implicit closure, exact orientation and nesting. Preserve all its proof obligations, not only absence of proper crossings. The result is a sufficient certificate for both fill rules, not a product rejection envelope or general cubic tessellator. Positional error is still separately certified; no tolerance parameter belongs to this helper.

@@ -15,7 +15,10 @@
 //    all four `CubicFillWorkspace` entries plus the V2 cascade through `FillEngine`.
 // 4. WASM layer: `fill_v0` output bytes through both release WASMs in Node, over the B0
 //    decision cells and the first 2,000 randomized paths in corpus order.
-// 5. Every digest must be equal, every entry call must allocate nothing (O7), the randomized
+// 5. Release-profile oracles: every ignored kernel test whose name contains `b0r_oracle_full`
+//    (contract section 7: O1 at full size and the later units' full-size oracles), on this tree
+//    only, with their output saved in the run directory.
+// 6. Every digest must be equal, every entry call must allocate nothing (O7), the randomized
 //    corpus must meet its coverage floors, and a tampered digest must be reported (self-check).
 //
 // Re-comparison of a finished run, with an optional tampered digest:
@@ -476,6 +479,46 @@ function buildWasm(sourceRoot, targetDirectory) {
   return path.join(targetDirectory, WASM_RELATIVE);
 }
 
+const ORACLE_FILTER = 'b0r_oracle_full';
+
+function runOracles(file) {
+  const args = [
+    'run',
+    RUST.release,
+    'cargo',
+    'test',
+    '--manifest-path',
+    path.join(root, KERNEL, 'Cargo.toml'),
+    '--release',
+    '--lib',
+    '--locked',
+    '--offline',
+    ORACLE_FILTER,
+    '--',
+    '--ignored',
+    '--nocapture',
+    '--test-threads',
+    '1',
+  ];
+  console.log(`> ${path.basename(rustup)} ${args.join(' ')}`);
+  const result = spawnSync(rustup, args, {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+    env: cargoEnv(root, BRANCH_TARGET),
+  });
+  if (result.error) throw result.error;
+  writeFileSync(file, `${result.stdout}${result.stderr}`);
+  process.stdout.write(result.stdout);
+  const summary = /test result: (\w+)\. (\d+) passed; (\d+) failed/u.exec(result.stdout);
+  return {
+    status: result.status,
+    passed: summary ? Number(summary[2]) : 0,
+    failed: summary ? Number(summary[3]) : null,
+    file: path.relative(root, file),
+  };
+}
+
 function dumpNative(sourceRoot, targetDirectory, corpora, output, threads) {
   const extra = {
     P3_B0R_B0_CORPUS: corpora.b0,
@@ -729,6 +772,10 @@ async function fullRun(options) {
         ),
       ),
     };
+    const oracles = timed(durations, 'oraclesBranchMs', () =>
+      runOracles(path.join(output, 'oracles-branch.txt')),
+    );
+    if (oracles.status !== 0) failures.push(`release oracles failed (${oracles.file})`);
     const crossingPaths = new Set();
     for (const [name, entry] of native.branch) {
       const match = /^rnd\/([^/]+)\/(\d+)\//u.exec(name);
@@ -812,6 +859,7 @@ async function fullRun(options) {
       corpusSha256: corpusSha,
       wasmSha256: { ...wasmSha, equal: wasmSha.base === wasmSha.branch },
       o5: testFiles,
+      oracles,
       native: {
         cases: native.branch.size,
         b0Cases: count(native.branch, 'b0/'),
