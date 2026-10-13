@@ -938,6 +938,7 @@ impl RoundedFillWorkspace {
 
     fn build_sections_and_nodes(&mut self, tau: f64) -> Result<(), RoundedFillError> {
         let mut previous_x = None;
+        let mut sweep = EdgeColumnSweep::guarded(&self.edges);
         for column_index in 0..self.exact_columns.len() {
             // T1: the column's section is built only if an embedding step falls back.
             let x_source = SectionSource::Column(self.exact_columns[column_index]);
@@ -947,7 +948,10 @@ impl RoundedFillWorkspace {
             previous_x = Some(x_rank);
 
             let section_start = self.sections.len();
-            for edge_index in 0..self.edges.len() {
+            // B0R L3 (contract section 5.4): with at most `SWEEP_EDGES` edges the swept scan runs
+            // and the current loop below has no iteration; otherwise the current loop runs.
+            let fallback_edges = self.scan_column_sections(column_index, &mut sweep)?;
+            for edge_index in 0..fallback_edges {
                 self.charge()?;
                 let edge = self.edges[edge_index];
                 if edge.a.x != edge.b.x {
@@ -1269,6 +1273,7 @@ impl RoundedFillWorkspace {
     }
 
     fn build_cells(&mut self, rule: LineFillRule) -> Result<(), RoundedFillError> {
+        let mut sweep = EdgeColumnSweep::guarded(&self.edges);
         for slab in 0..self.exact_columns.len().saturating_sub(1) {
             // T5: the mediant sample and the active sections are built only when a comparison
             // falls back (`compare_slab_sections`). Both columns passed `compare_event_x`, so
@@ -1276,7 +1281,9 @@ impl RoundedFillWorkspace {
             let mut sample =
                 SlabSample::new(self.exact_columns[slab], self.exact_columns[slab + 1]);
             self.active.clear();
-            for edge_index in 0..self.edges.len() {
+            // B0R L3: the swept scan, or the current loop below (size guard).
+            let fallback_edges = self.scan_slab_active(slab, &mut sweep)?;
+            for edge_index in 0..fallback_edges {
                 self.charge()?;
                 let edge = self.edges[edge_index];
                 if edge.a.x != edge.b.x && edge.low_column <= slab && slab < edge.high_column {
@@ -1468,18 +1475,47 @@ impl RoundedFillWorkspace {
         edge: usize,
         endpoint: u8,
     ) -> Result<usize, RoundedFillError> {
+        #[cfg(test)]
+        if let Some(result) = self.b0r_shadow_scan(ScanLoop::Lookup {
+            column,
+            edge,
+            endpoint,
+        }) {
+            return result.map(|(node, _)| node as usize);
+        }
         let range = self.column_sections[column];
         let end = range
             .start
             .checked_add(range.count)
             .ok_or(RoundedFillError::InternalInvariant)?;
+        // B0R L4 (contract section 5.4): the current loop charges one unit per candidate up to
+        // and including the match and reads nothing observable otherwise. So an uncharged scan
+        // followed by one Lemma C bulk charge of q + 1 units for a match at offset q, or of
+        // `range.count` units followed by `InternalInvariant` without a match, gives the same
+        // result, `work_units` and `WorkLimit` point. The range was recorded from the pushes
+        // into `sections`, so the uncharged scan reads only elements the current loop may read.
         for index in range.start..end {
-            self.charge()?;
             let section = self.sections[index];
             if section.edge == edge && section.endpoint == endpoint {
+                let mut charges = index - range.start + 1;
+                if crate::fill_filter::fault_active(crate::fill_filter::Fault::L4ChargeShort) {
+                    charges -= 1;
+                }
+                #[cfg(test)]
+                b0r_count_scans(|counts| {
+                    counts.lookups += 1;
+                    counts.lookup_charges += charges as u64;
+                });
+                self.bulk_charge(charges as u64).1?;
                 return Ok(section.node);
             }
         }
+        #[cfg(test)]
+        b0r_count_scans(|counts| {
+            counts.lookups += 1;
+            counts.lookup_charges += range.count as u64;
+        });
+        self.bulk_charge(range.count as u64).1?;
         Err(RoundedFillError::InternalInvariant)
     }
 
@@ -1513,10 +1549,14 @@ impl RoundedFillWorkspace {
             })?;
         }
 
+        let mut sweep = EdgeColumnSweep::guarded(&self.edges);
         for column_index in 0..self.columns.len() {
             let column = self.columns[column_index];
+            let swept = sweep
+                .as_mut()
+                .map(|sweep| sweep.column_sets(&self.edges, column_index));
             for rank in 0..column.node_count.saturating_sub(1) {
-                self.build_column_span(column_index, rank, rule)?;
+                self.build_column_span(column_index, rank, rule, swept)?;
             }
         }
         for meta in &self.node_meta {
@@ -1532,10 +1572,14 @@ impl RoundedFillWorkspace {
         column: usize,
         rank: usize,
         rule: LineFillRule,
+        swept: Option<ColumnEdgeSets>,
     ) -> Result<(), RoundedFillError> {
         let mut left_winding = 0i64;
         let mut right_winding = 0i64;
-        for edge_index in 0..self.edges.len() {
+        // B0R L3: the swept scans, or the current loops below (size guard).
+        let fallback_edges =
+            self.scan_span_windings(column, rank, swept, &mut left_winding, &mut right_winding)?;
+        for edge_index in 0..fallback_edges {
             self.charge()?;
             let edge = self.edges[edge_index];
             if edge.a.x == edge.b.x {
@@ -1564,7 +1608,8 @@ impl RoundedFillWorkspace {
 
         let contributor_start = self.contributors.len();
         let mut vertical_delta = 0i64;
-        for edge_index in 0..self.edges.len() {
+        let fallback_edges = self.scan_span_verticals(column, rank, swept, &mut vertical_delta)?;
+        for edge_index in 0..fallback_edges {
             self.charge()?;
             let edge = self.edges[edge_index];
             if edge.a.x != edge.b.x || edge.low_column != column {
@@ -1821,6 +1866,277 @@ impl RoundedFillWorkspace {
         result
     }
 
+    /// Corollary C1 (contract section 5.4), a sparse charged scan: equivalent to the current
+    /// `for edge in 0..n { charge()?; body(edge)? }` when `body` has no effect (no state change,
+    /// no error, no charge) for every edge outside `active`. Before the body of the active edge
+    /// k, one Lemma C bulk charge applies the outer charges of the iterations `consumed..=k`;
+    /// after the last active edge, the remaining `n - consumed`. Each body, including its own
+    /// charges (the `lookup_section_node` calls of `build_column_span`) and its failures, runs
+    /// at the same `work_units`, in the same ascending edge order and with the same state.
+    fn sparse_charged_scan(
+        &mut self,
+        active: u64,
+        mut body: impl FnMut(&mut Self, usize) -> Result<(), RoundedFillError>,
+    ) -> Result<(), RoundedFillError> {
+        let count = self.edges.len();
+        debug_assert!(count <= SWEEP_EDGES);
+        debug_assert!(count == SWEEP_EDGES || active >> count == 0);
+        #[cfg(test)]
+        b0r_count_scans(|counts| {
+            counts.scans += 1;
+            counts.iterations += count as u64;
+            counts.members += u64::from(active.count_ones());
+        });
+        let mut consumed = 0usize;
+        let mut rest = active;
+        while rest != 0 {
+            let edge = rest.trailing_zeros() as usize;
+            rest &= rest - 1;
+            let mut outer = edge - consumed + 1;
+            if crate::fill_filter::fault_active(crate::fill_filter::Fault::L3OuterChargeShort) {
+                outer -= 1;
+            }
+            self.bulk_charge(outer as u64).1?;
+            body(self, edge)?;
+            consumed = edge + 1;
+        }
+        self.bulk_charge((count - consumed) as u64).1
+    }
+
+    /// B0R L3 for the section scan of `build_sections_and_nodes`: returns the number of
+    /// iterations left for the current loop, zero once the swept scan ran, or every edge when
+    /// the size guard fails.
+    fn scan_column_sections(
+        &mut self,
+        column: usize,
+        sweep: &mut Option<EdgeColumnSweep>,
+    ) -> Result<usize, RoundedFillError> {
+        let Some(sweep) = sweep.as_mut() else {
+            return Ok(self.edges.len());
+        };
+        let active = sweep.column_sets(&self.edges, column).all;
+        #[cfg(test)]
+        if let Some(result) = self.b0r_shadow_scan(ScanLoop::Sections { column, active }) {
+            return result.map(|_| 0);
+        }
+        self.swept_column_sections(column, active)?;
+        Ok(0)
+    }
+
+    /// The swept section scan. `active` holds the nonvertical edges with
+    /// `low <= column <= high` and the vertical edges with `low == column` (a vertical edge has
+    /// `low == high`); every other edge only tests and continues in the current loop.
+    fn swept_column_sections(
+        &mut self,
+        column: usize,
+        active: u64,
+    ) -> Result<(), RoundedFillError> {
+        self.sparse_charged_scan(active, |workspace, edge_index| {
+            workspace.column_section_body(column, edge_index)
+        })
+    }
+
+    /// The body of one section-scan iteration after its charge, unchanged.
+    fn column_section_body(
+        &mut self,
+        column_index: usize,
+        edge_index: usize,
+    ) -> Result<(), RoundedFillError> {
+        let edge = self.edges[edge_index];
+        if edge.a.x != edge.b.x {
+            if edge.low_column <= column_index && column_index <= edge.high_column {
+                self.push_section(column_index, edge_index, 0)?;
+            }
+        } else if edge.low_column == column_index {
+            self.push_section(column_index, edge_index, 1)?;
+            self.push_section(column_index, edge_index, 2)?;
+        }
+        Ok(())
+    }
+
+    /// B0R L3 for the active-edge scan of `build_cells`, as `scan_column_sections`.
+    fn scan_slab_active(
+        &mut self,
+        slab: usize,
+        sweep: &mut Option<EdgeColumnSweep>,
+    ) -> Result<usize, RoundedFillError> {
+        let Some(sweep) = sweep.as_mut() else {
+            return Ok(self.edges.len());
+        };
+        let active = sweep.slab_set(&self.edges, slab);
+        #[cfg(test)]
+        if let Some(result) = self.b0r_shadow_scan(ScanLoop::Slab { slab, active }) {
+            return result.map(|_| 0);
+        }
+        self.swept_slab_active(slab, active)?;
+        Ok(0)
+    }
+
+    /// The swept active-edge scan. `active` holds the edges with `low <= slab < high`, which
+    /// are nonvertical; every other edge only tests in the current loop.
+    fn swept_slab_active(&mut self, slab: usize, active: u64) -> Result<(), RoundedFillError> {
+        self.sparse_charged_scan(active, |workspace, edge_index| {
+            workspace.slab_active_body(slab, edge_index);
+            Ok(())
+        })
+    }
+
+    /// The body of one active-edge-scan iteration after its charge, unchanged.
+    fn slab_active_body(&mut self, slab: usize, edge_index: usize) {
+        let edge = self.edges[edge_index];
+        if edge.a.x != edge.b.x && edge.low_column <= slab && slab < edge.high_column {
+            self.active.push(ActiveEdge {
+                edge: edge_index,
+                section: ExactSection::unbuilt(),
+            });
+        }
+    }
+
+    /// B0R L3 for the first scan of `build_column_span`, as `scan_column_sections`; the
+    /// windings are added to `left_winding` and `right_winding`.
+    fn scan_span_windings(
+        &mut self,
+        column: usize,
+        rank: usize,
+        swept: Option<ColumnEdgeSets>,
+        left_winding: &mut i64,
+        right_winding: &mut i64,
+    ) -> Result<usize, RoundedFillError> {
+        let Some(sets) = swept else {
+            return Ok(self.edges.len());
+        };
+        #[cfg(test)]
+        if let Some(result) = self.b0r_shadow_scan(ScanLoop::Windings {
+            column,
+            rank,
+            active: sets.nonvertical,
+        }) {
+            let (left, right) = result?;
+            *left_winding += left;
+            *right_winding += right;
+            return Ok(0);
+        }
+        self.swept_span_windings(column, rank, sets.nonvertical, left_winding, right_winding)?;
+        Ok(0)
+    }
+
+    /// The swept winding scan. `active` holds the nonvertical edges with
+    /// `low <= column <= high`, which for a nonvertical edge (`low < high`) are exactly those
+    /// active on the left or the right; every other edge only tests and continues.
+    fn swept_span_windings(
+        &mut self,
+        column: usize,
+        rank: usize,
+        active: u64,
+        left_winding: &mut i64,
+        right_winding: &mut i64,
+    ) -> Result<(), RoundedFillError> {
+        self.sparse_charged_scan(active, |workspace, edge_index| {
+            workspace.span_winding_body(column, rank, edge_index, left_winding, right_winding)
+        })
+    }
+
+    /// The body of one winding-scan iteration after its charge, unchanged (its
+    /// `lookup_section_node` call charges).
+    fn span_winding_body(
+        &mut self,
+        column: usize,
+        rank: usize,
+        edge_index: usize,
+        left_winding: &mut i64,
+        right_winding: &mut i64,
+    ) -> Result<(), RoundedFillError> {
+        let edge = self.edges[edge_index];
+        if edge.a.x == edge.b.x {
+            return Ok(());
+        }
+        let active_left = edge.low_column < column && column <= edge.high_column;
+        let active_right = edge.low_column <= column && column < edge.high_column;
+        if active_left || active_right {
+            let node = self.lookup_section_node(column, edge_index, 0)?;
+            let node_rank = self.node_rank(column, node)?;
+            if node_rank <= rank {
+                let delta = edge_winding(edge);
+                if active_left {
+                    *left_winding = left_winding
+                        .checked_add(delta)
+                        .ok_or(RoundedFillError::InternalInvariant)?;
+                }
+                if active_right {
+                    *right_winding = right_winding
+                        .checked_add(delta)
+                        .ok_or(RoundedFillError::InternalInvariant)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// B0R L3 for the second scan of `build_column_span`, as `scan_column_sections`; the
+    /// vertical windings are added to `vertical_delta`.
+    fn scan_span_verticals(
+        &mut self,
+        column: usize,
+        rank: usize,
+        swept: Option<ColumnEdgeSets>,
+        vertical_delta: &mut i64,
+    ) -> Result<usize, RoundedFillError> {
+        let Some(sets) = swept else {
+            return Ok(self.edges.len());
+        };
+        #[cfg(test)]
+        if let Some(result) = self.b0r_shadow_scan(ScanLoop::Verticals {
+            column,
+            rank,
+            active: sets.vertical,
+        }) {
+            *vertical_delta += result?.0;
+            return Ok(0);
+        }
+        self.swept_span_verticals(column, rank, sets.vertical, vertical_delta)?;
+        Ok(0)
+    }
+
+    /// The swept vertical scan. `active` holds the vertical edges with `low == column`; every
+    /// other edge only tests and continues.
+    fn swept_span_verticals(
+        &mut self,
+        column: usize,
+        rank: usize,
+        active: u64,
+        vertical_delta: &mut i64,
+    ) -> Result<(), RoundedFillError> {
+        self.sparse_charged_scan(active, |workspace, edge_index| {
+            workspace.span_vertical_body(column, rank, edge_index, vertical_delta)
+        })
+    }
+
+    /// The body of one vertical-scan iteration after its charge, unchanged (its two
+    /// `lookup_section_node` calls charge, and `push_contributor` may fail).
+    fn span_vertical_body(
+        &mut self,
+        column: usize,
+        rank: usize,
+        edge_index: usize,
+        vertical_delta: &mut i64,
+    ) -> Result<(), RoundedFillError> {
+        let edge = self.edges[edge_index];
+        if edge.a.x != edge.b.x || edge.low_column != column {
+            return Ok(());
+        }
+        let a_node = self.lookup_section_node(column, edge_index, 1)?;
+        let b_node = self.lookup_section_node(column, edge_index, 2)?;
+        let a_rank = self.node_rank(column, a_node)?;
+        let b_rank = self.node_rank(column, b_node)?;
+        if a_rank.min(b_rank) <= rank && a_rank.max(b_rank) > rank {
+            *vertical_delta = vertical_delta
+                .checked_add(vertical_winding(edge))
+                .ok_or(RoundedFillError::InternalInvariant)?;
+            self.push_contributor(edge_index)?;
+        }
+        Ok(())
+    }
+
     fn actual_allocated_bytes(&self) -> Result<usize, RoundedFillError> {
         allocation_bytes(&[
             (self.edges.capacity(), size_of::<EdgeState>()),
@@ -1917,6 +2233,118 @@ fn sweep_box_overlaps(edges: &[EdgeState], mut mark: impl FnMut(usize, usize)) {
 /// i(2n - i - 1) is even, because i and 2n - i - 1 have opposite parities.
 fn pair_rank(count: usize, left: usize, right: usize) -> usize {
     left * (2 * count - left - 1) / 2 + (right - left - 1)
+}
+
+/// The active edge sets of one column for B0R L3 (contract section 5.4), as `u64` bitsets over
+/// edge indices.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ColumnEdgeSets {
+    /// Edges with `low_column <= column <= high_column`: the nonvertical edges spanning the
+    /// column and the vertical edges on it (a vertical edge has `low_column == high_column`).
+    all: u64,
+    /// The nonvertical edges of `all`.
+    nonvertical: u64,
+    /// The vertical edges of `all`, that is, the vertical edges with `low_column == column`.
+    vertical: u64,
+}
+
+/// B0R L3's incremental active sets over the columns or slabs of one phase, for at most
+/// `SWEEP_EDGES` edges with assigned columns.
+///
+/// The edge indices are insertion-sorted by `low_column` and by `high_column` into two
+/// `[u8; 64]` stack arrays. `advance(upto, from)` adds every edge with `low_column <= upto` and
+/// then removes every edge with `high_column < from`; with `upto` and `from` non-decreasing
+/// across the calls of a phase and `from <= upto + 1`, the set is then exactly
+/// {e : low <= upto and high >= from}. An edge leaves only after it entered: `high < from`
+/// implies `low <= high <= upto`, so it was added in the same call or earlier. Each edge enters
+/// and leaves at most once, so a phase costs O(columns + edges) after the two sorts of at most
+/// 64 entries. Scratch: under 200 bytes on the stack.
+struct EdgeColumnSweep {
+    by_low: [u8; SWEEP_EDGES],
+    by_high: [u8; SWEEP_EDGES],
+    count: usize,
+    added: usize,
+    removed: usize,
+    set: u64,
+    vertical: u64,
+}
+
+impl EdgeColumnSweep {
+    /// The sweep, or `None` when the size guard fails (more than `SWEEP_EDGES` edges), in which
+    /// case the current loops run.
+    fn guarded(edges: &[EdgeState]) -> Option<Self> {
+        if edges.len() > SWEEP_EDGES {
+            return None;
+        }
+        let mut sweep = Self {
+            by_low: [0; SWEEP_EDGES],
+            by_high: [0; SWEEP_EDGES],
+            count: edges.len(),
+            added: 0,
+            removed: 0,
+            set: 0,
+            vertical: 0,
+        };
+        for (index, edge) in edges.iter().enumerate() {
+            sweep.vertical |= u64::from(edge.a.x == edge.b.x) << index;
+            insert_by_key(&mut sweep.by_low, index, |at| {
+                edges[usize::from(at)].low_column > edge.low_column
+            });
+            insert_by_key(&mut sweep.by_high, index, |at| {
+                edges[usize::from(at)].high_column > edge.high_column
+            });
+        }
+        #[cfg(test)]
+        b0r_count_scans(|counts| counts.sweeps += 1);
+        Some(sweep)
+    }
+
+    fn advance(&mut self, edges: &[EdgeState], upto: usize, from: usize) -> u64 {
+        while self.added < self.count {
+            let edge = usize::from(self.by_low[self.added]);
+            if edges[edge].low_column > upto {
+                break;
+            }
+            self.set |= 1u64 << edge;
+            self.added += 1;
+        }
+        while self.removed < self.count {
+            let edge = usize::from(self.by_high[self.removed]);
+            if edges[edge].high_column >= from {
+                break;
+            }
+            self.set &= !(1u64 << edge);
+            self.removed += 1;
+        }
+        self.set
+    }
+
+    /// The sets of `column`; columns must be visited in non-decreasing order.
+    fn column_sets(&mut self, edges: &[EdgeState], column: usize) -> ColumnEdgeSets {
+        let all = self.advance(edges, column, column);
+        ColumnEdgeSets {
+            all,
+            nonvertical: all & !self.vertical,
+            vertical: all & self.vertical,
+        }
+    }
+
+    /// The edges with `low_column <= slab < high_column`, all nonvertical; slabs must be
+    /// visited in non-decreasing order.
+    fn slab_set(&mut self, edges: &[EdgeState], slab: usize) -> u64 {
+        self.advance(edges, slab, slab + 1)
+    }
+}
+
+/// Inserts `index` into the sorted prefix `order[..index]`, after every entry for which
+/// `greater` is false (a stable insertion step).
+fn insert_by_key(order: &mut [u8; SWEEP_EDGES], index: usize, greater: impl Fn(u8) -> bool) {
+    let mut cursor = index;
+    while cursor > 0 && greater(order[cursor - 1]) {
+        order[cursor] = order[cursor - 1];
+        cursor -= 1;
+    }
+    order[cursor] = index as u8;
 }
 
 /// B0R L2's stable bottom-up merge sort of the indices `0..count` with Lemma D's charge count
@@ -2451,4 +2879,640 @@ fn b0r_loop_variants(
         }
     }
     variants
+}
+
+// ---------------------------------------------------------------------------------------------
+// B0R U7 test machinery (`cfg(test)` only): the reference copies of the pre-U7 scans and of
+// `lookup_section_node`, oracle O10's shadow comparison of L3 and L4 with sampled or exhaustive
+// variants (O11), per-thread counts and test access.
+
+/// One call of a scan restructured by unit U7, with the active set the sweep computed.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ScanLoop {
+    /// The section scan of `build_sections_and_nodes` (L3).
+    Sections { column: usize, active: u64 },
+    /// The active-edge scan of `build_cells` (L3).
+    Slab { slab: usize, active: u64 },
+    /// The winding scan of `build_column_span` (L3).
+    Windings {
+        column: usize,
+        rank: usize,
+        active: u64,
+    },
+    /// The vertical scan of `build_column_span` (L3).
+    Verticals {
+        column: usize,
+        rank: usize,
+        active: u64,
+    },
+    /// `lookup_section_node` (L4).
+    Lookup {
+        column: usize,
+        edge: usize,
+        endpoint: u8,
+    },
+}
+
+#[cfg(test)]
+impl ScanLoop {
+    /// The index of this scan's kind in the order of the enum.
+    pub(crate) fn kind(self) -> usize {
+        match self {
+            Self::Sections { .. } => 0,
+            Self::Slab { .. } => 1,
+            Self::Windings { .. } => 2,
+            Self::Verticals { .. } => 3,
+            Self::Lookup { .. } => 4,
+        }
+    }
+}
+
+/// Per-thread counts of the restructured scans' work (test builds only).
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ScanCounts {
+    /// `EdgeColumnSweep`s built (phases that passed the size guard).
+    pub(crate) sweeps: u64,
+    /// Sparse charged scans (L3 calls).
+    pub(crate) scans: u64,
+    /// Logical iterations n of those scans.
+    pub(crate) iterations: u64,
+    /// Active members of those scans (bodies run).
+    pub(crate) members: u64,
+    /// `lookup_section_node` calls (L4).
+    pub(crate) lookups: u64,
+    /// Units charged by those calls.
+    pub(crate) lookup_charges: u64,
+}
+
+#[cfg(test)]
+impl ScanCounts {
+    pub(crate) fn merge(&mut self, other: Self) {
+        self.sweeps += other.sweeps;
+        self.scans += other.scans;
+        self.iterations += other.iterations;
+        self.members += other.members;
+        self.lookups += other.lookups;
+        self.lookup_charges += other.lookup_charges;
+    }
+}
+
+/// Per-thread tally of O10's L3/L4 comparisons with the reference copies (test builds only).
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ScanShadowTally {
+    /// Shadowed calls by `ScanLoop::kind`.
+    pub(crate) calls: [u64; 5],
+    /// Compared runs, at the real limits and in the variants.
+    pub(crate) runs: u64,
+    /// Runs whose result, counters, buffer lengths or pushed records differed.
+    pub(crate) mismatches: u64,
+    /// Compared runs whose reference returned `WorkLimit`.
+    pub(crate) work_limit: u64,
+    /// Compared runs whose reference returned `SectionLimit` or `ContributorLimit`.
+    pub(crate) push_limit: u64,
+    /// Compared runs whose reference returned another error.
+    pub(crate) other_errors: u64,
+    /// Shadowed calls whose variants were sampled.
+    pub(crate) sampled_calls: u64,
+    /// Shadowed calls whose variants covered every failing budget and push limit.
+    pub(crate) exhaustive_calls: u64,
+}
+
+#[cfg(test)]
+impl ScanShadowTally {
+    pub(crate) fn merge(&mut self, other: Self) {
+        for (total, count) in self.calls.iter_mut().zip(other.calls) {
+            *total += count;
+        }
+        self.runs += other.runs;
+        self.mismatches += other.mismatches;
+        self.work_limit += other.work_limit;
+        self.push_limit += other.push_limit;
+        self.other_errors += other.other_errors;
+        self.sampled_calls += other.sampled_calls;
+        self.exhaustive_calls += other.exhaustive_calls;
+    }
+}
+
+#[cfg(test)]
+const NO_SCAN_COUNTS: ScanCounts = ScanCounts {
+    sweeps: 0,
+    scans: 0,
+    iterations: 0,
+    members: 0,
+    lookups: 0,
+    lookup_charges: 0,
+};
+
+#[cfg(test)]
+const NO_SCAN_TALLY: ScanShadowTally = ScanShadowTally {
+    calls: [0; 5],
+    runs: 0,
+    mismatches: 0,
+    work_limit: 0,
+    push_limit: 0,
+    other_errors: 0,
+    sampled_calls: 0,
+    exhaustive_calls: 0,
+};
+
+/// O10 scan variants: none, sampled, or every failing budget and push limit (O11).
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ScanVariants {
+    Off,
+    Sampled,
+    Exhaustive,
+}
+
+#[cfg(test)]
+thread_local! {
+    static SCAN_COUNTS: core::cell::Cell<ScanCounts> = const { core::cell::Cell::new(NO_SCAN_COUNTS) };
+    static SCAN_TALLY: core::cell::Cell<ScanShadowTally> =
+        const { core::cell::Cell::new(NO_SCAN_TALLY) };
+    static SCAN_VARIANTS: core::cell::Cell<ScanVariants> =
+        const { core::cell::Cell::new(ScanVariants::Off) };
+    static SCAN_SHADOW_BUSY: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+fn b0r_count_scans(update: impl FnOnce(&mut ScanCounts)) {
+    SCAN_COUNTS.with(|counts| {
+        let mut value = counts.get();
+        update(&mut value);
+        counts.set(value);
+    });
+}
+
+/// Returns and resets this thread's scan counts.
+#[cfg(test)]
+pub(crate) fn take_scan_counts() -> ScanCounts {
+    SCAN_COUNTS.with(|counts| counts.replace(NO_SCAN_COUNTS))
+}
+
+/// Returns and resets this thread's O10 scan tally.
+#[cfg(test)]
+pub(crate) fn take_scan_tally() -> ScanShadowTally {
+    SCAN_TALLY.with(|tally| tally.replace(NO_SCAN_TALLY))
+}
+
+/// Runs `action` with O10's scan variants on in this thread: in shadow mode each L3 and L4 call
+/// is then also compared with the reference under reduced budgets and push limits, sampled or,
+/// when `exhaustive`, at every budget from the call's start to one past its charge total and at
+/// every push limit (O11).
+#[cfg(test)]
+pub(crate) fn with_scan_variants<T>(exhaustive: bool, action: impl FnOnce() -> T) -> T {
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            SCAN_VARIANTS.with(|mode| mode.set(ScanVariants::Off));
+        }
+    }
+    let mode = if exhaustive {
+        ScanVariants::Exhaustive
+    } else {
+        ScanVariants::Sampled
+    };
+    SCAN_VARIANTS.with(|active| active.set(mode));
+    let _reset = Reset;
+    action()
+}
+
+#[cfg(test)]
+fn b0r_record_scan(expected: Result<(i64, i64), RoundedFillError>, equal: bool) {
+    crate::fill_filter::shadow_check(equal);
+    SCAN_TALLY.with(|tally| {
+        let mut value = tally.get();
+        value.runs += 1;
+        value.mismatches += u64::from(!equal);
+        match expected {
+            Ok(_) => {}
+            Err(RoundedFillError::WorkLimit) => value.work_limit += 1,
+            Err(RoundedFillError::SectionLimit | RoundedFillError::ContributorLimit) => {
+                value.push_limit += 1;
+            }
+            Err(_) => value.other_errors += 1,
+        }
+        tally.set(value);
+    });
+}
+
+/// The state a scan may change: the counters, the limits the variants lower, and the lengths of
+/// the three buffers the scans push into.
+#[cfg(test)]
+struct ScanSnapshot {
+    stats: RoundedFillStats,
+    limits: RoundedFillLimits,
+    sections: usize,
+    active: usize,
+    contributors: usize,
+}
+
+#[cfg(test)]
+impl ScanSnapshot {
+    fn take(workspace: &RoundedFillWorkspace) -> Self {
+        Self {
+            stats: workspace.stats,
+            limits: workspace.limits,
+            sections: workspace.sections.len(),
+            active: workspace.active.len(),
+            contributors: workspace.contributors.len(),
+        }
+    }
+
+    /// Restores the state before the scan: the scans only push into `sections`, `active` and
+    /// `contributors` and change counters, and the captures check that no other buffer changed
+    /// length.
+    fn restore(&self, workspace: &mut RoundedFillWorkspace) {
+        workspace.sections.truncate(self.sections);
+        workspace.active.truncate(self.active);
+        workspace.contributors.truncate(self.contributors);
+        workspace.stats = self.stats;
+        workspace.limits = self.limits;
+    }
+}
+
+/// What one scan run observably did: its result (with the windings or node it returns), every
+/// counter, the length of every buffer and the records it pushed.
+#[cfg(test)]
+#[derive(Debug, PartialEq)]
+struct ScanCapture {
+    result: Result<(i64, i64), RoundedFillError>,
+    stats: RoundedFillStats,
+    lengths: [usize; 16],
+    sections: Vec<RoundedSection>,
+    active: Vec<(usize, ExactSection)>,
+    contributors: Vec<usize>,
+}
+
+#[cfg(test)]
+impl ScanCapture {
+    fn take(
+        workspace: &RoundedFillWorkspace,
+        snapshot: &ScanSnapshot,
+        result: Result<(i64, i64), RoundedFillError>,
+    ) -> Self {
+        Self {
+            result,
+            stats: workspace.stats,
+            lengths: [
+                workspace.edges.len(),
+                workspace.events.len(),
+                workspace.exact_columns.len(),
+                workspace.column_sections.len(),
+                workspace.node_meta.len(),
+                workspace.active.len(),
+                workspace.source_edges.len(),
+                workspace.columns.len(),
+                workspace.nodes.len(),
+                workspace.sections.len(),
+                workspace.cells.len(),
+                workspace.boundaries.len(),
+                workspace.spans.len(),
+                workspace.contributors.len(),
+                workspace.vertices.len(),
+                workspace.indices.len(),
+            ],
+            sections: workspace.sections[snapshot.sections.min(workspace.sections.len())..]
+                .to_vec(),
+            active: workspace.active[snapshot.active.min(workspace.active.len())..]
+                .iter()
+                .map(|active| (active.edge, active.section))
+                .collect(),
+            contributors: workspace.contributors
+                [snapshot.contributors.min(workspace.contributors.len())..]
+                .to_vec(),
+        }
+    }
+}
+
+/// O10's reduced limits for one scan call. Budgets: sampled as for L1 and L2 (the start, one
+/// unit later, the middle, around the reference's final `work_units` and three pseudo-random
+/// points), or every budget from the start to one past the charge total, so that the scan fails
+/// at each of its iterations and at each charge inside an active body. Push limits for the
+/// scans that push into a capped buffer (`sections`, `contributors`): failing at the first, a
+/// middle and the last push, or at every push.
+#[cfg(test)]
+fn b0r_scan_variants(
+    scan: ScanLoop,
+    snapshot: &ScanSnapshot,
+    reference: &ScanCapture,
+    exhaustive: bool,
+) -> Vec<RoundedFillLimits> {
+    let start = snapshot.stats.work_units;
+    let end = reference.stats.work_units.max(start);
+    let span = end - start;
+    let mut budgets: Vec<u64> = if exhaustive {
+        (start..=end + 1).collect()
+    } else {
+        let mut budgets = vec![
+            start,
+            start + 1,
+            start + span / 2,
+            end.saturating_sub(1).max(start),
+            end,
+            end + 1,
+        ];
+        let mut seed = span ^ ((scan.kind() as u64) << 40) ^ 0x9e37_79b9_7f4a_7c15;
+        for _ in 0..3 {
+            seed = seed
+                .wrapping_mul(0x5851_f42d_4c95_7f2d)
+                .wrapping_add(0x1405_7b7e_f767_814f);
+            budgets.push(start + (seed >> 11) % (span + 2));
+        }
+        budgets
+    };
+    budgets.sort_unstable();
+    budgets.dedup();
+    let mut variants: Vec<RoundedFillLimits> = budgets
+        .into_iter()
+        .map(|max_work| RoundedFillLimits {
+            max_work,
+            ..snapshot.limits
+        })
+        .collect();
+    let (pushed, base) = match scan {
+        ScanLoop::Sections { .. } => (reference.sections.len(), snapshot.sections),
+        ScanLoop::Verticals { .. } => (reference.contributors.len(), snapshot.contributors),
+        _ => (0, 0),
+    };
+    if pushed > 0 {
+        let mut counts: Vec<usize> = if exhaustive {
+            (0..pushed).collect()
+        } else {
+            vec![0, pushed / 2, pushed - 1]
+        };
+        counts.dedup();
+        variants.extend(counts.into_iter().map(|count| match scan {
+            ScanLoop::Sections { .. } => RoundedFillLimits {
+                max_sections: base + count,
+                ..snapshot.limits
+            },
+            _ => RoundedFillLimits {
+                max_contributors: base + count,
+                ..snapshot.limits
+            },
+        }));
+    }
+    variants
+}
+
+#[cfg(test)]
+impl RoundedFillWorkspace {
+    /// O10 for L3 and L4: unless shadow mode is off or a shadowed scan is already running on
+    /// this thread, runs the reference copy and then the restructured scan from the same state
+    /// and records whether the results, every counter, every buffer length and the pushed
+    /// records are equal. With scan variants on, both also run from that state under reduced
+    /// budgets and push limits. The restructured run at the real limits runs last, so its state
+    /// continues the tessellation. Scans nested in a shadowed scan (the lookups of
+    /// `build_column_span`) run unshadowed; the enclosing comparison covers them.
+    fn b0r_shadow_scan(&mut self, scan: ScanLoop) -> Option<Result<(i64, i64), RoundedFillError>> {
+        if !crate::fill_filter::shadow_active() || SCAN_SHADOW_BUSY.with(core::cell::Cell::get) {
+            return None;
+        }
+        struct Reset;
+        impl Drop for Reset {
+            fn drop(&mut self) {
+                SCAN_SHADOW_BUSY.with(|busy| busy.set(false));
+            }
+        }
+        SCAN_SHADOW_BUSY.with(|busy| busy.set(true));
+        let _reset = Reset;
+        SCAN_TALLY.with(|tally| {
+            let mut value = tally.get();
+            value.calls[scan.kind()] += 1;
+            tally.set(value);
+        });
+
+        let snapshot = ScanSnapshot::take(self);
+        let expected = self.b0r_run_scan(scan, LoopImpl::Reference);
+        let reference = ScanCapture::take(self, &snapshot, expected);
+        snapshot.restore(self);
+        let mode = SCAN_VARIANTS.with(core::cell::Cell::get);
+        if mode != ScanVariants::Off {
+            let exhaustive = mode == ScanVariants::Exhaustive;
+            for limits in b0r_scan_variants(scan, &snapshot, &reference, exhaustive) {
+                self.limits = limits;
+                let expected = self.b0r_run_scan(scan, LoopImpl::Reference);
+                let variant_reference = ScanCapture::take(self, &snapshot, expected);
+                snapshot.restore(self);
+                self.limits = limits;
+                let result = self.b0r_run_scan(scan, LoopImpl::Restructured);
+                let variant = ScanCapture::take(self, &snapshot, result);
+                snapshot.restore(self);
+                b0r_record_scan(expected, variant_reference == variant);
+            }
+            SCAN_TALLY.with(|tally| {
+                let mut value = tally.get();
+                if exhaustive {
+                    value.exhaustive_calls += 1;
+                } else {
+                    value.sampled_calls += 1;
+                }
+                tally.set(value);
+            });
+        }
+        let result = self.b0r_run_scan(scan, LoopImpl::Restructured);
+        let actual = ScanCapture::take(self, &snapshot, result);
+        b0r_record_scan(expected, reference == actual);
+        Some(result)
+    }
+
+    /// Runs one scan without the shadow dispatch: the restructured scan (L3's sparse charged
+    /// scan over `active`, or L4) or its pre-U7 reference copy. Returns the windings of
+    /// `Windings`, the vertical delta of `Verticals` and the node of `Lookup`.
+    pub(crate) fn b0r_run_scan(
+        &mut self,
+        scan: ScanLoop,
+        implementation: LoopImpl,
+    ) -> Result<(i64, i64), RoundedFillError> {
+        let reference = implementation == LoopImpl::Reference;
+        match scan {
+            ScanLoop::Sections { column, active } => {
+                if reference {
+                    self.b0r_reference_column_sections(column)?;
+                } else {
+                    self.swept_column_sections(column, active)?;
+                }
+                Ok((0, 0))
+            }
+            ScanLoop::Slab { slab, active } => {
+                if reference {
+                    self.b0r_reference_slab_active(slab)?;
+                } else {
+                    self.swept_slab_active(slab, active)?;
+                }
+                Ok((0, 0))
+            }
+            ScanLoop::Windings {
+                column,
+                rank,
+                active,
+            } => {
+                if reference {
+                    return self.b0r_reference_span_windings(column, rank);
+                }
+                let (mut left, mut right) = (0i64, 0i64);
+                self.swept_span_windings(column, rank, active, &mut left, &mut right)?;
+                Ok((left, right))
+            }
+            ScanLoop::Verticals {
+                column,
+                rank,
+                active,
+            } => {
+                if reference {
+                    return Ok((self.b0r_reference_span_verticals(column, rank)?, 0));
+                }
+                let mut delta = 0i64;
+                self.swept_span_verticals(column, rank, active, &mut delta)?;
+                Ok((delta, 0))
+            }
+            ScanLoop::Lookup {
+                column,
+                edge,
+                endpoint,
+            } => {
+                let node = if reference {
+                    self.b0r_reference_lookup_section_node(column, edge, endpoint)?
+                } else {
+                    self.lookup_section_node(column, edge, endpoint)?
+                };
+                Ok((node as i64, 0))
+            }
+        }
+    }
+
+    /// The pre-U7 section scan of `build_sections_and_nodes`, verbatim (O10 reference).
+    fn b0r_reference_column_sections(
+        &mut self,
+        column_index: usize,
+    ) -> Result<(), RoundedFillError> {
+        for edge_index in 0..self.edges.len() {
+            self.charge()?;
+            let edge = self.edges[edge_index];
+            if edge.a.x != edge.b.x {
+                if edge.low_column <= column_index && column_index <= edge.high_column {
+                    self.push_section(column_index, edge_index, 0)?;
+                }
+            } else if edge.low_column == column_index {
+                self.push_section(column_index, edge_index, 1)?;
+                self.push_section(column_index, edge_index, 2)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The pre-U7 active-edge scan of `build_cells`, verbatim (O10 reference).
+    fn b0r_reference_slab_active(&mut self, slab: usize) -> Result<(), RoundedFillError> {
+        for edge_index in 0..self.edges.len() {
+            self.charge()?;
+            let edge = self.edges[edge_index];
+            if edge.a.x != edge.b.x && edge.low_column <= slab && slab < edge.high_column {
+                self.active.push(ActiveEdge {
+                    edge: edge_index,
+                    section: ExactSection::unbuilt(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// The pre-U7 winding scan of `build_column_span`, verbatim except that it calls the
+    /// reference `lookup_section_node` (O10 reference).
+    fn b0r_reference_span_windings(
+        &mut self,
+        column: usize,
+        rank: usize,
+    ) -> Result<(i64, i64), RoundedFillError> {
+        let mut left_winding = 0i64;
+        let mut right_winding = 0i64;
+        for edge_index in 0..self.edges.len() {
+            self.charge()?;
+            let edge = self.edges[edge_index];
+            if edge.a.x == edge.b.x {
+                continue;
+            }
+            let active_left = edge.low_column < column && column <= edge.high_column;
+            let active_right = edge.low_column <= column && column < edge.high_column;
+            if active_left || active_right {
+                let node = self.b0r_reference_lookup_section_node(column, edge_index, 0)?;
+                let node_rank = self.node_rank(column, node)?;
+                if node_rank <= rank {
+                    let delta = edge_winding(edge);
+                    if active_left {
+                        left_winding = left_winding
+                            .checked_add(delta)
+                            .ok_or(RoundedFillError::InternalInvariant)?;
+                    }
+                    if active_right {
+                        right_winding = right_winding
+                            .checked_add(delta)
+                            .ok_or(RoundedFillError::InternalInvariant)?;
+                    }
+                }
+            }
+        }
+        Ok((left_winding, right_winding))
+    }
+
+    /// The pre-U7 vertical scan of `build_column_span`, verbatim except that it calls the
+    /// reference `lookup_section_node` (O10 reference).
+    fn b0r_reference_span_verticals(
+        &mut self,
+        column: usize,
+        rank: usize,
+    ) -> Result<i64, RoundedFillError> {
+        let mut vertical_delta = 0i64;
+        for edge_index in 0..self.edges.len() {
+            self.charge()?;
+            let edge = self.edges[edge_index];
+            if edge.a.x != edge.b.x || edge.low_column != column {
+                continue;
+            }
+            let a_node = self.b0r_reference_lookup_section_node(column, edge_index, 1)?;
+            let b_node = self.b0r_reference_lookup_section_node(column, edge_index, 2)?;
+            let a_rank = self.node_rank(column, a_node)?;
+            let b_rank = self.node_rank(column, b_node)?;
+            if a_rank.min(b_rank) <= rank && a_rank.max(b_rank) > rank {
+                vertical_delta = vertical_delta
+                    .checked_add(vertical_winding(edge))
+                    .ok_or(RoundedFillError::InternalInvariant)?;
+                self.push_contributor(edge_index)?;
+            }
+        }
+        Ok(vertical_delta)
+    }
+
+    /// The pre-U7 `lookup_section_node`, verbatim (O10 reference).
+    fn b0r_reference_lookup_section_node(
+        &mut self,
+        column: usize,
+        edge: usize,
+        endpoint: u8,
+    ) -> Result<usize, RoundedFillError> {
+        let range = self.column_sections[column];
+        let end = range
+            .start
+            .checked_add(range.count)
+            .ok_or(RoundedFillError::InternalInvariant)?;
+        for index in range.start..end {
+            self.charge()?;
+            let section = self.sections[index];
+            if section.edge == edge && section.endpoint == endpoint {
+                return Ok(section.node);
+            }
+        }
+        Err(RoundedFillError::InternalInvariant)
+    }
+
+    /// Test access: a state for `lookup_section_node` with the given section records and
+    /// column ranges.
+    pub(crate) fn b0r_load_lookup(&mut self, sections: &[RoundedSection], ranges: &[SourceRange]) {
+        self.begin_attempt();
+        self.sections.extend_from_slice(sections);
+        self.column_sections.extend_from_slice(ranges);
+    }
 }

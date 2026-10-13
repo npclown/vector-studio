@@ -496,6 +496,8 @@ const EXPECTED_ORACLES = [
   'fill_sections_slab_tests::b0r_oracle_full_slab_corpus_rates',
   'rounded_line_fill_loop_tests::b0r_oracle_full_o10_event_loops',
   'rounded_line_fill_loop_tests::b0r_oracle_full_o11_charge_lemmas',
+  'rounded_line_fill_scan_tests::b0r_oracle_full_o10_scan_loops',
+  'rounded_line_fill_scan_tests::b0r_oracle_full_o11_scan_loops',
 ];
 
 /** Failures of one oracle run: exit status, the cargo summary, and every expected test run. */
