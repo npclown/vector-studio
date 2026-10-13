@@ -32,6 +32,7 @@
     "test:geometry": "node tooling/test-geometry.mjs",
     "test:geometry:browser": "node tooling/test-geometry-browser.mjs",
     "test:p2-identity": "node tooling/compare-p2-wasm.mjs",
+    "test:p3-fill-identity": "node tooling/compare-p3-fill-identity.mjs",
     "test:unit": "vitest run",
     "typecheck": "tsc --build"
   },
