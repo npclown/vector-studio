@@ -341,6 +341,12 @@ pub(crate) enum Fault {
     T5SentinelAsValue,
     /// O8 (10): F0.6 applied to two T5 sentinels before they are resolved.
     T5SentinelIdentity,
+    /// O8 (11): Corollary C1 in L1 with one outer charge too few per active member.
+    C1OuterChargeShort,
+    /// O8 (12): Lemma D in L2 without the prefix-minimum correction m.
+    LemmaDWithoutMinimum,
+    /// O8 (13): L1 with its candidates processed in sorted-by-x order.
+    L1SortedByX,
 }
 
 #[cfg(test)]

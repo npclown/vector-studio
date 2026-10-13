@@ -72,6 +72,8 @@ mod p3_b0r_identity;
 #[cfg(test)]
 mod rounded_cubic_topology_tests;
 #[cfg(test)]
+mod rounded_line_fill_loop_tests;
+#[cfg(test)]
 mod rounded_line_fill_tests;
 #[cfg(test)]
 mod simple_cubic_topology_filter_tests;
