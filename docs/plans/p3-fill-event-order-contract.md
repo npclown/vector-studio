@@ -2,6 +2,8 @@
 
 Status: prospective contract, 2026-09-29. After [exact predicates](p3-fill-predicates-contract.md) and [certified placement](p3-fill-intersections-contract.md), compare symbolic endpoint/proper-crossing positions exactly. This is a private numeric building block inside existing Rust geometry ownership, not a document format, public API, rational mesh transport, event store, sweep or triangulator. The [active plan](p3-fill-stroke-meshes.md) owns status and narrow entry. Stroke-bound refinement remains deferred.
 
+B0R pointer, 2026-10-13: unit U1b of the [B0R contract](p3-b0r-kernel-performance-contract.md#62-frozen-clauses-this-contract-amends) (section 5.5, user decision B0R-Q1) makes `multiply`, `add_magnitudes` and `subtract_magnitudes` skip all-zero low limbs. The fixed-array, used-length arithmetic and the loops bounded by declared limb widths and used lengths stay as below; results, `used`, trimming, capacities and assertions are unchanged.
+
 ## Surface and semantics
 
 Add `fill_event_order.rs`, reusing `geometry::Point` and P3.2a relation classification. Freeze crate-private Copy/Debug/PartialEq types and function:

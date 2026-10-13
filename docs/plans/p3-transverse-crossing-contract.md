@@ -4,6 +4,8 @@ Status: FROZEN after Primary and independent Astra high proof/interface/all60-fi
 
 B0R pointer, 2026-10-13: unit U1 of the [B0R contract](p3-b0r-kernel-performance-contract.md#62-frozen-clauses-this-contract-amends) encloses the exact cross signs of the no-floating-determinant clause with the binary64 filters F2.1 and F2.4 and falls back to them when undecided. No rounded value is used as an answer and nothing is retried (B0R section 6.2); every certificate outcome is unchanged.
 
+B0R reference pointer, 2026-10-13: unit U1b of the [B0R contract](p3-b0r-kernel-performance-contract.md#62-frozen-clauses-this-contract-amends) skips all-zero low limbs inside the shared `fill_exact` arithmetic. The `Signed<34>`/`<68>` widths and magnitude bounds of the arithmetic clause below are kept, and every result is unchanged.
+
 ## Mathematical claim and boundary
 
 For each of two leaves, let C(u) be the exact restriction of its original represented cubic to the declared dyadic cell, and L(u) the segment between its actual carried endpoints. Use the existing [rounded-knot homotopy](p3-rounded-knot-topology-contract.md), H(s,u)=(1-s)C(u)+sL(u), independently for the two leaves at the same s. Certify exactly one transverse intersection of their open parameter intervals for every s in[0,1], with constant ordered derivative orientation, only if all these sufficient conditions hold:

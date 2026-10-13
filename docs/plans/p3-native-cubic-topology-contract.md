@@ -4,6 +4,8 @@ Status: FROZEN after Primary/independent contract review, 2026-10-02. This priva
 
 B0R pointer, 2026-10-13: unit U1 of the [B0R contract](p3-b0r-kernel-performance-contract.md#62-frozen-clauses-this-contract-amends) puts the binary64 filters F0.1 and F2.1-F2.3 before the exact topology predicates, with the unchanged exact routine as fallback. They are not a recursion, subdivision, epsilon merge, retry or allocation (B0R section 6.2), and every certificate outcome is unchanged.
 
+B0R reference pointer, 2026-10-13: unit U1b of the [B0R contract](p3-b0r-kernel-performance-contract.md#62-frozen-clauses-this-contract-amends) skips all-zero low limbs inside the shared checked-capacity arithmetic. The 2^-1134 grid, the `Signed<34>`/`<68>` widths and the magnitude bounds of the exact-representation clause below are kept, and every result is unchanged.
+
 ## Scope and mathematical ownership
 
 Add an unexported Rust `simple_cubic_topology` module using existing `fill_exact::Signed` and multiplication. It certifies the same restricted exact-knot/monotone-projection/disjoint-hull condition as P3.1e, including implicit closure, exact orientation and nesting. Preserve all its proof obligations, not only absence of proper crossings. The result is a sufficient certificate for both fill rules, not a product rejection envelope or general cubic tessellator. Positional error is still separately certified; no tolerance parameter belongs to this helper.
