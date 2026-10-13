@@ -56,6 +56,8 @@ mod fill_predicates_filter_tests;
 #[cfg(test)]
 mod fill_predicates_tests;
 #[cfg(test)]
+mod fill_sections_filter_tests;
+#[cfg(test)]
 mod line_fill_tests;
 #[cfg(test)]
 mod mixed_line_arrangement_tests;

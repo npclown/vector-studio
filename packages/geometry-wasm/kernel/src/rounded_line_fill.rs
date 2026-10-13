@@ -4,9 +4,9 @@ use core::mem::size_of;
 use crate::fill_event_order::{compare_event_x, EventError, FillEvent};
 use crate::fill_predicates::{orient2d, segment_relation, SegmentRelation};
 use crate::fill_sections::{
-    column_as_section, compare_column_f64, compare_section_f64, compare_sections, endpoint_section,
-    event_column, lower_half_predicate, mediant, rank_finite, section_at_column,
-    upper_half_predicate, ExactColumn, ExactSection, MAX_FINITE_RANK, MIN_FINITE_RANK,
+    compare_column_source_f64, compare_section_sources, compare_sections, event_column, mediant,
+    rank_finite, section_at_column, ExactColumn, ExactSection, SectionSource, SectionTarget,
+    MAX_FINITE_RANK, MIN_FINITE_RANK,
 };
 use crate::geometry::{Bounds, Point};
 use crate::line_fill::LineFillRule;
@@ -781,8 +781,7 @@ impl RoundedFillWorkspace {
         while low < high {
             let middle = low + (high - low) / 2;
             self.charge()?;
-            let column = self.exact_column(middle)?;
-            match compare_column_f64(column, value) {
+            match self.compare_column_value(middle, value)? {
                 Ordering::Less => low = middle + 1,
                 Ordering::Greater => high = middle,
                 Ordering::Equal => return Ok(middle),
@@ -794,9 +793,11 @@ impl RoundedFillWorkspace {
     fn build_sections_and_nodes(&mut self, tau: f64) -> Result<(), RoundedFillError> {
         let mut previous_x = None;
         for column_index in 0..self.exact_columns.len() {
-            let exact_column = self.exact_column(column_index)?;
-            let (x, x_rank) =
-                self.embed_scalar(column_as_section(exact_column), previous_x, tau)?;
+            // T1: the column's section is built only if an embedding step falls back.
+            let x_source = SectionSource::Column(self.exact_columns[column_index]);
+            #[cfg(test)]
+            self.b0r_shadow_column_source(x_source, column_index);
+            let (x, x_rank) = self.embed_scalar(x_source, previous_x, tau)?;
             previous_x = Some(x_rank);
 
             let section_start = self.sections.len();
@@ -831,8 +832,10 @@ impl RoundedFillWorkspace {
                 if self.nodes.len() >= self.limits.max_nodes {
                     return Err(RoundedFillError::NodeLimit);
                 }
-                let exact = self.exact_section(self.sections[cursor])?;
-                let (y, y_rank) = self.embed_scalar(exact, previous_y, tau)?;
+                let source = self.section_source(self.sections[cursor])?;
+                #[cfg(test)]
+                self.b0r_shadow_section_source(source, self.sections[cursor]);
+                let (y, y_rank) = self.embed_scalar(source, previous_y, tau)?;
                 previous_y = Some(y_rank);
                 let node = self.nodes.len();
                 self.nodes.push(RoundedNode {
@@ -907,6 +910,43 @@ impl RoundedFillWorkspace {
         event_column(self.exact_columns[index]).map_err(map_event_error)
     }
 
+    /// T1 and T4: the order of column `index` and `value`, building the exact column only on
+    /// the exact fallback path. Every event in `exact_columns` was compared by
+    /// `compare_event_x` in `sort_events` and `build_exact_columns` (each element at least
+    /// once, because every edge contributes two endpoint events), so it is finite and, if a
+    /// crossing, proper; for such events the eager `event_column` cannot fail, and the lazy
+    /// result equals `compare_column_f64(self.exact_column(index)?, value)`.
+    fn compare_column_value(&self, index: usize, value: f64) -> Result<Ordering, RoundedFillError> {
+        let order =
+            compare_column_source_f64(self.exact_columns[index], value).map_err(map_event_error);
+        #[cfg(test)]
+        if crate::fill_filter::shadow_active() {
+            let eager = self
+                .exact_column(index)
+                .map(|column| crate::fill_sections::exact_compare_column_f64(column, value));
+            crate::fill_filter::shadow_check(eager == order);
+        }
+        order
+    }
+
+    /// T1: the defining data of a section record, with the eager code's endpoint-code check.
+    /// Its value is `exact_section(section)`'s, built by the same function when needed.
+    fn section_source(&self, section: RoundedSection) -> Result<SectionSource, RoundedFillError> {
+        let edge = self.edges[section.edge];
+        match section.endpoint {
+            0 => Ok(SectionSource::Edge {
+                start: edge.a,
+                end: edge.b,
+                column: self.exact_columns[section.column],
+            }),
+            1 => Ok(SectionSource::Endpoint(edge.a.y)),
+            2 => Ok(SectionSource::Endpoint(edge.b.y)),
+            _ => Err(RoundedFillError::InternalInvariant),
+        }
+    }
+
+    /// The pre-U4 eager construction, kept as the O10 shadow reference.
+    #[cfg(test)]
     fn exact_section(&self, section: RoundedSection) -> Result<ExactSection, RoundedFillError> {
         let edge = self.edges[section.edge];
         match section.endpoint {
@@ -915,9 +955,29 @@ impl RoundedFillWorkspace {
                 edge.b,
                 self.exact_column(section.column)?,
             )),
-            1 => Ok(endpoint_section(edge.a.y)),
-            2 => Ok(endpoint_section(edge.b.y)),
+            1 => Ok(crate::fill_sections::endpoint_section(edge.a.y)),
+            2 => Ok(crate::fill_sections::endpoint_section(edge.b.y)),
             _ => Err(RoundedFillError::InternalInvariant),
+        }
+    }
+
+    /// O10: the lazily built column section equals the eager `column_as_section`.
+    #[cfg(test)]
+    fn b0r_shadow_column_source(&self, source: SectionSource, column: usize) {
+        if crate::fill_filter::shadow_active() {
+            let eager = self
+                .exact_column(column)
+                .map(crate::fill_sections::column_as_section);
+            crate::fill_filter::shadow_check(source.build().map_err(map_event_error) == eager);
+        }
+    }
+
+    /// O10: the lazily built section equals the eager `exact_section`.
+    #[cfg(test)]
+    fn b0r_shadow_section_source(&self, source: SectionSource, section: RoundedSection) {
+        if crate::fill_filter::shadow_active() {
+            let eager = self.exact_section(section);
+            crate::fill_filter::shadow_check(source.build().map_err(map_event_error) == eager);
         }
     }
 
@@ -927,24 +987,38 @@ impl RoundedFillWorkspace {
         right: RoundedSection,
     ) -> Result<Ordering, RoundedFillError> {
         self.charge()?;
-        Ok(compare_sections(
-            self.exact_section(left)?,
-            self.exact_section(right)?,
-        ))
+        // T1: F0.5 or the source enclosures decide; otherwise both sections are built.
+        let left_source = self.section_source(left)?;
+        let right_source = self.section_source(right)?;
+        let order = compare_section_sources(left_source, right_source).map_err(map_event_error);
+        #[cfg(test)]
+        if crate::fill_filter::shadow_active() {
+            let eager = self.exact_section(left).and_then(|left| {
+                self.exact_section(right)
+                    .map(|right| crate::fill_sections::exact_compare_sections(left, right))
+            });
+            crate::fill_filter::shadow_check(eager == order);
+        }
+        order
     }
 
     fn embed_scalar(
         &mut self,
-        target: ExactSection,
+        target: impl Into<SectionTarget>,
         previous: Option<u64>,
         tau: f64,
     ) -> Result<(f64, u64), RoundedFillError> {
+        // T2: the target's enclosure is computed once for the three searches of this call.
+        let mut target = target.into();
         let mut low = MIN_FINITE_RANK;
         let mut high = MAX_FINITE_RANK;
         while low <= high {
             let middle = low + (high - low) / 2;
             self.charge()?;
-            match compare_section_f64(target, rank_finite(middle)) {
+            match target
+                .compare_f64(rank_finite(middle))
+                .map_err(map_event_error)?
+            {
                 Ordering::Equal => {
                     if previous.is_some_and(|rank| middle <= rank) {
                         return Err(RoundedFillError::TopologyAmbiguous);
@@ -966,8 +1040,8 @@ impl RoundedFillWorkspace {
             }
         }
 
-        let lower = self.search_lower_window(target, tau)?;
-        let upper = self.search_upper_window(target, tau)?;
+        let lower = self.search_lower_window(&mut target, tau)?;
+        let upper = self.search_upper_window(&mut target, tau)?;
         if lower > upper {
             return Err(RoundedFillError::TopologyAmbiguous);
         }
@@ -986,7 +1060,7 @@ impl RoundedFillWorkspace {
 
     fn search_lower_window(
         &mut self,
-        target: ExactSection,
+        target: &mut SectionTarget,
         tau: f64,
     ) -> Result<u64, RoundedFillError> {
         let mut low = MIN_FINITE_RANK;
@@ -995,7 +1069,10 @@ impl RoundedFillWorkspace {
         while low <= high {
             let middle = low + (high - low) / 2;
             self.charge()?;
-            if lower_half_predicate(target, rank_finite(middle), tau) {
+            if target
+                .lower_half(rank_finite(middle), tau)
+                .map_err(map_event_error)?
+            {
                 answer = Some(middle);
                 if middle == MIN_FINITE_RANK {
                     break;
@@ -1013,7 +1090,7 @@ impl RoundedFillWorkspace {
 
     fn search_upper_window(
         &mut self,
-        target: ExactSection,
+        target: &mut SectionTarget,
         tau: f64,
     ) -> Result<u64, RoundedFillError> {
         let mut low = MIN_FINITE_RANK;
@@ -1022,7 +1099,10 @@ impl RoundedFillWorkspace {
         while low <= high {
             let middle = low + (high - low) / 2;
             self.charge()?;
-            if upper_half_predicate(target, rank_finite(middle), tau) {
+            if target
+                .upper_half(rank_finite(middle), tau)
+                .map_err(map_event_error)?
+            {
                 answer = Some(middle);
                 if middle == MAX_FINITE_RANK {
                     break;
