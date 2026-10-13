@@ -553,9 +553,12 @@ fn ratio_cases(seed: u64, count: u64, adversarial: bool) -> Tally {
     tally
 }
 
+/// A differential family: `(seed, count, adversarial) -> tally`.
+type Runner = fn(u64, u64, bool) -> Tally;
+
 fn run_all(random: u64, adversarial: u64, shards: usize) -> [Tally; 6] {
     let mut totals = [Tally::default(); 6];
-    let runners: [(u64, fn(u64, u64, bool) -> Tally); 3] = [
+    let runners: [(u64, Runner); 3] = [
         (0x4230_5231_b100, add_cases),
         (0x4230_5231_b200, multiply_cases),
         (0x4230_5231_b300, ratio_cases),
