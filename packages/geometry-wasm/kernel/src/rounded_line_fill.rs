@@ -461,6 +461,9 @@ struct PendingCell {
     after: i64,
 }
 
+/// `Clone` exists only in test builds: oracle O10 runs the `cfg(test)` reference loops on a clone
+/// of the workspace state (B0R contract section 10, unit U6).
+#[cfg_attr(test, derive(Clone))]
 pub(crate) struct RoundedFillWorkspace {
     limits: RoundedFillLimits,
     edges: Vec<EdgeState>,
@@ -697,10 +700,24 @@ impl RoundedFillWorkspace {
     }
 
     fn collect_events(&mut self) -> Result<(), RoundedFillError> {
+        #[cfg(test)]
+        if crate::fill_filter::shadow_active() {
+            return self.b0r_shadow_event_loop(EventLoop::Collect);
+        }
+        self.collect_events_restructured()
+    }
+
+    /// B0R L1 (contract section 5.4): the endpoint events as before, then the crossing pairs.
+    /// With at most `SWEEP_EDGES` edges only the box-overlapping pairs run their body
+    /// (`collect_crossings_swept`); otherwise the current all-pairs loop below runs (size guard).
+    fn collect_events_restructured(&mut self) -> Result<(), RoundedFillError> {
         for edge_index in 0..self.edges.len() {
             let edge = self.edges[edge_index];
             self.push_event(FillEvent::Endpoint(edge.a))?;
             self.push_event(FillEvent::Endpoint(edge.b))?;
+        }
+        if self.edges.len() <= SWEEP_EDGES {
+            return self.collect_crossings_swept();
         }
         for left in 0..self.edges.len() {
             for right in (left + 1)..self.edges.len() {
@@ -733,6 +750,23 @@ impl RoundedFillWorkspace {
     }
 
     fn sort_events(&mut self) -> Result<(), RoundedFillError> {
+        #[cfg(test)]
+        if crate::fill_filter::shadow_active() {
+            return self.b0r_shadow_event_loop(EventLoop::Sort);
+        }
+        self.sort_events_restructured()
+    }
+
+    /// B0R L2 (contract section 5.4): with at most `MERGE_SORT_EVENTS` events, the stable merge
+    /// sort with the Lemma D charge count (`sort_events_merged`). If the size guard fails, or a
+    /// comparator call returned an error, the current insertion sort below runs on the untouched
+    /// `events` from the start.
+    fn sort_events_restructured(&mut self) -> Result<(), RoundedFillError> {
+        if self.events.len() <= MERGE_SORT_EVENTS {
+            if let Some(result) = self.sort_events_merged() {
+                return result;
+            }
+        }
         for index in 1..self.events.len() {
             let value = self.events[index];
             let mut cursor = index;
@@ -747,6 +781,117 @@ impl RoundedFillWorkspace {
             self.events[cursor] = value;
         }
         Ok(())
+    }
+
+    /// B0R L1, the crossing pairs of at most `SWEEP_EDGES` edges (contract sections 4.3 and 5.4).
+    ///
+    /// The current loop visits every pair `left < right` in lexicographic order and, per pair,
+    /// charges one unit, counts one `pair_checks`, then runs `segment_relation` and pushes a
+    /// `ProperCrossing`. Edge boxes are exact (binary64 endpoints), and a pair whose closed
+    /// boxes are disjoint is `Disjoint` by F0.3, while `segment_relation` cannot fail on the
+    /// validated finite edges; so outside the box-overlapping pairs the body has no effect.
+    ///
+    /// Corollary C1 with the pair rank as the iteration index: before the body of the candidate
+    /// at rank k, the outer charges of iterations `consumed..=k` are applied by one Lemma C bulk
+    /// charge, whose counted variant adds the successful charges to `pair_checks`; after the
+    /// last candidate, the remaining `total - consumed` iterations. Each body therefore runs at
+    /// the same `work_units` and `pair_checks`, in the same order, as in the current loop, and a
+    /// `WorkLimit` or `EventLimit` failure leaves the same counters and pushed events.
+    fn collect_crossings_swept(&mut self) -> Result<(), RoundedFillError> {
+        let count = self.edges.len();
+        debug_assert!(count <= SWEEP_EDGES);
+        let mut rows = [0u64; SWEEP_EDGES];
+        sweep_box_overlaps(&self.edges, |left, right| rows[left] |= 1u64 << right);
+        let total = pair_count(count).ok_or(RoundedFillError::InternalInvariant)?;
+        #[cfg(test)]
+        {
+            let candidates: u64 = rows.iter().map(|row| u64::from(row.count_ones())).sum();
+            b0r_count_loops(|counts| {
+                counts.swept_calls += 1;
+                counts.logical_pairs += total as u64;
+                counts.candidate_pairs += candidates;
+            });
+            if crate::fill_filter::fault_active(crate::fill_filter::Fault::L1SortedByX) {
+                return self.b0r_collect_crossings_sorted_by_x(total);
+            }
+        }
+        let mut consumed = 0usize;
+        for (left, &marks) in rows.iter().enumerate().take(count) {
+            let mut row = marks;
+            while row != 0 {
+                let right = row.trailing_zeros() as usize;
+                row &= row - 1;
+                let rank = pair_rank(count, left, right);
+                let mut outer = rank - consumed + 1;
+                if crate::fill_filter::fault_active(crate::fill_filter::Fault::C1OuterChargeShort) {
+                    outer -= 1;
+                }
+                self.bulk_charge_pairs(outer)?;
+                self.crossing_pair(left, right)?;
+                consumed = rank + 1;
+            }
+        }
+        self.bulk_charge_pairs(total - consumed)
+    }
+
+    /// The body of one `collect_events` pair iteration after its charge, unchanged.
+    fn crossing_pair(&mut self, left: usize, right: usize) -> Result<(), RoundedFillError> {
+        let a = self.edges[left];
+        let b = self.edges[right];
+        let relation = segment_relation(a.a, a.b, b.a, b.b)
+            .map_err(|_| RoundedFillError::InternalInvariant)?;
+        if relation == SegmentRelation::ProperCrossing {
+            self.push_event(FillEvent::Crossing {
+                a: a.a,
+                b: a.b,
+                c: b.a,
+                d: b.b,
+            })?;
+        }
+        Ok(())
+    }
+
+    /// B0R L2 (contract section 5.4): returns `None` if a comparator call returned an error, with
+    /// `events` and every counter untouched, so the caller runs the current insertion sort.
+    ///
+    /// Otherwise the stable merge sort gives the same permutation as the stable insertion sort
+    /// (the exact x comparison is a total preorder, so the stable order is unique), and Lemma D
+    /// gives the insertion sort's comparison count C, which Lemma C charges in bulk: on success
+    /// `work_units` grows by C and the permutation is applied; on failure `work_units` becomes
+    /// `max_work` and `WorkLimit` returns with `events` unsorted. That content is scratch that no
+    /// output or counter reads after a failure (P3.2e:140). The current sort performs nothing but
+    /// charges and comparisons until its first comparator error, and comparator errors depend on
+    /// one operand at a time; `stable_sort_charges` compares every element at least once, so
+    /// both agree on whether an error exists, and the fallback starts at the same `work_units`.
+    fn sort_events_merged(&mut self) -> Option<Result<(), RoundedFillError>> {
+        let count = self.events.len();
+        let mut order = [0u16; MERGE_SORT_EVENTS];
+        let events = &self.events;
+        let Ok(charges) = stable_sort_charges(count, &mut order, |left, right| {
+            compare_event_x(events[left], events[right])
+        }) else {
+            #[cfg(test)]
+            b0r_count_loops(|counts| counts.insertion_fallbacks += 1);
+            return None;
+        };
+        #[cfg(test)]
+        b0r_count_loops(|counts| {
+            counts.merge_sorts += 1;
+            counts.merge_sorted_events += count as u64;
+            counts.emulated_charges += charges;
+        });
+        if let Err(error) = self.bulk_charge(charges).1 {
+            return Some(Err(error));
+        }
+        // `exact_columns` is empty until `build_exact_columns` and has capacity `max_events`, so
+        // it holds the permuted copy without allocating; it is cleared again afterwards.
+        debug_assert!(self.exact_columns.is_empty());
+        for &index in &order[..count] {
+            self.exact_columns.push(self.events[usize::from(index)]);
+        }
+        self.events.copy_from_slice(&self.exact_columns);
+        self.exact_columns.clear();
+        Some(Ok(()))
     }
 
     fn build_exact_columns(&mut self) -> Result<(), RoundedFillError> {
@@ -1646,6 +1791,36 @@ impl RoundedFillWorkspace {
         Ok(())
     }
 
+    /// Lemma C (contract section 5.4): equivalent to `count` consecutive `charge()` calls with
+    /// nothing in between. Each call fails exactly when `work_units >= max_work`, so the sequence
+    /// fails if and only if `work_units + count > max_work`, and a failing sequence leaves
+    /// `work_units = max_work`. Returns the number of calls that would have succeeded,
+    /// min(count, max_work - work_units), with the result of the sequence.
+    fn bulk_charge(&mut self, count: u64) -> (u64, Result<(), RoundedFillError>) {
+        if count == 0 {
+            return (0, Ok(()));
+        }
+        // As in `charge()`: the first call fails without changing `work_units`.
+        if self.stats.work_units >= self.limits.max_work {
+            return (0, Err(RoundedFillError::WorkLimit));
+        }
+        let remaining = self.limits.max_work - self.stats.work_units;
+        if count > remaining {
+            self.stats.work_units = self.limits.max_work;
+            return (remaining, Err(RoundedFillError::WorkLimit));
+        }
+        self.stats.work_units += count;
+        (count, Ok(()))
+    }
+
+    /// Lemma C's counted variant for `collect_events`: each successful outer charge of the
+    /// current pair loop is followed by `pair_checks += 1`.
+    fn bulk_charge_pairs(&mut self, count: usize) -> Result<(), RoundedFillError> {
+        let (charged, result) = self.bulk_charge(count as u64);
+        self.stats.pair_checks += charged as usize;
+        result
+    }
+
     fn actual_allocated_bytes(&self) -> Result<usize, RoundedFillError> {
         allocation_bytes(&[
             (self.edges.capacity(), size_of::<EdgeState>()),
@@ -1666,4 +1841,614 @@ impl RoundedFillWorkspace {
             (self.indices.capacity(), size_of::<u32>()),
         ])
     }
+}
+
+/// L1 size guard (contract section 5.4): the sweep's `[u64; 64]` bitset and `[u8; 64]` order
+/// hold at most 64 edges. Today's `LIMITS` and `FILL_V0_LIMITS` allow 64 edges; a workspace
+/// with more edges runs the current all-pairs loop.
+const SWEEP_EDGES: usize = 64;
+
+/// L2 size guard (contract section 5.4): the merge sort's two `[u16; 256]` index arrays hold at
+/// most 256 events. Today's caps allow 128 events; more events run the current insertion sort.
+const MERGE_SORT_EVENTS: usize = 256;
+
+/// The closed coordinate box of one edge. Edge endpoints are finite binary64 values, so the box
+/// is exact.
+#[derive(Clone, Copy, Default)]
+struct EdgeBox {
+    x_lo: f64,
+    x_hi: f64,
+    y_lo: f64,
+    y_hi: f64,
+}
+
+impl EdgeBox {
+    fn of(edge: EdgeState) -> Self {
+        Self {
+            x_lo: edge.a.x.min(edge.b.x),
+            x_hi: edge.a.x.max(edge.b.x),
+            y_lo: edge.a.y.min(edge.b.y),
+            y_hi: edge.a.y.max(edge.b.y),
+        }
+    }
+}
+
+/// Section 4.3's sweep over edge boxes: calls `mark(min, max)` once for every pair of edges
+/// whose closed boxes overlap, which is every pair that F0.3 does not decide `Disjoint`.
+///
+/// The edge indices are insertion-sorted by `x_lo` into a `[u8; 64]` stack array (tie order does
+/// not matter, because the marks are a set). For each edge a in that order, the following edges
+/// b are scanned while `x_lo_b <= x_hi_a`; since `x_lo_a <= x_lo_b <= x_hi_b`, these are exactly
+/// the later edges whose x ranges overlap a's, and every edge after the first failing one has an
+/// even larger `x_lo`. A pair is marked when the y ranges also overlap. With finite coordinates
+/// the overlap tests are the negations of F0.3's strict separation tests. Scratch: 2 KiB of
+/// boxes and the 64-byte order, on the stack.
+fn sweep_box_overlaps(edges: &[EdgeState], mut mark: impl FnMut(usize, usize)) {
+    let count = edges.len();
+    debug_assert!(count <= SWEEP_EDGES);
+    let mut boxes = [EdgeBox::default(); SWEEP_EDGES];
+    let mut order = [0u8; SWEEP_EDGES];
+    for (index, edge) in edges.iter().enumerate() {
+        boxes[index] = EdgeBox::of(*edge);
+        let mut cursor = index;
+        while cursor > 0 && boxes[usize::from(order[cursor - 1])].x_lo > boxes[index].x_lo {
+            order[cursor] = order[cursor - 1];
+            cursor -= 1;
+        }
+        order[cursor] = index as u8;
+    }
+    for (position, &first) in order[..count].iter().enumerate() {
+        let a = boxes[usize::from(first)];
+        for &second in &order[position + 1..count] {
+            let b = boxes[usize::from(second)];
+            if b.x_lo > a.x_hi {
+                break;
+            }
+            if b.y_lo <= a.y_hi && a.y_lo <= b.y_hi {
+                let (first, second) = (usize::from(first), usize::from(second));
+                mark(first.min(second), first.max(second));
+            }
+        }
+    }
+}
+
+/// The zero-based iteration index of the pair `left < right` in the current lexicographic pair
+/// loop over `count` edges (Lemma B's rank): i(2n - i - 1)/2 + (j - i - 1). The product
+/// i(2n - i - 1) is even, because i and 2n - i - 1 have opposite parities.
+fn pair_rank(count: usize, left: usize, right: usize) -> usize {
+    left * (2 * count - left - 1) / 2 + (right - left - 1)
+}
+
+/// B0R L2's stable bottom-up merge sort of the indices `0..count` with Lemma D's charge count
+/// (contract section 5.4). Writes the stable sorted permutation into `order[..count]` and
+/// returns C, the number of comparisons the current stable insertion sort makes, or the first
+/// comparator error. Nothing is charged here.
+///
+/// Lemma D: inserting the element at index i >= 1 makes g_i shifting comparisons (g_i earlier
+/// elements are strictly greater) plus one stopping comparison unless all i earlier elements are
+/// greater, so C = sum g_i + (n - 1) - m, with m the number of indices i >= 1 whose element is
+/// strictly less than every earlier element. The merge counts sum g_i: a run holds a contiguous
+/// range of input positions, and when the right run's head is taken because the left head is
+/// strictly greater, every remaining left-run element (at least the left head) is strictly
+/// greater too, while every left-run element already taken is at most it. The extra pass keeps
+/// the running minimum: an element is strictly less than every earlier one exactly when it is
+/// strictly less than their minimum. That pass alone compares every element at least once for
+/// n >= 2, which the comparator-error fallback relies on.
+pub(crate) fn stable_sort_charges<E>(
+    count: usize,
+    order: &mut [u16; MERGE_SORT_EVENTS],
+    mut compare: impl FnMut(usize, usize) -> Result<Ordering, E>,
+) -> Result<u64, E> {
+    assert!(count <= MERGE_SORT_EVENTS);
+    for (slot, index) in order.iter_mut().zip(0u16..).take(count) {
+        *slot = index;
+    }
+    let mut scratch = [0u16; MERGE_SORT_EVENTS];
+    let mut inversions = 0u64;
+    let mut sorted_in_order = true;
+    let mut width = 1usize;
+    while width < count {
+        if sorted_in_order {
+            merge_runs(
+                &order[..count],
+                &mut scratch[..count],
+                width,
+                &mut compare,
+                &mut inversions,
+            )?;
+        } else {
+            merge_runs(
+                &scratch[..count],
+                &mut order[..count],
+                width,
+                &mut compare,
+                &mut inversions,
+            )?;
+        }
+        sorted_in_order = !sorted_in_order;
+        width *= 2;
+    }
+    if !sorted_in_order {
+        order[..count].copy_from_slice(&scratch[..count]);
+    }
+    if count == 0 {
+        return Ok(0);
+    }
+    let mut minima = 0u64;
+    let mut minimum = 0usize;
+    for index in 1..count {
+        if compare(minimum, index)? == Ordering::Greater {
+            minima += 1;
+            minimum = index;
+        }
+    }
+    if crate::fill_filter::fault_active(crate::fill_filter::Fault::LemmaDWithoutMinimum) {
+        minima = 0;
+    }
+    Ok(inversions + (count as u64 - 1) - minima)
+}
+
+/// One bottom-up merge pass of runs of `width` from `source` into `target`, stable (the left
+/// element is taken unless it is strictly greater), adding the strict inversions it resolves.
+fn merge_runs<E>(
+    source: &[u16],
+    target: &mut [u16],
+    width: usize,
+    compare: &mut impl FnMut(usize, usize) -> Result<Ordering, E>,
+    inversions: &mut u64,
+) -> Result<(), E> {
+    let count = source.len();
+    let mut start = 0usize;
+    while start < count {
+        let middle = (start + width).min(count);
+        let end = (start + 2 * width).min(count);
+        let (mut left, mut right, mut out) = (start, middle, start);
+        while left < middle && right < end {
+            if compare(usize::from(source[left]), usize::from(source[right]))? == Ordering::Greater
+            {
+                target[out] = source[right];
+                right += 1;
+                *inversions += (middle - left) as u64;
+            } else {
+                target[out] = source[left];
+                left += 1;
+            }
+            out += 1;
+        }
+        let rest = middle - left;
+        target[out..out + rest].copy_from_slice(&source[left..middle]);
+        out += rest;
+        target[out..out + (end - right)].copy_from_slice(&source[right..end]);
+        start = end;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------------------------
+// B0R U6 test machinery (`cfg(test)` only): the reference loops, oracle O10's shadow comparison
+// of L1 and L2, the O8 fault path of defect (13) and test access for O11.
+
+/// The two loops restructured by unit U6.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum EventLoop {
+    /// `collect_events` (L1).
+    Collect,
+    /// `sort_events` (L2).
+    Sort,
+}
+
+/// Which implementation of an `EventLoop` runs.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LoopImpl {
+    /// The production code: L1 or L2 behind its size guard.
+    Restructured,
+    /// The pre-U6 loop, kept verbatim as the O10 reference.
+    Reference,
+}
+
+/// Per-thread counts of the restructured loops' work (test builds only).
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct LoopCounts {
+    /// `collect_crossings_swept` calls.
+    pub(crate) swept_calls: u64,
+    /// Logical pairs n(n - 1)/2 of those calls.
+    pub(crate) logical_pairs: u64,
+    /// Candidate pairs (overlapping boxes) of those calls.
+    pub(crate) candidate_pairs: u64,
+    /// Merge sorts without a comparator error.
+    pub(crate) merge_sorts: u64,
+    /// Events sorted by them.
+    pub(crate) merge_sorted_events: u64,
+    /// Lemma D charge totals C of them.
+    pub(crate) emulated_charges: u64,
+    /// Merge sorts abandoned for the insertion sort after a comparator error.
+    pub(crate) insertion_fallbacks: u64,
+}
+
+#[cfg(test)]
+impl LoopCounts {
+    pub(crate) fn merge(&mut self, other: Self) {
+        self.swept_calls += other.swept_calls;
+        self.logical_pairs += other.logical_pairs;
+        self.candidate_pairs += other.candidate_pairs;
+        self.merge_sorts += other.merge_sorts;
+        self.merge_sorted_events += other.merge_sorted_events;
+        self.emulated_charges += other.emulated_charges;
+        self.insertion_fallbacks += other.insertion_fallbacks;
+    }
+}
+
+/// Per-thread tally of O10's L1/L2 comparisons with the reference loops (test builds only).
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct LoopShadowTally {
+    /// Compared `collect_events` runs.
+    pub(crate) collect_runs: u64,
+    /// Compared `sort_events` runs.
+    pub(crate) sort_runs: u64,
+    /// Runs whose result, counters or pushed records differed.
+    pub(crate) mismatches: u64,
+    /// Compared runs whose reference returned `WorkLimit`.
+    pub(crate) work_limit: u64,
+    /// Compared runs whose reference returned `EventLimit`.
+    pub(crate) event_limit: u64,
+    /// Compared runs whose reference returned another error.
+    pub(crate) other_errors: u64,
+}
+
+#[cfg(test)]
+impl LoopShadowTally {
+    pub(crate) fn merge(&mut self, other: Self) {
+        self.collect_runs += other.collect_runs;
+        self.sort_runs += other.sort_runs;
+        self.mismatches += other.mismatches;
+        self.work_limit += other.work_limit;
+        self.event_limit += other.event_limit;
+        self.other_errors += other.other_errors;
+    }
+}
+
+#[cfg(test)]
+const NO_LOOP_COUNTS: LoopCounts = LoopCounts {
+    swept_calls: 0,
+    logical_pairs: 0,
+    candidate_pairs: 0,
+    merge_sorts: 0,
+    merge_sorted_events: 0,
+    emulated_charges: 0,
+    insertion_fallbacks: 0,
+};
+
+#[cfg(test)]
+const NO_LOOP_TALLY: LoopShadowTally = LoopShadowTally {
+    collect_runs: 0,
+    sort_runs: 0,
+    mismatches: 0,
+    work_limit: 0,
+    event_limit: 0,
+    other_errors: 0,
+};
+
+#[cfg(test)]
+thread_local! {
+    static LOOP_COUNTS: core::cell::Cell<LoopCounts> = const { core::cell::Cell::new(NO_LOOP_COUNTS) };
+    static LOOP_TALLY: core::cell::Cell<LoopShadowTally> =
+        const { core::cell::Cell::new(NO_LOOP_TALLY) };
+    static LOOP_VARIANTS: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+fn b0r_count_loops(update: impl FnOnce(&mut LoopCounts)) {
+    LOOP_COUNTS.with(|counts| {
+        let mut value = counts.get();
+        update(&mut value);
+        counts.set(value);
+    });
+}
+
+/// Returns and resets this thread's loop counts.
+#[cfg(test)]
+pub(crate) fn take_loop_counts() -> LoopCounts {
+    LOOP_COUNTS.with(|counts| counts.replace(NO_LOOP_COUNTS))
+}
+
+/// Returns and resets this thread's O10 loop tally.
+#[cfg(test)]
+pub(crate) fn take_loop_tally() -> LoopShadowTally {
+    LOOP_TALLY.with(|tally| tally.replace(NO_LOOP_TALLY))
+}
+
+/// Runs `action` with O10's loop variants on in this thread: in shadow mode each L1 and L2 call
+/// is then also compared with the reference under reduced budgets and event limits.
+#[cfg(test)]
+pub(crate) fn with_loop_variants<T>(action: impl FnOnce() -> T) -> T {
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            LOOP_VARIANTS.with(|active| active.set(false));
+        }
+    }
+    LOOP_VARIANTS.with(|active| active.set(true));
+    let _reset = Reset;
+    action()
+}
+
+#[cfg(test)]
+fn b0r_record_loop_run(which: EventLoop, expected: Result<(), RoundedFillError>, equal: bool) {
+    crate::fill_filter::shadow_check(equal);
+    LOOP_TALLY.with(|tally| {
+        let mut value = tally.get();
+        match which {
+            EventLoop::Collect => value.collect_runs += 1,
+            EventLoop::Sort => value.sort_runs += 1,
+        }
+        value.mismatches += u64::from(!equal);
+        match expected {
+            Ok(()) => {}
+            Err(RoundedFillError::WorkLimit) => value.work_limit += 1,
+            Err(RoundedFillError::EventLimit) => value.event_limit += 1,
+            Err(_) => value.other_errors += 1,
+        }
+        tally.set(value);
+    });
+}
+
+/// The bits of every event, for a bit-exact comparison of pushed records.
+#[cfg(test)]
+pub(crate) fn b0r_event_bits(events: &[FillEvent]) -> Vec<u64> {
+    let mut bits = Vec::with_capacity(events.len() * 9);
+    for event in events {
+        match *event {
+            FillEvent::Endpoint(point) => {
+                bits.extend([0, point.x.to_bits(), point.y.to_bits()]);
+            }
+            FillEvent::Crossing { a, b, c, d } => {
+                bits.push(1);
+                for point in [a, b, c, d] {
+                    bits.extend([point.x.to_bits(), point.y.to_bits()]);
+                }
+            }
+        }
+    }
+    bits
+}
+
+#[cfg(test)]
+impl RoundedFillWorkspace {
+    /// O10 for L1 and L2: runs the restructured loop on this workspace and the reference loop
+    /// on a clone of the state before it, and records whether the results, every counter and
+    /// the pushed records are equal. After an L2 `WorkLimit` the events are scratch that no
+    /// output reads (P3.2e:140) and are not compared. With loop variants on, both loops also
+    /// run from clones of the same state under reduced budgets and event limits.
+    fn b0r_shadow_event_loop(&mut self, which: EventLoop) -> Result<(), RoundedFillError> {
+        let before = self.clone();
+        let result = self.b0r_run_loop(which, LoopImpl::Restructured);
+        let mut reference = before.clone();
+        let expected = reference.b0r_run_loop(which, LoopImpl::Reference);
+        let equal = b0r_loop_states_equal(which, &reference, expected, self, result);
+        b0r_record_loop_run(which, expected, equal);
+        if LOOP_VARIANTS.with(core::cell::Cell::get) {
+            for limits in b0r_loop_variants(which, &before, &reference, expected) {
+                let mut variant_reference = before.clone();
+                variant_reference.limits = limits;
+                let mut variant = variant_reference.clone();
+                let expected = variant_reference.b0r_run_loop(which, LoopImpl::Reference);
+                let result = variant.b0r_run_loop(which, LoopImpl::Restructured);
+                let equal =
+                    b0r_loop_states_equal(which, &variant_reference, expected, &variant, result);
+                b0r_record_loop_run(which, expected, equal);
+            }
+        }
+        result
+    }
+
+    /// Runs one event loop without the shadow dispatch.
+    pub(crate) fn b0r_run_loop(
+        &mut self,
+        which: EventLoop,
+        implementation: LoopImpl,
+    ) -> Result<(), RoundedFillError> {
+        match (which, implementation) {
+            (EventLoop::Collect, LoopImpl::Restructured) => self.collect_events_restructured(),
+            (EventLoop::Collect, LoopImpl::Reference) => self.b0r_reference_collect_events(),
+            (EventLoop::Sort, LoopImpl::Restructured) => self.sort_events_restructured(),
+            (EventLoop::Sort, LoopImpl::Reference) => self.b0r_reference_sort_events(),
+        }
+    }
+
+    /// The pre-U6 `collect_events`, verbatim (O10 reference).
+    fn b0r_reference_collect_events(&mut self) -> Result<(), RoundedFillError> {
+        for edge_index in 0..self.edges.len() {
+            let edge = self.edges[edge_index];
+            self.push_event(FillEvent::Endpoint(edge.a))?;
+            self.push_event(FillEvent::Endpoint(edge.b))?;
+        }
+        for left in 0..self.edges.len() {
+            for right in (left + 1)..self.edges.len() {
+                self.charge()?;
+                self.stats.pair_checks += 1;
+                let a = self.edges[left];
+                let b = self.edges[right];
+                let relation = segment_relation(a.a, a.b, b.a, b.b)
+                    .map_err(|_| RoundedFillError::InternalInvariant)?;
+                if relation == SegmentRelation::ProperCrossing {
+                    self.push_event(FillEvent::Crossing {
+                        a: a.a,
+                        b: a.b,
+                        c: b.a,
+                        d: b.b,
+                    })?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// The pre-U6 `sort_events`, verbatim (O10 reference).
+    fn b0r_reference_sort_events(&mut self) -> Result<(), RoundedFillError> {
+        for index in 1..self.events.len() {
+            let value = self.events[index];
+            let mut cursor = index;
+            while cursor > 0 {
+                let ordering = self.compare_events(self.events[cursor - 1], value)?;
+                if ordering != Ordering::Greater {
+                    break;
+                }
+                self.events[cursor] = self.events[cursor - 1];
+                cursor -= 1;
+            }
+            self.events[cursor] = value;
+        }
+        Ok(())
+    }
+
+    /// O8 defect (13): L1 with the candidates processed in the sweep's sorted-by-x discovery
+    /// order instead of lexicographic order (the charge emulation saturates where ranks go
+    /// back).
+    fn b0r_collect_crossings_sorted_by_x(&mut self, total: usize) -> Result<(), RoundedFillError> {
+        let count = self.edges.len();
+        let mut pairs = Vec::new();
+        sweep_box_overlaps(&self.edges, |left, right| pairs.push((left, right)));
+        let mut consumed = 0usize;
+        for (left, right) in pairs {
+            let rank = pair_rank(count, left, right);
+            self.bulk_charge_pairs((rank + 1).saturating_sub(consumed))?;
+            self.crossing_pair(left, right)?;
+            consumed = consumed.max(rank + 1);
+        }
+        self.bulk_charge_pairs(total - consumed)
+    }
+
+    /// Test access: the state before `collect_events`, through the real `copy_edges`.
+    pub(crate) fn b0r_load_contours(
+        &mut self,
+        contours: &[&[Point]],
+    ) -> Result<(), RoundedFillError> {
+        self.begin_attempt();
+        self.copy_edges(contours)
+    }
+
+    /// Test access: the state before `sort_events` with the given raw events.
+    pub(crate) fn b0r_load_events(&mut self, events: &[FillEvent]) {
+        self.begin_attempt();
+        self.events.extend_from_slice(events);
+        self.stats.events = events.len();
+    }
+
+    /// Test access: the starting work counter and the two limits the event loops read.
+    pub(crate) fn b0r_set_budget(&mut self, work_units: u64, max_work: u64, max_events: usize) {
+        self.stats.work_units = work_units;
+        self.limits.max_work = max_work;
+        self.limits.max_events = max_events;
+    }
+
+    /// Test access: the counters and the events.
+    pub(crate) fn b0r_loop_state(&self) -> (RoundedFillStats, &[FillEvent]) {
+        (self.stats, &self.events)
+    }
+
+    /// Test access: one per-iteration `charge()`, the Lemma C reference, counted into
+    /// `pair_checks` like the current pair loop when `counted`.
+    pub(crate) fn b0r_charge(&mut self, counted: bool) -> Result<(), RoundedFillError> {
+        self.charge()?;
+        if counted {
+            self.stats.pair_checks += 1;
+        }
+        Ok(())
+    }
+
+    /// Test access: Lemma C's bulk charge, plain or counted into `pair_checks`.
+    pub(crate) fn b0r_bulk_charge(
+        &mut self,
+        count: u64,
+        counted: bool,
+    ) -> Result<(), RoundedFillError> {
+        if counted {
+            self.bulk_charge_pairs(count as usize)
+        } else {
+            self.bulk_charge(count).1
+        }
+    }
+}
+
+/// Equal results, counters and pushed records of a reference and a restructured run. The
+/// `exact_columns` scratch is compared as well (L2 leaves it empty, as the reference does).
+#[cfg(test)]
+fn b0r_loop_states_equal(
+    which: EventLoop,
+    reference: &RoundedFillWorkspace,
+    expected: Result<(), RoundedFillError>,
+    candidate: &RoundedFillWorkspace,
+    result: Result<(), RoundedFillError>,
+) -> bool {
+    let compare_events =
+        which == EventLoop::Collect || expected != Err(RoundedFillError::WorkLimit);
+    expected == result
+        && reference.stats == candidate.stats
+        && b0r_event_bits(&reference.exact_columns) == b0r_event_bits(&candidate.exact_columns)
+        && (!compare_events
+            || b0r_event_bits(&reference.events) == b0r_event_bits(&candidate.events))
+}
+
+/// O10's reduced limits for one loop call: budgets at the start, one unit later, the middle,
+/// around the reference's final `work_units` and three pseudo-random points in between; for a
+/// successful `collect_events` with crossings, event limits failing at the first, a middle and
+/// the last crossing push.
+#[cfg(test)]
+fn b0r_loop_variants(
+    which: EventLoop,
+    before: &RoundedFillWorkspace,
+    reference: &RoundedFillWorkspace,
+    expected: Result<(), RoundedFillError>,
+) -> Vec<RoundedFillLimits> {
+    let start = before.stats.work_units;
+    let end = reference.stats.work_units.max(start);
+    let span = end - start;
+    let mut budgets = vec![
+        start,
+        start + 1,
+        start + span / 2,
+        end.saturating_sub(1).max(start),
+        end,
+        end + 1,
+    ];
+    let mut seed = span
+        ^ ((before.edges.len() as u64) << 32)
+        ^ ((before.events.len() as u64) << 16)
+        ^ 0x9e37_79b9_7f4a_7c15;
+    for _ in 0..3 {
+        seed = seed
+            .wrapping_mul(0x5851_f42d_4c95_7f2d)
+            .wrapping_add(0x1405_7b7e_f767_814f);
+        budgets.push(start + (seed >> 11) % (span + 2));
+    }
+    budgets.sort_unstable();
+    budgets.dedup();
+    let mut variants: Vec<RoundedFillLimits> = budgets
+        .into_iter()
+        .map(|max_work| RoundedFillLimits {
+            max_work,
+            ..before.limits
+        })
+        .collect();
+    if which == EventLoop::Collect && expected.is_ok() {
+        let endpoints = before.events.len() + 2 * before.edges.len();
+        let crossings = reference.events.len().saturating_sub(endpoints);
+        if crossings > 0 {
+            let mut limits = vec![
+                endpoints,
+                endpoints + crossings / 2,
+                endpoints + crossings - 1,
+            ];
+            limits.dedup();
+            variants.extend(limits.into_iter().map(|max_events| RoundedFillLimits {
+                max_events,
+                ..before.limits
+            }));
+        }
+    }
+    variants
 }
