@@ -492,6 +492,8 @@ const EXPECTED_ORACLES = [
   'fill_event_order_filter_tests::b0r_oracle_full_o1_event_order',
   'fill_sections_filter_tests::b0r_oracle_full_o1_sections',
   'fill_sections_filter_tests::b0r_oracle_full_o10_tessellation_shadow',
+  'fill_sections_slab_tests::b0r_oracle_full_o1_slab_sections',
+  'fill_sections_slab_tests::b0r_oracle_full_slab_corpus_rates',
 ];
 
 /** Failures of one oracle run: exit status, the cargo summary, and every expected test run. */
