@@ -454,26 +454,94 @@ impl SimpleCubicTopologyWorkspace {
     }
 
     fn validate_pairs(&mut self) -> Result<(), TopologyError> {
+        let max_pairs = self.limits.max_pairs;
+        #[cfg(test)]
+        if let Some(result) = b0r_pair_loop_override(&mut SimplePairLoops(self), max_pairs) {
+            return result;
+        }
+        self.sweep_pairs(max_pairs)
+    }
+
+    /// B0R section 4: the candidate pairs C in lexicographic order with the Lemma B counter.
+    fn sweep_pairs(&mut self, max_pairs: usize) -> Result<(), TopologyError> {
+        let leaf_count = self.exact_leaves.len();
+        let candidates = self.pair_candidates();
+        for (left_index, right_index) in candidates.pairs() {
+            enter_pair(
+                &mut self.stats.pairs,
+                leaf_count,
+                left_index,
+                right_index,
+                max_pairs,
+            )?;
+            self.check_pair(left_index, right_index)?;
+        }
+        finish_pairs(&mut self.stats.pairs, leaf_count, max_pairs)
+    }
+
+    fn pair_candidates(&self) -> PairCandidates {
+        let (boxes, wild) = leaf_boxes(self.exact_leaves.iter().map(|leaf| &leaf.controls[..]));
+        PairCandidates::new(
+            self.exact_leaves.len(),
+            &boxes,
+            wild,
+            &self.contours[..self.contour_len],
+        )
+    }
+
+    /// The unchanged per-pair body of the pre-B0R loop.
+    fn check_pair(&self, left_index: usize, right_index: usize) -> Result<(), TopologyError> {
+        let left = &self.exact_leaves[left_index];
+        let right = &self.exact_leaves[right_index];
+        if let Some(shared) = adjacent_shared_point(*left, *right, &self.contours) {
+            if !hull_intersection_is_only(exact_leaf_hull(left), exact_leaf_hull(right), shared) {
+                return Err(TopologyError::Unresolved);
+            }
+        } else if closed_hulls_intersect(exact_leaf_hull(left), exact_leaf_hull(right)) {
+            return Err(TopologyError::Unresolved);
+        }
+        Ok(())
+    }
+
+    /// The pre-B0R all-pairs loop, kept as the O3 reference. Only the budget is a parameter;
+    /// `touched` receives every pair whose body returned an error.
+    #[cfg(test)]
+    #[allow(clippy::needless_range_loop)]
+    fn reference_pairs(
+        &mut self,
+        max_pairs: usize,
+        touched: &mut [u64; ABSOLUTE_MAX_LEAVES],
+    ) -> Result<(), TopologyError> {
         for left_index in 0..self.exact_leaves.len() {
             for right_index in (left_index + 1)..self.exact_leaves.len() {
-                if self.stats.pairs == self.limits.max_pairs {
+                if self.stats.pairs == max_pairs {
                     return Err(TopologyError::WorkLimit);
                 }
                 self.stats.pairs += 1;
-                let left = &self.exact_leaves[left_index];
-                let right = &self.exact_leaves[right_index];
-                if let Some(shared) = adjacent_shared_point(*left, *right, &self.contours) {
-                    if !hull_intersection_is_only(
-                        exact_leaf_hull(left),
-                        exact_leaf_hull(right),
-                        shared,
-                    ) {
-                        return Err(TopologyError::Unresolved);
-                    }
-                } else if closed_hulls_intersect(exact_leaf_hull(left), exact_leaf_hull(right)) {
-                    return Err(TopologyError::Unresolved);
+                if let Err(error) = self.reference_pair_body(left_index, right_index) {
+                    touched[left_index] |= 1u64 << right_index;
+                    return Err(error);
                 }
             }
+        }
+        Ok(())
+    }
+
+    /// The pre-B0R pair body, copied verbatim for the reference loop.
+    #[cfg(test)]
+    fn reference_pair_body(
+        &self,
+        left_index: usize,
+        right_index: usize,
+    ) -> Result<(), TopologyError> {
+        let left = &self.exact_leaves[left_index];
+        let right = &self.exact_leaves[right_index];
+        if let Some(shared) = adjacent_shared_point(*left, *right, &self.contours) {
+            if !hull_intersection_is_only(exact_leaf_hull(left), exact_leaf_hull(right), shared) {
+                return Err(TopologyError::Unresolved);
+            }
+        } else if closed_hulls_intersect(exact_leaf_hull(left), exact_leaf_hull(right)) {
+            return Err(TopologyError::Unresolved);
         }
         Ok(())
     }
@@ -710,28 +778,100 @@ impl RoundedKnotCubicTopologyWorkspace {
     }
 
     fn validate_pairs(&mut self) -> Result<(), TopologyError> {
+        let max_pairs = self.limits.max_pairs;
+        #[cfg(test)]
+        if let Some(result) = b0r_pair_loop_override(&mut RoundedPairLoops(self), max_pairs) {
+            return result;
+        }
+        self.sweep_pairs(max_pairs)
+    }
+
+    /// B0R section 4: the candidate pairs C in lexicographic order with the Lemma B counter.
+    fn sweep_pairs(&mut self, max_pairs: usize) -> Result<(), TopologyError> {
+        let leaf_count = self.exact_leaves.len();
+        let candidates = self.pair_candidates();
+        for (left_index, right_index) in candidates.pairs() {
+            enter_pair(
+                &mut self.stats.pairs,
+                leaf_count,
+                left_index,
+                right_index,
+                max_pairs,
+            )?;
+            self.check_pair(left_index, right_index)?;
+        }
+        finish_pairs(&mut self.stats.pairs, leaf_count, max_pairs)
+    }
+
+    fn pair_candidates(&self) -> PairCandidates {
+        let (boxes, wild) = leaf_boxes(self.exact_leaves.iter().map(|leaf| &leaf.points[..]));
+        PairCandidates::new(
+            self.exact_leaves.len(),
+            &boxes,
+            wild,
+            &self.contours[..self.contour_len],
+        )
+    }
+
+    /// The unchanged per-pair body of the pre-B0R loop.
+    fn check_pair(&self, left_index: usize, right_index: usize) -> Result<(), TopologyError> {
+        let left = &self.exact_leaves[left_index];
+        let right = &self.exact_leaves[right_index];
+        if let Some((previous, next)) = directed_rounded_adjacent(left, right, &self.contours) {
+            let direction = point_sub(next.points[3], previous.points[0]);
+            if !rounded_projected_monotone(previous, direction)
+                || !rounded_projected_monotone(next, direction)
+            {
+                return Err(TopologyError::Unresolved);
+            }
+        } else if closed_hulls_intersect(rounded_leaf_hull(left), rounded_leaf_hull(right)) {
+            return Err(TopologyError::Unresolved);
+        }
+        Ok(())
+    }
+
+    /// The pre-B0R all-pairs loop, kept as the O3 reference. Only the budget is a parameter;
+    /// `touched` receives every pair whose body returned an error.
+    #[cfg(test)]
+    #[allow(clippy::needless_range_loop)]
+    fn reference_pairs(
+        &mut self,
+        max_pairs: usize,
+        touched: &mut [u64; ABSOLUTE_MAX_LEAVES],
+    ) -> Result<(), TopologyError> {
         for left_index in 0..self.exact_leaves.len() {
             for right_index in (left_index + 1)..self.exact_leaves.len() {
-                if self.stats.pairs == self.limits.max_pairs {
+                if self.stats.pairs == max_pairs {
                     return Err(TopologyError::WorkLimit);
                 }
                 self.stats.pairs += 1;
-                let left = &self.exact_leaves[left_index];
-                let right = &self.exact_leaves[right_index];
-                if let Some((previous, next)) =
-                    directed_rounded_adjacent(left, right, &self.contours)
-                {
-                    let direction = point_sub(next.points[3], previous.points[0]);
-                    if !rounded_projected_monotone(previous, direction)
-                        || !rounded_projected_monotone(next, direction)
-                    {
-                        return Err(TopologyError::Unresolved);
-                    }
-                } else if closed_hulls_intersect(rounded_leaf_hull(left), rounded_leaf_hull(right))
-                {
-                    return Err(TopologyError::Unresolved);
+                if let Err(error) = self.reference_pair_body(left_index, right_index) {
+                    touched[left_index] |= 1u64 << right_index;
+                    return Err(error);
                 }
             }
+        }
+        Ok(())
+    }
+
+    /// The pre-B0R pair body, copied verbatim for the reference loop.
+    #[cfg(test)]
+    fn reference_pair_body(
+        &self,
+        left_index: usize,
+        right_index: usize,
+    ) -> Result<(), TopologyError> {
+        let left = &self.exact_leaves[left_index];
+        let right = &self.exact_leaves[right_index];
+        if let Some((previous, next)) = directed_rounded_adjacent(left, right, &self.contours) {
+            let direction = point_sub(next.points[3], previous.points[0]);
+            if !rounded_projected_monotone(previous, direction)
+                || !rounded_projected_monotone(next, direction)
+            {
+                return Err(TopologyError::Unresolved);
+            }
+        } else if closed_hulls_intersect(rounded_leaf_hull(left), rounded_leaf_hull(right)) {
+            return Err(TopologyError::Unresolved);
         }
         Ok(())
     }
@@ -888,83 +1028,229 @@ impl TransverseArrangementWorkspace {
         // Optional marked-LINE state adds one borrowed 64-boolean array and scalar flags. The
         // triangle-free scan borrows the at-most-32-record prefix and uses two record references,
         // one witness index, and booleans; it neither copies the array nor allocates graph storage.
+        let max_pairs = self.rounded.limits.max_pairs;
+        #[cfg(test)]
+        if let Some(result) = b0r_pair_loop_override(
+            &mut TransversePairLoops {
+                workspace: self,
+                marked_lines,
+                policy,
+            },
+            max_pairs,
+        ) {
+            return result;
+        }
+        self.sweep_pairs(marked_lines, policy, max_pairs)
+    }
+
+    /// B0R section 4: the candidate pairs C in lexicographic order with the Lemma B counter,
+    /// so partners, the triangle-free crossing prefix and the crossing records are built in the
+    /// order of the pre-B0R loop.
+    fn sweep_pairs(
+        &mut self,
+        marked_lines: Option<&[bool; ABSOLUTE_MAX_LEAVES]>,
+        policy: ArrangementPolicy,
+        max_pairs: usize,
+    ) -> Result<(), TopologyError> {
+        let leaf_count = self.rounded.exact_leaves.len();
+        let candidates = self.rounded.pair_candidates();
+        for (left_index, right_index) in candidates.pairs() {
+            enter_pair(
+                &mut self.rounded.stats.pairs,
+                leaf_count,
+                left_index,
+                right_index,
+                max_pairs,
+            )?;
+            self.check_pair(left_index, right_index, marked_lines, policy)?;
+        }
+        finish_pairs(&mut self.rounded.stats.pairs, leaf_count, max_pairs)
+    }
+
+    /// The unchanged per-pair body of the pre-B0R loop; its `continue` is the early `Ok`.
+    fn check_pair(
+        &mut self,
+        left_index: usize,
+        right_index: usize,
+        marked_lines: Option<&[bool; ABSOLUTE_MAX_LEAVES]>,
+        policy: ArrangementPolicy,
+    ) -> Result<(), TopologyError> {
+        let orientation = {
+            let left = &self.rounded.exact_leaves[left_index];
+            let right = &self.rounded.exact_leaves[right_index];
+            if let Some((previous, next)) =
+                directed_rounded_adjacent(left, right, &self.rounded.contours)
+            {
+                let direction = point_sub(next.points[3], previous.points[0]);
+                if !rounded_projected_monotone(previous, direction)
+                    || !rounded_projected_monotone(next, direction)
+                {
+                    return Err(TopologyError::Unresolved);
+                }
+                None
+            } else if !closed_hulls_intersect(rounded_leaf_hull(left), rounded_leaf_hull(right)) {
+                None
+            } else {
+                Some(
+                    certify_transverse_rounded_pair_with_kinds(
+                        left,
+                        left.closure || marked_lines.is_some_and(|kinds| kinds[left_index]),
+                        right,
+                        right.closure || marked_lines.is_some_and(|kinds| kinds[right_index]),
+                    )
+                    .ok_or(TopologyError::Unresolved)?,
+                )
+            }
+        };
+
+        let Some(orientation) = orientation else {
+            return Ok(());
+        };
+        match policy {
+            ArrangementPolicy::Matching => {
+                if self.partners[left_index] != usize::MAX {
+                    return Err(TopologyError::Unresolved);
+                }
+                if self.partners[right_index] != usize::MAX {
+                    return Err(TopologyError::Unresolved);
+                }
+                if self.crossing_len == self.crossings.len() {
+                    return Err(TopologyError::WorkLimit);
+                }
+                self.partners[left_index] = right_index;
+                self.partners[right_index] = left_index;
+            }
+            ArrangementPolicy::TriangleFree => {
+                if closes_crossing_triangle(
+                    &self.crossings[..self.crossing_len],
+                    left_index,
+                    right_index,
+                ) {
+                    return Err(TopologyError::Unresolved);
+                }
+                if self.crossing_len == self.crossings.len() {
+                    return Err(TopologyError::WorkLimit);
+                }
+            }
+        }
+        self.crossings[self.crossing_len] = ArrangementCrossing {
+            left_leaf: left_index,
+            right_leaf: right_index,
+            orientation,
+        };
+        self.crossing_len += 1;
+        Ok(())
+    }
+
+    /// The pre-B0R all-pairs loop, kept as the O3 reference. Only the budget is a parameter;
+    /// `touched` receives every pair whose body returned an error or appended a crossing.
+    #[cfg(test)]
+    #[allow(clippy::needless_range_loop)]
+    fn reference_pairs(
+        &mut self,
+        marked_lines: Option<&[bool; ABSOLUTE_MAX_LEAVES]>,
+        policy: ArrangementPolicy,
+        max_pairs: usize,
+        touched: &mut [u64; ABSOLUTE_MAX_LEAVES],
+    ) -> Result<(), TopologyError> {
         for left_index in 0..self.rounded.exact_leaves.len() {
             for right_index in (left_index + 1)..self.rounded.exact_leaves.len() {
-                if self.rounded.stats.pairs == self.rounded.limits.max_pairs {
+                if self.rounded.stats.pairs == max_pairs {
                     return Err(TopologyError::WorkLimit);
                 }
                 self.rounded.stats.pairs += 1;
-                let orientation = {
-                    let left = &self.rounded.exact_leaves[left_index];
-                    let right = &self.rounded.exact_leaves[right_index];
-                    if let Some((previous, next)) =
-                        directed_rounded_adjacent(left, right, &self.rounded.contours)
-                    {
-                        let direction = point_sub(next.points[3], previous.points[0]);
-                        if !rounded_projected_monotone(previous, direction)
-                            || !rounded_projected_monotone(next, direction)
-                        {
-                            return Err(TopologyError::Unresolved);
-                        }
-                        None
-                    } else if !closed_hulls_intersect(
-                        rounded_leaf_hull(left),
-                        rounded_leaf_hull(right),
-                    ) {
-                        None
-                    } else {
-                        Some(
-                            certify_transverse_rounded_pair_with_kinds(
-                                left,
-                                left.closure || marked_lines.is_some_and(|kinds| kinds[left_index]),
-                                right,
-                                right.closure
-                                    || marked_lines.is_some_and(|kinds| kinds[right_index]),
-                            )
-                            .ok_or(TopologyError::Unresolved)?,
-                        )
-                    }
-                };
-
-                let Some(orientation) = orientation else {
-                    continue;
-                };
-                match policy {
-                    ArrangementPolicy::Matching => {
-                        if self.partners[left_index] != usize::MAX {
-                            return Err(TopologyError::Unresolved);
-                        }
-                        if self.partners[right_index] != usize::MAX {
-                            return Err(TopologyError::Unresolved);
-                        }
-                        if self.crossing_len == self.crossings.len() {
-                            return Err(TopologyError::WorkLimit);
-                        }
-                        self.partners[left_index] = right_index;
-                        self.partners[right_index] = left_index;
-                    }
-                    ArrangementPolicy::TriangleFree => {
-                        if closes_crossing_triangle(
-                            &self.crossings[..self.crossing_len],
-                            left_index,
-                            right_index,
-                        ) {
-                            return Err(TopologyError::Unresolved);
-                        }
-                        if self.crossing_len == self.crossings.len() {
-                            return Err(TopologyError::WorkLimit);
-                        }
-                    }
+                let before = self.crossing_len;
+                let outcome =
+                    self.reference_pair_body(left_index, right_index, marked_lines, policy);
+                if outcome.is_err() || self.crossing_len != before {
+                    touched[left_index] |= 1u64 << right_index;
                 }
-                self.crossings[self.crossing_len] = ArrangementCrossing {
-                    left_leaf: left_index,
-                    right_leaf: right_index,
-                    orientation,
-                };
-                self.crossing_len += 1;
+                outcome?;
             }
         }
         Ok(())
+    }
+
+    /// The pre-B0R pair body, copied verbatim for the reference loop; `continue` is `Ok(())`.
+    #[cfg(test)]
+    fn reference_pair_body(
+        &mut self,
+        left_index: usize,
+        right_index: usize,
+        marked_lines: Option<&[bool; ABSOLUTE_MAX_LEAVES]>,
+        policy: ArrangementPolicy,
+    ) -> Result<(), TopologyError> {
+        let orientation = {
+            let left = &self.rounded.exact_leaves[left_index];
+            let right = &self.rounded.exact_leaves[right_index];
+            if let Some((previous, next)) =
+                directed_rounded_adjacent(left, right, &self.rounded.contours)
+            {
+                let direction = point_sub(next.points[3], previous.points[0]);
+                if !rounded_projected_monotone(previous, direction)
+                    || !rounded_projected_monotone(next, direction)
+                {
+                    return Err(TopologyError::Unresolved);
+                }
+                None
+            } else if !closed_hulls_intersect(rounded_leaf_hull(left), rounded_leaf_hull(right)) {
+                None
+            } else {
+                Some(
+                    certify_transverse_rounded_pair_with_kinds(
+                        left,
+                        left.closure || marked_lines.is_some_and(|kinds| kinds[left_index]),
+                        right,
+                        right.closure || marked_lines.is_some_and(|kinds| kinds[right_index]),
+                    )
+                    .ok_or(TopologyError::Unresolved)?,
+                )
+            }
+        };
+
+        let Some(orientation) = orientation else {
+            return Ok(());
+        };
+        match policy {
+            ArrangementPolicy::Matching => {
+                if self.partners[left_index] != usize::MAX {
+                    return Err(TopologyError::Unresolved);
+                }
+                if self.partners[right_index] != usize::MAX {
+                    return Err(TopologyError::Unresolved);
+                }
+                if self.crossing_len == self.crossings.len() {
+                    return Err(TopologyError::WorkLimit);
+                }
+                self.partners[left_index] = right_index;
+                self.partners[right_index] = left_index;
+            }
+            ArrangementPolicy::TriangleFree => {
+                if closes_crossing_triangle(
+                    &self.crossings[..self.crossing_len],
+                    left_index,
+                    right_index,
+                ) {
+                    return Err(TopologyError::Unresolved);
+                }
+                if self.crossing_len == self.crossings.len() {
+                    return Err(TopologyError::WorkLimit);
+                }
+            }
+        }
+        self.crossings[self.crossing_len] = ArrangementCrossing {
+            left_leaf: left_index,
+            right_leaf: right_index,
+            orientation,
+        };
+        self.crossing_len += 1;
+        Ok(())
+    }
+
+    /// B0R O3(b) test access: the matching partner slots.
+    #[cfg(test)]
+    pub(crate) fn b0r_partners(&self) -> [usize; ABSOLUTE_MAX_LEAVES] {
+        self.partners
     }
 }
 
@@ -995,6 +1281,831 @@ fn closes_crossing_triangle(
         }
     }
     false
+}
+
+// B0R technique 2 (docs/plans/p3-b0r-kernel-performance-contract.md section 4): sweep-based pair
+// candidates for the three pair loops above.
+//
+// - Section 4.2. B_i is the closed box spanned by the section 3.3 enclosures of every coordinate
+//   of the leaf's point set (the four restricted controls, or the six rounded points). It contains
+//   the leaf's hull. F holds every pair of one contour whose contour_leaf values differ by one or
+//   are 0 and count - 1, a superset of the pairs on which `adjacent_shared_point` or
+//   `directed_rounded_adjacent` returns Some. C = F, plus every pair of closed-overlapping boxes,
+//   plus every pair with a leaf whose box cannot be formed (an enclosure is None).
+// - Lemma A. A pair outside C is not adjacent, so its body evaluates `closed_hulls_intersect`;
+//   separated boxes give disjoint hulls, so that returns false and the body returns Ok without
+//   changing any state. Skipping it changes nothing but the pair counter.
+// - Section 4.3. The boxed leaves are insertion-sorted by x_lo into a [u8; 64]; each leaf scans
+//   the following ones while their x_lo <= its x_hi and marks those whose y ranges also overlap.
+//   Marks go to a [u64; 64] bitset, row i holding bit j for j > i.
+// - Section 4.4. Candidates are read in lexicographic (i, j) order, the order of the pre-B0R
+//   loops restricted to C. The counter emulates the pre-B0R loop exactly (Lemma B): with
+//   rank(i, j) = i(2n - i - 1)/2 + (j - i - 1) and T = n(n - 1)/2, a candidate at rank p >=
+//   max_pairs sets pairs = max_pairs and returns WorkLimit; otherwise pairs = p + 1 and the
+//   unchanged body runs. After the last candidate, T > max_pairs gives pairs = max_pairs and
+//   WorkLimit, else pairs = T. Every pair loop starts with pairs == 0 (begin_attempt), which the
+//   pre-B0R loop's `pairs == max_pairs` test also assumed.
+//
+// Scratch: 64 boxes (2 KiB), one wild mask, the 512-byte bitset and the 64-byte order, all on
+// the stack of the nonrecursive sweep helpers, well inside the source-level envelopes above.
+// Nothing is allocated or retained; no workspace field changes.
+
+/// Section 4.2: the closed box spanned by the enclosures of one leaf's points.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct LeafBox {
+    x_lo: f64,
+    x_hi: f64,
+    y_lo: f64,
+    y_hi: f64,
+}
+
+const EMPTY_BOX: LeafBox = LeafBox {
+    x_lo: 0.0,
+    x_hi: 0.0,
+    y_lo: 0.0,
+    y_hi: 0.0,
+};
+
+fn leaf_box(points: &[ExactPoint]) -> Option<LeafBox> {
+    let mut result: Option<LeafBox> = None;
+    for point in points {
+        let x = enclose_coordinate(&point.x)?;
+        let y = enclose_coordinate(&point.y)?;
+        result = Some(match result {
+            None => LeafBox {
+                x_lo: x.lo,
+                x_hi: x.hi,
+                y_lo: y.lo,
+                y_hi: y.hi,
+            },
+            Some(current) => LeafBox {
+                x_lo: current.x_lo.min(x.lo),
+                x_hi: current.x_hi.max(x.hi),
+                y_lo: current.y_lo.min(y.lo),
+                y_hi: current.y_hi.max(y.hi),
+            },
+        });
+    }
+    result
+}
+
+/// Boxes of every leaf, and the mask of leaves without a box (every pair with one is a
+/// candidate).
+fn leaf_boxes<'a>(
+    leaves: impl Iterator<Item = &'a [ExactPoint]>,
+) -> ([LeafBox; ABSOLUTE_MAX_LEAVES], u64) {
+    let mut boxes = [EMPTY_BOX; ABSOLUTE_MAX_LEAVES];
+    let mut wild = 0u64;
+    for (index, points) in leaves.enumerate() {
+        match leaf_box(points) {
+            Some(value) => boxes[index] = value,
+            None => wild |= 1u64 << index,
+        }
+    }
+    (boxes, wild)
+}
+
+/// The closed comparison `left <= right` of two box endpoints.
+fn closed_le(left: f64, right: f64) -> bool {
+    if sweep_fault(SweepFault::StrictBoxOverlap) {
+        left < right
+    } else {
+        left <= right
+    }
+}
+
+/// Section 4.3: the candidate bitset C, row i holding bit j for j > i, and the x_lo order of
+/// the boxed leaves followed by the unboxed ones.
+struct PairCandidates {
+    rows: [u64; ABSOLUTE_MAX_LEAVES],
+    order: [u8; ABSOLUTE_MAX_LEAVES],
+    leaf_count: usize,
+}
+
+impl PairCandidates {
+    fn new(
+        leaf_count: usize,
+        boxes: &[LeafBox; ABSOLUTE_MAX_LEAVES],
+        wild: u64,
+        contours: &[TopologyRange],
+    ) -> Self {
+        debug_assert!(leaf_count <= ABSOLUTE_MAX_LEAVES);
+        let mut candidates = Self {
+            rows: [0; ABSOLUTE_MAX_LEAVES],
+            order: [0; ABSOLUTE_MAX_LEAVES],
+            leaf_count,
+        };
+
+        // Deterministic, allocation-free insertion sort of the boxed leaves by x_lo. Ties may
+        // stay in any order: the marks form a set.
+        let mut boxed = 0usize;
+        for index in 0..leaf_count {
+            if wild & (1u64 << index) != 0 {
+                continue;
+            }
+            let mut position = boxed;
+            while position > 0
+                && boxes[candidates.order[position - 1] as usize].x_lo > boxes[index].x_lo
+            {
+                candidates.order[position] = candidates.order[position - 1];
+                position -= 1;
+            }
+            candidates.order[position] = index as u8;
+            boxed += 1;
+        }
+        let mut position = boxed;
+        for index in 0..leaf_count {
+            if wild & (1u64 << index) != 0 {
+                candidates.order[position] = index as u8;
+                position += 1;
+            }
+        }
+
+        let order = candidates.order;
+        for first in 0..boxed {
+            let left = order[first] as usize;
+            for &right in &order[first + 1..boxed] {
+                let right = right as usize;
+                if !closed_le(boxes[right].x_lo, boxes[left].x_hi) {
+                    break;
+                }
+                if closed_le(boxes[left].y_lo, boxes[right].y_hi)
+                    && closed_le(boxes[right].y_lo, boxes[left].y_hi)
+                {
+                    candidates.mark(left, right);
+                }
+            }
+        }
+        for index in 0..leaf_count {
+            if wild & (1u64 << index) != 0 {
+                for other in 0..leaf_count {
+                    if other != index {
+                        candidates.mark(index, other);
+                    }
+                }
+            }
+        }
+        if !sweep_fault(SweepFault::ForcedPairsNotMarked) {
+            for contour in contours {
+                for offset in 1..contour.count {
+                    candidates.mark(contour.start + offset - 1, contour.start + offset);
+                }
+                if contour.count >= 2 {
+                    candidates.mark(contour.start, contour.start + contour.count - 1);
+                }
+            }
+        }
+        candidates
+    }
+
+    fn mark(&mut self, left: usize, right: usize) {
+        let (low, high) = if left < right {
+            (left, right)
+        } else {
+            (right, left)
+        };
+        self.rows[low] |= 1u64 << high;
+    }
+
+    #[cfg(test)]
+    fn contains(&self, left: usize, right: usize) -> bool {
+        self.rows[left] & (1u64 << right) != 0
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> u64 {
+        self.rows
+            .iter()
+            .map(|row| u64::from(row.count_ones()))
+            .sum()
+    }
+
+    /// Candidates in lexicographic (i, j) order, read from the bitset rows in order.
+    fn pairs(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
+        (0..self.leaf_count).flat_map(move |position| {
+            let left = if sweep_fault(SweepFault::SortedByXOrder) {
+                self.order[position] as usize
+            } else {
+                position
+            };
+            RowBits(self.rows[left]).map(move |right| (left, right))
+        })
+    }
+}
+
+/// The set bits of one bitset row, lowest first.
+struct RowBits(u64);
+
+impl Iterator for RowBits {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<usize> {
+        if self.0 == 0 {
+            return None;
+        }
+        let bit = self.0.trailing_zeros() as usize;
+        self.0 &= self.0 - 1;
+        Some(bit)
+    }
+}
+
+/// Section 4.4: the rank of (left, right), left < right, in the pre-B0R loop's order.
+fn pair_rank(leaf_count: usize, left: usize, right: usize) -> usize {
+    left * (2 * leaf_count - left - 1) / 2 + (right - left - 1)
+}
+
+/// Lemma B, before a candidate's body: the pre-B0R loop's counter at that pair.
+fn enter_pair(
+    pairs: &mut usize,
+    leaf_count: usize,
+    left: usize,
+    right: usize,
+    max_pairs: usize,
+) -> Result<(), TopologyError> {
+    let rank = pair_rank(leaf_count, left, right);
+    if rank >= max_pairs {
+        *pairs = max_pairs;
+        return Err(TopologyError::WorkLimit);
+    }
+    *pairs = if sweep_fault(SweepFault::CounterOffByOne) {
+        rank
+    } else {
+        rank + 1
+    };
+    Ok(())
+}
+
+/// Lemma B, after the last candidate: the pre-B0R loop's counter at its end.
+fn finish_pairs(
+    pairs: &mut usize,
+    leaf_count: usize,
+    max_pairs: usize,
+) -> Result<(), TopologyError> {
+    let total = leaf_count * leaf_count.saturating_sub(1) / 2;
+    if total > max_pairs {
+        *pairs = max_pairs;
+        return Err(TopologyError::WorkLimit);
+    }
+    *pairs = total;
+    Ok(())
+}
+
+/// Seeded sweep defects of oracle O8 (3)-(6). The switch is a `cfg(test)` thread-local; every
+/// other build compiles `sweep_fault` to a constant `false`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SweepFault {
+    /// O8 (3): box overlap tested with strict inequalities.
+    StrictBoxOverlap,
+    /// O8 (4): forced pairs not marked.
+    ForcedPairsNotMarked,
+    /// O8 (5): candidates processed in sorted-by-x order.
+    SortedByXOrder,
+    /// O8 (6): the Lemma B counter one too low on entering a candidate.
+    CounterOffByOne,
+}
+
+#[cfg(test)]
+fn sweep_fault(fault: SweepFault) -> bool {
+    B0R_SWEEP_FAULT.with(|active| active.get() == Some(fault))
+}
+
+#[cfg(not(test))]
+#[inline(always)]
+fn sweep_fault(_fault: SweepFault) -> bool {
+    false
+}
+
+/// Which pair loop the topology workspaces run in this test thread.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum B0rPairLoopMode {
+    /// The production sweep (the default).
+    Sweep,
+    /// The pre-B0R all-pairs reference loop only.
+    Reference,
+    /// O3(b) and O3(c): both loops from the same state, compared for the real budget and a set
+    /// of smaller budgets; the sweep's result and state are kept.
+    Shadow,
+}
+
+/// Shadow-mode observations of this test thread.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct B0rShadowTally {
+    /// Pair-loop calls compared.
+    pub(crate) calls: u64,
+    /// Reference/sweep runs compared, over every budget.
+    pub(crate) runs: u64,
+    /// Compared runs whose reference result was WorkLimit.
+    pub(crate) work_limit_runs: u64,
+    /// Compared runs whose reference result was another error.
+    pub(crate) failure_runs: u64,
+    /// Compared runs with a different result or state.
+    pub(crate) mismatches: u64,
+    /// Pairs whose reference body (real budget) returned an error or changed state.
+    pub(crate) touched: u64,
+    /// Touched pairs outside C (O3(c)); must be zero.
+    pub(crate) uncovered: u64,
+    /// |C| and T = n(n - 1)/2 summed over the calls.
+    pub(crate) candidates: u64,
+    pub(crate) total_pairs: u64,
+    /// Calls with at least one leaf without a box.
+    pub(crate) unboxed_calls: u64,
+}
+
+#[cfg(test)]
+impl B0rShadowTally {
+    pub(crate) fn merge(&mut self, other: Self) {
+        self.calls += other.calls;
+        self.runs += other.runs;
+        self.work_limit_runs += other.work_limit_runs;
+        self.failure_runs += other.failure_runs;
+        self.mismatches += other.mismatches;
+        self.touched += other.touched;
+        self.uncovered += other.uncovered;
+        self.candidates += other.candidates;
+        self.total_pairs += other.total_pairs;
+        self.unboxed_calls += other.unboxed_calls;
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static B0R_SWEEP_FAULT: core::cell::Cell<Option<SweepFault>> =
+        const { core::cell::Cell::new(None) };
+    static B0R_PAIR_LOOP_MODE: core::cell::Cell<B0rPairLoopMode> =
+        const { core::cell::Cell::new(B0rPairLoopMode::Sweep) };
+    static B0R_SHADOW_TALLY: core::cell::Cell<B0rShadowTally> =
+        const { core::cell::Cell::new(B0rShadowTally {
+            calls: 0,
+            runs: 0,
+            work_limit_runs: 0,
+            failure_runs: 0,
+            mismatches: 0,
+            touched: 0,
+            uncovered: 0,
+            candidates: 0,
+            total_pairs: 0,
+            unboxed_calls: 0,
+        }) };
+}
+
+/// Runs `action` with one sweep defect switched on in this thread, then switches it off.
+#[cfg(test)]
+pub(crate) fn b0r_with_sweep_fault<T>(fault: SweepFault, action: impl FnOnce() -> T) -> T {
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            B0R_SWEEP_FAULT.with(|active| active.set(None));
+        }
+    }
+    B0R_SWEEP_FAULT.with(|active| active.set(Some(fault)));
+    let _reset = Reset;
+    action()
+}
+
+/// Runs `action` with the pair loops in `mode` in this thread, then restores the sweep.
+#[cfg(test)]
+pub(crate) fn b0r_with_pair_loop_mode<T>(mode: B0rPairLoopMode, action: impl FnOnce() -> T) -> T {
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            B0R_PAIR_LOOP_MODE.with(|active| active.set(B0rPairLoopMode::Sweep));
+        }
+    }
+    B0R_PAIR_LOOP_MODE.with(|active| active.set(mode));
+    let _reset = Reset;
+    action()
+}
+
+/// Returns and resets this thread's shadow tally.
+#[cfg(test)]
+pub(crate) fn b0r_take_shadow_tally() -> B0rShadowTally {
+    B0R_SHADOW_TALLY.with(|tally| tally.replace(B0rShadowTally::default()))
+}
+
+#[cfg(test)]
+fn update_shadow_tally(update: impl FnOnce(&mut B0rShadowTally)) {
+    B0R_SHADOW_TALLY.with(|tally| {
+        let mut value = tally.get();
+        update(&mut value);
+        tally.set(value);
+    });
+}
+
+/// One workspace's pair loops, for the reference and shadow modes.
+#[cfg(test)]
+trait B0rPairLoops {
+    type State: Copy + PartialEq + core::fmt::Debug;
+    fn leaf_count(&self) -> usize;
+    fn state(&self) -> Self::State;
+    fn restore(&mut self, state: Self::State);
+    fn pairs(&self) -> usize;
+    fn candidates(&self) -> PairCandidates;
+    fn unboxed(&self) -> bool;
+    fn reference(
+        &mut self,
+        max_pairs: usize,
+        touched: &mut [u64; ABSOLUTE_MAX_LEAVES],
+    ) -> Result<(), TopologyError>;
+    fn sweep(&mut self, max_pairs: usize) -> Result<(), TopologyError>;
+}
+
+#[cfg(test)]
+struct SimplePairLoops<'a>(&'a mut SimpleCubicTopologyWorkspace);
+
+#[cfg(test)]
+impl B0rPairLoops for SimplePairLoops<'_> {
+    type State = TopologyStats;
+
+    fn leaf_count(&self) -> usize {
+        self.0.exact_leaves.len()
+    }
+
+    fn state(&self) -> TopologyStats {
+        self.0.stats
+    }
+
+    fn restore(&mut self, state: TopologyStats) {
+        self.0.stats = state;
+    }
+
+    fn pairs(&self) -> usize {
+        self.0.stats.pairs
+    }
+
+    fn candidates(&self) -> PairCandidates {
+        self.0.pair_candidates()
+    }
+
+    fn unboxed(&self) -> bool {
+        leaf_boxes(self.0.exact_leaves.iter().map(|leaf| &leaf.controls[..])).1 != 0
+    }
+
+    fn reference(
+        &mut self,
+        max_pairs: usize,
+        touched: &mut [u64; ABSOLUTE_MAX_LEAVES],
+    ) -> Result<(), TopologyError> {
+        self.0.reference_pairs(max_pairs, touched)
+    }
+
+    fn sweep(&mut self, max_pairs: usize) -> Result<(), TopologyError> {
+        self.0.sweep_pairs(max_pairs)
+    }
+}
+
+#[cfg(test)]
+struct RoundedPairLoops<'a>(&'a mut RoundedKnotCubicTopologyWorkspace);
+
+#[cfg(test)]
+impl B0rPairLoops for RoundedPairLoops<'_> {
+    type State = TopologyStats;
+
+    fn leaf_count(&self) -> usize {
+        self.0.exact_leaves.len()
+    }
+
+    fn state(&self) -> TopologyStats {
+        self.0.stats
+    }
+
+    fn restore(&mut self, state: TopologyStats) {
+        self.0.stats = state;
+    }
+
+    fn pairs(&self) -> usize {
+        self.0.stats.pairs
+    }
+
+    fn candidates(&self) -> PairCandidates {
+        self.0.pair_candidates()
+    }
+
+    fn unboxed(&self) -> bool {
+        self.0.b0r_unboxed()
+    }
+
+    fn reference(
+        &mut self,
+        max_pairs: usize,
+        touched: &mut [u64; ABSOLUTE_MAX_LEAVES],
+    ) -> Result<(), TopologyError> {
+        self.0.reference_pairs(max_pairs, touched)
+    }
+
+    fn sweep(&mut self, max_pairs: usize) -> Result<(), TopologyError> {
+        self.0.sweep_pairs(max_pairs)
+    }
+}
+
+#[cfg(test)]
+struct TransversePairLoops<'a> {
+    workspace: &'a mut TransverseArrangementWorkspace,
+    marked_lines: Option<&'a [bool; ABSOLUTE_MAX_LEAVES]>,
+    policy: ArrangementPolicy,
+}
+
+#[cfg(test)]
+type TransverseLoopState = (
+    TopologyStats,
+    [usize; ABSOLUTE_MAX_LEAVES],
+    [ArrangementCrossing; ABSOLUTE_MAX_LEAVES / 2],
+    usize,
+);
+
+#[cfg(test)]
+impl B0rPairLoops for TransversePairLoops<'_> {
+    type State = TransverseLoopState;
+
+    fn leaf_count(&self) -> usize {
+        self.workspace.rounded.exact_leaves.len()
+    }
+
+    fn state(&self) -> TransverseLoopState {
+        (
+            self.workspace.rounded.stats,
+            self.workspace.partners,
+            self.workspace.crossings,
+            self.workspace.crossing_len,
+        )
+    }
+
+    fn restore(&mut self, state: TransverseLoopState) {
+        (
+            self.workspace.rounded.stats,
+            self.workspace.partners,
+            self.workspace.crossings,
+            self.workspace.crossing_len,
+        ) = state;
+    }
+
+    fn pairs(&self) -> usize {
+        self.workspace.rounded.stats.pairs
+    }
+
+    fn candidates(&self) -> PairCandidates {
+        self.workspace.rounded.pair_candidates()
+    }
+
+    fn unboxed(&self) -> bool {
+        self.workspace.rounded.b0r_unboxed()
+    }
+
+    fn reference(
+        &mut self,
+        max_pairs: usize,
+        touched: &mut [u64; ABSOLUTE_MAX_LEAVES],
+    ) -> Result<(), TopologyError> {
+        self.workspace
+            .reference_pairs(self.marked_lines, self.policy, max_pairs, touched)
+    }
+
+    fn sweep(&mut self, max_pairs: usize) -> Result<(), TopologyError> {
+        self.workspace
+            .sweep_pairs(self.marked_lines, self.policy, max_pairs)
+    }
+}
+
+#[cfg(test)]
+impl RoundedKnotCubicTopologyWorkspace {
+    fn b0r_unboxed(&self) -> bool {
+        leaf_boxes(self.exact_leaves.iter().map(|leaf| &leaf.points[..])).1 != 0
+    }
+}
+
+/// The reference or shadow pair loop, or `None` for the production sweep.
+#[cfg(test)]
+fn b0r_pair_loop_override<L: B0rPairLoops>(
+    loops: &mut L,
+    max_pairs: usize,
+) -> Option<Result<(), TopologyError>> {
+    match B0R_PAIR_LOOP_MODE.with(core::cell::Cell::get) {
+        B0rPairLoopMode::Sweep => None,
+        B0rPairLoopMode::Reference => {
+            let mut touched = [0u64; ABSOLUTE_MAX_LEAVES];
+            Some(loops.reference(max_pairs, &mut touched))
+        }
+        B0rPairLoopMode::Shadow => Some(b0r_shadow_pairs(loops, max_pairs)),
+    }
+}
+
+/// O3(b) and O3(c) on one pair-loop call. From the same starting state, the reference loop and
+/// the sweep run for the real budget and for the budgets 0, 1, the reference's final counter
+/// q - 1, q, q + 1, T/2, T - 1, T and one pseudo-random budget, so WorkLimit is compared at and
+/// around every reachable stopping point. Every run is compared by result and complete loop
+/// state (counter, partners, crossings array and length). The touched pairs of the real-budget
+/// reference run must lie in C. The sweep's real-budget result and state are kept.
+#[cfg(test)]
+fn b0r_shadow_pairs<L: B0rPairLoops>(loops: &mut L, max_pairs: usize) -> Result<(), TopologyError> {
+    let start = loops.state();
+    let leaf_count = loops.leaf_count();
+    let total = leaf_count * leaf_count.saturating_sub(1) / 2;
+    let candidates = loops.candidates();
+
+    let mut touched = [0u64; ABSOLUTE_MAX_LEAVES];
+    let reference = loops.reference(max_pairs, &mut touched);
+    let reference_state = loops.state();
+    let reached = loops.pairs();
+    let mut uncovered = 0u64;
+    let mut touched_count = 0u64;
+    for (left, &row) in touched.iter().enumerate().take(leaf_count) {
+        for right in RowBits(row) {
+            touched_count += 1;
+            if !candidates.contains(left, right) {
+                uncovered += 1;
+            }
+        }
+    }
+
+    let mut runs = 0u64;
+    let mut work_limit_runs = 0u64;
+    let mut failure_runs = 0u64;
+    let mut mismatches = 0u64;
+    let mut compare = |budget: usize,
+                       reference: Result<(), TopologyError>,
+                       reference_state: L::State,
+                       sweep: Result<(), TopologyError>,
+                       sweep_state: L::State| {
+        runs += 1;
+        match reference {
+            Err(TopologyError::WorkLimit) => work_limit_runs += 1,
+            Err(_) => failure_runs += 1,
+            Ok(()) => {}
+        }
+        if reference != sweep || reference_state != sweep_state {
+            mismatches += 1;
+            eprintln!(
+                "B0R sweep mismatch: leaves {leaf_count}, budget {budget}: reference {reference:?} \
+                 {reference_state:?}, sweep {sweep:?} {sweep_state:?}"
+            );
+        }
+    };
+
+    let pseudo = (reached * 7 + leaf_count * 13 + 5) % (total + 2);
+    let mut budgets = [
+        0,
+        1,
+        reached.saturating_sub(1),
+        reached,
+        reached + 1,
+        total / 2,
+        total.saturating_sub(1),
+        total,
+        pseudo,
+    ];
+    budgets.sort_unstable();
+    for (index, &budget) in budgets.iter().enumerate() {
+        if budget == max_pairs || (index > 0 && budgets[index - 1] == budget) {
+            continue;
+        }
+        loops.restore(start);
+        let mut scratch = [0u64; ABSOLUTE_MAX_LEAVES];
+        let budget_reference = loops.reference(budget, &mut scratch);
+        let budget_reference_state = loops.state();
+        loops.restore(start);
+        let budget_sweep = loops.sweep(budget);
+        let budget_sweep_state = loops.state();
+        compare(
+            budget,
+            budget_reference,
+            budget_reference_state,
+            budget_sweep,
+            budget_sweep_state,
+        );
+    }
+
+    loops.restore(start);
+    let result = loops.sweep(max_pairs);
+    compare(max_pairs, reference, reference_state, result, loops.state());
+
+    let candidate_count = candidates.len();
+    let unboxed = loops.unboxed();
+    update_shadow_tally(|tally| {
+        tally.calls += 1;
+        tally.runs += runs;
+        tally.work_limit_runs += work_limit_runs;
+        tally.failure_runs += failure_runs;
+        tally.mismatches += mismatches;
+        tally.touched += touched_count;
+        tally.uncovered += uncovered;
+        tally.candidates += candidate_count;
+        tally.total_pairs += total as u64;
+        tally.unboxed_calls += u64::from(unboxed);
+    });
+    result
+}
+
+/// B0R O3(a) test access: whether the section 4.2 boxes of two point sets (4 or 6 points each)
+/// overlap as closed boxes (`None` if a box cannot be formed), and `closed_hulls_intersect` on
+/// their hulls.
+#[cfg(test)]
+pub(crate) fn b0r_test_lemma_a(
+    left: &[B0rTestPoint],
+    right: &[B0rTestPoint],
+) -> (Option<bool>, bool) {
+    fn exact(points: &[B0rTestPoint]) -> Vec<ExactPoint> {
+        points
+            .iter()
+            .map(|point| ExactPoint {
+                x: point[0],
+                y: point[1],
+            })
+            .collect()
+    }
+    fn hull_of(points: &[ExactPoint]) -> ([u8; 6], usize) {
+        match points.len() {
+            4 => {
+                let (indices, len) = convex_hull(&<[ExactPoint; 4]>::try_from(points).unwrap());
+                let mut wide = [0u8; 6];
+                wide[..4].copy_from_slice(&indices);
+                (wide, len)
+            }
+            6 => convex_hull(&<[ExactPoint; 6]>::try_from(points).unwrap()),
+            other => panic!("Lemma A leaves have 4 or 6 points, not {other}"),
+        }
+    }
+    let left = exact(left);
+    let right = exact(right);
+    let overlap = match (leaf_box(&left), leaf_box(&right)) {
+        (Some(a), Some(b)) => Some(
+            closed_le(a.x_lo, b.x_hi)
+                && closed_le(b.x_lo, a.x_hi)
+                && closed_le(a.y_lo, b.y_hi)
+                && closed_le(b.y_lo, a.y_hi),
+        ),
+        _ => None,
+    };
+    let (left_indices, left_len) = hull_of(&left);
+    let (right_indices, right_len) = hull_of(&right);
+    let intersect = closed_hulls_intersect(
+        ExactHull {
+            points: &left,
+            indices: &left_indices[..left_len],
+        },
+        ExactHull {
+            points: &right,
+            indices: &right_indices[..right_len],
+        },
+    );
+    (overlap, intersect)
+}
+
+/// B0R O3 test access: the candidate pairs in processing order for synthetic boxes
+/// `[x_lo, x_hi, y_lo, y_hi]` (`None`: no box) and contour ranges over the same leaves.
+#[cfg(test)]
+pub(crate) fn b0r_test_candidate_pairs(
+    boxes: &[Option<[f64; 4]>],
+    contours: &[TopologyRange],
+) -> Vec<(usize, usize)> {
+    assert!(boxes.len() <= ABSOLUTE_MAX_LEAVES);
+    let mut values = [EMPTY_BOX; ABSOLUTE_MAX_LEAVES];
+    let mut wild = 0u64;
+    for (index, value) in boxes.iter().enumerate() {
+        match value {
+            Some([x_lo, x_hi, y_lo, y_hi]) => {
+                values[index] = LeafBox {
+                    x_lo: *x_lo,
+                    x_hi: *x_hi,
+                    y_lo: *y_lo,
+                    y_hi: *y_hi,
+                }
+            }
+            None => wild |= 1u64 << index,
+        }
+    }
+    PairCandidates::new(boxes.len(), &values, wild, contours)
+        .pairs()
+        .collect()
+}
+
+/// B0R Lemma B test access: the emulated counter over `candidates` (lexicographic), with a body
+/// that fails with `Unresolved` exactly at `failing`, which must be a candidate.
+#[cfg(test)]
+pub(crate) fn b0r_test_emulated_counter(
+    leaf_count: usize,
+    candidates: &[(usize, usize)],
+    failing: Option<(usize, usize)>,
+    max_pairs: usize,
+) -> (Result<(), TopologyError>, usize) {
+    fn run(
+        pairs: &mut usize,
+        leaf_count: usize,
+        candidates: &[(usize, usize)],
+        failing: Option<(usize, usize)>,
+        max_pairs: usize,
+    ) -> Result<(), TopologyError> {
+        for &(left, right) in candidates {
+            enter_pair(pairs, leaf_count, left, right, max_pairs)?;
+            if failing == Some((left, right)) {
+                return Err(TopologyError::Unresolved);
+            }
+        }
+        finish_pairs(pairs, leaf_count, max_pairs)
+    }
+    let mut pairs = 0usize;
+    let result = run(&mut pairs, leaf_count, candidates, failing, max_pairs);
+    (result, pairs)
 }
 
 fn validate_limits(limits: TopologyLimits) -> Result<(), TopologyError> {

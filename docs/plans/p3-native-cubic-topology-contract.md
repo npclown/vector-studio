@@ -6,6 +6,8 @@ B0R pointer, 2026-10-13: unit U1 of the [B0R contract](p3-b0r-kernel-performance
 
 B0R reference pointer, 2026-10-13: unit U1b of the [B0R contract](p3-b0r-kernel-performance-contract.md#62-frozen-clauses-this-contract-amends) skips all-zero low limbs inside the shared checked-capacity arithmetic. The 2^-1134 grid, the `Signed<34>`/`<68>` widths and the magnitude bounds of the exact-representation clause below are kept, and every result is unchanged.
 
+B0R pointer, 2026-10-13: unit U2 of the [B0R contract](p3-b0r-kernel-performance-contract.md#62-frozen-clauses-this-contract-amends) runs the pair body of the enumerate-i<j item only for the sweep candidates C of B0R section 4: forced adjacent pairs, pairs whose enclosure boxes overlap as closed boxes, and pairs with a leaf whose box cannot be formed. They run in the same i<j append order. By B0R Lemma A every skipped pair passes unchanged, and the logical pair counter of Lemma B keeps `pairs`, the charge-before-inspection WorkLimit point and every result. Nothing is allocated.
+
 ## Scope and mathematical ownership
 
 Add an unexported Rust `simple_cubic_topology` module using existing `fill_exact::Signed` and multiplication. It certifies the same restricted exact-knot/monotone-projection/disjoint-hull condition as P3.1e, including implicit closure, exact orientation and nesting. Preserve all its proof obligations, not only absence of proper crossings. The result is a sufficient certificate for both fill rules, not a product rejection envelope or general cubic tessellator. Positional error is still separately certified; no tolerance parameter belongs to this helper.

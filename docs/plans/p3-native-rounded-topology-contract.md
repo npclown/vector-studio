@@ -4,6 +4,8 @@ Status: FROZEN, 2026-10-02, after Primary, Astra high arithmetic/proof review an
 
 B0R pointer, 2026-10-13: unit U1 of the [B0R contract](p3-b0r-kernel-performance-contract.md#62-frozen-clauses-this-contract-amends) puts the binary64 filters F0.1 and F2.1-F2.3 before the exact predicates of the no-adaptive-numeric-work clause, with the unchanged exact routine as fallback. They are not an adaptive subdivision, epsilon or retry (B0R section 6.2), and every certificate outcome is unchanged.
 
+B0R pointer, 2026-10-13: unit U2 of the [B0R contract](p3-b0r-kernel-performance-contract.md#62-frozen-clauses-this-contract-amends) inspects nonadjacent hull pairs, and runs the pair body of the enumerate-i<j item, only for the sweep candidates C of B0R section 4, in the same i<j append order. By B0R Lemma A every pair outside C passes unchanged, and the logical pair counter of Lemma B keeps `pairs`, the charge-before-inspection WorkLimit point and every result. Nothing is allocated.
+
 ## Scope and representation
 
 Add a separate crate-private `RoundedKnotCubicTopologyWorkspace` in the existing `simple_cubic_topology` module. Reuse TopologyInput/Range/Cubic/Leaf, TopologyLimits/Error/Stats/Output and existing exact decode/restrict/predicate primitives. Keep SimpleCubicTopologyWorkspace and its retained four-control leaf layout, resource accounting and accepted/rejected outcomes unchanged. Do not modify cubic_fill.rs or native_cubic_fill_tests.rs. The two certificates are not equivalent; later adoption must separately freeze any OR/retry/error precedence and memory ownership semantics.

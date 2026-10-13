@@ -2,6 +2,8 @@
 
 Status: FROZEN after Primary, Astra high and Sol medium full-contract review on2026-10-05 before implementation. The [active plan](p3-fill-stroke-meshes.md) owns execution. This is the private native counterpart of [P3.1i](p3-triangle-free-arrangement-contract.md), extending the existing [mixed helper](p3-native-mixed-line-arrangement-contract.md). No canonical CubicFillWorkspace adoption, public API/ABI, dependency, cap/tolerance, arithmetic, old-entry semantics or deferred stroke change.
 
+B0R pointer, 2026-10-13: unit U2 of the [B0R contract](p3-b0r-kernel-performance-contract.md#62-frozen-clauses-this-contract-amends) runs the shared pair body only for the sweep candidates C of B0R section 4, in the same complete i<j append order, so partners, the triangle-free crossing prefix and the crossing records are built in the same order. By B0R Lemma A every pair outside C passes unchanged, and the logical pair counter of Lemma B keeps `pairs` and the charge-before-inspection WorkLimit point. The matching and triangle-free policies and their order are unchanged. Nothing is allocated.
+
 ## Private interface, proof and ownership
 
 Add crate-private `TransverseArrangementWorkspace::certify_triangle_free(input: TopologyInput, source_kinds: &[bool])`. Reuse the exact I theorem: injective leaves, persistent unique transverse pairs, complete endpoint/adjacent separation, and triangle-free crossing graph exclude crossing-order exchanges and preserve corresponding face winding/parity under spatial transport. This is not fixed-coordinate membership, sorted event output, positional error or mesh/coverage acceptance. Rejecting every crossing triangle remains conservative.

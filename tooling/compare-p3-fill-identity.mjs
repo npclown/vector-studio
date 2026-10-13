@@ -485,6 +485,9 @@ const EXPECTED_ORACLES = [
   'fill_filter_tests::b0r_oracle_full_o1_filter_module',
   'simple_cubic_topology_filter_tests::b0r_oracle_full_o1_topology',
   'fill_exact_tests::b0r_oracle_full_u1b_fill_exact',
+  'simple_cubic_topology_sweep_tests::b0r_oracle_full_o3a_lemma_a',
+  'simple_cubic_topology_sweep_tests::b0r_oracle_full_o3b_corpus_shadow',
+  'simple_cubic_topology_sweep_tests::b0r_oracle_full_o3b_random_scenes',
 ];
 
 /** Failures of one oracle run: exit status, the cargo summary, and every expected test run. */
@@ -512,7 +515,8 @@ function oracleFailures(status, stdout) {
   return { failures, passed, failed };
 }
 
-function runOracles(file) {
+/** Runs every full-size oracle; the O3(b) corpus oracle reads the O4 corpora (unit U2). */
+function runOracles(file, corpora) {
   const args = [
     'run',
     RUST.release,
@@ -536,7 +540,10 @@ function runOracles(file) {
     cwd: root,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
-    env: cargoEnv(root, BRANCH_TARGET),
+    env: cargoEnv(root, BRANCH_TARGET, {
+      P3_B0R_B0_CORPUS: corpora.b0,
+      P3_B0R_RANDOM_CORPUS: corpora.random,
+    }),
   });
   if (result.error) throw result.error;
   writeFileSync(file, `${result.stdout}${result.stderr}`);
@@ -806,7 +813,7 @@ async function fullRun(options) {
       ),
     };
     const oracles = timed(durations, 'oraclesBranchMs', () =>
-      runOracles(path.join(output, 'oracles-branch.txt')),
+      runOracles(path.join(output, 'oracles-branch.txt'), corpora),
     );
     for (const failure of oracles.failures)
       failures.push(`release oracles: ${failure} (${oracles.file})`);

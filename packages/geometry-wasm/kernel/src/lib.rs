@@ -68,6 +68,8 @@ mod rounded_line_fill_tests;
 #[cfg(test)]
 mod simple_cubic_topology_filter_tests;
 #[cfg(test)]
+mod simple_cubic_topology_sweep_tests;
+#[cfg(test)]
 mod simple_cubic_topology_tests;
 #[cfg(test)]
 mod transverse_arrangement_tests;
