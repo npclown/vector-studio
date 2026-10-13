@@ -2,6 +2,8 @@
 
 Status: prospective implementation contract, 2026-09-29. The user's continued execution authorization permits this isolated private numeric building block after [P3.1c](p3-fill-region-oracle-contract.md). The [active plan](p3-fill-stroke-meshes.md) records the narrow dependency refinement. It is not complete tessellation, mesh transport or renderer entry. Further stroke-bound refinement remains deferred.
 
+B0R pointer, 2026-10-13: unit U3 of the [B0R contract](p3-b0r-kernel-performance-contract.md#62-frozen-clauses-this-contract-amends) runs the exact identities F0.2 (two equal points give `Equal`) and F0.3 (disjoint closed segment boxes give `Disjoint`) and the binary64 static filter F1 before the unchanged exact accumulator, which runs once whenever they do not decide. They are not an epsilon, a rounded determinant or an adaptive retry (B0R section 6.2), and every predicate result is unchanged.
+
 ## Scope and private surface
 
 Add `packages/geometry-wasm/kernel/src/fill_predicates.rs`. Reuse `crate::geometry::Point` without changing it. This module provides:

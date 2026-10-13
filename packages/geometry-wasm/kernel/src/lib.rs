@@ -40,6 +40,8 @@ mod simple_cubic_topology;
 mod p3_b0_diag;
 
 #[cfg(test)]
+mod fill_event_order_filter_tests;
+#[cfg(test)]
 mod fill_event_order_tests;
 #[cfg(test)]
 mod fill_exact_tests;
@@ -49,6 +51,8 @@ mod fill_export_tests;
 mod fill_filter_tests;
 #[cfg(test)]
 mod fill_intersections_tests;
+#[cfg(test)]
+mod fill_predicates_filter_tests;
 #[cfg(test)]
 mod fill_predicates_tests;
 #[cfg(test)]

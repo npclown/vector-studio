@@ -253,8 +253,8 @@ pub(crate) fn enclose_ratio<const NN: usize, const NW: usize>(
     quotient.is_finite().then_some(quotient)
 }
 
-/// Filter identities for the `cfg(test)` decided/fallback counters (oracles O1 and O2). U1 adds
-/// only the topology filters; later B0R units add their own identities beside them.
+/// Filter identities for the `cfg(test)` decided/fallback counters (oracles O1 and O2). U1's
+/// topology filters come first; later B0R units add their own identities after them.
 #[allow(clippy::enum_variant_names)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FilterId {
@@ -270,9 +270,27 @@ pub(crate) enum FilterId {
     TopologyDotTotal,
     /// F2.3, `compare_coordinate` (and through it `compare_points`, `between_closed`).
     TopologyCompareCoordinate,
+    /// F0.2, `fill_predicates` orientation with two equal points (`same_point`).
+    PredicateOrientIdentity,
+    /// F1, the static filter for the orientation of binary64 points.
+    PredicateOrient,
+    /// F0.3, `segment_relation` with disjoint closed segment boxes.
+    SegmentBoxes,
+    /// F0.4, an event comparison of two `Endpoint` events.
+    EventEndpoints,
+    /// F2.5, an event comparison involving a crossing, decided on enclosed x coordinates.
+    EventCrossingX,
 }
 
+/// The number of U1 topology filter identities, the first variants of `FilterId`. U1's test
+/// files iterate over exactly these, so the count keeps its U1 value.
 pub(crate) const FILTER_COUNT: usize = 6;
+
+/// The number of U3 binary64-input filter identities, which follow the topology ones.
+pub(crate) const BINARY64_FILTER_COUNT: usize = 5;
+
+#[cfg(test)]
+const COUNTER_SLOTS: usize = FILTER_COUNT + BINARY64_FILTER_COUNT;
 
 /// Fault switches of oracle O8 that act inside this module.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -283,12 +301,14 @@ pub(crate) enum Fault {
     EnclosureWideningRemoved,
     /// O8 (7): ratio enclosure using a fixed numerator unit instead of section 3.4.
     RatioFixedNumeratorUnit,
+    /// O8 (2): the F1 error bound multiplied by 0.5.
+    F1BoundHalved,
 }
 
 #[cfg(test)]
 thread_local! {
-    static COUNTERS: core::cell::Cell<[[u64; 2]; FILTER_COUNT]> =
-        const { core::cell::Cell::new([[0; 2]; FILTER_COUNT]) };
+    static COUNTERS: core::cell::Cell<[[u64; 2]; COUNTER_SLOTS]> =
+        const { core::cell::Cell::new([[0; 2]; COUNTER_SLOTS]) };
     static FAULT: core::cell::Cell<Option<Fault>> = const { core::cell::Cell::new(None) };
 }
 
@@ -307,20 +327,20 @@ pub(crate) fn record(id: FilterId, decided: bool) {
 pub(crate) fn record(_id: FilterId, _decided: bool) {}
 
 #[cfg(test)]
-fn fault_active(fault: Fault) -> bool {
+pub(crate) fn fault_active(fault: Fault) -> bool {
     FAULT.with(|active| active.get() == Some(fault))
 }
 
 #[cfg(not(test))]
 #[inline(always)]
-fn fault_active(_fault: Fault) -> bool {
+pub(crate) fn fault_active(_fault: Fault) -> bool {
     false
 }
 
 /// Resets this thread's counters.
 #[cfg(test)]
 pub(crate) fn reset_counters() {
-    COUNTERS.with(|counters| counters.set([[0; 2]; FILTER_COUNT]));
+    COUNTERS.with(|counters| counters.set([[0; 2]; COUNTER_SLOTS]));
 }
 
 /// This thread's (decided, fallback) counts for one filter.
