@@ -2,6 +2,7 @@ use core::cmp::Ordering;
 use core::mem::size_of;
 
 use crate::fill_exact::{multiply, Signed};
+use crate::fill_filter::{self, compare_enclosures, enclose, FilterId, Interval, UNDECIDED};
 use crate::geometry::{Point, Provenance};
 
 const ABSOLUTE_MAX_CONTOURS: usize = 4;
@@ -13,6 +14,8 @@ const MAX_DEPTH: u32 = 20;
 const COORDINATE_LIMBS: usize = 34;
 const PRODUCT_LIMBS: usize = 68;
 const GRID_SHIFT: usize = 60;
+/// B0R section 3.3: topology coordinates are integers on the grid 2^-(1074 + GRID_SHIFT).
+const GRID_UNIT_EXPONENT: i32 = 1074 + GRID_SHIFT as i32;
 
 type ExactCoordinate = Signed<COORDINATE_LIMBS>;
 type ExactProduct = Signed<PRODUCT_LIMBS>;
@@ -1289,11 +1292,196 @@ fn cross_points(left: ExactPoint, right: ExactPoint) -> ExactProduct {
     cross_vectors(left, right)
 }
 
+// B0R filters F0.1 and F2.1-F2.4 (docs/plans/p3-b0r-kernel-performance-contract.md sections
+// 3.5 and 3.7). Each filtered predicate first tries a proof from binary64 enclosures of its exact
+// inputs (fill_filter, R1-R3) and otherwise runs its unchanged exact routine once on the same
+// inputs, so every returned value is the exact one. A filter never returns Equal; only F0.1, an
+// exact identity, does.
+//
+// Width bounds ("decides when" in section 3.7). They affect speed only, never soundness. Let u =
+// 2^-53. An enclosure of x (section 3.3) is at most four ulps wide, at most 8u|x|. With M the
+// largest input magnitude:
+// - a difference d = b - a of enclosed inputs has width at most 16uM + 6u|d|: the two input
+//   widths, plus for each endpoint half an ulp of rounding and one ulp of R1 widening;
+// - a product p = d1 * d2 has width at most |d1| w(d2) + |d2| w(d1) + w(d1) w(d2) + 6u|p|, that
+//   is at most 16uM(|d1| + |d2|) + 18u|p| + 784u^2 M^2, using |d| <= 2M;
+// - F2.1 and F2.4, D = p1 - p2: with S the sum of the four difference magnitudes and P = |p1| +
+//   |p2|, w(D) <= 16uM S + 18u P + 3u|D| + 2^11 u^2 M^2. An interval that contains D and is
+//   narrower than |D| excludes zero, so the filter decides when |D| > 32u(M S + P) + 2^11 u^2 M^2.
+//   The second-order constant is larger than the 2^9 of section 3.7's first-order table, because
+//   it also counts the R1 widening of the differences; it changes only when the filter decides;
+// - F2.2, a dot (b - a) . v with v enclosed directly: the same bound with v's width 8u|v| in
+//   place of one difference width, and for the three-term total P summed over all six products;
+// - F2.3, disjoint enclosures: decides when |a - b| > 8u(|a| + |b|), at most 16uM.
+//
+// Exact zeros always fall back, unless F0.1 catches them.
+//
+// Scratch: each filtered helper adds at most six PointEnclosures (192 bytes) and three Intervals
+// on the stack, plus closure copies of its by-value ExactPoint arguments (at most three, 1,728
+// bytes) for the fallback; every helper stays inside the source-level envelopes declared above,
+// below 32 KiB. Nothing is allocated or retained.
+
+fn enclose_coordinate(value: &ExactCoordinate) -> Option<Interval> {
+    enclose(value, GRID_UNIT_EXPONENT)
+}
+
+#[derive(Clone, Copy)]
+struct PointEnclosure {
+    x: Interval,
+    y: Interval,
+}
+
+const UNDECIDED_POINT: PointEnclosure = PointEnclosure {
+    x: UNDECIDED,
+    y: UNDECIDED,
+};
+
+/// Encloses both coordinates; an unavailable enclosure yields the undecidable interval, which
+/// every later interval operation propagates.
+fn enclose_point(point: &ExactPoint) -> PointEnclosure {
+    match (enclose_coordinate(&point.x), enclose_coordinate(&point.y)) {
+        (Some(x), Some(y)) => PointEnclosure { x, y },
+        _ => UNDECIDED_POINT,
+    }
+}
+
+fn enclosure_sub(left: PointEnclosure, right: PointEnclosure) -> PointEnclosure {
+    PointEnclosure {
+        x: left.x.sub(right.x),
+        y: left.y.sub(right.y),
+    }
+}
+
+/// Interval form of `cross_vectors`: left.x * right.y - left.y * right.x.
+fn enclosure_cross(left: PointEnclosure, right: PointEnclosure) -> Interval {
+    left.x.mul(right.y).sub(left.y.mul(right.x))
+}
+
+/// Interval form of `dot`: left.x * right.x + left.y * right.y.
+fn enclosure_dot(left: PointEnclosure, right: PointEnclosure) -> Interval {
+    left.x.mul(right.x).add(left.y.mul(right.y))
+}
+
+/// Value equality of trimmed coordinates: sign, used length and the used limbs. Unused limbs
+/// are zero in every value `fill_exact` builds, so this agrees with the derived equality.
+fn same_coordinate(left: &ExactCoordinate, right: &ExactCoordinate) -> bool {
+    left.negative == right.negative
+        && left.used == right.used
+        && left.limbs[..left.used] == right.limbs[..right.used]
+}
+
+fn same_exact_point(left: &ExactPoint, right: &ExactPoint) -> bool {
+    same_coordinate(&left.x, &right.x) && same_coordinate(&left.y, &right.y)
+}
+
+/// Returns the filter's decision, or the exact routine's value when the filter is undecided.
+fn decide_or(
+    id: FilterId,
+    decision: Option<Ordering>,
+    exact: impl FnOnce() -> Ordering,
+) -> Ordering {
+    match decision {
+        Some(value) => {
+            fill_filter::record(id, true);
+            value
+        }
+        None => {
+            fill_filter::record(id, false);
+            exact()
+        }
+    }
+}
+
+/// Topology orientation: F0.1, then F2.1, then the unchanged exact routine.
 fn orient(start: ExactPoint, end: ExactPoint, query: ExactPoint) -> Ordering {
+    // F0.1: the cross product of a zero vector, or of a vector with itself, is exactly zero.
+    if same_exact_point(&start, &end)
+        || same_exact_point(&start, &query)
+        || same_exact_point(&end, &query)
+    {
+        fill_filter::record(FilterId::TopologyOrientIdentity, true);
+        return Ordering::Equal;
+    }
+    let origin = enclose_point(&start);
+    let filtered = enclosure_cross(
+        enclosure_sub(enclose_point(&end), origin),
+        enclosure_sub(enclose_point(&query), origin),
+    )
+    .sign();
+    decide_or(FilterId::TopologyOrient, filtered, || {
+        orient_exact(start, end, query)
+    })
+}
+
+/// The exact orientation routine, unchanged; the fallback of `orient` and its reference.
+fn orient_exact(start: ExactPoint, end: ExactPoint, query: ExactPoint) -> Ordering {
     cross_vectors(point_sub(end, start), point_sub(query, start)).cmp_zero()
 }
 
+/// F2.1 and F2.4: the sign of `cross_vectors(left, right)` for exact vectors, enclosed directly.
+fn cross_sign(left: ExactPoint, right: ExactPoint) -> Ordering {
+    let filtered = enclosure_cross(enclose_point(&left), enclose_point(&right)).sign();
+    decide_or(FilterId::TopologyCrossSign, filtered, || {
+        cross_vectors(left, right).cmp_zero()
+    })
+}
+
+/// Interval form of `dot(point_sub(end, start), direction)`.
+fn projection_enclosure(
+    end: &ExactPoint,
+    start: &ExactPoint,
+    direction: PointEnclosure,
+) -> Interval {
+    enclosure_dot(
+        enclosure_sub(enclose_point(end), enclose_point(start)),
+        direction,
+    )
+}
+
+/// F2.2: the sign of `dot(point_sub(end, start), direction)`.
+fn projection_sign(
+    end: ExactPoint,
+    start: ExactPoint,
+    direction: ExactPoint,
+    direction_enclosure: PointEnclosure,
+) -> Ordering {
+    projection_sign_from(
+        projection_enclosure(&end, &start, direction_enclosure),
+        end,
+        start,
+        direction,
+    )
+}
+
+fn projection_sign_from(
+    enclosure: Interval,
+    end: ExactPoint,
+    start: ExactPoint,
+    direction: ExactPoint,
+) -> Ordering {
+    decide_or(FilterId::TopologyDotSign, enclosure.sign(), || {
+        dot(point_sub(end, start), direction).cmp_zero()
+    })
+}
+
 fn projected_monotone(controls: ExactCubic) -> bool {
+    let chord = point_sub(controls[3], controls[0]);
+    if chord.x.is_zero() && chord.y.is_zero() {
+        return false;
+    }
+    let chord_enclosure = enclose_point(&chord);
+    let projections = [
+        projection_sign(controls[1], controls[0], chord, chord_enclosure),
+        projection_sign(controls[2], controls[1], chord, chord_enclosure),
+        projection_sign(controls[3], controls[2], chord, chord_enclosure),
+    ];
+    projections.iter().all(|value| *value != Ordering::Less)
+        && projections.contains(&Ordering::Greater)
+}
+
+/// The unfiltered `projected_monotone`, kept as the O1 differential reference.
+#[cfg(test)]
+fn projected_monotone_exact(controls: ExactCubic) -> bool {
     let chord = point_sub(controls[3], controls[0]);
     if chord.x.is_zero() && chord.y.is_zero() {
         return false;
@@ -1308,16 +1496,62 @@ fn projected_monotone(controls: ExactCubic) -> bool {
 }
 
 fn rounded_projected_monotone(leaf: &RoundedExactLeaf, direction: ExactPoint) -> bool {
-    let source_progresses = if leaf.closure {
-        dot(point_sub(leaf.points[3], leaf.points[0]), direction).cmp_zero() == Ordering::Greater
+    rounded_projected_monotone_points(&leaf.points, leaf.closure, direction)
+}
+
+/// F2.2 on every dot sign of `rounded_projected_monotone`, including the three-term `total`,
+/// whose interval is the sum of the three projection intervals; each undecided sign falls back
+/// to its exact computation.
+fn rounded_projected_monotone_points(
+    points: &[ExactPoint; 6],
+    closure: bool,
+    direction: ExactPoint,
+) -> bool {
+    let direction_enclosure = enclose_point(&direction);
+    let source_progresses = if closure {
+        projection_sign(points[3], points[0], direction, direction_enclosure) == Ordering::Greater
+    } else {
+        let mut projections = [UNDECIDED; 3];
+        let mut nonnegative = true;
+        for index in 0..3 {
+            let enclosure =
+                projection_enclosure(&points[index + 1], &points[index], direction_enclosure);
+            projections[index] = enclosure;
+            if projection_sign_from(enclosure, points[index + 1], points[index], direction)
+                == Ordering::Less
+            {
+                nonnegative = false;
+            }
+        }
+        let total = projections[0].add(projections[1]).add(projections[2]);
+        let total_sign = decide_or(FilterId::TopologyDotTotal, total.sign(), || {
+            let mut total = ExactProduct::zero();
+            for index in 0..3 {
+                total = total.add(dot(point_sub(points[index + 1], points[index]), direction));
+            }
+            total.cmp_zero()
+        });
+        nonnegative && total_sign == Ordering::Greater
+    };
+    source_progresses
+        && projection_sign(points[5], points[4], direction, direction_enclosure)
+            == Ordering::Greater
+}
+
+/// The unfiltered `rounded_projected_monotone`, kept as the O1 differential reference.
+#[cfg(test)]
+fn rounded_projected_monotone_exact(
+    points: &[ExactPoint; 6],
+    closure: bool,
+    direction: ExactPoint,
+) -> bool {
+    let source_progresses = if closure {
+        dot(point_sub(points[3], points[0]), direction).cmp_zero() == Ordering::Greater
     } else {
         let mut total = ExactProduct::zero();
         let mut nonnegative = true;
         for index in 0..3 {
-            let projection = dot(
-                point_sub(leaf.points[index + 1], leaf.points[index]),
-                direction,
-            );
+            let projection = dot(point_sub(points[index + 1], points[index]), direction);
             if projection.cmp_zero() == Ordering::Less {
                 nonnegative = false;
             }
@@ -1326,10 +1560,23 @@ fn rounded_projected_monotone(leaf: &RoundedExactLeaf, direction: ExactPoint) ->
         nonnegative && total.cmp_zero() == Ordering::Greater
     };
     source_progresses
-        && dot(point_sub(leaf.points[5], leaf.points[4]), direction).cmp_zero() == Ordering::Greater
+        && dot(point_sub(points[5], points[4]), direction).cmp_zero() == Ordering::Greater
 }
 
+/// F2.3: disjoint enclosures decide; otherwise the unchanged exact comparison. `compare_points`
+/// and `between_closed` reach the filter through this function.
 fn compare_coordinate(left: ExactCoordinate, right: ExactCoordinate) -> Ordering {
+    let filtered = match (enclose_coordinate(&left), enclose_coordinate(&right)) {
+        (Some(left), Some(right)) => compare_enclosures(left, right),
+        _ => None,
+    };
+    decide_or(FilterId::TopologyCompareCoordinate, filtered, || {
+        compare_coordinate_exact(left, right)
+    })
+}
+
+/// The exact coordinate comparison, unchanged; the fallback of `compare_coordinate`.
+fn compare_coordinate_exact(left: ExactCoordinate, right: ExactCoordinate) -> Ordering {
     if left.negative != right.negative {
         return if left.negative {
             Ordering::Less
@@ -1468,6 +1715,31 @@ fn between_closed(value: ExactCoordinate, left: ExactCoordinate, right: ExactCoo
         && compare_coordinate(value, maximum) != Ordering::Greater
 }
 
+/// The unfiltered `compare_points`, kept as the O1 differential reference.
+#[cfg(test)]
+fn compare_points_exact(left: ExactPoint, right: ExactPoint) -> Ordering {
+    match compare_coordinate_exact(left.x, right.x) {
+        Ordering::Equal => compare_coordinate_exact(left.y, right.y),
+        value => value,
+    }
+}
+
+/// The unfiltered `between_closed`, kept as the O1 differential reference.
+#[cfg(test)]
+fn between_closed_exact(
+    value: ExactCoordinate,
+    left: ExactCoordinate,
+    right: ExactCoordinate,
+) -> bool {
+    let (minimum, maximum) = if compare_coordinate_exact(left, right) == Ordering::Greater {
+        (right, left)
+    } else {
+        (left, right)
+    };
+    compare_coordinate_exact(value, minimum) != Ordering::Less
+        && compare_coordinate_exact(value, maximum) != Ordering::Greater
+}
+
 fn within_bounds(point: ExactPoint, start: ExactPoint, end: ExactPoint) -> bool {
     between_closed(point.x, start.x, end.x) && between_closed(point.y, start.y, end.y)
 }
@@ -1558,6 +1830,35 @@ fn transverse_orientation(
     let mut orientation = 0i8;
     for &left_generator in &left_generators[..left_len] {
         for &right_generator in &right_generators[..right_len] {
+            // F2.4 encloses each exact generator cross sign and falls back to it (section 3.7).
+            let sign = match cross_sign(left_generator, right_generator) {
+                Ordering::Less => -1,
+                Ordering::Equal => return None,
+                Ordering::Greater => 1,
+            };
+            if orientation == 0 {
+                orientation = sign;
+            } else if orientation != sign {
+                return None;
+            }
+        }
+    }
+    Some(orientation)
+}
+
+/// The unfiltered `transverse_orientation`, kept as the O1 differential reference.
+#[cfg(test)]
+fn transverse_orientation_exact(
+    left: &[ExactPoint; 6],
+    left_closure: bool,
+    right: &[ExactPoint; 6],
+    right_closure: bool,
+) -> Option<i8> {
+    let (left_generators, left_len) = transverse_generators(left, left_closure);
+    let (right_generators, right_len) = transverse_generators(right, right_closure);
+    let mut orientation = 0i8;
+    for &left_generator in &left_generators[..left_len] {
+        for &right_generator in &right_generators[..right_len] {
             let sign = match cross_vectors(left_generator, right_generator).cmp_zero() {
                 Ordering::Less => -1,
                 Ordering::Equal => return None,
@@ -1571,6 +1872,131 @@ fn transverse_orientation(
         }
     }
     Some(orientation)
+}
+
+/// B0R U1 test access (oracles O1, O2 and O8): one filtered topology predicate and its exact
+/// reference, on exact grid points given as `[x, y]` coordinate pairs.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum B0rTopologyPredicate {
+    /// `orient(p0, p1, p2)`: -1, 0 or 1.
+    Orient,
+    /// `cross_sign(p0, p1)` of two exact vectors.
+    CrossSign,
+    /// The sign of `dot(p0 - p1, p2)`.
+    DotSign,
+    /// `projected_monotone([p0, p1, p2, p3])`: 0 or 1.
+    ProjectedMonotone,
+    /// `rounded_projected_monotone` on six points `p0..p5`, direction `p6`.
+    RoundedProjectedMonotone { closure: bool },
+    /// `transverse_orientation` on `p0..p5` and `p6..p11`: -1, 1, or 2 for `None`.
+    TransverseOrientation {
+        left_closure: bool,
+        right_closure: bool,
+    },
+    /// `compare_coordinate(p0.x, p1.x)`.
+    CompareCoordinate,
+    /// `compare_points(p0, p1)`.
+    ComparePoints,
+    /// `between_closed(p0.x, p1.x, p2.x)`: 0 or 1.
+    BetweenClosed,
+}
+
+#[cfg(test)]
+pub(crate) type B0rTestPoint = [ExactCoordinate; 2];
+
+#[cfg(test)]
+pub(crate) fn b0r_test_point(point: Point) -> B0rTestPoint {
+    let exact = exact_point(point);
+    [exact.x, exact.y]
+}
+
+/// The exact restriction of a cubic to the dyadic cell `[end - 1, end] / 2^depth`.
+#[cfg(test)]
+pub(crate) fn b0r_test_restrict(
+    points: [Point; 4],
+    end_numerator: u32,
+    depth: u32,
+) -> [B0rTestPoint; 4] {
+    restrict_cell(exact_cubic(points), end_numerator, depth).map(|point| [point.x, point.y])
+}
+
+/// Evaluates one predicate, filtered (`exact == false`) or by its exact reference.
+#[cfg(test)]
+pub(crate) fn b0r_test_evaluate(
+    predicate: B0rTopologyPredicate,
+    points: &[B0rTestPoint],
+    exact: bool,
+) -> i32 {
+    let p = |index: usize| ExactPoint {
+        x: points[index][0],
+        y: points[index][1],
+    };
+    let six = |start: usize| core::array::from_fn::<ExactPoint, 6, _>(|index| p(start + index));
+    let ordering = |value: Ordering| value as i32;
+    let flag = |value: bool| i32::from(value);
+    match predicate {
+        B0rTopologyPredicate::Orient => ordering(if exact {
+            orient_exact(p(0), p(1), p(2))
+        } else {
+            orient(p(0), p(1), p(2))
+        }),
+        B0rTopologyPredicate::CrossSign => ordering(if exact {
+            cross_vectors(p(0), p(1)).cmp_zero()
+        } else {
+            cross_sign(p(0), p(1))
+        }),
+        B0rTopologyPredicate::DotSign => ordering(if exact {
+            dot(point_sub(p(0), p(1)), p(2)).cmp_zero()
+        } else {
+            projection_sign(p(0), p(1), p(2), enclose_point(&p(2)))
+        }),
+        B0rTopologyPredicate::ProjectedMonotone => {
+            let controls = [p(0), p(1), p(2), p(3)];
+            flag(if exact {
+                projected_monotone_exact(controls)
+            } else {
+                projected_monotone(controls)
+            })
+        }
+        B0rTopologyPredicate::RoundedProjectedMonotone { closure } => flag(if exact {
+            rounded_projected_monotone_exact(&six(0), closure, p(6))
+        } else {
+            rounded_projected_monotone_points(&six(0), closure, p(6))
+        }),
+        B0rTopologyPredicate::TransverseOrientation {
+            left_closure,
+            right_closure,
+        } => {
+            let result = if exact {
+                transverse_orientation_exact(&six(0), left_closure, &six(6), right_closure)
+            } else {
+                transverse_orientation(&six(0), left_closure, &six(6), right_closure)
+            };
+            result.map_or(2, i32::from)
+        }
+        B0rTopologyPredicate::CompareCoordinate => ordering(if exact {
+            compare_coordinate_exact(p(0).x, p(1).x)
+        } else {
+            compare_coordinate(p(0).x, p(1).x)
+        }),
+        B0rTopologyPredicate::ComparePoints => ordering(if exact {
+            compare_points_exact(p(0), p(1))
+        } else {
+            compare_points(p(0), p(1))
+        }),
+        B0rTopologyPredicate::BetweenClosed => flag(if exact {
+            between_closed_exact(p(0).x, p(1).x, p(2).x)
+        } else {
+            between_closed(p(0).x, p(1).x, p(2).x)
+        }),
+    }
+}
+
+/// The section 3.3 enclosure of one topology coordinate.
+#[cfg(test)]
+pub(crate) fn b0r_test_enclose_coordinate(value: &ExactCoordinate) -> Option<Interval> {
+    enclose_coordinate(value)
 }
 
 fn certify_transverse_rounded_pair(

@@ -2,6 +2,8 @@
 
 Status: FROZEN, 2026-10-02, after Primary, Astra high arithmetic/proof review and independent Sol medium interface/carrier/ownership review, before implementation. This private helper implements the separate [P3.1f sufficient condition](p3-rounded-knot-topology-contract.md); the [active plan](p3-fill-stroke-meshes.md) owns execution. It does not adopt the new gate in CubicFillWorkspace or replace [P3.2g](p3-native-cubic-topology-contract.md). No public API/ABI, P2 behavior, external dependency, work cap or error allowance changes. Stroke refinement stays deferred.
 
+B0R pointer, 2026-10-13: unit U1 of the [B0R contract](p3-b0r-kernel-performance-contract.md#62-frozen-clauses-this-contract-amends) puts the binary64 filters F0.1 and F2.1-F2.3 before the exact predicates of the no-adaptive-numeric-work clause, with the unchanged exact routine as fallback. They are not an adaptive subdivision, epsilon or retry (B0R section 6.2), and every certificate outcome is unchanged.
+
 ## Scope and representation
 
 Add a separate crate-private `RoundedKnotCubicTopologyWorkspace` in the existing `simple_cubic_topology` module. Reuse TopologyInput/Range/Cubic/Leaf, TopologyLimits/Error/Stats/Output and existing exact decode/restrict/predicate primitives. Keep SimpleCubicTopologyWorkspace and its retained four-control leaf layout, resource accounting and accepted/rejected outcomes unchanged. Do not modify cubic_fill.rs or native_cubic_fill_tests.rs. The two certificates are not equivalent; later adoption must separately freeze any OR/retry/error precedence and memory ownership semantics.

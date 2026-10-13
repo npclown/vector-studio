@@ -13,6 +13,9 @@ mod fill_event_order;
 // Shared fixed-width arithmetic for private P3 geometry; no P2 export.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 mod fill_exact;
+// B0R binary64 filters with exact fallback (private; no P2 caller or export).
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+mod fill_filter;
 // P3 placement is private preparation; no P2 v1 caller or WASM export.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 mod fill_intersections;
@@ -41,6 +44,8 @@ mod fill_event_order_tests;
 #[cfg(test)]
 mod fill_export_tests;
 #[cfg(test)]
+mod fill_filter_tests;
+#[cfg(test)]
 mod fill_intersections_tests;
 #[cfg(test)]
 mod fill_predicates_tests;
@@ -58,6 +63,8 @@ mod p3_b0r_identity;
 mod rounded_cubic_topology_tests;
 #[cfg(test)]
 mod rounded_line_fill_tests;
+#[cfg(test)]
+mod simple_cubic_topology_filter_tests;
 #[cfg(test)]
 mod simple_cubic_topology_tests;
 #[cfg(test)]
