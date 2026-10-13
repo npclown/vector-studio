@@ -42,6 +42,8 @@ mod p3_b0_diag;
 #[cfg(test)]
 mod fill_event_order_tests;
 #[cfg(test)]
+mod fill_exact_tests;
+#[cfg(test)]
 mod fill_export_tests;
 #[cfg(test)]
 mod fill_filter_tests;

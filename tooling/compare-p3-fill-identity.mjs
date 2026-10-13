@@ -484,6 +484,7 @@ const ORACLE_FILTER = 'b0r_oracle_full';
 const EXPECTED_ORACLES = [
   'fill_filter_tests::b0r_oracle_full_o1_filter_module',
   'simple_cubic_topology_filter_tests::b0r_oracle_full_o1_topology',
+  'fill_exact_tests::b0r_oracle_full_u1b_fill_exact',
 ];
 
 /** Failures of one oracle run: exit status, the cargo summary, and every expected test run. */

@@ -217,12 +217,42 @@ impl<const N: usize> Signed<N> {
     }
 }
 
-fn add_magnitudes<const N: usize>(left: Signed<N>, right: Signed<N>, negative: bool) -> Signed<N> {
+/// Index of the lowest nonzero limb of a nonzero value, or 0 for zero.
+///
+/// B0R U1b (contract section 5.5): the magnitude routines below start at the lowest nonzero
+/// limbs. The scan is bounded by `used`; for a trimmed nonzero value it stops below `used`.
+fn lowest_nonzero_limb<const N: usize>(value: &Signed<N>) -> usize {
+    let mut index = 0;
+    while index < value.used && value.limbs[index] == 0 {
+        index += 1;
+    }
+    index
+}
+
+/// Same-sign magnitude sum.
+///
+/// B0R U1b: below the higher of the two operands' lowest nonzero limbs, the other operand is
+/// zero and no carry has arisen, so the limbs of the operand whose lowest nonzero limb is lower
+/// are copied unchanged and the carry loop starts at the higher index. The result, `used`, the
+/// capacity assertion and the width are those of the full loop.
+pub(crate) fn add_magnitudes<const N: usize>(
+    left: Signed<N>,
+    right: Signed<N>,
+    negative: bool,
+) -> Signed<N> {
     let mut result = Signed::<N>::zero();
     result.negative = negative;
     let length = left.used.max(right.used);
+    let left_low = lowest_nonzero_limb(&left);
+    let right_low = lowest_nonzero_limb(&right);
+    let (start, lower) = if left_low <= right_low {
+        (right_low, &left)
+    } else {
+        (left_low, &right)
+    };
+    result.limbs[..start].copy_from_slice(&lower.limbs[..start]);
     let mut carry = false;
-    for index in 0..length {
+    for index in start..length {
         let (partial, first_carry) = left.limbs[index].overflowing_add(right.limbs[index]);
         let (sum, second_carry) = partial.overflowing_add(u64::from(carry));
         result.limbs[index] = sum;
@@ -237,7 +267,15 @@ fn add_magnitudes<const N: usize>(left: Signed<N>, right: Signed<N>, negative: b
     result
 }
 
-fn subtract_magnitudes<const N: usize>(
+/// Magnitude difference `larger - smaller`, with `|larger| >= |smaller|`.
+///
+/// B0R U1b: below the subtrahend's lowest nonzero limb nothing is subtracted and no borrow
+/// arises, so the minuend's limbs there are copied unchanged. That range is the low limbs zero
+/// in both operands, plus the minuend's nonzero limbs above a still-zero subtrahend when the
+/// minuend's lowest nonzero limb is lower. The borrow loop starts at the subtrahend's lowest
+/// nonzero limb and never skips one, because a nonzero subtrahend limb over a zero minuend limb
+/// borrows. The result, `used`, trimming and the borrow assertion are those of the full loop.
+pub(crate) fn subtract_magnitudes<const N: usize>(
     larger: Signed<N>,
     smaller: Signed<N>,
     negative: bool,
@@ -246,8 +284,10 @@ fn subtract_magnitudes<const N: usize>(
     let mut result = Signed::<N>::zero();
     result.negative = negative;
     result.used = larger.used;
+    let start = lowest_nonzero_limb(&smaller).min(larger.used);
+    result.limbs[..start].copy_from_slice(&larger.limbs[..start]);
     let mut borrow = false;
-    for index in 0..larger.used {
+    for index in start..larger.used {
         let (partial, first_borrow) = larger.limbs[index].overflowing_sub(smaller.limbs[index]);
         let (difference, second_borrow) = partial.overflowing_sub(u64::from(borrow));
         result.limbs[index] = difference;
@@ -280,11 +320,18 @@ pub(crate) fn multiply<const A: usize, const B: usize, const OUT: usize>(
         left.used + right.used <= OUT + 1,
         "integer product capacity overflow"
     );
+    // B0R U1b (contract section 5.5): a row or column below an operand's lowest nonzero limb
+    // adds zero products with a zero carry and changes no word, so both loops start at the
+    // lowest nonzero limbs and each product word still lands at its summed limb offset. Every
+    // partial sum is below the final product, so no word at or above `left.used + right.used`
+    // is ever nonzero, and trimming from that bound gives the full loop's canonical result.
+    let left_low = lowest_nonzero_limb(&left);
+    let right_low = lowest_nonzero_limb(&right);
     let mut result = Signed::<OUT>::zero();
     result.negative = left.negative ^ right.negative;
-    for left_index in 0..left.used {
+    for left_index in left_low..left.used {
         let mut carry = 0u128;
-        for right_index in 0..right.used {
+        for right_index in right_low..right.used {
             let output_index = left_index + right_index;
             assert!(output_index < OUT, "integer product capacity overflow");
             let value = u128::from(left.limbs[left_index]) * u128::from(right.limbs[right_index])
@@ -302,7 +349,7 @@ pub(crate) fn multiply<const A: usize, const B: usize, const OUT: usize>(
             output_index += 1;
         }
     }
-    result.used = OUT;
+    result.used = (left.used + right.used).min(OUT);
     result.trim();
     result
 }
