@@ -280,6 +280,25 @@ pub(crate) enum FilterId {
     EventEndpoints,
     /// F2.5, an event comparison involving a crossing, decided on enclosed x coordinates.
     EventCrossingX,
+    /// F0.5, a column or section whose exact value is a binary64 endpoint coordinate, compared
+    /// with a binary64 value or with another such coordinate.
+    EndpointValue,
+    /// F0.6, `compare_columns` or `compare_sections` with identical representations.
+    RepresentationIdentity,
+    /// F2.6, `compare_columns` and `compare_column_f64` on ratio enclosures (section 3.4).
+    ColumnRatio,
+    /// F2.7, `compare_sections` and `compare_section_f64` on ratio enclosures (section 3.4).
+    SectionRatio,
+    /// F2.8, the half-budget predicates on a ratio enclosure (section 3.4).
+    HalfBudget,
+    /// T1 and T4, a crossing column compared with a binary64 value, enclosed from its points.
+    LazyColumn,
+    /// T1, two sections compared on enclosures from their defining binary64 data.
+    LazySection,
+    /// T2, an `embed_scalar` bisection step decided by the target's per-call enclosure.
+    EmbedStep,
+    /// T2 with F2.8, a window-search step decided by the target's per-call enclosure.
+    EmbedHalfStep,
 }
 
 /// The number of U1 topology filter identities, the first variants of `FilterId`. U1's test
@@ -289,8 +308,11 @@ pub(crate) const FILTER_COUNT: usize = 6;
 /// The number of U3 binary64-input filter identities, which follow the topology ones.
 pub(crate) const BINARY64_FILTER_COUNT: usize = 5;
 
+/// The number of U4 column and section filter identities, which follow the U3 ones.
+pub(crate) const SECTION_FILTER_COUNT: usize = 9;
+
 #[cfg(test)]
-const COUNTER_SLOTS: usize = FILTER_COUNT + BINARY64_FILTER_COUNT;
+const COUNTER_SLOTS: usize = FILTER_COUNT + BINARY64_FILTER_COUNT + SECTION_FILTER_COUNT;
 
 /// Fault switches of oracle O8 that act inside this module.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -310,6 +332,63 @@ thread_local! {
     static COUNTERS: core::cell::Cell<[[u64; 2]; COUNTER_SLOTS]> =
         const { core::cell::Cell::new([[0; 2]; COUNTER_SLOTS]) };
     static FAULT: core::cell::Cell<Option<Fault>> = const { core::cell::Cell::new(None) };
+    static SHADOW: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+    static SHADOW_TALLY: core::cell::Cell<ShadowTally> =
+        const { core::cell::Cell::new(ShadowTally { checks: 0, mismatches: 0 }) };
+}
+
+/// Oracle O10, tessellation shadow mode for U4 (T1, T2, T4 and F2.6-F2.8): every filtered or
+/// lazy decision also computes the eager exact value and records whether the two are equal.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ShadowTally {
+    pub(crate) checks: u64,
+    pub(crate) mismatches: u64,
+}
+
+#[cfg(test)]
+impl ShadowTally {
+    pub(crate) fn merge(&mut self, other: Self) {
+        self.checks += other.checks;
+        self.mismatches += other.mismatches;
+    }
+}
+
+/// Whether shadow mode is on in this thread (test builds only).
+#[cfg(test)]
+pub(crate) fn shadow_active() -> bool {
+    SHADOW.with(core::cell::Cell::get)
+}
+
+/// Records one shadow comparison of a filtered or lazy decision with the eager exact one.
+#[cfg(test)]
+pub(crate) fn shadow_check(equal: bool) {
+    SHADOW_TALLY.with(|tally| {
+        let mut value = tally.get();
+        value.checks += 1;
+        value.mismatches += u64::from(!equal);
+        tally.set(value);
+    });
+}
+
+/// Runs `action` with shadow mode on in this thread, then switches it off.
+#[cfg(test)]
+pub(crate) fn with_shadow<T>(action: impl FnOnce() -> T) -> T {
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            SHADOW.with(|active| active.set(false));
+        }
+    }
+    SHADOW.with(|active| active.set(true));
+    let _reset = Reset;
+    action()
+}
+
+/// Returns and resets this thread's shadow tally.
+#[cfg(test)]
+pub(crate) fn take_shadow_tally() -> ShadowTally {
+    SHADOW_TALLY.with(|tally| tally.replace(ShadowTally::default()))
 }
 
 /// Counts one filter call as decided or as fallen back (this thread, test builds only).

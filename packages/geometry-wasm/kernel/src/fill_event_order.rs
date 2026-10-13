@@ -147,7 +147,7 @@ fn crossing_x_filter(left: FillEvent, right: FillEvent) -> Option<Ordering> {
 /// carry about 32u * M^3 and 16u * M^2, and the quotient a relative width of about
 /// 64u * κ with κ = M^2 / |W| (times M / |x| for X), the crossing's condition number. Disjoint
 /// enclosures therefore decide when |x1 - x2| > 64u * κ * (|x1| + |x2|).
-fn x_enclosure(event: FillEvent) -> Interval {
+pub(crate) fn x_enclosure(event: FillEvent) -> Interval {
     match event {
         FillEvent::Endpoint(point) => Interval::point(point.x),
         FillEvent::Crossing { a, b, c, d } => {
