@@ -2,6 +2,8 @@
 
 Status: FROZEN after Primary, independent Astra high proof/storage review and Sol medium engineering/transport review,2026-10-05, before implementation. Implements only the private counterpart of [P3.1g](p3-transverse-arrangement-contract.md), using [P3.2r](p3-transverse-crossing-contract.md) exact pair primitives. The [active plan](p3-fill-stroke-meshes.md) owns execution. No CubicFillWorkspace adoption, public API/ABI, dependency, work-cap, tolerance, general crossing-order or deferred stroke change.
 
+B0R pointer, 2026-10-13: unit U2 of the [B0R contract](p3-b0r-kernel-performance-contract.md#62-frozen-clauses-this-contract-amends) runs the shared pair body only for the sweep candidates C of B0R section 4, in the same complete i<j append order, so partners, the triangle-free crossing prefix and the crossing records are built in the same order. By B0R Lemma A every pair outside C passes unchanged, and the logical pair counter of Lemma B keeps `pairs` and the charge-before-inspection WorkLimit point. The matching and triangle-free policies and their order are unchanged. Nothing is allocated.
+
 ## Ownership and representation
 
 Add crate-private `TransverseArrangementWorkspace`, `ArrangementCrossing { left_leaf: usize, right_leaf: usize, orientation: i8 }` and `ArrangementOutput<'a> { points: &'a [Point], contours: &'a [TopologyRange], crossings: &'a [ArrangementCrossing] }` in simple_cubic_topology.rs. Reuse TopologyInput/Limits/Error/Stats without changed meanings. Methods: new(limits), certify(input), stats(), output(), allocated_bytes(). No signed-area orientations, nesting matrix, face labels, positions or mesh output; zero signed-area crossing contours can certify.

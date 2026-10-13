@@ -70,7 +70,7 @@ struct CorpusPath {
 }
 
 /// A run of consecutive paths of one cell or family, processed by fresh workspaces.
-struct Chunk {
+pub(crate) struct Chunk {
     prefix: String,
     first: usize,
     paths: Vec<CorpusPath>,
@@ -133,7 +133,7 @@ impl Reader<'_> {
 }
 
 /// The frozen B0 frame (`tests/geometry/p3-b0/corpus.ts`): one chunk per cell, nonzero rule.
-fn read_b0(bytes: &[u8]) -> Vec<Chunk> {
+pub(crate) fn read_b0(bytes: &[u8]) -> Vec<Chunk> {
     let mut reader = Reader { bytes, offset: 0 };
     assert_eq!(reader.take(8), B0_MAGIC, "B0 corpus magic");
     let cells = reader.u32();
@@ -159,7 +159,7 @@ fn read_b0(bytes: &[u8]) -> Vec<Chunk> {
 }
 
 /// The `p3-b0r-random/v1` frame (`tests/geometry/p3-b0r/corpus.ts`).
-fn read_random(bytes: &[u8]) -> Vec<Chunk> {
+pub(crate) fn read_random(bytes: &[u8]) -> Vec<Chunk> {
     let mut reader = Reader { bytes, offset: 0 };
     assert_eq!(reader.take(8), RANDOM_MAGIC, "randomized corpus magic");
     let families = reader.u32();
@@ -432,7 +432,7 @@ fn pack(path: &CorpusPath, request_id: u32) -> Vec<u8> {
     bytes
 }
 
-fn run_chunk(chunk: &Chunk) -> String {
+pub(crate) fn run_chunk(chunk: &Chunk) -> String {
     let mut workspace = CubicFillWorkspace::new(LIMITS).expect("construct identity workspace");
     let mut engine = FillEngine::new();
     assert_eq!(
@@ -544,7 +544,7 @@ fn meta_line(output: &mut String) {
     line(output, "meta/workspace-sizes", &hash.finish(), 0, "META", 0);
 }
 
-fn read_file(variable: &str) -> Vec<u8> {
+pub(crate) fn read_file(variable: &str) -> Vec<u8> {
     let path = env::var(variable).unwrap_or_else(|_| panic!("{variable} is required"));
     std::fs::read(&path).unwrap_or_else(|error| panic!("read {path}: {error}"))
 }
