@@ -277,10 +277,10 @@ Landed:
   - O1: smoke and full-size differentials;
   - O2: named fixtures that assert, through the counters, whether the fallback ran, plus decided controls;
   - O8: the seeded defects.
-- `tooling/compare-p3-fill-identity.mjs` gains step 5. It runs every ignored test named `b0r_oracle_full` in the release profile on the branch tree, saves the output as `oracles-branch.txt` in the run directory and fails the run on a nonzero exit. Section 7 requires `pnpm test:p3-fill-identity` to run the full O1; U0's tool did not yet do so.
+- `tooling/compare-p3-fill-identity.mjs` gains step 5. It runs every ignored test named `b0r_oracle_full` in the release profile on the branch tree and saves the output as `oracles-branch.txt` in the run directory. It fails the run on a nonzero exit, a missing cargo summary line, any failed test, or an expected oracle (a declared list of test names, which each unit extends) that did not run. Section 7 requires `pnpm test:p3-fill-identity` to run the full O1; U0's tool did not yet do so.
 - Dated pointer lines under the status lines of [P3.2g](p3-native-cubic-topology-contract.md), [P3.2n](p3-native-rounded-topology-contract.md) and [P3.2r](p3-transverse-crossing-contract.md), for the section 6.2 clauses that U1's filters touch. The sweep rows of section 6.2 belong to U2.
 
-Local evidence, 2026-10-13, Windows 11, 16 logical cores, pinned Rust 1.94.1, Node 24.15.0, uncommitted working tree on branch `claude/p3-b0r-u1-topology-filters` over the U0 commit `ecacdbb`, merge base `b52b683`:
+Local evidence, 2026-10-13, Windows 11, 16 logical cores, pinned Rust 1.94.1, Node 24.15.0, uncommitted working tree on branch `claude/p3-b0r-u1-topology-filters` over the U0 commit `ecacdbb`. Its tree is identical to `f07854c`, the squash merge of U0 into `main` and this PR's base. The identity tool compared against `b52b683`, the merge base of that pre-merge branch; `f07854c` differs from `b52b683` only by U0's test tooling, harness and corpus, so the kernel compared is the same:
 
 - `pnpm test:p3-fill-identity`: **PASS**, run `20261013T024933Z-9b8bb624`, 13 min 39 s wall time. The first run, `20261013T022436Z-bc74c18e`, also passed; it predates a fix to the regular expression that copies the oracle pass count into `summary.json`, which did not affect pass or fail.
   - Native: 66,351 cases on each side (6,350 B0, 60,000 randomized, 1 workspace size), all digests equal.
@@ -290,7 +290,7 @@ Local evidence, 2026-10-13, Windows 11, 16 logical cores, pinned Rust 1.94.1, No
   - O5: the modified kernel sources are `lib.rs` and `simple_cubic_topology.rs`; their inline test modules are byte-identical to the merge base, and no existing test file changed.
   - Release WASM SHA-256: base `2075c339…27e2`, branch `c9c80356…dc9d`. The change is expected (section 2, operation identity); `fill_v0_revision()` stays 1.
   - Durations: release test build of the merge base 45.3 s (cold); the branch builds were warm (0.1 s; 49.1 s cold in the first run); release WASM builds 5.2 s and 0.1 s; native dumps 105.8 s (base) and 34.9 s (branch) on 16 threads; release oracles 106.3 s (2 passed); WASM layer 518.8 s.
-- Full-size O1 (release profile, 16 threads, inside the run above; the counts are identical in both runs because every corpus is seeded): zero disagreements and zero containment violations.
+- Full-size O1 (release profile, inside the run above): zero disagreements and zero containment violations. Each corpus is split into 16 fixed seeded shards, one thread each, so the tuples and counts do not depend on the machine's core count; the evidence run had 16 cores, so its counts are those of the fixed sharding. The independent reviewer reran the release O1 on commit `7473926` with identical counts. After the review, a rerun with the fixed-shard change and the stricter oracle check gave identical counts again (2 passed, 104.9 s).
   - Topology: 10^7 random and 10^6 adversarial tuples for each of the 13 predicate variants, 88.5 s. The variants are `orient`, the cross sign, the dot sign, `projected_monotone`, `rounded_projected_monotone` (closure and not), `transverse_orientation` (four closure combinations), `compare_coordinate`, `compare_points` and `between_closed`.
   - Filter module, 17.6 s:
     - interval add, sub, mul and div on point intervals, checked exactly: 44,000,000 cases, 2,656,957 undecidable (non-finite);
@@ -330,16 +330,7 @@ Interpretations recorded for review:
 - **Trimmed-invariant fixture.** `enclose` `debug_assert!`s the invariant as section 3.3 requires, so the O2 fixture expects a panic in debug builds and `None` in release. `top_limbs`, which returns the `None`, is also checked directly.
 - **Counters and faults.** These are `cfg(test)` thread-locals, as section 7 requires. In other builds `record` is an empty inline function and the fault check is a constant `false`.
 
-Informal timing, **not a benchmark and not evidence**. A throwaway test, not committed, timed `CubicFillWorkspace::attempt` in the release test profile on one thread. It took the median of 10 paths per cell, three repetitions per path after one warm-up, on base `b52b683` and on this tree:
-
-| Cell    | Base (ms per path) | Branch (ms per path) |
-| ------- | -----------------: | -------------------: |
-| P2/s=16 |               34.2 |                  9.6 |
-| P4/s=16 |              130.7 |                 34.0 |
-| P8/s=8  |              132.1 |                 33.9 |
-| P8/s=3  |               19.5 |                  6.0 |
-
-These times cover the whole attempt, of which the B0 record attributes 87-94% to topology. The tessellation stage is unchanged by U1. Only U8's committed remeasure carries performance evidence.
+An informal local timing of whole attempts, not committed, suggested the topology stage is faster; it is not a benchmark, and only U8's committed remeasure carries performance evidence.
 
 ### B0 runner (light tier)
 

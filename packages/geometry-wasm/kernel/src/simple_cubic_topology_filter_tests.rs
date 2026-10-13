@@ -11,7 +11,7 @@ use std::time::Instant;
 
 use crate::fill_exact::Signed;
 use crate::fill_filter::{counts, reset_counters, FilterId, FILTER_COUNT};
-use crate::fill_filter_tests::{enclosure_contains, parallel, pow2, share, thread_count, Rng};
+use crate::fill_filter_tests::{enclosure_contains, parallel, pow2, share, Rng, ORACLE_SHARDS};
 use crate::geometry::Point;
 use crate::simple_cubic_topology::{
     b0r_test_enclose_coordinate, b0r_test_evaluate, b0r_test_point, b0r_test_restrict,
@@ -645,7 +645,7 @@ fn b0r_o1_smoke_topology_predicates() {
 fn b0r_oracle_full_o1_topology() {
     const RANDOM: u64 = 10_000_000;
     const ADVERSARIAL: u64 = 1_000_000;
-    let threads = thread_count();
+    let threads = ORACLE_SHARDS;
     let start = Instant::now();
     let mut failures = Vec::new();
     for (index, predicate) in PREDICATES.into_iter().enumerate() {
@@ -682,7 +682,7 @@ fn b0r_oracle_full_o1_topology() {
         }
     }
     println!(
-        "B0R O1 topology: {} predicates, {threads} threads, {:.1} s",
+        "B0R O1 topology: {} predicates, {threads} shards, {:.1} s",
         PREDICATES.len(),
         start.elapsed().as_secs_f64()
     );

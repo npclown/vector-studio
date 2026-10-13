@@ -722,7 +722,7 @@ fn b0r_o8_ratio_fixed_numerator_unit_is_detected() {
     assert!(section.violations > 0, "{section:?}");
 }
 
-/// Runs `work(thread_index)` on every available core with a large stack and merges results.
+/// Runs `work(shard)` for each shard on its own thread with a large stack and collects results.
 pub(crate) fn parallel<T: Send + 'static>(
     threads: usize,
     work: impl Fn(usize) -> T + Send + Sync + Copy + 'static,
@@ -741,9 +741,9 @@ pub(crate) fn parallel<T: Send + 'static>(
         .collect()
 }
 
-pub(crate) fn thread_count() -> usize {
-    thread::available_parallelism().map_or(4, usize::from)
-}
+/// The full-size corpora are split into this fixed number of seeded shards, one thread each,
+/// so the tuples and every reported count are independent of the machine's core count.
+pub(crate) const ORACLE_SHARDS: usize = 16;
 
 /// Splits `total` cases over `threads` workers.
 pub(crate) fn share(total: u64, threads: usize, index: usize) -> u64 {
@@ -757,7 +757,7 @@ pub(crate) fn share(total: u64, threads: usize, index: usize) -> u64 {
 fn b0r_oracle_full_o1_filter_module() {
     const RANDOM: u64 = 10_000_000;
     const ADVERSARIAL: u64 = 1_000_000;
-    let threads = thread_count();
+    let threads = ORACLE_SHARDS;
     let start = Instant::now();
     let mut operations = Tally::default();
     for tally in parallel(threads, move |index| {
@@ -792,7 +792,7 @@ fn b0r_oracle_full_o1_filter_module() {
         section.merge(s);
     }
     println!(
-        "B0R O1 filter module ({threads} threads, {:.1} s): interval operations {operations:?}; enclosure containment {containment:?}; column ratios {column:?}; section ratios {section:?}",
+        "B0R O1 filter module ({threads} shards, {:.1} s): interval operations {operations:?}; enclosure containment {containment:?}; column ratios {column:?}; section ratios {section:?}",
         start.elapsed().as_secs_f64()
     );
     for tally in [operations, containment, column, section] {

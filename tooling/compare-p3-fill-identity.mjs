@@ -480,6 +480,36 @@ function buildWasm(sourceRoot, targetDirectory) {
 }
 
 const ORACLE_FILTER = 'b0r_oracle_full';
+/** Every full-size oracle that must run and pass; each B0R unit adds its own names. */
+const EXPECTED_ORACLES = [
+  'fill_filter_tests::b0r_oracle_full_o1_filter_module',
+  'simple_cubic_topology_filter_tests::b0r_oracle_full_o1_topology',
+];
+
+/** Failures of one oracle run: exit status, the cargo summary, and every expected test run. */
+function oracleFailures(status, stdout) {
+  const failures = [];
+  if (status !== 0) failures.push(`cargo exited with ${status}`);
+  const summary = /test result: (\w+)\. (\d+) passed; (\d+) failed/u.exec(stdout);
+  if (!summary) {
+    failures.push('no cargo test summary line');
+    return { failures, passed: 0, failed: null };
+  }
+  const passed = Number(summary[2]);
+  const failed = Number(summary[3]);
+  if (summary[1] !== 'ok' || failed !== 0) failures.push(`${failed} oracle tests failed`);
+  if (passed < EXPECTED_ORACLES.length)
+    failures.push(`${passed} oracle tests passed, expected at least ${EXPECTED_ORACLES.length}`);
+  const started = new Set(
+    stdout
+      .split(/\r?\n/u)
+      .map((line) => /^test (\S+) \.\.\./u.exec(line)?.[1])
+      .filter(Boolean),
+  );
+  for (const name of EXPECTED_ORACLES)
+    if (!started.has(name)) failures.push(`expected oracle ${name} did not run`);
+  return { failures, passed, failed };
+}
 
 function runOracles(file) {
   const args = [
@@ -510,11 +540,13 @@ function runOracles(file) {
   if (result.error) throw result.error;
   writeFileSync(file, `${result.stdout}${result.stderr}`);
   process.stdout.write(result.stdout);
-  const summary = /test result: (\w+)\. (\d+) passed; (\d+) failed/u.exec(result.stdout);
+  const { failures, passed, failed } = oracleFailures(result.status, result.stdout);
   return {
     status: result.status,
-    passed: summary ? Number(summary[2]) : 0,
-    failed: summary ? Number(summary[3]) : null,
+    passed,
+    failed,
+    expected: EXPECTED_ORACLES,
+    failures,
     file: path.relative(root, file),
   };
 }
@@ -775,7 +807,8 @@ async function fullRun(options) {
     const oracles = timed(durations, 'oraclesBranchMs', () =>
       runOracles(path.join(output, 'oracles-branch.txt')),
     );
-    if (oracles.status !== 0) failures.push(`release oracles failed (${oracles.file})`);
+    for (const failure of oracles.failures)
+      failures.push(`release oracles: ${failure} (${oracles.file})`);
     const crossingPaths = new Set();
     for (const [name, entry] of native.branch) {
       const match = /^rnd\/([^/]+)\/(\d+)\//u.exec(name);
