@@ -488,6 +488,8 @@ const EXPECTED_ORACLES = [
   'simple_cubic_topology_sweep_tests::b0r_oracle_full_o3a_lemma_a',
   'simple_cubic_topology_sweep_tests::b0r_oracle_full_o3b_corpus_shadow',
   'simple_cubic_topology_sweep_tests::b0r_oracle_full_o3b_random_scenes',
+  'fill_predicates_filter_tests::b0r_oracle_full_o1_binary64_predicates',
+  'fill_event_order_filter_tests::b0r_oracle_full_o1_event_order',
 ];
 
 /** Failures of one oracle run: exit status, the cargo summary, and every expected test run. */

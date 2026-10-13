@@ -1,5 +1,6 @@
 use core::cmp::Ordering;
 
+use crate::fill_filter::{self, Fault, FilterId};
 use crate::geometry::Point;
 
 // A shifted significand product is below 2^4196. Even six same-sign terms
@@ -31,7 +32,7 @@ pub(crate) fn orient2d(a: Point, b: Point, c: Point) -> Result<Ordering, Predica
         ));
     });
     validate_points(&[a, b, c])?;
-    Ok(orient2d_finite(a, b, c))
+    Ok(orient2d_filtered(a, b, c))
 }
 
 pub(crate) fn point_on_segment(
@@ -60,6 +61,17 @@ pub(crate) fn segment_relation(
     });
     validate_points(&[a, b, c, d])?;
 
+    // F0.3: every non-Disjoint result below needs a common point of the two closed segments (a
+    // point on a segment, a crossing, a touch or a collinear overlap), and both closed boxes
+    // contain it. A point segment is CollinearPoint only on the other closed segment, and
+    // collinear segments with disjoint boxes have disjoint projections. The comparisons are of
+    // the represented values, with signed zeros equal, as in the exact branches.
+    let disjoint_boxes = segment_boxes_disjoint(a, b, c, d);
+    fill_filter::record(FilterId::SegmentBoxes, disjoint_boxes);
+    if disjoint_boxes {
+        return Ok(SegmentRelation::Disjoint);
+    }
+
     let ab_is_point = same_point(a, b);
     let cd_is_point = same_point(c, d);
     if ab_is_point {
@@ -77,10 +89,10 @@ pub(crate) fn segment_relation(
         });
     }
 
-    let abc = orient2d_finite(a, b, c);
-    let abd = orient2d_finite(a, b, d);
-    let cda = orient2d_finite(c, d, a);
-    let cdb = orient2d_finite(c, d, b);
+    let abc = orient2d_filtered(a, b, c);
+    let abd = orient2d_filtered(a, b, d);
+    let cda = orient2d_filtered(c, d, a);
+    let cdb = orient2d_filtered(c, d, b);
 
     if abc == Ordering::Equal
         && abd == Ordering::Equal
@@ -113,6 +125,84 @@ fn validate_points(points: &[Point]) -> Result<(), PredicateError> {
         Ok(())
     } else {
         Err(PredicateError::NonFinite)
+    }
+}
+
+/// u = 2^-53, the unit roundoff of binary64 round-to-nearest.
+const UNIT_ROUNDOFF: f64 = f64::EPSILON / 2.0;
+
+/// Shewchuk's stage-A bound `ccwerrboundA = (3 + 16u) * u`; every operation here is exact.
+const ORIENT_ERROR_BOUND: f64 = (3.0 + 16.0 * UNIT_ROUNDOFF) * UNIT_ROUNDOFF;
+
+/// F1 guard: the largest input magnitude, 2^500.
+const F1_INPUT_LIMIT: f64 = f64::from_bits((1023 + 500) << 52);
+
+/// F1 guard: the smallest nonzero `|detleft| + |detright|`, 2^-900.
+const F1_SUM_FLOOR: f64 = f64::from_bits((1023 - 900) << 52);
+
+/// Orientation of three finite points: F0.2, then F1, then the unchanged exact accumulator
+/// `orient2d_finite`, which runs once when neither decides.
+fn orient2d_filtered(a: Point, b: Point, c: Point) -> Ordering {
+    // F0.2: the cross product of a zero vector, or of a vector with itself, is exactly zero.
+    // `same_point` treats signed zeros as equal, as the exact routine does.
+    if same_point(a, b) || same_point(a, c) || same_point(b, c) {
+        fill_filter::record(FilterId::PredicateOrientIdentity, true);
+        return Ordering::Equal;
+    }
+    match orient2d_static_filter(a, b, c) {
+        Some(value) => {
+            fill_filter::record(FilterId::PredicateOrient, true);
+            value
+        }
+        None => {
+            fill_filter::record(FilterId::PredicateOrient, false);
+            orient2d_finite(a, b, c)
+        }
+    }
+}
+
+/// F1 (B0R contract section 3.6): Shewchuk's stage A (Shewchuk 1997, section 4).
+///
+/// With `detleft = (ax - cx)(by - cy)`, `detright = (ay - cy)(bx - cx)` and
+/// `det = detleft - detright` in binary64, `|det| > ccwerrboundA * (|detleft| + |detright|)`
+/// proves that `det` has the sign of the exact determinant. The translated determinant expands
+/// to the six terms `orient2d_finite` accumulates, so both have the same sign. Only stage A is
+/// used; the exact accumulator replaces stages B to D.
+///
+/// Guard. The bound assumes that no operation overflows or underflows, so F1 runs only when
+/// every input magnitude is at most 2^500 and `|detleft| + |detright|` is 0 or at least 2^-900:
+/// - with inputs at most 2^500, differences are at most 2^501 and products at most 2^1002, so
+///   nothing overflows;
+/// - a difference that falls in the subnormal range is exact (gradual underflow, Sterbenz);
+/// - a product that underflows carries an absolute error of at most 2^-1075, which is outside
+///   the relative bound. When `|detleft| + |detright|` is at least 2^-900, the bound itself is
+///   at least 3u * 2^-900 > 2^-955, so such errors are absorbed with a margin of more than
+///   2^100. When the sum is 0, `det` is 0, the strict test fails and the exact routine runs.
+///   A sum below 2^-900 also goes to the exact routine.
+fn orient2d_static_filter(a: Point, b: Point, c: Point) -> Option<Ordering> {
+    if [a.x, a.y, b.x, b.y, c.x, c.y]
+        .iter()
+        .any(|value| value.abs() > F1_INPUT_LIMIT)
+    {
+        return None;
+    }
+    let detleft = (a.x - c.x) * (b.y - c.y);
+    let detright = (a.y - c.y) * (b.x - c.x);
+    let det = detleft - detright;
+    let sum = detleft.abs() + detright.abs();
+    if sum < F1_SUM_FLOOR {
+        return None;
+    }
+    let mut bound = ORIENT_ERROR_BOUND * sum;
+    if fill_filter::fault_active(Fault::F1BoundHalved) {
+        bound *= 0.5;
+    }
+    if det > bound {
+        Some(Ordering::Greater)
+    } else if -det > bound {
+        Some(Ordering::Less)
+    } else {
+        None
     }
 }
 
@@ -216,7 +306,15 @@ fn compare_limbs(left: &[u64; LIMB_COUNT], right: &[u64; LIMB_COUNT]) -> Orderin
 }
 
 fn point_on_segment_finite(point: Point, start: Point, end: Point) -> bool {
-    orient2d_finite(start, end, point) == Ordering::Equal && within_bounds(point, start, end)
+    orient2d_filtered(start, end, point) == Ordering::Equal && within_bounds(point, start, end)
+}
+
+/// F0.3: the closed coordinate boxes of segments ab and cd are disjoint.
+fn segment_boxes_disjoint(a: Point, b: Point, c: Point, d: Point) -> bool {
+    a.x.max(b.x) < c.x.min(d.x)
+        || c.x.max(d.x) < a.x.min(b.x)
+        || a.y.max(b.y) < c.y.min(d.y)
+        || c.y.max(d.y) < a.y.min(b.y)
 }
 
 fn same_point(left: Point, right: Point) -> bool {
@@ -253,4 +351,89 @@ fn collinear_relation(a: Point, b: Point, c: Point, d: Point) -> SegmentRelation
     } else {
         SegmentRelation::Disjoint
     }
+}
+
+// `cfg(test)` reference copies of the pre-U3 routines (B0R oracle O1): the same statements, with
+// every orientation through the unchanged exact accumulator and no F0.2, F0.3 or F1.
+
+/// Pre-U3 `orient2d`, the reference of the filtered entry.
+#[cfg(test)]
+pub(crate) fn b0r_reference_orient2d(
+    a: Point,
+    b: Point,
+    c: Point,
+) -> Result<Ordering, PredicateError> {
+    validate_points(&[a, b, c])?;
+    Ok(orient2d_finite(a, b, c))
+}
+
+/// Pre-U3 `point_on_segment`.
+#[cfg(test)]
+pub(crate) fn b0r_reference_point_on_segment(
+    point: Point,
+    start: Point,
+    end: Point,
+) -> Result<bool, PredicateError> {
+    validate_points(&[point, start, end])?;
+    Ok(reference_point_on_segment_finite(point, start, end))
+}
+
+/// Pre-U3 `segment_relation`.
+#[cfg(test)]
+pub(crate) fn b0r_reference_segment_relation(
+    a: Point,
+    b: Point,
+    c: Point,
+    d: Point,
+) -> Result<SegmentRelation, PredicateError> {
+    validate_points(&[a, b, c, d])?;
+
+    let ab_is_point = same_point(a, b);
+    let cd_is_point = same_point(c, d);
+    if ab_is_point {
+        return Ok(if reference_point_on_segment_finite(a, c, d) {
+            SegmentRelation::CollinearPoint
+        } else {
+            SegmentRelation::Disjoint
+        });
+    }
+    if cd_is_point {
+        return Ok(if reference_point_on_segment_finite(c, a, b) {
+            SegmentRelation::CollinearPoint
+        } else {
+            SegmentRelation::Disjoint
+        });
+    }
+
+    let abc = orient2d_finite(a, b, c);
+    let abd = orient2d_finite(a, b, d);
+    let cda = orient2d_finite(c, d, a);
+    let cdb = orient2d_finite(c, d, b);
+
+    if abc == Ordering::Equal
+        && abd == Ordering::Equal
+        && cda == Ordering::Equal
+        && cdb == Ordering::Equal
+    {
+        return Ok(collinear_relation(a, b, c, d));
+    }
+
+    if opposite(abc, abd) && opposite(cda, cdb) {
+        return Ok(SegmentRelation::ProperCrossing);
+    }
+
+    if (abc == Ordering::Equal && within_bounds(c, a, b))
+        || (abd == Ordering::Equal && within_bounds(d, a, b))
+        || (cda == Ordering::Equal && within_bounds(a, c, d))
+        || (cdb == Ordering::Equal && within_bounds(b, c, d))
+    {
+        return Ok(SegmentRelation::Touch);
+    }
+
+    Ok(SegmentRelation::Disjoint)
+}
+
+#[cfg(test)]
+fn reference_point_on_segment_finite(point: Point, start: Point, end: Point) -> bool {
+    orient2d_finite(start, end, point) == Ordering::Equal && within_bounds(point, start, end)
 }

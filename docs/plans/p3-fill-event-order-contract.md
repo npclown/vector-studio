@@ -4,6 +4,8 @@ Status: prospective contract, 2026-09-29. After [exact predicates](p3-fill-predi
 
 B0R pointer, 2026-10-13: unit U1b of the [B0R contract](p3-b0r-kernel-performance-contract.md#62-frozen-clauses-this-contract-amends) (section 5.5, user decision B0R-Q1) makes `multiply`, `add_magnitudes` and `subtract_magnitudes` skip all-zero low limbs. The fixed-array, used-length arithmetic and the loops bounded by declared limb widths and used lengths stay as below; results, `used`, trimming, capacities and assertions are unchanged.
 
+B0R pointer, 2026-10-13: unit U3 of the [B0R contract](p3-b0r-kernel-performance-contract.md#62-frozen-clauses-this-contract-amends) adds F0.4 (two endpoint events compare by their binary64 coordinates) and the interval fast path F2.5 (disjoint enclosures of the event x coordinates decide) after validation and crossing classification, before the unchanged exact comparison. When the x enclosures overlap, the exact routine decides the whole comparison, x and then y. Every comparison result and error is unchanged.
+
 ## Surface and semantics
 
 Add `fill_event_order.rs`, reusing `geometry::Point` and P3.2a relation classification. Freeze crate-private Copy/Debug/PartialEq types and function:
