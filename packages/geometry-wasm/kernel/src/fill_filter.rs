@@ -347,6 +347,11 @@ pub(crate) enum Fault {
     LemmaDWithoutMinimum,
     /// O8 (13): L1 with its candidates processed in sorted-by-x order.
     L1SortedByX,
+    /// O8 (11) for L3, where Corollary C1 has charging bodies: one outer charge too few per
+    /// active member.
+    L3OuterChargeShort,
+    /// O8 (14): L4 charging q instead of q + 1 for a match at offset q.
+    L4ChargeShort,
 }
 
 #[cfg(test)]
