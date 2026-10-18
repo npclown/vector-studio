@@ -24,18 +24,18 @@ const ORDER_SEED: u32 = 0x9e37_79b9;
 const QUANTUM_PROBES: usize = 10_000;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Entry {
+pub(crate) enum Entry {
     Attempt,
     Transverse,
 }
 
-struct CorpusPath {
-    verbs: Vec<u8>,
-    point_bytes: Vec<u8>,
+pub(crate) struct CorpusPath {
+    pub(crate) verbs: Vec<u8>,
+    pub(crate) point_bytes: Vec<u8>,
 }
 
 impl CorpusPath {
-    fn input(&self) -> PathInput<'_> {
+    pub(crate) fn input(&self) -> PathInput<'_> {
         PathInput::from_test_parts(
             Request {
                 request_id: 0,
@@ -49,32 +49,32 @@ impl CorpusPath {
     }
 }
 
-struct Cell {
-    id: String,
-    entry: Entry,
-    paths: Vec<CorpusPath>,
+pub(crate) struct Cell {
+    pub(crate) id: String,
+    pub(crate) entry: Entry,
+    pub(crate) paths: Vec<CorpusPath>,
 }
 
 impl Cell {
-    fn is_decision(&self) -> bool {
+    pub(crate) fn is_decision(&self) -> bool {
         !self.id.starts_with("O1/") && !self.id.starts_with("X/")
     }
 
     #[cfg_attr(not(p3_b0_diag), allow(dead_code))]
-    fn is_primary(&self) -> bool {
+    pub(crate) fn is_primary(&self) -> bool {
         ["P2/", "P4/", "P8/"]
             .iter()
             .any(|prefix| self.id.starts_with(prefix))
     }
 }
 
-struct Reader<'a> {
-    bytes: &'a [u8],
-    offset: usize,
+pub(crate) struct Reader<'a> {
+    pub(crate) bytes: &'a [u8],
+    pub(crate) offset: usize,
 }
 
 impl Reader<'_> {
-    fn take(&mut self, count: usize) -> &[u8] {
+    pub(crate) fn take(&mut self, count: usize) -> &[u8] {
         let end = self
             .offset
             .checked_add(count)
@@ -85,17 +85,17 @@ impl Reader<'_> {
         slice
     }
 
-    fn u8(&mut self) -> u8 {
+    pub(crate) fn u8(&mut self) -> u8 {
         self.take(1)[0]
     }
 
-    fn u32(&mut self) -> usize {
+    pub(crate) fn u32(&mut self) -> usize {
         let bytes: [u8; 4] = self.take(4).try_into().expect("u32 width");
         usize::try_from(u32::from_le_bytes(bytes)).expect("u32 fits usize")
     }
 }
 
-fn read_corpus(path: &str) -> Vec<Cell> {
+pub(crate) fn read_corpus(path: &str) -> Vec<Cell> {
     let bytes = fs::read(path).expect("read P3 B0 corpus");
     let mut reader = Reader {
         bytes: &bytes,
@@ -132,18 +132,18 @@ fn read_corpus(path: &str) -> Vec<Cell> {
     cells
 }
 
-fn env_usize(name: &str) -> usize {
+pub(crate) fn env_usize(name: &str) -> usize {
     env::var(name)
         .unwrap_or_else(|_| panic!("{name} is required"))
         .parse()
         .unwrap_or_else(|_| panic!("{name} must be an unsigned integer"))
 }
 
-fn nanos(start: Instant) -> u64 {
+pub(crate) fn nanos(start: Instant) -> u64 {
     u64::try_from(start.elapsed().as_nanos()).expect("duration fits u64")
 }
 
-fn clock_quantum() -> u64 {
+pub(crate) fn clock_quantum() -> u64 {
     let mut smallest = u64::MAX;
     let mut previous = Instant::now();
     for _ in 0..QUANTUM_PROBES {
@@ -171,7 +171,7 @@ impl Xorshift32 {
     }
 }
 
-fn shuffled<T: Copy>(items: &[T], seed: u32) -> Vec<T> {
+pub(crate) fn shuffled<T: Copy>(items: &[T], seed: u32) -> Vec<T> {
     let mut output = items.to_vec();
     let mut random = Xorshift32(seed);
     for index in (1..output.len()).rev() {
@@ -182,10 +182,10 @@ fn shuffled<T: Copy>(items: &[T], seed: u32) -> Vec<T> {
     output
 }
 
-const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
-const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+pub(crate) const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+pub(crate) const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 
-fn fnv(mut hash: u64, bytes: &[u8]) -> u64 {
+pub(crate) fn fnv(mut hash: u64, bytes: &[u8]) -> u64 {
     for byte in bytes {
         hash ^= u64::from(*byte);
         hash = hash.wrapping_mul(FNV_PRIME);
@@ -290,19 +290,19 @@ fn timed_batch(
     (nanos(start), black_box(hash))
 }
 
-struct Json(String);
+pub(crate) struct Json(pub(crate) String);
 
 impl Json {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(String::new())
     }
 
-    fn raw(&mut self, value: &str) -> &mut Self {
+    pub(crate) fn raw(&mut self, value: &str) -> &mut Self {
         self.0.push_str(value);
         self
     }
 
-    fn string(&mut self, value: &str) -> &mut Self {
+    pub(crate) fn string(&mut self, value: &str) -> &mut Self {
         self.0.push('"');
         for character in value.chars() {
             match character {
@@ -318,23 +318,23 @@ impl Json {
         self
     }
 
-    fn key(&mut self, name: &str) -> &mut Self {
+    pub(crate) fn key(&mut self, name: &str) -> &mut Self {
         self.string(name).raw(":")
     }
 
-    fn number<T: core::fmt::Display>(&mut self, value: T) -> &mut Self {
+    pub(crate) fn number<T: core::fmt::Display>(&mut self, value: T) -> &mut Self {
         let _ = write!(self.0, "{value}");
         self
     }
 
     #[cfg_attr(not(p3_b0_diag), allow(dead_code))]
-    fn float(&mut self, value: f64) -> &mut Self {
+    pub(crate) fn float(&mut self, value: f64) -> &mut Self {
         assert!(value.is_finite(), "nonfinite JSON number");
         let _ = write!(self.0, "{value:?}");
         self
     }
 
-    fn numbers(&mut self, values: &[u64]) -> &mut Self {
+    pub(crate) fn numbers(&mut self, values: &[u64]) -> &mut Self {
         self.raw("[");
         for (index, value) in values.iter().enumerate() {
             if index > 0 {
@@ -345,7 +345,7 @@ impl Json {
         self.raw("]")
     }
 
-    fn hexes(&mut self, values: &[u64]) -> &mut Self {
+    pub(crate) fn hexes(&mut self, values: &[u64]) -> &mut Self {
         self.raw("[");
         for (index, value) in values.iter().enumerate() {
             if index > 0 {
@@ -357,7 +357,7 @@ impl Json {
     }
 }
 
-fn write_output(json: &Json) {
+pub(crate) fn write_output(json: &Json) {
     let path = env::var("P3_B0_OUTPUT").expect("P3_B0_OUTPUT is required");
     let mut file = OpenOptions::new()
         .write(true)

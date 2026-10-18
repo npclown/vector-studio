@@ -351,3 +351,6 @@ mod allocation_test_support {
 mod p3_b0_spike;
 #[cfg(test)]
 mod p3_b0_spike_tests;
+// P3 B0 spike unit SL-U3 harness, test-only; appended for the same reason as above.
+#[cfg(test)]
+mod p3_b0_spike_bench;

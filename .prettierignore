@@ -60,3 +60,4 @@ docs/evidence/p3.1p-t03/**/*.json
 
 # Preserve the P3 B0 reference records byte-for-byte.
 docs/benchmarks/results/*_p3_p3-b0-feasibility-v1_*.json
+docs/benchmarks/results/*_p3_p3-b0-spike-ladder-v1_*.json
