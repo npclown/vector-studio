@@ -1,6 +1,6 @@
 # P3 B0 direction proposal: alternatives after the B0R remeasure
 
-Status: PROPOSAL, independent review READY (round 2), awaiting user decision. Full tier, documentation only. It changes no requirement, threshold, budget, contract, past evidence or user decision. It only compares directions and asks the user to choose; every option it describes needs its own contract before any code. The [P3 plan](p3-fill-stroke-meshes.md) owns status, the [B0 contract](p3-b0-feasibility-benchmark-contract.md) owns the decision rule and the budgets, and the two result records own the measurements.
+Status: DECIDED 2026-10-18. Independent review READY (round 2); the user chose the recommended option of every question (section 6, review and approval record). Full tier, documentation only. It changes no requirement, threshold, budget, contract, past evidence or user decision. It only compares directions and asks the user to choose; every option it describes needs its own contract before any code. The [P3 plan](p3-fill-stroke-meshes.md) owns status, the [B0 contract](p3-b0-feasibility-benchmark-contract.md) owns the decision rule and the budgets, and the two result records own the measurements.
 
 **Identifiers in this document.** To avoid existing IDs (the D8 checkpoints B0-B4, decision D8, the B0 events E1-E5, the R2 decisions E1-E3, the R2 mechanism K1 and the K4 carrier, the B0R filters F0-F2), this proposal uses:
 
@@ -326,4 +326,4 @@ Choosing B0D-Q1 (a) authorizes only the spike contract, unit 1 of the list in se
 
 - **Independent review, round 2 (`reviewer`): READY.** Every round-1 item is resolved; no blocking items. Four minor should-fix items are applied: "admits them exactly" for Alt-A2's unverified admission, B0D-Q4(b) tied to the chosen direction's next work, clearance strictly greater than twice the flattening bound, and DF9 labelled as a worst-case estimate with its viewport assumption.
 
-- **User decisions.** Pending.
+- **User decisions, 2026-10-18, in chat.** The user chose the recommended option of each question: B0D-Q1 (a) Alt-E1, the fallback ladder gated by a test-only spike, with the D8 checkpoint B1 blocked until the spike's verdict; B0D-Q2 (a) budgets unchanged; B0D-Q3 (a) the exact clearance condition (strictly greater than twice the flattening bound between non-adjacent flattened edges, plus the monotone argument for adjacent leaves), subject to proof and independent review in the spike contract; B0D-Q4 (a) no rerun, the verdict stays INCONCLUSIVE; B0D-Q5 (a) workers deferred until after the spike; B0D-Q6 (a) simple contours only in the spike, crossings take the exact rung. As section 6 states, this authorizes only the spike contract (unit 1 of section 5).
