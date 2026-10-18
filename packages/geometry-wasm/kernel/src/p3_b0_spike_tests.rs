@@ -1502,6 +1502,41 @@ fn json_outcome(result: Result<(), Reason>, stage: Stage, fast: &FastRung) -> St
     }
 }
 
+/// One fixture entry of the hand-off: its view, expectation, stop and fast-rung outcome. The
+/// seeded-defect entries run it inside `with_spike_fault`.
+fn json_fixture(fixture: &Fixture) -> String {
+    let expected = match fixture.expected {
+        Expected::Fast {
+            area,
+            boundary,
+            triangles,
+        } => format!(
+            "{{\"kind\":\"fast\",\"area\":{},\"boundary\":{boundary:?},\"triangles\":{}}}",
+            hex(area),
+            triangles.map_or_else(|| "null".to_owned(), |count| count.to_string())
+        ),
+        Expected::Fallback(reason) => {
+            format!("{{\"kind\":\"fallback\",\"reason\":\"{}\"}}", reason.code())
+        }
+        Expected::Passes(stage) => format!("{{\"kind\":\"passes\",\"stage\":\"{stage:?}\"}}"),
+    };
+    let stop = match fixture.expected {
+        Expected::Passes(stage) => stage,
+        _ => Stage::Fr8,
+    };
+    let mut fast = FastRung::new();
+    fast.load(fixture.view.view(), DELTA, fixture.rule).unwrap();
+    let result = fast.run(stop);
+    let view = &fixture.view;
+    format!(
+        "{{\"id\":\"{}\",\"kind\":\"view\",\"rule\":\"{}\",\"expected\":{expected},{},{}}}",
+        fixture.id,
+        rule_name(fixture.rule),
+        json_view(&view.ranges, &view.points, &view.owners, &view.sources),
+        json_outcome(result, stop, &fast)
+    )
+}
+
 #[test]
 #[ignore = "SL-U2 hand-off; run with --ignored --exact --nocapture"]
 fn emit_spike_fixtures() {
@@ -1515,37 +1550,7 @@ fn emit_spike_fixtures() {
         if index > 0 {
             out.push(',');
         }
-        let expected = match fixture.expected {
-            Expected::Fast {
-                area,
-                boundary,
-                triangles,
-            } => format!(
-                "{{\"kind\":\"fast\",\"area\":{},\"boundary\":{boundary:?},\"triangles\":{}}}",
-                hex(area),
-                triangles.map_or_else(|| "null".to_owned(), |count| count.to_string())
-            ),
-            Expected::Fallback(reason) => {
-                format!("{{\"kind\":\"fallback\",\"reason\":\"{}\"}}", reason.code())
-            }
-            Expected::Passes(stage) => format!("{{\"kind\":\"passes\",\"stage\":\"{stage:?}\"}}"),
-        };
-        let stop = match fixture.expected {
-            Expected::Passes(stage) => stage,
-            _ => Stage::Fr8,
-        };
-        let mut fast = FastRung::new();
-        fast.load(fixture.view.view(), DELTA, fixture.rule).unwrap();
-        let result = fast.run(stop);
-        let view = &fixture.view;
-        let _ = write!(
-            out,
-            "{{\"id\":\"{}\",\"kind\":\"view\",\"rule\":\"{}\",\"expected\":{expected},{},{}}}",
-            fixture.id,
-            rule_name(fixture.rule),
-            json_view(&view.ranges, &view.points, &view.owners, &view.sources),
-            json_outcome(result, stop, &fast)
-        );
+        out.push_str(&json_fixture(fixture));
     }
     // SL-F13: the two B0 fixture paths through the ladder, with the exact rung's output for
     // the SL-O3 comparison (the oracle run executes the exact rung on every path).
@@ -1588,6 +1593,56 @@ fn emit_spike_fixtures() {
             path.name,
             json_outcome(result, Stage::Fr8, ladder.fast())
         );
+    }
+    // The seeded defects of section 4.8 (SL-A5, the SL-U2 part): each defect's named fixtures
+    // run under its fault switch, for the TypeScript oracles to reject. Added by SL-U2.
+    out.push_str("],\"defects\":[");
+    let defects: [(&str, &[&str], SpikeFault); 10] = [
+        ("(1)", &["SL-F3"], SpikeFault::ClearanceGreaterEqual),
+        ("(2)", &["SL-F11", "SL-F19"], SpikeFault::KnotErrorsOmitted),
+        (
+            "(3)",
+            &["SL-F10", "SL-F10b"],
+            SpikeFault::MonotoneChordsOnly,
+        ),
+        (
+            "(4)",
+            &["SL-F1", "SL-F3", "SL-F18"],
+            SpikeFault::SimplicityOnly,
+        ),
+        ("(5)", &["SL-F12a"], SpikeFault::ConeInverted),
+        (
+            "(6)",
+            &["SL-F6/nonzero"],
+            SpikeFault::NestingFromOrientation,
+        ),
+        ("(7)", &["SL-F5/nonzero"], SpikeFault::TriangleFlipped),
+        (
+            "(8)",
+            &["SL-F6/nonzero"],
+            SpikeFault::NonBoundaryTriangulated,
+        ),
+        ("(9)", &["SL-F3"], SpikeFault::ScanBoundWithoutRadius),
+        ("(10)", &["SL-F18"], SpikeFault::SkipTwoApart),
+    ];
+    let mut first = true;
+    for (defect, ids, which) in defects {
+        for id in ids {
+            let fixture = fixture(id);
+            // Defect (1) is ≥ together with `Fault::R1WideningRemoved` (section 4.8).
+            let entry = if defect == "(1)" {
+                with_fault(Fault::R1WideningRemoved, || {
+                    with_spike_fault(which, || json_fixture(&fixture))
+                })
+            } else {
+                with_spike_fault(which, || json_fixture(&fixture))
+            };
+            if !first {
+                out.push(',');
+            }
+            first = false;
+            let _ = write!(out, "{{\"defect\":\"{defect}\",\"entry\":{entry}}}");
+        }
     }
     out.push_str("]}");
     println!("P3_B0_SPIKE_FIXTURES_BEGIN");
