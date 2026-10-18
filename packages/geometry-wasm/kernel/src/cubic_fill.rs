@@ -1158,3 +1158,54 @@ fn same_point_bits(left: Point, right: Point) -> bool {
 fn finite_point(point: Point) -> bool {
     point.x.is_finite() && point.y.is_finite()
 }
+
+/// The P3 B0 spike S1 accessor, test-only, kept in its own impl block at the end of the file so
+/// that no existing line moves (the release WASM embeds source locations).
+#[cfg(test)]
+impl CubicFillWorkspace {
+    /// P3 B0 spike S1 accessor (`docs/plans/p3-b0-spike-ladder-contract.md` section 2.2): the
+    /// statements of `attempt_body` up to the B0 stop point S1, in the same order and with the
+    /// same `all_line_eligible` argument. It publishes nothing and returns borrowed views of
+    /// the S1 state, or the prefix failure (a sizing status other than `PATH_OK`, or an error).
+    pub(crate) fn prepare_for_spike(
+        &mut self,
+        input: PathInput<'_>,
+        command_capacity: usize,
+    ) -> Result<crate::p3_b0_spike::S1View<'_>, crate::p3_b0_spike::PrefixFailure> {
+        use crate::p3_b0_spike::{PrefixFailure, S1View};
+        self.begin_attempt();
+        if input.verbs.len() > MAX_SOURCE_VERBS || input.point_count() > MAX_SOURCE_SCALARS {
+            return Err(PrefixFailure::Error(CubicFillError::SourceLimit));
+        }
+
+        self.diagnostics.sizing_invoked = true;
+        let (sizing_plan, sizing_bounds) = run_path(
+            input,
+            Pass::Sizing,
+            &mut self.diagnostics.statistics,
+            |_, _, _| true,
+        );
+        self.diagnostics.flat_status = sizing_plan.status;
+        self.diagnostics.sizing_plan = sizing_plan;
+        if sizing_plan.status != PATH_OK {
+            return Err(PrefixFailure::Sizing(sizing_plan.status));
+        }
+
+        let all_line_eligible = input.verbs.iter().all(|verb| *verb != VERB_CUBIC);
+        self.decode_sources(input, all_line_eligible)
+            .map_err(PrefixFailure::Error)?;
+        self.emit(input, sizing_plan, sizing_bounds, command_capacity)
+            .map_err(PrefixFailure::Error)?;
+        self.collect_contours(all_line_eligible)
+            .map_err(PrefixFailure::Error)?;
+        self.validate_leaf_partitions()
+            .map_err(PrefixFailure::Error)?;
+        Ok(S1View {
+            commands: &self.commands[..self.command_len],
+            ranges: &self.contour_ranges[..self.range_len],
+            points: &self.contour_points[..self.point_len],
+            owners: &self.edge_owners[..self.owner_len],
+            sources: &self.sources[..self.source_len],
+        })
+    }
+}

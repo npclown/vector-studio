@@ -344,3 +344,10 @@ mod allocation_test_support {
         COUNT.with(Cell::get)
     }
 }
+
+// P3 B0 spike unit SL-U1 (docs/plans/p3-b0-spike-ladder-contract.md), test-only. Declared at
+// the end of the file so that no existing line moves (the release WASM embeds source locations).
+#[cfg(test)]
+mod p3_b0_spike;
+#[cfg(test)]
+mod p3_b0_spike_tests;
