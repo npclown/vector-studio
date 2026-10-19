@@ -16,10 +16,10 @@ use crate::simple_cubic_topology::{
 pub(crate) const MAX_FLAT_COMMANDS: usize = 72;
 const MAX_SOURCE_VERBS: usize = 24;
 const MAX_SOURCE_SCALARS: usize = 104;
-const MAX_CONTOUR_POINTS: usize = 68;
-const MAX_CONTOURS: usize = 4;
-const MAX_EDGE_OWNERS: usize = 64;
-const MAX_SOURCE_SEGMENTS: usize = 16;
+pub(crate) const MAX_CONTOUR_POINTS: usize = 68;
+pub(crate) const MAX_CONTOURS: usize = 4;
+pub(crate) const MAX_EDGE_OWNERS: usize = 64;
+pub(crate) const MAX_SOURCE_SEGMENTS: usize = 16;
 const MAX_COMBINED_HEAP_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -140,6 +140,24 @@ pub(crate) struct CubicFillOutput<'a> {
     pub(crate) sources: &'a [DecodedSource],
     pub(crate) rounded: RoundedFillOutput<'a>,
     pub(crate) rounded_stats: RoundedFillStats,
+}
+
+/// Borrowed views of the S1 state after the prefix (Alt-A1 production contract
+/// `docs/plans/p3-alt-a1-fill-ladder-contract.md` section 1.2; spike section 2.2).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct S1View<'a> {
+    pub(crate) commands: &'a [FlatCommand],
+    pub(crate) ranges: &'a [ContourRange],
+    pub(crate) points: &'a [Point],
+    pub(crate) owners: &'a [EdgeOwner],
+    pub(crate) sources: &'a [DecodedSource],
+}
+
+/// A failed S1 prefix: a sizing status other than `PATH_OK`, or an error.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PrefixFailure {
+    Sizing(u32),
+    Error(CubicFillError),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -336,29 +354,11 @@ impl CubicFillWorkspace {
         command_capacity: usize,
         topology_mode: TopologyMode,
     ) -> Result<CubicFillDiagnostics, CubicFillError> {
-        self.begin_attempt();
-        if input.verbs.len() > MAX_SOURCE_VERBS || input.point_count() > MAX_SOURCE_SCALARS {
-            return Err(CubicFillError::SourceLimit);
-        }
-
-        self.diagnostics.sizing_invoked = true;
-        let (sizing_plan, sizing_bounds) = run_path(
-            input,
-            Pass::Sizing,
-            &mut self.diagnostics.statistics,
-            |_, _, _| true,
-        );
-        self.diagnostics.flat_status = sizing_plan.status;
-        self.diagnostics.sizing_plan = sizing_plan;
-        if sizing_plan.status != PATH_OK {
-            return Ok(self.diagnostics);
-        }
-
-        let all_line_eligible = input.verbs.iter().all(|verb| *verb != VERB_CUBIC);
-        self.decode_sources(input, all_line_eligible)?;
-        self.emit(input, sizing_plan, sizing_bounds, command_capacity)?;
-        self.collect_contours(all_line_eligible)?;
-        self.validate_leaf_partitions()?;
+        let all_line_eligible = match self.run_prefix(input, command_capacity) {
+            Ok(all_line_eligible) => all_line_eligible,
+            Err(PrefixFailure::Sizing(_)) => return Ok(self.diagnostics),
+            Err(PrefixFailure::Error(error)) => return Err(error),
+        };
         #[cfg(p3_b0_diag)]
         if crate::p3_b0_diag::stop_stage() == crate::p3_b0_diag::STAGE_S1 {
             return Ok(self.diagnostics);
@@ -387,6 +387,62 @@ impl CubicFillWorkspace {
         self.validate_rounded_ownership()?;
         self.published = true;
         Ok(self.diagnostics)
+    }
+
+    /// The Alt-A1 S1 prefix (production contract section 1.2), the production form of the
+    /// spike's `cfg(test)` `prepare_for_spike`: the prefix statements of `attempt_body`, then
+    /// borrowed views of the S1 state. It publishes nothing; a later `attempt*` call re-runs the
+    /// same prefix on the same input.
+    pub(crate) fn prepare_prefix(
+        &mut self,
+        input: PathInput<'_>,
+        command_capacity: usize,
+    ) -> Result<S1View<'_>, PrefixFailure> {
+        self.run_prefix(input, command_capacity)?;
+        Ok(S1View {
+            commands: &self.commands[..self.command_len],
+            ranges: &self.contour_ranges[..self.range_len],
+            points: &self.contour_points[..self.point_len],
+            owners: &self.edge_owners[..self.owner_len],
+            sources: &self.sources[..self.source_len],
+        })
+    }
+
+    /// The statements of `attempt_body` up to the B0 stop point S1, in their order. Returns
+    /// `all_line_eligible`, a sizing status other than `PATH_OK`, or the first error.
+    fn run_prefix(
+        &mut self,
+        input: PathInput<'_>,
+        command_capacity: usize,
+    ) -> Result<bool, PrefixFailure> {
+        self.begin_attempt();
+        if input.verbs.len() > MAX_SOURCE_VERBS || input.point_count() > MAX_SOURCE_SCALARS {
+            return Err(PrefixFailure::Error(CubicFillError::SourceLimit));
+        }
+
+        self.diagnostics.sizing_invoked = true;
+        let (sizing_plan, sizing_bounds) = run_path(
+            input,
+            Pass::Sizing,
+            &mut self.diagnostics.statistics,
+            |_, _, _| true,
+        );
+        self.diagnostics.flat_status = sizing_plan.status;
+        self.diagnostics.sizing_plan = sizing_plan;
+        if sizing_plan.status != PATH_OK {
+            return Err(PrefixFailure::Sizing(sizing_plan.status));
+        }
+
+        let all_line_eligible = input.verbs.iter().all(|verb| *verb != VERB_CUBIC);
+        self.decode_sources(input, all_line_eligible)
+            .map_err(PrefixFailure::Error)?;
+        self.emit(input, sizing_plan, sizing_bounds, command_capacity)
+            .map_err(PrefixFailure::Error)?;
+        self.collect_contours(all_line_eligible)
+            .map_err(PrefixFailure::Error)?;
+        self.validate_leaf_partitions()
+            .map_err(PrefixFailure::Error)?;
+        Ok(all_line_eligible)
     }
 
     pub(crate) fn output(&self) -> Option<CubicFillOutput<'_>> {
