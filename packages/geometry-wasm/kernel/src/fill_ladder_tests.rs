@@ -2280,3 +2280,336 @@ fn al_f7_triangle_search_on_synthetic_line_paths() {
         "MESH_CHECK"
     );
 }
+
+// ------------------------------------------------------------------------------------------
+// AL-U4b1 (contract section 5.1, AL-C2 with AL-C1): the prefix-shared subdivision of FR2 is
+// bit-identical to the spike's per-leaf `restrict`, kept here as a statement-for-statement
+// copy of the AL-U3 code (`fill_ladder.rs` at 4f48284), on many cubics, depths and leaf orders.
+
+/// The AL-U3 `IPoint`, restricted to the operations of `restrict`.
+#[derive(Clone, Copy)]
+struct OldIPoint {
+    x: crate::fill_filter::Interval,
+    y: crate::fill_filter::Interval,
+}
+
+impl OldIPoint {
+    fn exact(point: Point) -> Self {
+        Self {
+            x: crate::fill_filter::Interval::point(point.x),
+            y: crate::fill_filter::Interval::point(point.y),
+        }
+    }
+
+    fn add(self, other: Self) -> Self {
+        Self {
+            x: self.x.add(other.x),
+            y: self.y.add(other.y),
+        }
+    }
+
+    fn mul(self, scale: crate::fill_filter::Interval) -> Self {
+        Self {
+            x: self.x.mul(scale),
+            y: self.y.mul(scale),
+        }
+    }
+}
+
+/// The AL-U3 `restrict`, unchanged.
+fn old_restrict(controls: [Point; 4], numerator: u32, depth: u32) -> [OldIPoint; 4] {
+    let mut points = controls.map(OldIPoint::exact);
+    let cell = numerator - 1;
+    for bit in (0..depth).rev() {
+        points = old_split_half(points, cell & (1u32 << bit) != 0);
+    }
+    points
+}
+
+/// The AL-U3 `split_half`, unchanged.
+fn old_split_half(points: [OldIPoint; 4], right: bool) -> [OldIPoint; 4] {
+    let p01 = old_midpoint(points[0], points[1]);
+    let p12 = old_midpoint(points[1], points[2]);
+    let p23 = old_midpoint(points[2], points[3]);
+    let p012 = old_midpoint(p01, p12);
+    let p123 = old_midpoint(p12, p23);
+    let middle = old_midpoint(p012, p123);
+    if right {
+        [middle, p123, p23, points[3]]
+    } else {
+        [points[0], p01, p012, middle]
+    }
+}
+
+/// The AL-U3 `midpoint`, unchanged.
+fn old_midpoint(left: OldIPoint, right: OldIPoint) -> OldIPoint {
+    left.add(right)
+        .mul(crate::fill_filter::Interval::point(0.5))
+}
+
+fn old_restrict_bits(controls: [Point; 4], numerator: u32, depth: u32) -> [[u64; 4]; 4] {
+    old_restrict(controls, numerator, depth).map(|point| {
+        [
+            point.x.lo.to_bits(),
+            point.x.hi.to_bits(),
+            point.y.lo.to_bits(),
+            point.y.hi.to_bits(),
+        ]
+    })
+}
+
+/// A deterministic xorshift64* stream for the AL-U4b1 equivalence test.
+struct EquivalenceStream(u64);
+
+impl EquivalenceStream {
+    fn next(&mut self) -> u64 {
+        self.0 ^= self.0 >> 12;
+        self.0 ^= self.0 << 25;
+        self.0 ^= self.0 >> 27;
+        self.0.wrapping_mul(0x2545_f491_4f6c_dd1d)
+    }
+
+    fn below(&mut self, bound: u64) -> u64 {
+        self.next() % bound
+    }
+
+    /// A coordinate from several families: small integers, dyadic fractions, wide exponents,
+    /// subnormals, signed zeros and values near the overflow of the midpoint sums.
+    fn coordinate(&mut self) -> f64 {
+        let sign = if self.next() & 1 == 0 { 1.0 } else { -1.0 };
+        match self.below(8) {
+            0 => sign * self.below(64) as f64,
+            1 => sign * self.below(1 << 20) as f64 / 1024.0,
+            2 => sign * f64::from_bits(0x3ff0_0000_0000_0000 | (self.next() >> 12)),
+            3 => {
+                let exponent = self.below(200) as i32 - 100;
+                sign * pow2(exponent) * (1.0 + self.below(1 << 30) as f64 / (1u64 << 30) as f64)
+            }
+            4 => sign * f64::from_bits(self.next() >> 13 & 0x000f_ffff_ffff_ffff),
+            5 => sign * 0.0,
+            6 => sign * f64::MAX / (1.0 + self.below(4) as f64),
+            _ => sign * (self.next() >> 11) as f64 * pow2(-53) * 1.0e6,
+        }
+    }
+
+    fn cubic(&mut self) -> [Point; 4] {
+        [(); 4].map(|()| p(self.coordinate(), self.coordinate()))
+    }
+}
+
+#[test]
+fn al_u4b1_shared_subdivision_is_bit_identical_to_the_per_leaf_restrict() {
+    let mut stream = EquivalenceStream(0x9e37_79b9_7f4a_7c15);
+    let mut leaves: Vec<([Point; 4], u32, u32)> = Vec::new();
+    let mut covered = Vec::new();
+    // (1) Covering leaf sequences in order, one depth per cubic, depths 0 to 8, as FR2 meets the
+    // leaves of one cubic; the shared path must make 2^d − 1 splits for each.
+    for depth in 0..=8u32 {
+        for _ in 0..4 {
+            let cubic = stream.cubic();
+            let start = leaves.len();
+            for numerator in 1..=(1u32 << depth) {
+                leaves.push((cubic, numerator, depth));
+            }
+            covered.push((start, leaves.len(), depth));
+        }
+    }
+    // (2) Mixed depths and orders on shared sources: random walks over a few cubics, with the
+    // source repeated, revisited after others, and copied with one signed zero flipped.
+    let mut pool: Vec<[Point; 4]> = (0..24).map(|_| stream.cubic()).collect();
+    let mut flipped = pool[0];
+    flipped[2] = p(-0.0, flipped[2].y);
+    pool[0][2] = p(0.0, pool[0][2].y);
+    pool.push(flipped);
+    for _ in 0..20_000 {
+        let cubic = pool[stream.below(pool.len() as u64) as usize];
+        let depth = match stream.below(4) {
+            0 => stream.below(4) as u32,
+            1 => stream.below(9) as u32,
+            2 => 20,
+            _ => stream.below(21) as u32,
+        };
+        let numerator = 1 + stream.below(1u64 << depth) as u32;
+        let run = 1 + stream.below(6) as u32;
+        for offset in 0..run {
+            // Consecutive leaves, and siblings at other depths, as a cubic's leaves would be.
+            if numerator + offset <= 1u32 << depth {
+                leaves.push((cubic, numerator + offset, depth));
+            }
+        }
+        if depth > 0 && stream.below(3) == 0 {
+            let coarser = depth - 1 - stream.below(u64::from(depth)) as u32;
+            let parent = ((numerator - 1) >> (depth - coarser)) + 1;
+            leaves.push((cubic, parent, coarser));
+            leaves.push((cubic, numerator, depth));
+        }
+    }
+    // (3) Every leaf of a depth-20 path along both extremes and a random interior run.
+    let deep = stream.cubic();
+    for numerator in [1, 2, 3, (1 << 19), (1 << 19) + 1, (1 << 20) - 1, 1 << 20] {
+        leaves.push((deep, numerator, 20));
+    }
+    for _ in 0..256 {
+        let start = 1 + stream.below((1 << 20) - 64) as u32;
+        for offset in 0..64 {
+            leaves.push((deep, start + offset, 20));
+        }
+    }
+
+    let (shared, _) = crate::fill_ladder::shared_restrict_bits(&leaves);
+    let mut differences = Vec::new();
+    for (index, (&(controls, numerator, depth), bits)) in leaves.iter().zip(&shared).enumerate() {
+        if old_restrict_bits(controls, numerator, depth) != *bits {
+            differences.push(format!("leaf {index}: n = {numerator}, d = {depth}"));
+        }
+    }
+    let non_finite = shared
+        .iter()
+        .filter(|bits| {
+            bits.iter()
+                .flatten()
+                .any(|bit| !f64::from_bits(*bit).is_finite())
+        })
+        .count();
+    println!(
+        "AL-U4b1 equivalence: {} leaves compared, {} differ, {non_finite} with undecided controls",
+        leaves.len(),
+        differences.len()
+    );
+    assert!(
+        differences.is_empty(),
+        "shared subdivision differs: {differences:#?}"
+    );
+    // The sample must exercise the undecided (overflow) path as well as the finite one.
+    assert!(non_finite > 0 && non_finite < leaves.len());
+
+    // A covering sequence costs one split per internal node.
+    for (start, end, depth) in covered {
+        let (bits, splits) = crate::fill_ladder::shared_restrict_bits(&leaves[start..end]);
+        assert_eq!(bits.len(), end - start);
+        assert_eq!(splits, (1u64 << depth) - 1, "depth {depth}");
+    }
+}
+
+// ------------------------------------------------------------------------------------------
+// AL-U4b1 review item S1: on every path where both production and the spike are fast, the
+// production `FastStats::max_deviation_squared` (FR2's largest certified |d_m|² bound, read by
+// SL-O1 and AL-M5's operand) has the spike's bits. The spike exposes no per-edge
+// `deviation_squared`, so the bound is compared through this maximum only. These are additions
+// beside the AL-I3 differential, which they repeat on the same cases.
+
+#[derive(Default)]
+struct DeviationBits {
+    compared: usize,
+    differences: Vec<String>,
+}
+
+impl DeviationBits {
+    fn case(
+        &mut self,
+        runner: &mut DifferentialRunner,
+        name: &str,
+        request: FillRequest,
+        path: &RealPath,
+    ) {
+        let production = runner.harness.fast(request, &path.verbs, &path.point_bytes);
+        let production_bits = runner
+            .harness
+            .ladder
+            .fast()
+            .stats()
+            .max_deviation_squared
+            .to_bits();
+        let spike = spike_rung(
+            &mut runner.spike,
+            &mut runner.spike_workspace,
+            request,
+            path,
+            p3_b0_spike::Stage::Fr8,
+        );
+        if production.is_ok() && spike.is_ok() {
+            self.compare(
+                name,
+                production_bits,
+                runner.spike.stats().max_deviation_squared,
+            );
+        }
+    }
+
+    fn compare(&mut self, name: &str, production_bits: u64, spike: f64) {
+        self.compared += 1;
+        if production_bits != spike.to_bits() {
+            self.differences.push(format!(
+                "{name}: production {:e} ({production_bits:#018x}), spike {spike:e} ({:#018x})",
+                f64::from_bits(production_bits),
+                spike.to_bits()
+            ));
+        }
+    }
+
+    fn report(&self, label: &str) {
+        println!(
+            "AL-U4b1 max |d_m|² bits {label}: {} fast paths compared, {} differ",
+            self.compared,
+            self.differences.len()
+        );
+        assert!(
+            self.differences.is_empty(),
+            "max_deviation_squared differs: {:#?}",
+            self.differences
+        );
+    }
+}
+
+#[test]
+fn al_u4b1_fixtures_and_debug_sample_keep_the_spike_max_deviation_bits() {
+    let mut fixtures_bits = DeviationBits::default();
+    let mut scan = TestScan::new();
+    let mut production = Box::new(FastRung::new());
+    let mut spike = Box::new(p3_b0_spike::FastRung::new());
+    for fixture in fixtures() {
+        let left = production
+            .load(fixture.view.view(), DELTA, fixture.rule)
+            .and_then(|()| production.run(Stage::Fr9, &mut scan));
+        let right = spike
+            .load(fixture.view.spike_view(), DELTA, fixture.rule)
+            .and_then(|()| spike.run(p3_b0_spike::Stage::Fr8));
+        if left.is_ok() && right.is_ok() {
+            fixtures_bits.compare(
+                fixture.id,
+                production.stats().max_deviation_squared.to_bits(),
+                spike.stats().max_deviation_squared,
+            );
+        }
+    }
+    fixtures_bits.report("fixtures");
+    assert!(fixtures_bits.compared > 0);
+    let mut runner = DifferentialRunner::new();
+    let mut sample_bits = DeviationBits::default();
+    for (name, request, path) in sample_cases() {
+        sample_bits.case(&mut runner, &name, request, &path);
+    }
+    sample_bits.report("debug sample");
+    assert!(sample_bits.compared > 0);
+}
+
+#[test]
+#[ignore = "AL-U4b1 S1 full corpus; needs P3_B0R_B0_CORPUS and P3_B0R_RANDOM_CORPUS; release profile"]
+fn al_u4b1_full_corpus_keeps_the_spike_max_deviation_bits() {
+    let mut runner = DifferentialRunner::new();
+    let mut b0 = DeviationBits::default();
+    for (name, request, path) in b0_corpus() {
+        b0.case(&mut runner, &name, request, &path);
+    }
+    let random_bytes = {
+        let path = env::var("P3_B0R_RANDOM_CORPUS").expect("P3_B0R_RANDOM_CORPUS is required");
+        std::fs::read(path).expect("read the randomized corpus")
+    };
+    let mut random = DeviationBits::default();
+    for (name, request, path) in random_corpus(&random_bytes) {
+        random.case(&mut runner, &name, request, &path);
+    }
+    b0.report("B0 framed corpus");
+    random.report("p3-b0r-random/v1");
+    assert!(b0.compared > 0 && random.compared > 0);
+}

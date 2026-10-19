@@ -25,6 +25,13 @@
 //!   production `FastStats`. The sub-stages are then timed as isolated kernels over state
 //!   prepared once per path (untimed), on the paths whose FR1-FR5 pass.
 //!
+//! **AL-U4b1.** The mirror follows the first optimization: FR2's `restrict` is the shared
+//! `Subdivision` (AL-C2 with AL-C1), `midpoint` takes the hoisted one-point interval of 0.5,
+//! and the |d_m|² terms reuse the previous leaf's 2 p_end when p_start has the same bits
+//! (AL-C1). The fidelity check is unchanged. The AL-U4a per-leaf `restrict` stays as the extra
+//! kernel `FR2.restrict.AL-U4a`, checked against the stored controls, for a same-run
+//! comparison, and the counts report both split totals.
+//!
 //! The ignored test runs only by hand (release profile, `--nocapture`, one test thread) and
 //! prints its tables; it changes no output and writes no file.
 use core::cmp::Ordering;
@@ -253,6 +260,21 @@ fn same_point(left: Point, right: Point) -> bool {
     left.x == right.x && left.y == right.y
 }
 
+/// AL-U4b1: the bits [x.lo, x.hi, y.lo, y.hi] of an interval point.
+fn ipoint_bits(point: IPoint) -> [u64; 4] {
+    [
+        point.x.lo.to_bits(),
+        point.x.hi.to_bits(),
+        point.y.lo.to_bits(),
+        point.y.hi.to_bits(),
+    ]
+}
+
+/// AL-U4b1: `fill_ladder.rs`'s `same_bits`.
+fn same_bits(left: Point, right: Point) -> bool {
+    left.x.to_bits() == right.x.to_bits() && left.y.to_bits() == right.y.to_bits()
+}
+
 fn orient(a: Point, b: Point, c: Point, reason: Reason) -> Result<Ordering, Reason> {
     orient2d(a, b, c).map_err(|_| reason)
 }
@@ -349,19 +371,118 @@ struct ContourInfo {
     contracted: bool,
 }
 
-fn restrict<const COUNT: bool>(
-    controls: [Point; 4],
-    numerator: u32,
-    depth: u32,
-    splits: &mut u64,
-) -> [IPoint; 4] {
+const LEVELS: usize = MAX_LEAF_DEPTH as usize;
+
+/// AL-U4b1: `fill_ladder.rs`'s `Subdivision`, the prefix-shared interval de Casteljau of FR2,
+/// statement for statement; `splits` counts its `split_both` calls in every build.
+struct Subdivision {
+    source: Option<[Point; 4]>,
+    root: [IPoint; 4],
+    levels: usize,
+    keys: [u32; LEVELS],
+    children: [[[IPoint; 4]; 2]; LEVELS],
+    split: [bool; LEVELS + 1],
+    splits: u64,
+}
+
+impl Subdivision {
+    fn new() -> Self {
+        Self {
+            source: None,
+            root: [IPoint::default(); 4],
+            levels: 0,
+            keys: [0; LEVELS],
+            children: [[[IPoint::default(); 4]; 2]; LEVELS],
+            split: [false; LEVELS + 1],
+            splits: 0,
+        }
+    }
+
+    fn node(&self, level: usize) -> [IPoint; 4] {
+        if level == 0 {
+            self.root
+        } else {
+            self.children[level - 1][(self.keys[level - 1] & 1) as usize]
+        }
+    }
+
+    fn split_node(&mut self, level: usize) -> [[IPoint; 4]; 2] {
+        self.splits += 1;
+        split_both(self.node(level))
+    }
+
+    fn restrict(&mut self, controls: [Point; 4], numerator: u32, depth: u32) -> [IPoint; 4] {
+        let cell = numerator - 1;
+        let depth = depth as usize;
+        if depth > LEVELS {
+            let mut points = controls.map(IPoint::exact);
+            for bit in (0..depth).rev() {
+                points = split_both(points)[((cell >> bit) & 1) as usize];
+            }
+            return points;
+        }
+        let same_source = self.source.is_some_and(|cached| {
+            cached
+                .iter()
+                .zip(controls.iter())
+                .all(|(left, right)| same_bits(*left, *right))
+        });
+        if !same_source {
+            self.source = Some(controls);
+            self.root = controls.map(IPoint::exact);
+            self.levels = 0;
+            self.split[0] = false;
+        }
+        let mut level = 0;
+        while level < depth
+            && level < self.levels
+            && self.keys[level] == cell >> (depth - level - 1)
+        {
+            level += 1;
+        }
+        if level < depth {
+            self.levels = level;
+            while level < depth {
+                if !self.split[level] {
+                    self.children[level] = self.split_node(level);
+                    self.split[level] = true;
+                }
+                self.keys[level] = cell >> (depth - level - 1);
+                level += 1;
+                self.split[level] = false;
+                self.levels = level;
+            }
+        }
+        self.node(depth)
+    }
+}
+
+fn split_both(points: [IPoint; 4]) -> [[IPoint; 4]; 2] {
+    let half = Interval::point(0.5);
+    let p01 = midpoint_half(points[0], points[1], half);
+    let p12 = midpoint_half(points[1], points[2], half);
+    let p23 = midpoint_half(points[2], points[3], half);
+    let p012 = midpoint_half(p01, p12, half);
+    let p123 = midpoint_half(p12, p23, half);
+    let middle = midpoint_half(p012, p123, half);
+    [
+        [points[0], p01, p012, middle],
+        [middle, p123, p23, points[3]],
+    ]
+}
+
+/// AL-U4b1: `fill_ladder.rs`'s `midpoint`, with the hoisted one-point interval of 0.5.
+fn midpoint_half(left: IPoint, right: IPoint, half: Interval) -> IPoint {
+    left.add(right).mul(half)
+}
+
+/// The AL-U4a mirror's per-leaf `restrict` (the spike's, before AL-U4b1), kept for the
+/// same-run comparison kernel `FR2.restrict.AL-U4a`.
+fn restrict_unshared(controls: [Point; 4], numerator: u32, depth: u32) -> [IPoint; 4] {
     let mut points = controls.map(IPoint::exact);
     let cell = numerator - 1;
     for bit in (0..depth).rev() {
         points = split_half(points, cell & (1u32 << bit) != 0);
-        if COUNT {
-            *splits += 1;
-        }
     }
     points
 }
@@ -460,8 +581,11 @@ struct Counts {
     /// FR1: source lookups (`resolve` and `source_end`) and the sources each one scanned.
     lookups: u64,
     lookup_steps: u64,
-    /// FR2: `split_half` calls of the interval de Casteljau, and the |d_m|² terms checked.
+    /// FR2: `split_both` calls of the shared interval de Casteljau (AL-U4b1), the `split_half`
+    /// calls the per-leaf `restrict` of AL-U4a made (the sum of the leaf depths), and the
+    /// |d_m|² terms checked.
     splits: u64,
+    unshared_splits: u64,
     fr2_terms: u64,
     /// FR3: contracted contours (the only ones FR3 examines).
     contracted: u64,
@@ -487,6 +611,7 @@ impl Counts {
         self.lookups += other.lookups;
         self.lookup_steps += other.lookup_steps;
         self.splits += other.splits;
+        self.unshared_splits += other.unshared_splits;
         self.fr2_terms += other.fr2_terms;
         self.contracted += other.contracted;
         self.fr4_pairs += other.fr4_pairs;
@@ -827,7 +952,9 @@ impl Mirror {
         let delta_squared = delta.mul(delta);
         let two = Interval::point(2.0);
         let three = Interval::point(3.0);
-        let mut splits = 0u64;
+        let mut subdivision = Subdivision::new();
+        let mut doubled_end: Option<(Point, IPoint)> = None;
+        let mut unshared_splits = 0u64;
         for index in 0..self.cert_len {
             let edge = self.cert[index];
             let start = IPoint::exact(edge.start);
@@ -841,9 +968,18 @@ impl Mirror {
                     depth,
                     ..
                 } => {
-                    controls = restrict::<COUNT>(source, numerator, depth, &mut splits);
-                    let third = start.mul(two).add(end).div(three);
-                    let two_thirds = start.add(end.mul(two)).div(three);
+                    controls = subdivision.restrict(source, numerator, depth);
+                    if COUNT {
+                        unshared_splits += u64::from(depth);
+                    }
+                    let start_doubled = match doubled_end {
+                        Some((point, doubled)) if same_bits(point, edge.start) => doubled,
+                        _ => start.mul(two),
+                    };
+                    let end_doubled = end.mul(two);
+                    doubled_end = Some((edge.end, end_doubled));
+                    let third = start_doubled.add(end).div(three);
+                    let two_thirds = start.add(end_doubled).div(three);
                     deviations = [
                         controls[0].sub(start),
                         controls[1].sub(third),
@@ -876,15 +1012,17 @@ impl Mirror {
             }
         }
         if COUNT {
-            self.counts.splits += splits;
+            self.counts.splits += subdivision.splits;
+            self.counts.unshared_splits += unshared_splits;
         }
         Ok(())
     }
 
-    /// FR2 sub-stage: the interval de Casteljau restriction of every leaf alone (`restrict`),
-    /// with the per-edge copy that `deviation` makes.
-    fn fr2_restrict(&mut self) {
-        let mut splits = 0u64;
+    /// FR2 sub-stage: the interval de Casteljau restriction of every leaf alone (the shared
+    /// `Subdivision` from AL-U4b1), with the per-edge copy that `deviation` makes. Returns the
+    /// split count.
+    fn fr2_restrict(&mut self) -> u64 {
+        let mut subdivision = Subdivision::new();
         for index in 0..self.cert_len {
             let edge = self.cert[index];
             if let Piece::Leaf {
@@ -895,9 +1033,34 @@ impl Mirror {
             } = edge.piece
             {
                 // Every leaf's result is kept observable, as `deviation` stores it.
-                black_box(restrict::<false>(controls, numerator, depth, &mut splits));
+                black_box(subdivision.restrict(controls, numerator, depth));
             }
         }
+        subdivision.splits
+    }
+
+    /// The AL-U4a `FR2.restrict` kernel, the per-leaf `restrict` before AL-U4b1, for a
+    /// same-run comparison; it checks that its result equals the stored controls.
+    fn fr2_restrict_unshared(&mut self) -> bool {
+        let mut same = true;
+        for index in 0..self.cert_len {
+            let edge = self.cert[index];
+            if let Piece::Leaf {
+                controls,
+                numerator,
+                depth,
+                ..
+            } = edge.piece
+            {
+                let restricted = black_box(restrict_unshared(controls, numerator, depth));
+                // Bit comparison, so that a ±0 or NaN-payload difference is caught.
+                same &= restricted
+                    .iter()
+                    .zip(edge.controls.iter())
+                    .all(|(left, right)| ipoint_bits(*left) == ipoint_bits(*right));
+            }
+        }
+        same
     }
 
     /// FR2 sub-stage: the |d_m|² terms and their comparisons with δ² alone, on the restricted
@@ -908,6 +1071,7 @@ impl Mirror {
         let two = Interval::point(2.0);
         let three = Interval::point(3.0);
         let mut largest = 0.0f64;
+        let mut doubled_end: Option<(Point, IPoint)> = None;
         for index in 0..self.cert_len {
             let edge = self.cert[index];
             let start = IPoint::exact(edge.start);
@@ -916,8 +1080,14 @@ impl Mirror {
             let mut deviations = [IPoint::default(); 4];
             let checked: &[usize] = match edge.piece {
                 Piece::Leaf { .. } => {
-                    let third = start.mul(two).add(end).div(three);
-                    let two_thirds = start.add(end.mul(two)).div(three);
+                    let start_doubled = match doubled_end {
+                        Some((point, doubled)) if same_bits(point, edge.start) => doubled,
+                        _ => start.mul(two),
+                    };
+                    let end_doubled = end.mul(two);
+                    doubled_end = Some((edge.end, end_doubled));
+                    let third = start_doubled.add(end).div(three);
+                    let two_thirds = start.add(end_doubled).div(three);
                     deviations = [
                         controls[0].sub(start),
                         controls[1].sub(third),
@@ -1397,7 +1567,7 @@ const FILTERS: [(&str, FilterId); 3] = [
 ];
 
 /// The mirror's sub-stage kernels, in stage order.
-const KERNELS: [&str; 15] = [
+const KERNELS: [&str; 16] = [
     "FR1",
     "FR1.resolve",
     "FR2",
@@ -1413,6 +1583,7 @@ const KERNELS: [&str; 15] = [
     "FR5.boxgap",
     "FR5.relation",
     "FR5.points",
+    "FR2.restrict.AL-U4a",
 ];
 
 fn time_kernel(timing: &Timing, mirrors: &mut [Box<Mirror>], kernel: impl Fn(&mut Mirror)) -> f64 {
@@ -1441,7 +1612,7 @@ fn measure_kernel(slot: usize, timing: &Timing, mirrors: &mut [Box<Mirror>]) -> 
             black_box(m.deviation::<false>()).expect("FR2 passes");
         }),
         3 => time_kernel(timing, mirrors, |m| {
-            m.fr2_restrict();
+            black_box(m.fr2_restrict());
         }),
         4 => time_kernel(timing, mirrors, |m| {
             black_box(m.fr2_terms()).expect("FR2 terms pass");
@@ -1475,6 +1646,9 @@ fn measure_kernel(slot: usize, timing: &Timing, mirrors: &mut [Box<Mirror>]) -> 
         }),
         14 => time_kernel(timing, mirrors, |m| {
             black_box(m.fr5_points());
+        }),
+        15 => time_kernel(timing, mirrors, |m| {
+            black_box(m.fr2_restrict_unshared());
         }),
         _ => unreachable!("unknown kernel {slot}"),
     }
@@ -1590,11 +1764,12 @@ fn print_tables(results: &[CellResult], timing: &Timing, quantum: u64) {
     println!();
     println!("Logical counts (sums over each cell's paths):");
     println!(
-        "| Cell | Edges | Leaves | Segments | Lookups | Lookup steps | Splits | FR2 terms | \
+        "| Cell | Edges | Leaves | Segments | Lookups | Lookup steps | Splits | Splits (AL-U4a) | \
+         FR2 terms | \
          Contracted | FR4 pairs | FR4 dots | Scan visits | Consecutive | Candidates | Box decided | \
          Step 2 | Step 3 | Point tests none/(i)/(ii)/(iii) |"
     );
-    println!("|{}", " --- |".repeat(18));
+    println!("|{}", " --- |".repeat(19));
     let mut total = Counts::default();
     for result in results {
         total.add(&result.counts);
@@ -1723,13 +1898,14 @@ fn interval_hook_cost(timing: &Timing) -> (f64, f64) {
 
 fn print_counts(id: &str, c: &Counts) {
     println!(
-        "| {id} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {}/{}/{}/{} |",
+        "| {id} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {}/{}/{}/{} |",
         c.edges,
         c.leaves,
         c.segments,
         c.lookups,
         c.lookup_steps,
         c.splits,
+        c.unshared_splits,
         c.fr2_terms,
         c.contracted,
         c.fr4_pairs,
@@ -1856,6 +2032,17 @@ fn al_u4a_certificate_sub_stage_split() {
                     state.fr2_terms().map(f64::to_bits),
                     Ok(state.max_deviation_squared.to_bits()),
                     "FR2 terms kernel, {}",
+                    cell.id
+                );
+                assert_eq!(
+                    state.fr2_restrict(),
+                    state.counts.splits,
+                    "FR2 restrict kernel, {}",
+                    cell.id
+                );
+                assert!(
+                    state.fr2_restrict_unshared(),
+                    "AL-U4a restrict kernel, {}",
                     cell.id
                 );
                 assert_eq!(
