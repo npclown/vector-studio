@@ -9,6 +9,7 @@ use crate::engine::{
     BATCH_ALLOCATION_FAILED, BATCH_DISPOSED, BATCH_INTERNAL_ERROR, BATCH_INVALID_BATCH, BATCH_OK,
     BATCH_OUTPUT_CAPACITY, BATCH_RESOURCE_LIMIT,
 };
+use crate::fill_export::FillRequest;
 use crate::fill_export::{
     construction_status, map_attempt_error, map_flat_status, tolerances, FillEngine, Mapped,
     FILL_INPUT_MAGIC, FILL_OUTPUT_MAGIC, FILL_PATH_EMPTY, FILL_PATH_INVALID_PATH,
@@ -16,6 +17,7 @@ use crate::fill_export::{
     FILL_PATH_UNSUPPORTED_GEOMETRY, FILL_PATH_WORK_LIMIT, FILL_V0_LIMITS, FILL_V0_REVISION,
     FILL_V0_VERSION, INPUT_CAP_BYTES, OUTPUT_CAP_BYTES,
 };
+use crate::fill_ladder::{with_ladder_faults, LadderFault, Reason, Rung};
 use crate::fill_predicates::orient2d;
 use crate::geometry::{
     Point, PATH_EMPTY, PATH_INVALID, PATH_INVALID_TOLERANCE, PATH_NUMERIC_RANGE, PATH_OK,
@@ -399,7 +401,7 @@ fn assert_mesh_invariants(mesh: &Decoded) {
 fn runtime_limits_equal_the_native_test_limits() {
     assert_eq!(FILL_V0_LIMITS, crate::native_cubic_fill_tests::LIMITS);
     assert_eq!(FILL_V0_VERSION, 0);
-    assert_eq!(FILL_V0_REVISION, 1);
+    assert_eq!(FILL_V0_REVISION, 2);
     assert_eq!(FILL_INPUT_MAGIC.to_le_bytes(), *b"VGF0");
     assert_eq!(FILL_OUTPUT_MAGIC.to_le_bytes(), *b"VGM0");
     let (slots, split, bytes) = FillEngine::scratch_sizes().unwrap();
@@ -939,6 +941,7 @@ fn cascade_retries_triangle_free_only_after_knot_or_unresolved() {
     // Line-only paths skip topology in every mode.
     let input = pack(&[square(5, NONZERO, 0)]);
     let mut engine = FillEngine::new();
+    engine.hooks().exact_only = true;
     load(&mut engine, &input, 1 << 16);
     assert_eq!(engine.process(input.len() as u32), BATCH_OK);
     let diagnostics = engine.workspace().unwrap().diagnostics();
@@ -1259,6 +1262,48 @@ fn process_does_not_allocate_or_move_storage() {
             .rectangle(4.0, 1.0, 8.0, 3.0),
         rounded_failure(5),
         TestPath::new(6, NONZERO, 0).line_to(1.0, 1.0),
+        // Alt-A1 AL-U3: fast-admitted paths and every fallback reason reachable through the
+        // export (`DEVIATION` has no real input; `TRIANGLE` and `MESH_CHECK` are seeded below).
+        square(7, NONZERO, 511),
+        TestPath::new(8, NONZERO, -12)
+            .move_to(0.0, 0.0)
+            .cubic_to([0.0, 64.0, 64.0, 64.0, 64.0, 0.0])
+            .close(),
+        square(9, NONZERO, -3).move_to(20.0, 0.0).line_to(21.0, 0.0),
+        TestPath {
+            id: 10,
+            rule: NONZERO,
+            exponent: -3,
+            verbs: vec![MOVE, CUBIC, CUBIC, CUBIC, CLOSE],
+            points: [
+                0xc012_27b6_d3c8_7953u64,
+                0xbfeb_648e_a01d_d46e,
+                0xc001_2bb4_ca0b_aa67,
+                0xc000_bcae_9b60_b5bb,
+                0x3fd7_b0c3_f399_470a,
+                0xc007_cb78_b088_20a4,
+                0x4008_15fa_31eb_8733,
+                0xc00c_0581_e77d_b5d7,
+                0x4007_147f_2212_f5d4,
+                0xbfea_01cf_1150_8679,
+                0x4003_2052_38a6_41eb,
+                0x3ffc_ec88_1c04_529b,
+                0x3ff8_72e6_eb4a_d6f4,
+                0x4011_6f52_c7c2_9577,
+                0xbfe7_a329_601d_2d99,
+                0x4007_3d22_5fb4_d753,
+                0xc006_166a_b719_6ac6,
+                0x3ff2_aa69_450b_eea0,
+                0xc012_27b6_d3c8_7953,
+                0xbfeb_648e_a01d_d46e,
+            ]
+            .map(f64::from_bits)
+            .to_vec(),
+        },
+        TestPath::new(11, NONZERO, -3)
+            .rectangle(0.0, 0.0, 1.0, 1.0)
+            .rectangle(1.25, 0.0, 2.25, 1.0),
+        square(12, EVENODD, -3),
     ];
     let input = pack(&paths);
     let mut engine = FillEngine::new();
@@ -1288,6 +1333,65 @@ fn process_does_not_allocate_or_move_storage() {
     let decoded = decode(engine.output_bytes(), &paths);
     for mesh in decoded.iter().filter(|mesh| mesh.status == FILL_PATH_OK) {
         assert_mesh_invariants(mesh);
+    }
+
+    // Both rungs ran: the ladder record of each path, then the seeded `MESH_CHECK` and
+    // `TRIANGLE` fallbacks of the fast paths inside the same allocation window.
+    let reasons = |engine: &mut FillEngine| -> Vec<(Option<Rung>, Option<Reason>)> {
+        paths
+            .iter()
+            .map(|path| {
+                let request = FillRequest {
+                    request_id: path.id,
+                    rule: if path.rule == 0 {
+                        LineFillRule::Nonzero
+                    } else {
+                        LineFillRule::Evenodd
+                    },
+                    exponent: path.exponent,
+                };
+                let built = engine
+                    .build_one(request, &path.verbs, &point_bytes(&path.points))
+                    .unwrap()
+                    .unwrap();
+                (built.rung, built.reason)
+            })
+            .collect()
+    };
+    let fallback = |reason| (Some(Rung::Exact), Some(reason));
+    let fast = (Some(Rung::Fast), None);
+    let mut expected = vec![
+        fast,
+        fallback(Reason::Monotone),
+        fallback(Reason::Monotone),
+        fallback(Reason::Crossing),
+        fallback(Reason::Monotone),
+        (None, None),
+        fallback(Reason::Range),
+        fallback(Reason::Prefix),
+        fallback(Reason::Structure),
+        fallback(Reason::Closure),
+        fallback(Reason::Clearance),
+        fast,
+    ];
+    assert_eq!(reasons(&mut engine), expected);
+    for (fault, reason) in [
+        (LadderFault::TriangleFlipped, Reason::MeshCheck),
+        (LadderFault::Fr7OrientationRejected, Reason::Triangle),
+    ] {
+        with_ladder_faults(&[fault], || {
+            let storage = engine.storage();
+            crate::allocation_test_support::start();
+            let status = engine.process(input.len() as u32);
+            let allocations = crate::allocation_test_support::stop();
+            assert_eq!(status, BATCH_OK);
+            assert_eq!(allocations, 0, "process must not allocate");
+            assert_eq!(engine.storage(), storage);
+            for index in [0, 11] {
+                expected[index] = fallback(reason);
+            }
+            assert_eq!(reasons(&mut engine), expected);
+        });
     }
 }
 

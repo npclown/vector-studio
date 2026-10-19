@@ -60,6 +60,8 @@ V3 covers the nine items V1 [section f](p3-v1-path-scene-port-proposal.md#f-item
 | V2: accepted exponents `-1021..=1023`; `internal-error` does not dispose; caller may split batches; `linearMemoryBytes()` outside the port   | V2 sections [d](p3-v2-fill-mesh-transport-contract.md#d-tolerance), [h](p3-v2-fill-mesh-transport-contract.md#h-typescript-adapter), a             |
 | V2: `boundaryEdges` come from a conforming refinement; `bounds` are exact vertex bounds                                                      | V2 sections [f](p3-v2-fill-mesh-transport-contract.md#f-boundary-edges), [g](p3-v2-fill-mesh-transport-contract.md#g-positions-bounds-and-indices) |
 
+Amended 2026-10-20 by the [Alt-A1 production contract](p3-alt-a1-fill-ladder-contract.md), at the V2 `boundaryEdges` row above: for fast-rung meshes, `boundaryEdges` are the edges used once in an unrefined conforming mesh (that contract's section 3.5); they are exactly the region-boundary edges, as before.
+
 ## a) Path node landing and scene validation
 
 `packages/contracts/src/scene.ts` gains `ScenePathVerb`, `SceneFillRule`, `ScenePathGeometry`, `PathStyle` and the `path` member of `RenderNodeSnapshot`, exactly as V1 [section a](p3-v1-path-scene-port-proposal.md#a-path-node-in-the-scene-contract) sketches them.
@@ -254,6 +256,9 @@ The local frame is a parallelogram in screen space. Every boundary point is at l
 **Fringe builder.** The algorithm is O02's, unchanged in its rules:
 
 - boundary loops from `boundaryEdges`, which V2's conforming refinement makes exactly the region boundary, with sectors by exact angle and sector pairing at pinch vertices;
+
+  Amended 2026-10-20 by the [Alt-A1 production contract](p3-alt-a1-fill-ladder-contract.md): for fast-rung meshes, `boundaryEdges` are the edges used once in an unrefined conforming mesh (that contract's section 3.5); they are exactly the region-boundary edges, as before.
+
 - loop nesting by exact midpoint point-in-polygon;
 - faces triangulated by bridging and ear clipping, including the three triangulator choices O02's review ruled within its contract;
 - no Steiner points: exterior triangles reuse the mesh's boundary vertex indices plus the four frame corners;
@@ -582,6 +587,9 @@ All are now settled by the [frozen V2 contract](p3-v2-fill-mesh-transport-contra
 - **Exponent range.** `-1021..=1023` (V2 d), mirrored by `renderer-core`'s internal `E_MIN` and `E_MAX`. A port's `invalid-tolerance` stays authoritative.
 - **Port types.** V2 lands them in `packages/contracts/src/geometry.ts`; V3a starts after that merge.
 - **`boundaryEdges`.** V2 f's conforming refinement makes them exactly the region-boundary edges, as the fringe builder requires.
+
+  Amended 2026-10-20 by the [Alt-A1 production contract](p3-alt-a1-fill-ladder-contract.md): for fast-rung meshes, `boundaryEdges` are the edges used once in an unrefined conforming mesh (that contract's section 3.5); they are exactly the region-boundary edges, as before.
+
 - **`internal-error`** does not dispose the adapter, and V3 isolates the path (section b).
 - **Linear memory** is reported through the host hook (section d).
 - **Determinism** (V2 c) supports the memo's no-expiry rules.

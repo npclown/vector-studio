@@ -129,6 +129,9 @@ export function revisionSelfCheck(
   input: RevisionChangeInput,
   name: string,
 ): { case: string; detected: boolean };
+export function revisionTamperChecks(
+  input: RevisionChangeInput,
+): { case: string | null; detected: boolean }[];
 export const FILL_ENGINE_META: string;
 export interface PathSource {
   rule: 0 | 1;

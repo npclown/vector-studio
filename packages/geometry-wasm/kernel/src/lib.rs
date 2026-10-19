@@ -355,7 +355,7 @@ mod p3_b0_spike_tests;
 #[cfg(test)]
 mod p3_b0_spike_bench;
 // P3 Alt-A1 production fast rung and ladder, unit AL-U1
-// (docs/plans/p3-alt-a1-fill-ladder-contract.md); not yet wired into the fill export.
+// (docs/plans/p3-alt-a1-fill-ladder-contract.md); wired into the fill export by AL-U3.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 mod fill_ladder;
 #[cfg(test)]
@@ -366,3 +366,7 @@ mod fill_ladder_tests;
 mod fill_ladder_dump_tests;
 #[cfg(test)]
 mod fill_ladder_identity;
+// P3 Alt-A1 unit AL-U3: the ladder through the fill export, test-only; appended for the same
+// reason as above.
+#[cfg(test)]
+mod fill_export_ladder_tests;

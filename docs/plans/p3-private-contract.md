@@ -95,6 +95,8 @@ Distinguish a point on a source contour from a boundary of the final filled regi
 
 Positive controls must independently fail a missing triangle, a duplicated overlapping triangle, wrong fill parity, a flipped index, out-of-range indices, NaN vertex, underreported bounds, misplaced cap, wrong miter fallback, stale source echo and lost local ownership. Triangle orientation alone is not evidence of correct region coverage.
 
+The [Alt-A1 production contract](p3-alt-a1-fill-ladder-contract.md) adds a fast rung to the fill export. Its exact clearance and monotone certificate (spike SL-T1, SL-T2) ties the flattened polygon's topology to the source curves without a positional argument. The fast mesh has no Steiner vertex and its region is exactly the flattened polygon's, so it consumes none of the 0.0625 topology share. The exact kernel remains the fallback and the oracle.
+
 ## User decisions on mesh position representation (2026-10-06)
 
 After the integrated P3.1m [position certificate](p3-position-certificate-contract.md) and its [evidence](../evidence/p3.1m-position-certificate-review-2026-10-06.md), the user selected the recommended option for each decision listed in that contract.

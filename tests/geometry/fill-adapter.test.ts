@@ -68,7 +68,7 @@ describe('fill-v0 adapter factory', () => {
       const adapter = await createFillMeshPort(source);
       expect(adapter.portVersion).toBe(0);
       expect(adapter.operationId).toBe(FILL_V0_OPERATION_ID);
-      expect(adapter.operationId).toBe('geometry-wasm/fill-v0');
+      expect(adapter.operationId).toBe('geometry-wasm/fill-v0+r2');
       expect(adapter.linearMemoryBytes()).toBeGreaterThan(0);
       const result = adapter.buildFillMeshes([square()]);
       expect(result.status).toBe('ok');
@@ -81,6 +81,7 @@ describe('fill-v0 adapter factory', () => {
       { fill_v0_process: undefined },
       { fill_v0_version: () => 1 },
       { fill_v0_revision: () => FILL_V0_REVISION + 1 },
+      { fill_v0_revision: () => 1 },
     ]) {
       const real = await kernel();
       const dispose = vi.fn(() => real.fill_v0_dispose());
