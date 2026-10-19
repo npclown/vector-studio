@@ -70,3 +70,80 @@ export function compareWasmToNative(
   wasm: Map<string, DigestEntry>,
   native: Map<string, DigestEntry>,
 ): DigestComparison;
+export const LADDER_CORPUS_SHA256: string;
+export interface IdentityOptions {
+  base: string | null;
+  threads: number | null;
+  compareOnly: string | null;
+  tamper: string | null;
+  allowTestChanges: string[];
+  revisionChange: boolean;
+  selfTest: boolean;
+}
+export function parseArguments(args: readonly string[]): IdentityOptions;
+export function checkTestFileChanges(
+  listing: readonly string[],
+  allowList: readonly string[],
+): { allowed: string[]; failures: string[] };
+export function checkRevisions(base: number, branch: number, revisionChange: boolean): string[];
+export interface RungRecord {
+  rung: 0 | 1;
+  reason: string;
+  step: string;
+  exact: string;
+}
+export function parseRungRecord(text: string): Map<string, RungRecord>;
+export function rungPathOf(name: string): string | null;
+export function familyOf(path: string): string;
+export type RevisionClass = 'unchanged' | 'fast-identical' | 'changed-fast' | 'newly-admitted';
+export interface ClassifiedCase {
+  case: string;
+  layer: 'native' | 'wasm';
+  path: string;
+  family: string;
+  class: RevisionClass;
+  oldStatus: string;
+  reason: string;
+}
+export interface RevisionChangeInput {
+  native: { base: Map<string, DigestEntry>; branch: Map<string, DigestEntry> };
+  wasm: { base: Map<string, DigestEntry>; branch: Map<string, DigestEntry> };
+  rungs: Map<string, RungRecord>;
+}
+export function classifyRevisionChange(input: RevisionChangeInput): {
+  cases: ClassifiedCase[];
+  failures: string[];
+  metaDiffering: string[];
+};
+export function changedPaths(cases: readonly ClassifiedCase[]): string[];
+export function applyOracleValidation(
+  cases: readonly ClassifiedCase[],
+  validation: ReadonlyMap<string, { rung: string; failures: readonly string[] }>,
+): string[];
+export function revisionManifest(cases: readonly ClassifiedCase[]): {
+  text: string;
+  sha256: string;
+  counts: Record<string, Record<RevisionClass, number>>;
+};
+export function revisionSelfCheck(
+  input: RevisionChangeInput,
+  name: string,
+): { case: string; detected: boolean };
+export const FILL_ENGINE_META: string;
+export interface PathSource {
+  rule: 0 | 1;
+  exponent: number;
+  verbs: readonly number[];
+  points: readonly number[];
+}
+export function pathSources(
+  b0: unknown,
+  random: unknown,
+  ladderPaths: readonly PathSource[],
+): Map<string, PathSource>;
+export function validateChangedPaths(
+  paths: readonly string[],
+  sources: ReadonlyMap<string, PathSource>,
+  directory: string,
+  revision: number,
+): Promise<Map<string, { rung: string; failures: string[] }>>;

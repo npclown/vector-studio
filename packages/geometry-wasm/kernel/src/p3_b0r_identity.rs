@@ -14,6 +14,10 @@
 //! vertices are also hashed as raw bits. The V2 cascade case digests the `FillEngine` batch
 //! status, `result_len`, `required_output_bytes` and every published output byte.
 //!
+//! The corpora are the B0 framed corpus, `p3-b0r-random/v1` and, from Alt-A1 unit AL-U2
+//! (docs/plans/p3-alt-a1-fill-ladder-contract.md section 4.4), `p3-fill-ladder-random/v1` in the
+//! same frame; AL-U2 adds those data cases and no API call.
+//!
 //! O7: the tracking allocator counts only inside the entry call (`attempt*` or
 //! `FillEngine::process`); digests, formatting and packing run outside that window.
 use core::fmt::{self, Write as _};
@@ -531,17 +535,39 @@ fn meta_line(output: &mut String) {
         engine.reserve(ENGINE_INPUT_BYTES, ENGINE_OUTPUT_BYTES),
         BATCH_OK
     );
-    let mut hash = Sha256::new();
+    // Two cases since Alt-A1 AL-U2: the cubic workspace's sizes, which must stay identical in
+    // every mode, and the fill engine's, which the ladder's reservation changes in AL-U3.
+    let mut cubic = Sha256::new();
     let _ = write!(
-        hash,
-        "cubic_inline={}\ncubic_allocated={}\nengine_inline={}\nengine_heap={}\nscratch={:?}\n",
+        cubic,
+        "cubic_inline={}\ncubic_allocated={}\n",
         size_of::<CubicFillWorkspace>(),
         workspace.allocated_bytes(),
+    );
+    line(
+        output,
+        "meta/cubic-workspace-sizes",
+        &cubic.finish(),
+        0,
+        "META",
+        0,
+    );
+    let mut fill = Sha256::new();
+    let _ = write!(
+        fill,
+        "engine_inline={}\nengine_heap={}\nscratch={:?}\n",
         size_of::<FillEngine>(),
         engine.heap_bytes(),
         FillEngine::scratch_sizes(),
     );
-    line(output, "meta/workspace-sizes", &hash.finish(), 0, "META", 0);
+    line(
+        output,
+        "meta/fill-engine-sizes",
+        &fill.finish(),
+        0,
+        "META",
+        0,
+    );
 }
 
 pub(crate) fn read_file(variable: &str) -> Vec<u8> {
@@ -559,6 +585,8 @@ fn dump_native_digests() {
     );
     let mut chunks = read_b0(&read_file("P3_B0R_B0_CORPUS"));
     chunks.extend(read_random(&read_file("P3_B0R_RANDOM_CORPUS")));
+    // Alt-A1 AL-U2 data cases: `p3-fill-ladder-random/v1`, in the same frame.
+    chunks.extend(read_random(&read_file("P3_FILL_LADDER_CORPUS")));
     let threads = env::var("P3_B0R_THREADS")
         .ok()
         .and_then(|value| value.parse().ok())

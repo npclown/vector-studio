@@ -360,3 +360,9 @@ mod p3_b0_spike_bench;
 mod fill_ladder;
 #[cfg(test)]
 mod fill_ladder_tests;
+// P3 Alt-A1 unit AL-U2: the oracles' hand-off and the branch-only rung record, test-only;
+// appended for the same reason as above.
+#[cfg(test)]
+mod fill_ladder_dump_tests;
+#[cfg(test)]
+mod fill_ladder_identity;
