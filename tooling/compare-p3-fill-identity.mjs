@@ -567,6 +567,39 @@ export function revisionSelfCheck(input, name) {
   };
 }
 
+/**
+ * The full run's tamper self-check in revision-change mode (AL-U3). Plain mode's check needs
+ * exactly one differing case, which cannot hold when a revision change legitimately changes
+ * thousands of cases. Here one native entry case (an AL-I1 case) and one WASM case of the
+ * `unchanged` class are tampered, each on its own, and the classification must then report
+ * that case by name: an AL-I1 entry difference, or a rung-1 case whose bytes differ.
+ */
+export function revisionTamperChecks(input) {
+  const nativeCase = [...input.native.branch.keys()].find(
+    (name) => rungPathOf(name) === null && !name.startsWith('meta/') && input.native.base.has(name),
+  );
+  const wasmCase = classifyRevisionChange(input).cases.find(
+    (item) => item.layer === 'wasm' && item.class === 'unchanged',
+  )?.case;
+  return [nativeCase, wasmCase].map((name) => {
+    if (name === undefined) return { case: null, detected: false };
+    const layer = name.startsWith('wasm/') ? 'wasm' : 'native';
+    const tampered = {
+      ...input,
+      [layer]: { ...input[layer], branch: tamper(input[layer].branch, name) },
+    };
+    const expected = [
+      `AL-I1: entry case ${name} differs from the merge base`,
+      `${name}: rung 1 but the bytes differ`,
+    ];
+    const { failures } = classifyRevisionChange(tampered);
+    return {
+      case: name,
+      detected: failures.some((failure) => expected.some((start) => failure.startsWith(start))),
+    };
+  });
+}
+
 // ---------------------------------------------------------------------------------------------
 // Process helpers.
 
@@ -1246,12 +1279,25 @@ function selfTest() {
     write('revisions.json', JSON.stringify({ base: 1, branch: 2 }));
     const clean = compareOnly(directory, null, true);
     const seeded = compareOnly(directory, cascade('0000'), true);
+    // The full run's revision-change tamper checks (AL-U3): an AL-I1 entry case and an
+    // unchanged WASM case, each tampered, must be reported by name.
+    const load = (name) => parseNativeDigests(readFileSync(path.join(directory, name), 'utf8'));
+    const tamperChecks = revisionTamperChecks({
+      native: { base: load('native-base.tsv'), branch: load('native-branch.tsv') },
+      wasm: { base: load('wasm-base.tsv'), branch: load('wasm-branch.tsv') },
+      rungs: parseRungRecord(readFileSync(path.join(directory, 'rungs-branch.tsv'), 'utf8')),
+    });
+    const tampers =
+      tamperChecks.length === 2 &&
+      tamperChecks.every((check) => check.detected) &&
+      tamperChecks[0].case === 'rnd/T/0000/attempt' &&
+      tamperChecks[1].case === 'wasm/rnd/T/0000';
     write('revisions.json', JSON.stringify({ base: 1, branch: 1 }));
     const unrevised = compareOnly(directory, null, true);
     const plain = compareOnly(directory, null, false);
-    const pass = clean && !seeded && !unrevised && !plain;
+    const pass = clean && !seeded && tampers && !unrevised && !plain;
     console.log(
-      `P3 B0R identity self-test: clean revision-change ${clean ? 'PASS' : 'FAIL'}; seeded unexpected change ${seeded ? 'NOT DETECTED' : 'detected'}; revision not base + 1 ${unrevised ? 'NOT DETECTED' : 'detected'}; plain mode on changed cases ${plain ? 'NOT DETECTED' : 'detected'}; ${pass ? 'PASS' : 'FAIL'}`,
+      `P3 B0R identity self-test: clean revision-change ${clean ? 'PASS' : 'FAIL'}; seeded unexpected change ${seeded ? 'NOT DETECTED' : 'detected'}; revision-change tamper checks ${tamperChecks.map((check) => `${check.case} ${check.detected ? 'detected' : 'NOT DETECTED'}`).join(', ')}; revision not base + 1 ${unrevised ? 'NOT DETECTED' : 'detected'}; plain mode on changed cases ${plain ? 'NOT DETECTED' : 'detected'}; ${pass ? 'PASS' : 'FAIL'}`,
     );
     return pass;
   } finally {
@@ -1405,15 +1451,16 @@ async function fullRun(options) {
     report('wasm-vs-native', crossComparison);
     if (!crossComparison.equal) failures.push('WASM cascade digests differ from native ones');
     let revision = null;
+    let revisionInput = null;
     if (options.revisionChange) {
       const rungs = timed(durations, 'rungRecordMs', () =>
         dumpRungs(corpora, path.join(output, 'rungs-branch.tsv'), options.threads),
       );
-      const input = {
+      const input = (revisionInput = {
         native: { base: native.base, branch: native.branch },
         wasm: { base: wasm.base, branch: wasm.branch },
         rungs,
-      };
+      });
       const changed = changedPaths(classifyRevisionChange(input).cases);
       const validationStart = Date.now();
       const validation = await validateChangedPaths(
@@ -1475,10 +1522,14 @@ async function fullRun(options) {
 
     const nativeTamperCase = [...native.branch.keys()].find((name) => name.startsWith('rnd/'));
     const wasmTamperCase = [...wasm.branch.keys()][0];
-    const tamperChecks = [
-      tamperSelfCheck(native.base, native.branch, nativeTamperCase),
-      tamperSelfCheck(wasm.base, wasm.branch, wasmTamperCase),
-    ];
+    // Revision-change mode tampers an AL-I1 entry case and an unchanged WASM case and needs the
+    // classification to report each (AL-U3); plain mode keeps its exactly-one-difference check.
+    const tamperChecks = options.revisionChange
+      ? revisionTamperChecks(revisionInput)
+      : [
+          tamperSelfCheck(native.base, native.branch, nativeTamperCase),
+          tamperSelfCheck(wasm.base, wasm.branch, wasmTamperCase),
+        ];
     for (const check of tamperChecks)
       if (!check.detected) failures.push(`tamper self-check not detected for ${check.case}`);
 

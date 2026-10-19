@@ -29,6 +29,8 @@ V2 does not touch `renderer-core`, `renderer-webgpu`, the scene contract or the 
 | Port `operationId` | `'geometry-wasm/fill-v0'`                                                         |
 | Kernel revision    | `fill_v0_revision() == 1`; the adapter accepts only the revision it was built for |
 
+Amended 2026-10-20 by the [Alt-A1 production contract](p3-alt-a1-fill-ladder-contract.md): the port `operationId` is `'geometry-wasm/fill-v0+r2'` and the kernel revision is `fill_v0_revision() == 2` (that contract's section 2.1). The transport version, the magics, the framing and every export name and signature are unchanged.
+
 `abi_version()` stays 1. Every P2 export keeps its name, signature, byte layout and behavior, and P2 code paths never call fill code. The fill family is new names only; nothing is renamed or removed.
 
 **Operation identity rule.** The `operationId` names the operation and its error budget (V1 rule 6 and the [numeric compatibility decision](p3-private-contract.md#numeric-compatibility-decision)). Any change that can alter an `ok` mesh for some request (flattening, the tolerance relation in section d, the topology cascade, the refinement or the vertex/triangle order) must change the `operationId` and the kernel revision together, for example to `'geometry-wasm/fill-v0+r2'`. A change that only turns a failure into a success, such as a B1 cap raise, keeps them, because failed results are never cached (V1 section d).
@@ -166,12 +168,16 @@ Lifetime rules, matching the P2 contract:
 
 The four `CubicFillWorkspace` entries differ only in the topology certificate stage. Decoding, flattening, contour collection and the rounded tessellation do not depend on the mode, and the tessellation input is the same contour point list in every mode. **The mesh of a path that succeeds is therefore the same whichever certificate admits it.** The mode affects only which paths are admitted, and the failure reported.
 
+Amended 2026-10-20 by the [Alt-A1 production contract](p3-alt-a1-fill-ladder-contract.md): the sentence "the mesh of a path that succeeds is therefore the same whichever certificate admits it" holds for the exact rung only. A path that the fast rung admits gets the fast-rung mesh of that contract's section 3.5, which may differ from the exact-rung mesh.
+
 **Decision: a fixed two-step cascade.**
 
 1. Call `attempt` (legacy mode: exact simple-topology certificate, then the rounded-knot certificate after `KnotMismatch`).
 2. Only if step 1 returns `Err(CubicFillError::Topology(e))` with `e` equal to `KnotMismatch` or `Unresolved`, call `attempt_triangle_free` on the same input. Other topology errors are not retried.
 
 The final result is that of the last call made. No other retry exists.
+
+Amended 2026-10-20 by the [Alt-A1 production contract](p3-alt-a1-fill-ladder-contract.md): a fast rung precedes this cascade (that contract's section 3.1). The cascade runs unchanged, on the same input, only when the fast rung falls back.
 
 Reasons:
 
@@ -274,6 +280,8 @@ This satisfies V1 rule 5 as written: the third vertex `c` gives `(b - a) x (c - 
 
 The refinement is part of the fill export, not a change to `RoundedFillWorkspace`, whose behavior and tests are unchanged.
 
+Amended 2026-10-20 by the [Alt-A1 production contract](p3-alt-a1-fill-ladder-contract.md): the cell-ladder refinement and the ledger cross-check apply to exact-rung meshes only. A fast-rung mesh is conforming by construction and is not refined; its `boundaryEdges` come from the same once-only scan, run on its triangles in output order (that contract's section 3.5).
+
 ### Test-side independent check
 
 Tests do not trust the kernel's list. A test helper outside `packages/geometry-wasm`, using the exact predicates of `geometry-reference`, checks every `ok` mesh in the suite:
@@ -290,6 +298,8 @@ Positive controls: the unrefined kernel mesh of both hanging fixtures fails conf
 - `indices`: `Uint32Array`, three per triangle, in refinement order (cells in kernel order, ladder order inside each). Every triangle is counter-clockwise: positive `(b - a) x (c - a)` in node-local coordinates. The port defines no front-face or cull convention; V3 does.
 - `boundaryEdges`: `Uint32Array` of pairs, section f.
 - `bounds`: the exact component-wise minimum and maximum of `positions`. It is not the flattened-path bound and not the source-curve bound. The adapter recomputes it from the copied positions and treats a difference from the kernel record as an ABI breach.
+
+Amended 2026-10-20 by the [Alt-A1 production contract](p3-alt-a1-fill-ladder-contract.md): for a fast-rung mesh, `positions` are the boundary contours' flattened polygon vertices in contour order, reversed where the fast rung reverses a contour, and `indices` are the fast rung's triangles in emission order, counter-clockwise (that contract's section 3.5).
 
 ## h) TypeScript adapter
 
@@ -310,6 +320,8 @@ export function createFillMeshPort(
   source: WebAssembly.Module | BufferSource,
 ): Promise<FillMeshAdapter>;
 ```
+
+Amended 2026-10-20 by the [Alt-A1 production contract](p3-alt-a1-fill-ladder-contract.md): the `operationId` literal type is `'geometry-wasm/fill-v0+r2'`, and the adapter is built for kernel revision 2 (that contract's section 2.1).
 
 The factory instantiates a new instance with no imports, checks that every `fill_v0_*` export exists, that `fill_v0_version()` is 0 and that `fill_v0_revision()` is the revision the adapter was built for. On any failure it disposes the instance and rejects. `packages/geometry-wasm/package.json` gains `@vector-studio/contracts` as a dependency, which the boundary policy already allows; its `tsconfig.json` gains the matching project reference if `tsc --build` needs it.
 

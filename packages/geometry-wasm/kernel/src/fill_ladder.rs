@@ -6,8 +6,8 @@
 //! proof of its section 3). The stage order, the check order inside each stage, the thresholds
 //! and every proved/not-proved decision are the spike's, with the three production additions of
 //! section 3.1: AL-FR0 (a conservative tolerance range), AL-M5 (a strengthened closure bound)
-//! and AL-FR9 (an always-on output check). In AL-U1 the ladder is not yet wired into the
-//! export; `fill_export::build_path` is unchanged.
+//! and AL-FR9 (an always-on output check). From AL-U3 (revision 2) `fill_export::build_path`
+//! runs rung 0 as step 0 of stage 4, and V2's exact cascade on a fallback.
 //!
 //! Nothing in a call allocates: the fast rung's storage is reserved once by
 //! `FillLadder::reserve` (section 3.4), the rest is bounded stack scratch, and the exact rung
@@ -239,7 +239,7 @@ pub(crate) fn with_ladder_faults<T>(faults: &[LadderFault], action: impl FnOnce(
 
 /// AL-FR9 item 2 and the boundary derivation (contract section 3.5): V2 section f's once-only
 /// scan, the existing `collect_boundary` of `fill_export.rs`, run on the fast triangles. The
-/// export implements it on its reserved fill scratch when it switches (AL-U3).
+/// export implements it on its reserved fill scratch (`FillScratch`, from AL-U3).
 pub(crate) trait BoundaryScan {
     /// Scans `triangles` (counterclockwise index triples, flattened, in output order). Returns
     /// the edges used exactly once as directed pairs in triangle order, or `None` when a

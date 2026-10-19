@@ -148,6 +148,8 @@ Arbitrary path fills and strokes use WASM-produced meshes. A geometry-only chang
 
 Under the [V3 contract](plans/p3-v3-renderer-mesh-pipeline-contract.md) (fill only, D8 interim), each drawn path mesh is one non-indexed, vertex-pulling draw of its region and fringe triangles with a second pipeline. These mesh draws sit beside the analytic primitive draws in paint order: a path draw closes the current analytic run (section [g](plans/p3-v3-renderer-mesh-pipeline-contract.md#g-paint-order-and-composition)). The mesh data travels in an optional packet part, so a primitive-only packet is unchanged.
 
+**P3 fill operation `'geometry-wasm/fill-v0+r2'` (2026-10-20, [Alt-A1 production contract](plans/p3-alt-a1-fill-ladder-contract.md)).** The fill export runs a two-rung ladder per path. The fast rung certifies the flattened polygon against the source curves with an exact clearance and monotone sufficient condition, and then triangulates the polygon by monotone decomposition, with no Steiner points. Every decision is an exact predicate or a proved interval bound. Any case it does not prove, including crossings, touching and coincident contours, falls back to the exact arrangement kernel unchanged, which also serves as the test oracle. One output per path; equal requests take the same rung. No dependency is added and the port is unchanged; the operation identity changes, so cache keys miss once.
+
 Style data is stored separately from geometry so color and opacity changes do not rebuild vertices.
 
 ## GPU resource strategy

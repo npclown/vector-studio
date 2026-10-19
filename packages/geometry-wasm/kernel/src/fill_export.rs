@@ -3,6 +3,10 @@
 //! The frozen contract is `docs/plans/p3-v2-fill-mesh-transport-contract.md`.
 //! This engine is independent of the P2 `Engine`: it owns its own arenas,
 //! epoch, workspace and scratch, and P2 code never calls into it.
+//!
+//! Revision 2 (`docs/plans/p3-alt-a1-fill-ladder-contract.md`, unit AL-U3): stage 4 of every
+//! path runs the two-rung ladder, rung 0 (`fill_ladder`'s fast rung) first, and on a fallback
+//! V2's two-step exact cascade unchanged.
 
 use core::cmp::Ordering;
 use core::mem::size_of;
@@ -13,6 +17,7 @@ use crate::engine::{
     BATCH_ALLOCATION_FAILED, BATCH_DISPOSED, BATCH_INTERNAL_ERROR, BATCH_INVALID_BATCH, BATCH_OK,
     BATCH_OUTPUT_CAPACITY, BATCH_RESOURCE_LIMIT,
 };
+use crate::fill_ladder::{BoundaryScan, ExactStep, FillLadder, Reason, Rung};
 use crate::fill_predicates::orient2d;
 use crate::geometry::{
     validate_path, Point, PATH_EMPTY, PATH_INVALID, PATH_INVALID_TOLERANCE, PATH_NUMERIC_RANGE,
@@ -23,7 +28,7 @@ use crate::rounded_line_fill::{RoundedFillError, RoundedFillLimits, RoundedFillO
 use crate::simple_cubic_topology::TopologyError;
 
 pub const FILL_V0_VERSION: u32 = 0;
-pub const FILL_V0_REVISION: u32 = 1;
+pub const FILL_V0_REVISION: u32 = 2;
 pub const FILL_INPUT_MAGIC: u32 = 0x3046_4756;
 pub const FILL_OUTPUT_MAGIC: u32 = 0x304D_4756;
 
@@ -609,6 +614,28 @@ impl FillScratch {
     }
 }
 
+/// AL-FR9 item 2 on a fast mesh (Alt-A1 contract section 3.5). The fast triangles are copied
+/// into the reserved index scratch, and V2's unchanged `collect_boundary` runs on them, so the
+/// edges used once of a fast mesh come from the same code, in the same slot order, as an exact
+/// mesh's. A duplicated directed edge or another self-check failure is `None` (`MESH_CHECK`).
+/// The copy never allocates: rung 0 emits at most `fill_ladder::MAX_BOUNDARY_RECORDS` index
+/// slots, which `FillLadder::reserve` checks against this scratch's reserved capacity. After a
+/// published fast mesh the scratch holds its triangles and boundary pairs, in output order.
+impl BoundaryScan for FillScratch {
+    fn scan(&mut self, triangles: &[u32]) -> Option<&[[u32; 2]]> {
+        self.triangles.clear();
+        self.edges.clear();
+        self.boundary.clear();
+        self.split.clear();
+        if triangles.len() > self.triangles.capacity() {
+            return None;
+        }
+        self.triangles.extend_from_slice(triangles);
+        self.collect_boundary().ok()?;
+        Some(&self.boundary)
+    }
+}
+
 /// The next node after `node`, up to and including `last`, that has a mesh
 /// vertex. Node indices are contiguous by rank within a column.
 fn next_vertex_node(
@@ -672,18 +699,97 @@ fn vertex_node(mesh: &RoundedFillOutput<'_>, vertex: u32) -> Result<usize, SelfC
 pub(crate) enum PathOutcome {
     /// A non-`OK` path status.
     Status(u32),
-    /// `OK`: the workspace holds the vertices and the scratch the refined mesh.
+    /// `OK`: on the exact rung the workspace holds the vertices and the scratch the refined
+    /// mesh; on the fast rung the ladder holds the vertices and the scratch the fast triangles
+    /// and their edges used once (Alt-A1 contract section 3.5).
     Mesh,
 }
 
-/// Runs the per-path stage order of section e for one path.
+/// One path's result with its ladder record (Alt-A1 contract section 3.6): the rung that
+/// produced it, and on a fallback the reason and the exact rung's topology step. All three are
+/// `None` for a status decided before stage 4; under `exact_only` the reason is `None`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) struct BuiltPath {
+    pub(crate) outcome: PathOutcome,
+    pub(crate) rung: Option<Rung>,
+    pub(crate) reason: Option<Reason>,
+    pub(crate) step: Option<ExactStep>,
+}
+
+impl BuiltPath {
+    const fn decided(status: u32) -> Self {
+        Self {
+            outcome: PathOutcome::Status(status),
+            rung: None,
+            reason: None,
+            step: None,
+        }
+    }
+}
+
+/// The test-only ladder switches (Alt-A1 contract section 3.6): `exact_only` skips rung 0, and
+/// the production seeded defects (14) and (15) of section 4.3. Outside test builds the type is
+/// empty and every switch is constant `false`.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct PathSwitches {
+    #[cfg(test)]
+    pub(crate) exact_only: bool,
+    /// Defect (14): the exact cascade's step order inverted (triangle-free first).
+    #[cfg(test)]
+    pub(crate) cascade_inverted: bool,
+    /// Defect (15): a fallback path served from rung 0's partial state (the scratch that
+    /// rung 0 left), because the exact mesh's refinement is skipped.
+    #[cfg(test)]
+    pub(crate) fallback_partial: bool,
+}
+
+impl PathSwitches {
+    #[cfg(test)]
+    fn exact_only(self) -> bool {
+        self.exact_only
+    }
+
+    #[cfg(not(test))]
+    #[inline(always)]
+    fn exact_only(self) -> bool {
+        false
+    }
+
+    #[cfg(test)]
+    fn cascade_inverted(self) -> bool {
+        self.cascade_inverted
+    }
+
+    #[cfg(not(test))]
+    #[inline(always)]
+    fn cascade_inverted(self) -> bool {
+        false
+    }
+
+    #[cfg(test)]
+    fn fallback_partial(self) -> bool {
+        self.fallback_partial
+    }
+
+    #[cfg(not(test))]
+    #[inline(always)]
+    fn fallback_partial(self) -> bool {
+        false
+    }
+}
+
+/// Runs the per-path stage order of section e for one path. Stage 4 is the ladder of the
+/// Alt-A1 contract (section 3.1): rung 0, and on a fallback V2's exact cascade, unchanged.
 pub(crate) fn build_path(
     workspace: &mut CubicFillWorkspace,
     scratch: &mut FillScratch,
+    ladder: &mut FillLadder,
     request: FillRequest,
     verbs: &[u8],
     point_bytes: &[u8],
-) -> Result<PathOutcome, SelfCheckFailure> {
+    switches: PathSwitches,
+) -> Result<BuiltPath, SelfCheckFailure> {
     let unchecked = PathInput::from_parts(
         Request {
             request_id: request.request_id,
@@ -695,13 +801,13 @@ pub(crate) fn build_path(
         point_bytes,
     );
     if validate_path(unchecked).is_err() {
-        return Ok(PathOutcome::Status(FILL_PATH_INVALID_PATH));
+        return Ok(BuiltPath::decided(FILL_PATH_INVALID_PATH));
     }
     if !(MIN_TOLERANCE_EXPONENT..=MAX_TOLERANCE_EXPONENT).contains(&request.exponent) {
-        return Ok(PathOutcome::Status(FILL_PATH_INVALID_TOLERANCE));
+        return Ok(BuiltPath::decided(FILL_PATH_INVALID_TOLERANCE));
     }
     if verbs.is_empty() {
-        return Ok(PathOutcome::Status(FILL_PATH_EMPTY));
+        return Ok(BuiltPath::decided(FILL_PATH_EMPTY));
     }
     let (flatten, topology) = tolerances(request.exponent);
     let input = PathInput::from_parts(
@@ -715,39 +821,80 @@ pub(crate) fn build_path(
         point_bytes,
     );
 
-    let mut result = workspace.attempt(input, request.rule, topology, MAX_FLAT_COMMANDS);
+    // Step 0, rung 0 (Alt-A1 contract sections 1.2 and 3.1): AL-FR0, the S1 prefix, FR1-FR8
+    // and AL-FR9 on the request's tolerance. A published fast mesh is the path's result: no
+    // exact attempt, no cell-ladder refinement and no ledger cross-check run (section 3.8).
+    let reason = if switches.exact_only() {
+        None
+    } else {
+        match ladder.fast_rung(workspace, request, verbs, point_bytes, scratch) {
+            Ok(()) => {
+                return Ok(BuiltPath {
+                    outcome: PathOutcome::Mesh,
+                    rung: Some(Rung::Fast),
+                    reason: None,
+                    step: None,
+                })
+            }
+            Err(reason) => Some(reason),
+        }
+    };
+
+    // Rung 1, the exact rung, on the same input: V2's two-step cascade, unchanged. Only the
+    // seeded defect (14), a test-only switch, inverts its step order.
+    let inverted = switches.cascade_inverted();
+    let mut step = ExactStep::Legacy;
+    let mut result = if inverted {
+        workspace.attempt_triangle_free(input, request.rule, topology, MAX_FLAT_COMMANDS)
+    } else {
+        workspace.attempt(input, request.rule, topology, MAX_FLAT_COMMANDS)
+    };
     if matches!(
         result,
         Err(CubicFillError::Topology(
             TopologyError::KnotMismatch | TopologyError::Unresolved
         ))
     ) {
-        result = workspace.attempt_triangle_free(input, request.rule, topology, MAX_FLAT_COMMANDS);
+        step = ExactStep::TriangleFree;
+        result = if inverted {
+            workspace.attempt(input, request.rule, topology, MAX_FLAT_COMMANDS)
+        } else {
+            workspace.attempt_triangle_free(input, request.rule, topology, MAX_FLAT_COMMANDS)
+        };
     }
+    let exact = |outcome| BuiltPath {
+        outcome,
+        rung: Some(Rung::Exact),
+        reason,
+        step: Some(step),
+    };
     let diagnostics = match result {
         Ok(diagnostics) => diagnostics,
         Err(error) => {
             return match map_attempt_error(error) {
-                Mapped::Path(status) => Ok(PathOutcome::Status(status)),
+                Mapped::Path(status) => Ok(exact(PathOutcome::Status(status))),
                 Mapped::Internal => Err(SelfCheckFailure),
             }
         }
     };
     match map_flat_status(diagnostics.flat_status) {
         Mapped::Path(FILL_PATH_OK) => {}
-        Mapped::Path(status) => return Ok(PathOutcome::Status(status)),
+        Mapped::Path(status) => return Ok(exact(PathOutcome::Status(status))),
         Mapped::Internal => return Err(SelfCheckFailure),
     }
     let output = workspace.output().ok_or(SelfCheckFailure)?;
-    scratch.refine(&output.rounded)?;
+    // The seeded defect (15), a test-only switch, skips the refinement on a fallback path.
+    if !(switches.fallback_partial() && reason.is_some()) {
+        scratch.refine(&output.rounded)?;
+    }
     if scratch.triangles.is_empty() {
         return if output.rounded.vertices.is_empty() && scratch.boundary.is_empty() {
-            Ok(PathOutcome::Status(FILL_PATH_EMPTY))
+            Ok(exact(PathOutcome::Status(FILL_PATH_EMPTY)))
         } else {
             Err(SelfCheckFailure)
         };
     }
-    Ok(PathOutcome::Mesh)
+    Ok(exact(PathOutcome::Mesh))
 }
 
 /// Exact vertex bounds `[minX, minY, maxX, maxY]`.
@@ -831,13 +978,16 @@ fn write_block(
     Some(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_batch(
     input: FillInput<'_>,
     workspace: &mut CubicFillWorkspace,
     scratch: &mut FillScratch,
+    ladder: &mut FillLadder,
     output: &mut [u8],
     output_cap: u32,
     fault_path: Option<usize>,
+    switches: PathSwitches,
 ) -> BatchOutcome {
     let capacity = output.len() as u64;
     let path_count = input.path_count();
@@ -857,19 +1007,26 @@ fn run_batch(
         if fault_path == Some(index) {
             return BatchOutcome::Internal;
         }
-        let outcome = match build_path(workspace, scratch, request, verbs, points) {
-            Ok(outcome) => outcome,
+        let built = match build_path(workspace, scratch, ladder, request, verbs, points, switches) {
+            Ok(built) => built,
             Err(SelfCheckFailure) => return BatchOutcome::Internal,
         };
         let record_offset = OUTPUT_HEADER_BYTES as u64 + (index as u64) * RESULT_BYTES as u64;
         let record_fits = record_offset + RESULT_BYTES as u64 <= capacity;
-        let (status, block) = match outcome {
+        let (status, block) = match built.outcome {
             PathOutcome::Status(status) => (status, BlockRecord::default()),
             PathOutcome::Mesh => {
-                let Some(mesh) = workspace.output() else {
-                    return BatchOutcome::Internal;
+                let vertices = if built.rung == Some(Rung::Fast) {
+                    let Some((vertices, _)) = ladder.mesh() else {
+                        return BatchOutcome::Internal;
+                    };
+                    vertices
+                } else {
+                    let Some(mesh) = workspace.output() else {
+                        return BatchOutcome::Internal;
+                    };
+                    mesh.rounded.vertices
                 };
-                let vertices = mesh.rounded.vertices;
                 let triangles = scratch.triangles();
                 let boundary = scratch.boundary();
                 let payload = 16 * vertices.len() as u64
@@ -973,6 +1130,7 @@ pub struct FillEngine {
     disposed: bool,
     workspace: Option<CubicFillWorkspace>,
     scratch: FillScratch,
+    ladder: Option<FillLadder>,
     heap_bytes: usize,
     #[cfg(test)]
     test_hooks: TestHooks,
@@ -984,6 +1142,12 @@ pub(crate) struct TestHooks {
     pub(crate) fail_workspace: Option<u32>,
     pub(crate) fault_path: Option<usize>,
     pub(crate) output_cap: Option<u32>,
+    /// Skips rung 0, so every path takes V2's exact cascade (Alt-A1 contract section 3.6).
+    pub(crate) exact_only: bool,
+    /// Seeded defect (14), section 4.3: the cascade's step order inverted.
+    pub(crate) defect_cascade_inverted: bool,
+    /// Seeded defect (15), section 4.3: a fallback path served from rung 0's partial state.
+    pub(crate) defect_fallback_partial: bool,
 }
 
 impl Default for FillEngine {
@@ -1005,12 +1169,16 @@ impl FillEngine {
             disposed: false,
             workspace: None,
             scratch: FillScratch::empty(),
+            ladder: None,
             heap_bytes: 0,
             #[cfg(test)]
             test_hooks: TestHooks {
                 fail_workspace: None,
                 fault_path: None,
                 output_cap: None,
+                exact_only: false,
+                defect_cascade_inverted: false,
+                defect_fallback_partial: false,
             },
         }
     }
@@ -1038,6 +1206,7 @@ impl FillEngine {
                 Err(status) => {
                     self.workspace = None;
                     self.scratch = FillScratch::empty();
+                    self.ladder = None;
                     self.heap_bytes = 0;
                     status
                 }
@@ -1053,12 +1222,17 @@ impl FillEngine {
         }
         let (scratch, scratch_bytes) = FillScratch::reserve(FILL_V0_LIMITS)?;
         let workspace = CubicFillWorkspace::new(FILL_V0_LIMITS).map_err(construction_status)?;
+        // Alt-A1 contract section 3.4: rung 0's storage, reserved once and fallibly beside the
+        // workspace and the scratch, after the check that the scratch holds AL-FR9's records.
+        let ladder = FillLadder::reserve(FILL_V0_LIMITS)?;
         let total = workspace
             .allocated_bytes()
             .checked_add(scratch_bytes)
+            .and_then(|bytes| bytes.checked_add(ladder.allocated_bytes()))
             .ok_or(BATCH_INTERNAL_ERROR)?;
         self.scratch = scratch;
         self.workspace = Some(workspace);
+        self.ladder = Some(ladder);
         self.heap_bytes = total;
         Ok(())
     }
@@ -1082,24 +1256,28 @@ impl FillEngine {
         let Some(input) = FillInput::parse(input_bytes) else {
             return BATCH_INVALID_BATCH;
         };
-        let Some(workspace) = self.workspace.as_mut() else {
+        let (Some(workspace), Some(ladder)) = (self.workspace.as_mut(), self.ladder.as_mut())
+        else {
             return BATCH_ALLOCATION_FAILED;
         };
         #[cfg(test)]
-        let (fault_path, output_cap) = (
+        let (fault_path, output_cap, switches) = (
             self.test_hooks.fault_path,
             self.test_hooks.output_cap.unwrap_or(OUTPUT_CAP_BYTES),
+            self.test_hooks.switches(),
         );
         #[cfg(not(test))]
-        let (fault_path, output_cap) = (None, OUTPUT_CAP_BYTES);
+        let (fault_path, output_cap, switches) = (None, OUTPUT_CAP_BYTES, PathSwitches::default());
         let output = &mut words_as_bytes_mut(&mut self.output)[..capacity];
         match run_batch(
             input,
             workspace,
             &mut self.scratch,
+            ladder,
             output,
             output_cap,
             fault_path,
+            switches,
         ) {
             BatchOutcome::Published(total) => {
                 self.result_len = total;
@@ -1129,6 +1307,7 @@ impl FillEngine {
         self.output_capacity = 0;
         self.workspace = None;
         self.scratch = FillScratch::empty();
+        self.ladder = None;
         self.heap_bytes = 0;
         BATCH_OK
     }
@@ -1178,9 +1357,49 @@ impl FillEngine {
 }
 
 #[cfg(test)]
+impl TestHooks {
+    fn switches(&self) -> PathSwitches {
+        PathSwitches {
+            exact_only: self.exact_only,
+            cascade_inverted: self.defect_cascade_inverted,
+            fallback_partial: self.defect_fallback_partial,
+        }
+    }
+}
+
+#[cfg(test)]
 impl FillEngine {
     pub(crate) fn hooks(&mut self) -> &mut TestHooks {
         &mut self.test_hooks
+    }
+
+    /// One path through `build_path` on this engine's reserved state and hooks, for the
+    /// native ladder record (Alt-A1 contract section 3.6); `None` before a reservation.
+    pub(crate) fn build_one(
+        &mut self,
+        request: FillRequest,
+        verbs: &[u8],
+        point_bytes: &[u8],
+    ) -> Option<Result<BuiltPath, SelfCheckFailure>> {
+        let switches = self.test_hooks.switches();
+        let (Some(workspace), Some(ladder)) = (self.workspace.as_mut(), self.ladder.as_mut())
+        else {
+            return None;
+        };
+        Some(build_path(
+            workspace,
+            &mut self.scratch,
+            ladder,
+            request,
+            verbs,
+            point_bytes,
+            switches,
+        ))
+    }
+
+    /// Rung 0's published fast mesh after the last path, if that path was fast.
+    pub(crate) fn fast_mesh(&self) -> Option<(&[Point], &[[u32; 3]])> {
+        self.ladder.as_ref().and_then(FillLadder::mesh)
     }
 
     pub(crate) fn input_bytes_mut(&mut self) -> &mut [u8] {
@@ -1211,7 +1430,7 @@ impl FillEngine {
         self.disposed
     }
 
-    pub(crate) fn storage(&self) -> [(usize, usize); 6] {
+    pub(crate) fn storage(&self) -> [(usize, usize); 7] {
         [
             (self.input.as_ptr() as usize, self.input.capacity()),
             (self.output.as_ptr() as usize, self.output.capacity()),
@@ -1231,6 +1450,12 @@ impl FillEngine {
                 self.scratch.split.as_ptr() as usize,
                 self.scratch.split.capacity(),
             ),
+            self.ladder.as_ref().map_or((0, 0), |ladder| {
+                (
+                    core::ptr::from_ref(ladder.fast()) as usize,
+                    ladder.allocated_bytes(),
+                )
+            }),
         ]
     }
 
