@@ -359,6 +359,11 @@ fn same_point(left: Point, right: Point) -> bool {
     left.x == right.x && left.y == right.y
 }
 
+/// Bit equality of two points (AL-U4b1): the same binary64 operands, signed zeros distinct.
+fn same_bits(left: Point, right: Point) -> bool {
+    left.x.to_bits() == right.x.to_bits() && left.y.to_bits() == right.y.to_bits()
+}
+
 fn orient(a: Point, b: Point, c: Point, reason: Reason) -> Result<Ordering, Reason> {
     orient2d(a, b, c).map_err(|_| reason)
 }
@@ -850,6 +855,13 @@ impl FastRung {
         let two = Interval::point(2.0);
         let three = Interval::point(3.0);
         let knot_errors = !fault(LadderFault::KnotErrorsOmitted);
+        // AL-U4b1 (contract section 5.1, AL-C2 with AL-C1): the prefix-shared subdivision of
+        // the leaves, bounded stack scratch; see `Subdivision`.
+        let mut subdivision = Subdivision::new();
+        // AL-U4b1 (AL-C1): the previous leaf's p_end and its 2 p_end. The next leaf's 2 p_start
+        // is that value when p_start has the same bits, since both are `IPoint::exact(p).mul(two)`
+        // on bit-identical p; otherwise it is computed as before.
+        let mut doubled_end: Option<(Point, IPoint)> = None;
         for index in 0..self.cert_len {
             let edge = self.cert[index];
             let start = IPoint::exact(edge.start);
@@ -866,11 +878,17 @@ impl FastRung {
                     // Spike section 2.3 FR2: exact restricted controls R0-R3 enclosed by
                     // interval de Casteljau on [(n − 1)/2^d, n/2^d], following the high-to-low
                     // bits of n − 1 as P3.2g's `restrict_cell` does exactly.
-                    controls = restrict(source, numerator, depth);
+                    controls = subdivision.restrict(source, numerator, depth);
                     // Spike section 3.3: d_0 = R0 − p_start, d_1 = R1 − (2 p_start + p_end)/3,
                     // d_2 = R2 − (p_start + 2 p_end)/3, d_3 = R3 − p_end.
-                    let third = start.mul(two).add(end).div(three);
-                    let two_thirds = start.add(end.mul(two)).div(three);
+                    let start_doubled = match doubled_end {
+                        Some((point, doubled)) if same_bits(point, edge.start) => doubled,
+                        _ => start.mul(two),
+                    };
+                    let end_doubled = end.mul(two);
+                    doubled_end = Some((edge.end, end_doubled));
+                    let third = start_doubled.add(end).div(three);
+                    let two_thirds = start.add(end_doubled).div(three);
                     deviations = [
                         controls[0].sub(start),
                         controls[1].sub(third),
@@ -1778,33 +1796,178 @@ fn point_clear(point: Point, start: Point, end: Point, r_squared: Interval) -> b
     proved_positive(dot(beyond, v)) && proved_exceeds(norm_squared(beyond), r_squared)
 }
 
-/// Interval de Casteljau restriction of a source cubic to the dyadic cell
-/// [(n − 1)/2^d, n/2^d], with the cell bits read from high to low (P3.2g `restrict_cell`).
-fn restrict(controls: [Point; 4], numerator: u32, depth: u32) -> [IPoint; 4] {
-    let mut points = controls.map(IPoint::exact);
-    let cell = numerator - 1;
-    for bit in (0..depth).rev() {
-        points = split_half(points, cell & (1u32 << bit) != 0);
-    }
-    points
+const LEVELS: usize = MAX_LEAF_DEPTH as usize;
+
+/// Interval de Casteljau restriction of source cubics to dyadic cells [(n − 1)/2^d, n/2^d],
+/// with the cell bits read from high to low (P3.2g `restrict_cell`), shared across the leaves
+/// of FR2 (AL-U4b1; contract section 5.1, AL-C2 with AL-C1).
+///
+/// The spike's `restrict` started each leaf at `IPoint::exact` of the source controls and
+/// applied `split_half(points, bit)` once per bit of n − 1, high to low. Its level-j interval
+/// controls therefore depend only on the source's bits and on the first j bits of the cell,
+/// that is on the prefix index (n − 1) >> (d − j). This cache keeps, for the last source seen,
+/// the node of every level along the last leaf's path, keyed by that prefix index, and both
+/// halves of each node it has split:
+///
+/// - AL-C1: `split_half` computed all six midpoints whatever `right` was, then returned one
+///   half. `split_both` makes the same six `midpoint` calls on the same operands, in the same
+///   order, and returns both halves, so each half has the bits `split_half` gave it.
+/// - AL-C2: a cached node at level j is the result of the same j `split_half` steps on the same
+///   inputs as the uncached path: the source is compared by bits (so `IPoint::exact` gives the
+///   same root), and the level-j key equals the leaf's prefix index only when the first j bits
+///   agree. The leaf's result is therefore bit-identical to the spike's `restrict`.
+///
+/// Every operation is a pure function of its operands (`fill_filter::Interval` reads only the
+/// test-build fault switch, which no call changes), so neither caching nor the call order can
+/// change a bit. When a cubic's leaves are consecutive and cover it, every internal node is
+/// split once: 2^d − 1 calls instead of d·2^d. It decides nothing.
+struct Subdivision {
+    /// The source controls of the cached root, compared by bits; `None` before the first leaf.
+    source: Option<[Point; 4]>,
+    root: [IPoint; 4],
+    /// The cached path length: nodes at levels 1..=`levels` are valid.
+    levels: usize,
+    /// `keys[j]`: the prefix index of the cached node at level j + 1; its last bit chooses the
+    /// half of the level-j node.
+    keys: [u32; LEVELS],
+    /// `children[j]`: both halves [left, right] of the cached level-j node, valid when
+    /// `split[j]`.
+    children: [[[IPoint; 4]; 2]; LEVELS],
+    split: [bool; LEVELS + 1],
+    /// `split_both` calls (a logical counter for the AL-U4b1 tests; decides nothing).
+    #[cfg(test)]
+    splits: u64,
 }
 
-fn split_half(points: [IPoint; 4], right: bool) -> [IPoint; 4] {
-    let p01 = midpoint(points[0], points[1]);
-    let p12 = midpoint(points[1], points[2]);
-    let p23 = midpoint(points[2], points[3]);
-    let p012 = midpoint(p01, p12);
-    let p123 = midpoint(p12, p23);
-    let middle = midpoint(p012, p123);
-    if right {
-        [middle, p123, p23, points[3]]
-    } else {
-        [points[0], p01, p012, middle]
+impl Subdivision {
+    fn new() -> Self {
+        Self {
+            source: None,
+            root: [IPoint::default(); 4],
+            levels: 0,
+            keys: [0; LEVELS],
+            children: [[[IPoint::default(); 4]; 2]; LEVELS],
+            split: [false; LEVELS + 1],
+            #[cfg(test)]
+            splits: 0,
+        }
+    }
+
+    fn node(&self, level: usize) -> [IPoint; 4] {
+        if level == 0 {
+            self.root
+        } else {
+            self.children[level - 1][(self.keys[level - 1] & 1) as usize]
+        }
+    }
+
+    fn split_node(&mut self, level: usize) -> [[IPoint; 4]; 2] {
+        #[cfg(test)]
+        {
+            self.splits += 1;
+        }
+        split_both(self.node(level))
+    }
+
+    /// The restricted controls of leaf n of depth d of `controls`: bit-identical to the
+    /// spike's `restrict(controls, numerator, depth)` (see the type's comment).
+    fn restrict(&mut self, controls: [Point; 4], numerator: u32, depth: u32) -> [IPoint; 4] {
+        let cell = numerator - 1;
+        let depth = depth as usize;
+        if depth > LEVELS {
+            // Unreachable: FR1 rejects a leaf deeper than `MAX_LEAF_DEPTH`. The uncached path,
+            // the spike's loop, keeps the result defined without indexing past the cache.
+            let mut points = controls.map(IPoint::exact);
+            for bit in (0..depth).rev() {
+                points = split_both(points)[((cell >> bit) & 1) as usize];
+            }
+            return points;
+        }
+        let same_source = self.source.is_some_and(|cached| {
+            cached
+                .iter()
+                .zip(controls.iter())
+                .all(|(left, right)| same_bits(*left, *right))
+        });
+        if !same_source {
+            self.source = Some(controls);
+            self.root = controls.map(IPoint::exact);
+            self.levels = 0;
+            self.split[0] = false;
+        }
+        // The longest cached prefix of this leaf's path. `keys[level]` is the cached node at
+        // level + 1; this leaf's node there has prefix index cell >> (depth − level − 1).
+        let mut level = 0;
+        while level < depth
+            && level < self.levels
+            && self.keys[level] == cell >> (depth - level - 1)
+        {
+            level += 1;
+        }
+        if level < depth {
+            // Nodes below `level` belong to another path; `split[level]` still describes the
+            // kept node at `level`.
+            self.levels = level;
+            while level < depth {
+                if !self.split[level] {
+                    self.children[level] = self.split_node(level);
+                    self.split[level] = true;
+                }
+                self.keys[level] = cell >> (depth - level - 1);
+                level += 1;
+                self.split[level] = false;
+                self.levels = level;
+            }
+        }
+        self.node(depth)
     }
 }
 
-fn midpoint(left: IPoint, right: IPoint) -> IPoint {
-    left.add(right).mul(Interval::point(0.5))
+/// Both halves of the interval de Casteljau split at 1/2: the six `midpoint` calls of the
+/// spike's `split_half`, unchanged, returning [left, right] instead of the half `right` chose
+/// (AL-U4b1, AL-C1).
+fn split_both(points: [IPoint; 4]) -> [[IPoint; 4]; 2] {
+    // AL-U4b1 (AL-C1): the one-point interval of 0.5, built once per split instead of once per
+    // midpoint; `Interval::point` is a construction with no arithmetic.
+    let half = Interval::point(0.5);
+    let p01 = midpoint(points[0], points[1], half);
+    let p12 = midpoint(points[1], points[2], half);
+    let p23 = midpoint(points[2], points[3], half);
+    let p012 = midpoint(p01, p12, half);
+    let p123 = midpoint(p12, p23, half);
+    let middle = midpoint(p012, p123, half);
+    [
+        [points[0], p01, p012, middle],
+        [middle, p123, p23, points[3]],
+    ]
+}
+
+fn midpoint(left: IPoint, right: IPoint, half: Interval) -> IPoint {
+    left.add(right).mul(half)
+}
+
+/// AL-U4b1 equivalence hook: the restricted controls of each leaf `(controls, numerator,
+/// depth)` in order, through one shared `Subdivision` as FR2 runs them, as the bits of
+/// [x.lo, x.hi, y.lo, y.hi] per control, with the number of splits made.
+#[cfg(test)]
+pub(crate) fn shared_restrict_bits(leaves: &[([Point; 4], u32, u32)]) -> (Vec<[[u64; 4]; 4]>, u64) {
+    let mut subdivision = Subdivision::new();
+    let results = leaves
+        .iter()
+        .map(|&(controls, numerator, depth)| {
+            subdivision
+                .restrict(controls, numerator, depth)
+                .map(|point| {
+                    [
+                        point.x.lo.to_bits(),
+                        point.x.hi.to_bits(),
+                        point.y.lo.to_bits(),
+                        point.y.hi.to_bits(),
+                    ]
+                })
+        })
+        .collect();
+    (results, subdivision.splits)
 }
 
 /// The FR7 event order: `Less` when `left` is above `right` (y descending, then x ascending).
