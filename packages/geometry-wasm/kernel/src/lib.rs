@@ -370,3 +370,7 @@ mod fill_ladder_identity;
 // reason as above.
 #[cfg(test)]
 mod fill_export_ladder_tests;
+// P3 Alt-A1 unit AL-U4a: the certificate's sub-stage diagnostic split, test-only; appended for
+// the same reason as above.
+#[cfg(test)]
+mod fill_ladder_diag_tests;
