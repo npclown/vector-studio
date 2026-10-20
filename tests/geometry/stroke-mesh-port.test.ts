@@ -47,7 +47,7 @@ describeStrokeMeshPortConformance(
     };
   },
   {
-    operationId: 'geometry-wasm/stroke-v0',
+    operationId: 'geometry-wasm/stroke-v0+r2',
     createFillPort: async () => {
       const adapter = await createFillMeshPort(module);
       return { port: adapter, dispose: () => adapter.dispose() };

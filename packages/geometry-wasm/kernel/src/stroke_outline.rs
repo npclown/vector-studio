@@ -328,7 +328,7 @@ pub(crate) struct Piece {
     pub(crate) disk_vertices: usize,
     /// A zero-area hull, dropped from the arrangement and kept only in this record.
     pub(crate) dropped: bool,
-    /// Joins: `[O_in, O_out, T]` (the tip only on a miter). Square caps: `[E- + r t, E+ + r t]`.
+    /// Joins: `[O_in, O_out, T]` (the tip only on a miter). Square caps: `[E- + r t, E+ + r t]`. Round caps: `[E-, E+]`, the cap's own triple.
     pub(crate) extra: [Point; 3],
     pub(crate) extra_count: usize,
     /// Sweeps, leaves and cusp disks (ST-U4).
@@ -560,8 +560,11 @@ struct LeafRange {
     split: bool,
     stationary_start: bool,
     stationary_end: bool,
+    /// The range's start triple, fixed before its first leaf, with its normal error bound: the
+    /// source triple (0) at a segment start, or at a reversal the left range's end triple read
+    /// from the other side (section 4.2: one sample triple per knot).
+    start: (Triple, f64),
     /// The source triple at a range end that is a segment end.
-    source_start: Option<Triple>,
     source_end: Option<Triple>,
 }
 
@@ -664,8 +667,11 @@ impl StrokeWorkspace {
         &self.pieces
     }
 
-    pub(crate) fn piece_points(&self, piece: &Piece) -> &[Point] {
-        &self.piece_points[piece.start..piece.start + piece.count]
+    /// A piece's stored polygon, or `None` when it was not stored (after an `InputLimit`
+    /// overflow, the record is kept but its points are not).
+    pub(crate) fn piece_points(&self, piece: &Piece) -> Option<&[Point]> {
+        let end = piece.start.checked_add(piece.count)?;
+        self.piece_points.get(piece.start..end)
     }
 
     /// The published mesh vertices, triangles and boundary pairs after `Mesh`.
@@ -1221,7 +1227,7 @@ impl StrokeWorkspace {
             }
             CubicClass::Cusp { split } => {
                 let (left, right) = split_at(controls, split);
-                self.emit_range(
+                let (knot, knot_error) = self.emit_range(
                     request,
                     index,
                     LeafRange {
@@ -1230,13 +1236,23 @@ impl StrokeWorkspace {
                         split: true,
                         stationary_start: false,
                         stationary_end: true,
-                        source_start: Some(segment.start),
+                        start: (segment.start, 0.0),
                         source_end: None,
                     },
                     r,
                     tolerances,
                 )?;
                 self.emit_cusp_disk(index, left[3], split, r, tolerances)?;
+                // The right range leaves the knot along the reversed limit direction, so its
+                // normal is the left's negated. The knot triple is computed once, by the left
+                // range's last leaf, and read from this side with its outer points swapped, as
+                // for collinear parts. Its normal error is that leaf's `dN`, which already holds
+                // the split end's limit-direction term (plan: ST-U4 cusp shared triple).
+                let mirrored = Triple {
+                    minus: knot.plus,
+                    center: knot.center,
+                    plus: knot.minus,
+                };
                 self.emit_range(
                     request,
                     index,
@@ -1246,12 +1262,13 @@ impl StrokeWorkspace {
                         split: true,
                         stationary_start: true,
                         stationary_end: false,
-                        source_start: None,
+                        start: (mirrored, knot_error),
                         source_end: Some(segment.end),
                     },
                     r,
                     tolerances,
                 )
+                .map(|_| ())
             }
             CubicClass::Regular | CubicClass::StationaryStart | CubicClass::StationaryEnd => self
                 .emit_range(
@@ -1263,12 +1280,13 @@ impl StrokeWorkspace {
                         split: false,
                         stationary_start: segment.class == CubicClass::StationaryStart,
                         stationary_end: segment.class == CubicClass::StationaryEnd,
-                        source_start: Some(segment.start),
+                        start: (segment.start, 0.0),
                         source_end: Some(segment.end),
                     },
                     r,
                     tolerances,
-                ),
+                )
+                .map(|_| ()),
         }
     }
 
@@ -1303,7 +1321,8 @@ impl StrokeWorkspace {
     }
 
     /// Section 4.5: depth-first, left-first midpoint subdivision of one range, emitting each
-    /// accepted leaf with the triples it shares with its neighbours.
+    /// accepted leaf with the triples it shares with its neighbours. Returns the range's end
+    /// triple with its normal error bound.
     fn emit_range(
         &mut self,
         request: StrokeRequest,
@@ -1311,7 +1330,7 @@ impl StrokeWorkspace {
         leaves: LeafRange,
         r: f64,
         tolerances: Tolerances,
-    ) -> Result<(), FrontEndError> {
+    ) -> Result<(Triple, f64), FrontEndError> {
         let magnitude = magnitude(&self.segments[index].controls);
         let factor = if self.defects.leaf_factor_two() {
             2.0
@@ -1321,7 +1340,7 @@ impl StrokeWorkspace {
         self.leaf_stack.clear();
         self.leaf_stack.push((leaves.controls, 0, 0));
         // The start triple of the next leaf and its normal error bound.
-        let mut current: Option<(Triple, f64)> = leaves.source_start.map(|start| (start, 0.0));
+        let mut current: (Triple, f64) = leaves.start;
         while let Some((q, depth, leaf)) = self.leaf_stack.pop() {
             let first = leaf == 0;
             let last = u64::from(leaf) + 1 == 1u64 << depth;
@@ -1345,7 +1364,7 @@ impl StrokeWorkspace {
                     split_range: leaves.split,
                     stationary_start,
                     stationary_end,
-                    start_error: current.map(|(_, error)| error),
+                    start_error: current.1,
                     end_fixed: last && leaves.source_end.is_some(),
                     split_length,
                     factor,
@@ -1363,10 +1382,7 @@ impl StrokeWorkspace {
                 self.leaf_stack.push((left, depth + 1, 2 * leaf));
                 continue;
             }
-            let start = match current {
-                Some((start, _)) => start,
-                None => triple(q[0], offset(unit_vector(measure.start_direction)?, r)),
-            };
+            let start = current.0;
             let end = match (last, leaves.source_end) {
                 (true, Some(end)) => end,
                 _ => triple(q[3], offset(unit_vector(measure.end_direction)?, r)),
@@ -1395,9 +1411,9 @@ impl StrokeWorkspace {
             if !last && self.defects.knot_join() {
                 self.emit_knot_join(request, index, end, r, tolerances)?;
             }
-            current = Some((end, measure.end_error));
+            current = (end, measure.end_error);
         }
-        Ok(())
+        Ok(current)
     }
 
     /// ST-D6 seeded defect only: the user join at a generated knot.
@@ -1558,6 +1574,7 @@ impl StrokeWorkspace {
                 for point in [sample.center, sample.minus, sample.plus] {
                     self.push_candidate(point)?;
                 }
+                self.set_extra(&[sample.minus, sample.plus]);
                 self.emit_hull(PieceKind::RoundCap, index, parameter, parameter, disk)
                     .map(|_| ())
             }
