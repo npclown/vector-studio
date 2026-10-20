@@ -6,6 +6,9 @@ import type {
   RenderCamera,
   RendererDiagnostic,
   RenderSceneSnapshot,
+  StrokeMeshBatchResult,
+  StrokeMeshPort,
+  StrokeMeshRequest,
 } from '@vector-studio/contracts';
 import { PrimitiveRendererService, type PrimitivePacket } from '@vector-studio/renderer-core';
 import {
@@ -56,6 +59,46 @@ function owned(mesh: HandMesh): FillMesh {
   };
 }
 
+// B2 stroke contract, ST-A10 (unit ST-U6): with `?stroke=1` the fixture also injects a static
+// test-double stroke-mesh port. Its one mesh is the stroke region of F01 at width 2 with butt
+// caps and miter joins (limit 4, so every 90 degree corner keeps its miter): [-1, 11]^2 minus
+// (1, 9)^2. Any other stroke request answers invalid-path. Still no WASM and no real port.
+const strokeMode = parameters.get('stroke') === '1';
+const STROKE_RING: HandMesh = {
+  positions: [-1, -1, 11, -1, 11, 11, -1, 11, 1, 1, 9, 1, 9, 9, 1, 9],
+  indices: RING.indices,
+  boundaryEdges: RING.boundaryEdges,
+};
+
+/** Static stroke test double: F01, width 2, butt, miter 4 gives STROKE_RING. */
+class StaticStrokeMeshPort implements StrokeMeshPort {
+  readonly portVersion = 0 as const;
+  readonly operationId = 'test/p3-st-u6-static-stroke-double';
+  calls = 0;
+  requests = 0;
+
+  buildStrokeMeshes(requests: readonly StrokeMeshRequest[]): StrokeMeshBatchResult {
+    this.calls += 1;
+    this.requests += requests.length;
+    return {
+      status: 'ok',
+      results: requests.map((request) => {
+        const echo = { requestId: request.requestId, toleranceExponent: request.toleranceExponent };
+        const points = Array.from(request.points).join(',');
+        const known =
+          points === F01_POINTS &&
+          request.width === 2 &&
+          request.cap === 'butt' &&
+          request.join === 'miter' &&
+          request.miterLimit === 4;
+        return known
+          ? { ...echo, status: 'ok' as const, mesh: owned(STROKE_RING) }
+          : { ...echo, status: 'failed' as const, code: 'invalid-path' as const };
+      }),
+    };
+  }
+}
+
 /** Static test double: F01 and F02 nonzero fill the square, F02 evenodd the ring. */
 class StaticFillMeshPort implements FillMeshPort {
   readonly portVersion = 0 as const;
@@ -99,6 +142,7 @@ interface CapturedFrame {
     notices: number;
   }>;
   portCalls: number;
+  strokePortCalls: number;
 }
 
 let device: GPUDevice | undefined;
@@ -114,6 +158,7 @@ let capture:
   | undefined;
 const diagnostics: RendererDiagnostic[] = [];
 const port = new StaticFillMeshPort();
+const strokePort = new StaticStrokeMeshPort();
 
 function boundMember<T extends object>(target: T, key: string | symbol): unknown {
   const value: unknown = Reflect.get(target, key);
@@ -237,7 +282,10 @@ const platform: WebGpuPlatform = {
 };
 
 const backend = new WebGpuBackend({ platform });
-const service = new PrimitiveRendererService(backend, { fillMesh: port });
+const service = new PrimitiveRendererService(backend, {
+  fillMesh: port,
+  ...(strokeMode ? { strokeMesh: strokePort } : {}),
+});
 backend.attachPrimitiveFrameSource(service);
 backend.subscribeDiagnostics((event) => {
   diagnostics.push(event);
@@ -325,6 +373,7 @@ async function copyFrame(
         notices: mesh?.notices.length ?? 0,
       },
       portCalls: port.calls,
+      strokePortCalls: strokePort.calls,
     };
   } finally {
     buffer.destroy();
@@ -366,6 +415,13 @@ const api = {
       diagnostics,
       pathMesh: service.getPathMeshStatistics(),
       port: { calls: port.calls, requests: port.requests, operationId: port.operationId },
+      strokePort: strokeMode
+        ? {
+            calls: strokePort.calls,
+            requests: strokePort.requests,
+            operationId: strokePort.operationId,
+          }
+        : null,
     };
   },
   dispose() {
