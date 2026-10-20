@@ -32,6 +32,12 @@
 //! kernel `FR2.restrict.AL-U4a`, checked against the stored controls, for a same-run
 //! comparison, and the counts report both split totals.
 //!
+//! **AL-U4b2.** The mirror follows the second optimization: FR4 computes each edge's chord and
+//! control steps once per edge (`MonotoneEdge`, AL-C1), as `fill_ladder.rs`'s
+//! `monotone_contour` does; its sub-stage kernels compute only their own per-edge operands. The
+//! fidelity check is unchanged. The AL-U4b1 FR4 stays as the extra kernel `FR4.AL-U4b1`,
+//! checked to pass on every timed path, for a same-run comparison. The dot counts are unchanged.
+//!
 //! The ignored test runs only by hand (release profile, `--nocapture`, one test thread) and
 //! prints its tables; it changes no output and writes no file.
 use core::cmp::Ordering;
@@ -503,6 +509,40 @@ fn split_half(points: [IPoint; 4], right: bool) -> [IPoint; 4] {
 
 fn midpoint(left: IPoint, right: IPoint) -> IPoint {
     left.add(right).mul(Interval::point(0.5))
+}
+
+/// AL-U4b2: `fill_ladder.rs`'s `MonotoneEdge`, one edge's FR4 operands computed once. The
+/// mirror's sub-stage kernels compute only the chord (`CHORDS`) or only the steps (`STEPS`).
+#[derive(Clone, Copy)]
+struct MonotoneEdge {
+    chord: IPoint,
+    steps: [IPoint; 3],
+    terms: Option<usize>,
+}
+
+impl MonotoneEdge {
+    fn new<const CHORDS: bool, const STEPS: bool>(edge: &CertEdge) -> Self {
+        let terms = match edge.piece {
+            Piece::Leaf { .. } => Some(3),
+            Piece::Segment { .. } => Some(1),
+            Piece::Unset => None,
+        };
+        let mut steps = [IPoint::default(); 3];
+        if STEPS {
+            for (term, step) in steps.iter_mut().enumerate().take(terms.unwrap_or(0)) {
+                *step = edge.controls[term + 1].sub(edge.controls[term]);
+            }
+        }
+        Self {
+            chord: if CHORDS {
+                exact_difference(edge.end, edge.start)
+            } else {
+                IPoint::default()
+            },
+            steps,
+            terms,
+        }
+    }
 }
 
 fn merge_sort(
@@ -1181,28 +1221,75 @@ impl Mirror {
 
     // FR4 -----------------------------------------------------------------------------------
 
-    /// `FastRung::monotone`; `CHORDS` and `STEPS` select the sub-stages (both for the stage).
+    /// `FastRung::monotone` with `monotone_contour` (AL-U4b2): each edge's chord and control
+    /// steps are computed once per edge (`MonotoneEdge`), edge 0's kept for the cyclic pair.
+    /// `CHORDS` and `STEPS` select the sub-stages (both for the stage); each sub-stage computes
+    /// only its own per-edge operands.
     fn monotone<const COUNT: bool, const CHORDS: bool, const STEPS: bool>(
         &mut self,
     ) -> Result<(), Reason> {
+        for info in self.contours[..self.range_len].iter().copied() {
+            let edges = &self.cert[info.cert_start..info.cert_start + info.cert_count];
+            let count = edges.len();
+            if count == 0 {
+                continue;
+            }
+            let first = MonotoneEdge::new::<CHORDS, STEPS>(&edges[0]);
+            let mut e = first;
+            for index in 0..count {
+                let next = index + 1;
+                let (f_edge, f) = if next < count {
+                    (
+                        &edges[next],
+                        MonotoneEdge::new::<CHORDS, STEPS>(&edges[next]),
+                    )
+                } else {
+                    (&edges[0], first)
+                };
+                let w = exact_difference(f_edge.end, edges[index].start);
+                if COUNT {
+                    self.counts.fr4_pairs += 1;
+                    self.counts.fr4_dots += 2;
+                }
+                if CHORDS
+                    && (!proved_positive(dot(e.chord, w)) || !proved_positive(dot(f.chord, w)))
+                {
+                    return Err(Reason::Monotone);
+                }
+                if STEPS {
+                    for edge in [&e, &f] {
+                        let Some(terms) = edge.terms else {
+                            return Err(Reason::Structure);
+                        };
+                        for step in &edge.steps[..terms] {
+                            if COUNT {
+                                self.counts.fr4_dots += 1;
+                            }
+                            if !proved_positive(dot(*step, w)) {
+                                return Err(Reason::Monotone);
+                            }
+                        }
+                    }
+                }
+                e = f;
+            }
+        }
+        Ok(())
+    }
+
+    /// The AL-U4b1 `FastRung::monotone` (each edge's chord and steps computed in both of its
+    /// pairs), kept as the extra kernel `FR4.AL-U4b1` for a same-run comparison (AL-U4b2).
+    fn monotone_unshared(&self) -> Result<(), Reason> {
         for info in self.contours[..self.range_len].iter().copied() {
             let count = info.cert_count;
             for index in 0..count {
                 let e = self.cert[info.cert_start + index];
                 let f = self.cert[info.cert_start + (index + 1) % count];
                 let w = exact_difference(f.end, e.start);
-                if COUNT {
-                    self.counts.fr4_pairs += 1;
-                    self.counts.fr4_dots += 2;
-                }
-                if CHORDS
-                    && (!proved_positive(dot(exact_difference(e.end, e.start), w))
-                        || !proved_positive(dot(exact_difference(f.end, f.start), w)))
+                if !proved_positive(dot(exact_difference(e.end, e.start), w))
+                    || !proved_positive(dot(exact_difference(f.end, f.start), w))
                 {
                     return Err(Reason::Monotone);
-                }
-                if !STEPS {
-                    continue;
                 }
                 for edge in [e, f] {
                     let terms = match edge.piece {
@@ -1212,9 +1299,6 @@ impl Mirror {
                     };
                     for term in 0..terms {
                         let step = edge.controls[term + 1].sub(edge.controls[term]);
-                        if COUNT {
-                            self.counts.fr4_dots += 1;
-                        }
                         if !proved_positive(dot(step, w)) {
                             return Err(Reason::Monotone);
                         }
@@ -1567,7 +1651,7 @@ const FILTERS: [(&str, FilterId); 3] = [
 ];
 
 /// The mirror's sub-stage kernels, in stage order.
-const KERNELS: [&str; 16] = [
+const KERNELS: [&str; 17] = [
     "FR1",
     "FR1.resolve",
     "FR2",
@@ -1584,6 +1668,7 @@ const KERNELS: [&str; 16] = [
     "FR5.relation",
     "FR5.points",
     "FR2.restrict.AL-U4a",
+    "FR4.AL-U4b1",
 ];
 
 fn time_kernel(timing: &Timing, mirrors: &mut [Box<Mirror>], kernel: impl Fn(&mut Mirror)) -> f64 {
@@ -1598,7 +1683,7 @@ fn time_kernel(timing: &Timing, mirrors: &mut [Box<Mirror>], kernel: impl Fn(&mu
 ///
 /// The slots run in order on shared prepared state: slot 0 (FR1) rebuilds the certified edges,
 /// which zeroes their `controls` and `deviation_squared`, and slot 2 (FR2) restores both before
-/// slot 4 (FR2 terms), slot 5 (FR3, AL-M5) and slots 6-8 (FR4) read them. The order of
+/// slot 4 (FR2 terms), slot 5 (FR3, AL-M5) and slots 6-8 and 16 (FR4) read them. The order of
 /// `KERNELS` must keep that dependency.
 fn measure_kernel(slot: usize, timing: &Timing, mirrors: &mut [Box<Mirror>]) -> f64 {
     match slot {
@@ -1649,6 +1734,9 @@ fn measure_kernel(slot: usize, timing: &Timing, mirrors: &mut [Box<Mirror>]) -> 
         }),
         15 => time_kernel(timing, mirrors, |m| {
             black_box(m.fr2_restrict_unshared());
+        }),
+        16 => time_kernel(timing, mirrors, |m| {
+            black_box(m.monotone_unshared()).expect("AL-U4b1 FR4 passes");
         }),
         _ => unreachable!("unknown kernel {slot}"),
     }
@@ -2043,6 +2131,12 @@ fn al_u4a_certificate_sub_stage_split() {
                 assert!(
                     state.fr2_restrict_unshared(),
                     "AL-U4a restrict kernel, {}",
+                    cell.id
+                );
+                assert_eq!(
+                    state.monotone_unshared(),
+                    Ok(()),
+                    "AL-U4b1 FR4 kernel, {}",
                     cell.id
                 );
                 assert_eq!(

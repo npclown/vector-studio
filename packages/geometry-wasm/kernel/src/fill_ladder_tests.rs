@@ -2613,3 +2613,341 @@ fn al_u4b1_full_corpus_keeps_the_spike_max_deviation_bits() {
     random.report("p3-b0r-random/v1");
     assert!(b0.compared > 0 && random.compared > 0);
 }
+
+// ------------------------------------------------------------------------------------------
+// AL-U4b2 (contract section 5.1, AL-C1): FR4 with each edge's chord and control steps computed
+// once per edge decides exactly as the AL-U4b1 FR4 (`fill_ladder.rs` at 85f7ef9), kept here as
+// a statement-for-statement copy. Both record the bits [lo, hi] of every decided dot interval in
+// order, so equal traces mean the same operands, the same dots, the same decisions in the same
+// order, and the same first failing reason.
+
+impl OldIPoint {
+    fn sub(self, other: Self) -> Self {
+        Self {
+            x: self.x.sub(other.x),
+            y: self.y.sub(other.y),
+        }
+    }
+}
+
+fn old_exact_difference(left: Point, right: Point) -> OldIPoint {
+    OldIPoint::exact(left).sub(OldIPoint::exact(right))
+}
+
+fn old_dot(left: OldIPoint, right: OldIPoint) -> crate::fill_filter::Interval {
+    left.x.mul(right.x).add(left.y.mul(right.y))
+}
+
+/// The AL-U4b1 `FastRung::monotone`, unchanged except that it reads `MonotoneTestEdge`s and
+/// records each decided dot interval.
+fn old_monotone_trace(
+    contours: &[Vec<crate::fill_ladder::MonotoneTestEdge>],
+    chords_only: bool,
+) -> (Result<(), Reason>, Vec<[u64; 2]>) {
+    let mut trace = Vec::new();
+    let mut decided = |value: crate::fill_filter::Interval| {
+        trace.push([value.lo.to_bits(), value.hi.to_bits()]);
+        value.sign() == Some(Ordering::Greater)
+    };
+    let mut run = || {
+        for contour in contours {
+            let count = contour.len();
+            for index in 0..count {
+                let e = contour[index];
+                let f = contour[(index + 1) % count];
+                let w = old_exact_difference(f.1, e.0);
+                if !decided(old_dot(old_exact_difference(e.1, e.0), w))
+                    || !decided(old_dot(old_exact_difference(f.1, f.0), w))
+                {
+                    return Err(Reason::Monotone);
+                }
+                if chords_only {
+                    continue;
+                }
+                for edge in [e, f] {
+                    let terms = match edge.2 {
+                        Some(terms) => terms,
+                        None => return Err(Reason::Structure),
+                    };
+                    let controls = edge.3.map(|[x, y]| OldIPoint { x, y });
+                    for term in 0..terms {
+                        let step = controls[term + 1].sub(controls[term]);
+                        if !decided(old_dot(step, w)) {
+                            return Err(Reason::Monotone);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    };
+    let result = run();
+    (result, trace)
+}
+
+#[derive(Default)]
+struct MonotoneEquivalence {
+    cases: usize,
+    dots: usize,
+    undecided_dots: usize,
+    passed: usize,
+    monotone: usize,
+    structure: usize,
+    differences: Vec<String>,
+}
+
+impl MonotoneEquivalence {
+    /// Compares both FR4 versions on `contours`, with and without defect (3)'s chords-only
+    /// switch, and returns the new version's full result.
+    fn compare(
+        &mut self,
+        name: &str,
+        contours: &[Vec<crate::fill_ladder::MonotoneTestEdge>],
+    ) -> Result<(), Reason> {
+        let mut full = Ok(());
+        for chords_only in [false, true] {
+            let new = crate::fill_ladder::monotone_trace(contours, chords_only);
+            let old = old_monotone_trace(contours, chords_only);
+            self.cases += 1;
+            self.dots += new.1.len();
+            self.undecided_dots += new
+                .1
+                .iter()
+                .filter(|[lo, hi]| {
+                    !(f64::from_bits(*lo).is_finite() && f64::from_bits(*hi).is_finite())
+                })
+                .count();
+            match new.0 {
+                Ok(()) => self.passed += 1,
+                Err(Reason::Monotone) => self.monotone += 1,
+                Err(Reason::Structure) => self.structure += 1,
+                Err(_) => {}
+            }
+            if new != old {
+                self.differences.push(format!(
+                    "{name} (chords only {chords_only}): new {:?} after {} dots, old {:?} after \
+                     {} dots",
+                    new.0,
+                    new.1.len(),
+                    old.0,
+                    old.1.len()
+                ));
+            }
+            if !chords_only {
+                full = new.0;
+            }
+        }
+        full
+    }
+
+    fn report(&self, label: &str) {
+        println!(
+            "AL-U4b2 FR4 equivalence {label}: {} cases, {} dots ({} undecided), {} pass, {} \
+             MONOTONE, {} STRUCTURE, {} differ",
+            self.cases,
+            self.dots,
+            self.undecided_dots,
+            self.passed,
+            self.monotone,
+            self.structure,
+            self.differences.len()
+        );
+        assert!(
+            self.differences.is_empty(),
+            "FR4 differs: {:#?}",
+            self.differences
+        );
+    }
+}
+
+/// FR4 on a real path: the certified edges after FR3, compared, and the new version's result
+/// against the production stop after FR4. Returns false when FR1-FR3 do not pass.
+fn monotone_real_case(
+    harness: &mut Harness,
+    equivalence: &mut MonotoneEquivalence,
+    name: &str,
+    request: FillRequest,
+    path: &RealPath,
+) -> bool {
+    let through_fr3 = harness.ladder.fast_rung_until(
+        &mut harness.workspace,
+        request,
+        &path.verbs,
+        &path.point_bytes,
+        &mut harness.scan,
+        Stage::Fr3,
+    );
+    if through_fr3.is_err() {
+        return false;
+    }
+    let inputs = harness.ladder.fast().monotone_inputs();
+    let result = equivalence.compare(name, &inputs);
+    let production = harness.ladder.fast_rung_until(
+        &mut harness.workspace,
+        request,
+        &path.verbs,
+        &path.point_bytes,
+        &mut harness.scan,
+        Stage::Fr4,
+    );
+    if production != result {
+        equivalence.differences.push(format!(
+            "{name}: production FR4 stop {production:?}, hook {result:?}"
+        ));
+    }
+    true
+}
+
+/// A random interval around `center`: exact, widened by a random relative width, or undecided.
+fn random_interval(stream: &mut EquivalenceStream, center: f64) -> crate::fill_filter::Interval {
+    match stream.below(16) {
+        0 => crate::fill_filter::UNDECIDED,
+        1..=7 => crate::fill_filter::Interval::point(center),
+        _ => {
+            let width = center.abs() * pow2(-(stream.below(60) as i32)) + pow2(-1074);
+            crate::fill_filter::Interval {
+                lo: center - width,
+                hi: center + width,
+            }
+        }
+    }
+}
+
+/// A random contour of 1 to 10 edges: a convex polygon (scaled by a random power of two, so
+/// that most pairs pass) with leaf or segment pieces whose controls lie on the chords, perturbed
+/// by random enclosure widths, reversed steps and unset pieces; or entirely random points.
+fn random_monotone_contour(
+    stream: &mut EquivalenceStream,
+) -> Vec<crate::fill_ladder::MonotoneTestEdge> {
+    let count = 1 + stream.below(10) as usize;
+    let convex = stream.below(4) != 0;
+    let scale = pow2(stream.below(160) as i32 - 80);
+    let phase = stream.below(1000) as f64 / 1000.0;
+    let points: Vec<Point> = (0..count)
+        .map(|index| {
+            if convex {
+                let angle = core::f64::consts::TAU * (index as f64 + phase) / count.max(3) as f64;
+                p(scale * angle.cos(), scale * angle.sin())
+            } else {
+                p(stream.coordinate(), stream.coordinate())
+            }
+        })
+        .collect();
+    (0..count)
+        .map(|index| {
+            let start = points[index];
+            let end = points[(index + 1) % count];
+            let terms = match stream.below(16) {
+                0 => None,
+                1..=10 => Some(3),
+                _ => Some(1),
+            };
+            let along = |t: f64| {
+                p(
+                    start.x + (end.x - start.x) * t,
+                    start.y + (end.y - start.y) * t,
+                )
+            };
+            let mut targets = match terms {
+                Some(1) => [start, end, end, end],
+                _ => [start, along(1.0 / 3.0), along(2.0 / 3.0), end],
+            };
+            if stream.below(8) == 0 {
+                // A reversed control step.
+                targets.swap(1, 2);
+            }
+            let controls = targets.map(|point| {
+                [
+                    random_interval(stream, point.x),
+                    random_interval(stream, point.y),
+                ]
+            });
+            (start, end, terms, controls)
+        })
+        .collect()
+}
+
+#[test]
+fn al_u4b2_fr4_shared_operands_decide_as_before() {
+    // Fixtures: the synthetic views through FR3, then FR4 by both versions, and the hook's
+    // result against the production stops after FR4 (with and without defect (3)).
+    let mut scan = TestScan::new();
+    let mut production = Box::new(FastRung::new());
+    let mut fixtures_equivalence = MonotoneEquivalence::default();
+    let mut reached = 0usize;
+    for fixture in fixtures() {
+        let through_fr3 = production
+            .load(fixture.view.view(), DELTA, fixture.rule)
+            .and_then(|()| production.run(Stage::Fr3, &mut scan));
+        if through_fr3.is_err() {
+            continue;
+        }
+        reached += 1;
+        let inputs = production.monotone_inputs();
+        let result = fixtures_equivalence.compare(fixture.id, &inputs);
+        let stop = production
+            .load(fixture.view.view(), DELTA, fixture.rule)
+            .and_then(|()| production.run(Stage::Fr4, &mut scan));
+        let chords = crate::fill_ladder::monotone_trace(&inputs, true).0;
+        let chords_stop = with_ladder_faults(&[LadderFault::MonotoneChordsOnly], || {
+            production
+                .load(fixture.view.view(), DELTA, fixture.rule)
+                .and_then(|()| production.run(Stage::Fr4, &mut scan))
+        });
+        if stop != result || chords_stop != chords {
+            fixtures_equivalence.differences.push(format!(
+                "{}: stop {stop:?} / {chords_stop:?}, hook {result:?} / {chords:?}",
+                fixture.id
+            ));
+        }
+    }
+    fixtures_equivalence.report("fixtures");
+    assert!(reached > 0 && fixtures_equivalence.monotone > 0 && fixtures_equivalence.passed > 0);
+
+    // The debug sample of real paths.
+    let mut harness = Harness::new();
+    let mut sample = MonotoneEquivalence::default();
+    let mut sample_reached = 0usize;
+    for (name, request, path) in sample_cases() {
+        if monotone_real_case(&mut harness, &mut sample, &name, request, &path) {
+            sample_reached += 1;
+        }
+    }
+    sample.report("debug sample");
+    assert!(sample_reached > 0 && sample.passed > 0);
+
+    // Random edges, contours of 1 to 10 edges (FR1 admits only 3 or more; FR4 handles any),
+    // one to three contours per case.
+    let mut stream = EquivalenceStream(0xd1b5_4a32_d192_ed03);
+    let mut random = MonotoneEquivalence::default();
+    for case in 0..20_000 {
+        let contours: Vec<_> = (0..1 + stream.below(3))
+            .map(|_| random_monotone_contour(&mut stream))
+            .collect();
+        let _ = random.compare(&format!("random {case}"), &contours);
+    }
+    random.report("random edges");
+    assert!(random.passed > 0 && random.monotone > 0 && random.structure > 0);
+    assert!(random.undecided_dots > 0 && random.undecided_dots < random.dots);
+}
+
+#[test]
+#[ignore = "AL-U4b2 FR4 full corpus; needs P3_B0R_B0_CORPUS and P3_B0R_RANDOM_CORPUS; release profile"]
+fn al_u4b2_full_corpus_fr4_shared_operands_decide_as_before() {
+    let mut harness = Harness::new();
+    let mut b0 = MonotoneEquivalence::default();
+    for (name, request, path) in b0_corpus() {
+        monotone_real_case(&mut harness, &mut b0, &name, request, &path);
+    }
+    let random_bytes = {
+        let path = env::var("P3_B0R_RANDOM_CORPUS").expect("P3_B0R_RANDOM_CORPUS is required");
+        std::fs::read(path).expect("read the randomized corpus")
+    };
+    let mut random = MonotoneEquivalence::default();
+    for (name, request, path) in random_corpus(&random_bytes) {
+        monotone_real_case(&mut harness, &mut random, &name, request, &path);
+    }
+    b0.report("B0 framed corpus");
+    random.report("p3-b0r-random/v1");
+    assert!(b0.passed > 0 && random.passed > 0);
+}
