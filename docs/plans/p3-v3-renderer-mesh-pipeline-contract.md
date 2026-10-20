@@ -386,6 +386,8 @@ Every vertex of a triangle computes the same flat `t`, so no provoking-vertex co
 
 ## h) D8-interim failure outcome
 
+Amended 2026-10-20 by [V4](p3-fill-stroke-meshes.md#v4-playground-path-page), the builder work cap: a path whose mesh has more than `fringeBoundaryVertexCap` (128) distinct boundary vertices is drawn region-only (no coverage fringe) instead of not drawn, and queues one `render.path-mesh-interim-failure` notice with code `fringe-work-cap` per cache entry. This is V3-Q2 option (c) scoped to that one cause; every other failure keeps this section's rule. It is removed with the TypeScript builder at the R2/K1 placement decision, or when B0's E3 result replaces it.
+
 **Code.** `packages/contracts/src/diagnostics.ts` gains:
 
 ```ts

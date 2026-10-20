@@ -654,8 +654,10 @@ describe('V3b backend lifecycle (V3-A13)', () => {
   });
 });
 
-describe('V3b host injection (V3-A18)', () => {
-  it('V3-A18: no host requests the mesh pipeline or injects a port before V4', () => {
+// V4 removed the V3-A18 form of this test ("before V4") when the playground gained the real
+// port. The remaining hosts still request no mesh pipeline and inject no port.
+describe('V4 host injection', () => {
+  it('V4: no host other than the path page requests the mesh pipeline or injects a port', () => {
     const root = join(__dirname, '../../apps');
     const files: string[] = [];
     const walk = (directory: string) => {
@@ -668,13 +670,21 @@ describe('V3b host injection (V3-A18)', () => {
     };
     walk(root);
     expect(files.length).toBeGreaterThan(0);
-    // V3c: the V3-A14 smoke fixture page is a test fixture with a static test-double port, not
-    // a host; it must not reach a real port (no geometry-wasm). V4 replaces this exemption.
+    // The V4 path page and its manifest and project-reference edges inject the real port.
+    const host = files.filter(
+      (file) =>
+        /[\\/]src[\\/]p3-v4-paths\.ts$/.test(file) ||
+        /[\\/]playground[\\/](package|tsconfig)\.json$/.test(file),
+    );
+    expect(host).toHaveLength(3);
+    // The V3-A14 smoke fixture page is a test fixture with a static test-double port, not a
+    // host; it must not reach a real port (no geometry-wasm).
     const fixture = files.filter((file) => /p3-v3-mesh\.(ts|html)$/.test(file));
     expect(fixture).toHaveLength(2);
     for (const file of fixture)
       expect(readFileSync(file, 'utf8'), file).not.toMatch(/geometry-wasm/);
-    for (const file of files.filter((candidate) => !fixture.includes(candidate))) {
+    const allowed = new Set([...host, ...fixture]);
+    for (const file of files.filter((candidate) => !allowed.has(candidate))) {
       expect(readFileSync(file, 'utf8'), file).not.toMatch(
         /fillMesh|geometry-wasm|requiresMeshPipeline|meshPipeline/,
       );
