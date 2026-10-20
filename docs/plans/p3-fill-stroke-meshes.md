@@ -1800,6 +1800,24 @@ Validation. The first runs below used a local scratch branch with AL-U5's commit
   - `pnpm build`: PASS.
   - AL-A2 `git diff --exit-code origin/main` on the Cargo files, lockfiles and `packages/contracts`: exit 0.
 
+Review follow-up. The independent diff review of PR #162 returned NOT READY with one blocking item. It and the should-fix items are applied on the same branch, as described in the design above:
+
+- **B1.** A missing native leg, a whole missing browser, or a missing cell was classified as a checksum mismatch, and so as INVALID with a false reason. Now only two present checksums that differ are a mismatch. A missing checksum or leg fails `repetitions-complete` instead, which gives INCONCLUSIVE. Tests cover a whole missing browser, a missing native leg and a missing cell.
+- **S1.** The `al-s1-same-kernel` item and `analysis.alS1Kernel` were added, and auto-discovery links only an AL-S1 record of this kernel. The test covers a changed kernel file and a manifest without kernel entries.
+- **S2.** `--al-s1 <path>` was added, and the link rule is documented above.
+- **S3.** `cross-origin-isolated` was added as a validity item.
+- **S4.** The B0 shuffle orders are checked under `operation-identity`.
+- **S5.** Neither the plan's Next line nor the B0 row is edited.
+- **S6.** The doc comments now say that `Fnv1a64.result` creates per-mesh `Uint8Array` views inside the window. The `statuses` comment now says the statuses come from one untimed call after the preparation sample.
+- **S7.** The README browser fields are now part of `metadata-complete`.
+- The configuration gained the kernel-source rule, so its reference hash is now `f337d0ef…2bfd`.
+- Reruns, on commit `11c81df`:
+  - `vitest … p3-b0-wasm-analysis.test.ts`: 17 passed.
+  - Functional run `20261020T021640Z-d717edd9`, clean committed tree: PASS. All 10 validity items PASS, k̂ = 1.674 and k̂₁ = 1.321 (not evidence), WASM `f13fb345…6127`, and `alS1Kernel.equal` null, since no AL-S1 record is committed. Product verdict NONE.
+  - `pnpm test:geometry`: PASS. Native: 378 passed and 52 ignored. Vitest: 48 files passed and 4 skipped, with 791 tests passed and 6 skipped.
+  - `pnpm check`: PASS, with 66 files and 740 tests.
+  - Prettier and `git diff --check`: PASS.
+
 Deviations and notes:
 
 - **The WASM build.** Section 5.2 says the release WASM is "built by `pnpm build`". `pnpm build` compiles only TypeScript, so the runner builds the WASM with the release cargo command of `tooling/test-geometry.mjs` instead. The SHA-256 is identical to `pnpm test:geometry`'s.
