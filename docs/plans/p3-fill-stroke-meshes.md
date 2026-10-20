@@ -1870,6 +1870,7 @@ Local validation for this commit:
 - `pnpm check`: its `format:check` step (`prettier --check .`) fails on 232 files, all under `.claude/worktrees/`, which holds other sessions' git worktrees, excluded from git by `.git/info/exclude` but not from Prettier; this unit leaves them untouched. The same check with `.gitignore`, `.prettierignore` and an extra ignore of `.claude/` passes. The other steps pass on their own: `lint`, `typecheck`, `test:unit` (66 files, 740 tests) and `check:boundaries`.
 
 Next: the independent evidence review (AL-A15) of both records against the contract, then AL-U8, the verdict to the user under B0-Q3. B1 stays blocked under AL-Q6.
+**User decision, 2026-10-20, in chat (AL-U8, product verdict INCONCLUSIVE).** The verdict was shown with the estimates at k̂ = 1.579 (T̂ 1,031 ms, 1.03 × B_init; t̂_edit 4.37 ms, 1.09 × B_edit) and three options: resume feature development; more AL-U4b optimization and a re-measurement before B1; or a budget revision. The user chose to resume feature development: B1 (kernel caps), V4 (real paths in the playground) and B2 (strokes) may proceed now, which relaxes AL-Q6's "B1 after a FEASIBLE verdict" by this decision. The remaining 1.03-1.09 × gap is a later optimization and re-measurement item. Budgets, records and the decision rule are unchanged. The AL-A15 independent evidence review of the AL-U7 records is owed: the user skipped verification on 2026-10-20 only.
 
 ### B0 runner (light tier)
 
