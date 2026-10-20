@@ -2042,6 +2042,44 @@ Validation (worktree with the main checkout's pinned toolchain through `CARGO_HO
 
 Full tier, 2026-10-21, independent review round 1 READY WITH FOLLOW-UPS (applied); APPROVED by the user 2026-10-21 with OB5-Q1 to Q7 all (a); next OB5-U1: the [AL-OB5 proposal](p3-al-ob5-workload-scenario-proposal.md) fixes scenario `p3-al-ob5-workload` v1, the direct 1,000 × 32 workload measurement owed by [Alt-A1 section 5.4](p3-alt-a1-fill-ladder-contract.md#54-verifying-the-workload-itself), with units OB5-U1 to OB5-U3 and questions OB5-Q1 to OB5-Q7; no harness, run or record until then, and no budget or decision-rule change.
 
+### Alt-A1 AL-OB5 OB5-U1 generator and admission expectation
+
+Light-tier unit of the approved [AL-OB5 proposal](p3-al-ob5-workload-scenario-proposal.md#6-units), 2026-10-21. Test-only: no product source, contract, dependency, threshold or B0 module changes, and no timing or performance claim. Precision is UNVERIFIED against the 0.25 physical-pixel target until B4.
+
+**Deliverables.**
+
+- `tests/geometry/p3-al-ob5/corpus.ts`: cells OB5-W2, OB5-W4 and OB5-W8 (s = 32, λ = 2, 4, 8, B0's bulges 3/64, 3/16, 3/8, `snapped: true`, 1,000 paths, seed `0x12345678`) through B0's unchanged `generateCellPaths` and `encodeCorpus`; and the OB5-Q7 (a) observation cell OB5-W8U (`snapped: false`, role `o1`), kept out of the decision cells and out of the decision corpus bytes.
+- `tests/geometry/p3-al-ob5/fixture.json`: the scalar bits and verbs of paths 0 and 999 of each decision set, written by the independent Rust generator in `packages/geometry-wasm/kernel/src/p3_al_ob5_tests.rs` (its own xorshift32 ρ draws, `sin`/`cos` and `round_ties_even`; ignored test `emit_p3_al_ob5_fixture`) before any comparison. The native test `ob5_fixture_matches_the_independent_generator` checks the committed file against that generator; `tests/geometry/p3-al-ob5-corpus.test.ts` checks the TypeScript corpus against the same file, so the TypeScript-versus-fixture check is not circular. The unsnapped set is not in the fixture, because its bits depend on the platform `sin`/`cos`.
+- `ob5_decision_sets_are_all_ok_on_rung_0_with_the_expected_counts` runs all 3,000 decision paths through `FillEngine::process` at the production caps in one batch per set, asserting zero allocations in both the capacity-query and the real call, and reads each path's rung from `build_one` on the same engine.
+- `ob5_unsnapped_observation_records_status_and_rung_mix` records OB5-W8U as an observation, with no assertion on its outcome.
+
+**Corpus SHA-256** (little-endian `P3B0COR1` framing, bytes from `encodeCorpus`; pinned in the Vitest file):
+
+| Corpus                                   | SHA-256                                                            |
+| ---------------------------------------- | ------------------------------------------------------------------ |
+| Decision: OB5-W2, OB5-W4, OB5-W8 (3,000) | `353fef77a5f7fe9208bdd6566a16477833ea0dc47528dbaca8581a37222acc2f` |
+| Observation: OB5-W8U, unsnapped (1,000)  | `8c6618bec379f5e1041ef5803913e16208427cbb178c784afa1238580b2596fc` |
+
+B0's corpus bytes are unchanged.
+
+**Committed expectation** (every path of the set; V, T and boundary pairs B per path):
+
+| Set    | Paths | Status | Rung     | V   | T   | B   |
+| ------ | ----- | ------ | -------- | --- | --- | --- |
+| OB5-W2 | 1,000 | ok     | 0 (fast) | 64  | 62  | 64  |
+| OB5-W4 | 1,000 | ok     | 0 (fast) | 128 | 126 | 128 |
+| OB5-W8 | 1,000 | ok     | 0 (fast) | 256 | 254 | 256 |
+
+**Observation only, not an expectation: OB5-W8U (unsnapped, generic coordinates).** Native run on the same engine over the Rust generator's own unsnapped bits: 911 paths `ok` on rung 0 with V 256, T 254, B 256; 89 paths status 5 (`work-limit`) with the exact rung as the last rung tried. This is recorded for the OB5-Q7 (a) observation. It is outside the decision sets and the verdict, and it does not change the generator. Those bits differ from the hashed TypeScript OB5-W8U corpus (`8c6618be…96fc`) in most paths (the review counted 712 of 1,000 paths and 4,717 scalars), because unsnapped coordinates keep the platform `sin`/`cos` rounding; so the split describes the Rust bits, not the hashed corpus. OB5-U2 and OB5-U3 take the Q7 (a) observation from the TypeScript corpus bytes. The decision sets are unaffected: all 3,000 snapped paths are bit-identical between the two generators on this machine (V8 and MSVC libm), and OB5-U2's native leg reads the TypeScript-encoded corpus or verifies its SHA-256 (OB5-V4), so the expectation does not depend on CI's libm.
+
+**Validation.**
+
+- `pnpm test:geometry`: native stage PASS (fmt, clippy `-D warnings`, `cargo test` 449 passed, 56 ignored, 0 failed, including the three new OB5-U1 tests (the fixture check is one of them) and one ignored fixture emitter; release WASM built twice with identical hashes). The Vitest stage ran 51 files passed and 1 failed: `extent-t03-local.test.ts` hit a 60 s timeout while this machine also ran `pnpm check`, a scratch WASM build and a Prettier pass; re-run alone with the new `p3-al-ob5-corpus.test.ts` it passes (2 files, 9 tests). The new Vitest file passed in the full run (5 tests). A clean uncontended full re-run is left to CI.
+- `pnpm check`: PASS. Prettier, ESLint, typecheck, `pnpm test:unit` 69 files and 945 tests, boundaries. `pnpm build`: PASS.
+- `git diff --exit-code origin/main -- Cargo.toml Cargo.lock pnpm-lock.yaml packages/contracts` (AL-A2), and the kernel `Cargo.toml` and `Cargo.lock`: exit 0.
+- Release WASM: the independent-build SHA-256 printed by `pnpm test:geometry`, `480cb6336040254fed9bf3be2d620e87fcb723ea981c5b15c1bbb2275f0b2d50`, equals a release build of `origin/main`'s kernel in a scratch tree with the same flags and path remap.
+- Independent diff review: READY WITH FOLLOW-UPS (no blocking item). Applied: the OB5-W8U observation is now described as the Rust bits, which differ from the hashed TypeScript corpus, and OB5-U2 takes the observation from the TypeScript bytes (SF1); the admission test now asserts that `build_one` agrees with the batch record for every path (SF2); the native leg dependency on libm is addressed for OB5-U2 (SF3); and the nits are fixed. The new link `#6-units` resolves.
+
 ### B2 ST-U2 stroke oracle
 
 Unit ST-U2 of the [B2 stroke contract](p3-b2-stroke-contract.md#121-units): the independent oracle ST-O1 to ST-O5 with the positive controls of [section 11.1](p3-b2-stroke-contract.md#111-oracles), and the named fixtures ST-F1 to ST-F26 of [section 11.2](p3-b2-stroke-contract.md#112-named-fixtures) with their literal expectations. Light tier. Acceptance for this unit: ST-A5, with ST-A12. Precision is **UNVERIFIED** against the 0.25 physical-pixel target; this unit makes no precision or performance claim and closes no A01-A08 or C03-C05 item. The independent diff review is NOT RUN: the user skipped independent reviews for 2026-10-20 only, so it is owed.
