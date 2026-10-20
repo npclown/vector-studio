@@ -104,6 +104,7 @@ describe('stroke-v0 adapter factory', () => {
       { stroke_v0_required_output_bytes: undefined },
       { stroke_v0_version: () => 1 },
       { stroke_v0_revision: () => STROKE_V0_REVISION + 1 },
+      { stroke_v0_revision: () => 1 },
       { stroke_v0_revision: () => 0 },
     ]) {
       const real = await kernel();
