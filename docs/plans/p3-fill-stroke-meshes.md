@@ -1738,6 +1738,65 @@ Review follow-up. The independent diff review of PR #161 returned NOT READY with
   - Kernel fmt and clippy `--all-targets -D warnings`: clean.
   - The AL-S1 functional run above was not repeated: the fixes change only the analysis's product helper, labels and two per-cell E5 fields, which the harness test exercises. The AL-S1 configuration hash `8f07f146…672e` is unchanged.
 
+### Alt-A1 AL-U6 AL-S2 WASM ratio
+
+Unit AL-U6 of the [Alt-A1 production contract](p3-alt-a1-fill-ladder-contract.md#61-units): the AL-S2 page, runner, analysis, validator, the combined verdict and the root script, following [section 5.2](p3-alt-a1-fill-ladder-contract.md#52-b-b0-w-the-wasmnative-ratio) (B0-W) and the product verdict of [section 5.3](p3-alt-a1-fill-ladder-contract.md#53-c-product-stage-verification-scenario-al-s1-and-the-verdict). Light tier with one independent diff review. Acceptance for this unit: AL-A13 (the AL-S2 part), with AL-A2, AL-A12 and AL-A16. The functional run below is **not evidence**; only AL-U7's reference record carries performance evidence, and precision stays UNVERIFIED.
+
+**Depends on AL-U5.** The runner imports `runRatioMode` from `tooling/run-p3-fill-ladder-benchmark.mjs`, and the analysis imports `ratioModeConfig`, `analyzeRatioNative`, `productVerdict` and `validateLadderRecord` from `tests/geometry/p3-fill-ladder/analysis.ts`, unchanged. AL-U5 merged first, through PR #161 (`e0130fa`).
+
+Files:
+
+- `tests/geometry-benchmark/p3-b0-wasm/` (the page, placed as the P2.5 page is): `index.html`, `main.ts`, `workload.ts`, `vite.config.ts` and `benchmark.spec.ts`; and the root `playwright.p3-b0-wasm.config.ts`, beside `playwright.p2-benchmark.config.ts`.
+- `tooling/run-p3-b0-wasm-benchmark.mjs` and `.d.mts`: `pnpm benchmark:p3-b0-wasm --profile functional|reference [--environment-json <observations.json>]`, with B0's argument parser and environment reader imported unchanged.
+- `tests/geometry/p3-b0-wasm/analysis.ts` and `tests/geometry/p3-b0-wasm-analysis.test.ts`.
+- `package.json` (the root script only), `.gitignore` (`artifacts/p3-b0-wasm/`) and `.prettierignore` (the future AL-S2 records, kept byte for byte as the B0 and spike records are).
+
+Design:
+
+- **One runner session.** The runner builds the release WASM with the cargo command `pnpm test:geometry` uses and records its SHA-256. It runs the native leg first: AL-U5's `runRatioMode`, the AL-S1 harness's ratio mode, unchanged. It then builds the Vite production page, with the WASM and the B0 framed corpus emitted as assets, and runs Playwright: Chrome, then Edge, headed in both profiles, one worker, a fresh page per repetition, no tracing, video or DevTools. Raw output goes to an exclusive `artifacts/p3-b0-wasm/<run-id>/`.
+- **The page.** It verifies the SHA-256 of the WASM and the corpus. Outside timing, it decodes the corpus into the 34 decision cells' paths 0-9 as port requests: request id = path index, nonzero, e = −3. It drives `createFillMeshPort(module)`, one adapter per page. Each cell gets an untimed preparation sample, then warm-up and timed samples of R = 100 `buildFillMeshes` calls. The one-path cells get R = 1,000 on path 0. The order is B0's per-repetition shuffle, decision cells first, then the one-path cells, as the ratio mode orders them. The window runs from before the first call to after the last call's fold.
+- **Checksum.** `Fnv1a64.result` reproduces `ratioModeConfig().fold` and the Rust `fold_decoded`: FNV-1a 64 over the status, V, T and the pair count, then the position, index and pair bytes, little-endian, chained over the calls. It is computed on two u32 words, so it allocates nothing. The test checks it against a BigInt reference. The functional run checks it against the native leg on every cell.
+- **No reserve, growth or retry while timing.** The page keeps a read-only handle on the instance the factory creates, by wrapping `WebAssembly.instantiate` only while `createFillMeshPort` runs; the adapter code is the package's, unchanged. Each warm-up and timed sample must advance `fill_v0_memory_epoch` by exactly R, which means one `process` per call and no reserve or OUTPUT_CAPACITY retry. It must also leave both arena capacities and the linear memory size unchanged.
+- **Clock.** The P2.5 probe: the minimum positive `performance.now` increment. The preview serves the page cross-origin isolated (COOP/COEP), and the page records `crossOriginIsolated`. A sample shorter than 100 quanta makes its cell UNVERIFIED.
+- **Ratio.** Per cell and repetition index, r = browser per-path median / native per-path median, where per-path = nearest-rank median sample / (R · paths). k_cell is the nearest-rank median of r over the repetitions. **k̂** is the maximum over Chrome and Edge of k_cell at P2/s=16, P4/s=16 and P8/s=8, labelled "browser port time over native export time in the test-harness build". **k̂₁** is the same at the one-path cells; it is report-only.
+- **Validity, all required.**
+  - `repetitions-complete`: every native and browser repetition.
+  - `checksums-equal-native`: every browser cell, ten-path and one-path, equals the native checksum.
+  - `largest-primary-verified`: browser and native.
+  - `no-reserve-or-growth`: the browser epoch and storage check, and native zero allocations with stable storage.
+  - `largest-cells-admitted`: every path `ok`.
+  - `operation-identity`: page options, WASM and corpus SHA-256, `operationId` `'geometry-wasm/fill-v0+r2'`, port version 0.
+  - `native-leg-valid`: `analyzeRatioNative`.
+  - `metadata-complete`: power and background observations, and the AL-S1 link, for reference only.
+  - Interpretation: a page that is not visible for the whole repetition fails that repetition.
+- **Combined verdict.** `combinedVerdict` passes two signals separately. `s2Invalid` is a checksum mismatch, which yields INVALID with no verdict. `s2Valid` covers every other validity item; if it is false, the verdict is INCONCLUSIVE. With both clear, AL-U5's `productVerdict(AL-S1 analysis, k̂, …, k̂₁)` applies B0's rule: T̂ = 1,000 · t̂ · k̂, t̂_edit = t̂_p95 · k̂, and M̂ from AL-S1, with t̂_p95 · k̂₁ as context only. A functional run has no verdict (NONE). A reference run without a usable AL-S1 link is INCONCLUSIVE.
+- **AL-S1 link.** The runner finds the one tracked, unmodified `docs/benchmarks/results/*_p3_p3-fill-ladder-v1_*.json` whose profile is reference. The reference profile requires it. The record's `alS1` holds its path, the SHA-256 of its bytes, its run ID, scenario, profile and configuration hash, and a copy of the analysis parts the verdict reads: estimates, checks, invalid reasons and verdict.
+- **Validator `validateWasmRecord(record, alS1Bytes)`.** It checks the schema and scenario identity, the configuration hash, and that the configuration is pinned, equal to `scenarioConfig(profile)`. It checks the corpus SHA-256. It checks the native configuration against the embedded `ratioModeConfig` and its hash. For the link, it checks the SHA-256 of the linked bytes, re-validates them with `validateLadderRecord`, and rebuilds and compares the link. Finally, it recomputes the analysis.
+- **Configuration.** It embeds `ratioModeConfig(profile)`, whose reference hash is `ff36ec78…f9c3`. The AL-S2 reference configuration hash is `a698532efbac2f6b7aa66e1bc086335d542ef52607bef783cb121a03d9f630a0`, pinned in the test; a change to AL-U5's ratio-mode configuration changes it.
+
+Validation. The first runs below used a local scratch branch with AL-U5's commits merged, before AL-U5 reached `main`; the last items rerun on this branch rebased onto `e0130fa`:
+
+- **`pnpm benchmark:p3-b0-wasm --profile functional`, first attempt: FAIL.** The browser leg failed because `Browser.getBrowserCommandLine` needs `--enable-automation`. It is now set in the Playwright configuration, as P2.5 sets it.
+- **Functional run `20261020T005324Z-6bc298d3`** (AL-U5 `619dd9e`, uncommitted tree): PASS. Every validity item PASS, and every browser checksum equals the native checksum on all 34 cells and the three one-path cells, in both browsers. k̂ = 1.643 and k̂₁ = 1.315. WASM `eea56347…f5e4`. Product verdict NONE (functional).
+- **Functional run `20261020T011903Z-fd044b83`** (AL-U5 `bb34707` and `main` `ad6ce26`, clean committed scratch tree `d94a4ab`): PASS, every validity item PASS.
+  - k̂ = 1.794 (Chrome, P4/s=16) and k̂₁ = 1.590.
+  - WASM `f13fb345…6127`. Chrome 155.0.8059.80 and Edge 155.0.4283.62, headed.
+  - `crossOriginIsolated` true, clock quantum 0.005 ms, `linearMemoryBytes()` 2,293,760 in each browser.
+  - One functional browser repetition takes about 11 s.
+  - These figures are not evidence; they show only that the runner works.
+- **`pnpm exec vitest run --config vitest.geometry.config.ts tests/geometry/p3-b0-wasm-analysis.test.ts`**: 14 passed. They cover the configuration and the pinned hashes, the corpus decoder against the generator, the shuffle against the five committed B0 record orders, the fold against a BigInt FNV-1a reference, k̂, k̂₁, FEASIBLE and INFEASIBLE, INVALID on a checksum mismatch, and INCONCLUSIVE on reserve, coarse clock, missing repetition and missing link. A functional record gets NONE. The tamper tests reject a changed browser or native sample, k̂, verdict, configuration, configuration hash, native configuration, corpus hash, AL-S1 bytes, AL-S1 link copy, and a failing `validateLadderRecord`.
+- **`pnpm test:geometry`** (scratch with `619dd9e`): PASS. Native: 377 passed and 51 ignored. Vitest: 48 files passed and 4 skipped, with 788 tests passed and 6 skipped. WASM `eea56347…f5e4`.
+- **`pnpm check`**: PASS after the ESLint ignore for `artifacts/p3-b0-wasm/**`. The first run linted the page bundle under `artifacts/`.
+- **`pnpm build`**: PASS.
+
+Deviations and notes:
+
+- **The WASM build.** Section 5.2 says the release WASM is "built by `pnpm build`". `pnpm build` compiles only TypeScript, so the runner builds the WASM with the release cargo command of `tooling/test-geometry.mjs` instead. The SHA-256 is identical to `pnpm test:geometry`'s.
+- **Headed functional profile.** P2.5 runs its functional profile headless. AL-S2 runs headed in both profiles, as section 5.2 and the Primary asked.
+- **Root Playwright configuration.** `playwright.p3-b0-wasm.config.ts` is a root file outside the unit's listed files. It follows P2.5's placement.
+- **`.gitignore`, `.prettierignore` and `eslint.config.mjs`** each gain one line: the raw output directory, the future committed AL-S2 records, and the page bundle under `artifacts/`.
+- **Cross-origin isolation** is a harness choice that gives the 5 µs clock resolution; it is recorded per repetition.
+
 ### B0 runner (light tier)
 
 Plan entry: implement section 9 item 1 of the [B0 contract](p3-b0-feasibility-benchmark-contract.md) without changing it. Acceptance check: `pnpm benchmark:p3-b0 --profile functional` completes end to end; the TypeScript generator and an independent Rust generator match committed fixture bits; a tampered record is rejected; `pnpm check`, `pnpm build` and `pnpm test:geometry` pass; the diagnostic flag builds and passes clippy in its own target directory; the WASM release artifact is byte-identical to main's. Evidence is recorded on the runner PR. A functional run is not performance evidence.

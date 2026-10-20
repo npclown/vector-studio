@@ -14,6 +14,7 @@
     "benchmark:p1": "node tooling/run-p1-benchmark.mjs",
     "benchmark:p2": "node tooling/run-p2-benchmark.mjs",
     "benchmark:p3-b0": "node tooling/run-p3-b0-benchmark.mjs",
+    "benchmark:p3-b0-wasm": "node tooling/run-p3-b0-wasm-benchmark.mjs",
     "benchmark:p3-b0-spike": "node tooling/run-p3-b0-spike-benchmark.mjs",
     "benchmark:p3-fill-ladder": "node tooling/run-p3-fill-ladder-benchmark.mjs",
     "benchmark:p0:p0-3": "pnpm build && playwright test --config playwright.p0-3-benchmark.config.ts",
