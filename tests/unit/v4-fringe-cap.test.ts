@@ -47,6 +47,29 @@ function polygonMesh(n: number, radius = 10): FillMesh {
   };
 }
 
+/** Two disjoint convex contours of na and nb vertices: na + nb distinct boundary vertices. */
+function twoContourMesh(na: number, nb: number): FillMesh {
+  const a = polygonMesh(na);
+  const b = polygonMesh(nb, 4);
+  const positions = [...a.positions, ...b.positions].map((value, index) =>
+    index >= a.positions.length && (index - a.positions.length) % 2 === 0 ? value + 100 : value,
+  );
+  return {
+    positions: Float64Array.from(positions),
+    indices: Uint32Array.from([...a.indices, ...Array.from(b.indices, (value) => value + na)]),
+    boundaryEdges: Uint32Array.from([
+      ...a.boundaryEdges,
+      ...Array.from(b.boundaryEdges, (value) => value + na),
+    ]),
+    bounds: {
+      minX: Math.min(a.bounds.minX, b.bounds.minX + 100),
+      minY: Math.min(a.bounds.minY, b.bounds.minY),
+      maxX: Math.max(a.bounds.maxX, b.bounds.maxX + 100),
+      maxY: Math.max(a.bounds.maxY, b.bounds.maxY),
+    },
+  };
+}
+
 function countingBuilder(): { builder: PathFringeBuilder; calls: number[] } {
   const calls: number[] = [];
   return {
@@ -152,6 +175,79 @@ describe('V4 fringe-builder work cap', () => {
     expect(frame.notices.map((entry) => [entry.nodeId, entry.failureCode])).toEqual([
       ['above-cap', 'fringe-work-cap'],
     ]);
+  });
+
+  it('V4 SF3: the cap counts distinct boundary vertices over all contours (64 + 65 capped, 64 + 64 not)', () => {
+    const meshes = new Map<number, FillMesh>([
+      [0, twoContourMesh(64, 64)],
+      [40, twoContourMesh(64, 65)],
+    ]);
+    const port = new ScriptedFillMeshPort({
+      request: (request, tag) => {
+        const mesh = meshes.get(tag);
+        if (mesh === undefined) throw new Error(`no mesh for tag ${tag}`);
+        return okResult(request, mesh);
+      },
+    });
+    const h = createPathHarness({
+      port,
+      nodes: [pathNode('at-cap', 0), pathNode('above-cap', 40)],
+      fringeBuilder: buildPathFringe,
+    });
+    const frame = h.prepare();
+    expect(frame.draws.map((draw) => [draw.nodeId, draw.fringe !== null])).toEqual([
+      ['at-cap', true],
+      ['above-cap', false],
+    ]);
+    expect(frame.notices.map((entry) => [entry.nodeId, entry.failureCode])).toEqual([
+      ['above-cap', 'fringe-work-cap'],
+    ]);
+  });
+
+  it('V4 SF3: a geometry-revision bump starts a new cache entry that notifies again', () => {
+    const { builder } = countingBuilder();
+    const h = createPathHarness({
+      port: createCountingPort(),
+      nodes: [pathNode('a', 0)],
+      fringeBuilder: builder,
+      limits: { fringeBoundaryVertexCap: 3 },
+    });
+    expect(h.prepare().notices).toHaveLength(1);
+    expect(h.prepare().notices).toHaveLength(0);
+    h.replace([pathNode('a', 0, { points: [0, 0, 12, 0, 12, 12] })]);
+    expect(h.prepare().notices.map((entry) => entry.failureCode)).toEqual(['fringe-work-cap']);
+  });
+
+  it('V4 SF3: a fill-rule change starts a new cache entry that notifies again', () => {
+    const { builder } = countingBuilder();
+    const h = createPathHarness({
+      port: createCountingPort(),
+      nodes: [pathNode('a', 0)],
+      fringeBuilder: builder,
+      limits: { fringeBoundaryVertexCap: 3 },
+    });
+    expect(h.prepare().notices).toHaveLength(1);
+    h.replace([pathNode('a', 0, { fillRule: 'evenodd' })]);
+    expect(h.prepare().notices.map((entry) => entry.failureCode)).toEqual(['fringe-work-cap']);
+  });
+
+  it('V4 SF3: a revision that drops under the cap gets its fringe and calls the builder', () => {
+    const { builder, calls } = countingBuilder();
+    let boundary = 129;
+    const port = new ScriptedFillMeshPort({
+      request: (request) => okResult(request, polygonMesh(boundary)),
+    });
+    const h = createPathHarness({ port, nodes: [pathNode('a', 0)], fringeBuilder: builder });
+    const first = h.prepare();
+    expect(first.draws.map((draw) => draw.fringe)).toEqual([null]);
+    expect(first.notices).toHaveLength(1);
+    expect(calls).toEqual([]);
+    boundary = 128;
+    h.replace([pathNode('a', 0, { points: [0, 0, 12, 0, 12, 12] })]);
+    const second = h.prepare();
+    expect(second.draws.map((draw) => draw.fringe !== null)).toEqual([true]);
+    expect(second.notices).toEqual([]);
+    expect(calls).toHaveLength(1);
   });
 
   it('V4: the fringe-work-cap diagnostic says the path is drawn without its fringe', () => {

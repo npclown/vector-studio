@@ -13,12 +13,14 @@ import type {
 // Functional evidence only: precision is UNVERIFIED against the 0.25 physical-pixel target
 // until B4 has A04 evidence.
 //
-// Sizes respect the current fill-kernel caps (at most 16 source segments, 4 contours and
-// 72 flat commands per path, cubic_fill.rs). The tolerance is 2^e local units with the largest e
+// Sizes respect the fill-kernel caps after B1 (at most 64 source segments, 4 contours and 264
+// flat commands per path, cubic_fill.rs). The tolerance is 2^e local units with the largest e
 // such that 2^e * zoom * DPR <= 1/8, so each zoom doubling roughly multiplies a cubic's flat
-// segments by sqrt(2). A path beyond a cap fails with the D8-interim `work-limit` notice and is
-// not drawn (B1 raises the caps). Probed against the fill-v0+r2 kernel, every cubic shape below
-// meshes for e >= -4, that is up to zoom * DPR = 2, and fails at e = -5.
+// segments by sqrt(2). Probed against the fill-v0+r2 kernel after B1, every shape below meshes
+// for e >= -7, that is up to zoom * DPR = 16. A path beyond a kernel cap would still fail with
+// the D8-interim `work-limit` notice and not be drawn. A mesh with more than 128 boundary
+// vertices draws region-only with the `fringe-work-cap` notice (V3-Q2 (c)); the teardrop
+// reaches 198 at e = -7, but the spec's views (zoom <= 3) stay under it.
 
 export const V4_EVIDENCE_LABEL =
   'UNVERIFIED: functional V4 playground evidence only; precision is UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence, and no Q4 coverage threshold is claimed.';
