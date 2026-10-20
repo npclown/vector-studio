@@ -39,7 +39,7 @@ import { parseArguments } from '../../tooling/run-p3-b0-wasm-benchmark.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 /** Recorded in the plan when AL-U6 merges; any configuration change shows up here. */
-const REFERENCE_CONFIG_HASH = 'a698532efbac2f6b7aa66e1bc086335d542ef52607bef783cb121a03d9f630a0';
+const REFERENCE_CONFIG_HASH = 'f337d0efb6c457118c624dacc9bcd6a9946f2c495437282c987f20be884c2bfd';
 type Mutable<T> = { -readonly [K in keyof T]: Mutable<T[K]> };
 const clone = <T>(value: T): Mutable<T> => JSON.parse(JSON.stringify(value)) as Mutable<T>;
 const decision = corpusCells().filter((cell) => cell.role === 'decision');
@@ -77,12 +77,25 @@ describe('AL-S2 configuration', () => {
     expect(scenarioConfig('functional').sampling).toMatchObject({ repetitions: 1, timed: 2 });
   });
 
-  it('parses the runner arguments as B0 does', () => {
+  it('parses the runner arguments as B0 does, plus --al-s1', () => {
     expect(parseArguments(['--profile', 'functional'])).toEqual({
       profile: 'functional',
       environmentJson: null,
+      alS1: null,
     });
+    expect(
+      parseArguments([
+        '--al-s1',
+        'docs/x.json',
+        '--profile',
+        'reference',
+        '--environment-json',
+        'e',
+      ]),
+    ).toEqual({ profile: 'reference', environmentJson: 'e', alS1: 'docs/x.json' });
     expect(() => parseArguments(['--profile', 'reference'])).toThrow(/environment-json/);
+    expect(() => parseArguments(['--profile', 'functional', '--al-s1'])).toThrow(/al-s1/);
+    expect(() => parseArguments(['--profile', 'functional', '--bogus', 'x'])).toThrow(/Unknown/);
   });
 });
 
@@ -268,11 +281,25 @@ function captureFor(
   };
 }
 
-function alS1Bytes(perPathNs: number, p95Ns: number): Uint8Array {
+/** The kernel entries of a source manifest, as both runners record them. */
+const KERNEL_MANIFEST = {
+  'packages/geometry-wasm/kernel/Cargo.lock': '1'.repeat(64),
+  'packages/geometry-wasm/kernel/Cargo.toml': '2'.repeat(64),
+  'packages/geometry-wasm/kernel/src/lib.rs': '3'.repeat(64),
+};
+
+function alS1Bytes(
+  perPathNs: number,
+  p95Ns: number,
+  manifest: Record<string, string> = KERNEL_MANIFEST,
+): Uint8Array {
   const record = {
     schemaVersion: 1,
     scenario: { id: 'p3-fill-ladder', version: 1, profile: 'reference', configHash: 'abc' },
-    run: { runId: '20261020T000000Z-00000000' },
+    run: {
+      runId: '20261020T000000Z-00000000',
+      sourceManifest: { ...manifest, 'tooling/run-p3-fill-ladder-benchmark.mjs': '4'.repeat(64) },
+    },
     analysis: {
       estimates: {
         wasmFactor: 2,
@@ -311,7 +338,7 @@ function syntheticRecord(
       project,
       channel: project === 'chrome' ? 'chrome' : 'msedge',
       browserVersion: '141.0.0.0',
-      launchFlags: [],
+      launchFlags: ['--enable-automation'],
       repetition,
       startedAt: '2026-10-20T00:00:00.000Z',
       recordedAt: '2026-10-20T00:01:00.000Z',
@@ -323,7 +350,15 @@ function syntheticRecord(
   const record: WasmRecord = {
     schemaVersion: 1,
     scenario: { id: 'p3-b0-wasm', version: 1, profile, config, configHash: configHash(config) },
-    run: { commit: 'deadbeef', utcStart: '2026-10-20T00:00:00.000Z', timezone: 'Asia/Seoul' },
+    run: {
+      commit: 'deadbeef',
+      utcStart: '2026-10-20T00:00:00.000Z',
+      timezone: 'Asia/Seoul',
+      sourceManifest: {
+        ...KERNEL_MANIFEST,
+        'tooling/run-p3-b0-wasm-benchmark.mjs': '5'.repeat(64),
+      },
+    },
     environment: {
       os: { type: 'Windows_NT' },
       cpu: 'test cpu',
@@ -408,6 +443,75 @@ describe('AL-S2 analysis and combined verdict', () => {
 
     const unlinked = syntheticRecord('reference', undefined, null);
     expect(unlinked.analysis).toMatchObject({ product: { verdict: 'INCONCLUSIVE' } });
+  });
+
+  const failing = (record: WasmRecord) =>
+    analyze(record)
+      .checks.filter((item) => !item.pass)
+      .map((item) => item.id);
+
+  it('reports a whole missing browser or native leg as incomplete, not as a mismatch (B1)', () => {
+    const noEdge = clone(syntheticRecord('reference'));
+    noEdge.browsers = noEdge.browsers.filter((item) => item.project !== 'edge');
+    expect(failing(noEdge)).toContain('repetitions-complete');
+    expect(failing(noEdge)).not.toContain('checksums-equal-native');
+    expect(analyze(noEdge).product.verdict).toBe('INCONCLUSIVE');
+
+    const noNative = clone(syntheticRecord('reference'));
+    noNative.native = null;
+    expect(failing(noNative)).toContain('repetitions-complete');
+    expect(failing(noNative)).not.toContain('checksums-equal-native');
+    expect(analyze(noNative).product.verdict).toBe('INCONCLUSIVE');
+
+    const noCell = clone(syntheticRecord('reference'));
+    noCell.browsers[0]!.capture!.cells.splice(4, 1);
+    expect(failing(noCell)).toContain('repetitions-complete');
+    expect(failing(noCell)).not.toContain('checksums-equal-native');
+  });
+
+  it('is INCONCLUSIVE when the linked AL-S1 record measured other kernel sources (S1)', () => {
+    const changed = {
+      ...KERNEL_MANIFEST,
+      'packages/geometry-wasm/kernel/src/lib.rs': '9'.repeat(64),
+    };
+    const record = syntheticRecord('reference', undefined, alS1Bytes(500_000, 1_000_000, changed));
+    const analysis = record.analysis as ReturnType<typeof analyze>;
+    expect(analysis.alS1Kernel.equal).toBe(false);
+    expect(failing(record)).toEqual(['al-s1-same-kernel']);
+    expect(analysis.product.verdict).toBe('INCONCLUSIVE');
+    const unlisted = syntheticRecord('reference', undefined, alS1Bytes(500_000, 1_000_000, {}));
+    expect(failing(unlisted)).toEqual(['al-s1-same-kernel']);
+    expect(syntheticRecord('reference').analysis).toMatchObject({ alS1Kernel: { equal: true } });
+  });
+
+  it('requires cross-origin isolation, B0 orders and the README browser fields (S3, S4, S7)', () => {
+    const isolated = clone(syntheticRecord('reference'));
+    isolated.browsers[1]!.capture!.crossOriginIsolated = false;
+    expect(failing(isolated)).toEqual(['cross-origin-isolated']);
+
+    const order = clone(syntheticRecord('reference'));
+    order.browsers[0]!.capture!.order.reverse();
+    expect(failing(order)).toEqual(['operation-identity']);
+    const onePathOrder = clone(syntheticRecord('reference'));
+    onePathOrder.browsers[0]!.capture!.onePathOrder.reverse();
+    expect(failing(onePathOrder)).toEqual(['operation-identity']);
+    const nativeOrder = clone(syntheticRecord('reference'));
+    nativeOrder.native!.repetitions[2]!.order.reverse();
+    expect(failing(nativeOrder)).toEqual(['operation-identity']);
+
+    const flags = clone(syntheticRecord('reference'));
+    flags.browsers[3]!.launchFlags = [];
+    expect(failing(flags)).toEqual(['metadata-complete']);
+    const channel = clone(syntheticRecord('reference'));
+    channel.browsers[3]!.channel = null;
+    expect(failing(channel)).toEqual(['metadata-complete']);
+    const dpr = clone(syntheticRecord('reference'));
+    (
+      dpr.browsers[0]!.capture!.environment.viewport as { devicePixelRatio: unknown }
+    ).devicePixelRatio = null;
+    expect(failing(dpr)).toEqual(['metadata-complete']);
+    for (const record of [isolated, order, flags])
+      expect(analyze(record).product.verdict).toBe('INCONCLUSIVE');
   });
 
   it('gives a functional run no verdict', () => {

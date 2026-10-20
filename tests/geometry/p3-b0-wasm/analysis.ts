@@ -36,10 +36,12 @@ import {
   type LadderRecord,
   type RatioOutput,
 } from '../p3-fill-ladder/analysis.js';
-import type {
-  WasmCapture,
-  WasmCellCapture,
-  WasmPageOptions,
+import {
+  orderSeed,
+  shuffled,
+  type WasmCapture,
+  type WasmCellCapture,
+  type WasmPageOptions,
 } from '../../geometry-benchmark/p3-b0-wasm/workload.js';
 
 export { CORPUS_SHA256, OPERATION_ID, OPERATION_REVISION };
@@ -59,10 +61,20 @@ export const VALIDITY_IDS = [
   'largest-cells-admitted',
   'operation-identity',
   'native-leg-valid',
+  'cross-origin-isolated',
+  'al-s1-same-kernel',
   'metadata-complete',
 ] as const;
 export type ValidityId = (typeof VALIDITY_IDS)[number];
 const DECISION_PATHS = 10;
+/** Section 5.3's estimates multiply AL-S1's t̂ by this run's k̂: both must measure one kernel. */
+const KERNEL_SOURCE_RULE =
+  'the run.sourceManifest entries under packages/geometry-wasm/kernel/src/ and the kernel Cargo.toml and Cargo.lock equal this run';
+const KERNEL_FILES = [
+  'packages/geometry-wasm/kernel/Cargo.toml',
+  'packages/geometry-wasm/kernel/Cargo.lock',
+];
+const KERNEL_SOURCE_PREFIX = 'packages/geometry-wasm/kernel/src/';
 const MEMORY_CEILING_BYTES = 256 * 2 ** 20;
 
 /** The largest-L decision cell of each primary series, in series order (section 5.2). */
@@ -151,7 +163,8 @@ export function scenarioConfig(profile: Profile) {
         scenario: { id: LADDER_SCENARIO_ID, version: LADDER_SCENARIO_VERSION },
         profile: 'reference',
         record:
-          'the one committed docs/benchmarks/results/*_p3_p3-fill-ladder-v1_*.json reference record',
+          'a committed docs/benchmarks/results/*_p3_p3-fill-ladder-v1_*.json reference record: --al-s1 <path>, or the only one whose kernel sources equal this run',
+        kernelSources: KERNEL_SOURCE_RULE,
       },
     },
     memory: {
@@ -225,6 +238,8 @@ export interface AlS1Link {
   readonly scenario: { readonly id: string; readonly version: number };
   readonly profile: string;
   readonly configHash: string;
+  /** SHA-256 of the kernel entries of its source manifest (`kernelSourceSha256`). */
+  readonly kernelSourceSha256: string | null;
   readonly analysis: AlS1Analysis;
 }
 
@@ -259,6 +274,25 @@ export function sha256Hex(bytes: Uint8Array | string): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
+/**
+ * The SHA-256 of the canonical JSON of a source manifest's kernel entries: every file under
+ * `packages/geometry-wasm/kernel/src/` and the kernel's Cargo.toml and Cargo.lock. Null when
+ * the manifest is missing or lacks any of them.
+ */
+export function kernelSourceSha256(manifest: unknown): string | null {
+  if (manifest === null || typeof manifest !== 'object') return null;
+  const entries = Object.entries(manifest as Record<string, unknown>).filter(
+    ([file]) => file.startsWith(KERNEL_SOURCE_PREFIX) || KERNEL_FILES.includes(file),
+  );
+  if (
+    !KERNEL_FILES.every((file) => entries.some(([name]) => name === file)) ||
+    !entries.some(([file]) => file.startsWith(KERNEL_SOURCE_PREFIX)) ||
+    entries.some(([, hash]) => typeof hash !== 'string')
+  )
+    return null;
+  return sha256Hex(canonicalJson(Object.fromEntries(entries)));
+}
+
 /** Builds the link to a committed AL-S1 record from its repository path and file bytes. */
 export function linkAlS1(repositoryPath: string, bytes: Uint8Array): AlS1Link {
   const record = JSON.parse(new TextDecoder().decode(bytes)) as LadderRecord & {
@@ -273,6 +307,9 @@ export function linkAlS1(repositoryPath: string, bytes: Uint8Array): AlS1Link {
     scenario: { id: record.scenario.id, version: record.scenario.version },
     profile: record.scenario.profile,
     configHash: record.scenario.configHash,
+    kernelSourceSha256: kernelSourceSha256(
+      (record.run as { sourceManifest?: unknown }).sourceManifest,
+    ),
     analysis: {
       estimates: analysis.estimates,
       checks: analysis.checks,
@@ -294,6 +331,8 @@ interface CellRepetition {
 interface CellTable {
   readonly cell: string;
   readonly checksum: string | null;
+  /** Every distinct browser checksum of the cell, sorted. */
+  readonly checksums: readonly string[];
   readonly admitted: boolean;
   readonly perRepetition: readonly CellRepetition[];
 }
@@ -349,10 +388,10 @@ function browserTable(
         },
       ];
     });
-    if (checksums.size !== 1) issues.push(`${id} browser checksums ${checksums.size}`);
     return {
       cell: id,
       checksum: checksums.size === 1 ? [...checksums][0]! : null,
+      checksums: [...checksums].sort(),
       admitted,
       perRepetition,
     };
@@ -513,6 +552,12 @@ export function analyze(record: WasmRecord) {
         capture.adapter.portVersion !== config.operation.portVersion
       )
         identityIssues.push(`r${repetition} adapter identity`);
+      // B0's per-repetition shuffle, as the native leg orders its cells.
+      const seed = orderSeed(repetition);
+      if (canonicalJson(capture.order) !== canonicalJson(shuffled(decision, seed)))
+        identityIssues.push(`r${repetition} cell order`);
+      if (canonicalJson(capture.onePathOrder) !== canonicalJson(shuffled(onePathCells, seed)))
+        identityIssues.push(`r${repetition} one-path order`);
     }
     const tableIssues: string[] = [];
     const tenPath = browserTable(
@@ -573,12 +618,17 @@ export function analyze(record: WasmRecord) {
     ...(record.native !== null && record.native.repetitions.length !== config.sampling.repetitions
       ? [`native ${record.native.repetitions.length} repetitions`]
       : []),
-    ...browsers.flatMap((browser) => browser.issues.map((item) => `${browser.project} ${item}`)),
+    ...browsers.flatMap((browser) =>
+      [...browser.issues, ...browser.tableIssues.filter((item) => item.endsWith(' missing'))].map(
+        (item) => `${browser.project} ${item}`,
+      ),
+    ),
     ...record.failures.map((item) => item.stage),
   ];
-  check('repetitions-complete', complete.length === 0, complete.join('; ') || 'complete');
-
+  // Only two checksums that both exist and differ are a mismatch (no verdict, section 5.3);
+  // a missing browser or native checksum is an incomplete run (INCONCLUSIVE).
   const mismatches: string[] = [];
+  const missingChecksums: string[] = [];
   for (const browser of browsers) {
     for (const [table, nativeTable] of [
       [browser.tenPath, native?.tenPath ?? []],
@@ -586,16 +636,27 @@ export function analyze(record: WasmRecord) {
     ] as const) {
       for (const entry of table) {
         const nativeChecksum = nativeTable.find((item) => item.cell === entry.cell)?.checksum;
-        if (entry.checksum === null || nativeChecksum == null || entry.checksum !== nativeChecksum)
+        if (entry.checksums.length === 0 || nativeChecksum == null)
+          missingChecksums.push(`${browser.project} ${entry.cell}`);
+        else if (entry.checksums.some((value) => value !== nativeChecksum))
           mismatches.push(`${browser.project} ${entry.cell}`);
       }
     }
   }
-  if (native === null) mismatches.push('no native checksums');
+  if (missingChecksums.length > 0)
+    complete.push(`checksums missing: ${missingChecksums.join(', ')}`);
+  const nativeOrder = (record.native?.repetitions ?? [])
+    .filter(
+      (rep) =>
+        canonicalJson(rep.order) !== canonicalJson(shuffled(decision, orderSeed(rep.repetition))),
+    )
+    .map((rep) => `native r${rep.repetition} cell order`);
+  check('repetitions-complete', complete.length === 0, complete.join('; ') || 'complete');
   check(
     'checksums-equal-native',
     mismatches.length === 0,
-    mismatches.join(', ') || 'every browser cell checksum equals the native checksum',
+    mismatches.join(', ') ||
+      'every present browser checksum equals the native checksum (missing ones fail repetitions-complete)',
   );
 
   const unverified = browsers.flatMap((browser) =>
@@ -642,9 +703,12 @@ export function analyze(record: WasmRecord) {
     ...browsers.flatMap((browser) =>
       [
         ...browser.identityIssues,
-        ...browser.tableIssues.filter((item) => !item.includes('reserve')),
+        ...browser.tableIssues.filter(
+          (item) => !item.includes('reserve') && !item.endsWith(' missing'),
+        ),
       ].map((item) => `${browser.project} ${item}`),
     ),
+    ...nativeOrder,
     ...(record.corpus.sha256 === config.corpus.sha256 ? [] : ['corpus SHA-256']),
     ...(record.native !== null && record.native.corpus.sha256 !== config.corpus.sha256
       ? ['native corpus SHA-256']
@@ -658,8 +722,55 @@ export function analyze(record: WasmRecord) {
     native === null ? 'missing' : native.issues.join(', ') || 'valid',
   );
 
+  const notIsolated = browsers.flatMap((browser) =>
+    record.browsers
+      .filter((item) => item.project === browser.project && item.capture !== null)
+      .filter((item) => item.capture!.crossOriginIsolated !== true)
+      .map((item) => `${browser.project} r${item.repetition}`),
+  );
+  check(
+    'cross-origin-isolated',
+    notIsolated.length === 0,
+    notIsolated.join(', ') || 'every captured page was cross-origin isolated',
+  );
+
+  // Section 5.3 multiplies AL-S1's t̂ by this k̂: both runs must measure one kernel source.
+  const runKernel = kernelSourceSha256((record.run as { sourceManifest?: unknown }).sourceManifest);
+  const alS1Kernel = {
+    alS2: runKernel,
+    alS1: record.alS1?.kernelSourceSha256 ?? null,
+    equal:
+      record.alS1 === null
+        ? null
+        : runKernel !== null && runKernel === record.alS1.kernelSourceSha256,
+  };
+  check(
+    'al-s1-same-kernel',
+    alS1Kernel.equal !== false,
+    alS1Kernel.equal === null
+      ? 'no linked AL-S1 record'
+      : alS1Kernel.equal
+        ? 'equal kernel sources'
+        : `kernel sources differ: AL-S1 ${alS1Kernel.alS1 ?? 'none'}, AL-S2 ${runKernel ?? 'none'}`,
+  );
+
   const run = record.run as Record<string, unknown>;
   const environment = record.environment as Record<string, unknown>;
+  // The benchmark README's browser fields: product, channel, version, launch flags, viewport
+  // and device-pixel ratio, for every browser repetition record.
+  const browserFields = record.browsers.flatMap((item) => {
+    const name = `${item.project} r${item.repetition}`;
+    const viewport = item.capture?.environment.viewport;
+    return [
+      [`${name}.channel`, item.channel],
+      [`${name}.launchFlags`, item.launchFlags.length > 0 ? item.launchFlags : null],
+      [`${name}.viewport`, viewport && viewport.width > 0 && viewport.height > 0 ? viewport : null],
+      [
+        `${name}.devicePixelRatio`,
+        viewport && Number.isFinite(viewport.devicePixelRatio) ? viewport.devicePixelRatio : null,
+      ],
+    ];
+  });
   const missing = [
     ['run.commit', run.commit],
     ['run.utcStart', run.utcStart],
@@ -680,6 +791,7 @@ export function analyze(record: WasmRecord) {
       [`${browser.project}.browserVersion`, browser.browserVersions[0]],
       [`${browser.project}.linearMemoryBytes`, browser.linearMemoryBytes],
     ]),
+    ...browserFields,
     ...(record.scenario.profile === 'reference' ? [['alS1', record.alS1]] : []),
   ]
     .filter(([, value]) => value === undefined || value === null || value === '')
@@ -723,6 +835,7 @@ export function analyze(record: WasmRecord) {
     valid,
     memory,
     product,
+    alS1Kernel,
   };
 }
 

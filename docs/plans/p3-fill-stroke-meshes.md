@@ -1747,7 +1747,7 @@ Unit AL-U6 of the [Alt-A1 production contract](p3-alt-a1-fill-ladder-contract.md
 Files:
 
 - `tests/geometry-benchmark/p3-b0-wasm/` (the page, placed as the P2.5 page is): `index.html`, `main.ts`, `workload.ts`, `vite.config.ts` and `benchmark.spec.ts`; and the root `playwright.p3-b0-wasm.config.ts`, beside `playwright.p2-benchmark.config.ts`.
-- `tooling/run-p3-b0-wasm-benchmark.mjs` and `.d.mts`: `pnpm benchmark:p3-b0-wasm --profile functional|reference [--environment-json <observations.json>]`, with B0's argument parser and environment reader imported unchanged.
+- `tooling/run-p3-b0-wasm-benchmark.mjs` and `.d.mts`: `pnpm benchmark:p3-b0-wasm --profile functional|reference [--environment-json <observations.json>] [--al-s1 <path>]`, with B0's argument parser and environment reader imported unchanged; `--al-s1` is parsed before them.
 - `tests/geometry/p3-b0-wasm/analysis.ts` and `tests/geometry/p3-b0-wasm-analysis.test.ts`.
 - `package.json` (the root script only), `.gitignore` (`artifacts/p3-b0-wasm/`) and `.prettierignore` (the future AL-S2 records, kept byte for byte as the B0 and spike records are).
 
@@ -1755,24 +1755,29 @@ Design:
 
 - **One runner session.** The runner builds the release WASM with the cargo command `pnpm test:geometry` uses and records its SHA-256. It runs the native leg first: AL-U5's `runRatioMode`, the AL-S1 harness's ratio mode, unchanged. It then builds the Vite production page, with the WASM and the B0 framed corpus emitted as assets, and runs Playwright: Chrome, then Edge, headed in both profiles, one worker, a fresh page per repetition, no tracing, video or DevTools. Raw output goes to an exclusive `artifacts/p3-b0-wasm/<run-id>/`.
 - **The page.** It verifies the SHA-256 of the WASM and the corpus. Outside timing, it decodes the corpus into the 34 decision cells' paths 0-9 as port requests: request id = path index, nonzero, e = −3. It drives `createFillMeshPort(module)`, one adapter per page. Each cell gets an untimed preparation sample, then warm-up and timed samples of R = 100 `buildFillMeshes` calls. The one-path cells get R = 1,000 on path 0. The order is B0's per-repetition shuffle, decision cells first, then the one-path cells, as the ratio mode orders them. The window runs from before the first call to after the last call's fold.
-- **Checksum.** `Fnv1a64.result` reproduces `ratioModeConfig().fold` and the Rust `fold_decoded`: FNV-1a 64 over the status, V, T and the pair count, then the position, index and pair bytes, little-endian, chained over the calls. It is computed on two u32 words, so it allocates nothing. The test checks it against a BigInt reference. The functional run checks it against the native leg on every cell.
+- **Checksum.** `Fnv1a64.result` reproduces `ratioModeConfig().fold` and the Rust `fold_decoded`: FNV-1a 64 over the status, V, T and the pair count, then the position, index and pair bytes, little-endian, chained over the calls. It is computed on two u32 words without BigInt. Its per-mesh `Uint8Array` views are created inside the window and counted in the browser time. The test checks it against a BigInt reference. The functional run checks it against the native leg on every cell.
 - **No reserve, growth or retry while timing.** The page keeps a read-only handle on the instance the factory creates, by wrapping `WebAssembly.instantiate` only while `createFillMeshPort` runs; the adapter code is the package's, unchanged. Each warm-up and timed sample must advance `fill_v0_memory_epoch` by exactly R, which means one `process` per call and no reserve or OUTPUT_CAPACITY retry. It must also leave both arena capacities and the linear memory size unchanged.
 - **Clock.** The P2.5 probe: the minimum positive `performance.now` increment. The preview serves the page cross-origin isolated (COOP/COEP), and the page records `crossOriginIsolated`. A sample shorter than 100 quanta makes its cell UNVERIFIED.
 - **Ratio.** Per cell and repetition index, r = browser per-path median / native per-path median, where per-path = nearest-rank median sample / (R · paths). k_cell is the nearest-rank median of r over the repetitions. **k̂** is the maximum over Chrome and Edge of k_cell at P2/s=16, P4/s=16 and P8/s=8, labelled "browser port time over native export time in the test-harness build". **k̂₁** is the same at the one-path cells; it is report-only.
 - **Validity, all required.**
-  - `repetitions-complete`: every native and browser repetition.
-  - `checksums-equal-native`: every browser cell, ten-path and one-path, equals the native checksum.
+  - `repetitions-complete`: every native and browser repetition, and every cell's browser and native checksum present. A missing browser, native leg or cell is reported here.
+  - `checksums-equal-native`: only a present browser checksum that differs from a present native checksum fails it. This is the one item that gives no verdict (`s2.invalid`).
   - `largest-primary-verified`: browser and native.
   - `no-reserve-or-growth`: the browser epoch and storage check, and native zero allocations with stable storage.
   - `largest-cells-admitted`: every path `ok`.
-  - `operation-identity`: page options, WASM and corpus SHA-256, `operationId` `'geometry-wasm/fill-v0+r2'`, port version 0.
+  - `operation-identity`: page options, WASM and corpus SHA-256, `operationId` `'geometry-wasm/fill-v0+r2'`, port version 0. It also requires the page's cell order and one-path order, and the native leg's cell order, to equal B0's shuffle with seed `0x9e3779b9 + r`.
   - `native-leg-valid`: `analyzeRatioNative`.
-  - `metadata-complete`: power and background observations, and the AL-S1 link, for reference only.
+  - `cross-origin-isolated`: every captured page reports `crossOriginIsolated`, as the configuration pins.
+  - `al-s1-same-kernel`: the linked AL-S1 record's `run.sourceManifest` entries under `packages/geometry-wasm/kernel/src/`, plus the kernel `Cargo.toml` and `Cargo.lock`, must equal this run's, compared by the SHA-256 of their canonical JSON (`kernelSourceSha256`). The comparison is recorded as `analysis.alS1Kernel`. A difference makes the run INCONCLUSIVE, so an AL-S1 t̂ is never multiplied by a k̂ of another kernel.
+  - `metadata-complete`: the README browser fields of every browser repetition record (channel, version, launch flags, viewport and device-pixel ratio). For the reference profile only, also the power and background observations and the AL-S1 link.
   - Interpretation: a page that is not visible for the whole repetition fails that repetition.
 - **Combined verdict.** `combinedVerdict` passes two signals separately. `s2Invalid` is a checksum mismatch, which yields INVALID with no verdict. `s2Valid` covers every other validity item; if it is false, the verdict is INCONCLUSIVE. With both clear, AL-U5's `productVerdict(AL-S1 analysis, k̂, …, k̂₁)` applies B0's rule: T̂ = 1,000 · t̂ · k̂, t̂_edit = t̂_p95 · k̂, and M̂ from AL-S1, with t̂_p95 · k̂₁ as context only. A functional run has no verdict (NONE). A reference run without a usable AL-S1 link is INCONCLUSIVE.
-- **AL-S1 link.** The runner finds the one tracked, unmodified `docs/benchmarks/results/*_p3_p3-fill-ladder-v1_*.json` whose profile is reference. The reference profile requires it. The record's `alS1` holds its path, the SHA-256 of its bytes, its run ID, scenario, profile and configuration hash, and a copy of the analysis parts the verdict reads: estimates, checks, invalid reasons and verdict.
+- **AL-S1 link.** The candidates are the tracked, unmodified `docs/benchmarks/results/*_p3_p3-fill-ladder-v1_*.json` records whose profile is reference.
+  - `--al-s1 <path>` names one candidate explicitly. A kernel difference is then recorded by `al-s1-same-kernel`, not refused.
+  - Without it, the runner links the only candidate whose kernel sources equal this run's. If several match, it requires `--al-s1`, so a second AL-S1 record never blocks the runner. If none matches, there is no link, and the reference profile refuses to start.
+  - The record's `alS1` holds its path, the SHA-256 of its bytes, its run ID, scenario, profile, configuration hash and kernel-source hash, and a copy of the analysis parts the verdict reads: estimates, checks, invalid reasons and verdict. The validator rebuilds this link from the linked bytes.
 - **Validator `validateWasmRecord(record, alS1Bytes)`.** It checks the schema and scenario identity, the configuration hash, and that the configuration is pinned, equal to `scenarioConfig(profile)`. It checks the corpus SHA-256. It checks the native configuration against the embedded `ratioModeConfig` and its hash. For the link, it checks the SHA-256 of the linked bytes, re-validates them with `validateLadderRecord`, and rebuilds and compares the link. Finally, it recomputes the analysis.
-- **Configuration.** It embeds `ratioModeConfig(profile)`, whose reference hash is `ff36ec78…f9c3`. The AL-S2 reference configuration hash is `a698532efbac2f6b7aa66e1bc086335d542ef52607bef783cb121a03d9f630a0`, pinned in the test; a change to AL-U5's ratio-mode configuration changes it.
+- **Configuration.** It embeds `ratioModeConfig(profile)`, whose reference hash is `ff36ec78…f9c3`. The AL-S2 reference configuration hash is `f337d0efb6c457118c624dacc9bcd6a9946f2c495437282c987f20be884c2bfd`, pinned in the test; a change to AL-U5's ratio-mode configuration changes it.
 
 Validation. The first runs below used a local scratch branch with AL-U5's commits merged, before AL-U5 reached `main`; the last items rerun on this branch rebased onto `e0130fa`:
 
@@ -1801,7 +1806,7 @@ Deviations and notes:
 - **Headed functional profile.** P2.5 runs its functional profile headless. AL-S2 runs headed in both profiles, as section 5.2 and the Primary asked.
 - **Root Playwright configuration.** `playwright.p3-b0-wasm.config.ts` is a root file outside the unit's listed files. It follows P2.5's placement.
 - **`.gitignore`, `.prettierignore` and `eslint.config.mjs`** each gain one line: the raw output directory, the future committed AL-S2 records, and the page bundle under `artifacts/`.
-- **Cross-origin isolation** is a harness choice that gives the 5 µs clock resolution; it is recorded per repetition.
+- **Cross-origin isolation** is a harness choice that gives the 5 µs clock resolution. It is pinned in the configuration and enforced by `cross-origin-isolated`.
 
 ### B0 runner (light tier)
 

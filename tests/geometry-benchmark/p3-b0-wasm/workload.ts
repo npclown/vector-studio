@@ -116,7 +116,7 @@ const STATUS_CODE: Readonly<Record<string, number>> = Object.freeze({
 export const BATCH_FAILED_WORD = 0xffff_ffff;
 
 /**
- * FNV-1a 64 over bytes, on two u32 halves so that a fold allocates nothing. The prime is
+ * FNV-1a 64 over bytes, on two u32 halves, so that the hash state needs no BigInt. The prime is
  * 2^40 + 0x1b3: the low word becomes (lo · 0x1b3) mod 2^32, the high word
  * (hi · 0x1b3 + carry + (lo << 8)) mod 2^32. Every intermediate is an integer below 2^53.
  */
@@ -159,7 +159,9 @@ export class Fnv1a64 {
    * The decoded fold of one port result, as `fold_decoded`: per path in request order the
    * status as u32 LE; on `ok` also V, T and the boundary pair count, then the position f64
    * bits, the indices and the boundary pairs, little-endian (the host is little-endian, which
-   * the adapter checks). A batch failure folds `BATCH_FAILED_WORD` and returns false.
+   * the adapter checks). A batch failure folds `BATCH_FAILED_WORD` and returns false. It
+   * creates three `Uint8Array` views per mesh inside the timed window; that small allocation
+   * is part of the measured browser cost.
    */
   result(result: FillMeshBatchResult): boolean {
     if (result.status !== 'ok') {
@@ -232,7 +234,7 @@ export interface WasmCellCapture {
   readonly paths: number;
   /** Untimed; the adapter's arenas are provisioned here. */
   readonly preparation: WasmSample;
-  /** Statuses of the preparation sample's last call, in request order. */
+  /** Statuses of one untimed call made after the preparation sample, in request order. */
   readonly statuses: readonly string[];
   readonly warmup: readonly WasmSample[];
   readonly timed: readonly WasmSample[];

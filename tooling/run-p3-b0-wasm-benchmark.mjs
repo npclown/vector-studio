@@ -80,7 +80,7 @@ const SOURCE_ROOTS = [
   'pnpm-lock.yaml',
 ];
 
-const { parseArguments, readEnvironmentObservations } = await import(
+const { parseArguments: parseB0Arguments, readEnvironmentObservations } = await import(
   pathToFileURL(path.join(root, 'tooling/run-p3-b0-benchmark.mjs')).href
 );
 const { captureP2Build } = await import(
@@ -101,6 +101,7 @@ const {
   WASM_RUNNER_VERSION,
   WASM_SCHEMA_VERSION,
   analyze,
+  kernelSourceSha256,
   linkAlS1,
   pageOptions,
   scenarioConfig,
@@ -108,7 +109,23 @@ const {
   validateWasmRecord,
 } = await import(pathToFileURL(path.join(root, 'tests/geometry/p3-b0-wasm/analysis.ts')).href);
 
-export { parseArguments };
+/**
+ * B0's arguments (`--profile`, `--environment-json`), unchanged, plus an optional
+ * `--al-s1 <path>` that names the AL-S1 reference record to link.
+ */
+export function parseArguments(args) {
+  const rest = [];
+  let alS1 = null;
+  for (let index = 0; index < args.length; index += 2) {
+    if (args[index] === '--al-s1') {
+      const value = args[index + 1];
+      if (value === undefined || value.startsWith('--')) throw new Error('--al-s1 needs a value.');
+      if (alS1 !== null) throw new Error('Duplicate --al-s1.');
+      alS1 = value;
+    } else rest.push(args[index], ...(index + 1 < args.length ? [args[index + 1]] : []));
+  }
+  return { ...parseB0Arguments(rest), alS1 };
+}
 
 function git(...args) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
@@ -257,29 +274,55 @@ function buildWasm(output) {
 }
 
 /**
- * The committed AL-S1 reference record (section 5.3): exactly one tracked, unmodified
- * `*_p3_p3-fill-ladder-v1_*.json` whose profile is reference. Returns null when there is none;
- * the reference profile requires one.
+ * The committed AL-S1 reference record to link (section 5.3). Every candidate is a tracked,
+ * unmodified `docs/benchmarks/results/*_p3_p3-fill-ladder-v1_*.json` whose profile is
+ * reference.
+ *
+ * - With `explicit` (`--al-s1 <path>`), that record, which must be such a candidate. Its
+ *   kernel sources are compared in the analysis (`al-s1-same-kernel`); a difference makes the
+ *   run INCONCLUSIVE rather than refusing it.
+ * - Otherwise, the only candidate whose kernel source entries (`kernelSourceSha256`) equal
+ *   `kernelSha256`, this run's. None gives null; several require `--al-s1`.
  */
-export function findAlS1Record() {
+export function findAlS1Record({ explicit = null, kernelSha256 = null } = {}) {
   const tracked = git('ls-files', '--', 'docs/benchmarks/results')
     .split(/\r?\n/u)
     .filter((file) => AL_S1_PATTERN.test(file));
-  const references = tracked.filter((file) => {
+  const load = (file) => {
     try {
-      const record = JSON.parse(readFileSync(path.join(root, file), 'utf8'));
-      return record?.scenario?.profile === 'reference';
+      const bytes = readFileSync(path.join(root, file));
+      const record = JSON.parse(bytes.toString('utf8'));
+      return record?.scenario?.profile === 'reference' ? { file, bytes, record } : null;
     } catch {
-      return false;
+      return null;
     }
-  });
-  if (references.length === 0) return null;
-  if (references.length > 1)
-    throw new Error(`Several AL-S1 reference records: ${references.join(', ')}.`);
-  const file = references[0];
-  if (git('status', '--porcelain', '--', file) !== '')
-    throw new Error(`The AL-S1 record ${file} differs from its committed bytes.`);
-  return { file, bytes: readFileSync(path.join(root, file)) };
+  };
+  const unmodified = (candidate) => {
+    if (git('status', '--porcelain', '--', candidate.file) !== '')
+      throw new Error(`The AL-S1 record ${candidate.file} differs from its committed bytes.`);
+    return { file: candidate.file, bytes: candidate.bytes };
+  };
+  if (explicit !== null) {
+    const file = path.relative(root, path.resolve(root, explicit)).split(path.sep).join('/');
+    const candidate = tracked.includes(file) ? load(file) : null;
+    if (candidate === null)
+      throw new Error(`--al-s1 ${explicit} is not a tracked AL-S1 reference record.`);
+    return unmodified(candidate);
+  }
+  const matching = tracked
+    .map(load)
+    .filter(
+      (candidate) =>
+        candidate !== null &&
+        kernelSha256 !== null &&
+        kernelSourceSha256(candidate.record.run?.sourceManifest) === kernelSha256,
+    );
+  if (matching.length === 0) return null;
+  if (matching.length > 1)
+    throw new Error(
+      `Several AL-S1 reference records match this kernel (${matching.map((item) => item.file).join(', ')}); name one with --al-s1.`,
+    );
+  return unmodified(matching[0]);
 }
 
 const fixed = (value, digits) =>
@@ -352,9 +395,14 @@ export async function main(args = process.argv.slice(2)) {
   const corpusSha = sha256Hex(corpus);
   if (corpusSha !== CORPUS_SHA256)
     throw new Error(`Corpus SHA-256 ${corpusSha} differs from the pinned ${CORPUS_SHA256}.`);
-  const alS1 = findAlS1Record();
+  const alS1 = findAlS1Record({
+    explicit: options.alS1,
+    kernelSha256: kernelSourceSha256(manifestBefore),
+  });
   if (options.profile === 'reference' && alS1 === null)
-    throw new Error('The reference profile requires the committed AL-S1 reference record.');
+    throw new Error(
+      'The reference profile requires a committed AL-S1 reference record of this kernel (or --al-s1).',
+    );
 
   const { runId, output } = reserveOutput();
   console.log(`P3 AL-S2 ${options.profile} output: ${path.relative(root, output)}`);
