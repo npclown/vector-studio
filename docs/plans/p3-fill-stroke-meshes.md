@@ -2342,6 +2342,84 @@ These are inputs to the user's decision, not adopted changes.
 
 Validation: listed on the ST-U3b PR.
 
+### Alt-A1 AL-U4b3 FR5 boxes once
+
+Unit AL-U4b3, the third certificate optimization under [section 5.1](p3-alt-a1-fill-ladder-contract.md#51-a-certificate-stage-optimization) of the Alt-A1 contract, light tier with one independent diff review. It applies hot spots 6 and 8 of the [AL-U4a split](#alt-a1-al-u4a-diagnostic-split) to FR5 (SL-C3), the clearance sweep, with classes AL-C1 and AL-C4 only. AL-U4b2 was merged through PR #160 (`ad6ce26`), and B1 through PR #168. The branch starts from `main` `ae91297`. Acceptance check: AL-A11 (`pnpm test:p3-fill-identity` plain mode PASS against `ae91297`, AL-A5, AL-A7, the seeded defects still detected), with AL-A2, AL-A8, AL-A12 and AL-A16. The timings below are diagnostics, **not evidence**. This entry makes no performance claim, and precision stays UNVERIFIED.
+
+Files:
+
+- `packages/geometry-wasm/kernel/src/fill_ladder.rs`: FR5 moves from `FastRung::clearance`, `consecutive` and `clear_pair` into the free functions `clearance_edges`, `consecutive` and `clear_pair`, with the new `EdgeBox` and `total_order_key`. `merge_sort` becomes generic over its item type; FR7's call is unchanged. `cfg(test)` hooks are added: `FastRung::clearance_inputs`, `clearance_trace`, the types `ClearanceTestEdge` and `ClearanceTrace`, and the `VISIT_*` outcome codes. No check, threshold, reason or `FastStats` field changes.
+- `packages/geometry-wasm/kernel/src/fill_ladder_tests.rs`, by additions only: the equivalence tests and their `cfg(test)` copy of the AL-U4b2 FR5.
+- `packages/geometry-wasm/kernel/src/fill_ladder_diag_tests.rs`: the mirror's FR5 brought up to date, under the Primary ruling recorded in the [AL-U4b1 entry](#alt-a1-al-u4b1-shared-subdivision).
+
+Diagnostic before the change (the AL-U4a command, unchanged, on `ae91297`). The mirror's fidelity holds on 1,270 B0 paths, with 0 differ. Since B1, 1,130 of them pass FR1-FR5 in production, against AL-U4a's 1,121. Mirror shares of its own FR1-FR5 sum: FR2 56.6% (`restrict` 23.3%, terms 34.2%), FR4 31.7% (steps 28.8%, chords 6.9%), FR5 8.6% (box gap 4.1%, sort 2.6%, scan 1.3%) and FR1 3.1% (lookups 1.3%). Production stops, as shares of the fast rung: S1 14%, FR6-FR8 12% and AL-FR9 7%. FR2 and FR4 are interval arithmetic; outcome identity leaves them only AL-C1 and AL-C2, which AL-U4b1 and AL-U4b2 have used, and the Primary ruling excludes AL-C3 from FR2. So FR5 is the largest certificate stage still open to AL-C1 and AL-C4.
+
+Design and decision-equality argument (the code comments carry it):
+
+- **Boxes once per edge, AL-C1.** `EdgeBox` holds xlo, xhi, ylo and yhi, each the same `f64::min` or `f64::max` call on (start, end) that AL-U4b2 made. AL-U4b2 computed xlo and xhi once per edge for the sort and the scan, and recomputed all four extremes of both edges in step 1 for every candidate. Every value read is the same, with no rounding. FR1 has checked that every coordinate is finite.
+- **Step 1 gaps lazily, AL-C4.** The four gaps are tested in the same order, gap(xhi(e), xlo(f)), gap(xhi(f), xlo(e)), gap(yhi(e), ylo(f)) and gap(yhi(f), ylo(e)). Each uses the same `Interval::point(low).sub(Interval::point(high))` and `proved_exceeds(gap, r)`. A gap is now computed only when the earlier ones did not decide. The interval operations are pure, and `.any` already stopped at the first decided gap.
+- **Integer sort keys, AL-C4.** The merge sort orders (`total_order_key(xlo)`, index) pairs by integer comparison. `total_order_key` is the bit transform of the standard library's `f64::total_cmp`, so every comparison has the result of AL-U4b2's comparator `xlo[a].total_cmp(&xlo[b]).then(a.cmp(&b))`. The same merge sort therefore makes the same moves and gives the same order.
+- **By reference, AL-C4.** `consecutive` and `clear_pair` read the two edges by reference, instead of copying two `CertEdge` values per scan visit and per candidate.
+- **Fault switches once per call, AL-C4.** Defects (4), (9) and (10) are read once in `clearance_edges`, not once per position, visit or pair. They are test-build switches that no stage changes, and constant `false` outside test builds.
+- **The candidate bitset only with debug assertions, AL-C4.** It feeds only a `debug_assert!`, so release builds no longer zero `MAX_EDGES × EDGE_WORDS` words per call (8 KiB since B1).
+- **No reordering.** The sort, the scan order and bound, the consecutive skip, the step order, every decided quantity and the counter updates are unchanged. So the result, the reason and `sweep_candidates`, `clearance_step2` and `clearance_step3` are the same for every input.
+- **The `observe` callback.** `clearance_edges` passes each visit's outcome to a callback. Production passes a no-op closure, which inlines away; only `clearance_trace` records the visits.
+
+Equivalence tests, both by additions in `fill_ladder_tests.rs`. Both FR5 versions record every scan visit (a, b) in order with its outcome: consecutive skip, box gap, `CROSSING`, simplicity-only pass, clear, or `CLEARANCE` at point test k. They also record the three counters and the result. Equal traces therefore mean the same sort order, the same scan, the same skips, the same step reached for every candidate and the same first failing pair. Each case is compared without faults and under each FR5 defect: (1) with `Fault::R1WideningRemoved`, (4), (9) and (10).
+
+- Debug test `al_u4b3_fr5_boxes_once_decide_as_before`. Its fixtures and real-path cases also compare the hook's result and counters with the production stop after FR5.
+  - Fixtures reaching FR5: 90 cases, 810 visits, 353 candidates, 0 differ (66 pass, 15 `CROSSING`, 9 `CLEARANCE`).
+  - Debug-sample paths reaching FR5: 195 cases, 8,886 visits, 4,665 candidates, 0 differ.
+  - Random edges: 20,000 inputs of one to four closed contours of 1 to 12 edges, with points near a small grid (signed zeros included) or from the AL-U4b1 coordinate families, and δ around the point spacing. That makes 100,000 compared runs, with 466,845 visits and 302,050 candidates: 76,647 box gaps, 225,403 at step 2 and 84,306 at step 3. 0 differ: 10,173 pass, 67,874 `CROSSING` and 21,953 `CLEARANCE`.
+- Ignored release test `al_u4b3_full_corpus_fr5_boxes_once_decide_as_before`, every corpus path that passes FR1-FR4:
+  - B0 framed corpus: 5,905 cases, 405,837 visits, 210,750 candidates, 0 differ.
+  - `p3-b0r-random/v1`: 42,465 cases, 1,920,757 visits, 1,183,947 candidates, 46,370 at step 3, 0 differ.
+- Four mutations were run. Three were detected: using f's box twice in the fourth gap made 26 fixture cases differ, skipping defect (10)'s switch made 18 differ, and the raw bits as the sort key made 15 debug-sample cases differ. The fourth, using e's box twice in the second gap, was not detected, and is equivalent. In sorted order xlo(f) ≥ xlo(e), so gap(xhi(f), xlo(e)) ≤ 0 can never prove a gap above r > 0.
+
+**Diagnostic, not evidence.** The AL-U4a command, unchanged. For same-session comparisons, the same diagnostic file was also run against `ae91297`'s kernel crate, exported with `git archive` to a scratch directory, alternating with the branch: three pairs on the final code. Every run passes, with mirror fidelity 1,270 B0 paths and 0 differ, and every kernel cross-check holds. The new `FR5.AL-U4b2` kernel, the AL-U4b2 FR5 kept in the mirror, passes with the same candidate count on every timed path.
+
+Medians, summed over the 26 cells, in µs:
+
+| Run pair | `ae91297` production FR5 stop | Branch production FR5 stop | Mirror FR5 / `FR5.AL-U4b2` (branch run) |
+| -------- | ----------------------------: | -------------------------: | --------------------------------------: |
+| 1        |                        251.84 |                     398.53 |                  388.01 / 421.58 (0.92) |
+| 2        |                        746.23 |                     741.30 |                  601.48 / 641.64 (0.94) |
+| 3        |                      1,170.34 |                   1,524.91 |                  641.87 / 718.06 (0.89) |
+
+Other sessions were running on the machine, and the production stop differences are noise-dominated: S1, which neither side changes, ranged from 1,126 to 1,920 µs between runs. The production FR5 stop shows no resolvable change. Only the same-run kernel comparison isolates this change, and it shows a gain of about 6 to 11% of FR5. FR5 is about 5% of the fast rung, so this unit moves the fast rung by well under 1%. In the base runs, whose mirror is the same file, the ratio was 0.94, 0.94 and 0.91.
+
+A first variant also stored FR2's controls in place and read FR2's edges by reference (the AL-U4a "FR2 residual", AL-C4). Its equivalence test, with bit comparisons of every stored control, every `deviation_squared` and `max_deviation_squared`, passed. Its same-run FR2 kernel ratio against the AL-U4b2 FR2 was 0.95 and 1.04 in two runs, which is noise. It was removed from this unit, because it gave no measurable gain.
+
+Local evidence, 2026-10-20, Windows 11, pinned Rust 1.94.1, uncommitted working tree on branch `claude/p3-alt-a1-u4b3-fr5-s1` over `main` `ae91297`:
+
+- AL-A11 and AL-A8: `pnpm test:p3-fill-identity --base ae91297f7f2cdbfcf29c144cac43c63c56da940c --allow-test-change packages/geometry-wasm/kernel/src/fill_ladder_tests.rs --allow-test-change packages/geometry-wasm/kernel/src/fill_ladder_diag_tests.rs` (plain mode): PASS.
+  - `fill_v0_revision()` base 2 and branch 2.
+  - Native: all digests equal. WASM: all digests equal. WASM against native: all digests equal. 76,352 native cases and 6,041 WASM cases.
+  - Release WASM SHA-256: base `65a9f3c0…212b`, branch `d862b133…87e0`.
+  - The oracle layers PASS (51 min), and both tamper self-checks were detected.
+  - Run directory `artifacts/p3-b0r-identity/20261020T111948Z-eae379d3`. The tool names it from the system clock in UTC.
+  - A first run without `--base` took the stale local `main` (`bcd0a8b`) as its merge base, and failed on that base's differences (other units' test files and digests). It is not evidence either way. The explicit base is the branch point.
+- AL-A5, the full-corpus AL-I3 with the AL-U4b1, AL-U4b2 and AL-U4b3 corpus tests (`P3_B0R_B0_CORPUS` and `P3_B0R_RANDOM_CORPUS` from the AL-U3 re-baseline run, `cargo test --release --lib full_corpus -- --ignored`): PASS, 4 tests.
+  - B0 corpus: 1,270 paths identical (1,121 fast, 149 fallback).
+  - `p3-b0r-random/v1`: 12,000 paths identical (5,393 fast, 6,607 fallback).
+  - No allowed difference, 0 failures, 0 allocating rung-0 calls. These are the AL-U1 counts.
+  - `max_deviation_squared` bits: 1,121 and 5,393 fast paths compared, 0 differ.
+  - The FR4 and FR5 corpus equivalences as above, 0 differ.
+- `pnpm test:geometry`: native `cargo test` 407 passed and 54 ignored; independent-build WASM SHA-256 `d862b133351626c79633933b05dfeae790e101a1c0d0297a7fe96281effb87e0`, the identity run's branch WASM. Geometry vitest: 48 files passed and 4 skipped, 804 tests passed and 6 skipped, with 1 failure in both runs. The pure TypeScript test `extent-t03-local.test.ts` ("pruned c2Local equals the unpruned oracle …") timed out at its 60 s limit, the first time while the identity run's oracles were running and the second time with other sessions running. Re-run alone, the file passed 4 tests in 67 s. This unit changes no TypeScript.
+- `pnpm check`: PASS on its first run. Format, lint and typecheck pass; `test:unit` passes 68 files and 915 tests; `check:boundaries` PASS (AL-A12).
+- `pnpm build`: PASS.
+- Kernel `cargo fmt --check` and `clippy --all-targets -D warnings`, debug and release: clean. `p3_b0_diag` clippy (`RUSTFLAGS="--cfg p3_b0_diag"`, own scratch target directory, `--all-targets -D warnings`): PASS.
+- AL-A2: `git diff --exit-code ae91297 -- packages/geometry-wasm/kernel/Cargo.toml packages/geometry-wasm/kernel/Cargo.lock pnpm-lock.yaml package.json packages/contracts` exits 0.
+- `git diff --check`: PASS. Prettier with an empty ignore file is clean on this plan (AL-A16).
+- **After the fast-forward to `main` `c785b59`.** That `main` adds B2 stroke units (ST-U3b, ST-U4) and P1 work, and touches no fill-ladder file. On the fast-forwarded tree: kernel fmt and clippy clean; native debug `cargo test --lib` 421 passed and 55 ignored; the full-corpus run above repeated with the same counts, 4 tests PASS. The identity run, `pnpm test:geometry`, `pnpm check` and `pnpm build` were not repeated.
+
+Deviations and notes:
+
+- **`fill_ladder_diag_tests.rs` is edited** under the AL-U4b1 Primary ruling. The mirror's FR5 follows `clearance_edges` statement for statement, and its sort, scan and box-gap kernels use the stored boxes and keyed order. The AL-U4b2 FR5 stays as the extra kernel `FR5.AL-U4b2`, with an untimed check that it passes with the mirror's candidate count on every timed path. The fidelity check is unchanged. The file is on the identity run's `--allow-test-change` list.
+- **The equivalence tests need `cfg(test)` hooks in `fill_ladder.rs`.** `CertEdge` stays private, so `clearance_inputs` exports the certified edges after FR4, and `clearance_trace` runs `clearance_edges` itself on them. They are functions, not an inline test module, so O5's inline-module check is unaffected.
+- **Logical counters.** None change: on the 26 cells, the mirror has 17,008 visits, 7,740 consecutive skips and 9,268 candidates, all decided at step 1, as before.
+- **Not done.** FR1's source lookups (1.3%) and FR5's remaining sort and box-gap work are left. FR2 and FR4 are interval arithmetic. Outside the certificate, S1 and FR6 to AL-FR9 are outside section 5.1's scope.
+
 ### B2 ST-U5 stroke export
 
 Unit ST-U5 of the frozen [B2 stroke contract](p3-b2-stroke-contract.md#121-units), full tier under the approved and frozen contract. Scope: the `stroke_v0_*` export and `StrokeEngine` (section 7), the `StrokeMeshPort` types (section 6), `createStrokeMeshPort` (section 8), the conformance suite SC01-SC22 and its double (section 11.4), the transport fixtures (section 11.2), and the section 1.3 documents for ST-U5. Acceptance: ST-A7 (transport), ST-A8 (SC01-SC22 on the WASM adapter and the double), ST-A9 (nothing else changes) and ST-A12. Every result is functional evidence, and precision is **UNVERIFIED** against the 0.25 physical-pixel target until B4. Reviews: the ST-A0 contract review ran. Its verdict was NOT READY: its B1 and S2 findings were fixed in ST-U4 (#173), and the remaining findings are contract amendments still to land. This unit's independent diff review ran on PR #174 and was NOT READY, on merge-gate items only (the code matched the contract). Those items are resolved on this branch: the merge of `main` with ST-U4, the reruns with their base hashes recorded, the re-measured memory rows, and the reviews recorded.
@@ -2371,7 +2449,7 @@ Design:
 | Target   | Front end | `RoundedFillWorkspace` | `FillScratch` | Heap total (cap 48 MiB) | Linear memory after `stroke_v0_reserve(0, 0)` |
 | -------- | --------: | ---------------------: | ------------: | ----------------------: | --------------------------------------------: |
 | x86_64   | 1,255,120 |             14,262,272 |     2,654,208 |              18,171,600 |                                             — |
-| `wasm32` |         — |                      — |             — |                       — |                     13,828,096 (1,114,112 before) |
+| `wasm32` |         — |                      — |             — |                       — |                 13,828,096 (1,114,112 before) |
 
 The native row is printed by `stroke_outline_tests::stroke_v0_limits_fit_the_workspace_and_heap_caps`. The `wasm32` row comes from the release WASM in Node: a fresh instance, `stroke_v0_reserve(0, 0)` and `memory.buffer.byteLength`. That growth bounds the wasm32 heap. The kernel has no export for the per-part bytes there. `heap_cap_is_checked_at_reserve` checks the native heap against the cap at the limit and one byte below it.
 

@@ -38,6 +38,14 @@
 //! fidelity check is unchanged. The AL-U4b1 FR4 stays as the extra kernel `FR4.AL-U4b1`,
 //! checked to pass on every timed path, for a same-run comparison. The dot counts are unchanged.
 //!
+//! **AL-U4b3.** The mirror follows the third optimization. FR5 computes each edge's box once
+//! (`EdgeBox`, AL-C1), sorts (key, index) pairs by integer comparison, tests the four step-1
+//! gaps in order and stops at the first decided one,
+//! reads the edges by reference, and keeps the candidate bitset only with debug assertions
+//! (AL-C4), as `fill_ladder.rs`'s `clearance_edges` does. The fidelity check is unchanged.
+//! The AL-U4b2 FR5 stays as the extra kernel `FR5.AL-U4b2`, checked to pass with the same
+//! candidate count on every timed path, for a same-run comparison.
+//!
 //! The ignored test runs only by hand (release profile, `--nocapture`, one test thread) and
 //! prints its tables; it changes no output and writes no file.
 use core::cmp::Ordering;
@@ -377,6 +385,37 @@ struct ContourInfo {
     contracted: bool,
 }
 
+/// `fill_ladder::total_order_key` (AL-U4b3).
+fn total_order_key(value: f64) -> i64 {
+    let mut bits = value.to_bits() as i64;
+    bits ^= (((bits >> 63) as u64) >> 1) as i64;
+    bits
+}
+
+/// `fill_ladder::EdgeBox` (AL-U4b3).
+#[derive(Clone, Copy, Debug, Default)]
+struct EdgeBox {
+    xlo: f64,
+    xhi: f64,
+    ylo: f64,
+    yhi: f64,
+}
+
+impl EdgeBox {
+    fn new(edge: &CertEdge) -> Self {
+        Self {
+            xlo: edge.start.x.min(edge.end.x),
+            xhi: edge.start.x.max(edge.end.x),
+            ylo: edge.start.y.min(edge.end.y),
+            yhi: edge.start.y.max(edge.end.y),
+        }
+    }
+}
+
+/// The mirror's candidate bitset words per row, as `fill_ladder`'s `EDGE_WORDS`.
+#[cfg(debug_assertions)]
+const EDGE_WORDS: usize = MAX_EDGES.div_ceil(64);
+
 const LEVELS: usize = MAX_LEAF_DEPTH as usize;
 
 /// AL-U4b1: `fill_ladder.rs`'s `Subdivision`, the prefix-shared interval de Casteljau of FR2,
@@ -545,10 +584,10 @@ impl MonotoneEdge {
     }
 }
 
-fn merge_sort(
-    items: &mut [usize],
-    scratch: &mut [usize],
-    mut compare: impl FnMut(usize, usize) -> Ordering,
+fn merge_sort<T: Copy>(
+    items: &mut [T],
+    scratch: &mut [T],
+    mut compare: impl FnMut(T, T) -> Ordering,
 ) {
     let length = items.len();
     let mut width = 1usize;
@@ -685,10 +724,9 @@ struct Mirror {
     max_deviation_squared: f64,
     counts: Counts,
     /// FR5 state prepared once (untimed) for the isolated sweep, box-gap, relation and point
-    /// kernels: the sort keys and order, and the pairs reaching each step.
-    xlo: [f64; MAX_EDGES],
-    xhi: [f64; MAX_EDGES],
-    order: [usize; MAX_EDGES],
+    /// kernels: the edge boxes (AL-U4b3) and order, and the pairs reaching each step.
+    boxes: [EdgeBox; MAX_EDGES],
+    order: [(i64, usize); MAX_EDGES],
     candidates: Vec<(usize, usize)>,
     step2: Vec<(usize, usize)>,
     step3: Vec<(usize, usize)>,
@@ -712,9 +750,8 @@ impl Mirror {
             cert_len: 0,
             max_deviation_squared: 0.0,
             counts: Counts::default(),
-            xlo: [0.0; MAX_EDGES],
-            xhi: [0.0; MAX_EDGES],
-            order: [0; MAX_EDGES],
+            boxes: [EdgeBox::default(); MAX_EDGES],
+            order: [(0, 0); MAX_EDGES],
             candidates: Vec::new(),
             step2: Vec::new(),
             step3: Vec::new(),
@@ -1311,8 +1348,8 @@ impl Mirror {
 
     // FR5 -----------------------------------------------------------------------------------
 
-    fn consecutive(&self, left: usize, right: usize) -> bool {
-        let (a, b) = (self.cert[left], self.cert[right]);
+    /// `fill_ladder::consecutive` (AL-U4b3: the edges by reference).
+    fn consecutive(&self, a: &CertEdge, b: &CertEdge) -> bool {
         if a.contour != b.contour {
             return false;
         }
@@ -1321,9 +1358,141 @@ impl Mirror {
         offset == 1 || offset == count - 1
     }
 
-    /// `FastRung::clearance`; with `COUNT` it also stores the sort state and the pairs that
-    /// reach each step, for the isolated kernels.
+    /// `fill_ladder::clearance_edges` (AL-U4b3); with `COUNT` it also stores the boxes, the
+    /// order and the pairs that reach each step, for the isolated kernels.
     fn clearance<const COUNT: bool>(&mut self) -> Result<(), Reason> {
+        let count = self.cert_len;
+        let radius = 2.0 * self.delta;
+        let r = Interval::point(radius);
+        let r_squared = r.mul(r);
+        let mut boxes = [EdgeBox::default(); MAX_EDGES];
+        for (slot, edge) in boxes.iter_mut().zip(&self.cert[..count]) {
+            *slot = EdgeBox::new(edge);
+        }
+        let mut order = [(0i64, 0usize); MAX_EDGES];
+        let mut scratch = [(0i64, 0usize); MAX_EDGES];
+        for (index, slot) in order[..count].iter_mut().enumerate() {
+            *slot = (total_order_key(boxes[index].xlo), index);
+        }
+        merge_sort(&mut order[..count], &mut scratch[..count], |a, b| a.cmp(&b));
+        if COUNT {
+            self.boxes = boxes;
+            self.order = order;
+            self.candidates.clear();
+            self.step2.clear();
+            self.step3.clear();
+        }
+        #[cfg(debug_assertions)]
+        let mut marks = [[0u64; EDGE_WORDS]; MAX_EDGES];
+        let mut candidates = 0u32;
+        for position in 0..count {
+            let a = order[position].1;
+            let bound = (boxes[a].xhi + radius).next_up();
+            let bound = if bound.is_finite() {
+                bound
+            } else {
+                f64::INFINITY
+            };
+            for &(_, b) in &order[position + 1..count] {
+                if boxes[b].xlo > bound {
+                    break;
+                }
+                if COUNT {
+                    self.counts.visits += 1;
+                }
+                if self.consecutive(&self.cert[a], &self.cert[b]) {
+                    if COUNT {
+                        self.counts.consecutive += 1;
+                    }
+                    continue;
+                }
+                #[cfg(debug_assertions)]
+                {
+                    let (low, high) = (a.min(b), a.max(b));
+                    marks[low][high / 64] |= 1u64 << (high % 64);
+                }
+                candidates += 1;
+                if COUNT {
+                    self.candidates.push((a, b));
+                }
+                self.clear_pair::<COUNT>(a, b, &boxes[a], &boxes[b], r, r_squared)?;
+            }
+        }
+        #[cfg(debug_assertions)]
+        debug_assert!(
+            marks
+                .iter()
+                .flatten()
+                .map(|word| word.count_ones())
+                .sum::<u32>()
+                == candidates
+        );
+        if COUNT {
+            self.counts.candidates += u64::from(candidates);
+        }
+        Ok(())
+    }
+
+    /// Step 1 of `fill_ladder::clear_pair` (AL-U4b3): the four gaps in order, stopping at the
+    /// first decided one.
+    fn box_gap(e_box: &EdgeBox, f_box: &EdgeBox, r: Interval) -> bool {
+        let gap = |high: f64, low: f64| Interval::point(low).sub(Interval::point(high));
+        proved_exceeds(gap(e_box.xhi, f_box.xlo), r)
+            || proved_exceeds(gap(f_box.xhi, e_box.xlo), r)
+            || proved_exceeds(gap(e_box.yhi, f_box.ylo), r)
+            || proved_exceeds(gap(f_box.yhi, e_box.ylo), r)
+    }
+
+    /// `fill_ladder::clear_pair` (AL-U4b3).
+    fn clear_pair<const COUNT: bool>(
+        &mut self,
+        left: usize,
+        right: usize,
+        e_box: &EdgeBox,
+        f_box: &EdgeBox,
+        r: Interval,
+        r_squared: Interval,
+    ) -> Result<(), Reason> {
+        if Self::box_gap(e_box, f_box, r) {
+            if COUNT {
+                self.counts.box_decided += 1;
+            }
+            return Ok(());
+        }
+        if COUNT {
+            self.counts.step2 += 1;
+            self.step2.push((left, right));
+        }
+        let (e, f) = (&self.cert[left], &self.cert[right]);
+        match segment_relation(e.start, e.end, f.start, f.end) {
+            Ok(SegmentRelation::Disjoint) => {}
+            _ => return Err(Reason::Crossing),
+        }
+        if COUNT {
+            self.counts.step3 += 1;
+            self.step3.push((left, right));
+        }
+        let mut decided = [0u64; 4];
+        let (e, f) = (&self.cert[left], &self.cert[right]);
+        for (point, segment) in [(e.start, f), (e.end, f), (f.start, e), (f.end, e)] {
+            if !point_clear::<COUNT>(point, segment.start, segment.end, r_squared, &mut decided) {
+                if COUNT {
+                    Self::add_point_tests(&mut self.counts, decided);
+                }
+                return Err(Reason::Clearance);
+            }
+        }
+        if COUNT {
+            Self::add_point_tests(&mut self.counts, decided);
+        }
+        Ok(())
+    }
+
+    /// The AL-U4b2 `FastRung::clearance` (two `CertEdge` copies per scan visit and per
+    /// candidate, the step-1 extremes recomputed per pair and all four gaps computed, the
+    /// bitset always), kept as the extra kernel `FR5.AL-U4b2` for a same-run comparison
+    /// (AL-U4b3). Returns the candidate count.
+    fn clearance_u4b2(&self) -> Result<u32, Reason> {
         let count = self.cert_len;
         let radius = 2.0 * self.delta;
         let r = Interval::point(radius);
@@ -1343,15 +1512,18 @@ impl Mirror {
         merge_sort(&mut order[..count], &mut scratch[..count], |a, b| {
             xlo[a].total_cmp(&xlo[b]).then(a.cmp(&b))
         });
-        if COUNT {
-            self.xlo = xlo;
-            self.xhi = xhi;
-            self.order = order;
-            self.candidates.clear();
-            self.step2.clear();
-            self.step3.clear();
-        }
-        let mut marks = [0u64; MAX_EDGES];
+        let consecutive = |left: usize, right: usize| {
+            let (a, b) = (self.cert[left], self.cert[right]);
+            if a.contour != b.contour {
+                return false;
+            }
+            let count = self.contours[a.contour].cert_count;
+            let offset = (a.local + count - b.local) % count;
+            offset == 1 || offset == count - 1
+        };
+        // The AL-U4b2 bitset, `MAX_EDGES` rows of `EDGE_WORDS` words, zeroed per call and read
+        // only by the `debug_assert!`, exactly as in AL-U4b2's production code.
+        let mut marks = [[0u64; MAX_EDGES.div_ceil(64)]; MAX_EDGES];
         let mut candidates = 0u32;
         for position in 0..count {
             let a = order[position];
@@ -1365,152 +1537,108 @@ impl Mirror {
                 if xlo[b] > bound {
                     break;
                 }
-                if COUNT {
-                    self.counts.visits += 1;
-                }
-                if self.consecutive(a, b) {
-                    if COUNT {
-                        self.counts.consecutive += 1;
-                    }
+                if consecutive(a, b) {
                     continue;
                 }
                 let (low, high) = (a.min(b), a.max(b));
-                marks[low] |= 1u64 << high;
+                marks[low][high / 64] |= 1u64 << (high % 64);
                 candidates += 1;
-                if COUNT {
-                    self.candidates.push((a, b));
+                let (e, f) = (self.cert[a], self.cert[b]);
+                let gap = |high: f64, low: f64| Interval::point(low).sub(Interval::point(high));
+                let gaps = [
+                    gap(e.start.x.max(e.end.x), f.start.x.min(f.end.x)),
+                    gap(f.start.x.max(f.end.x), e.start.x.min(e.end.x)),
+                    gap(e.start.y.max(e.end.y), f.start.y.min(f.end.y)),
+                    gap(f.start.y.max(f.end.y), e.start.y.min(e.end.y)),
+                ];
+                if gaps.iter().any(|value| proved_exceeds(*value, r)) {
+                    continue;
                 }
-                self.clear_pair::<COUNT>(a, b, r, r_squared)?;
+                match segment_relation(e.start, e.end, f.start, f.end) {
+                    Ok(SegmentRelation::Disjoint) => {}
+                    _ => return Err(Reason::Crossing),
+                }
+                let mut decided = [0u64; 4];
+                for (point, segment) in [(e.start, f), (e.end, f), (f.start, e), (f.end, e)] {
+                    if !point_clear::<false>(
+                        point,
+                        segment.start,
+                        segment.end,
+                        r_squared,
+                        &mut decided,
+                    ) {
+                        return Err(Reason::Clearance);
+                    }
+                }
             }
         }
-        debug_assert!(marks.iter().map(|row| row.count_ones()).sum::<u32>() == candidates);
-        if COUNT {
-            self.counts.candidates += u64::from(candidates);
-        }
-        Ok(())
+        debug_assert!(
+            marks
+                .iter()
+                .flatten()
+                .map(|word| word.count_ones())
+                .sum::<u32>()
+                == candidates
+        );
+        Ok(candidates)
     }
 
-    fn clear_pair<const COUNT: bool>(
-        &mut self,
-        left: usize,
-        right: usize,
-        r: Interval,
-        r_squared: Interval,
-    ) -> Result<(), Reason> {
-        let (e, f) = (self.cert[left], self.cert[right]);
-        let gap = |high: f64, low: f64| Interval::point(low).sub(Interval::point(high));
-        let gaps = [
-            gap(e.start.x.max(e.end.x), f.start.x.min(f.end.x)),
-            gap(f.start.x.max(f.end.x), e.start.x.min(e.end.x)),
-            gap(e.start.y.max(e.end.y), f.start.y.min(f.end.y)),
-            gap(f.start.y.max(f.end.y), e.start.y.min(e.end.y)),
-        ];
-        if gaps.iter().any(|value| proved_exceeds(*value, r)) {
-            if COUNT {
-                self.counts.box_decided += 1;
-            }
-            return Ok(());
-        }
-        if COUNT {
-            self.counts.step2 += 1;
-            self.step2.push((left, right));
-        }
-        match segment_relation(e.start, e.end, f.start, f.end) {
-            Ok(SegmentRelation::Disjoint) => {}
-            _ => return Err(Reason::Crossing),
-        }
-        if COUNT {
-            self.counts.step3 += 1;
-            self.step3.push((left, right));
-        }
-        let mut decided = [0u64; 4];
-        for (point, segment) in [(e.start, f), (e.end, f), (f.start, e), (f.end, e)] {
-            if !point_clear::<COUNT>(point, segment.start, segment.end, r_squared, &mut decided) {
-                if COUNT {
-                    self.add_point_tests(decided);
-                }
-                return Err(Reason::Clearance);
-            }
-        }
-        if COUNT {
-            self.add_point_tests(decided);
-        }
-        Ok(())
-    }
-
-    fn add_point_tests(&mut self, decided: [u64; 4]) {
-        for (total, value) in self.counts.point_tests.iter_mut().zip(decided) {
+    fn add_point_tests(counts: &mut Counts, decided: [u64; 4]) {
+        for (total, value) in counts.point_tests.iter_mut().zip(decided) {
             *total += value;
         }
     }
 
-    /// FR5 sub-stage: the sort keys and the merge sort.
+    /// FR5 sub-stage: the boxes and the merge sort.
     fn fr5_sort(&self) -> usize {
         let count = self.cert_len;
-        let mut xlo = [0.0f64; MAX_EDGES];
-        let mut xhi = [0.0f64; MAX_EDGES];
-        for index in 0..count {
-            let edge = self.cert[index];
-            xlo[index] = edge.start.x.min(edge.end.x);
-            xhi[index] = edge.start.x.max(edge.end.x);
+        let mut boxes = [EdgeBox::default(); MAX_EDGES];
+        for (slot, edge) in boxes.iter_mut().zip(&self.cert[..count]) {
+            *slot = EdgeBox::new(edge);
         }
-        let mut order = [0usize; MAX_EDGES];
-        let mut scratch = [0usize; MAX_EDGES];
+        let mut order = [(0i64, 0usize); MAX_EDGES];
+        let mut scratch = [(0i64, 0usize); MAX_EDGES];
         for (index, slot) in order[..count].iter_mut().enumerate() {
-            *slot = index;
+            *slot = (total_order_key(boxes[index].xlo), index);
         }
-        merge_sort(&mut order[..count], &mut scratch[..count], |a, b| {
-            xlo[a].total_cmp(&xlo[b]).then(a.cmp(&b))
-        });
-        black_box(xhi);
-        order[0]
+        merge_sort(&mut order[..count], &mut scratch[..count], |a, b| a.cmp(&b));
+        black_box(&boxes);
+        order[0].1
     }
 
-    /// FR5 sub-stage: the sweep scan with its consecutive-pair skip and marks, on the stored
+    /// FR5 sub-stage: the sweep scan with its consecutive-pair skip, on the stored boxes and
     /// order, without the pair tests.
     fn fr5_scan(&self) -> u32 {
         let count = self.cert_len;
         let radius = 2.0 * self.delta;
-        let mut marks = [0u64; MAX_EDGES];
         let mut candidates = 0u32;
         for position in 0..count {
-            let a = self.order[position];
-            let bound = (self.xhi[a] + radius).next_up();
+            let a = self.order[position].1;
+            let bound = (self.boxes[a].xhi + radius).next_up();
             let bound = if bound.is_finite() {
                 bound
             } else {
                 f64::INFINITY
             };
-            for &b in &self.order[position + 1..count] {
-                if self.xlo[b] > bound {
+            for &(_, b) in &self.order[position + 1..count] {
+                if self.boxes[b].xlo > bound {
                     break;
                 }
-                if self.consecutive(a, b) {
+                if self.consecutive(&self.cert[a], &self.cert[b]) {
                     continue;
                 }
-                let (low, high) = (a.min(b), a.max(b));
-                marks[low] |= 1u64 << high;
                 candidates += 1;
             }
         }
-        debug_assert!(marks.iter().map(|row| row.count_ones()).sum::<u32>() == candidates);
         candidates
     }
 
-    /// FR5 sub-stage: step 1, the box-gap test, on every stored candidate.
+    /// FR5 sub-stage: step 1, the box-gap test, on every stored candidate and the stored boxes.
     fn fr5_box_gap(&self) -> u32 {
         let r = Interval::point(2.0 * self.delta);
         let mut decided = 0u32;
         for &(left, right) in &self.candidates {
-            let (e, f) = (self.cert[left], self.cert[right]);
-            let gap = |high: f64, low: f64| Interval::point(low).sub(Interval::point(high));
-            let gaps = [
-                gap(e.start.x.max(e.end.x), f.start.x.min(f.end.x)),
-                gap(f.start.x.max(f.end.x), e.start.x.min(e.end.x)),
-                gap(e.start.y.max(e.end.y), f.start.y.min(f.end.y)),
-                gap(f.start.y.max(f.end.y), e.start.y.min(e.end.y)),
-            ];
-            if gaps.iter().any(|value| proved_exceeds(*value, r)) {
+            if Self::box_gap(&self.boxes[left], &self.boxes[right], r) {
                 decided += 1;
             }
         }
@@ -1651,7 +1779,7 @@ const FILTERS: [(&str, FilterId); 3] = [
 ];
 
 /// The mirror's sub-stage kernels, in stage order.
-const KERNELS: [&str; 17] = [
+const KERNELS: [&str; 18] = [
     "FR1",
     "FR1.resolve",
     "FR2",
@@ -1669,6 +1797,7 @@ const KERNELS: [&str; 17] = [
     "FR5.points",
     "FR2.restrict.AL-U4a",
     "FR4.AL-U4b1",
+    "FR5.AL-U4b2",
 ];
 
 fn time_kernel(timing: &Timing, mirrors: &mut [Box<Mirror>], kernel: impl Fn(&mut Mirror)) -> f64 {
@@ -1737,6 +1866,9 @@ fn measure_kernel(slot: usize, timing: &Timing, mirrors: &mut [Box<Mirror>]) -> 
         }),
         16 => time_kernel(timing, mirrors, |m| {
             black_box(m.monotone_unshared()).expect("AL-U4b1 FR4 passes");
+        }),
+        17 => time_kernel(timing, mirrors, |m| {
+            black_box(m.clearance_u4b2()).expect("AL-U4b2 FR5 passes");
         }),
         _ => unreachable!("unknown kernel {slot}"),
     }
@@ -2137,6 +2269,12 @@ fn al_u4a_certificate_sub_stage_split() {
                     state.monotone_unshared(),
                     Ok(()),
                     "AL-U4b1 FR4 kernel, {}",
+                    cell.id
+                );
+                assert_eq!(
+                    state.clearance_u4b2().map(u64::from),
+                    Ok(state.counts.candidates),
+                    "AL-U4b2 FR5 kernel, {}",
                     cell.id
                 );
                 assert_eq!(

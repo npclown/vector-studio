@@ -2955,3 +2955,473 @@ fn al_u4b2_full_corpus_fr4_shared_operands_decide_as_before() {
     random.report("p3-b0r-random/v1");
     assert!(b0.passed > 0 && random.passed > 0);
 }
+
+// ------------------------------------------------------------------------------------------
+// AL-U4b3 (contract section 5.1, AL-C1 and AL-C4): FR5 with each edge's box computed once, the
+// step-1 gaps tested lazily in order, the edges read by reference, the fault switches read once
+// per call and the candidate bitset kept only with debug assertions decides exactly as the
+// AL-U4b2 FR5 (`fill_ladder.rs` at ae91297), kept here as a statement-for-statement copy. Both
+// are compared through their full visit trace (every scan visit (a, b) in order with its
+// outcome), their counters and their result.
+
+use crate::fill_ladder::{
+    ClearanceTestEdge, ClearanceTrace, VISIT_BOX_GAP, VISIT_CLEAR, VISIT_CLEARANCE,
+    VISIT_CONSECUTIVE, VISIT_CROSSING, VISIT_DISJOINT,
+};
+
+fn old_cross(left: OldIPoint, right: OldIPoint) -> crate::fill_filter::Interval {
+    left.x.mul(right.y).sub(left.y.mul(right.x))
+}
+
+fn old_norm_squared(value: OldIPoint) -> crate::fill_filter::Interval {
+    old_dot(value, value)
+}
+
+fn old_proved_positive(value: crate::fill_filter::Interval) -> bool {
+    value.sign() == Some(Ordering::Greater)
+}
+
+fn old_proved_negative(value: crate::fill_filter::Interval) -> bool {
+    value.sign() == Some(Ordering::Less)
+}
+
+/// The AL-U4b2 `proved_exceeds`, with defect (1)'s switch passed in.
+fn old_proved_exceeds(
+    value: crate::fill_filter::Interval,
+    bound: crate::fill_filter::Interval,
+    greater_equal: bool,
+) -> bool {
+    if greater_equal {
+        value.is_finite() && bound.is_finite() && value.lo >= bound.hi
+    } else {
+        crate::fill_filter::compare_enclosures(value, bound) == Some(Ordering::Greater)
+    }
+}
+
+/// The AL-U4b2 `point_clear`, unchanged.
+fn old_point_clear(
+    point: Point,
+    start: Point,
+    end: Point,
+    r_squared: crate::fill_filter::Interval,
+    greater_equal: bool,
+) -> bool {
+    let v = old_exact_difference(end, start);
+    let w = old_exact_difference(point, start);
+    let across = old_cross(v, w);
+    if old_proved_exceeds(
+        across.mul(across),
+        r_squared.mul(old_norm_squared(v)),
+        greater_equal,
+    ) {
+        return true;
+    }
+    if old_proved_negative(old_dot(w, v))
+        && old_proved_exceeds(old_norm_squared(w), r_squared, greater_equal)
+    {
+        return true;
+    }
+    let beyond = old_exact_difference(point, end);
+    old_proved_positive(old_dot(beyond, v))
+        && old_proved_exceeds(old_norm_squared(beyond), r_squared, greater_equal)
+}
+
+/// The ladder faults FR5 reads, as the AL-U4b2 copy takes them.
+#[derive(Clone, Copy, Default)]
+struct ClearanceFaults {
+    greater_equal: bool,
+    simplicity_only: bool,
+    scan_without_radius: bool,
+    skip_two_apart: bool,
+}
+
+/// The AL-U4b2 `FastRung::clearance` and `clear_pair`, unchanged except that they read
+/// `ClearanceTestEdge`s, take the fault switches as arguments and record each visit as
+/// `clearance_trace` does.
+fn old_clearance_trace(
+    edges: &[ClearanceTestEdge],
+    counts: &[usize],
+    delta: f64,
+    faults: ClearanceFaults,
+) -> ClearanceTrace {
+    let count = edges.len();
+    let mut trace = Vec::new();
+    let mut stats = [0u32; 3];
+    let radius = 2.0 * delta;
+    let r = crate::fill_filter::Interval::point(radius);
+    let r_squared = r.mul(r);
+    let mut xlo = vec![0.0f64; count];
+    let mut xhi = vec![0.0f64; count];
+    for index in 0..count {
+        let edge = edges[index];
+        xlo[index] = edge.0.x.min(edge.1.x);
+        xhi[index] = edge.0.x.max(edge.1.x);
+    }
+    let mut order: Vec<usize> = (0..count).collect();
+    // The merge sort's order is the unique sorted order of its total comparator.
+    order.sort_by(|&a, &b| xlo[a].total_cmp(&xlo[b]).then(a.cmp(&b)));
+    let consecutive = |left: usize, right: usize| {
+        let (a, b) = (edges[left], edges[right]);
+        if a.2 != b.2 {
+            return false;
+        }
+        let count = counts[a.2];
+        let offset = (a.3 + count - b.3) % count;
+        offset == 1
+            || offset == count - 1
+            || (faults.skip_two_apart && (offset == 2 || offset + 2 == count))
+    };
+    let clear_pair = |left: usize, right: usize, stats: &mut [u32; 3]| -> u8 {
+        let (e, f) = (edges[left], edges[right]);
+        if !faults.simplicity_only {
+            let gap = |high: f64, low: f64| {
+                crate::fill_filter::Interval::point(low)
+                    .sub(crate::fill_filter::Interval::point(high))
+            };
+            let gaps = [
+                gap(e.0.x.max(e.1.x), f.0.x.min(f.1.x)),
+                gap(f.0.x.max(f.1.x), e.0.x.min(e.1.x)),
+                gap(e.0.y.max(e.1.y), f.0.y.min(f.1.y)),
+                gap(f.0.y.max(f.1.y), e.0.y.min(e.1.y)),
+            ];
+            if gaps
+                .iter()
+                .any(|value| old_proved_exceeds(*value, r, faults.greater_equal))
+            {
+                return VISIT_BOX_GAP;
+            }
+        }
+        stats[1] += 1;
+        match crate::fill_predicates::segment_relation(e.0, e.1, f.0, f.1) {
+            Ok(crate::fill_predicates::SegmentRelation::Disjoint) => {}
+            _ => return VISIT_CROSSING,
+        }
+        if faults.simplicity_only {
+            return VISIT_DISJOINT;
+        }
+        stats[2] += 1;
+        for (test, (point, segment)) in [(e.0, f), (e.1, f), (f.0, e), (f.1, e)]
+            .into_iter()
+            .enumerate()
+        {
+            if !old_point_clear(point, segment.0, segment.1, r_squared, faults.greater_equal) {
+                return VISIT_CLEARANCE + test as u8;
+            }
+        }
+        VISIT_CLEAR
+    };
+    for position in 0..count {
+        let a = order[position];
+        let bound = if faults.scan_without_radius {
+            xhi[a]
+        } else {
+            (xhi[a] + radius).next_up()
+        };
+        let bound = if bound.is_finite() {
+            bound
+        } else {
+            f64::INFINITY
+        };
+        for &b in &order[position + 1..count] {
+            if xlo[b] > bound {
+                break;
+            }
+            if consecutive(a, b) {
+                trace.push((a, b, VISIT_CONSECUTIVE));
+                continue;
+            }
+            stats[0] += 1;
+            let outcome = clear_pair(a, b, &mut stats);
+            trace.push((a, b, outcome));
+            match outcome {
+                VISIT_CROSSING => return (Err(Reason::Crossing), stats, trace),
+                VISIT_BOX_GAP | VISIT_DISJOINT | VISIT_CLEAR => {}
+                _ => return (Err(Reason::Clearance), stats, trace),
+            }
+        }
+    }
+    (Ok(()), stats, trace)
+}
+
+/// The fault configurations FR5 is compared under: none, and each FR5 defect ((1) with
+/// `Fault::R1WideningRemoved` as its seeded test runs it, (4), (9) and (10)).
+const CLEARANCE_FAULTS: [(&str, Option<LadderFault>); 5] = [
+    ("none", None),
+    ("(1)", Some(LadderFault::ClearanceGreaterEqual)),
+    ("(4)", Some(LadderFault::SimplicityOnly)),
+    ("(9)", Some(LadderFault::ScanBoundWithoutRadius)),
+    ("(10)", Some(LadderFault::SkipTwoApart)),
+];
+
+#[derive(Default)]
+struct ClearanceEquivalence {
+    cases: usize,
+    visits: usize,
+    candidates: u64,
+    box_gaps: usize,
+    step2: u64,
+    step3: u64,
+    passed: usize,
+    crossing: usize,
+    clearance: usize,
+    differences: Vec<String>,
+}
+
+impl ClearanceEquivalence {
+    /// Compares both FR5 versions on the given edges under every `CLEARANCE_FAULTS`
+    /// configuration, and returns the new version's result and counters without faults.
+    fn compare(
+        &mut self,
+        name: &str,
+        edges: &[ClearanceTestEdge],
+        counts: &[usize],
+        delta: f64,
+    ) -> (Result<(), Reason>, [u32; 3]) {
+        let mut plain = (Ok(()), [0; 3]);
+        for (label, which) in CLEARANCE_FAULTS {
+            let faults = ClearanceFaults {
+                greater_equal: which == Some(LadderFault::ClearanceGreaterEqual),
+                simplicity_only: which == Some(LadderFault::SimplicityOnly),
+                scan_without_radius: which == Some(LadderFault::ScanBoundWithoutRadius),
+                skip_two_apart: which == Some(LadderFault::SkipTwoApart),
+            };
+            let run = || {
+                let ladder: Vec<LadderFault> = which.into_iter().collect();
+                let new = with_ladder_faults(&ladder, || {
+                    crate::fill_ladder::clearance_trace(edges, counts, delta)
+                });
+                let old = old_clearance_trace(edges, counts, delta, faults);
+                (new, old)
+            };
+            let (new, old) = if faults.greater_equal {
+                with_fault(Fault::R1WideningRemoved, run)
+            } else {
+                run()
+            };
+            self.cases += 1;
+            self.visits += new.2.len();
+            self.candidates += u64::from(new.1[0]);
+            self.step2 += u64::from(new.1[1]);
+            self.step3 += u64::from(new.1[2]);
+            self.box_gaps += new
+                .2
+                .iter()
+                .filter(|visit| visit.2 == VISIT_BOX_GAP)
+                .count();
+            match new.0 {
+                Ok(()) => self.passed += 1,
+                Err(Reason::Crossing) => self.crossing += 1,
+                Err(Reason::Clearance) => self.clearance += 1,
+                Err(_) => {}
+            }
+            if new != old {
+                self.differences.push(format!(
+                    "{name} (faults {label}): new {:?} {:?} after {} visits, old {:?} {:?} after \
+                     {} visits",
+                    new.0,
+                    new.1,
+                    new.2.len(),
+                    old.0,
+                    old.1,
+                    old.2.len()
+                ));
+            }
+            if which.is_none() {
+                plain = (new.0, new.1);
+            }
+        }
+        plain
+    }
+
+    fn report(&self, label: &str) {
+        println!(
+            "AL-U4b3 FR5 equivalence {label}: {} cases, {} visits, {} candidates ({} box gap), \
+             {} step 2, {} step 3, {} pass, {} CROSSING, {} CLEARANCE, {} differ",
+            self.cases,
+            self.visits,
+            self.candidates,
+            self.box_gaps,
+            self.step2,
+            self.step3,
+            self.passed,
+            self.crossing,
+            self.clearance,
+            self.differences.len()
+        );
+        assert!(
+            self.differences.is_empty(),
+            "FR5 differs: {:#?}",
+            self.differences
+        );
+    }
+}
+
+/// FR5 on a real path: the certified edges after FR4, compared, and the new version's result
+/// and counters against the production stop after FR5. Returns false when FR1-FR4 do not pass.
+fn clearance_real_case(
+    harness: &mut Harness,
+    equivalence: &mut ClearanceEquivalence,
+    name: &str,
+    request: FillRequest,
+    path: &RealPath,
+) -> bool {
+    let through_fr4 = harness.ladder.fast_rung_until(
+        &mut harness.workspace,
+        request,
+        &path.verbs,
+        &path.point_bytes,
+        &mut harness.scan,
+        Stage::Fr4,
+    );
+    if through_fr4.is_err() {
+        return false;
+    }
+    let (edges, counts, delta) = harness.ladder.fast().clearance_inputs();
+    let (result, counters) = equivalence.compare(name, &edges, &counts, delta);
+    let production = harness.ladder.fast_rung_until(
+        &mut harness.workspace,
+        request,
+        &path.verbs,
+        &path.point_bytes,
+        &mut harness.scan,
+        Stage::Fr5,
+    );
+    let stats = harness.ladder.fast().stats();
+    let production_counters = [
+        stats.sweep_candidates,
+        stats.clearance_step2,
+        stats.clearance_step3,
+    ];
+    if production != result || production_counters != counters {
+        equivalence.differences.push(format!(
+            "{name}: production FR5 stop {production:?} {production_counters:?}, hook \
+             {result:?} {counters:?}"
+        ));
+    }
+    true
+}
+
+/// A random point near a small grid, so that random edges cross, touch, overlap, share ends
+/// and pass within 2δ of each other; sometimes from the AL-U4b1 coordinate families.
+fn random_clearance_point(stream: &mut EquivalenceStream, scale: f64) -> Point {
+    if stream.below(16) == 0 {
+        return p(stream.coordinate(), stream.coordinate());
+    }
+    let mut coordinate = || {
+        let grid = stream.below(9) as f64 - 4.0;
+        let offset = match stream.below(4) {
+            0 => 0.0,
+            1 => (stream.below(17) as f64 - 8.0) / 16.0,
+            2 => (stream.below(1 << 20) as f64 / (1 << 20) as f64 - 0.5) * 0.25,
+            _ => {
+                if stream.below(2) == 0 {
+                    -0.0
+                } else {
+                    0.0
+                }
+            }
+        };
+        (grid + offset) * scale
+    };
+    p(coordinate(), coordinate())
+}
+
+/// A random FR5 input: one to four contours of 1 to 12 edges each, closed polygons over random
+/// points, with δ = 2^k chosen around the point spacing.
+fn random_clearance_case(
+    stream: &mut EquivalenceStream,
+) -> (Vec<ClearanceTestEdge>, Vec<usize>, f64) {
+    let scale = pow2(stream.below(40) as i32 - 20);
+    let delta = scale * pow2(stream.below(10) as i32 - 8);
+    let contours = 1 + stream.below(4) as usize;
+    let mut edges = Vec::new();
+    let mut counts = Vec::new();
+    for contour in 0..contours {
+        let count = 1 + stream.below(12) as usize;
+        let points: Vec<Point> = (0..count)
+            .map(|_| random_clearance_point(stream, scale))
+            .collect();
+        for local in 0..count {
+            edges.push((points[local], points[(local + 1) % count], contour, local));
+        }
+        counts.push(count);
+    }
+    (edges, counts, delta)
+}
+
+#[test]
+fn al_u4b3_fr5_boxes_once_decide_as_before() {
+    // Fixtures: the synthetic views through FR4, then FR5 by both versions, and the hook's
+    // result and counters against the production stop after FR5.
+    let mut scan = TestScan::new();
+    let mut production = Box::new(FastRung::new());
+    let mut fixtures_fr5 = ClearanceEquivalence::default();
+    for fixture in fixtures() {
+        let through_fr4 = production
+            .load(fixture.view.view(), DELTA, fixture.rule)
+            .and_then(|()| production.run(Stage::Fr4, &mut scan));
+        if through_fr4.is_err() {
+            continue;
+        }
+        let (edges, counts, delta) = production.clearance_inputs();
+        let (result, counters) = fixtures_fr5.compare(fixture.id, &edges, &counts, delta);
+        let stop = production
+            .load(fixture.view.view(), DELTA, fixture.rule)
+            .and_then(|()| production.run(Stage::Fr5, &mut scan));
+        let stats = production.stats();
+        let stop_counters = [
+            stats.sweep_candidates,
+            stats.clearance_step2,
+            stats.clearance_step3,
+        ];
+        if stop != result || stop_counters != counters {
+            fixtures_fr5.differences.push(format!(
+                "{}: stop {stop:?} {stop_counters:?}, hook {result:?} {counters:?}",
+                fixture.id
+            ));
+        }
+    }
+    fixtures_fr5.report("fixtures");
+    assert!(fixtures_fr5.passed > 0 && fixtures_fr5.crossing > 0 && fixtures_fr5.clearance > 0);
+
+    // The debug sample of real paths.
+    let mut harness = Harness::new();
+    let mut sample = ClearanceEquivalence::default();
+    for (name, request, path) in sample_cases() {
+        clearance_real_case(&mut harness, &mut sample, &name, request, &path);
+    }
+    sample.report("debug sample");
+    assert!(sample.passed > 0);
+
+    // Random FR5 inputs.
+    let mut stream = EquivalenceStream(0x6a09_e667_f3bc_c908);
+    let mut random = ClearanceEquivalence::default();
+    for case in 0..20_000 {
+        let (edges, counts, delta) = random_clearance_case(&mut stream);
+        let _ = random.compare(&format!("random {case}"), &edges, &counts, delta);
+    }
+    random.report("random edges");
+    assert!(random.passed > 0 && random.crossing > 0 && random.clearance > 0);
+    assert!(random.box_gaps > 0 && random.step3 > 0);
+}
+
+#[test]
+#[ignore = "AL-U4b3 FR5 full corpus; needs P3_B0R_B0_CORPUS and P3_B0R_RANDOM_CORPUS; release profile"]
+fn al_u4b3_full_corpus_fr5_boxes_once_decide_as_before() {
+    let mut harness = Harness::new();
+    let mut b0 = ClearanceEquivalence::default();
+    for (name, request, path) in b0_corpus() {
+        clearance_real_case(&mut harness, &mut b0, &name, request, &path);
+    }
+    let random_bytes = {
+        let path = env::var("P3_B0R_RANDOM_CORPUS").expect("P3_B0R_RANDOM_CORPUS is required");
+        std::fs::read(path).expect("read the randomized corpus")
+    };
+    let mut random = ClearanceEquivalence::default();
+    for (name, request, path) in random_corpus(&random_bytes) {
+        clearance_real_case(&mut harness, &mut random, &name, request, &path);
+    }
+    b0.report("B0 framed corpus");
+    random.report("p3-b0r-random/v1");
+    assert!(b0.passed > 0 && random.passed > 0);
+}

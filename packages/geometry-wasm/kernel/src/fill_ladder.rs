@@ -1035,125 +1035,15 @@ impl FastRung {
     // ------------------------------------------------------------------------------------
     // FR5: non-consecutive pairs (SL-C3; SL-L3, SL-L4; spike section 3.9).
 
-    /// SL-C2 handles consecutive pairs; every other pair, in one contour or two, is SL-C3's.
-    fn consecutive(&self, left: usize, right: usize) -> bool {
-        let (a, b) = (self.cert[left], self.cert[right]);
-        if a.contour != b.contour {
-            return false;
-        }
-        let count = self.contours[a.contour].cert_count;
-        let offset = (a.local + count - b.local) % count;
-        offset == 1
-            || offset == count - 1
-            || (fault(LadderFault::SkipTwoApart) && (offset == 2 || offset + 2 == count))
-    }
-
+    /// FR5 (SL-C3): `clearance_edges` on the certified edges of P′.
     fn clearance(&mut self) -> Result<(), Reason> {
-        let count = self.cert_len;
-        // Contract section 3.2: r = 2δ and r² enclosed exactly as the spike does.
-        let radius = 2.0 * self.delta;
-        let r = Interval::point(radius);
-        let r_squared = r.mul(r);
-        let mut xlo = [0.0f64; MAX_EDGES];
-        let mut xhi = [0.0f64; MAX_EDGES];
-        for index in 0..count {
-            let edge = self.cert[index];
-            xlo[index] = edge.start.x.min(edge.end.x);
-            xhi[index] = edge.start.x.max(edge.end.x);
-        }
-        // Sort by xlo, ties by index (allocation-free bottom-up merge sort).
-        let mut order = [0usize; MAX_EDGES];
-        let mut scratch = [0usize; MAX_EDGES];
-        for (index, slot) in order[..count].iter_mut().enumerate() {
-            *slot = index;
-        }
-        merge_sort(&mut order[..count], &mut scratch[..count], |a, b| {
-            xlo[a].total_cmp(&xlo[b]).then(a.cmp(&b))
-        });
-        let mut marks = [[0u64; EDGE_WORDS]; MAX_EDGES];
-        self.stats.sweep_candidates = 0;
-        self.stats.clearance_step2 = 0;
-        self.stats.clearance_step3 = 0;
-        for position in 0..count {
-            let a = order[position];
-            // Spike section 3.9: scan while xlo(b) ≤ next_up(fl(xhi(a) + r)). An unscanned pair
-            // has xlo(b) above an upper bound of xhi(a) + r (R1), so a proved x gap above r.
-            let bound = if fault(LadderFault::ScanBoundWithoutRadius) {
-                xhi[a]
-            } else {
-                (xhi[a] + radius).next_up()
-            };
-            let bound = if bound.is_finite() {
-                bound
-            } else {
-                f64::INFINITY
-            };
-            for &b in &order[position + 1..count] {
-                if xlo[b] > bound {
-                    break;
-                }
-                if self.consecutive(a, b) {
-                    continue;
-                }
-                let (low, high) = (a.min(b), a.max(b));
-                marks[low][high / 64] |= 1u64 << (high % 64);
-                self.stats.sweep_candidates += 1;
-                self.clear_pair(a, b, r, r_squared)?;
-            }
-        }
-        debug_assert!(
-            marks
-                .iter()
-                .flatten()
-                .map(|word| word.count_ones())
-                .sum::<u32>()
-                == self.stats.sweep_candidates
-        );
-        Ok(())
-    }
-
-    /// Spike section 3.9 steps 1-3 for one non-consecutive pair e = [a, b], f = [c, d].
-    fn clear_pair(
-        &mut self,
-        left: usize,
-        right: usize,
-        r: Interval,
-        r_squared: Interval,
-    ) -> Result<(), Reason> {
-        let (e, f) = (self.cert[left], self.cert[right]);
-        let simplicity_only = fault(LadderFault::SimplicityOnly);
-        if !simplicity_only {
-            // Step 1, box gap: Euclidean distance is at least each axis gap.
-            let gap = |high: f64, low: f64| Interval::point(low).sub(Interval::point(high));
-            let gaps = [
-                gap(e.start.x.max(e.end.x), f.start.x.min(f.end.x)),
-                gap(f.start.x.max(f.end.x), e.start.x.min(e.end.x)),
-                gap(e.start.y.max(e.end.y), f.start.y.min(f.end.y)),
-                gap(f.start.y.max(f.end.y), e.start.y.min(e.end.y)),
-            ];
-            if gaps.iter().any(|value| proved_exceeds(*value, r)) {
-                return Ok(());
-            }
-        }
-        // Step 2: the closed segments must be disjoint (B0D-Q6 (a)); any other relation, a
-        // crossing, touch, collinear point or overlap, is `CROSSING`.
-        self.stats.clearance_step2 += 1;
-        match segment_relation(e.start, e.end, f.start, f.end) {
-            Ok(SegmentRelation::Disjoint) => {}
-            _ => return Err(Reason::Crossing),
-        }
-        if simplicity_only {
-            return Ok(());
-        }
-        // Step 3 (SL-L4): for disjoint segments the distance is the minimum of the four
-        // point-segment distances, each of which must be proved farther than r.
-        self.stats.clearance_step3 += 1;
-        for (point, segment) in [(e.start, f), (e.end, f), (f.start, e), (f.end, e)] {
-            if !point_clear(point, segment.start, segment.end, r_squared) {
-                return Err(Reason::Clearance);
-            }
-        }
-        Ok(())
+        clearance_edges(
+            &self.cert[..self.cert_len],
+            &self.contours,
+            self.delta,
+            &mut self.stats,
+            &mut |_, _, _| {},
+        )
     }
 
     // ------------------------------------------------------------------------------------
@@ -1929,6 +1819,312 @@ pub(crate) fn monotone_trace(
     (result, trace)
 }
 
+/// FR5 visit outcomes, as `clearance_edges` passes them to its `observe` callback with the
+/// pair (a, b) in scan order. Only the AL-U4b3 equivalence test (`clearance_trace`) records
+/// them; production passes a no-op.
+///
+/// A consecutive pair, skipped (SL-C2 handles it).
+pub(crate) const VISIT_CONSECUTIVE: u8 = 0;
+/// Step 1 proved an axis gap above r.
+pub(crate) const VISIT_BOX_GAP: u8 = 1;
+/// Step 2 found a relation other than `Disjoint`: `CROSSING`.
+pub(crate) const VISIT_CROSSING: u8 = 2;
+/// Defect (4), simplicity only: step 2 passed and step 3 is skipped.
+pub(crate) const VISIT_DISJOINT: u8 = 3;
+/// Step 3 proved all four point-segment distances above r.
+pub(crate) const VISIT_CLEAR: u8 = 4;
+/// Step 3 failed at point test k (0-3): `CLEARANCE`. The code is `VISIT_CLEARANCE + k`.
+pub(crate) const VISIT_CLEARANCE: u8 = 5;
+
+/// One certified edge's axis-aligned box, for the FR5 sort key, the scan bound and step 1.
+///
+/// AL-U4b3 (contract section 5.1, AL-C1): before AL-U4b3, FR5 computed xlo and xhi once per
+/// edge for the sort and the scan, and step 1 recomputed all four extremes of both edges for
+/// every candidate pair, as `e.start.x.max(e.end.x)`, `f.start.x.min(f.end.x)` and likewise in
+/// y. Each field here is the same `f64::min` or `f64::max` call on the same two operands in the
+/// same order (start, then end), computed once per edge, so it has the bits of every per-pair
+/// computation. No rounding is involved; FR1 has checked that every coordinate is finite.
+#[derive(Clone, Copy, Default)]
+struct EdgeBox {
+    xlo: f64,
+    xhi: f64,
+    ylo: f64,
+    yhi: f64,
+}
+
+impl EdgeBox {
+    fn new(edge: &CertEdge) -> Self {
+        Self {
+            xlo: edge.start.x.min(edge.end.x),
+            xhi: edge.start.x.max(edge.end.x),
+            ylo: edge.start.y.min(edge.end.y),
+            yhi: edge.start.y.max(edge.end.y),
+        }
+    }
+}
+
+/// AL-U4b3 (AL-C4): the integer key of `f64::total_cmp`, computed as the standard library's
+/// implementation computes it (the sign-magnitude bits mapped to two's complement order), so
+/// `total_order_key(a).cmp(&total_order_key(b)) == a.total_cmp(&b)` for all a and b. It is
+/// integer bit manipulation, with no floating-point arithmetic.
+fn total_order_key(value: f64) -> i64 {
+    let mut bits = value.to_bits() as i64;
+    bits ^= (((bits >> 63) as u64) >> 1) as i64;
+    bits
+}
+
+/// SL-C2 handles consecutive pairs; every other pair, in one contour or two, is SL-C3's.
+///
+/// AL-U4b3 (AL-C4): the edges are read by reference instead of being copied for each scan
+/// visit; the integer test is unchanged.
+fn consecutive(a: &CertEdge, b: &CertEdge, contours: &[ContourInfo], skip_two_apart: bool) -> bool {
+    if a.contour != b.contour {
+        return false;
+    }
+    let count = contours[a.contour].cert_count;
+    let offset = (a.local + count - b.local) % count;
+    offset == 1 || offset == count - 1 || (skip_two_apart && (offset == 2 || offset + 2 == count))
+}
+
+/// FR5 (SL-C3; SL-L3, SL-L4; spike section 3.9): the x sweep over the certified edges of P′ and
+/// steps 1-3 for every non-consecutive pair it reaches, in the spike's order. The first
+/// unproved pair returns `CROSSING` or `CLEARANCE`. It sets the sweep and clearance counters of
+/// `stats`.
+///
+/// AL-U4b3 (contract section 5.1, AL-C1 and AL-C4), against AL-U4b2's `FastRung::clearance`:
+///
+/// - The boxes are computed once per edge (`EdgeBox`, AL-C1). The sort key, the scan bound and
+///   step 1 read the same values as before: xlo and xhi were already computed once per edge, and
+///   step 1's extremes have the bits of its per-pair computations.
+/// - Step 1 tests the four gaps in the same order, gap(xhi(e), xlo(f)), gap(xhi(f), xlo(e)),
+///   gap(yhi(e), ylo(f)), gap(yhi(f), ylo(e)), each by the same `Interval::point(low)` minus
+///   `Interval::point(high)` and `proved_exceeds(gap, r)`. It now computes a gap only when the
+///   earlier ones did not decide (AL-C4, control flow): the interval operations are pure and
+///   `.any` already stopped at the first decided gap, so the decision is the same.
+/// - The sort orders (key, index) pairs by integer comparison (`total_order_key`, AL-C4),
+///   which decides every comparison as before.
+/// - Edges are read by reference, not copied per scan visit and per candidate (AL-C4).
+/// - The fault switches are read once per call instead of once per position, visit or pair
+///   (AL-C4). They are test-build constants that no stage changes, and constant `false` outside
+///   test builds.
+/// - The candidate bitset, which only feeds a `debug_assert!`, exists only with debug
+///   assertions (AL-C4: no zeroing of `MAX_EDGES × EDGE_WORDS` words per call in release).
+///
+/// The sort, the scan order and bound, the consecutive skip, the step order and every decided
+/// quantity are unchanged, so the result and the counters are the same for every input.
+/// `observe` sees each visit's outcome (`VISIT_*`) in order.
+fn clearance_edges(
+    edges: &[CertEdge],
+    contours: &[ContourInfo],
+    delta: f64,
+    stats: &mut FastStats,
+    observe: &mut impl FnMut(usize, usize, u8),
+) -> Result<(), Reason> {
+    let count = edges.len();
+    // Contract section 3.2: r = 2δ and r² enclosed exactly as the spike does.
+    let radius = 2.0 * delta;
+    let r = Interval::point(radius);
+    let r_squared = r.mul(r);
+    let scan_without_radius = fault(LadderFault::ScanBoundWithoutRadius);
+    let skip_two_apart = fault(LadderFault::SkipTwoApart);
+    let simplicity_only = fault(LadderFault::SimplicityOnly);
+    let mut boxes = [EdgeBox::default(); MAX_EDGES];
+    for (slot, edge) in boxes.iter_mut().zip(edges) {
+        *slot = EdgeBox::new(edge);
+    }
+    // Sort by xlo, ties by index (allocation-free bottom-up merge sort). AL-U4b3 (AL-C4): the
+    // items are (total_order_key(xlo), index) pairs compared as integer pairs. For every two
+    // items this gives the result of AL-U4b2's comparator
+    // `xlo[a].total_cmp(&xlo[b]).then(a.cmp(&b))` (see `total_order_key`), so the same merge
+    // sort makes the same moves and yields the same order.
+    let mut order = [(0i64, 0usize); MAX_EDGES];
+    let mut scratch = [(0i64, 0usize); MAX_EDGES];
+    for (index, slot) in order[..count].iter_mut().enumerate() {
+        *slot = (total_order_key(boxes[index].xlo), index);
+    }
+    merge_sort(&mut order[..count], &mut scratch[..count], |a, b| a.cmp(&b));
+    #[cfg(debug_assertions)]
+    let mut marks = [[0u64; EDGE_WORDS]; MAX_EDGES];
+    stats.sweep_candidates = 0;
+    stats.clearance_step2 = 0;
+    stats.clearance_step3 = 0;
+    for position in 0..count {
+        let a = order[position].1;
+        // Spike section 3.9: scan while xlo(b) ≤ next_up(fl(xhi(a) + r)). An unscanned pair
+        // has xlo(b) above an upper bound of xhi(a) + r (R1), so a proved x gap above r.
+        let bound = if scan_without_radius {
+            boxes[a].xhi
+        } else {
+            (boxes[a].xhi + radius).next_up()
+        };
+        let bound = if bound.is_finite() {
+            bound
+        } else {
+            f64::INFINITY
+        };
+        for &(_, b) in &order[position + 1..count] {
+            if boxes[b].xlo > bound {
+                break;
+            }
+            if consecutive(&edges[a], &edges[b], contours, skip_two_apart) {
+                observe(a, b, VISIT_CONSECUTIVE);
+                continue;
+            }
+            #[cfg(debug_assertions)]
+            {
+                let (low, high) = (a.min(b), a.max(b));
+                marks[low][high / 64] |= 1u64 << (high % 64);
+            }
+            stats.sweep_candidates += 1;
+            let outcome = clear_pair(
+                (&edges[a], &boxes[a]),
+                (&edges[b], &boxes[b]),
+                r,
+                r_squared,
+                simplicity_only,
+                stats,
+            );
+            observe(a, b, outcome);
+            match outcome {
+                VISIT_CROSSING => return Err(Reason::Crossing),
+                VISIT_BOX_GAP | VISIT_DISJOINT | VISIT_CLEAR => {}
+                _ => return Err(Reason::Clearance),
+            }
+        }
+    }
+    #[cfg(debug_assertions)]
+    debug_assert!(
+        marks
+            .iter()
+            .flatten()
+            .map(|word| word.count_ones())
+            .sum::<u32>()
+            == stats.sweep_candidates
+    );
+    Ok(())
+}
+
+/// Spike section 3.9 steps 1-3 for one non-consecutive pair e = [a, b], f = [c, d], with each
+/// edge's box; the visit outcome (`VISIT_*`). See `clearance_edges` for the AL-U4b3 argument.
+fn clear_pair(
+    (e, e_box): (&CertEdge, &EdgeBox),
+    (f, f_box): (&CertEdge, &EdgeBox),
+    r: Interval,
+    r_squared: Interval,
+    simplicity_only: bool,
+    stats: &mut FastStats,
+) -> u8 {
+    if !simplicity_only {
+        // Step 1, box gap: Euclidean distance is at least each axis gap.
+        let gap = |high: f64, low: f64| Interval::point(low).sub(Interval::point(high));
+        if proved_exceeds(gap(e_box.xhi, f_box.xlo), r)
+            || proved_exceeds(gap(f_box.xhi, e_box.xlo), r)
+            || proved_exceeds(gap(e_box.yhi, f_box.ylo), r)
+            || proved_exceeds(gap(f_box.yhi, e_box.ylo), r)
+        {
+            return VISIT_BOX_GAP;
+        }
+    }
+    // Step 2: the closed segments must be disjoint (B0D-Q6 (a)); any other relation, a
+    // crossing, touch, collinear point or overlap, is `CROSSING`.
+    stats.clearance_step2 += 1;
+    match segment_relation(e.start, e.end, f.start, f.end) {
+        Ok(SegmentRelation::Disjoint) => {}
+        _ => return VISIT_CROSSING,
+    }
+    if simplicity_only {
+        return VISIT_DISJOINT;
+    }
+    // Step 3 (SL-L4): for disjoint segments the distance is the minimum of the four
+    // point-segment distances, each of which must be proved farther than r.
+    stats.clearance_step3 += 1;
+    for (test, (point, segment)) in [(e.start, f), (e.end, f), (f.start, e), (f.end, e)]
+        .into_iter()
+        .enumerate()
+    {
+        if !point_clear(point, segment.start, segment.end, r_squared) {
+            return VISIT_CLEARANCE + test as u8;
+        }
+    }
+    VISIT_CLEAR
+}
+
+/// AL-U4b3 equivalence test input: one certified edge as FR5 reads it, (p_start, p_end, its
+/// contour, its index in the contour).
+#[cfg(test)]
+pub(crate) type ClearanceTestEdge = (Point, Point, usize, usize);
+
+/// AL-U4b3 equivalence trace: the FR5 result, the counters (sweep candidates, step 2, step 3)
+/// and every visit (a, b, `VISIT_*`) in order.
+#[cfg(test)]
+pub(crate) type ClearanceTrace = (Result<(), Reason>, [u32; 3], Vec<(usize, usize, u8)>);
+
+#[cfg(test)]
+impl FastRung {
+    /// AL-U4b3 equivalence hook: the certified edges, each contour's certified edge count and
+    /// δ, as FR5 reads them after a run through FR4.
+    pub(crate) fn clearance_inputs(&self) -> (Vec<ClearanceTestEdge>, Vec<usize>, f64) {
+        (
+            self.cert[..self.cert_len]
+                .iter()
+                .map(|edge| (edge.start, edge.end, edge.contour, edge.local))
+                .collect(),
+            self.contours[..self.range_len]
+                .iter()
+                .map(|info| info.cert_count)
+                .collect(),
+            self.delta,
+        )
+    }
+}
+
+/// AL-U4b3 equivalence hook: production FR5 (`clearance_edges`) on the given edges, with the
+/// result, the counters (sweep candidates, step 2, step 3) and every visit (a, b, `VISIT_*`) in
+/// order. It reads the ladder fault switches as production does.
+#[cfg(test)]
+pub(crate) fn clearance_trace(
+    edges: &[ClearanceTestEdge],
+    counts: &[usize],
+    delta: f64,
+) -> ClearanceTrace {
+    assert!(
+        edges.len() <= MAX_EDGES,
+        "at most MAX_EDGES certified edges"
+    );
+    let cert: Vec<CertEdge> = edges
+        .iter()
+        .map(|&(start, end, contour, local)| CertEdge {
+            start,
+            end,
+            piece: Piece::Segment { a: start, b: end },
+            contour,
+            local,
+            ..CertEdge::default()
+        })
+        .collect();
+    let contours: Vec<ContourInfo> = counts
+        .iter()
+        .map(|&cert_count| ContourInfo {
+            cert_count,
+            ..ContourInfo::default()
+        })
+        .collect();
+    let mut stats = FastStats::default();
+    let mut trace = Vec::new();
+    let result = clearance_edges(&cert, &contours, delta, &mut stats, &mut |a, b, outcome| {
+        trace.push((a, b, outcome));
+    });
+    (
+        result,
+        [
+            stats.sweep_candidates,
+            stats.clearance_step2,
+            stats.clearance_step3,
+        ],
+        trace,
+    )
+}
+
 /// Spike section 3.9 step 3: p is proved farther than r from the segment [s, t], with
 /// v = t − s and w = p − s, when any one of (i)-(iii) is proved.
 fn point_clear(point: Point, start: Point, end: Point, r_squared: Interval) -> bool {
@@ -2134,11 +2330,12 @@ fn above(left: Point, right: Point) -> Ordering {
 }
 
 /// A deterministic, allocation-free bottom-up merge sort of index values (spike section 2.3);
-/// the comparator breaks ties itself, so the order is total.
-fn merge_sort(
-    items: &mut [usize],
-    scratch: &mut [usize],
-    mut compare: impl FnMut(usize, usize) -> Ordering,
+/// the comparator breaks ties itself, so the order is total. AL-U4b3 (AL-C4) makes it generic
+/// over the item type, so that FR5 sorts keyed indices; the algorithm is unchanged.
+fn merge_sort<T: Copy>(
+    items: &mut [T],
+    scratch: &mut [T],
+    mut compare: impl FnMut(T, T) -> Ordering,
 ) {
     let length = items.len();
     let mut width = 1usize;
