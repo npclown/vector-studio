@@ -10,6 +10,7 @@ export default tseslint.config(
       '**/playwright-report/**',
       '**/test-results/**',
       'artifacts/p2.5/**',
+      'artifacts/p3-b0-wasm/**',
       '**/.tools/**',
       '**/target/**',
     ],
