@@ -59,6 +59,7 @@ export type PathMeshRendererFailureCode =
   | 'invalid-response'
   | 'invalid-mesh'
   | 'fringe-unsupported'
+  | 'fringe-work-cap'
   | 'packing-range'
   | 'mesh-pipeline-unavailable';
 export type PathMeshFailureCode =
@@ -126,6 +127,11 @@ export type PathMeshLimits = Readonly<{
   resourceLimitExpiryPrepares: number;
   toleranceVariantsPerNode: number;
   fringeVariantsPerEntry: number;
+  /**
+   * V4 builder work cap (D8 interim): a mesh with more distinct boundary vertices than this is
+   * drawn region-only, without calling the fringe builder, and notifies `fringe-work-cap` once.
+   */
+  fringeBoundaryVertexCap: number;
 }>;
 
 /** The contract's numbers (sections b, d and h). Tests may lower them; production never does. */
@@ -139,6 +145,7 @@ export const PATH_MESH_LIMITS: PathMeshLimits = Object.freeze({
   resourceLimitExpiryPrepares: 256,
   toleranceVariantsPerNode: 3,
   fringeVariantsPerEntry: 2,
+  fringeBoundaryVertexCap: 128,
 });
 
 export type PathMeshPipelineOptions = Readonly<{
@@ -169,7 +176,11 @@ type MeshEntry = {
   readonly offsets: Float32Array | null;
   readonly midpoint: Readonly<{ x: number; y: number }>;
   readonly meshBytes: number;
+  /** Distinct vertex indices in the port's boundaryEdges (the V4 builder work measure). */
+  readonly boundaryVertices: number;
   readonly variants: Map<number, FringeVariant | 'unsupported'>;
+  /** Set once the entry's `fringe-work-cap` notice is queued. */
+  capNotified: boolean;
   lastServed: number;
 };
 type NodeCache = {
@@ -365,7 +376,17 @@ export class PathMeshPipeline {
       }
       let fringeBucket: number | null = null;
       let fringe: PathMeshDraw['fringe'] = null;
-      if (this.#fringeBuilder !== undefined) {
+      if (
+        this.#fringeBuilder !== undefined &&
+        entry.boundaryVertices > this.#limits.fringeBoundaryVertexCap
+      ) {
+        // V4 builder work cap: draw the region triangles without a fringe (aliased edges,
+        // opacity applied once) and never call the builder for this entry. One notice per entry.
+        if (!entry.capNotified) {
+          entry.capNotified = true;
+          this.#enqueue(item.path.id, 'renderer', 'fringe-work-cap', entry.e);
+        }
+      } else if (this.#fringeBuilder !== undefined) {
         const served = this.#serveFringe(item, entry, this.#fringeBuilder);
         if (served === 'range') {
           frameStates.set(item.path.id, 'fringe-range');
@@ -728,7 +749,9 @@ export class PathMeshPipeline {
       midpoint: packed?.midpoint ?? { x: 0, y: 0 },
       // Section d: the packed Float32 offsets of the port vertices are owned by the entry.
       meshBytes: (result?.bytes ?? 0) + (packed?.offsets?.byteLength ?? 0),
+      boundaryVertices: mesh === null ? 0 : new Set(mesh.boundaryEdges).size,
       variants: new Map(),
+      capNotified: false,
       lastServed: 0,
     });
   }
@@ -889,10 +912,15 @@ export function pathMeshNoticeDiagnostic(
   generation: number,
 ): DiagnosticInput {
   const subject = notice.nodeId === null ? 'the mesh path' : `path ${notice.nodeId}`;
+  // fringe-work-cap (the V4 builder work cap) still draws the region triangles, without a fringe.
+  const outcome =
+    notice.failureCode === 'fringe-work-cap'
+      ? 'is drawn without its coverage fringe'
+      : 'is not drawn';
   return Object.freeze({
     code: DIAGNOSTIC_CODES.PATH_MESH_INTERIM_FAILURE,
     severity: 'warning',
-    message: `D8-interim: ${subject} is not drawn (${notice.failureScope} ${notice.failureCode}).`,
+    message: `D8-interim: ${subject} ${outcome} (${notice.failureScope} ${notice.failureCode}).`,
     generation,
     context: Object.freeze({
       interim: notice.interim,
