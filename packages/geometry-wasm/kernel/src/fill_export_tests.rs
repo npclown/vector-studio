@@ -4,7 +4,7 @@
 use core::cmp::Ordering;
 
 use crate::codec::{align_up, read_f64, read_u32, write_f64, write_u32, PathInput, Request};
-use crate::cubic_fill::{CubicFillError, CubicFillWorkspace, MAX_FLAT_COMMANDS};
+use crate::cubic_fill::{CubicFillError, CubicFillWorkspace, PrefixFailure, MAX_FLAT_COMMANDS};
 use crate::engine::{
     BATCH_ALLOCATION_FAILED, BATCH_DISPOSED, BATCH_INTERNAL_ERROR, BATCH_INVALID_BATCH, BATCH_OK,
     BATCH_OUTPUT_CAPACITY, BATCH_RESOURCE_LIMIT,
@@ -1493,6 +1493,11 @@ fn star_21_10() -> TestPath {
 
 /// The legacy attempt's kernel value: `Ok(flat_status)` or the error.
 fn legacy_value(path: &TestPath) -> Result<u32, CubicFillError> {
+    legacy_attempt(path).0
+}
+
+/// The legacy attempt's kernel value with the workspace it ran in, for its statistics.
+fn legacy_attempt(path: &TestPath) -> (Result<u32, CubicFillError>, CubicFillWorkspace) {
     let mut workspace = CubicFillWorkspace::new(FILL_V0_LIMITS).unwrap();
     let bytes = point_bytes(&path.points);
     let (flatten, topology) = tolerances(path.exponent);
@@ -1506,9 +1511,10 @@ fn legacy_value(path: &TestPath) -> Result<u32, CubicFillError> {
         &path.verbs,
         &bytes,
     );
-    workspace
+    let value = workspace
         .attempt(input, LineFillRule::Nonzero, topology, MAX_FLAT_COMMANDS)
-        .map(|diagnostics| diagnostics.flat_status)
+        .map(|diagnostics| diagnostics.flat_status);
+    (value, workspace)
 }
 
 #[test]
@@ -1755,8 +1761,180 @@ fn b1_rings_process_without_allocation_or_storage_change() {
 fn b1_ring_exact_rung_also_admits() {
     for (index, rho) in B1_RINGS.into_iter().enumerate() {
         let path = b1_ring(index as u32, 32, rho);
-        assert_eq!(legacy_value(&path), Ok(PATH_OK), "ring {rho}");
+        let (value, workspace) = legacy_attempt(&path);
+        assert_eq!(value, Ok(PATH_OK), "ring {rho}");
+        assert_eq!(workspace.topology_stats().leaves, 256, "ring {rho}");
+        assert_eq!(workspace.topology_stats().pairs, 32_640, "ring {rho}");
+        assert_eq!(workspace.rounded_stats().edges, 256, "ring {rho}");
+        // The mesh the exact rung publishes: a flipped fast-rung triangle forces the fallback.
+        let engine_rung = |path: &TestPath| {
+            let mut engine = FillEngine::new();
+            assert_eq!(engine.reserve(1 << 16, 1 << 20), BATCH_OK);
+            let bytes = point_bytes(&path.points);
+            let built = engine
+                .build_one(
+                    FillRequest {
+                        request_id: path.id,
+                        rule: LineFillRule::Nonzero,
+                        exponent: path.exponent,
+                    },
+                    &path.verbs,
+                    &bytes,
+                )
+                .unwrap()
+                .unwrap();
+            (built.rung, built.reason)
+        };
+        with_ladder_faults(&[LadderFault::TriangleFlipped], || {
+            assert_eq!(
+                engine_rung(&path),
+                (Some(Rung::Exact), Some(Reason::MeshCheck)),
+                "ring {rho}"
+            );
+            let mesh = run_one(path.clone());
+            assert_eq!(mesh.status, FILL_PATH_OK, "ring {rho}");
+            assert!(mesh.twice_area() > 0.0, "ring {rho}");
+            assert_mesh_invariants(&mesh);
+        });
     }
+}
+
+/// Appends one closed ring contour to `path`: `sides` vertices of a regular polygon of the
+/// given edge length around `center`, snapped to multiples of 2^-10. Each side is an outward
+/// cubic as in `b1_ring`, except that the last side is `tail_lines` collinear lines when that
+/// is non-zero (the cubic count is then `sides - 1`).
+fn b1_ring_contour(
+    path: TestPath,
+    sides: usize,
+    edge: f64,
+    center: (f64, f64),
+    tail_lines: usize,
+) -> TestPath {
+    use core::f64::consts::{PI, TAU};
+    let snap = |value: f64| (value * 1024.0).round_ties_even() / 1024.0;
+    let radius = edge / (2.0 * (PI / sides as f64).sin());
+    let vertex = |index: usize| {
+        let phi = TAU * (index % sides) as f64 / sides as f64;
+        (center.0 + radius * phi.cos(), center.1 + radius * phi.sin())
+    };
+    let offset = 3.0 / 8.0 * edge;
+    let first = vertex(0);
+    let mut path = path.move_to(snap(first.0), snap(first.1));
+    let cubics = if tail_lines > 0 { sides - 1 } else { sides };
+    for index in 0..cubics {
+        let (a, b) = (vertex(index), vertex(index + 1));
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let length = (dx * dx + dy * dy).sqrt();
+        let (nx, ny) = (dy / length, -dx / length);
+        path = path.cubic_to([
+            snap(a.0 + dx / 3.0 + offset * nx),
+            snap(a.1 + dy / 3.0 + offset * ny),
+            snap(a.0 + 2.0 * dx / 3.0 + offset * nx),
+            snap(a.1 + 2.0 * dy / 3.0 + offset * ny),
+            snap(b.0),
+            snap(b.1),
+        ]);
+    }
+    if tail_lines > 0 {
+        let (a, b) = (vertex(sides - 1), vertex(sides));
+        for step in 1..=tail_lines {
+            let t = step as f64 / tail_lines as f64;
+            path = path.line_to(snap(a.0 + (b.0 - a.0) * t), snap(a.1 + (b.1 - a.1) * t));
+        }
+    }
+    path.close()
+}
+
+/// The prefix view's counts for `path` under `FILL_V0_LIMITS`: flat commands, contour points,
+/// edge owners and decoded sources.
+fn prefix_counts(path: &TestPath) -> Result<[usize; 4], PrefixFailure> {
+    let mut workspace = CubicFillWorkspace::new(FILL_V0_LIMITS).unwrap();
+    let bytes = point_bytes(&path.points);
+    let (flatten, _) = tolerances(path.exponent);
+    let input = PathInput::from_parts(
+        Request {
+            request_id: 0,
+            source_epoch: 0,
+            source_revision: 0,
+            tolerance: flatten,
+        },
+        &path.verbs,
+        &bytes,
+    );
+    workspace
+        .prepare_prefix(input, MAX_FLAT_COMMANDS)
+        .map(|view| {
+            [
+                view.commands.len(),
+                view.points.len(),
+                view.owners.len(),
+                view.sources.len(),
+            ]
+        })
+}
+
+/// One edge owner above the cap: 31 ring cubics (248 leaves) and a side of nine collinear lines
+/// make 257 leaves. The 259 flat commands still fit the 264-command cap (up to 262 leaves of one
+/// contour do), so the owner cap is the limit that fires. It is `OwnerLimit` in the legacy
+/// attempt and in the fast rung's prefix, and `WORK_LIMIT` through the export.
+#[test]
+fn b1_257_leaves_fail_with_owner_limit() {
+    let path = b1_ring_contour(TestPath::new(1, NONZERO, -3), 32, 8.0, (0.0, 0.0), 9);
+    assert_eq!(path.verbs.len(), 1 + 31 + 9 + 1);
+    assert_eq!(legacy_value(&path), Err(CubicFillError::OwnerLimit));
+    assert_eq!(
+        prefix_counts(&path),
+        Err(PrefixFailure::Error(CubicFillError::OwnerLimit))
+    );
+    assert_eq!(status_of(path), FILL_PATH_WORK_LIMIT);
+    // 262 leaves still fit 264 commands and fail on the owner cap. 263 leaves are 265 commands,
+    // one above the command cap, and that limit fires first, in the emission.
+    let at_commands = b1_ring_contour(TestPath::new(3, NONZERO, -3), 32, 8.0, (0.0, 0.0), 14);
+    assert_eq!(legacy_value(&at_commands), Err(CubicFillError::OwnerLimit));
+    let over_commands = b1_ring_contour(TestPath::new(4, NONZERO, -3), 32, 8.0, (0.0, 0.0), 15);
+    assert_eq!(
+        legacy_value(&over_commands),
+        Err(CubicFillError::CommandLimit)
+    );
+    assert_eq!(status_of(over_commands), FILL_PATH_WORK_LIMIT);
+    // The same path with eight lines is 256 leaves and meshes; the cap is exactly 256.
+    let at_cap = b1_ring_contour(TestPath::new(2, NONZERO, -3), 32, 8.0, (0.0, 0.0), 8);
+    assert_eq!(prefix_counts(&at_cap).map(|counts| counts[2]), Ok(256));
+    assert_eq!(status_of(at_cap), FILL_PATH_OK);
+}
+
+/// The source caps and the command cap, each at its limit. Four contours of 16 cubics are
+/// 72 source verbs (4 MOVE, 64 CUBIC, 4 CLOSE), 392 source scalars (64·6 + 4·2), 64 segments and,
+/// at four leaves per cubic, 264 flat commands with 256 owners. They sit next to the one-above
+/// failures of `reachable_mapping_rows_have_fixtures` and
+/// `mapping_row_fixtures_reach_their_kernel_values`.
+#[test]
+fn b1_source_and_command_caps_admit_exactly_their_limit() {
+    let centers = [(-30.0, -30.0), (30.0, -30.0), (-30.0, 30.0), (30.0, 30.0)];
+    let mut path = TestPath::new(1, NONZERO, -3);
+    for center in centers {
+        path = b1_ring_contour(path, 16, 2.0, center, 0);
+    }
+    assert_eq!(path.verbs.len(), 72);
+    assert_eq!(path.points.len(), 392);
+    assert_eq!(prefix_counts(&path), Ok([264, 256, 256, 64]));
+    assert_eq!(legacy_value(&path), Ok(PATH_OK));
+    let mesh = run_one(path.clone());
+    assert_eq!(mesh.status, FILL_PATH_OK);
+    assert_mesh_invariants(&mesh);
+
+    // One verb more is the source-verb cap, whichever of the three source caps fires first.
+    let mut over = path.clone();
+    over.verbs.push(MOVE);
+    over.points.extend([0.0, 0.0]);
+    assert_eq!(over.verbs.len(), 73);
+    assert_eq!(legacy_value(&over), Err(CubicFillError::SourceLimit));
+    assert_eq!(status_of(over), FILL_PATH_WORK_LIMIT);
+    // One scalar more, with the verbs unchanged, is 393 source scalars.
+    let mut scalars = path.clone();
+    scalars.points.extend([0.0]);
+    assert_eq!(scalars.points.len(), 393);
+    assert_eq!(legacy_value(&scalars), Err(CubicFillError::SourceLimit));
 }
 
 /// B1's test-only pre-B1 cap mode restores the pre-B1 caps for the frozen oracles: the B1 ring
