@@ -10,8 +10,9 @@ import type {
 // B2 stroke contract, ST-A10 (unit ST-U6): the headed GPU stroke fixtures and their analytic
 // pixel oracle, drawn by the V3 smoke fixture page in its `?stroke=1` mode with static
 // test-double fill and stroke ports (no WASM). The approved example of the visible semantics is
-// a red fill under a blue stroke: at opacity 1 its stroke-only, overlap and fill-only pixels are
-// exact two-draw composites; a single-paint path is exact at opacity 0.5; and with both paints
+// a red fill under a blue stroke, here with stroke alpha 0.5: at opacity 1 its stroke-only,
+// overlap and fill-only pixels are exact two-draw composites; a single-paint path is exact at
+// opacity 0.5; and with both paints
 // at opacity 0.5 the path is the D8-interim failure composition-unsupported until ST-U7, so it
 // draws nothing. Functional evidence only: precision is UNVERIFIED against the 0.25
 // physical-pixel target until B4 has A04 evidence; no Q4 coverage threshold is claimed. Pixels
@@ -40,6 +41,7 @@ const BLUE: SceneColor = { r: 0, g: 0, b: 1, a: 1 };
 
 /** The one stroke the static double meshes: width 2, butt caps, miter joins with limit 4. */
 const STROKE: PathStroke = { color: BLUE, width: 2, cap: 'butt', join: 'miter', miterLimit: 4 };
+const HALF_BLUE: SceneColor = { r: 0, g: 0, b: 1, a: 0.5 };
 
 type StrokeFixtureNode = Readonly<{
   id: string;
@@ -54,7 +56,16 @@ type StrokeFixtureNode = Readonly<{
 
 /** Paint order left to right. */
 export const STROKE_FIXTURE_NODES: readonly StrokeFixtureNode[] = [
-  { id: 'both-opaque', x: 20, fill: RED, stroke: STROKE, opacity: 1, drawn: true },
+  // Review M2: the stroke color has alpha 0.5 at node opacity 1, so the overlap checks that two
+  // draws are exact for any paint alphas (section 9.6): S + F * (1 - S.a) over the destination.
+  {
+    id: 'both-opaque',
+    x: 20,
+    fill: RED,
+    stroke: { ...STROKE, color: HALF_BLUE },
+    opacity: 1,
+    drawn: true,
+  },
   { id: 'fill-half', x: 160, fill: RED, stroke: null, opacity: 0.5, drawn: true },
   { id: 'stroke-half', x: 300, fill: null, stroke: STROKE, opacity: 0.5, drawn: true },
   { id: 'both-half', x: 440, fill: RED, stroke: STROKE, opacity: 0.5, drawn: false },
