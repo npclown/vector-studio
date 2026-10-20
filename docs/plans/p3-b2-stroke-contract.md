@@ -1,6 +1,6 @@
 # P3 B2 stroke contract: semantics, `stroke_v0` transport and `StrokeMeshPort`
 
-Status: FROZEN 2026-10-20 as unit ST-U1 of the approved [B2 stroke proposal](p3-b2-stroke-proposal.md). The user approved that proposal on 2026-10-20 and answered B2-Q1 to B2-Q9 with (a) each ([approval record](p3-b2-stroke-proposal.md#8-review-and-approval-record)). **Independent review NOT RUN — owed.** The user skipped independent reviews for 2026-10-20 only; the review of this contract is owed and runs before ST-U3, the first kernel unit, merges (section 12.3). Full tier: this contract fixes a public scene field, a new geometry port, a new kernel export family and new visible behavior. It is documentation only. No code, run or record follows from it. The [P3 plan](p3-fill-stroke-meshes.md) owns status.
+Status: FROZEN 2026-10-20 as unit ST-U1 of the approved [B2 stroke proposal](p3-b2-stroke-proposal.md). The user approved that proposal on 2026-10-20 and answered B2-Q1 to B2-Q9 with (a) each ([approval record](p3-b2-stroke-proposal.md#8-review-and-approval-record)). **Independent review NOT RUN — owed.** The user skipped independent reviews for 2026-10-20 only; the review of this contract is owed and runs before ST-U3, the first kernel unit, merges (section 12.3). **That gate was overtaken; see the ST-A0 amendment below.** Full tier: this contract fixes a public scene field, a new geometry port, a new kernel export family and new visible behavior. It is documentation only. No code, run or record follows from it. The [P3 plan](p3-fill-stroke-meshes.md) owns status.
 
 Amended 2026-10-20 by [ST-U3](p3-fill-stroke-meshes.md#b2-st-u3-line-stroke-kernel), stricter only, as §4.4-4.7 permit. ST-G1 adds the condition that the squared segment length `d̃·d̃` is finite and normal (otherwise `numeric-range`). ST-G3 becomes `64u(‖B‖∞ + r·L³) ≤ 2^(e−1)`, and a kept miter with `L > 2^24` is `numeric-range`; the frozen `32u·L²` underestimates the `1 + d̂` cancellation, which ST-U3 measured at about 1.46·u·ratio³. No fixture outcome changes. ST-F13x (`M(0,0) L(1,1) L(4,4)`, expectation in the τ band) is added beside ST-F13 for ST-D3, because ST-F13's directions (3,1) and (9,3) normalize to the same binary64 unit vector. §7.7's wording is corrected: at e = −1020, 2^(e−4) is subnormal; the code handles it exactly. §4.2's "rounded once" is `C ± fl(r·N)`, two roundings, which ST-G1's bound covers.
 
@@ -25,6 +25,15 @@ Amended 2026-10-20 by [ST-U4](p3-fill-stroke-meshes.md#b2-st-u4-cubic-stroke), a
 - **The guard.** A kept miter needs `ρ ≤ 2^24` and `64u(‖B‖∞ + r·ρ³) ≤ 2^(e−1)`, else `numeric-range`. ST-U3's proof holds with `ρ` in place of `L`, because it uses only `c ≥ 1/L`.
 - **Strictness.** The guard is at least as strict as the frozen `32u(‖B‖∞ + r·L²)` with the actual ratio in place of `L`, since `ρ ≥ ratio ≥ 1`.
 - **Fixtures.** The path above is added as fixture `ST-U4/tip-ratio`: a kept miter, `ok`, area 400. ST-F5, ST-F24 and ST-F25 keep their literal results; ST-F24 at `L = 2^30` has `ρ ≈ 2^21`, which still gives `numeric-range`.
+
+Amended 2026-10-20, ST-A0 amendment (unit `claude/p3-b2-st-a0-contract-amendments`, documentation only), applying the ST-A0 review. Dated notes and targeted corrections only; no requirement, threshold, user decision (B2-Q1 to B2-Q9, the ST-F16 decision, V1-Q4) or past evidence text changes. Each finding is tagged B, S or M as in the review.
+
+- **B2, review gate.** ST-U3 (#169) and ST-U5 (#174) merged before the review findings were applied, under the user's 2026-10-20 exception, which skipped independent reviews for that day. The ST-A0 contract review did run, before ST-U5 merged, with verdict **NOT READY** (blocking B1 and B2, eight SHOULD-FIX items, five minor ones). The gate now reads: the **ST-A0 amendments land before ST-U6 merges**. Adopted findings apply to code already on `main` (for example S3 and S4 below, which ST-U6 implements, and the ST-U4 correction of ST-U3's ST-G3). The status line, §12.2's ST-A0 row, §12.3 item 1 and ST-OB1 carry the same pointer.
+- **B1, ST-F16.** Already recorded by the ST-U4 notes above and the dated notes in §7.6, §11.2, §11.3 and §12.2: ST-F16 is a current-cap fixture (`work-limit` at `STROKE_V0_LIMITS`, `NodeLimit`), `WIDE_TEST_LIMITS` is `cfg(test)` only, ST-F16p evidences ST-S8 at production limits, and the ST-U4 note says "Fixture expectations do change". Verified against the text on `main`; nothing further was missing.
+- **S2, tip guard.** Already applied by the ST-U4 note above (`ρ`, the certified upper bound of the actual ratio) and fixture `ST-U4/tip-ratio`.
+- **M1, κ.** The plan's ST-U4 ST-G4 text and the code agree: `κ = 2^-52/(leaf parameter length)`, computed as `UNIT * 2.0 / (split_length * SLACK_DOWN)` at `packages/geometry-wasm/kernel/src/stroke_cubic.rs:511-514` with `UNIT = 2^-53`. The contract note's `κ = 2^-52/(its parameter length)` is the same value.
+- **M2, `t̃`.** The ST-U4 note above is labelled **Algorithm change (§4.6)**; it is not a guard change.
+- **S7, cubic `work-limit` findings.** Recorded only: the cubic findings (the canonical cusp at `e = −8` failing, R5 failing at zoom 1, 64 square-capped line subpaths exhausting `max_work`, and the resulting mostly-`work-limit` P3 stress scene) were **escalated to the user as the pending ST-U9 decision**. This amendment decides nothing about them.
 
 **Evidence label.** Every stroke result under this contract is functional evidence. Until B4 has A04 evidence, every report, PR description and screenshot states that precision is **UNVERIFIED** against the 0.25 physical-pixel target, as D8 [requires](p3-d8-parallel-tracks.md#rules). Stroke work closes no A01-A08 criterion and no C03-C05 item.
 
@@ -68,6 +77,8 @@ Out of scope, unchanged from the [proposal](p3-b2-stroke-proposal.md#1-authority
 | `docs/plans/p3-v2-fill-mesh-transport-contract.md`, Alt-A1 contract                                       | None. The fill export, its identity and its conformance suite are unchanged                                                                                                                                                                                                            | —          |
 | `docs/requirements.md`                                                                                    | None. The new visible rows (cusp disk, no minimum width, opacity staging) are recorded in this contract, which the user approved through the proposal. The dash requirement stays in the [appearance model](../requirements.md#initial-appearance-model) for the later appearance plan | —          |
 | `docs/plans/p3-fill-stroke-meshes.md`                                                                     | B2 row status, unit entries and evidence                                                                                                                                                                                                                                               | Every unit |
+
+Amended 2026-10-20, ST-A0 amendment (S5), pointer on the ST-U6 row: V1-Q4's interim outcome (a path the kernel cannot fully mesh is not drawn, with the interim notice) is scoped by the private contract to D8 checkpoints V2 to V4. It **extends to B2 stroke failures** under the user-approved [proposal §5.6](p3-b2-stroke-proposal.md#56-renderer-composition-with-v3), whose failure bullet reuses that notice for strokes. **Hiding the fill when the stroke fails is the chosen reading** (§9.6 and §14); it is a Primary interpretation of that approved text, not a new user decision.
 
 ## 2. Semantics
 
@@ -130,6 +141,11 @@ The total stays 0.25 physical px with the private contract's [three rows](p3-pri
 - **Resolution.** The arrangement resolves the union of the emitted pieces exactly up to its rounded embedding at `τ`. The stroke uses `τ = 2^(e−2)`, half the fill's `2^(e−1)`, because the stroke shares the topology row with arcs ([V2 section d](p3-v2-fill-mesh-transport-contract.md#d-tolerance) is unchanged for fills).
 - **Region, not only position.** The region is resolved exactly from the emitted polygons (section 4.8), so the obligation that remains is per piece, as P3.0b-s1 [requires](p3-stroke-boundary-certificate.md#proof-boundaries-and-next-numerical-checkpoint).
 - **Evidence method.** A04 for strokes is evidenced by B4's measurement on a frozen corpus against the independent oracle (B2-Q7). The construction bounds of section 4 are design obligations with a stage-to-proof table, checked by ST-O1 on every dumped output. They are not a precision claim.
+
+Amended 2026-10-20, ST-A0 amendment (S1):
+
+- **The metric.** The "Hausdorff distance `h`" of the union bullet above is the **two-sided Hausdorff distance between closed regions** (each emitted piece against its ideal piece, then the union against the ideal union), **plus the no-crack property** of §4.2 (no gap opens inside the ideal region). It is not a bound on boundary displacement.
+- **Residual: hole closing.** A two-sided Hausdorff bound of `h` does not stop an ideal hole or gap narrower than `2h` from closing (for example the inner hole of a small closed ring). The private contract's curve and topology rows speak of boundary displacement, so this direction is **a stated residual, to be measured by B4's A04 metric** (ST-OB3). It is not claimed here.
 
 ## 4. Algorithm
 
@@ -195,6 +211,8 @@ The outer side at a turn is the right side (`E−`) when `cross(d_in, d_out) > 0
 - **Vertices.** `c + r·dir_j`, two roundings per coordinate.
 - **ST-G2, arc guard.** `g_arc = (8k + 16)·2^-53·(‖c‖∞ + r)` bounds the direction and vertex rounding. The polygon is inscribed up to `g_arc`, so its Hausdorff distance to the disk is at most the sagitta plus `g_arc`, which the count rule keeps within `2^(e−2)`.
 
+Amended 2026-10-20, ST-A0 amendment (M4): the count rule's `(1 − 2^-40)` relative slack does not cover absolute subnormal rounding of `2^(e−2) − g_arc`. At `e = −1020`, `2^(e−4)` is subnormal, and `2^(e−2)` is within two binades of the subnormal range, so an absolute error of one subnormal unit (`2^-1074`) is not a relative `2^-40`. This is an extreme corner: the code builds these powers exactly and compares exactly, and any later change to the rule must keep that comparison exact at `e = −1020`.
+
 ### 4.5 Cubic leaves
 
 A remaining cubic segment, split at its interior stationary parameters (section 4.6), is subdivided by de Casteljau midpoint splitting in Float64, depth-first and left-first, to a depth of at most 20. A leaf with controls `Q0..Q3` (the computed subcurve controls) is **accepted** when:
@@ -212,6 +230,15 @@ deltaUp + 4·r·sinUp + gCtrl + gOff ≤ 2^e · (1 − 2^-40)
 - A leaf that is not accepted at depth 20, or a path whose leaves exceed the piece cap, is `work-limit`. A coarse leaf is never emitted.
 
 ST-U4 may strengthen any guard constant above (larger guards, never smaller) before ST-U5 lands, recording it in its PR. After ST-U5 a guard change that can alter an `ok` mesh is an identity change (section 7.1).
+
+Amended 2026-10-20, ST-A0 amendment (S1), the hull argument in full. Let a band between samples `t0` and `t1` have end segments `s0 = [E−(t0), E+(t0)]` and `s1 = [E−(t1), E+(t1)]`, each of length `2r`, at an angle `θ ≤ 2α` to each other (both end normals lie within `α` of the chord normal). The ideal band region is the bilinear patch `P` of the quadrilateral `E−(t0), E+(t0), E+(t1), E−(t1)`; its sides include `s0` and `s1`. The emitted piece is the hull `H` of the four end points and the two centres.
+
+- **Crossing (folded) case.** Suppose `s0` and `s1` cross at `X` (the inner offset folds, so the band quadrilateral is a bowtie). As a point set the patch is two triangles with apex `X`. The hull adds two triangles `(X, A, B)` with `A` on `s0` and `B` on `s1`, apex angle `π − θ` and legs `a = |XA|`, `b = |XB|`, both `≤ 2r` because `X` lies on both segments. The legs lie on `s0` and `s1`, which belong to `P`. Write a point `Y = X + s(A − X) + t(B − X)` with `s, t ≥ 0`, `s + t ≤ 1`. Its distance to the line of `XA` is `t·b·sin θ` and to the line of `XB` is `s·a·sin θ`.
+- **Foot inside the leg.** If the perpendicular foot onto a leg falls inside that leg, the distance to the leg is that line distance.
+- **Foot outside a leg.** Because the apex angle is obtuse, the foot of `Y` onto the line of `XA` falls beyond `X` exactly when `s·a < t·b·|cos θ|`. The foot onto the line of `XB` is then at `t·b − s·a·|cos θ| ≥ 0` and `≤ t·b ≤ b`, so it lies inside `XB`. The two feet cannot both fall outside. In this case the distance to `P` is at most `s·a·sin θ`, and `s·a < t·b`.
+- **Bound.** In every case `dist(Y, P) ≤ min(s·a, t·b)·sin θ`. With `s + t ≤ 1` this is at most `a·b/(a + b)·sin θ ≤ ((a + b)/4)·sin θ ≤ r·sin θ ≤ 2·r·sin α`, which is the hull term of the factor 4.
+- **Non-crossing case.** If `s0` and `s1` do not cross and the quadrilateral is convex, `H = P` and the hull term is 0. A quadrilateral that is simple but has a reflex vertex adds a triangle at that vertex, and the same barycentric bound applies with its two legs, one of which is an end segment (`≤ 2r`). This amendment does **not** prove the reflex-vertex case in closed form, nor the case where the two chords cross while `s0` and `s1` do not. Both remain residuals covered, as before, by ST-O1, which computes the hull term exactly from the emitted points on every dumped output.
+- **Carry to the union.** The per-piece bound carries to the union by §3's union bullet, with the metric named there.
 
 ### 4.6 Stationary classification
 
@@ -279,6 +306,8 @@ export type PathStyle = Readonly<{ fill: SceneColor | null; stroke: PathStroke |
 | Nonfinite world bounds of the stroke bounds box of section 9.7, for a nonempty path with `width > 0` | `invalid-value`       |
 | `stroke` with `width > 0` while the mirror's `pathStrokes` option is `'unsupported'`                 | `unsupported-feature` |
 | `stroke` with `width = 0`, with or without a stroke port                                             | Accepted; no stroke   |
+
+Amended 2026-10-20, ST-A0 amendment (S3), the nonfinite-world-bounds row: the stroke bounds box uses `k = min(L, 2^24)` for miter joins (§9.7), so `{width: 4, join: 'miter', miterLimit: Number.MAX_VALUE}` no longer gives `r·k = Infinity`. ST-S4 says that limit is valid, and scene validation must not reject it as `invalid-value` for that reason. A width so large that `r·k` or the world bounds still overflow remains `invalid-value`, as before.
 
 `RetainedSceneMirrorOptions` gains `pathStrokes: 'supported' | 'unsupported'`, default `'unsupported'`, fixed at construction; the service passes `'supported'` exactly when a stroke port is injected. Replay equality compares every stroke field with `===`, color channels included. The geometry revision is unchanged by stroke fields (it covers `verbs` and `points` only).
 
@@ -409,12 +438,17 @@ Amended 2026-10-20 by ST-U4 (ST-A0 review; see the header notes).
 
 The front-end limits gain two rows:
 
-| Limit (front end)                                          | Value | On excess                    |
-| ---------------------------------------------------------- | ----: | ---------------------------- |
-| Piece records per path, dropped zero-area hulls included   | 4,096 | `work-limit` (`PieceLimit`)  |
-| Leaf stack (depth-first, one pending sibling per level)    |    22 | not reachable (depth ≤ 20)   |
+| Limit (front end)                                        | Value | On excess                   |
+| -------------------------------------------------------- | ----: | --------------------------- |
+| Piece records per path, dropped zero-area hulls included | 4,096 | `work-limit` (`PieceLimit`) |
+| Leaf stack (depth-first, one pending sibling per level)  |    22 | not reachable (depth ≤ 20)  |
 
 `STROKE_V0_LIMITS` is unchanged. The test-only limit set `WIDE_TEST_LIMITS` (`cfg(test)` only, never a production configuration) is `STROKE_V0_LIMITS` with only these arrangement fields raised: `max_events` 65,536 (events and columns), `max_sections` 4,194,304, `max_nodes` 262,144, `max_work` 4,000,000,000, and `max_bytes` 1 GiB for their storage. The front-end limits, `τ = 2^(e−2)`, `max_input_vertices`, `max_edges`, `max_contours`, `max_pairs`, `max_cells`, `max_boundaries`, `max_contributors`, `max_vertices` and `max_triangles` are the same. Current-cap fixtures are checked under it.
+
+Amended 2026-10-20, ST-A0 amendment (S6):
+
+- **Piece store.** The 4,096-record piece store above is `MAX_PIECE_RECORDS: usize = 4_096` at `packages/geometry-wasm/kernel/src/stroke_outline.rs:55`; its overflow is `FrontEndError::PieceLimit` (`stroke_outline.rs:129`), mapped to `work-limit` in §7.8. The 512-piece cap (`MAX_PIECES`, `stroke_outline.rs:49`) is unchanged.
+- **Memory rows.** ST-U3's recorded rows are stale after ST-U4 (the front end grew to 1,255,120 B). ST-U5 re-measured them and recorded them in the [ST-U5 plan section](p3-fill-stroke-meshes.md#b2-st-u5-stroke-export): native heap total **18,171,600 B** (front end 1,255,120 B, `RoundedFillWorkspace` 14,262,272 B, `FillScratch` 2,654,208 B), and `wasm32` linear memory **13,828,096 B** after `stroke_v0_reserve(0, 0)` (1,114,112 B before). Both fit the 48 MiB heap cap and P2 ABI v1's per-path limits, so the table needs no change. These rows supersede ST-U3's 17,117,344 B and 11,690,144 B; the ST-U3 text is left as written.
 
 ### 7.7 Tolerance
 
@@ -475,6 +509,13 @@ The factory and the adapter follow [V2 section h](p3-v2-fill-mesh-transport-cont
 
 `PrimitiveRendererServiceOptions` gains `strokeMesh?: StrokeMeshPort` and `strokeMeshMemoryBytes?: () => number`, with V3's port shape check (`portVersion === 0`, nonempty `operationId`, callable `buildStrokeMeshes`). A stroke port without a fill port is allowed. Statistics add `strokePortLinearMemoryBytes`, and `pathMeshMemoryBytes` includes it.
 
+Amended 2026-10-20, ST-A0 amendment (S4), for ST-U6, consistent with [V3 section a](p3-v3-renderer-mesh-pipeline-contract.md#a-path-node-landing-and-scene-validation), which sets `pathNodes: 'supported'` exactly when a fill port is given:
+
+- **`pathNodes` derivation.** The service passes `pathNodes: 'supported'` when **a fill port, a stroke port, or both** are given, and `'unsupported'` otherwise. With neither port, every path node stays `unsupported-feature`, as in V3. This widens V3's "exactly when a port is given" from the fill port to either port; V3's no-port behavior is unchanged.
+- **`pathStrokes`.** As in §5: `'supported'` exactly when a stroke port is given.
+- **A fill without a fill port.** The mirror also needs the fill-side fact. `RetainedSceneMirrorOptions` gains `pathFills: 'supported' | 'unsupported'` (default `'unsupported'`, fixed at construction, passed as `'supported'` exactly when a fill port is given), and a path with `fill !== null` while it is `'unsupported'` is **`unsupported-feature`**, in the same precedence slot as the stroke row (last, after `invalid-value` and graph reasons). A path with `fill === null` is accepted without a fill port. A stroke-only host therefore sees the fill-on-path case rejected at scene validation instead of silently drawn without its fill.
+- **Open for the ST-U6 PR.** `pathFills` is a new mirror option introduced here as the consistent reading of V3's gating; the ST-U6 PR must record it in its V3 amendment notes.
+
 ### 9.2 Drawable paints
 
 Per path node, after V3's derivations:
@@ -510,6 +551,8 @@ For premultiplied coverage-adjusted `F` and `S`, two source-over draws in fill-t
 ### 9.7 Culling bounds
 
 The stroke bounds box is the box of the path's points expanded by `r·k` in local units before mapping, with `k = max(1, L if join = 'miter', 1.5 if cap = 'square')`. A miter tip lies within `L·r` of its join point, a square-cap corner within `sqrt(2)·r < 1.5·r` of its end, and every other piece within `r` of a point of the curve's control hull. World bounds follow P1's arithmetic rule, as V3 does for the fill's point box.
+
+Amended 2026-10-20, ST-A0 amendment (S3): the stroke bounds box uses `k = max(1, min(L, 2^24) if join = 'miter', 1.5 if cap = 'square')`. With `k = L`, a valid limit such as `Number.MAX_VALUE` made `r·k` infinite and the scene change `invalid-value`, although ST-S4 accepts it. The cap is sound for culling: a kept miter needs the certified ratio bound `ρ ≤ 2^24` (the ST-U4 correction in the header), and the tip lies within `ratio·r ≤ ρ·r` of its join point. A kept miter with `ρ > 2^24` is `numeric-range`, so that path is not drawn and its bounds are irrelevant. Where `L ≤ 2^24` the bound is unchanged.
 
 ### 9.8 Notices
 
@@ -588,6 +631,12 @@ Amended 2026-10-20 by ST-U4 (user decision and ST-A0 review; see the header note
 - **ST-U4/tip-ratio** is `M(0,0) L(10,0) L(10,10)`, `w = 20`, butt, miter `L = 1e4`. Expected: `ok`, a kept miter, and the region is the square `[0,20]×[−10,10]`, area 400 (ST-O4).
 - **ST-U4/folded-arc** is section 11.3's ST-D8 catcher.
 
+Amended 2026-10-20, ST-A0 amendment (S8, M3), registering fixtures already in the code and plan:
+
+- **ST-F13x** is `M(0,0) L(1,1) L(4,4)`, `w = 2`, butt, miter `L = 4`, added by ST-U3 beside ST-F13 for ST-D3, because ST-F13's directions `(3,1)` and `(9,3)` normalize to the same binary64 unit vector and so cannot detect an unshared continuation triple. Expectation: no join piece and the outgoing start triple equals the incoming end triple bit for bit. Its area is checked by ST-O3's `τ` band, not to `1e−12`, because the arrangement rounds its slanted sections at interior columns.
+- **ST-U4/folded-arc, ST-U4/tip-ratio and ST-F16p** are registered in the notes above and in §11.3; they are listed here so that §11.2 is the complete fixture index.
+- **ST-F26 at-limit statuses are as measured by ST-U3** (its report table in the [ST-U3 plan section](p3-fill-stroke-meshes.md#b2-st-u3-line-stroke-kernel)), replacing "at the limit `ok` or another listed status", which cannot fail. Each is a current-cap observation that a limit raise may re-baseline: pieces 512 (closed convex 256-gon, bevel) `work-limit` (arrangement `InputLimit`, more than 1,024 vertices); pieces 513 (open 256-segment staircase, square caps, bevel) `work-limit` (`PieceLimit`); edges 1024 (64 square-capped horizontal subpaths) `work-limit` (`max_work` exhausted); edges 1025 `work-limit` (`InputLimit`); `n = 256` (ST-F1 with round caps, `w = 400`) `ok`; `n = 512` (`w = 1000`) `work-limit` (`DiskLimit`).
+
 ### 11.3 Seeded defects
 
 Each is a `cfg(test)` fault switch or a test-only variant; the unit's PR lists each with its failing test.
@@ -613,6 +662,8 @@ Amended 2026-10-20 by ST-U4 (ST-A0 review):
 
 - **ST-D8's catcher is the synthetic folded-band fixture `ST-U4/folded-arc`.** The ST-F15 case named before its first run (R6 at `e = −3`) did not expose the defect. The fixture is a cubic arc of radius 1 over 0.2 rad, with controls `(0.9950041652780257, ∓0.09983341664682815)` and `(1.001665278240658, ∓0.03344447228510901)`, `w = 9.94`, butt, `e = 0`. Its expectation was fixed before its first run: factor 4 gives `ok` with two depth-1 leaves that ST-O1 accepts; factor 2 gives one depth-0 leaf that ST-O1 rejects.
 - **ST-D6 and ST-D7's ST-F16 checks** (ST-O2, and membership of `(0.5, 0.8)`) run under `WIDE_TEST_LIMITS`. ST-D6 is also caught by ST-O2 on ST-F15 R3 at `e = −5`, at production limits.
+
+Amended 2026-10-20, ST-A0 amendment (S8): **ST-D9** (disk count halved) is named above as caught by ST-O1 on ST-F3 and ST-F16. ST-O1 is ST-U2's oracle, so ST-U3 caught it with **ST-F3's literal area** (8-gon caps), as its plan section records; the named ST-O1 catcher stays as the contract's check.
 
 ### 11.4 Stroke conformance suite
 
@@ -681,11 +732,14 @@ Each unit is its own PR from an updated `main`. ST-U3, ST-U4 and ST-U5 are high-
 
 Amended 2026-10-20 by ST-U4 (user decision and ST-A0 review): ST-A1's ST-F16 entry reads "ST-F16 under the test-only limits `WIDE_TEST_LIMITS` (§7.6), and `work-limit` at production limits". ST-F16p, which is `ok` at production limits, evidences ST-S8 there.
 
+Amended 2026-10-20, ST-A0 amendment (B2): ST-A0's check "The owed `reviewer` review READY before ST-U3 merges" is superseded. ST-U3 and ST-U5 merged first under the user's 2026-10-20 exception; the review ran with verdict NOT READY. ST-A0 is met when the **ST-A0 amendments land before ST-U6 merges**.
+
 Each PR follows the `AGENTS.md` description format, states `NOT RUN` with a reason for any check it skips, carries the UNVERIFIED label and makes no performance claim.
 
 ### 12.3 Review plan
 
 1. **This contract:** the owed fresh-context `reviewer` review, full tier, with specific checks of section 4.5's factor 4 and hull argument, section 4.6's classification, the crack-freeness argument of section 4.2, the guards of section 4.7, the limits of section 7.6 and the opacity rule of section 9.6. Findings are applied as dated amendments before ST-U3 merges; a finding that changes a user decision goes to the user.
+   - Amended 2026-10-20, ST-A0 amendment (B2): the review ran before ST-U5 merged (verdict NOT READY) and its findings are applied by dated notes before ST-U6 merges, not before ST-U3. The cubic `work-limit` findings (S7) were escalated to the user as the pending ST-U9 decision.
 2. **ST-U2, ST-U3, ST-U3b, ST-U4:** one independent diff review each, with the stage-to-proof table checked for ST-U3 and ST-U4.
 3. **ST-U5, ST-U6:** independent diff review and evidence review.
 4. **ST-U7, ST-U9:** independent review of the addendum or contract, then of the diff and evidence.
@@ -704,7 +758,7 @@ Each PR follows the `AGENTS.md` description format, states `NOT RUN` with a reas
 
 **Open obligations.**
 
-- **ST-OB1.** The independent review of this contract is owed (status line).
+- **ST-OB1.** The independent review of this contract is owed (status line). Amended 2026-10-20: it ran (NOT READY); its amendments are due before ST-U6 merges.
 - **ST-OB2.** The stage-to-proof tables of ST-U3 and ST-U4 discharge the per-piece bounds of section 4; P3.0b-s1's proof boundaries are assigned as follows: resolved-region topology by the arrangement; stationary handling by section 4.6; miter tips by ST-G3; round arcs by section 4.4.
 - **ST-OB3.** A04 for strokes, through B4, with the rows ST-U8 proposes.
 - **ST-OB4.** C04 items 1-6 stay open (section 10).
