@@ -389,7 +389,7 @@ impl FillScratch {
     }
 
     /// Reserves every scratch buffer; `Err(status)` on refusal.
-    fn reserve(limits: RoundedFillLimits) -> Result<(Self, usize), u32> {
+    pub(crate) fn reserve(limits: RoundedFillLimits) -> Result<(Self, usize), u32> {
         let (slots, split, bytes) = Self::sizes(limits).ok_or(BATCH_INTERNAL_ERROR)?;
         let mut scratch = Self::empty();
         if scratch.triangles.try_reserve_exact(slots).is_err()

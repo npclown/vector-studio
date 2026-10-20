@@ -1826,6 +1826,119 @@ Deviations and notes:
 - **`.gitignore`, `.prettierignore` and `eslint.config.mjs`** each gain one line: the raw output directory, the future committed AL-S2 records, and the page bundle under `artifacts/`.
 - **Cross-origin isolation** is a harness choice that gives the 5 µs clock resolution. It is pinned in the configuration and enforced by `cross-origin-isolated`.
 
+### B2 ST-U3 line-stroke kernel
+
+Unit ST-U3 of the frozen [B2 stroke contract](p3-b2-stroke-contract.md#121-units), light tier. Plan entry: the line-stroke kernel front end of sections 2 to 4 and its dump hook. Acceptance check: the line fixtures of [section 11.2](p3-b2-stroke-contract.md#112-named-fixtures) meet their literal expectations, natively and through the hand-off; each seeded defect of section 11.3 assigned to ST-U3 fails its named check; the real memory of `STROKE_V0_LIMITS` is recorded; the guard constants are proved or tightened for line strokes. Every result is functional evidence, and precision is **UNVERIFIED** against the 0.25 physical-pixel target until B4. Independent review NOT RUN: the user skipped independent reviews for 2026-10-20 only. ST-A0's owed contract review is still due before this unit merges.
+
+Files:
+
+- `packages/geometry-wasm/kernel/src/stroke_outline.rs` (new): decoding, triples, exact join classification and miter predicate, disk polygons, hulls, guards, the arrangement call and the refinement.
+- `packages/geometry-wasm/kernel/src/stroke_outline_tests.rs` and `stroke_dump_tests.rs` (new, `cfg(test)`).
+- `packages/geometry-wasm/kernel/src/lib.rs`: three module lines appended at the end of the file.
+- `packages/geometry-wasm/kernel/src/fill_export.rs`: `FillScratch::reserve` made `pub(crate)`; no other change (see deviations).
+- `tests/geometry/stroke-oracle.test.ts` and `tests/geometry/stroke-oracle/` (`dump.ts`, `fixtures.ts`), new.
+
+Design:
+
+- **Stage order (section 7.8).** `StrokeWorkspace::build` applies the stages in this order: `validate_path`, then the stroke values, the tolerance range (−1020 to 1023) and empty. It then runs the front end, `RoundedFillWorkspace::tessellate(pieces, Nonzero, 2^(e−2))` under `STROKE_V0_LIMITS`, `FillScratch::refine`, and finally the empty-region check. Front-end and arrangement errors map through exhaustive matches with no wildcard. The status constants are section 7.2's. A front end that emits no piece returns `empty` without an arrangement call. When more than 1,024 vertices are emitted, the result is the arrangement's own `InputLimit`, but only after every front-end stage, so the front end's own failures come first.
+- **Decoding (ST-S1, ST-S2).** It removes zero-length segments, adds the closing line only for `CLOSE` with a distinct last point, applies ST-S10 to open subpaths whose segments are all removed, and enforces the source, segment and subpath caps. A cubic that is not zero-length is `UnsupportedCubic`, which maps to `unsupported-geometry`, until ST-U4.
+- **Triples (section 4.2).** For each segment, `n(d)` of the rounded difference gives one offset `r·N`, so both end triples are `C ± r·N`. At an exact forward continuation, the outgoing start triple is replaced by the incoming end triple, which also holds at a closed seam.
+- **Joins (section 4.3).** Turn, continuation and reversal come from exact `Signed` cross and dot products of the source differences. The miter predicate is the section's four-case test in `Signed<266>`, with compile-time assertions `PREDICATE_LIMBS ≥ 8·COORDINATE_LIMBS + 2` and `2·LINE_LIMBS ≥ 4·COORDINATE_LIMBS`. The tip uses section 4.3's formula, rounded per operation.
+- **Disks (section 4.4).** One 65-entry quadrant-I table is built by bisection at level 6. A level-k polygon takes every `2^(6−k)`-th entry, because bisection gives the same values at every level, and the other quadrants come from exact rotations. The level comes from the count rule with `g_arc`; when no level 1 to 6 qualifies, the result is `DiskLimit`.
+- **Hulls.** Andrew's monotone chain with exact `orient2d` keeps collinear boundary points and drops duplicates (−0 is normalized to +0). A hull with zero exact area is dropped. Its vertices are listed counter-clockwise from the lexicographically smallest point.
+- **Emission (section 4.9)** per subpath: the start cap; then for each segment its sweep and the join that follows it, with the seam join last on a closed subpath; then the end cap; or a single ST-P7 piece.
+- **Memory.** `StrokeWorkspace::new` reserves every buffer once. `build` allocates nothing, which the tracking allocator checks on fixtures, the cap fixtures and the failures.
+- **Dump hook.** The ignored test `stroke_dump_tests::emit_stroke_dump` reads `P3STKIN1` (one tab-separated line per case, with every binary64 value given as 16 hexadecimal digits of its bits). It writes `P3STKDUMP1`: one length-framed JSON line per case, with the request, the status, the subpaths, and the segments with their triples and join classes. Each line also has the pieces, with kind, source segment, parameter interval, disk vertex count and points, and the mesh. Every float is given as its bits. The test `dump_reads_its_input_and_frames_each_case` checks the framing.
+- **Test-only seeded defects** live in `StrokeDefects`, with fields under `cfg(test)`. In production every switch is a constant `false`.
+
+**Stage-to-proof table (line strokes).** Here `u = 2^-53`, `M` is the largest source coordinate magnitude, and every bound is a Euclidean distance from an emitted point to its ideal position.
+
+| Piece                     | Emitted points                                              | Per-point bound                                                                         | Guard and requirement                                         | Piece bound vs share                                               |
+| ------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------ |
+| ST-P1 sweep               | `A`, `B` exact; `E±` from `C ± fl(r·N)`                     | `‖n(d) − d/‖d‖‖ ≤ 5u`; `‖E − E*‖ ≤ 5u·r + u·r + √2·u·(M + r) ≤ 7.5u·(M + r)`            | ST-G1 `16u·(M + r) ≤ 2^(e−4)`, with `d̃·d̃` normal and finite | Hull of points within `g_off`: `≤ 2^(e−4) ≤ 2^e`                   |
+| ST-P3 bevel               | `B` exact; `O_in`, `O_out` are triple points                | as ST-P1                                                                                | ST-G1                                                         | `≤ 2^(e−4)`                                                        |
+| ST-P4 miter               | as ST-P3 plus `T`                                           | `‖T − T*‖ ≤ 1.42u·‖B‖∞ + 23.1u·r·L³` (proof below)                                      | ST-G3 as tightened: `L ≤ 2^24`, `64u·(‖B‖∞ + r·L³) ≤ 2^(e−1)` | `≤ 2^(e−1) ≤ 2^e`                                                  |
+| ST-P5 round join or cap   | disk vertices, `B`, two triple points                       | direction `≤ (3.5k + 3)u`; vertex `≤ (3.5k + 6)u·(‖c‖∞ + r) ≤ g_arc`                    | ST-G2 inside the count rule; triple points by ST-G1           | Outside the disk by `≤ g_off`; uncovered `≤ sagitta + g_arc ≤ 2^(e−2)` |
+| ST-P6 square cap          | triple points, `E± + fl(r·τ̂)`                               | `≤ g_off + 6u·r + u·(M + 2r) ≤ 2·g_off`                                                 | ST-G1                                                         | `≤ 2^(e−3) ≤ 2^e`                                                  |
+| ST-P7 point square, round | `p ± r` (one rounding each); disk                           | `≤ u·(M + r)`; ST-P5's arc bound                                                       | ST-G1; ST-G2                                                  | `≤ 2^(e−4)`; `≤ 2^(e−2)`                                           |
+| All                       | every coordinate                                            | finite                                                                                  | ST-G6 at every candidate point                                | —                                                                  |
+| Resolution                | the union of the pieces                                     | exact arrangement up to its rounded embedding                                           | `τ = 2^(e−2)`, native assertion (ST-D12)                      | topology row, section 3                                            |
+
+**Guard proofs and tightenings (sections 4.4 to 4.7, line cases).**
+
+- **ST-G1, proved with one range condition.** The rounded direction `d̃` has relative error at most `u` in each component, so its angle error is at most `u`. `d̃·d̃` has relative error at most about `2u`, `sqrt` adds `u/2`, and the division adds `u` per component. So `|n(d)| = 1 ± 3.5u`, and with the angle error `‖n(d) − d/‖d‖‖ ≤ 5u`. Then `fl(r·N)` adds `u·r`, and `C ± fl(r·N)` adds `u·(M + r)` per coordinate, so the total is at most `7.5u·(M + r) < g_off = 16u·(M + r)`. **Tightening:** the argument needs `d̃·d̃` to be a finite normal number. Otherwise it overflows, or its squares underflow and lose their relative bound. ST-U3 therefore makes a squared length that is nonfinite or below `2^-1022` `numeric-range` (`unit_vector`). This only adds failures for segments longer than about `2^511` or shorter than about `2^-511`.
+- **ST-G2, proved.** Each bisection level forms `a + b`, whose angle is the mean of its neighbours' angles up to half their length mismatch. It then renormalizes, which adds at most `3.5u` of angle and `3u` of length error. So after `k` levels the direction error is at most `(3.5k + 3)u`. The vertex `c + r·dir` adds `√2·u·(‖c‖∞ + 2r)`. The sum stays below `g_arc = (8k + 16)u·(‖c‖∞ + r)`. Measured against `Math.cos` and `Math.sin`, the level-6 table's largest direction error is `2.83u`, against the bound's `64u`. The count rule's `(1 − 2^-40)` factor covers the rounding of the rule's own evaluation.
+- **ST-G3, tightened from `L²` to `L³`.** The contract states `g_tip = 32u·(‖B‖∞ + r·L²)`, with an amplification of at most `L²/2`. That amplification bounds the geometric sensitivity, but not the cancellation in `1 + d̂`. Near a reversal, `1 + d = 2c²` with `c = cos(φ/2) ≥ 1/L`. The normals' length and angle errors of about `5u` each give `|d̂ − d| ≤ 12.2u`, and with the addition `|den − (1 + d)| ≤ 14.3u`. With `L ≤ 2^24`, `den ≥ 0.776·(1 + d)`. Then `|s/den − σ/(1 + d)| ≤ 8.31u/c² + 9.21u/c³ ≤ 17.6u·L³`, and with the remaining roundings `‖T − T*‖ ≤ 1.42u·‖B‖∞ + 23.1u·r·L³`. A fixed-point (2^-300) reference over 2,800 random near-reversal turns measured `max ‖T − T*‖ / (u·ratio³) = 1.46`. At ratio 89.5 the error `1.16e−10` exceeds the contract's `32u·L² = 2.84e−11` four times. ST-U3 therefore uses `g_tip = 64u·(‖B‖∞ + r·L³) ≤ 2^(e−1)`, and treats a kept miter with `L > 2^24` as `numeric-range`. The guard only gets larger, as section 4.5's last paragraph allows before ST-U5. No contract fixture changes outcome: ST-F5, ST-F24 and ST-F25 keep their literal results.
+- **ST-G6** is checked at every candidate point before the hull. ST-G4 and ST-G5 belong to ST-U4.
+
+**Memory of `STROKE_V0_LIMITS` (section 7.6).** `RoundedFillWorkspace::new(STROKE_V0_LIMITS)` passes its validation. Its byte totals:
+
+| Target   | Front end | `RoundedFillWorkspace` (cap 32 MiB) | `FillScratch` | Total (cap 48 MiB) |
+| -------- | --------: | ----------------------------------: | ------------: | -----------------: |
+| x86_64   |   200,864 |                          14,262,272 |     2,654,208 |         17,117,344 |
+| `wasm32` |   184,480 |                           9,146,368 |     2,359,296 |         11,690,144 |
+
+The native row is printed by `stroke_v0_limits_fit_the_workspace_and_heap_caps`. The `wasm32` row comes from a throwaway copy of this kernel with one extra export, run in Node. That copy was not committed, and the instance's linear memory after reserve was 12,910,592 bytes. Both rows fit both caps, so the limits table needs no amendment.
+
+Fixture results. Native results come from `stroke_outline_tests.rs`, and the hand-off results from `stroke-oracle.test.ts` on the dumped meshes, with exact BigInt areas and membership. Every `ok` mesh passes `checkFillMesh` (ST-O3).
+
+- **Caps.** ST-F1: area 8, bounds `(0,−1,4,1)`, and the region equals the rectangle under `checkFillRegion` (ST-O4). ST-F2: area 12 and bounds `(−1,−1,5,1)` (ST-O4). ST-F3: two 16-gons and area `8 + 3.0614674589207183` within 1e−12.
+- **Joins.** ST-F4: miter `L = 2` gives area 16, tip `(5,−1)` and the exact region; `L = 1` and bevel give 15.5; round gives `15 + 0.7653668647301796`.
+- **Miter predicate.** ST-F5: `L = 1.25` keeps the miter, with the tip within `g_tip` of `(25.75,−1)`. `1.2499999999999998` gives a bevel and `1.2500000000000002` a miter. The predicate on `u = (25,0)`, `v = (7,24)` returns the same three answers.
+- **Reversal.** ST-F6: miter and bevel give area 8, with the exact region and only the two sweeps; round gives `8 + 1.5307337294603591`.
+- **Degenerate subpaths.** ST-F7 and ST-F9: `empty` for every cap and join. ST-F8: butt is `empty`, round gives one 16-gon, square gives area 4 with bounds `(3,4,5,6)` (ST-O4). ST-F10: area 16, with the pieces sweep, miter and sweep.
+- **Closed square.** ST-F11 is the same for every cap. Miter gives area 32 and region `[−1,5]² ∖ (1,3)²` (ST-O4), bevel gives 30, round gives `28 + 3.0614674589207183`.
+- **Open subpath.** ST-F12: `(0,4)` and `(−0.5,4)` are outside, `(4,4)` and `(4,0.5)` inside (ST-O5).
+- **Continuation.** ST-F13: no join piece, the outgoing start triple equals the incoming end triple bit for bit, one boundary loop, and area `25.298221281347036` within 1e−12.
+- **Overlap.** ST-F14 (a) gives 12 and (b) gives 20 with three miters, both with exact regions (ST-O3, ST-O4).
+- **Thin and out of range.** ST-F21: area exactly `2^-18`. ST-F22 is `empty` and ST-F23 is `numeric-range` for every cap. ST-F24 is `numeric-range` at `L = 2^30`, and at `L = 4` gives a bevel and `ok`.
+- **Miter limits.** ST-F25: a miter appears exactly where the ratio is at most `L`, for `sqrt 2`, `5/3` and `sqrt 50` with `L` = 1, `Math.SQRT2`, 4 and 100 (`Math.SQRT2` rounds above `sqrt 2`, so it keeps the 90° miter). Every case is `ok`.
+- **ST-F26 current-cap fixtures**, labelled; a limit raise may re-baseline them:
+
+  | Case       | Construction                                                                     | Status       | Cause                                                                                             |
+  | ---------- | -------------------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------- |
+  | pieces 512 | closed convex 256-gon, bevel                                                     | `work-limit` | 512 pieces, but more than 1,024 vertices (arrangement `InputLimit`)                               |
+  | pieces 513 | open 256-segment staircase, square caps, bevel                                   | `work-limit` | `PieceLimit` at the 513th piece                                                                    |
+  | edges 1024 | 64 square-capped horizontal subpaths                                             | `work-limit` | exactly 1,024 vertices and edges; `max_work` (64,000,000) exhausted in the all-pairs pass         |
+  | edges 1025 | 62 such subpaths, a two-segment bevel staircase, two square points               | `work-limit` | exactly 1,025 vertices: `InputLimit`, which is reached before `EdgeLimit` because the caps are equal |
+  | n = 256    | ST-F1 with round caps, `w = 400`                                                 | `ok`         | two 256-gon caps                                                                                  |
+  | n = 512    | ST-F1 with round caps, `w = 1000`                                                | `work-limit` | `DiskLimit`                                                                                       |
+
+  The edge cap is not reachable on its own, because `max_input_vertices` equals `max_edges`. The 1,024-edge case shows that `max_work` binds before the edge cap.
+
+Seeded defects of section 11.3 assigned to ST-U3. Each is a `StrokeDefects` switch. The test `seeded_defects_fail_their_named_tests` checks each switch against its named check, after a control run on the clean workspace:
+
+| Defect | Switch                  | Failing check                                                                                                     |
+| ------ | ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| ST-D1  | `float_miter`           | ST-F5 neighbours: `1.2499999999999998` keeps a miter                                                              |
+| ST-D2  | `equality_bevel`        | ST-F5 at `L = 1.25` gives a bevel                                                                                 |
+| ST-D3  | `unshared_continuation` | ST-F13x triple equality (ST-F13 itself is blind to it, see deviations)                                           |
+| ST-D4  | `stroke_implicit_close` | ST-F12 membership                                                                                                 |
+| ST-D5  | `keep_zero_length`      | ST-F10 area (the zero tangent becomes `numeric-range`)                                                            |
+| ST-D9  | `halve_disk`            | ST-F3 area (8-gon caps)                                                                                           |
+| ST-D10 | `square_along_normal`   | ST-F2 area                                                                                                        |
+| ST-D11 | `reversal_as_turn`      | ST-F6 miter (the tip divides by `1 + d̂ = 0`, so ST-G6 gives `numeric-range`)                                      |
+| ST-D12 | `fill_tolerance`        | the native `τ = 2^(e−2)` assertion at `e` = −3, −8, 0, 10                                                         |
+| ST-D13 | `clockwise_piece`       | ST-F14 (b) area (an odd sweep wound clockwise cancels its overlap)                                                |
+| ST-D14 | `skip_tip_guard`        | ST-F24 at `L = 2^30` is no longer `numeric-range`                                                                 |
+
+ST-D6, ST-D7 and ST-D8 are cubic defects and belong to ST-U4. The contract names ST-O1 on ST-F3 and ST-F16 for ST-D9. ST-O1 is ST-U2's oracle, so ST-U3 catches ST-D9 with ST-F3's literal area instead.
+
+Validation (uncommitted tree, then committed):
+
+- VALIDATION_PLACEHOLDER
+
+Deviations and open items:
+
+- **`fill_export.rs`.** V2's refinement must be reused unchanged, and `FillScratch::reserve` was private. Making it `pub(crate)` is the only edit to this file, which B1 is also changing; the edit is one word on a line B1 does not touch.
+- **ST-O1 and ST-O2 are not applied yet.** ST-U2's oracle is being built in parallel. The hand-off already dumps every piece with its points, triples and classification. `stroke-oracle.test.ts` applies ST-O3 to ST-O5 and the literal expectations now, and ST-O1 and ST-O2 join it when ST-U2 lands. ST-A3's "ST-O1 on every dumped fixture" is therefore open for the line fixtures.
+- **ST-F13 cannot detect ST-D3.** The directions `(3,1)` and `(9,3)` normalize to the same binary64 unit vector, so recomputed triples equal the shared ones bit for bit. ST-U3 adds the supplementary fixture **ST-F13x**, `M(0,0) L(1,1) L(4,4)`, where `(1,1)` and `(3,3)` normalize differently. It catches ST-D3. Its area is checked by ST-O3's τ band, not to 1e−12. The first run with a 1e−12 expectation failed by about `2^-7`, because the arrangement rounds its slanted sections at interior columns. That is the τ band's case, which this unit had not foreseen for a supplementary fixture. The contract's own ST-F13 literal passes unchanged. The Primary may want ST-F13x added to section 11.2 with a dated note.
+- **ST-G3 and ST-G1 tightenings** are described above. The Primary records them in the contract with a dated note, since the frozen text gives `L²`.
+- **Section 7.7 wording.** At `e = −1020`, `2^(e−4) = 2^-1024` is subnormal, not normal as the section states. `power_of_two` builds subnormal powers exactly, and every guard comparison stays exact. Only the sentence is inaccurate.
+- **"Each coordinate rounded once" (section 4.2)** is implemented as `C ± fl(r·N)`. That is two roundings per coordinate, because fused multiply-add is a library call outside section 4.2's allowed operations. ST-G1's bound covers both roundings.
+- **`UnsupportedCubic`** is a unit-local front-end error for a cubic that is not zero-length. It maps to `unsupported-geometry` and is removed by ST-U4. No export exists, so no port behavior depends on it.
+- **No export, adapter, ABI or contract change.** The release WASM's stroke code is dead code there, until ST-U5 calls it.
+
 ### B0 runner (light tier)
 
 Plan entry: implement section 9 item 1 of the [B0 contract](p3-b0-feasibility-benchmark-contract.md) without changing it. Acceptance check: `pnpm benchmark:p3-b0 --profile functional` completes end to end; the TypeScript generator and an independent Rust generator match committed fixture bits; a tampered record is rejected; `pnpm check`, `pnpm build` and `pnpm test:geometry` pass; the diagnostic flag builds and passes clippy in its own target directory; the WASM release artifact is byte-identical to main's. Evidence is recorded on the runner PR. A functional run is not performance evidence.
