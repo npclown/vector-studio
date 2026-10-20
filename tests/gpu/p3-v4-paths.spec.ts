@@ -42,7 +42,7 @@ function rotated(point: Readonly<{ x: number; y: number }>, degrees: number) {
   return { x: a * point.x + c * point.y + e, y: b * point.x + d * point.y + f };
 }
 
-/** Gated views: every cubic path stays within the current kernel caps (zoom * DPR <= 2). */
+/** Gated views: every path meshes with a fringe and no notice (zoom * DPR <= 2, far inside the B1 caps). */
 const GATED_VIEWS: readonly V4View[] = [
   viewAt('overview', SCENE_CENTER, 1, 0),
   viewAt('rotate-30', SCENE_CENTER, 1, 30),
@@ -51,7 +51,7 @@ const GATED_VIEWS: readonly V4View[] = [
   viewAt('zoom-2-pan-stars-rotate-45', rotated({ x: 190, y: 320 }, 45), 2, 45),
   viewAt('pan-rotate-minus-15', { x: 300, y: 260 }, 1, -15),
 ];
-/** Observed, not gated: beyond the kernel caps, the cubic paths report work-limit (B1). */
+/** Observed, not gated: a zoom-3 view. After B1 the paths mesh with no notice; any notice is recorded. */
 const OBSERVED_VIEW = viewAt('zoom-3-beyond-kernel-caps', { x: 350, y: 120 }, 3, 0);
 
 /** Channel tolerance for interior probes, in 8-bit steps; functional, not a precision gate. */
@@ -177,7 +177,7 @@ test('P3 V4 path page screenshots (UNVERIFIED precision)', async ({ browser, pag
     });
   }
   const final = await page.evaluate(() => window.__vectorStudioP3V4Paths.snapshot());
-  // The beyond-caps view is observed: the cubic paths there are expected to report work-limit.
+  // The zoom-3 view is observed, not gated: after B1 no notice is expected, and any one is recorded.
   const observedNotices = final.diagnostics.filter(
     (event) => event.code === 'render.path-mesh-interim-failure',
   );
