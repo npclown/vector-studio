@@ -35,6 +35,14 @@ Amended 2026-10-20 (revised 2026-10-21 after the PR #176 reviews), ST-A0 amendme
 - **M2, `t̃`.** The ST-U4 note above is labelled **Algorithm change (§4.6)**; it is not a guard change.
 - **S7, cubic `work-limit` findings.** Recorded only: the cubic findings (the canonical cusp at `e = −8` failing, R5 failing at zoom 1, 64 square-capped line subpaths exhausting `max_work`, and the resulting mostly-`work-limit` P3 stress scene) were **escalated to the user in chat on 2026-10-20 as the pending ST-U9 decision**. The [plan](p3-fill-stroke-meshes.md#b2-st-a0-contract-amendments) names that pending decision and the [ST-U3b recommendation](p3-fill-stroke-meshes.md#b2-st-u3b-scaling-probe) carries a pointer to the cubic fixtures. This amendment decides nothing about them.
 
+Amended 2026-10-21 by the [ST-U4 cusp shared triple follow-up](p3-fill-stroke-meshes.md#b2-st-u4-cusp-shared-triple-review-follow-up) (ST-U4 post-merge review SF1), restoring §4.2 and bumping the §7.1 identity:
+
+- **Defect.** At a non-collinear reversal, ST-U4's right range computed its own start triple from its own `D1`, so the cusp knot had two triples. They are mirror images in exact arithmetic, but in binary64 they differed by a few ulps. That broke §4.2's "every generated knot has exactly one sample triple", and the arrangement could fail with `TopologyAmbiguous` (`unsupported-geometry`).
+- **Correction.** The right range's first leaf now starts from the left range's last end triple with `E−` and `E+` swapped, computed once, as collinear parts already did. Its normal error bound is that leaf's `dN`, which already contains the split end's limit-direction term. No guard formula changes. The proof is in the plan entry.
+- **Revision 2 (§7.1 identity rule).** The change alters `ok` meshes, so the identity moves together: `operationId` `'geometry-wasm/stroke-v0+r2'` and `stroke_v0_revision() == 2`. The §7.1 table's v0 values are as frozen and are superseded by these. `stroke_v0_version()`, the magics, `abi_version()` and `fill_v0_*` are unchanged.
+- **Measured effect** on the review's 100-case corpus: 85 results are bit-identical. 5 `ok` results change. Their piece inputs differ only in the right range's first start triple (1 to 2 ulps on four, 64 ulps on a coordinate near zero on the fifth), but the published meshes differ downstream: the arrangement no longer creates the sliver vertices of the duplicate triple, so they have fewer vertices and triangles (68→60, 102→84, 104→90, 66→56 and 326→322 vertices) and other vertices move by a few ulps. All five pass ST-O1 to ST-O3. 4 cases go from `unsupported-geometry` to `ok`. 6 `work-limit` cases change only in piece samples, and none has a mesh. No other status changes.
+- **Fixtures.** `ST-U4/cusp-shared-a` and `ST-U4/cusp-shared-b` (the review's two reproductions, `ok`) and a bitwise one-triple-per-knot check are added. A reversal `2^-20` from a segment end is a listed `work-limit` class (`DepthLimit`), with a fixture.
+
 **Evidence label.** Every stroke result under this contract is functional evidence. Until B4 has A04 evidence, every report, PR description and screenshot states that precision is **UNVERIFIED** against the 0.25 physical-pixel target, as D8 [requires](p3-d8-parallel-tracks.md#rules). Stroke work closes no A01-A08 criterion and no C03-C05 item.
 
 **Identifiers.** This contract prefixes its own IDs with **ST-**: semantics rows ST-S1 to ST-S12, pieces ST-P1 to ST-P7, guards ST-G1 to ST-G6, oracles ST-O1 to ST-O5, fixtures ST-F1 to ST-F26, seeded defects ST-D1 to ST-D14, conformance cases SC01 to SC22, units ST-U2 to ST-U9 (with ST-U3b), acceptance ST-A0 to ST-A12, risks and open obligations ST-OB1 to ST-OB8. V2's cases C01-C18, V3's codes and the proposal's B2-Q1 to B2-Q9 keep their meaning.
@@ -380,6 +388,8 @@ V1 rules 1-8 apply unchanged, with rule 5's region being section 2.2's stroke re
 | Kernel revision    | `stroke_v0_revision() == 1`; the adapter accepts only the revision it was built for |
 
 The magics differ from P2's (`VGS2`, `VGR2`) and fill's (`VGF0`, `VGM0`). `abi_version()` stays 1 and `fill_v0_*` is unchanged. **Identity rule,** as V2's: a change that can alter an `ok` stroke mesh for some request changes the `operationId` and the revision together (for example to `'geometry-wasm/stroke-v0+r2'`); a change that only turns a failure into a success, such as a limit raise, keeps them.
+
+Amended 2026-10-21 (cusp shared triple; see the header notes): the identity is now `'geometry-wasm/stroke-v0+r2'` with `stroke_v0_revision() == 2`. The table above, the §8 adapter interface (`operationId`) and the SC21 row keep the frozen v0 values; all three are superseded by revision 2.
 
 ### 7.2 Exports
 

@@ -306,7 +306,8 @@ fn dump_case(workspace: &mut StrokeWorkspace, case: &Case) -> String {
         )
         .unwrap();
         if complete {
-            for (offset, value) in workspace.piece_points(piece).iter().enumerate() {
+            let points = workspace.piece_points(piece).unwrap_or_default();
+            for (offset, value) in points.iter().enumerate() {
                 if offset > 0 {
                     line.push(',');
                 }
