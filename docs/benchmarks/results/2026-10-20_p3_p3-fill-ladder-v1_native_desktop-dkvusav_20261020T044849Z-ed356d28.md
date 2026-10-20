@@ -339,3 +339,12 @@ As the contract requires for every verdict:
 - The comparisons with the 2026-10-17 and 2026-10-18 records are across runs on different days, with different code (exact rung alone, test-only spike module, production export).
 - SL-O5 and SL-O6 are Float64 observations. SL-O6 is not D8 checkpoint B4's A04 measurement.
 - It closes no A01-A08 criterion. Acting on it needs the independent evidence review (AL-A15). Under the contract's section 5.3 and user decision B0-Q3, an INCONCLUSIVE verdict goes to the user before B1, as INFEASIBLE does, with the measured numbers; this record chooses no remedy.
+
+## Review note (AL-A15, 2026-10-20)
+
+Appended after the independent evidence review; the text above is unchanged, and the raw `.json` is unchanged.
+
+- **Status.** The independent evidence review AL-A15 accepted this record on 2026-10-20 with no blocking items: the verdict recomputes exactly from the raw samples, every hash, link and provenance item checks out, and the tables match `analyze()`. The status line above still says Exploratory because the body is immutable; read it as accepted ([plan entry](../../plans/p3-fill-stroke-meshes.md#alt-a1-al-u7-reference-runs)).
+- **Correction, "Where the scatter comes from".** The sentence that the same cell in other repetitions stays at the lower level is wrong for P8/s=4: that cell is at the upper level in both repetitions 3 and 4 (path medians 39.5 and 40.3 µs, against 32.0-32.4 µs in repetitions 0-2). It holds for P8/s=7 (repetition 0 only) and P8/s=5 (repetition 2 only).
+- **Correction, "Size of the levels".** The band of about 1.2-1.27 times holds for the cells it names (P8/s=4 in repetitions 3 and 4, P8/s=7 in repetition 0, and K2/s=8). It does not describe P8/s=5 in repetition 2, which rises from about 41 µs to 51.5-75.9 µs, up to about 1.85 times.
+- **Background load disclosure.** The runner's process listing shows no process of this project, so that narrow claim holds, and the 2026-10-12 protocol minimum (operator statement plus process listings) is met. The listing does show a third-party `hyperframes preview` tool running since 2026-10-19 (node PID 30716, esbuild PID 26568 and four `chrome-headless-shell` processes) and interactive applications: Chrome (22-28 processes), 14 `claude.exe`, codex, ChatGPT, TradingView, `Video.UI.exe`, Teams and TeamViewer. This is relevant beside the unexplained level changes in check 2; it does not identify their source.
