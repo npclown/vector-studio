@@ -2613,7 +2613,36 @@ Before the fix, 11 corpus cusps had unmirrored knot triples. After it, there are
 - **M5.** `StrokeWorkspace::piece_points` returns `Option` through `get`. `piece_points_after_an_input_limit_overflow` checks that ST-F15 R3 at `e = −11` (`InputLimit`) has a piece whose points were not stored, and that the call returns `None` for it instead of panicking.
 - The dump hook and the three test callers are adapted to the `Option`.
 
-Validation: VALIDATION-PENDING
+Validation, 2026-10-21, on the merge commit `6312370`. That commit is this branch's fix commit `1c2d43f`, made on `2940bee`, with `origin/main` at `9185a07` (#178 and #176) merged in. The commands ran with `CARGO_HOME` and `RUSTUP_HOME` at the main checkout's `.tools`, with no junction.
+
+- **`pnpm test:geometry`**: PASS.
+  - The fixture generators pass, and so do `cargo fmt --check` and `clippy --all-targets -D warnings`.
+  - Native: 445 passed and 55 ignored. The 260 native intersection certificates are verified.
+  - The release WASM is identical to an independent rebuild, `66324bcf…b449`.
+  - Vitest: 51 files passed and 4 skipped; 892 tests passed and 6 skipped.
+  - Before the merge, on `1c2d43f`'s tree, it also passed: 443 native, the same WASM hash, and 892 Vitest tests.
+- **`vitest run --config vitest.geometry.config.ts tests/geometry/stroke-oracle.test.ts`**, with `P2_NATIVE_RUSTUP` set: 22 of 22 passed, both before and after the merge.
+- **Corpus re-dump on the merged head**: `after.txt` is reproduced bit for bit (SHA-256 `83034d34…cb37`).
+- **`pnpm test:p3-fill-identity --base origin/main`** (`9185a07`), plain mode: PASS, run `20261020T171633Z-8ac4a78a`.
+  - The six changed existing test files are passed to `--allow-test-change`: the four stroke kernel test files, `stroke-adapter.test.ts` and `stroke-mesh-port.test.ts`.
+  - `fill_v0_revision()` is 2 on both sides.
+  - The native, WASM and WASM-vs-native digests are all equal, over 76,352 native and 6,041 WASM cases, and the coverage floors are met.
+  - Both tamper self-checks are detected. The `b0r_oracle_full` oracles pass (16 tests, 2,207 s).
+  - Release WASM: base `e2fae964…2a21`, branch `66324bcf…b449`. They differ only through the stroke code.
+  - The same run before the merge, against `2940bee`, also passed (run `20261020T161256Z-f6a8f505`).
+- **`pnpm test:p2-identity origin/main`** (base `9185a07`): PASS. The P2 output identity holds over 10,048 batches, SHA-256 `876f4a49…046f`.
+- **`pnpm check`**: PASS. Format, lint and typecheck pass, and so do the boundaries. Unit tests: 69 files and 941 tests.
+- **`pnpm build`**: PASS.
+- **Prettier with an empty ignore file** on this plan, the stroke contract and `docs/graphics-engine-architecture.md`: clean.
+- **Local link and anchor check** (scratch script, GitHub slugs) on the same three files: PASS, 0 broken.
+- **`git diff --check`**: PASS. No dependency or lockfile changed.
+- **Not run:** an independent review of this diff. It is the light tier's PR review, owed. No benchmark is claimed.
+
+Files outside the brief's list:
+
+- `stroke_dump_tests.rs`, for the `piece_points` `Option`.
+- `stroke_export.rs` and `stroke_export_tests.rs`, for the revision.
+- `docs/graphics-engine-architecture.md`: one sentence naming revision 2.
 
 ### B0 runner (light tier)
 
