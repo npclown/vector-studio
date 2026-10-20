@@ -1,12 +1,12 @@
-//! P3 B2 stroke front end for line strokes, unit ST-U3.
+//! P3 B2 stroke front end, units ST-U3 (lines) and ST-U4 (cubics).
 //!
 //! The frozen contract is `docs/plans/p3-b2-stroke-contract.md`. This module decodes a path
-//! into subpaths and remaining drawing segments (ST-S1, ST-S2), emits the outline pieces of
-//! section 4.2 as positively oriented convex polygons in the order of section 4.9, and resolves
-//! their union with the unchanged `RoundedFillWorkspace` under nonzero at `tau = 2^(e-2)`,
-//! followed by V2's unchanged refinement and boundary checks (`FillScratch`). It has no export
-//! yet (ST-U5) and no cubic support yet (ST-U4): a cubic that is not zero-length is the
-//! unit-local `UnsupportedCubic` until ST-U4 replaces it.
+//! into subpaths and remaining drawing segments (ST-S1, ST-S2), classifies each cubic's
+//! stationary points exactly (section 4.6, `stroke_cubic.rs`), emits the outline pieces of
+//! section 4.2 as positively oriented convex polygons in the order of section 4.9 (cubic
+//! leaves by section 4.5, cusp disks by ST-S8), and resolves their union with the unchanged
+//! `RoundedFillWorkspace` under nonzero at `tau = 2^(e-2)`, followed by V2's unchanged
+//! refinement and boundary checks (`FillScratch`). It has no export yet (ST-U5).
 //!
 //! Arithmetic (section 4.2): binary64 `+ - * /` and `sqrt` only, plus exact `Signed`
 //! predicates and exact `orient2d`. No `sin`, `cos`, `atan2`, `hypot`, `mul_add` or `pow`.
@@ -22,6 +22,10 @@ use crate::fill_predicates::orient2d;
 use crate::geometry::{validate_path, Point, VERB_CLOSE, VERB_CUBIC, VERB_LINE, VERB_MOVE};
 use crate::line_fill::LineFillRule;
 use crate::rounded_line_fill::{RoundedFillError, RoundedFillLimits, RoundedFillWorkspace};
+use crate::stroke_cubic::{
+    classify_cubic, evaluate, measure_leaf, split_at, split_half, stationary_guard, CubicClass,
+    LeafContext, MAX_LEAF_DEPTH,
+};
 
 /// Section 7.2 path statuses. ST-U5 publishes them through `stroke_v0_*`.
 pub(crate) const STROKE_PATH_OK: u32 = 0;
@@ -46,8 +50,11 @@ pub(crate) const MAX_PIECES: usize = 512;
 pub(crate) const MAX_DISK_VERTICES: usize = 256;
 /// Largest bisection level `k` (`n = 2^(k+2)`, section 4.4).
 pub(crate) const MAX_DISK_LEVEL: u32 = 6;
-/// Piece records including dropped hulls: caps (2 per subpath), sweeps, joins, point caps.
-const MAX_PIECE_RECORDS: usize = 2 * MAX_SUBPATHS + 2 * MAX_SEGMENTS + MAX_SUBPATHS;
+/// Piece records including dropped hulls. Beyond it the path is `PieceLimit` (ST-U4: cubic
+/// leaves and their dropped hulls are bounded only by this record cap and `MAX_PIECES`).
+const MAX_PIECE_RECORDS: usize = 4_096;
+/// The depth-first leaf stack: one pending right sibling per level plus the current leaf.
+const LEAF_STACK: usize = MAX_LEAF_DEPTH as usize + 2;
 /// Section 7.5 combined stroke heap cap.
 pub(crate) const STROKE_V0_HEAP_CAP: usize = 48 * 1024 * 1024;
 
@@ -117,14 +124,12 @@ pub(crate) enum FrontEndError {
     SourceLimit,
     SegmentLimit,
     SubpathLimit,
-    /// Leaf depth (ST-U4); unused by line strokes.
+    /// A cubic leaf not accepted at depth 20 (section 4.5).
     DepthLimit,
     PieceLimit,
     DiskLimit,
     /// ST-G1 to ST-G6.
     NumericRange,
-    /// ST-U3 only: a cubic that is not zero-length, until ST-U4 lands.
-    UnsupportedCubic,
     /// A front-end invariant failure.
     Invariant,
 }
@@ -145,7 +150,6 @@ pub(crate) fn map_front_end_error(error: FrontEndError) -> Mapped {
         | FrontEndError::PieceLimit
         | FrontEndError::DiskLimit => Mapped::Path(STROKE_PATH_WORK_LIMIT),
         FrontEndError::NumericRange => Mapped::Path(STROKE_PATH_NUMERIC_RANGE),
-        FrontEndError::UnsupportedCubic => Mapped::Path(STROKE_PATH_UNSUPPORTED_GEOMETRY),
         FrontEndError::Invariant => Mapped::Internal,
     }
 }
@@ -223,12 +227,22 @@ pub(crate) struct Triple {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct Segment {
     pub(crate) subpath: usize,
-    /// Source verb ordinal: the LINE, or the CLOSE of a closing line.
+    /// Source verb ordinal: the LINE or CUBIC, or the CLOSE of a closing line.
     pub(crate) verb: usize,
+    /// End points (`P0` and `P3` of a cubic).
     pub(crate) a: Point,
     pub(crate) b: Point,
-    /// `n(d)`, the Float64 unit direction of the rounded tangent.
-    pub(crate) unit: Point,
+    pub(crate) cubic: bool,
+    /// Cubic controls `P0..P3`; a line keeps `[a, a, b, b]`.
+    pub(crate) controls: [Point; 4],
+    /// Section 4.6 classification of a cubic (`Regular` for a line).
+    pub(crate) class: CubicClass,
+    /// ST-S2 one-sided tangents as exact source point pairs `(from, to)`.
+    pub(crate) start_tangent: (Point, Point),
+    pub(crate) end_tangent: (Point, Point),
+    /// `n(d)` of the rounded start and end tangents.
+    pub(crate) start_unit: Point,
+    pub(crate) end_unit: Point,
     pub(crate) start: Triple,
     pub(crate) end: Triple,
     /// The source join that follows this segment inside its subpath, if any.
@@ -276,11 +290,17 @@ pub(crate) enum PieceKind {
     SquareCap,
     PointRound,
     PointSquare,
+    /// ST-P2, section 4.5.
+    CubicLeaf,
+    /// ST-P5 at an interior reversal or collinear turning point (ST-S8).
+    CuspDisk,
 }
 
 impl PieceKind {
     pub(crate) fn name(self) -> &'static str {
         match self {
+            Self::CubicLeaf => "cubic-leaf",
+            Self::CuspDisk => "cusp-disk",
             Self::LineSweep => "line-sweep",
             Self::Bevel => "bevel",
             Self::Miter => "miter",
@@ -311,6 +331,21 @@ pub(crate) struct Piece {
     /// Joins: `[O_in, O_out, T]` (the tip only on a miter). Square caps: `[E- + r t, E+ + r t]`.
     pub(crate) extra: [Point; 3],
     pub(crate) extra_count: usize,
+    /// Sweeps, leaves and cusp disks (ST-U4).
+    pub(crate) meta: PieceMeta,
+}
+
+/// The sweep, leaf and cusp-disk fields of a piece record (section 11.1 hand-off).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct PieceMeta {
+    /// Sweep part of a collinear cubic (0 for a line).
+    pub(crate) part: usize,
+    /// A leaf is `[index, index + 1] / 2^depth` of its subdivided range.
+    pub(crate) range: (f64, f64),
+    pub(crate) depth: u32,
+    pub(crate) index: u32,
+    /// Start and end triples of a sweep or leaf; a cusp disk's center is `samples[0].center`.
+    pub(crate) samples: [Triple; 2],
 }
 
 /// Per-path outcome.
@@ -359,6 +394,15 @@ pub(crate) struct StrokeDefects {
     /// ST-D14: tip guard ST-G3 skipped.
     #[cfg(test)]
     pub(crate) skip_tip_guard: bool,
+    /// ST-D6 (ST-U4): the user join applied at generated knots between cubic leaves.
+    #[cfg(test)]
+    pub(crate) knot_join: bool,
+    /// ST-D7 (ST-U4): cusp disks omitted.
+    #[cfg(test)]
+    pub(crate) omit_cusp_disk: bool,
+    /// ST-D8 (ST-U4): the leaf test with factor 2 instead of 4.
+    #[cfg(test)]
+    pub(crate) leaf_factor_two: bool,
 }
 
 #[cfg(test)]
@@ -384,6 +428,9 @@ impl StrokeDefects {
     defect!(fill_tolerance);
     defect!(clockwise_piece);
     defect!(skip_tip_guard);
+    defect!(knot_join);
+    defect!(omit_cusp_disk);
+    defect!(leaf_factor_two);
 }
 
 #[cfg(not(test))]
@@ -432,11 +479,25 @@ impl StrokeDefects {
     fn skip_tip_guard(self) -> bool {
         false
     }
+    #[inline(always)]
+    fn knot_join(self) -> bool {
+        false
+    }
+    #[inline(always)]
+    fn omit_cusp_disk(self) -> bool {
+        false
+    }
+    #[inline(always)]
+    fn leaf_factor_two(self) -> bool {
+        false
+    }
 }
 
 /// Tolerances of one request (section 3), built from exponent bits.
 #[derive(Clone, Copy, Debug)]
 struct Tolerances {
+    /// `2^e`, the curve share and the leaf test's bound (section 4.5).
+    full: f64,
     /// `2^(e-1)`, the ST-G3 requirement.
     half: f64,
     /// `2^(e-2)`, the arc share and the arrangement tolerance.
@@ -448,6 +509,7 @@ struct Tolerances {
 impl Tolerances {
     fn new(exponent: i32) -> Self {
         Self {
+            full: power_of_two(exponent),
             half: power_of_two(exponent - 1),
             quarter: power_of_two(exponent - 2),
             sixteenth: power_of_two(exponent - 4),
@@ -471,6 +533,11 @@ pub(crate) struct StrokeWorkspace {
     emitted: usize,
     extra: [Point; 3],
     extra_count: usize,
+    meta: PieceMeta,
+    /// Depth-first leaf stack: controls, depth, index.
+    leaf_stack: Vec<LeafEntry>,
+    /// ST-G1 `g_off` of the current path.
+    g_off: f64,
     rounded: RoundedFillWorkspace,
     scratch: FillScratch,
     front_bytes: usize,
@@ -478,6 +545,24 @@ pub(crate) struct StrokeWorkspace {
     defects: StrokeDefects,
     #[cfg(test)]
     last_tau: Option<f64>,
+    #[cfg(test)]
+    last_error: Option<StrokeError>,
+}
+
+type LeafEntry = ([Point; 4], u32, u32);
+
+/// One subdivided parameter range of a cubic (section 4.5).
+#[derive(Clone, Copy, Debug)]
+struct LeafRange {
+    controls: [Point; 4],
+    range: (f64, f64),
+    /// The controls come from the split at an interior reversal.
+    split: bool,
+    stationary_start: bool,
+    stationary_end: bool,
+    /// The source triple at a range end that is a segment end.
+    source_start: Option<Triple>,
+    source_end: Option<Triple>,
 }
 
 fn reserve<T>(capacity: usize) -> Result<Vec<T>, u32> {
@@ -491,8 +576,24 @@ fn reserve<T>(capacity: usize) -> Result<Vec<T>, u32> {
 impl StrokeWorkspace {
     /// Reserves every buffer from `STROKE_V0_LIMITS`; `Err(batch status)` on refusal.
     pub(crate) fn new() -> Result<Self, u32> {
-        let rounded = RoundedFillWorkspace::new(STROKE_V0_LIMITS).map_err(construction_status)?;
-        let (scratch, scratch_bytes) = FillScratch::reserve(STROKE_V0_LIMITS)?;
+        let workspace = Self::reserved(STROKE_V0_LIMITS)?;
+        let total = workspace.allocated_bytes().ok_or(BATCH_INTERNAL_ERROR)?;
+        if total > STROKE_V0_HEAP_CAP {
+            return Err(BATCH_INTERNAL_ERROR);
+        }
+        Ok(workspace)
+    }
+
+    /// Test-only arrangement limits wider than `STROKE_V0_LIMITS` (same input-vertex cap),
+    /// used to observe what an arrangement-limited fixture needs; never a production value.
+    #[cfg(test)]
+    pub(crate) fn with_limits(limits: RoundedFillLimits) -> Result<Self, u32> {
+        Self::reserved(limits)
+    }
+
+    fn reserved(limits: RoundedFillLimits) -> Result<Self, u32> {
+        let rounded = RoundedFillWorkspace::new(limits).map_err(construction_status)?;
+        let (scratch, scratch_bytes) = FillScratch::reserve(limits)?;
         let mut workspace = Self {
             subpaths: reserve(MAX_SUBPATHS)?,
             segments: reserve(MAX_SEGMENTS)?,
@@ -506,6 +607,9 @@ impl StrokeWorkspace {
             emitted: 0,
             extra: [Point::default(); 3],
             extra_count: 0,
+            meta: PieceMeta::default(),
+            leaf_stack: reserve(LEAF_STACK)?,
+            g_off: 0.0,
             rounded,
             scratch,
             front_bytes: 0,
@@ -513,6 +617,8 @@ impl StrokeWorkspace {
             defects: StrokeDefects::default(),
             #[cfg(test)]
             last_tau: None,
+            #[cfg(test)]
+            last_error: None,
         };
         workspace.front_bytes = [
             workspace.subpaths.capacity() * size_of::<Subpath>(),
@@ -522,14 +628,11 @@ impl StrokeWorkspace {
             workspace.piece_points.capacity() * size_of::<Point>(),
             workspace.candidates.capacity() * size_of::<Point>(),
             workspace.hull.capacity() * size_of::<Point>(),
+            workspace.leaf_stack.capacity() * size_of::<LeafEntry>(),
         ]
         .into_iter()
         .try_fold(0usize, usize::checked_add)
         .ok_or(BATCH_INTERNAL_ERROR)?;
-        let total = workspace.allocated_bytes().ok_or(BATCH_INTERNAL_ERROR)?;
-        if total > STROKE_V0_HEAP_CAP {
-            return Err(BATCH_INTERNAL_ERROR);
-        }
         Ok(workspace)
     }
 
@@ -581,6 +684,11 @@ impl StrokeWorkspace {
     }
 
     #[cfg(test)]
+    pub(crate) fn last_error(&self) -> Option<StrokeError> {
+        self.last_error
+    }
+
+    #[cfg(test)]
     pub(crate) fn last_tau(&self) -> Option<f64> {
         self.last_tau
     }
@@ -601,9 +709,13 @@ impl StrokeWorkspace {
         self.vertex_total = 0;
         self.emitted = 0;
         self.extra_count = 0;
+        self.meta = PieceMeta::default();
+        self.leaf_stack.clear();
+        self.g_off = 0.0;
         #[cfg(test)]
         {
             self.last_tau = None;
+            self.last_error = None;
         }
     }
 
@@ -651,6 +763,10 @@ impl StrokeWorkspace {
         match self.front_end(request, input, tolerances) {
             Ok(()) => {}
             Err(error) => {
+                #[cfg(test)]
+                {
+                    self.last_error = Some(error);
+                }
                 let mapped = match error {
                     StrokeError::Front(error) => map_front_end_error(error),
                     StrokeError::Rounded(error) => map_rounded_error(error),
@@ -685,6 +801,10 @@ impl StrokeWorkspace {
             self.rounded
                 .tessellate(&references[..contours], LineFillRule::Nonzero, tau)
         {
+            #[cfg(test)]
+            {
+                self.last_error = Some(StrokeError::Rounded(error));
+            }
             return match map_rounded_error(error) {
                 Mapped::Path(status) => Ok(StrokeOutcome::Status(status)),
                 Mapped::Internal => Err(SelfCheckFailure),
@@ -732,6 +852,9 @@ impl StrokeWorkspace {
         if g_off > tolerances.sixteenth {
             return Err(StrokeError::Front(FrontEndError::NumericRange));
         }
+        self.g_off = g_off;
+        self.classify_cubics(tolerances)
+            .map_err(StrokeError::Front)?;
         self.build_triples(r).map_err(StrokeError::Front)?;
         self.classify_joins().map_err(StrokeError::Front)?;
         self.emit(request, r, tolerances)
@@ -797,8 +920,9 @@ impl StrokeWorkspace {
                     self.push_source(p2)?;
                     self.push_source(p3)?;
                     self.mark_drawing()?;
-                    if !(same(current, p1) && same(current, p2) && same(current, p3)) {
-                        return Err(FrontEndError::UnsupportedCubic);
+                    let zero_length = same(current, p1) && same(current, p2) && same(current, p3);
+                    if keep_zero || !zero_length {
+                        self.push_cubic(current, p1, p2, p3, ordinal)?;
                     }
                     current = p3;
                 }
@@ -833,22 +957,84 @@ impl StrokeWorkspace {
     }
 
     fn push_segment(&mut self, a: Point, b: Point, verb: usize) -> Result<(), FrontEndError> {
+        self.push(Segment {
+            verb,
+            a,
+            b,
+            controls: [a, a, b, b],
+            start_tangent: (a, b),
+            end_tangent: (a, b),
+            ..Segment::default()
+        })
+    }
+
+    /// A remaining cubic with its ST-S2 tangents: the start tangent is the first nonzero of
+    /// `P1 - P0`, `P2 - P0`, `P3 - P0`, the end tangent the first nonzero of `P3 - P2`,
+    /// `P3 - P1`, `P3 - P0` (exact differences, so "nonzero" is "a different point").
+    fn push_cubic(
+        &mut self,
+        p0: Point,
+        p1: Point,
+        p2: Point,
+        p3: Point,
+        verb: usize,
+    ) -> Result<(), FrontEndError> {
+        let start = [p1, p2, p3]
+            .into_iter()
+            .find(|point| !same(*point, p0))
+            .unwrap_or(p0);
+        let end = [p2, p1, p0]
+            .into_iter()
+            .find(|point| !same(*point, p3))
+            .unwrap_or(p3);
+        self.push(Segment {
+            verb,
+            a: p0,
+            b: p3,
+            cubic: true,
+            controls: [p0, p1, p2, p3],
+            start_tangent: (p0, start),
+            end_tangent: (end, p3),
+            ..Segment::default()
+        })
+    }
+
+    fn push(&mut self, mut segment: Segment) -> Result<(), FrontEndError> {
         if self.segments.len() >= MAX_SEGMENTS {
             return Err(FrontEndError::SegmentLimit);
         }
-        let subpath = self
+        segment.subpath = self
             .subpaths
             .len()
             .checked_sub(1)
             .ok_or(FrontEndError::Invariant)?;
-        self.segments.push(Segment {
-            subpath,
-            verb,
-            a,
-            b,
-            ..Segment::default()
-        });
-        self.subpaths[subpath].segment_count += 1;
+        self.subpaths[segment.subpath].segment_count += 1;
+        self.segments.push(segment);
+        Ok(())
+    }
+
+    /// Section 4.6 for every remaining cubic, with ST-G5 at each reversal and turning point.
+    fn classify_cubics(&mut self, tolerances: Tolerances) -> Result<(), FrontEndError> {
+        for segment in &mut self.segments {
+            if !segment.cubic {
+                continue;
+            }
+            if segment.controls.iter().all(|point| same(*point, segment.a)) {
+                // Only under ST-D5 (zero-length kept): the zero tangent is numeric-range.
+                return Err(FrontEndError::NumericRange);
+            }
+            segment.class = classify_cubic(segment.controls)?;
+            let stationary = match segment.class {
+                CubicClass::Cusp { .. } => true,
+                CubicClass::Collinear { count, .. } => count > 0,
+                CubicClass::Regular | CubicClass::StationaryStart | CubicClass::StationaryEnd => {
+                    false
+                }
+            };
+            if stationary && !stationary_guard(magnitude(&segment.controls), tolerances.sixteenth) {
+                return Err(FrontEndError::NumericRange);
+            }
+        }
         Ok(())
     }
 
@@ -874,18 +1060,20 @@ impl StrokeWorkspace {
     /// ST-S2 and section 4.2: unit directions and canonical sample triples.
     fn build_triples(&mut self, r: f64) -> Result<(), FrontEndError> {
         for segment in &mut self.segments {
-            let direction = Point {
-                x: segment.b.x - segment.a.x,
-                y: segment.b.y - segment.a.y,
+            let tangent_unit = |(from, to): (Point, Point)| {
+                unit_vector(Point {
+                    x: to.x - from.x,
+                    y: to.y - from.y,
+                })
             };
-            let unit = unit_vector(direction)?;
-            segment.unit = unit;
-            let offset = Point {
-                x: r * -unit.y,
-                y: r * unit.x,
+            segment.start_unit = tangent_unit(segment.start_tangent)?;
+            segment.end_unit = if segment.cubic {
+                tangent_unit(segment.end_tangent)?
+            } else {
+                segment.start_unit
             };
-            segment.start = triple(segment.a, offset);
-            segment.end = triple(segment.b, offset);
+            segment.start = triple(segment.a, offset(segment.start_unit, r));
+            segment.end = triple(segment.b, offset(segment.end_unit, r));
         }
         Ok(())
     }
@@ -939,7 +1127,11 @@ impl StrokeWorkspace {
                 self.emit_cap(request.cap, first, false, r, tolerances)?;
             }
             for index in first..=last {
-                self.emit_sweep(index)?;
+                if self.segments[index].cubic {
+                    self.emit_cubic(request, index, r, tolerances)?;
+                } else {
+                    self.emit_sweep(index)?;
+                }
                 if let Some(join) = self.segments[index].join_after {
                     self.emit_join(request, index, join, r, tolerances)?;
                 }
@@ -953,18 +1145,35 @@ impl StrokeWorkspace {
 
     fn emit_sweep(&mut self, index: usize) -> Result<(), FrontEndError> {
         let segment = self.segments[index];
+        self.emit_line_part(index, segment.start, segment.end, 0, (0.0, 1.0))
+    }
+
+    /// ST-P1 between two triples: a line, or one part of a collinear cubic.
+    fn emit_line_part(
+        &mut self,
+        index: usize,
+        start: Triple,
+        end: Triple,
+        part: usize,
+        parameters: (f64, f64),
+    ) -> Result<(), FrontEndError> {
         self.candidates.clear();
         for point in [
-            segment.start.minus,
-            segment.start.center,
-            segment.start.plus,
-            segment.end.minus,
-            segment.end.center,
-            segment.end.plus,
+            start.minus,
+            start.center,
+            start.plus,
+            end.minus,
+            end.center,
+            end.plus,
         ] {
             self.push_candidate(point)?;
         }
-        let emitted = self.emit_hull(PieceKind::LineSweep, index, 0.0, 1.0, 0)?;
+        self.meta = PieceMeta {
+            part,
+            samples: [start, end],
+            ..PieceMeta::default()
+        };
+        let emitted = self.emit_hull(PieceKind::LineSweep, index, parameters.0, parameters.1, 0)?;
         if emitted && self.defects.clockwise_piece() && index % 2 == 1 {
             if let Some(piece) = self.pieces.last() {
                 let (start, count) = (piece.start, piece.count);
@@ -975,6 +1184,247 @@ impl StrokeWorkspace {
             }
         }
         Ok(())
+    }
+
+    /// Sweep pieces of one cubic in parameter order, with each cusp disk between the leaves or
+    /// collinear parts it separates (section 4.9).
+    fn emit_cubic(
+        &mut self,
+        request: StrokeRequest,
+        index: usize,
+        r: f64,
+        tolerances: Tolerances,
+    ) -> Result<(), FrontEndError> {
+        let segment = self.segments[index];
+        let controls = segment.controls;
+        match segment.class {
+            CubicClass::Collinear { turning, count } => {
+                // Part k moves along (-1)^k times the start tangent, so its normal is
+                // (-1)^k N0; a knot triple read from the other side swaps its outer points.
+                let base = offset(segment.start_unit, r);
+                let mut start = segment.start;
+                let mut from = 0.0;
+                for (part, parameter) in turning[..count].iter().copied().enumerate() {
+                    let center = evaluate(controls, parameter);
+                    let step = if part % 2 == 0 { base } else { negate(base) };
+                    let end = triple(center, step);
+                    self.emit_line_part(index, start, end, part, (from, parameter))?;
+                    self.emit_cusp_disk(index, center, parameter, r, tolerances)?;
+                    start = Triple {
+                        minus: end.plus,
+                        center,
+                        plus: end.minus,
+                    };
+                    from = parameter;
+                }
+                self.emit_line_part(index, start, segment.end, count, (from, 1.0))
+            }
+            CubicClass::Cusp { split } => {
+                let (left, right) = split_at(controls, split);
+                self.emit_range(
+                    request,
+                    index,
+                    LeafRange {
+                        controls: left,
+                        range: (0.0, split),
+                        split: true,
+                        stationary_start: false,
+                        stationary_end: true,
+                        source_start: Some(segment.start),
+                        source_end: None,
+                    },
+                    r,
+                    tolerances,
+                )?;
+                self.emit_cusp_disk(index, left[3], split, r, tolerances)?;
+                self.emit_range(
+                    request,
+                    index,
+                    LeafRange {
+                        controls: right,
+                        range: (split, 1.0),
+                        split: true,
+                        stationary_start: true,
+                        stationary_end: false,
+                        source_start: None,
+                        source_end: Some(segment.end),
+                    },
+                    r,
+                    tolerances,
+                )
+            }
+            CubicClass::Regular | CubicClass::StationaryStart | CubicClass::StationaryEnd => self
+                .emit_range(
+                    request,
+                    index,
+                    LeafRange {
+                        controls,
+                        range: (0.0, 1.0),
+                        split: false,
+                        stationary_start: segment.class == CubicClass::StationaryStart,
+                        stationary_end: segment.class == CubicClass::StationaryEnd,
+                        source_start: Some(segment.start),
+                        source_end: Some(segment.end),
+                    },
+                    r,
+                    tolerances,
+                ),
+        }
+    }
+
+    /// ST-S8: the disk of radius `r` at a reversal or turning point (ST-D7 seeds its omission).
+    fn emit_cusp_disk(
+        &mut self,
+        index: usize,
+        center: Point,
+        parameter: f64,
+        r: f64,
+        tolerances: Tolerances,
+    ) -> Result<(), FrontEndError> {
+        if self.defects.omit_cusp_disk() {
+            return Ok(());
+        }
+        self.candidates.clear();
+        self.push_disk(center, r, tolerances)?;
+        let disk = self.candidates.len();
+        self.meta = PieceMeta {
+            samples: [
+                Triple {
+                    minus: center,
+                    center,
+                    plus: center,
+                },
+                Triple::default(),
+            ],
+            ..PieceMeta::default()
+        };
+        self.emit_hull(PieceKind::CuspDisk, index, parameter, parameter, disk)
+            .map(|_| ())
+    }
+
+    /// Section 4.5: depth-first, left-first midpoint subdivision of one range, emitting each
+    /// accepted leaf with the triples it shares with its neighbours.
+    fn emit_range(
+        &mut self,
+        request: StrokeRequest,
+        index: usize,
+        leaves: LeafRange,
+        r: f64,
+        tolerances: Tolerances,
+    ) -> Result<(), FrontEndError> {
+        let magnitude = magnitude(&self.segments[index].controls);
+        let factor = if self.defects.leaf_factor_two() {
+            2.0
+        } else {
+            4.0
+        };
+        self.leaf_stack.clear();
+        self.leaf_stack.push((leaves.controls, 0, 0));
+        // The start triple of the next leaf and its normal error bound.
+        let mut current: Option<(Triple, f64)> = leaves.source_start.map(|start| (start, 0.0));
+        while let Some((q, depth, leaf)) = self.leaf_stack.pop() {
+            let first = leaf == 0;
+            let last = u64::from(leaf) + 1 == 1u64 << depth;
+            let stationary_start = leaves.stationary_start && first;
+            let stationary_end = leaves.stationary_end && last;
+            let width = leaves.range.1 - leaves.range.0;
+            let scale = power_of_two(-(depth as i32));
+            let split_length = if leaves.split && (stationary_start || stationary_end) {
+                width * scale
+            } else {
+                0.0
+            };
+            let measure = measure_leaf(
+                q,
+                depth,
+                LeafContext {
+                    magnitude,
+                    r,
+                    full: tolerances.full,
+                    g_off: self.g_off,
+                    split_range: leaves.split,
+                    stationary_start,
+                    stationary_end,
+                    start_error: current.map(|(_, error)| error),
+                    end_fixed: last && leaves.source_end.is_some(),
+                    split_length,
+                    factor,
+                },
+            );
+            if !measure.accepted {
+                if depth >= MAX_LEAF_DEPTH {
+                    return Err(FrontEndError::DepthLimit);
+                }
+                let (left, right) = split_half(q);
+                if self.leaf_stack.len() + 2 > self.leaf_stack.capacity() {
+                    return Err(FrontEndError::Invariant);
+                }
+                self.leaf_stack.push((right, depth + 1, 2 * leaf + 1));
+                self.leaf_stack.push((left, depth + 1, 2 * leaf));
+                continue;
+            }
+            let start = match current {
+                Some((start, _)) => start,
+                None => triple(q[0], offset(unit_vector(measure.start_direction)?, r)),
+            };
+            let end = match (last, leaves.source_end) {
+                (true, Some(end)) => end,
+                _ => triple(q[3], offset(unit_vector(measure.end_direction)?, r)),
+            };
+            self.candidates.clear();
+            for point in [
+                start.minus,
+                start.center,
+                start.plus,
+                end.minus,
+                end.center,
+                end.plus,
+            ] {
+                self.push_candidate(point)?;
+            }
+            self.meta = PieceMeta {
+                part: 0,
+                range: leaves.range,
+                depth,
+                index: leaf,
+                samples: [start, end],
+            };
+            let t0 = leaves.range.0 + width * (f64::from(leaf) * scale);
+            let t1 = leaves.range.0 + width * (f64::from(leaf + 1) * scale);
+            self.emit_hull(PieceKind::CubicLeaf, index, t0, t1, 0)?;
+            if !last && self.defects.knot_join() {
+                self.emit_knot_join(request, index, end, r, tolerances)?;
+            }
+            current = Some((end, measure.end_error));
+        }
+        Ok(())
+    }
+
+    /// ST-D6 seeded defect only: the user join at a generated knot.
+    fn emit_knot_join(
+        &mut self,
+        request: StrokeRequest,
+        index: usize,
+        knot: Triple,
+        r: f64,
+        tolerances: Tolerances,
+    ) -> Result<(), FrontEndError> {
+        match request.join {
+            StrokeJoin::Round => {
+                self.candidates.clear();
+                self.push_disk(knot.center, r, tolerances)?;
+                let disk = self.candidates.len();
+                for point in [knot.center, knot.minus, knot.plus] {
+                    self.push_candidate(point)?;
+                }
+                self.set_extra(&[knot.minus, knot.plus]);
+                self.emit_hull(PieceKind::RoundJoin, index, 1.0, 1.0, disk)
+                    .map(|_| ())
+            }
+            StrokeJoin::Miter | StrokeJoin::Bevel => {
+                self.emit_bevel(index, knot.center, knot.minus, knot.minus)
+            }
+        }
     }
 
     fn emit_join(
@@ -1037,11 +1487,11 @@ impl StrokeWorkspace {
                         let keep = if forced {
                             true
                         } else if self.defects.float_miter() {
-                            float_miter(incoming.unit, outgoing.unit, request.miter_limit)
+                            float_miter(incoming.end_unit, outgoing.start_unit, request.miter_limit)
                         } else {
                             miter_kept(
-                                (incoming.a, incoming.b),
-                                (outgoing.a, outgoing.b),
+                                incoming.end_tangent,
+                                outgoing.start_tangent,
                                 request.miter_limit,
                                 self.defects.equality_bevel(),
                             )
@@ -1049,9 +1499,10 @@ impl StrokeWorkspace {
                         if !keep {
                             return self.emit_bevel(index, center, o_in, o_out);
                         }
-                        let tip = miter_tip(center, incoming.unit, outgoing.unit, right, r);
+                        let (tip, denominator) =
+                            miter_tip(center, incoming.end_unit, outgoing.start_unit, right, r);
                         if !self.defects.skip_tip_guard()
-                            && !tip_guard(center, r, request.miter_limit, tolerances)
+                            && !tip_guard(center, r, request.miter_limit, denominator, tolerances)
                         {
                             return Err(FrontEndError::NumericRange);
                         }
@@ -1111,18 +1562,20 @@ impl StrokeWorkspace {
                     .map(|_| ())
             }
             StrokeCap::Square => {
+                let unit = if end {
+                    segment.end_unit
+                } else {
+                    segment.start_unit
+                };
                 let outward = if self.defects.square_along_normal() {
                     Point {
-                        x: -segment.unit.y,
-                        y: segment.unit.x,
+                        x: -unit.y,
+                        y: unit.x,
                     }
                 } else if end {
-                    segment.unit
+                    unit
                 } else {
-                    Point {
-                        x: -segment.unit.x,
-                        y: -segment.unit.y,
-                    }
+                    negate(unit)
                 };
                 let step = Point {
                     x: r * outward.x,
@@ -1282,7 +1735,7 @@ impl StrokeWorkspace {
             return Err(FrontEndError::PieceLimit);
         }
         if self.pieces.len() >= self.pieces.capacity() {
-            return Err(FrontEndError::Invariant);
+            return Err(FrontEndError::PieceLimit);
         }
         self.emitted += 1;
         let start = self.vertex_total;
@@ -1305,8 +1758,10 @@ impl StrokeWorkspace {
             dropped: false,
             extra: self.extra,
             extra_count: self.extra_count,
+            meta: self.meta,
         });
         self.extra_count = 0;
+        self.meta = PieceMeta::default();
         Ok(true)
     }
 
@@ -1320,7 +1775,7 @@ impl StrokeWorkspace {
         disk_vertices: usize,
     ) -> Result<bool, FrontEndError> {
         if self.pieces.len() >= self.pieces.capacity() {
-            return Err(FrontEndError::Invariant);
+            return Err(FrontEndError::PieceLimit);
         }
         self.pieces.push(Piece {
             kind,
@@ -1333,8 +1788,10 @@ impl StrokeWorkspace {
             dropped: true,
             extra: self.extra,
             extra_count: self.extra_count,
+            meta: self.meta,
         });
         self.extra_count = 0;
+        self.meta = PieceMeta::default();
         Ok(false)
     }
 
@@ -1367,6 +1824,25 @@ fn add(a: Point, b: Point) -> Point {
         x: a.x + b.x,
         y: a.y + b.y,
     }
+}
+
+fn negate(a: Point) -> Point {
+    Point { x: -a.x, y: -a.y }
+}
+
+/// `fl(r N)` for the left normal `N = (-n.y, n.x)` of a unit direction `n`.
+fn offset(unit: Point, r: f64) -> Point {
+    Point {
+        x: r * -unit.y,
+        y: r * unit.x,
+    }
+}
+
+/// The largest coordinate magnitude among a segment's source controls (ST-G4, ST-G5).
+fn magnitude(controls: &[Point; 4]) -> f64 {
+    controls
+        .iter()
+        .fold(0.0f64, |m, point| m.max(point.x.abs()).max(point.y.abs()))
 }
 
 fn triple(center: Point, offset: Point) -> Triple {
@@ -1468,8 +1944,8 @@ fn exact_dot(u: ExactVector, v: ExactVector) -> Signed<LINE_LIMBS> {
 
 /// Exact turn, continuation or reversal of two line segments (section 4.3).
 fn classify(incoming: Segment, outgoing: Segment) -> JoinClass {
-    let u = exact_vector(incoming.a, incoming.b);
-    let v = exact_vector(outgoing.a, outgoing.b);
+    let u = exact_vector(incoming.end_tangent.0, incoming.end_tangent.1);
+    let v = exact_vector(outgoing.start_tangent.0, outgoing.start_tangent.1);
     match exact_cross(u, v).cmp_zero() {
         Ordering::Greater => JoinClass::TurnLeft,
         Ordering::Less => JoinClass::TurnRight,
@@ -1540,14 +2016,15 @@ fn float_miter(incoming: Point, outgoing: Point, limit: f64) -> bool {
 }
 
 /// Section 4.3 tip `T = B + r (n_in + n_out) / (1 + n_in.n_out)`, rounded per operation, with
-/// `n_in`, `n_out` the Float64 outer unit normals.
+/// `n_in`, `n_out` the Float64 outer unit normals. Also returns the computed denominator
+/// `fl(1 + d̂)`, from which ST-G3 bounds the actual miter ratio.
 pub(crate) fn miter_tip(
     center: Point,
     incoming: Point,
     outgoing: Point,
     right: bool,
     r: f64,
-) -> Point {
+) -> (Point, f64) {
     let outer = |unit: Point| {
         if right {
             Point {
@@ -1573,26 +2050,54 @@ pub(crate) fn miter_tip(
         x: sum.x / denominator,
         y: sum.y / denominator,
     };
-    Point {
-        x: center.x + r * quotient.x,
-        y: center.y + r * quotient.y,
+    (
+        Point {
+            x: center.x + r * quotient.x,
+            y: center.y + r * quotient.y,
+        },
+        denominator,
+    )
+}
+
+/// ST-U3's bound `|fl(1 + d̂) - (1 + d)| <= 14.3u` on the computed miter denominator, rounded
+/// up to `15u`.
+const DENOMINATOR_ERROR: f64 = 15.0 * UNIT;
+
+/// A certified upper bound `rho` of the actual miter ratio `1/c`, `1 + d = 2c^2`, from the
+/// computed denominator: `c^2 >= (fl(1 + d̂) - 15u)/2` when that is positive, else the user's
+/// limit `L`. A kept miter has ratio `<= L` exactly (section 4.3), so `rho <= L` always.
+fn ratio_bound(limit: f64, denominator: f64) -> f64 {
+    let lower = (denominator - DENOMINATOR_ERROR) * SLACK_DOWN;
+    if lower > 0.0 {
+        ((2.0 / lower).sqrt() * (1.0 + 1.0 / 1_099_511_627_776.0)).min(limit)
+    } else {
+        limit
     }
 }
 
-/// ST-G3 as tightened in ST-U3: a kept miter needs `L <= 2^24` and
-/// `g_tip = 64 * 2^-53 * (|B|inf + r * L^3) <= 2^(e-1)`.
-fn tip_guard(center: Point, r: f64, limit: f64, tolerances: Tolerances) -> bool {
+/// ST-G3 as tightened in ST-U3 and corrected in ST-U4 (contract dated notes): with `rho` the
+/// certified upper bound of the actual ratio, a kept miter needs `rho <= 2^24` and
+/// `g_tip = 64 * 2^-53 * (|B|inf + r * rho^3) <= 2^(e-1)`. ST-U3's proof holds with `rho` in
+/// place of `L`, because it uses only `c >= 1/L`, and `c >= 1/rho` holds as well.
+fn tip_guard(center: Point, r: f64, limit: f64, denominator: f64, tolerances: Tolerances) -> bool {
     // The limit is finite (stage 2).
-    if limit > MAX_GUARDED_MITER_LIMIT {
+    let rho = ratio_bound(limit, denominator);
+    if rho > MAX_GUARDED_MITER_LIMIT {
         return false;
     }
     let reach = center.x.abs().max(center.y.abs());
-    let g_tip = 64.0 * UNIT * (reach + r * (limit * limit * limit));
+    let g_tip = 64.0 * UNIT * (reach + r * (rho * rho * rho));
     g_tip <= tolerances.half
 }
 
-/// Test access to the private tolerance builder.
+/// Test access to the private tolerance builder; `denominator` is `fl(1 + d̂)`.
 #[cfg(test)]
-pub(crate) fn tip_guard_at(center: Point, r: f64, limit: f64, exponent: i32) -> bool {
-    tip_guard(center, r, limit, Tolerances::new(exponent))
+pub(crate) fn tip_guard_at(
+    center: Point,
+    r: f64,
+    limit: f64,
+    denominator: f64,
+    exponent: i32,
+) -> bool {
+    tip_guard(center, r, limit, denominator, Tolerances::new(exponent))
 }

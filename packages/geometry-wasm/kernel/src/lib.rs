@@ -386,6 +386,12 @@ mod stroke_dump_tests;
 mod stroke_outline;
 #[cfg(test)]
 mod stroke_outline_tests;
+// P3 B2 unit ST-U4: cubic stroke classification and leaves, private; appended for the same
+// reason as above.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+mod stroke_cubic;
+#[cfg(test)]
+mod stroke_cubic_tests;
 // P3 B2 unit ST-U3b: the B2-Q8 native scaling probe, test-only; appended for the same reason as
 // above.
 #[cfg(test)]

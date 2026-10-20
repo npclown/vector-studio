@@ -1,13 +1,15 @@
 /**
- * P3 B2 unit ST-U3: the line fixtures of `docs/plans/p3-b2-stroke-contract.md` section 11.2 as
- * dump cases, and exact mesh measurements (BigInt, binary64 values as integer multiples of
- * 2^-1074) for their literal expectations.
+ * P3 B2 units ST-U3 and ST-U4: the line and cubic fixtures of
+ * `docs/plans/p3-b2-stroke-contract.md` section 11.2 as dump cases (with ST-U4's seeded-defect
+ * runs and its synthetic folded-band fixture), and exact mesh measurements (BigInt, binary64
+ * values as integer multiples of 2^-1074) for their literal expectations.
  */
 import type { FillMesh } from '@vector-studio/contracts';
 import type { StrokeCap, StrokeCase, StrokeJoin } from './dump.js';
 
 const MOVE = 0;
 const LINE = 1;
+const CUBIC = 2;
 const CLOSE = 3;
 
 export const CAPS: readonly StrokeCap[] = ['butt', 'round', 'square'];
@@ -204,6 +206,19 @@ export function lineCases(): StrokeCase[] {
     ),
     strokeCase('ST-F24/2^30', F24, 2, 'butt', 'miter', 2 ** 30),
     strokeCase('ST-F24/4', F24, 2, 'butt', 'miter', 4),
+    // ST-U4 (ST-A0 review S2): the tip guard uses the actual ratio (sqrt 2), not L = 1e4.
+    strokeCase(
+      'ST-U4/tip-ratio',
+      [
+        ['M', 0, 0],
+        ['L', 10, 0],
+        ['L', 10, 10],
+      ],
+      20,
+      'butt',
+      'miter',
+      1e4,
+    ),
     strokeCase('ST-F26/disk-256', F1, 400, 'round', 'miter', 4),
     strokeCase('ST-F26/disk-512', F1, 1000, 'round', 'miter', 4),
   ];
@@ -224,6 +239,198 @@ export function lineCases(): StrokeCase[] {
       cases.push(
         strokeCase(`ST-F25/${turn}/${String(limit)}`, commands, 2, 'butt', 'miter', limit),
       );
+  return cases;
+}
+
+/** ST-U4: a cubic path `M(p0) C(p1)(p2)(p3)` as verbs and points. */
+export function cubicPath(controls: readonly (readonly [number, number])[]): {
+  verbs: number[];
+  points: number[];
+} {
+  const [p0, p1, p2, p3] = controls as [
+    readonly [number, number],
+    readonly [number, number],
+    readonly [number, number],
+    readonly [number, number],
+  ];
+  return { verbs: [MOVE, CUBIC], points: [...p0, ...p1, ...p2, ...p3] };
+}
+
+/** The s2 regular families R1-R6 with their stated widths (section 11.2, ST-F15). */
+export const S2_FAMILIES: readonly (readonly [string, readonly [number, number][], number])[] = [
+  [
+    'R1',
+    [
+      [0, 0],
+      [1, 0],
+      [2, 0],
+      [3, 0],
+    ],
+    2,
+  ],
+  [
+    'R2',
+    [
+      [0, 0],
+      [1, 0],
+      [2, 0],
+      [3, 0],
+    ],
+    64,
+  ],
+  [
+    'R3',
+    [
+      [0, 0],
+      [1, 0],
+      [2, 1 / 64],
+      [3, 3 / 64],
+    ],
+    2,
+  ],
+  [
+    'R4',
+    [
+      [0, 0],
+      [1, 0],
+      [2, 1 / 64],
+      [3, 3 / 64],
+    ],
+    64,
+  ],
+  [
+    'R5',
+    [
+      [0, 0],
+      [1, 1],
+      [2, -1],
+      [3, 0],
+    ],
+    2,
+  ],
+  [
+    'R6',
+    [
+      [3, -3 / 64],
+      [-1, -1 / 64],
+      [-1, 1 / 64],
+      [3, 3 / 64],
+    ],
+    2,
+  ],
+];
+
+/** The nine s2 zoom/DPR pairs and `e = floor(log2(0.125 / (zoom·DPR)))`. */
+export const S2_EXPONENTS: readonly (readonly [number, number, number])[] = [
+  [0.01, 1, 3],
+  [0.01, 2, 2],
+  [0.01, 3, 2],
+  [1, 1, -3],
+  [1, 2, -4],
+  [1, 3, -5],
+  [64, 1, -9],
+  [64, 2, -10],
+  [64, 3, -11],
+];
+
+export const F16 = cubicPath([
+  [0, 0],
+  [1, 1],
+  [0, 1],
+  [1, 0],
+]);
+export const F17 = cubicPath([
+  [3, 0],
+  [-1, 0],
+  [-1, 0],
+  [3, 0],
+]);
+export const F18 = cubicPath([
+  [0, 0],
+  [0, 0],
+  [1, 0],
+  [3, 1],
+]);
+export const F19 = cubicPath([
+  [-1, 0],
+  [1, 0],
+  [-1, 0],
+  [1, 0],
+]);
+
+/** ST-D8's folded-band case, named before its first run: R6 at zoom 1, DPR 1 (`e = -3`). */
+export const D8_CASE = 'ST-F15/R6-zoom1-dpr1';
+
+/**
+ * ST-U4's synthetic folded-band fixture for ST-D8, added because the named ST-F15 case did not
+ * expose the defect. A cubic arc of radius 1 over the angle 0.2 (`k = 4/3·tan(0.05)`, the
+ * controls rounded to binary64 once), stroked with `w = 9.94` (r = 4.97 > 1, so the inner
+ * offset folds) at `e = 0`. Expectations fixed before its first run: factor 4 gives `ok` with
+ * exactly two leaves of depth 1 and ST-O1 passes; factor 2 (ST-D8) accepts the whole arc as one
+ * leaf of depth 0, and ST-O1 rejects it.
+ */
+export const FOLDED_ARC = cubicPath([
+  [0.9950041652780257, -0.09983341664682815],
+  [1.001665278240658, -0.03344447228510901],
+  [1.001665278240658, 0.03344447228510901],
+  [0.9950041652780257, 0.09983341664682815],
+]);
+export const FOLDED_ARC_WIDTH = 9.94;
+
+function cubicCase(
+  name: string,
+  path: { verbs: number[]; points: number[] },
+  width: number,
+  cap: StrokeCap,
+  exponent: number,
+  flags: StrokeCase['flags'] = [],
+): StrokeCase {
+  return { name, ...path, width, cap, join: 'miter', miterLimit: 4, exponent, flags };
+}
+
+/** Every ST-U4 dump case: the cubic fixtures ST-F15 to ST-F20 and the defect runs. */
+export function cubicCases(): StrokeCase[] {
+  const cases: StrokeCase[] = [];
+  for (const [family, controls, width] of S2_FAMILIES)
+    for (const [zoom, dpr, exponent] of S2_EXPONENTS)
+      cases.push(
+        cubicCase(
+          `ST-F15/${family}-zoom${String(zoom)}-dpr${String(dpr)}`,
+          cubicPath(controls),
+          width,
+          'butt',
+          exponent,
+        ),
+      );
+  cases.push(
+    cubicCase('ST-F16', F16, 0.125, 'butt', -8),
+    cubicCase('ST-F16/wide', F16, 0.125, 'butt', -8, ['wide']),
+    // ST-F16p (ST-U4, ST-A0 review): ST-F16's curve at e = -5, expected `ok` at production
+    // limits with one cusp disk at t = 1/2, center (0.5, 0.75), n = 8, and (0.5, 0.8) inside.
+    cubicCase('ST-F16p', F16, 0.125, 'butt', -5),
+  );
+  for (const cap of CAPS) cases.push(cubicCase(`ST-F17/${cap}`, F17, 2, cap, -3));
+  cases.push(cubicCase('ST-F18', F18, 2, 'square', -3), cubicCase('ST-F19', F19, 2, 'butt', -3));
+  for (const cap of CAPS) {
+    cases.push(
+      cubicCase(`ST-F20/endpoint-${cap}`, F18, 2, cap, -3),
+      cubicCase(`ST-F20/reversal-${cap}`, F17, 2, cap, -3),
+      cubicCase(`ST-F20/continuation-${cap}`, F19, 2, cap, -3),
+    );
+  }
+  cases.push(cubicCase('ST-U4/folded-arc', FOLDED_ARC, FOLDED_ARC_WIDTH, 'butt', 0));
+  // Seeded defects ST-D6 to ST-D8 (section 11.3) with their controls above.
+  const r3 = S2_FAMILIES[2]!;
+  const r6 = S2_FAMILIES[5]!;
+  cases.push(
+    cubicCase('ST-D6/ST-F16', F16, 0.125, 'butt', -8, ['wide', 'knot-join']),
+    cubicCase('ST-D6/ST-F15/R3-zoom1-dpr3', cubicPath(r3[1]), r3[2], 'butt', -5, ['knot-join']),
+    cubicCase('ST-D7/ST-F16', F16, 0.125, 'butt', -8, ['wide', 'omit-cusp-disk']),
+    cubicCase(`ST-D8/${D8_CASE}`, cubicPath(r6[1]), r6[2], 'butt', -3, ['leaf-factor-two']),
+    cubicCase('ST-D8/ST-U4/folded-arc', FOLDED_ARC, FOLDED_ARC_WIDTH, 'butt', 0, [
+      'leaf-factor-two',
+    ]),
+  );
   return cases;
 }
 
