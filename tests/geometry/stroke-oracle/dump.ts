@@ -1,7 +1,8 @@
 /**
- * P3 B2 unit ST-U3 (`docs/plans/p3-b2-stroke-contract.md` section 11.1): the `P3STKIN1` input
- * writer and the strict reader of the `emit_stroke_dump` hand-off (`P3STKDUMP1`). Every binary64
- * value travels as its 16-digit hexadecimal bit pattern, so nothing is rounded on the way.
+ * P3 B2 units ST-U3 and ST-U4 (`docs/plans/p3-b2-stroke-contract.md` section 11.1): the
+ * `P3STKIN1` input writer and the strict reader of the `emit_stroke_dump` hand-off
+ * (`P3STKDUMP1`). Every binary64 value travels as its 16-digit hexadecimal bit pattern, so nothing
+ * is rounded on the way.
  */
 import type { FillMesh } from '@vector-studio/contracts';
 import type {
@@ -15,6 +16,12 @@ export const DUMP_MAGIC = 'P3STKDUMP1';
 export type StrokeCap = 'butt' | 'round' | 'square';
 export type StrokeJoin = 'miter' | 'round' | 'bevel';
 
+/**
+ * ST-U4 test flags (the input's ninth field): seeded defects ST-D6 to ST-D8, and `wide`, which
+ * runs the case under the kernel's test-only arrangement limits `WIDE_TEST_LIMITS`.
+ */
+export type StrokeFlag = 'wide' | 'knot-join' | 'omit-cusp-disk' | 'leaf-factor-two';
+
 /** One dump case: a path and a stroke request. */
 export type StrokeCase = Readonly<{
   name: string;
@@ -25,6 +32,7 @@ export type StrokeCase = Readonly<{
   join: StrokeJoin;
   miterLimit: number;
   exponent: number;
+  flags?: readonly StrokeFlag[];
 }>;
 
 export type DumpPoint = readonly [x: number, y: number];
@@ -32,6 +40,9 @@ export type DumpTriple = readonly [minus: DumpPoint, center: DumpPoint, plus: Du
 
 export type DumpSegment = Readonly<{
   subpath: number;
+  verb: number;
+  /** The cubic's class (section 4.6), or null for a line. */
+  cubic: string | null;
   a: DumpPoint;
   b: DumpPoint;
   start: DumpTriple;
@@ -53,12 +64,22 @@ export type DumpPiece = Readonly<{
   extra: readonly DumpPoint[];
   t: readonly [number, number];
   disk: number;
+  /** Collinear cubic sweep part. */
+  part: number;
+  /** Leaf range, depth and index. */
+  range: readonly [number, number];
+  depth: number;
+  index: number;
+  /** Sweep and leaf start and end triples; a cusp disk's center is `samples[0][1]`. */
+  samples: readonly [DumpTriple, DumpTriple];
   points: readonly DumpPoint[];
 }>;
 
 export type DumpEntry = Readonly<{
   name: string;
   status: string;
+  /** The failing stage of a non-ok case: the front end or the arrangement. */
+  failure: Readonly<{ stage: 'front-end' | 'arrangement'; error: string }> | null;
   subpaths: readonly Readonly<{ firstSegment: number; segmentCount: number; closed: boolean }>[];
   segments: readonly DumpSegment[];
   pieces: readonly DumpPiece[];
@@ -82,18 +103,18 @@ export function encodeInput(cases: readonly StrokeCase[]): string {
   const lines = [INPUT_MAGIC];
   for (const entry of cases) {
     if (entry.name.includes('\t') || entry.name.includes('"')) throw new Error(entry.name);
-    lines.push(
-      [
-        entry.name,
-        String(entry.exponent),
-        bitsOf(entry.width),
-        entry.cap,
-        entry.join,
-        bitsOf(entry.miterLimit),
-        entry.verbs.join(''),
-        entry.points.map(bitsOf).join(','),
-      ].join('\t'),
-    );
+    const fields = [
+      entry.name,
+      String(entry.exponent),
+      bitsOf(entry.width),
+      entry.cap,
+      entry.join,
+      bitsOf(entry.miterLimit),
+      entry.verbs.join(''),
+      entry.points.map(bitsOf).join(','),
+    ];
+    if (entry.flags && entry.flags.length > 0) fields.push(entry.flags.join(','));
+    lines.push(fields.join('\t'));
   }
   return `${lines.join('\n')}\n`;
 }
@@ -114,8 +135,10 @@ type RawSegment = Omit<DumpSegment, 'a' | 'b' | 'start' | 'end'> & {
   start: unknown;
   end: unknown;
 };
-type RawPiece = Omit<DumpPiece, 't' | 'points' | 'extra'> & {
+type RawPiece = Omit<DumpPiece, 't' | 'points' | 'extra' | 'range' | 'samples'> & {
   t: [string, string];
+  range: [string, string];
+  samples: [unknown, unknown];
   points: unknown[];
   extra: unknown[];
 };
@@ -161,9 +184,12 @@ export function parseDump(text: string): DumpEntry[] {
     return {
       name: raw.name,
       status: raw.status,
+      failure: raw.failure,
       subpaths: raw.subpaths,
       segments: raw.segments.map((segment) => ({
         subpath: segment.subpath,
+        verb: segment.verb,
+        cubic: segment.cubic,
         a: point(segment.a),
         b: point(segment.b),
         start: triple(segment.start),
@@ -179,6 +205,11 @@ export function parseDump(text: string): DumpEntry[] {
         extra: piece.extra.map(point),
         t: [fromBits(piece.t[0]), fromBits(piece.t[1])] as const,
         disk: piece.disk,
+        part: piece.part,
+        range: [fromBits(piece.range[0]), fromBits(piece.range[1])] as const,
+        depth: piece.depth,
+        index: piece.index,
+        samples: [triple(piece.samples[0]), triple(piece.samples[1])] as const,
         points: piece.points.map(point),
       })),
       mesh: raw.mesh === null ? null : mesh(raw.mesh),
@@ -211,24 +242,42 @@ export function oraclePieces(entry: DumpEntry, source: StrokeCase): StrokeDumpPi
   return entry.pieces.map((piece): StrokeDumpPiece => {
     const polygon = piece.dropped ? null : piece.points;
     switch (piece.kind) {
-      case 'line-sweep': {
-        const segment = entry.segments[piece.segment]!;
+      case 'line-sweep':
         return {
           kind: 'line-sweep',
           verb: piece.verb,
-          part: 0,
-          start: sample(segment.start),
-          end: sample(segment.end),
+          part: piece.part,
+          start: sample(piece.samples[0]),
+          end: sample(piece.samples[1]),
           polygon,
         };
-      }
+      case 'cubic-leaf':
+        return {
+          kind: 'cubic-leaf',
+          verb: piece.verb,
+          rangeStart: piece.range[0],
+          rangeEnd: piece.range[1],
+          depth: piece.depth,
+          index: piece.index,
+          start: sample(piece.samples[0]),
+          end: sample(piece.samples[1]),
+          polygon,
+        };
+      case 'cusp-disk':
+        return {
+          kind: 'cusp-disk',
+          verb: piece.verb,
+          parameter: piece.t[0],
+          center: piece.samples[0][1],
+          polygon,
+        };
       case 'bevel':
       case 'miter':
       case 'round-join':
         return {
           kind: 'join',
           incomingVerb: piece.verb,
-          outgoingVerb: piece.nextVerb!,
+          outgoingVerb: piece.nextVerb ?? -1,
           join: piece.kind === 'round-join' ? 'round' : piece.kind,
           outerIn: piece.extra[0]!,
           outerOut: piece.extra[1]!,

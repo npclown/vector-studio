@@ -102,6 +102,12 @@ impl TestPath {
         self
     }
 
+    fn c(mut self, controls: [f64; 6]) -> Self {
+        self.verbs.push(2);
+        self.points.extend(controls);
+        self
+    }
+
     fn z(mut self) -> Self {
         self.verbs.push(CLOSE);
         self
@@ -1214,4 +1220,58 @@ fn p2_v1_verb_limit_paths_are_work_limit() {
     let path = long_lines(1, 65_537).exponent(0);
     assert_eq!(path.verbs.len(), 65_538);
     assert_eq!(status_of(path), STROKE_PATH_WORK_LIMIT);
+}
+
+#[test]
+fn former_interim_cubics_are_ok_through_the_export() {
+    // ST-U3 returned its interim `unsupported-geometry` for any cubic that is not zero-length;
+    // since ST-U4 these reach the export as meshes. ST-F16p (cusp; ST-F16's curve at e = -5),
+    // ST-F17 (collinear reversal) and ST-F19 (collinear continuation, exact area 4), each
+    // through the export and equal to the workspace's mesh.
+    let cases = [
+        TestPath::new(1)
+            .m(0.0, 0.0)
+            .c([1.0, 1.0, 0.0, 1.0, 1.0, 0.0])
+            .width(0.125)
+            .exponent(-5),
+        TestPath::new(2)
+            .m(3.0, 0.0)
+            .c([-1.0, 0.0, -1.0, 0.0, 3.0, 0.0]),
+        TestPath::new(3)
+            .m(-1.0, 0.0)
+            .c([1.0, 0.0, -1.0, 0.0, 1.0, 0.0]),
+    ];
+    let decoded = run(&cases);
+    let mut workspace = StrokeWorkspace::new().unwrap();
+    for (path, mesh) in cases.iter().zip(&decoded) {
+        assert_eq!(mesh.status, STROKE_PATH_OK, "path {}", path.id);
+        assert_ne!(mesh.status, STROKE_PATH_UNSUPPORTED_GEOMETRY);
+        assert_eq!(
+            workspace.build(path.request(), &path.verbs, &path.point_bytes()),
+            Ok(StrokeOutcome::Mesh)
+        );
+        let (vertices, triangles, _) = workspace.mesh().unwrap();
+        assert_eq!(mesh.positions.len(), 2 * vertices.len());
+        assert_eq!(mesh.indices, triangles);
+    }
+    assert_area(
+        &decoded[1],
+        6.0 + HALF_SIXTEEN_GON,
+        CLOSE_AREA,
+        "ST-F17 butt",
+    );
+    assert_area(&decoded[2], 4.0, 0.0, "ST-F19");
+    // ST-F16 itself (e = -8) is a labelled current-cap fixture since the 2026-10-20 decision:
+    // `work-limit` at STROKE_V0_LIMITS, never `unsupported-geometry`.
+    let f16 = TestPath::new(5)
+        .m(0.0, 0.0)
+        .c([1.0, 1.0, 0.0, 1.0, 1.0, 0.0])
+        .width(0.125)
+        .exponent(-8);
+    assert_eq!(status_of(f16), STROKE_PATH_WORK_LIMIT);
+    // ST-U3's own interim fixture (w = 2, e = -3) is now also a current-cap `work-limit`.
+    let interim = TestPath::new(4)
+        .m(0.0, 0.0)
+        .c([1.0, 1.0, 0.0, 1.0, 1.0, 0.0]);
+    assert_eq!(status_of(interim), STROKE_PATH_WORK_LIMIT);
 }

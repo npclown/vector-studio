@@ -1,14 +1,16 @@
 /**
- * P3 B2 unit ST-U3 (`docs/plans/p3-b2-stroke-contract.md` sections 11.1 and 11.2): the line
- * fixtures through the oracle hand-off. It writes a `P3STKIN1` input, runs the ignored Rust test
- * `emit_stroke_dump` with the pinned toolchain, and checks every literal expectation of the
- * line fixtures on the dumped meshes: V2's mesh checks on every `ok` (ST-O3), the exact region
- * against the ideal union where the ideal pieces are exact polygons (ST-O4), areas, bounds,
- * statuses, piece kinds, triples and named-point membership (ST-O5).
+ * P3 B2 units ST-U3 and ST-U4 (`docs/plans/p3-b2-stroke-contract.md` sections 11.1 and 11.2):
+ * the line and cubic fixtures through the oracle hand-off. It writes a `P3STKIN1` input, runs
+ * the ignored Rust test `emit_stroke_dump` with the pinned toolchain, and checks every literal
+ * expectation of the fixtures on the dumped meshes: V2's mesh checks on every `ok` (ST-O3), the
+ * exact region against the ideal union where the ideal pieces are exact polygons (ST-O4), areas,
+ * bounds, statuses, piece kinds, triples and named-point membership (ST-O5).
  *
  * ST-O1 to ST-O4 of the independent oracle of ST-U2
  * (`packages/geometry-reference/src/stroke-region.ts`) run on every dumped `ok` and `empty`
- * case. Precision is UNVERIFIED against the 0.25 physical-pixel target until B4.
+ * case, and ST-O1 and ST-O2 also on cubic cases whose front end completed before the
+ * arrangement stopped them. Precision is UNVERIFIED against the 0.25 physical-pixel target
+ * until B4.
  */
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -20,6 +22,7 @@ import {
   checkStrokeInventory,
   checkStrokePieceBounds,
   checkStrokeResolution,
+  classifyStrokeSource,
   idealStrokeExactArea,
   type Point,
   type StrokeOracleSource,
@@ -37,6 +40,8 @@ import {
   boundaryLoops,
   CAPS,
   contains,
+  cubicCases,
+  D8_CASE,
   F25_LIMITS,
   F25_TURNS,
   HALF_SIXTEEN_GON,
@@ -120,7 +125,7 @@ beforeAll(() => {
   directory = mkdtempSync(path.join(tmpdir(), 'p3-stroke-oracle-'));
   const input = path.join(directory, 'input.txt');
   const dump = path.join(directory, 'dump.txt');
-  writeFileSync(input, encodeInput(lineCases()));
+  writeFileSync(input, encodeInput([...lineCases(), ...cubicCases()]));
   runDump(input, dump);
   entries = new Map(parseDump(readFileSync(dump, 'utf8')).map((entry) => [entry.name, entry]));
 }, 900_000);
@@ -156,7 +161,7 @@ function kinds(name: string): string[] {
 
 describe('ST-U3 line strokes through the dump hand-off', () => {
   it('dumps every case and every ok mesh passes the V2 mesh checks (ST-O3)', () => {
-    expect(entries.size).toBe(lineCases().length);
+    expect(entries.size).toBe(lineCases().length + cubicCases().length);
     for (const found of entries.values()) {
       expect(found.status, found.name).not.toBe('internal-error');
       if (found.status === 'ok') expect(checkFillMesh(found.mesh!), found.name).toEqual([]);
@@ -206,7 +211,7 @@ describe('ST-U3 line strokes through the dump hand-off', () => {
       }
     }
     expect(failures).toEqual([]);
-    expect(checked).toBe(64);
+    expect(checked).toBe(65);
     expect(exactRegions).toBeGreaterThan(0);
   });
 
@@ -334,6 +339,15 @@ describe('ST-U3 line strokes through the dump hand-off', () => {
     expect(kinds('ST-F24/4')).toContain('bevel');
   });
 
+  it('ST-U4 tip guard: a kept sqrt-2 miter with L = 1e4 is ok (actual ratio, not L)', () => {
+    expect(kinds('ST-U4/tip-ratio')).toEqual(['line-sweep', 'miter', 'line-sweep']);
+    expectRegion(
+      'ST-U4/tip-ratio',
+      [rectangle(0, -10, 10, 10), rectangle(0, 0, 20, 10), rectangle(10, -10, 20, 0)],
+      400,
+    );
+  });
+
   it('ST-F25: miter exactly where the ratio is at most L', () => {
     for (const [turn, , ratio] of F25_TURNS)
       for (const limit of F25_LIMITS) {
@@ -350,4 +364,215 @@ describe('ST-U3 line strokes through the dump hand-off', () => {
     expect(entry('ST-F26/disk-256').pieces.some((piece) => piece.disk === 256)).toBe(true);
     expect(entry('ST-F26/disk-512').status).toBe('work-limit');
   });
+});
+
+// ---------------------------------------------------------------------------
+// ST-U4: cubic strokes
+
+const oracleSource = (source: StrokeCase): StrokeOracleSource => ({
+  verbs: source.verbs,
+  points: source.points,
+  width: source.width,
+  cap: source.cap,
+  join: source.join,
+  miterLimit: source.miterLimit,
+  toleranceExponent: source.exponent,
+});
+
+const cubicSource = (name: string): StrokeCase => {
+  const found = cubicCases().find((source) => source.name === name);
+  if (!found) throw new Error(`no cubic case ${name}`);
+  return found;
+};
+
+/** The front end finished with stored pieces (an arrangement stop other than its input cap). */
+const frontEndComplete = (found: DumpEntry): boolean =>
+  found.status === 'ok' ||
+  found.status === 'empty' ||
+  (found.failure?.stage === 'arrangement' && found.failure.error !== 'Rounded(InputLimit)');
+
+const seeded = (name: string): boolean => name.startsWith('ST-D');
+
+/**
+ * ST-O3's union-area band costs seconds per case beyond a few dozen pieces; it runs on the `ok`
+ * cubic cases of at most 32 pieces, and every `ok` mesh gets the V2 mesh checks.
+ */
+const BAND_PIECES = 32;
+
+describe('ST-U4 cubic strokes through the dump hand-off', () => {
+  it('ST-O1 and ST-O2 on every cubic case whose front end completed', () => {
+    const failures: string[] = [];
+    const checked: string[] = [];
+    for (const source of cubicCases()) {
+      if (seeded(source.name)) continue;
+      const found = entry(source.name);
+      expect(found.status, source.name).not.toBe('internal-error');
+      if (found.status === 'ok') expect(checkFillMesh(found.mesh!), source.name).toEqual([]);
+      const pieces = oraclePieces(found, source);
+      if (frontEndComplete(found)) {
+        const bounds = checkStrokePieceBounds(oracleSource(source), pieces);
+        if (!bounds.ok) failures.push(`${source.name} ST-O1: ${bounds.findings.join('; ')}`);
+        checked.push(source.name);
+      }
+      if (frontEndComplete(found) || found.failure?.error === 'Rounded(InputLimit)') {
+        const inventory = checkStrokeInventory(oracleSource(source), pieces);
+        if (!inventory.ok) failures.push(`${source.name} ST-O2: ${inventory.findings.join('; ')}`);
+      }
+    }
+    expect(failures).toEqual([]);
+    expect(checked.length).toBeGreaterThan(40);
+  }, 900_000);
+
+  it('ST-O3 (tau band) on the ok cubic cases of at most 32 pieces, ST-O4 on ST-F19', () => {
+    const failures: string[] = [];
+    let banded = 0;
+    for (const source of cubicCases()) {
+      if (seeded(source.name)) continue;
+      const found = entry(source.name);
+      if (found.status !== 'ok' || found.pieces.length > BAND_PIECES) continue;
+      const result = checkStrokeResolution(
+        oraclePieces(found, source),
+        found.mesh!,
+        'band',
+        2 ** (source.exponent - 2),
+      );
+      if (!result.ok) failures.push(`${source.name} ST-O3: ${result.findings.join('; ')}`);
+      banded += 1;
+    }
+    const f19 = oracleSource(cubicSource('ST-F19'));
+    expect(idealStrokeExactArea(f19)).not.toBeNull();
+    const exact = checkStrokeExactRegion(f19, okMesh('ST-F19'));
+    if (!exact.ok) failures.push(`ST-F19 ST-O4: ${exact.findings.join('; ')}`);
+    expect(failures).toEqual([]);
+    expect(banded).toBeGreaterThan(30);
+  }, 900_000);
+
+  it('ST-F15: R1 and R2 ok at every e, R3 and R4 ok at e = -3, the rest ok or work-limit', () => {
+    const listed: string[] = [];
+    for (const source of cubicCases()) {
+      if (!source.name.startsWith('ST-F15/')) continue;
+      const found = entry(source.name);
+      const family = source.name.slice('ST-F15/'.length, 'ST-F15/'.length + 2);
+      const required =
+        family === 'R1' ||
+        family === 'R2' ||
+        (source.exponent === -3 && (family === 'R3' || family === 'R4'));
+      if (required) expect(found.status, source.name).toBe('ok');
+      else expect(['ok', 'work-limit'], source.name).toContain(found.status);
+      if (found.status === 'work-limit')
+        listed.push(`${source.name}: ${found.failure?.error ?? ''}`);
+    }
+    // The listed work-limit cases (ST-A3), recorded in the plan entry.
+    expect(listed).toHaveLength(16);
+  });
+
+  it('ST-F16: one reversal at t* = 1/2, cusp center (0.5, 0.75), n = 32, (0.5, 0.8) inside', () => {
+    // STROKE_V0_LIMITS: the arrangement's node cap stops ST-F16 after a complete front end
+    // (its expected status by user decision, 2026-10-20; contract dated note).
+    expect(entry('ST-F16').status).toBe('work-limit');
+    expect(entry('ST-F16').failure).toEqual({
+      stage: 'arrangement',
+      error: 'Rounded(NodeLimit)',
+    });
+    // The literal expectation under the kernel's test-only wide arrangement limits.
+    const classes = classifyStrokeSource(oracleSource(cubicSource('ST-F16'))).cubics;
+    expect(classes.map((cubic) => [cubic.kind, cubic.stationary?.value])).toEqual([['cusp', 0.5]]);
+    const found = entry('ST-F16/wide');
+    expect(found.segments[0]!.cubic).toBe('cusp');
+    const disks = found.pieces.filter((piece) => piece.kind === 'cusp-disk');
+    expect(disks).toHaveLength(1);
+    expect(disks[0]!.t[0]).toBe(0.5);
+    expect(disks[0]!.samples[0][1]).toEqual([0.5, 0.75]);
+    expect(disks[0]!.disk).toBe(32);
+    expect(contains(okMesh('ST-F16/wide'), 0.5, 0.8)).toBe(true);
+  });
+
+  it('ST-F16p: the cusp disk at production limits (e = -5, n = 8)', () => {
+    // Literal fixed before the first run (ST-A0 review): ok at STROKE_V0_LIMITS, one cusp disk
+    // at t = 1/2 with center exactly (0.5, 0.75) and n = 8, (0.5, 0.8) inside.
+    const found = entry('ST-F16p');
+    expect(found.status).toBe('ok');
+    expect(found.segments[0]!.cubic).toBe('cusp');
+    const disks = found.pieces.filter((piece) => piece.kind === 'cusp-disk');
+    expect(disks).toHaveLength(1);
+    expect(disks[0]!.t[0]).toBe(0.5);
+    expect(disks[0]!.samples[0][1]).toEqual([0.5, 0.75]);
+    expect(disks[0]!.disk).toBe(8);
+    expect(contains(okMesh('ST-F16p'), 0.5, 0.8)).toBe(true);
+  });
+
+  it('ST-F17 to ST-F20: collinear reversal and continuation, stationary start', () => {
+    expectArea('ST-F17/butt', 6 + HALF_SIXTEEN_GON);
+    expectArea('ST-F17/square', 8 + HALF_SIXTEEN_GON);
+    expectArea('ST-F17/round', 6 + SIXTEEN_GON);
+    for (const cap of CAPS) {
+      const disks = entry(`ST-F17/${cap}`).pieces.filter((piece) => piece.kind === 'cusp-disk');
+      expect(
+        disks.map((piece) => piece.samples[0][1]),
+        cap,
+      ).toEqual([[0, 0]]);
+    }
+    const f18 = okMesh('ST-F18');
+    // Start tangent (1, 0): the start triple is (0, -1), (0, 0), (0, 1).
+    expect(entry('ST-F18').segments[0]!.start).toEqual([
+      [0, -1],
+      [0, 0],
+      [0, 1],
+    ]);
+    expect(contains(f18, -0.9, 0.9)).toBe(true);
+    expect(contains(f18, -1.1, 0)).toBe(false);
+    expect(contains(f18, -0.5, 1.1)).toBe(false);
+    expectRegion('ST-F19', [rectangle(-1, -1, 1, 1)], 4);
+    expect(okMesh('ST-F19').bounds).toEqual({ minX: -1, minY: -1, maxX: 1, maxY: 1 });
+    expect(kinds('ST-F19')).toEqual(['line-sweep']);
+    for (const cap of CAPS)
+      for (const [probe, kind] of [
+        ['endpoint', 'endpoint-stationary'],
+        ['reversal', 'collinear'],
+        ['continuation', 'collinear'],
+      ] as const) {
+        const name = `ST-F20/${probe}-${cap}`;
+        okMesh(name);
+        expect(entry(name).segments[0]!.cubic, name).toBe(kind);
+        const oracle = classifyStrokeSource(oracleSource(cubicSource(name))).cubics[0]!;
+        expect(oracle.kind, name).toBe(kind);
+        expect(oracle.turningPoints.length, name).toBe(probe === 'reversal' ? 1 : 0);
+      }
+  });
+
+  it('seeded defects ST-D6 to ST-D8 fail their named checks; the controls pass', () => {
+    const check = (name: string) => {
+      const source = cubicSource(name);
+      const pieces = oraclePieces(entry(name), source);
+      return {
+        bounds: checkStrokePieceBounds(oracleSource(source), pieces).ok,
+        inventory: checkStrokeInventory(oracleSource(source), pieces).ok,
+      };
+    };
+    const control = check;
+    // ST-D6: the user join at generated knots, rejected by ST-O2 on ST-F15 and ST-F16.
+    for (const [name, clean] of [
+      ['ST-D6/ST-F16', 'ST-F16/wide'],
+      ['ST-D6/ST-F15/R3-zoom1-dpr3', 'ST-F15/R3-zoom1-dpr3'],
+    ] as const) {
+      expect(control(clean).inventory, clean).toBe(true);
+      expect(check(name).inventory, name).toBe(false);
+    }
+    // ST-D7: the cusp disk omitted, rejected by ST-F16's membership and by ST-O2.
+    expect(contains(okMesh('ST-D7/ST-F16'), 0.5, 0.8)).toBe(false);
+    expect(check('ST-D7/ST-F16').inventory).toBe(false);
+    // ST-D8: the named ST-F15 case does not expose factor 2 (ST-O1 still passes; recorded) ...
+    expect(control(D8_CASE).bounds).toBe(true);
+    expect(check(`ST-D8/${D8_CASE}`).bounds).toBe(true);
+    // ... so the synthetic folded-band fixture does: factor 4 gives two depth-1 leaves that
+    // ST-O1 accepts, factor 2 one depth-0 leaf that ST-O1 rejects.
+    expect(control('ST-U4/folded-arc').bounds).toBe(true);
+    expect(check('ST-D8/ST-U4/folded-arc').bounds).toBe(false);
+    const depths = (name: string) =>
+      entry(name)
+        .pieces.filter((piece) => piece.kind === 'cubic-leaf')
+        .map((piece) => piece.depth);
+    expect(depths('ST-U4/folded-arc')).toEqual([1, 1]);
+    expect(depths('ST-D8/ST-U4/folded-arc')).toEqual([0]);
+  }, 900_000);
 });
