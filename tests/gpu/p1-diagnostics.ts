@@ -51,7 +51,19 @@ export function collectP1Diagnostics(page: Page): P1PageDiagnostics {
         );
       // The normal path: the global is defined once `goto` resolves, so this returns at once and
       // a passing run behaves as before this helper existed.
-      if (await defined()) return;
+      let present: boolean;
+      try {
+        present = await defined();
+      } catch (error) {
+        // For example "Execution context was destroyed": fail as before, with the log attached.
+        throw new Error(
+          `checking window.__vectorStudioP1 after navigation threw (url ${page.url()}): ` +
+            `${error instanceof Error ? error.message : String(error)}\n` +
+            `Collected diagnostics (${entries.length}):\n${entries.join('\n') || '(none)'}`,
+          { cause: error },
+        );
+      }
+      if (present) return;
       // Otherwise the test fails, as its first `evaluate` would have before. The bounded wait only
       // collects late console, network and page-error entries and tells a late appearance apart
       // from none; a late appearance never turns the failure into a pass.
