@@ -8,7 +8,10 @@ import type { Page, TestInfo } from '@playwright/test';
 export interface P1PageDiagnostics {
   readonly entries: string[];
   readonly pageErrors: string[];
-  /** Waits (bounded) for the fixture global; on timeout throws with the collected log. */
+  /**
+   * Returns at once when the fixture global is defined. Otherwise waits (bounded) only to collect
+   * late diagnostics, then always throws with the log, saying whether the global appeared late.
+   */
   waitForFixture(timeoutMs?: number): Promise<void>;
   /** Attaches the collected log to the test report (on failure unless `always`). */
   attach(info: TestInfo, always?: boolean): Promise<void>;
@@ -41,6 +44,19 @@ export function collectP1Diagnostics(page: Page): P1PageDiagnostics {
     entries,
     pageErrors,
     async waitForFixture(timeoutMs = 15_000) {
+      const defined = () =>
+        page.evaluate(
+          () =>
+            (window as unknown as { __vectorStudioP1?: unknown }).__vectorStudioP1 !== undefined,
+        );
+      // The normal path: the global is defined once `goto` resolves, so this returns at once and
+      // a passing run behaves as before this helper existed.
+      if (await defined()) return;
+      // Otherwise the test fails, as its first `evaluate` would have before. The bounded wait only
+      // collects late console, network and page-error entries and tells a late appearance apart
+      // from none; a late appearance never turns the failure into a pass.
+      const started = Date.now();
+      let outcome: string;
       try {
         await page.waitForFunction(
           () =>
@@ -48,14 +64,14 @@ export function collectP1Diagnostics(page: Page): P1PageDiagnostics {
           undefined,
           { timeout: timeoutMs },
         );
+        outcome = `appeared ${Date.now() - started} ms after navigation resolved`;
       } catch (error) {
-        throw new Error(
-          `window.__vectorStudioP1 was not defined within ${timeoutMs} ms (url ${page.url()}).\n` +
-            `Collected diagnostics (${entries.length}):\n${entries.join('\n') || '(none)'}\n` +
-            `Cause: ${error instanceof Error ? error.message : String(error)}`,
-          { cause: error },
-        );
+        outcome = `never appeared within ${timeoutMs} ms (${error instanceof Error ? error.message : String(error)})`;
       }
+      throw new Error(
+        `window.__vectorStudioP1 was undefined when navigation resolved; it ${outcome} (url ${page.url()}).\n` +
+          `Collected diagnostics (${entries.length}):\n${entries.join('\n') || '(none)'}`,
+      );
     },
     async attach(info, always = false) {
       if (!always && info.status === info.expectedStatus) return;

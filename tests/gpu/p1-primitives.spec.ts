@@ -26,7 +26,8 @@ declare global {
 test.use({ trace: 'off' });
 
 // Page diagnostics (console, page errors, failed requests, HTTP >= 400) of the running test,
-// attached to the report when it fails. The config runs one worker serially, so one slot suffices.
+// attached to the report when it fails. A worker runs one test at a time and each worker has its
+// own module instance, so one slot suffices with any worker count.
 let activeDiagnostics: P1PageDiagnostics | undefined;
 // Playwright requires the destructuring pattern even when no fixture is used.
 // eslint-disable-next-line no-empty-pattern
