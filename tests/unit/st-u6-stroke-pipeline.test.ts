@@ -314,7 +314,7 @@ describe('ST-U6 failures, isolation and memo (sections 9.4 and 9.6)', () => {
     expect(frame.draws).toEqual([]);
     expect(frame.notices).toEqual([
       notice('b', 'renderer', 'invalid-response', -3, 'fill'),
-      notice('a', 'path', 'invalid-stroke', -3, 'stroke'),
+      notice('a', 'path', 'invalid-stroke', null, 'stroke'),
     ]);
   });
 
@@ -398,6 +398,96 @@ describe('ST-U6 failures, isolation and memo (sections 9.4 and 9.6)', () => {
     ]);
     // Both fill meshes stay cached; the stroke variant mark keeps the stroke mesh too.
     expect(h.statistics().entries).toBe(3);
+  });
+});
+
+describe('ST-U6 review B1 and S1: an undrawable path never calls a port every frame', () => {
+  // A byte budget of 1 evicts every entry outside the working set after each prepare, so an
+  // entry built for a path that is never drawn would be rebuilt every frame.
+  const tight = { byteBudget: 1 };
+
+  it('ST-A10 (B1): a failed fill with an ok stroke makes no further call under budget pressure', () => {
+    const fill = new ScriptedFillMeshPort({
+      request: (request) =>
+        ({
+          requestId: request.requestId,
+          toleranceExponent: request.toleranceExponent,
+          status: 'failed',
+          code: 'work-limit',
+        }) as const,
+    });
+    const stroke = new ScriptedStrokeMeshPort();
+    const h = createStrokeHarness({
+      fillPort: fill,
+      strokePort: stroke,
+      nodes: [strokedNode('a', 0)],
+      limits: tight,
+    });
+    expect(h.prepare().draws).toEqual([]);
+    const calls = [fill.callCount, stroke.callCount];
+    expect(calls).toEqual([1, 1]);
+    for (let index = 0; index < 5; index += 1) expect(h.prepare().draws).toEqual([]);
+    expect([fill.callCount, stroke.callCount]).toEqual(calls);
+  });
+
+  it('ST-A10 (B1): a failed stroke with an ok fill makes no further call under budget pressure', () => {
+    const fill = createCountingPort();
+    const stroke = createFailingStrokePort({ pathFailures: new Map([[0, 'numeric-range']]) });
+    const h = createStrokeHarness({
+      fillPort: fill,
+      strokePort: stroke,
+      nodes: [strokedNode('a', 0)],
+      limits: tight,
+    });
+    expect(h.prepare().draws).toEqual([]);
+    expect([fill.callCount, stroke.callCount]).toEqual([1, 1]);
+    for (let index = 0; index < 5; index += 1) expect(h.prepare().draws).toEqual([]);
+    expect([fill.callCount, stroke.callCount]).toEqual([1, 1]);
+  });
+
+  it('ST-A10 (B1): a port-version state on either port requests nothing for the other paint, even after eviction', () => {
+    for (const changed of ['fill', 'stroke'] as const) {
+      const ports = both();
+      const h = createStrokeHarness({
+        fillPort: ports.fill,
+        strokePort: ports.stroke,
+        nodes: [strokedNode('a', 0)],
+        limits: tight,
+      });
+      if (changed === 'fill') ports.fill.setPortVersion(1);
+      else ports.stroke.setPortVersion(1);
+      for (let index = 0; index < 5; index += 1) expect(h.prepare().draws).toEqual([]);
+      expect([ports.fill.callCount, ports.stroke.callCount], changed).toEqual([0, 0]);
+    }
+  });
+
+  it('ST-A10 (S1): both ports changing version give exactly one port-version notice per node and transition', () => {
+    const ports = both();
+    const h = createStrokeHarness({
+      fillPort: ports.fill,
+      strokePort: ports.stroke,
+      nodes: [strokedNode('a', 0), strokedNode('b', 20)],
+    });
+    h.prepare();
+    ports.fill.setPortVersion(1);
+    expect(h.prepare().notices).toEqual([
+      notice('a', 'renderer', 'port-version', null, null),
+      notice('b', 'renderer', 'port-version', null, null),
+    ]);
+    ports.stroke.setPortVersion(1);
+    expect(h.prepare().notices).toEqual([]);
+    ports.fill.setPortVersion(0);
+    expect(h.prepare().notices).toEqual([]);
+    ports.stroke.setPortVersion(0);
+    expect(h.drawn()).toEqual(['a:fill', 'a:stroke', 'b:fill', 'b:stroke']);
+    // A new transition notifies once again.
+    ports.fill.setPortVersion(1);
+    ports.stroke.setPortVersion(1);
+    expect(h.prepare().notices).toEqual([
+      notice('a', 'renderer', 'port-version', null, null),
+      notice('b', 'renderer', 'port-version', null, null),
+    ]);
+    expect([ports.fill.callCount, ports.stroke.callCount]).toEqual([1, 1]);
   });
 });
 

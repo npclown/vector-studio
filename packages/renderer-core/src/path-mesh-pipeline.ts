@@ -438,32 +438,37 @@ export class PathMeshPipeline {
 
       // B2 section 9.6, interim rule until ST-U7: both paints at 0 < opacity < 1 draw neither
       // paint and call no port; cached meshes stay. It clears when either condition clears.
-      const compositionKey = stateKey(path.id, null);
-      if (
+      // Node-level states, one key per node: composition-unsupported, then port-version of
+      // either drawable paint's port. Each notifies once per (node, code) transition.
+      const nodeCode: PathMeshRendererFailureCode | null =
         node.style.fill !== null &&
         node.style.stroke !== null &&
         node.style.stroke.width > 0 &&
         node.opacity > 0 &&
         node.opacity < 1
-      ) {
-        frameStates.set(
-          compositionKey,
-          Object.freeze({ nodeId: path.id, paint: null, code: 'composition-unsupported' }),
-        );
-        continue;
-      }
-      frameStates.set(compositionKey, null);
+          ? 'composition-unsupported'
+          : drawable.some((paint) => !readings[paint]!.ok)
+            ? 'port-version'
+            : null;
+      frameStates.set(
+        stateKey(path.id, null),
+        nodeCode === null ? null : Object.freeze({ nodeId: path.id, paint: null, code: nodeCode }),
+      );
+      if (nodeCode !== null) continue;
 
+      // Every drawable paint's state and memo are evaluated first. A path with a paint known to
+      // fail in this prepare requests nothing, so an undrawable path never calls a port every
+      // frame; the other paint's cached mesh stays (B2 section 9.6, review B1).
       const items: Evaluated[] = [];
+      const requests: PendingRequest[] = [];
       let failed = false;
       for (const paint of drawable) {
         const channel = this.#channels[paint]!;
-        const port = readings[paint]!;
-        // One state code per node, paint and prepare, in a fixed order: the port, then the exact
-        // bucket ranges of section c, then the f32 orientation check of the packed lanes.
-        const code: PathMeshRendererFailureCode | null = !port.ok
-          ? 'port-version'
-          : buckets.e < channel.eMin
+        const port = readings[paint] as Extract<PortReading, { ok: true }>;
+        // One state code per node, paint and prepare, in a fixed order: the exact bucket ranges
+        // of section c, then the f32 orientation check of the packed lanes.
+        const code: PathMeshRendererFailureCode | null =
+          buckets.e < channel.eMin
             ? 'tolerance-range'
             : buckets.f < F_MIN || buckets.f > F_MAX
               ? 'fringe-range'
@@ -474,7 +479,7 @@ export class PathMeshPipeline {
           stateKey(path.id, paint),
           code === null ? null : Object.freeze({ nodeId: path.id, paint, code }),
         );
-        if (code !== null || !port.ok) {
+        if (code !== null) {
           failed = true;
           continue;
         }
@@ -493,14 +498,17 @@ export class PathMeshPipeline {
           }),
         );
         if (this.#lookup(paint, path.id, e) !== undefined) continue;
-        if (this.#consultMemo(path.id, revision, key, e, port.operationId, now)) continue;
-        missing[paint].push(
+        if (this.#consultMemo(path.id, revision, key, e, port.operationId, now)) {
+          failed = true;
+          continue;
+        }
+        requests.push(
           Object.freeze({ nodeId: path.id, revision, key, e, operationId: port.operationId, node }),
         );
       }
-      // B2 section 9.6: a state failure of either drawable paint hides the whole path; the
-      // other paint is still built, and its cached mesh stays.
-      if (!failed) evaluated.push(Object.freeze({ path, items: Object.freeze(items) }));
+      if (failed) continue;
+      for (const request of requests) missing[request.key.paint].push(request);
+      evaluated.push(Object.freeze({ path, items: Object.freeze(items) }));
     }
 
     // Steps 5-7: one batch per port (fill first, then stroke), isolation of a failed batch,
@@ -924,8 +932,9 @@ export class PathMeshPipeline {
     code: PathMeshFailureCode,
     now: number,
   ): void {
-    // invalid-path is decided before the tolerance stage, so its key omits the exponent.
-    const exponent = code === 'invalid-path' ? null : request.e;
+    // invalid-path and invalid-stroke are decided before the tolerance stage (V2; B2 section 7.8),
+    // so their key and notice omit the exponent.
+    const exponent = code === 'invalid-path' || code === 'invalid-stroke' ? null : request.e;
     const key = memoKey(
       request.operationId,
       request.nodeId,
