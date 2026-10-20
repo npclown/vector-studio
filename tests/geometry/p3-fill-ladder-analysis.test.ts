@@ -48,6 +48,8 @@ const root = path.resolve(import.meta.dirname, '../..');
 const manifest = path.join(root, 'packages/geometry-wasm/kernel/Cargo.toml');
 type Mutable<T> = { -readonly [K in keyof T]: Mutable<T[K]> };
 const clone = <T>(value: T): Mutable<T> => JSON.parse(JSON.stringify(value)) as Mutable<T>;
+/** `configHash(ratioModeConfig('reference'))`, recorded in the plan for AL-U6. */
+const RATIO_CONFIG_HASH = 'ff36ec78a920d704df431cf411f9c064bf1d3a0cb21523c83857a6bdad9ef9c3';
 /** `configHash(scenarioConfig('reference'))`, recorded in the plan when AL-U5 merges. */
 const REFERENCE_CONFIG_HASH = '8f07f1467b1e396fd1a9c02e6f27c17131cf203e287b5ea690391536b7f3672e';
 
@@ -92,6 +94,8 @@ describe('P3 Alt-A1 AL-S1 configuration (section 5.3)', () => {
       sampling: { repetitions: 5, warmup: 3, timed: 20 },
     });
     expect(JSON.stringify(scenarioConfig('reference'))).not.toContain('run_ladder_ratio');
+    // Recorded in the plan for AL-U6 to embed in AL-S2's configuration.
+    expect(configHash(ratio)).toBe(RATIO_CONFIG_HASH);
   });
 
   it('parses the runner arguments as B0 does', () => {
@@ -165,6 +169,8 @@ function syntheticRecord(
         return {
           cell: cell.id,
           engineNs: 1,
+          heapBytes: 1,
+          bufferBytes: 2,
           batchAllocations: 0,
           storageStable: true,
           batchNs: Array.from({ length: 20 }, (_, index) => 10 * base * (1 + (index % 3) * 0.001)),
@@ -389,13 +395,29 @@ describe('P3 Alt-A1 AL-S1 analysis and validateLadderRecord (AL-A13)', () => {
     expect(product.meshBytes).toBe(estimates.meshBytes);
     // The decision factor is k-hat alone; k-hat-one never decides.
     const kFeasible = 0.9 * (1e9 / (1000 * estimates.perPathNs));
-    expect(productVerdict(analysis, kFeasible, true, 1e6).verdict).toBe('FEASIBLE');
-    expect(productVerdict(analysis, 1.2 * (1e9 / (1000 * estimates.perPathNs)), true).verdict).toBe(
+    const ok = { invalid: false, valid: true };
+    expect(productVerdict(analysis, kFeasible, ok, 1e6).verdict).toBe('FEASIBLE');
+    expect(productVerdict(analysis, 1.2 * (1e9 / (1000 * estimates.perPathNs)), ok).verdict).toBe(
       'INFEASIBLE',
     );
-    expect(productVerdict(analysis, kFeasible, false).verdict).toBe('INCONCLUSIVE');
+    // An AL-S2 validity failure is INCONCLUSIVE; an AL-S2 no-verdict cause is INVALID.
+    expect(productVerdict(analysis, kFeasible, { invalid: false, valid: false }).verdict).toBe(
+      'INCONCLUSIVE',
+    );
+    expect(productVerdict(analysis, kFeasible, { invalid: true, valid: true }).verdict).toBe(
+      'INVALID',
+    );
+    expect(productVerdict(analysis, kFeasible, { invalid: true, valid: false }).verdict).toBe(
+      'INVALID',
+    );
     const invalid = analyze({ ...syntheticRecord((value) => 1000 * value), oracle: null });
-    expect(productVerdict(invalid, kFeasible, true).verdict).toBe('INVALID');
+    expect(productVerdict(invalid, kFeasible, ok).verdict).toBe('INVALID');
+    // B0's rule gives a functional AL-S1 analysis no verdict, whatever k-hat and AL-S2 say (B1).
+    const functional = analyze(syntheticRecord((value) => 1000 * value, 'functional'));
+    expect(functional.verdict).toBe('NONE');
+    for (const s2 of [ok, { invalid: true, valid: false }])
+      for (const k of [kFeasible, 1e6])
+        expect(productVerdict(functional, k, s2).verdict).toBe('NONE');
     expect(productEstimates(analysis, Number.NaN)).toBeNull();
   });
 });
@@ -538,6 +560,11 @@ describe('P3 Alt-A1 AL-S1 harness on the B0 corpus (AL-A13)', () => {
     }
     expect(decision.linearity).toMatchObject({ cell: 'P4/s=16', storageStable: true });
     expect(decision.engine.heapBytes).toBeGreaterThan(0);
+    // E5 does not depend on the input: every prepared cell engine has the admission engine's.
+    expect(new Set(decision.cells.map((cell) => cell.heapBytes))).toEqual(
+      new Set([decision.engine.heapBytes]),
+    );
+    expect(decision.cells.every((cell) => cell.bufferBytes > 0)).toBe(true);
   }, 900_000);
 
   it('runs a ratio repetition with the decoded fold on every call', () => {

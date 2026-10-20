@@ -330,7 +330,7 @@ function summaryMarkdown(record) {
       (item) => `| ${item.id} | ${item.pass ? 'yes' : 'NO'} | ${item.detail} |`,
     ),
     '',
-    `Timed decision paths on the fast rung: ${fixed(analysis.timedFastShare === null ? null : 100 * analysis.timedFastShare, 1)}%. Fallback rate at the largest cell: ${analysis.seriesFallback.map((item) => `${item.series} ${fixed(item.fallbackRate, 3)}`).join(', ')}. E5: FillEngine inline ${analysis.engine?.inlineBytes ?? '-'} bytes, heap ${analysis.engine?.heapBytes ?? '-'} bytes.`,
+    `Timed decision paths on the fast rung: ${fixed(analysis.timedFastShare === null ? null : 100 * analysis.timedFastShare, 1)}%. Fallback rate at the largest cell: ${analysis.seriesFallback.map((item) => `${item.series} ${fixed(item.fallbackRate, 3)}`).join(', ')}. E5: FillEngine inline ${analysis.engine?.inlineBytes ?? '-'} bytes, heap_bytes() (workspace, scratch, ladder) ${analysis.engine?.admissionHeapBytes ?? '-'} bytes (prepared cell engines ${analysis.engine?.cellHeapBytes.join(', ') ?? '-'}), largest cell input+output buffers ${analysis.engine?.maxBufferBytes ?? '-'} bytes.`,
     '',
   ];
   if (analysis.estimates) {

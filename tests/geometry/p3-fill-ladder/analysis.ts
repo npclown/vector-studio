@@ -280,6 +280,10 @@ export interface LadderDecisionOutput {
   readonly cells: readonly {
     readonly cell: string;
     readonly engineNs: number;
+    /** E5 of the cell's prepared engine: workspace, scratch and ladder storage. */
+    readonly heapBytes: number;
+    /** The prepared engine's input plus output buffer capacity, outside `heapBytes`. */
+    readonly bufferBytes: number;
     readonly batchAllocations: number;
     readonly storageStable: boolean;
     readonly batchNs: readonly number[];
@@ -1201,7 +1205,22 @@ export function analyze(record: LadderRecord) {
     estimates,
     ratios,
     checks,
-    engine: reps[0]?.engine ?? null,
+    // E5, labelled: `inlineBytes` is size_of::<FillEngine>(); `admissionHeapBytes` the
+    // admission engine's heap_bytes() (workspace, scratch and ladder, from FILL_V0_LIMITS);
+    // `cellHeapBytes` the same from every prepared decision-cell engine (it must be one value);
+    // `maxBufferBytes` the largest input plus output buffer a prepared cell engine held.
+    engine: reps[0]
+      ? {
+          inlineBytes: reps[0].engine.inlineBytes,
+          admissionHeapBytes: reps[0].engine.heapBytes,
+          cellHeapBytes: [
+            ...new Set(reps.flatMap((rep) => rep.cells.map((cell) => cell.heapBytes))),
+          ],
+          maxBufferBytes: reps
+            .flatMap((rep) => rep.cells.map((cell) => cell.bufferBytes))
+            .reduce((most, value) => Math.max(most, value), 0),
+        }
+      : null,
     oracle,
     allocationFreeBatches,
     allocationFreeAdmission,
@@ -1257,21 +1276,30 @@ export function productEstimates(
 }
 
 /**
- * The product verdict of section 5.3 under B0's unchanged rule with k = k̂: INCONCLUSIVE when
- * any AL-S1 check or AL-S2 validity item fails, no verdict (`INVALID`) for a run an oracle
- * gate, a checksum mismatch or `MESH_CHECK` invalidated, otherwise FEASIBLE or INFEASIBLE.
+ * The product verdict of section 5.3 under B0's unchanged rule with k = k̂: `NONE` for a
+ * non-reference AL-S1 profile; no verdict (`INVALID`) when an oracle gate, a checksum mismatch
+ * or `MESH_CHECK` invalidated AL-S1, or when AL-S2 reports `s2.invalid` (its browser checksum
+ * differs from the native one, or another no-verdict cause); INCONCLUSIVE when any AL-S1
+ * check or any other AL-S2 validity item fails; otherwise FEASIBLE or INFEASIBLE.
  */
 export function productVerdict(
-  analysis: Pick<LadderAnalysis, 'estimates' | 'checks' | 'invalidReasons'>,
+  analysis: Pick<LadderAnalysis, 'estimates' | 'checks' | 'invalidReasons' | 'verdict'>,
   kHat: number,
-  s2Valid: boolean,
+  s2: {
+    /** A browser-vs-native checksum mismatch or another section 5.3 no-verdict cause. */
+    readonly invalid: boolean;
+    /** Every other AL-S2 validity item of section 5.2 holds. */
+    readonly valid: boolean;
+  },
   kHatOnePath: number | null = null,
 ) {
   const budgets = b0ScenarioConfig('reference').decision.budgets;
   const estimates = productEstimates(analysis, kHat, kHatOnePath);
-  let verdict: Exclude<Verdict, 'NONE'>;
-  if (analysis.invalidReasons.length > 0) verdict = 'INVALID';
-  else if (!analysis.checks.every((item) => item.pass) || !s2Valid || estimates === null)
+  let verdict: Verdict;
+  // B0's rule gives a non-reference profile no verdict.
+  if (analysis.verdict === 'NONE') verdict = 'NONE';
+  else if (analysis.invalidReasons.length > 0 || s2.invalid) verdict = 'INVALID';
+  else if (!analysis.checks.every((item) => item.pass) || !s2.valid || estimates === null)
     verdict = 'INCONCLUSIVE';
   else
     verdict =

@@ -446,6 +446,11 @@ fn decision_cell(json: &mut Json, cell: &Cell, warmup: usize, timed: usize) {
         harness.prepare(single);
     }
     let storage = harness.storage();
+    // E5 of this prepared engine: `heap_bytes()` (workspace, scratch and ladder storage), and
+    // separately the input and output buffers the preparation sized.
+    let heap_bytes = harness.engine.heap_bytes();
+    let buffer_bytes =
+        u64::from(harness.engine.input_capacity()) + u64::from(harness.engine.output_capacity());
     let mut path_ns = Vec::with_capacity(timed * DECISION_PATHS);
     let mut scratch = Vec::with_capacity(DECISION_PATHS);
     for _ in 0..warmup {
@@ -473,6 +478,12 @@ fn decision_cell(json: &mut Json, cell: &Cell, warmup: usize, timed: usize) {
         .raw(",")
         .key("engineNs")
         .number(engine_ns)
+        .raw(",")
+        .key("heapBytes")
+        .number(heap_bytes)
+        .raw(",")
+        .key("bufferBytes")
+        .number(buffer_bytes)
         .raw(",")
         .key("batchAllocations")
         .number(batch_allocations)
@@ -569,7 +580,10 @@ fn run_ladder_decision() {
         .number(quantum)
         .raw(",");
 
-    // E5: the engine's inline size and `heap_bytes()` (workspace, scratch and ladder).
+    // E5: `size_of::<FillEngine>()`, and `heap_bytes()` (workspace, scratch and ladder storage,
+    // which come from FILL_V0_LIMITS, not from the input) of the reserved admission engine. The
+    // input and output buffers are excluded here; each timed cell records its prepared
+    // engine's `heapBytes` and `bufferBytes`.
     let decision: Vec<&Cell> = cells.iter().filter(|cell| cell.is_decision()).collect();
     let mut harness = Harness::new(64 * 1024);
     json.key("engine")
