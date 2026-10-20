@@ -386,3 +386,7 @@ mod stroke_dump_tests;
 mod stroke_outline;
 #[cfg(test)]
 mod stroke_outline_tests;
+// P3 B2 unit ST-U3b: the B2-Q8 native scaling probe, test-only; appended for the same reason as
+// above.
+#[cfg(test)]
+mod stroke_probe_tests;
