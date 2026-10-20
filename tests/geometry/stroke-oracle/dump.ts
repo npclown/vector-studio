@@ -4,6 +4,10 @@
  * value travels as its 16-digit hexadecimal bit pattern, so nothing is rounded on the way.
  */
 import type { FillMesh } from '@vector-studio/contracts';
+import type {
+  StrokeDumpPiece,
+  StrokeSampleTriple,
+} from '../../../packages/geometry-reference/src/index.js';
 
 export const INPUT_MAGIC = 'P3STKIN1';
 export const DUMP_MAGIC = 'P3STKDUMP1';
@@ -37,7 +41,16 @@ export type DumpSegment = Readonly<{
 
 export type DumpPiece = Readonly<{
   kind: string;
+  /** Kernel segment index, or the subpath index of a point piece. */
   segment: number;
+  /** Source verb ordinal of the segment (the CLOSE ordinal for a closing line). */
+  verb: number;
+  /** A join's outgoing verb ordinal, else null. */
+  nextVerb: number | null;
+  /** A zero-area hull, dropped from the arrangement. */
+  dropped: boolean;
+  /** Joins: outer in, outer out and the miter tip. Square caps: the two extension points. */
+  extra: readonly DumpPoint[];
   t: readonly [number, number];
   disk: number;
   points: readonly DumpPoint[];
@@ -101,7 +114,11 @@ type RawSegment = Omit<DumpSegment, 'a' | 'b' | 'start' | 'end'> & {
   start: unknown;
   end: unknown;
 };
-type RawPiece = Omit<DumpPiece, 't' | 'points'> & { t: [string, string]; points: unknown[] };
+type RawPiece = Omit<DumpPiece, 't' | 'points' | 'extra'> & {
+  t: [string, string];
+  points: unknown[];
+  extra: unknown[];
+};
 type RawMesh = { positions: string[]; indices: number[]; boundaryEdges: number[] };
 type RawEntry = Omit<DumpEntry, 'segments' | 'pieces' | 'mesh'> & {
   segments: RawSegment[];
@@ -156,11 +173,93 @@ export function parseDump(text: string): DumpEntry[] {
       pieces: raw.pieces.map((piece) => ({
         kind: piece.kind,
         segment: piece.segment,
+        verb: piece.verb,
+        nextVerb: piece.nextVerb,
+        dropped: piece.dropped,
+        extra: piece.extra.map(point),
         t: [fromBits(piece.t[0]), fromBits(piece.t[1])] as const,
         disk: piece.disk,
         points: piece.points.map(point),
       })),
       mesh: raw.mesh === null ? null : mesh(raw.mesh),
     };
+  });
+}
+
+/** The point of the k-th MOVE of a case (the start of subpath k). */
+function movePoint(source: StrokeCase, subpath: number): DumpPoint {
+  let scalar = 0;
+  let moves = 0;
+  for (const verb of source.verbs) {
+    if (verb === 0) {
+      if (moves === subpath) return [source.points[scalar]!, source.points[scalar + 1]!];
+      moves += 1;
+    }
+    scalar += verb === 2 ? 6 : verb === 3 ? 0 : 2;
+  }
+  throw new Error(`no subpath ${String(subpath)}`);
+}
+
+const sample = (value: DumpTriple): StrokeSampleTriple => ({
+  minus: value[0],
+  center: value[1],
+  plus: value[2],
+});
+
+/** The oracle's `StrokeDumpPiece` view of one dumped entry (ST-U2's hand-off shape). */
+export function oraclePieces(entry: DumpEntry, source: StrokeCase): StrokeDumpPiece[] {
+  return entry.pieces.map((piece): StrokeDumpPiece => {
+    const polygon = piece.dropped ? null : piece.points;
+    switch (piece.kind) {
+      case 'line-sweep': {
+        const segment = entry.segments[piece.segment]!;
+        return {
+          kind: 'line-sweep',
+          verb: piece.verb,
+          part: 0,
+          start: sample(segment.start),
+          end: sample(segment.end),
+          polygon,
+        };
+      }
+      case 'bevel':
+      case 'miter':
+      case 'round-join':
+        return {
+          kind: 'join',
+          incomingVerb: piece.verb,
+          outgoingVerb: piece.nextVerb!,
+          join: piece.kind === 'round-join' ? 'round' : piece.kind,
+          outerIn: piece.extra[0]!,
+          outerOut: piece.extra[1]!,
+          tip: piece.extra[2] ?? null,
+          polygon,
+        };
+      case 'round-cap':
+      case 'square-cap': {
+        const segment = entry.segments[piece.segment]!;
+        const end = piece.t[0] === 1;
+        return {
+          kind: 'cap',
+          end: end ? 'end' : 'start',
+          verb: piece.verb,
+          cap: piece.kind === 'round-cap' ? 'round' : 'square',
+          triple: sample(end ? segment.end : segment.start),
+          extension: piece.kind === 'square-cap' ? [piece.extra[0]!, piece.extra[1]!] : null,
+          polygon,
+        };
+      }
+      case 'point-round':
+      case 'point-square':
+        return {
+          kind: 'point-cap',
+          subpath: piece.segment,
+          cap: piece.kind === 'point-round' ? 'round' : 'square',
+          point: movePoint(source, piece.segment),
+          polygon,
+        };
+      default:
+        throw new Error(`unknown piece kind ${piece.kind}`);
+    }
   });
 }

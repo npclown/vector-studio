@@ -6,18 +6,32 @@
  * against the ideal union where the ideal pieces are exact polygons (ST-O4), areas, bounds,
  * statuses, piece kinds, triples and named-point membership (ST-O5).
  *
- * ST-O1 (piece bounds against the ideal pieces) and ST-O2 (inventory) are the independent oracle
- * of ST-U2 (`packages/geometry-reference/src/stroke-region.ts`); they join this file when ST-U2
- * lands. Precision is UNVERIFIED against the 0.25 physical-pixel target until B4.
+ * ST-O1 to ST-O4 of the independent oracle of ST-U2
+ * (`packages/geometry-reference/src/stroke-region.ts`) run on every dumped `ok` and `empty`
+ * case. Precision is UNVERIFIED against the 0.25 physical-pixel target until B4.
  */
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { Point } from '../../packages/geometry-reference/src/index.js';
+import {
+  checkStrokeExactRegion,
+  checkStrokeInventory,
+  checkStrokePieceBounds,
+  checkStrokeResolution,
+  idealStrokeExactArea,
+  type Point,
+  type StrokeOracleSource,
+} from '../../packages/geometry-reference/src/index.js';
 import { checkFillMesh, checkFillRegion } from '../support/fill-mesh-check.js';
-import { encodeInput, parseDump, type DumpEntry } from './stroke-oracle/dump.js';
+import {
+  encodeInput,
+  oraclePieces,
+  parseDump,
+  type DumpEntry,
+  type StrokeCase,
+} from './stroke-oracle/dump.js';
 import {
   area,
   boundaryLoops,
@@ -78,6 +92,27 @@ const rectangle = (x0: number, y0: number, x1: number, y1: number): Point[] => [
   [x0, y1],
 ];
 
+/** Every coordinate an integer and every drawing segment horizontal or vertical. */
+function axisAligned(source: StrokeCase): boolean {
+  if (!source.points.every((value) => Number.isInteger(value))) return false;
+  let scalar = 0;
+  let current: [number, number] = [0, 0];
+  let start: [number, number] = [0, 0];
+  for (const verb of source.verbs) {
+    if (verb === 3) {
+      if (current[0] !== start[0] && current[1] !== start[1]) return false;
+      current = start;
+      continue;
+    }
+    const next: [number, number] = [source.points[scalar]!, source.points[scalar + 1]!];
+    scalar += 2;
+    if (verb === 0) start = next;
+    else if (next[0] !== current[0] && next[1] !== current[1]) return false;
+    current = next;
+  }
+  return true;
+}
+
 let directory = '';
 let entries = new Map<string, DumpEntry>();
 
@@ -126,6 +161,53 @@ describe('ST-U3 line strokes through the dump hand-off', () => {
       expect(found.status, found.name).not.toBe('internal-error');
       if (found.status === 'ok') expect(checkFillMesh(found.mesh!), found.name).toEqual([]);
     }
+  });
+
+  it("ST-O1 to ST-O4 of ST-U2's independent oracle on every dumped case", () => {
+    const failures: string[] = [];
+    let exactRegions = 0;
+    let checked = 0;
+    for (const source of lineCases()) {
+      const found = entry(source.name);
+      if (found.status !== 'ok' && found.status !== 'empty') continue;
+      checked += 1;
+      const oracleSource: StrokeOracleSource = {
+        verbs: source.verbs,
+        points: source.points,
+        width: source.width,
+        cap: source.cap,
+        join: source.join,
+        miterLimit: source.miterLimit,
+        toleranceExponent: source.exponent,
+      };
+      const pieces = oraclePieces(found, source);
+      const report = (oracle: string, result: { ok: boolean; findings: readonly string[] }) => {
+        if (!result.ok) failures.push(`${source.name} ${oracle}: ${result.findings.join('; ')}`);
+      };
+      report('ST-O1', checkStrokePieceBounds(oracleSource, pieces));
+      report('ST-O2', checkStrokeInventory(oracleSource, pieces));
+      if (found.status !== 'ok') continue;
+      // ST-O4's scope (section 11.1): axis-aligned segments, integer data, no arcs. A rational
+      // non-axis normal (ST-F5, ST-F25) has an exact ideal polygon, but its binary64 samples and
+      // the arrangement's rounding are inexact, so it takes ST-O3's tau band.
+      const exactIdeal = idealStrokeExactArea(oracleSource) !== null && axisAligned(source);
+      report(
+        'ST-O3',
+        checkStrokeResolution(
+          pieces,
+          found.mesh!,
+          exactIdeal ? 'exact' : 'band',
+          2 ** (source.exponent - 2),
+        ),
+      );
+      if (exactIdeal) {
+        exactRegions += 1;
+        report('ST-O4', checkStrokeExactRegion(oracleSource, found.mesh!));
+      }
+    }
+    expect(failures).toEqual([]);
+    expect(checked).toBe(64);
+    expect(exactRegions).toBeGreaterThan(0);
   });
 
   it('ST-F1 to ST-F3: caps (ST-O4 on butt and square)', () => {
