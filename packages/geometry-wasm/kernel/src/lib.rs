@@ -396,3 +396,99 @@ mod stroke_cubic_tests;
 // above.
 #[cfg(test)]
 mod stroke_probe_tests;
+// P3 B2 unit ST-U5 (docs/plans/p3-b2-stroke-contract.md, section 7): the stroke-mesh transport
+// v0. A third module-level engine; it shares no state with GLOBAL_ENGINE or GLOBAL_FILL_ENGINE.
+// Appended for the same reason as above.
+mod stroke_export;
+#[cfg(test)]
+mod stroke_export_tests;
+
+#[cfg(target_arch = "wasm32")]
+struct GlobalStrokeEngine(UnsafeCell<stroke_export::StrokeEngine>);
+
+// Same single-threaded, non-reentrant rule as GlobalEngine.
+#[cfg(target_arch = "wasm32")]
+unsafe impl Sync for GlobalStrokeEngine {}
+
+#[cfg(target_arch = "wasm32")]
+static GLOBAL_STROKE_ENGINE: GlobalStrokeEngine =
+    GlobalStrokeEngine(UnsafeCell::new(stroke_export::StrokeEngine::new()));
+
+#[cfg(target_arch = "wasm32")]
+fn with_stroke_engine<T>(f: impl FnOnce(&mut stroke_export::StrokeEngine) -> T) -> T {
+    // SAFETY: the stroke ABI permits one single-threaded, non-reentrant caller.
+    // No reference to the StrokeEngine escapes this function.
+    unsafe { f(&mut *GLOBAL_STROKE_ENGINE.0.get()) }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn stroke_v0_version() -> u32 {
+    stroke_export::STROKE_V0_VERSION
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn stroke_v0_revision() -> u32 {
+    stroke_export::STROKE_V0_REVISION
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn stroke_v0_reserve(input_bytes: u32, output_bytes: u32) -> u32 {
+    with_stroke_engine(|engine| engine.reserve(input_bytes, output_bytes))
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn stroke_v0_input_ptr() -> u32 {
+    with_stroke_engine(stroke_export::StrokeEngine::input_ptr)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn stroke_v0_input_capacity() -> u32 {
+    with_stroke_engine(stroke_export::StrokeEngine::input_capacity)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn stroke_v0_output_ptr() -> u32 {
+    with_stroke_engine(stroke_export::StrokeEngine::output_ptr)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn stroke_v0_output_capacity() -> u32 {
+    with_stroke_engine(stroke_export::StrokeEngine::output_capacity)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn stroke_v0_memory_epoch() -> u32 {
+    with_stroke_engine(stroke_export::StrokeEngine::memory_epoch)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn stroke_v0_process(input_length: u32) -> u32 {
+    with_stroke_engine(|engine| engine.process(input_length))
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn stroke_v0_result_len() -> u32 {
+    with_stroke_engine(stroke_export::StrokeEngine::result_len)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn stroke_v0_required_output_bytes() -> u32 {
+    with_stroke_engine(stroke_export::StrokeEngine::required_output_bytes)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub extern "C" fn stroke_v0_dispose() -> u32 {
+    with_stroke_engine(stroke_export::StrokeEngine::dispose)
+}

@@ -178,6 +178,8 @@ C04 remains open until topology, coverage and composition have a feasible repres
 - Every V2-V4 result is labelled UNVERIFIED against the 0.25-pixel target until the A04 corpus measurement (D8 checkpoint B4) has evidence. V2-V4 results close no A01-A08 criterion; acceptance evidence counts only after C03-C05 are complete, on the frozen layout and carrier.
 - The joint freeze above still gates C04 completion, P3 A05/A06 and any certificate claim. Nothing else in this section is narrowed.
 
+Extended 2026-10-20 by user decision B2-Q9 (a) to the B2 stroke transport `stroke_v0` and the stroke draw, under the same conditions; see the [B2 stroke contract](p3-b2-stroke-contract.md).
+
 Candidate safe composition directions are region-partitioned fill/stroke evaluation or another proven single-opacity mesh scheme. Independent full-alpha draws with node opacity applied twice are excluded by the inherited contract. No offscreen isolation, stencil reinterpretation or alternative path-renderer architecture is approved here. If feasibility requires one, stop with a concrete architecture proposal.
 
 Primary review rejects treating the union of fill and stroke as one undifferentiated paint: fill-only, stroke-only and overlap regions can have different colors/alpha. Likewise, an inside-only one-pixel coverage ramp is not automatically compliant with the geometric edge/coverage contract. Both region attribution and boundary reconstruction need independent evidence before choosing a vertex format or fringe rule.
