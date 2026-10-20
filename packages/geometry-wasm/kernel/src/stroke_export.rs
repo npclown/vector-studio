@@ -24,7 +24,8 @@ use crate::stroke_outline::{
 
 /// Section 7.1 identity.
 pub const STROKE_V0_VERSION: u32 = 0;
-pub const STROKE_V0_REVISION: u32 = 1;
+/// Revision 2 (2026-10-21): one sample triple per cusp knot (plan: ST-U4 cusp shared triple).
+pub const STROKE_V0_REVISION: u32 = 2;
 /// Bytes `VGT0`.
 pub const STROKE_INPUT_MAGIC: u32 = 0x3054_4756;
 /// Bytes `VGU0`.

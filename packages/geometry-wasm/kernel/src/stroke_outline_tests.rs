@@ -323,7 +323,10 @@ fn st_f4_joins_give_their_areas_and_the_miter_tip() {
         .find(|piece| piece.kind == PieceKind::Miter)
         .copied()
         .unwrap();
-    assert!(ws.piece_points(&miter).contains(&Point { x: 5.0, y: -1.0 }));
+    assert!(ws
+        .piece_points(&miter)
+        .unwrap()
+        .contains(&Point { x: 5.0, y: -1.0 }));
     assert_area(
         &mut ws,
         &f4(),
@@ -381,6 +384,7 @@ fn st_f5_exact_miter_predicate_on_the_ratio_five_quarters() {
             let g_tip = 64.0 * power_of_two(-53) * (25.0 + limit * limit * limit);
             let tip = ws
                 .piece_points(&found)
+                .unwrap()
                 .iter()
                 .copied()
                 .find(|point| point.x > 25.5)
@@ -978,6 +982,19 @@ fn tip_guard_values() {
         power_of_two(-41),
         -3
     ));
+    // The rho <= 2^24 boundary (V4 review M2): with fl(1 + d) = 79u the certified lower bound
+    // of c^2 is 64u (1 - 2^-40) / 2, so rho is just above 2^24 and the miter is refused; with
+    // 80u, rho = 2^27 / sqrt 65 (about 0.993 * 2^24) passes. r = 1e-12 keeps g_tip far below
+    // 2^(e-1), so only the ratio check decides.
+    let unit = power_of_two(-53);
+    assert!(
+        !tip_guard_at(center, 1e-12, power_of_two(30), 79.0 * unit, -3),
+        "den = 79u: rho above 2^24"
+    );
+    assert!(
+        tip_guard_at(center, 1e-12, power_of_two(30), 80.0 * unit, -3),
+        "den = 80u: rho below 2^24"
+    );
 }
 
 /// ST-U4 (ST-A0 review S2): `M(0,0) L(10,0) L(10,10)`, `w = 20`, miter limit `1e4`, `e = -3`.
@@ -1026,7 +1043,7 @@ fn every_piece_is_positive_convex_and_hull_ordered() {
             for join in JOINS {
                 let _ = run(&mut ws, path, request(2.0, cap, join, 4.0, -3));
                 for piece in ws.pieces() {
-                    let points = ws.piece_points(piece);
+                    let points = ws.piece_points(piece).unwrap();
                     assert!(points.len() >= 3);
                     // Starts at the lexicographically smallest point.
                     assert!(points
@@ -1180,10 +1197,12 @@ fn seeded_defects_fail_their_named_tests() {
             || !f12_holds(&ws),
         "ST-D4"
     );
-    // ST-D5: zero-length segments kept; caught by ST-F10.
+    // ST-D5: zero-length segments kept. Caught by the guard: on ST-F10 the defect ends in
+    // `numeric-range` before ST-F10's area check can run (#169 review M4).
     let mut ws = with_defect(|d| d.keep_zero_length = true);
-    assert!(
-        !area_is(&mut ws, &f10(), request(2.0, BUTT, MITER, 2.0, -3), 16.0),
+    assert_eq!(
+        run(&mut ws, &f10(), request(2.0, BUTT, MITER, 2.0, -3)),
+        StrokeOutcome::Status(STROKE_PATH_NUMERIC_RANGE),
         "ST-D5"
     );
     // ST-D9: disk count halved; caught by ST-F3's area.
@@ -1208,10 +1227,12 @@ fn seeded_defects_fail_their_named_tests() {
         ),
         "ST-D10"
     );
-    // ST-D11: reversal as a miter turn; caught by ST-F6.
+    // ST-D11: reversal as a miter turn. Caught by the guard: on ST-F6 the defect ends in
+    // `numeric-range` before ST-F6's area check can run (#169 review M4).
     let mut ws = with_defect(|d| d.reversal_as_turn = true);
-    assert!(
-        !area_is(&mut ws, &f6(), request(2.0, BUTT, MITER, 4.0, -3), 8.0),
+    assert_eq!(
+        run(&mut ws, &f6(), request(2.0, BUTT, MITER, 4.0, -3)),
+        StrokeOutcome::Status(STROKE_PATH_NUMERIC_RANGE),
         "ST-D11"
     );
     // ST-D12: arrangement tolerance 2^(e-1); caught by the native tau assertion.

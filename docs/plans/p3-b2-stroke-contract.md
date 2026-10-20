@@ -26,6 +26,14 @@ Amended 2026-10-20 by [ST-U4](p3-fill-stroke-meshes.md#b2-st-u4-cubic-stroke), a
 - **Strictness.** The guard is at least as strict as the frozen `32u(‖B‖∞ + r·L²)` with the actual ratio in place of `L`, since `ρ ≥ ratio ≥ 1`.
 - **Fixtures.** The path above is added as fixture `ST-U4/tip-ratio`: a kept miter, `ok`, area 400. ST-F5, ST-F24 and ST-F25 keep their literal results; ST-F24 at `L = 2^30` has `ρ ≈ 2^21`, which still gives `numeric-range`.
 
+Amended 2026-10-21 by the [ST-U4 cusp shared triple follow-up](p3-fill-stroke-meshes.md#b2-st-u4-cusp-shared-triple-review-follow-up) (ST-U4 post-merge review SF1), restoring §4.2 and bumping the §7.1 identity:
+
+- **Defect.** At a non-collinear reversal, ST-U4's right range computed its own start triple from its own `D1`, so the cusp knot had two triples. They are mirror images in exact arithmetic, but in binary64 they differed by a few ulps. That broke §4.2's "every generated knot has exactly one sample triple", and the arrangement could fail with `TopologyAmbiguous` (`unsupported-geometry`).
+- **Correction.** The right range's first leaf now starts from the left range's last end triple with `E−` and `E+` swapped, computed once, as collinear parts already did. Its normal error bound is that leaf's `dN`, which already contains the split end's limit-direction term. No guard formula changes. The proof is in the plan entry.
+- **Revision 2 (§7.1 identity rule).** The change alters `ok` meshes, so the identity moves together: `operationId` `'geometry-wasm/stroke-v0+r2'` and `stroke_v0_revision() == 2`. The §7.1 table's v0 values are as frozen and are superseded by these. `stroke_v0_version()`, the magics, `abi_version()` and `fill_v0_*` are unchanged.
+- **Measured effect** on the review's 100-case corpus: 85 results are bit-identical. 5 `ok` meshes change, each only in the right range's first start triple: 1 to 2 ulps on four, and 64 ulps on a coordinate near zero on the fifth. 4 cases go from `unsupported-geometry` to `ok`. 6 `work-limit` cases change only in piece samples, and none has a mesh. No other status changes.
+- **Fixtures.** `ST-U4/cusp-shared-a` and `ST-U4/cusp-shared-b` (the review's two reproductions, `ok`) and a bitwise one-triple-per-knot check are added. A reversal `2^-20` from a segment end is a listed `work-limit` class (`DepthLimit`), with a fixture.
+
 **Evidence label.** Every stroke result under this contract is functional evidence. Until B4 has A04 evidence, every report, PR description and screenshot states that precision is **UNVERIFIED** against the 0.25 physical-pixel target, as D8 [requires](p3-d8-parallel-tracks.md#rules). Stroke work closes no A01-A08 criterion and no C03-C05 item.
 
 **Identifiers.** This contract prefixes its own IDs with **ST-**: semantics rows ST-S1 to ST-S12, pieces ST-P1 to ST-P7, guards ST-G1 to ST-G6, oracles ST-O1 to ST-O5, fixtures ST-F1 to ST-F26, seeded defects ST-D1 to ST-D14, conformance cases SC01 to SC22, units ST-U2 to ST-U9 (with ST-U3b), acceptance ST-A0 to ST-A12, risks and open obligations ST-OB1 to ST-OB8. V2's cases C01-C18, V3's codes and the proposal's B2-Q1 to B2-Q9 keep their meaning.
@@ -345,6 +353,8 @@ V1 rules 1-8 apply unchanged, with rule 5's region being section 2.2's stroke re
 
 The magics differ from P2's (`VGS2`, `VGR2`) and fill's (`VGF0`, `VGM0`). `abi_version()` stays 1 and `fill_v0_*` is unchanged. **Identity rule,** as V2's: a change that can alter an `ok` stroke mesh for some request changes the `operationId` and the revision together (for example to `'geometry-wasm/stroke-v0+r2'`); a change that only turns a failure into a success, such as a limit raise, keeps them.
 
+Amended 2026-10-21 (cusp shared triple; see the header notes): the identity is now `'geometry-wasm/stroke-v0+r2'` with `stroke_v0_revision() == 2`. The table above keeps the frozen v0 values.
+
 ### 7.2 Exports
 
 All parameters and returns `u32`, as P2 and V2: `stroke_v0_version`, `stroke_v0_revision`, `stroke_v0_reserve(inputBytes, outputBytes)`, `stroke_v0_input_ptr`, `stroke_v0_input_capacity`, `stroke_v0_output_ptr`, `stroke_v0_output_capacity`, `stroke_v0_memory_epoch`, `stroke_v0_process(inputLength)`, `stroke_v0_result_len`, `stroke_v0_required_output_bytes`, `stroke_v0_dispose`. Each has the meaning of its [`fill_v0_` counterpart](p3-v2-fill-mesh-transport-contract.md#exports). A third module-level engine, `StrokeEngine`, owns this state and shares no field, epoch, arena or workspace with the P2 `Engine` or `FillEngine`. Batch statuses are P2's (`OK=0` to `INTERNAL_ERROR=6`). Path statuses: `OK=0`, `EMPTY=1`, `INVALID_PATH=2`, `INVALID_TOLERANCE=3`, `NUMERIC_RANGE=4`, `WORK_LIMIT=5`, `UNSUPPORTED_GEOMETRY=6`, `INVALID_STROKE=7`.
@@ -409,10 +419,10 @@ Amended 2026-10-20 by ST-U4 (ST-A0 review; see the header notes).
 
 The front-end limits gain two rows:
 
-| Limit (front end)                                          | Value | On excess                    |
-| ---------------------------------------------------------- | ----: | ---------------------------- |
-| Piece records per path, dropped zero-area hulls included   | 4,096 | `work-limit` (`PieceLimit`)  |
-| Leaf stack (depth-first, one pending sibling per level)    |    22 | not reachable (depth ≤ 20)   |
+| Limit (front end)                                        | Value | On excess                   |
+| -------------------------------------------------------- | ----: | --------------------------- |
+| Piece records per path, dropped zero-area hulls included | 4,096 | `work-limit` (`PieceLimit`) |
+| Leaf stack (depth-first, one pending sibling per level)  |    22 | not reachable (depth ≤ 20)  |
 
 `STROKE_V0_LIMITS` is unchanged. The test-only limit set `WIDE_TEST_LIMITS` (`cfg(test)` only, never a production configuration) is `STROKE_V0_LIMITS` with only these arrangement fields raised: `max_events` 65,536 (events and columns), `max_sections` 4,194,304, `max_nodes` 262,144, `max_work` 4,000,000,000, and `max_bytes` 1 GiB for their storage. The front-end limits, `τ = 2^(e−2)`, `max_input_vertices`, `max_edges`, `max_contours`, `max_pairs`, `max_cells`, `max_boundaries`, `max_contributors`, `max_vertices` and `max_triangles` are the same. Current-cap fixtures are checked under it.
 

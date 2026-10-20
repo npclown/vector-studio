@@ -77,7 +77,7 @@ describe('stroke-v0 adapter factory', () => {
       const adapter = await createStrokeMeshPort(source);
       expect(adapter.portVersion).toBe(0);
       expect(adapter.operationId).toBe(STROKE_V0_OPERATION_ID);
-      expect(adapter.operationId).toBe('geometry-wasm/stroke-v0');
+      expect(adapter.operationId).toBe('geometry-wasm/stroke-v0+r2');
       expect(adapter.linearMemoryBytes()).toBeGreaterThan(0);
       const result = adapter.buildStrokeMeshes([line()]);
       expect(result.status).toBe('ok');

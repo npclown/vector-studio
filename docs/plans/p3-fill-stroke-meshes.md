@@ -2126,6 +2126,8 @@ Seeded defects of section 11.3 assigned to ST-U3. Each is a `StrokeDefects` swit
 
 ST-D6, ST-D7 and ST-D8 are cubic defects and belong to ST-U4. The contract names ST-O1 on ST-F3 and ST-F16 for ST-D9. ST-O1 is ST-U2's oracle, so ST-U3 catches ST-D9 with ST-F3's literal area instead.
 
+Correction, 2026-10-21 (#169 review M4, [cusp shared triple follow-up](#b2-st-u4-cusp-shared-triple-review-follow-up)): ST-D5 and ST-D11 are caught by the guard, not by ST-F10's area or ST-F6's miter. With either switch on, the fixture ends in `numeric-range` before its geometry check runs. The test now asserts that status for each, with a comment that says "caught by the guard". The table above is left as written.
+
 Validation, on the tree with ST-U2 merged. This worktree has no `.tools` directory, and junctions are not allowed. So `pnpm test:geometry` and `pnpm test:p2-identity` ran as copies of `tooling/test-geometry.mjs` and `tooling/compare-p2-wasm.mjs` whose only change points `.tools` at the main checkout's pinned toolchain and the cargo target at a separate `geometry-build-st-u3` directory:
 
 - **`cargo test … --lib stroke_`** (native): 24 passed and 1 ignored (the dump hook).
@@ -2174,6 +2176,7 @@ Design:
 - **Collinear cubics.** The pieces are consecutive ST-P1 sweeps between `P0`, the turning points `c_k = C(t̃_k)` (de Casteljau) and `P3`, with a cusp disk at each `c_k`. Part `k` uses the normal `(−1)^k·N0`, where `N0` comes from the start tangent. The knot triple is computed once, and the next part reads it with its outer points swapped, which is the same arithmetic bit for bit. The last part ends at the source end triple.
 - **Reversal (cusp).** The cubic is split once at `t̃`. The ranges `[0, t̃]` and `[t̃, 1]` keep the split's controls. The cusp disk at the split point lies between their leaves. The split point is a stationary parameter of both ranges, so its leaf gets the reduced cone, and its normal is the first nonzero of the cone set toward the interior (`D1`).
 - **Leaves (section 4.5).** Each range is subdivided by midpoints, depth-first and left-first, from a 22-entry stack. A leaf is accepted by section 4.5's test with ST-U4's terms (guards below). At depth 20 a rejected leaf is `DepthLimit`. An accepted leaf's start triple is the previous leaf's end triple, or the source triple, or, after a split, its own. Its end triple is the source triple at `t = 1`, or `Q3 ± fl(r·n(D2))`, or `D1` at a split end. The leaf hull is ST-P2. A range's leaves tile it as `[index, index + 1]/2^depth`, and the knot triples are shared bit for bit.
+  - Correction, 2026-10-21 ([cusp shared triple follow-up](#b2-st-u4-cusp-shared-triple-review-follow-up)): "after a split, its own" departed from contract §4.2, because the cusp knot then had two triples. Since stroke revision 2, the right range's first leaf starts from the left range's last end triple with its outer points swapped.
 - **Seeded defects** `knot_join` (ST-D6), `omit_cusp_disk` (ST-D7) and `leaf_factor_two` (ST-D8) are `cfg(test)` switches, constant `false` in production.
 - **Test-only wide limits.** `StrokeWorkspace::with_limits` (`cfg(test)`) reserves another `RoundedFillLimits`. `WIDE_TEST_LIMITS`, defined in the contract's §7.6 dated note, is `STROKE_V0_LIMITS` with only `max_events` (events and columns), `max_sections`, `max_nodes` and `max_work` raised, plus `max_bytes` for their storage. The front-end limits, `τ`, `max_input_vertices`, `max_edges`, `max_contours` and the other arrangement fields are the same. It exists only to check current-cap fixtures (ST-F16). Production uses `STROKE_V0_LIMITS`, unchanged.
 
@@ -2253,6 +2256,7 @@ Deviations and open items:
 - **Test-only wide limits** appear only in `cfg(test)` code and the dump's `wide` flag. No production path can reach them.
 - **No export, adapter, ABI or contract change** beyond the dated notes. The release WASM's stroke code is still dead code there, until ST-U5.
 - **ST-OB7.** The measured `DepthLimit` cases suggest that the deferred tighter bound would recover slow-speed leaves. It stays deferred.
+  - Addition, 2026-10-21 (V4 review M1, [cusp shared triple follow-up](#b2-st-u4-cusp-shared-triple-review-follow-up)): another listed `DepthLimit` (`work-limit`) class is a reversal very near a segment end. At `s = 2^-20` from the start or the end, both orientations stop with `Front(DepthLimit)`. At `2^-2`, `2^-6` and `2^-10` the review's probes are `ok`, and at `2^-40` they are `work-limit` too. This is an ST-OB7 input.
 
 ### B2 ST-U3b scaling probe
 
@@ -2476,8 +2480,67 @@ Validation, 2026-10-20, on the merge commit `5250ce5` (`main` at `e4ec82d`, with
 Deviations and open items:
 
 - **`unsupported-geometry` has no export fixture.** Since ST-U4 it is reachable only through `TopologyAmbiguous`, for which no stroke fixture is known. The mapping row is covered by `status_mapping_rows_of_section_7_8` and by the adapter's path-status test.
+  - Correction, 2026-10-21 ([cusp shared triple follow-up](#b2-st-u4-cusp-shared-triple-review-follow-up)): strokes did reach `unsupported-geometry`. Revision 1 failed with `TopologyAmbiguous` on 4 of the 40 random exact cusps in the ST-U4 post-merge review's corpus, because the cusp knot had two triples. Revision 2 removes that cause, and those 4 cases are `ok`. The identity above (`stroke_v0_revision() = 1`, `'geometry-wasm/stroke-v0'`) is now revision 2, `'geometry-wasm/stroke-v0+r2'`.
 - **The fill adapter is not shared.** `stroke-adapter.ts` duplicates `fill-adapter.ts` rather than factoring a common core, so that V2's adapter and its identity stay byte-for-byte unchanged. A later cleanup may merge them.
 - **Small framing helpers duplicated.** `stroke_export.rs` repeats `section`, `all_zero`, `read_usize`, the record and block writers and the arena word helpers from `fill_export.rs` instead of making them `pub(crate)`, so `fill_export.rs` is untouched.
+
+### B2 ST-U4 cusp shared triple (review follow-up)
+
+Light-tier plan entry, 2026-10-21. It is a post-merge review follow-up to ST-U4 (#173): the review's finding SF1, plus minors M1 and M2 and minors M4 and M5 of the #169 review. It restores the frozen contract's §4.2 property and adds no behaviour. Acceptance check:
+
+- the review's two reproductions are `ok` with literal membership, fixed before their first run;
+- a native test shows one bit-identical mirrored triple at each cusp knot;
+- the review's 100-case corpus changes no status except `unsupported-geometry` → `ok`, and changes `ok` meshes only in the right range's first start triple;
+- the stroke identity moves to revision 2 under contract §7.1;
+- the fill and P2 identities are unchanged;
+- `pnpm test:geometry`, `pnpm check` and `pnpm build` pass.
+
+Precision is **UNVERIFIED** against the 0.25 physical-pixel target until B4, as for every stroke result.
+
+**Finding.** At a non-collinear reversal, the right range's first leaf computed its own start triple, `Q0 ± fl(r·n(D1))`. It did not reuse the left range's end triple. In exact arithmetic the two are mirror images; in binary64 they differed by 1 to 4 ulps. So the cusp knot had two triples, contrary to §4.2, and the ST-U4 entry above recorded the departure only as "after a split, its own". The arrangement's `embed_scalar` could then not keep a strict order, and failed with `Rounded(TopologyAmbiguous)`, which maps to `unsupported-geometry`. This happened on 4 of the review's 40 random exact cusps.
+
+**Fix.** Files:
+
+- `stroke_outline.rs`: `LeafRange.source_start: Option<Triple>` becomes `start: (Triple, f64)`, the start triple with its normal error bound. `emit_range` returns its last end triple and bound. The cusp branch passes the left range's end triple, with `E−` and `E+` swapped, as the right range's start, the way collinear parts already share their knot triple. The path that computed a start triple after a split is removed.
+- `stroke_cubic.rs`: `LeafContext.start_error` becomes `f64`, and `LeafMeasure.start_direction`, now unused, is removed. The guard formulas are unchanged.
+- `stroke_export.rs` and `stroke-adapter.ts`: revision 2 (below).
+
+**Error accounting.** The right range's first leaf now inherits the left's normal. Its bound:
+
+1. For a non-collinear exact reversal, the hodograph factors as `D(t) = (t − t*)(A·t + w)` with `A·t* + w ≠ 0`. Otherwise `D = A·(t − t*)²` would be parallel to `A` everywhere, and the cubic would be collinear (section 4.6, case 3).
+2. So the one-sided limit directions at `t*` are exactly opposite, `L_R = −L_L`, and the reference normals satisfy `N_R* = −N_L*`.
+3. The swapped triple is exactly `triple(c, −fl(r·n))`, since `a + (−b) = a − b` in IEEE arithmetic. Its normal is the left's computed normal, negated bit for bit.
+4. Its normal error against `N_R*` therefore equals the left leaf's computed-normal error against `N_L*`. That error is bounded by the left leaf's `end_error`, `dN = (18ε·|V_L| + 600u·M²)/aLow_L + 8u`.
+5. That bound already holds the split end's one-sided limit-direction term, `576u·M²/aLow ≤ 600u·M²/aLow` (ST-G4 (4) above). It also holds the `L(t̃)` against `L(t*)` term, `17u·M·|V|/aLow`, which the `16s` part of `ε` covers. No further term is needed.
+6. The right leaf charges this bound through the unchanged `gCtrl` term, `3r·max(dN_start, dN_end)`. This is the inheritance rule that ST-G4 already states for interior knots: "a knot's `dN` comes from the leaf that computed it".
+7. No guard formula is loosened. The value supplied is a proven bound for the triple actually emitted.
+8. The right first leaf's start term can now be smaller than its former self-computed one. That former term bounded a triple that is no longer emitted. In the corpus, no leaf's acceptance changed: piece counts, depths and indices are equal before and after.
+
+**Identity (contract §7.1).** The fix changes `ok` meshes (below), so the rule "a change that can alter an `ok` stroke mesh ... changes the `operationId` and the revision together" applies, and the failure-to-success exemption does not. `stroke_v0_revision()` becomes 2 and `operationId` becomes `'geometry-wasm/stroke-v0+r2'`, in the kernel, the adapter and its type, `stroke-adapter.test.ts` and the SC21 option of `stroke-mesh-port.test.ts`. The double keeps its own id. The fill operation and revision are untouched. The Primary decided this on 2026-10-21. ST-U6 has not landed, so nothing caches stroke meshes yet. The contract carries a dated note.
+
+**Corpus regression.** The input is the review's 100-case corpus (40 random exact cusps, 40 random regular cubics, 20 collinear cubics), generated by the review's `gen2.mjs` (SHA-256 `425f7882…5746`) as `in.txt` (`044c23b6…478e`). It was dumped with `emit_stroke_dump` before the fix on `2940bee` (`before.txt`, `c3001537…ae74`) and after it (`after.txt`, `83034d34…cb37`). ST-O1, ST-O2 and ST-O3 then ran on every complete case, with the review's harness. The dumps were compared field by field: status, failure, mesh, and every piece's kind, parameters, depth, index, samples and points. The comparison scripts are ad hoc and are not committed. They and the dumps are in the implementer's session scratch directory, and the hashes above identify the dumps.
+
+| Change                                 | Cases                                          | Detail                                                                                                                                                                             |
+| -------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| bit-identical                          | 85                                             | status, mesh and pieces equal                                                                                                                                                      |
+| `unsupported-geometry` → `ok`          | cusp23, cusp24, cusp29, cusp39                 | each `Rounded(TopologyAmbiguous)` before; ST-O1, ST-O2 and ST-O3 pass after                                                                                                        |
+| `ok`, mesh changed                     | cusp8, cusp9, cusp22, cusp25, cusp30           | only the right range's first start triple: 1, 1 to 2, 1 to 2, 2 and 64 ulps (cusp30's 64 is in an `x` near zero); ST-O1 and ST-O2 pass, and ST-O3 on the four of at most 12 pieces |
+| `work-limit`, samples changed, no mesh | cusp10, cusp11, cusp13, cusp14, cusp21, cusp36 | only the right range's first start triple                                                                                                                                          |
+
+Before the fix, 11 corpus cusps had unmirrored knot triples. After it, there are none. Before the fix the counts were 70 `ok`, 4 `unsupported-geometry` and 26 `work-limit`, the same as the review's own run. After it they are 74 `ok` and 26 `work-limit`. No oracle check failed in either run. No status changed in any other way.
+
+**Fixtures** (native, `stroke_cubic_tests.rs`). Each literal was fixed before its first run, and each passed on its first run:
+
+- **`ST-U4/cusp-shared-a`.** `M(0,0) C(−0.037109375,−0.22265625)(−0.0302734375,−0.21875)(0.1455078125,1.01171875)`, `w = 1`, butt, `e = −3`. It is `ok`, classified `Cusp` at `t̃ = 19/64` with one cusp disk. `(−0.018, −0.112)` (the cusp) and `(0.184, −0.112)` (0.4r from the centerline) are inside. `(−1.02, −0.112)` (2r) is outside.
+- **`ST-U4/cusp-shared-b`.** `M(0,0) C(0,0.095703125)(0.7177734375,0.703125)(0.2783203125,0.322265625)`, `w = 0.25`, round, `e = −1`. It is `ok`, `Cusp` at `t̃ = 49/64` with one disk. `(0.42, 0.4465)` and `(0.1755, 0.2865)` are inside, and `(0.67, 0.4465)` is outside.
+- **`st_u4_cusp_knot_has_one_mirrored_triple`.** On both cases and on ST-F16p, the leaves on either side of the disk share one parameter. The right leaf's start triple is the left leaf's end triple with `E−` and `E+` swapped, compared by bits. The disk center is the same point.
+- **M1, `st_u4_reversal_near_a_segment_end_is_depth_limited`.** The review's `cusp-near-start-2^-20` and `cusp-near-end-2^-20` probes, `w = 0.25`, butt, `e = −3`, are `work-limit` with `Front(DepthLimit)`. This is a listed `work-limit` class and an ST-OB7 input (ST-U4 deviations above).
+- **M2.** `tip_guard_values` adds `fl(1 + d̂) = 79u`, which is refused because `ρ` is just above `2^24`, and `80u`, which passes with `ρ = 2^27/√65`. Both use `r = 1e-12`, so only the ratio check decides.
+- **M4.** ST-D5 and ST-D11 assert `numeric-range` (ST-U3 correction above).
+- **M5.** `StrokeWorkspace::piece_points` returns `Option` through `get`. `piece_points_after_an_input_limit_overflow` checks that ST-F15 R3 at `e = −11` (`InputLimit`) has a piece whose points were not stored, and that the call returns `None` for it instead of panicking.
+- The dump hook and the three test callers are adapted to the `Option`.
+
+Validation: VALIDATION-PENDING
 
 ### B0 runner (light tier)
 

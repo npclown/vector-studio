@@ -240,6 +240,162 @@ fn st_f16p_cusp_disk_at_production_limits() {
     assert!(inside(&ws, point(0.5, 0.8)));
 }
 
+// ---- ST-U4 cusp shared triple (ST-U4 post-merge review SF1) ----
+
+/// The two exact reversals the review reproduced as `unsupported-geometry`
+/// (`Rounded(TopologyAmbiguous)`), when the right range computed its own start triple. Their
+/// literals were fixed before their first run: `ok`, one cusp disk at the exact `t*` (19/64 and
+/// 49/64), the cusp point and a point at `0.4 r` from the centerline inside, a point at `2 r`
+/// outside.
+const CUSP_A: [[f64; 2]; 4] = [
+    [0.0, 0.0],
+    [-0.037_109_375, -0.222_656_25],
+    [-0.030_273_437_5, -0.218_75],
+    [0.145_507_812_5, 1.011_718_75],
+];
+const CUSP_B: [[f64; 2]; 4] = [
+    [0.0, 0.0],
+    [0.0, 0.095_703_125],
+    [0.717_773_437_5, 0.703_125],
+    [0.278_320_312_5, 0.322_265_625],
+];
+
+/// `(name, controls, width, cap, e, t*, inside, outside)`.
+type CuspCase = (
+    &'static str,
+    [[f64; 2]; 4],
+    f64,
+    StrokeCap,
+    i32,
+    f64,
+    [Point; 2],
+    Point,
+);
+
+fn shared_cusp_cases() -> [CuspCase; 2] {
+    [
+        (
+            "ST-U4/cusp-shared-a",
+            CUSP_A,
+            1.0,
+            BUTT,
+            -3,
+            0.296_875,
+            [point(-0.018, -0.112), point(0.184, -0.112)],
+            point(-1.02, -0.112),
+        ),
+        (
+            "ST-U4/cusp-shared-b",
+            CUSP_B,
+            0.25,
+            StrokeCap::Round,
+            -1,
+            0.765_625,
+            [point(0.42, 0.4465), point(0.1755, 0.2865)],
+            point(0.67, 0.4465),
+        ),
+    ]
+}
+
+fn bits(p: Point) -> (u64, u64) {
+    (p.x.to_bits(), p.y.to_bits())
+}
+
+#[test]
+fn st_u4_cusp_shared_triple_fixtures_are_ok() {
+    let mut ws = workspace();
+    for (name, shape, width, cap, exponent, split, inner, outer) in shared_cusp_cases() {
+        let outcome = run(
+            &mut ws,
+            &cubic(shape),
+            request(width, cap, MITER, 4.0, exponent),
+        );
+        assert_eq!(outcome, StrokeOutcome::Mesh, "{name}");
+        assert_eq!(ws.segments()[0].class, CubicClass::Cusp { split }, "{name}");
+        assert_eq!(count(&ws, PieceKind::CuspDisk), 1, "{name}");
+        for probe in inner {
+            assert!(inside(&ws, probe), "{name}: {probe:?} inside");
+        }
+        assert!(!inside(&ws, outer), "{name}: {outer:?} outside");
+    }
+}
+
+/// Section 4.2: the cusp knot has exactly one sample triple. The right range's first leaf
+/// starts with the left range's last end triple, its outer points swapped, bit for bit.
+#[test]
+fn st_u4_cusp_knot_has_one_mirrored_triple() {
+    let mut ws = workspace();
+    let mut cases: Vec<_> = shared_cusp_cases()
+        .iter()
+        .map(|case| (case.0, case.1, request(case.2, case.3, MITER, 4.0, case.4)))
+        .collect();
+    cases.push(("ST-F16p", F16, request(0.125, BUTT, MITER, 4.0, -5)));
+    for (name, shape, request) in cases {
+        assert_eq!(
+            run(&mut ws, &cubic(shape), request),
+            StrokeOutcome::Mesh,
+            "{name}"
+        );
+        let pieces = ws.pieces();
+        let disk = pieces
+            .iter()
+            .position(|piece| piece.kind == PieceKind::CuspDisk)
+            .unwrap();
+        let (left, right) = (pieces[disk - 1], pieces[disk + 1]);
+        assert_eq!(left.kind, PieceKind::CubicLeaf, "{name}");
+        assert_eq!(right.kind, PieceKind::CubicLeaf, "{name}");
+        assert_eq!(left.meta.range.1, right.meta.range.0, "{name}");
+        let (end, start) = (left.meta.samples[1], right.meta.samples[0]);
+        assert_eq!(bits(start.center), bits(end.center), "{name}");
+        assert_eq!(bits(start.minus), bits(end.plus), "{name}");
+        assert_eq!(bits(start.plus), bits(end.minus), "{name}");
+        assert_eq!(
+            bits(pieces[disk].meta.samples[0].center),
+            bits(end.center),
+            "{name}"
+        );
+    }
+}
+
+/// V4 review M1: a reversal at `s = 2^-20` from a segment end is a listed `work-limit` class
+/// (`DepthLimit`: the frozen `768u M^2` cone term next to the stationary end), set before its
+/// first run. The reviewer's `cusp-near-start/end-2^-20` probes, `w = 0.25`, butt, `e = -3`.
+#[test]
+fn st_u4_reversal_near_a_segment_end_is_depth_limited() {
+    let s = 2f64.powi(-20);
+    let near_start = [
+        [0.0, 0.0],
+        [0.0, -3.0 * s],
+        [-1.5 * s, 1.5 - 6.0 * s],
+        [3.0 - 4.5 * s, 4.5 - 9.0 * s],
+    ];
+    let near_end = [near_start[3], near_start[2], near_start[1], near_start[0]];
+    let mut ws = workspace();
+    for (name, shape) in [("near-start", near_start), ("near-end", near_end)] {
+        let outcome = run(&mut ws, &cubic(shape), request(0.25, BUTT, MITER, 4.0, -3));
+        assert_eq!(status(outcome), STROKE_PATH_WORK_LIMIT, "{name}");
+        assert_eq!(
+            ws.last_error(),
+            Some(StrokeError::Front(FrontEndError::DepthLimit)),
+            "{name}"
+        );
+    }
+}
+
+/// #169 review M5: after an `InputLimit` overflow the piece records are kept but their points
+/// are not; `piece_points` reports that with `None` instead of panicking. ST-F15 R3 at
+/// `e = -11` is the listed `InputLimit` case.
+#[test]
+fn piece_points_after_an_input_limit_overflow() {
+    let mut ws = workspace();
+    let outcome = run(&mut ws, &cubic(R3), request(2.0, BUTT, MITER, 4.0, -11));
+    assert_eq!(status(outcome), STROKE_PATH_WORK_LIMIT);
+    assert!(ws
+        .pieces()
+        .iter()
+        .any(|piece| ws.piece_points(piece).is_none()));
+}
+
 #[test]
 fn st_f17_collinear_reversal_areas() {
     let mut ws = workspace();

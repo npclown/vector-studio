@@ -404,9 +404,10 @@ pub(crate) struct LeafContext {
     /// The leaf's start or end is a stationary parameter (reduced cone).
     pub(crate) stationary_start: bool,
     pub(crate) stationary_end: bool,
-    /// The leaf's start triple is fixed before the test, with its normal error bound: a source
-    /// end (0) or the previous leaf's end. `None`: this leaf computes it (after a reversal).
-    pub(crate) start_error: Option<f64>,
+    /// The normal error bound of the leaf's start triple, which is fixed before the test: a
+    /// source end (0), the previous leaf's end, or after a reversal the left range's end triple
+    /// read from the other side (that leaf's `dN`, with the split end's limit-direction term).
+    pub(crate) start_error: f64,
     /// The leaf's end is a source end: its triple is the source triple (normal error 0).
     pub(crate) end_fixed: bool,
     /// The binary64 length of the leaf's parameter interval, for leaves next to a reversal
@@ -416,11 +417,10 @@ pub(crate) struct LeafContext {
     pub(crate) factor: f64,
 }
 
-/// The test's outcome and the directions of an accepted leaf's computed end normals.
+/// The test's outcome and the direction of an accepted leaf's computed end normal.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct LeafMeasure {
     pub(crate) accepted: bool,
-    pub(crate) start_direction: Point,
     pub(crate) end_direction: Point,
     /// Normal error bounds of the leaf's start and end triples.
     pub(crate) start_error: f64,
@@ -497,9 +497,7 @@ pub(crate) fn measure_leaf(q: [Point; 4], depth: u32, context: LeafContext) -> L
         };
         (18.0 * eps * length + stationary) / a_low + 8.0 * UNIT
     };
-    let start_error = context
-        .start_error
-        .unwrap_or_else(|| computed_error(context.stationary_start));
+    let start_error = context.start_error;
     let end_error = if context.end_fixed {
         0.0
     } else {
@@ -526,11 +524,6 @@ pub(crate) fn measure_leaf(q: [Point; 4], depth: u32, context: LeafContext) -> L
     }
     LeafMeasure {
         accepted: true,
-        start_direction: if context.stationary_start {
-            first_nonzero([d[1], d[2]])
-        } else {
-            d[0]
-        },
         end_direction: if context.stationary_end {
             first_nonzero([d[1], d[0]])
         } else {
