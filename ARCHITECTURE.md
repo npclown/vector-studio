@@ -116,6 +116,8 @@ P2.3 adds the private `geometry-wasm` TypeScript adapter/cache over the owned Ru
 
 P3 V1 ([ADR 0002](docs/decisions/0002-path-scene-and-fill-mesh-port.md)) adds the first concrete geometry port. `contracts` defines a fill-mesh port with plain-data requests and results; `geometry-wasm` implements it beside its P2 private session; the host composition root obtains that adapter from a `geometry-wasm` factory and injects it into `renderer-core`. Among current packages, only the playground, as host composition, may depend on `geometry-wasm`. The scene contract gains a path node whose fill rule is part of its geometry. The port is fill only until stroke has its own approved contract. These contracts are accepted; their code lands in D8 checkpoints V2 and V3.
 
+Pointer, 2026-10-20 (B2 ST-U5): stroke now has its own approved contract, the [B2 stroke contract](docs/plans/p3-b2-stroke-contract.md). `contracts` defines `StrokeMeshPort` beside `FillMeshPort`, with the same plain-data rules and the same mesh form. `geometry-wasm` implements it with `createStrokeMeshPort` over its own kernel instance, and the host composition root injects it into `renderer-core` (ST-U6). No dependency edge changes.
+
 Forbidden dependency examples:
 
 - `model -> renderer-webgpu`

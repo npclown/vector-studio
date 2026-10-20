@@ -150,6 +150,8 @@ Under the [V3 contract](plans/p3-v3-renderer-mesh-pipeline-contract.md) (fill on
 
 **P3 fill operation `'geometry-wasm/fill-v0+r2'` (2026-10-20, [Alt-A1 production contract](plans/p3-alt-a1-fill-ladder-contract.md)).** The fill export runs a two-rung ladder per path. The fast rung certifies the flattened polygon against the source curves with an exact clearance and monotone sufficient condition, and then triangulates the polygon by monotone decomposition, with no Steiner points. Every decision is an exact predicate or a proved interval bound. Any case it does not prove, including crossings, touching and coincident contours, falls back to the exact arrangement kernel unchanged, which also serves as the test oracle. One output per path; equal requests take the same rung. No dependency is added and the port is unchanged; the operation identity changes, so cache keys miss once.
 
+**P3 stroke operation `'geometry-wasm/stroke-v0'` (2026-10-20, [B2 stroke contract](plans/p3-b2-stroke-contract.md)).** The stroke export outlines each path as positively oriented convex pieces: line sweeps, cubic leaves, joins, caps and cusp disks, built from shared sample triples and decided by exact predicates. It then resolves their union with the existing exact arrangement under nonzero at `τ = 2^(e−2)`, followed by V2's refinement and boundary checks, unchanged. The output has the fill mesh's form. The export is its own `stroke_v0_*` family with its own engine and workspace, and it shares no state with the P2 or fill engines. The Alt-A1 fast rung is not used for strokes.
+
 Style data is stored separately from geometry so color and opacity changes do not rebuild vertices.
 
 ## GPU resource strategy

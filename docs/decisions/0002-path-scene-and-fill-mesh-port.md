@@ -4,6 +4,8 @@ Status: Accepted. The user approved the [P3 V1 proposal](../plans/p3-v1-path-sce
 
 Date: 2026-10-08
 
+Note, 2026-10-20 (B2 ST-U5): as this record anticipates, stroke gets its own port, `StrokeMeshPort`, under the [B2 stroke contract](../plans/p3-b2-stroke-contract.md). This record's decision is unchanged.
+
 ## Context
 
 Under [D8](../plans/p3-d8-parallel-tracks.md), Track A must draw paths. Today the scene contract accepts only primitives and containers, `renderer-core` imports only `contracts`, and `geometry-wasm` exposes a private P2 session that no renderer uses. [ADR 0001](0001-port-composition.md) already decided that the host composes concrete adapters and that `renderer-core` consumes a geometry port that `geometry-wasm` implements. No such port exists yet, and no package may yet depend on `geometry-wasm` in production.
