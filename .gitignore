@@ -18,6 +18,7 @@ artifacts/p3.1p-t01/
 artifacts/p3.1p-t02/
 artifacts/p3.1p-t03/
 artifacts/p3-v3-mesh/
+artifacts/p3-v4-paths/
 artifacts/p3-b0-wasm/
 *.tsbuildinfo
 .tools/

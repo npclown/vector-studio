@@ -989,7 +989,9 @@ describe('V3a device loss, ownership and host injection', () => {
     expect(service.prepare(target)).toBeNull();
   });
 
-  it('V3-A18: no host injects a port: apps/playground constructs no service with fillMesh', () => {
+  // V4 removed the V3-A18 test ("no host injects a port"), as V3-A18 foresaw, when the
+  // playground gained the real port. This V4 test keeps the remaining hosts port-free.
+  it('V4: only the path page injects the real port; the V3 smoke fixture keeps its static double', () => {
     const root = join(__dirname, '../../apps/playground');
     const files: string[] = [];
     const walk = (directory: string) => {
@@ -1002,13 +1004,23 @@ describe('V3a device loss, ownership and host injection', () => {
     };
     walk(root);
     expect(files.length).toBeGreaterThan(0);
-    // V3c: the V3-A14 smoke fixture page is a test fixture with a static test-double port, not
-    // a host; it must not reach a real port (no geometry-wasm). V4 replaces this exemption.
+    const host = files.filter((file) => /[\\/]src[\\/]p3-v4-paths\.ts$/.test(file));
+    expect(host).toHaveLength(1);
+    const hostSource = readFileSync(host[0]!, 'utf8');
+    expect(hostSource).toMatch(/from '@vector-studio\/geometry-wasm'/);
+    expect(hostSource).toMatch(/fillMesh: adapter/);
+    // The manifest and project-reference edges of that import (boundary rule P-B1).
+    const edges = files.filter((file) =>
+      /[\\/]playground[\\/](package|tsconfig)\.json$/.test(file),
+    );
+    expect(edges).toHaveLength(2);
+    // The V3-A14 smoke fixture page is a test fixture with a static test-double port.
     const fixture = files.filter((file) => /p3-v3-mesh\.(ts|html)$/.test(file));
     expect(fixture).toHaveLength(2);
     for (const file of fixture)
       expect(readFileSync(file, 'utf8'), file).not.toMatch(/geometry-wasm/);
-    for (const file of files.filter((candidate) => !fixture.includes(candidate))) {
+    const allowed = new Set([...host, ...edges, ...fixture]);
+    for (const file of files.filter((candidate) => !allowed.has(candidate))) {
       expect(readFileSync(file, 'utf8'), file).not.toMatch(/fillMesh|geometry-wasm/);
     }
   });
