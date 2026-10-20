@@ -2215,6 +2215,8 @@ export function checkStrokeResolution(
       );
   } else {
     const allowance = qmul(qn(data.perimeter * (1 + 2 ** -40)), qn(tau));
+    // Implied by the symmetric-difference check below (|Δarea| ≤ xor); kept as the frozen
+    // section 11.1 wording's own test.
     if (qcmp(qabs(qsub(areas.first, areas.second)), allowance) > 0) {
       findings.push('mesh area differs from the piece union by more than perimeter times tau');
     }

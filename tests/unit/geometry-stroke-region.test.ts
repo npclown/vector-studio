@@ -977,6 +977,25 @@ describe('ST-O1 piece bounds and ST-O2 inventory', () => {
     expect(checkStrokePieceBounds(f16, dented).findings.join('\n')).toMatch(
       /hull vertices, not its/,
     );
+
+    // A pure disk with twice the reported count: every vertex lies on the circle and every chord
+    // passes checkDisk, so only the vertex-count check can reject it (review of the hardening).
+    const poly = disk.polygon!;
+    const cx = poly.reduce((sum, [x]) => sum + x, 0) / poly.length;
+    const cy = poly.reduce((sum, [, y]) => sum + y, 0) / poly.length;
+    const radius = Math.hypot(poly[0]![0] - cx, poly[0]![1] - cy);
+    const doubled = poly.flatMap((point, index) => {
+      const next = poly[(index + 1) % poly.length]!;
+      const mx = (point[0] + next[0]) / 2 - cx;
+      const my = (point[1] + next[1]) / 2 - cy;
+      const scale = radius / Math.hypot(mx, my);
+      return [point, [cx + mx * scale, cy + my * scale] as const];
+    });
+    const overfull = [...cusp];
+    overfull[diskIndex] = { ...disk, polygon: doubled };
+    expect(checkStrokePieceBounds(f16, overfull).findings.join('\n')).toMatch(
+      /hull vertices, not its/,
+    );
   });
 
   it("ST-O2 control: a round cap's own E- differing from the sweep triple is rejected (M3)", () => {
