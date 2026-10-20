@@ -2145,6 +2145,99 @@ Deviations and open items:
 - **`UnsupportedCubic`** is a unit-local front-end error for a cubic that is not zero-length. It maps to `unsupported-geometry` and is removed by ST-U4. No export exists, so no port behavior depends on it.
 - **No export, adapter, ABI or contract change.** The release WASM's stroke code is dead code there, until ST-U5 calls it.
 
+### B2 ST-U3b scaling probe
+
+Unit ST-U3b of the frozen [B2 stroke contract](p3-b2-stroke-contract.md#121-units), light tier, decision B2-Q8. Plan entry: an ignored native test that times line strokes of 1 to 512 segments with each join and cap, within the stroke limits, and reports the observation with a recommendation on ST-U9. Acceptance check: the probe runs in the release profile and prints per-stroke times, arrangement counts and growth slopes. **No threshold, no performance claim and no committed result record**: B2-Q8 asks for an observation, and every number below is **diagnostic, not evidence**. Independent review NOT RUN: the user skipped independent reviews for 2026-10-20 only; one diff review is owed under the contract's review plan.
+
+Files:
+
+- `packages/geometry-wasm/kernel/src/stroke_probe_tests.rs` (new, `cfg(test)`): the probe `stroke_scaling_probe` (ignored) and one ordinary test of its input generator and slope fit.
+- `packages/geometry-wasm/kernel/src/lib.rs`: one module line appended at the end of the file.
+
+Design:
+
+- **Inputs.** Open polylines of `n` = 1, 2, 4, …, 512 LINE segments in two families. `zigzag` steps `(16, ±16)`, so every interior vertex turns 90° and pieces overlap only their neighbours. `chords` puts its points on a circle of radius 100 at multiples of the golden angle, so most segments cross many others and crossings grow quadratically. The miter limit is 4.
+- **Sweeps.** Table 1 covers family × join × cap × `n` at `w = 2`, `e = −3` (zoom 1, DPR 1 in the s2 mapping), 180 cases. Table 2 covers width at `n = 32` (zigzag; miter/butt and round/round). Table 3 covers the tolerance exponent at `n = 32`.
+- **Counts.** Each case has one untimed build on a fresh `StrokeWorkspace`, whose `RoundedFillStats` start at zero, so zero edges means the arrangement never ran. It records the emitted pieces, the emitted vertex total, the arrangement vertices, edges, pair checks, events, sections, nodes, work units and triangles.
+- **Timing.** The timed builds reuse one workspace, as production does: one warm-up, then builds until a 200 ms budget is spent (`P3_STROKE_PROBE_BUDGET_MS`), at least one and at most 101. The median is reported. Every timed build must reproduce the counting build's outcome.
+- **Labels.** A `work-limit` is labelled `front:pieces` (the 512-piece cap), `front:vertices` (more than 1,024 emitted vertices, the arrangement's preflight `InputLimit`), `front:other` (for example `DiskLimit`), or `arr:<counter>` for the first arrangement counter found at its cap.
+- **Slopes.** Ln-ln least squares over the `ok` cases with `n ≥ 8`, or with `n ≥ 2` when fewer than three such cases exist. This is the B0 style of fitted growth slope.
+
+Command (release profile, one thread), run with the pinned toolchain through `CARGO_HOME` and `RUSTUP_HOME`:
+
+```text
+cargo test --manifest-path packages/geometry-wasm/kernel/Cargo.toml --release --lib --locked \
+    --offline stroke_probe_tests -- --ignored --nocapture --test-threads 1
+```
+
+Environment: Windows 11 Pro, `x86_64-pc-windows-msvc`, Rust 1.94.1, on a shared desktop where other worktrees were building at the same time. Two full runs on the same tree differed by 10-35% on single cases (chords miter/butt at `n = 8`: 23.0 and 31.2 ms). Each run took about 46 s. The numbers below come from the second run.
+
+**Results, diagnostic, not evidence.** Selected rows of Table 1 (`w = 2`, `e = −3`), median time per stroke:
+
+| Family | Join/cap     |  n | Status                     | Pieces | Edges | Pair checks | Sections | Nodes |      Work | Median ms |
+| ------ | ------------ | -: | -------------------------- | -----: | ----: | ----------: | -------: | ----: | --------: | --------: |
+| zigzag | miter/butt   |  8 | ok                         |     15 |    75 |       2,775 |      201 |    88 |    33,929 |      0.91 |
+| zigzag | miter/butt   | 32 | ok                         |     63 |   315 |      49,455 |      777 |   304 |   311,092 |      5.45 |
+| zigzag | miter/butt   | 64 | ok                         |    127 |   635 |     201,295 |    1,545 |   592 | 1,111,546 |     16.88 |
+| zigzag | miter/butt   | 128 | work-limit(front:vertices) |    255 |     — |           — |        — |     — |         — |      0.18 |
+| zigzag | bevel/butt   | 64 | ok                         |    127 |   572 |     163,306 |    1,482 |   592 |   990,921 |     23.12 |
+| zigzag | round/round  |  8 | ok                         |     17 |   191 |      18,145 |      561 |   324 |   207,537 |      4.59 |
+| zigzag | round/round  | 32 | ok                         |     65 |   719 |     258,121 |    2,097 | 1,188 | 2,231,741 |     27.70 |
+| zigzag | round/round  | 64 | work-limit(front:vertices) |    129 |     — |           — |        — |     — |         — |      0.16 |
+| chords | miter/butt   |  8 | ok                         |     15 |    76 |       2,850 |    1,420 | 1,223 |   578,316 |     31.20 |
+| chords | miter/butt   | 16 | work-limit(arr:nodes)      |     31 |   156 |      12,090 |    8,724 | 8,192 | 1,873,225 |    168.14 |
+| chords | miter/butt   | 32 | work-limit(arr:nodes)      |     63 |   316 |      49,770 |    8,598 | 8,192 | 2,936,161 |    533.16 |
+| chords | miter/butt   | 64 | work-limit(arr:events)     |    127 |   634 |      91,323 |        0 |     0 |    91,323 |      3.25 |
+| chords | round/round  |  8 | ok                         |     17 |   210 |      21,945 |    2,372 | 2,048 | 1,577,597 |     38.94 |
+| chords | round/round  | 32 | work-limit(arr:nodes)      |     65 |   786 |     308,505 |    8,627 | 8,192 | 4,665,362 |    790.38 |
+
+Largest `ok` `n` at `w = 2`, `e = −3`, for every join and cap: zigzag 64 with miter or bevel joins and 32 with round joins; chords 8. Beyond those, zigzag fails `front:vertices` and then `front:pieces` (from `n = 256` or 512). Chords fails `arr:nodes` at 16 and 32, `arr:events` at 64 (with miter or bevel joins), and `front:vertices` or `front:pieces` above that.
+
+Fitted slopes, diagnostic, not evidence (`time` is the median):
+
+| Family | Join  | Cap    | `ok` n | time/n | time/edges | edges/n | sections/n | pairs/n | work/n | time/work |
+| ------ | ----- | ------ | ------ | -----: | ---------: | ------: | ---------: | ------: | -----: | --------: |
+| zigzag | miter | butt   | 8-64   |   1.40 |       1.36 |    1.03 |       0.98 |    2.06 |   1.68 |      0.83 |
+| zigzag | miter | round  | 8-64   |   1.29 |       1.46 |    0.88 |       0.85 |    1.77 |   1.46 |      0.88 |
+| zigzag | miter | square | 8-64   |   1.39 |       1.43 |    0.97 |       0.94 |    1.95 |   1.63 |      0.85 |
+| zigzag | round | butt   | 8-32   |   1.48 |       1.40 |    1.06 |       1.03 |    2.11 |   1.85 |      0.80 |
+| zigzag | round | round  | 8-32   |   1.30 |       1.36 |    0.96 |       0.95 |    1.92 |   1.71 |      0.76 |
+| zigzag | round | square | 8-32   |   1.53 |       1.50 |    1.02 |       1.01 |    2.05 |   1.82 |      0.84 |
+| zigzag | bevel | butt   | 8-64   |   1.41 |       1.38 |    1.02 |       0.98 |    2.05 |   1.66 |      0.85 |
+| zigzag | bevel | round  | 8-64   |   1.27 |       1.47 |    0.87 |       0.84 |    1.74 |   1.44 |      0.89 |
+| zigzag | bevel | square | 8-64   |   1.32 |       1.36 |    0.97 |       0.93 |    1.94 |   1.61 |      0.81 |
+| chords | miter | butt   | 2-8    |   3.36 |       2.99 |    1.12 |       2.28 |    2.28 |   2.97 |      1.13 |
+| chords | round | round  | 2-8    |   2.23 |       2.68 |    0.83 |       1.67 |    1.68 |   2.36 |      0.95 |
+| chords | bevel | butt   | 2-8    |   2.95 |       2.67 |    1.10 |       2.28 |    2.24 |   2.95 |      1.00 |
+
+The other chords series lie between 2.31 and 2.90 for time/n. Chords slopes rest on three points, `n` = 2, 4 and 8, which include the fixed per-stroke cost.
+
+Width (Table 2, zigzag, `n = 32`, `e = −3`), diagnostic, not evidence:
+
+- **Miter/butt.** From `w = 0.0625` to `w = 16` the run stays at 312-315 edges, 777-788 sections and 7.1-8.7 ms. At `w = 64` (four times the step), neighbouring pieces overlap widely: 3,022 sections, 1,850 nodes and 84.3 ms.
+- **Round/round.** At `w ≤ 0.25` it has 454 edges and 11-13 ms; at `w` = 1 and 2, 719 edges and 27-32 ms. From `w = 4` it is `work-limit(front:vertices)`, with 1,246 to 4,412 emitted vertices.
+
+Tolerance exponent (Table 3, zigzag, `n = 32`, `w = 2`), diagnostic, not evidence:
+
+- **Miter/butt** is identical from `e = 3` to `e = −14` (315 edges) at 7.2-8.3 ms. Line sweeps and miters do not depend on `e`.
+- **Round/round.** At `e` = 3 and 0 it has 455 edges and 12-13 ms, and at `e = −3`, 719 edges and 29.7 ms. At `e` = −6, −9 and −11 it is `work-limit(front:vertices)`, with 2,303, 4,415 and 8,639 emitted vertices. At `e = −14` it is `work-limit(front:other)` (`DiskLimit`: the first round cap needs more than 256 disk vertices).
+
+Observations, diagnostic, not evidence:
+
+- **Every case takes the all-pairs loop.** Pair checks equal `E·(E−1)/2` in every `ok` case (for example 315 edges and 49,455 pairs). The swept crossing collector runs only up to 64 edges (`SWEEP_EDGES`), which a stroke of more than about 10 segments exceeds. Pair checks grow with slope 1.7-2.1. On zigzag, time grows more slowly (slope 1.3-1.5 over `n` = 8-64), because sections and nodes grow linearly there, and time per work unit has slope 0.8-0.9.
+- **The limits bind before time does.** On zigzag the 1,024-vertex cap binds at 64-127 segments for line joins and at 33-63 for round joins at zoom 1. With round joins or caps the cap binds already at 32 segments at `e ≤ −6` (zoom 8 or more), and at `w ≥ 4`. A failing `front:` case costs at most 0.9 ms.
+- **Crossing strokes are expensive, and they fail late.** Chords reach the 8,192-node cap at 16 segments. Such a build runs most of the arrangement before failing, for 0.15-0.8 s per stroke. The `arr:events` failures at 64 segments fail early (2.1-4.1 ms).
+- **Fixed cost.** One segment takes 40-65 µs with butt caps, 75-140 µs with square caps and 220-420 µs with round caps (two disk polygons, 38-42 edges).
+
+**Recommendation on ST-U9** (for the user; no threshold, so this is not a gate decision). Family A alone gives about 5-30 ms per stroke at 32 segments and zoom 1. A scene of hundreds of such strokes is far from interactive. Two limits also bind early: the 1,024-vertex limit, at about 32 round-joined segments or at any zoom of 8 or more, and the 8,192-node limit, at about 16 self-crossing segments. The probe therefore supports building ST-U9, the certified direct-tessellation fast rung (family B). It would mesh non-overlapping consecutive pieces directly and fall back to family A only where its certificate fails. Since most line strokes overlap only at their joins, as zigzag does, they would avoid the quadratic all-pairs arrangement. A self-crossing stroke still needs the exact path, so ST-U9's contract should also decide one of two things:
+
+- whether a raise of `STROKE_V0_LIMITS` (vertices and nodes) or a swept crossing collector above 64 edges belongs with it;
+- or whether the arrangement should stop early once its node or section count makes failure certain. Today a failing crossing stroke costs up to 0.8 s.
+
+These are inputs to the user's decision, not adopted changes.
+
+Validation: listed on the ST-U3b PR.
+
 ### B0 runner (light tier)
 
 Plan entry: implement section 9 item 1 of the [B0 contract](p3-b0-feasibility-benchmark-contract.md) without changing it. Acceptance check: `pnpm benchmark:p3-b0 --profile functional` completes end to end; the TypeScript generator and an independent Rust generator match committed fixture bits; a tampered record is rejected; `pnpm check`, `pnpm build` and `pnpm test:geometry` pass; the diagnostic flag builds and passes clippy in its own target directory; the WASM release artifact is byte-identical to main's. Evidence is recorded on the runner PR. A functional run is not performance evidence.
