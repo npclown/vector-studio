@@ -374,3 +374,7 @@ mod fill_export_ladder_tests;
 // the same reason as above.
 #[cfg(test)]
 mod fill_ladder_diag_tests;
+// P3 Alt-A1 unit AL-U5: the AL-S1 harness and its ratio mode, test-only; appended for the same
+// reason as above.
+#[cfg(test)]
+mod p3_fill_ladder_bench;
