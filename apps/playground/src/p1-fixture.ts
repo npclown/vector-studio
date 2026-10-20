@@ -28,6 +28,9 @@ let productionShader = '';
 let positionsRequested = false;
 let lastPacketRevision: number | undefined;
 let expectedDestroyedGeneration: number | undefined;
+// Generation destroyed by recoverWithEdit. Unlike the one above it stays set until the
+// recovered frame is captured, because an aborted readback can settle after the loss event.
+let destroyingGeneration: number | undefined;
 let device: GPUDevice | undefined;
 let nativeContext: GPUCanvasContext | undefined;
 let capture:
@@ -168,7 +171,24 @@ const platform: WebGpuPlatform = {
                             };
                             void copyFrame(actualDevice, nativeContext!, capturedPacket).then(
                               pending.resolve,
-                              pending.reject,
+                              (error: unknown) => {
+                                // A frame submitted on the deliberately destroyed device can
+                                // consume the capture before the loss is observed; its
+                                // readback then aborts. That abort is part of the expected
+                                // loss, so re-arm the capture for the recovered generation.
+                                // Any other failure, or one outside that window, still rejects.
+                                if (
+                                  destroyingGeneration !== undefined &&
+                                  capturedPacket.generation <= destroyingGeneration &&
+                                  error instanceof DOMException &&
+                                  error.name === 'AbortError' &&
+                                  capture === undefined
+                                ) {
+                                  capture = pending;
+                                  return;
+                                }
+                                pending.reject(error);
+                              },
                             );
                           }
                         }
@@ -343,6 +363,7 @@ const api = {
     if (expectedDestroyedGeneration !== undefined) throw new Error('Recovery already pending.');
     const pending = captureNext();
     expectedDestroyedGeneration = backend.getStatistics().generation;
+    destroyingGeneration = expectedDestroyedGeneration;
     try {
       backend.destroyDeviceForTesting();
       const result = service.applyChanges(changes);
@@ -353,6 +374,7 @@ const api = {
       return recovered;
     } finally {
       expectedDestroyedGeneration = undefined;
+      destroyingGeneration = undefined;
       capture = undefined;
     }
   },
