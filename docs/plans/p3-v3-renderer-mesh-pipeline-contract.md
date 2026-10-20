@@ -633,5 +633,7 @@ Primary owns this contract, the packet and draw design, the fringe builder's exa
 
   Interpretation 3 under V3-C1 (batch bisection read against V1 rule 3) was reported to the user in the same message.
 
+- **User decision, 2026-10-20, in chat (note on V3-Q2).** 2026-10-20 user decision: V3-Q2 (c) for `fringe-work-cap` — ratified after the V4 post-merge review. A path above `fringeBoundaryVertexCap` (128) boundary vertices draws region-only, with the one `fringe-work-cap` notice per cache entry (section h's amendment). The 2026-10-12 V3-Q2 (a) decision above stays as written for every other code.
+
 - **V3a review notes.** Section c's guard row "`e > E_MAX`: request `E_MAX`" is dead in practice: `e > E_MAX` needs `sigmaMax(S) < 2^-1026`, so `sigmaMin ≤ sigmaMax` gives `f ≥ 1028 > F_MAX`, and the `fringe-range` state applies first. The row stays as written; no contract change. The V3-A16 erratum is interpretation 5 under V3-C1.
 - **What approval does not do.** It closes no A01-A08 criterion and no C03-C05 item. V3-Q1's adoption stays conditional on its three follow-up results: V3-A14, B0's E4 draw cost and the R2 per-tile partition.
