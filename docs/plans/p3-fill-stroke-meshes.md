@@ -2184,7 +2184,7 @@ Validation (2026-10-20, under the user's exception):
 - **`pnpm build`**: PASS.
 - **`pnpm test:p2-identity origin/main`** (base `ae91297`): PASS. The P2 output identity holds over 10,048 batches, SHA-256 `876f4a49…046f`. The release WASM changes, from `65a9f3c0…1212b` to `cdb383d1…7edf93`, because the stroke code is now exported.
 - **`git diff --check`** PASS. `git diff --exit-code origin/main` on `Cargo.toml`, `Cargo.lock` and `pnpm-lock.yaml` exits 0, so no dependency changed.
-- **`pnpm test:p3-fill-identity`** (plain mode): recorded on the PR, because it runs after this commit (see the unit report).
+- **`pnpm test:p3-fill-identity --base origin/main`** (plain mode, on commit `09a3068`): PASS. `fill_v0_revision()` is 2 on both base and branch. The native, WASM and WASM-vs-native digests are all equal over 76,352 native and 6,041 WASM cases, and the coverage floors are met. Both tamper self-checks are detected, and the `b0r_oracle_full` oracles pass (2,622 s).
 - **Not run:** the independent review (user exception, 2026-10-20; now due before merge).
 
 Deviations and open items:
