@@ -50,6 +50,9 @@ importers:
       '@vector-studio/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@vector-studio/geometry-wasm':
+        specifier: workspace:*
+        version: link:../../packages/geometry-wasm
       '@vector-studio/renderer-core':
         specifier: workspace:*
         version: link:../../packages/renderer-core
