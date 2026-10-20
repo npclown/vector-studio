@@ -24,7 +24,7 @@ use crate::geometry::{
     PATH_WORK_LIMIT,
 };
 use crate::line_fill::LineFillRule;
-use crate::rounded_line_fill::RoundedFillError;
+use crate::rounded_line_fill::{RoundedFillError, RoundedFillLimits};
 use crate::simple_cubic_topology::TopologyError;
 
 const MOVE: u8 = 0;
@@ -399,14 +399,57 @@ fn assert_mesh_invariants(mesh: &Decoded) {
 
 #[test]
 fn runtime_limits_equal_the_native_test_limits() {
-    assert_eq!(FILL_V0_LIMITS, crate::native_cubic_fill_tests::LIMITS);
+    // B1: `FILL_V0_LIMITS` no longer equals the frozen native `LIMITS`. It is the
+    // same scaling rule at E = 256 edge owners instead of 64, and it is at least
+    // `LIMITS` in every field, so every path `LIMITS` admits it admits.
+    let native = crate::native_cubic_fill_tests::LIMITS;
+    assert_eq!(
+        FILL_V0_LIMITS,
+        RoundedFillLimits {
+            max_contours: 4,
+            max_input_vertices: 256,
+            max_edges: 256,
+            max_pairs: 32_640,
+            max_events: 512,
+            max_sections: 131_584,
+            max_nodes: 1_024,
+            max_cells: 1_024,
+            max_boundaries: 2_048,
+            max_contributors: 2_048,
+            max_vertices: 1_024,
+            max_triangles: 1_024,
+            max_work: 32_000_000,
+            max_bytes: 16 * 1024 * 1024,
+        }
+    );
+    let fields = |limits: RoundedFillLimits| {
+        [
+            limits.max_contours,
+            limits.max_input_vertices,
+            limits.max_edges,
+            limits.max_pairs,
+            limits.max_events,
+            limits.max_sections,
+            limits.max_nodes,
+            limits.max_cells,
+            limits.max_boundaries,
+            limits.max_contributors,
+            limits.max_vertices,
+            limits.max_triangles,
+            limits.max_work as usize,
+            limits.max_bytes,
+        ]
+    };
+    for (runtime, test) in fields(FILL_V0_LIMITS).into_iter().zip(fields(native)) {
+        assert!(runtime >= test);
+    }
     assert_eq!(FILL_V0_VERSION, 0);
     assert_eq!(FILL_V0_REVISION, 2);
     assert_eq!(FILL_INPUT_MAGIC.to_le_bytes(), *b"VGF0");
     assert_eq!(FILL_OUTPUT_MAGIC.to_le_bytes(), *b"VGM0");
     let (slots, split, bytes) = FillEngine::scratch_sizes().unwrap();
-    assert_eq!(slots, 3 * (256 + 2 * 256));
-    assert_eq!(split, 512 + 256);
+    assert_eq!(slots, 3 * (1_024 + 2 * 1_024));
+    assert_eq!(split, 2_048 + 1_024);
     assert!(bytes > 0);
 }
 
@@ -667,14 +710,14 @@ fn reachable_mapping_rows_have_fixtures() {
     coarse.exponent = -3;
     assert_eq!(status_of(coarse), FILL_PATH_OK);
 
-    // Current-cap fixtures (B1 may re-baseline): source verbs 24 + 1.
+    // Current-cap fixtures (re-baselined by B1): source verbs 72 + 1.
     let mut source = TestPath::new(2, NONZERO, 0).move_to(0.0, 0.0);
-    for index in 0..24 {
+    for index in 0..72 {
         source = source.line_to(f64::from(index + 1), f64::from(index % 2));
     }
-    assert_eq!(source.verbs.len(), 25);
+    assert_eq!(source.verbs.len(), 73);
     assert_eq!(status_of(source), FILL_PATH_WORK_LIMIT);
-    // Flat command cap: a fine cubic flattens to more than 72 commands.
+    // Flat command cap: a fine cubic flattens to more than 264 commands.
     let fine = TestPath::new(3, NONZERO, -12)
         .move_to(0.0, 0.0)
         .cubic_to([0.0, 64.0, 64.0, 64.0, 64.0, 0.0])
@@ -1432,11 +1475,14 @@ fn request_echo_and_record_fields_are_little_endian() {
     assert_eq!(decoded[2].exponent, 7);
 }
 
-/// The line-only star polygon {13/6}, radius 100, rounded to integers.
-fn star_13_6() -> TestPath {
+/// The line-only star polygon {21/10}, radius 1,000, rounded to integers. B1 re-baseline: the
+/// pre-B1 fixture, {13/6} of radius 100, now meshes under the raised rounded node cap.
+fn star_21_10() -> TestPath {
     let points = [
-        100.0, 0.0, -97.0, 24.0, 89.0, -46.0, -75.0, 66.0, 57.0, -82.0, -35.0, 94.0, 12.0, -99.0,
-        12.0, 99.0, -35.0, -94.0, 57.0, 82.0, -75.0, -66.0, 89.0, 46.0, -97.0, -24.0,
+        1000.0, 0.0, -989.0, 149.0, 956.0, -295.0, -901.0, 434.0, 826.0, -563.0, -733.0, 680.0,
+        623.0, -782.0, -500.0, 866.0, 365.0, -931.0, -223.0, 975.0, 75.0, -997.0, 75.0, 997.0,
+        -223.0, -975.0, 365.0, 931.0, -500.0, -866.0, 623.0, 782.0, -733.0, -680.0, 826.0, 563.0,
+        -901.0, -434.0, 956.0, 295.0, -989.0, -149.0,
     ];
     let mut path = TestPath::new(1, NONZERO, -3).move_to(points[0], points[1]);
     for pair in points[2..].chunks_exact(2) {
@@ -1470,7 +1516,7 @@ fn mapping_row_fixtures_reach_their_kernel_values() {
     // Each fixture names the kernel value it reaches, then the port status.
     // Cap fixtures are current-cap fixtures that B1 may re-baseline.
     let mut source_limit = TestPath::new(1, NONZERO, 0).move_to(0.0, 0.0);
-    for index in 0..24 {
+    for index in 0..72 {
         source_limit = source_limit.line_to(f64::from(index + 1), f64::from(index % 2));
     }
     let next = f64::from_bits(1.0f64.to_bits() + 1);
@@ -1494,13 +1540,13 @@ fn mapping_row_fixtures_reach_their_kernel_values() {
             FILL_PATH_WORK_LIMIT,
         ),
         (
-            "SourceLimit (24 source verbs + 1)",
+            "SourceLimit (72 source verbs + 1)",
             source_limit,
             Err(CubicFillError::SourceLimit),
             FILL_PATH_WORK_LIMIT,
         ),
         (
-            "CommandLimit (72 flat commands)",
+            "CommandLimit (264 flat commands)",
             TestPath::new(1, NONZERO, -12)
                 .move_to(0.0, 0.0)
                 .cubic_to([0.0, 64.0, 64.0, 64.0, 64.0, 0.0])
@@ -1509,10 +1555,10 @@ fn mapping_row_fixtures_reach_their_kernel_values() {
             FILL_PATH_WORK_LIMIT,
         ),
         (
-            // Current-cap fixture (B1 may re-baseline): the line-only star
-            // polygon {13/6} of radius 100 exceeds the rounded node cap.
-            "Rounded(NodeLimit) (star polygon {13/6})",
-            star_13_6(),
+            // Current-cap fixture (re-baselined by B1): the line-only star
+            // polygon {21/10} of radius 1,000 exceeds the rounded node cap.
+            "Rounded(NodeLimit) (star polygon {21/10})",
+            star_21_10(),
             Err(CubicFillError::Rounded(RoundedFillError::NodeLimit)),
             FILL_PATH_WORK_LIMIT,
         ),
@@ -1561,4 +1607,208 @@ fn mapping_row_fixtures_reach_their_kernel_values() {
         assert_eq!(legacy_value(&path), kernel_value, "{name}");
         assert_eq!(status_of(path), status, "{name}");
     }
+}
+
+// ------------------------------------------------------------------------------------------
+// D8 B1 kernel caps (`docs/plans/p3-fill-stroke-meshes.md`, "B1 kernel caps").
+
+/// A single-contour ring of `sides` cubics in the form of B0's `p3-b0-ring/v1` generator (edge
+/// 8, outward bulge h·e with h = 3/8, so λ = 8 leaves per cubic at δ = 1/8), rotated by `rho`
+/// and snapped to multiples of 2^-10. The last cubic ends on the first vertex bit for bit.
+fn b1_ring(id: u32, sides: usize, rho: f64) -> TestPath {
+    use core::f64::consts::{PI, TAU};
+    let edge = 8.0;
+    let snap = |value: f64| (value * 1024.0).round_ties_even() / 1024.0;
+    let radius = edge / (2.0 * (PI / sides as f64).sin());
+    let vertex = |index: usize| {
+        let phi = TAU * (index % sides) as f64 / sides as f64 + rho;
+        (radius * phi.cos(), radius * phi.sin())
+    };
+    let offset = 3.0 / 8.0 * edge;
+    let first = vertex(0);
+    let mut path = TestPath::new(id, NONZERO, -3).move_to(snap(first.0), snap(first.1));
+    for index in 0..sides {
+        let (a, b) = (vertex(index), vertex(index + 1));
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let length = (dx * dx + dy * dy).sqrt();
+        let (nx, ny) = (dy / length, -dx / length);
+        path = path.cubic_to([
+            snap(a.0 + dx / 3.0 + offset * nx),
+            snap(a.1 + dy / 3.0 + offset * ny),
+            snap(a.0 + 2.0 * dx / 3.0 + offset * nx),
+            snap(a.1 + 2.0 * dy / 3.0 + offset * ny),
+            snap(b.0),
+            snap(b.1),
+        ]);
+    }
+    path.close()
+}
+
+/// The rotations of the B1 rings.
+const B1_RINGS: [f64; 3] = [0.0, 0.3, 1.1];
+
+#[test]
+fn b1_ring_of_32_cubics_at_lambda_8_is_fast_admitted() {
+    let mut engine = FillEngine::new();
+    assert_eq!(engine.reserve(1 << 16, 1 << 20), BATCH_OK);
+    let mut prefix = CubicFillWorkspace::new(FILL_V0_LIMITS).unwrap();
+    for (index, rho) in B1_RINGS.into_iter().enumerate() {
+        let path = b1_ring(index as u32, 32, rho);
+        assert_eq!(path.verbs.len(), 34);
+        assert_eq!(path.points.len(), 2 + 6 * 32);
+        let bytes = point_bytes(&path.points);
+        let (flatten, _) = tolerances(path.exponent);
+        let input = PathInput::from_parts(
+            Request {
+                request_id: 0,
+                source_epoch: 0,
+                source_revision: 0,
+                tolerance: flatten,
+            },
+            &path.verbs,
+            &bytes,
+        );
+        // L* = 32 · 8 = 256 leaves: C·s·λ + 2C flat commands, one point and one owner per leaf.
+        let view = prefix.prepare_prefix(input, MAX_FLAT_COMMANDS).unwrap();
+        assert_eq!(view.commands.len(), 258, "ring {rho}");
+        assert_eq!(view.points.len(), 256, "ring {rho}");
+        assert_eq!(view.owners.len(), 256, "ring {rho}");
+        assert_eq!(view.sources.len(), 32, "ring {rho}");
+
+        let built = engine
+            .build_one(
+                FillRequest {
+                    request_id: path.id,
+                    rule: LineFillRule::Nonzero,
+                    exponent: path.exponent,
+                },
+                &path.verbs,
+                &bytes,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            (built.rung, built.reason),
+            (Some(Rung::Fast), None),
+            "ring {rho}"
+        );
+        let mesh = run_one(path);
+        assert_eq!(mesh.status, FILL_PATH_OK, "ring {rho}");
+        assert_eq!(mesh.positions.len(), 2 * 256, "ring {rho}");
+        assert_eq!(mesh.indices.len(), 3 * 254, "ring {rho}");
+        assert_eq!(mesh.boundary.len(), 2 * 256, "ring {rho}");
+        assert!(mesh.twice_area() > 0.0, "ring {rho}");
+        assert_mesh_invariants(&mesh);
+    }
+    // One cubic more is 264 leaves and 266 flat commands, above the 264-command cap.
+    let over = b1_ring(9, 33, 0.0);
+    assert_eq!(legacy_value(&over), Err(CubicFillError::CommandLimit));
+    assert_eq!(status_of(over), FILL_PATH_WORK_LIMIT);
+}
+
+#[test]
+fn b1_rings_process_without_allocation_or_storage_change() {
+    let mut paths: Vec<TestPath> = B1_RINGS
+        .into_iter()
+        .enumerate()
+        .map(|(index, rho)| b1_ring(index as u32, 32, rho))
+        .collect();
+    paths.push(b1_ring(9, 33, 0.0));
+    let input = pack(&paths);
+    let mut engine = FillEngine::new();
+    load(&mut engine, &input, 8);
+    let workspace_bytes = engine.workspace().unwrap().allocated_bytes();
+    for expected in [BATCH_OUTPUT_CAPACITY, BATCH_OK] {
+        if expected == BATCH_OK {
+            let required = engine.required_output_bytes();
+            assert_eq!(engine.reserve(input.len() as u32, required), BATCH_OK);
+            engine.input_bytes_mut()[..input.len()].copy_from_slice(&input);
+        }
+        let storage = engine.storage();
+        crate::allocation_test_support::start();
+        let status = engine.process(input.len() as u32);
+        let allocations = crate::allocation_test_support::stop();
+        assert_eq!(status, expected);
+        assert_eq!(allocations, 0, "process must not allocate");
+        assert_eq!(engine.storage(), storage);
+    }
+    assert_eq!(
+        engine.workspace().unwrap().allocated_bytes(),
+        workspace_bytes
+    );
+    let decoded = decode(engine.output_bytes(), &paths);
+    let statuses: Vec<u32> = decoded.iter().map(|mesh| mesh.status).collect();
+    assert_eq!(
+        statuses,
+        vec![
+            FILL_PATH_OK,
+            FILL_PATH_OK,
+            FILL_PATH_OK,
+            FILL_PATH_WORK_LIMIT
+        ]
+    );
+}
+
+/// The exact rung's Legacy attempt also admits the B1 rings under `FILL_V0_LIMITS`: 256
+/// topology leaves, 32,640 counted pairs and 256 rounded edges (above the 64-edge sweep guard).
+#[test]
+fn b1_ring_exact_rung_also_admits() {
+    for (index, rho) in B1_RINGS.into_iter().enumerate() {
+        let path = b1_ring(index as u32, 32, rho);
+        assert_eq!(legacy_value(&path), Ok(PATH_OK), "ring {rho}");
+    }
+}
+
+/// B1's test-only pre-B1 cap mode restores the pre-B1 caps for the frozen oracles: the B1 ring
+/// (34 verbs) fails again with `SourceLimit` (`WORK_LIMIT` through the export), as do 25 source
+/// verbs, while the production default admits the ring and passes the verb cap.
+#[test]
+fn b1_pre_b1_cap_mode_restores_the_old_caps() {
+    assert_eq!(
+        crate::fill_export::PRE_B1_FILL_V0_LIMITS,
+        crate::native_cubic_fill_tests::LIMITS
+    );
+    let ring = b1_ring(0, 32, 0.0);
+    let mut zigzag = TestPath::new(1, NONZERO, 0).move_to(0.0, 0.0);
+    for index in 0..24 {
+        zigzag = zigzag.line_to(f64::from(index + 1), f64::from(index % 2));
+    }
+    let zigzag = zigzag.close();
+    let attempt = |workspace: &mut CubicFillWorkspace, path: &TestPath| {
+        let bytes = point_bytes(&path.points);
+        let (flatten, topology) = tolerances(path.exponent);
+        let input = PathInput::from_parts(
+            Request {
+                request_id: 0,
+                source_epoch: 0,
+                source_revision: 0,
+                tolerance: flatten,
+            },
+            &path.verbs,
+            &bytes,
+        );
+        workspace
+            .attempt(input, LineFillRule::Nonzero, topology, MAX_FLAT_COMMANDS)
+            .map(|diagnostics| diagnostics.flat_status)
+    };
+    let mut old =
+        CubicFillWorkspace::new_pre_b1(crate::fill_export::PRE_B1_FILL_V0_LIMITS).unwrap();
+    assert_eq!(attempt(&mut old, &ring), Err(CubicFillError::SourceLimit));
+    assert_eq!(attempt(&mut old, &zigzag), Err(CubicFillError::SourceLimit));
+    let mut new = CubicFillWorkspace::new(FILL_V0_LIMITS).unwrap();
+    assert_eq!(attempt(&mut new, &ring), Ok(PATH_OK));
+    assert_ne!(attempt(&mut new, &zigzag), Err(CubicFillError::SourceLimit));
+
+    let paths = [ring, zigzag];
+    let input = pack(&paths);
+    let mut engine = FillEngine::new();
+    engine.hooks().pre_b1_caps = true;
+    load(&mut engine, &input, 1 << 20);
+    assert_eq!(engine.process(input.len() as u32), BATCH_OK);
+    let statuses: Vec<u32> = decode(engine.output_bytes(), &paths)
+        .iter()
+        .map(|mesh| mesh.status)
+        .collect();
+    assert_eq!(statuses, vec![FILL_PATH_WORK_LIMIT, FILL_PATH_WORK_LIMIT]);
+    assert_eq!(run_one(paths[0].clone()).status, FILL_PATH_OK);
 }

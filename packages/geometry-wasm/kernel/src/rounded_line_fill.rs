@@ -2160,12 +2160,13 @@ impl RoundedFillWorkspace {
 }
 
 /// L1 size guard (contract section 5.4): the sweep's `[u64; 64]` bitset and `[u8; 64]` order
-/// hold at most 64 edges. Today's `LIMITS` and `FILL_V0_LIMITS` allow 64 edges; a workspace
-/// with more edges runs the current all-pairs loop.
+/// hold at most 64 edges. `LIMITS` allows 64 edges; since B1, `FILL_V0_LIMITS` allows 256, and
+/// a path with more than 64 edges runs the current all-pairs loop (B1 keeps this guard).
 const SWEEP_EDGES: usize = 64;
 
 /// L2 size guard (contract section 5.4): the merge sort's two `[u16; 256]` index arrays hold at
-/// most 256 events. Today's caps allow 128 events; more events run the current insertion sort.
+/// most 256 events. `LIMITS` allows 128 events and, since B1, `FILL_V0_LIMITS` 512; more than
+/// 256 events run the current insertion sort.
 const MERGE_SORT_EVENTS: usize = 256;
 
 /// The closed coordinate box of one edge. Edge endpoints are finite binary64 values, so the box

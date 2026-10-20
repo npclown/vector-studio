@@ -492,7 +492,7 @@ fn constructor_storage_and_byte_boundaries_are_owned_once() {
             ..TopologyLimits::default()
         },
         TopologyLimits {
-            max_pairs: 2_017,
+            max_pairs: 32_641,
             ..TopologyLimits::default()
         },
         TopologyLimits {
@@ -510,7 +510,7 @@ fn constructor_storage_and_byte_boundaries_are_owned_once() {
     let rounded = RoundedKnotCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
     let bytes = workspace.allocated_bytes();
     assert_eq!(bytes, rounded.allocated_bytes());
-    assert!(size_of::<TransverseArrangementWorkspace>() <= 4 * 1024);
+    assert!(size_of::<TransverseArrangementWorkspace>() <= 16 * 1024);
     drop(workspace);
     drop(rounded);
     assert!(TransverseArrangementWorkspace::new(TopologyLimits {
