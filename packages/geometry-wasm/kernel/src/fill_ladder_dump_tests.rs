@@ -35,7 +35,7 @@ use crate::cubic_fill::{
 };
 use crate::engine::BATCH_OK;
 use crate::fill_export::{
-    tolerances, FillEngine, FillRequest, FILL_INPUT_MAGIC, FILL_V0_LIMITS, FILL_V0_REVISION,
+    tolerances, FillEngine, FillRequest, FILL_INPUT_MAGIC, FILL_V0_REVISION, PRE_B1_FILL_V0_LIMITS,
 };
 use crate::fill_ladder::{
     exact_cascade, with_ladder_faults, BoundaryScan, ExactOutcome, ExactStep, FastRung, FillLadder,
@@ -677,14 +677,18 @@ pub(crate) struct DumpHarness {
 impl DumpHarness {
     pub(crate) fn new() -> Self {
         let mut engine = FillEngine::new();
+        // B1: the AL-U2 oracle dump (SL-O1 to SL-O3, AL-I3 against the frozen spike) runs at
+        // the pre-B1 caps, so it compares like with like.
+        engine.hooks().pre_b1_caps = true;
         assert_eq!(
             engine.reserve(ENGINE_INPUT_BYTES, ENGINE_OUTPUT_BYTES),
             BATCH_OK,
             "reserve the fill-v0 engine"
         );
-        let workspace = || CubicFillWorkspace::new(FILL_V0_LIMITS).expect("workspace");
+        let workspace =
+            || CubicFillWorkspace::new_pre_b1(PRE_B1_FILL_V0_LIMITS).expect("workspace");
         Self {
-            ladder: FillLadder::reserve(FILL_V0_LIMITS).expect("ladder"),
+            ladder: FillLadder::reserve(PRE_B1_FILL_V0_LIMITS).expect("ladder"),
             workspace: workspace(),
             probe: workspace(),
             exact: workspace(),

@@ -603,8 +603,8 @@ fn mixed_line_lifecycle_old_entry_and_resource_accounting_are_frozen() {
 
     let mut workspace = TransverseArrangementWorkspace::new(TopologyLimits::default()).unwrap();
     let mut independent = TransverseArrangementWorkspace::new(TopologyLimits::default()).unwrap();
-    assert_eq!(workspace.allocated_bytes(), 224_256);
-    assert_eq!(size_of::<TransverseArrangementWorkspace>(), 2_512);
+    assert_eq!(workspace.allocated_bytes(), 897_024);
+    assert_eq!(size_of::<TransverseArrangementWorkspace>(), 7_120);
     assert_mixed_attempt(
         &mut independent,
         &success,

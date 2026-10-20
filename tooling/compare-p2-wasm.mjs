@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const cache = path.join(root, '.tools');
-const cargoHome = path.join(cache, 'rust/cargo');
+const cargoHome = process.env.CARGO_HOME || path.join(cache, 'rust/cargo');
 const rustup = path.join(cargoHome, process.platform === 'win32' ? 'bin/rustup.exe' : 'bin/rustup');
 const temporary = path.join(cache, 'geometry-tmp');
 const wasmRelative = 'wasm32-unknown-unknown/release/vector_studio_geometry_kernel.wasm';
@@ -44,7 +44,7 @@ function buildRelease(sourceRoot, targetDirectory) {
   const env = {
     ...process.env,
     CARGO_HOME: cargoHome,
-    RUSTUP_HOME: path.join(cache, 'rust/rustup'),
+    RUSTUP_HOME: process.env.RUSTUP_HOME || path.join(cache, 'rust/rustup'),
     CARGO_TARGET_DIR: targetDirectory,
     TEMP: temporary,
     TMP: temporary,

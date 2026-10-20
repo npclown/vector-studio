@@ -12,7 +12,9 @@ use core::cmp::Ordering;
 use core::mem::size_of;
 
 use crate::codec::{align_up, read_u32, write_f64, write_u32, PathInput, Request};
-use crate::cubic_fill::{CubicFillError, CubicFillWorkspace, MAX_FLAT_COMMANDS};
+use crate::cubic_fill::{
+    CubicFillError, CubicFillWorkspace, MAX_CONTOURS, MAX_EDGE_OWNERS, MAX_FLAT_COMMANDS,
+};
 use crate::engine::{
     BATCH_ALLOCATION_FAILED, BATCH_DISPOSED, BATCH_INTERNAL_ERROR, BATCH_INVALID_BATCH, BATCH_OK,
     BATCH_OUTPUT_CAPACITY, BATCH_RESOURCE_LIMIT,
@@ -49,9 +51,38 @@ pub(crate) const OUTPUT_CAP_BYTES: u32 = 256 * 1024 * 1024;
 pub(crate) const MIN_TOLERANCE_EXPONENT: i32 = -1021;
 pub(crate) const MAX_TOLERANCE_EXPONENT: i32 = 1023;
 
-/// Runtime workspace limits of fill transport v0. Equal today to the native
+/// Runtime workspace limits of fill transport v0. Equal before B1 to the native
 /// test constant `LIMITS`; B1 changes these values without a port change.
+///
+/// D8 B1 (`docs/plans/p3-fill-stroke-meshes.md`, "B1 kernel caps"): every field
+/// is the pre-B1 value scaled by the same rule from E = `MAX_EDGE_OWNERS` (64
+/// before B1, 256 since): input vertices and edges E, pairs
+/// E(E − 1)/2, events 2E, sections the full bound events · E + 2E, nodes,
+/// cells, vertices and triangles 4E, boundaries and contributors 8E. The work
+/// budget scales with the pair count (×16), and 16 MiB still holds the
+/// workspace's reservation.
 pub(crate) const FILL_V0_LIMITS: RoundedFillLimits = RoundedFillLimits {
+    max_contours: MAX_CONTOURS,
+    max_input_vertices: MAX_EDGE_OWNERS,
+    max_edges: MAX_EDGE_OWNERS,
+    max_pairs: MAX_EDGE_OWNERS * (MAX_EDGE_OWNERS - 1) / 2,
+    max_events: 2 * MAX_EDGE_OWNERS,
+    max_sections: 2 * MAX_EDGE_OWNERS * MAX_EDGE_OWNERS + 2 * MAX_EDGE_OWNERS,
+    max_nodes: 4 * MAX_EDGE_OWNERS,
+    max_cells: 4 * MAX_EDGE_OWNERS,
+    max_boundaries: 8 * MAX_EDGE_OWNERS,
+    max_contributors: 8 * MAX_EDGE_OWNERS,
+    max_vertices: 4 * MAX_EDGE_OWNERS,
+    max_triangles: 4 * MAX_EDGE_OWNERS,
+    max_work: 32_000_000,
+    max_bytes: 16 * 1024 * 1024,
+};
+
+/// B1's test-only pre-B1 cap mode: `FILL_V0_LIMITS` before B1 (E = 64), equal to the native
+/// test constant `LIMITS`. With `CubicFillWorkspace::new_pre_b1` it reproduces the pre-B1
+/// kernel for the frozen oracles (`docs/plans/p3-fill-stroke-meshes.md`, "B1 kernel caps").
+#[cfg(test)]
+pub(crate) const PRE_B1_FILL_V0_LIMITS: RoundedFillLimits = RoundedFillLimits {
     max_contours: 4,
     max_input_vertices: 64,
     max_edges: 64,
@@ -1148,6 +1179,9 @@ pub(crate) struct TestHooks {
     pub(crate) defect_cascade_inverted: bool,
     /// Seeded defect (15), section 4.3: a fallback path served from rung 0's partial state.
     pub(crate) defect_fallback_partial: bool,
+    /// B1's pre-B1 cap mode for the frozen oracles: the next reserve builds the workspace,
+    /// scratch and ladder from `PRE_B1_FILL_V0_LIMITS` and `CubicFillWorkspace::new_pre_b1`.
+    pub(crate) pre_b1_caps: bool,
 }
 
 impl Default for FillEngine {
@@ -1179,6 +1213,7 @@ impl FillEngine {
                 exact_only: false,
                 defect_cascade_inverted: false,
                 defect_fallback_partial: false,
+                pre_b1_caps: false,
             },
         }
     }
@@ -1220,11 +1255,25 @@ impl FillEngine {
         if let Some(status) = self.test_hooks.fail_workspace.take() {
             return Err(status);
         }
-        let (scratch, scratch_bytes) = FillScratch::reserve(FILL_V0_LIMITS)?;
-        let workspace = CubicFillWorkspace::new(FILL_V0_LIMITS).map_err(construction_status)?;
+        let limits = FILL_V0_LIMITS;
+        #[cfg(test)]
+        let limits = if self.test_hooks.pre_b1_caps {
+            PRE_B1_FILL_V0_LIMITS
+        } else {
+            limits
+        };
+        let (scratch, scratch_bytes) = FillScratch::reserve(limits)?;
+        let workspace = CubicFillWorkspace::new(limits);
+        #[cfg(test)]
+        let workspace = if self.test_hooks.pre_b1_caps {
+            CubicFillWorkspace::new_pre_b1(limits)
+        } else {
+            workspace
+        };
+        let workspace = workspace.map_err(construction_status)?;
         // Alt-A1 contract section 3.4: rung 0's storage, reserved once and fallibly beside the
         // workspace and the scratch, after the check that the scratch holds AL-FR9's records.
-        let ladder = FillLadder::reserve(FILL_V0_LIMITS)?;
+        let ladder = FillLadder::reserve(limits)?;
         let total = workspace
             .allocated_bytes()
             .checked_add(scratch_bytes)

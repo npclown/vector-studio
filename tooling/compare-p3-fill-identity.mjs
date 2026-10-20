@@ -67,8 +67,8 @@ import { URL, fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const cache = path.join(root, '.tools');
-const cargoHome = path.join(cache, 'rust/cargo');
-const rustupHome = path.join(cache, 'rust/rustup');
+const cargoHome = process.env.CARGO_HOME || path.join(cache, 'rust/cargo');
+const rustupHome = process.env.RUSTUP_HOME || path.join(cache, 'rust/rustup');
 const rustup = path.join(cargoHome, process.platform === 'win32' ? 'bin/rustup.exe' : 'bin/rustup');
 const temporary = path.join(cache, 'geometry-tmp');
 const BRANCH_TARGET = path.join(cache, 'geometry-build');
