@@ -432,7 +432,7 @@ fn fallback_fixtures() -> Vec<(Path, Reason)> {
         Reason::Prefix,
     ));
     let mut source_limit = Path::new("source-limit", NONZERO, 0).move_to(0.0, 0.0);
-    for index in 0..24 {
+    for index in 0..72 {
         source_limit = source_limit.line_to(f64::from(index + 1), f64::from(index % 2));
     }
     fixtures.push((source_limit, Reason::Prefix));

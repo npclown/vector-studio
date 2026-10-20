@@ -211,7 +211,7 @@ describe('ST-U3 line strokes through the dump hand-off', () => {
       }
     }
     expect(failures).toEqual([]);
-    expect(checked).toBe(64);
+    expect(checked).toBe(65);
     expect(exactRegions).toBeGreaterThan(0);
   });
 
@@ -339,6 +339,15 @@ describe('ST-U3 line strokes through the dump hand-off', () => {
     expect(kinds('ST-F24/4')).toContain('bevel');
   });
 
+  it('ST-U4 tip guard: a kept sqrt-2 miter with L = 1e4 is ok (actual ratio, not L)', () => {
+    expect(kinds('ST-U4/tip-ratio')).toEqual(['line-sweep', 'miter', 'line-sweep']);
+    expectRegion(
+      'ST-U4/tip-ratio',
+      [rectangle(0, -10, 10, 10), rectangle(0, 0, 20, 10), rectangle(10, -10, 20, 0)],
+      400,
+    );
+  });
+
   it('ST-F25: miter exactly where the ratio is at most L', () => {
     for (const [turn, , ratio] of F25_TURNS)
       for (const limit of F25_LIMITS) {
@@ -459,7 +468,7 @@ describe('ST-U4 cubic strokes through the dump hand-off', () => {
 
   it('ST-F16: one reversal at t* = 1/2, cusp center (0.5, 0.75), n = 32, (0.5, 0.8) inside', () => {
     // STROKE_V0_LIMITS: the arrangement's node cap stops ST-F16 after a complete front end
-    // (a recorded blocker, plan entry "B2 ST-U4 cubic stroke").
+    // (its expected status by user decision, 2026-10-20; contract dated note).
     expect(entry('ST-F16').status).toBe('work-limit');
     expect(entry('ST-F16').failure).toEqual({
       stage: 'arrangement',
@@ -476,6 +485,20 @@ describe('ST-U4 cubic strokes through the dump hand-off', () => {
     expect(disks[0]!.samples[0][1]).toEqual([0.5, 0.75]);
     expect(disks[0]!.disk).toBe(32);
     expect(contains(okMesh('ST-F16/wide'), 0.5, 0.8)).toBe(true);
+  });
+
+  it('ST-F16p: the cusp disk at production limits (e = -5, n = 8)', () => {
+    // Literal fixed before the first run (ST-A0 review): ok at STROKE_V0_LIMITS, one cusp disk
+    // at t = 1/2 with center exactly (0.5, 0.75) and n = 8, (0.5, 0.8) inside.
+    const found = entry('ST-F16p');
+    expect(found.status).toBe('ok');
+    expect(found.segments[0]!.cubic).toBe('cusp');
+    const disks = found.pieces.filter((piece) => piece.kind === 'cusp-disk');
+    expect(disks).toHaveLength(1);
+    expect(disks[0]!.t[0]).toBe(0.5);
+    expect(disks[0]!.samples[0][1]).toEqual([0.5, 0.75]);
+    expect(disks[0]!.disk).toBe(8);
+    expect(contains(okMesh('ST-F16p'), 0.5, 0.8)).toBe(true);
   });
 
   it('ST-F17 to ST-F20: collinear reversal and continuation, stationary start', () => {

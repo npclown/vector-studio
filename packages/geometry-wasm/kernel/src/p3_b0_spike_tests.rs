@@ -1121,7 +1121,7 @@ fn check_accessor(workspace: &mut CubicFillWorkspace, path: &RealPath) -> Result
 
 #[test]
 fn s1_accessor_matches_published_output_on_small_paths() {
-    let mut workspace = CubicFillWorkspace::new(LIMITS).expect("workspace");
+    let mut workspace = CubicFillWorkspace::new_pre_b1(LIMITS).expect("workspace");
     let mut published = 0usize;
     for path in small_real_paths() {
         if check_accessor(&mut workspace, &path).unwrap() {
@@ -1147,7 +1147,7 @@ fn sl_f13_b0_fixture_paths_take_the_fast_rung() {
         );
         assert_eq!(outcome.rung, Rung::Fast, "{}: {outcome:?}", path.name);
         // The S1 polygon, from a separate prefix run.
-        let mut workspace = CubicFillWorkspace::new(LIMITS).expect("workspace");
+        let mut workspace = CubicFillWorkspace::new_pre_b1(LIMITS).expect("workspace");
         assert!(check_accessor(&mut workspace, &path).unwrap());
         check_ring_mesh(&mut workspace, &path, ladder.fast())
             .unwrap_or_else(|message| panic!("{}: {message}", path.name));
@@ -1215,7 +1215,7 @@ fn ladder_falls_back_to_the_exact_rung_with_its_reason() {
     );
     assert_eq!(outcome.rung, Rung::Exact);
     assert_eq!(outcome.reason, Some(Reason::Crossing));
-    let mut reference = CubicFillWorkspace::new(LIMITS).expect("workspace");
+    let mut reference = CubicFillWorkspace::new_pre_b1(LIMITS).expect("workspace");
     assert_eq!(
         outcome.exact,
         Some(entry_attempt(&mut reference, f05.entry, f05.input()))
@@ -1291,7 +1291,7 @@ fn read_b0_corpus() -> Vec<(String, Vec<RealPath>)> {
 #[ignore = "B0 corpus; needs P3_B0R_B0_CORPUS; run in the release profile"]
 fn spike_corpus_s1_accessor_matches_published_output() {
     let corpus = read_b0_corpus();
-    let mut workspace = CubicFillWorkspace::new(LIMITS).expect("workspace");
+    let mut workspace = CubicFillWorkspace::new_pre_b1(LIMITS).expect("workspace");
     let (mut published, mut other) = (0usize, 0usize);
     for (_, paths) in &corpus {
         for path in paths {
@@ -1316,7 +1316,7 @@ fn spike_corpus_ladder_is_allocation_free() {
     let mut paths_total = 0usize;
     let mut allocating = 0usize;
     let mut totals = [0usize; Reason::ALL.len() + 1];
-    let mut prefix_workspace = CubicFillWorkspace::new(LIMITS).expect("workspace");
+    let mut prefix_workspace = CubicFillWorkspace::new_pre_b1(LIMITS).expect("workspace");
     let mut meshes_checked = 0usize;
     let mut mesh_failures = Vec::new();
     for (id, paths) in &corpus {
@@ -1555,7 +1555,7 @@ fn emit_spike_fixtures() {
     // SL-F13: the two B0 fixture paths through the ladder, with the exact rung's output for
     // the SL-O3 comparison (the oracle run executes the exact rung on every path).
     let mut ladder = Box::new(SpikeLadder::new(LIMITS).expect("ladder"));
-    let mut exact = CubicFillWorkspace::new(LIMITS).expect("workspace");
+    let mut exact = CubicFillWorkspace::new_pre_b1(LIMITS).expect("workspace");
     for path in b0_fixture_paths() {
         let outcome = ladder.run(
             path.input(),

@@ -177,8 +177,8 @@ describe('P3.2w canonical mixed LINE/cubic composition', () => {
 
   it('keeps exact retained storage and every measured attempt allocation-free', () => {
     expect(nativeRows.every(({ carrier }) => carrier.allocations === 0)).toBe(true);
-    expect(nativeRows.every(({ carrier }) => carrier.allocated_bytes === 1_111_552)).toBe(true);
-    expect(nativeRows.every(({ carrier }) => carrier.inline_bytes === 12_952)).toBe(true);
+    expect(nativeRows.every(({ carrier }) => carrier.allocated_bytes === 2_908_672)).toBe(true);
+    expect(nativeRows.every(({ carrier }) => carrier.inline_bytes === 42_952)).toBe(true);
   });
 
   it('preserves the literal packed owner vectors independently of fixture helpers', () => {

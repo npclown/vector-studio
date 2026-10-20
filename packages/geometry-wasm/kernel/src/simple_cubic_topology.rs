@@ -5,11 +5,24 @@ use crate::fill_exact::{multiply, Signed};
 use crate::fill_filter::{self, compare_enclosures, enclose, FilterId, Interval, UNDECIDED};
 use crate::geometry::{Point, Provenance};
 
+// D8 B1 kernel caps (`docs/plans/p3-fill-stroke-meshes.md`, "B1 kernel caps"): the leaf and
+// cubic caps equal `cubic_fill.rs`'s `MAX_EDGE_OWNERS` and `MAX_SOURCE_SEGMENTS` (pre-B1: 64 and
+// 16), the pair budget is every pair of that many leaves, as before, and the byte cap fits
+// ABSOLUTE_MAX_LEAVES retained `RoundedExactLeaf` records.
 const ABSOLUTE_MAX_CONTOURS: usize = 4;
-const ABSOLUTE_MAX_CUBICS: usize = 16;
-const ABSOLUTE_MAX_LEAVES: usize = 64;
-const ABSOLUTE_MAX_PAIRS: usize = 2_016;
+const ABSOLUTE_MAX_CUBICS: usize = 64;
+const ABSOLUTE_MAX_LEAVES: usize = 256;
+const ABSOLUTE_MAX_PAIRS: usize = ABSOLUTE_MAX_LEAVES * (ABSOLUTE_MAX_LEAVES - 1) / 2;
 const ABSOLUTE_MAX_BYTES: usize = 1024 * 1024;
+/// The arrangement crossing ceiling, `ABSOLUTE_MAX_LEAVES / 2` before B1. B1 keeps it at 32: it
+/// bounds the triangle-free scan's quadratic prefix search, and a larger ceiling would only
+/// admit more crossings, which no B1 workload needs.
+const MAX_CROSSINGS: usize = 32;
+/// Words of one leaf bitset row (B0R section 4.3's candidate rows and the unboxed-leaf mask).
+const LEAF_WORDS: usize = ABSOLUTE_MAX_LEAVES.div_ceil(64);
+// The sweep order stores leaf indices as u16.
+const _: () = assert!(ABSOLUTE_MAX_LEAVES <= u16::MAX as usize + 1);
+const _: () = assert!(MAX_CROSSINGS <= ABSOLUTE_MAX_LEAVES / 2);
 const MAX_DEPTH: u32 = 20;
 const COORDINATE_LIMBS: usize = 34;
 const PRODUCT_LIMBS: usize = 68;
@@ -291,12 +304,13 @@ pub(crate) struct RoundedKnotCubicTopologyWorkspace {
 }
 
 pub(crate) struct TransverseArrangementWorkspace {
-    // The sole heap owner is rounded. The additional inline arrangement storage is 64 usize
-    // matching-partner slots, 32 bounded crossing records, one length, and one publication flag;
-    // the native unit freezes the complete wrapper at no more than 4 KiB.
+    // The sole heap owner is rounded. The additional inline arrangement storage is
+    // ABSOLUTE_MAX_LEAVES (64 before B1, 256 since) usize matching-partner slots, 32 bounded
+    // crossing records, one length, and one publication flag; the native unit freezes the
+    // complete wrapper at 2,512 bytes before B1 and 7,120 since (at most 16 KiB).
     rounded: RoundedKnotCubicTopologyWorkspace,
     partners: [usize; ABSOLUTE_MAX_LEAVES],
-    crossings: [ArrangementCrossing; ABSOLUTE_MAX_LEAVES / 2],
+    crossings: [ArrangementCrossing; MAX_CROSSINGS],
     crossing_len: usize,
     published: bool,
 }
@@ -510,7 +524,7 @@ impl SimpleCubicTopologyWorkspace {
     fn reference_pairs(
         &mut self,
         max_pairs: usize,
-        touched: &mut [u64; ABSOLUTE_MAX_LEAVES],
+        touched: &mut [LeafRow; ABSOLUTE_MAX_LEAVES],
     ) -> Result<(), TopologyError> {
         for left_index in 0..self.exact_leaves.len() {
             for right_index in (left_index + 1)..self.exact_leaves.len() {
@@ -519,7 +533,7 @@ impl SimpleCubicTopologyWorkspace {
                 }
                 self.stats.pairs += 1;
                 if let Err(error) = self.reference_pair_body(left_index, right_index) {
-                    touched[left_index] |= 1u64 << right_index;
+                    set_bit(&mut touched[left_index], right_index);
                     return Err(error);
                 }
             }
@@ -837,7 +851,7 @@ impl RoundedKnotCubicTopologyWorkspace {
     fn reference_pairs(
         &mut self,
         max_pairs: usize,
-        touched: &mut [u64; ABSOLUTE_MAX_LEAVES],
+        touched: &mut [LeafRow; ABSOLUTE_MAX_LEAVES],
     ) -> Result<(), TopologyError> {
         for left_index in 0..self.exact_leaves.len() {
             for right_index in (left_index + 1)..self.exact_leaves.len() {
@@ -846,7 +860,7 @@ impl RoundedKnotCubicTopologyWorkspace {
                 }
                 self.stats.pairs += 1;
                 if let Err(error) = self.reference_pair_body(left_index, right_index) {
-                    touched[left_index] |= 1u64 << right_index;
+                    set_bit(&mut touched[left_index], right_index);
                     return Err(error);
                 }
             }
@@ -928,7 +942,7 @@ impl TransverseArrangementWorkspace {
         Ok(Self {
             rounded: RoundedKnotCubicTopologyWorkspace::new(limits)?,
             partners: [usize::MAX; ABSOLUTE_MAX_LEAVES],
-            crossings: [ArrangementCrossing::default(); ABSOLUTE_MAX_LEAVES / 2],
+            crossings: [ArrangementCrossing::default(); MAX_CROSSINGS],
             crossing_len: 0,
             published: false,
         })
@@ -972,7 +986,7 @@ impl TransverseArrangementWorkspace {
 
         // This attempt-local map retains no source sidecar or leaf record. Source leaves occupy
         // the prefix of each prepared contour in packed source order; any following closure slot
-        // remains false. A conservative 1 KiB covers the 64 booleans, borrowed input slice pairs,
+        // remains false. A conservative 1 KiB covers the 256 booleans (64 before B1), input slices,
         // policy/result values, range iterators, and scalar indices in this nonrecursive helper.
         let mut marked_lines = [false; ABSOLUTE_MAX_LEAVES];
         for (contour_index, source_range) in input.contours.iter().copied().enumerate() {
@@ -1025,7 +1039,7 @@ impl TransverseArrangementWorkspace {
     ) -> Result<(), TopologyError> {
         // Pair inspection borrows both retained records. Its largest exact scratch is the shared
         // transverse-orientation envelope above; no RoundedExactLeaf or six-point array is copied.
-        // Optional marked-LINE state adds one borrowed 64-boolean array and scalar flags. The
+        // Optional marked-LINE state adds one borrowed 256-boolean array and scalar flags. The
         // triangle-free scan borrows the at-most-32-record prefix and uses two record references,
         // one witness index, and booleans; it neither copies the array nor allocates graph storage.
         let max_pairs = self.rounded.limits.max_pairs;
@@ -1151,7 +1165,7 @@ impl TransverseArrangementWorkspace {
         marked_lines: Option<&[bool; ABSOLUTE_MAX_LEAVES]>,
         policy: ArrangementPolicy,
         max_pairs: usize,
-        touched: &mut [u64; ABSOLUTE_MAX_LEAVES],
+        touched: &mut [LeafRow; ABSOLUTE_MAX_LEAVES],
     ) -> Result<(), TopologyError> {
         for left_index in 0..self.rounded.exact_leaves.len() {
             for right_index in (left_index + 1)..self.rounded.exact_leaves.len() {
@@ -1163,7 +1177,7 @@ impl TransverseArrangementWorkspace {
                 let outcome =
                     self.reference_pair_body(left_index, right_index, marked_lines, policy);
                 if outcome.is_err() || self.crossing_len != before {
-                    touched[left_index] |= 1u64 << right_index;
+                    set_bit(&mut touched[left_index], right_index);
                 }
                 outcome?;
             }
@@ -1309,6 +1323,26 @@ fn closes_crossing_triangle(
 // Scratch: 64 boxes (2 KiB), one wild mask, the 512-byte bitset and the 64-byte order, all on
 // the stack of the nonrecursive sweep helpers, well inside the source-level envelopes above.
 // Nothing is allocated or retained; no workspace field changes.
+//
+// B1 widening (`docs/plans/p3-fill-stroke-meshes.md`, "B1 kernel caps"): with
+// ABSOLUTE_MAX_LEAVES = 256 a bitset row is LEAF_WORDS = 4 u64 words, bit j of row i in word
+// j / 64 at position j % 64, and the order holds u16 indices. For at most 64 leaves only word 0
+// is ever set, so every mark, read and iteration order is the pre-B1 one. Scratch at 256 leaves:
+// 256 boxes (8 KiB), a 32-byte wild mask, the 8 KiB bitset and the 512-byte order, still on the
+// stack of the same nonrecursive helpers.
+
+/// One leaf bitset row (B1): bit j in word j / 64.
+type LeafRow = [u64; LEAF_WORDS];
+
+const EMPTY_ROW: LeafRow = [0; LEAF_WORDS];
+
+fn set_bit(row: &mut LeafRow, bit: usize) {
+    row[bit / 64] |= 1u64 << (bit % 64);
+}
+
+fn has_bit(row: &LeafRow, bit: usize) -> bool {
+    row[bit / 64] & (1u64 << (bit % 64)) != 0
+}
 
 /// Section 4.2: the closed box spanned by the enclosures of one leaf's points.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1353,13 +1387,13 @@ fn leaf_box(points: &[ExactPoint]) -> Option<LeafBox> {
 /// candidate).
 fn leaf_boxes<'a>(
     leaves: impl Iterator<Item = &'a [ExactPoint]>,
-) -> ([LeafBox; ABSOLUTE_MAX_LEAVES], u64) {
+) -> ([LeafBox; ABSOLUTE_MAX_LEAVES], LeafRow) {
     let mut boxes = [EMPTY_BOX; ABSOLUTE_MAX_LEAVES];
-    let mut wild = 0u64;
+    let mut wild = EMPTY_ROW;
     for (index, points) in leaves.enumerate() {
         match leaf_box(points) {
             Some(value) => boxes[index] = value,
-            None => wild |= 1u64 << index,
+            None => set_bit(&mut wild, index),
         }
     }
     (boxes, wild)
@@ -1377,8 +1411,8 @@ fn closed_le(left: f64, right: f64) -> bool {
 /// Section 4.3: the candidate bitset C, row i holding bit j for j > i, and the x_lo order of
 /// the boxed leaves followed by the unboxed ones.
 struct PairCandidates {
-    rows: [u64; ABSOLUTE_MAX_LEAVES],
-    order: [u8; ABSOLUTE_MAX_LEAVES],
+    rows: [LeafRow; ABSOLUTE_MAX_LEAVES],
+    order: [u16; ABSOLUTE_MAX_LEAVES],
     leaf_count: usize,
 }
 
@@ -1386,12 +1420,12 @@ impl PairCandidates {
     fn new(
         leaf_count: usize,
         boxes: &[LeafBox; ABSOLUTE_MAX_LEAVES],
-        wild: u64,
+        wild: LeafRow,
         contours: &[TopologyRange],
     ) -> Self {
         debug_assert!(leaf_count <= ABSOLUTE_MAX_LEAVES);
         let mut candidates = Self {
-            rows: [0; ABSOLUTE_MAX_LEAVES],
+            rows: [EMPTY_ROW; ABSOLUTE_MAX_LEAVES],
             order: [0; ABSOLUTE_MAX_LEAVES],
             leaf_count,
         };
@@ -1400,7 +1434,7 @@ impl PairCandidates {
         // stay in any order: the marks form a set.
         let mut boxed = 0usize;
         for index in 0..leaf_count {
-            if wild & (1u64 << index) != 0 {
+            if has_bit(&wild, index) {
                 continue;
             }
             let mut position = boxed;
@@ -1410,13 +1444,13 @@ impl PairCandidates {
                 candidates.order[position] = candidates.order[position - 1];
                 position -= 1;
             }
-            candidates.order[position] = index as u8;
+            candidates.order[position] = index as u16;
             boxed += 1;
         }
         let mut position = boxed;
         for index in 0..leaf_count {
-            if wild & (1u64 << index) != 0 {
-                candidates.order[position] = index as u8;
+            if has_bit(&wild, index) {
+                candidates.order[position] = index as u16;
                 position += 1;
             }
         }
@@ -1437,7 +1471,7 @@ impl PairCandidates {
             }
         }
         for index in 0..leaf_count {
-            if wild & (1u64 << index) != 0 {
+            if has_bit(&wild, index) {
                 for other in 0..leaf_count {
                     if other != index {
                         candidates.mark(index, other);
@@ -1464,19 +1498,20 @@ impl PairCandidates {
         } else {
             (right, left)
         };
-        self.rows[low] |= 1u64 << high;
+        set_bit(&mut self.rows[low], high);
     }
 
     #[cfg(test)]
     fn contains(&self, left: usize, right: usize) -> bool {
-        self.rows[left] & (1u64 << right) != 0
+        has_bit(&self.rows[left], right)
     }
 
     #[cfg(test)]
     fn len(&self) -> u64 {
         self.rows
             .iter()
-            .map(|row| u64::from(row.count_ones()))
+            .flatten()
+            .map(|word| u64::from(word.count_ones()))
             .sum()
     }
 
@@ -1493,19 +1528,18 @@ impl PairCandidates {
     }
 }
 
-/// The set bits of one bitset row, lowest first.
-struct RowBits(u64);
+/// The set bits of one bitset row, lowest first (word 0 first, so for at most 64 leaves the
+/// pre-B1 single-word order).
+struct RowBits(LeafRow);
 
 impl Iterator for RowBits {
     type Item = usize;
 
     fn next(&mut self) -> Option<usize> {
-        if self.0 == 0 {
-            return None;
-        }
-        let bit = self.0.trailing_zeros() as usize;
-        self.0 &= self.0 - 1;
-        Some(bit)
+        let word = self.0.iter().position(|word| *word != 0)?;
+        let bit = self.0[word].trailing_zeros() as usize;
+        self.0[word] &= self.0[word] - 1;
+        Some(word * 64 + bit)
     }
 }
 
@@ -1706,7 +1740,7 @@ trait B0rPairLoops {
     fn reference(
         &mut self,
         max_pairs: usize,
-        touched: &mut [u64; ABSOLUTE_MAX_LEAVES],
+        touched: &mut [LeafRow; ABSOLUTE_MAX_LEAVES],
     ) -> Result<(), TopologyError>;
     fn sweep(&mut self, max_pairs: usize) -> Result<(), TopologyError>;
 }
@@ -1739,13 +1773,13 @@ impl B0rPairLoops for SimplePairLoops<'_> {
     }
 
     fn unboxed(&self) -> bool {
-        leaf_boxes(self.0.exact_leaves.iter().map(|leaf| &leaf.controls[..])).1 != 0
+        leaf_boxes(self.0.exact_leaves.iter().map(|leaf| &leaf.controls[..])).1 != EMPTY_ROW
     }
 
     fn reference(
         &mut self,
         max_pairs: usize,
-        touched: &mut [u64; ABSOLUTE_MAX_LEAVES],
+        touched: &mut [LeafRow; ABSOLUTE_MAX_LEAVES],
     ) -> Result<(), TopologyError> {
         self.0.reference_pairs(max_pairs, touched)
     }
@@ -1789,7 +1823,7 @@ impl B0rPairLoops for RoundedPairLoops<'_> {
     fn reference(
         &mut self,
         max_pairs: usize,
-        touched: &mut [u64; ABSOLUTE_MAX_LEAVES],
+        touched: &mut [LeafRow; ABSOLUTE_MAX_LEAVES],
     ) -> Result<(), TopologyError> {
         self.0.reference_pairs(max_pairs, touched)
     }
@@ -1810,7 +1844,7 @@ struct TransversePairLoops<'a> {
 type TransverseLoopState = (
     TopologyStats,
     [usize; ABSOLUTE_MAX_LEAVES],
-    [ArrangementCrossing; ABSOLUTE_MAX_LEAVES / 2],
+    [ArrangementCrossing; MAX_CROSSINGS],
     usize,
 );
 
@@ -1855,7 +1889,7 @@ impl B0rPairLoops for TransversePairLoops<'_> {
     fn reference(
         &mut self,
         max_pairs: usize,
-        touched: &mut [u64; ABSOLUTE_MAX_LEAVES],
+        touched: &mut [LeafRow; ABSOLUTE_MAX_LEAVES],
     ) -> Result<(), TopologyError> {
         self.workspace
             .reference_pairs(self.marked_lines, self.policy, max_pairs, touched)
@@ -1870,7 +1904,7 @@ impl B0rPairLoops for TransversePairLoops<'_> {
 #[cfg(test)]
 impl RoundedKnotCubicTopologyWorkspace {
     fn b0r_unboxed(&self) -> bool {
-        leaf_boxes(self.exact_leaves.iter().map(|leaf| &leaf.points[..])).1 != 0
+        leaf_boxes(self.exact_leaves.iter().map(|leaf| &leaf.points[..])).1 != EMPTY_ROW
     }
 }
 
@@ -1883,7 +1917,7 @@ fn b0r_pair_loop_override<L: B0rPairLoops>(
     match B0R_PAIR_LOOP_MODE.with(core::cell::Cell::get) {
         B0rPairLoopMode::Sweep => None,
         B0rPairLoopMode::Reference => {
-            let mut touched = [0u64; ABSOLUTE_MAX_LEAVES];
+            let mut touched = [EMPTY_ROW; ABSOLUTE_MAX_LEAVES];
             Some(loops.reference(max_pairs, &mut touched))
         }
         B0rPairLoopMode::Shadow => Some(b0r_shadow_pairs(loops, max_pairs)),
@@ -1903,7 +1937,7 @@ fn b0r_shadow_pairs<L: B0rPairLoops>(loops: &mut L, max_pairs: usize) -> Result<
     let total = leaf_count * leaf_count.saturating_sub(1) / 2;
     let candidates = loops.candidates();
 
-    let mut touched = [0u64; ABSOLUTE_MAX_LEAVES];
+    let mut touched = [EMPTY_ROW; ABSOLUTE_MAX_LEAVES];
     let reference = loops.reference(max_pairs, &mut touched);
     let reference_state = loops.state();
     let reached = loops.pairs();
@@ -1960,7 +1994,7 @@ fn b0r_shadow_pairs<L: B0rPairLoops>(loops: &mut L, max_pairs: usize) -> Result<
             continue;
         }
         loops.restore(start);
-        let mut scratch = [0u64; ABSOLUTE_MAX_LEAVES];
+        let mut scratch = [EMPTY_ROW; ABSOLUTE_MAX_LEAVES];
         let budget_reference = loops.reference(budget, &mut scratch);
         let budget_reference_state = loops.state();
         loops.restore(start);
@@ -2060,7 +2094,7 @@ pub(crate) fn b0r_test_candidate_pairs(
 ) -> Vec<(usize, usize)> {
     assert!(boxes.len() <= ABSOLUTE_MAX_LEAVES);
     let mut values = [EMPTY_BOX; ABSOLUTE_MAX_LEAVES];
-    let mut wild = 0u64;
+    let mut wild = EMPTY_ROW;
     for (index, value) in boxes.iter().enumerate() {
         match value {
             Some([x_lo, x_hi, y_lo, y_hi]) => {
@@ -2071,7 +2105,7 @@ pub(crate) fn b0r_test_candidate_pairs(
                     y_hi: *y_hi,
                 }
             }
-            None => wild |= 1u64 << index,
+            None => set_bit(&mut wild, index),
         }
     }
     PairCandidates::new(boxes.len(), &values, wild, contours)

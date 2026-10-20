@@ -1820,7 +1820,8 @@ pub(crate) struct SpikeLadder {
 impl SpikeLadder {
     pub(crate) fn new(limits: RoundedFillLimits) -> Result<Self, CubicFillError> {
         Ok(Self {
-            exact: CubicFillWorkspace::new(limits)?,
+            // B1: the spike runs at the pre-B1 caps, its own frozen arrays being sized for them.
+            exact: CubicFillWorkspace::new_pre_b1(limits)?,
             fast: FastRung::new(),
         })
     }

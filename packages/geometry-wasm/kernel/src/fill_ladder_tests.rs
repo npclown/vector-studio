@@ -23,7 +23,7 @@ use crate::cubic_fill::{
     MAX_FLAT_COMMANDS,
 };
 use crate::engine::BATCH_INTERNAL_ERROR;
-use crate::fill_export::{tolerances, FillRequest, FILL_V0_LIMITS};
+use crate::fill_export::{tolerances, FillRequest, FILL_V0_LIMITS, PRE_B1_FILL_V0_LIMITS};
 use crate::fill_filter::{with_fault, Fault};
 use crate::fill_ladder::{
     exact_cascade, with_ladder_faults, BoundaryScan, ExactOutcome, ExactStep, FastRung, FillLadder,
@@ -1255,6 +1255,8 @@ fn input<'a>(request: FillRequest, path: &'a RealPath) -> PathInput<'a> {
     )
 }
 
+/// B1: the module-level ladder harness (AL-F7, AL-I2, AL-I3) runs at the pre-B1 caps, so its
+/// comparisons with the frozen spike and the pre-B1 fixtures are like with like.
 struct Harness {
     ladder: FillLadder,
     workspace: CubicFillWorkspace,
@@ -1264,8 +1266,8 @@ struct Harness {
 impl Harness {
     fn new() -> Self {
         Self {
-            ladder: FillLadder::reserve(FILL_V0_LIMITS).expect("ladder"),
-            workspace: CubicFillWorkspace::new(FILL_V0_LIMITS).expect("workspace"),
+            ladder: FillLadder::reserve(PRE_B1_FILL_V0_LIMITS).expect("ladder"),
+            workspace: CubicFillWorkspace::new_pre_b1(PRE_B1_FILL_V0_LIMITS).expect("workspace"),
             scan: TestScan::new(),
         }
     }
@@ -1348,7 +1350,7 @@ fn assert_fallback_equals_exact_cascade(
     assert!(harness.ladder.mesh().is_none(), "{}", path.name);
     let exact = outcome.exact.expect("exact result on fallback");
     let ladder_digest = exact_digest(&harness.workspace);
-    let mut reference = CubicFillWorkspace::new(FILL_V0_LIMITS).expect("workspace");
+    let mut reference = CubicFillWorkspace::new_pre_b1(PRE_B1_FILL_V0_LIMITS).expect("workspace");
     let direct = exact_cascade(&mut reference, request, &path.verbs, &path.point_bytes);
     assert_eq!(exact, direct, "{}", path.name);
     assert_eq!(ladder_digest, exact_digest(&reference), "{}", path.name);
@@ -1535,7 +1537,8 @@ fn al_f9_b0_fixture_paths_are_fast_and_the_exact_rung_admits_them() {
             path.name
         );
         let view = {
-            let mut workspace = CubicFillWorkspace::new(FILL_V0_LIMITS).expect("workspace");
+            let mut workspace =
+                CubicFillWorkspace::new_pre_b1(PRE_B1_FILL_V0_LIMITS).expect("workspace");
             let view = workspace
                 .prepare_prefix(input(request, &path), MAX_FLAT_COMMANDS)
                 .expect("prefix");
@@ -1564,7 +1567,7 @@ fn al_f9_b0_fixture_paths_are_fast_and_the_exact_rung_admits_them() {
             None,
         )
         .unwrap_or_else(|message| panic!("{}: {message}", path.name));
-        let mut exact = CubicFillWorkspace::new(FILL_V0_LIMITS).expect("workspace");
+        let mut exact = CubicFillWorkspace::new_pre_b1(PRE_B1_FILL_V0_LIMITS).expect("workspace");
         let outcome = exact_cascade(&mut exact, request, &path.verbs, &path.point_bytes);
         assert!(outcome.result.is_ok(), "{}: {outcome:?}", path.name);
         assert!(exact.output().is_some(), "{}", path.name);
@@ -1829,7 +1832,8 @@ impl DifferentialRunner {
         Self {
             harness: Harness::new(),
             spike: Box::new(p3_b0_spike::FastRung::new()),
-            spike_workspace: CubicFillWorkspace::new(FILL_V0_LIMITS).expect("workspace"),
+            spike_workspace: CubicFillWorkspace::new_pre_b1(PRE_B1_FILL_V0_LIMITS)
+                .expect("workspace"),
             result: Differential::default(),
         }
     }

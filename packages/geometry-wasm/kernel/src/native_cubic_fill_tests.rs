@@ -1877,8 +1877,8 @@ fn emit_composition_rows(
     let mut workspace = BridgeWorkspace::new(LIMITS).expect("construct mixed cubic workspace");
     let allocated_bytes = workspace.allocated_bytes();
     let inline_bytes = size_of::<BridgeWorkspace>();
-    assert_eq!(allocated_bytes, 1_111_552);
-    assert_eq!(inline_bytes, 12_952);
+    assert_eq!(allocated_bytes, 2_908_672);
+    assert_eq!(inline_bytes, 42_952);
     println!("{begin_marker}");
     for (row, expectation) in rows.iter().zip(expected) {
         assert_eq!(row.id, expectation.id);
@@ -3055,7 +3055,11 @@ mod tests {
             );
         }
         if seventeenth {
-            path.line_to(point(-3.0, 0.0));
+            // B1 re-baseline: an open tail of 49 lines makes 65 segments, one above the
+            // 64-segment cap (one line, 17 segments, before B1).
+            for index in 0..49 {
+                path.line_to(point(-3.0 * f64::from(index + 1), 0.0));
+            }
         } else {
             path.close();
         }
@@ -3290,15 +3294,15 @@ mod tests {
         let rounded_topology =
             RoundedKnotCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
         let transverse = TransverseArrangementWorkspace::new(TopologyLimits::default()).unwrap();
-        assert_eq!(rounded_topology.allocated_bytes(), 224_256);
-        assert_eq!(transverse.allocated_bytes(), 224_256);
+        assert_eq!(rounded_topology.allocated_bytes(), 897_024);
+        assert_eq!(transverse.allocated_bytes(), 897_024);
         let expected = rounded
             .allocated_bytes()
             .checked_add(exact.allocated_bytes())
             .and_then(|bytes| bytes.checked_add(rounded_topology.allocated_bytes()))
             .and_then(|bytes| bytes.checked_add(transverse.allocated_bytes()))
             .unwrap();
-        assert_eq!(expected, 1_111_552);
+        assert_eq!(expected, 2_908_672);
         assert_eq!(workspace.allocated_bytes(), expected);
         assert!(workspace.allocated_bytes() <= MAX_BRIDGE_HEAP_BYTES);
         assert!(size_of::<BridgeWorkspace>() < 64 * 1024);
@@ -3621,8 +3625,8 @@ mod tests {
 
         assert_mixed_failure_recovery(&mut workspace, |workspace| {
             let path = RawPath {
-                verbs: vec![VERB_MOVE; 25],
-                point_bytes: vec![0; 50 * 8],
+                verbs: vec![VERB_MOVE; 73],
+                point_bytes: vec![0; 146 * 8],
             };
             assert_eq!(
                 measured_mixed_rule_attempt(
@@ -4078,8 +4082,8 @@ mod tests {
 
         assert_triangle_free_failure_recovery(&mut workspace, |workspace| {
             let path = RawPath {
-                verbs: vec![VERB_MOVE; 25],
-                point_bytes: vec![0; 50 * 8],
+                verbs: vec![VERB_MOVE; 73],
+                point_bytes: vec![0; 146 * 8],
             };
             assert_eq!(
                 measured_triangle_free_rule_attempt(
@@ -4717,8 +4721,8 @@ mod tests {
         let line_identity = topology_skip_triangle();
         let legacy_exact = raw_square();
         let cheap_failure = RawPath {
-            verbs: vec![VERB_MOVE; 25],
-            point_bytes: vec![0; 50 * 8],
+            verbs: vec![VERB_MOVE; 73],
+            point_bytes: vec![0; 146 * 8],
         };
         let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
 
@@ -5019,8 +5023,8 @@ mod tests {
         let exact_success = adoption_path(0.0, true);
         let line_identity = topology_skip_triangle();
         let cheap_failure = RawPath {
-            verbs: vec![VERB_MOVE; 25],
-            point_bytes: vec![0; 50 * 8],
+            verbs: vec![VERB_MOVE; 73],
+            point_bytes: vec![0; 146 * 8],
         };
         let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
 
@@ -5174,14 +5178,15 @@ mod tests {
         let mut seventeen = RawPath::default();
         let mut current = point(0.0, 0.0);
         seventeen.move_to(current);
-        for index in 0..17 {
+        // B1 re-baseline: one segment above the 64-segment cap (17 above 16 before B1).
+        for index in 0..65 {
             // Three-unit spans keep both one-third controls integral, so P2 sees a=b=0.
             let end = point(3.0 * f64::from(index + 1), 0.0);
             append_linear(&mut seventeen, current, end);
             current = end;
         }
-        assert_eq!(seventeen.verbs.len(), 18);
-        assert_eq!(seventeen.point_count(), 104);
+        assert_eq!(seventeen.verbs.len(), 66);
+        assert_eq!(seventeen.point_count(), 392);
         assert_eq!(
             measured_raw_attempt(
                 &mut workspace,
@@ -5216,8 +5221,8 @@ mod tests {
         assert!(!workspace.diagnostics().emission_invoked);
 
         let cheap_verbs = RawPath {
-            verbs: vec![VERB_MOVE; 25],
-            point_bytes: vec![0; 50 * 8],
+            verbs: vec![VERB_MOVE; 73],
+            point_bytes: vec![0; 146 * 8],
         };
         assert_eq!(
             measured_raw_attempt(
@@ -5233,7 +5238,7 @@ mod tests {
 
         let cheap_scalars = RawPath {
             verbs: Vec::new(),
-            point_bytes: vec![0; 105 * 8],
+            point_bytes: vec![0; 393 * 8],
         };
         assert_eq!(
             measured_raw_attempt(
@@ -5846,8 +5851,8 @@ mod tests {
         let mixed = mixed_sixteen_square(false, false);
         let all_cubic = mixed_sixteen_square(true, false);
         let seventeenth = mixed_sixteen_square(false, true);
-        assert!(seventeenth.verbs.len() <= 24);
-        assert!(seventeenth.point_count() <= 104);
+        assert!(seventeenth.verbs.len() <= 72);
+        assert!(seventeenth.point_count() <= 392);
         let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
 
         for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
@@ -6180,12 +6185,12 @@ mod tests {
     fn source_and_command_failures_recover_without_dependent_work() {
         let success = raw_square();
         let source_limit = RawPath {
-            verbs: vec![VERB_MOVE; 25],
-            point_bytes: vec![0; 50 * 8],
+            verbs: vec![VERB_MOVE; 73],
+            point_bytes: vec![0; 146 * 8],
         };
         let scalar_limit = RawPath {
             verbs: Vec::new(),
-            point_bytes: vec![0; 105 * 8],
+            point_bytes: vec![0; 393 * 8],
         };
         let mut unsupported = RawPath::default();
         unsupported.move_to(point(0.0, 0.0));
@@ -6360,8 +6365,8 @@ mod tests {
         assert!(second.output().is_some());
 
         let too_many = RawPath {
-            verbs: vec![VERB_MOVE; 25],
-            point_bytes: vec![0; 50 * 8],
+            verbs: vec![VERB_MOVE; 73],
+            point_bytes: vec![0; 146 * 8],
         };
         assert_eq!(
             measured_raw_attempt(
@@ -7097,7 +7102,10 @@ mod tests {
             sixteen_zero_lines.line_to(point(0.0, 0.0));
         }
         let mut seventeen_zero_lines = sixteen_zero_lines.clone();
-        seventeen_zero_lines.line_to(point(0.0, 0.0));
+        // B1 re-baseline: 65 zero lines, one above the 64-segment cap (17 before B1).
+        for _ in 0..49 {
+            seventeen_zero_lines.line_to(point(0.0, 0.0));
+        }
         for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
             let diagnostics = measured_raw_rule_attempt(
                 &mut bridge,
@@ -8458,12 +8466,14 @@ mod tests {
 
     #[test]
     fn zero_lines_still_charge_the_shared_sixteen_source_limit() {
-        let ceiling = zero_line_source_ceiling(13);
-        let overflow = zero_line_source_ceiling(14);
-        assert_eq!(ceiling.verbs.len(), 18);
-        assert_eq!(ceiling.point_count(), 34);
-        assert_eq!(overflow.verbs.len(), 19);
-        assert_eq!(overflow.point_count(), 36);
+        // B1 re-baseline: the ceiling is 64 sources (61 zero lines and three lines), 16
+        // (13 and three) before B1.
+        let ceiling = zero_line_source_ceiling(61);
+        let overflow = zero_line_source_ceiling(62);
+        assert_eq!(ceiling.verbs.len(), 66);
+        assert_eq!(ceiling.point_count(), 130);
+        assert_eq!(overflow.verbs.len(), 67);
+        assert_eq!(overflow.point_count(), 132);
         let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
         for rule in [LineFillRule::Nonzero, LineFillRule::Evenodd] {
             let diagnostics = measured_raw_rule_attempt(
@@ -8478,7 +8488,7 @@ mod tests {
             assert!(!diagnostics.topology_invoked);
             assert!(diagnostics.rounded_invoked);
             let output = workspace.output().unwrap();
-            assert_eq!(output.sources.len(), 16);
+            assert_eq!(output.sources.len(), 64);
             assert_eq!(output.owners.len(), 3);
             assert_eq!(mesh_area(output.rounded), 4.5);
             assert_depth_zero_original_identity(&ceiling, output);

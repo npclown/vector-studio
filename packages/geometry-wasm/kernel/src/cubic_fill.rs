@@ -13,14 +13,64 @@ use crate::simple_cubic_topology::{
     TransverseArrangementWorkspace,
 };
 
-pub(crate) const MAX_FLAT_COMMANDS: usize = 72;
-const MAX_SOURCE_VERBS: usize = 24;
-const MAX_SOURCE_SCALARS: usize = 104;
-pub(crate) const MAX_CONTOUR_POINTS: usize = 68;
+// D8 B1 kernel caps (`docs/plans/p3-fill-stroke-meshes.md`, "B1 kernel caps"). A path holds at
+// most MAX_CONTOURS contours, MAX_SOURCE_SEGMENTS source segments and MAX_EDGE_OWNERS flattened
+// edges; the roadmap's 32 cubics at λ = 8 are 256 leaves. The other caps follow from those three
+// as the pre-B1 caps (4, 16, 64 → 24, 104, 68, 72) did: one MOVE and one CLOSE per contour, six
+// scalars per cubic and two per MOVE, and one repeated start point per contour before
+// `finish_*_contour` drops it.
 pub(crate) const MAX_CONTOURS: usize = 4;
-pub(crate) const MAX_EDGE_OWNERS: usize = 64;
-pub(crate) const MAX_SOURCE_SEGMENTS: usize = 16;
+pub(crate) const MAX_SOURCE_SEGMENTS: usize = 64;
+pub(crate) const MAX_EDGE_OWNERS: usize = 256;
+pub(crate) const MAX_FLAT_COMMANDS: usize = MAX_EDGE_OWNERS + 2 * MAX_CONTOURS;
+const MAX_SOURCE_VERBS: usize = MAX_SOURCE_SEGMENTS + 2 * MAX_CONTOURS;
+const MAX_SOURCE_SCALARS: usize = 6 * MAX_SOURCE_SEGMENTS + 2 * MAX_CONTOURS;
+pub(crate) const MAX_CONTOUR_POINTS: usize = MAX_EDGE_OWNERS + MAX_CONTOURS;
 const MAX_COMBINED_HEAP_BYTES: usize = 16 * 1024 * 1024;
+
+/// The prefix caps one workspace enforces. The arrays above are always sized for the B1 caps;
+/// a workspace enforces `B1_CAPS` unless a `cfg(test)` constructor selects `PRE_B1_CAPS`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PrefixCaps {
+    source_verbs: usize,
+    source_scalars: usize,
+    source_segments: usize,
+    flat_commands: usize,
+    contour_points: usize,
+    edge_owners: usize,
+}
+
+const B1_CAPS: PrefixCaps = PrefixCaps {
+    source_verbs: MAX_SOURCE_VERBS,
+    source_scalars: MAX_SOURCE_SCALARS,
+    source_segments: MAX_SOURCE_SEGMENTS,
+    flat_commands: MAX_FLAT_COMMANDS,
+    contour_points: MAX_CONTOUR_POINTS,
+    edge_owners: MAX_EDGE_OWNERS,
+};
+
+/// B1's test-only pre-B1 cap mode (`docs/plans/p3-fill-stroke-meshes.md`, "B1 kernel caps"):
+/// the caps before B1, so that the frozen oracles (SL-O4 against the 2026-10-17 record, AL-I3
+/// against the frozen spike) compare like with like. Unreachable outside `cfg(test)`.
+#[cfg(test)]
+const PRE_B1_CAPS: PrefixCaps = PrefixCaps {
+    source_verbs: 24,
+    source_scalars: 104,
+    source_segments: 16,
+    flat_commands: 72,
+    contour_points: 68,
+    edge_owners: 64,
+};
+
+/// The topology limits before B1 (`TopologyLimits::default()` was these values).
+#[cfg(test)]
+const PRE_B1_TOPOLOGY_LIMITS: TopologyLimits = TopologyLimits {
+    max_contours: 4,
+    max_cubics: 16,
+    max_leaves: 64,
+    max_pairs: 2_016,
+    max_bytes: 1024 * 1024,
+};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct FlatCommand {
@@ -218,17 +268,33 @@ pub(crate) struct CubicFillWorkspace {
     diagnostics: CubicFillDiagnostics,
     topology_stats: TopologyStats,
     published: bool,
+    caps: PrefixCaps,
 }
 
 impl CubicFillWorkspace {
     pub(crate) fn new(limits: RoundedFillLimits) -> Result<Self, CubicFillError> {
+        Self::with_caps(limits, B1_CAPS, TopologyLimits::default())
+    }
+
+    /// B1's test-only pre-B1 cap mode: the prefix and topology caps before B1. The caller passes
+    /// the matching rounded limits (`fill_export::PRE_B1_FILL_V0_LIMITS` or the native `LIMITS`).
+    #[cfg(test)]
+    pub(crate) fn new_pre_b1(limits: RoundedFillLimits) -> Result<Self, CubicFillError> {
+        Self::with_caps(limits, PRE_B1_CAPS, PRE_B1_TOPOLOGY_LIMITS)
+    }
+
+    fn with_caps(
+        limits: RoundedFillLimits,
+        caps: PrefixCaps,
+        topology_limits: TopologyLimits,
+    ) -> Result<Self, CubicFillError> {
         let workspace = Self {
             rounded: RoundedFillWorkspace::new(limits).map_err(CubicFillError::Rounded)?,
-            topology: SimpleCubicTopologyWorkspace::new(TopologyLimits::default())
+            topology: SimpleCubicTopologyWorkspace::new(topology_limits)
                 .map_err(CubicFillError::Topology)?,
-            rounded_topology: RoundedKnotCubicTopologyWorkspace::new(TopologyLimits::default())
+            rounded_topology: RoundedKnotCubicTopologyWorkspace::new(topology_limits)
                 .map_err(CubicFillError::Topology)?,
-            transverse_topology: TransverseArrangementWorkspace::new(TopologyLimits::default())
+            transverse_topology: TransverseArrangementWorkspace::new(topology_limits)
                 .map_err(CubicFillError::Topology)?,
             source_verbs: [SourceVerb::Unused; MAX_SOURCE_VERBS],
             source_verb_len: 0,
@@ -247,6 +313,7 @@ impl CubicFillWorkspace {
             diagnostics: CubicFillDiagnostics::default(),
             topology_stats: TopologyStats::default(),
             published: false,
+            caps,
         };
         if workspace
             .rounded
@@ -416,7 +483,9 @@ impl CubicFillWorkspace {
         command_capacity: usize,
     ) -> Result<bool, PrefixFailure> {
         self.begin_attempt();
-        if input.verbs.len() > MAX_SOURCE_VERBS || input.point_count() > MAX_SOURCE_SCALARS {
+        if input.verbs.len() > self.caps.source_verbs
+            || input.point_count() > self.caps.source_scalars
+        {
             return Err(PrefixFailure::Error(CubicFillError::SourceLimit));
         }
 
@@ -503,7 +572,7 @@ impl CubicFillWorkspace {
                 }
                 VERB_LINE => {
                     let mut open = active.ok_or(CubicFillError::UnsupportedSource)?;
-                    if self.source_len >= MAX_SOURCE_SEGMENTS {
+                    if self.source_len >= self.caps.source_segments {
                         return Err(CubicFillError::SourceLimit);
                     }
                     let end = read_source_point(input, scalar)?;
@@ -525,7 +594,7 @@ impl CubicFillWorkspace {
                 }
                 VERB_CUBIC => {
                     let mut open = active.ok_or(CubicFillError::UnsupportedSource)?;
-                    if self.source_len >= MAX_SOURCE_SEGMENTS {
+                    if self.source_len >= self.caps.source_segments {
                         return Err(CubicFillError::SourceLimit);
                     }
                     let one = read_source_point(input, scalar)?;
@@ -606,7 +675,7 @@ impl CubicFillWorkspace {
         sizing_bounds: Bounds,
         command_capacity: usize,
     ) -> Result<(), CubicFillError> {
-        let bounded_capacity = command_capacity.min(MAX_FLAT_COMMANDS);
+        let bounded_capacity = command_capacity.min(self.caps.flat_commands);
         let mut exhausted = false;
         let commands = &mut self.commands;
         let command_len = &mut self.command_len;
@@ -682,7 +751,7 @@ impl CubicFillWorkspace {
                     if command.verb != VERB_LINE || command.provenance.source_verb != source_verb {
                         continue;
                     }
-                    if leaf_len >= MAX_EDGE_OWNERS {
+                    if leaf_len >= self.caps.edge_owners {
                         return Err(CubicFillError::OwnerLimit);
                     }
                     leaves[leaf_len] = TopologyLeaf {
@@ -1004,7 +1073,7 @@ impl CubicFillWorkspace {
     }
 
     fn push_point(&mut self, point: Point) -> Result<(), CubicFillError> {
-        if self.point_len >= MAX_CONTOUR_POINTS {
+        if self.point_len >= self.caps.contour_points {
             return Err(CubicFillError::PointLimit);
         }
         self.contour_points[self.point_len] = point;
@@ -1013,7 +1082,7 @@ impl CubicFillWorkspace {
     }
 
     fn push_owner(&mut self, owner: EdgeOwner) -> Result<(), CubicFillError> {
-        if self.owner_len >= MAX_EDGE_OWNERS {
+        if self.owner_len >= self.caps.edge_owners {
             return Err(CubicFillError::OwnerLimit);
         }
         self.edge_owners[self.owner_len] = owner;
@@ -1230,7 +1299,9 @@ impl CubicFillWorkspace {
     ) -> Result<crate::p3_b0_spike::S1View<'_>, crate::p3_b0_spike::PrefixFailure> {
         use crate::p3_b0_spike::{PrefixFailure, S1View};
         self.begin_attempt();
-        if input.verbs.len() > MAX_SOURCE_VERBS || input.point_count() > MAX_SOURCE_SCALARS {
+        if input.verbs.len() > self.caps.source_verbs
+            || input.point_count() > self.caps.source_scalars
+        {
             return Err(PrefixFailure::Error(CubicFillError::SourceLimit));
         }
 

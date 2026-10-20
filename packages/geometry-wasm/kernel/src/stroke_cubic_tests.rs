@@ -19,9 +19,11 @@ const CLOSE_AREA: f64 = 1e-12;
 const BUTT: StrokeCap = StrokeCap::Butt;
 const MITER: StrokeJoin = StrokeJoin::Miter;
 
-/// Test-only arrangement limits wider than `STROKE_V0_LIMITS` (same input-vertex, edge and
-/// contour caps). They let a fixture that `STROKE_V0_LIMITS` stops in the arrangement show its
-/// literal expectation; they are never a production configuration.
+/// `WIDE_TEST_LIMITS` of the contract's §7.6 dated note: `STROKE_V0_LIMITS` with only
+/// `max_events`, `max_sections`, `max_nodes` and `max_work` raised, plus `max_bytes` for their
+/// storage. The front-end limits, `τ`, `max_input_vertices`, `max_edges`, `max_contours` and
+/// every other field are unchanged. They let a current-cap fixture (ST-F16) show its literal
+/// expectation; they are `cfg(test)` only and never a production configuration.
 pub(crate) const WIDE_TEST_LIMITS: RoundedFillLimits = RoundedFillLimits {
     max_contours: 512,
     max_input_vertices: 1_024,
@@ -30,11 +32,11 @@ pub(crate) const WIDE_TEST_LIMITS: RoundedFillLimits = RoundedFillLimits {
     max_events: 65_536,
     max_sections: 4_194_304,
     max_nodes: 262_144,
-    max_cells: 262_144,
-    max_boundaries: 524_288,
-    max_contributors: 524_288,
-    max_vertices: 262_144,
-    max_triangles: 262_144,
+    max_cells: 8_192,
+    max_boundaries: 16_384,
+    max_contributors: 16_384,
+    max_vertices: 8_192,
+    max_triangles: 8_192,
     max_work: 4_000_000_000,
     max_bytes: 1 << 30,
 };
@@ -178,10 +180,11 @@ fn stationary_classification_is_exact() {
 fn st_f16_cusp_disk_under_wide_limits_and_the_production_node_limit() {
     let path = cubic(F16);
     let request = request(0.125, BUTT, MITER, 4.0, -8);
-    // STROKE_V0_LIMITS: the arrangement's node cap stops ST-F16 (a recorded blocker, see the
-    // plan entry). The front end completes.
+    // STROKE_V0_LIMITS: ST-F16's expected status is work-limit (user decision 2026-10-20, the
+    // contract's dated note): the front end completes and the arrangement's node cap stops it.
     let mut ws = workspace();
     assert_eq!(status(run(&mut ws, &path, request)), STROKE_PATH_WORK_LIMIT);
+    assert_eq!(ws.pieces().len(), 91);
     assert_eq!(
         ws.last_error(),
         Some(StrokeError::Rounded(RoundedFillError::NodeLimit))
@@ -215,6 +218,26 @@ fn st_f16_cusp_disk_under_wide_limits_and_the_production_node_limit() {
         count(&ws, PieceKind::Bevel) + count(&ws, PieceKind::Miter),
         0
     );
+}
+
+/// ST-F16p (ST-A0 review): ST-F16's curve at `e = -5`, its literal fixed before its first run:
+/// `ok` at `STROKE_V0_LIMITS`, one cusp disk at `t = 1/2`, center exactly `(0.5, 0.75)`,
+/// `n = 8`, and `(0.5, 0.8)` inside. It keeps ST-S8 evidenced at production limits.
+#[test]
+fn st_f16p_cusp_disk_at_production_limits() {
+    let mut ws = workspace();
+    let outcome = run(&mut ws, &cubic(F16), request(0.125, BUTT, MITER, 4.0, -5));
+    assert_eq!(outcome, StrokeOutcome::Mesh);
+    let disks: Vec<_> = ws
+        .pieces()
+        .iter()
+        .filter(|piece| piece.kind == PieceKind::CuspDisk)
+        .collect();
+    assert_eq!(disks.len(), 1);
+    assert_eq!(disks[0].t0, 0.5);
+    assert_eq!(disks[0].meta.samples[0].center, point(0.5, 0.75));
+    assert_eq!(disks[0].disk_vertices, 8);
+    assert!(inside(&ws, point(0.5, 0.8)));
 }
 
 #[test]

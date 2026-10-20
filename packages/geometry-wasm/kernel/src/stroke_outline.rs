@@ -1499,10 +1499,10 @@ impl StrokeWorkspace {
                         if !keep {
                             return self.emit_bevel(index, center, o_in, o_out);
                         }
-                        let tip =
+                        let (tip, denominator) =
                             miter_tip(center, incoming.end_unit, outgoing.start_unit, right, r);
                         if !self.defects.skip_tip_guard()
-                            && !tip_guard(center, r, request.miter_limit, tolerances)
+                            && !tip_guard(center, r, request.miter_limit, denominator, tolerances)
                         {
                             return Err(FrontEndError::NumericRange);
                         }
@@ -2016,14 +2016,15 @@ fn float_miter(incoming: Point, outgoing: Point, limit: f64) -> bool {
 }
 
 /// Section 4.3 tip `T = B + r (n_in + n_out) / (1 + n_in.n_out)`, rounded per operation, with
-/// `n_in`, `n_out` the Float64 outer unit normals.
+/// `n_in`, `n_out` the Float64 outer unit normals. Also returns the computed denominator
+/// `fl(1 + d̂)`, from which ST-G3 bounds the actual miter ratio.
 pub(crate) fn miter_tip(
     center: Point,
     incoming: Point,
     outgoing: Point,
     right: bool,
     r: f64,
-) -> Point {
+) -> (Point, f64) {
     let outer = |unit: Point| {
         if right {
             Point {
@@ -2049,26 +2050,54 @@ pub(crate) fn miter_tip(
         x: sum.x / denominator,
         y: sum.y / denominator,
     };
-    Point {
-        x: center.x + r * quotient.x,
-        y: center.y + r * quotient.y,
+    (
+        Point {
+            x: center.x + r * quotient.x,
+            y: center.y + r * quotient.y,
+        },
+        denominator,
+    )
+}
+
+/// ST-U3's bound `|fl(1 + d̂) - (1 + d)| <= 14.3u` on the computed miter denominator, rounded
+/// up to `15u`.
+const DENOMINATOR_ERROR: f64 = 15.0 * UNIT;
+
+/// A certified upper bound `rho` of the actual miter ratio `1/c`, `1 + d = 2c^2`, from the
+/// computed denominator: `c^2 >= (fl(1 + d̂) - 15u)/2` when that is positive, else the user's
+/// limit `L`. A kept miter has ratio `<= L` exactly (section 4.3), so `rho <= L` always.
+fn ratio_bound(limit: f64, denominator: f64) -> f64 {
+    let lower = (denominator - DENOMINATOR_ERROR) * SLACK_DOWN;
+    if lower > 0.0 {
+        ((2.0 / lower).sqrt() * (1.0 + 1.0 / 1_099_511_627_776.0)).min(limit)
+    } else {
+        limit
     }
 }
 
-/// ST-G3 as tightened in ST-U3: a kept miter needs `L <= 2^24` and
-/// `g_tip = 64 * 2^-53 * (|B|inf + r * L^3) <= 2^(e-1)`.
-fn tip_guard(center: Point, r: f64, limit: f64, tolerances: Tolerances) -> bool {
+/// ST-G3 as tightened in ST-U3 and corrected in ST-U4 (contract dated notes): with `rho` the
+/// certified upper bound of the actual ratio, a kept miter needs `rho <= 2^24` and
+/// `g_tip = 64 * 2^-53 * (|B|inf + r * rho^3) <= 2^(e-1)`. ST-U3's proof holds with `rho` in
+/// place of `L`, because it uses only `c >= 1/L`, and `c >= 1/rho` holds as well.
+fn tip_guard(center: Point, r: f64, limit: f64, denominator: f64, tolerances: Tolerances) -> bool {
     // The limit is finite (stage 2).
-    if limit > MAX_GUARDED_MITER_LIMIT {
+    let rho = ratio_bound(limit, denominator);
+    if rho > MAX_GUARDED_MITER_LIMIT {
         return false;
     }
     let reach = center.x.abs().max(center.y.abs());
-    let g_tip = 64.0 * UNIT * (reach + r * (limit * limit * limit));
+    let g_tip = 64.0 * UNIT * (reach + r * (rho * rho * rho));
     g_tip <= tolerances.half
 }
 
-/// Test access to the private tolerance builder.
+/// Test access to the private tolerance builder; `denominator` is `fl(1 + d̂)`.
 #[cfg(test)]
-pub(crate) fn tip_guard_at(center: Point, r: f64, limit: f64, exponent: i32) -> bool {
-    tip_guard(center, r, limit, Tolerances::new(exponent))
+pub(crate) fn tip_guard_at(
+    center: Point,
+    r: f64,
+    limit: f64,
+    denominator: f64,
+    exponent: i32,
+) -> bool {
+    tip_guard(center, r, limit, denominator, Tolerances::new(exponent))
 }

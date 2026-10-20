@@ -206,6 +206,19 @@ export function lineCases(): StrokeCase[] {
     ),
     strokeCase('ST-F24/2^30', F24, 2, 'butt', 'miter', 2 ** 30),
     strokeCase('ST-F24/4', F24, 2, 'butt', 'miter', 4),
+    // ST-U4 (ST-A0 review S2): the tip guard uses the actual ratio (sqrt 2), not L = 1e4.
+    strokeCase(
+      'ST-U4/tip-ratio',
+      [
+        ['M', 0, 0],
+        ['L', 10, 0],
+        ['L', 10, 10],
+      ],
+      20,
+      'butt',
+      'miter',
+      1e4,
+    ),
     strokeCase('ST-F26/disk-256', F1, 400, 'round', 'miter', 4),
     strokeCase('ST-F26/disk-512', F1, 1000, 'round', 'miter', 4),
   ];
@@ -392,6 +405,9 @@ export function cubicCases(): StrokeCase[] {
   cases.push(
     cubicCase('ST-F16', F16, 0.125, 'butt', -8),
     cubicCase('ST-F16/wide', F16, 0.125, 'butt', -8, ['wide']),
+    // ST-F16p (ST-U4, ST-A0 review): ST-F16's curve at e = -5, expected `ok` at production
+    // limits with one cusp disk at t = 1/2, center (0.5, 0.75), n = 8, and (0.5, 0.8) inside.
+    cubicCase('ST-F16p', F16, 0.125, 'butt', -5),
   );
   for (const cap of CAPS) cases.push(cubicCase(`ST-F17/${cap}`, F17, 2, cap, -3));
   cases.push(cubicCase('ST-F18', F18, 2, 'square', -3), cubicCase('ST-F19', F19, 2, 'butt', -3));
