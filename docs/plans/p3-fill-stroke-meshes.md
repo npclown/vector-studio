@@ -1788,6 +1788,12 @@ Validation. The first runs below used a local scratch branch with AL-U5's commit
 - **`pnpm test:geometry`** (scratch with `619dd9e`): PASS. Native: 377 passed and 51 ignored. Vitest: 48 files passed and 4 skipped, with 788 tests passed and 6 skipped. WASM `eea56347…f5e4`.
 - **`pnpm check`**: PASS after the ESLint ignore for `artifacts/p3-b0-wasm/**`. The first run linted the page bundle under `artifacts/`.
 - **`pnpm build`**: PASS.
+- **Rerun on this branch rebased onto `e0130fa`** (clean committed tree `d08a514`):
+  - Functional run `20261020T013949Z-b619a291`: PASS. Every validity item PASS, with k̂ = 1.569 and k̂₁ = 1.407 (not evidence), WASM `f13fb345…6127`, quantum 0.005 ms, cross-origin isolated, and product verdict NONE.
+  - `pnpm test:geometry`: PASS. Native: 378 passed and 52 ignored. Vitest: 48 files passed and 4 skipped, with 788 tests passed and 6 skipped. The WASM SHA-256 is the same.
+  - `pnpm check`: PASS, with 66 unit files and 740 tests.
+  - `pnpm build`: PASS.
+  - AL-A2 `git diff --exit-code origin/main` on the Cargo files, lockfiles and `packages/contracts`: exit 0.
 
 Deviations and notes:
 
