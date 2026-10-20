@@ -1,9 +1,15 @@
-//! ST-U3 oracle hand-off (`docs/plans/p3-b2-stroke-contract.md` section 11.1): the ignored test
-//! `emit_stroke_dump` reads a `P3STKIN1` text input and writes one framed JSON line per case:
-//! the request, the status, the classification (segments, triples, joins), every piece with
-//! its kind, source segment, parameter interval and emitted points, and the mesh. Every
-//! binary64 value is written as its 16-digit hexadecimal bit pattern, so nothing is rounded.
+//! ST-U3 and ST-U4 oracle hand-off (`docs/plans/p3-b2-stroke-contract.md` section 11.1): the
+//! ignored test `emit_stroke_dump` reads a `P3STKIN1` text input and writes one framed JSON line
+//! per case: the request, the status, the classification (segments with their cubic class,
+//! triples, joins), every piece with its kind, source segment, parameter interval, leaf range,
+//! depth and index, sample triples and emitted points, and the mesh. Every binary64 value is
+//! written as its 16-digit hexadecimal bit pattern, so nothing is rounded.
 //! `tests/geometry/stroke-oracle.test.ts` writes the input and reads the dump.
+//!
+//! ST-U4 adds an optional ninth input field of comma-separated test flags: the seeded defects
+//! `knot-join` (ST-D6), `omit-cusp-disk` (ST-D7) and `leaf-factor-two` (ST-D8), and `wide`, which
+//! runs the case on a workspace with the test-only arrangement limits `WIDE_TEST_LIMITS` (never
+//! a production configuration).
 
 use std::env;
 use std::fmt::Write as _;
@@ -11,9 +17,10 @@ use std::fs::OpenOptions;
 use std::io::Write as _;
 
 use crate::geometry::Point;
+use crate::stroke_cubic_tests::WIDE_TEST_LIMITS;
 use crate::stroke_outline::{
     JoinClass, PieceKind, StrokeCap, StrokeJoin, StrokeOutcome, StrokeRequest, StrokeWorkspace,
-    STROKE_PATH_EMPTY, STROKE_PATH_INVALID_PATH, STROKE_PATH_INVALID_STROKE,
+    Triple, STROKE_PATH_EMPTY, STROKE_PATH_INVALID_PATH, STROKE_PATH_INVALID_STROKE,
     STROKE_PATH_INVALID_TOLERANCE, STROKE_PATH_NUMERIC_RANGE, STROKE_PATH_UNSUPPORTED_GEOMETRY,
     STROKE_PATH_WORK_LIMIT,
 };
@@ -28,6 +35,7 @@ struct Case {
     request: StrokeRequest,
     verbs: Vec<u8>,
     points: Vec<f64>,
+    flags: Vec<String>,
 }
 
 fn parse_bits(text: &str) -> f64 {
@@ -53,7 +61,8 @@ fn parse_join(text: &str) -> StrokeJoin {
 }
 
 /// `P3STKIN1` then one tab-separated line per case:
-/// `name, exponent, width bits, cap, join, miterLimit bits, verb digits, point bits (comma)`.
+/// `name, exponent, width bits, cap, join, miterLimit bits, verb digits, point bits (comma)`,
+/// and an optional ninth field of comma-separated test flags.
 fn read_input(text: &str) -> Vec<Case> {
     let mut lines = text.lines();
     assert_eq!(lines.next(), Some(INPUT_MAGIC), "input magic");
@@ -61,7 +70,24 @@ fn read_input(text: &str) -> Vec<Case> {
         .filter(|line| !line.is_empty())
         .map(|line| {
             let fields: Vec<&str> = line.split('\t').collect();
-            assert_eq!(fields.len(), 8, "case fields: {line}");
+            assert!(
+                fields.len() == 8 || fields.len() == 9,
+                "case fields: {line}"
+            );
+            let flags: Vec<String> = fields
+                .get(8)
+                .filter(|text| !text.is_empty())
+                .map(|text| text.split(',').map(str::to_owned).collect())
+                .unwrap_or_default();
+            for flag in &flags {
+                assert!(
+                    matches!(
+                        flag.as_str(),
+                        "wide" | "knot-join" | "omit-cusp-disk" | "leaf-factor-two"
+                    ),
+                    "flag {flag}"
+                );
+            }
             Case {
                 name: fields[0].to_owned(),
                 request: StrokeRequest {
@@ -84,6 +110,7 @@ fn read_input(text: &str) -> Vec<Case> {
                 } else {
                     fields[7].split(',').map(parse_bits).collect()
                 },
+                flags,
             }
         })
         .collect()
@@ -95,6 +122,15 @@ fn hex(value: f64) -> String {
 
 fn point(value: Point) -> String {
     format!("[{},{}]", hex(value.x), hex(value.y))
+}
+
+fn triple_text(value: Triple) -> String {
+    format!(
+        "[{},{},{}]",
+        point(value.minus),
+        point(value.center),
+        point(value.plus)
+    )
 }
 
 fn status_name(status: u32) -> &'static str {
@@ -137,6 +173,18 @@ fn join_name(join: StrokeJoin) -> &'static str {
 
 fn dump_case(workspace: &mut StrokeWorkspace, case: &Case) -> String {
     let bytes: Vec<u8> = case.points.iter().flat_map(|v| v.to_le_bytes()).collect();
+    {
+        let defects = workspace.defects_mut();
+        *defects = crate::stroke_outline::StrokeDefects::default();
+        for flag in &case.flags {
+            match flag.as_str() {
+                "knot-join" => defects.knot_join = true,
+                "omit-cusp-disk" => defects.omit_cusp_disk = true,
+                "leaf-factor-two" => defects.leaf_factor_two = true,
+                _ => {}
+            }
+        }
+    }
     let outcome = workspace.build(case.request, &case.verbs, &bytes);
     let mut line = String::new();
     let request = case.request;
@@ -157,6 +205,15 @@ fn dump_case(workspace: &mut StrokeWorkspace, case: &Case) -> String {
         Ok(StrokeOutcome::Status(status)) => status_name(status),
     };
     write!(line, ",\"status\":\"{status}\"").unwrap();
+    // The failing stage of a non-ok case (test diagnostics; "front-end" or "arrangement").
+    let failure = workspace.last_error().map_or("null".to_owned(), |error| {
+        let stage = match error {
+            crate::stroke_outline::StrokeError::Front(_) => "front-end",
+            crate::stroke_outline::StrokeError::Rounded(_) => "arrangement",
+        };
+        format!("{{\"stage\":\"{stage}\",\"error\":\"{error:?}\"}}")
+    });
+    write!(line, ",\"failure\":{failure}").unwrap();
     line.push_str(",\"subpaths\":[");
     for (index, subpath) in workspace.subpaths().iter().enumerate() {
         if index > 0 {
@@ -182,18 +239,20 @@ fn dump_case(workspace: &mut StrokeWorkspace, case: &Case) -> String {
                 join.seam
             )
         });
+        let class = if segment.cubic {
+            format!("\"{}\"", segment.class.name())
+        } else {
+            "null".to_owned()
+        };
         write!(
             line,
-            "{{\"subpath\":{},\"a\":{},\"b\":{},\"start\":[{},{},{}],\"end\":[{},{},{}],\"join\":{join}}}",
+            "{{\"subpath\":{},\"verb\":{},\"cubic\":{class},\"a\":{},\"b\":{},\"start\":{},\"end\":{},\"join\":{join}}}",
             segment.subpath,
+            segment.verb,
             point(segment.a),
             point(segment.b),
-            point(segment.start.minus),
-            point(segment.start.center),
-            point(segment.start.plus),
-            point(segment.end.minus),
-            point(segment.end.center),
-            point(segment.end.plus),
+            triple_text(segment.start),
+            triple_text(segment.end),
         )
         .unwrap();
     }
@@ -226,16 +285,24 @@ fn dump_case(workspace: &mut StrokeWorkspace, case: &Case) -> String {
             .map(|value| point(*value))
             .collect::<Vec<_>>()
             .join(",");
+        let meta = piece.meta;
         write!(
             line,
-            "{{\"kind\":\"{}\",\"segment\":{},\"verb\":{verb},\"nextVerb\":{},\"dropped\":{},\"extra\":[{extra}],\"t\":[{},{}],\"disk\":{},\"points\":[",
+            "{{\"kind\":\"{}\",\"segment\":{},\"verb\":{verb},\"nextVerb\":{},\"dropped\":{},\"extra\":[{extra}],\"t\":[{},{}],\"disk\":{},\"part\":{},\"range\":[{},{}],\"depth\":{},\"index\":{},\"samples\":[{},{}],\"points\":[",
             piece.kind.name(),
             piece.segment,
             next_verb.map_or("null".to_owned(), |verb| verb.to_string()),
             piece.dropped,
             hex(piece.t0),
             hex(piece.t1),
-            piece.disk_vertices
+            piece.disk_vertices,
+            meta.part,
+            hex(meta.range.0),
+            hex(meta.range.1),
+            meta.depth,
+            meta.index,
+            triple_text(meta.samples[0]),
+            triple_text(meta.samples[1]),
         )
         .unwrap();
         if complete {
@@ -283,10 +350,18 @@ fn dump_case(workspace: &mut StrokeWorkspace, case: &Case) -> String {
 
 fn dump(cases: &[Case]) -> String {
     let mut workspace = StrokeWorkspace::new().expect("the stroke workspace reserves");
+    let mut wide: Option<StrokeWorkspace> = None;
     let mut text = String::new();
     writeln!(text, "{OUTPUT_MAGIC} {}", cases.len()).unwrap();
     for case in cases {
-        let line = dump_case(&mut workspace, case);
+        let line = if case.flags.iter().any(|flag| flag == "wide") {
+            let wide = wide.get_or_insert_with(|| {
+                StrokeWorkspace::with_limits(WIDE_TEST_LIMITS).expect("the wide workspace")
+            });
+            dump_case(wide, case)
+        } else {
+            dump_case(&mut workspace, case)
+        };
         writeln!(text, "{} {line}", line.len()).unwrap();
     }
     text
@@ -316,7 +391,8 @@ fn emit_stroke_dump() {
     );
 }
 
-/// The debug layer's check of the hand-off: a two-case input dumps two framed lines.
+/// The debug layer's check of the hand-off: a three-case input dumps three framed lines, and
+/// a ninth flag field is read.
 #[test]
 fn dump_reads_its_input_and_frames_each_case() {
     let bits = |value: f64| format!("{:016x}", value.to_bits());
@@ -325,25 +401,36 @@ fn dump_reads_its_input_and_frames_each_case() {
         .map(|value| bits(*value))
         .collect::<Vec<_>>()
         .join(",");
+    let cubic = [0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 0.0]
+        .iter()
+        .map(|value| bits(*value))
+        .collect::<Vec<_>>()
+        .join(",");
     let text = format!(
-        "{INPUT_MAGIC}\nST-F1\t-3\t{}\tbutt\tmiter\t{}\t01\t{points}\nST-F7\t-3\t{}\tround\tround\t{}\t0\t{}\n",
+        "{INPUT_MAGIC}\nST-F1\t-3\t{}\tbutt\tmiter\t{}\t01\t{points}\nST-F7\t-3\t{}\tround\tround\t{}\t0\t{}\nF16-D7\t-3\t{}\tbutt\tmiter\t{}\t02\t{cubic}\tomit-cusp-disk\n",
         bits(2.0),
         bits(4.0),
         bits(2.0),
         bits(4.0),
         [bits(4.0), bits(5.0)].join(","),
+        bits(0.125),
+        bits(4.0),
     );
     let cases = read_input(&text);
-    assert_eq!(cases.len(), 2);
+    assert_eq!(cases.len(), 3);
+    assert_eq!(cases[2].flags, ["omit-cusp-disk"]);
     let output = dump(&cases);
     let mut lines = output.lines();
-    assert_eq!(lines.next(), Some("P3STKDUMP1 2"));
-    for (expected, line) in ["\"status\":\"ok\"", "\"status\":\"empty\""]
+    assert_eq!(lines.next(), Some("P3STKDUMP1 3"));
+    for (expected, line) in ["\"status\":\"ok\"", "\"status\":\"empty\"", "\"cusp\""]
         .into_iter()
         .zip(lines)
     {
         let (length, body) = line.split_once(' ').unwrap();
         assert_eq!(length.parse::<usize>().unwrap(), body.len());
         assert!(body.contains(expected), "{body}");
+        if expected == "\"cusp\"" {
+            assert!(!body.contains("\"cusp-disk\""), "{body}");
+        }
     }
 }

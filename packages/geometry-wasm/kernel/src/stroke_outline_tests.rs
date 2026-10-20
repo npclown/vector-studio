@@ -10,8 +10,7 @@ use crate::stroke_outline::{
     build_directions, disk_level, miter_kept, power_of_two, tip_guard_at, PieceKind, StrokeCap,
     StrokeJoin, StrokeOutcome, StrokeRequest, StrokeWorkspace, MAX_PIECES, STROKE_PATH_EMPTY,
     STROKE_PATH_INVALID_PATH, STROKE_PATH_INVALID_STROKE, STROKE_PATH_INVALID_TOLERANCE,
-    STROKE_PATH_NUMERIC_RANGE, STROKE_PATH_UNSUPPORTED_GEOMETRY, STROKE_PATH_WORK_LIMIT,
-    STROKE_V0_HEAP_CAP, STROKE_V0_LIMITS,
+    STROKE_PATH_NUMERIC_RANGE, STROKE_PATH_WORK_LIMIT, STROKE_V0_HEAP_CAP, STROKE_V0_LIMITS,
 };
 
 pub(crate) const SIXTEEN_GON: f64 = 3.061_467_458_920_718_3;
@@ -882,13 +881,14 @@ fn stage_order_and_value_statuses() {
         status(&mut ws, &f1(), request(-0.0, BUTT, MITER, 4.0, -3)),
         STROKE_PATH_EMPTY
     );
-    // ST-U3 has no cubic strokes; a zero-length cubic is removed.
+    // ST-U4 strokes cubics (ST-U3's interim unsupported-geometry is gone): ST-F18 is ok, and a
+    // zero-length cubic is removed.
     let cubic = PathSpec::new()
         .m(0.0, 0.0)
-        .c([1.0, 1.0, 0.0, 1.0, 1.0, 0.0]);
+        .c([0.0, 0.0, 1.0, 0.0, 3.0, 1.0]);
     assert_eq!(
         status(&mut ws, &cubic, request(2.0, BUTT, MITER, 4.0, -3)),
-        STROKE_PATH_UNSUPPORTED_GEOMETRY
+        0
     );
     let point = PathSpec::new()
         .m(1.0, 1.0)
