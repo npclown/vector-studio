@@ -10,8 +10,7 @@ use crate::stroke_outline::{
     build_directions, disk_level, miter_kept, power_of_two, tip_guard_at, PieceKind, StrokeCap,
     StrokeJoin, StrokeOutcome, StrokeRequest, StrokeWorkspace, MAX_PIECES, STROKE_PATH_EMPTY,
     STROKE_PATH_INVALID_PATH, STROKE_PATH_INVALID_STROKE, STROKE_PATH_INVALID_TOLERANCE,
-    STROKE_PATH_NUMERIC_RANGE, STROKE_PATH_UNSUPPORTED_GEOMETRY, STROKE_PATH_WORK_LIMIT,
-    STROKE_V0_HEAP_CAP, STROKE_V0_LIMITS,
+    STROKE_PATH_NUMERIC_RANGE, STROKE_PATH_WORK_LIMIT, STROKE_V0_HEAP_CAP, STROKE_V0_LIMITS,
 };
 
 pub(crate) const SIXTEEN_GON: f64 = 3.061_467_458_920_718_3;
@@ -882,13 +881,14 @@ fn stage_order_and_value_statuses() {
         status(&mut ws, &f1(), request(-0.0, BUTT, MITER, 4.0, -3)),
         STROKE_PATH_EMPTY
     );
-    // ST-U3 has no cubic strokes; a zero-length cubic is removed.
+    // ST-U4 strokes cubics (ST-U3's interim unsupported-geometry is gone): ST-F18 is ok, and a
+    // zero-length cubic is removed.
     let cubic = PathSpec::new()
         .m(0.0, 0.0)
-        .c([1.0, 1.0, 0.0, 1.0, 1.0, 0.0]);
+        .c([0.0, 0.0, 1.0, 0.0, 3.0, 1.0]);
     assert_eq!(
         status(&mut ws, &cubic, request(2.0, BUTT, MITER, 4.0, -3)),
-        STROKE_PATH_UNSUPPORTED_GEOMETRY
+        0
     );
     let point = PathSpec::new()
         .m(1.0, 1.0)
@@ -959,12 +959,47 @@ fn disk_directions_and_count_rule() {
 #[test]
 fn tip_guard_values() {
     let center = Point { x: 25.0, y: 0.0 };
-    assert!(tip_guard_at(center, 1.0, 100.0, -3));
-    assert!(!tip_guard_at(center, 1.0, power_of_two(30), -3));
+    // A denominator of 0 certifies nothing, so the bound falls back to the limit L.
+    assert!(tip_guard_at(center, 1.0, 100.0, 0.0, -3));
+    assert!(!tip_guard_at(center, 1.0, power_of_two(30), 0.0, -3));
     assert!(
-        !tip_guard_at(center, 1e-30, power_of_two(25), -3),
-        "L above 2^24 always fails"
+        !tip_guard_at(center, 1e-30, power_of_two(25), 0.0, -3),
+        "a ratio bound above 2^24 always fails"
     );
+    // ST-U4 correction (ST-A0 review): the guard uses the certified ratio, not L. A 90 degree
+    // turn (1 + d = 1, ratio sqrt 2) passes with L = 1e4 or 2^30.
+    assert!(tip_guard_at(center, 10.0, 1e4, 1.0, -3));
+    assert!(tip_guard_at(center, 10.0, power_of_two(30), 1.0, -3));
+    // ...and a near-reversal still fails: 1 + d = 2^-41 gives a ratio of about 2^21.
+    assert!(!tip_guard_at(
+        center,
+        1.0,
+        power_of_two(30),
+        power_of_two(-41),
+        -3
+    ));
+}
+
+/// ST-U4 (ST-A0 review S2): `M(0,0) L(10,0) L(10,10)`, `w = 20`, miter limit `1e4`, `e = -3`.
+/// The ratio is sqrt 2, so the miter is kept, the tip is `(20, -10)` up to `g_tip`, and the
+/// result is `ok` (ST-U3's `L^3` guard made it `numeric-range`).
+#[test]
+fn tip_guard_uses_the_actual_ratio() {
+    let mut ws = workspace();
+    let path = PathSpec::new().m(0.0, 0.0).l(10.0, 0.0).l(10.0, 10.0);
+    let outcome = run(&mut ws, &path, request(20.0, BUTT, MITER, 1e4, -3));
+    assert_eq!(outcome, StrokeOutcome::Mesh);
+    assert_eq!(
+        kinds(&ws),
+        [PieceKind::LineSweep, PieceKind::Miter, PieceKind::LineSweep]
+    );
+    let tip = ws.pieces()[1].extra[2];
+    assert!(
+        (tip.x - 20.0).abs() <= 1e-12 && (tip.y + 10.0).abs() <= 1e-12,
+        "{tip:?}"
+    );
+    // Sweeps [0,10]x[-10,10] and [0,20]x[0,10] overlap in 100; the miter adds [10,20]x[-10,0].
+    assert!((area(&ws) - 400.0).abs() <= 1e-9, "{}", area(&ws));
 }
 
 #[test]

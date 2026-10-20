@@ -4,6 +4,28 @@ Status: FROZEN 2026-10-20 as unit ST-U1 of the approved [B2 stroke proposal](p3-
 
 Amended 2026-10-20 by [ST-U3](p3-fill-stroke-meshes.md#b2-st-u3-line-stroke-kernel), stricter only, as §4.4-4.7 permit. ST-G1 adds the condition that the squared segment length `d̃·d̃` is finite and normal (otherwise `numeric-range`). ST-G3 becomes `64u(‖B‖∞ + r·L³) ≤ 2^(e−1)`, and a kept miter with `L > 2^24` is `numeric-range`; the frozen `32u·L²` underestimates the `1 + d̂` cancellation, which ST-U3 measured at about 1.46·u·ratio³. No fixture outcome changes. ST-F13x (`M(0,0) L(1,1) L(4,4)`, expectation in the τ band) is added beside ST-F13 for ST-D3, because ST-F13's directions (3,1) and (9,3) normalize to the same binary64 unit vector. §7.7's wording is corrected: at e = −1020, 2^(e−4) is subnormal; the code handles it exactly. §4.2's "rounded once" is `C ± fl(r·N)`, two roundings, which ST-G1's bound covers.
 
+Amended 2026-10-20 by [ST-U4](p3-fill-stroke-meshes.md#b2-st-u4-cubic-stroke), stricter only, as §4.5 permits. ST-G4 gains terms for the control error `ε = (4ℓ + 16s)·2^-53·M` per coordinate (`s = 1` on the two ranges of a reversal split): `aLow` loses and `bUp` gains `20·ε·|V|`; `gCtrl` gains `5ε + 3r·max(dN_start, dN_end)`, where `dN = (18·ε·|V| + [end at a reversal split] 600·2^-53·M²)/aLow + 8·2^-53` bounds a computed end normal, a knot's bound is inherited by the next leaf, and a source end has `dN = 0`; a leaf next to a reversal split adds `κ·(|V| + 2r)` with `κ = 2^-52/` (its parameter length). The frozen terms all stay. A non-collinear cubic needs `2^-250 ≤ M ≤ 2^250` (else `numeric-range`), so that no product overflows and `768·2^-53·M²` stays normal. §4.5's "stationary parameter" includes the split `t̃` on both sides of a reversal.
+
+- **Algorithm change (§4.6).** `t̃` is the largest binary64 `≤ t*`, found by bisection on bit patterns with the exact sign of `t − t*`; it is no longer "the Float64 evaluation of `t*`". This applies to both the reversal and the collinear turning points. Proof: `|t̃ − t*| ≤ 2^-53`, and `C′(t*) = 0`, so `|C(t̃) − C(t*)| ≤ ½·34M·2^-106` plus the de Casteljau rounding `√2·15.1u·M`, about `21.4u·M`, which is below ST-G5's `η = 64u·M`. ST-G5 and its requirement `2η ≤ 2^(e−4)` are unchanged. A root with `t̃ = 0` is `numeric-range`.
+- **Fixture expectations do change.** ST-U4's ST-F16 note below is one; the ST-U4 fixtures `ST-F16p`, `ST-U4/folded-arc` and `ST-U4/tip-ratio` are added.
+
+Amended 2026-10-20 by user decision (chat, 2026-10-20), with the ST-A0 review, recorded by [ST-U4](p3-fill-stroke-meshes.md#b2-st-u4-cubic-stroke):
+
+- **ST-F16 becomes a current-cap fixture.** At `STROKE_V0_LIMITS` its expected status is **`work-limit`**: the front end completes (91 pieces), and the unchanged arrangement stops it with `NodeLimit`.
+- **Its literals are kept.** One interior reversal at `t* = 1/2`, cusp center exactly `(0.5, 0.75)`, `n = 32`, and `(0.5, 0.8)` inside. They are checked under the named `cfg(test)` limit set `WIDE_TEST_LIMITS` of §7.6.
+- **Cost moves to ST-U9.** The measured arrangement cost is 78,314 nodes, 101,537 sections, 1,076 columns and 553,015,839 work units, against 8,192 nodes and 64,000,000 work. That makes cubic-stroke performance an ST-U9 (certified fast rung) item.
+- **Reference measurements.** ST-F15 R5 at `e = −3` stops at `NodeLimit` and is `ok` under `WIDE_TEST_LIMITS`, with 69,881 nodes and 120,932,305 work units. R6 at `e = −3` stops at `EventLimit`, and under `WIDE_TEST_LIMITS` it stops at 262,144 nodes.
+- **ST-F16p is added**, so that ST-S8 keeps evidence at production limits. It is ST-F16's curve and width at `e = −5`. Its literal was fixed before its first run: `ok` at `STROKE_V0_LIMITS`, one cusp disk at `t = 1/2` with center exactly `(0.5, 0.75)` and `n = 8`, and `(0.5, 0.8)` inside.
+- **The §7.6, §11.2, §11.3 and §12.2 dated notes** carry the rest.
+
+Amended 2026-10-20 by [ST-U4](p3-fill-stroke-meshes.md#b2-st-u4-cubic-stroke), after the ST-A0 review, correcting ST-U3's ST-G3:
+
+- **The defect.** ST-U3's `64u(‖B‖∞ + r·L³)` used the user's limit `L`, not the actual ratio. So `M(0,0) L(10,0) L(10,10)`, `w = 20`, `L = 1e4`, `e = −3` (ratio `√2`) was `numeric-range`, and any kept miter with `L > 2^24` failed.
+- **The correction.** ST-G3 now uses a certified upper bound `ρ` of the actual ratio. ST-U3 proved `|fl(1 + d̂) − (1 + d)| ≤ 14.3u`, so `c² ≥ (fl(1 + d̂) − 15u)/2` when that is positive. Then `ρ = min(L, √(2/(fl(1 + d̂) − 15u))·(1 + 2^-40))`, with the subtraction rounded down; otherwise `ρ = L`.
+- **The guard.** A kept miter needs `ρ ≤ 2^24` and `64u(‖B‖∞ + r·ρ³) ≤ 2^(e−1)`, else `numeric-range`. ST-U3's proof holds with `ρ` in place of `L`, because it uses only `c ≥ 1/L`.
+- **Strictness.** The guard is at least as strict as the frozen `32u(‖B‖∞ + r·L²)` with the actual ratio in place of `L`, since `ρ ≥ ratio ≥ 1`.
+- **Fixtures.** The path above is added as fixture `ST-U4/tip-ratio`: a kept miter, `ok`, area 400. ST-F5, ST-F24 and ST-F25 keep their literal results; ST-F24 at `L = 2^30` has `ρ ≈ 2^21`, which still gives `numeric-range`.
+
 **Evidence label.** Every stroke result under this contract is functional evidence. Until B4 has A04 evidence, every report, PR description and screenshot states that precision is **UNVERIFIED** against the 0.25 physical-pixel target, as D8 [requires](p3-d8-parallel-tracks.md#rules). Stroke work closes no A01-A08 criterion and no C03-C05 item.
 
 **Identifiers.** This contract prefixes its own IDs with **ST-**: semantics rows ST-S1 to ST-S12, pieces ST-P1 to ST-P7, guards ST-G1 to ST-G6, oracles ST-O1 to ST-O5, fixtures ST-F1 to ST-F26, seeded defects ST-D1 to ST-D14, conformance cases SC01 to SC22, units ST-U2 to ST-U9 (with ST-U3b), acceptance ST-A0 to ST-A12, risks and open obligations ST-OB1 to ST-OB8. V2's cases C01-C18, V3's codes and the proposal's B2-Q1 to B2-Q9 keep their meaning.
@@ -383,6 +405,17 @@ The source limits keep every accepted stroke path inside P2 ABI v1's per-path li
 
 `max_pairs` is `pair_count(1024)`. ST-U3 records `allocated_bytes()` of the workspace and the scratch, natively and for `wasm32`, in its PR. If these values fail `RoundedFillWorkspace::new`'s validation or the byte caps, ST-U3 stops and the Primary amends this table with a dated note before any code merges; values are never changed silently.
 
+Amended 2026-10-20 by ST-U4 (ST-A0 review; see the header notes).
+
+The front-end limits gain two rows:
+
+| Limit (front end)                                          | Value | On excess                    |
+| ---------------------------------------------------------- | ----: | ---------------------------- |
+| Piece records per path, dropped zero-area hulls included   | 4,096 | `work-limit` (`PieceLimit`)  |
+| Leaf stack (depth-first, one pending sibling per level)    |    22 | not reachable (depth ≤ 20)   |
+
+`STROKE_V0_LIMITS` is unchanged. The test-only limit set `WIDE_TEST_LIMITS` (`cfg(test)` only, never a production configuration) is `STROKE_V0_LIMITS` with only these arrangement fields raised: `max_events` 65,536 (events and columns), `max_sections` 4,194,304, `max_nodes` 262,144, `max_work` 4,000,000,000, and `max_bytes` 1 GiB for their storage. The front-end limits, `τ = 2^(e−2)`, `max_input_vertices`, `max_edges`, `max_contours`, `max_pairs`, `max_cells`, `max_boundaries`, `max_contributors`, `max_vertices` and `max_triangles` are the same. Current-cap fixtures are checked under it.
+
 ### 7.7 Tolerance
 
 Accepted range **`−1020 ≤ toleranceExponent ≤ 1023`**, so that `2^e`, `2^(e−2)` and `2^(e−4)` are normal binary64 values, built from exponent bits as V2 builds its tolerances. Outside it: `invalid-tolerance`. A non-integer or nonfinite exponent is `invalid-request` for the batch, and the adapter encodes an integer outside `i32` as `−2^31`, as V2 does.
@@ -548,6 +581,13 @@ All at identity transform, `e = −3` (zoom 1, DPR 1), unless stated. "Area" is 
 
 Transport fixtures, outside this table, mirror V2's: each framing rejection, the status mapping with one fixture per reachable row, capacity retry with exact `required_output_bytes`, transport caps at limit and limit + 1, epoch exhaustion, zero allocation in `process`, and every fail-closed trigger through a wrapped export object.
 
+Amended 2026-10-20 by ST-U4 (user decision and ST-A0 review; see the header notes):
+
+- **ST-F16** is a labelled current-cap fixture. At `STROKE_V0_LIMITS` it is `work-limit`. Its literals above are checked under `WIDE_TEST_LIMITS` (§7.6).
+- **ST-F16p** is ST-F16's curve and `w` at `e = −5`. Expected: `ok` at `STROKE_V0_LIMITS`, one interior reversal at `t* = 1/2`, one cusp disk with center exactly `(0.5, 0.75)` and `n = 8`, and `(0.5, 0.8)` inside.
+- **ST-U4/tip-ratio** is `M(0,0) L(10,0) L(10,10)`, `w = 20`, butt, miter `L = 1e4`. Expected: `ok`, a kept miter, and the region is the square `[0,20]×[−10,10]`, area 400 (ST-O4).
+- **ST-U4/folded-arc** is section 11.3's ST-D8 catcher.
+
 ### 11.3 Seeded defects
 
 Each is a `cfg(test)` fault switch or a test-only variant; the unit's PR lists each with its failing test.
@@ -568,6 +608,11 @@ Each is a `cfg(test)` fault switch or a test-only variant; the unit's PR lists e
 | ST-D12 | Arrangement tolerance `2^(e−1)`                       | A native assertion on the `τ` passed to `tessellate`                                                                                                                                                           |
 | ST-D13 | A piece emitted clockwise                             | ST-O3 area on ST-F14 (b)                                                                                                                                                                                       |
 | ST-D14 | Tip guard ST-G3 skipped                               | ST-F24 at `L = 2^30`                                                                                                                                                                                           |
+
+Amended 2026-10-20 by ST-U4 (ST-A0 review):
+
+- **ST-D8's catcher is the synthetic folded-band fixture `ST-U4/folded-arc`.** The ST-F15 case named before its first run (R6 at `e = −3`) did not expose the defect. The fixture is a cubic arc of radius 1 over 0.2 rad, with controls `(0.9950041652780257, ∓0.09983341664682815)` and `(1.001665278240658, ∓0.03344447228510901)`, `w = 9.94`, butt, `e = 0`. Its expectation was fixed before its first run: factor 4 gives `ok` with two depth-1 leaves that ST-O1 accepts; factor 2 gives one depth-0 leaf that ST-O1 rejects.
+- **ST-D6 and ST-D7's ST-F16 checks** (ST-O2, and membership of `(0.5, 0.8)`) run under `WIDE_TEST_LIMITS`. ST-D6 is also caught by ST-O2 on ST-F15 R3 at `e = −5`, at production limits.
 
 ### 11.4 Stroke conformance suite
 
@@ -633,6 +678,8 @@ Each unit is its own PR from an updated `main`. ST-U3, ST-U4 and ST-U5 are high-
 | ST-A10 | Renderer: validation rows, keys, one stroke call per `prepare` with isolation, paint order, two-draw composition at opacity 1, single-paint paths at opacity 0.5, `composition-unsupported` at 0.5 with both paints, culling bounds, notices with `paint`, device-loss reconstruction without a port call | `pnpm test:unit` (renderer-core stroke tests); `pnpm test:gpu` stroke fixtures, including the approved example's stroke-only and fill-only pixels and the interim failure for its overlap case                                                                                      | U6             |
 | ST-A11 | Joint coverage: the approved example (red fill, blue stroke, opacity 0.5) gives `(0, 0, 0.5, 0.5)` in the overlap                                                                                                                                                                                         | Fixed by ST-U7's addendum; `pnpm test:gpu`                                                                                                                                                                                                                                          | U7             |
 | ST-A12 | Static checks, documentation and labels                                                                                                                                                                                                                                                                   | `pnpm check`, `pnpm build`; `cargo fmt` and `clippy -D warnings` inside `pnpm test:geometry`; `pnpm exec prettier --check` on changed Markdown, a local link and anchor check, `git diff --check`; UNVERIFIED label in every PR and plan entry; plan B2 row updated                 | every unit     |
+
+Amended 2026-10-20 by ST-U4 (user decision and ST-A0 review): ST-A1's ST-F16 entry reads "ST-F16 under the test-only limits `WIDE_TEST_LIMITS` (§7.6), and `work-limit` at production limits". ST-F16p, which is `ok` at production limits, evidences ST-S8 there.
 
 Each PR follows the `AGENTS.md` description format, states `NOT RUN` with a reason for any check it skips, carries the UNVERIFIED label and makes no performance claim.
 
