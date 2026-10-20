@@ -378,3 +378,11 @@ mod fill_ladder_diag_tests;
 // reason as above.
 #[cfg(test)]
 mod p3_fill_ladder_bench;
+// P3 B2 unit ST-U3 (docs/plans/p3-b2-stroke-contract.md): the line-stroke front end, private;
+// no export until ST-U5. Appended for the same reason as above.
+#[cfg(test)]
+mod stroke_dump_tests;
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+mod stroke_outline;
+#[cfg(test)]
+mod stroke_outline_tests;
