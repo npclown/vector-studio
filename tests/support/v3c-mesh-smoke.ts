@@ -203,7 +203,7 @@ export function smokeSnapshot(variant: SmokeVariant, revision: number): RenderSc
           points: [...data.points],
           fillRule: node.rule!,
         },
-        style: { fill: node.color },
+        style: { fill: node.color, stroke: null },
       });
     }
   }

@@ -309,7 +309,7 @@ export function v4Snapshot(rotation: number, revision: number): RenderSceneSnaps
         points: path.data.points,
         fillRule: path.fillRule,
       },
-      style: { fill: path.color },
+      style: { fill: path.color, stroke: null },
     })),
   ];
   return {

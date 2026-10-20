@@ -21,6 +21,7 @@ import {
   validateSnapshotShape,
   pathDataEquals,
   type PathNodeSupport,
+  type PathSupport,
   type ValidatedChangesInput,
   type ValidatedSnapshotInput,
 } from './scene-validation.js';
@@ -35,7 +36,16 @@ export type RetainedSceneView = Readonly<{
   getGeometryRevision(id: string): number | undefined;
 }>;
 
-export type RetainedSceneMirrorOptions = Readonly<{ pathNodes: PathNodeSupport }>;
+/**
+ * Port presence, fixed at construction (P3 V3 contract, section a; B2 stroke contract, section 5
+ * and the section 9.1 amendment S4). `pathFills` takes the value of `pathNodes` when omitted, so
+ * V3 calls keep their meaning; `pathStrokes` defaults to 'unsupported'.
+ */
+export type RetainedSceneMirrorOptions = Readonly<{
+  pathNodes: PathNodeSupport;
+  pathFills?: PathNodeSupport;
+  pathStrokes?: PathNodeSupport;
+}>;
 
 export type ScenePendingChangeState = Readonly<{
   sceneChanged: boolean;
@@ -70,7 +80,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
   #cameraChanged = false;
   #invalidationToken: symbol | null = null;
   #onInvalidate: () => void;
-  readonly #pathNodes: PathNodeSupport;
+  readonly #pathNodes: PathSupport;
   #nextGeometryRevision = 1;
 
   static {
@@ -85,7 +95,15 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
   ) {
     this.#onInvalidate = onInvalidate;
     // Fixed at construction, so validation and replay equality stay stable for the mirror's life.
-    this.#pathNodes = options.pathNodes === 'supported' ? 'supported' : 'unsupported';
+    const pathNodes = options.pathNodes === 'supported' ? 'supported' : 'unsupported';
+    const pathFills =
+      options.pathFills === undefined
+        ? pathNodes
+        : options.pathFills === 'supported'
+          ? 'supported'
+          : 'unsupported';
+    const pathStrokes = options.pathStrokes === 'supported' ? 'supported' : 'unsupported';
+    this.#pathNodes = Object.freeze({ pathNodes, pathFills, pathStrokes });
   }
 
   public replaceSnapshot(snapshot: RenderSceneSnapshot): SceneApplyResult {

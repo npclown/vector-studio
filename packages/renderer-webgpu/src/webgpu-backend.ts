@@ -697,6 +697,8 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
             failureScope: 'renderer',
             failureCode: 'mesh-pipeline-unavailable',
             toleranceExponent: null,
+            // B2 stroke contract, section 9.8: this renderer-wide code carries no paint.
+            paint: null,
           }),
           generation,
         ),

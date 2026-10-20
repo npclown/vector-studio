@@ -464,6 +464,7 @@ describe('V3c builder failures (V3-A11, V3-A8)', () => {
         failureScope: 'renderer',
         failureCode: 'fringe-unsupported',
         toleranceExponent: -3,
+        paint: 'fill',
       },
       {
         interim: 'd8',
@@ -471,6 +472,7 @@ describe('V3c builder failures (V3-A11, V3-A8)', () => {
         failureScope: 'renderer',
         failureCode: 'fringe-range',
         toleranceExponent: null,
+        paint: 'fill',
       },
     ]);
     expect(h.statistics().entries).toBe(3);

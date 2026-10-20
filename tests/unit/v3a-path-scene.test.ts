@@ -114,13 +114,18 @@ describe('V3a path node validation', () => {
     expect(reasonFor(withGeometry({ ...square.geometry, fillRule: 'evenodd' }))).toBe('applied');
   });
 
-  it('V3-A1: style fields other than exactly fill, or an invalid fill color, are invalid-value', () => {
-    expect(reasonFor({ ...square, style: { fill: null, stroke: null } })).toBe('invalid-value');
-    expect(reasonFor({ ...square, style: {} })).toBe('invalid-value');
-    expect(reasonFor({ ...square, style: { fill: { r: 2, g: 0, b: 0, a: 1 } } })).toBe(
+  // B2 stroke contract, section 5 (ST-U6): `style` is now exactly `fill, stroke`, with `stroke`
+  // required and explicitly null when absent, so the V3 row "exactly fill" becomes this one.
+  it('V3-A1: style fields other than exactly fill and stroke, or an invalid fill color, are invalid-value', () => {
+    expect(reasonFor({ ...square, style: { fill: null } })).toBe('invalid-value');
+    expect(reasonFor({ ...square, style: { fill: null, stroke: null, extra: 1 } })).toBe(
       'invalid-value',
     );
-    expect(reasonFor({ ...square, style: { fill: null } })).toBe('applied');
+    expect(reasonFor({ ...square, style: {} })).toBe('invalid-value');
+    expect(
+      reasonFor({ ...square, style: { fill: { r: 2, g: 0, b: 0, a: 1 }, stroke: null } }),
+    ).toBe('invalid-value');
+    expect(reasonFor({ ...square, style: { fill: null, stroke: null } })).toBe('applied');
   });
 
   it('V3-A1: a nonfinite world transform or nonfinite point-box world bounds is invalid-value; an empty path is exempt', () => {

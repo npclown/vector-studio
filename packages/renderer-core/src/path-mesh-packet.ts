@@ -7,7 +7,7 @@ import type {
 } from './primitive-packet.js';
 import { toDyadic } from './path-buckets.js';
 import type { PathFringe } from './path-fringe.js';
-import type { PathMeshDraw } from './path-mesh-pipeline.js';
+import type { PathMeshDraw, PathPaint } from './path-mesh-pipeline.js';
 
 // The packet mesh part of the P3 V3 contract, section f, unit V3b: the per-view O-PX(128) mesh
 // origin, the six mesh resources with their byte layouts, first-fit range management with
@@ -39,6 +39,7 @@ export const MESH_STRIDES: Readonly<Record<MeshResourceId, number>> = Object.fre
 export const MESH_ORIGIN_TARGET_PX = 128;
 
 const MIN_ELEMENTS = 16;
+const EMPTY_SLOTS: ReadonlyMap<string, number> = new Map();
 const GEOMETRY_REGIONS = [
   'meshPositions',
   'meshTriangles',
@@ -246,6 +247,8 @@ type ResidentVariant = {
 };
 type SlotRecord = {
   nodeId: string;
+  /** The paint owning the slot: the node's fill slot or its stroke slot (B2 section 9.5). */
+  paint: PathPaint;
   variant: ResidentVariant | null;
   /** The 16 words of the last written meshInstances record. */
   instance: number[] | null;
@@ -256,6 +259,8 @@ export type MeshPartInput = Readonly<{
   generation: number;
   draws: readonly PathMeshDraw[];
   slots: ReadonlyMap<string, number>;
+  /** Stroke slots by node id (B2 section 9.5); absent for a fill-only source. */
+  strokeSlots?: ReadonlyMap<string, number>;
   resident: ReadonlySet<symbol>;
   frameLanes: readonly number[] | null;
 }>;
@@ -263,8 +268,10 @@ export type MeshPartInput = Readonly<{
 export type MeshPartOutput = Readonly<{
   resources: readonly MeshResource[];
   writes: readonly MeshWrite[];
-  /** firstTriangle and triangleCount by node id, for the draws of this packet. */
+  /** firstTriangle and triangleCount by node id, for the fill draws of this packet. */
   placements: ReadonlyMap<string, Readonly<{ firstTriangle: number; triangleCount: number }>>;
+  /** The same for the stroke draws of this packet (B2 section 9.5). */
+  strokePlacements: ReadonlyMap<string, Readonly<{ firstTriangle: number; triangleCount: number }>>;
   expected: ReadonlyMap<MeshResourceId, ReadonlyMap<number, symbol>>;
 }>;
 
@@ -307,8 +314,10 @@ export class PathMeshPacker {
     }
 
     // Removed nodes, reused slots and evicted entries release their ranges.
+    const slotsOf = (paint: PathPaint) =>
+      paint === 'fill' ? input.slots : (input.strokeSlots ?? EMPTY_SLOTS);
     for (const [slot, record] of this.#records) {
-      if (input.slots.get(record.nodeId) !== slot) {
+      if (slotsOf(record.paint).get(record.nodeId) !== slot) {
         this.#releaseVariant(record);
         this.#records.delete(slot);
         this.#setVersion('meshInstances', slot, undefined);
@@ -323,6 +332,9 @@ export class PathMeshPacker {
     // replaces the whole arena.
     let slotDemand = 0;
     for (const slot of input.slots.values()) slotDemand = Math.max(slotDemand, slot + 1);
+    for (const slot of input.strokeSlots?.values() ?? []) {
+      slotDemand = Math.max(slotDemand, slot + 1);
+    }
     this.#slotDemand = slotDemand;
     if (capacityFor(slotDemand) > this.#capacities.meshInstances / MESH_STRIDES.meshInstances) {
       this.#replaceArena(null);
@@ -331,7 +343,12 @@ export class PathMeshPacker {
     for (const draw of input.draws) {
       let record = this.#records.get(draw.slot);
       if (record === undefined) {
-        record = { nodeId: draw.nodeId, variant: null, instance: null };
+        record = {
+          nodeId: draw.nodeId,
+          paint: draw.paint ?? 'fill',
+          variant: null,
+          instance: null,
+        };
         this.#records.set(draw.slot, record);
       }
       if (record.variant?.id !== (draw.fringe?.id ?? draw.entryId)) {
@@ -342,9 +359,10 @@ export class PathMeshPacker {
     }
     // Read placements only after every draw is placed: a repack moves earlier variants.
     const placements = new Map<string, { firstTriangle: number; triangleCount: number }>();
+    const strokePlacements = new Map<string, { firstTriangle: number; triangleCount: number }>();
     for (const draw of input.draws) {
       const variant = this.#records.get(draw.slot)!.variant!;
-      placements.set(
+      (draw.paint === 'stroke' ? strokePlacements : placements).set(
         draw.nodeId,
         Object.freeze({
           firstTriangle: variant.bases.meshTriangles,
@@ -372,6 +390,7 @@ export class PathMeshPacker {
       ),
       writes: Object.freeze(writes),
       placements,
+      strokePlacements,
       expected: expectedRecords(writes),
     });
   }

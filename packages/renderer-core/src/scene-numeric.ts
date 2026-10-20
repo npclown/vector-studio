@@ -1,4 +1,4 @@
-import type { RenderNodeSnapshot, SceneAffine } from '@vector-studio/contracts';
+import type { PathStroke, RenderNodeSnapshot, SceneAffine } from '@vector-studio/contracts';
 import { multiplyAffine } from './camera.js';
 
 export type SceneBounds = Readonly<{
@@ -65,6 +65,37 @@ export function getPathLocalPointBounds(points: readonly number[]): SceneBounds 
     if (y > maxY) maxY = y;
   }
   return Object.freeze({ minX, minY, maxX, maxY });
+}
+
+/** 2^24: the miter-ratio cap of the stroke culling bound (B2 stroke contract, section 9.7, S3). */
+export const STROKE_MITER_BOUND_CAP = 2 ** 24;
+
+/**
+ * The stroke bounds box of the B2 stroke contract, section 9.7 with the ST-A0 amendment (S3):
+ * the box of the path's points expanded by r·k in local units, r = width / 2 and
+ * k = max(1, min(L, 2^24) if join = 'miter', 1.5 if cap = 'square'). Null for an empty path or a
+ * stroke that draws nothing (null or width 0). The box may be nonfinite; transformSceneBounds
+ * then reports it, which scene validation turns into invalid-value.
+ */
+export function getPathLocalStrokeBounds(
+  points: readonly number[],
+  stroke: PathStroke | null,
+): SceneBounds | null {
+  if (stroke === null || !(stroke.width > 0)) return null;
+  const box = getPathLocalPointBounds(points);
+  if (box === null) return null;
+  const k = Math.max(
+    1,
+    stroke.join === 'miter' ? Math.min(stroke.miterLimit, STROKE_MITER_BOUND_CAP) : 1,
+    stroke.cap === 'square' ? 1.5 : 1,
+  );
+  const expansion = (stroke.width / 2) * k;
+  return Object.freeze({
+    minX: box.minX - expansion,
+    minY: box.minY - expansion,
+    maxX: box.maxX + expansion,
+    maxY: box.maxY + expansion,
+  });
 }
 
 export function transformSceneBounds(
@@ -165,6 +196,12 @@ export function hasFiniteSceneArithmetic(nodes: ReadonlyMap<string, RenderNodeSn
         // P1's arithmetic rule on the point box; an empty path is exempt.
         const pathBounds = getPathLocalPointBounds(node.geometry.points);
         if (pathBounds !== null && transformSceneBounds(pathBounds, world) === null) return false;
+        // B2 stroke contract, section 5: nonfinite world bounds of the stroke bounds box of a
+        // nonempty path with width > 0 are invalid-value too.
+        const strokeBounds = getPathLocalStrokeBounds(node.geometry.points, node.style.stroke);
+        if (strokeBounds !== null && transformSceneBounds(strokeBounds, world) === null) {
+          return false;
+        }
         continue;
       }
       const bounds = getPrimitiveLocalStrokeBounds(node);

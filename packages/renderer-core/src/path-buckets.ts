@@ -5,6 +5,11 @@
 /** V2's accepted exponent range (V2 contract, section d). Internal; not part of the port. */
 export const E_MIN = -1021;
 export const E_MAX = 1023;
+/**
+ * The stroke port's accepted lower bound (B2 stroke contract, sections 7.7 and 9.3): a bucket
+ * e < -1020 is the state failure tolerance-range for the stroke paint. E_MAX applies to both.
+ */
+export const STROKE_E_MIN = -1020;
 /** Bounds rho = 2^f to positive finite Float64 values. */
 export const F_MIN = -1074;
 export const F_MAX = 1023;

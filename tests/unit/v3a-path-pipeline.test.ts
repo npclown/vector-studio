@@ -47,7 +47,11 @@ function notice(
   failureCode: PathMeshNotice['failureCode'],
   toleranceExponent: number | null,
 ): PathMeshNotice {
-  return { interim: 'd8', nodeId, failureScope, failureCode, toleranceExponent };
+  // B2 stroke contract, section 9.8 (ST-U6): a fill-only notice carries paint 'fill', except the
+  // paint-free port-version and mesh-pipeline-unavailable codes.
+  const paint =
+    failureCode === 'port-version' || failureCode === 'mesh-pipeline-unavailable' ? null : 'fill';
+  return { interim: 'd8', nodeId, failureScope, failureCode, toleranceExponent, paint };
 }
 
 describe('V3a port consumption and cache key', () => {
@@ -826,6 +830,7 @@ describe('V3a failure classes, memo and notices', () => {
         failureScope: 'path',
         failureCode: 'work-limit',
         toleranceExponent: -3,
+        paint: 'fill',
       },
     });
     expect(
