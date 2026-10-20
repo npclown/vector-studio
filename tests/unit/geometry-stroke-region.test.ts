@@ -8,6 +8,7 @@ import {
   classifyStrokeSource,
   idealStrokeExactArea,
   idealStrokePieces,
+  idealStrokeVerticesBinary64,
   STROKE_16GON_AREA,
   STROKE_FIXTURES,
   STROKE_S2_EXPONENTS,
@@ -128,6 +129,11 @@ function diskPolygon(center: Point, r: number, e: number, extra: readonly Point[
   return hull([...vertices, ...extra]);
 }
 
+/** The disk vertex count the contract's rule gives for a center. */
+function diskN(center: Point, r: number, e: number): number {
+  return strokeDiskVertexCount(r, e, Math.max(Math.abs(center[0]), Math.abs(center[1])))!;
+}
+
 function bezier(p: readonly Point[], t: number): Point {
   const lerp = (a: Point, b: Point): Point => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
   const a = lerp(p[0]!, p[1]!);
@@ -211,6 +217,7 @@ function syntheticDump(source: StrokeOracleSource, depth = 5): StrokeDumpPiece[]
             verb: segment.verb,
             parameter: info.turningPoints[part - 1]!.t,
             center: a,
+            diskVertices: diskN(a, r, e),
             polygon: diskPolygon(a, r, e, []),
           });
         }
@@ -243,6 +250,7 @@ function syntheticDump(source: StrokeOracleSource, depth = 5): StrokeDumpPiece[]
           verb: segment.verb,
           parameter: split!,
           center,
+          diskVertices: diskN(center, r, e),
           polygon: diskPolygon(center, r, e, []),
         });
       }
@@ -296,6 +304,7 @@ function syntheticDump(source: StrokeOracleSource, depth = 5): StrokeDumpPiece[]
         outerIn: inTriple.minus,
         outerOut: inTriple.plus,
         tip: null,
+        diskVertices: diskN(b, r, e),
         polygon: diskPolygon(b, r, e, [b, inTriple.minus, inTriple.plus]),
       };
     }
@@ -323,6 +332,7 @@ function syntheticDump(source: StrokeOracleSource, depth = 5): StrokeDumpPiece[]
         outerIn,
         outerOut,
         tip: null,
+        diskVertices: diskN(b, r, e),
         polygon: diskPolygon(b, r, e, [b, outerIn, outerOut]),
       };
     }
@@ -359,6 +369,7 @@ function syntheticDump(source: StrokeOracleSource, depth = 5): StrokeDumpPiece[]
         cap: 'round',
         triple: t,
         extension: null,
+        diskVertices: diskN(t.center, r, e),
         polygon: diskPolygon(t.center, r, e, [t.minus, t.center, t.plus]),
       };
     }
@@ -394,7 +405,14 @@ function syntheticDump(source: StrokeOracleSource, depth = 5): StrokeDumpPiece[]
                 [c[0] + r, c[1] + r],
                 [c[0] - r, c[1] + r],
               ]);
-        pieces.push({ kind: 'point-cap', subpath: ordinal, cap: source.cap, point: c, polygon });
+        pieces.push({
+          kind: 'point-cap',
+          subpath: ordinal,
+          cap: source.cap,
+          point: c,
+          ...(source.cap === 'round' ? { diskVertices: diskN(c, r, e) } : {}),
+          polygon,
+        });
       }
       return;
     }
@@ -936,6 +954,53 @@ describe('ST-O1 piece bounds and ST-O2 inventory', () => {
     expect(checkStrokePieceBounds(f4, notHull).findings.join('\n')).toMatch(/is not the hull/);
   });
 
+  it('ST-O1 control: a wrong reported disk vertex count and a pure disk that is not its hull are rejected (M2)', () => {
+    const f3 = fixture('ST-F3').source;
+    const pieces = syntheticDump(f3);
+    const capIndex = pieces.findIndex((piece) => piece.kind === 'cap');
+    const cap = pieces[capIndex] as Extract<StrokeDumpPiece, { kind: 'cap' }>;
+    expect(cap.diskVertices).toBe(16);
+    expect(checkStrokePieceBounds(f3, pieces).findings).toEqual([]);
+    const wrong = [...pieces];
+    wrong[capIndex] = { ...cap, diskVertices: 8 };
+    expect(checkStrokePieceBounds(f3, wrong).findings.join('\n')).toMatch(
+      /disk vertex count 8 where the rule gives 16/,
+    );
+
+    const f16 = fixture('ST-F16').source;
+    const cusp = syntheticDump(f16);
+    const diskIndex = cusp.findIndex((piece) => piece.kind === 'cusp-disk');
+    const disk = cusp[diskIndex] as Extract<StrokeDumpPiece, { kind: 'cusp-disk' }>;
+    expect(disk.polygon).toHaveLength(disk.diskVertices!);
+    const dented = [...cusp];
+    dented[diskIndex] = { ...disk, polygon: disk.polygon!.filter((_, index) => index !== 3) };
+    expect(checkStrokePieceBounds(f16, dented).findings.join('\n')).toMatch(
+      /hull vertices, not its/,
+    );
+  });
+
+  it("ST-O2 control: a round cap's own E- differing from the sweep triple is rejected (M3)", () => {
+    const f3 = fixture('ST-F3').source;
+    const pieces = syntheticDump(f3);
+    const capIndex = pieces.findIndex((piece) => piece.kind === 'cap' && piece.end === 'end');
+    const cap = pieces[capIndex] as Extract<StrokeDumpPiece, { kind: 'cap' }>;
+    expect(checkStrokeInventory(f3, pieces).findings).toEqual([]);
+    const mutated = [...pieces];
+    mutated[capIndex] = { ...cap, triple: { ...cap.triple, minus: cap.triple.plus } };
+    expect(checkStrokeInventory(f3, mutated).findings.join('\n')).toMatch(
+      /does not share the sweep triple/,
+    );
+  });
+
+  it('ST-O3 exact mode needs binary64 ideal vertices (M1)', () => {
+    const f1 = fixture('ST-F1').source;
+    expect(idealStrokeVerticesBinary64(f1)).toBe(true);
+    // M(0, 2^40) L(1, 2^40), w = 2^-30: the ideal corners 2^40 ± 2^-31 need 71 bits.
+    const thin: StrokeOracleSource = { ...f1, points: [0, 2 ** 40, 1, 2 ** 40], width: 2 ** -30 };
+    expect(idealStrokeExactArea(thin)).not.toBeNull();
+    expect(idealStrokeVerticesBinary64(thin)).toBe(false);
+  });
+
   it('ST-O1 control: a square cap along the normal instead of the tangent is rejected (ST-D10)', () => {
     const f2 = fixture('ST-F2').source;
     const pieces = syntheticDump(f2);
@@ -1143,6 +1208,20 @@ describe('ST-O3 resolution, ST-O4 exact region and ST-O5 membership', () => {
     expect(checkStrokeResolution(pieces, near, 'band', 2 ** -5).ok).toBe(true);
     const far = withBoundary([0, -1, 6, -1, 6, 1, 0, 1], [0, 1, 2, 0, 2, 3]);
     expect(checkStrokeResolution(pieces, far, 'band', 2 ** -5).ok).toBe(false);
+  });
+
+  it('ST-O3 band control: a translated mesh of equal area is rejected (symmetric difference)', () => {
+    const pieces = syntheticDump(fixture('ST-F1').source);
+    const moved = withBoundary([100, 49, 104, 49, 104, 51, 100, 51], [0, 1, 2, 0, 2, 3]);
+    const result = checkStrokeResolution(pieces, moved, 'band', 2 ** -5);
+    expect(result.meshArea).toEqual(result.unionArea);
+    expect(result.ok).toBe(false);
+    expect(result.findings.join('\n')).toMatch(/symmetric difference/);
+    const small = withBoundary(
+      [2 ** -8, -1, 4 + 2 ** -8, -1, 4 + 2 ** -8, 1, 2 ** -8, 1],
+      [0, 1, 2, 0, 2, 3],
+    );
+    expect(checkStrokeResolution(pieces, small, 'band', 2 ** -5).ok).toBe(true);
   });
 
   it('ST-O4 control: the bevel mesh is not the miter region (ST-D2 visible on regions)', () => {

@@ -67,6 +67,8 @@ export type StrokeDumpPiece =
       /** Float64 parameter of the reversal or turning point. */
       parameter: number;
       center: Point;
+      /** The disk polygon's vertex count `n` (section 4.4), before the hull. */
+      diskVertices?: number;
       polygon: readonly Point[] | null;
     }>
   | Readonly<{
@@ -78,6 +80,8 @@ export type StrokeDumpPiece =
       outerIn: Point;
       outerOut: Point;
       tip: Point | null;
+      /** Round joins: the disk polygon's vertex count. */
+      diskVertices?: number;
       polygon: readonly Point[] | null;
     }>
   | Readonly<{
@@ -88,6 +92,8 @@ export type StrokeDumpPiece =
       triple: StrokeSampleTriple;
       /** Square caps: `[E- + r·τ̂, E+ + r·τ̂]`; null for round caps. */
       extension: readonly [Point, Point] | null;
+      /** Round caps: the disk polygon's vertex count. */
+      diskVertices?: number;
       polygon: readonly Point[] | null;
     }>
   | Readonly<{
@@ -95,6 +101,8 @@ export type StrokeDumpPiece =
       subpath: number;
       cap: 'round' | 'square';
       point: Point;
+      /** Round point caps: the disk polygon's vertex count. */
+      diskVertices?: number;
       polygon: readonly Point[] | null;
     }>;
 
@@ -1084,6 +1092,38 @@ function checkDisk(
   }
 }
 
+/**
+ * ST-O1 disk count: the dumped vertex count `n` equals the contract's rule for the
+ * disk center `c` (when the dump reports one). A pure disk piece (no other hull
+ * points) must equal its own hull, so it has exactly `n` vertices.
+ */
+function checkDiskCount(
+  source: StrokeOracleSource,
+  center: Point,
+  reported: number | undefined,
+  polygon: readonly Point[] | null,
+  pure: boolean,
+  label: string,
+  findings: string[],
+): void {
+  if (reported === undefined) return;
+  const expected = strokeDiskVertexCount(
+    source.width / 2,
+    source.toleranceExponent,
+    Math.max(Math.abs(center[0]), Math.abs(center[1])),
+  );
+  if (expected === null || reported !== expected) {
+    findings.push(
+      `${label}: disk vertex count ${String(reported)} where the rule gives ${String(expected)}`,
+    );
+  }
+  if (pure && polygon !== null && polygon.length !== reported) {
+    findings.push(
+      `${label}: disk polygon has ${String(polygon.length)} hull vertices, not its ${String(reported)}`,
+    );
+  }
+}
+
 /** `p` within `h` of `base + σ·(r/|d|)·perp(d)` (σ = +1 for E+, -1 for E-). */
 function sampleOk(p: Point, base: QSPoint, s: Q, d: QPoint, sigma: 1 | -1, r: Q, h: Q): boolean {
   const w = sigma > 0 ? pperp(d) : pneg(pperp(d));
@@ -1456,6 +1496,15 @@ export function checkStrokePieceBounds(
           );
         }
         checkDisk(piece.polygon, qp(piece.center), r, h2, [], label, findings);
+        checkDiskCount(
+          source,
+          piece.center,
+          piece.diskVertices,
+          piece.polygon,
+          true,
+          label,
+          findings,
+        );
         return;
       }
       case 'join': {
@@ -1482,6 +1531,15 @@ export function checkStrokePieceBounds(
             r,
             h2,
             [join.raw, piece.outerIn, piece.outerOut],
+            label,
+            findings,
+          );
+          checkDiskCount(
+            source,
+            join.raw,
+            piece.diskVertices,
+            piece.polygon,
+            false,
             label,
             findings,
           );
@@ -1521,6 +1579,15 @@ export function checkStrokePieceBounds(
             r,
             h2,
             [join.raw, piece.outerIn, piece.outerOut],
+            label,
+            findings,
+          );
+          checkDiskCount(
+            source,
+            join.raw,
+            piece.diskVertices,
+            piece.polygon,
+            false,
             label,
             findings,
           );
@@ -1592,6 +1659,15 @@ export function checkStrokePieceBounds(
             label,
             findings,
           );
+          checkDiskCount(
+            source,
+            piece.triple.center,
+            piece.diskVertices,
+            piece.polygon,
+            false,
+            label,
+            findings,
+          );
         }
         return;
       }
@@ -1604,6 +1680,15 @@ export function checkStrokePieceBounds(
         const c = qp(subpath.start);
         if (piece.cap === 'round') {
           checkDisk(piece.polygon, c, r, h2, [], label, findings);
+          checkDiskCount(
+            source,
+            piece.point,
+            piece.diskVertices,
+            piece.polygon,
+            true,
+            label,
+            findings,
+          );
           return;
         }
         const corners = [
@@ -2107,7 +2192,8 @@ function inspectMesh(mesh: StrokeOracleMesh): MeshData {
 /**
  * ST-O3: the V2 mesh checks, and the mesh region against the exact nonzero
  * union of the emitted piece polygons. `exact` requires equal regions (and so
- * equal area and boundary); `band` requires `|area difference| <= perimeter·τ`.
+ * equal area and boundary); `band` requires `|area difference| <= perimeter·τ` and the
+ * symmetric difference `<= perimeter·τ·(1 + 2^-40)`.
  */
 export function checkStrokeResolution(
   pieces: readonly StrokeDumpPiece[],
@@ -2131,6 +2217,13 @@ export function checkStrokeResolution(
     const allowance = qmul(qn(data.perimeter * (1 + 2 ** -40)), qn(tau));
     if (qcmp(qabs(qsub(areas.first, areas.second)), allowance) > 0) {
       findings.push('mesh area differs from the piece union by more than perimeter times tau');
+    }
+    // The symmetric difference, not only the area difference: a translated mesh of equal area
+    // must fail (2026-10-21 review of PR #169).
+    if (qcmp(areas.xor, allowance) > 0) {
+      findings.push(
+        `mesh region differs from the piece union by more than perimeter times tau (symmetric difference ${String(qv(areas.xor))})`,
+      );
     }
   }
   return {
@@ -2340,6 +2433,33 @@ export function idealStrokePieces(source: StrokeOracleSource): readonly StrokeId
 export function idealStrokeExactArea(source: StrokeOracleSource): StrokeExactArea | null {
   const exact = idealBuild(source).exact;
   return exact === null ? null : exactArea(regionAreas(exact, []).first);
+}
+
+/** True when `a` is exactly a finite binary64 value. */
+function isBinary64(a: Q): boolean {
+  if (a.n === 0n) return true;
+  if ((a.d & (a.d - 1n)) !== 0n) return false;
+  let significand = absBig(a.n);
+  let low = -(bitLength(a.d) - 1);
+  while ((significand & 1n) === 0n) {
+    significand >>= 1n;
+    low += 1;
+  }
+  const high = low + bitLength(significand) - 1;
+  return bitLength(significand) <= 53 && low >= -1074 && high <= 1023;
+}
+
+/**
+ * True when the ideal region is an exact polygon union whose every vertex is exactly a
+ * binary64 value: only then can an emitted (binary64) polygon equal the ideal one, so only
+ * then does ST-O3's exact mode apply.
+ */
+export function idealStrokeVerticesBinary64(source: StrokeOracleSource): boolean {
+  const exact = idealBuild(source).exact;
+  return (
+    exact !== null &&
+    exact.every((polygon) => polygon.every((v) => isBinary64(v.x) && isBinary64(v.y)))
+  );
 }
 
 /**

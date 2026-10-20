@@ -328,7 +328,7 @@ pub(crate) struct Piece {
     pub(crate) disk_vertices: usize,
     /// A zero-area hull, dropped from the arrangement and kept only in this record.
     pub(crate) dropped: bool,
-    /// Joins: `[O_in, O_out, T]` (the tip only on a miter). Square caps: `[E- + r t, E+ + r t]`.
+    /// Joins: `[O_in, O_out, T]` (the tip only on a miter). Square caps: `[E- + r t, E+ + r t]`. Round caps: `[E-, E+]`, the cap's own triple.
     pub(crate) extra: [Point; 3],
     pub(crate) extra_count: usize,
     /// Sweeps, leaves and cusp disks (ST-U4).
@@ -1574,6 +1574,7 @@ impl StrokeWorkspace {
                 for point in [sample.center, sample.minus, sample.plus] {
                     self.push_candidate(point)?;
                 }
+                self.set_extra(&[sample.minus, sample.plus]);
                 self.emit_hull(PieceKind::RoundCap, index, parameter, parameter, disk)
                     .map(|_| ())
             }
