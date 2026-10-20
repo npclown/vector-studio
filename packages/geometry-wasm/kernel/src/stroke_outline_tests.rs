@@ -6,11 +6,13 @@ use core::cmp::Ordering;
 
 use crate::fill_predicates::orient2d;
 use crate::geometry::{Point, VERB_CLOSE, VERB_CUBIC, VERB_LINE, VERB_MOVE};
+use crate::rounded_line_fill::RoundedFillError;
 use crate::stroke_outline::{
-    build_directions, disk_level, miter_kept, power_of_two, tip_guard_at, PieceKind, StrokeCap,
-    StrokeJoin, StrokeOutcome, StrokeRequest, StrokeWorkspace, MAX_PIECES, STROKE_PATH_EMPTY,
-    STROKE_PATH_INVALID_PATH, STROKE_PATH_INVALID_STROKE, STROKE_PATH_INVALID_TOLERANCE,
-    STROKE_PATH_NUMERIC_RANGE, STROKE_PATH_WORK_LIMIT, STROKE_V0_HEAP_CAP, STROKE_V0_LIMITS,
+    build_directions, disk_level, miter_kept, power_of_two, tip_guard_at, FrontEndError, PieceKind,
+    StrokeCap, StrokeError, StrokeJoin, StrokeOutcome, StrokeRequest, StrokeWorkspace, MAX_PIECES,
+    STROKE_PATH_EMPTY, STROKE_PATH_INVALID_PATH, STROKE_PATH_INVALID_STROKE,
+    STROKE_PATH_INVALID_TOLERANCE, STROKE_PATH_NUMERIC_RANGE, STROKE_PATH_WORK_LIMIT,
+    STROKE_V0_HEAP_CAP, STROKE_V0_LIMITS,
 };
 
 pub(crate) const SIXTEEN_GON: f64 = 3.061_467_458_920_718_3;
@@ -733,7 +735,7 @@ pub(crate) fn f26_cases() -> Vec<(&'static str, PathSpec, StrokeRequest, u32)> {
         "edges-1024",
         edges,
         request(2.0, StrokeCap::Square, MITER, 4.0, -3),
-        u32::MAX,
+        STROKE_PATH_WORK_LIMIT,
     ));
     // Edges 1,025: 62 such subpaths, one two-segment bevel staircase (25) and two square
     // points (4 each).
@@ -761,7 +763,7 @@ pub(crate) fn f26_cases() -> Vec<(&'static str, PathSpec, StrokeRequest, u32)> {
         "disk-256",
         f1(),
         request(400.0, StrokeCap::Round, MITER, 4.0, -3),
-        u32::MAX,
+        0,
     ));
     cases.push((
         "disk-512",
@@ -800,25 +802,55 @@ fn convex_edge(j: u32) -> (i64, i64) {
 
 #[test]
 fn st_f26_current_cap_fixtures() {
+    // ST-U6 (contract section 11.2 note, ST-A0 M3): each at-limit status and its cause is
+    // asserted as observed at STROKE_V0_LIMITS. These are current-cap observations that a limit
+    // raise may re-baseline.
+    let causes = [
+        (
+            "pieces-512",
+            Some(StrokeError::Rounded(RoundedFillError::InputLimit)),
+        ),
+        (
+            "pieces-513",
+            Some(StrokeError::Front(FrontEndError::PieceLimit)),
+        ),
+        (
+            "edges-1024",
+            Some(StrokeError::Rounded(RoundedFillError::WorkLimit)),
+        ),
+        (
+            "edges-1025",
+            Some(StrokeError::Rounded(RoundedFillError::InputLimit)),
+        ),
+        ("disk-256", None),
+        (
+            "disk-512",
+            Some(StrokeError::Front(FrontEndError::DiskLimit)),
+        ),
+    ];
     let mut ws = workspace();
-    for (name, path, request, expected) in f26_cases() {
+    let cases = f26_cases();
+    assert_eq!(cases.len(), causes.len());
+    for ((name, path, request, expected), (cause_name, cause)) in cases.into_iter().zip(causes) {
+        assert_eq!(name, cause_name);
         let found = status(&mut ws, &path, request);
         let pieces = ws.pieces().len();
         println!(
-            "ST-F26 {name}: status {found}, pieces {pieces}, stats {:?}",
+            "ST-F26 {name}: status {found}, cause {:?}, pieces {pieces}, stats {:?}",
+            ws.last_error(),
             ws.rounded_stats()
         );
-        if expected != u32::MAX {
-            assert_eq!(found, expected, "{name}");
-        } else {
-            assert!(
-                found == 0 || found == STROKE_PATH_WORK_LIMIT,
-                "{name}: {found}"
-            );
-        }
+        assert_eq!(found, expected, "{name}");
+        assert_eq!(ws.last_error(), cause, "{name}: cause");
         match name {
             "pieces-513" => assert_eq!(pieces, MAX_PIECES, "{name}: stops at the cap"),
             "pieces-512" => assert_eq!(pieces, 512, "{name}"),
+            // The arrangement stops with its whole work budget spent (max_work exhausted).
+            "edges-1024" => assert_eq!(
+                ws.rounded_stats().work_units,
+                STROKE_V0_LIMITS.max_work,
+                "{name}"
+            ),
             "disk-256" => {
                 assert_eq!(found, 0, "{name}");
                 assert!(ws.pieces().iter().any(|piece| piece.disk_vertices == 256));
