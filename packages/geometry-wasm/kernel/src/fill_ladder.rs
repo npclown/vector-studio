@@ -1024,36 +1024,8 @@ impl FastRung {
     fn monotone(&mut self) -> Result<(), Reason> {
         let chords_only = fault(LadderFault::MonotoneChordsOnly);
         for info in self.contours[..self.range_len].iter().copied() {
-            let count = info.cert_count;
-            // Contour order, then the cyclic pair (last, first).
-            for index in 0..count {
-                let e = self.cert[info.cert_start + index];
-                let f = self.cert[info.cert_start + (index + 1) % count];
-                // w = p_end(f) − p_start(e); u_e, u_f the chords.
-                let w = exact_difference(f.end, e.start);
-                if !proved_positive(dot(exact_difference(e.end, e.start), w))
-                    || !proved_positive(dot(exact_difference(f.end, f.start), w))
-                {
-                    return Err(Reason::Monotone);
-                }
-                if chords_only {
-                    continue;
-                }
-                for edge in [e, f] {
-                    // ⟨R_{m+1} − R_m, w⟩ > 0 for m = 0, 1, 2 (leaf), or ⟨γ(1) − γ(0), w⟩ > 0.
-                    let terms = match edge.piece {
-                        Piece::Leaf { .. } => 3,
-                        Piece::Segment { .. } => 1,
-                        Piece::Unset => return Err(Reason::Structure),
-                    };
-                    for term in 0..terms {
-                        let step = edge.controls[term + 1].sub(edge.controls[term]);
-                        if !proved_positive(dot(step, w)) {
-                            return Err(Reason::Monotone);
-                        }
-                    }
-                }
-            }
+            let edges = &self.cert[info.cert_start..info.cert_start + info.cert_count];
+            monotone_contour(edges, chords_only, &mut |_| {})?;
         }
         Ok(())
     }
@@ -1775,6 +1747,179 @@ impl FastRung {
         }
         Ok(())
     }
+}
+
+/// One certified edge's FR4 operands, computed once per edge (AL-U4b2; contract section 5.1,
+/// AL-C1). The spike computed them in each of the edge's two consecutive pairs, (previous, e)
+/// and (e, next), by the same operations on the same operands: the chord
+/// `exact_difference(end, start)` and the control steps `controls[m + 1].sub(controls[m])`.
+/// They depend only on the edge, not on the pair's w, so the value computed once has the bits
+/// of each of the two values computed before. `fill_filter::Interval` reads only the test-build
+/// fault switch, which nothing changes during FR4, so computing a step that the spike would not
+/// have reached (its pair failed earlier) has no effect.
+#[derive(Clone, Copy)]
+struct MonotoneEdge {
+    /// u = p_end − p_start.
+    chord: IPoint,
+    /// R_{m+1} − R_m for m < `terms` (leaf: m = 0, 1, 2), or γ(1) − γ(0) (segment).
+    steps: [IPoint; 3],
+    /// 3 for a leaf, 1 for a segment, `None` for an unset piece. FR2 has already returned
+    /// `STRUCTURE` on an unset piece; FR4 keeps the spike's check at the spike's position.
+    terms: Option<usize>,
+}
+
+impl MonotoneEdge {
+    fn new(edge: &CertEdge) -> Self {
+        let terms = match edge.piece {
+            Piece::Leaf { .. } => Some(3),
+            Piece::Segment { .. } => Some(1),
+            Piece::Unset => None,
+        };
+        let mut steps = [IPoint::default(); 3];
+        for (term, step) in steps.iter_mut().enumerate().take(terms.unwrap_or(0)) {
+            *step = edge.controls[term + 1].sub(edge.controls[term]);
+        }
+        Self {
+            chord: exact_difference(edge.end, edge.start),
+            steps,
+            terms,
+        }
+    }
+}
+
+/// FR4 on one contour's certified edges (SL-C2; SL-L2): every consecutive pair (e, f), in
+/// contour order and then the cyclic pair (last, first), with w = p_end(f) − p_start(e):
+/// ⟨u_e, w⟩ > 0 and ⟨u_f, w⟩ > 0 proved, then for e and then f each ⟨R_{m+1} − R_m, w⟩ > 0
+/// (m = 0, 1, 2 for a leaf) or ⟨γ(1) − γ(0), w⟩ > 0 (a segment) proved, in that order. The
+/// first unproved dot returns `MONOTONE`.
+///
+/// AL-U4b2 (contract section 5.1, AL-C1): each edge's `MonotoneEdge` is computed once, when it
+/// first enters a pair as f (edge 0 as the first pair's e, kept for the cyclic pair). Every dot
+/// is `dot(operand, w)` on operands with the spike's bits, in the spike's order, and every
+/// decision is the same `proved_positive`; the checks, their order and the reasons are the
+/// spike's. `observe` sees each decided dot interval in order; production passes a no-op, and
+/// only the AL-U4b2 equivalence test (`monotone_trace`) records them.
+fn monotone_contour(
+    edges: &[CertEdge],
+    chords_only: bool,
+    observe: &mut impl FnMut(Interval),
+) -> Result<(), Reason> {
+    let count = edges.len();
+    if count == 0 {
+        return Ok(());
+    }
+    let first = MonotoneEdge::new(&edges[0]);
+    let mut e = first;
+    for index in 0..count {
+        let next = index + 1;
+        let (f_edge, f) = if next < count {
+            (&edges[next], MonotoneEdge::new(&edges[next]))
+        } else {
+            (&edges[0], first)
+        };
+        // w = p_end(f) − p_start(e); u_e, u_f the chords.
+        let w = exact_difference(f_edge.end, edges[index].start);
+        let chord_e = dot(e.chord, w);
+        observe(chord_e);
+        if !proved_positive(chord_e) {
+            return Err(Reason::Monotone);
+        }
+        let chord_f = dot(f.chord, w);
+        observe(chord_f);
+        if !proved_positive(chord_f) {
+            return Err(Reason::Monotone);
+        }
+        if !chords_only {
+            for edge in [&e, &f] {
+                let Some(terms) = edge.terms else {
+                    return Err(Reason::Structure);
+                };
+                for step in &edge.steps[..terms] {
+                    let value = dot(*step, w);
+                    observe(value);
+                    if !proved_positive(value) {
+                        return Err(Reason::Monotone);
+                    }
+                }
+            }
+        }
+        e = f;
+    }
+    Ok(())
+}
+
+/// AL-U4b2 equivalence test input: one certified edge as FR4 reads it, (p_start, p_end, the
+/// step count (3 leaf, 1 segment, `None` unset), the controls' [x, y] intervals).
+#[cfg(test)]
+pub(crate) type MonotoneTestEdge = (Point, Point, Option<usize>, [[Interval; 2]; 4]);
+
+#[cfg(test)]
+impl FastRung {
+    /// AL-U4b2 equivalence hook: the certified edges of each loaded contour, as FR4 reads them
+    /// after a run through FR3.
+    pub(crate) fn monotone_inputs(&self) -> Vec<Vec<MonotoneTestEdge>> {
+        self.contours[..self.range_len]
+            .iter()
+            .map(|info| {
+                self.cert[info.cert_start..info.cert_start + info.cert_count]
+                    .iter()
+                    .map(|edge| {
+                        let terms = match edge.piece {
+                            Piece::Leaf { .. } => Some(3),
+                            Piece::Segment { .. } => Some(1),
+                            Piece::Unset => None,
+                        };
+                        (
+                            edge.start,
+                            edge.end,
+                            terms,
+                            edge.controls.map(|point| [point.x, point.y]),
+                        )
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+}
+
+/// AL-U4b2 equivalence hook: production FR4 (`monotone_contour`, as `FastRung::monotone` runs
+/// it over the contours) on the given edges, with the result and the bits [lo, hi] of every
+/// decided dot interval in order.
+#[cfg(test)]
+pub(crate) fn monotone_trace(
+    contours: &[Vec<MonotoneTestEdge>],
+    chords_only: bool,
+) -> (Result<(), Reason>, Vec<[u64; 2]>) {
+    let mut trace = Vec::new();
+    let mut observe = |value: Interval| trace.push([value.lo.to_bits(), value.hi.to_bits()]);
+    let mut result = Ok(());
+    for contour in contours {
+        let edges: Vec<CertEdge> = contour
+            .iter()
+            .map(|&(start, end, terms, controls)| CertEdge {
+                start,
+                end,
+                piece: match terms {
+                    Some(3) => Piece::Leaf {
+                        source: 0,
+                        controls: [start, start, end, end],
+                        numerator: 1,
+                        depth: 0,
+                    },
+                    Some(1) => Piece::Segment { a: start, b: end },
+                    None => Piece::Unset,
+                    Some(other) => panic!("no piece has {other} control steps"),
+                },
+                controls: controls.map(|[x, y]| IPoint { x, y }),
+                ..CertEdge::default()
+            })
+            .collect();
+        result = monotone_contour(&edges, chords_only, &mut observe);
+        if result.is_err() {
+            break;
+        }
+    }
+    (result, trace)
 }
 
 /// Spike section 3.9 step 3: p is proved farther than r from the segment [s, t], with
