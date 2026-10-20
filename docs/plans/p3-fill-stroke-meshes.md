@@ -2328,26 +2328,26 @@ cargo test --manifest-path packages/geometry-wasm/kernel/Cargo.toml --release --
     --offline stroke_probe_tests -- --ignored --nocapture --test-threads 1
 ```
 
-Environment: Windows 11 Pro, `x86_64-pc-windows-msvc`, Rust 1.94.1, on a shared desktop where other worktrees were building at the same time. Two full runs on the same tree differed by 10-35% on single cases (chords miter/butt at `n = 8`: 23.0 and 31.2 ms). Each run took about 46 s. The numbers below come from the second run.
+Environment: Windows 11 Pro, `x86_64-pc-windows-msvc`, Rust 1.94.1, on a shared desktop where other worktrees were building at the same time. Two full runs on the same tree differed by 10-35% on single cases (chords miter/butt at `n = 8`: 23.0 and 31.2 ms). Each run took about 46 s. The numbers below come from the second run, on the tree of PR #171's head `c50ad96`. Its probe file and `lib.rs` are byte-identical to the squash `e4eb2b4` on `main` (checked with `git diff c50ad96 e4eb2b4`, empty). Every median is a **single run of the probe**, and the "Builds" column shows how many timed builds stood behind it. The probe prints its own builds column (`stroke_probe_tests.rs:261` and `:292`), but this table did not copy it. The values here are therefore **derived**, not read from the run: the loop at `stroke_probe_tests.rs:232` keeps building until the 200 ms budget is spent, at least once and at most 101 times, so a median `m` stands behind approximately `min(101, ⌈200 / m⌉)` builds (the loop stops on the sum of the actual samples, so a count can be off by one or more; the probe's own count was not recorded). The two rows above 500 ms are a single sample, and the 168 ms row has two. Added 2026-10-21 (PR #171 review).
 
 **Results, diagnostic, not evidence.** Selected rows of Table 1 (`w = 2`, `e = −3`), median time per stroke:
 
-| Family | Join/cap    |   n | Status                     | Pieces | Edges | Pair checks | Sections | Nodes |      Work | Median ms |
-| ------ | ----------- | --: | -------------------------- | -----: | ----: | ----------: | -------: | ----: | --------: | --------: |
-| zigzag | miter/butt  |   8 | ok                         |     15 |    75 |       2,775 |      201 |    88 |    33,929 |      0.91 |
-| zigzag | miter/butt  |  32 | ok                         |     63 |   315 |      49,455 |      777 |   304 |   311,092 |      5.45 |
-| zigzag | miter/butt  |  64 | ok                         |    127 |   635 |     201,295 |    1,545 |   592 | 1,111,546 |     16.88 |
-| zigzag | miter/butt  | 128 | work-limit(front:vertices) |    255 |     — |           — |        — |     — |         — |      0.18 |
-| zigzag | bevel/butt  |  64 | ok                         |    127 |   572 |     163,306 |    1,482 |   592 |   990,921 |     23.12 |
-| zigzag | round/round |   8 | ok                         |     17 |   191 |      18,145 |      561 |   324 |   207,537 |      4.59 |
-| zigzag | round/round |  32 | ok                         |     65 |   719 |     258,121 |    2,097 | 1,188 | 2,231,741 |     27.70 |
-| zigzag | round/round |  64 | work-limit(front:vertices) |    129 |     — |           — |        — |     — |         — |      0.16 |
-| chords | miter/butt  |   8 | ok                         |     15 |    76 |       2,850 |    1,420 | 1,223 |   578,316 |     31.20 |
-| chords | miter/butt  |  16 | work-limit(arr:nodes)      |     31 |   156 |      12,090 |    8,724 | 8,192 | 1,873,225 |    168.14 |
-| chords | miter/butt  |  32 | work-limit(arr:nodes)      |     63 |   316 |      49,770 |    8,598 | 8,192 | 2,936,161 |    533.16 |
-| chords | miter/butt  |  64 | work-limit(arr:events)     |    127 |   634 |      91,323 |        0 |     0 |    91,323 |      3.25 |
-| chords | round/round |   8 | ok                         |     17 |   210 |      21,945 |    2,372 | 2,048 | 1,577,597 |     38.94 |
-| chords | round/round |  32 | work-limit(arr:nodes)      |     65 |   786 |     308,505 |    8,627 | 8,192 | 4,665,362 |    790.38 |
+| Family | Join/cap    |   n | Status                     | Pieces | Edges | Pair checks | Sections | Nodes |      Work | Median ms | Builds (derived) |
+| ------ | ----------- | --: | -------------------------- | -----: | ----: | ----------: | -------: | ----: | --------: | --------: | ---------------: |
+| zigzag | miter/butt  |   8 | ok                         |     15 |    75 |       2,775 |      201 |    88 |    33,929 |      0.91 |        101 (cap) |
+| zigzag | miter/butt  |  32 | ok                         |     63 |   315 |      49,455 |      777 |   304 |   311,092 |      5.45 |               37 |
+| zigzag | miter/butt  |  64 | ok                         |    127 |   635 |     201,295 |    1,545 |   592 | 1,111,546 |     16.88 |               12 |
+| zigzag | miter/butt  | 128 | work-limit(front:vertices) |    255 |     — |           — |        — |     — |         — |      0.18 |        101 (cap) |
+| zigzag | bevel/butt  |  64 | ok                         |    127 |   572 |     163,306 |    1,482 |   592 |   990,921 |     23.12 |                9 |
+| zigzag | round/round |   8 | ok                         |     17 |   191 |      18,145 |      561 |   324 |   207,537 |      4.59 |               44 |
+| zigzag | round/round |  32 | ok                         |     65 |   719 |     258,121 |    2,097 | 1,188 | 2,231,741 |     27.70 |                8 |
+| zigzag | round/round |  64 | work-limit(front:vertices) |    129 |     — |           — |        — |     — |         — |      0.16 |        101 (cap) |
+| chords | miter/butt  |   8 | ok                         |     15 |    76 |       2,850 |    1,420 | 1,223 |   578,316 |     31.20 |                7 |
+| chords | miter/butt  |  16 | work-limit(arr:nodes)      |     31 |   156 |      12,090 |    8,724 | 8,192 | 1,873,225 |    168.14 |                2 |
+| chords | miter/butt  |  32 | work-limit(arr:nodes)      |     63 |   316 |      49,770 |    8,598 | 8,192 | 2,936,161 |    533.16 |                1 |
+| chords | miter/butt  |  64 | work-limit(arr:events)     |    127 |   634 |      91,323 |        0 |     0 |    91,323 |      3.25 |               62 |
+| chords | round/round |   8 | ok                         |     17 |   210 |      21,945 |    2,372 | 2,048 | 1,577,597 |     38.94 |                6 |
+| chords | round/round |  32 | work-limit(arr:nodes)      |     65 |   786 |     308,505 |    8,627 | 8,192 | 4,665,362 |    790.38 |                1 |
 
 Largest `ok` `n` at `w = 2`, `e = −3`, for every join and cap: zigzag 64 with miter or bevel joins and 32 with round joins; chords 8. Beyond those, zigzag fails `front:vertices` and then `front:pieces` (from `n = 256` or 512). Chords fails `arr:nodes` at 16 and 32, `arr:events` at 64 (with miter or bevel joins), and `front:vertices` or `front:pieces` above that.
 
@@ -2475,6 +2475,7 @@ Deviations and notes:
 - **The equivalence tests need `cfg(test)` hooks in `fill_ladder.rs`.** `CertEdge` stays private, so `clearance_inputs` exports the certified edges after FR4, and `clearance_trace` runs `clearance_edges` itself on them. They are functions, not an inline test module, so O5's inline-module check is unaffected.
 - **Logical counters.** None change: on the 26 cells, the mirror has 17,008 visits, 7,740 consecutive skips and 9,268 candidates, all decided at step 1, as before.
 - **Not done.** FR1's source lookups (1.3%) and FR5's remaining sort and box-gap work are left. FR2 and FR4 are interval arithmetic. Outside the certificate, S1 and FR6 to AL-FR9 are outside section 5.1's scope.
+- **Final base (added 2026-10-21, PR #175 review).** The branch began at `main` `ae91297`, as stated at the top, but the base it merged on was `489107a`, the parent of the squash `640a28f`. Only CI ran on the merged head. None of the local runs above was repeated on `489107a`. The same squash also realigned, by whitespace only, the `wasm32` row of the ST-U5 memory table (no value changed).
 
 ### B2 ST-U5 stroke export
 
@@ -2643,6 +2644,56 @@ Files outside the brief's list:
 - `stroke_dump_tests.rs`, for the `piece_points` `Option`.
 - `stroke_export.rs` and `stroke_export_tests.rs`, for the revision.
 - `docs/graphics-engine-architecture.md`: one sentence naming revision 2.
+
+### B2 ST-U2 oracle hardening (review follow-up)
+
+Light-tier plan entry, 2026-10-21. It is the post-merge review follow-up to ST-U2 (PR #169): the SHOULD-FIX item S1 and the minors M1, M2, M3 and M6, with documentation minors of the ST-U3b (#171) and AL-U4b3 (#175) reviews. The branch is stacked on `claude/p3-b2-st-u4-cusp-shared-triple` (PR #179), because it edits the same kernel and test files; once #179 merges, `origin/main` is merged in. It changes no kernel output, no export output and no threshold; it adds one dated contract note. Acceptance check (revised 2026-10-21 after review):
+
+- the new positive controls are rejected and the whole corpus still passes the stricter checks;
+- `stroke_v0` status and mesh are unchanged on all 145 dump cases; the release WASM bytes may change, because M3 adds a store to the piece record that only the dump reads;
+- `pnpm test:geometry`, `pnpm check` and `pnpm build` pass.
+
+Precision is **UNVERIFIED** against the 0.25 physical-pixel target until B4, as for every stroke result.
+
+**S1, ST-O3 band mode checked only the area.** `checkStrokeResolution` in `band` mode compared `|area(union) − area(mesh)|` with `perimeter·τ` and ignored the symmetric difference, so a mesh of equal area moved far away passed (the review's ST-F1 sweep moved to `[100,104]×[50,52]`). Band mode now also requires `xor ≤ perimeter·τ·(1 + 2^-40)`, with the same allowance that the area check uses.
+
+- **Measured first, before the bound was added.** Every band-mode call of the corpus was instrumented: `tests/geometry/stroke-oracle.test.ts` (22 line cases through the band path and 50 cubic cases of at most 32 pieces, 72 instances in all) on the ST-U4 cusp-shared-triple tree. The maximum ratio `xor / (perimeter·τ·(1 + 2^-40))` per family:
+
+  | Family | Instances | Maximum xor / allowance | Case at the maximum | Maximum area difference / allowance |
+  | ------ | --------: | ----------------------: | ------------------- | ----------------------------------: |
+  | line   |        22 |                  0.2156 | `ST-F13`            |                              0.0420 |
+  | cubic  |        50 |                  0.2268 | `ST-U4/folded-arc`  |                              0.0765 |
+
+  No instance exceeds 0.23 and none needs a corner term, so the bound is added **without** one. The instrumentation was removed before the commit. The unit fixtures (`tests/unit/geometry-stroke-region.test.ts`) have two accepting band cases: the boundary moved by `2^-8` (xor `2^-8`, allowance about 0.4) and the new mesh translated by `2^-8` (xor `2^-6`).
+
+- **Justification from the contract.** Section 3 gives the resolution share: the arrangement resolves the union of the emitted pieces up to its rounded embedding at `τ = 2^(e−2)`. When each boundary point of the union is a one-sided displacement of the mesh boundary by at most `τ` (the kernel declares `error_bound = τ`), the symmetric difference is at most `τ·perimeter`. The strict two-sided bound is the `τ`-tube, about `2τ·perimeter + π·τ²` per loop, which allows a hole just inside an edge and a flap just outside; that is the hole-closing residual the ST-A0 amendment names. The allowance `perimeter·τ·(1 + 2^-40)`, with no corner term, is therefore a test band justified by the measured margin (at most 23% used), not a consequence of section 3. A result over the band on a new fixture means re-checking the band before blaming the kernel.
+- **This is stricter than §11.1's wording.** The table says "area difference at most perimeter times `τ`". A dated 2026-10-21 note in the contract says so; the frozen text is unchanged.
+- **Positive control.** `ST-O3 band control: a translated mesh of equal area is rejected` (`tests/unit/geometry-stroke-region.test.ts`): ST-F1's sweep with the mesh moved to `[100,104]×[49,51]` has mesh area equal to the union area and is rejected on the symmetric difference, and the `2^-8` translation is accepted.
+
+**M1, exact-mode scope.** `tests/geometry/stroke-oracle.test.ts` treated a region as exact when the ideal pieces were exact polygons and the input was axis-aligned. The oracle now also requires every ideal vertex to round-trip through binary64 (`idealStrokeVerticesBinary64`): `M(0,2^40) L(1,2^40)` with `w = 2^-30` has ideal corners `2^40 ± 2^-31`, which need 71 bits, so it takes the band. `axisAligned` consumed 2 scalars for a CUBIC verb; it now consumes 6 and accepts a cubic only when its control points and end lie on one axis line through the current point. A unit test covers the 71-bit example and ST-F1.
+
+**M2, ST-O1 disk count.** `StrokeDumpPiece` carries the dumped `disk` count as `diskVertices` on round caps, round joins, cusp disks and round point caps. ST-O1 compares it with `strokeDiskVertexCount(r, e, ‖c‖∞)` of the oracle for the piece's center, and for the pieces that are a bare disk (cusp disk, round point cap) requires the hull to have exactly `n` vertices, so the disk polygon is its own hull (simple and convex). Controls: a reported count of 8 where the rule gives 16 (ST-F3 cap), and a cusp disk with one vertex removed (ST-F16).
+
+**M3, the round cap's own triple.** `stroke_outline.rs` records a round cap's `E−` and `E+` in the piece's `extra`, as square caps record their extension points, and `dump.ts` reads them as the cap's triple (the center is the segment's). ST-O2 therefore compares the cap's own `E±` with the sweep triple at the end. Control: an `E−` replaced by `E+` on the ST-F3 end cap is rejected as not sharing the sweep triple; that oracle check already existed, so the control shows the check works on synthetic input. What M3 fixes is `dump.ts` taking the cap triple from the segment record, which made the comparison circular; its coverage is the integration run on the real dump. `extra` is read only by the dump test, so no mesh and no export byte moves. The release WASM comparison is below.
+
+**M6, dump case names.** `stroke_dump_tests.rs` writes case names through `json_escape`, which escapes the double quote, the backslash and every control character; a native test covers them.
+
+**Documentation minors (no code).** The ST-U3b table gains a derived "Builds" column and the measured tree's commit; the AL-U4b3 entry records its final base.
+
+Files: `packages/geometry-reference/src/stroke-region.ts`, `packages/geometry-wasm/kernel/src/stroke_outline.rs` (one `set_extra` call and one comment), `packages/geometry-wasm/kernel/src/stroke_dump_tests.rs`, `tests/geometry/stroke-oracle.test.ts`, `tests/geometry/stroke-oracle/dump.ts`, `tests/unit/geometry-stroke-region.test.ts`, `docs/plans/p3-b2-stroke-contract.md` (one dated note), and this plan.
+
+**Release WASM (M3).** It is **not** byte-identical to its base. With the change, the independent-build release WASM (`pnpm test:geometry`, two builds agree) is `480cb633…2b50`. The base (`HEAD` of #179, the same command and flags in a separate target directory) is `66324bcf…b449`. The ST-U5 export is live code, and the piece store is a live write, so the extra `set_extra` call changes the compiled bytes. The mesh outputs are unchanged: the 145 dump cases (all line and cubic fixtures) were dumped with the base and with the changed `stroke_outline.rs`, and the `status` and `mesh` of every case are equal (145 of 145). Every other dump field is equal too, except `extra` of the 12 round caps, which is the change itself. `extra` is read only by `stroke_dump_tests.rs`; no export path reads it.
+
+Validation:
+
+- `pnpm vitest run tests/unit/geometry-stroke-region.test.ts`: PASS, 173 tests (the 3 new controls and tests included).
+- `vitest run --config vitest.geometry.config.ts tests/geometry/stroke-oracle.test.ts` with `P2_NATIVE_RUSTUP` set: PASS, 22 tests, with the stricter ST-O3 band, the binary64 exact-mode scope, the disk count and the round cap's own triple.
+- `pnpm test:geometry`: PASS. Fixture generators, `cargo fmt --check` and `clippy --all-targets -D warnings` clean. Native 446 passed and 55 ignored. The release WASM and the independent rebuild are identical (`480cb633…2b50`). Vitest: 51 files passed and 4 skipped; 892 tests passed and 6 skipped.
+- `pnpm check`: PASS. Format, lint, typecheck and boundaries pass; `test:unit` 69 files and 945 tests.
+- `pnpm build`: PASS.
+- `prettier --check --ignore-path <empty file>` on this plan and the contract: clean. A link check of both documents (a script resolving relative file links and GitHub heading anchors): 363 links, 0 broken. `git diff --check`: PASS.
+- **Independent review:** READY WITH FOLLOW-UPS (no blocking item). Both SHOULD-FIX items are applied: the S1 band is now described as a test band justified by the measured margin, the same way in the plan and the contract, and the acceptance check is revised to "status and mesh unchanged; WASM bytes may change". Its minors are applied: the M3 control is described as a synthetic check, an overfull 32-vertex disk reported as 16 is added as an M2 control that only the new count check rejects (its findings are empty with that check disabled), the redundant area check carries a comment, the contract header lists the new note, and the builds column is marked approximate. `origin/main` (with #179) is merged in.
+- **Not run:** `pnpm test:p3-fill-identity` and `pnpm test:p2-identity` (no fill or P2 file changed).
 
 ### B0 runner (light tier)
 

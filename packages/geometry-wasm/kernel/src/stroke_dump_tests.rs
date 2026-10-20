@@ -133,6 +133,25 @@ fn triple_text(value: Triple) -> String {
     )
 }
 
+/// A JSON string body: the double quote, the backslash and every control character are escaped.
+fn json_escape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => {
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 fn status_name(status: u32) -> &'static str {
     match status {
         STROKE_PATH_EMPTY => "empty",
@@ -191,7 +210,7 @@ fn dump_case(workspace: &mut StrokeWorkspace, case: &Case) -> String {
     write!(
         line,
         "{{\"name\":\"{}\",\"request\":{{\"width\":{},\"cap\":\"{}\",\"join\":\"{}\",\"miterLimit\":{},\"exponent\":{}}}",
-        case.name,
+        json_escape(&case.name),
         hex(request.width),
         cap_name(request.cap),
         join_name(request.join),
@@ -434,4 +453,12 @@ fn dump_reads_its_input_and_frames_each_case() {
             assert!(!body.contains("\"cusp-disk\""), "{body}");
         }
     }
+}
+
+/// M6: a case name with a quote, a backslash or a control character stays valid JSON.
+#[test]
+fn dump_escapes_case_names() {
+    assert_eq!(json_escape("ST-F1/a"), "ST-F1/a");
+    assert_eq!(json_escape("a\"b\\c"), "a\\\"b\\\\c");
+    assert_eq!(json_escape("t\u{1}\u{1f}\r"), "t\\u0001\\u001f\\r");
 }

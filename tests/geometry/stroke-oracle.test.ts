@@ -24,6 +24,7 @@ import {
   checkStrokeResolution,
   classifyStrokeSource,
   idealStrokeExactArea,
+  idealStrokeVerticesBinary64,
   type Point,
   type StrokeOracleSource,
 } from '../../packages/geometry-reference/src/index.js';
@@ -107,6 +108,17 @@ function axisAligned(source: StrokeCase): boolean {
     if (verb === 3) {
       if (current[0] !== start[0] && current[1] !== start[1]) return false;
       current = start;
+      continue;
+    }
+    // A CUBIC verb consumes 6 scalars; it is axis-aligned only when its control points and end
+    // all lie on the axis line through the current point.
+    if (verb === 2) {
+      const [x1, y1, x2, y2, x3, y3] = [0, 1, 2, 3, 4, 5].map((k) => source.points[scalar + k]!);
+      scalar += 6;
+      const sameX = x1 === current[0] && x2 === current[0] && x3 === current[0];
+      const sameY = y1 === current[1] && y2 === current[1] && y3 === current[1];
+      if (!sameX && !sameY) return false;
+      current = [x3!, y3!];
       continue;
     }
     const next: [number, number] = [source.points[scalar]!, source.points[scalar + 1]!];
@@ -195,7 +207,10 @@ describe('ST-U3 line strokes through the dump hand-off', () => {
       // ST-O4's scope (section 11.1): axis-aligned segments, integer data, no arcs. A rational
       // non-axis normal (ST-F5, ST-F25) has an exact ideal polygon, but its binary64 samples and
       // the arrangement's rounding are inexact, so it takes ST-O3's tau band.
-      const exactIdeal = idealStrokeExactArea(oracleSource) !== null && axisAligned(source);
+      // Exact mode also needs every ideal vertex to round-trip through binary64: with a width
+      // below the spacing of the coordinates (M(0,2^40) L(1,2^40), w = 2^-30) the ideal corner
+      // is not representable and the emitted polygon cannot equal it.
+      const exactIdeal = idealStrokeVerticesBinary64(oracleSource) && axisAligned(source);
       report(
         'ST-O3',
         checkStrokeResolution(

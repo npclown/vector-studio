@@ -60,7 +60,10 @@ export type DumpPiece = Readonly<{
   nextVerb: number | null;
   /** A zero-area hull, dropped from the arrangement. */
   dropped: boolean;
-  /** Joins: outer in, outer out and the miter tip. Square caps: the two extension points. */
+  /**
+   * Joins: outer in, outer out and the miter tip. Square caps: the two extension points.
+   * Round caps: the cap's own `E-` and `E+`.
+   */
   extra: readonly DumpPoint[];
   t: readonly [number, number];
   disk: number;
@@ -269,6 +272,7 @@ export function oraclePieces(entry: DumpEntry, source: StrokeCase): StrokeDumpPi
           verb: piece.verb,
           parameter: piece.t[0],
           center: piece.samples[0][1],
+          diskVertices: piece.disk,
           polygon,
         };
       case 'bevel':
@@ -282,6 +286,7 @@ export function oraclePieces(entry: DumpEntry, source: StrokeCase): StrokeDumpPi
           outerIn: piece.extra[0]!,
           outerOut: piece.extra[1]!,
           tip: piece.extra[2] ?? null,
+          ...(piece.kind === 'round-join' ? { diskVertices: piece.disk } : {}),
           polygon,
         };
       case 'round-cap':
@@ -293,8 +298,18 @@ export function oraclePieces(entry: DumpEntry, source: StrokeCase): StrokeDumpPi
           end: end ? 'end' : 'start',
           verb: piece.verb,
           cap: piece.kind === 'round-cap' ? 'round' : 'square',
-          triple: sample(end ? segment.end : segment.start),
+          // A round cap records its own `E-` and `E+` (the center is the segment's); a square
+          // cap's hull uses the segment triple, so it is taken from there.
+          triple:
+            piece.kind === 'round-cap'
+              ? {
+                  minus: piece.extra[0]!,
+                  center: sample(end ? segment.end : segment.start).center,
+                  plus: piece.extra[1]!,
+                }
+              : sample(end ? segment.end : segment.start),
           extension: piece.kind === 'square-cap' ? [piece.extra[0]!, piece.extra[1]!] : null,
+          ...(piece.kind === 'round-cap' ? { diskVertices: piece.disk } : {}),
           polygon,
         };
       }
@@ -305,6 +320,7 @@ export function oraclePieces(entry: DumpEntry, source: StrokeCase): StrokeDumpPi
           subpath: piece.segment,
           cap: piece.kind === 'point-round' ? 'round' : 'square',
           point: movePoint(source, piece.segment),
+          ...(piece.kind === 'point-round' ? { diskVertices: piece.disk } : {}),
           polygon,
         };
       default:
