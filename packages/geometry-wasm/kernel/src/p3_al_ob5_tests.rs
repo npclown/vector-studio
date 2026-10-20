@@ -13,7 +13,8 @@ use core::f64::consts::{PI, TAU};
 use crate::codec::{align_up, read_u32, write_f64, write_u32};
 use crate::engine::{BATCH_OK, BATCH_OUTPUT_CAPACITY};
 use crate::fill_export::{
-    FillEngine, FillRequest, FILL_INPUT_MAGIC, FILL_OUTPUT_MAGIC, FILL_PATH_OK, FILL_V0_VERSION,
+    FillEngine, FillRequest, PathOutcome, FILL_INPUT_MAGIC, FILL_OUTPUT_MAGIC, FILL_PATH_OK,
+    FILL_V0_VERSION,
 };
 use crate::fill_ladder::Rung;
 use crate::line_fill::LineFillRule;
@@ -272,6 +273,16 @@ fn run_set(paths: &[RingPath], expect_ok_batch: bool) -> Option<Vec<Outcome>> {
             )
             .expect("engine reserved")
             .expect("no self-check failure");
+        // The rung comes from a second build of the same path; it must agree with the batch record.
+        let expected = if status == FILL_PATH_OK {
+            PathOutcome::Mesh
+        } else {
+            PathOutcome::Status(status)
+        };
+        assert_eq!(
+            built.outcome, expected,
+            "path {index}: build_one disagrees with the batch record"
+        );
         outcomes.push(Outcome {
             status,
             vertices,

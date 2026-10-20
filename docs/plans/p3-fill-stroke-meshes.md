@@ -2044,7 +2044,7 @@ Full tier, 2026-10-21, independent review round 1 READY WITH FOLLOW-UPS (applied
 
 ### Alt-A1 AL-OB5 OB5-U1 generator and admission expectation
 
-Light-tier unit of the approved [AL-OB5 proposal](p3-al-ob5-workload-scenario-proposal.md#6-units), 2026-10-21. Test-only: no product source, contract, dependency, threshold or B0 module changes, and no timing or performance claim. Precision label: UNVERIFIED pending the independent diff review.
+Light-tier unit of the approved [AL-OB5 proposal](p3-al-ob5-workload-scenario-proposal.md#6-units), 2026-10-21. Test-only: no product source, contract, dependency, threshold or B0 module changes, and no timing or performance claim. Precision is UNVERIFIED against the 0.25 physical-pixel target until B4.
 
 **Deliverables.**
 
@@ -2070,15 +2070,15 @@ B0's corpus bytes are unchanged.
 | OB5-W4 | 1,000 | ok     | 0 (fast) | 128 | 126 | 128 |
 | OB5-W8 | 1,000 | ok     | 0 (fast) | 256 | 254 | 256 |
 
-**Observation only, not an expectation: OB5-W8U (unsnapped, generic coordinates).** Native run on the same engine: 911 paths `ok` on rung 0 with V 256, T 254, B 256; 89 paths status 5 (`work-limit`) with the exact rung as the last rung tried. This is recorded for the OB5-Q7 (a) observation. It is outside the decision sets and the verdict, and it does not change the generator. Whether the browser and the platform `sin`/`cos` reproduce this split is not claimed.
+**Observation only, not an expectation: OB5-W8U (unsnapped, generic coordinates).** Native run on the same engine over the Rust generator's own unsnapped bits: 911 paths `ok` on rung 0 with V 256, T 254, B 256; 89 paths status 5 (`work-limit`) with the exact rung as the last rung tried. This is recorded for the OB5-Q7 (a) observation. It is outside the decision sets and the verdict, and it does not change the generator. Those bits differ from the hashed TypeScript OB5-W8U corpus (`8c6618be…96fc`) in most paths (the review counted 712 of 1,000 paths and 4,717 scalars), because unsnapped coordinates keep the platform `sin`/`cos` rounding; so the split describes the Rust bits, not the hashed corpus. OB5-U2 and OB5-U3 take the Q7 (a) observation from the TypeScript corpus bytes. The decision sets are unaffected: all 3,000 snapped paths are bit-identical between the two generators on this machine (V8 and MSVC libm), and OB5-U2's native leg reads the TypeScript-encoded corpus or verifies its SHA-256 (OB5-V4), so the expectation does not depend on CI's libm.
 
 **Validation.**
 
-- `pnpm test:geometry`: native stage PASS (fmt, clippy `-D warnings`, `cargo test` 449 passed, 56 ignored, 0 failed, including the three new OB5-U1 tests and the fixture check; release WASM built twice with identical hashes). The Vitest stage ran 51 files passed and 1 failed: `extent-t03-local.test.ts` hit a 60 s timeout while this machine also ran `pnpm check`, a scratch WASM build and a Prettier pass; re-run alone with the new `p3-al-ob5-corpus.test.ts` it passes (2 files, 9 tests). The new Vitest file passed in the full run (5 tests). A clean uncontended full re-run is left to CI.
+- `pnpm test:geometry`: native stage PASS (fmt, clippy `-D warnings`, `cargo test` 449 passed, 56 ignored, 0 failed, including the three new OB5-U1 tests (the fixture check is one of them) and one ignored fixture emitter; release WASM built twice with identical hashes). The Vitest stage ran 51 files passed and 1 failed: `extent-t03-local.test.ts` hit a 60 s timeout while this machine also ran `pnpm check`, a scratch WASM build and a Prettier pass; re-run alone with the new `p3-al-ob5-corpus.test.ts` it passes (2 files, 9 tests). The new Vitest file passed in the full run (5 tests). A clean uncontended full re-run is left to CI.
 - `pnpm check`: PASS. Prettier, ESLint, typecheck, `pnpm test:unit` 69 files and 945 tests, boundaries. `pnpm build`: PASS.
 - `git diff --exit-code origin/main -- Cargo.toml Cargo.lock pnpm-lock.yaml packages/contracts` (AL-A2), and the kernel `Cargo.toml` and `Cargo.lock`: exit 0.
 - Release WASM: the independent-build SHA-256 printed by `pnpm test:geometry`, `480cb6336040254fed9bf3be2d620e87fcb723ea981c5b15c1bbb2275f0b2d50`, equals a release build of `origin/main`'s kernel in a scratch tree with the same flags and path remap.
-- Independent diff review: pending.
+- Independent diff review: READY WITH FOLLOW-UPS (no blocking item). Applied: the OB5-W8U observation is now described as the Rust bits, which differ from the hashed TypeScript corpus, and OB5-U2 takes the observation from the TypeScript bytes (SF1); the admission test now asserts that `build_one` agrees with the batch record for every path (SF2); the native leg dependency on libm is addressed for OB5-U2 (SF3); and the nits are fixed. The new link `#6-units` resolves.
 
 ### B2 ST-U2 stroke oracle
 
