@@ -271,7 +271,7 @@ describe('P3.2s native transverse arrangement preservation', () => {
   it('keeps retained storage stable, bounded, and certify allocation-free', () => {
     expect(new Set(nativeRows.map(({ inline_bytes }) => inline_bytes)).size).toBe(1);
     expect(new Set(nativeRows.map(({ allocated_bytes }) => allocated_bytes)).size).toBe(1);
-    expect(nativeRows.every(({ inline_bytes }) => inline_bytes > 0 && inline_bytes <= 4096)).toBe(
+    expect(nativeRows.every(({ inline_bytes }) => inline_bytes > 0 && inline_bytes <= 16_384)).toBe(
       true,
     );
     expect(

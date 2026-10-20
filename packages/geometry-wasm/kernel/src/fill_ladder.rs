@@ -80,8 +80,10 @@ const MAX_HALF_EDGES: usize = MAX_POINTS + 2 * MAX_DIAGONALS;
 /// P2's deepest leaf (`geometry.rs` `MAX_DEPTH`, enforced by `validate_leaf_partitions`).
 const MAX_LEAF_DEPTH: u32 = 20;
 
-// The FR5 candidate bitset holds one u64 row per certified edge (spike section 2.5).
-const _: () = assert!(MAX_EDGES <= 64);
+/// The FR5 candidate bitset holds one row per certified edge (spike section 2.5). Before B1 a
+/// row was one u64 (`MAX_EDGES <= 64`); B1 widens it to EDGE_WORDS words, bit j in word j / 64,
+/// which for at most 64 edges is the pre-B1 word.
+const EDGE_WORDS: usize = MAX_EDGES.div_ceil(64);
 // FR7 and AL-FR9 store vertex indices as u32.
 const _: () = assert!(MAX_POINTS <= u32::MAX as usize);
 
@@ -1068,7 +1070,7 @@ impl FastRung {
         merge_sort(&mut order[..count], &mut scratch[..count], |a, b| {
             xlo[a].total_cmp(&xlo[b]).then(a.cmp(&b))
         });
-        let mut marks = [0u64; MAX_EDGES];
+        let mut marks = [[0u64; EDGE_WORDS]; MAX_EDGES];
         self.stats.sweep_candidates = 0;
         self.stats.clearance_step2 = 0;
         self.stats.clearance_step3 = 0;
@@ -1094,13 +1096,18 @@ impl FastRung {
                     continue;
                 }
                 let (low, high) = (a.min(b), a.max(b));
-                marks[low] |= 1u64 << high;
+                marks[low][high / 64] |= 1u64 << (high % 64);
                 self.stats.sweep_candidates += 1;
                 self.clear_pair(a, b, r, r_squared)?;
             }
         }
         debug_assert!(
-            marks.iter().map(|row| row.count_ones()).sum::<u32>() == self.stats.sweep_candidates
+            marks
+                .iter()
+                .flatten()
+                .map(|word| word.count_ones())
+                .sum::<u32>()
+                == self.stats.sweep_candidates
         );
         Ok(())
     }

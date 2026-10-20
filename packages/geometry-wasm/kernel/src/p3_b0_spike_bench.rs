@@ -383,7 +383,7 @@ fn run_spike_decision() {
 
     // E5: the ladder workspace's inline size and its exact workspace's allocation.
     let mut ladder = new_ladder();
-    let mut probe = CubicFillWorkspace::new(LIMITS).expect("construct the prefix probe");
+    let mut probe = CubicFillWorkspace::new_pre_b1(LIMITS).expect("construct the prefix probe");
     json.key("workspace")
         .raw("{")
         .key("inlineBytes")
@@ -529,10 +529,11 @@ fn run_spike_diagnostic() {
     let timed = env_usize("P3_B0_DIAG_TIMED");
     let quantum = clock_quantum();
     let mut ladder = new_ladder();
-    let mut exact = CubicFillWorkspace::new(LIMITS).expect("construct the exact workspace");
+    let mut exact = CubicFillWorkspace::new_pre_b1(LIMITS).expect("construct the exact workspace");
     // The fast rung alone (section 5.8): its own prefix workspace and rung, no exact rung on a
     // fallback, so a stage stop never includes exact-rung time.
-    let mut prefix = CubicFillWorkspace::new(LIMITS).expect("construct the prefix workspace");
+    let mut prefix =
+        CubicFillWorkspace::new_pre_b1(LIMITS).expect("construct the prefix workspace");
     let mut fast = Box::new(FastRung::new());
     let mut json = Json::new();
     json.raw("{")
@@ -855,8 +856,8 @@ fn write_dump(text: &str) {
 fn run_spike_oracle() {
     let cells = read_corpus(&env::var("P3_B0_INPUT").expect("P3_B0_INPUT is required"));
     let mut ladder = new_ladder();
-    let mut exact = CubicFillWorkspace::new(LIMITS).expect("construct the exact workspace");
-    let mut probe = CubicFillWorkspace::new(LIMITS).expect("construct the prefix probe");
+    let mut exact = CubicFillWorkspace::new_pre_b1(LIMITS).expect("construct the exact workspace");
+    let mut probe = CubicFillWorkspace::new_pre_b1(LIMITS).expect("construct the prefix probe");
     let mut dump = Json::new();
     dump.raw("{")
         .key("schema")
@@ -1047,7 +1048,7 @@ fn run_spike_oracle() {
             // Paths 0-9 (B0's batch); for P4/s=16 also paths 0-99 (B0's linearity batch).
             let mut hash10 = FNV_OFFSET;
             let mut ok10 = true;
-            let mut workspace = CubicFillWorkspace::new(LIMITS).expect("checksum workspace");
+            let mut workspace = CubicFillWorkspace::new_pre_b1(LIMITS).expect("checksum workspace");
             for path in &cell.paths[..DECISION_PATHS] {
                 ok10 &= fold_exact_path(&mut workspace, cell, path, &mut hash10);
             }

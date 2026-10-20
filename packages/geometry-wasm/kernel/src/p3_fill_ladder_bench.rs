@@ -166,6 +166,9 @@ struct Harness {
 impl Harness {
     fn new(input_bytes: usize) -> Self {
         let mut engine = FillEngine::new();
+        // B1: AL-S1 measures and checks the frozen pre-B1 kernel (its SL-O4 reference is the
+        // 2026-10-17 record), so the engine runs in the test-only pre-B1 cap mode.
+        engine.hooks().pre_b1_caps = true;
         assert_eq!(
             engine.reserve(as_u32(input_bytes), INITIAL_OUTPUT_BYTES),
             BATCH_OK,
@@ -595,7 +598,7 @@ fn run_ladder_decision() {
         .number(harness.engine.heap_bytes())
         .raw("},");
 
-    let mut probe = CubicFillWorkspace::new(LIMITS).expect("construct the prefix probe");
+    let mut probe = CubicFillWorkspace::new_pre_b1(LIMITS).expect("construct the prefix probe");
     json.key("admission").raw("[");
     let mut admitted = Vec::new();
     let mut linearity_ok = false;
@@ -1012,7 +1015,8 @@ fn run_ladder_oracle() {
         json.string(name);
     }
     json.raw("]},").key("exactOutcomes").raw("[");
-    let mut workspace = CubicFillWorkspace::new(LIMITS).expect("construct the exact workspace");
+    let mut workspace =
+        CubicFillWorkspace::new_pre_b1(LIMITS).expect("construct the exact workspace");
     let mut checksums = Json::new();
     checksums.raw("[");
     let mut first_checksum = true;

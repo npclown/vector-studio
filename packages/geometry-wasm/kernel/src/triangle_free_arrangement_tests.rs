@@ -854,8 +854,8 @@ fn triangle_free_lifecycle_is_atomic_allocation_free_and_isolated() {
 
     let mut workspace = TransverseArrangementWorkspace::new(TopologyLimits::default()).unwrap();
     let mut independent = TransverseArrangementWorkspace::new(TopologyLimits::default()).unwrap();
-    assert_eq!(workspace.allocated_bytes(), 224_256);
-    assert_eq!(size_of::<TransverseArrangementWorkspace>(), 2_512);
+    assert_eq!(workspace.allocated_bytes(), 897_024);
+    assert_eq!(size_of::<TransverseArrangementWorkspace>(), 7_120);
     let independent_expected = assert_cap_success(&mut independent, &cap, &cap_kinds);
 
     assert_cap_failure_recovery(&mut workspace, &cap, &cap_kinds, |workspace| {
@@ -1161,8 +1161,8 @@ fn emit_triangle_free_arrangement() {
     let mut workspace = TransverseArrangementWorkspace::new(TopologyLimits::default()).unwrap();
     let allocated_bytes = workspace.allocated_bytes();
     let inline_bytes = size_of::<TransverseArrangementWorkspace>();
-    assert_eq!(allocated_bytes, 224_256);
-    assert_eq!(inline_bytes, 2_512);
+    assert_eq!(allocated_bytes, 897_024);
+    assert_eq!(inline_bytes, 7_120);
     println!("P3_NATIVE_TRIANGLE_FREE_ARRANGEMENT_BEGIN");
     for row in rows {
         let input = TopologyInput {
