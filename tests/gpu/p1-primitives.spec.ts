@@ -13,6 +13,7 @@ import {
 import { inspectPixels } from '../support/p1-visual-oracle.js';
 import { p1EvidenceDirectory, p1Source, p1Write } from '../support/p1-evidence.js';
 import { inspectNativePositions } from '../support/p1-position-oracle.js';
+import { collectP1Diagnostics, type P1PageDiagnostics } from './p1-diagnostics.js';
 
 declare global {
   interface Window {
@@ -23,6 +24,17 @@ declare global {
 // Full images, raw readbacks, source manifests and numeric reports are retained
 // explicitly. Avoid duplicating thousands of multi-megabyte protocol results in a trace.
 test.use({ trace: 'off' });
+
+// Page diagnostics (console, page errors, failed requests, HTTP >= 400) of the running test,
+// attached to the report when it fails. A worker runs one test at a time and each worker has its
+// own module instance, so one slot suffices with any worker count.
+let activeDiagnostics: P1PageDiagnostics | undefined;
+// Playwright requires the destructuring pattern even when no fixture is used.
+// eslint-disable-next-line no-empty-pattern
+test.afterEach(async ({}, info) => {
+  await activeDiagnostics?.attach(info);
+  activeDiagnostics = undefined;
+});
 
 async function render(page: Page, fixture: VisualFixture, dpr: number) {
   return page.evaluate(
@@ -46,9 +58,10 @@ for (const samples of [1, 4] as const) {
         const directory = p1EvidenceDirectory(info);
         const source = p1Source();
         p1Write(directory, 'source.json', JSON.stringify(source, null, 2));
-        const pageErrors: string[] = [];
-        page.on('pageerror', (error) => pageErrors.push(error.message));
+        const diagnostics = (activeDiagnostics = collectP1Diagnostics(page));
+        const pageErrors = diagnostics.pageErrors;
         await page.goto(`/p1-fixture.html?samples=${samples}`);
+        await diagnostics.waitForFixture();
         const capability = await page.evaluate(() => window.__vectorStudioP1.ready);
         expect(capability.supported, JSON.stringify(capability)).toBe(true);
         if (capability.supported) expect(capability.capabilities.sampleCount).toBe(samples);
@@ -137,9 +150,10 @@ for (const samples of [1, 4] as const) {
     const directory = p1EvidenceDirectory(info);
     const source = p1Source();
     p1Write(directory, 'source.json', JSON.stringify(source, null, 2));
-    const pageErrors: string[] = [];
-    page.on('pageerror', (error) => pageErrors.push(error.message));
+    const diagnostics = (activeDiagnostics = collectP1Diagnostics(page));
+    const pageErrors = diagnostics.pageErrors;
     await page.goto(`/p1-fixture.html?samples=${samples}`);
+    await diagnostics.waitForFixture();
     const capability = await page.evaluate(() => window.__vectorStudioP1.ready);
     expect(capability.supported, JSON.stringify(capability)).toBe(true);
     if (capability.supported) expect(capability.capabilities.sampleCount).toBe(samples);
