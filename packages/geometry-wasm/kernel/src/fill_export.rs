@@ -1263,13 +1263,13 @@ impl FillEngine {
             limits
         };
         let (scratch, scratch_bytes) = FillScratch::reserve(limits)?;
-        let workspace = CubicFillWorkspace::new(limits);
         #[cfg(test)]
-        let workspace = if self.test_hooks.pre_b1_caps {
-            CubicFillWorkspace::new_pre_b1(limits)
-        } else {
-            workspace
+        let workspace = match self.test_hooks.pre_b1_caps {
+            true => CubicFillWorkspace::new_pre_b1(limits),
+            false => CubicFillWorkspace::new(limits),
         };
+        #[cfg(not(test))]
+        let workspace = CubicFillWorkspace::new(limits);
         let workspace = workspace.map_err(construction_status)?;
         // Alt-A1 contract section 3.4: rung 0's storage, reserved once and fallibly beside the
         // workspace and the scratch, after the check that the scratch holds AL-FR9's records.
