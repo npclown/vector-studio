@@ -656,7 +656,12 @@ export class PathMeshPipeline {
     ) => {
       const node = present.get(nodeId);
       if (node === undefined || revisions.get(nodeId) !== revision) return false;
-      const current = paintKeyOf(node, paint);
+      // V3: a fill entry depends on fillRule only, so `fill: null` keeps it. A stroke entry
+      // needs the same stroke key fields; a null or width-0 stroke has none.
+      const current =
+        paint === 'fill'
+          ? Object.freeze({ paint: 'fill' as const, fillRule: node.geometry.fillRule })
+          : paintKeyOf(node, paint);
       const port = readings[paint];
       return (
         current !== null &&
