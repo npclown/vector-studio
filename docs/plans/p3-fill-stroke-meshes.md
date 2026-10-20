@@ -2695,6 +2695,10 @@ Validation:
 - **Independent review:** READY WITH FOLLOW-UPS (no blocking item). Both SHOULD-FIX items are applied: the S1 band is now described as a test band justified by the measured margin, the same way in the plan and the contract, and the acceptance check is revised to "status and mesh unchanged; WASM bytes may change". Its minors are applied: the M3 control is described as a synthetic check, an overfull 32-vertex disk reported as 16 is added as an M2 control that only the new count check rejects (its findings are empty with that check disabled), the redundant area check carries a comment, the contract header lists the new note, and the builds column is marked approximate. `origin/main` (with #179) is merged in.
 - **Not run:** `pnpm test:p3-fill-identity` and `pnpm test:p2-identity` (no fill or P2 file changed).
 
+### Alt-A1 AL-OB5 workload scenario proposal
+
+Full tier, DRAFT 2026-10-21, awaiting independent review and the user's approval: the [AL-OB5 proposal](p3-al-ob5-workload-scenario-proposal.md) fixes scenario `p3-al-ob5-workload` v1, the direct 1,000 × 32 workload measurement owed by [Alt-A1 section 5.4](p3-alt-a1-fill-ladder-contract.md#54-verifying-the-workload-itself), with units OB5-U1 to OB5-U3 and questions OB5-Q1 to OB5-Q7; no harness, run or record until then, and no budget or decision-rule change.
+
 ### B0 runner (light tier)
 
 Plan entry: implement section 9 item 1 of the [B0 contract](p3-b0-feasibility-benchmark-contract.md) without changing it. Acceptance check: `pnpm benchmark:p3-b0 --profile functional` completes end to end; the TypeScript generator and an independent Rust generator match committed fixture bits; a tampered record is rejected; `pnpm check`, `pnpm build` and `pnpm test:geometry` pass; the diagnostic flag builds and passes clippy in its own target directory; the WASM release artifact is byte-identical to main's. Evidence is recorded on the runner PR. A functional run is not performance evidence.
