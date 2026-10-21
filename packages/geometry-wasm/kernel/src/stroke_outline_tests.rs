@@ -1288,3 +1288,181 @@ fn seeded_defects_fail_their_named_tests() {
         "ST-D14"
     );
 }
+
+// ---- ST-U3c round-join shared vertex (ST-U8 review follow-up) ----
+
+/// The ST-U8 playground path `join-round`, `chevron(45, 52, -26)`: arms at the disk-table
+/// direction 45 degrees, so the inner offset points of both sweeps coincide geometrically
+/// with join-disk vertices. Before ST-U3c they differed by one ulp and the arrangement
+/// returned `Rounded(TopologyAmbiguous)`.
+const JOIN_ROUND_ENDS: [[f64; 2]; 2] = [
+    [-36.769_552_621_700_47, 10.769_552_621_700_477],
+    [36.769_552_621_700_47, 10.769_552_621_700_477],
+];
+/// `chevron(11.25, 52, -26)`, the reviewer's half-angle 11.25 reproduction.
+const HALF_ANGLE_11_25_ENDS: [[f64; 2]; 2] = [
+    [-10.144_696_744_838_669, 25.000_834_580_967_982],
+    [10.144_696_744_838_669, 25.000_834_580_967_982],
+];
+/// The ideal areas are the union of the two sweep rectangles and the inscribed 32-gons
+/// (inclusion-exclusion over convex intersections). The mesh is resolved under the
+/// arrangement's `tau = 2^(e-2)` rounding, so its area may differ from the union of the pieces
+/// by up to `tau` times the boundary length, which is below 256 for these paths. The band is
+/// `256 tau` (8 at `e = -3`). The first run used `1e-9`, which only an exactly representable
+/// region meets; the observed differences were 0.12 to 0.47 for the 45-degree fixtures and
+/// 0.006 for half-angle 11.25 (plan: B2 ST-U3c).
+const U3C_AREA_BAND: f64 = 256.0 / 32.0;
+
+fn chevron(ends: [[f64; 2]; 2]) -> PathSpec {
+    PathSpec::new()
+        .m(ends[0][0], ends[0][1])
+        .l(0.0, -26.0)
+        .l(ends[1][0], ends[1][1])
+}
+
+/// `(name, path, request, area, inside, outside)`. Every literal was fixed before its first
+/// run (plan: B2 ST-U3c round-join shared vertex).
+type SharedVertexCase = (
+    &'static str,
+    PathSpec,
+    StrokeRequest,
+    Option<f64>,
+    Vec<Point>,
+    Vec<Point>,
+);
+
+fn shared_vertex_cases() -> Vec<SharedVertexCase> {
+    let round = StrokeJoin::Round;
+    let p = |x: f64, y: f64| Point { x, y };
+    // B, a point 5.5 beyond B on the outer side, a point inside the inner corner (which is at
+    // (0, -26 + 6 sqrt 2) for the 45-degree arms).
+    let probes_45 = vec![p(0.0, -26.0), p(0.0, -31.5), p(0.0, -18.0)];
+    let outside_45 = vec![p(0.0, -32.5), p(0.0, -17.0)];
+    let mut cases: Vec<SharedVertexCase> = vec![
+        (
+            "ST-U3c/join-round",
+            chevron(JOIN_ROUND_ENDS),
+            request(12.0, BUTT, round, 4.0, -3),
+            Some(1_240.093_006_370_322_7),
+            probes_45.clone(),
+            outside_45.clone(),
+        ),
+        (
+            "ST-U3c/chevron-45-exact",
+            chevron([[-36.0, 10.0], [36.0, 10.0]]),
+            request(12.0, BUTT, round, 4.0, -3),
+            Some(1_213.973_524_260_676_4),
+            probes_45.clone(),
+            outside_45.clone(),
+        ),
+        (
+            "ST-U3c/half-angle-11.25",
+            chevron(HALF_ANGLE_11_25_ENDS),
+            request(12.0, BUTT, round, 4.0, -3),
+            Some(1_116.178_539_431_534),
+            vec![p(0.0, -26.0), p(0.0, -31.5), p(0.0, 0.0)],
+            vec![p(0.0, -32.5), p(0.0, 6.0)],
+        ),
+        (
+            "ST-U3c/join-round-round-caps",
+            chevron(JOIN_ROUND_ENDS),
+            request(12.0, StrokeCap::Round, round, 4.0, -3),
+            Some(1_352.465_031_851_612_8),
+            // Also 5.5 beyond the start along the outward tangent.
+            [probes_45.clone(), vec![p(-40.658_627_7, 14.658_627_7)]].concat(),
+            [outside_45.clone(), vec![p(-41.365_734_5, 15.365_734_5)]].concat(),
+        ),
+    ];
+    // The reviewer's other tolerances and width: `ok` with B and the inner overlap inside.
+    for (name, width, exponent) in [
+        ("ST-U3c/join-round-e-5", 12.0, -5),
+        ("ST-U3c/join-round-e-1", 12.0, -1),
+        ("ST-U3c/join-round-e3", 12.0, 3),
+        ("ST-U3c/join-round-w4", 4.0, -3),
+    ] {
+        cases.push((
+            name,
+            chevron(JOIN_ROUND_ENDS),
+            request(width, BUTT, round, 4.0, exponent),
+            None,
+            vec![p(0.0, -26.0), p(0.0, -25.0)],
+            vec![],
+        ));
+    }
+    cases
+}
+
+#[test]
+fn st_u3c_round_join_shared_vertex_fixtures_are_ok() {
+    let mut ws = workspace();
+    for (name, path, request, expected, inner, outer) in shared_vertex_cases() {
+        assert_eq!(run(&mut ws, &path, request), StrokeOutcome::Mesh, "{name}");
+        if let Some(expected) = expected {
+            let found = area(&ws);
+            assert!(
+                (found - expected).abs() <= U3C_AREA_BAND,
+                "{name}: area {found} vs {expected}"
+            );
+        }
+        for probe in inner {
+            assert!(inside(&ws, probe), "{name}: {probe:?} inside");
+        }
+        for probe in outer {
+            assert!(!inside(&ws, probe), "{name}: {probe:?} outside");
+        }
+    }
+}
+
+/// Section 4.2 sharing, bit for bit: in every ST-U3c fixture, each offset point `E-`, `E+` of
+/// a triple adjacent to a round join or cap that lies on the disk piece at all is one of its
+/// vertices exactly, and no two distinct piece vertices of the path are within `1e-9`.
+#[test]
+fn st_u3c_disk_vertices_share_the_sweep_offset_points() {
+    let mut ws = workspace();
+    for (name, path, request, ..) in shared_vertex_cases() {
+        assert_eq!(run(&mut ws, &path, request), StrokeOutcome::Mesh, "{name}");
+        let bits = |p: Point| (p.x.to_bits(), p.y.to_bits());
+        let mut all: Vec<Point> = Vec::new();
+        let mut shared = 0;
+        for piece in ws.pieces().iter().filter(|piece| !piece.dropped) {
+            let points = ws.piece_points(piece).unwrap();
+            all.extend_from_slice(points);
+            let segment = ws.segments()[piece.segment];
+            let triples = match piece.kind {
+                PieceKind::RoundJoin => {
+                    let next = segment.join_after.unwrap().next;
+                    vec![segment.end, ws.segments()[next].start]
+                }
+                PieceKind::RoundCap if piece.t0 == 0.0 => vec![segment.start],
+                PieceKind::RoundCap => vec![segment.end],
+                _ => continue,
+            };
+            for triple in triples {
+                for target in [triple.minus, triple.plus] {
+                    let exact = points.iter().any(|v| bits(*v) == bits(target));
+                    let near = points
+                        .iter()
+                        .any(|v| (v.x - target.x).abs().max((v.y - target.y).abs()) <= 1e-9);
+                    assert_eq!(exact, near, "{name}: {target:?} shared bit for bit");
+                    shared += usize::from(exact);
+                }
+            }
+        }
+        // Each join shares its two outer and two inner points; each round cap its two.
+        let caps = if request.cap == StrokeCap::Round {
+            4
+        } else {
+            0
+        };
+        assert_eq!(shared, 4 + caps, "{name}: shared offset points");
+        for (index, a) in all.iter().enumerate() {
+            for b in &all[index + 1..] {
+                let close = (a.x - b.x).abs().max((a.y - b.y).abs()) <= 1e-9;
+                assert!(
+                    !close || bits(*a) == bits(*b),
+                    "{name}: {a:?} and {b:?} are distinct but within 1e-9"
+                );
+            }
+        }
+    }
+}

@@ -186,7 +186,7 @@ const CELLS: readonly (readonly Cell[])[] = [
     },
     {
       id: 'join-round',
-      label: 'Round join, same chevron (known defect ST-U3c: not drawn)',
+      label: 'Round join, same chevron',
       data: chevron(45, 52, -26),
       stroke: stroke(ORANGE, 12, 'butt', 'round'),
     },

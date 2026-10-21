@@ -30,11 +30,6 @@ declare global {
 // draw count equals the expected count, and a few probes far from every edge show the paint
 // each path implies. Pixels near an edge are captured, not gated. Console errors are recorded,
 // not gated (one 404 for the favicon is expected).
-//
-// Known defect, gated as a tripwire: `join-round` (a 90-degree round join) is
-// `unsupported-geometry` (`Rounded(TopologyAmbiguous)`), because its join disk has a vertex 1 ulp
-// away from the sweep's offset point. It is tracked as follow-up ST-U3c in the plan; its fix
-// re-baselines every expectation that names `join-round`.
 
 test.use({ trace: 'off' });
 
@@ -59,9 +54,10 @@ type Expectation = Readonly<{
 
 /**
  * Observed literals, fixed at the first headed run (2026-10-21, ST-U8) and identical in Chrome and
- * Edge. They are current-kernel observations (revision 2, production limits): a limit raise or
- * ST-U9's fast rung may re-baseline them, and so does the ST-U3c fix of the `join-round` defect.
- * Keyed `dpr/view`.
+ * Edge. They are current-kernel observations (production limits): a limit raise or ST-U9's fast
+ * rung may re-baseline them. Re-baselined 2026-10-21 by ST-U3c (stroke revision 3): `join-round`
+ * is drawn, so its `unsupported-geometry` notice is gone and each view that shows it has one more
+ * mesh draw. Keyed `dpr/view`.
  */
 const EXPECTED: Readonly<Record<string, Expectation>> = {
   '1/overview-zoom-1': {
@@ -71,24 +67,22 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
       'cusp-f16-large stroke work-limit',
       'cusp-f16p stroke fringe-work-cap',
       'fill-stroke-circle stroke work-limit',
-      'join-round stroke unsupported-geometry',
       'wide-cubic stroke work-limit',
     ],
-    meshDraws: 16,
+    meshDraws: 17,
   },
   '1/zoom-0.01': {
-    notices: ['both-half null composition-unsupported', 'join-round stroke unsupported-geometry'],
-    meshDraws: 20,
+    notices: ['both-half null composition-unsupported'],
+    meshDraws: 21,
   },
   '1/zoom-0.25': {
     notices: [
       'both-half null composition-unsupported',
       'cusp-f16-large stroke work-limit',
       'fill-stroke-circle stroke fringe-work-cap',
-      'join-round stroke unsupported-geometry',
       'wide-cubic stroke work-limit',
     ],
-    meshDraws: 18,
+    meshDraws: 19,
   },
   '1/zoom-2-cusp': {
     notices: [
@@ -100,8 +94,8 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
     meshDraws: 6,
   },
   '1/zoom-4-joins': {
-    notices: ['cap-round stroke fringe-work-cap', 'join-round stroke unsupported-geometry'],
-    meshDraws: 4,
+    notices: ['cap-round stroke fringe-work-cap'],
+    meshDraws: 5,
   },
   '1/zoom-64-cusp': {
     notices: ['cusp-f16p stroke work-limit'],
@@ -122,18 +116,13 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
       'cusp-f16-large stroke work-limit',
       'cusp-f16p stroke fringe-work-cap',
       'fill-stroke-circle stroke work-limit',
-      'join-round stroke unsupported-geometry',
       'wide-cubic stroke work-limit',
     ],
-    meshDraws: 16,
+    meshDraws: 17,
   },
   '2/zoom-0.01': {
-    notices: [
-      'both-half null composition-unsupported',
-      'join-round stroke unsupported-geometry',
-      'wide-cubic stroke fringe-work-cap',
-    ],
-    meshDraws: 20,
+    notices: ['both-half null composition-unsupported', 'wide-cubic stroke fringe-work-cap'],
+    meshDraws: 21,
   },
   '2/zoom-64-extreme-miter-tip': {
     notices: [],
@@ -147,19 +136,14 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
       'cusp-f16p stroke work-limit',
       'cusp-shared-a stroke fringe-work-cap',
       'fill-stroke-circle stroke work-limit',
-      'join-round stroke unsupported-geometry',
       'thin-one-px stroke fringe-work-cap',
       'wide-cubic stroke work-limit',
     ],
-    meshDraws: 15,
+    meshDraws: 16,
   },
   '3/zoom-0.01': {
-    notices: [
-      'both-half null composition-unsupported',
-      'join-round stroke unsupported-geometry',
-      'wide-cubic stroke fringe-work-cap',
-    ],
-    meshDraws: 20,
+    notices: ['both-half null composition-unsupported', 'wide-cubic stroke fringe-work-cap'],
+    meshDraws: 21,
   },
   '3/zoom-64-extreme-miter-tip': {
     notices: [],
@@ -259,7 +243,7 @@ for (const dpr of [1, 2, 3]) {
         }
         if (state.ports?.fill.operationId !== 'geometry-wasm/fill-v0+r2')
           failures.push(`${key}: unexpected fill port ${JSON.stringify(state.ports)}`);
-        if (state.ports?.stroke.operationId !== 'geometry-wasm/stroke-v0+r2')
+        if (state.ports?.stroke.operationId !== 'geometry-wasm/stroke-v0+r3')
           failures.push(`${key}: unexpected stroke port ${JSON.stringify(state.ports)}`);
 
         // Probes, far from every edge, in the zoom 1 overview only (decoded in the page).

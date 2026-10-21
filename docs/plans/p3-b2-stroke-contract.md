@@ -45,6 +45,14 @@ Amended 2026-10-21 by the [ST-U4 cusp shared triple follow-up](p3-fill-stroke-me
 
 Amended 2026-10-21 by the [ST-U2 oracle hardening follow-up](p3-fill-stroke-meshes.md#b2-st-u2-oracle-hardening-review-follow-up): ST-O3's band mode also bounds the symmetric difference, a test band stricter than the frozen wording; see the dated note in section 11.1.
 
+Amended 2026-10-21 by the [ST-U3c round-join shared vertex follow-up](p3-fill-stroke-meshes.md#b2-st-u3c-round-join-shared-vertex-review-follow-up) (ST-U8 review), restoring §4.2's sharing and bumping the §7.1 identity:
+
+- **Defect.** A disk vertex `c + r·dir_j` and an adjacent triple's offset point `C ± fl(r·N)` at the same direction were computed separately, from the bisection table and from `n(d)`. They are one point in exact arithmetic, but in binary64 they could differ by an ulp. A round join whose arms lie along a table direction (the ST-U8 playground path `join-round`, `chevron(45, 52, −26)`) then failed with `Rounded(TopologyAmbiguous)` (`unsupported-geometry`).
+- **Algorithm change (§4.4).** After the disk vertices are formed, each offset point `E−`, `E+` of a triple at the disk's center replaces its nearest disk vertex (max norm, first index on a tie, at most one point per vertex) when that vertex lies within `δ = 8·2^-53·(‖c‖∞ + r)`. The triples are, for a join, the incoming end and outgoing start triples; for a round cap, its end triple; for a cusp disk, the knot triple. A round point cap has no triple and is unchanged. `n` and the count rule are unchanged; the snap is skipped when `δ` is not a normal number.
+- **ST-G2 holds unchanged.** A snapped vertex lies within `√2·δ·(1 + 3u) + (3.5k + 6)u·(‖c‖∞ + r) < g_arc` of its ideal position `c + r·dir_j`, because ST-U3's proved vertex bound leaves a margin of `(4.5k + 10)u·(‖c‖∞ + r) ≥ 14.5u·(‖c‖∞ + r)` and `√2·8 < 11.4`. The polygon is therefore still inscribed up to `g_arc`, and the count rule still bounds its Hausdorff distance by `2^(e−2)`. The proof is in the plan entry.
+- **Revision 3 (§7.1 identity rule).** The change alters `ok` meshes, so `operationId` becomes `'geometry-wasm/stroke-v0+r3'` and `stroke_v0_revision() == 3`, superseding revision 2. `stroke_v0_version()`, the magics, `abi_version()` and `fill_v0_*` are unchanged.
+- **Fixtures.** `ST-U3c/join-round` and seven related cases are added with literal expectations, and a bitwise check that each shared offset point is a disk-piece vertex.
+
 **Evidence label.** Every stroke result under this contract is functional evidence. Until B4 has A04 evidence, every report, PR description and screenshot states that precision is **UNVERIFIED** against the 0.25 physical-pixel target, as D8 [requires](p3-d8-parallel-tracks.md#rules). Stroke work closes no A01-A08 criterion and no C03-C05 item.
 
 **Identifiers.** This contract prefixes its own IDs with **ST-**: semantics rows ST-S1 to ST-S12, pieces ST-P1 to ST-P7, guards ST-G1 to ST-G6, oracles ST-O1 to ST-O5, fixtures ST-F1 to ST-F26, seeded defects ST-D1 to ST-D14, conformance cases SC01 to SC22, units ST-U2 to ST-U9 (with ST-U3b), acceptance ST-A0 to ST-A12, risks and open obligations ST-OB1 to ST-OB8. V2's cases C01-C18, V3's codes and the proposal's B2-Q1 to B2-Q9 keep their meaning.
@@ -223,6 +231,8 @@ The outer side at a turn is the right side (`E−`) when `cross(d_in, d_out) > 0
 
 Amended 2026-10-20, ST-A0 amendment (M4): the count rule's `(1 − 2^-40)` relative slack does not cover absolute subnormal rounding. A subtraction whose result is subnormal is exact, so `2^(e−2) − g_arc` itself carries no error. The residual is the rounding of `g_arc = (8k + 16)·2^-53·(‖c‖∞ + r)` and of the product with the slack factor when those results are subnormal. At `e = −1020`, `2^(e−4)` is subnormal (`2^-1024`), and each such rounding is at most a few units of `2^-1075`, an absolute error of about `2^-49` relative to `2^(e−4)`. The slack absorbs this except when `2^(e−2) − g_arc` is below about `2^-1035`; there the count rule guarantees `2^(e−2) + 2^-1075` instead of `2^(e−2)`. The code does not make these roundings exact (`stroke_outline.rs:1911-1912`). (Revised 2026-10-21 after the PR #176 re-review.)
 
+Amended 2026-10-21 (ST-U3c; see the header notes): a disk vertex within `δ = 8·2^-53·(‖c‖∞ + r)` of an adjacent triple's `E−` or `E+` is that point, bit for bit, so §4.2's sharing also holds where a disk direction meets an offset direction. ST-G2's `g_arc` bound still holds for the snapped vertex.
+
 ### 4.5 Cubic leaves
 
 A remaining cubic segment, split at its interior stationary parameters (section 4.6), is subdivided by de Casteljau midpoint splitting in Float64, depth-first and left-first, to a depth of at most 20. A leaf with controls `Q0..Q3` (the computed subcurve controls) is **accepted** when:
@@ -392,6 +402,8 @@ V1 rules 1-8 apply unchanged, with rule 5's region being section 2.2's stroke re
 The magics differ from P2's (`VGS2`, `VGR2`) and fill's (`VGF0`, `VGM0`). `abi_version()` stays 1 and `fill_v0_*` is unchanged. **Identity rule,** as V2's: a change that can alter an `ok` stroke mesh for some request changes the `operationId` and the revision together (for example to `'geometry-wasm/stroke-v0+r2'`); a change that only turns a failure into a success, such as a limit raise, keeps them.
 
 Amended 2026-10-21 (cusp shared triple; see the header notes): the identity is now `'geometry-wasm/stroke-v0+r2'` with `stroke_v0_revision() == 2`. The table above, the §8 adapter interface (`operationId`) and the SC21 row keep the frozen v0 values; all three are superseded by revision 2.
+
+Amended 2026-10-21 (ST-U3c round-join shared vertex; see the header notes): the identity is now `'geometry-wasm/stroke-v0+r3'` with `stroke_v0_revision() == 3`, superseding revision 2 in the same three places.
 
 ### 7.2 Exports
 
