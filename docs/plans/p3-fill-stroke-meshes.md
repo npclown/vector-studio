@@ -2845,6 +2845,10 @@ Light tier, closes ST-U6 re-review follow-up F1. No contract text changes.
 - **Tests.** Two unit tests in `tests/unit/st-u6-stroke-pipeline.test.ts`: the probe (the stroke port is called exactly once: the single batch of 8 is ok and its meshes stay protected while the fills resolve one per prepare), and the reverse case (stroke pending, fill ok: the fill port is called exactly once). Both fail without the fix (seeded mutation: revert the working-set addition).
 - **Independent review:** round 1 NOT READY on documentation only; round 2 READY (the V3 amendment matches the code exactly, and the anchors resolve). B1: the change widens V3 section d's working set, so it needs a V3 dated amendment, not only a plan reading; now added under V3 section d. S1: the final assertions are now exact, 16 draws and 0 evictions. S2: the protected paths are defined (drawability, node-state, paint-state and memo checks passed). S3: the no-stamp half stays untested, as stated in the code comment; accepted. The reviewer confirmed the protected set is bounded by the all-drawn working set, and that fill-only behaviour is unchanged.
 
+### B2 ST-U7 joint coverage
+
+Design addendum for ST-U7 drafted 2026-10-21 (**DRAFT**, independent review and ST7-Q1 to ST7-Q7 pending): [ST-U7 joint-coverage addendum](p3-b2-st-u7-joint-coverage-addendum.md), recommending a joint-coverage fill draw over a renderer-derived overlay; no ST-U7 code until it is frozen.
+
 ### B0 runner (light tier)
 
 Plan entry: implement section 9 item 1 of the [B0 contract](p3-b0-feasibility-benchmark-contract.md) without changing it. Acceptance check: `pnpm benchmark:p3-b0 --profile functional` completes end to end; the TypeScript generator and an independent Rust generator match committed fixture bits; a tampered record is rejected; `pnpm check`, `pnpm build` and `pnpm test:geometry` pass; the diagnostic flag builds and passes clippy in its own target directory; the WASM release artifact is byte-identical to main's. Evidence is recorded on the runner PR. A functional run is not performance evidence.
