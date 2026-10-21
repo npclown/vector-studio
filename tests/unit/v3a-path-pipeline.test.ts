@@ -1035,7 +1035,7 @@ describe('V3a device loss, ownership and host injection', () => {
       expect(readFileSync(file, 'utf8'), file).not.toMatch(/geometry-wasm/);
     const allowed = new Set([...host, ...edges, ...fixture]);
     for (const file of files.filter((candidate) => !allowed.has(candidate))) {
-      expect(readFileSync(file, 'utf8'), file).not.toMatch(/fillMesh|geometry-wasm/);
+      expect(readFileSync(file, 'utf8'), file).not.toMatch(/fillMesh|strokeMesh|geometry-wasm/);
     }
   });
 });

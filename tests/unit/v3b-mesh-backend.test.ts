@@ -688,7 +688,7 @@ describe('V4 host injection', () => {
     const allowed = new Set([...host, ...fixture]);
     for (const file of files.filter((candidate) => !allowed.has(candidate))) {
       expect(readFileSync(file, 'utf8'), file).not.toMatch(
-        /fillMesh|geometry-wasm|requiresMeshPipeline|meshPipeline/,
+        /fillMesh|strokeMesh|geometry-wasm|requiresMeshPipeline|meshPipeline/,
       );
     }
   });

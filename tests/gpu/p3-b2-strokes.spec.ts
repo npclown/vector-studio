@@ -28,7 +28,13 @@ declare global {
 // notices of each view are exactly the expected set (work-limit is the open ST-U9 decision, and
 // composition-unsupported is the open ST-U7 decision; both are shown, never hidden), the mesh
 // draw count equals the expected count, and a few probes far from every edge show the paint
-// each path implies. Pixels near an edge are captured, not gated.
+// each path implies. Pixels near an edge are captured, not gated. Console errors are recorded,
+// not gated (one 404 for the favicon is expected).
+//
+// Known defect, gated as a tripwire: `join-round` (a 90-degree round join) is
+// `unsupported-geometry` (`Rounded(TopologyAmbiguous)`), because its join disk has a vertex 1 ulp
+// away from the sweep's offset point. It is tracked as follow-up ST-U3c in the plan; its fix
+// re-baselines every expectation that names `join-round`.
 
 test.use({ trace: 'off' });
 
@@ -54,7 +60,8 @@ type Expectation = Readonly<{
 /**
  * Observed literals, fixed at the first headed run (2026-10-21, ST-U8) and identical in Chrome and
  * Edge. They are current-kernel observations (revision 2, production limits): a limit raise or
- * ST-U9's fast rung may re-baseline them. Keyed `dpr/view`.
+ * ST-U9's fast rung may re-baseline them, and so does the ST-U3c fix of the `join-round` defect.
+ * Keyed `dpr/view`.
  */
 const EXPECTED: Readonly<Record<string, Expectation>> = {
   '1/overview-zoom-1': {
@@ -302,6 +309,8 @@ for (const dpr of [1, 2, 3]) {
           );
           return { ...probe, observed, expected: expectedRgb, deviation };
         });
+        if (id === 'overview-zoom-1' && probes.length !== 5)
+          failures.push(`${key}: ${probes.length} probes in bounds, expected 5`);
         for (const report of probeReports) {
           if (report.deviation > PROBE_TOLERANCE)
             failures.push(
