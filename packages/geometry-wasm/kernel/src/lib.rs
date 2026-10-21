@@ -497,3 +497,8 @@ pub extern "C" fn stroke_v0_dispose() -> u32 {
 // Declared at the end of the file so that no existing line moves.
 #[cfg(test)]
 mod p3_al_ob5_tests;
+
+// P3 Alt-A1 AL-OB5 unit OB5-U2, the production-cap native harness, test-only. Declared at the
+// end of the file so that no existing line moves.
+#[cfg(test)]
+mod p3_al_ob5_bench;

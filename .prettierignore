@@ -63,3 +63,4 @@ docs/benchmarks/results/*_p3_p3-b0-feasibility-v1_*.json
 docs/benchmarks/results/*_p3_p3-b0-spike-ladder-v1_*.json
 docs/benchmarks/results/*_p3_p3-fill-ladder-v1_*.json
 docs/benchmarks/results/*_p3_p3-b0-wasm-v1_*.json
+docs/benchmarks/results/*_p3_p3-al-ob5-workload-v1_*.json
