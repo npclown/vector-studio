@@ -35,7 +35,8 @@ use crate::cubic_fill::{
 };
 use crate::engine::BATCH_OK;
 use crate::fill_export::{
-    tolerances, FillEngine, FillRequest, FILL_INPUT_MAGIC, FILL_V0_REVISION, PRE_B1_FILL_V0_LIMITS,
+    tolerances, FillEngine, FillRequest, FILL_INPUT_MAGIC, FILL_V0_LIMITS, FILL_V0_REVISION,
+    PRE_B1_FILL_V0_LIMITS,
 };
 use crate::fill_ladder::{
     exact_cascade, with_ladder_faults, BoundaryScan, ExactOutcome, ExactStep, FastRung, FillLadder,
@@ -700,6 +701,31 @@ impl DumpHarness {
         }
     }
 
+    /// The production caps (B1) instead of the pre-B1 cap mode, for the AL-OB5 oracle run of
+    /// `p3_al_ob5_bench.rs` (proposal OB5-V7), whose 32-cubic paths exceed the pre-B1 caps. The
+    /// frozen spike keeps its pre-B1 workspace, so AL-I3 reports `PREFIX` there, as expected.
+    pub(crate) fn production() -> Self {
+        let mut engine = FillEngine::new();
+        assert_eq!(
+            engine.reserve(ENGINE_INPUT_BYTES, ENGINE_OUTPUT_BYTES),
+            BATCH_OK,
+            "reserve the fill-v0 engine"
+        );
+        let workspace = || CubicFillWorkspace::new(FILL_V0_LIMITS).expect("workspace");
+        Self {
+            ladder: FillLadder::reserve(FILL_V0_LIMITS).expect("ladder"),
+            workspace: workspace(),
+            probe: workspace(),
+            exact: workspace(),
+            spike_workspace: CubicFillWorkspace::new_pre_b1(PRE_B1_FILL_V0_LIMITS)
+                .expect("workspace"),
+            fast: Box::new(FastRung::new()),
+            spike: Box::new(p3_b0_spike::FastRung::new()),
+            scan: OnceScan::new(),
+            engine,
+        }
+    }
+
     /// One dump line (without the newline).
     pub(crate) fn entry(&mut self, entry: &InputEntry) -> String {
         with_ladder_faults(&entry.faults, || match &entry.body {
@@ -900,7 +926,15 @@ impl DumpHarness {
 
 /// The whole framed dump of `entries`.
 pub(crate) fn dump(entries: &[InputEntry]) -> String {
-    let mut harness = DumpHarness::new();
+    dump_with(DumpHarness::new(), entries)
+}
+
+/// The whole framed dump of `entries` on the production caps (`DumpHarness::production`).
+pub(crate) fn dump_production(entries: &[InputEntry]) -> String {
+    dump_with(DumpHarness::production(), entries)
+}
+
+fn dump_with(mut harness: DumpHarness, entries: &[InputEntry]) -> String {
     let mut out = format!(
         "{FRAME_BEGIN}\n{{\"schema\":\"{DUMP_SCHEMA}\",\"revision\":{FILL_V0_REVISION},\"entries\":{}}}\n",
         entries.len()
