@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import type { FillMeshResult } from '@vector-studio/contracts';
 import { configHash } from './p3-b0/analysis.js';
 import { generateCellPaths } from './p3-b0/corpus.js';
+import { encodeDumpInput } from './p3-fill-ladder/corpus.js';
 import type { LadderEntry } from './p3-fill-ladder/dump.js';
 import {
   analyze,
@@ -326,6 +327,10 @@ function record(profile: Profile, shape: Shape = { initMs: 500, editMs: 1 }): Mu
     },
     corpus: CORPUS,
     observationCorpus: OBSERVATION,
+    oracleInput: (() => {
+      const input = encodeDumpInput(oracleInputs(profile));
+      return { sha256: sha256Hex(input), bytes: input.length };
+    })(),
     native: {
       repetitions: Array.from({ length: repetitions }, (_, repetition) =>
         nativeOutput(profile, repetition),
@@ -595,6 +600,37 @@ describe('AL-OB5 analysis', () => {
       expect(analyze(value as Ob5Record).verdict).toBe('INCONCLUSIVE');
     });
 
+  it('is INCONCLUSIVE, not INVALID, when a path fails in every leg (section 2.4)', () => {
+    const value = structuredClone(reference);
+    for (const browser of value.browsers)
+      for (const set of browser.capture!.sets)
+        if (set.set === 'OB5-W2') {
+          set.statuses[5] = 'work-limit';
+          set.vertices[5] = 0;
+          set.triangles[5] = 0;
+          set.boundaryPairs[5] = 0;
+        }
+    for (const repetition of value.native!.repetitions)
+      for (const set of repetition.sets)
+        if (set.set === 'OB5-W2') {
+          set.statuses[5] = 5;
+          set.vertices[5] = 0;
+          set.triangles[5] = 0;
+          set.boundaryPairs[5] = 0;
+        }
+    expect(failing(value)).toContain('OB5-V5');
+    expect(failing(value)).not.toContain('OB5-V1');
+    expect(failing(value)).not.toContain('OB5-V3');
+    expect(analyze(value as Ob5Record).verdict).toBe('INCONCLUSIVE');
+  });
+
+  it('fails OB5-V7 when SL-O3 checked nothing', () => {
+    const value = structuredClone(reference);
+    value.oracle!.gates['SL-O3'] = { checked: 0, failures: [] };
+    expect(failing(value)).toEqual(['OB5-V7']);
+    expect(analyze(value as Ob5Record).verdict).toBe('INVALID');
+  });
+
   it('names every validity item once', () => {
     expect(analyze(reference as Ob5Record).checks.map((item) => item.id)).toEqual([
       ...VALIDITY_IDS,
@@ -701,6 +737,13 @@ describe('validateOb5Record', () => {
         delete (value.environment as { cpu?: unknown }).cpu;
       },
       /stored analysis/u,
+    ],
+    [
+      'the oracle input',
+      (value) => {
+        (value as { oracleInput: { bytes: number } }).oracleInput.bytes += 1;
+      },
+      /oracle input hash/u,
     ],
     [
       'the scenario identity',

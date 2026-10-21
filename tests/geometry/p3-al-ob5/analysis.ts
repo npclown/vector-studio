@@ -1,6 +1,6 @@
 /**
  * P3 Alt-A1 AL-OB5 unit OB5-U2 (`docs/plans/p3-al-ob5-workload-scenario-proposal.md`
- * sections 3-5): scenario `p3-al-ob5-workload` v1, the direct measurement of the 1,000 횞 32
+ * sections 3-5): scenario `p3-al-ob5-workload` v1, the direct measurement of the 1,000 × 32
  * workload. The pinned configuration and its hash, the oracle-run evaluation (OB5-V7, OB5-V8),
  * the analysis of a record (the statistics of section 3.4, the validity items OB5-V1 to
  * OB5-V14 and the verdict of section 4), and the validator `validateOb5Record`.
@@ -21,7 +21,7 @@ import {
 import { sliverStatistics, type SpikeMesh } from '../p3-b0-spike/oracle.js';
 import { kernelSourceSha256, sha256Hex } from '../p3-b0-wasm/analysis.js';
 import { DUMP_SCHEMA, type LadderDump, type LadderEntry } from '../p3-fill-ladder/dump.js';
-import { type DumpInput } from '../p3-fill-ladder/corpus.js';
+import { encodeDumpInput, type DumpInput } from '../p3-fill-ladder/corpus.js';
 import {
   OPERATION_ID,
   OPERATION_REVISION,
@@ -117,7 +117,7 @@ function sampling(profile: Profile) {
   };
 }
 
-/** The flat command count of a fast mesh's source at 貫 leaves per cubic (B0's check 6). */
+/** The flat command count of a fast mesh's source at λ leaves per cubic (B0's check 6). */
 function flatCommands(lambda: number): number {
   return OB5_CUBICS * lambda + 2;
 }
@@ -454,6 +454,7 @@ export interface Ob5Record {
     readonly bytes: number;
     readonly fnv: string;
   };
+  readonly oracleInput: { readonly sha256: string; readonly bytes: number };
   readonly native: {
     readonly repetitions: readonly NativeOutput[];
     readonly failures: readonly { readonly stage: string; readonly error: string }[];
@@ -723,13 +724,16 @@ export function evaluateOb5Oracle(
   };
 }
 
-/** Gate status from the stored failure lists. SL-O1, SL-O2 and the harness need a check. */
+/**
+ * Gate status from the stored failure lists. SL-O1, SL-O2, SL-O3 and the harness need a check:
+ * an oracle gate that checked nothing must not pass (review of PR #185, SF2).
+ */
 export function oracleStatus(oracle: Ob5OracleResults | null) {
   const gates = ORACLE_GATES.map((id) => {
     const gate = oracle?.gates[id];
     const checked = gate?.checked ?? 0;
     const failures = gate?.failures.length ?? 0;
-    const needsCheck = id === 'SL-O1' || id === 'SL-O2' || id === 'harness';
+    const needsCheck = id === 'SL-O1' || id === 'SL-O2' || id === 'SL-O3' || id === 'harness';
     return {
       id,
       checked,
@@ -1015,10 +1019,20 @@ export function analyze(record: Ob5Record) {
   const browserSetLegs = legs.filter((leg) => leg.source !== 'native');
   const nativeSetLegs = legs.filter((leg) => leg.source === 'native');
 
+  // Section 2.4: a path or batch failure fails OB5-V5 and makes the verdict INCONCLUSIVE. The
+  // identity items OB5-V1 to OB5-V3 are therefore judged only on admitted legs (every path and
+  // edit ok, no batch failure), so a failing path is not also reported as an identity failure
+  // that would make the run INVALID (review of PR #185, SF1).
+  const admitted = (leg: SetLeg) =>
+    leg.batchFailures === 0 &&
+    leg.statuses.every((status) => status === 'ok') &&
+    leg.editStatuses.every((status) => status === 'ok');
+
   // OB5-V1: browser equals native (only two present checksums that differ fail).
   const v1: string[] = [];
   for (const leg of browserSetLegs) {
-    const natives = nativeSetLegs.filter((item) => item.set === leg.set);
+    if (!admitted(leg)) continue;
+    const natives = nativeSetLegs.filter((item) => item.set === leg.set && admitted(item));
     const nativeInit = new Set(natives.flatMap((item) => item.callChecksums));
     const nativePaths = natives[0]?.pathChecksums;
     for (const checksum of new Set(leg.callChecksums))
@@ -1044,6 +1058,7 @@ export function analyze(record: Ob5Record) {
   // OB5-V2: deterministic output.
   const v2: string[] = [];
   for (const leg of legs) {
+    if (!admitted(leg)) continue;
     if (new Set(leg.callChecksums).size > 1)
       v2.push(`${legName(leg)}: the set's calls fold differently`);
     const editDiffers = leg.editChecksums.filter(
@@ -1058,7 +1073,9 @@ export function analyze(record: Ob5Record) {
   }
   for (const id of setIds) {
     const distinct = new Set(
-      nativeSetLegs.filter((leg) => leg.set === id).map((leg) => canonicalJson(leg.pathChecksums)),
+      nativeSetLegs
+        .filter((leg) => leg.set === id && admitted(leg))
+        .map((leg) => canonicalJson(leg.pathChecksums)),
     );
     if (distinct.size > 1) v2.push(`native ${id}: per-path folds differ between repetitions`);
   }
@@ -1067,6 +1084,7 @@ export function analyze(record: Ob5Record) {
   // OB5-V3: expected meshes, flat commands and M.
   const v3: string[] = [];
   for (const leg of legs) {
+    if (!admitted(leg)) continue;
     const expected = expectations.get(leg.set);
     if (expected === undefined) {
       v3.push(`${legName(leg)}: unknown set`);
@@ -1563,6 +1581,13 @@ export function validateOb5Record(record: Ob5Record): void {
     record.observationCorpus.fnv !== fnvHex(observation)
   )
     throw new Error('observation corpus hash mismatch');
+  // The oracle run's input is regenerated too (review of PR #185, N1).
+  const oracleInput = encodeDumpInput(oracleInputs(record.scenario.profile));
+  if (
+    record.oracleInput.sha256 !== sha256Hex(oracleInput) ||
+    record.oracleInput.bytes !== oracleInput.length
+  )
+    throw new Error('oracle input hash mismatch');
   const asset = (name: string) =>
     record.builds.page.files.find((file) => file.path === name)?.sha256;
   if (
