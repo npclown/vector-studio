@@ -509,7 +509,8 @@ describe('ST-U6 review F1: a pending sibling paint does not churn the published 
     });
     for (let index = 0; index < 30; index += 1) h.prepare();
     expect(stroke.callCount).toBe(1);
-    expect(h.prepare().draws.length).toBeGreaterThan(0);
+    expect(h.prepare().draws.length).toBe(16);
+    expect(h.statistics().evictions).toBe(0);
   });
 
   it('ST-A10 (F1): the reverse case, a stroke batch failing above one request with an ok fill, builds each fill once', () => {
@@ -526,7 +527,8 @@ describe('ST-U6 review F1: a pending sibling paint does not churn the published 
     });
     for (let index = 0; index < 30; index += 1) h.prepare();
     expect(fill.callCount).toBe(1);
-    expect(h.prepare().draws.length).toBeGreaterThan(0);
+    expect(h.prepare().draws.length).toBe(16);
+    expect(h.statistics().evictions).toBe(0);
   });
 });
 
