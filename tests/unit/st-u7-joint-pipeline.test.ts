@@ -349,6 +349,9 @@ describe('ST-U7 joint records and overlay ranges (addendum section 4.5)', () => 
       expect(shadow.f32('meshPositions', 8 * (fill[12]! + vertex))).toBe(
         overlay.positions[2 * vertex],
       );
+      expect(shadow.f32('meshPositions', 8 * (fill[12]! + vertex) + 4)).toBe(
+        overlay.positions[2 * vertex + 1],
+      );
     }
     for (let entry = 0; entry < overlay.lists.length; entry += 1) {
       expect(shadow.u32('meshFeatureLists', 4 * (fill[13]! + entry))).toBe(overlay.lists[entry]);

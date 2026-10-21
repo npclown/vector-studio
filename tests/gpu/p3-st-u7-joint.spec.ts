@@ -121,7 +121,7 @@ for (const samples of [1, 4] as const) {
           const name = `st-a16-${viewId}-${index}-dpr${dpr}`;
           write(`${name}-o1.png`, pngOf(one));
           if (one.packet.jointDraws !== 0) failures.push(`${name} o=1: joint draws`);
-          if (viewId === 'identity') captured.set(`${index}/1`, onePixels);
+          captured.set(`${viewId}/${index}/1`, onePixels);
           for (const opacity of OPACITIES) {
             const atO = await render({ kind: 'st-a16', view: viewId, frame: index, opacity }, dpr);
             const atOPixels = pixelsOf(atO);
@@ -144,7 +144,7 @@ for (const samples of [1, 4] as const) {
             failures.push(...report.failures);
             stA16.push(report);
             packets.push({ scene: name, opacity, packet: atO.packet });
-            if (viewId === 'identity') captured.set(`${index}/${opacity}`, atOPixels);
+            captured.set(`${viewId}/${index}/${opacity}`, atOPixels);
           }
         }
       }
@@ -165,24 +165,27 @@ for (const samples of [1, 4] as const) {
             }
           }
         }
-        const identityFrames = layoutFrames(JOINT_VIEWS.find((view) => view.id === 'identity')!);
+        // Every ST-A16 view and frame, at o = 1, 0.5 and 0.25, outside the excluded band.
         let a16Compared = 0;
-        for (let index = 0; index < identityFrames.length; index += 1) {
-          for (const opacity of [1, ...OPACITIES]) {
-            const frame = await render(
-              { kind: 'st-a16', view: 'identity', frame: index, opacity },
-              dpr,
-            );
-            const after = pixelsOf(frame);
-            const reference = captured.get(`${index}/${opacity}`)!;
-            const band = excludedBand(identityFrames[index]!, dpr, frame.width, frame.height);
-            for (let pixel = 0; pixel < frame.width * frame.height; pixel += 1) {
-              if (band.mask[pixel] === 1) continue;
-              a16Compared += 1;
-              for (let channel = 0; channel < 4; channel += 1) {
-                if (after[4 * pixel + channel] !== reference[4 * pixel + channel]) {
-                  mismatches += 1;
-                  break;
+        for (const viewId of VIEW_ORDER) {
+          const viewFrames = layoutFrames(JOINT_VIEWS.find((view) => view.id === viewId)!);
+          for (let index = 0; index < viewFrames.length; index += 1) {
+            for (const opacity of [1, ...OPACITIES]) {
+              const frame = await render(
+                { kind: 'st-a16', view: viewId, frame: index, opacity },
+                dpr,
+              );
+              const after = pixelsOf(frame);
+              const reference = captured.get(`${viewId}/${index}/${opacity}`)!;
+              const band = excludedBand(viewFrames[index]!, dpr, frame.width, frame.height);
+              for (let pixel = 0; pixel < frame.width * frame.height; pixel += 1) {
+                if (band.mask[pixel] === 1) continue;
+                a16Compared += 1;
+                for (let channel = 0; channel < 4; channel += 1) {
+                  if (after[4 * pixel + channel] !== reference[4 * pixel + channel]) {
+                    mismatches += 1;
+                    break;
+                  }
                 }
               }
             }
@@ -307,7 +310,14 @@ test('P3 ST-U7 seeded defects fail their checks (UNVERIFIED precision)', async (
     const pageErrors: string[] = [];
     const { render } = await openPage(page, `samples=4&joint=1&defect=${defect.id}`, pageErrors);
     const a11 = await render({ kind: 'st-a11' }, 1);
-    const a11Failures = inspectStA11(1, a11.width, a11.height, pixelsOf(a11)).failures.length;
+    const a11Report = inspectStA11(1, a11.width, a11.height, pixelsOf(a11));
+    const a11Failures = a11Report.failures.length;
+    // ST7-D1 outputs o F' (opacity twice): ST-A11's specific check is the overlap's separation
+    // from the double-opacity value, which must then be at most 20/255 on a joint node.
+    const separationFailures = a11Report.failures.filter((failure) =>
+      failure.includes('from the double-opacity value'),
+    ).length;
+    const minimumSeparation = Math.min(...Object.values(a11Report.minimumSeparation));
     const a16: Record<string, number> = {};
     const frames = layoutFrames(JOINT_VIEWS.find((view) => view.id === 'identity')!);
     for (let index = 0; index < frames.length; index += 1) {
@@ -331,7 +341,7 @@ test('P3 ST-U7 seeded defects fail their checks (UNVERIFIED precision)', async (
     }
     const caught =
       defect.id === 'ST7-D1'
-        ? a11Failures > 0
+        ? separationFailures > 0 && minimumSeparation <= 20
         : defect.id === 'ST7-D10'
           ? (a16['o=0.25'] ?? 0) > 0
           : (a16['o=0.5'] ?? 0) + (a16['o=0.25'] ?? 0) > 0;
@@ -339,6 +349,8 @@ test('P3 ST-U7 seeded defects fail their checks (UNVERIFIED precision)', async (
       defect: defect.id,
       caughtBy: defect.caughtBy,
       a11Failures,
+      separationFailures,
+      minimumSeparation,
       a16OverTolerance: a16,
       caught,
       pageErrors,
