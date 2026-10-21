@@ -233,7 +233,7 @@ function derivedPaths(set: Ob5Set): DerivedPath[] {
         points: Array.from(request.points),
         fillRule: 'nonzero',
       },
-      style: { fill: { r: 0, g: 0, b: 0, a: 1 } },
+      style: { fill: { r: 0, g: 0, b: 0, a: 1 }, stroke: null },
     };
     return { id: node.id, node, world: [1, 0, 0, 1, 0, 0], hidden: false };
   });
