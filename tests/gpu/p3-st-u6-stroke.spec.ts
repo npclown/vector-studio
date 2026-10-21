@@ -22,8 +22,8 @@ declare global {
 // B2 stroke contract, ST-A10 (unit ST-U6): headed GPU stroke fixtures, labelled UNVERIFIED. The
 // V3 smoke fixture page runs in its `?stroke=1` mode with static test-double fill and stroke
 // ports (no WASM). It checks the approved example's stroke-only, overlap and fill-only pixels at
-// opacity 1, single-paint paths at opacity 0.5, and the interim composition-unsupported failure
-// for both paints at opacity 0.5, plus device-loss reconstruction with no port call. Precision is
+// opacity 1, single-paint paths at opacity 0.5, and both paints at opacity 0.5 drawn by the
+// joint fill draw (ST-U7), plus device-loss reconstruction with no port call. Precision is
 // UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence; no Q4 coverage
 // threshold is claimed and no A01-A08 criterion is closed. Edge pixels are captured, not gated.
 
@@ -69,10 +69,12 @@ for (const samples of [1, 4] as const) {
       write(`${name}.png`, Buffer.from(frame.png.split(',')[1]!, 'base64'));
       write(`${name}.rgba.gz`, gzipSync(pixels));
       failures.push(...report.failures);
-      // both-opaque draws fill then stroke, fill-half one fill, stroke-half one stroke, and the
-      // composition-unsupported both-half draws nothing.
+      // both-opaque draws fill then stroke, fill-half one fill, stroke-half one stroke, and
+      // both-half its joint fill draw then its stroke draw (ST-U7).
       if (frame.packet.meshDraws !== STROKE_FIXTURE_MESH_DRAWS)
-        failures.push(`${name}: ${frame.packet.meshDraws} mesh draws, expected 4`);
+        failures.push(
+          `${name}: ${frame.packet.meshDraws} mesh draws, expected ${STROKE_FIXTURE_MESH_DRAWS}`,
+        );
       if (frame.packet.analyticDraws !== 0)
         failures.push(`${name}: ${frame.packet.analyticDraws} analytic draws, expected 0`);
       observations.push({
@@ -146,7 +148,7 @@ for (const samples of [1, 4] as const) {
           injection:
             'Static test-double fill-mesh and stroke-mesh ports (no WASM), opaque black clear, COPY_SRC usage, explicit 4x rejection for the 1x fallback, post-submit staging copies; production shaders and packet path unmodified',
           gates:
-            'pixel centers >= 3 physical px from every boundary within 2/255 of the analytic two-draw composite; the both-paints-at-0.5 node draws nothing and reports composition-unsupported once with paint null; probed pixels equal after device loss with zero new port calls',
+            'pixel centers >= 3 physical px from every boundary within 2/255 of the analytic two-draw composite; the both-paints-at-0.5 node draws the joint composite (ST-U7, ST-A11); probed pixels equal after device loss with zero new port calls',
           observations,
           recovery,
           interim: interim.map((event) => event.context),
@@ -163,24 +165,16 @@ for (const samples of [1, 4] as const) {
     expect(recovery).not.toBeNull();
     expect(sourceAtEnd.manifestSha256).toBe(source.manifestSha256);
     expect(pageErrors).toEqual([]);
-    // The interim failure of the overlap case: once, on its transition, with paint null.
-    expect(interim.map((event) => event.context)).toEqual([
-      {
-        interim: 'd8',
-        nodeId: 'both-half',
-        failureScope: 'renderer',
-        failureCode: 'composition-unsupported',
-        toleranceExponent: null,
-        paint: null,
-      },
-    ]);
+    // ST-U7: the overlap case draws, so no D8-interim diagnostic is emitted.
+    expect(interim.map((event) => event.context)).toEqual([]);
     const errors = state.diagnostics.filter(
       (event) => event.severity === 'error' && event.code !== 'device-loss.detected',
     );
     expect(errors).toEqual([]);
-    // One batch per port at each DPR: DPR 2 needs a finer bucket (e = -7 after -6).
-    expect(state.port).toMatchObject({ calls: 2, requests: 4 });
-    expect(state.strokePort).toMatchObject({ calls: 2, requests: 4 });
+    // One batch per port at each DPR: DPR 2 needs a finer bucket (e = -7 after -6); both-half
+    // now meshes both paints, so each port serves three requests per DPR.
+    expect(state.port).toMatchObject({ calls: 2, requests: 6 });
+    expect(state.strokePort).toMatchObject({ calls: 2, requests: 6 });
     expect(disposed.resources.live).toBe(0);
   });
 }

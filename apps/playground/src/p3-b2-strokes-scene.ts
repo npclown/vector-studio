@@ -269,7 +269,7 @@ const CELLS: readonly (readonly Cell[])[] = [
   [
     {
       id: 'both-half',
-      label: 'Fill plus stroke at opacity 0.5: composition-unsupported until ST-U7 (not drawn)',
+      label: 'Fill plus stroke at opacity 0.5: the joint fill draw, opacity once (ST-U7)',
       data: SQUARE,
       fill: RED,
       stroke: stroke(BLUE, 10, 'butt', 'miter'),
