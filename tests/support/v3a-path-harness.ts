@@ -213,7 +213,10 @@ export function pathNode(
       points: overrides.points ?? [tag, 0, tag + 10, 0, tag + 10, 10],
       fillRule: overrides.fillRule ?? 'nonzero',
     },
-    style: { fill: overrides.fill === undefined ? { r: 1, g: 0, b: 0, a: 1 } : overrides.fill },
+    style: {
+      fill: overrides.fill === undefined ? { r: 1, g: 0, b: 0, a: 1 } : overrides.fill,
+      stroke: null,
+    },
   };
 }
 

@@ -137,7 +137,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   #meshOriginRevision = Symbol('mesh-origin');
   /** The generation whose first skipped mesh receipt stopped mesh draws and writes. */
   #meshStoppedGeneration: number | null = null;
-  /** P3 V3 section f: true exactly when this source consumes a fill-mesh port. */
+  /** P3 V3 section f: true exactly when this source consumes a fill-mesh or stroke-mesh port. */
   public readonly requiresMeshPipeline: boolean;
 
   public constructor(mirror: RetainedSceneMirror, pathMeshes?: PathMeshPipeline) {
@@ -380,6 +380,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     const pipeline = this.#pathMeshes;
     if (pipeline === undefined) return undefined;
     const slots = pipeline.getPathSlots();
+    // B2 stroke contract, section 9.5: a stroked node's stroke has its own second slot.
+    const strokeSlots = pipeline.getStrokeSlots();
     const notices = pipeline.takePacketNotices();
     if (slots.size === 0 && notices.length === 0) return undefined;
     if (slots.size === 0 || this.#meshStoppedGeneration === generation) {
@@ -400,6 +402,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       generation,
       draws: pathDraws,
       slots,
+      ...(strokeSlots.size === 0 ? {} : { strokeSlots }),
       resident: pipeline.getResidentIds(),
       frameLanes: meshFrame,
     });
@@ -413,7 +416,11 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       }),
       draws: Object.freeze(
         pathDraws.map((draw) => {
-          const placement = output.placements.get(draw.nodeId)!;
+          // A stroked path's fill and stroke draws share its sequence, so they get the same
+          // paint position and stay consecutive, fill first (B2 section 9.5).
+          const placement = (
+            draw.paint === 'stroke' ? output.strokePlacements : output.placements
+          ).get(draw.nodeId)!;
           return Object.freeze({
             sequence: sequences.get(draw.nodeId)!,
             draw: Object.freeze({

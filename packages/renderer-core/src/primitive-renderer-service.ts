@@ -9,6 +9,7 @@ import type {
   RenderSceneSnapshot,
   SceneApplyResult,
   SceneSynchronizationState,
+  StrokeMeshPort,
 } from '@vector-studio/contracts';
 
 import type {
@@ -26,6 +27,10 @@ export type PrimitiveRendererServiceOptions = Readonly<{
   fillMesh?: FillMeshPort;
   /** Host-supplied accounting hook, for example a V2 adapter's linearMemoryBytes. Not part of the port. */
   fillMeshMemoryBytes?: () => number;
+  /** B2 stroke contract, section 9.1. A stroke port without a fill port is allowed. */
+  strokeMesh?: StrokeMeshPort;
+  /** Host-supplied accounting hook for the stroke port's linear memory. Not part of the port. */
+  strokeMeshMemoryBytes?: () => number;
 }>;
 
 /** Owns the CPU scene mirror and packet source while the backend owns scheduling and native state. */
@@ -36,7 +41,10 @@ export class PrimitiveRendererService
   readonly #mirror: RetainedSceneMirror;
   readonly #source: PrimitiveSceneSource;
   #disposed = false;
-  /** P3 V3 section f: true exactly when a fill-mesh port is given; read by the backend at attach. */
+  /**
+   * P3 V3 section f: true exactly when a fill-mesh or a stroke-mesh port is given; read by the
+   * backend at attach.
+   */
   public readonly requiresMeshPipeline: boolean;
 
   public constructor(
@@ -45,25 +53,39 @@ export class PrimitiveRendererService
   ) {
     const port = options.fillMesh;
     const memoryBytes = options.fillMeshMemoryBytes;
+    const strokePort = options.strokeMesh;
+    const strokeMemoryBytes = options.strokeMeshMemoryBytes;
     if (port !== undefined) assertFillMeshPort(port);
     if (memoryBytes !== undefined && typeof memoryBytes !== 'function') {
       throw new TypeError('fillMeshMemoryBytes must be a function.');
     }
+    if (strokePort !== undefined) assertStrokeMeshPort(strokePort);
+    if (strokeMemoryBytes !== undefined && typeof strokeMemoryBytes !== 'function') {
+      throw new TypeError('strokeMeshMemoryBytes must be a function.');
+    }
     this.#invalidationTarget = invalidationTarget;
-    this.requiresMeshPipeline = port !== undefined;
-    // P3 V3 section a: path nodes are supported exactly when a port is given.
+    const anyPort = port !== undefined || strokePort !== undefined;
+    this.requiresMeshPipeline = anyPort;
+    // P3 V3 section a with the B2 section 9.1 amendment (S4): path nodes are supported when a
+    // fill port, a stroke port or both are given; fills exactly when a fill port is given, and
+    // strokes with width > 0 exactly when a stroke port is given.
     this.#mirror = new RetainedSceneMirror(undefined, {
-      pathNodes: port === undefined ? 'unsupported' : 'supported',
+      pathNodes: anyPort ? 'supported' : 'unsupported',
+      pathFills: port === undefined ? 'unsupported' : 'supported',
+      pathStrokes: strokePort === undefined ? 'unsupported' : 'supported',
     });
     this.#source = new PrimitiveSceneSource(
       this.#mirror,
-      port === undefined
+      !anyPort
         ? undefined
         : new PathMeshPipeline({
-            port,
-            // P3 V3 section e: the exact fringe builder, a D8-interim placement (V3-Q3 c).
-            fringeBuilder: buildPathFringe,
+            ...(port === undefined ? {} : { port }),
             ...(memoryBytes === undefined ? {} : { memoryBytes }),
+            ...(strokePort === undefined ? {} : { strokePort }),
+            ...(strokeMemoryBytes === undefined ? {} : { strokeMemoryBytes }),
+            // P3 V3 section e: the exact fringe builder, a D8-interim placement (V3-Q3 c); the
+            // stroke mesh uses it unchanged (B2 section 9.5).
+            fringeBuilder: buildPathFringe,
           }),
     );
   }
@@ -129,15 +151,26 @@ export class PrimitiveRendererService
 
 /** A malformed port is a host programming error, not scene input (P3 V3 section a). */
 function assertFillMeshPort(port: FillMeshPort): void {
-  const candidate = port as unknown as Record<string, unknown> | null;
-  if (
-    typeof candidate !== 'object' ||
-    candidate === null ||
-    candidate.portVersion !== 0 ||
-    typeof candidate.operationId !== 'string' ||
-    candidate.operationId.length === 0 ||
-    typeof candidate.buildFillMeshes !== 'function'
-  ) {
+  if (!hasPortShape(port, 'buildFillMeshes')) {
     throw new TypeError('fillMesh must be a FillMeshPort with portVersion 0.');
   }
+}
+
+/** V3's port shape check applied to the stroke port (B2 stroke contract, section 9.1). */
+function assertStrokeMeshPort(port: StrokeMeshPort): void {
+  if (!hasPortShape(port, 'buildStrokeMeshes')) {
+    throw new TypeError('strokeMesh must be a StrokeMeshPort with portVersion 0.');
+  }
+}
+
+function hasPortShape(port: unknown, method: string): boolean {
+  const candidate = port as Record<string, unknown> | null;
+  return (
+    typeof candidate === 'object' &&
+    candidate !== null &&
+    candidate.portVersion === 0 &&
+    typeof candidate.operationId === 'string' &&
+    candidate.operationId.length > 0 &&
+    typeof candidate[method] === 'function'
+  );
 }

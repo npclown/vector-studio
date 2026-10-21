@@ -32,7 +32,20 @@ export type ScenePathGeometry = Readonly<{
   points: readonly number[];
   fillRule: SceneFillRule;
 }>;
-export type PathStyle = Readonly<{ fill: SceneColor | null }>;
+export type SceneStrokeCap = 'butt' | 'round' | 'square';
+export type SceneStrokeJoin = 'miter' | 'round' | 'bevel';
+/** A path stroke (P3 B2 stroke contract, section 5). Primitive strokes keep SceneStroke. */
+export type PathStroke = Readonly<{
+  color: SceneColor;
+  /** Node-local units, finite, >= 0. */
+  width: number;
+  cap: SceneStrokeCap;
+  join: SceneStrokeJoin;
+  /** Finite, >= 1, required for every join kind. */
+  miterLimit: number;
+}>;
+/** `stroke` is required and explicitly null when absent. */
+export type PathStyle = Readonly<{ fill: SceneColor | null; stroke: PathStroke | null }>;
 export type SceneNodeBase = Readonly<{
   id: string;
   parentId: string | null;

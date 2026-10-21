@@ -176,7 +176,7 @@ describe('Primary packet publication review', () => {
       expect([view.getUint32(0, true), view.getUint32(4, true)]).toEqual([1, 0]);
       source.acknowledge(receipt(reparent));
       const stroked = {
-        ...reparented,
+        ...(reparented as Extract<RenderNodeSnapshot, { kind: 'primitive' }>),
         style: {
           fill: { r: 1, g: 1, b: 1, a: 1 },
           stroke: { color: { r: 1, g: 0, b: 0, a: 1 }, width: 3 },

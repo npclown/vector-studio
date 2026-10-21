@@ -106,6 +106,7 @@ describe('V4 fringe-builder work cap', () => {
         failureScope: 'renderer',
         failureCode: 'fringe-work-cap',
         toleranceExponent: -3,
+        paint: 'fill',
       },
     ]);
     // Later frames and a new fringe bucket stay region-only without a second notice.
@@ -258,6 +259,7 @@ describe('V4 fringe-builder work cap', () => {
         failureScope: 'renderer',
         failureCode: 'fringe-work-cap',
         toleranceExponent: -3,
+        paint: 'fill',
       },
       2,
     );

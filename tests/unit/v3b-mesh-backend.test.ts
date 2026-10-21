@@ -558,6 +558,7 @@ describe('V3b backend lifecycle (V3-A13)', () => {
         failureScope: 'renderer',
         failureCode: 'mesh-pipeline-unavailable',
         toleranceExponent: null,
+        paint: null,
       },
     ]);
     service.replaceSnapshot({

@@ -1,4 +1,5 @@
 import type {
+  PathStroke,
   PathStyle,
   PrimitiveGeometry,
   PrimitiveStyle,
@@ -17,6 +18,23 @@ import { hasFiniteSceneArithmetic } from './scene-numeric.js';
 
 /** Port presence, fixed when a mirror is constructed (P3 V3 contract, section a). */
 export type PathNodeSupport = 'supported' | 'unsupported';
+
+/**
+ * The three port-presence facts of a mirror (V3 section a; B2 stroke contract, section 5 and
+ * the section 9.1 amendment S4): path nodes at all, fills (`fill !== null`) and strokes with
+ * `width > 0`.
+ */
+export type PathSupport = Readonly<{
+  pathNodes: PathNodeSupport;
+  pathFills: PathNodeSupport;
+  pathStrokes: PathNodeSupport;
+}>;
+
+const NO_PATH_SUPPORT: PathSupport = Object.freeze({
+  pathNodes: 'unsupported',
+  pathFills: 'unsupported',
+  pathStrokes: 'unsupported',
+});
 
 export type ValidatedNode = Readonly<{
   node: RenderNodeSnapshot;
@@ -42,7 +60,7 @@ export type ValidatedChangesInput = Readonly<{
 
 export function validateSnapshotShape(
   input: unknown,
-  pathNodes: PathNodeSupport = 'unsupported',
+  pathNodes: PathSupport = NO_PATH_SUPPORT,
 ): ValidatedSnapshotInput | null {
   if (!hasExactFields(input, ['identity', 'revision', 'nodes', 'rootOrder'])) {
     return null;
@@ -60,7 +78,7 @@ export function validateSnapshotShape(
 
 export function validateChangesShape(
   input: unknown,
-  pathNodes: PathNodeSupport = 'unsupported',
+  pathNodes: PathSupport = NO_PATH_SUPPORT,
 ): ValidatedChangesInput | null {
   if (
     !hasExactFields(input, [
@@ -171,7 +189,7 @@ export function snapshotsEqual(
   return true;
 }
 
-function copyNode(value: unknown, pathNodes: PathNodeSupport): ValidatedNode | null {
+function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -236,7 +254,14 @@ function copyNode(value: unknown, pathNodes: PathNodeSupport): ValidatedNode | n
       geometry,
       style,
     });
-    return Object.freeze({ node, unsupported: pathNodes !== 'supported' });
+    // B2 stroke contract, section 5 and the section 9.1 amendment (S4): a stroke with
+    // width > 0 needs a stroke port and a fill needs a fill port; each is reported in the same
+    // last slot as a path without any port. A width-0 stroke is accepted and draws nothing.
+    const unsupported =
+      pathNodes.pathNodes !== 'supported' ||
+      (style.fill !== null && pathNodes.pathFills !== 'supported') ||
+      (style.stroke !== null && style.stroke.width > 0 && pathNodes.pathStrokes !== 'supported');
+    return Object.freeze({ node, unsupported });
   }
 
   const geometry = copyGeometry(value.geometry);
@@ -335,11 +360,40 @@ function hasPathGrammar(verbs: readonly ScenePathVerb[]): boolean {
 }
 
 function copyPathStyle(value: unknown): PathStyle | null {
-  if (!hasExactFields(value, ['fill'])) return null;
+  // B2 stroke contract, section 5: exactly fill and stroke; stroke is required, null when absent.
+  if (!hasExactFields(value, ['fill', 'stroke'])) return null;
   const record = value as Record<string, unknown>;
   const fill = record.fill === null ? null : copyColor(record.fill);
   if (record.fill !== null && fill === null) return null;
-  return Object.freeze({ fill });
+  const stroke = record.stroke === null ? null : copyPathStroke(record.stroke);
+  if (record.stroke !== null && stroke === null) return null;
+  return Object.freeze({ fill, stroke });
+}
+
+/** B2 stroke contract, section 5 validation rows; every failure here is invalid-value. */
+function copyPathStroke(value: unknown): PathStroke | null {
+  if (!hasExactFields(value, ['color', 'width', 'cap', 'join', 'miterLimit'])) return null;
+  const record = value as Record<string, unknown>;
+  const color = copyColor(record.color);
+  const width = copyNonnegativeNumber(record.width);
+  const cap =
+    record.cap === 'butt' || record.cap === 'round' || record.cap === 'square' ? record.cap : null;
+  const join =
+    record.join === 'miter' || record.join === 'round' || record.join === 'bevel'
+      ? record.join
+      : null;
+  const miterLimit = copyFiniteNumber(record.miterLimit);
+  if (
+    color === null ||
+    width === null ||
+    cap === null ||
+    join === null ||
+    miterLimit === null ||
+    miterLimit < 1
+  ) {
+    return null;
+  }
+  return Object.freeze({ color, width, cap, join, miterLimit });
 }
 
 function copyStyle(value: unknown): PrimitiveStyle | null {
@@ -536,7 +590,8 @@ function nodeEquals(left: RenderNodeSnapshot, right: RenderNodeSnapshot): boolea
     return (
       pathDataEquals(left.geometry, right.geometry) &&
       left.geometry.fillRule === right.geometry.fillRule &&
-      nullableColorEquals(left.style.fill, right.style.fill)
+      nullableColorEquals(left.style.fill, right.style.fill) &&
+      nullablePathStrokeEquals(left.style.stroke, right.style.stroke)
     );
   }
   if (left.kind !== 'primitive' || right.kind !== 'primitive') return false;
@@ -578,6 +633,17 @@ function nullableStrokeEquals(left: SceneStroke | null, right: SceneStroke | nul
   return left === null || right === null
     ? left === right
     : left.width === right.width && colorEquals(left.color, right.color);
+}
+
+/** B2 stroke contract, section 5: every stroke field with `===`, color channels included. */
+function nullablePathStrokeEquals(left: PathStroke | null, right: PathStroke | null): boolean {
+  return left === null || right === null
+    ? left === right
+    : left.width === right.width &&
+        left.cap === right.cap &&
+        left.join === right.join &&
+        left.miterLimit === right.miterLimit &&
+        colorEquals(left.color, right.color);
 }
 
 function nullableColorEquals(left: SceneColor | null, right: SceneColor | null): boolean {

@@ -108,6 +108,13 @@ The world-bounds row is P1's arithmetic rule applied to the box of the path's po
 
 **Replay equality.** `nodeEquals` compares path nodes field by field with the existing `===` rule: `fillRule`, `verbs` and `points` elementwise, and `style.fill`. An identical replay at the same revision is `replayed`; a path difference at the same revision is `revision-conflict`.
 
+Amended 2026-10-21 by [ST-U6](p3-fill-stroke-meshes.md#b2-st-u6-renderer-stroke) under the [B2 stroke contract section 5](p3-b2-stroke-contract.md#5-scene-field-and-validation) and its ST-A0 amendments (S3, S4), style rows:
+
+- **`style` is exactly `fill, stroke`.** `PathStyle.stroke: PathStroke | null` is required and explicitly `null` when absent, so the row "`style` fields other than exactly `fill`" above now reads "other than exactly `fill, stroke`" (`invalid-value`). The stroke rows of B2 section 5 (shape, color, width, cap, join, miter limit, nonfinite world bounds of the stroke bounds box) refine this table in the same precedence.
+- **Port presence.** `RetainedSceneMirrorOptions` gains `pathStrokes` (default `'unsupported'`) and `pathFills`, which takes the value of `pathNodes` when omitted, so `new RetainedSceneMirror(cb, { pathNodes: 'supported' })` keeps its meaning. The service passes `pathNodes: 'supported'` when a fill port, a stroke port or both are given (widening "exactly when a port is given" above to either port), `pathFills: 'supported'` exactly when a fill port is given, and `pathStrokes: 'supported'` exactly when a stroke port is given. A path with `fill !== null` while `pathFills` is `'unsupported'`, or with a stroke of `width > 0` while `pathStrokes` is `'unsupported'`, is `unsupported-feature` in the last slot. `pathFills` is the new mirror option that ST-A0 S4 asked this note to record.
+- **Bounds.** The world-bounds row also applies to the stroke bounds box (B2 section 9.7, with `k = min(L, 2^24)` for miter joins), for a nonempty path with `width > 0`.
+- **Replay equality** also compares every stroke field with `===`, color channels included. The geometry revision still covers `verbs` and `points` only.
+
 ## b) Port consumption, geometry revision and cache key
 
 **Geometry revision.** The mirror owns a counter that starts at 1 and only increases. On every publication (`applyChanges`, `replaceSnapshot`, including an identity switch), each published path node gets:
@@ -150,6 +157,12 @@ Splitting is normative:
 - **Cost.** One defective path in n requests costs at most `2·⌈log2 n⌉` extra calls. If every path is defective, all n are settled after at most `2n − 1` calls in total, spread over prepares of at most 32 calls.
 
 **Request buffers.** The service builds fresh `Uint8Array` verbs with `PATH_VERB_CODES` and a fresh `Float64Array` of points per request. It never mutates request or result buffers.
+
+Amended 2026-10-21 by [ST-U6](p3-fill-stroke-meshes.md#b2-st-u6-renderer-stroke) under [B2 stroke contract sections 9.3 and 9.4](p3-b2-stroke-contract.md#93-cache-keys-memo-and-reuse):
+
+- **Keys.** The cache key above gains the tag `'fill'`. A stroke key is `('stroke', portVersion, operationId, nodeId, geometryRevision, width, cap, join, miterLimit, toleranceExponent)`, read from the stroke port at every `prepare` and compared with `===`. A stroke color, node opacity or fill change builds no stroke mesh.
+- **Second port call.** After the fill call of step 5, every missing drawable stroke key goes into one `buildStrokeMeshes` call, with this section's isolation, settling, resume and memo rules applied to the stroke port independently, its own bound of 32 calls per `prepare` and its own `disposed` latch. Its responses are validated as in section h before packing; the stroke port also answers the per-path code `invalid-stroke`.
+- **Stroke drawability and tolerance.** A stroke is drawable when the path is not hidden, `stroke !== null`, `width > 0`, it has a verb, its world linear map is nonsingular, and its stroke world bounds meet the viewport; a path is culled only when neither paint's bounds meet it. The stroke uses the node's `e` and `f`; `e < -1020` is the state failure `tolerance-range` for the stroke paint, and `e > 1023` requests 1023.
 
 ## c) Tolerance and fringe buckets
 
@@ -231,6 +244,8 @@ The budget is a functional bound, not a performance claim; B0 measures real size
 | Latch        | After `batch-failed` with `disposed`, the service stops calling the port; every later new key fails as batch `disposed`                                                                                                                                      |
 
 **No per-frame calls for a failing key.** A drawable path whose key, and every finer serving key, is not resident and whose key is in the memo is skipped without a port call. Its key reaches the port again only after the key changes, its memo entry is evicted while not consulted, or a `resource-limit` entry expires. All three are bounded, so a visible failing path never calls the port every frame.
+
+Amended 2026-10-21 by [ST-U6](p3-fill-stroke-meshes.md#b2-st-u6-renderer-stroke) under [B2 stroke contract section 9.3](p3-b2-stroke-contract.md#93-cache-keys-memo-and-reuse): one mesh cache and one failure memo hold both paints, with paint-tagged entries. The byte budget, memo capacity and working-set rules apply to the total; the tolerance-variant cap and the reuse rule apply per node and paint; a change of any stroke key field makes that paint's entries unreachable. Ties in the budget eviction order compare the tag first (`'fill'` before `'stroke'`), so a fill-only scene evicts as before. Statistics add `strokePortCalls` and `strokePortLinearMemoryBytes`, and `pathMeshMemoryBytes` includes the latter.
 
 ## e) A5 coverage on K4
 
@@ -378,11 +393,15 @@ Every vertex of a triangle computes the same flat `t`, so no provoking-vertex co
 - During growth, resource accounting tracks the old and new mesh arenas at once, until the old one retires.
 - `meshInstances` has one record per path slot and grows by power of two like P1's slot arrays; `meshFrame` is exactly 32 bytes.
 
+Amended 2026-10-21 by [ST-U6](p3-fill-stroke-meshes.md#b2-st-u6-renderer-stroke) under [B2 stroke contract section 9.5](p3-b2-stroke-contract.md#95-draws-and-records): a drawn stroked path emits its fill draw (when the fill is drawable) and then its stroke draw, both `MeshFillDraw` entries with the same `position`, consecutive in `draws`. The stroke draw has its own `meshInstances` record from a second path slot, allocated by this section's slot allocator for each node whose stroke has `width > 0` and released when it no longer has one. The record layout is the 64-byte layout above, with the stroke color in the straight color lanes and the served stroke variant's bases. The stroke mesh uses section e's fringe builder and work cap, this coverage rule, pipeline and shader unchanged, and device loss rebuilds stroke data from the CPU entries without a port call (section i). A fill-only scene packs byte-identically to V3.
+
 ## g) Paint order and composition
 
 **Order.** Preparation walks the authoritative depth-first order once. Visible primitives append their slot to `order` as today. A path that emits a mesh draw closes the current analytic run and records its draw with `position` equal to the number of analytic draws so far. A path that emits no draw (hidden, culled, empty, singular, `fill: null` or failed) does not split a run, because nothing paints between its neighbours. Analytic draws therefore still partition `[0, visibleCount)` into adjacent increasing ranges, which the backend keeps validating unchanged. A scene with no drawn path emits exactly one analytic draw, as today. The backend encodes draws in merged order and switches pipeline and bind group only at a variant change.
 
 **Composition.** A fill-only path has `L = F` in D2's terms, so its output is `P = F · opacity`, source-over the destination with P1's blend. Node opacity must reach each sample exactly once. That holds because a variant's region and exterior triangles partition its frame (section e's exact check) and the rasterizer's shared-edge rule covers each sample by at most one of them. This is O02's G3 assumption, which WebGPU does not state normatively; V3 inherits it as a stated limit. No offscreen isolation, stencil or extra pass is used. Overlap between separate nodes is ordinary source-over in paint order, as for primitives. Container opacity stays 1, as P1 requires.
+
+Amended 2026-10-21 by [ST-U6](p3-fill-stroke-meshes.md#b2-st-u6-renderer-stroke) under [B2 stroke contract section 9.6](p3-b2-stroke-contract.md#96-composition-and-the-opacity-staging-b2-q6): two source-over draws in fill-then-stroke order are exact at node opacity 1 for any paint alphas, and a single-paint path is exact at any opacity. Both paints at `0 < opacity < 1` would apply opacity twice in the overlap; that case is the interim state failure `composition-unsupported` of section h until ST-U7.
 
 ## h) D8-interim failure outcome
 
@@ -419,6 +438,12 @@ It is emitted with severity `warning`, the message prefix `D8-interim:`, the cur
 
 **Label and removal.** The code is D8-interim, scoped to V2-V4 as V1-Q4 approved. It does not answer U2 or U4 and does not reuse `render.submission-failed`. It is removed or replaced when the production failure behavior is decided, before P3 acceptance, with requirements text naming the meshes that can reach that behavior. Removal deletes the code, the `notices` field and their tests in one change.
 
+Amended 2026-10-21 by [ST-U6](p3-fill-stroke-meshes.md#b2-st-u6-renderer-stroke) under [B2 stroke contract sections 9.6 and 9.8](p3-b2-stroke-contract.md#98-notices), with the ST-A0 S5 note:
+
+- **Context key `paint`.** The notice context gains `paint: 'fill' | 'stroke' | null`: the paint for path and batch scopes and for renderer failures of one paint (`tolerance-range`, `fringe-range`, `packing-range`, `invalid-response`, `invalid-mesh`, `fringe-unsupported`, `fringe-work-cap`), and `null` for `composition-unsupported`, `port-version` (of either port) and `mesh-pipeline-unavailable`. State failures transition per node and paint; `composition-unsupported` per node.
+- **Codes.** The table gains `invalid-stroke` (scope `path`) and `composition-unsupported` (scope `renderer`): a path with `fill !== null`, a stroke of `width > 0` and `0 < opacity < 1` draws neither paint, calls no port for it and keeps its cached meshes; it clears when either condition clears.
+- **Outcome.** If either drawable paint of a path fails (any port, response, fringe or state failure), the whole path is not drawn and every other node draws; the other paint's cached mesh stays. This extends V1-Q4 to stroke failures as the ST-A0 S5 note states. `fringe-work-cap` still draws its paint region-only, as amended above.
+
 ## i) Device loss, generation and lifetime
 
 - **No port call on recovery.** Meshes, fringe variants and packed bytes are CPU caches keyed without the generation. A new generation forces a reconstruct packet whose mesh part writes every occupied path slot's instance record, every served variant's ranges and `meshFrame` from the CPU entries, byte for byte as before the loss. The port is not called while keys match.
@@ -440,6 +465,8 @@ The [carve-out](p3-private-contract.md#private-transport-and-lifetime-requiremen
 | 4. Arenas and views              | V3 holds only owned port results and reports the adapter's linear memory                                                                    | Kernel arena sharing (V2)                                            |
 | 5. Cache identity and eviction   | Key, byte accounting, budget, variant caps, failure classes, memo outside the cache, fringe variants with their own `f` invalidation        | Final budgets after B0; per-cell identity under E2                   |
 | 6. Upload and lifetime           | Mesh arena under P1's allocator, generation and receipt meanings; range management; latest-scene reconstruction without port calls          | Tile caches and epoch builds (E2)                                    |
+
+Amended 2026-10-21 by [ST-U6](p3-fill-stroke-meshes.md#b2-st-u6-renderer-stroke) under [B2 stroke contract section 10](p3-b2-stroke-contract.md#10-c04-items-for-the-stroke-transport-and-draw): item 2's "fill/stroke ordering" is now fixed functionally (fill then stroke at one paint position, separate instance records and the opacity staging rule); joint fill and stroke coverage stays open for ST-U7 and the C04 layout.
 
 ## k) A08 visual contract
 

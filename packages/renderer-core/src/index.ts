@@ -18,6 +18,7 @@ export type {
   PathMeshFailureCode,
   PathMeshFailureScope,
   PathMeshNotice,
+  PathPaint,
   PathMeshStatistics,
 } from './path-mesh-pipeline.js';
 export { MESH_RESOURCE_ORDER, MESH_STRIDES } from './path-mesh-packet.js';
