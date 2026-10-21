@@ -3111,7 +3111,7 @@ Validation, 2026-10-21, branch `claude/p3-b2-st-u7cd-joint-draw` with `origin/ma
 - `git diff --exit-code origin/main -- packages/geometry-wasm/kernel/Cargo.toml packages/geometry-wasm/kernel/Cargo.lock pnpm-lock.yaml`: exit 0.
 - `prettier --check --ignore-path <empty file>` on every changed file, a local link and anchor check of the changed documents (517 links, 0 broken) and `git diff --check`: PASS.
 
-Independent review (full tier: a diff review of ST-U7c and ST-U7d and an evidence review): pending.
+Independent review (full tier: a diff review of ST-U7c and ST-U7d and an evidence review): round 1 NOT READY on documentation only (B1, mojibake in this section's evidence lines); the code, shader, backend, contract notes, allow-list and evidence conformed, and the reviewer reproduced the ST-A15 digests on `0cb7115`, `4e753fd` and the branch. All items applied: B1 rewritten in UTF-8 with the real values; S1 ST-A17 now re-compares every view (11,846,386 pixels per run, 0 mismatches); S2 ST7-D1 asserts the ST-A11 separation failure; S3 the y lane is compared; S6 the removed import is recorded. S4 (the test-only `getOverlayBuildCountForTesting` ships in the `.d.ts`, read-only, as the `WebGpuBackend.*ForTesting` precedent) is accepted as residual API surface. A Primary spot check of the fix found no remaining `??` or mojibake.
 
 ### B0 runner (light tier)
 
