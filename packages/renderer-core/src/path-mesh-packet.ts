@@ -7,6 +7,7 @@ import type {
 } from './primitive-packet.js';
 import { toDyadic } from './path-buckets.js';
 import type { PathFringe } from './path-fringe.js';
+import type { JointOverlay } from './path-joint-overlay.js';
 import type { PathMeshDraw, PathPaint } from './path-mesh-pipeline.js';
 
 // The packet mesh part of the P3 V3 contract, section f, unit V3b: the per-view O-PX(128) mesh
@@ -15,6 +16,14 @@ import type { PathMeshDraw, PathPaint } from './path-mesh-pipeline.js';
 // served fringe variant (unit V3c) has its own ranges in the four geometry regions: the port
 // vertices then its four frame corners, its region and exterior triangle records, its lists and
 // its features. Without a fringe builder (tests only) a variant is region-only, as in V3b.
+//
+// ST-U7 addendum, section 4.5 (unit ST-U7c): a joint fill draw also places its overlay variant
+// in its own ranges of the four geometry regions (positions, 32-byte joint triangle records with
+// all eight words used, fill and stroke lists, no features). The fill slot's record then holds
+// the overlay's position and list bases in words 12 and 13, the fill variant's feature base in
+// word 14 and stroke slot + 1 in word 15. All 16 words are recomputed for every draw of every
+// packet from the current slot maps and written by compare-and-write, so a stroke slot change or
+// a change of the joint condition rewrites the record in the same packet.
 
 export const MESH_RESOURCE_ORDER = [
   'meshPositions',
@@ -242,6 +251,8 @@ type ResidentVariant = {
   readonly offsets: Float32Array;
   readonly indices: Uint32Array;
   readonly fringe: PathFringe | null;
+  /** An overlay variant of a joint fill draw (ST-U7 addendum, section 4.5); null otherwise. */
+  readonly overlay: JointOverlay | null;
   readonly sizes: Readonly<Record<GeometryRegion, number>>;
   readonly bases: Record<GeometryRegion, number>;
 };
@@ -250,6 +261,10 @@ type SlotRecord = {
   /** The paint owning the slot: the node's fill slot or its stroke slot (B2 section 9.5). */
   paint: PathPaint;
   variant: ResidentVariant | null;
+  /** The fill slot's resident overlay variant (ST-U7); it stays while the overlay is resident. */
+  overlay: ResidentVariant | null;
+  /** True when the last written record was a joint fill record (words 12 and 13 the overlay's). */
+  joint: boolean;
   /** The 16 words of the last written meshInstances record. */
   instance: number[] | null;
 };
@@ -275,6 +290,9 @@ export type MeshPartOutput = Readonly<{
   expected: ReadonlyMap<MeshResourceId, ReadonlyMap<number, symbol>>;
 }>;
 
+/** @internal Tests only: the packet seeded defects of the ST-U7 addendum, section 5.6. */
+export type MeshPackerSeededDefect = 'ST7-D7' | 'ST7-D9';
+
 export type MeshArenaStatistics = Readonly<{
   arenaReplacements: number;
   repacks: number;
@@ -285,6 +303,7 @@ export type MeshArenaStatistics = Readonly<{
 
 /** CPU owner of the mesh part's resources, ranges and record versions. */
 export class PathMeshPacker {
+  readonly #seededDefect: MeshPackerSeededDefect | undefined;
   #capacities: Record<MeshResourceId, number> = initialCapacities();
   #buffers: Record<MeshResourceId, Uint8Array> = createBuffers(this.#capacities);
   #incarnations: Record<MeshResourceId, symbol> = createIncarnations();
@@ -298,6 +317,11 @@ export class PathMeshPacker {
   #slotDemand = 0;
   #arenaReplacements = 0;
   #repacks = 0;
+
+  /** @internal The seeded defect is for tests only; production passes nothing. */
+  public constructor(options: Readonly<{ seededDefect?: MeshPackerSeededDefect }> = {}) {
+    this.#seededDefect = options.seededDefect;
+  }
 
   public prepare(input: MeshPartInput): MeshPartOutput {
     // Ranges released by the previous packet are reusable from this one on: the GPU reads of
@@ -319,12 +343,16 @@ export class PathMeshPacker {
     for (const [slot, record] of this.#records) {
       if (slotsOf(record.paint).get(record.nodeId) !== slot) {
         this.#releaseVariant(record);
+        this.#releaseOverlay(record);
         this.#records.delete(slot);
         this.#setVersion('meshInstances', slot, undefined);
         continue;
       }
       if (record.variant !== null && !input.resident.has(record.variant.id)) {
         this.#releaseVariant(record);
+      }
+      if (record.overlay !== null && !input.resident.has(record.overlay.id)) {
+        this.#releaseOverlay(record);
       }
     }
 
@@ -347,6 +375,8 @@ export class PathMeshPacker {
           nodeId: draw.nodeId,
           paint: draw.paint ?? 'fill',
           variant: null,
+          overlay: null,
+          joint: false,
           instance: null,
         };
         this.#records.set(draw.slot, record);
@@ -355,13 +385,37 @@ export class PathMeshPacker {
         this.#releaseVariant(record);
         record.variant = this.#placeVariant(draw);
       }
-      this.#writeInstance(draw.slot, record, instanceWords(draw, record.variant));
+      if (draw.overlay !== undefined && record.overlay?.id !== draw.overlay.id) {
+        this.#releaseOverlay(record);
+        record.overlay = this.#placeOverlay(draw.overlay.id, draw.overlay.data);
+      }
+    }
+    // Every record is computed after every variant is placed: a repack moves earlier variants.
+    // Word 15 is the stroke slot + 1 from the current slot map (addendum section 4.5).
+    for (const draw of input.draws) {
+      const record = this.#records.get(draw.slot)!;
+      const joint = draw.composite === 'joint-fill';
+      let link = 0;
+      if (joint) {
+        link = (input.strokeSlots?.get(draw.nodeId) ?? -1) + 1;
+        if (this.#seededDefect === 'ST7-D7') link = 0;
+        if (this.#seededDefect === 'ST7-D9' && record.joint && record.instance !== null) {
+          link = record.instance[15]!;
+        }
+      }
+      record.joint = joint;
+      this.#writeInstance(
+        draw.slot,
+        record,
+        instanceWords(draw, record.variant!, joint ? record.overlay : null, link),
+      );
     }
     // Read placements only after every draw is placed: a repack moves earlier variants.
     const placements = new Map<string, { firstTriangle: number; triangleCount: number }>();
     const strokePlacements = new Map<string, { firstTriangle: number; triangleCount: number }>();
     for (const draw of input.draws) {
-      const variant = this.#records.get(draw.slot)!.variant!;
+      const record = this.#records.get(draw.slot)!;
+      const variant = draw.composite === 'joint-fill' ? record.overlay! : record.variant!;
       (draw.paint === 'stroke' ? strokePlacements : placements).set(
         draw.nodeId,
         Object.freeze({
@@ -484,6 +538,7 @@ export class PathMeshPacker {
       offsets: draw.offsets,
       indices: draw.mesh.indices,
       fringe,
+      overlay: null,
       sizes,
       bases: { meshPositions: 0, meshTriangles: 0, meshFeatureLists: 0, meshFeatures: 0 },
     };
@@ -494,6 +549,27 @@ export class PathMeshPacker {
       // way the arena is replaced and every resident variant is repacked contiguously.
       this.#replaceArena(variant);
     }
+    return variant;
+  }
+
+  /** ST-U7 addendum, section 4.5: the overlay variant's own ranges; no features of its own. */
+  #placeOverlay(id: symbol, overlay: JointOverlay): ResidentVariant {
+    const variant: ResidentVariant = {
+      id,
+      offsets: overlay.positions,
+      indices: new Uint32Array(0),
+      fringe: null,
+      overlay,
+      sizes: Object.freeze({
+        meshPositions: overlay.positions.length / 2,
+        meshTriangles: (4 * overlay.triangles.length) / MESH_STRIDES.meshTriangles,
+        meshFeatureLists: overlay.lists.length,
+        meshFeatures: 0,
+      }),
+      bases: { meshPositions: 0, meshTriangles: 0, meshFeatureLists: 0, meshFeatures: 0 },
+    };
+    if (this.#allocate(variant)) this.#writeVariant(variant);
+    else this.#replaceArena(variant);
     return variant;
   }
 
@@ -518,6 +594,17 @@ export class PathMeshPacker {
     const variant = record.variant;
     if (variant === null) return;
     record.variant = null;
+    this.#releaseRanges(variant);
+  }
+
+  #releaseOverlay(record: SlotRecord): void {
+    const overlay = record.overlay;
+    if (overlay === null) return;
+    record.overlay = null;
+    this.#releaseRanges(overlay);
+  }
+
+  #releaseRanges(variant: ResidentVariant): void {
     for (const region of GEOMETRY_REGIONS) {
       const size = variant.sizes[region];
       if (size === 0) continue;
@@ -532,7 +619,11 @@ export class PathMeshPacker {
   #replaceArena(extra: ResidentVariant | null): void {
     const variants = [...this.#records.entries()]
       .sort(([left], [right]) => left - right)
-      .flatMap(([, record]) => (record.variant === null ? [] : [record.variant]));
+      .flatMap(([, record]) =>
+        [record.variant, record.overlay].filter(
+          (variant): variant is ResidentVariant => variant !== null,
+        ),
+      );
     if (extra !== null) variants.push(extra);
     const capacities = { ...this.#capacities };
     for (const region of GEOMETRY_REGIONS) {
@@ -575,8 +666,10 @@ export class PathMeshPacker {
     for (const [slot, record] of this.#records) {
       if (record.instance === null) continue;
       if (record.variant !== null) {
-        record.instance[12] = record.variant.bases.meshPositions;
-        record.instance[13] = record.variant.bases.meshFeatureLists;
+        // A joint fill record points at its overlay's positions and lists (ST-U7, section 4.5).
+        const source = record.joint && record.overlay !== null ? record.overlay : record.variant;
+        record.instance[12] = source.bases.meshPositions;
+        record.instance[13] = source.bases.meshFeatureLists;
         record.instance[14] = record.variant.bases.meshFeatures;
       }
       this.#writeInstance(slot, record, record.instance, true);
@@ -591,7 +684,8 @@ export class PathMeshPacker {
     const positions = new DataView(this.#buffers.meshPositions.buffer);
     const vertexBase = variant.bases.meshPositions;
     const version = Symbol('meshPositions-range');
-    // The port vertices, packed once per entry, then a fringe variant's four frame corners.
+    // The port vertices, packed once per entry, then a fringe variant's four frame corners. An
+    // overlay variant's positions are all in its offsets: the fill variant's, then Steiner points.
     const portVertices = variant.offsets.length / 2;
     for (let index = 0; index < variant.sizes.meshPositions; index += 1) {
       const byte = (vertexBase + index) * MESH_STRIDES.meshPositions;
@@ -606,7 +700,13 @@ export class PathMeshPacker {
     const triangleVersion = Symbol('meshTriangles-range');
     for (let index = 0; index < variant.sizes.meshTriangles; index += 1) {
       const byte = (triangleBase + index) * MESH_STRIDES.meshTriangles;
-      if (variant.fringe !== null) {
+      if (variant.overlay !== null) {
+        // Joint records (ST-U7, section 4.5): i0, i1, i2 (bit 31 selects the stroke variant's
+        // positions), fillListOffset, fillListCount, strokeListOffset, strokeListCount, roles.
+        for (let word = 0; word < 8; word += 1) {
+          triangles.setUint32(byte + 4 * word, variant.overlay.triangles[8 * index + word]!, true);
+        }
+      } else if (variant.fringe !== null) {
         // The fringe's records: i0, i1, i2, listOffset, listCount, role, two zero words.
         for (let word = 0; word < 8; word += 1) {
           triangles.setUint32(byte + 4 * word, variant.fringe.triangles[8 * index + word]!, true);
@@ -621,18 +721,16 @@ export class PathMeshPacker {
       }
       this.#setVersion('meshTriangles', triangleBase + index, triangleVersion);
     }
-    if (variant.fringe === null) return;
+    const listSource = variant.overlay?.lists ?? variant.fringe?.lists ?? null;
+    if (listSource === null) return;
     const lists = new DataView(this.#buffers.meshFeatureLists.buffer);
     const listBase = variant.bases.meshFeatureLists;
     const listVersion = Symbol('meshFeatureLists-range');
     for (let index = 0; index < variant.sizes.meshFeatureLists; index += 1) {
-      lists.setUint32(
-        (listBase + index) * MESH_STRIDES.meshFeatureLists,
-        variant.fringe.lists[index]!,
-        true,
-      );
+      lists.setUint32((listBase + index) * MESH_STRIDES.meshFeatureLists, listSource[index]!, true);
       this.#setVersion('meshFeatureLists', listBase + index, listVersion);
     }
+    if (variant.fringe === null) return;
     const features = new DataView(this.#buffers.meshFeatures.buffer);
     const featureBase = variant.bases.meshFeatures;
     const featureVersion = Symbol('meshFeatures-range');
@@ -671,6 +769,7 @@ export class PathMeshPacker {
   #markAllDirty(): void {
     for (const record of this.#records.values()) {
       if (record.variant !== null) this.#writeVariant(record.variant);
+      if (record.overlay !== null) this.#writeVariant(record.overlay);
     }
     for (const [slot, record] of this.#records) {
       if (record.instance !== null) {
@@ -714,8 +813,19 @@ export class PathMeshPacker {
   }
 }
 
-/** The 16 words of a meshInstances record (section f). Words 12-15 are u32. */
-function instanceWords(draw: PathMeshDraw, variant: ResidentVariant): number[] {
+/**
+ * The 16 words of a meshInstances record (section f). Words 12-15 are u32. For a joint fill
+ * draw (ST-U7 addendum, section 4.5) words 12 and 13 are the overlay's position and list bases,
+ * word 14 the fill variant's feature base and word 15 the stroke slot + 1; otherwise word 15 is 0
+ * and the record is V3's.
+ */
+function instanceWords(
+  draw: PathMeshDraw,
+  variant: ResidentVariant,
+  overlay: ResidentVariant | null,
+  link: number,
+): number[] {
+  const source = overlay ?? variant;
   const words = [
     draw.linear[0],
     draw.linear[1],
@@ -729,10 +839,10 @@ function instanceWords(draw: PathMeshDraw, variant: ResidentVariant): number[] {
     draw.fill.g,
     draw.fill.b,
     draw.fill.a,
-    variant.bases.meshPositions,
-    variant.bases.meshFeatureLists,
+    source.bases.meshPositions,
+    source.bases.meshFeatureLists,
     variant.bases.meshFeatures,
-    0,
+    overlay === null ? 0 : link,
   ];
   for (let word = 0; word < 12; word += 1) words[word] = Math.fround(words[word]!);
   return words;

@@ -427,6 +427,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
               instance: draw.slot,
               firstTriangle: placement.firstTriangle,
               triangleCount: placement.triangleCount,
+              // ST-U7 addendum, section 4.5: only a joint fill draw carries the field.
+              ...(draw.composite === undefined ? {} : { composite: draw.composite }),
             }),
           });
         }),

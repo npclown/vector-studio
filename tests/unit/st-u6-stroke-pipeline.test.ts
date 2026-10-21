@@ -1,10 +1,7 @@
 import type { FillMesh } from '@vector-studio/contracts';
 import { describe, expect, it } from 'vitest';
 import { buildPathFringe } from '../../packages/renderer-core/src/path-fringe.js';
-import {
-  pathMeshNoticeDiagnostic,
-  type PathMeshNotice,
-} from '../../packages/renderer-core/src/path-mesh-pipeline.js';
+import type { PathMeshNotice } from '../../packages/renderer-core/src/path-mesh-pipeline.js';
 import type { MeshResourceId } from '../../packages/renderer-core/src/primitive-packet.js';
 import {
   ScriptedFillMeshPort,
@@ -30,8 +27,8 @@ import {
 
 // B2 stroke contract, section 9 (unit ST-U6, ST-A10): the stroke port beside the fill port,
 // keys, memo and reuse per paint, one stroke batch per prepare with V3's isolation, the second
-// path slot, fill-then-stroke draws, whole-path failure, the opacity staging rule
-// (composition-unsupported), culling bounds, notices with a paint, and device-loss
+// path slot, fill-then-stroke draws, whole-path failure, the joint fill draw that replaced the
+// opacity staging rule (ST-U7, ST-A15), culling bounds, notices with a paint, and device-loss
 // reconstruction. Functional evidence only: precision is UNVERIFIED against the 0.25
 // physical-pixel target; no performance claim.
 
@@ -671,7 +668,7 @@ describe('ST-U6 draws, slots and composition (sections 9.5 and 9.6)', () => {
     expect(frame.notices).toEqual([]);
   });
 
-  it('ST-A10 (B2-Q6 a): both paints at 0 < opacity < 1 are composition-unsupported: no draw, no call, one notice per transition, cached meshes stay', () => {
+  it('ST-A15 (ST-U7): both paints at 0 < opacity < 1 draw a joint fill draw then the stroke draw; opacity changes call no port and reuse the cached meshes and overlay', () => {
     const ports = both();
     const nodes = (opacity: number) => [strokedNode('a', 0, { opacity }), pathNode('f', 20)];
     const h = createStrokeHarness({
@@ -680,23 +677,28 @@ describe('ST-U6 draws, slots and composition (sections 9.5 and 9.6)', () => {
       nodes: nodes(0.5),
     });
     const first = h.prepare();
-    expect(first.draws.map((draw) => draw.nodeId)).toEqual(['f']);
-    expect(first.notices).toEqual([notice('a', 'renderer', 'composition-unsupported', null, null)]);
-    expect([ports.fill.calls.flat().map((request) => request.tag), ports.stroke.callCount]).toEqual(
-      [[20], 0],
-    );
-    expect(h.prepare().notices).toEqual([]);
-    // It clears when the opacity reaches 1: both paints mesh once and draw.
+    expect(
+      first.draws.map((draw) => [draw.nodeId, draw.paint, draw.composite ?? null, draw.opacity]),
+    ).toEqual([
+      ['a', 'fill', 'joint-fill', 0.5],
+      ['a', 'stroke', null, 0.5],
+      ['f', 'fill', null, 1],
+    ]);
+    expect(first.draws[0]!.overlay).toBeDefined();
+    expect(first.notices).toEqual([]);
+    expect([ports.fill.callCount, ports.stroke.callCount]).toEqual([1, 1]);
+    expect(h.pipeline.getOverlayBuildCount()).toBe(1);
+    // Opacity 1 and back below 1: no port call, and the cached overlay serves again.
     h.replace(nodes(1));
-    expect(h.drawn()).toEqual(['a:fill', 'a:stroke', 'f:fill']);
-    expect([ports.fill.callCount, ports.stroke.callCount]).toEqual([2, 1]);
-    // Back to 0.5: a new transition notifies again; the meshes stay cached and nothing is called.
+    expect(h.prepare().draws.map((draw) => draw.composite ?? null)).toEqual([null, null, null]);
     h.replace(nodes(0.25));
     const again = h.prepare();
-    expect(again.draws.map((draw) => draw.nodeId)).toEqual(['f']);
-    expect(again.notices).toEqual([notice('a', 'renderer', 'composition-unsupported', null, null)]);
+    expect(again.draws.map((draw) => draw.composite ?? null)).toEqual(['joint-fill', null, null]);
+    expect(again.draws[0]!.overlay!.id).toBe(first.draws[0]!.overlay!.id);
+    expect([ports.fill.callCount, ports.stroke.callCount]).toEqual([1, 1]);
+    expect(h.pipeline.getOverlayBuildCount()).toBe(1);
     expect(h.statistics().entries).toBe(3);
-    // It also clears when either paint goes: a null fill, or a stroke of width 0.
+    // One paint at 0.25 is a single-paint draw, exact at any opacity.
     h.replace([strokedNode('a', 0, { opacity: 0.25, fill: null }), pathNode('f', 20)]);
     expect(h.drawn()).toEqual(['a:stroke', 'f:fill']);
     h.replace([
@@ -704,18 +706,7 @@ describe('ST-U6 draws, slots and composition (sections 9.5 and 9.6)', () => {
       pathNode('f', 20),
     ]);
     expect(h.drawn()).toEqual(['a:fill', 'f:fill']);
-    expect([ports.fill.callCount, ports.stroke.callCount]).toEqual([2, 1]);
-    expect(
-      pathMeshNoticeDiagnostic(notice('a', 'renderer', 'composition-unsupported', null, null), 3)
-        .context,
-    ).toEqual({
-      interim: 'd8',
-      nodeId: 'a',
-      failureScope: 'renderer',
-      failureCode: 'composition-unsupported',
-      toleranceExponent: null,
-      paint: null,
-    });
+    expect([ports.fill.callCount, ports.stroke.callCount]).toEqual([1, 1]);
   });
 });
 

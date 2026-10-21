@@ -33,6 +33,11 @@ import {
   type PathFringeBuildResult,
 } from './path-fringe.js';
 import {
+  JOINT_OVERLAY_LIMITS,
+  buildJointOverlay,
+  type JointOverlay,
+} from './path-joint-overlay.js';
+import {
   getPathLocalPointBounds,
   getPathLocalStrokeBounds,
   transformSceneBounds,
@@ -49,8 +54,14 @@ import {
 // port. Both paints share one mesh cache and one failure memo with paint-tagged keys; each port
 // has its own batch, isolation stack, call bound and `disposed` latch. A drawn stroked path
 // emits its fill draw (if drawable) and then its stroke draw; if either drawable paint fails,
-// the whole path is not drawn (V1-Q4 extended to strokes, ST-A0 S5). Both paints at
-// 0 < opacity < 1 are the interim state failure `composition-unsupported` until ST-U7.
+// the whole path is not drawn (V1-Q4 extended to strokes, ST-A0 S5).
+//
+// ST-U7 addendum (docs/plans/p3-b2-st-u7-joint-coverage-addendum.md), unit ST-U7c: a path with
+// both paints drawable at 0 < opacity < 1 is drawn by a joint-coverage fill draw over a
+// renderer-derived overlay (path-joint-overlay.ts), then the unchanged stroke draw, so opacity
+// applies once. The overlay is built on first need and cached on the fill entry, at most two per
+// node; a failed build is the D8-interim state `overlay-unsupported` (paint null), which hides
+// the path and keeps both cached meshes. Functional evidence only: precision is UNVERIFIED.
 
 export type { PathFringe, PathFringeBuilder, PathFringeBuildResult };
 
@@ -79,7 +90,7 @@ export type PathMeshRendererFailureCode =
   | 'fringe-work-cap'
   | 'packing-range'
   | 'mesh-pipeline-unavailable'
-  | 'composition-unsupported';
+  | 'overlay-unsupported';
 export type PathMeshFailureCode =
   StrokeMeshFailureCode | PathMeshBatchFailureCode | PathMeshRendererFailureCode;
 
@@ -92,7 +103,7 @@ export type PathMeshNotice = Readonly<{
   toleranceExponent: number | null;
   /**
    * The paint of a path or batch failure or of a one-paint state failure; null for
-   * `composition-unsupported`, `port-version` (of either port) and `mesh-pipeline-unavailable`.
+   * `overlay-unsupported`, `port-version` (of either port) and `mesh-pipeline-unavailable`.
    */
   paint: PathPaint | null;
 }>;
@@ -129,6 +140,13 @@ export type PathMeshDraw = Readonly<{
   opacity: number;
   /** The straight color lanes: the fill color, or the stroke color for a stroke draw. */
   fill: SceneColor;
+  /**
+   * ST-U7 addendum, section 4.5: present only on a joint fill draw, the fill draw of a path with
+   * both paints drawn at 0 < opacity < 1. Its stroke draw follows unchanged.
+   */
+  composite?: 'joint-fill';
+  /** The served overlay variant of a joint fill draw (addendum section 4.2); absent otherwise. */
+  overlay?: Readonly<{ id: symbol; data: JointOverlay }>;
 }>;
 
 export type PathMeshStatistics = Readonly<{
@@ -166,6 +184,11 @@ export type PathMeshLimits = Readonly<{
    * drawn region-only, without calling the fringe builder, and notifies `fringe-work-cap` once.
    */
   fringeBoundaryVertexCap: number;
+  /** ST-U7 addendum, section 4.6: at most this many overlay variants (or marks) per node. */
+  overlayVariantsPerNode: number;
+  /** ST7-Q5 (a), current-cap estimates: the overlay work cap per build (section 4.6). */
+  overlayExactTests: number;
+  overlaySteinerPoints: number;
 }>;
 
 /** The contract's numbers (sections b, d and h). Tests may lower them; production never does. */
@@ -180,7 +203,13 @@ export const PATH_MESH_LIMITS: PathMeshLimits = Object.freeze({
   toleranceVariantsPerNode: 3,
   fringeVariantsPerEntry: 2,
   fringeBoundaryVertexCap: 128,
+  overlayVariantsPerNode: 2,
+  overlayExactTests: JOINT_OVERLAY_LIMITS.exactTests,
+  overlaySteinerPoints: JOINT_OVERLAY_LIMITS.steinerPoints,
 });
+
+/** @internal Tests only: the seeded defect ST7-D8 of the ST-U7 addendum, section 5.6. */
+export type PathMeshSeededDefect = 'ST7-D8';
 
 export type PathMeshPipelineOptions = Readonly<{
   /** The fill-mesh port (V3). */
@@ -193,6 +222,8 @@ export type PathMeshPipelineOptions = Readonly<{
   strokeMemoryBytes?: () => number;
   limits?: Partial<PathMeshLimits>;
   fringeBuilder?: PathFringeBuilder;
+  /** @internal Tests only: a seeded defect of the ST-U7 addendum, section 5.6. */
+  seededDefect?: PathMeshSeededDefect;
 }>;
 
 export type PathMeshPrepareInput = Readonly<{
@@ -222,6 +253,18 @@ type PaintKey =
     }>;
 
 type FringeVariant = Readonly<{ id: symbol; f: number; fringe: PathFringe; bytes: number }>;
+/**
+ * ST-U7 addendum, section 4.6: one overlay variant of a fill entry, or its failure mark. It
+ * belongs to one pair of served variants: this fill entry's fringe variant (null: region-only)
+ * and the stroke entry with its fringe variant (null: region-only).
+ */
+type OverlayVariant = {
+  readonly fillVariant: symbol | null;
+  readonly strokeEntry: symbol;
+  readonly strokeVariant: symbol | null;
+  readonly built: Readonly<{ id: symbol; overlay: JointOverlay; bytes: number }> | null;
+  lastServed: number;
+};
 type MeshEntry = {
   readonly id: symbol;
   readonly e: number;
@@ -233,6 +276,8 @@ type MeshEntry = {
   /** Distinct vertex indices in the port's boundaryEdges (the V4 builder work measure). */
   readonly boundaryVertices: number;
   readonly variants: Map<number, FringeVariant | 'unsupported'>;
+  /** Overlay variants and marks; only fill entries hold them (ST-U7 addendum, section 4.6). */
+  overlays: OverlayVariant[];
   /** Set once the entry's `fringe-work-cap` notice is queued. */
   capNotified: boolean;
   lastServed: number;
@@ -338,6 +383,8 @@ export class PathMeshPipeline {
   readonly #channels: Readonly<Record<PathPaint, PortChannel | undefined>>;
   readonly #limits: PathMeshLimits;
   readonly #fringeBuilder: PathFringeBuilder | undefined;
+  readonly #seededDefect: PathMeshSeededDefect | undefined;
+  #overlayBuilds = 0;
   #prepareCount = 0;
   #disposed = false;
   #cache: Record<PathPaint, Map<string, NodeCache>> = { fill: new Map(), stroke: new Map() };
@@ -387,6 +434,7 @@ export class PathMeshPipeline {
     });
     this.#limits = Object.freeze({ ...PATH_MESH_LIMITS, ...options.limits });
     this.#fringeBuilder = options.fringeBuilder;
+    this.#seededDefect = options.seededDefect;
   }
 
   /** Steps 1-9 of section b, without packing. Returns the paints served in paint order. */
@@ -436,20 +484,14 @@ export class PathMeshPipeline {
       const buckets = this.#bucketsFor(path, zoom, devicePixelRatio);
       if (buckets.singular) continue;
 
-      // B2 section 9.6, interim rule until ST-U7: both paints at 0 < opacity < 1 draw neither
-      // paint and call no port; cached meshes stay. It clears when either condition clears.
-      // Node-level states, one key per node: composition-unsupported, then port-version of
-      // either drawable paint's port. Each notifies once per (node, code) transition.
-      const nodeCode: PathMeshRendererFailureCode | null =
-        node.style.fill !== null &&
-        node.style.stroke !== null &&
-        node.style.stroke.width > 0 &&
-        node.opacity > 0 &&
-        node.opacity < 1
-          ? 'composition-unsupported'
-          : drawable.some((paint) => !readings[paint]!.ok)
-            ? 'port-version'
-            : null;
+      // The node-level state, one key per node: port-version of either drawable paint's port.
+      // It notifies once per (node, code) transition. ST-U7 removed the interim composition state:
+      // both paints at 0 < opacity < 1 now draw through the joint fill draw (step 8).
+      const nodeCode: PathMeshRendererFailureCode | null = drawable.some(
+        (paint) => !readings[paint]!.ok,
+      )
+        ? 'port-version'
+        : null;
       frameStates.set(
         stateKey(path.id, null),
         nodeCode === null ? null : Object.freeze({ nodeId: path.id, paint: null, code: nodeCode }),
@@ -545,7 +587,26 @@ export class PathMeshPipeline {
         if (drawn === null) failed = true;
         else pathDraws.push(drawn);
       });
-      if (!failed) draws.push(...pathDraws);
+      if (failed) continue;
+      // ST-U7 addendum, section 4.1: the joint condition. Both paints are drawn (neither failed
+      // nor empty) and 0 < o < 1. The joint fill draw takes the fill draw's place, before the
+      // unchanged stroke draw; at o = 0, o = 1 and for one paint the draws are ST-U6's.
+      const opacity = path.node.opacity;
+      if (pathDraws.length === 2 && opacity > 0 && opacity < 1) {
+        const fillEntry = entries[0]!;
+        const overlay = this.#serveOverlay(path.id, fillEntry, entries[1]!, pathDraws, now);
+        if (overlay === null) continue;
+        const joint: PathMeshDraw = Object.freeze({
+          ...pathDraws[0]!,
+          composite: 'joint-fill' as const,
+          overlay,
+        });
+        draws.push(
+          ...(this.#seededDefect === 'ST7-D8' ? [pathDraws[1]!, joint] : [joint, pathDraws[1]!]),
+        );
+        continue;
+      }
+      draws.push(...pathDraws);
     }
 
     // State-failure notices on (node, paint, code) transitions only.
@@ -560,10 +621,13 @@ export class PathMeshPipeline {
       }
     }
 
-    // Step 9: bounded eviction.
+    // Step 9: bounded eviction. Overlay variants whose parent variant is gone are unreachable
+    // and dropped first (ST-U7 addendum, section 4.6); evicting a fill entry drops its overlays.
+    this.#sweepOverlays();
     this.#peakBytes = Math.max(this.#peakBytes, this.#totalBytes());
     this.#trimToleranceVariants(working);
     this.#evictToBudget(working);
+    this.#sweepOverlays();
     this.#evictMemo(now);
     return Object.freeze(draws);
   }
@@ -591,10 +655,21 @@ export class PathMeshPipeline {
           for (const variant of entry.variants.values()) {
             if (variant !== 'unsupported') ids.add(variant.id);
           }
+          for (const overlay of entry.overlays) {
+            if (overlay.built !== null) ids.add(overlay.built.id);
+          }
         }
       }
     }
     return ids;
+  }
+
+  /**
+   * @internal Tests only (ST-U7 addendum, ST-A15): the number of overlay builds so far. It is
+   * not a field of the exported PathMeshStatistics.
+   */
+  public getOverlayBuildCount(): number {
+    return this.#overlayBuilds;
   }
 
   /** At most `noticesPerPacket` queued notices, oldest first; the rest stay queued. */
@@ -927,6 +1002,7 @@ export class PathMeshPipeline {
       meshBytes: (result?.bytes ?? 0) + (packed?.offsets?.byteLength ?? 0),
       boundaryVertices: mesh === null ? 0 : new Set(mesh.boundaryEdges).size,
       variants: new Map(),
+      overlays: [],
       capNotified: false,
       lastServed: 0,
     });
@@ -1061,6 +1137,130 @@ export class PathMeshPipeline {
     return variant;
   }
 
+  /**
+   * ST-U7 addendum, sections 4.2 and 4.6: the overlay variant of one served variant pair, built
+   * on first need (ST7-Q3 a) and cached on the fill entry, or null when it is marked as failed:
+   * the renderer state `overlay-unsupported` with paint null, one notice per mark (ST7-Q4 a).
+   * Opacity changes reuse it, and no port is called in any case.
+   */
+  #serveOverlay(
+    nodeId: string,
+    fillEntry: MeshEntry,
+    strokeEntry: MeshEntry,
+    pathDraws: readonly PathMeshDraw[],
+    now: number,
+  ): Readonly<{ id: symbol; data: JointOverlay }> | null {
+    const [fillDraw, strokeDraw] = pathDraws as readonly [PathMeshDraw, PathMeshDraw];
+    const fillVariant = fillDraw.fringe?.id ?? null;
+    const strokeVariant = strokeDraw.fringe?.id ?? null;
+    let overlay = fillEntry.overlays.find(
+      (candidate) =>
+        candidate.fillVariant === fillVariant &&
+        candidate.strokeEntry === strokeEntry.id &&
+        candidate.strokeVariant === strokeVariant,
+    );
+    if (overlay === undefined) {
+      this.#overlayBuilds += 1;
+      const result = buildJointOverlay(
+        {
+          fill: {
+            mesh: fillEntry.mesh!,
+            fringeBucket: fillDraw.fringe === null ? null : fillDraw.fringeBucket,
+          },
+          stroke: {
+            mesh: strokeEntry.mesh!,
+            fringeBucket: strokeDraw.fringe === null ? null : strokeDraw.fringeBucket,
+          },
+        },
+        {
+          limits: {
+            exactTests: this.#limits.overlayExactTests,
+            steinerPoints: this.#limits.overlaySteinerPoints,
+          },
+        },
+      );
+      overlay = {
+        fillVariant,
+        strokeEntry: strokeEntry.id,
+        strokeVariant,
+        built:
+          result.status === 'built'
+            ? Object.freeze({
+                id: Symbol(`path-joint-overlay-${nodeId}`),
+                overlay: result.overlay,
+                bytes:
+                  result.overlay.positions.byteLength +
+                  result.overlay.triangles.byteLength +
+                  result.overlay.lists.byteLength,
+              })
+            : null,
+        lastServed: now,
+      };
+      fillEntry.overlays.push(overlay);
+      this.#trimOverlays(nodeId, overlay);
+      if (overlay.built === null)
+        this.#enqueue(nodeId, 'renderer', 'overlay-unsupported', null, null);
+    }
+    overlay.lastServed = now;
+    return overlay.built === null
+      ? null
+      : Object.freeze({ id: overlay.built.id, data: overlay.built.overlay });
+  }
+
+  /** At most overlayVariantsPerNode overlay variants per node; least recently served first. */
+  #trimOverlays(nodeId: string, keep: OverlayVariant): void {
+    const fillCache = this.#cache.fill.get(nodeId);
+    if (fillCache === undefined) return;
+    for (;;) {
+      const all = [...fillCache.entries.values()].flatMap((entry) =>
+        entry.overlays.map((overlay) => ({ entry, overlay })),
+      );
+      if (all.length <= this.#limits.overlayVariantsPerNode) return;
+      const victim = all
+        .filter(({ overlay }) => overlay !== keep)
+        .sort((left, right) => left.overlay.lastServed - right.overlay.lastServed)[0];
+      if (victim === undefined) return;
+      victim.entry.overlays = victim.entry.overlays.filter((overlay) => overlay !== victim.overlay);
+    }
+  }
+
+  /**
+   * Drops overlay variants that became unreachable: their fill fringe variant left the fill
+   * entry, or their stroke entry or its fringe variant is no longer resident (section 4.6).
+   * Returns the bytes dropped.
+   */
+  #sweepOverlays(): number {
+    let dropped = 0;
+    for (const [nodeId, fillCache] of this.#cache.fill) {
+      const strokeEntries = this.#cache.stroke.get(nodeId)?.entries;
+      for (const entry of fillCache.entries.values()) {
+        if (entry.overlays.length === 0) continue;
+        const fillVariants = new Set<symbol>();
+        for (const variant of entry.variants.values()) {
+          if (variant !== 'unsupported') fillVariants.add(variant.id);
+        }
+        entry.overlays = entry.overlays.filter((overlay) => {
+          const stroke =
+            strokeEntries === undefined
+              ? undefined
+              : [...strokeEntries.values()].find(
+                  (candidate) => candidate.id === overlay.strokeEntry,
+                );
+          const reachable =
+            (overlay.fillVariant === null || fillVariants.has(overlay.fillVariant)) &&
+            stroke !== undefined &&
+            (overlay.strokeVariant === null ||
+              [...stroke.variants.values()].some(
+                (variant) => variant !== 'unsupported' && variant.id === overlay.strokeVariant,
+              ));
+          if (!reachable) dropped += overlay.built?.bytes ?? 0;
+          return reachable;
+        });
+      }
+    }
+    return dropped;
+  }
+
   #enqueue(
     nodeId: string,
     failureScope: PathMeshFailureScope,
@@ -1134,6 +1334,8 @@ export class PathMeshPipeline {
       if (nodeCache.entries.size === 0) this.#cache[paint].delete(nodeId);
       bytes -= entryBytes(entry);
       this.#evictions += 1;
+      // Evicting a stroke parent evicts the overlays that reference it (ST-U7, section 4.6).
+      if (paint === 'stroke') bytes -= this.#sweepOverlays();
     }
     // A working set above budget is kept and counted.
     if (bytes > this.#limits.byteBudget) this.#overBudgetFrames += 1;
@@ -1294,11 +1496,9 @@ function stateKey(nodeId: string, paint: PathPaint | null): string {
   return JSON.stringify([nodeId, paint]);
 }
 
-/** B2 section 9.8: port-version and composition-unsupported carry no paint. */
+/** B2 section 9.8: port-version carries no paint (overlay-unsupported is queued directly). */
 function statePaintTag(state: StateFailure): PathPaint | null {
-  return state.code === 'port-version' || state.code === 'composition-unsupported'
-    ? null
-    : state.paint;
+  return state.code === 'port-version' ? null : state.paint;
 }
 
 function classifyResult(
@@ -1441,6 +1641,8 @@ function entryBytes(entry: MeshEntry): number {
   for (const variant of entry.variants.values()) {
     if (variant !== 'unsupported') bytes += variant.bytes;
   }
+  // ST-U7 addendum, section 4.6: overlay bytes count in the budget with their fill entry.
+  for (const overlay of entry.overlays) bytes += overlay.built?.bytes ?? 0;
   return bytes;
 }
 

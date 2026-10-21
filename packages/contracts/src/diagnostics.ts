@@ -22,7 +22,8 @@ export const DIAGNOSTIC_CODES = Object.freeze({
   STALE_GENERATION_SKIPPED: 'render.stale-generation-skipped',
   /**
    * D8-interim (P3 V3 contract, section h; extended to path strokes by the B2 stroke contract,
-   * section 9.8); removed or replaced before P3 acceptance.
+   * section 9.8, and to the joint fill and stroke overlay, `overlay-unsupported`, by the ST-U7
+   * addendum); removed or replaced before P3 acceptance.
    */
   PATH_MESH_INTERIM_FAILURE: 'render.path-mesh-interim-failure',
   DISPOSAL_COMPLETED: 'disposal.completed',
