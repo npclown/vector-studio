@@ -491,6 +491,45 @@ describe('ST-U6 review B1 and S1: an undrawable path never calls a port every fr
   });
 });
 
+describe('ST-U6 review F1: a pending sibling paint does not churn the published one', () => {
+  const tight = { byteBudget: 1 };
+  const nodes = Array.from({ length: 8 }, (_, index) => strokedNode(`p${index}`, index * 20));
+
+  it('ST-A10 (F1): a fill batch failing above one request, with callsPerPrepare 1, builds each stroke once', () => {
+    const fill = new ScriptedFillMeshPort({
+      batch: (requests) =>
+        requests.length > 1 ? { status: 'batch-failed', code: 'internal-error' } : undefined,
+    });
+    const stroke = new ScriptedStrokeMeshPort();
+    const h = createStrokeHarness({
+      fillPort: fill,
+      strokePort: stroke,
+      nodes,
+      limits: { callsPerPrepare: 1, ...tight },
+    });
+    for (let index = 0; index < 30; index += 1) h.prepare();
+    expect(stroke.callCount).toBe(1);
+    expect(h.prepare().draws.length).toBeGreaterThan(0);
+  });
+
+  it('ST-A10 (F1): the reverse case, a stroke batch failing above one request with an ok fill, builds each fill once', () => {
+    const fill = createCountingPort();
+    const stroke = new ScriptedStrokeMeshPort({
+      batch: (requests) =>
+        requests.length > 1 ? { status: 'batch-failed', code: 'internal-error' } : undefined,
+    });
+    const h = createStrokeHarness({
+      fillPort: fill,
+      strokePort: stroke,
+      nodes,
+      limits: { callsPerPrepare: 1, ...tight },
+    });
+    for (let index = 0; index < 30; index += 1) h.prepare();
+    expect(fill.callCount).toBe(1);
+    expect(h.prepare().draws.length).toBeGreaterThan(0);
+  });
+});
+
 describe('ST-U6 draws, slots and composition (sections 9.5 and 9.6)', () => {
   it('ST-A10: a stroked path emits its fill draw then its stroke draw at one position, from two slots, with the stroke color lanes', () => {
     const ports = both();

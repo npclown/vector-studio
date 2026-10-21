@@ -527,7 +527,13 @@ export class PathMeshPipeline {
     for (const { path, items } of evaluated) {
       const entries = items.map((item) => this.#lookup(item.paint, path.id, item.e));
       // A paint that is still missing or memoized as failed hides the whole path this frame.
-      if (entries.some((entry) => entry === undefined)) continue;
+      if (entries.some((entry) => entry === undefined)) {
+        // Review follow-up (ST-U6 pending-paint churn): a published sibling stays in this
+        // frame's working set, without a lastServed stamp, so budget eviction cannot drop it
+        // before the path can draw. Single-paint paths have no published sibling to keep.
+        for (const entry of entries) if (entry !== undefined) working.add(entry);
+        continue;
+      }
       const pathDraws: PathMeshDraw[] = [];
       let failed = false;
       items.forEach((item, index) => {
