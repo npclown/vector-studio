@@ -182,6 +182,8 @@ Extended 2026-10-20 by user decision B2-Q9 (a) to the B2 stroke transport `strok
 
 Candidate safe composition directions are region-partitioned fill/stroke evaluation or another proven single-opacity mesh scheme. Independent full-alpha draws with node opacity applied twice are excluded by the inherited contract. No offscreen isolation, stencil reinterpretation or alternative path-renderer architecture is approved here. If feasibility requires one, stop with a concrete architecture proposal.
 
+> ST-U7 realizes the second direction, a proven single-opacity mesh scheme, with no offscreen isolation or stencil; see the [ST-U7 addendum](p3-b2-st-u7-joint-coverage-addendum.md).
+
 Primary review rejects treating the union of fill and stroke as one undifferentiated paint: fill-only, stroke-only and overlap regions can have different colors/alpha. Likewise, an inside-only one-pixel coverage ramp is not automatically compliant with the geometric edge/coverage contract. Both region attribution and boundary reconstruction need independent evidence before choosing a vertex format or fringe rule.
 
 ## Validation map and freeze conditions

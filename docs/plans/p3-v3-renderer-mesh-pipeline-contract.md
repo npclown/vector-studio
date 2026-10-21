@@ -249,6 +249,8 @@ Amended 2026-10-21 by [ST-U6](p3-fill-stroke-meshes.md#b2-st-u6-renderer-stroke)
 
 Amended 2026-10-21 by the [ST-U6 pending-paint churn follow-up](p3-fill-stroke-meshes.md#b2-st-u6-pending-paint-churn-review-follow-up): the Working set row also covers the cached entries of a path that passed this frame's drawability, node-state, paint-state and memo checks and was not drawn only because a sibling paint's entry is missing. Those entries are not evicted that frame and are not stamped as drawn; they still count toward the byte budget and the over-budget statistics. At most one entry per node and paint is protected. The frozen row text above is unchanged.
 
+Amended 2026-10-21 by [ST-U7](p3-fill-stroke-meshes.md#b2-st-u7-joint-coverage) under the [ST-U7 addendum](p3-b2-st-u7-joint-coverage-addendum.md): overlay variants are cache data of their fill entry; their bytes count in the budget; at most two per node; evicting either parent variant evicts them; a failed overlay is a mark like a failed fringe variant. An overlay is reachable only when both parent entries are resident, so the pending-sibling working-set amendment above needs no overlay rule.
+
 ## e) A5 coverage on K4
 
 **What is reused from O02, unchanged.** The coverage rule at the pixel center (`s`, `w`, `c = clamp(0.5 − s/w, 0, 1)`), EDGE and VERTEX features with multi-sector pinch vertices and the reflex bit, global feature order and strict-`<` updates, the 1.5 px list reach, the 1.0 px far-field clamp to the role constant, `@builtin(position)` as the pixel center, no `sample` interpolation or alpha-to-coverage, one pipeline per sample count, and a complement-triangulation fringe with an exact partition check. The [O02 contract](p3-o02-a5-coverage-contract.md#features-and-reach) owns their meaning; this section states only what differs on K4.
@@ -282,6 +284,14 @@ The local frame is a parallelogram in screen space. Every boundary point is at l
 - an exact partition check over region and exterior triangles before publication.
 
 A vertex with more than 3 sectors, duplicate coordinates, a failed pairing, no ear or a failed partition check is `fringe-unsupported` for that `(key, f′)` variant. Region triangles are the port's, unchanged. **Where this builder runs is decision [V3-Q3](#n-decisions-for-the-user).**
+
+Amended 2026-10-21 by [ST-U7](p3-fill-stroke-meshes.md#b2-st-u7-joint-coverage) under the [ST-U7 addendum](p3-b2-st-u7-joint-coverage-addendum.md): in joint draws only, the port's fill triangles are re-split by the overlay builder:
+
+- the faces are the exact arrangement of each crossed triangle with the clipped stroke `boundaryEdges`;
+- the faces are triangulated by this section's triangulator;
+- Steiner points are rounded once to Float64, except on axis-aligned frame edges, where the exact frame coordinate is kept.
+
+Each overlay triangle keeps its parent's fill list and role and carries a stroke list of every stroke feature within the stroke variant's `ρ′`, decided exactly, and a stroke role from exact membership. The overlay passes this section's exact partition check over the domain's boundary edge multiset. The sentence "Region triangles are the port's, unchanged" (above) still holds for every fill and stroke draw. The joint draw's overlay triangles are an exception under the D8-interim exception recorded in `docs/graphics-engine-architecture.md` by ST-U7a.
 
 **Interpretation.** O02's G1-G3 PASS does not transfer: features are evaluated in f32 from local lanes in the shader, not rounded once from host float64 physical values, and K4 carries no position certificate. Section [k](#k-a08-visual-contract) fixes the visual contract that later evidence uses; V3 claims none of it.
 
@@ -397,6 +407,8 @@ Every vertex of a triangle computes the same flat `t`, so no provoking-vertex co
 
 Amended 2026-10-21 by [ST-U6](p3-fill-stroke-meshes.md#b2-st-u6-renderer-stroke) under [B2 stroke contract section 9.5](p3-b2-stroke-contract.md#95-draws-and-records): a drawn stroked path emits its fill draw (when the fill is drawable) and then its stroke draw, both `MeshFillDraw` entries with the same `position`, consecutive in `draws`. The stroke draw has its own `meshInstances` record from a second path slot, allocated by this section's slot allocator for each node whose stroke has `width > 0` and released when it no longer has one. The record layout is the 64-byte layout above, with the stroke color in the straight color lanes and the served stroke variant's bases. The stroke mesh uses section e's fringe builder and work cap, this coverage rule, pipeline and shader unchanged, and device loss rebuilds stroke data from the CPU entries without a port call (section i). A fill-only scene packs byte-identically to V3.
 
+Amended 2026-10-21 by [ST-U7](p3-fill-stroke-meshes.md#b2-st-u7-joint-coverage) under the [ST-U7 addendum](p3-b2-st-u7-joint-coverage-addendum.md): the joint triangle record (eight u32 words: three indices with bit 31 selecting the stroke variant's positions, fill list, stroke list, roles in bits 0 and 1); word 15 of the fill slot's record, which is stroke slot + 1 under the joint condition and 0 otherwise, recomputed every `prepare`; `MeshFillDraw.composite?: 'joint-fill'`; the pipeline `'p3-mesh-joint-v0'`, created beside the fill pipeline from the same module. `layoutVersion` stays 0; packets without joint draws are unchanged in bytes and shape.
+
 ## g) Paint order and composition
 
 **Order.** Preparation walks the authoritative depth-first order once. Visible primitives append their slot to `order` as today. A path that emits a mesh draw closes the current analytic run and records its draw with `position` equal to the number of analytic draws so far. A path that emits no draw (hidden, culled, empty, singular, `fill: null` or failed) does not split a run, because nothing paints between its neighbours. Analytic draws therefore still partition `[0, visibleCount)` into adjacent increasing ranges, which the backend keeps validating unchanged. A scene with no drawn path emits exactly one analytic draw, as today. The backend encodes draws in merged order and switches pipeline and bind group only at a variant change.
@@ -404,6 +416,8 @@ Amended 2026-10-21 by [ST-U6](p3-fill-stroke-meshes.md#b2-st-u6-renderer-stroke)
 **Composition.** A fill-only path has `L = F` in D2's terms, so its output is `P = F · opacity`, source-over the destination with P1's blend. Node opacity must reach each sample exactly once. That holds because a variant's region and exterior triangles partition its frame (section e's exact check) and the rasterizer's shared-edge rule covers each sample by at most one of them. This is O02's G3 assumption, which WebGPU does not state normatively; V3 inherits it as a stated limit. No offscreen isolation, stencil or extra pass is used. Overlap between separate nodes is ordinary source-over in paint order, as for primitives. Container opacity stays 1, as P1 requires.
 
 Amended 2026-10-21 by [ST-U6](p3-fill-stroke-meshes.md#b2-st-u6-renderer-stroke) under [B2 stroke contract section 9.6](p3-b2-stroke-contract.md#96-composition-and-the-opacity-staging-b2-q6): two source-over draws in fill-then-stroke order are exact at node opacity 1 for any paint alphas, and a single-paint path is exact at any opacity. Both paints at `0 < opacity < 1` would apply opacity twice in the overlap; that case is the interim state failure `composition-unsupported` of section h until ST-U7.
+
+Amended 2026-10-21 by [ST-U7](p3-fill-stroke-meshes.md#b2-st-u7-joint-coverage) under the [ST-U7 addendum](p3-b2-st-u7-joint-coverage-addendum.md): both paints at `0 < opacity < 1` are drawn by the joint fill draw and the stroke draw, exact by the addendum's section 3.2; each draw still covers each sample at most once. No offscreen isolation, stencil or extra pass is used.
 
 ## h) D8-interim failure outcome
 
@@ -446,6 +460,8 @@ Amended 2026-10-21 by [ST-U6](p3-fill-stroke-meshes.md#b2-st-u6-renderer-stroke)
 - **Codes.** The table gains `invalid-stroke` (scope `path`) and `composition-unsupported` (scope `renderer`): a path with `fill !== null`, a stroke of `width > 0` and `0 < opacity < 1` draws neither paint, calls no port for it and keeps its cached meshes; it clears when either condition clears.
 - **Outcome.** If either drawable paint of a path fails (any port, response, fringe or state failure), the whole path is not drawn and every other node draws; the other paint's cached mesh stays. This extends V1-Q4 to stroke failures as the ST-A0 S5 note states. `fringe-work-cap` still draws its paint region-only, as amended above.
 
+Amended 2026-10-21 by [ST-U7](p3-fill-stroke-meshes.md#b2-st-u7-joint-coverage) under the [ST-U7 addendum](p3-b2-st-u7-joint-coverage-addendum.md): the table loses `composition-unsupported` and gains `overlay-unsupported` (renderer scope, `paint: null`), D8-interim, removed with the TypeScript builder.
+
 ## i) Device loss, generation and lifetime
 
 - **No port call on recovery.** Meshes, fringe variants and packed bytes are CPU caches keyed without the generation. A new generation forces a reconstruct packet whose mesh part writes every occupied path slot's instance record, every served variant's ranges and `meshFrame` from the CPU entries, byte for byte as before the loss. The port is not called while keys match.
@@ -454,6 +470,8 @@ Amended 2026-10-21 by [ST-U6](p3-fill-stroke-meshes.md#b2-st-u6-renderer-stroke)
 - **Edits during recovery** publish CPU state as today; the first recoverable frame uses the latest accepted scene.
 - **Dispose** is terminal and idempotent. It clears the mesh cache, memo, notice queue and slot maps. It does not dispose the port, which the host owns (V1 c).
 - **Port outages.** The `disposed` latch persists across generations; it is service state, not GPU state.
+
+Amended 2026-10-21 by [ST-U7](p3-fill-stroke-meshes.md#b2-st-u7-joint-coverage) under the [ST-U7 addendum](p3-b2-st-u7-joint-coverage-addendum.md): overlay variants are reconstructed from CPU entries byte for byte, with no port call and no rebuild.
 
 ## j) C04 items for V3
 
@@ -469,6 +487,8 @@ The [carve-out](p3-private-contract.md#private-transport-and-lifetime-requiremen
 | 6. Upload and lifetime           | Mesh arena under P1's allocator, generation and receipt meanings; range management; latest-scene reconstruction without port calls          | Tile caches and epoch builds (E2)                                    |
 
 Amended 2026-10-21 by [ST-U6](p3-fill-stroke-meshes.md#b2-st-u6-renderer-stroke) under [B2 stroke contract section 10](p3-b2-stroke-contract.md#10-c04-items-for-the-stroke-transport-and-draw): item 2's "fill/stroke ordering" is now fixed functionally (fill then stroke at one paint position, separate instance records and the opacity staging rule); joint fill and stroke coverage stays open for ST-U7 and the C04 layout.
+
+Amended 2026-10-21 by [ST-U7](p3-fill-stroke-meshes.md#b2-st-u7-joint-coverage) under the [ST-U7 addendum](p3-b2-st-u7-joint-coverage-addendum.md): joint fill and stroke coverage is fixed functionally by ST-U7; the C04 layout stays open.
 
 ## k) A08 visual contract
 
