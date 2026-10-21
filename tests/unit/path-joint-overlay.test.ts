@@ -322,6 +322,41 @@ const FIXTURES: readonly Fixture[] = [
       [0, null],
     ],
   },
+  // Positive control for section 4.2 step 6 (review S1): a region-only rectangle fill under an
+  // inverted-U stroke whose legs cross the fill's axis-aligned bottom edge y = 0, one of them
+  // sloped from the non-dyadic (1.3, -1) to (1.2, 1). The four Steiner points on that outer
+  // edge keep y = 0 exactly after rounding, so the overlay builds.
+  {
+    id: 'U7b-axis-outer',
+    fill: meshOf(rectangle(0, 0, 4, 2), [
+      [0, 1, 2],
+      [0, 2, 3],
+    ]),
+    stroke: meshOf(
+      [
+        [1.3, -1],
+        [1.5, -1],
+        [1.5, 0.8],
+        [2.5, 0.8],
+        [2.5, -1],
+        [2.7, -1],
+        [2.7, 1],
+        [1.2, 1],
+      ],
+      [
+        [0, 1, 2],
+        [0, 2, 7],
+        [2, 6, 7],
+        [2, 3, 6],
+        [3, 4, 5],
+        [3, 5, 6],
+      ],
+    ),
+    buckets: [
+      [null, -1],
+      [null, null],
+    ],
+  },
 ];
 
 /**
@@ -777,13 +812,37 @@ function listFindings(
         ),
     );
   if (expectedKept.join() !== Array.from(detail.kept).join()) findings.push('drop-rule');
-  // Stroke features in global order, independently.
+  // Stroke features: the brute-force set is geometric (each boundary edge and vertex of the stroke
+  // mesh); each published list entry is decoded through the stroke fringe variant's own feature
+  // record (kind and binary32 lanes), so no feature order is re-derived on either side.
   const stroke = input.stroke.mesh;
   const edges: [number, number][] = [];
   for (let i = 0; i < stroke.boundaryEdges.length; i += 2)
     edges.push([stroke.boundaryEdges[i]!, stroke.boundaryEdges[i + 1]!]);
-  edges.sort((l, r) => l[0] - r[0] || l[1] - r[1]);
-  const vertices = [...new Set(stroke.boundaryEdges)].sort((l, r) => l - r);
+  const vertices = [...new Set(stroke.boundaryEdges)];
+  const strokeMid = [
+    stroke.bounds.minX / 2 + stroke.bounds.maxX / 2,
+    stroke.bounds.minY / 2 + stroke.bounds.maxY / 2,
+  ] as const;
+  const lane = (s: number, axis: 0 | 1) =>
+    Math.fround(stroke.positions[2 * s + axis]! - strokeMid[axis]);
+  const edgeKey = ([a, b]: readonly [number, number]) =>
+    `E:${lane(a, 0)},${lane(a, 1)},${lane(b, 0)},${lane(b, 1)}`;
+  const vertexKey = (v: number) => `V:${lane(v, 0)},${lane(v, 1)}`;
+  let published: ((entry: number) => string) | null = null;
+  if (input.stroke.fringeBucket !== null) {
+    const variant = buildPathFringeDetailed(stroke, input.stroke.fringeBucket).result;
+    if (variant.status !== 'built') throw new Error('stroke fringe');
+    const words = variant.fringe.features;
+    const floats = new Float32Array(words.buffer, words.byteOffset, words.length);
+    published = (entry) => {
+      const at = 16 * entry;
+      if (at >= words.length) return `out-of-range:${entry}`;
+      if (words[at] === 0)
+        return `E:${floats[at + 1]},${floats[at + 2]},${floats[at + 3]},${floats[at + 4]}`;
+      return `V:${floats[at + 2]},${floats[at + 3]}`;
+    };
+  }
   const q = (p: Exact): Q2 => [rational(p[0]), rational(p[1])];
   const reachValue = input.stroke.fringeBucket === null ? 0 : 2 ** input.stroke.fringeBucket;
   const rho = view.scale(reachValue);
@@ -813,27 +872,30 @@ function listFindings(
     const strokeList = Array.from(
       overlay.lists.subarray(words[at + 5], words[at + 5]! + words[at + 6]!),
     );
-    const expected: number[] = [];
-    if (input.stroke.fringeBucket !== null) {
+    const expected: string[] = [];
+    if (published !== null) {
       const corners = record.map(view.rounded);
       const triangle = corners.map(q) as unknown as readonly [Q2, Q2, Q2];
       const tbox = box(corners);
-      edges.forEach(([a, b], index) => {
-        const A = view.strokePoint(a);
-        const B = view.strokePoint(b);
-        if (!near(box([A, B]), tbox)) return;
+      for (const edge of edges) {
+        const A = view.strokePoint(edge[0]);
+        const B = view.strokePoint(edge[1]);
+        if (!near(box([A, B]), tbox)) continue;
         if (compare(segmentTriangleDistanceSquared(q(A), q(B), triangle), reach) <= 0)
-          expected.push(index);
-      });
-      vertices.forEach((vertex, index) => {
+          expected.push(edgeKey(edge));
+      }
+      for (const vertex of vertices) {
         const V = view.strokePoint(vertex);
-        if (!near(box([V]), tbox)) return;
+        if (!near(box([V]), tbox)) continue;
         if (compare(pointTriangleDistanceSquared(q(V), triangle), reach) <= 0)
-          expected.push(edges.length + index);
-      });
+          expected.push(vertexKey(vertex));
+      }
     }
-    if (strokeList.join() !== expected.join())
-      findings.push(`stroke-list:${t}:${strokeList.join()}|${expected.join()}`);
+    const found = published === null ? strokeList.map(String) : strokeList.map(published);
+    // Sorted by (kind, global id): EDGE records precede VERTEX records, indices ascend.
+    const ascending = strokeList.every((entry, i) => i === 0 || entry > strokeList[i - 1]!);
+    if (!ascending || [...found].sort().join() !== [...expected].sort().join())
+      findings.push(`stroke-list:${t}:${found.join(';')}|${expected.join(';')}`);
   }
   return findings;
 }
@@ -1205,5 +1267,67 @@ describe('ST7-Q5 (a): the overlay work cap, at the builder', () => {
       throw new Error('fringe');
     for (const key of ['corners', 'triangles', 'lists', 'features'] as const)
       expect(Array.from(counted.result.fringe[key])).toEqual(Array.from(plain.result.fringe[key]));
+  });
+
+  it('many small rings in one large triangle exhaust the exact-test cap (holes, angles, bridges)', () => {
+    // 16 x 16 square rings inside one region triangle: one face with 246 holes.
+    const rings: FillMesh[] = [];
+    for (let i = 0; i < 16; i += 1)
+      for (let j = 0; j < 16; j += 1) {
+        const x = 10 + 6 * i;
+        const y = 10 + 6 * j;
+        if (x + y > 180) continue;
+        rings.push(ringMesh(rectangle(x, y, x + 4, y + 4), rectangle(x + 1, y + 1, x + 3, y + 3)));
+      }
+    const positions: number[] = [];
+    const indices: number[] = [];
+    const boundary: number[] = [];
+    for (const ring of rings) {
+      const base = positions.length / 2;
+      positions.push(...ring.positions);
+      indices.push(...Array.from(ring.indices, (v) => v + base));
+      boundary.push(...Array.from(ring.boundaryEdges, (v) => v + base));
+    }
+    const xs = positions.filter((_, i) => i % 2 === 0);
+    const ys = positions.filter((_, i) => i % 2 === 1);
+    const stroke: FillMesh = {
+      positions: Float64Array.from(positions),
+      indices: Uint32Array.from(indices),
+      boundaryEdges: Uint32Array.from(boundary),
+      bounds: {
+        minX: Math.min(...xs),
+        minY: Math.min(...ys),
+        maxX: Math.max(...xs),
+        maxY: Math.max(...ys),
+      },
+    };
+    const fill = meshOf(
+      [
+        [0, 0],
+        [200, 0],
+        [0, 200],
+      ],
+      [[0, 1, 2]],
+    );
+    const result = buildJointOverlay({
+      fill: { mesh: fill, fringeBucket: null },
+      stroke: { mesh: stroke, fringeBucket: null },
+    });
+    expect(result.status === 'unsupported' && result.reason).toBe('work-cap:tests');
+    expect(result.status === 'unsupported' && result.work.exactTests).toBe(
+      JOINT_OVERLAY_LIMITS.exactTests + 1,
+    );
+  }, 120_000);
+});
+
+describe('section 4.2 step 6 positive control (review S1)', () => {
+  it('Steiner points on an axis-aligned outer edge of a region-only fill keep their coordinate', () => {
+    for (const buckets of fixtureOf('U7b-axis-outer').buckets) {
+      const { overlay, detail } = built(inputOf(fixtureOf('U7b-axis-outer'), buckets));
+      const onBottom = detail.steiner.filter((s) => s.y === 0);
+      expect(onBottom.length).toBe(4);
+      expect(onBottom.some((s) => s.x !== null && ![1.5, 2.5, 2.7].includes(s.x))).toBe(true);
+      expect(overlay.steinerPoints).toBeGreaterThanOrEqual(4);
+    }
   });
 });

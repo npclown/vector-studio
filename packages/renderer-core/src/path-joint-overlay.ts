@@ -251,6 +251,7 @@ function gcd(a: bigint, b: bigint): bigint {
  * approximation monotone for the spatial prefilter.
  */
 function roundRational(n: bigint, d: bigint, exponent: number, strict = true): number {
+  countExactTest();
   if (n === 0n) return 0;
   const negative = n < 0n;
   const a = negative ? -n : n;
@@ -427,7 +428,9 @@ class OverlayBuilder {
     return Object.freeze({ exactTests: work.tests, steinerPoints: this.#steinerCount });
   }
 
-  public run(work: ExactWork): Readonly<{ overlay: JointOverlay; detail: JointOverlayDetail }> {
+  public run(
+    work: ExactWork,
+  ): Readonly<{ overlay: Omit<JointOverlay, 'work'>; detail: JointOverlayDetail }> {
     const fillMesh = this.#input.fill.mesh;
     const strokeMesh = this.#input.stroke.mesh;
     const portVertices = fillMesh.positions.length / 2;
@@ -753,14 +756,13 @@ class OverlayBuilder {
       detailTriangles[3 * index + 1] = outputIndex(triangle.ids[1]);
       detailTriangles[3 * index + 2] = outputIndex(triangle.ids[2]);
     });
-    const overlay: JointOverlay = Object.freeze({
+    const overlay: Omit<JointOverlay, 'work'> = Object.freeze({
       positions,
       triangles,
       lists,
       fillVertices: fillVariantVertices,
       steinerPoints: this.#steinerCount,
       droppedTriangles: preDrop.length - kept.length,
-      work: this.work({ tests: 0, testLimit: 0 }),
     });
     const detail: JointOverlayDetail = Object.freeze({
       domain: domain.map((triangle) => triangle.v),
@@ -922,6 +924,7 @@ class OverlayBuilder {
         : 1;
     const ascending = b[axis] > a[axis];
     edge.points = [...found].sort((left, right) => {
+      countExactTest();
       const p = this.#vertices[left]!;
       const q = this.#vertices[right]!;
       const order = compareFraction(axis === 0 ? p.X : p.Y, p.W, axis === 0 ? q.X : q.Y, q.W);
@@ -1059,6 +1062,7 @@ class OverlayBuilder {
       const probe: P = [2n * v[0], 2n * v[1]];
       let best = -1;
       for (const f of positive) {
+        for (let edge = 0; edge < cycles[f]!.length; edge += 1) countExactTest();
         if (pointInLoop(points, cycles[f]!, probe) !== 1) continue;
         if (best < 0 || areas[f]! < areas[best]!) best = f;
       }
@@ -1159,13 +1163,16 @@ class OverlayBuilder {
     };
     const position = new Map<number, number>();
     for (const list of outgoing.values()) {
-      list.sort((a, b) => compareAngle(direction(a), direction(b)));
+      list.sort((a, b) => {
+        countExactTest();
+        return compareAngle(direction(a), direction(b));
+      });
       for (let i = 0; i < list.length; i += 1) {
-        if (
-          list.length > 1 &&
-          compareAngle(direction(list[i]!), direction(list[(i + 1) % list.length]!)) === 0
-        )
-          fail('arrangement:overlap');
+        if (list.length > 1) {
+          countExactTest();
+          const next = list[(i + 1) % list.length]!;
+          if (compareAngle(direction(list[i]!), direction(next)) === 0) fail('arrangement:overlap');
+        }
         position.set(list[i]!, i);
       }
     }
