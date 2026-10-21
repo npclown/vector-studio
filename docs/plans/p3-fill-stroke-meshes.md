@@ -2847,7 +2847,7 @@ Light tier, closes ST-U6 re-review follow-up F1. No contract text changes.
 
 ### B2 ST-U7 joint coverage
 
-Design addendum for ST-U7 (**FROZEN** 2026-10-21, revision 5, after independent review rounds 1 to 4 and a spot check; user answers ST7-Q1 to ST7-Q8 all (a), with ST7-Q2 (a)); freeze after the Primary's spot check): [ST-U7 joint-coverage addendum](p3-b2-st-u7-joint-coverage-addendum.md), recommending a joint-coverage fill draw over a renderer-derived overlay; no ST-U7 code until it is frozen.
+Design addendum for ST-U7 (**FROZEN** 2026-10-21, revision 5, after independent review rounds 1 to 4 and a spot check; user answers ST7-Q1 to ST7-Q8 all (a), with ST7-Q2 (a)): [ST-U7 joint-coverage addendum](p3-b2-st-u7-joint-coverage-addendum.md), a joint-coverage fill draw over a renderer-derived overlay; implementation starts with ST-U7a.
 
 ### B0 runner (light tier)
 
