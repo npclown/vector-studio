@@ -11,6 +11,7 @@ export default tseslint.config(
       '**/test-results/**',
       'artifacts/p2.5/**',
       'artifacts/p3-b0-wasm/**',
+      'artifacts/p3-al-ob5/**',
       '**/.tools/**',
       '**/target/**',
     ],
