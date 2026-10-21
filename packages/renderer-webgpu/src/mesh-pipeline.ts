@@ -1,11 +1,18 @@
 import type { MeshResourceId } from '@vector-studio/renderer-core';
 
 import type { PipelineCacheKey } from './pipeline-cache.js';
-import { MESH_FILL_SHADER_KEY } from './mesh-fill-shader.js';
+import {
+  MESH_FILL_SHADER_KEY,
+  MESH_JOINT_FRAGMENT_ENTRY_POINT,
+  MESH_JOINT_SHADER_KEY,
+  MESH_JOINT_VERTEX_ENTRY_POINT,
+} from './mesh-fill-shader.js';
 import { PRIMITIVE_RENDER_STATE_KEY, type PrimitiveTargetFormat } from './primitive-pipeline.js';
 
 // The second pipeline of the P3 V3 contract, section f: five read-only storage bindings and one
-// uniform, visible to the vertex and fragment stages, and no vertex or index buffer.
+// uniform, visible to the vertex and fragment stages, and no vertex or index buffer. ST-U7
+// addendum, section 4.5: a joint pipeline over the same module, layout and bind group layout,
+// with its own shaderKey and entry points, created beside the fill pipeline.
 
 export const MESH_PACKET_LAYOUT_VERSION = 0;
 export const MESH_PACKET_LAYOUT_KEY = 'p3-mesh-packet-v0';
@@ -56,12 +63,16 @@ export function createMeshBindGroupLayoutDescriptor(): GPUBindGroupLayoutDescrip
   };
 }
 
+/** The mesh pipelines: V3's fill pipeline and ST-U7's joint fill pipeline. */
+export type MeshPipelineKind = 'fill' | 'joint';
+
 export function meshPipelineKey(
   targetFormat: PrimitiveTargetFormat,
   sampleCount: 1 | 4,
+  kind: MeshPipelineKind = 'fill',
 ): PipelineCacheKey {
   return Object.freeze({
-    shaderKey: MESH_FILL_SHADER_KEY,
+    shaderKey: kind === 'fill' ? MESH_FILL_SHADER_KEY : MESH_JOINT_SHADER_KEY,
     layoutKey: MESH_PACKET_LAYOUT_KEY,
     vertexLayoutKey: MESH_VERTEX_LAYOUT_KEY,
     targetFormat,
@@ -75,14 +86,20 @@ export function createMeshPipelineDescriptor(
   pipelineLayout: GPUPipelineLayout,
   targetFormat: PrimitiveTargetFormat,
   sampleCount: 1 | 4,
+  kind: MeshPipelineKind = 'fill',
 ): GPURenderPipelineDescriptor {
+  const fill = kind === 'fill';
   return {
-    label: `vector-studio/p3-mesh-fill-${sampleCount}x`,
+    label: `vector-studio/p3-mesh-${fill ? 'fill' : 'joint'}-${sampleCount}x`,
     layout: pipelineLayout,
-    vertex: { module: shaderModule, entryPoint: 'meshVertexMain', buffers: [] },
+    vertex: {
+      module: shaderModule,
+      entryPoint: fill ? 'meshVertexMain' : MESH_JOINT_VERTEX_ENTRY_POINT,
+      buffers: [],
+    },
     fragment: {
       module: shaderModule,
-      entryPoint: 'meshFragmentMain',
+      entryPoint: fill ? 'meshFragmentMain' : MESH_JOINT_FRAGMENT_ENTRY_POINT,
       targets: [
         {
           format: targetFormat,

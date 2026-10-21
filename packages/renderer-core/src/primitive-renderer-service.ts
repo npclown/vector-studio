@@ -128,6 +128,14 @@ export class PrimitiveRendererService
     return this.#source.getPreparationStatistics();
   }
 
+  /**
+   * @internal Tests only (ST-U7 addendum, ST-A15 and ST-A17): overlay builds of the path-mesh
+   * pipeline so far, 0 without a port. It is not part of PathMeshStatistics.
+   */
+  public getOverlayBuildCountForTesting(): number {
+    return this.#source.getOverlayBuildCountForTesting();
+  }
+
   /** CPU attributions of the path-mesh cache; null without a port. */
   public getPathMeshStatistics(): PathMeshStatistics | null {
     return this.#source.getPathMeshStatistics();

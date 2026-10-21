@@ -46,6 +46,12 @@ export type MeshFillDraw = Readonly<{
   firstTriangle: number;
   /** Region and exterior triangles of the served variant, > 0. */
   triangleCount: number;
+  /**
+   * ST-U7 addendum, section 4.5: present only on a joint fill draw, which uses the joint
+   * pipeline over the overlay variant's triangles and reads the stroke record named by word 15
+   * of its instance record (stroke slot + 1). Absent on every other draw; layoutVersion stays 0.
+   */
+  composite?: 'joint-fill';
 }>;
 export type MeshResource = Readonly<{
   id: MeshResourceId;

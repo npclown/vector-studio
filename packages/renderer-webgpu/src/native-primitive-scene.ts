@@ -102,12 +102,16 @@ interface MeshArenaState extends ArenaBase {
   readonly incarnations: Readonly<Record<MeshResourceId, symbol>>;
   readonly capacities: Readonly<Record<MeshResourceId, number>>;
   instances: ReadonlySet<number>;
+  /** Word 15 of each written meshInstances record (ST-U7 addendum, section 4.5). */
+  links: ReadonlyMap<number, number>;
   frameInitialized: boolean;
 }
 
-/** The mesh pipeline created at initialization or recovery; null when unavailable. */
+/** The mesh pipelines created at initialization or recovery; null when unavailable. */
 interface MeshPipelineState {
   readonly pipeline: GPURenderPipeline;
+  /** ST-U7 addendum, section 4.5: the joint fill pipeline over the same module and layout. */
+  readonly jointPipeline: GPURenderPipeline;
   readonly bindGroupLayout: GPUBindGroupLayout;
 }
 
@@ -119,6 +123,7 @@ type ValidatedMesh =
       arena: MeshArenaState | null;
       createdArena: boolean;
       instances: ReadonlySet<number>;
+      links: ReadonlyMap<number, number>;
       frameInitialized: boolean;
       draws: readonly MeshFillDraw[];
       receiptResources: readonly MeshReceiptResource[];
@@ -240,7 +245,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     this.#mesh = mesh;
     this.meshPipelineAvailable = mesh !== null;
     this.shaderModulesCreated = 1 + meshShaderModulesCreated;
-    this.pipelinesCreated = mesh === null ? 1 : 2;
+    this.pipelinesCreated = mesh === null ? 1 : 3;
     this.#device = device;
     this.#context = context;
     this.#format = format;
@@ -405,15 +410,23 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       bindAnalytic();
       // P3 V3 section g: draws are encoded in merged paint order; the pipeline and bind group
       // switch only at a variant change.
+      // ST-U7 addendum, section 4.5: a joint fill draw switches to the joint pipeline and the
+      // next plain mesh draw back; the mesh bind group is shared.
       let analyticBound = true;
+      let jointBound = false;
       let nextMeshDraw = 0;
       const drawMeshesAt = (position: number) => {
         while (meshDraws[nextMeshDraw]?.position === position) {
           const draw = meshDraws[nextMeshDraw]!;
+          const joint = draw.composite === 'joint-fill';
           if (analyticBound) {
-            pass.setPipeline(this.#mesh!.pipeline);
+            pass.setPipeline(joint ? this.#mesh!.jointPipeline : this.#mesh!.pipeline);
             pass.setBindGroup(0, meshArena!.bindGroup);
             analyticBound = false;
+            jointBound = joint;
+          } else if (joint !== jointBound) {
+            pass.setPipeline(joint ? this.#mesh!.jointPipeline : this.#mesh!.pipeline);
+            jointBound = joint;
           }
           pass.draw(3 * draw.triangleCount, 1, 3 * draw.firstTriangle, draw.instance);
           nextMeshDraw += 1;
@@ -745,6 +758,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         arena: null,
         createdArena: false,
         instances: new Set<number>(),
+        links: new Map<number, number>(),
         frameInitialized: false,
         draws: Object.freeze([]),
         receiptResources: Object.freeze([]),
@@ -781,6 +795,9 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           current.capacities[id] === capacities[id],
       );
     let instances: ReadonlySet<number> = backingMatches ? current.instances : new Set<number>();
+    let links: ReadonlyMap<number, number> = backingMatches
+      ? current.links
+      : new Map<number, number>();
     let frameInitialized = backingMatches ? current.frameInitialized : false;
     const writeRecords = new Map<MeshResourceId, PrimitiveRecordVersion[]>(
       MESH_RESOURCE_IDS.map((id) => [id, []]),
@@ -826,6 +843,17 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         const next = new Set(instances);
         for (const record of write.records) next.add(record.index);
         instances = next;
+        // Word 15 of each written record, for the joint draw check below (ST-U7, section 4.5).
+        const view = new DataView(
+          write.bytes.buffer,
+          write.bytes.byteOffset,
+          write.bytes.byteLength,
+        );
+        const nextLinks = new Map(links);
+        write.records.forEach((record, offset) => {
+          nextLinks.set(record.index, view.getUint32(offset * stride + 60, true));
+        });
+        links = nextLinks;
       } else if (write.resourceId === 'meshFrame') {
         frameInitialized = true;
       }
@@ -849,9 +877,18 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         draw.firstTriangle < 0 ||
         !Number.isSafeInteger(draw.triangleCount) ||
         draw.triangleCount <= 0 ||
-        draw.firstTriangle + draw.triangleCount > triangleCapacity
+        draw.firstTriangle + draw.triangleCount > triangleCapacity ||
+        (draw.composite !== undefined && draw.composite !== 'joint-fill')
       ) {
         throw new TypeError('Invalid mesh draw.');
+      }
+      if (draw.composite === 'joint-fill') {
+        // ST-U7 addendum, section 4.5: word 15 - 1 of a joint fill record names the stroke
+        // record, which must be a written instance below capacity, as draw.instance is.
+        const stroke = (links.get(draw.instance) ?? 0) - 1;
+        if (stroke < 0 || stroke >= instanceCapacity || !instances.has(stroke)) {
+          throw new TypeError('Invalid joint mesh draw.');
+        }
       }
       previousPosition = draw.position;
     }
@@ -870,6 +907,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       arena: arena!,
       createdArena,
       instances,
+      links,
       frameInitialized,
       draws: part.draws,
       receiptResources: Object.freeze(
@@ -959,6 +997,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         incarnations: Object.freeze({ ...incarnations }),
         capacities: Object.freeze({ ...capacities }),
         instances: new Set<number>(),
+        links: new Map<number, number>(),
         frameInitialized: false,
         lastSubmittedSerial: 0,
         retired: false,
@@ -977,6 +1016,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     const arena = mesh.arena;
     if (arena === null) return;
     arena.instances = mesh.instances;
+    arena.links = mesh.links;
     arena.frameInitialized = mesh.frameInitialized;
     if (mesh.createdArena) {
       const previous = this.#currentMeshArena;
@@ -1416,7 +1456,28 @@ export function createNativePrimitiveSceneCreation(
               ),
           );
           trackMesh(`${prefix}/mesh-pipeline`, { category: 'render-pipeline' });
-          mesh = Object.freeze({ pipeline: meshPipeline, bindGroupLayout: meshBindGroupLayout });
+          // ST-U7 addendum, section 4.5: the joint pipeline, same module and layout. If either
+          // pipeline fails, the mesh path is unavailable for this generation: a joint path
+          // cannot fall back to two plain draws without opacity applied twice.
+          const jointPipeline = await pipelineCache.getOrCreate(
+            meshPipelineKey(format, sampleCount, 'joint'),
+            () =>
+              device.createRenderPipelineAsync(
+                createMeshPipelineDescriptor(
+                  meshShader,
+                  meshPipelineLayout,
+                  format,
+                  sampleCount,
+                  'joint',
+                ),
+              ),
+          );
+          trackMesh(`${prefix}/mesh-joint-pipeline`, { category: 'render-pipeline' });
+          mesh = Object.freeze({
+            pipeline: meshPipeline,
+            jointPipeline,
+            bindGroupLayout: meshBindGroupLayout,
+          });
         } catch {
           // The mesh path is unavailable for this generation; primitives still draw.
           for (const id of meshTracked) {

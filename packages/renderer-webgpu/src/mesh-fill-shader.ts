@@ -1,4 +1,9 @@
 export const MESH_FILL_SHADER_KEY = 'p3-mesh-fill-v0';
+/** ST-U7 addendum, section 4.5: the joint pipeline's shaderKey, over the same module. */
+export const MESH_JOINT_SHADER_KEY = 'p3-mesh-joint-v0';
+/** The joint pipeline's entry points in MESH_FILL_SHADER. */
+export const MESH_JOINT_VERTEX_ENTRY_POINT = 'meshJointVertexMain';
+export const MESH_JOINT_FRAGMENT_ENTRY_POINT = 'meshJointFragmentMain';
 
 /**
  * P3 V3 contract, sections e and f: one non-indexed vertex-pulling draw per path mesh, with the
@@ -12,6 +17,17 @@ export const MESH_FILL_SHADER_KEY = 'p3-mesh-fill-v0';
  * directions mapped with the linear lanes; every side and sector test is multiplied by the
  * orientation sigma = sign(det L), because boundary orientation is node-local. Functional only:
  * precision is UNVERIFIED against the 0.25 physical-pixel target and no Q4 threshold is claimed.
+ *
+ * ST-U7 addendum (docs/plans/p3-b2-st-u7-joint-coverage-addendum.md), section 4.5: the same module
+ * also holds the joint fill draw's entry points. meshJointVertexMain decodes the joint triangle's
+ * bit-31 indices (bit 31 set: relative to the stroke record's vertexBase; the fill record's word
+ * 15 names the stroke record as stroke slot + 1). Both vertex entry points compute positions
+ * through one helper, with @invariant on the position output, so a stroke boundary vertex is
+ * bit-identical in the stroke draw and in the joint draw. meshJointFragmentMain evaluates c_F
+ * over the fill list with the fill record and c_S over the stroke list with the stroke record
+ * (both lists in the overlay's list range, at the fill record's listBase) and outputs
+ * X = o * c_F * (f.rgb * f.a, f.a) * (1 - a_S) / (1 - o * a_S), with a_S = c_S * s.a, so the stroke
+ * draw that follows composites the stroke over the fill with opacity applied once.
  */
 export const MESH_FILL_SHADER = /* wgsl */ `
 struct MeshTriangle {
@@ -38,7 +54,8 @@ struct MeshInstance {
   vertexBase: u32,
   listBase: u32,
   featureBase: u32,
-  padding: u32,
+  // Word 15: 0, or stroke slot + 1 on a joint fill record (ST-U7 addendum, section 4.5).
+  strokeLink: u32,
 };
 
 struct MeshFrame {
@@ -50,7 +67,7 @@ struct MeshFrame {
 };
 
 struct MeshVertexOutput {
-  @builtin(position) position: vec4f,
+  @builtin(position) @invariant position: vec4f,
   @location(0) @interpolate(flat) triangle: u32,
   @location(1) @interpolate(flat) instance: u32,
 };
@@ -65,12 +82,38 @@ struct MeshVertexOutput {
 const REGION_ROLE: u32 = 0u;
 const EDGE_KIND: u32 = 0u;
 const FAR_FIELD_PX: f32 = 1.0;
+const JOINT_STROKE_INDEX: u32 = 0x80000000u;
+const JOINT_INDEX_MASK: u32 = 0x7fffffffu;
 
 // K4: p = ((A * u + B) + (O_m - camera)) * zoom * DPR, in physical pixels.
 fn toPhysical(offset: vec2f, instance: MeshInstance) -> vec2f {
   let linear = instance.linear.xy * offset.x + instance.linear.zw * offset.y;
   let documentPosition = (linear + instance.anchor) + frame.originMinusCamera;
   return documentPosition * frame.zoom * frame.devicePixelRatio;
+}
+
+// The corner's triangle index word: the same selection code for both vertex entry points.
+fn meshCornerIndex(triangle: MeshTriangle, corner: u32) -> u32 {
+  var local = triangle.i0;
+  if (corner == 1u) {
+    local = triangle.i1;
+  } else if (corner == 2u) {
+    local = triangle.i2;
+  }
+  return local;
+}
+
+// The shared position helper of both vertex entry points (ST-U7 addendum, S-3 a): NDC of the
+// position at absolute index positionIndex, mapped with the given record's lanes and anchor.
+fn meshPositionNdc(positionIndex: u32, instance: MeshInstance) -> vec4f {
+  let physicalPosition = toPhysical(positions[positionIndex], instance);
+  // NDC exactly as the P1 shader, y flipped.
+  return vec4f(
+    physicalPosition.x * 2.0 / frame.physicalSize.x - 1.0,
+    1.0 - physicalPosition.y * 2.0 / frame.physicalSize.y,
+    0.0,
+    1.0,
+  );
 }
 
 @vertex
@@ -82,22 +125,35 @@ fn meshVertexMain(
   let corner = vertexIndex % 3u;
   let triangle = triangles[triangleIndex];
   let instance = instances[instanceIndex];
-  var local = triangle.i0;
-  if (corner == 1u) {
-    local = triangle.i1;
-  } else if (corner == 2u) {
-    local = triangle.i2;
-  }
-  let physicalPosition = toPhysical(positions[instance.vertexBase + local], instance);
+  let local = meshCornerIndex(triangle, corner);
 
   var output: MeshVertexOutput;
-  // NDC exactly as the P1 shader, y flipped.
-  output.position = vec4f(
-    physicalPosition.x * 2.0 / frame.physicalSize.x - 1.0,
-    1.0 - physicalPosition.y * 2.0 / frame.physicalSize.y,
-    0.0,
-    1.0,
-  );
+  output.position = meshPositionNdc(instance.vertexBase + local, instance);
+  output.triangle = triangleIndex;
+  output.instance = instanceIndex;
+  return output;
+}
+
+// The joint fill draw's vertex entry point. It first selects the record: the stroke record
+// (word 15 - 1 of the fill record) for a bit-31 index, the fill record otherwise. A bit-31 index
+// is relative to the stroke record's vertexBase, masked; any other index is relative to the fill
+// record's vertexBase, the overlay's positions. Then it calls the shared position helper.
+@vertex
+fn meshJointVertexMain(
+  @builtin(vertex_index) vertexIndex: u32,
+  @builtin(instance_index) instanceIndex: u32,
+) -> MeshVertexOutput {
+  let triangleIndex = vertexIndex / 3u;
+  let corner = vertexIndex % 3u;
+  let triangle = triangles[triangleIndex];
+  let raw = meshCornerIndex(triangle, corner);
+  let fromStroke = (raw & JOINT_STROKE_INDEX) != 0u;
+  let recordIndex = select(instanceIndex, instances[instanceIndex].strokeLink - 1u, fromStroke);
+  let record = instances[recordIndex];
+  let local = raw & JOINT_INDEX_MASK;
+
+  var output: MeshVertexOutput;
+  output.position = meshPositionNdc(record.vertexBase + local, record);
   output.triangle = triangleIndex;
   output.instance = instanceIndex;
   return output;
@@ -142,8 +198,25 @@ fn insideSector(
 // far-field clamp to the role constant.
 fn meshCoverage(p: vec2f, triangle: MeshTriangle, instance: MeshInstance) -> f32 {
   let roleConstant = select(0.0, 1.0, triangle.role == REGION_ROLE);
-  let count = triangle.listCount;
-  let listStart = instance.listBase + triangle.listOffset;
+  return meshListCoverage(
+    p,
+    instance.listBase + triangle.listOffset,
+    triangle.listCount,
+    roleConstant,
+    instance,
+  );
+}
+
+// The per-feature code of the coverage rule, shared by meshCoverage and the joint coverage
+// helper: count entries of the list at listStart, features at instance.featureBase mapped with
+// instance's lanes, anchor and orientation, and the role constant of the far-field clamp.
+fn meshListCoverage(
+  p: vec2f,
+  listStart: u32,
+  count: u32,
+  roleConstant: f32,
+  instance: MeshInstance,
+) -> f32 {
   var best = 3.0e38;
   var side = 0.0;
   var width = 1.0;
@@ -204,5 +277,53 @@ fn meshFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {
     discard;
   }
   return vec4f(instance.fill.rgb * alpha, alpha);
+}
+
+// The joint coverage helper (ST-U7 addendum, section 4.5): c_F over the fill list with the fill
+// record, and c_S over the stroke list with the stroke record. Both lists live in the overlay's
+// list range, so both start at the fill record's listBase. Roles: bit 0 fill, bit 1 stroke, each
+// 0 region and 1 exterior.
+fn meshJointCoverage(
+  p: vec2f,
+  triangle: MeshTriangle,
+  fill: MeshInstance,
+  stroke: MeshInstance,
+) -> vec2f {
+  // Joint record words 3 to 7 (fillListOffset, fillListCount, strokeListOffset,
+  // strokeListCount, roles) are MeshTriangle's listOffset, listCount, role, padding0, padding1.
+  let roles = triangle.padding1;
+  let fillCoverage = meshListCoverage(
+    p,
+    fill.listBase + triangle.listOffset,
+    triangle.listCount,
+    select(0.0, 1.0, (roles & 1u) == 0u),
+    fill,
+  );
+  let strokeCoverage = meshListCoverage(
+    p,
+    fill.listBase + triangle.role,
+    triangle.padding0,
+    select(0.0, 1.0, (roles & 2u) == 0u),
+    stroke,
+  );
+  return vec2f(fillCoverage, strokeCoverage);
+}
+
+@fragment
+fn meshJointFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {
+  let triangle = triangles[input.triangle];
+  let fill = instances[input.instance];
+  let stroke = instances[fill.strokeLink - 1u];
+  let coverage = meshJointCoverage(input.position.xy, triangle, fill, stroke);
+  // X = o * c_F * (f.rgb * f.a, f.a) * (1 - a_S) / (1 - o * a_S) with a_S = c_S * s.a; for
+  // 0 < o < 1 the denominator is at least 1 - o > 0 (addendum section 3.2).
+  let opacity = fill.opacity;
+  let strokeAlpha = coverage.y * stroke.fill.a;
+  let factor = opacity * (1.0 - strokeAlpha) / (1.0 - opacity * strokeAlpha);
+  let alpha = coverage.x * fill.fill.a * factor;
+  if (alpha == 0.0) {
+    discard;
+  }
+  return vec4f(fill.fill.rgb * alpha, alpha);
 }
 `;

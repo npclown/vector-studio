@@ -283,6 +283,11 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     return this.#pathMeshes?.getStatistics() ?? null;
   }
 
+  /** @internal Tests only (ST-U7 addendum, ST-A17): the pipeline's overlay build count. */
+  public getOverlayBuildCountForTesting(): number {
+    return this.#pathMeshes?.getOverlayBuildCount() ?? 0;
+  }
+
   public acknowledge(receipt: PrimitiveReceipt): void {
     const pending = this.#pending;
     if (pending === null || !receiptMatchesPacket(receipt, pending.packet)) return;
@@ -427,6 +432,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
               instance: draw.slot,
               firstTriangle: placement.firstTriangle,
               triangleCount: placement.triangleCount,
+              // ST-U7 addendum, section 4.5: only a joint fill draw carries the field.
+              ...(draw.composite === undefined ? {} : { composite: draw.composite }),
             }),
           });
         }),

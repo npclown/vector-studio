@@ -25,8 +25,8 @@ declare global {
 // precision is UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence, and
 // no Q4 coverage threshold is claimed. The gates are what the contract requires of the page: it
 // renders through both real ports, no page error and no error diagnostic occur, the D8-interim
-// notices of each view are exactly the expected set (work-limit is the open ST-U9 decision, and
-// composition-unsupported is the open ST-U7 decision; both are shown, never hidden), the mesh
+// notices of each view are exactly the expected set (work-limit is the open ST-U9 decision; it is
+// shown, never hidden; ST-U7 draws the both-paints-at-0.5 node through the joint fill draw), the mesh
 // draw count equals the expected count, and a few probes far from every edge show the paint
 // each path implies. Pixels near an edge are captured, not gated. Console errors are recorded,
 // not gated (one 404 for the favicon is expected).
@@ -62,36 +62,33 @@ type Expectation = Readonly<{
 const EXPECTED: Readonly<Record<string, Expectation>> = {
   '1/overview-zoom-1': {
     notices: [
-      'both-half null composition-unsupported',
       'cap-round stroke fringe-work-cap',
       'cusp-f16-large stroke work-limit',
       'cusp-f16p stroke fringe-work-cap',
       'fill-stroke-circle stroke work-limit',
       'wide-cubic stroke work-limit',
     ],
-    meshDraws: 17,
+    meshDraws: 19,
   },
   '1/zoom-0.01': {
-    notices: ['both-half null composition-unsupported'],
-    meshDraws: 21,
+    notices: [],
+    meshDraws: 23,
   },
   '1/zoom-0.25': {
     notices: [
-      'both-half null composition-unsupported',
       'cusp-f16-large stroke work-limit',
       'fill-stroke-circle stroke fringe-work-cap',
       'wide-cubic stroke work-limit',
     ],
-    meshDraws: 19,
+    meshDraws: 21,
   },
   '1/zoom-2-cusp': {
     notices: [
-      'both-half null composition-unsupported',
       'cusp-f16p stroke fringe-work-cap',
       'fill-stroke-circle stroke work-limit',
       'wide-cubic stroke work-limit',
     ],
-    meshDraws: 6,
+    meshDraws: 8,
   },
   '1/zoom-4-joins': {
     notices: ['cap-round stroke fringe-work-cap'],
@@ -111,18 +108,17 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
   },
   '2/overview-zoom-1': {
     notices: [
-      'both-half null composition-unsupported',
       'cap-round stroke fringe-work-cap',
       'cusp-f16-large stroke work-limit',
       'cusp-f16p stroke fringe-work-cap',
       'fill-stroke-circle stroke work-limit',
       'wide-cubic stroke work-limit',
     ],
-    meshDraws: 17,
+    meshDraws: 19,
   },
   '2/zoom-0.01': {
-    notices: ['both-half null composition-unsupported', 'wide-cubic stroke fringe-work-cap'],
-    meshDraws: 21,
+    notices: ['wide-cubic stroke fringe-work-cap'],
+    meshDraws: 23,
   },
   '2/zoom-64-extreme-miter-tip': {
     notices: [],
@@ -130,7 +126,6 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
   },
   '3/overview-zoom-1': {
     notices: [
-      'both-half null composition-unsupported',
       'cap-round stroke fringe-work-cap',
       'cusp-f16-large stroke work-limit',
       'cusp-f16p stroke work-limit',
@@ -139,11 +134,11 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
       'thin-one-px stroke fringe-work-cap',
       'wide-cubic stroke work-limit',
     ],
-    meshDraws: 16,
+    meshDraws: 18,
   },
   '3/zoom-0.01': {
-    notices: ['both-half null composition-unsupported', 'wide-cubic stroke fringe-work-cap'],
-    meshDraws: 21,
+    notices: ['wide-cubic stroke fringe-work-cap'],
+    meshDraws: 23,
   },
   '3/zoom-64-extreme-miter-tip': {
     notices: [],

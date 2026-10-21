@@ -13,9 +13,9 @@ import type {
 // a red fill under a blue stroke, here with stroke alpha 0.5: at opacity 1 its stroke-only,
 // overlap and fill-only pixels are exact two-draw composites; a single-paint path is exact at
 // opacity 0.5; and with both paints
-// at opacity 0.5 the path is the D8-interim failure composition-unsupported until ST-U7, so it
-// draws nothing. Functional evidence only: precision is UNVERIFIED against the 0.25
-// physical-pixel target until B4 has A04 evidence; no Q4 coverage threshold is claimed. Pixels
+// at opacity 0.5 the path draws the joint fill draw and the stroke draw (ST-U7), the
+// stroke-over-fill composite with opacity applied once. Functional evidence only: precision is
+// UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence; no Q4 coverage threshold is claimed. Pixels
 // within 3 physical px of any boundary are captured, never gated.
 
 export const ST_U6_EVIDENCE_LABEL =
@@ -50,7 +50,7 @@ type StrokeFixtureNode = Readonly<{
   fill: SceneColor | null;
   stroke: PathStroke | null;
   opacity: number;
-  /** False for composition-unsupported: neither paint is drawn. */
+  /** Every fixture node is drawn (ST-U7 draws both paints at 0 < opacity < 1). */
   drawn: boolean;
 }>;
 
@@ -68,10 +68,10 @@ export const STROKE_FIXTURE_NODES: readonly StrokeFixtureNode[] = [
   },
   { id: 'fill-half', x: 160, fill: RED, stroke: null, opacity: 0.5, drawn: true },
   { id: 'stroke-half', x: 300, fill: null, stroke: STROKE, opacity: 0.5, drawn: true },
-  { id: 'both-half', x: 440, fill: RED, stroke: STROKE, opacity: 0.5, drawn: false },
+  { id: 'both-half', x: 440, fill: RED, stroke: STROKE, opacity: 0.5, drawn: true },
 ];
 
-export const STROKE_FIXTURE_MESH_DRAWS = 4;
+export const STROKE_FIXTURE_MESH_DRAWS = 6;
 export const STROKE_FIXTURE_CAMERA: RenderCamera = { position: { x: 0, y: 0 }, zoom: 1 };
 const SCALE = 8;
 const TOP = 30;
@@ -113,14 +113,7 @@ export function strokeFixtureSnapshot(revision: number): RenderSceneSnapshot {
   };
 }
 
-export type StrokePixelClass =
-  | 'exterior'
-  | 'fill-only'
-  | 'stroke-only'
-  | 'overlap'
-  | 'interim-overlap'
-  | 'interim-fill-only'
-  | 'interim-stroke-only';
+export type StrokePixelClass = 'exterior' | 'fill-only' | 'stroke-only' | 'overlap';
 
 export type StrokeInspection = Readonly<{
   failures: readonly string[];
@@ -156,8 +149,8 @@ function nearLoop(p: Point, loop: Loop): boolean {
 /**
  * Pixel centers at least 3 physical px from every boundary (the fill square and both stroke
  * ring loops of every node) must be within 2/255 of the analytic composite over opaque black:
- * fill then stroke, each premultiplied and scaled by the node opacity once, source-over with
- * P1's encoded-sRGB blending. A composition-unsupported node contributes nothing.
+ * the stroke-over-fill value L = S + F (1 - S.a), scaled by the node opacity once (P = o L), then
+ * source-over (P + dst (1 - P.a)) with P1's encoded-sRGB blending.
  */
 export function inspectStrokeFixture(
   dpr: number,
@@ -197,19 +190,19 @@ export function inspectStrokeFixture(
           shape.node.stroke !== null && inBox(p, shape.outer) && !inBox(p, shape.inner);
         if (!inFill && !inStroke) continue;
         owner = shape.node.id;
-        const prefix = shape.node.drawn ? '' : 'interim-';
-        pixelClass =
-          `${prefix}${inFill && inStroke ? 'overlap' : inFill ? 'fill-only' : 'stroke-only'}` as StrokePixelClass;
-        if (!shape.node.drawn) continue;
-        for (const [inside, color] of [
-          [inFill, shape.node.fill],
-          [inStroke, shape.node.stroke?.color ?? null],
-        ] as const) {
-          if (!inside || color === null) continue;
-          const alpha = color.a * shape.node.opacity;
-          const source = [color.r * alpha, color.g * alpha, color.b * alpha, alpha];
-          dst = dst.map((value, channel) => source[channel]! + value * (1 - alpha));
-        }
+        pixelClass = inFill && inStroke ? 'overlap' : inFill ? 'fill-only' : 'stroke-only';
+        // L = S + F (1 - S.a), P = o L, dst = P + dst (1 - P.a). For opacity 1 or one paint it
+        // equals the two source-over draws; for both paints at 0 < o < 1 it is the joint value.
+        const premultiplied = (inside: boolean, color: SceneColor | null) =>
+          !inside || color === null
+            ? [0, 0, 0, 0]
+            : [color.r * color.a, color.g * color.a, color.b * color.a, color.a];
+        const f = premultiplied(inFill, shape.node.fill);
+        const s = premultiplied(inStroke, shape.node.stroke?.color ?? null);
+        const joint = s.map(
+          (value, channel) => (value + f[channel]! * (1 - s[3]!)) * shape.node.opacity,
+        );
+        dst = dst.map((value, channel) => joint[channel]! + value * (1 - joint[3]!));
       }
       const counts = (classes[owner] ??= {});
       counts[pixelClass] = (counts[pixelClass] ?? 0) + 1;
@@ -234,9 +227,9 @@ export function inspectStrokeFixture(
     ['both-opaque', 'fill-only'],
     ['fill-half', 'fill-only'],
     ['stroke-half', 'stroke-only'],
-    ['both-half', 'interim-stroke-only'],
-    ['both-half', 'interim-overlap'],
-    ['both-half', 'interim-fill-only'],
+    ['both-half', 'stroke-only'],
+    ['both-half', 'overlap'],
+    ['both-half', 'fill-only'],
   ];
   for (const [node, pixelClass] of required) {
     if ((classes[node]?.[pixelClass] ?? 0) === 0) {

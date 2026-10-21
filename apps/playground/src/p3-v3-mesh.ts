@@ -63,12 +63,49 @@ function owned(mesh: HandMesh): FillMesh {
 // test-double stroke-mesh port. Its one mesh is the stroke region of F01 at width 2 with butt
 // caps and miter joins (limit 4, so every 90 degree corner keeps its miter): [-1, 11]^2 minus
 // (1, 9)^2. Any other stroke request answers invalid-path. Still no WASM and no real port.
-const strokeMode = parameters.get('stroke') === '1';
+const jointMode = parameters.get('joint') === '1';
+const strokeMode = parameters.get('stroke') === '1' || jointMode;
 const STROKE_RING: HandMesh = {
   positions: [-1, -1, 11, -1, 11, 11, -1, 11, 1, 1, 9, 1, 9, 9, 1, 9],
   indices: RING.indices,
   boundaryEdges: RING.boundaryEdges,
 };
+
+// ST-U7 addendum, unit ST-U7d: with `?joint=1` the page is the joint fixture page. The test
+// registers further hand-made meshes in Node (setStaticMeshes), keyed by path points and the
+// fill rule or the stroke values, so both static doubles stay test doubles with no WASM. A
+// seeded defect (`?defect=ST7-D1|ST7-D2|ST7-D8|ST7-D10`) is injected only here: the first three
+// rewrite the joint factor in the shader text handed to createShaderModule, ST7-D8 swaps each
+// joint fill draw with the stroke draw after it in the submitted packet. Without the parameter
+// the production shader, pipelines and packet path are unmodified.
+type MeshTable = Readonly<{
+  fill: readonly (readonly [key: string, mesh: HandMesh])[];
+  stroke: readonly (readonly [key: string, mesh: HandMesh])[];
+}>;
+const staticFill = new Map<string, HandMesh>();
+const staticStroke = new Map<string, HandMesh>();
+const seededDefect = jointMode ? parameters.get('defect') : null;
+const JOINT_FACTOR = 'let factor = opacity * (1.0 - strokeAlpha) / (1.0 - opacity * strokeAlpha);';
+const DEFECT_FACTORS: Readonly<Record<string, string>> = {
+  'ST7-D1': 'let factor = opacity;',
+  'ST7-D2': 'let factor = opacity * (1.0 - strokeAlpha);',
+  'ST7-D10':
+    'let factor = (1.0 - opacity) * (1.0 - strokeAlpha) / (1.0 - (1.0 - opacity) * strokeAlpha);',
+};
+
+/** The static doubles' table key of a stroke request or fill request. */
+function fillKey(points: string, fillRule: string): string {
+  return `${points}|${fillRule}`;
+}
+function strokeKey(request: StrokeMeshRequest): string {
+  return [
+    Array.from(request.points).join(','),
+    request.width,
+    request.cap,
+    request.join,
+    request.miterLimit,
+  ].join('|');
+}
 
 /** Static stroke test double: F01, width 2, butt, miter 4 gives STROKE_RING. */
 class StaticStrokeMeshPort implements StrokeMeshPort {
@@ -85,6 +122,9 @@ class StaticStrokeMeshPort implements StrokeMeshPort {
       results: requests.map((request) => {
         const echo = { requestId: request.requestId, toleranceExponent: request.toleranceExponent };
         const points = Array.from(request.points).join(',');
+        const registered = staticStroke.get(strokeKey(request));
+        if (registered !== undefined)
+          return { ...echo, status: 'ok' as const, mesh: owned(registered) };
         const known =
           points === F01_POINTS &&
           request.width === 2 &&
@@ -114,6 +154,8 @@ class StaticFillMeshPort implements FillMeshPort {
       results: requests.map((request) => {
         const echo = { requestId: request.requestId, toleranceExponent: request.toleranceExponent };
         const points = Array.from(request.points).join(',');
+        const registered = staticFill.get(fillKey(points, request.fillRule));
+        if (registered !== undefined) return { ...echo, status: 'ok', mesh: owned(registered) };
         if (points === F01_POINTS) return { ...echo, status: 'ok', mesh: owned(SQUARE) };
         if (points === F02_POINTS) {
           return {
@@ -138,11 +180,13 @@ interface CapturedFrame {
     analyticDraws: number;
     meshDraws: number;
     meshTriangles: number;
+    jointDraws: number;
     meshWrites: readonly Readonly<{ resource: string; offset: number; bytes: number }>[];
     notices: number;
   }>;
   portCalls: number;
   strokePortCalls: number;
+  overlayBuilds: number;
 }
 
 let device: GPUDevice | undefined;
@@ -202,6 +246,17 @@ const platform: WebGpuPlatform = {
         // shaders, pipelines and packet path are unmodified.
         const instrumented = new Proxy(actualDevice, {
           get(target, key) {
+            if (key === 'createShaderModule' && seededDefect !== null) {
+              return (descriptor: GPUShaderModuleDescriptor) => {
+                const factor = DEFECT_FACTORS[seededDefect];
+                if (factor === undefined || !descriptor.code.includes(JOINT_FACTOR))
+                  return target.createShaderModule(descriptor);
+                return target.createShaderModule({
+                  ...descriptor,
+                  code: descriptor.code.replace(JOINT_FACTOR, factor),
+                });
+              };
+            }
             if (key === 'createRenderPipelineAsync') {
               return (descriptor: GPURenderPipelineDescriptor) => {
                 if (sampleCount === 1 && descriptor.multisample?.count === 4) {
@@ -249,7 +304,8 @@ const platform: WebGpuPlatform = {
                     scene: new Proxy(scene, {
                       get(inner, member) {
                         if (member !== 'submitPrimitivePacket') return boundMember(inner, member);
-                        return (packet: PrimitivePacket) => {
+                        return (original: PrimitivePacket) => {
+                          const packet = seededDefect === 'ST7-D8' ? swapJoint(original) : original;
                           const result = inner.submitPrimitivePacket(packet);
                           const pending = capture;
                           if (
@@ -280,6 +336,20 @@ const platform: WebGpuPlatform = {
     };
   },
 };
+
+/** ST7-D8 (seeded): each joint fill draw moves after the stroke draw that follows it. */
+function swapJoint(packet: PrimitivePacket): PrimitivePacket {
+  const mesh = packet.mesh;
+  if (mesh === undefined) return packet;
+  const draws = [...mesh.draws];
+  for (let index = 0; index + 1 < draws.length; index += 1) {
+    if (draws[index]!.composite === 'joint-fill') {
+      [draws[index], draws[index + 1]] = [draws[index + 1]!, draws[index]!];
+      index += 1;
+    }
+  }
+  return { ...packet, mesh: { ...mesh, draws } };
+}
 
 const backend = new WebGpuBackend({ platform });
 const service = new PrimitiveRendererService(backend, {
@@ -364,6 +434,7 @@ async function copyFrame(
         analyticDraws: packet.draws.length,
         meshDraws: mesh?.draws.length ?? 0,
         meshTriangles: mesh?.draws.reduce((sum, draw) => sum + draw.triangleCount, 0) ?? 0,
+        jointDraws: mesh?.draws.filter((draw) => draw.composite === 'joint-fill').length ?? 0,
         meshWrites:
           mesh?.writes.map((write) => ({
             resource: write.resourceId,
@@ -374,6 +445,7 @@ async function copyFrame(
       },
       portCalls: port.calls,
       strokePortCalls: strokePort.calls,
+      overlayBuilds: service.getOverlayBuildCountForTesting(),
     };
   } finally {
     buffer.destroy();
@@ -382,6 +454,12 @@ async function copyFrame(
 
 const api = {
   ready,
+  /** ST-U7d joint mode only: registers static double meshes built by the test in Node. */
+  setStaticMeshes(table: MeshTable) {
+    if (!jointMode) throw new Error('Static meshes need ?joint=1.');
+    for (const [key, mesh] of table.fill) staticFill.set(key, mesh);
+    for (const [key, mesh] of table.stroke) staticStroke.set(key, mesh);
+  },
   async render(snapshot: RenderSceneSnapshot, camera: RenderCamera, dpr: number) {
     await ready;
     backend.resize({ width: 640, height: 360 }, dpr);
@@ -414,6 +492,7 @@ const api = {
       statistics: backend.getStatistics(),
       diagnostics,
       pathMesh: service.getPathMeshStatistics(),
+      overlayBuilds: service.getOverlayBuildCountForTesting(),
       port: { calls: port.calls, requests: port.requests, operationId: port.operationId },
       strokePort: strokeMode
         ? {
