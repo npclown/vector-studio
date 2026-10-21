@@ -25,7 +25,9 @@ use crate::stroke_outline::{
 /// Section 7.1 identity.
 pub const STROKE_V0_VERSION: u32 = 0;
 /// Revision 2 (2026-10-21): one sample triple per cusp knot (plan: ST-U4 cusp shared triple).
-pub const STROKE_V0_REVISION: u32 = 2;
+/// Revision 3 (2026-10-21): disk vertices share the adjacent triples' offset points (plan: B2
+/// ST-U3c round-join shared vertex).
+pub const STROKE_V0_REVISION: u32 = 3;
 /// Bytes `VGT0`.
 pub const STROKE_INPUT_MAGIC: u32 = 0x3054_4756;
 /// Bytes `VGU0`.

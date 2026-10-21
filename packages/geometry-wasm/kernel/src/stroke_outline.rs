@@ -93,6 +93,10 @@ const MAX_GUARDED_MITER_LIMIT: f64 = 16_777_216.0;
 const DIRECTION_COUNT: usize = (1 << MAX_DISK_LEVEL) + 1;
 /// Candidate points of one piece: a 256-gon plus three extra points.
 const MAX_CANDIDATES: usize = MAX_DISK_VERTICES + 3;
+/// ST-U3c shared disk vertices (section 4.4, amended 2026-10-21): a disk vertex within
+/// `SHARE_FACTOR * u * (|c|inf + r)` (max norm) of an adjacent triple's `E-` or `E+` is that
+/// point. The plan entry proves the snapped polygon stays inside ST-G2's `g_arc`.
+const SHARE_FACTOR: f64 = 8.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum StrokeCap {
@@ -1215,7 +1219,7 @@ impl StrokeWorkspace {
                     let step = if part % 2 == 0 { base } else { negate(base) };
                     let end = triple(center, step);
                     self.emit_line_part(index, start, end, part, (from, parameter))?;
-                    self.emit_cusp_disk(index, center, parameter, r, tolerances)?;
+                    self.emit_cusp_disk(index, end, parameter, r, tolerances)?;
                     start = Triple {
                         minus: end.plus,
                         center,
@@ -1242,7 +1246,7 @@ impl StrokeWorkspace {
                     r,
                     tolerances,
                 )?;
-                self.emit_cusp_disk(index, left[3], split, r, tolerances)?;
+                self.emit_cusp_disk(index, knot, split, r, tolerances)?;
                 // The right range leaves the knot along the reversed limit direction, so its
                 // normal is the left's negated. The knot triple is computed once, by the left
                 // range's last leaf, and read from this side with its outer points swapped, as
@@ -1290,11 +1294,12 @@ impl StrokeWorkspace {
         }
     }
 
-    /// ST-S8: the disk of radius `r` at a reversal or turning point (ST-D7 seeds its omission).
+    /// ST-S8: the disk of radius `r` at a reversal or turning point (ST-D7 seeds its omission),
+    /// centered at the knot triple's center and sharing its offset points (ST-U3c).
     fn emit_cusp_disk(
         &mut self,
         index: usize,
-        center: Point,
+        knot: Triple,
         parameter: f64,
         r: f64,
         tolerances: Tolerances,
@@ -1302,8 +1307,10 @@ impl StrokeWorkspace {
         if self.defects.omit_cusp_disk() {
             return Ok(());
         }
+        let center = knot.center;
         self.candidates.clear();
         self.push_disk(center, r, tolerances)?;
+        self.share_disk_vertices(center, r, &[knot.minus, knot.plus]);
         let disk = self.candidates.len();
         self.meta = PieceMeta {
             samples: [
@@ -1429,6 +1436,7 @@ impl StrokeWorkspace {
             StrokeJoin::Round => {
                 self.candidates.clear();
                 self.push_disk(knot.center, r, tolerances)?;
+                self.share_disk_vertices(knot.center, r, &[knot.minus, knot.plus]);
                 let disk = self.candidates.len();
                 for point in [knot.center, knot.minus, knot.plus] {
                     self.push_candidate(point)?;
@@ -1454,6 +1462,13 @@ impl StrokeWorkspace {
         let incoming = self.segments[index];
         let outgoing = self.segments[join.next];
         let center = incoming.end.center;
+        // ST-U3c: the disk shares both adjacent triples' offset points.
+        let shared = [
+            incoming.end.minus,
+            incoming.end.plus,
+            outgoing.start.minus,
+            outgoing.start.plus,
+        ];
         // ST-D11 seeds a reversal treated as a kept miter turn.
         let forced = join.class == JoinClass::Reversal
             && self.defects.reversal_as_turn()
@@ -1471,6 +1486,7 @@ impl StrokeWorkspace {
                 }
                 self.candidates.clear();
                 self.push_disk(center, r, tolerances)?;
+                self.share_disk_vertices(center, r, &shared);
                 let disk = self.candidates.len();
                 for point in [center, incoming.end.minus, incoming.end.plus] {
                     self.push_candidate(point)?;
@@ -1491,6 +1507,7 @@ impl StrokeWorkspace {
                     StrokeJoin::Round => {
                         self.candidates.clear();
                         self.push_disk(center, r, tolerances)?;
+                        self.share_disk_vertices(center, r, &shared);
                         let disk = self.candidates.len();
                         for point in [center, o_in, o_out] {
                             self.push_candidate(point)?;
@@ -1570,6 +1587,7 @@ impl StrokeWorkspace {
             StrokeCap::Round => {
                 self.candidates.clear();
                 self.push_disk(sample.center, r, tolerances)?;
+                self.share_disk_vertices(sample.center, r, &[sample.minus, sample.plus]);
                 let disk = self.candidates.len();
                 for point in [sample.center, sample.minus, sample.plus] {
                     self.push_candidate(point)?;
@@ -1692,6 +1710,42 @@ impl StrokeWorkspace {
             })?;
         }
         Ok(())
+    }
+
+    /// ST-U3c (section 4.2 sharing, section 4.4 amended 2026-10-21): after `push_disk`, each
+    /// adjacent sample point `E-` or `E+` of a triple at the disk's center replaces its nearest
+    /// disk vertex (max norm, first index on a tie) when that vertex lies within
+    /// `delta = SHARE_FACTOR * u * (|c|inf + r)` and no earlier point took it. A disk vertex
+    /// and a sweep's offset point at the same direction are then one binary64 point, not two
+    /// a few ulps apart (which made the arrangement `TopologyAmbiguous`). The count `n` is
+    /// unchanged; `delta` is used only while it is a normal number, so it is exact.
+    fn share_disk_vertices(&mut self, center: Point, r: f64, targets: &[Point]) {
+        let reach = center.x.abs().max(center.y.abs()) + r;
+        let delta = SHARE_FACTOR * UNIT * reach;
+        if !(delta.is_finite() && delta >= f64::MIN_POSITIVE) {
+            return;
+        }
+        let mut taken = [usize::MAX; 4];
+        for (slot, target) in targets.iter().take(taken.len()).enumerate() {
+            let mut nearest = None;
+            let mut best = f64::INFINITY;
+            for (index, vertex) in self.candidates.iter().enumerate() {
+                let distance = (vertex.x - target.x).abs().max((vertex.y - target.y).abs());
+                if distance < best {
+                    best = distance;
+                    nearest = Some(index);
+                }
+            }
+            if let Some(index) = nearest {
+                if best <= delta && !taken.contains(&index) {
+                    self.candidates[index] = Point {
+                        x: target.x + 0.0,
+                        y: target.y + 0.0,
+                    };
+                    taken[slot] = index;
+                }
+            }
+        }
     }
 
     /// Boundary-inclusive convex hull of the candidates (section 4.2), stored as one piece.
