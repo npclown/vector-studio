@@ -1726,6 +1726,10 @@ impl StrokeWorkspace {
             return;
         }
         let mut taken = [usize::MAX; 4];
+        debug_assert!(
+            targets.len() <= taken.len(),
+            "at most four shared targets per disk"
+        );
         for (slot, target) in targets.iter().take(taken.len()).enumerate() {
             let mut nearest = None;
             let mut best = f64::INFINITY;
