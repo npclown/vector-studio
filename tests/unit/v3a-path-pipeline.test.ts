@@ -995,8 +995,9 @@ describe('V3a device loss, ownership and host injection', () => {
   });
 
   // V4 removed the V3-A18 test ("no host injects a port"), as V3-A18 foresaw, when the
-  // playground gained the real port. This V4 test keeps the remaining hosts port-free.
-  it('V4: only the path page injects the real port; the V3 smoke fixture keeps its static double', () => {
+  // playground gained the real port. This V4 test keeps the remaining hosts port-free. B2 ST-U8
+  // adds the stroke page as a second host, on V4's pattern: it injects both real ports.
+  it('V4: only the path page and the ST-U8 stroke page inject the real ports; the V3 smoke fixture keeps its static double', () => {
     const root = join(__dirname, '../../apps/playground');
     const files: string[] = [];
     const walk = (directory: string) => {
@@ -1009,11 +1010,19 @@ describe('V3a device loss, ownership and host injection', () => {
     };
     walk(root);
     expect(files.length).toBeGreaterThan(0);
-    const host = files.filter((file) => /[\\/]src[\\/]p3-v4-paths\.ts$/.test(file));
-    expect(host).toHaveLength(1);
-    const hostSource = readFileSync(host[0]!, 'utf8');
+    const v4Host = files.filter((file) => /[\\/]src[\\/]p3-v4-paths\.ts$/.test(file));
+    expect(v4Host).toHaveLength(1);
+    const hostSource = readFileSync(v4Host[0]!, 'utf8');
     expect(hostSource).toMatch(/from '@vector-studio\/geometry-wasm'/);
     expect(hostSource).toMatch(/fillMesh: adapter/);
+    // B2 ST-U8: the stroke page injects both real ports.
+    const b2Host = files.filter((file) => /[\\/]src[\\/]p3-b2-strokes\.ts$/.test(file));
+    expect(b2Host).toHaveLength(1);
+    const b2Source = readFileSync(b2Host[0]!, 'utf8');
+    expect(b2Source).toMatch(/from '@vector-studio\/geometry-wasm'/);
+    expect(b2Source).toMatch(/fillMesh: fill,/);
+    expect(b2Source).toMatch(/strokeMesh: strokes,/);
+    const host = [...v4Host, ...b2Host];
     // The manifest and project-reference edges of that import (boundary rule P-B1).
     const edges = files.filter((file) =>
       /[\\/]playground[\\/](package|tsconfig)\.json$/.test(file),
