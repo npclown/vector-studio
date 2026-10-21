@@ -61,7 +61,7 @@ export const FRINGE_FEATURE_VERTEX = 1;
 const MAX_SECTORS = 3;
 const REFLEX_SHIFT = 8;
 
-type P = readonly [bigint, bigint];
+export type P = readonly [bigint, bigint];
 export type Triangle = readonly [number, number, number];
 type DirectedEdge = Readonly<{ from: number; to: number }>;
 type Sector = Readonly<{
@@ -71,10 +71,38 @@ type Sector = Readonly<{
 }>;
 type VertexSectors = Readonly<{ vertex: number; sectors: readonly Sector[] }>;
 
-class Unsupported extends Error {}
+/** @internal A builder or triangulator refusal; the joint overlay builder maps it to its own. */
+export class Unsupported extends Error {}
 const unsupported = (reason: string): never => {
   throw new Unsupported(reason);
 };
+
+/**
+ * @internal The joint overlay's exact work counter (ST-U7 addendum, ST7-Q5 a): every exact
+ * predicate of a segment or point against an edge or triangle that runs after the bounding-box
+ * prefilter, including this builder's own and the triangulator's. Exceeding `testLimit` throws
+ * `ExactWorkCap`. The fringe builder alone never installs one, so its behavior is unchanged.
+ */
+export type ExactWork = { tests: number; readonly testLimit: number };
+/** @internal Thrown when an installed `ExactWork` exceeds its limit. */
+export class ExactWorkCap extends Error {}
+let activeWork: ExactWork | null = null;
+/** @internal Counts one exact test against the installed work counter, if any. */
+export function countExactTest(): void {
+  if (activeWork === null) return;
+  activeWork.tests += 1;
+  if (activeWork.tests > activeWork.testLimit) throw new ExactWorkCap('tests');
+}
+/** @internal Runs `run` with `work` installed as the exact work counter. */
+export function withExactWork<T>(work: ExactWork, run: () => T): T {
+  const previous = activeWork;
+  activeWork = work;
+  try {
+    return run();
+  } finally {
+    activeWork = previous;
+  }
+}
 
 /**
  * The exact fringe builder for one mesh entry at fringe bucket f, so rho = 2^f local units.
@@ -86,12 +114,16 @@ export const buildPathFringe: PathFringeBuilder = (mesh, fringeBucket) =>
   buildPathFringeDetailed(mesh, fringeBucket).result;
 
 /**
- * @internal Tests only: the build result with every exterior triangle before empty-list
- * exterior triangles are dropped, so an independent oracle can re-check the exact partition.
+ * @internal The build result with every exterior triangle before empty-list exterior triangles
+ * are dropped. Tests use it so an independent oracle can re-check the exact partition; the joint
+ * overlay builder (path-joint-overlay.ts, ST-U7 addendum section 4.2, S-c) re-runs it once per
+ * overlay build for the pre-drop frame partition, with its exact work counted in the overlay's
+ * work cap. Internal to renderer-core: not exported from the package.
  */
 export function buildPathFringeDetailed(
   mesh: FillMesh,
   fringeBucket: number,
+  work?: ExactWork,
 ): Readonly<{ result: PathFringeBuildResult; exterior: readonly Triangle[] | null }> {
   const rho = 2 ** fringeBucket;
   if (!(rho > 0) || !Number.isFinite(rho)) return { result: { status: 'range' }, exterior: null };
@@ -102,7 +134,10 @@ export function buildPathFringeDetailed(
   const corners = meshFrameCorners(mesh.bounds, midpoint, rho);
   if (corners === null) return { result: { status: 'range' }, exterior: null };
   try {
-    const built = buildExact(mesh, midpoint, corners, rho);
+    const built =
+      work === undefined
+        ? buildExact(mesh, midpoint, corners, rho)
+        : withExactWork(work, () => buildExact(mesh, midpoint, corners, rho));
     return { result: { status: 'built', fringe: built.fringe }, exterior: built.exterior };
   } catch (error) {
     if (error instanceof Unsupported) {
@@ -178,7 +213,8 @@ function buildExact(
 // ---------------------------------------------------------------------------------------------
 // Exact dyadic grid.
 
-class DyadicGrid {
+/** @internal One exact power-of-two grid for a set of Float64 values. */
+export class DyadicGrid {
   readonly #exponent: number;
 
   public constructor(values: readonly number[]) {
@@ -188,6 +224,11 @@ class DyadicGrid {
       exponent = Math.min(exponent, toDyadic(value).e);
     }
     this.#exponent = Number.isFinite(exponent) ? exponent : 0;
+  }
+
+  /** The grid's power of two: a grid integer n stands for n * 2^exponent. */
+  public get exponent(): number {
+    return this.#exponent;
   }
 
   /** The exact integer value * 2^-exponent. */
@@ -205,7 +246,8 @@ function cross(ax: bigint, ay: bigint, bx: bigint, by: bigint): bigint {
   return ax * by - ay * bx;
 }
 
-function orient(p: P, q: P, r: P): bigint {
+/** @internal */
+export function orient(p: P, q: P, r: P): bigint {
   return cross(q[0] - p[0], q[1] - p[1], r[0] - p[0], r[1] - p[1]);
 }
 
@@ -216,8 +258,8 @@ function halfPlane(d: P): number {
   return d[1] > 0n || (d[1] === 0n && d[0] > 0n) ? 0 : 1;
 }
 
-/** Exact angle order of nonzero directions; 0 only for equal directions. */
-function compareAngle(a: P, b: P): number {
+/** @internal Exact angle order of nonzero directions; 0 only for equal directions. */
+export function compareAngle(a: P, b: P): number {
   const ha = halfPlane(a);
   const hb = halfPlane(b);
   if (ha !== hb) return ha - hb;
@@ -292,7 +334,8 @@ function inClosedTriangle(q: P, a: P, b: P, c: P): boolean {
   return orient(a, b, q) >= 0n && orient(b, c, q) >= 0n && orient(c, a, q) >= 0n;
 }
 
-function twiceArea(points: readonly P[], chain: readonly number[]): bigint {
+/** @internal */
+export function twiceArea(points: readonly P[], chain: readonly number[]): bigint {
   let sum = 0n;
   for (let i = 0; i < chain.length; i += 1) {
     const p = points[chain[i]!]!;
@@ -392,8 +435,11 @@ function traceLoops(
   return loops;
 }
 
-/** Crossing-number point-in-polygon on doubled coordinates: 1 inside, 0 outside, -1 on boundary. */
-function pointInLoop(points: readonly P[], loop: readonly number[], m: P): -1 | 0 | 1 {
+/**
+ * @internal Crossing-number point-in-polygon on doubled coordinates: 1 inside, 0 outside, -1 on
+ * boundary.
+ */
+export function pointInLoop(points: readonly P[], loop: readonly number[], m: P): -1 | 0 | 1 {
   let inside = false;
   for (let i = 0; i < loop.length; i += 1) {
     const u0 = points[loop[i]!]!;
@@ -421,8 +467,11 @@ function chainEdges(chain: readonly number[]): [number, number][] {
   return chain.map((v, i) => [v, chain[(i + 1) % chain.length]!] as [number, number]);
 }
 
-/** Merge holes into the outer chain by bridges (descending max x), then the merged chain. */
-function mergeHoles(
+/**
+ * @internal Merge holes into the outer chain by bridges (descending max x), then the merged
+ * chain.
+ */
+export function mergeHoles(
   points: readonly P[],
   outer: readonly number[],
   holes: readonly (readonly number[])[],
@@ -468,7 +517,12 @@ function mergeHoles(
     for (const { h, b } of candidates) {
       const H = points[h]!;
       const B = points[b]!;
-      if (edges.some(([p, q]) => segmentMeetsOutsideEndpoints(H, B, points[p]!, points[q]!)))
+      if (
+        edges.some(([p, q]) => {
+          countExactTest();
+          return segmentMeetsOutsideEndpoints(H, B, points[p]!, points[q]!);
+        })
+      )
         continue;
       const toH: P = [H[0] - B[0], H[1] - B[1]];
       const toB: P = [B[0] - H[0], B[1] - H[1]];
@@ -574,6 +628,7 @@ function entersCorner(
     const edge = edges[k]!;
     const other = edge.from === vertex ? edge.to : edge.to === vertex ? edge.from : -1;
     if (other < 0) continue;
+    countExactTest();
     const r = points[other]!;
     const d: P = [r[0] - x[0], r[1] - x[1]];
     if (cross(a[0], a[1], d[0], d[1]) > 0n && cross(d[0], d[1], b[0], b[1]) > 0n) return true;
@@ -587,8 +642,10 @@ function entersCorner(
  * vertices may occur more than once. An ear has strictly positive exact area, no other boundary
  * vertex on the closed triangle except occurrences coincident with its corners, and no other
  * half-edge entering it at a corner. Fails with `no-ear` when no walk has an ear.
+ *
+ * @internal
  */
-function earClip(points: readonly P[], input: readonly number[]): Triangle[] {
+export function earClip(points: readonly P[], input: readonly number[]): Triangle[] {
   let edges: HalfEdge[] = input.map((v, i) => ({ from: v, to: input[(i + 1) % input.length]! }));
   const triangles: Triangle[] = [];
   while (edges.length > 0) {
@@ -608,6 +665,7 @@ function earClip(points: readonly P[], input: readonly number[]): Triangle[] {
         if (
           vertices.some((v) => {
             const q = points[v]!;
+            countExactTest();
             return !same(q, a) && !same(q, b) && !same(q, c) && inClosedTriangle(q, a, b, c);
           })
         )
@@ -701,6 +759,26 @@ function checkPartition(
   triangles: readonly Triangle[],
   frame: readonly [number, number, number, number],
 ): string | null {
+  const sides = frame.map((v, i) => [v, frame[(i + 1) % 4]!] as const);
+  return checkPartitionOver(points, triangles, sides, twiceArea(points, frame), 'frame-edge');
+}
+
+/**
+ * @internal O02's exact partition check with a domain boundary in place of the frame (V3 :282;
+ * ST-U7 addendum section 4.2): consistent nonzero orientation, no duplicate vertex coordinate,
+ * every edge not in `boundary` used exactly twice in opposite directions, every `boundary` edge
+ * exactly once, no vertex in the interior of an edge, and the absolute areas summing to
+ * `|boundaryArea|` (twice the area). `label` names a failed boundary edge. Returns null or the
+ * failed check. The interior-vertex test is prefiltered by exact coordinate ranges and reports
+ * the lowest such vertex of the first failing edge, as the unfiltered loop would.
+ */
+export function checkPartitionOver(
+  points: readonly P[],
+  triangles: readonly Triangle[],
+  boundary: readonly (readonly [number, number])[],
+  boundaryArea: bigint,
+  label: string,
+): string | null {
   let sign = 0n;
   let total = 0n;
   for (let t = 0; t < triangles.length; t += 1) {
@@ -733,30 +811,46 @@ function checkPartition(
       else entry.backward += 1;
       uses.set(key, entry);
     }
-  const frameKeys = new Set(
-    frame.map((v, i) => {
-      const w = frame[(i + 1) % 4]!;
-      return `${Math.min(v, w)}:${Math.max(v, w)}`;
-    }),
-  );
-  for (const key of frameKeys) if (!uses.has(key)) return `frame-edge:${key}`;
+  const boundaryKeys = new Set(boundary.map(([v, w]) => `${Math.min(v, w)}:${Math.max(v, w)}`));
+  if (boundaryKeys.size !== boundary.length) return `${label}:duplicate`;
+  for (const key of boundaryKeys) if (!uses.has(key)) return `${label}:${key}`;
   for (const [key, entry] of [...uses.entries()].sort()) {
-    if (frameKeys.has(key)) {
-      if (entry.forward + entry.backward !== 1) return `frame-edge:${key}`;
+    if (boundaryKeys.has(key)) {
+      if (entry.forward + entry.backward !== 1) return `${label}:${key}`;
     } else if (entry.forward !== 1 || entry.backward !== 1) return `edge-use:${key}`;
   }
+  // `byCoordinate` is sorted by x, then y: the candidates of an edge are a contiguous x range.
+  const xs = byCoordinate.map((v) => points[v]![0]);
+  const lowerBound = (x: bigint): number => {
+    let low = 0;
+    let high = xs.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (xs[middle]! < x) low = middle + 1;
+      else high = middle;
+    }
+    return low;
+  };
   for (const entry of uses.values()) {
     const A = points[entry.a]!;
     const B = points[entry.b]!;
-    for (const v of used) {
+    const x0 = A[0] < B[0] ? A[0] : B[0];
+    const x1 = A[0] < B[0] ? B[0] : A[0];
+    const y0 = A[1] < B[1] ? A[1] : B[1];
+    const y1 = A[1] < B[1] ? B[1] : A[1];
+    let lowest = -1;
+    for (let i = lowerBound(x0); i < byCoordinate.length && xs[i]! <= x1; i += 1) {
+      const v = byCoordinate[i]!;
       if (v === entry.a || v === entry.b) continue;
       const p = points[v]!;
-      if (orient(A, B, p) === 0n && onSegment(A, B, p))
-        return `t-junction:${v}:${entry.a}:${entry.b}`;
+      if (p[1] < y0 || p[1] > y1) continue;
+      countExactTest();
+      if (orient(A, B, p) === 0n && onSegment(A, B, p) && (lowest < 0 || v < lowest)) lowest = v;
     }
+    if (lowest >= 0) return `t-junction:${lowest}:${entry.a}:${entry.b}`;
   }
-  const frameArea = twiceArea(points, frame);
-  if ((total < 0n ? -total : total) !== (frameArea < 0n ? -frameArea : frameArea)) return 'area';
+  if ((total < 0n ? -total : total) !== (boundaryArea < 0n ? -boundaryArea : boundaryArea))
+    return 'area';
   return null;
 }
 
@@ -796,8 +890,8 @@ function insideClosed(p: P, triangle: readonly [P, P, P]): boolean {
   );
 }
 
-/** Exact: is the distance from p to the closed triangle at most r? */
-function pointTriangleWithin(p: P, triangle: readonly [P, P, P], r2: bigint): boolean {
+/** @internal Exact: is the distance from p to the closed triangle at most r? */
+export function pointTriangleWithin(p: P, triangle: readonly [P, P, P], r2: bigint): boolean {
   if (insideClosed(p, triangle)) return true;
   const [a, b, c] = triangle;
   return (
@@ -821,8 +915,16 @@ function segmentsIntersect(a: P, b: P, c: P, d: P): boolean {
   );
 }
 
-/** Exact: is the distance between the closed segment ab and the closed triangle at most r? */
-function segmentTriangleWithin(a: P, b: P, triangle: readonly [P, P, P], r2: bigint): boolean {
+/**
+ * @internal Exact: is the distance between the closed segment ab and the closed triangle at
+ * most r?
+ */
+export function segmentTriangleWithin(
+  a: P,
+  b: P,
+  triangle: readonly [P, P, P],
+  r2: bigint,
+): boolean {
   const [p, q, s] = triangle;
   if (
     insideClosed(a, triangle) ||
@@ -841,7 +943,8 @@ function segmentTriangleWithin(a: P, b: P, triangle: readonly [P, P, P], r2: big
 }
 
 type Box = readonly [bigint, bigint, bigint, bigint];
-function boxOf(points: readonly P[]): Box {
+/** @internal */
+export function boxOf(points: readonly P[]): Box {
   let x0 = points[0]![0];
   let y0 = points[0]![1];
   let x1 = x0;
@@ -854,8 +957,8 @@ function boxOf(points: readonly P[]): Box {
   }
   return [x0, y0, x1, y1];
 }
-/** Exact prefilter: false proves a distance above r in one axis, hence above r. */
-function boxesWithin(left: Box, right: Box, r: bigint): boolean {
+/** @internal Exact prefilter: false proves a distance above r in one axis, hence above r. */
+export function boxesWithin(left: Box, right: Box, r: bigint): boolean {
   return (
     left[0] - r <= right[2] &&
     right[0] - r <= left[2] &&
@@ -870,7 +973,8 @@ function float32Word(value: number): number {
   return wordScratch.getUint32(0);
 }
 
-function bitLength(value: bigint): number {
+/** @internal */
+export function bitLength(value: bigint): number {
   return value === 0n ? 0 : value.toString(2).length;
 }
 
@@ -969,11 +1073,13 @@ function encodeFringe(
     const near: number[] = [];
     edges.forEach((edge, index) => {
       if (!boxesWithin(edgeBoxes[index]!, box, rho)) return;
+      countExactTest();
       if (segmentTriangleWithin(points[edge.from]!, points[edge.to]!, corners3, r2))
         near.push(index);
     });
     sectors.forEach(({ vertex }, index) => {
       if (!boxesWithin(vertexBoxes[index]!, box, rho)) return;
+      countExactTest();
       if (pointTriangleWithin(points[vertex]!, corners3, r2)) near.push(edges.length + index);
     });
     return near;
