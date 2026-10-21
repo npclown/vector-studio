@@ -146,6 +146,8 @@ Rectangles, rounded rectangles, ellipses, and simple lines use shared unit geome
 
 Arbitrary path fills and strokes use WASM-produced meshes. A geometry-only change rebuilds the mesh; a transform-only change updates instance data without retessellation while the cached tolerance remains sufficient.
 
+Amended 2026-10-21: for the joint draw of a path with fill and stroke at node opacity below 1, the extended D8-interim exception in the anti-aliasing section ([P3 joint fill and stroke coverage](#anti-aliasing)) departs from this sentence.
+
 Under the [V3 contract](plans/p3-v3-renderer-mesh-pipeline-contract.md) (fill only, D8 interim), each drawn path mesh is one non-indexed, vertex-pulling draw of its region and fringe triangles with a second pipeline. These mesh draws sit beside the analytic primitive draws in paint order: a path draw closes the current analytic run (section [g](plans/p3-v3-renderer-mesh-pipeline-contract.md#g-paint-order-and-composition)). The mesh data travels in an optional packet part, so a primitive-only packet is unchanged.
 
 **P3 fill operation `'geometry-wasm/fill-v0+r2'` (2026-10-20, [Alt-A1 production contract](plans/p3-alt-a1-fill-ladder-contract.md)).** The fill export runs a two-rung ladder per path. The fast rung certifies the flattened polygon against the source curves with an exact clearance and monotone sufficient condition, and then triangulates the polygon by monotone decomposition, with no Steiner points. Every decision is an exact predicate or a proved interval bound. Any case it does not prove, including crossings, touching and coincident contours, falls back to the exact arrangement kernel unchanged, which also serves as the test oracle. One output per path; equal requests take the same rung. No dependency is added and the port is unchanged; the operation identity changes, so cache keys miss once.
@@ -210,6 +212,20 @@ These remain contract work in the [raster coverage readiness](plans/p3-raster-co
 - **Features and coverage.** EDGE and VERTEX features are node-local binary32 offsets. Each triangle lists every feature within exact local distance `ρ`. The mesh shader evaluates O02's coverage rule at the pixel center, maps features with the K4 lanes, and multiplies every side and sector test by `σ = sign(det L)`. O02's G1-G3 PASS does not transfer to this realization. The A08 visual contract is the V3 contract's [section k](plans/p3-v3-renderer-mesh-pipeline-contract.md#k-a08-visual-contract).
 - **Fringe cache identity.** A fringe variant belongs to one mesh-cache entry and one fringe bucket. A variant built for `f′` serves `f ≤ f′ ≤ f + 1`, and an entry keeps at most two. A failed build marks only that `(key, f′)` variant `fringe-unsupported` under the D8-interim outcome and keeps the mesh cached. A mesh with more than 128 distinct boundary vertices is not given a fringe: it draws region-only (aliased edges) with one `fringe-work-cap` notice per cache entry, a D8-interim work bound on the TypeScript builder that the user ratified as V3-Q2 (c) on 2026-10-20 and that leaves with the builder.
 - **D8-interim placement exception (user decision V3-Q3 (c)).** The exact BigInt TypeScript builder runs in `renderer-core` (`path-fringe.ts`). This is a time-bounded D8-interim exception to [`ARCHITECTURE.md`](../ARCHITECTURE.md#geometry-contract)'s geometry contract, which says the Rust/WASM kernel implements tessellation. It is also an exception to the [private contract](plans/p3-private-contract.md)'s "Keep Rust as the production geometry owner". Neither text is amended, and no ADR or port change is made. The builder adds no fill region, moves no vertex and adds no Steiner point, and the exact partition check gates every result. It is disposable under the C04 carve-out, like the K4 carrier. The exception ends when the R2/K1 contract decides the production placement of the per-tile exterior partition. At that point the builder is removed or moved, and this item is replaced.
+
+**P3 joint fill and stroke coverage (2026-10-21; ST-U7 addendum, [`plans/p3-b2-st-u7-joint-coverage-addendum.md`](plans/p3-b2-st-u7-joint-coverage-addendum.md)).**
+
+- **The draws.** For a path with fill and stroke at node opacity below 1, the renderer draws a joint-coverage fill draw over a derived overlay, then the stroke draw, so opacity applies once to the stroke-over-fill result.
+- **The builder.** The exact TypeScript builders in `renderer-core`, `path-joint-overlay.ts` beside the fringe builder `path-fringe.ts`, re-split the port's fill triangles along the stroke boundary. They add Steiner points, rounded once to Float64, and pass an exact partition check.
+- **What the exception covers.** For the joint draw only, this departs from five texts:
+  - "Arbitrary path fills and strokes use WASM-produced meshes" (above);
+  - the kernel geometry contract, `ARCHITECTURE.md:52-54` ("The Rust/WASM kernel implements this contract", including tessellation);
+  - private contract line 8 ("Keep Rust as the production geometry owner");
+  - V3's "Region triangles are the port's, unchanged";
+  - V3-Q3 (c)'s builder that "adds no Steiner point".
+- **Its terms.** It is a time-bounded D8-interim exception in the pattern of V3-Q3 (c), removed at the R2/K1 placement decision. The port meshes stay WASM-produced, and every other draw uses them unchanged.
+- **Opacity and vertices.** Overlay vertices are derived cache data, built once per pair of served variants. Color and opacity changes rebuild no port mesh, which is how the "do not rebuild vertices" rule above applies.
+- **Requirements.** No requirement text changes.
 
 All V3 results are functional evidence. Precision is UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence, and no Q4 threshold is claimed.
 
