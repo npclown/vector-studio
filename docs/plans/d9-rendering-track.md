@@ -316,3 +316,24 @@ How to read the table:
 **Round 2 (PR #210), 2026-10-23.** READY WITH FOLLOW-UPS; follow-ups F1-F4 applied (addendum E8.12). The addendum is APPROVED 2026-10-23 by the Primary under the user's standing instruction of 2026-10-22.
 
 **Next.** E8-U0 (identity tooling, light tier), then E8-U1, then E8-U2, each on its own branch.
+
+### E8-U0 evidence, 2026-10-23
+
+Light tier. `tooling/compare-p3-fill-identity.mjs` gains `--failure-to-success` as specified in [E8.2a](p3-rounded-knot-topology-contract.md#e82a-e8-u0-a-failure-to-success-mode-for-the-fill-identity-tool). No kernel code changed. Plain mode keeps its behavior; the existing `parseArguments` test is untouched (the option record gains `failureToSuccess` only when the flag is given).
+
+- **Classification.** A record is the tuple (digest, allocations, code, crossings). A base record that is not a path failure must be equal in every field. A base path failure may become `ok` or another path failure (allowed change, listed with both codes) and otherwise is an internal-regression (also FAIL, counted separately). A missing or extra record is a FAIL. Path-failure and internal codes follow `fill_export::map_attempt_error`; unrecognized codes count as non-path-failure.
+- **Self-test** (`node tooling/compare-p3-fill-identity.mjs --self-test`, exit 0, 21 failure-to-success cases plus plumbing and the existing revision-change self-test). All cases classified as specified:
+  - unchanged branch: 0 allowed, 0 FAIL
+  - failure becomes ok or another failure: 3 allowed, 0 FAIL
+  - one mesh byte; ok record becomes a failure; boundary pair change; diagnostics-only digest change; statistics-only digest change; allocations change; crossings change; ok code change with equal digest; META record change; missing record (native and WASM); extra record: each FAIL naming the case
+  - path failure becomes an internal error, a batch failure, or an unrecognized code: FAIL and internal-regression 1 each
+  - ok record becomes an internal error: FAIL, internal-regression 0
+  - full-run tamper checks (one native, one WASM ok case): detected
+  - compare-only on a synthetic run directory: unchanged passes, an allowed change passes (plain mode refuses it), `--tamper` detected
+- **Empty (PR #211 review F1).** `empty` (`path_status=1`, `NO_MESH(flat_status=1)`) is a result, not a failure: a base `empty` record must stay equal in every field, and a base path failure may become `empty` (allowed change). The self-test has 21 failure-to-success cases including both; unit tests: 25 passed. The classifier change cannot alter the main-versus-main run (all 82,393 records identical, none changes class), so that run was not repeated.
+- **Bases (PR #211 review F2).** The plain run used base e6eb90f and the failure-to-success run used base d37ab86. They are equivalent: d37ab86 differs from e6eb90f only in documents (#210), and the branch changes only tooling and tests, so the kernel under comparison is the same.
+- **Unit tests.** `tests/unit/p3-fill-identity-failure-to-success.test.ts` (new) and `tests/unit/p3-b0r-identity.test.ts`: 24 passed.
+- **Plain mode.** `pnpm test:p3-fill-identity --base origin/main` (base e6eb90f, head 2dc09ea): PASS; native 76,352 and WASM 6,041 cases digest-equal; 16 oracles passed; 0 allocating cases. Run `artifacts/p3-b0r-identity/20261022T190154Z-208dd78b` (not committed).
+- **New mode on main itself.** `pnpm test:p3-fill-identity --failure-to-success --base origin/main` (base d37ab86, head 2dc09ea, which differs from main only in tooling and tests): PASS; identical 82,393 (native 76,352, WASM 6,041), allowed change 0, FAIL 0, internal-regression 0; both tamper self-checks detected; 16 oracles passed. Run `artifacts/p3-b0r-identity/20261022T194548Z-f81753d9`.
+- **Environment.** Windows 11, Node 24 pinned toolchain Rust 1.94.1, `CARGO_HOME`/`RUSTUP_HOME` = `D:\GIT\vector-studio\.tools\rust\{cargo,rustup}` (no junction). `pnpm check` PASS.
+- **Open.** The mode keeps the plain revision rule (`fill_v0_revision()` equal); if E8-U1 or E8-U2 bump the revision, that decision belongs to their contract. The self-test needs the E8.2a review before E8-U1 relies on the mode (E8-K12).

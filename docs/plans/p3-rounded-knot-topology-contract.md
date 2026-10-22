@@ -116,6 +116,7 @@ Added in review round 1 (S2). E8-K3 cannot run in plain mode, because plain `pnp
   - **FAIL:** the base record is `ok`, and the branch record differs in any field, including a change only in diagnostics or statistics.
   - **allowed change:** the base record is a path failure (a non-`ok` path status), and the branch record is `ok` or another path failure. It is listed with both codes.
   - **internal-regression (also FAIL):** the base record is a path failure, and the branch record is an internal error or a batch failure. It is reported as its own class and counts as FAIL (round 2, F3).
+  - **Note, 2026-10-23 (PR #211 review F1):** in the first bullet a path failure is a non-`ok`, non-`empty` path status; `empty` is a result and must stay equal. `path_status=1` and `NO_MESH(flat_status=1)` are a must-equal base class (a base `empty` record that differs in any field is a FAIL), and `empty` is an accepted branch target of a base path failure (an allowed change).
   - The run passes only if there is no FAIL or internal-regression. It writes the count of each class and the list of allowed changes to the run directory.
 - **Unchanged.** Every other step of the tool stays unchanged: the test-file allow-list (O5), the inline `cfg(test)` module check, the pinned toolchain and the corpus.
 - **Self-test.** `--self-test` gains synthetic run directories for each class, and tamper cases that must FAIL:

@@ -43,10 +43,21 @@
 // `emit_fill_ladder_dump` hand-off of its path. The run writes a change manifest (case, class,
 // old status, reason) and its SHA-256, and checks that a seeded unexpected change fails.
 //
+// `--failure-to-success` (E8-U0, docs/plans/p3-rounded-knot-topology-contract.md section E8.2a)
+// replaces step 6's digest equality by a per-record classification of the merge base against the
+// branch, over the whole record tuple (digest, allocations, code, crossings). identical: the base
+// record is not a path failure and every field is equal (or a path failure that is unchanged).
+// allowed change: the base is a path failure and the branch is `ok` or another path failure.
+// FAIL: the base is not a path failure and any field differs, or a record is missing or extra.
+// internal-regression (also FAIL, reported separately): a base path failure becomes an internal
+// error, a batch failure or an unrecognized code. The run passes only with no FAIL. Every other
+// step (O5, O7, coverage floors, oracles, revisions) is unchanged. Excludes `--revision-change`.
+//
 // Re-comparison of a finished run, with an optional tampered digest:
 //   node tooling/compare-p3-fill-identity.mjs --compare-only <run-dir> [--tamper <case>]
-//     [--revision-change]
-// Self-test of the revision-change mode on a synthetic run directory (no kernel needed):
+//     [--revision-change | --failure-to-success]
+// Self-test of the revision-change and failure-to-success modes on synthetic data (no kernel
+// needed):
 //   node tooling/compare-p3-fill-identity.mjs --self-test
 /* global WebAssembly */
 import { spawnSync } from 'node:child_process';
@@ -360,10 +371,13 @@ export function parseArguments(args) {
     revisionChange: false,
     selfTest: false,
   };
+  // `failureToSuccess` is set only by its flag, so the option record of every other invocation
+  // keeps the shape that the reviewed AL-U2 test of `parseArguments` pins (O5: that file stays).
   for (let index = 0; index < args.length;) {
     const flag = args[index];
-    if (flag === '--revision-change' || flag === '--self-test') {
+    if (flag === '--revision-change' || flag === '--failure-to-success' || flag === '--self-test') {
       if (flag === '--revision-change') options.revisionChange = true;
+      else if (flag === '--failure-to-success') options.failureToSuccess = true;
       else options.selfTest = true;
       index += 1;
       continue;
@@ -379,6 +393,8 @@ export function parseArguments(args) {
     else throw new Error(`Unknown argument ${flag}.`);
     index += 2;
   }
+  if (options.revisionChange && options.failureToSuccess)
+    throw new Error('--revision-change and --failure-to-success exclude each other.');
   if (options.tamper !== null && options.compareOnly === null)
     throw new Error('--tamper is accepted only with --compare-only.');
   if (options.selfTest && args.length !== 1)
@@ -596,6 +612,152 @@ export function revisionTamperChecks(input) {
     return {
       case: name,
       detected: failures.some((failure) => expected.some((start) => failure.startsWith(start))),
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// E8-U0 pure helpers (E8.2a): the `--failure-to-success` classification.
+
+/**
+ * Error codes (the Debug text of `CubicFillError`) that `fill_export::map_attempt_error` maps to
+ * a path status, and the ones it maps to an internal error. The two lists follow that function.
+ */
+const PATH_FAILURE_ERROR =
+  /^(SourceLimit|CommandLimit|ContourLimit|PointLimit|OwnerLimit|UnsupportedSource|ZeroLengthLeaf|Topology\((KnotMismatch|Unresolved|WorkLimit|ByteLimit)\)|Rounded\((InputLimit|EdgeLimit|PairLimit|EventLimit|SectionLimit|NodeLimit|CellLimit|BoundaryLimit|ContributorLimit|WorkLimit|OutputLimit|TopologyAmbiguous|InvalidTolerance)\))$/u;
+const INTERNAL_ERROR =
+  /^(EmissionStatus\(\d+\)|PlanMismatch|BoundsMismatch|InvalidCommand|InvalidProvenance|TopologyOwnership|RoundedOwnership|CombinedByteLimit|Topology\((InvalidInput|InvalidProvenance|InvalidLimits|AllocationFailed)\)|Rounded\((InvalidInput|InternalInvariant|InvalidLimits|AllocationFailed|ByteLimit)\))$/u;
+
+/**
+ * Class of an outcome code: `ok`, `empty` (a result, not a failure: `path_status=1` or
+ * `NO_MESH(flat_status=1)`, which must stay equal and may be a target of a path failure), `path-failure`, `internal` (a kernel internal error), `batch`
+ * (a non-zero fill-v0 batch status) or `other` (META, an empty mesh, anything unrecognized).
+ * A path failure is a non-`ok`, non-`empty` path status: `path_status=2..6`, `NO_MESH(flat_status=2..5)` or a
+ * kernel error that the fill-v0 port maps to a path status.
+ */
+export function classifyOutcome(code) {
+  if (code === 'OK' || code === 'path_status=0') return 'ok';
+  let match = /^path_status=(\d+)$/u.exec(code);
+  if (match) {
+    const status = Number(match[1]);
+    if (status === 1) return 'empty';
+    return status >= 2 && status <= 6 ? 'path-failure' : 'other';
+  }
+  match = /^NO_MESH\(flat_status=(\d+)\)$/u.exec(code);
+  if (match) {
+    const status = Number(match[1]);
+    if (status === 1) return 'empty';
+    return status >= 2 && status <= 5 ? 'path-failure' : 'internal';
+  }
+  match = /^batch_status=(\d+)$/u.exec(code);
+  if (match) return Number(match[1]) !== 0 ? 'batch' : 'other';
+  if (PATH_FAILURE_ERROR.test(code)) return 'path-failure';
+  if (INTERNAL_ERROR.test(code)) return 'internal';
+  return 'other';
+}
+
+const RECORD_FIELDS = ['digest', 'allocations', 'code', 'crossings'];
+
+/** The fields in which two records differ, over the whole tuple (round 2, F1). */
+export function differingFields(base, branch) {
+  return RECORD_FIELDS.filter((field) => base[field] !== branch[field]);
+}
+
+/**
+ * E8.2a's per-record classification of the merge base against the branch over one layer. A base
+ * record that is not a path failure (ok, or any other code such as META) must be equal in every
+ * field; a base path failure may become `ok` or another path failure (an allowed change, listed
+ * with both codes) and otherwise is an internal-regression. A record missing from the branch or
+ * only on the branch is a FAIL. `fail` includes `internalRegression`.
+ */
+export function classifyFailureToSuccessLayer(layer, base, branch) {
+  const result = {
+    counts: { identical: 0, allowedChange: 0, fail: 0, internalRegression: 0 },
+    allowed: [],
+    fails: [],
+    internalRegressions: [],
+  };
+  const fail = (name, reason) => {
+    result.counts.fail += 1;
+    result.fails.push({ layer, case: name, reason });
+  };
+  for (const [name, old] of base) {
+    const current = branch.get(name);
+    if (current === undefined) {
+      fail(name, 'missing on the branch');
+      continue;
+    }
+    const differing = differingFields(old, current);
+    if (classifyOutcome(old.code) !== 'path-failure') {
+      if (differing.length === 0) result.counts.identical += 1;
+      else
+        fail(
+          name,
+          `${old.code} record differs in ${differing.join(', ')} (${old.code} -> ${current.code})`,
+        );
+      continue;
+    }
+    if (differing.length === 0) {
+      result.counts.identical += 1;
+      continue;
+    }
+    const outcome = classifyOutcome(current.code);
+    if (outcome === 'ok' || outcome === 'path-failure' || outcome === 'empty') {
+      result.counts.allowedChange += 1;
+      result.allowed.push({ layer, case: name, baseCode: old.code, branchCode: current.code });
+    } else {
+      const reason = `${old.code} became ${outcome} ${current.code}`;
+      result.counts.internalRegression += 1;
+      result.internalRegressions.push({ layer, case: name, reason });
+      fail(name, `internal-regression: ${reason}`);
+    }
+  }
+  for (const name of branch.keys()) if (!base.has(name)) fail(name, 'only on the branch');
+  return result;
+}
+
+/** Both layers: `input` is { native: { base, branch }, wasm: { base, branch } }. */
+export function classifyFailureToSuccess(input) {
+  const layers = [
+    classifyFailureToSuccessLayer('native', input.native.base, input.native.branch),
+    classifyFailureToSuccessLayer('wasm', input.wasm.base, input.wasm.branch),
+  ];
+  const counts = { identical: 0, allowedChange: 0, fail: 0, internalRegression: 0 };
+  for (const layer of layers)
+    for (const key of Object.keys(counts)) counts[key] += layer.counts[key];
+  const fails = layers.flatMap((layer) => layer.fails);
+  return {
+    counts,
+    perLayer: { native: layers[0].counts, wasm: layers[1].counts },
+    allowed: layers.flatMap((layer) => layer.allowed),
+    fails,
+    internalRegressions: layers.flatMap((layer) => layer.internalRegressions),
+    failures: fails.map((item) => `${item.layer}: ${item.case}: ${item.reason}`),
+    pass: counts.fail === 0,
+  };
+}
+
+/**
+ * The full run's tamper self-check in failure-to-success mode: the branch digest of one native
+ * and one WASM case whose base record is `ok`, each tampered on its own, must be reported as a
+ * FAIL naming that case.
+ */
+export function failureToSuccessTamperChecks(input) {
+  const pick = (layer) =>
+    [...input[layer].base].find(
+      ([name, entry]) => classifyOutcome(entry.code) === 'ok' && input[layer].branch.has(name),
+    )?.[0];
+  return ['native', 'wasm'].map((layer) => {
+    const name = pick(layer);
+    if (name === undefined) return { case: null, detected: false };
+    const tampered = {
+      ...input,
+      [layer]: { ...input[layer], branch: tamper(input[layer].branch, name) },
+    };
+    const { fails } = classifyFailureToSuccess(tampered);
+    return {
+      case: name,
+      detected: fails.some((item) => item.layer === layer && item.case === name),
     };
   });
 }
@@ -1176,7 +1338,32 @@ function reportRevisionChange(result) {
 // ---------------------------------------------------------------------------------------------
 // Modes.
 
-function compareOnly(directory, tamperCase, revisionChange) {
+function reportFailureToSuccess(result) {
+  const { counts } = result;
+  console.log(
+    `P3 B0R identity: failure-to-success identical ${counts.identical}, allowed change ${counts.allowedChange}, FAIL ${counts.fail} (internal-regression ${counts.internalRegression})`,
+  );
+  for (const item of result.allowed.slice(0, 25))
+    console.log(
+      `  allowed change ${item.layer} ${item.case}: ${item.baseCode} -> ${item.branchCode}`,
+    );
+  for (const failure of result.failures.slice(0, 25))
+    console.error(`P3 B0R identity: failure-to-success FAIL ${failure}`);
+}
+
+/** The classification counts and the full list of allowed changes, for the run directory. */
+function failureToSuccessRecord(result) {
+  return {
+    counts: result.counts,
+    perLayer: result.perLayer,
+    allowedChanges: result.allowed,
+    internalRegressions: result.internalRegressions,
+    fails: result.fails,
+    pass: result.pass,
+  };
+}
+
+function compareOnly(directory, tamperCase, revisionChange, failureToSuccess = false) {
   const load = (name) => parseNativeDigests(readFileSync(path.join(directory, name), 'utf8'));
   const native = { base: load('native-base.tsv'), branch: load('native-branch.tsv') };
   const wasm = { base: load('wasm-base.tsv'), branch: load('wasm-branch.tsv') };
@@ -1188,7 +1375,7 @@ function compareOnly(directory, tamperCase, revisionChange) {
   const cross = compareWasmToNative(wasm.branch, native.branch);
   report('wasm-vs-native', cross);
   console.log(
-    `P3 B0R identity (compare-only${revisionChange ? ', revision-change' : ''}): ${native.base.size} native and ${wasm.base.size} WASM cases`,
+    `P3 B0R identity (compare-only${revisionChange ? ', revision-change' : ''}${failureToSuccess ? ', failure-to-success' : ''}): ${native.base.size} native and ${wasm.base.size} WASM cases`,
   );
   // The revision rule of section 4.4, from the revisions the full run stored.
   const revisionsFile = path.join(directory, 'revisions.json');
@@ -1206,6 +1393,16 @@ function compareOnly(directory, tamperCase, revisionChange) {
     const result = revisionChangeResult({ native, wasm, rungs }, validation);
     reportRevisionChange(result);
     return cross.equal && revisionFailures.length === 0 && result.failures.length === 0;
+  }
+  if (failureToSuccess) {
+    const result = classifyFailureToSuccess({ native, wasm });
+    reportFailureToSuccess(result);
+    if (tamperCase === null && existsSync(directory))
+      writeFileSync(
+        path.join(directory, 'failure-to-success.json'),
+        `${JSON.stringify(failureToSuccessRecord(result), null, 2)}\n`,
+      );
+    return cross.equal && revisionFailures.length === 0 && result.pass;
   }
   const results = [
     ['native', compareDigests(native.base, native.branch)],
@@ -1225,7 +1422,7 @@ function compareOnly(directory, tamperCase, revisionChange) {
  * seeded unexpected change (a rung-1 case's branch digest tampered) fails, so does a branch
  * revision that is not base + 1, and plain mode refuses the changed cases.
  */
-function selfTest() {
+function selfTestRevisionChange() {
   mkdirSync(temporary, { recursive: true });
   const directory = mkdtempSync(path.join(temporary, 'p3-fill-identity-self-test-'));
   try {
@@ -1305,6 +1502,257 @@ function selfTest() {
   }
 }
 
+/**
+ * The `--failure-to-success` self-test (E8.2a) on synthetic records, no kernel needed. Every
+ * tamper case below must be classified as stated; a case that is not detected fails the test.
+ * The digests are built from separate diagnostics, statistics, boundary and mesh parts, so a
+ * digest change in one part with the mesh bytes unchanged is exercised (round 2, F2).
+ */
+function selfTestFailureToSuccess() {
+  const digest = ({
+    diagnostics = 'diag0',
+    stats = 'stats0',
+    boundary = 'boundary0',
+    mesh = 'mesh0',
+    label = 'ok',
+  } = {}) =>
+    sha256(
+      `${label}\ndiagnostics=${diagnostics}\nstats=${stats}\nboundary=${boundary}\nmesh=${mesh}`,
+    );
+  const record = (parts, code = 'path_status=0', allocations = 0, crossings = 0) => ({
+    digest: digest(parts),
+    allocations,
+    code,
+    crossings,
+  });
+  const failed = (label, code) => record({ label }, code);
+  const A = 'rnd/T/0000/fill_v0_cascade';
+  const WA = 'wasm/rnd/T/0000';
+  const nativeBase = () =>
+    new Map([
+      ['meta/cubic-workspace-sizes', record({ label: 'meta' }, 'META')],
+      ['rnd/T/0000/attempt', record({ label: 'attempt' }, 'OK', 0, 3)],
+      [A, record({}, 'path_status=0', 0, 2)],
+      ['rnd/T/0001/fill_v0_cascade', failed('f1', 'path_status=6')],
+      ['rnd/T/0002/fill_v0_cascade', failed('f2', 'path_status=5')],
+      ['rnd/T/0003/attempt', failed('f3', 'Topology(KnotMismatch)')],
+      ['rnd/T/0004/attempt', failed('e4', 'NO_MESH(flat_status=1)')],
+      ['rnd/T/0005/fill_v0_cascade', failed('e3', 'path_status=1')],
+    ]);
+  const wasmBase = () =>
+    new Map([
+      [WA, record({}, 'path_status=0', 0, 2)],
+      ['wasm/rnd/T/0001', failed('f1', 'path_status=6')],
+      ['wasm/rnd/T/0002', failed('f2', 'path_status=5')],
+    ]);
+  const classify = (change) => {
+    const native = { base: nativeBase(), branch: nativeBase() };
+    const wasm = { base: wasmBase(), branch: wasmBase() };
+    change(native.branch, wasm.branch);
+    return classifyFailureToSuccess({ native, wasm });
+  };
+  const withFields = (map, name, fields) => map.set(name, { ...map.get(name), ...fields });
+  // [label, change, expectation]: counts of allowed, fail and internal-regression, and the cases
+  // that the FAIL list must name.
+  const cases = [
+    ['unchanged branch', () => {}, { allowed: 0, fail: 0, internal: 0, names: [] }],
+    [
+      'allowed: failure becomes ok or another failure',
+      (n, w) => {
+        n.set('rnd/T/0001/fill_v0_cascade', record({ label: 'new1' }, 'path_status=0', 0, 1));
+        n.set('rnd/T/0003/attempt', failed('f3b', 'Rounded(WorkLimit)'));
+        w.set('wasm/rnd/T/0002', failed('f2b', 'path_status=6'));
+      },
+      { allowed: 3, fail: 0, internal: 0, names: [] },
+    ],
+    [
+      'FAIL: one mesh byte of an ok record',
+      (n) => n.set(A, record({ mesh: 'mesh1' }, 'path_status=0', 0, 2)),
+      { allowed: 0, fail: 1, internal: 0, names: [A] },
+    ],
+    [
+      'FAIL: ok record becomes a failure',
+      (n, w) => w.set(WA, failed('gone', 'path_status=6')),
+      { allowed: 0, fail: 1, internal: 0, names: [WA] },
+    ],
+    [
+      'FAIL: ok record with a changed boundary pair',
+      (n) => n.set(A, record({ boundary: 'boundary1' }, 'path_status=0', 0, 2)),
+      { allowed: 0, fail: 1, internal: 0, names: [A] },
+    ],
+    [
+      'FAIL: diagnostics-only digest change, same mesh bytes',
+      (n) => n.set(A, record({ diagnostics: 'diag1' }, 'path_status=0', 0, 2)),
+      { allowed: 0, fail: 1, internal: 0, names: [A] },
+    ],
+    [
+      'FAIL: statistics-only digest change, same mesh bytes',
+      (n) => n.set(A, record({ stats: 'stats1' }, 'path_status=0', 0, 2)),
+      { allowed: 0, fail: 1, internal: 0, names: [A] },
+    ],
+    [
+      'FAIL: allocations change with equal digest',
+      (n) => withFields(n, A, { allocations: 1 }),
+      { allowed: 0, fail: 1, internal: 0, names: [A] },
+    ],
+    [
+      'FAIL: crossings change with equal digest',
+      (n) => withFields(n, A, { crossings: 3 }),
+      { allowed: 0, fail: 1, internal: 0, names: [A] },
+    ],
+    [
+      'FAIL: ok code changes with equal digest (OK to path_status=0)',
+      (n) => withFields(n, 'rnd/T/0000/attempt', { code: 'path_status=0' }),
+      { allowed: 0, fail: 1, internal: 0, names: ['rnd/T/0000/attempt'] },
+    ],
+    [
+      'FAIL: META record differs',
+      (n) => n.set('meta/cubic-workspace-sizes', record({ label: 'meta2' }, 'META')),
+      { allowed: 0, fail: 1, internal: 0, names: ['meta/cubic-workspace-sizes'] },
+    ],
+    [
+      'FAIL: missing record (native and WASM)',
+      (n, w) => {
+        n.delete(A);
+        w.delete(WA);
+      },
+      { allowed: 0, fail: 2, internal: 0, names: [A, WA] },
+    ],
+    [
+      'FAIL: record only on the branch',
+      (n) => n.set('rnd/T/0009/fill_v0_cascade', record({ label: 'extra' })),
+      { allowed: 0, fail: 1, internal: 0, names: ['rnd/T/0009/fill_v0_cascade'] },
+    ],
+    [
+      'internal-regression: path failure becomes an internal error',
+      (n) => n.set('rnd/T/0003/attempt', failed('f3c', 'Rounded(InternalInvariant)')),
+      { allowed: 0, fail: 1, internal: 1, names: ['rnd/T/0003/attempt'] },
+    ],
+    [
+      'internal-regression: path failure becomes a batch failure',
+      (n, w) => w.set('wasm/rnd/T/0001', failed('f1c', 'batch_status=6')),
+      { allowed: 0, fail: 1, internal: 1, names: ['wasm/rnd/T/0001'] },
+    ],
+    [
+      'internal-regression: path failure becomes an unrecognized code',
+      (n) => n.set('rnd/T/0001/fill_v0_cascade', failed('f1d', 'Mystery(7)')),
+      { allowed: 0, fail: 1, internal: 1, names: ['rnd/T/0001/fill_v0_cascade'] },
+    ],
+    [
+      'allowed: path failure becomes empty (path_status=1 and NO_MESH(flat_status=1))',
+      (n, w) => {
+        n.set('rnd/T/0003/attempt', failed('e1', 'NO_MESH(flat_status=1)'));
+        w.set('wasm/rnd/T/0002', failed('e2', 'path_status=1'));
+      },
+      { allowed: 2, fail: 0, internal: 0, names: [] },
+    ],
+    [
+      'FAIL: base empty (path_status=1) becomes a failure or ok',
+      (n) => n.set('rnd/T/0005/fill_v0_cascade', failed('e3', 'path_status=6')),
+      { allowed: 0, fail: 1, internal: 0, names: ['rnd/T/0005/fill_v0_cascade'] },
+    ],
+    [
+      'FAIL: base empty (NO_MESH(flat_status=1)) becomes ok',
+      (n) => n.set('rnd/T/0004/attempt', record('k', 'OK')),
+      { allowed: 0, fail: 1, internal: 0, names: ['rnd/T/0004/attempt'] },
+    ],
+    [
+      'FAIL: unchanged-code base empty with a changed digest',
+      (n) => n.set('rnd/T/0004/attempt', failed('e5', 'NO_MESH(flat_status=1)')),
+      { allowed: 0, fail: 1, internal: 0, names: ['rnd/T/0004/attempt'] },
+    ],
+    [
+      'FAIL, not internal-regression: ok record becomes an internal error',
+      (n) => n.set(A, failed('boom', 'EmissionStatus(5)')),
+      { allowed: 0, fail: 1, internal: 0, names: [A] },
+    ],
+  ];
+  let pass = true;
+  for (const [label, change, expected] of cases) {
+    const result = classify(change);
+    const named = expected.names.every((name) => result.fails.some((item) => item.case === name));
+    const good =
+      result.counts.allowedChange === expected.allowed &&
+      result.counts.fail === expected.fail &&
+      result.counts.internalRegression === expected.internal &&
+      result.fails.length === expected.fail &&
+      named &&
+      result.pass === (expected.fail === 0);
+    pass &&= good;
+    console.log(
+      `P3 B0R identity self-test (failure-to-success) ${good ? 'ok' : 'WRONG'}: ${label}: allowed ${result.counts.allowedChange}, FAIL ${result.counts.fail} (internal-regression ${result.counts.internalRegression}), ${result.pass ? 'pass' : 'fail'}`,
+    );
+  }
+  // The tamper checks of the full run, on records that include an ok case in each layer.
+  const tamperChecks = failureToSuccessTamperChecks({
+    native: { base: nativeBase(), branch: nativeBase() },
+    wasm: { base: wasmBase(), branch: wasmBase() },
+  });
+  const tampers = tamperChecks.length === 2 && tamperChecks.every((check) => check.detected);
+  pass &&= tampers;
+  console.log(
+    `P3 B0R identity self-test (failure-to-success) full-run tamper checks: ${tamperChecks.map((check) => `${check.case} ${check.detected ? 'detected' : 'NOT DETECTED'}`).join(', ')}`,
+  );
+
+  // The compare-only plumbing on a synthetic run directory: --failure-to-success on an
+  // unchanged branch, on an allowed change (plain mode must refuse it), and --tamper.
+  mkdirSync(temporary, { recursive: true });
+  const directory = mkdtempSync(path.join(temporary, 'p3-fill-identity-f2s-self-test-'));
+  try {
+    const rows = (map) =>
+      `${[...map]
+        .map(
+          ([name, entry]) =>
+            `${name}\t${entry.digest}\t${entry.allocations}\t${entry.code}\t${entry.crossings}`,
+        )
+        .join('\n')}\n`;
+    const files = (nativeBranch, wasmBranch) => {
+      writeFileSync(path.join(directory, 'native-base.tsv'), rows(nativeBase()));
+      writeFileSync(path.join(directory, 'native-branch.tsv'), rows(nativeBranch));
+      writeFileSync(path.join(directory, 'wasm-base.tsv'), rows(wasmBase()));
+      writeFileSync(path.join(directory, 'wasm-branch.tsv'), rows(wasmBranch));
+    };
+    // The WASM cascade digests must equal the native ones, as in a real run.
+    const wasmOf = (native, entries) => {
+      const map = new Map();
+      for (const [wasmName, nativeName] of entries) map.set(wasmName, native.get(nativeName));
+      return map;
+    };
+    const entries = [
+      [WA, A],
+      ['wasm/rnd/T/0001', 'rnd/T/0001/fill_v0_cascade'],
+      ['wasm/rnd/T/0002', 'rnd/T/0002/fill_v0_cascade'],
+    ];
+    const baseNative = nativeBase();
+    const baseWasm = wasmOf(baseNative, entries);
+    files(baseNative, baseWasm);
+    const cleanBranch = compareOnly(directory, null, false, true);
+    const cleanPlain = compareOnly(directory, null, false, false);
+    const allowedNative = nativeBase();
+    allowedNative.set('rnd/T/0001/fill_v0_cascade', record({ label: 'new1' }));
+    allowedNative.set('rnd/T/0003/attempt', failed('f3b', 'Rounded(WorkLimit)'));
+    files(allowedNative, wasmOf(allowedNative, entries));
+    const allowedMode = compareOnly(directory, null, false, true);
+    const allowedPlain = compareOnly(directory, null, false, false);
+    const tamperedOk = compareOnly(directory, A, false, true);
+    const plumbing = cleanBranch && cleanPlain && allowedMode && !allowedPlain && !tamperedOk;
+    pass &&= plumbing;
+    console.log(
+      `P3 B0R identity self-test (failure-to-success) compare-only: unchanged ${cleanBranch ? 'pass' : 'FAIL'}; allowed change ${allowedMode ? 'pass' : 'FAIL'} (plain mode ${allowedPlain ? 'NOT DETECTED' : 'refuses it'}); --tamper ${tamperedOk ? 'NOT DETECTED' : 'detected'}; ${plumbing ? 'ok' : 'WRONG'}`,
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+  console.log(`P3 B0R identity self-test (failure-to-success): ${pass ? 'PASS' : 'FAIL'}`);
+  return pass;
+}
+
+function selfTest() {
+  const revisionChange = selfTestRevisionChange();
+  const failureToSuccess = selfTestFailureToSuccess();
+  return revisionChange && failureToSuccess;
+}
+
 async function fullRun(options) {
   const started = new Date();
   const durations = {};
@@ -1322,7 +1770,7 @@ async function fullRun(options) {
   const output = path.join(root, 'artifacts/p3-b0r-identity', runId);
   mkdirSync(output, { recursive: true });
   console.log(
-    `P3 B0R identity: base ${baseCommit}, head ${headCommit}, mode ${options.revisionChange ? 'revision-change' : 'plain'}, output ${path.relative(root, output)}`,
+    `P3 B0R identity: base ${baseCommit}, head ${headCommit}, mode ${options.revisionChange ? 'revision-change' : options.failureToSuccess ? 'failure-to-success' : 'plain'}, output ${path.relative(root, output)}`,
   );
 
   const b0 = await import(pathToFileURL(path.join(root, 'tests/geometry/p3-b0/corpus.ts')).href);
@@ -1452,6 +1900,8 @@ async function fullRun(options) {
     if (!crossComparison.equal) failures.push('WASM cascade digests differ from native ones');
     let revision = null;
     let revisionInput = null;
+    let f2sInput = null;
+    let failureToSuccess = null;
     if (options.revisionChange) {
       const rungs = timed(durations, 'rungRecordMs', () =>
         dumpRungs(corpora, path.join(output, 'rungs-branch.tsv'), options.threads),
@@ -1485,6 +1935,20 @@ async function fullRun(options) {
         selfCheck: result.selfCheck,
         failures: result.failures,
       };
+    } else if (options.failureToSuccess) {
+      f2sInput = {
+        native: { base: native.base, branch: native.branch },
+        wasm: { base: wasm.base, branch: wasm.branch },
+      };
+      const result = classifyFailureToSuccess(f2sInput);
+      reportFailureToSuccess(result);
+      writeFileSync(
+        path.join(output, 'failure-to-success.json'),
+        `${JSON.stringify(failureToSuccessRecord(result), null, 2)}\n`,
+        { flag: 'wx' },
+      );
+      failures.push(...result.failures.map((failure) => `failure-to-success: ${failure}`));
+      failureToSuccess = failureToSuccessRecord(result);
     } else {
       report('native', nativeComparison);
       report('wasm', wasmComparison);
@@ -1526,10 +1990,12 @@ async function fullRun(options) {
     // classification to report each (AL-U3); plain mode keeps its exactly-one-difference check.
     const tamperChecks = options.revisionChange
       ? revisionTamperChecks(revisionInput)
-      : [
-          tamperSelfCheck(native.base, native.branch, nativeTamperCase),
-          tamperSelfCheck(wasm.base, wasm.branch, wasmTamperCase),
-        ];
+      : options.failureToSuccess
+        ? failureToSuccessTamperChecks(f2sInput)
+        : [
+            tamperSelfCheck(native.base, native.branch, nativeTamperCase),
+            tamperSelfCheck(wasm.base, wasm.branch, wasmTamperCase),
+          ];
     for (const check of tamperChecks)
       if (!check.detected) failures.push(`tamper self-check not detected for ${check.case}`);
 
@@ -1538,7 +2004,11 @@ async function fullRun(options) {
       tool: 'compare-p3-fill-identity/2',
       contract: 'docs/plans/p3-b0r-kernel-performance-contract.md',
       amendedBy: 'docs/plans/p3-alt-a1-fill-ladder-contract.md',
-      mode: options.revisionChange ? 'revision-change' : 'plain',
+      mode: options.revisionChange
+        ? 'revision-change'
+        : options.failureToSuccess
+          ? 'failure-to-success'
+          : 'plain',
       runId,
       utcStart: started.toISOString(),
       utcEnd: new Date().toISOString(),
@@ -1578,6 +2048,7 @@ async function fullRun(options) {
         coverage: wasmCoverage,
       },
       revisionChange: revision,
+      ...(failureToSuccess === null ? {} : { failureToSuccess }),
       coverage: { ...coverage, floors: random.COVERAGE_FLOORS, missed },
       tamperChecks,
       durationsMs: durations,
@@ -1608,7 +2079,12 @@ export async function main(args = process.argv.slice(2)) {
   const options = parseArguments(args);
   if (options.selfTest) return selfTest();
   return options.compareOnly !== null
-    ? compareOnly(path.resolve(options.compareOnly), options.tamper, options.revisionChange)
+    ? compareOnly(
+        path.resolve(options.compareOnly),
+        options.tamper,
+        options.revisionChange,
+        options.failureToSuccess,
+      )
     : fullRun(options);
 }
 
