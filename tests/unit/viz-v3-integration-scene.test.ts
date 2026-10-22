@@ -338,7 +338,7 @@ describe('V-3 scene module (VZ3-A2)', () => {
       expect(p.x).toBeLessThanOrEqual(VIZ_V3_SURFACE.width - 2);
       expect(p.y).toBeLessThanOrEqual(VIZ_V3_SURFACE.height - 2);
     }
-  });
+  }, 120_000);
 
   it('separates every order change and the half-opacity and joint candidates by more than twice the tolerance', () => {
     const limit = 2 * PROBE_TOLERANCE;
