@@ -87,6 +87,8 @@ type InWindowApplication = {
   afterDiagnosticIndex: number;
   afterDiagnosticCode: string;
   lifecycle: string;
+  /** "Simulate device loss" is disabled while the backend is not ready (VZ3-Q4). */
+  loseButtonDisabled: boolean;
   sample: Sample;
 };
 type LossRecord = {
@@ -138,6 +140,7 @@ backend.subscribeDiagnostics((event) => {
         afterDiagnosticIndex: diagnostics.length - 1,
         afterDiagnosticCode: diagnostics.at(-1)!.code,
         lifecycle: backend.getStatistics().lifecycle,
+        loseButtonDisabled: (updateButtons(), loseDeviceButton.disabled),
         sample: takeSample(`${id} (in loss window)`, true),
       });
     }
