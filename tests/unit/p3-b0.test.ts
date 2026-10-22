@@ -112,7 +112,12 @@ describe('P3 B0 corpus generator', () => {
   it('frames the corpus deterministically', () => {
     const first = encodeCorpus(corpusCells());
     expect(new TextDecoder().decode(first.slice(0, 8))).toBe('P3B0COR1');
-    expect(encodeCorpus(corpusCells())).toEqual(first);
+    // The corpus is about 581 KB. A deep toEqual walks it element by element and takes over a
+    // second, so the two encodings are compared byte for byte instead.
+    const second = encodeCorpus(corpusCells());
+    expect(second).toBeInstanceOf(Uint8Array);
+    expect(second.length).toBe(first.length);
+    expect(second.findIndex((byte, index) => byte !== first[index])).toBe(-1);
   });
 });
 

@@ -114,6 +114,10 @@ describe('P3.1d frozen cubic boundary fixtures', () => {
     expect(fixtures.every(({ sourceVerbOrdinal }) => sourceVerbOrdinal === SOURCE)).toBe(true);
   });
 
+  // Exact BigInt certification of all 22,912 lines takes about 2 s alone, half of it in the
+  // rational gcd. exact.ts and the oracle are pinned by source manifests and SHA-256 records, so
+  // the work stays and this test gets its own timeout instead of failing under a loaded parallel
+  // unit run.
   it('certifies every frozen baseline without native output or supplied expectations', () => {
     for (const fixture of fixedCubicBoundaryFixtures()) {
       const result = certifyCubicBoundary(fixture);
@@ -122,7 +126,7 @@ describe('P3.1d frozen cubic boundary fixtures', () => {
       expect(result.finding, fixture.id).toBeNull();
       expect(result.maxCertifiedSquared, fixture.id).not.toBeNull();
     }
-  });
+  }, 30_000);
 });
 
 describe('P3.1d exact literal controls', () => {

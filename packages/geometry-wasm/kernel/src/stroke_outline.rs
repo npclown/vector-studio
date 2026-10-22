@@ -609,7 +609,8 @@ impl StrokeWorkspace {
     }
 
     fn reserved(limits: RoundedFillLimits) -> Result<Self, u32> {
-        let rounded = RoundedFillWorkspace::new(limits).map_err(construction_status)?;
+        // The stroke constructor enables E1-K1 (ST-U9 addendum E1.3, unit ST-U10).
+        let rounded = RoundedFillWorkspace::new_stroke(limits).map_err(construction_status)?;
         let (scratch, scratch_bytes) = FillScratch::reserve(limits)?;
         let mut workspace = Self {
             subpaths: reserve(MAX_SUBPATHS)?,
