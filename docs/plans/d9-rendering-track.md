@@ -51,16 +51,16 @@ State and evidence are owned by the [D9 in-flight table](d9-post-mvp1-tracks-pro
 
 By D9-Q2 (a) this plan carries the evidence index for the P3 exit gate. The visualization track supplies the headed pages for A07 and A08, and the Primary accepts the exit. The requirement text and thresholds stay in the [P3 acceptance table](p3-fill-stroke-meshes.md#runtime-acceptance-coverage-to-freeze-in-p30b). A row is marked done only when its evidence link exists.
 
-| ID  | Evidence location | State                                          |
-| --- | ----------------- | ---------------------------------------------- |
-| A01 | None yet          | TODO                                           |
-| A02 | None yet          | TODO                                           |
-| A03 | None yet          | TODO                                           |
-| A04 | None yet          | TODO; depends on E3                            |
-| A05 | None yet          | TODO                                           |
-| A06 | None yet          | TODO                                           |
-| A07 | None yet          | TODO; headed page from the visualization track |
-| A08 | None yet          | TODO; headed page from the visualization track |
+| ID  | Evidence location                                                                                                                     | State                                          |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| A01 | None yet                                                                                                                              | TODO                                           |
+| A02 | None yet                                                                                                                              | TODO                                           |
+| A03 | None yet                                                                                                                              | TODO                                           |
+| A04 | None yet                                                                                                                              | TODO; depends on E3                            |
+| A05 | None yet                                                                                                                              | TODO                                           |
+| A06 | None yet                                                                                                                              | TODO                                           |
+| A07 | None yet; A07 partial (V-3 evidence): [V-3 implementation evidence](d9-visualization-track.md#v-3-implementation-evidence-2026-10-23) | TODO; headed page from the visualization track |
+| A08 | None yet                                                                                                                              | TODO; headed page from the visualization track |
 
 ## Evidence rules
 

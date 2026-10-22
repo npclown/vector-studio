@@ -660,7 +660,7 @@ describe('V3b backend lifecycle (V3-A13)', () => {
 // V4 removed the V3-A18 form of this test ("before V4") when the playground gained the real
 // port. The remaining hosts still request no mesh pipeline and inject no port.
 describe('V4 host injection', () => {
-  it('V4: no host other than the path page, the ST-U8 stroke page, the V-1 appearance page and the V-2 path-data page requests the mesh pipeline or injects a port', () => {
+  it('V4: no host other than the path page, the ST-U8 stroke page, the V-1 appearance page, the V-2 path-data page and the V-3 integration page requests the mesh pipeline or injects a port', () => {
     const root = join(__dirname, '../../apps');
     const files: string[] = [];
     const walk = (directory: string) => {
@@ -674,16 +674,17 @@ describe('V4 host injection', () => {
     walk(root);
     expect(files.length).toBeGreaterThan(0);
     // The V4 path page, the B2 ST-U8 stroke page (on V4's pattern), the visualization track's
-    // V-1 appearance page and V-2 path-data page (same pattern) and the manifest and project-reference edges inject
-    // the real ports.
+    // V-1 appearance page, V-2 path-data page and V-3 integration page (same pattern) and the
+    // manifest and project-reference edges inject the real ports.
     const host = files.filter(
       (file) =>
         /[\\/]src[\\/]p3-(v4-paths|b2-strokes)\.ts$/.test(file) ||
         /[\\/]src[\\/]viz-v1-appearance\.ts$/.test(file) ||
         /[\\/]src[\\/]viz-v2-path-data\.ts$/.test(file) ||
+        /[\\/]src[\\/]viz-v3-integration\.ts$/.test(file) ||
         /[\\/]playground[\\/](package|tsconfig)\.json$/.test(file),
     );
-    expect(host).toHaveLength(6);
+    expect(host).toHaveLength(7);
     // The V3-A14 smoke fixture page is a test fixture with a static test-double port, not a
     // host; it must not reach a real port (no geometry-wasm).
     const fixture = files.filter((file) => /p3-v3-mesh\.(ts|html)$/.test(file));
