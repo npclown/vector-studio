@@ -6,15 +6,15 @@ Ownership: the packages and pages listed in [D9, visualization track](d9-post-mv
 
 ## Status index
 
-| Item | Subject                                            | Tier                                                              | State                               |
-| ---- | -------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------- |
-| V-1  | Path appearance editing on the existing P3 surface | To be set in the V-1 contract; full if the shared surface changes | Not started; contract to be written |
+| Item | Subject                                            | Tier                                                    | State                               |
+| ---- | -------------------------------------------------- | ------------------------------------------------------- | ----------------------------------- |
+| V-1  | Path appearance editing on the existing P3 surface | Full (user-visible behavior, AGENTS.md change workflow) | Not started; contract to be written |
 
 ## V-1: path appearance editing
 
 Source: D9-Q4 (a), see [D9 user decisions](d9-post-mvp1-tracks-proposal.md#user-decisions-2026-10-22).
 
-Scope: interactive editing of fill rule, fill color, stroke width, caps, joins, miter limit and opacity on a path, with live re-rendering through the ports. It is UI that exercises the existing fill-plus-stroke draw at node opacity; it adds no draw work.
+Scope: as stated in [D9-Q4 (a)](d9-post-mvp1-tracks-proposal.md#open-questions-for-the-user): interactive editing of path fill and stroke parameters with live re-rendering through the ports, as UI over the existing draw and not new draw work.
 
 Deferred: dash editing, gradients and full appearance controls, as in [`docs/prototype-plan.md`](../prototype-plan.md#deferred-from-the-graphics-prototype).
 

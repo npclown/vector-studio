@@ -87,7 +87,7 @@ A pull request is ready for merge only when:
 - benchmark claims link to committed result records;
 - unresolved risks and intentionally deferred items are explicit;
 - no secrets, machine-local caches, or unrelated files are included;
-- the description states the track; packages touched; shared surface changed? (y/n → full tier).
+- the description, in the Gate section, states the track; packages touched; shared surface changed? (y/n → full tier).
 
 ### Pull-request description format
 
@@ -137,7 +137,7 @@ Work runs in Claude Code. The Primary session owns plans, contracts, integration
 
 The Primary may run a high-risk numeric or lifecycle implementation on Opus 5.5 instead. Subagents do not delegate further. Their findings are inputs; the Primary decides adoption.
 
-**Tracks and lanes (D9).** After the MVP 1 cut there is one Primary. Each track (rendering, visualization) has one development lane and one verification lane, four agents in total under the Primary. A verification lane runs the fixed validation commands for its track and never edits the code it verifies. The fresh-context `reviewer` stays the independent check. Ownership, the shared surface and the operating rules are in `docs/plans/d9-post-mvp1-tracks-proposal.md`.
+**Tracks and lanes (D9).** After the MVP 1 cut there is still one Primary. Each track (rendering, visualization) has one development lane and one verification lane, four agents in total under the Primary. A verification lane runs the fixed validation commands for its track and never edits the code it verifies. The fresh-context `reviewer` stays the independent check. Ownership, the shared surface and the operating rules are in `docs/plans/d9-post-mvp1-tracks-proposal.md`.
 
 **Legacy names.** Records before 2026-10-08 were written under Codex and use its worker names: Astra (independent technical review), Sol (implementation or implementability audit), Terra (implementation and fixtures) and Luna (command execution), each with an effort level. Those records stay unchanged.
 
