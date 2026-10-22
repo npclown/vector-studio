@@ -50,3 +50,5 @@ Add direct pure borrowed-helper line/line and cubic/line controls: left actual/s
 | S04 | Pinned Rust fmt/Clippy and full pnpm test:geometry, bounded two-worker pnpm check, pnpm build, docs/links/diff, Primary/independent evidence review and required protected CI.                  |
 
 No local browser/GPU/benchmark/full-census execution is needed. Public transport/mesh/coverage, general multi-partner event ordering, larger capacities, later adoption and complete P3 C03-C05/A01-A08 remain open. Historical P2 A08 FAIL/latest-source performance UNVERIFIED are unchanged.
+
+E8 pointer, 2026-10-23 (addendum approved 2026-10-23): the [E8 addendum](p3-rounded-knot-topology-contract.md#e8-addendum-2026-10-23) proposes a second exact candidate direction for the adjacent pairs of `TransverseArrangementWorkspace::check_pair` and its reference body (E8-U1). The amendment applies from E8-U1 (E8-U2 for the snap); the text above is unchanged.
