@@ -832,10 +832,8 @@ impl RoundedKnotCubicTopologyWorkspace {
         let left = &self.exact_leaves[left_index];
         let right = &self.exact_leaves[right_index];
         if let Some((previous, next)) = directed_rounded_adjacent(left, right, &self.contours) {
-            let direction = point_sub(next.points[3], previous.points[0]);
-            if !rounded_projected_monotone(previous, direction)
-                || !rounded_projected_monotone(next, direction)
-            {
+            // E8 addendum E8.3: d1, then the guard and the one further exact candidate d2.
+            if !rounded_adjacent_projection(previous, next) {
                 return Err(TopologyError::Unresolved);
             }
         } else if closed_hulls_intersect(rounded_leaf_hull(left), rounded_leaf_hull(right)) {
@@ -878,10 +876,8 @@ impl RoundedKnotCubicTopologyWorkspace {
         let left = &self.exact_leaves[left_index];
         let right = &self.exact_leaves[right_index];
         if let Some((previous, next)) = directed_rounded_adjacent(left, right, &self.contours) {
-            let direction = point_sub(next.points[3], previous.points[0]);
-            if !rounded_projected_monotone(previous, direction)
-                || !rounded_projected_monotone(next, direction)
-            {
+            // E8 addendum E8.3: d1, then the guard and the one further exact candidate d2.
+            if !rounded_adjacent_projection(previous, next) {
                 return Err(TopologyError::Unresolved);
             }
         } else if closed_hulls_intersect(rounded_leaf_hull(left), rounded_leaf_hull(right)) {
@@ -1095,10 +1091,8 @@ impl TransverseArrangementWorkspace {
             if let Some((previous, next)) =
                 directed_rounded_adjacent(left, right, &self.rounded.contours)
             {
-                let direction = point_sub(next.points[3], previous.points[0]);
-                if !rounded_projected_monotone(previous, direction)
-                    || !rounded_projected_monotone(next, direction)
-                {
+                // E8 addendum E8.3: d1, then the guard and the one further exact candidate d2.
+                if !rounded_adjacent_projection(previous, next) {
                     return Err(TopologyError::Unresolved);
                 }
                 None
@@ -1200,10 +1194,8 @@ impl TransverseArrangementWorkspace {
             if let Some((previous, next)) =
                 directed_rounded_adjacent(left, right, &self.rounded.contours)
             {
-                let direction = point_sub(next.points[3], previous.points[0]);
-                if !rounded_projected_monotone(previous, direction)
-                    || !rounded_projected_monotone(next, direction)
-                {
+                // E8 addendum E8.3: d1, then the guard and the one further exact candidate d2.
+                if !rounded_adjacent_projection(previous, next) {
                     return Err(TopologyError::Unresolved);
                 }
                 None
@@ -2683,6 +2675,100 @@ fn rounded_projected_monotone_points(
             == Ordering::Greater
 }
 
+/// The common-direction test for a directed cyclic adjacent pair, P3.1f line 11 as amended by
+/// the E8 addendum E8.3 (docs/plans/p3-rounded-knot-topology-contract.md). The frozen test runs
+/// first with d1 = N.Q3 - P.Q0, unchanged. Only if it fails, the own-progress guard runs, and then
+/// the frozen test once more with the single closed-form exact candidate d2. Every decision is an
+/// exact integer sign; nothing is allocated, searched or retried.
+fn rounded_adjacent_projection(previous: &RoundedExactLeaf, next: &RoundedExactLeaf) -> bool {
+    let first = point_sub(next.points[3], previous.points[0]);
+    if rounded_projected_monotone(previous, first) && rounded_projected_monotone(next, first) {
+        return true;
+    }
+    if !rounded_own_progress(previous) || !rounded_own_progress(next) {
+        return false;
+    }
+    let Some(second) = rounded_second_direction(previous, next) else {
+        return false;
+    };
+    rounded_projected_monotone(previous, second) && rounded_projected_monotone(next, second)
+}
+
+/// E8.3 step 2: a piece that is not an implicit closure needs dot(B - A, Q3 - Q0) > 0, so an
+/// actual chord that runs against its own source piece stays UNRESOLVED.
+fn rounded_own_progress(leaf: &RoundedExactLeaf) -> bool {
+    leaf.closure
+        || dot(
+            point_sub(leaf.points[5], leaf.points[4]),
+            point_sub(leaf.points[3], leaf.points[0]),
+        )
+        .cmp_zero()
+            == Ordering::Greater
+}
+
+/// E8.3 steps 3-5: the vector set V (previous piece first; per piece its three control
+/// differences, or a closure's endpoint derivative, then its actual chord; zero vectors dropped),
+/// its exact angular extremes a and b, and d2 = J(a - b), or a when every vector points one way.
+fn rounded_second_direction(
+    previous: &RoundedExactLeaf,
+    next: &RoundedExactLeaf,
+) -> Option<ExactPoint> {
+    let mut vectors = [previous.points[0]; 8];
+    let mut len = 0usize;
+    for leaf in [previous, next] {
+        let points = &leaf.points;
+        let chord = point_sub(points[5], points[4]);
+        let (candidates, count) = if leaf.closure {
+            ([point_sub(points[3], points[0]), chord, chord, chord], 2)
+        } else {
+            (
+                [
+                    point_sub(points[1], points[0]),
+                    point_sub(points[2], points[1]),
+                    point_sub(points[3], points[2]),
+                    chord,
+                ],
+                4,
+            )
+        };
+        for vector in &candidates[..count] {
+            if !(vector.x.is_zero() && vector.y.is_zero()) {
+                vectors[len] = *vector;
+                len += 1;
+            }
+        }
+    }
+    let vectors = &vectors[..len];
+    let first = vectors
+        .iter()
+        .copied()
+        .find(|&a| vectors.iter().all(|&u| turns_left_or_along(a, u)))?;
+    let last = vectors
+        .iter()
+        .copied()
+        .find(|&b| vectors.iter().all(|&u| turns_left_or_along(u, b)))?;
+    match cross_vectors(first, last).cmp_zero() {
+        Ordering::Greater => {
+            let difference = point_sub(first, last);
+            Some(ExactPoint {
+                x: difference.y.negated(),
+                y: difference.x,
+            })
+        }
+        Ordering::Equal => Some(first),
+        Ordering::Less => None,
+    }
+}
+
+/// E8.3 step 4: cross(from, to) > 0, or cross(from, to) = 0 and dot(from, to) > 0.
+fn turns_left_or_along(from: ExactPoint, to: ExactPoint) -> bool {
+    match cross_vectors(from, to).cmp_zero() {
+        Ordering::Greater => true,
+        Ordering::Equal => dot(from, to).cmp_zero() == Ordering::Greater,
+        Ordering::Less => false,
+    }
+}
+
 /// The unfiltered `rounded_projected_monotone`, kept as the O1 differential reference.
 #[cfg(test)]
 fn rounded_projected_monotone_exact(
@@ -3064,6 +3150,46 @@ pub(crate) fn b0r_test_restrict(
     depth: u32,
 ) -> [B0rTestPoint; 4] {
     restrict_cell(exact_cubic(points), end_numerator, depth).map(|point| [point.x, point.y])
+}
+
+/// A literal leaf of the E8-U1 test hooks: the six points Q0..Q3, A, B and the closure flag.
+#[cfg(test)]
+pub(crate) type E8TestLeaf = ([Point; 6], bool);
+
+#[cfg(test)]
+fn e8_test_leaf((points, closure): E8TestLeaf) -> RoundedExactLeaf {
+    RoundedExactLeaf {
+        points: points.map(exact_point),
+        hull: [0; 6],
+        hull_len: 0,
+        contour: 0,
+        contour_leaf: 0,
+        ordinary_start: Point::default(),
+        closure,
+    }
+}
+
+/// E8-U1 test hook (E8 addendum E8.3): the adjacent-pair test of P3.2n and P3.2s on two literal
+/// leaves. Returns the frozen test with d1 alone and the amended test.
+#[cfg(test)]
+pub(crate) fn e8_test_adjacent_pair(previous: E8TestLeaf, next: E8TestLeaf) -> (bool, bool) {
+    let (previous, next) = (e8_test_leaf(previous), e8_test_leaf(next));
+    let first = point_sub(next.points[3], previous.points[0]);
+    (
+        rounded_projected_monotone(&previous, first) && rounded_projected_monotone(&next, first),
+        rounded_adjacent_projection(&previous, &next),
+    )
+}
+
+/// E8-U1 test hook: steps 3-5 of E8.3 on two literal leaves, d2 or `None` (no extreme, or
+/// cross(a, b) < 0).
+#[cfg(test)]
+pub(crate) fn e8_test_second_direction(
+    previous: E8TestLeaf,
+    next: E8TestLeaf,
+) -> Option<B0rTestPoint> {
+    rounded_second_direction(&e8_test_leaf(previous), &e8_test_leaf(next))
+        .map(|point| [point.x, point.y])
 }
 
 /// Evaluates one predicate, filtered (`exact == false`) or by its exact reference.

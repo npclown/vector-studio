@@ -3176,6 +3176,28 @@ mod tests {
         path
     }
 
+    /// E8-C2 (E8 addendum E8.6): the M1' path `M 0 0 C 0 -100 100 -100 100 -50 S 200 0 200 -50
+    /// L 200 50 L 0 50 Z` with each coordinate the binary64 sum c + 0.1; S reflects the
+    /// previous second control in binary64.
+    fn e8_c2_path() -> RawPath {
+        let c = |value: f64| value + 0.1;
+        let mut path = RawPath::default();
+        path.move_to(point(c(0.0), c(0.0)));
+        let two = point(c(100.0), c(-100.0));
+        let end = point(c(100.0), c(-50.0));
+        path.cubic_to(point(c(0.0), c(-100.0)), two, end);
+        let reflected = point(2.0 * end.x - two.x, 2.0 * end.y - two.y);
+        path.cubic_to(
+            reflected,
+            point(c(200.0), c(0.0)),
+            point(c(200.0), c(-50.0)),
+        );
+        path.line_to(point(c(200.0), c(50.0)));
+        path.line_to(point(c(0.0), c(50.0)));
+        path.close();
+        path
+    }
+
     fn adoption_bowtie() -> RawPath {
         let corners = [
             point(0.0, 0.0),
@@ -4924,10 +4946,25 @@ mod tests {
 
     #[test]
     fn rounded_topology_failure_preserves_exact_knot_mismatch_and_recovers() {
+        // E8-C5 (docs/plans/p3-rounded-knot-topology-contract.md, E8 addendum E8.6): the
+        // rounded-knot control passes the rounded helper under E8-U1, so the M1' path E8-C2,
+        // which has non-exact internal knots, replaces it as the failure, at its fixture
+        // tolerance e = 0. The old control is kept as a positive.
         let success = adoption_path(0.0, true);
-        let failure = rounded_failure_path();
+        let old = rounded_failure_path();
+        let failure = e8_c2_path();
         let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
 
+        measured_raw_attempt(
+            &mut workspace,
+            &old,
+            FLATTEN_TOLERANCE,
+            TOPOLOGY_TOLERANCE,
+            MAX_COMMANDS,
+        )
+        .unwrap();
+        assert!(workspace.output().is_some());
+        assert!(workspace.diagnostics().rounded_topology_selected);
         measured_raw_attempt(
             &mut workspace,
             &success,
@@ -4939,13 +4976,7 @@ mod tests {
         assert!(workspace.output().is_some());
         assert!(!workspace.diagnostics().rounded_topology_invoked);
         assert_eq!(
-            measured_raw_attempt(
-                &mut workspace,
-                &failure,
-                FLATTEN_TOLERANCE,
-                TOPOLOGY_TOLERANCE,
-                MAX_COMMANDS,
-            ),
+            measured_raw_attempt(&mut workspace, &failure, 1.0, 0.5, MAX_COMMANDS),
             Err(BridgeError::Topology(TopologyError::KnotMismatch))
         );
         let diagnostics = workspace.diagnostics();
@@ -4958,8 +4989,8 @@ mod tests {
         );
         assert!(!diagnostics.rounded_invoked);
         assert!(workspace.output().is_none());
-        assert_eq!(workspace.topology_stats().leaves, 6);
-        assert_eq!(workspace.topology_stats().pairs, 5);
+        assert_eq!(workspace.topology_stats().leaves, 33);
+        assert_eq!(workspace.topology_stats().pairs, 523);
         measured_raw_attempt(
             &mut workspace,
             &success,

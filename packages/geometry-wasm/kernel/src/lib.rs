@@ -507,3 +507,8 @@ mod p3_al_ob5_tests;
 // end of the file so that no existing line moves.
 #[cfg(test)]
 mod p3_al_ob5_bench;
+
+// D9 E8 unit E8-U1, the exact-rung direction hint's literal tests and emitters, test-only.
+// Declared at the end of the file so that no existing line moves.
+#[cfg(test)]
+mod e8_direction_hint_tests;
