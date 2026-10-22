@@ -2,6 +2,7 @@
 // same input, case by case, and checks that every change is a shared-point change of the plan
 // entry "B2 ST-U3d/ST-U3e stroke sharing (review follow-up)":
 //
+// - the case sets are equal: a case present in only one dump is a violation;
 // - the request, subpaths, piece count and piece metadata are equal;
 // - a segment's start triple changes only after an exact reversal, to the incoming end triple
 //   with E- and E+ swapped, bit for bit;
@@ -9,8 +10,19 @@
 // - every added piece point is a triple's E-, E+ or centre;
 // - every removed point is a replaced reversal-triple point, a triple centre, or a disk vertex
 //   of a round piece within `(3.125k + 7) u (|c|inf + r)` of a triple point (k from the piece's
-//   disk count);
-// - a status changes only from unsupported-geometry to ok.
+//   disk count), where a disk vertex needs a segment centre at distance r (a disk vertex with no
+//   such centre is a violation, not a zero ratio);
+// - a triple centre is an exact source point. It may enter or leave a piece's point set only as
+//   a hull-membership flip: it is a centre in both dumps, it lies inside or on the convex hull
+//   (exact rational arithmetic) of the point set that does not contain it (an added centre
+//   inside the hull of the before points, a removed centre inside the hull of the after points),
+//   it is on or outside the hull of the other points of the set that does contain it (so it was
+//   a hull member there: a centre strictly inside that hull is no flip), and another,
+//   non-centre point of the same piece changed too (a centre that changes alone is a dropped or
+//   added centre, not a flip). Any other centre change is a violation;
+// - a status changes only from unsupported-geometry to ok;
+// - the dump itself is well formed: no duplicate case name, and the header count equals the
+//   number of case lines.
 //
 //   node tooling/p3-stroke-dump-diff.mjs <before.dump> <after.dump>
 //
@@ -26,20 +38,75 @@ if (!beforePath || !afterPath) {
 }
 const U = 2 ** -53;
 const f64 = (hex) => Buffer.from(hex, 'hex').readDoubleBE(0);
-const read = (path) =>
-  new Map(
-    fs
-      .readFileSync(path, 'utf8')
-      .split('\n')
-      .slice(1)
-      .filter(Boolean)
-      .map((line) => {
-        const value = JSON.parse(line.slice(line.indexOf(' ') + 1));
-        return [value.name, value];
-      }),
-  );
+const violations = [];
+// Reads a dump. A duplicate case name, or a header count that differs from the number of case
+// lines, is a violation (the dump itself is malformed).
+const read = (path) => {
+  const [header, ...rest] = fs.readFileSync(path, 'utf8').split('\n');
+  const lines = rest.filter(Boolean);
+  const cases = new Map();
+  for (const line of lines) {
+    const value = JSON.parse(line.slice(line.indexOf(' ') + 1));
+    if (cases.has(value.name)) violations.push(`${path}: duplicate case ${value.name}`);
+    cases.set(value.name, value);
+  }
+  if (Number(header.split(' ')[1]) !== lines.length)
+    violations.push(`${path}: header "${header}" but ${lines.length} case lines`);
+  return cases;
+};
 const key = (point) => point.join(',');
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+// Exact coordinates: a binary64 is m * 2^e, so BigInt(m) << (e + 1074) is an exact integer.
+const exact = (hex) => {
+  const bits = Buffer.from(hex, 'hex').readBigUInt64BE(0);
+  const exponent = Number((bits >> 52n) & 0x7ffn);
+  const fraction = bits & 0xfffffffffffffn;
+  const mantissa = exponent === 0 ? fraction : fraction | (1n << 52n);
+  const value = mantissa << BigInt((exponent === 0 ? 1 : exponent) - 1);
+  return bits >> 63n === 1n ? -value : value;
+};
+const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+const hullOf = (points) => {
+  const sorted = [...new Map(points.map((p) => [key(p), p.map(exact)])).values()].sort((p, q) =>
+    p[0] < q[0] ? -1 : p[0] > q[0] ? 1 : p[1] < q[1] ? -1 : p[1] > q[1] ? 1 : 0,
+  );
+  if (sorted.length < 3) return sorted;
+  const chain = (list) => {
+    const out = [];
+    for (const p of list) {
+      while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], p) <= 0n) out.pop();
+      out.push(p);
+    }
+    out.pop();
+    return out;
+  };
+  return [...chain(sorted), ...chain([...sorted].reverse())];
+};
+const insideOrOn = (hull, point) => {
+  const p = point.map(exact);
+  if (hull.length === 0) return false;
+  if (hull.length === 1) return hull[0][0] === p[0] && hull[0][1] === p[1];
+  if (hull.length === 2) {
+    const [a, b] = hull;
+    const within = (v, x, y) => v >= (x < y ? x : y) && v <= (x > y ? x : y);
+    return cross(a, b, p) === 0n && within(p[0], a[0], b[0]) && within(p[1], a[1], b[1]);
+  }
+  for (let i = 0; i < hull.length; i++) {
+    if (cross(hull[i], hull[(i + 1) % hull.length], p) < 0n) return false;
+  }
+  return true;
+};
+// True when the point is strictly inside the hull (not on its boundary).
+const strictlyInside = (hull, point) => {
+  const p = point.map(exact);
+  if (hull.length < 3) return false;
+  for (let i = 0; i < hull.length; i++) {
+    if (cross(hull[i], hull[(i + 1) % hull.length], p) <= 0n) return false;
+  }
+  return true;
+};
+
 const before = read(beforePath);
 const after = read(afterPath);
 const tally = {
@@ -53,7 +120,9 @@ const tally = {
   centreFlips: 0,
   maxSnapUR: 0,
 };
-const violations = [];
+for (const name of after.keys()) {
+  if (!before.has(name)) violations.push(`${name}: missing before`);
+}
 for (const [name, a] of before) {
   const b = after.get(name);
   if (!b) {
@@ -97,6 +166,10 @@ for (const [name, a] of before) {
       centres.add(key(t[1]));
     }
   }
+  const centresBefore = new Set();
+  for (const segment of a.segments) {
+    for (const t of [segment.start, segment.end]) centresBefore.add(key(t[1]));
+  }
   const r = f64(b.request.width) / 2;
   const pieces1 = a.pieces ?? [];
   const pieces2 = b.pieces ?? [];
@@ -115,15 +188,30 @@ for (const [name, a] of before) {
     if (mapped !== JSON.stringify(m2)) bad(`piece ${i} samples`);
     const set1 = new Set(p1.map(key));
     const set2 = new Set(p2.map(key));
+    // A hull flip needs a cause: some non-centre point of the piece must have changed too.
+    const others1 = p1.filter((point) => !centres.has(key(point))).map(key);
+    const others2 = p2.filter((point) => !centres.has(key(point))).map(key);
+    const caused = !same(others1.sort(), others2.sort());
+    let hull1;
+    let hull2;
     for (const point of p2) {
       if (set1.has(key(point))) continue;
-      if (centres.has(key(point))) tally.centreFlips++;
-      else if (!outer.has(key(point))) bad(`piece ${i} added a point that is not a triple point`);
+      if (centres.has(key(point))) {
+        hull1 ??= hullOf(p1);
+        const onOrOutside = !strictlyInside(hullOf(p2.filter((x) => key(x) !== key(point))), point);
+        if (caused && centresBefore.has(key(point)) && insideOrOn(hull1, point) && onOrOutside)
+          tally.centreFlips++;
+        else bad(`piece ${i} added a centre that is not a hull-membership flip`);
+      } else if (!outer.has(key(point))) bad(`piece ${i} added a point that is not a triple point`);
     }
     for (const point of p1) {
       if (set2.has(key(point)) || replaced.has(key(point))) continue;
       if (centres.has(key(point))) {
-        tally.centreFlips++;
+        hull2 ??= hullOf(p2);
+        const onOrOutside = !strictlyInside(hullOf(p1.filter((x) => key(x) !== key(point))), point);
+        if (caused && centresBefore.has(key(point)) && insideOrOn(hull2, point) && onOrOutside)
+          tally.centreFlips++;
+        else bad(`piece ${i} removed a centre that is not a hull-membership flip`);
         continue;
       }
       const round = pieces2[i].kind.startsWith('round') || pieces2[i].kind === 'cusp-disk';
@@ -146,6 +234,10 @@ for (const [name, a] of before) {
             reach = Math.min(reach, Math.max(Math.abs(c[0]), Math.abs(c[1])) + r);
           }
         }
+      }
+      if (reach === Infinity) {
+        bad(`piece ${i} removed a disk vertex with no segment centre at distance r`);
+        continue;
       }
       const level = Math.log2(pieces2[i].disk) - 2;
       const ratio = nearest / (U * reach);
