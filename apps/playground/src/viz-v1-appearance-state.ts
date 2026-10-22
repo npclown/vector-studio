@@ -346,7 +346,8 @@ export class AppearanceEditor {
   #states: Record<string, AppearanceState> = { ...initialStates() };
   #applied: Record<string, AppearanceState> = { ...initialStates() };
   #revision = 0;
-  #pending: string | null = null;
+  /** Targets with an edit not yet sent, oldest first; one is sent per scheduled run. */
+  readonly #pending: string[] = [];
   #scheduled = false;
   #disabled: string | null = null;
   #stopped = false;
@@ -383,7 +384,7 @@ export class AppearanceEditor {
     return this.#errors;
   }
   public get hasPending(): boolean {
-    return this.#pending !== null;
+    return this.#pending.length > 0;
   }
 
   public subscribe(listener: () => void): () => void {
@@ -412,7 +413,7 @@ export class AppearanceEditor {
   /** "Reset all": one `replaceSnapshot` of the initial scene at the next revision. */
   public resetAll(): void {
     if (this.#disabled !== null || this.#stopped) return;
-    this.#pending = null;
+    this.#pending.length = 0;
     this.#states = { ...initialStates() };
     this.#replaceWith('reset-all', this.#revision + 1);
   }
@@ -420,9 +421,10 @@ export class AppearanceEditor {
   /** Sends the coalesced edit, if any. The scheduled run calls it. */
   public flush(): void {
     this.#scheduled = false;
-    const targetId = this.#pending;
-    if (targetId === null || this.#disabled !== null || this.#stopped) return;
-    this.#pending = null;
+    const targetId = this.#pending.shift();
+    if (targetId === undefined || this.#disabled !== null || this.#stopped) return;
+    // At most one scene change per scheduled run: another target's edit waits for the next run.
+    if (this.#pending.length > 0) this.#scheduleFlush();
     const target = targetById(targetId)!;
     const node = nodeFor(target, this.#states[targetId]!);
     const result = this.#sync.applyChanges(singleNodeChange(node, this.#revision));
@@ -452,15 +454,17 @@ export class AppearanceEditor {
   }
 
   #queue(targetId: string, next: AppearanceState): void {
-    if (this.#pending !== null && this.#pending !== targetId) this.flush();
     if (this.#disabled !== null || this.#stopped) return;
     this.#states[targetId] = next;
-    this.#pending = targetId;
-    if (!this.#scheduled) {
-      this.#scheduled = true;
-      this.#schedule(() => this.flush());
-    }
+    if (!this.#pending.includes(targetId)) this.#pending.push(targetId);
+    this.#scheduleFlush();
     this.#notify();
+  }
+
+  #scheduleFlush(): void {
+    if (this.#scheduled) return;
+    this.#scheduled = true;
+    this.#schedule(() => this.flush());
   }
 
   #replaceWith(label: string, revision: number): void {
@@ -566,7 +570,6 @@ export type TargetStatus = Readonly<{
   stroke: PaintStatus;
   overlay: Readonly<{ applies: boolean; text: string; notDrawn: boolean }>;
   pathDrawn: boolean;
-  zoomChanged: boolean;
   /** The label the status always carries. */
   label: string;
 }>;
@@ -649,7 +652,12 @@ export class TargetStatusTracker {
         const latest = record.latest;
         if (latest !== null && STATE_FAILURES.has(latest.failureCode)) {
           record.byExponent.delete(latest.toleranceExponent);
-          record.latest = [...record.byExponent.values()].at(-1) ?? null;
+          // The newest remaining notice by sequence number, not by map insertion order.
+          record.latest = [...record.byExponent.values()].reduce<ParsedNotice | null>(
+            (newest, notice) =>
+              newest === null || notice.sequence > newest.sequence ? notice : newest,
+            null,
+          );
         }
       }
     }
@@ -685,7 +693,6 @@ export class TargetStatusTracker {
             : 'joint overlay: no notice',
       },
       pathDrawn,
-      zoomChanged: this.#zoomChanged,
       label: this.#zoomChanged
         ? 'derived from notices; may differ after a zoom change; the notice log is authoritative'
         : 'derived from notices; the notice log is authoritative',

@@ -345,16 +345,25 @@ describe('V1-A5 edit flow', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('sends one change for an edit sequence that targets two paths, one node each', () => {
-    const { calls, editor, run } = fake({});
+  it('sends at most one one-node change per scheduled run when two paths are edited', () => {
+    const { calls, queue, editor, run } = fake({});
     editor.edit('v1-square', edit('opacity-slider', '0.5'));
     editor.edit('v1-star', edit('fill-rule', 'evenodd'));
+    expect(queue).toHaveLength(1);
     run();
-    const applies = calls.filter((call) => call.kind === 'apply');
-    expect(applies).toHaveLength(2);
-    for (const call of applies) {
-      if (call.kind === 'apply') expect(call.change.updated).toHaveLength(1);
-    }
+    // The first frame sends one change; the other target waits for the next frame.
+    expect(calls).toHaveLength(1);
+    expect(editor.hasPending).toBe(true);
+    expect(queue).toHaveLength(1);
+    run();
+    expect(calls).toHaveLength(2);
+    expect(editor.hasPending).toBe(false);
+    expect(queue).toHaveLength(0);
+    const updated = calls.map((call) =>
+      call.kind === 'apply' ? call.change.updated.map((node) => node.id) : [],
+    );
+    expect(updated).toEqual([['v1-square'], ['v1-star']]);
+    expect(editor.revision).toBe(3);
   });
 
   it('answers resync-required with exactly one replaceSnapshot of the whole current state', () => {
@@ -538,9 +547,9 @@ describe('V1-A5 edit flow', () => {
     run();
     expect(calls).toHaveLength(4);
     const last = calls[3]!;
-    if (last.kind === 'apply') {
-      expect((last.change.updated[0] as ReturnType<typeof pathNode>).opacity).toBeCloseTo(0.71, 10);
-    }
+    expect(last.kind).toBe('apply');
+    if (last.kind !== 'apply') return;
+    expect((last.change.updated[0] as ReturnType<typeof pathNode>).opacity).toBeCloseTo(0.71, 10);
   });
 });
 

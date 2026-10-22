@@ -70,6 +70,8 @@ const OBSERVED_NOTICES: Readonly<Record<string, readonly string[]>> = {
   'n2.a-butt': [],
   'n2.b-round': ['v1-zigzag stroke fringe-work-cap'],
   a10: [],
+  a6: [],
+  blur: [],
   a7: [],
   a11: [],
   a12: [],
@@ -245,6 +247,8 @@ for (const dpr of [1, 2]) {
       ): Promise<{ state: Snapshot; controls: Controls }> {
         // A fresh page per scenario: notices are emitted on transitions.
         await page.goto(`/viz-v1-appearance.html${query}`);
+        // The dev server may reload the page once while it optimizes dependencies.
+        await page.waitForFunction(() => window.__vectorStudioVizV1Appearance !== undefined);
         const capability = await page.evaluate(() => window.__vectorStudioVizV1Appearance.ready);
         if (!capability.supported) fail(scenario, `capability ${JSON.stringify(capability)}`);
         const state = await settle();
@@ -518,6 +522,7 @@ for (const dpr of [1, 2]) {
         const fill = solid(CIRCLE.initial.fill);
         const circleNotices = (state: Snapshot) =>
           state.notices.filter((n) => n.nodeId === 'v1-circle' && n.failureCode === 'work-limit');
+        await expect(page.locator('#viz-v1-target-status')).toBeVisible();
         const statusText = () => page.locator('#viz-v1-target-status').innerText();
         // Fill only: expected to mesh.
         await check('n1', 'fill-only', [
@@ -538,7 +543,7 @@ for (const dpr of [1, 2]) {
         );
         await expect(entries).toHaveCount(1);
         await expect(entries.first()).toBeVisible();
-        if (!(await statusText()).includes('not drawn'))
+        if (!(await statusText()).includes('stroke: not drawn'))
           fail('n1', `b: status ${await statusText()}`);
         // Stroke off again: the fill draws; the log entry remains; the status drops the failure.
         await c.strokeOn.uncheck();
@@ -769,6 +774,44 @@ for (const dpr of [1, 2]) {
         if (valid.revision !== before + 1)
           fail('a6', `valid width gave revision ${valid.revision}, expected ${before + 1}`);
         await expect(c.widthNumber).not.toHaveAttribute('aria-invalid', 'true');
+        noticeSet('a6', '', valid);
+      });
+
+      // V1-A5 on the page: a blur commits a number field, and the miter slider commits on change.
+      await scenario('blur', async () => {
+        const { controls: c } = await open('blur', '?target=v1-chevron');
+        const start = (await snapshot()).revision;
+        await c.widthNumber.fill('16');
+        // No commit yet: typing alone changes nothing.
+        let state = await settle();
+        if (state.revision !== start)
+          fail('blur', `typing alone moved the revision to ${state.revision}`);
+        await c.widthNumber.blur();
+        state = await settle();
+        const width = (state.states as Record<string, { stroke: { width: number } }>)['v1-chevron']!
+          .stroke.width;
+        if (width !== 16 || state.revision !== start + 1)
+          fail('blur', `blur: width ${width}, revision ${start} to ${state.revision}`);
+        await page.evaluate(() => {
+          const slider = document.querySelector<HTMLInputElement>('#viz-v1-miter-slider')!;
+          slider.value = '3.5';
+          slider.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        state = await settle();
+        if (state.revision !== start + 1)
+          fail('blur', `miter input moved the revision to ${state.revision}`);
+        await page.evaluate(() => {
+          document
+            .querySelector<HTMLInputElement>('#viz-v1-miter-slider')!
+            .dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        state = await settle();
+        const limit = (state.states as Record<string, { stroke: { miterLimit: number } }>)[
+          'v1-chevron'
+        ]!.stroke.miterLimit;
+        if (limit !== 3.5 || state.revision !== start + 2)
+          fail('blur', `miter change: limit ${limit}, revision ${start} to ${state.revision}`);
+        noticeSet('blur', '', state);
       });
 
       // V1-A11: coalescing and the commit rule.

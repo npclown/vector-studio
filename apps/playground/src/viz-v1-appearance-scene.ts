@@ -45,8 +45,6 @@ export type AppearanceState = Readonly<{
 export type VizTarget = Readonly<{
   id: string;
   label: string;
-  /** The page whose exported spec the path data comes from. */
-  source: string;
   data: TargetPathData;
   center: readonly [number, number];
   /** The initial appearance; a paint that starts off carries its off-paint defaults. */
@@ -85,7 +83,6 @@ export const VIZ_V1_TARGETS: readonly VizTarget[] = [
   {
     id: 'v1-square',
     label: 'B2 fill-stroke-square: red fill, blue stroke width 10',
-    source: 'B2_PATHS fill-stroke-square',
     data: square.data,
     center: [130, 170],
     initial: {
@@ -100,7 +97,6 @@ export const VIZ_V1_TARGETS: readonly VizTarget[] = [
   {
     id: 'v1-star',
     label: 'V4 star-nonzero: pentagram, fill only',
-    source: 'V4_PATHS star-nonzero',
     data: star.data,
     center: [360, 170],
     initial: {
@@ -115,7 +111,6 @@ export const VIZ_V1_TARGETS: readonly VizTarget[] = [
   {
     id: 'v1-zigzag',
     label: 'B2 cap-butt: open zigzag, blue stroke width 14',
-    source: 'B2_PATHS cap-butt',
     data: zigzag.data,
     center: [590, 170],
     initial: {
@@ -130,7 +125,6 @@ export const VIZ_V1_TARGETS: readonly VizTarget[] = [
   {
     id: 'v1-chevron',
     label: 'B2 miter-limit-keeps: chevron, blue stroke width 12, limit 4',
-    source: 'B2_PATHS miter-limit-keeps',
     data: chevron.data,
     center: [245, 430],
     initial: {
@@ -145,7 +139,6 @@ export const VIZ_V1_TARGETS: readonly VizTarget[] = [
   {
     id: 'v1-circle',
     label: 'B2 fill-stroke-circle: cubic circle, red fill, stroke off',
-    source: 'B2_PATHS fill-stroke-circle',
     data: circle.data,
     center: [475, 430],
     initial: {

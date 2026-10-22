@@ -8,7 +8,7 @@ Ownership: the packages and pages listed in [D9, visualization track](d9-post-mv
 
 | Item | Subject                                            | Tier                                                    | State                                                                                            |
 | ---- | -------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| V-1  | Path appearance editing on the existing P3 surface | Full (user-visible behavior, AGENTS.md change workflow) | implemented 2026-10-22 on `claude/viz-v1-path-appearance-impl` (PR to be opened); evidence in [V-1 implementation evidence](#v-1-implementation-evidence-2026-10-22); independent evidence review pending, so not complete ([contract](viz-v1-path-appearance-contract.md), PR #200) |
+| V-1  | Path appearance editing on the existing P3 surface | Full (user-visible behavior, AGENTS.md change workflow) | implemented 2026-10-22 on `claude/viz-v1-path-appearance-impl` ([PR #201](https://github.com/npclown/vector-studio/pull/201)); evidence in [V-1 implementation evidence](#v-1-implementation-evidence-2026-10-22); independent evidence review pending, so not complete ([contract](viz-v1-path-appearance-contract.md), PR #200) |
 
 ## V-1: path appearance editing
 
@@ -24,7 +24,7 @@ Acceptance criteria and validation method: to be written before code, in a V-1 c
 
 ### V-1 implementation evidence (2026-10-22)
 
-Implementation of the [approved contract](viz-v1-path-appearance-contract.md), on branch `claude/viz-v1-path-appearance-impl` (PR number added when it is opened). Functional evidence only: precision is UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence; no performance claim.
+Implementation of the [approved contract](viz-v1-path-appearance-contract.md), on branch `claude/viz-v1-path-appearance-impl` ([PR #201](https://github.com/npclown/vector-studio/pull/201)). Functional evidence only: precision is UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence; no performance claim.
 
 Environment: Windows 11 Pro 10.0.26200; headed Chrome 155.0.8059.85 and Edge 155.0.4283.62 (`playwright.gpu.config.ts`, DPR 1 and 2); kernel WASM built by `pnpm test:geometry` (fill-v0+r2, stroke-v0+r4). Evidence directories (git-ignored, `artifacts/viz-v1-appearance/<run>/<browser>/dpr<N>/`) hold `UNVERIFIED.txt`, `observations.json` and a PNG per stage.
 
@@ -46,7 +46,7 @@ Files: `apps/playground/viz-v1-appearance.html`, `src/viz-v1-appearance.ts` (hos
 
 Notice literals fixed at the first headed run (identical at DPR 1 and 2, Chrome and Edge): `n0` none (so `v1-circle` fill only meshes); `n1` fill only none, stroke on `v1-circle stroke work-limit`, stroke off the same one entry stays, stroke on again two `v1-circle stroke work-limit`; `n2` butt none, round `v1-zigzag stroke fringe-work-cap`; `s4` `v1-zigzag stroke fringe-work-cap`; `s1`, `s2`, `s3`, `s5`, `a10`, `a7`, `a11`, `a12` none.
 
-Deviations from the contract: none. Residual: independent evidence review not yet run.
+Deviation pending disposition: §3.4 per-exponent display. status() shows the latest record; per-exponent records are exposed only via the hook (the current exponent is not published by renderer-core). Residual: independent evidence review not yet run.
 
 ## Evidence rules
 

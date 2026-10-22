@@ -302,7 +302,7 @@ for (const target of VIZ_V1_TARGETS) {
 
 function selectTarget(id: string): void {
   selectedId = id;
-  for (const control of [...allControls, ...Array.from(document.querySelectorAll('input'))]) {
+  for (const control of document.querySelectorAll('input[aria-invalid]')) {
     control.removeAttribute('aria-invalid');
   }
   for (const message of document.querySelectorAll('.message')) message.textContent = '';
