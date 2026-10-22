@@ -996,8 +996,9 @@ describe('V3a device loss, ownership and host injection', () => {
 
   // V4 removed the V3-A18 test ("no host injects a port"), as V3-A18 foresaw, when the
   // playground gained the real port. This V4 test keeps the remaining hosts port-free. B2 ST-U8
-  // adds the stroke page as a second host, on V4's pattern: it injects both real ports.
-  it('V4: only the path page and the ST-U8 stroke page inject the real ports; the V3 smoke fixture keeps its static double', () => {
+  // adds the stroke page as a second host, on V4's pattern: it injects both real ports. The
+  // visualization track's V-1 appearance page is the third host, on the same pattern.
+  it('V4: only the path page, the ST-U8 stroke page and the V-1 appearance page inject the real ports; the V3 smoke fixture keeps its static double', () => {
     const root = join(__dirname, '../../apps/playground');
     const files: string[] = [];
     const walk = (directory: string) => {
@@ -1022,7 +1023,15 @@ describe('V3a device loss, ownership and host injection', () => {
     expect(b2Source).toMatch(/from '@vector-studio\/geometry-wasm'/);
     expect(b2Source).toMatch(/fillMesh: fill,/);
     expect(b2Source).toMatch(/strokeMesh: strokes,/);
-    const host = [...v4Host, ...b2Host];
+    // Visualization track V-1: the appearance page injects both real ports, as ST-U8 does. Only
+    // its host file wires them; its scene, state and html files stay under the deny-list below.
+    const vizHost = files.filter((file) => /[\\/]src[\\/]viz-v1-appearance\.ts$/.test(file));
+    expect(vizHost).toHaveLength(1);
+    const vizSource = readFileSync(vizHost[0]!, 'utf8');
+    expect(vizSource).toMatch(/from '@vector-studio\/geometry-wasm'/);
+    expect(vizSource).toMatch(/fillMesh: fill,/);
+    expect(vizSource).toMatch(/strokeMesh: strokes,/);
+    const host = [...v4Host, ...b2Host, ...vizHost];
     // The manifest and project-reference edges of that import (boundary rule P-B1).
     const edges = files.filter((file) =>
       /[\\/]playground[\\/](package|tsconfig)\.json$/.test(file),
