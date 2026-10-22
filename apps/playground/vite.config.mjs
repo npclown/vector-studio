@@ -53,6 +53,7 @@ export default defineConfig({
         p3V3Mesh: `${import.meta.dirname}/p3-v3-mesh.html`,
         p3V4Paths: `${import.meta.dirname}/p3-v4-paths.html`,
         p3B2Strokes: `${import.meta.dirname}/p3-b2-strokes.html`,
+        vizV1Appearance: `${import.meta.dirname}/viz-v1-appearance.html`,
       },
     },
   },
