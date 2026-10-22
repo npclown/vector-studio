@@ -55,6 +55,14 @@ Amended 2026-10-21 by the [ST-U3c round-join shared vertex follow-up](p3-fill-st
 
 Amended 2026-10-21 by [ST-U7](p3-fill-stroke-meshes.md#b2-st-u7-joint-coverage) under the [ST-U7 addendum](p3-b2-st-u7-joint-coverage-addendum.md): a path with both paints drawable at `0 < opacity < 1` is drawn by a joint-coverage fill draw over a renderer-derived overlay followed by the unchanged stroke draw; `composition-unsupported` is removed and the D8-interim code `overlay-unsupported` is added. See the dated notes in §§9.5, 9.6, 9.8, 10, 12, 13 and 14.
 
+Amended 2026-10-21 by the [ST-U3d/ST-U3e stroke sharing follow-up](p3-fill-stroke-meshes.md#b2-st-u3dst-u3e-stroke-sharing-review-follow-up) (PR #190 review), extending §4.2's sharing and bumping the §7.1 identity:
+
+- **ST-U3d, snap radius by level (§4.4).** The ST-U3c snap radius becomes `δ_k = (3.125k + 7)·2^-53·(‖c‖∞ + r)` for a disk of level `k` (10.125 to 25.75 in place of 8). Near-direction coincident pairs 9 to 11 ulps apart, which failed with `Rounded(TopologyAmbiguous)`, are now one point. **ST-G2 holds unchanged:** a snapped vertex lies within `√2·(3.125k + 7)·(1 + 4u)·u·(‖c‖∞ + r) + (3.5k + 6)u·(‖c‖∞ + r) < g_arc`, because `√2·(3.125k + 7)·(1 + 4u) < 4.5k + 10`, ST-U3's margin, at every `k`. No guard, count rule or constant changes. The proof, including when two disk vertices can lie within `δ_k` of one point, is in the plan entry.
+- **ST-U3e, one triple at an exact reversal (§4.2).** At an exact reversal the outgoing segment's start triple is the incoming end triple with `E−` and `E+` swapped, bit for bit, as at a cusp knot and between collinear parts. The exact tangents are antiparallel, so the swapped points meet ST-G1's per-point bound for the outgoing segment. This restores "every segment end has exactly one sample triple" at a reversal knot; before, the two triples differed by a few ulps when the length ratio was not a power of two, and the arrangement could fail with `Rounded(TopologyAmbiguous)`. ST-D3 still seeds only the forward-continuation case.
+- **Revision 4 (§7.1 identity rule).** Both changes alter `ok` meshes, so `operationId` becomes `'geometry-wasm/stroke-v0+r4'` and `stroke_v0_revision() == 4`, superseding revision 3. `stroke_v0_version()`, the magics, `abi_version()` and `fill_v0_*` are unchanged.
+- **Fixtures.** `ST-U3d/near-45-butt` and three related near-direction chevrons, five `ST-U3e/rev-…` exact reversals, a check that the snap factor stays inside the arc margin, and a check that the review's `λ = 4/3` cases are turns, not reversals.
+- **Not covered.** A near-reversal turn (exact cross product nonzero, a turn by about `1e-17` rad) still has two triples a few ulps apart and can fail with `Rounded(TopologyAmbiguous)`; so does `chev-1.40625`. Both are open observations under ST-OB7.
+
 **Evidence label.** Every stroke result under this contract is functional evidence. Until B4 has A04 evidence, every report, PR description and screenshot states that precision is **UNVERIFIED** against the 0.25 physical-pixel target, as D8 [requires](p3-d8-parallel-tracks.md#rules). Stroke work closes no A01-A08 criterion and no C03-C05 item.
 
 **Identifiers.** This contract prefixes its own IDs with **ST-**: semantics rows ST-S1 to ST-S12, pieces ST-P1 to ST-P7, guards ST-G1 to ST-G6, oracles ST-O1 to ST-O5, fixtures ST-F1 to ST-F26, seeded defects ST-D1 to ST-D14, conformance cases SC01 to SC22, units ST-U2 to ST-U9 (with ST-U3b), acceptance ST-A0 to ST-A12, risks and open obligations ST-OB1 to ST-OB8. V2's cases C01-C18, V3's codes and the proposal's B2-Q1 to B2-Q9 keep their meaning.
@@ -235,6 +243,8 @@ Amended 2026-10-20, ST-A0 amendment (M4): the count rule's `(1 − 2^-40)` relat
 
 Amended 2026-10-21 (ST-U3c; see the header notes): a disk vertex within `δ = 8·2^-53·(‖c‖∞ + r)` of an adjacent triple's `E−` or `E+` is that point, bit for bit, so §4.2's sharing also holds where a disk direction meets an offset direction. ST-G2's `g_arc` bound still holds for the snapped vertex.
 
+Amended 2026-10-21 (ST-U3d; see the header notes): the radius is `δ_k = (3.125k + 7)·2^-53·(‖c‖∞ + r)` at level `k`, still inside ST-G2's margin. At an exact reversal (ST-U3e), the outgoing start triple is the incoming end triple with `E−` and `E+` swapped.
+
 ### 4.5 Cubic leaves
 
 A remaining cubic segment, split at its interior stationary parameters (section 4.6), is subdivided by de Casteljau midpoint splitting in Float64, depth-first and left-first, to a depth of at most 20. A leaf with controls `Q0..Q3` (the computed subcurve controls) is **accepted** when:
@@ -406,6 +416,8 @@ The magics differ from P2's (`VGS2`, `VGR2`) and fill's (`VGF0`, `VGM0`). `abi_v
 Amended 2026-10-21 (cusp shared triple; see the header notes): the identity is now `'geometry-wasm/stroke-v0+r2'` with `stroke_v0_revision() == 2`. The table above, the §8 adapter interface (`operationId`) and the SC21 row keep the frozen v0 values; all three are superseded by revision 2.
 
 Amended 2026-10-21 (ST-U3c round-join shared vertex; see the header notes): the identity is now `'geometry-wasm/stroke-v0+r3'` with `stroke_v0_revision() == 3`, superseding revision 2 in the same three places.
+
+Amended 2026-10-21 (ST-U3d/ST-U3e stroke sharing; see the header notes): the identity is now `'geometry-wasm/stroke-v0+r4'` with `stroke_v0_revision() == 4`, superseding revision 3 in the same three places.
 
 ### 7.2 Exports
 

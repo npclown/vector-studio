@@ -93,10 +93,20 @@ const MAX_GUARDED_MITER_LIMIT: f64 = 16_777_216.0;
 const DIRECTION_COUNT: usize = (1 << MAX_DISK_LEVEL) + 1;
 /// Candidate points of one piece: a 256-gon plus three extra points.
 const MAX_CANDIDATES: usize = MAX_DISK_VERTICES + 3;
-/// ST-U3c shared disk vertices (section 4.4, amended 2026-10-21): a disk vertex within
-/// `SHARE_FACTOR * u * (|c|inf + r)` (max norm) of an adjacent triple's `E-` or `E+` is that
-/// point. The plan entry proves the snapped polygon stays inside ST-G2's `g_arc`.
-const SHARE_FACTOR: f64 = 8.0;
+/// ST-U3c shared disk vertices (section 4.4, amended 2026-10-21), widened by level in ST-U3d:
+/// a disk vertex of level `k` within `share_factor(k) * u * (|c|inf + r)` (max norm) of an
+/// adjacent triple's `E-` or `E+` is that point, with
+/// `share_factor(k) = SHARE_SLOPE * k + SHARE_OFFSET = 3.125k + 7`. Since
+/// `sqrt(2) * (3.125k + 7) * (1 + 4u) < 4.5k + 10`, the plan entry's proof keeps the snapped
+/// vertex inside ST-G2's `g_arc` at every level. Each factor is a dyadic number of at most
+/// eight significant bits, so `share_factor(k) * u` is exact.
+const SHARE_SLOPE: f64 = 3.125;
+const SHARE_OFFSET: f64 = 7.0;
+
+/// ST-U3d: the shared-vertex snap factor `3.125k + 7` of disk level `k` (see `SHARE_SLOPE`).
+pub(crate) fn share_factor(level: u32) -> f64 {
+    SHARE_SLOPE * f64::from(level) + SHARE_OFFSET
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum StrokeCap {
@@ -1088,7 +1098,12 @@ impl StrokeWorkspace {
         Ok(())
     }
 
-    /// Exact join classification, and the continuation triple sharing of section 4.2.
+    /// Exact join classification, and the triple sharing of section 4.2: at an exact forward
+    /// continuation the outgoing start triple is the incoming end triple; at an exact reversal
+    /// (ST-U3e) it is that triple read from the other side, with `E-` and `E+` swapped, as at a
+    /// cusp knot (ST-U4) and between collinear parts. The exact tangents are antiparallel, so
+    /// the outgoing segment's exact normal is the incoming one negated, and the swapped triple
+    /// keeps ST-G1's per-point bound for the outgoing segment.
     fn classify_joins(&mut self) -> Result<(), FrontEndError> {
         let share = !self.defects.unshared_continuation();
         for subpath_index in 0..self.subpaths.len() {
@@ -1104,6 +1119,14 @@ impl StrokeWorkspace {
                 let class = classify(self.segments[incoming], self.segments[outgoing]);
                 if class == JoinClass::Continuation && share {
                     self.segments[outgoing].start = self.segments[incoming].end;
+                }
+                if class == JoinClass::Reversal {
+                    let end = self.segments[incoming].end;
+                    self.segments[outgoing].start = Triple {
+                        minus: end.plus,
+                        center: end.center,
+                        plus: end.minus,
+                    };
                 }
                 self.segments[incoming].join_after = Some(JoinDecision {
                     class,
@@ -1309,8 +1332,8 @@ impl StrokeWorkspace {
         }
         let center = knot.center;
         self.candidates.clear();
-        self.push_disk(center, r, tolerances)?;
-        self.share_disk_vertices(center, r, &[knot.minus, knot.plus]);
+        let level = self.push_disk(center, r, tolerances)?;
+        self.share_disk_vertices(center, r, level, &[knot.minus, knot.plus]);
         let disk = self.candidates.len();
         self.meta = PieceMeta {
             samples: [
@@ -1435,8 +1458,8 @@ impl StrokeWorkspace {
         match request.join {
             StrokeJoin::Round => {
                 self.candidates.clear();
-                self.push_disk(knot.center, r, tolerances)?;
-                self.share_disk_vertices(knot.center, r, &[knot.minus, knot.plus]);
+                let level = self.push_disk(knot.center, r, tolerances)?;
+                self.share_disk_vertices(knot.center, r, level, &[knot.minus, knot.plus]);
                 let disk = self.candidates.len();
                 for point in [knot.center, knot.minus, knot.plus] {
                     self.push_candidate(point)?;
@@ -1485,8 +1508,8 @@ impl StrokeWorkspace {
                     return Ok(());
                 }
                 self.candidates.clear();
-                self.push_disk(center, r, tolerances)?;
-                self.share_disk_vertices(center, r, &shared);
+                let level = self.push_disk(center, r, tolerances)?;
+                self.share_disk_vertices(center, r, level, &shared);
                 let disk = self.candidates.len();
                 for point in [center, incoming.end.minus, incoming.end.plus] {
                     self.push_candidate(point)?;
@@ -1506,8 +1529,8 @@ impl StrokeWorkspace {
                     StrokeJoin::Bevel => self.emit_bevel(index, center, o_in, o_out),
                     StrokeJoin::Round => {
                         self.candidates.clear();
-                        self.push_disk(center, r, tolerances)?;
-                        self.share_disk_vertices(center, r, &shared);
+                        let level = self.push_disk(center, r, tolerances)?;
+                        self.share_disk_vertices(center, r, level, &shared);
                         let disk = self.candidates.len();
                         for point in [center, o_in, o_out] {
                             self.push_candidate(point)?;
@@ -1586,8 +1609,8 @@ impl StrokeWorkspace {
             StrokeCap::Butt => Ok(()),
             StrokeCap::Round => {
                 self.candidates.clear();
-                self.push_disk(sample.center, r, tolerances)?;
-                self.share_disk_vertices(sample.center, r, &[sample.minus, sample.plus]);
+                let level = self.push_disk(sample.center, r, tolerances)?;
+                self.share_disk_vertices(sample.center, r, level, &[sample.minus, sample.plus]);
                 let disk = self.candidates.len();
                 for point in [sample.center, sample.minus, sample.plus] {
                     self.push_candidate(point)?;
@@ -1681,13 +1704,14 @@ impl StrokeWorkspace {
         Ok(())
     }
 
-    /// Section 4.4: the disk polygon, counter-clockwise from direction `(1, 0)`.
+    /// Section 4.4: the disk polygon, counter-clockwise from direction `(1, 0)`. Returns the
+    /// level `k` of the directions it used (ST-U3d sizes the shared-vertex snap by it).
     fn push_disk(
         &mut self,
         center: Point,
         r: f64,
         tolerances: Tolerances,
-    ) -> Result<(), FrontEndError> {
+    ) -> Result<u32, FrontEndError> {
         let mut level = disk_level(center, r, tolerances.quarter)?;
         if self.defects.halve_disk() && level > 1 {
             level -= 1;
@@ -1709,19 +1733,20 @@ impl StrokeWorkspace {
                 y: center.y + r * direction.y,
             })?;
         }
-        Ok(())
+        Ok(level)
     }
 
-    /// ST-U3c (section 4.2 sharing, section 4.4 amended 2026-10-21): after `push_disk`, each
-    /// adjacent sample point `E-` or `E+` of a triple at the disk's center replaces its nearest
-    /// disk vertex (max norm, first index on a tie) when that vertex lies within
-    /// `delta = SHARE_FACTOR * u * (|c|inf + r)` and no earlier point took it. A disk vertex
-    /// and a sweep's offset point at the same direction are then one binary64 point, not two
-    /// a few ulps apart (which made the arrangement `TopologyAmbiguous`). The count `n` is
-    /// unchanged; `delta` is used only while it is a normal number, so it is exact.
-    fn share_disk_vertices(&mut self, center: Point, r: f64, targets: &[Point]) {
+    /// ST-U3c (section 4.2 sharing, section 4.4 amended 2026-10-21) and ST-U3d: after
+    /// `push_disk` at level `level`, each adjacent sample point `E-` or `E+` of a triple at the
+    /// disk's center replaces its nearest disk vertex (max norm, first index on a tie) when
+    /// that vertex lies within `delta = (3.125k + 7) * u * (|c|inf + r)` and no earlier point
+    /// took it. A disk vertex and a sweep's offset point at the same direction are then one
+    /// binary64 point, not two a few ulps apart (which made the arrangement
+    /// `TopologyAmbiguous`). The count `n` is unchanged; `delta` is used only while it is a
+    /// normal number, so its one rounding is relative.
+    fn share_disk_vertices(&mut self, center: Point, r: f64, level: u32, targets: &[Point]) {
         let reach = center.x.abs().max(center.y.abs()) + r;
-        let delta = SHARE_FACTOR * UNIT * reach;
+        let delta = share_factor(level) * UNIT * reach;
         if !(delta.is_finite() && delta >= f64::MIN_POSITIVE) {
             return;
         }
