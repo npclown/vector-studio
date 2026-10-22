@@ -1,6 +1,33 @@
 # D9 E3: B4 A04 corpus and measurement contract
 
-Status: DRAFT, 2026-10-22. Written for independent review and user approval. Independent review round 1 was NOT READY and round 2 READY WITH FOLLOW-UPS; the findings of both are applied ([review record](#12-review-and-approval-record)). User approval is pending. Nothing here is in force until the user approves it in chat. This is rendering-track item E3 ([D9 rendering track](d9-rendering-track.md#status-index)), which is checkpoint B4 of [D8](p3-d8-parallel-tracks.md#two-tracks). It is full tier: it fixes how an acceptance criterion is evidenced and sets a pass rule. It is a contract only. It changes no requirement, threshold, acceptance criterion, past decision or frozen contract text, and it authorizes no code until it is approved.
+Status: **APPROVED 2026-10-22 by the user** (independent review round 2 READY WITH FOLLOW-UPS, follow-ups applied). See [User decisions, 2026-10-22](#user-decisions-2026-10-22).
+
+Status history, kept as written: DRAFT, 2026-10-22. Written for independent review and user approval. Independent review round 1 was NOT READY and round 2 READY WITH FOLLOW-UPS; the findings of both are applied ([review record](#12-review-and-approval-record)). User approval is pending. Nothing here is in force until the user approves it in chat.
+
+This is rendering-track item E3 ([D9 rendering track](d9-rendering-track.md#status-index)), which is checkpoint B4 of [D8](p3-d8-parallel-tracks.md#two-tracks). It is full tier: it fixes how an acceptance criterion is evidenced and sets a pass rule. It is a contract only. It changes no requirement, threshold, past decision or frozen contract text. The one acceptance-criterion change, the A01 amendment of E3-Q10 (b), was approved by the user and is recorded in the P3 plan, which owns A01.
+
+### User decisions, 2026-10-22
+
+The user approved this contract in chat on 2026-10-22 and answered every open question (section 11):
+
+| Question | Answer | Option text                                                                                                                                                                                 |
+| -------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E3-Q1    | (a)    | CPU measurement with an exact shader model plus `β`, including the NDC round trip, and a GPU readback model check on the named subset in Chrome and Edge                                    |
+| E3-Q2    | (a)    | `E = max(B_R, B_M, G)`, including its stated discontinuity when sub-tolerance features collapse                                                                                             |
+| E3-Q3    | (a)    | Rejected cases are excluded and reported; a declared cell with no measured case is UNVERIFIED. This approves the coverage condition E3-A8                                                   |
+| E3-Q4    | (a)    | Commit the generator, the manifest and `corpusSha256`; regenerate the corpus in every run                                                                                                   |
+| E3-Q5    | (a)    | An UNDECIDED case keeps A04 UNVERIFIED until the oracle, never the threshold, resolves it                                                                                                   |
+| E3-Q6    | (a)    | A case the oracle cannot certify fails the freeze; the generator is revised, disclosed, under a new corpus version, before any kernel run                                                   |
+| E3-Q7    | (a)    | Measure the same `∂M` for fringe and region-only draws; rasterizer snapping and the viewport-transform precision are an explicit stated residual with their bounds recorded                 |
+| E3-Q8    | (a)    | Measure `k = 0` everywhere and `k = 1, 2` on E3-C8                                                                                                                                          |
+| E3-Q9    | (a)    | Corpus v1 of about 25,700 cases (25,752 in section 5.4)                                                                                                                                     |
+| E3-Q10   | (b)    | Route watertightness and GPU T-junction cracks to A01; measure A04 on the crack-closed region `M_gpu,closed`; report crack width separately. The user explicitly approved the A01 amendment |
+| E3-Q11   | (a)    | The viewport as guard band; clipping modelled as exact plane clipping plus an f32 interpolation bound, checked by readback next to the viewport edge                                        |
+| E3-Q12   | (a)    | `Ω` = viewport plus 2 physical px                                                                                                                                                           |
+
+**The A01 amendment.** It is recorded in the A01 row of the [P3 acceptance table](p3-fill-stroke-meshes.md#runtime-acceptance-coverage-to-freeze-in-p30b), which owns it, with a dated note superseding M03's acceptance of T-junction contact for f32 watertightness. Conforming refinement (E3-Q10 (c)) is a rendering-track candidate item as the remedy for A01 watertightness.
+
+**Effect.** This contract is in force as approved. Any change needs a dated amendment and the user's approval. The next step is unit E3-U1 (generator, manifest and the corpus freeze path), followed by E3-U2 and the oracle-only freeze check of section 5.5.
 
 **Evidence label.** Until the run under this contract has produced an accepted evidence record, every fill and stroke result keeps the label that precision is **UNVERIFIED** against the 0.25 physical-pixel target, as [D8](p3-d8-parallel-tracks.md#rules) requires.
 
@@ -682,3 +709,4 @@ The contract reads "declared transforms/zoom/DPR" over what can be seen.
   - **F5.** Section 7.1 states the assumption that shared vertices map bit-identically (`@invariant`, one helper, confirmed by readback). The fixed-function viewport precision is folded into E3-Q7's residual. E3-Q11 (a) states its clipping-precision assumption and the readback's pixel-resolution limit.
   - **F6.** Under E3-Q10 (b), A04 is defined on the crack-closed region, with the proof that `E(M_gpu,closed, M*) ≤ β_c`.
   - The round 2 ranking of Q10 to Q12 is recorded at the head of section 11.
+- 2026-10-22: **APPROVED by the user** in chat, with the answers of [User decisions, 2026-10-22](#user-decisions-2026-10-22), including explicit approval of the A01 amendment (E3-Q10 (b)).
