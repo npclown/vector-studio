@@ -16,9 +16,13 @@
 //   a hull-membership flip: it is a centre in both dumps, it lies inside or on the convex hull
 //   (exact rational arithmetic) of the point set that does not contain it (an added centre
 //   inside the hull of the before points, a removed centre inside the hull of the after points),
-//   and another, non-centre point of the same piece changed too (a centre that changes alone is
-//   a dropped or added centre, not a flip). Any other centre change is a violation;
-// - a status changes only from unsupported-geometry to ok.
+//   it is on or outside the hull of the other points of the set that does contain it (so it was
+//   a hull member there: a centre strictly inside that hull is no flip), and another,
+//   non-centre point of the same piece changed too (a centre that changes alone is a dropped or
+//   added centre, not a flip). Any other centre change is a violation;
+// - a status changes only from unsupported-geometry to ok;
+// - the dump itself is well formed: no duplicate case name, and the header count equals the
+//   number of case lines.
 //
 //   node tooling/p3-stroke-dump-diff.mjs <before.dump> <after.dump>
 //
@@ -34,18 +38,22 @@ if (!beforePath || !afterPath) {
 }
 const U = 2 ** -53;
 const f64 = (hex) => Buffer.from(hex, 'hex').readDoubleBE(0);
-const read = (path) =>
-  new Map(
-    fs
-      .readFileSync(path, 'utf8')
-      .split('\n')
-      .slice(1)
-      .filter(Boolean)
-      .map((line) => {
-        const value = JSON.parse(line.slice(line.indexOf(' ') + 1));
-        return [value.name, value];
-      }),
-  );
+const violations = [];
+// Reads a dump. A duplicate case name, or a header count that differs from the number of case
+// lines, is a violation (the dump itself is malformed).
+const read = (path) => {
+  const [header, ...rest] = fs.readFileSync(path, 'utf8').split('\n');
+  const lines = rest.filter(Boolean);
+  const cases = new Map();
+  for (const line of lines) {
+    const value = JSON.parse(line.slice(line.indexOf(' ') + 1));
+    if (cases.has(value.name)) violations.push(`${path}: duplicate case ${value.name}`);
+    cases.set(value.name, value);
+  }
+  if (Number(header.split(' ')[1]) !== lines.length)
+    violations.push(`${path}: header "${header}" but ${lines.length} case lines`);
+  return cases;
+};
 const key = (point) => point.join(',');
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -89,6 +97,15 @@ const insideOrOn = (hull, point) => {
   }
   return true;
 };
+// True when the point is strictly inside the hull (not on its boundary).
+const strictlyInside = (hull, point) => {
+  const p = point.map(exact);
+  if (hull.length < 3) return false;
+  for (let i = 0; i < hull.length; i++) {
+    if (cross(hull[i], hull[(i + 1) % hull.length], p) <= 0n) return false;
+  }
+  return true;
+};
 
 const before = read(beforePath);
 const after = read(afterPath);
@@ -103,7 +120,6 @@ const tally = {
   centreFlips: 0,
   maxSnapUR: 0,
 };
-const violations = [];
 for (const name of after.keys()) {
   if (!before.has(name)) violations.push(`${name}: missing before`);
 }
@@ -182,7 +198,8 @@ for (const [name, a] of before) {
       if (set1.has(key(point))) continue;
       if (centres.has(key(point))) {
         hull1 ??= hullOf(p1);
-        if (caused && centresBefore.has(key(point)) && insideOrOn(hull1, point))
+        const onOrOutside = !strictlyInside(hullOf(p2.filter((x) => key(x) !== key(point))), point);
+        if (caused && centresBefore.has(key(point)) && insideOrOn(hull1, point) && onOrOutside)
           tally.centreFlips++;
         else bad(`piece ${i} added a centre that is not a hull-membership flip`);
       } else if (!outer.has(key(point))) bad(`piece ${i} added a point that is not a triple point`);
@@ -191,7 +208,8 @@ for (const [name, a] of before) {
       if (set2.has(key(point)) || replaced.has(key(point))) continue;
       if (centres.has(key(point))) {
         hull2 ??= hullOf(p2);
-        if (caused && centresBefore.has(key(point)) && insideOrOn(hull2, point))
+        const onOrOutside = !strictlyInside(hullOf(p1.filter((x) => key(x) !== key(point))), point);
+        if (caused && centresBefore.has(key(point)) && insideOrOn(hull2, point) && onOrOutside)
           tally.centreFlips++;
         else bad(`piece ${i} removed a centre that is not a hull-membership flip`);
         continue;
