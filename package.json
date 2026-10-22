@@ -35,6 +35,7 @@
     "test:gpu:p3-o02": "playwright test --config playwright.p3-o02.config.ts",
     "test:geometry": "node tooling/test-geometry.mjs",
     "test:geometry:browser": "node tooling/test-geometry-browser.mjs",
+    "test:e3-a04": "vitest run --config vitest.e3-a04.config.ts",
     "test:p2-identity": "node tooling/compare-p2-wasm.mjs",
     "test:p3-fill-identity": "node tooling/compare-p3-fill-identity.mjs",
     "compare:p3-b0-records": "node tooling/compare-p3-b0-records.mjs",

@@ -1,0 +1,52 @@
+{
+  "version": "a04-corpus/v1",
+  "contract": "docs/plans/d9-e3-b4-precision-contract.md sections 5 and 13",
+  "generator": {
+    "path": "tests/geometry/e3-a04/corpus.ts",
+    "sha256": "4f535c6be0cbcc7ec4565ccec5b206babed2f179d91f037cfb51158e71af26b0"
+  },
+  "serialization": "one JSON object per case in generation order, keys sorted at every level, binary64 as 16-digit lower-case hex, no whitespace, LF line ends; corpusSha256 is the SHA-256 of the UTF-8 text",
+  "prng": "nextXorshift32 copied by value from packages/geometry-reference/src/corpus.ts",
+  "seeds": {
+    "C1": 1,
+    "C2": 305419896,
+    "C3": 2654435769,
+    "C5C9": 3735928559
+  },
+  "counts": {
+    "C1": 4680,
+    "C2": 1800,
+    "C3": 4860,
+    "C4": 1728,
+    "C5": 7038,
+    "C9": 3510,
+    "C10": 12,
+    "C11": 576,
+    "C12": 144,
+    "C6": 324,
+    "C7": 108,
+    "C8": 2682
+  },
+  "cases": 27462,
+  "bytes": 31265408,
+  "corpusSha256": "7f4d090f320b37b42848edac590f2f050af908600effdb90c941d955e670dcbb",
+  "nodeVersion": "v24.15.0",
+  "rustSourceSpans": {
+    "commit": "5c691ada9eb58be3d994fb82a4a1dd28f6602a58",
+    "path": "packages/geometry-wasm/kernel/src/stroke_outline_tests.rs",
+    "spans": {
+      "l76": {
+        "lines": "728-739",
+        "sha256": "d69b3811ec71f4d5e82fbc5788b11a872cd0b89ddd5bc6cd7c4f1eafe2bb8fdc"
+      },
+      "l78-l79": {
+        "lines": "1752-1776",
+        "sha256": "26fb12cd9d5c027f22d05dbb09eabe8051642b7e15da03bcaf8ac65a12471dde"
+      },
+      "l77": {
+        "lines": "1890-1901",
+        "sha256": "97844117e971f7683235531d54617d67d74079e31873ee14f68ad1ded9673dd8"
+      }
+    }
+  }
+}

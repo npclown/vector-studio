@@ -138,3 +138,83 @@ On and off were equal everywhere. The coverage floor holds: E1-K1 fired 58 times
 - **B1.** This file was reformatted with `prettier --config .prettierrc.json --ignore-path "" --write`. `.prettierignore` excludes `**/*.md`, so `pnpm format:check` does not cover it.
 - **S1.** The playground cases were renamed with `-local`. This changes the E1-C1 input hash from `35964ce6…` to `52940665…` (Node v24.15.0, S2). The before and after dumps were re-run and are again byte-identical (`8091e7c7…`), with `changed: 0` and the same statuses. The sweep was re-run with identical counts.
 - **S3.** The fixture comment on the E1-F4 window now gives the 127 vertical boundaries that are emitted before `WorkLimit`.
+
+## E3 E3-U1 evidence, 2026-10-22
+
+Dated append. Unit E3-U1 implements the corpus generator of the [E3 contract](d9-e3-b4-precision-contract.md), section 5, as its [section 13 annex](d9-e3-b4-precision-contract.md#13-e3-u1-corpus-annex-2026-10-22) makes it executable (deliverables of section 13.9). The work is on branch `claude/eng-e3-u1-a04-corpus`, which is stacked on the annex PR #205. Track: rendering. Packages: tests, tooling (`package.json` script, `vitest.e3-a04.config.ts`) and docs. Shared surface changed: no. **No kernel was run on the corpus.** The oracle-only freeze check and the freeze note belong to E3-U2 (section 5.5), so the corpus is generated but not yet frozen. Precision stays **UNVERIFIED**.
+
+**Files.**
+
+- `tests/geometry/e3-a04/corpus.ts`: the generator. It implements sections 13.2 to 13.7, including the hex literal tables of E3-N10. At generation it uses only binary64 basic operations, `Math.floor`, `Math.round` on exact values, and BigInt. It evaluates no `Math.sin`, `Math.cos`, `Math.sqrt` or `Math.pow`.
+- `tests/geometry/e3-a04/corpus-v1.manifest.json`: the manifest, with the version, the generator SHA-256, the seeds, the per-stratum counts, the byte count, `corpusSha256`, the Node version and the Rust span hashes.
+- `tests/geometry/e3-a04-corpus.test.ts`: 14 tests. `pnpm test:e3-a04` runs them through `vitest.e3-a04.config.ts`, and `pnpm test:geometry`'s glob collects them too, so they also run in CI.
+- `docs/validation.md`: a row for `pnpm test:e3-a04`, as section 9.3 requires. Prettier re-padded the existing command table: on `main` the file did not pass `prettier --check`.
+
+**Corpus `a04-corpus/v1`.**
+
+| Stratum | Cases | Stratum | Cases |
+| ------- | ----: | ------- | ----: |
+| C1      | 4,680 | C7      |   108 |
+| C2      | 1,800 | C8      | 2,682 |
+| C3      | 4,860 | C9      | 3,510 |
+| C4      | 1,728 | C10     |    12 |
+| C5      | 7,038 | C11     |   576 |
+| C6      |   324 | C12     |   144 |
+
+- **Total.** 27,462 cases, matching section 13.8. The canonical text is 31,265,408 bytes.
+- **`corpusSha256`.** `7f4d090f320b37b42848edac590f2f050af908600effdb90c941d955e670dcbb`.
+- **Generator SHA-256.** `4f535c6be0cbcc7ec4565ccec5b206babed2f179d91f037cfb51158e71af26b0`.
+- **Node.** v24.15.0. Generation takes about 1 s.
+- **Engine independence.** No generated value depends on a JavaScript transcendental function. T1, T2, T6, the chevron arms, f01, f06, f08 and j05 are hex tables. The test re-derives each of them with a BigInt Taylor series (2^-320 fixed point, accepted only when both ends of its error interval round to the same binary64) and bit-compares the result. T1 and T2 also equal V8's `Math.cos` and `Math.sin`, as section 13.3 states.
+- **Source-module checks.** The AL-OB5 rings (c14 to c19 and f02) come from `generateCellPaths`, which uses `Math.cos` and `Math.sin`. Their check against that module is therefore V8-dependent. The literals themselves are fixed.
+
+**Tests (all PASS).**
+
+- **Regeneration (E3-A1).** The test regenerates the corpus and checks `corpusSha256`, the counts, the bytes, the seeds and the generator SHA-256 against the manifest.
+- **Schema.** It checks the 20 keys, the index order, the stratum order, the id format, unique ids, valid `duplicateOf` targets and the point counts.
+- **Literal tables.** T0 to T7, the chevrons, f01, f06, f08 and j05. Every value that is rounded to an integer lies more than `10^-3` from a tie.
+- **Sources.** c14 to c19 and f02 are checked against `generateCellPaths`. c20 to c23 are checked against `fixedNativeDepthPositiveCubicFixtureRows`. Forty-eight C5 and C9 rows are checked against the stroke-oracle fixtures that they name. k01 to k06 are checked against `STROKE_S2_FAMILIES`.
+- **Rust spans.** The SHA-256 of each l76 to l79 span is checked against the `5c691ad` blob, and each literal is checked as well. The non-failing drift report against HEAD says that all three spans are unchanged, at lines 728, 1752 and 1890.
+- **Partial placement.** The extent of every partial case lies in `[4096, 8192)` and exceeds `640·d + 4`.
+- **53-bit draws.** Every generic scalar comes from a recorded 53-bit draw. More than 90 % of the draws carry more than 32 significant bits.
+- **C7.** `s = 1` holds exactly at the four attainable pairs, so 48 of the cases are duplicates.
+- **C4.** Every gap enclosure lies in `[g, 2g]`, with its lower end at least `g`.
+
+**Interpretations where section 13 is silent.** Each one affects `corpusSha256`. Each is the literal reading of the annex text, and each is listed for review before the freeze.
+
+1. **Closing and orientation.**
+   - Every named fill polygon is emitted as a closed contour (`Z`).
+   - "Centered" and "at the origin" squares (s06 to s08, x09, x11) are centered on the origin.
+   - A hole "at (x, y)" (j02, j04) has its minimum corner there.
+2. **`source` strings.**
+   - A stroke-oracle fixture name where one exists.
+   - `page:<node>` for a page node.
+   - `T03:S/TRI/k24` and similar for the T03 analogs.
+   - `AL-OB5/<cell>/path<i>` for the AL-OB5 rings.
+   - `SB-<n>` for the ST-U8 rows.
+   - `e3-annex/<row>` for annex-defined shapes.
+3. **Generated ids.**
+   - The seed is written as `0x%08x`.
+   - C9's draw indices continue the shared stream: `g0150` to `g0299`.
+4. **Generated draws.**
+   - C5 and C9 draw no family index, because each has a single family.
+   - C5 draws `n`, then the points, then the closed flag.
+   - The C3 ring draws its anchors, then per edge `δ₁x, δ₁y, δ₂x, δ₂y`.
+   - The pseudo-angle order is the exact angle in `[0, 2π)` from +x, counter-clockwise. The origin sorts first.
+   - C1 snaps after the whole family is built, including the 1/4 hole.
+5. **Tables.** Each table entry is the JavaScript expression, with `sin` and `cos` correctly rounded:
+   - f01: `2 * Math.PI * i / 200`;
+   - f06 and f08: `(deg * k * Math.PI) / 180`, with `R(x, y) = (x·c − y·s, x·s + y·c)`;
+   - j05: `r * cos(2 * Math.PI * i / 32)`;
+   - f03: the grid is row-major, with y outer.
+6. **Camera.**
+   - The midpoint is `(min + max) / 2`.
+   - World points are `(a·x + b·y) + t`.
+   - `E_cur` is `(d·z)·(a·x + b·y)`.
+   - The empty path (x03) uses the box `{t}`.
+   - x01 and x02 keep the label `T0`, with `world.l` overridden.
+   - C7 copies keep the base row's `joint` and `opacity`.
+   - The SB-11 single-paint rows (k27, k28) carry `joint` with their own page node as the group.
+7. **Test fallback in CI.** On a shallow CI checkout without `5c691ad`, the span test fetches exactly that commit (`git fetch --depth=1 origin <sha>`) before it reads the blob.
+
+**Validation.** The commands and their results are in the PR. Still pending: E3-U2 (the oracle and the oracle-only freeze check), then the freeze note, and one independent diff review of this unit.
