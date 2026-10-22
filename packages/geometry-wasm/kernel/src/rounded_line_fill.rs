@@ -488,9 +488,29 @@ pub(crate) struct RoundedFillWorkspace {
     tolerance: f64,
     published: bool,
     allocated_bytes: usize,
+    /// E1-K1 (stroke contract §12.1, ST-U9 addendum E1.3, unit ST-U10): set only by
+    /// `new_stroke`. `new` leaves it off, so fill takes no new branch outcome.
+    early_abort: bool,
+}
+
+/// E1-K1's forecast of `build_ledger`'s span loop (ST-U9 addendum E1.2, the closed form).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct LedgerForecast {
+    /// `F_L = Σ_c saturating_sub(n_c, 1)·(2E + s_c(s_c + 1)/2)`: the span loop's charges.
+    work: u64,
+    /// `S = Σ_c saturating_sub(n_c, 1)`: the span count, which bounds the vertical boundaries.
+    spans: usize,
 }
 
 impl RoundedFillWorkspace {
+    /// The stroke arrangement's workspace (E1.3, E1-Q5 (a)): `new` with the E1-K1 checkpoint
+    /// enabled. Limits, reservations and every other behavior are `new`'s.
+    pub(crate) fn new_stroke(limits: RoundedFillLimits) -> Result<Self, RoundedFillError> {
+        let mut workspace = Self::new(limits)?;
+        workspace.early_abort = true;
+        Ok(workspace)
+    }
+
     pub(crate) fn new(limits: RoundedFillLimits) -> Result<Self, RoundedFillError> {
         let index_capacity = validate_limits(limits)?;
         let requested = requested_bytes(limits, index_capacity)?;
@@ -522,6 +542,7 @@ impl RoundedFillWorkspace {
             tolerance: 0.0,
             published: false,
             allocated_bytes: 0,
+            early_abort: false,
         };
         workspace.allocated_bytes = workspace.actual_allocated_bytes()?;
         if workspace.allocated_bytes > limits.max_bytes {
@@ -1494,6 +1515,8 @@ impl RoundedFillWorkspace {
         // `range.count` units followed by `InternalInvariant` without a match, gives the same
         // result, `work_units` and `WorkLimit` point. The range was recorded from the pushes
         // into `sections`, so the uncharged scan reads only elements the current loop may read.
+        // In the ledger's span loop these charges are part of E1-K1's forecast `F_L`
+        // (`ledger_forecast`).
         for index in range.start..end {
             let section = self.sections[index];
             if section.edge == edge && section.endpoint == endpoint {
@@ -1549,6 +1572,31 @@ impl RoundedFillWorkspace {
             })?;
         }
 
+        // E1-K1 (ST-U9 addendum E1.3, unit ST-U10), stroke workspaces only: after the
+        // cell-boundary loop, before the span loop. It aborts only when the span loop's full run
+        // is certain to fail with `WorkLimit` inside its forecast charges.
+        let forecast = if self.early_abort {
+            self.ledger_forecast()
+        } else {
+            None
+        };
+        if let Some(forecast) = forecast {
+            if self.early_abort_certain(forecast) {
+                // As `charge` and `bulk_charge` leave a failing sequence (E1.3).
+                self.stats.work_units = self.limits.max_work;
+                return Err(RoundedFillError::WorkLimit);
+            }
+        }
+        #[cfg(test)]
+        let span_loop_start = self.stats.work_units;
+        #[cfg(test)]
+        if forecast.is_some() {
+            e1_probe(|probe| probe.span_loops += 1);
+        }
+
+        // The span loop. Its charges are E1-K1's forecast `F_L` (`ledger_forecast`): each span
+        // runs two scans of `E` charges (`build_column_span`) and one lookup per section of its
+        // column (`lookup_section_node`). A change to the charges here changes `F_L` with it.
         let mut sweep = EdgeColumnSweep::guarded(&self.edges);
         for column_index in 0..self.columns.len() {
             let column = self.columns[column_index];
@@ -1559,12 +1607,128 @@ impl RoundedFillWorkspace {
                 self.build_column_span(column_index, rank, rule, swept)?;
             }
         }
+        // E1.4 item 3: the forecast equals the span loop's actual charges.
+        #[cfg(test)]
+        if let Some(forecast) = forecast {
+            assert_eq!(
+                self.stats.work_units - span_loop_start,
+                forecast.work,
+                "E1-K1 forecast exactness"
+            );
+            e1_probe(|probe| probe.exact_checks += 1);
+        }
         for meta in &self.node_meta {
             if meta.incoming != meta.outgoing {
                 return Err(RoundedFillError::InternalInvariant);
             }
         }
         Ok(())
+    }
+
+    /// E1-K1's closed-form forecast (ST-U9 addendum E1.2), `O(columns)`, without charging or
+    /// allocating. A column's section range holds each `(edge, endpoint)` pair once, and each
+    /// span looks up each of them once, at its offset `q` for `q + 1` charges, so one span
+    /// charges `2E + s_c(s_c + 1)/2`. `None` on an arithmetic overflow or a column without its
+    /// section range; E1-K1 then does nothing.
+    fn ledger_forecast(&self) -> Option<LedgerForecast> {
+        if self.columns.len() != self.column_sections.len() {
+            return None;
+        }
+        let scans = u64::try_from(self.edges.len()).ok()?.checked_mul(2)?;
+        let mut work = 0u64;
+        let mut spans = 0usize;
+        for (column, range) in self.columns.iter().zip(&self.column_sections) {
+            let count = column.node_count.saturating_sub(1);
+            spans = spans.checked_add(count)?;
+            let sections = u64::try_from(range.count).ok()?;
+            let lookups = sections.checked_mul(sections.checked_add(1)?)? / 2;
+            let per_span = scans.checked_add(lookups)?;
+            work = work.checked_add(u64::try_from(count).ok()?.checked_mul(per_span)?)?;
+        }
+        Some(LedgerForecast { work, spans })
+    }
+
+    /// E1-K1's rule (E1.3): `W + F_L > max_work`, `boundaries.len() + S <= max_boundaries`
+    /// and `contributors.len() + Σ_vertical |Δrank| <= max_contributors`. The guards make
+    /// `WorkLimit` the only limit error the span loop can reach.
+    fn early_abort_certain(&self, forecast: LedgerForecast) -> bool {
+        #[cfg(test)]
+        e1_probe(|probe| {
+            probe.reached += 1;
+            probe.last = EarlyAbortRecord {
+                work: self.stats.work_units,
+                forecast: forecast.work,
+                spans: forecast.spans,
+                edges: self.edges.len(),
+                cells: self.cells.len(),
+                boundaries: self.boundaries.len(),
+                contributors: self.contributors.len(),
+                vertical_contributors: self.vertical_contributor_total(),
+            };
+        });
+        if self.stats.work_units.saturating_add(forecast.work) <= self.limits.max_work {
+            return false;
+        }
+        let boundaries_fit = self
+            .boundaries
+            .len()
+            .checked_add(forecast.spans)
+            .is_some_and(|total| total <= self.limits.max_boundaries);
+        let contributors_fit = boundaries_fit
+            && self
+                .vertical_contributor_total()
+                .and_then(|vertical| self.contributors.len().checked_add(vertical))
+                .is_some_and(|total| total <= self.limits.max_contributors);
+        #[cfg(test)]
+        {
+            let disabled = e1_k1_disabled();
+            e1_probe(|probe| {
+                if !contributors_fit {
+                    probe.blocked += 1;
+                } else {
+                    probe.certain += 1;
+                    if !disabled {
+                        probe.fired += 1;
+                    }
+                }
+            });
+            if disabled {
+                return false;
+            }
+        }
+        contributors_fit
+    }
+
+    /// `Σ_{vertical e} |rank(e, 2) − rank(e, 1)|` at the vertical edge's column: the
+    /// contributors the span loop pushes (E1.2). `None` when a section is missing or a rank
+    /// is out of range; E1-K1 then does not abort.
+    fn vertical_contributor_total(&self) -> Option<usize> {
+        let mut total = 0usize;
+        for (index, edge) in self.edges.iter().enumerate() {
+            if edge.a.x != edge.b.x {
+                continue;
+            }
+            let column = edge.low_column;
+            let a_rank = self.uncharged_section_rank(column, index, 1)?;
+            let b_rank = self.uncharged_section_rank(column, index, 2)?;
+            total = total.checked_add(a_rank.abs_diff(b_rank))?;
+        }
+        Some(total)
+    }
+
+    /// The rank of the node of section `(edge, endpoint)` in `column`, found as
+    /// `lookup_section_node` finds it but without charging.
+    fn uncharged_section_rank(&self, column: usize, edge: usize, endpoint: u8) -> Option<usize> {
+        let record = *self.columns.get(column)?;
+        let range = *self.column_sections.get(column)?;
+        let end = range.start.checked_add(range.count)?;
+        let section = self
+            .sections
+            .get(range.start..end)?
+            .iter()
+            .find(|section| section.edge == edge && section.endpoint == endpoint)?;
+        let rank = section.node.checked_sub(record.node_start)?;
+        (rank < record.node_count).then_some(rank)
     }
 
     fn build_column_span(
@@ -1576,7 +1740,8 @@ impl RoundedFillWorkspace {
     ) -> Result<(), RoundedFillError> {
         let mut left_winding = 0i64;
         let mut right_winding = 0i64;
-        // B0R L3: the swept scans, or the current loops below (size guard).
+        // B0R L3: the swept scans, or the current loops below (size guard). Each scan charges
+        // `E` and each lookup `q + 1`, as E1-K1's forecast `F_L` (`ledger_forecast`) counts.
         let fallback_edges =
             self.scan_span_windings(column, rank, swept, &mut left_winding, &mut right_winding)?;
         for edge_index in 0..fallback_edges {
@@ -3516,4 +3681,109 @@ impl RoundedFillWorkspace {
         self.sections.extend_from_slice(sections);
         self.column_sections.extend_from_slice(ranges);
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// ST-U10 test machinery (`cfg(test)` only; stroke contract §12.1, ST-U9 addendum E1.4): the
+// per-thread E1-K1 probe and the switch that disables the abort for the on-off differential.
+
+/// The state at E1-K1 of the last stroke run that reached it (test builds only).
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct EarlyAbortRecord {
+    /// `W`, the work units at E1-K1.
+    pub(crate) work: u64,
+    /// `F_L`.
+    pub(crate) forecast: u64,
+    /// `S`.
+    pub(crate) spans: usize,
+    pub(crate) edges: usize,
+    pub(crate) cells: usize,
+    /// `boundaries.len()` at E1-K1.
+    pub(crate) boundaries: usize,
+    /// `contributors.len()` at E1-K1.
+    pub(crate) contributors: usize,
+    /// `Σ_vertical |Δrank|`, or `None` when a section is missing.
+    pub(crate) vertical_contributors: Option<usize>,
+}
+
+/// Per-thread E1-K1 counts of stroke workspaces (test builds only).
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct EarlyAbortProbe {
+    /// Runs that reached E1-K1 with a forecast.
+    pub(crate) reached: u64,
+    /// Runs where `W + F_L > max_work` and both guards hold (with the switch on or off).
+    pub(crate) certain: u64,
+    /// Runs that E1-K1 aborted (the "E1-K1 fired" counter).
+    pub(crate) fired: u64,
+    /// Runs where `W + F_L > max_work` but a guard blocks the abort.
+    pub(crate) blocked: u64,
+    /// Span loops entered.
+    pub(crate) span_loops: u64,
+    /// Span loops completed with the forecast exactness assertion.
+    pub(crate) exact_checks: u64,
+    /// The last run's state at E1-K1.
+    pub(crate) last: EarlyAbortRecord,
+}
+
+#[cfg(test)]
+const NO_EARLY_ABORT_PROBE: EarlyAbortProbe = EarlyAbortProbe {
+    reached: 0,
+    certain: 0,
+    fired: 0,
+    blocked: 0,
+    span_loops: 0,
+    exact_checks: 0,
+    last: EarlyAbortRecord {
+        work: 0,
+        forecast: 0,
+        spans: 0,
+        edges: 0,
+        cells: 0,
+        boundaries: 0,
+        contributors: 0,
+        vertical_contributors: None,
+    },
+};
+
+#[cfg(test)]
+thread_local! {
+    static E1_PROBE: core::cell::Cell<EarlyAbortProbe> =
+        const { core::cell::Cell::new(NO_EARLY_ABORT_PROBE) };
+    static E1_K1_DISABLED: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+fn e1_probe(update: impl FnOnce(&mut EarlyAbortProbe)) {
+    E1_PROBE.with(|cell| {
+        let mut probe = cell.get();
+        update(&mut probe);
+        cell.set(probe);
+    });
+}
+
+#[cfg(test)]
+fn e1_k1_disabled() -> bool {
+    E1_K1_DISABLED.with(core::cell::Cell::get)
+}
+
+/// Returns this thread's E1-K1 probe and resets it.
+#[cfg(test)]
+pub(crate) fn take_early_abort_probe() -> EarlyAbortProbe {
+    E1_PROBE.with(|cell| cell.replace(NO_EARLY_ABORT_PROBE))
+}
+
+/// Runs `action` with E1-K1's abort disabled on this thread (the "off" side of the on-off
+/// differential); the forecast, the probe and the exactness assertion still run.
+#[cfg(test)]
+pub(crate) fn with_early_abort_disabled<T>(action: impl FnOnce() -> T) -> T {
+    struct Restore(bool);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            E1_K1_DISABLED.with(|cell| cell.set(self.0));
+        }
+    }
+    let _restore = Restore(E1_K1_DISABLED.with(|cell| cell.replace(true)));
+    action()
 }

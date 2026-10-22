@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>V-1 path appearance playground (UNVERIFIED precision)</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        background: #080d17;
+        color: #e8edf7;
+      }
+      body {
+        margin: 0;
+        padding: 16px;
+        display: grid;
+        grid-template-columns: 720px minmax(300px, 1fr);
+        gap: 16px;
+        align-items: start;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 16px;
+        font-weight: 650;
+      }
+      #viz-v1-surface {
+        display: block;
+        width: 720px;
+        height: 600px;
+        cursor: grab;
+        touch-action: none;
+      }
+      #viz-v1-surface.dragging {
+        cursor: grabbing;
+      }
+      .label {
+        margin: 8px 0 0;
+        font-size: 12px;
+        color: #ffd27d;
+      }
+      .panel {
+        font-size: 12px;
+      }
+      .panel h2 {
+        margin: 12px 0 6px;
+        font-size: 13px;
+      }
+      fieldset {
+        margin: 0 0 8px;
+        padding: 6px 8px 8px;
+        border: 1px solid #2b3a55;
+        border-radius: 6px;
+      }
+      fieldset fieldset {
+        margin: 6px 0 0;
+      }
+      legend {
+        padding: 0 4px;
+        color: #8fa0ba;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 12px;
+        align-items: center;
+        margin-top: 4px;
+      }
+      .row label {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+      }
+      input[type='number'] {
+        width: 72px;
+        background: #0e1626;
+        color: inherit;
+        border: 1px solid #394a67;
+        border-radius: 4px;
+        padding: 2px 4px;
+      }
+      input[type='range'] {
+        width: 140px;
+      }
+      input[type='color'] {
+        width: 36px;
+        height: 24px;
+        padding: 0;
+      }
+      input[aria-invalid='true'] {
+        border-color: #ff9da5;
+        outline: 1px solid #ff9da5;
+      }
+      .message {
+        color: #ff9da5;
+        min-height: 0;
+      }
+      :focus-visible {
+        outline: 2px solid #ffd27d;
+        outline-offset: 2px;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+      }
+      button {
+        min-height: 28px;
+        border: 1px solid #394a67;
+        border-radius: 6px;
+        background: #17233a;
+        color: inherit;
+        cursor: pointer;
+      }
+      dl {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        gap: 4px 8px;
+        margin: 0;
+      }
+      dt {
+        color: #8fa0ba;
+      }
+      dd {
+        margin: 0;
+        font-family: ui-monospace, Consolas, monospace;
+        overflow-wrap: anywhere;
+      }
+      ol,
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+      #viz-v1-notices,
+      #viz-v1-diagnostics,
+      #viz-v1-errors {
+        max-height: 200px;
+        overflow: auto;
+        font:
+          11px/1.4 ui-monospace,
+          Consolas,
+          monospace;
+      }
+      #viz-v1-diagnostics li[data-severity='warning'] {
+        color: #ffd27d;
+      }
+      #viz-v1-diagnostics li[data-severity='error'],
+      #viz-v1-errors li {
+        color: #ff9da5;
+      }
+      #viz-v1-target-status {
+        font:
+          11px/1.5 ui-monospace,
+          Consolas,
+          monospace;
+      }
+      #viz-v1-target-status [data-outcome='not drawn'] {
+        color: #ff9da5;
+      }
+      #viz-v1-target-status [data-outcome='drawn without fringe'] {
+        color: #ffd27d;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>V-1 path appearance: real fill-mesh and stroke-mesh ports (WASM kernel)</h1>
+      <canvas id="viz-v1-surface" aria-label="Path appearance rendering surface"></canvas>
+      <p class="label" id="viz-v1-label">
+        UNVERIFIED: precision is UNVERIFIED against the 0.25 physical-pixel target until A04
+        evidence exists. Edits go through the existing renderer ports. work-limit and
+        fringe-work-cap notices are the D8-interim state of the open ST-U9 decision.
+      </p>
+    </main>
+    <section class="panel" aria-label="Controls and status">
+      <fieldset id="viz-v1-targets">
+        <legend>Edit target</legend>
+        <div class="row" id="viz-v1-target-radios"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Fill</legend>
+        <div class="row">
+          <label><input type="checkbox" id="viz-v1-fill-on" /> Fill</label>
+          <label>Fill color <input type="color" id="viz-v1-fill-color" /></label>
+          <label
+            >Fill alpha
+            <input
+              type="number"
+              id="viz-v1-fill-alpha"
+              min="0"
+              max="1"
+              step="0.01"
+              aria-describedby="viz-v1-fill-alpha-message"
+          /></label>
+          <span class="message" id="viz-v1-fill-alpha-message"></span>
+        </div>
+        <fieldset id="viz-v1-fill-rule">
+          <legend>Fill rule</legend>
+          <div class="row">
+            <label><input type="radio" name="viz-v1-fill-rule" value="nonzero" /> nonzero</label>
+            <label><input type="radio" name="viz-v1-fill-rule" value="evenodd" /> evenodd</label>
+          </div>
+        </fieldset>
+      </fieldset>
+
+      <fieldset>
+        <legend>Stroke</legend>
+        <div class="row">
+          <label><input type="checkbox" id="viz-v1-stroke-on" /> Stroke</label>
+          <label>Stroke color <input type="color" id="viz-v1-stroke-color" /></label>
+          <label
+            >Stroke alpha
+            <input
+              type="number"
+              id="viz-v1-stroke-alpha"
+              min="0"
+              max="1"
+              step="0.01"
+              aria-describedby="viz-v1-stroke-alpha-message"
+          /></label>
+          <span class="message" id="viz-v1-stroke-alpha-message"></span>
+        </div>
+        <div class="row">
+          <label
+            >Stroke width <input type="range" id="viz-v1-width-slider" min="0" max="64" step="0.5"
+          /></label>
+          <label
+            >Stroke width value
+            <input
+              type="number"
+              id="viz-v1-width-number"
+              min="0"
+              max="64"
+              step="0.125"
+              aria-describedby="viz-v1-width-message"
+          /></label>
+          <span class="message" id="viz-v1-width-message"></span>
+        </div>
+        <fieldset id="viz-v1-cap">
+          <legend>Cap</legend>
+          <div class="row">
+            <label><input type="radio" name="viz-v1-cap" value="butt" /> butt</label>
+            <label><input type="radio" name="viz-v1-cap" value="round" /> round</label>
+            <label><input type="radio" name="viz-v1-cap" value="square" /> square</label>
+          </div>
+        </fieldset>
+        <fieldset id="viz-v1-join">
+          <legend>Join</legend>
+          <div class="row">
+            <label><input type="radio" name="viz-v1-join" value="miter" /> miter</label>
+            <label><input type="radio" name="viz-v1-join" value="round" /> round</label>
+            <label><input type="radio" name="viz-v1-join" value="bevel" /> bevel</label>
+          </div>
+        </fieldset>
+        <div class="row">
+          <label
+            >Miter limit (applies to miter joins)
+            <input type="range" id="viz-v1-miter-slider" min="1" max="20" step="0.1"
+          /></label>
+          <label
+            >Miter limit value
+            <input
+              type="number"
+              id="viz-v1-miter-number"
+              min="1"
+              max="100"
+              step="0.01"
+              aria-describedby="viz-v1-miter-message"
+          /></label>
+          <span class="message" id="viz-v1-miter-message"></span>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Opacity</legend>
+        <div class="row">
+          <label
+            >Opacity <input type="range" id="viz-v1-opacity-slider" min="0" max="1" step="0.01"
+          /></label>
+          <label
+            >Opacity value
+            <input
+              type="number"
+              id="viz-v1-opacity-number"
+              min="0"
+              max="1"
+              step="0.01"
+              aria-describedby="viz-v1-opacity-message"
+          /></label>
+          <span class="message" id="viz-v1-opacity-message"></span>
+        </div>
+      </fieldset>
+
+      <div class="controls">
+        <button type="button" id="viz-v1-reset-target">Reset target</button>
+        <button type="button" id="viz-v1-reset-all">Reset all</button>
+      </div>
+
+      <h2>View</h2>
+      <div class="controls">
+        <button type="button" id="viz-v1-zoom-in">Zoom in</button>
+        <button type="button" id="viz-v1-zoom-out">Zoom out</button>
+        <button type="button" id="viz-v1-reset-view">Reset view</button>
+      </div>
+      <div class="controls" id="viz-v1-views" role="group" aria-label="Views"></div>
+
+      <h2>Target status</h2>
+      <div id="viz-v1-target-status" aria-live="polite" aria-atomic="true"></div>
+      <h2>Appearance of each target</h2>
+      <ul id="viz-v1-appearance"></ul>
+      <h2>View and pipeline</h2>
+      <dl id="viz-v1-status"></dl>
+      <h2>D8-interim notices (newest first, never cleared)</h2>
+      <p id="viz-v1-notices-dropped"></p>
+      <ol id="viz-v1-notices"></ol>
+      <h2>Errors</h2>
+      <ol id="viz-v1-errors" role="alert"></ol>
+      <h2>Diagnostics</h2>
+      <ol id="viz-v1-diagnostics"></ol>
+    </section>
+    <script type="module" src="/src/viz-v1-appearance.ts"></script>
+  </body>
+</html>
