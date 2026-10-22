@@ -48,6 +48,8 @@ describe('E8-U0 failure-to-success identity mode', () => {
     expect(classifyOutcome('Rounded(InternalInvariant)')).toBe('internal');
     expect(classifyOutcome('Rounded(ByteLimit)')).toBe('internal');
     expect(classifyOutcome('batch_status=6')).toBe('batch');
+    expect(classifyOutcome('path_status=1')).toBe('empty');
+    expect(classifyOutcome('NO_MESH(flat_status=1)')).toBe('empty');
     expect(classifyOutcome('META')).toBe('other');
   });
 
@@ -65,6 +67,20 @@ describe('E8-U0 failure-to-success identity mode', () => {
     expect(allowed.allowed).toEqual([
       { layer: 'native', case: 'b', baseCode: 'path_status=5', branchCode: 'path_status=0' },
     ]);
+  });
+
+  it('treats empty as a result: failure to empty is allowed, empty must stay equal', () => {
+    const toEmpty = classifyFailureToSuccess(
+      input((n) => n.set('b', record('c', 'path_status=1'))),
+    );
+    expect(toEmpty.pass).toBe(true);
+    expect(toEmpty.counts.allowedChange).toBe(1);
+    const base = new Map([['e', record('e', 'path_status=1')]]);
+    const changed = new Map([['e', record('f', 'path_status=6')]]);
+    const wasm = { base: new Map(), branch: new Map() };
+    const result = classifyFailureToSuccess({ native: { base, branch: changed }, wasm });
+    expect(result.pass).toBe(false);
+    expect(result.counts.allowedChange).toBe(0);
   });
 
   it('fails a base ok record that differs in any field of the tuple', () => {

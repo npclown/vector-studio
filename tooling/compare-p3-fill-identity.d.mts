@@ -152,7 +152,7 @@ export function validateChangedPaths(
   directory: string,
   revision: number,
 ): Promise<Map<string, { rung: string; failures: string[] }>>;
-export type OutcomeClass = 'ok' | 'path-failure' | 'internal' | 'batch' | 'other';
+export type OutcomeClass = 'ok' | 'empty' | 'path-failure' | 'internal' | 'batch' | 'other';
 export function classifyOutcome(code: string): OutcomeClass;
 export function differingFields(base: DigestEntry, branch: DigestEntry): string[];
 export interface FailureToSuccessCounts {

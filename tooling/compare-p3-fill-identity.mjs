@@ -629,17 +629,26 @@ const INTERNAL_ERROR =
   /^(EmissionStatus\(\d+\)|PlanMismatch|BoundsMismatch|InvalidCommand|InvalidProvenance|TopologyOwnership|RoundedOwnership|CombinedByteLimit|Topology\((InvalidInput|InvalidProvenance|InvalidLimits|AllocationFailed)\)|Rounded\((InvalidInput|InternalInvariant|InvalidLimits|AllocationFailed|ByteLimit)\))$/u;
 
 /**
- * Class of an outcome code: `ok`, `path-failure`, `internal` (a kernel internal error), `batch`
+ * Class of an outcome code: `ok`, `empty` (a result, not a failure: `path_status=1` or
+ * `NO_MESH(flat_status=1)`, which must stay equal and may be a target of a path failure), `path-failure`, `internal` (a kernel internal error), `batch`
  * (a non-zero fill-v0 batch status) or `other` (META, an empty mesh, anything unrecognized).
- * A path failure is a non-`ok` path status: `path_status=1..6`, `NO_MESH(flat_status=1..5)` or a
+ * A path failure is a non-`ok`, non-`empty` path status: `path_status=2..6`, `NO_MESH(flat_status=2..5)` or a
  * kernel error that the fill-v0 port maps to a path status.
  */
 export function classifyOutcome(code) {
   if (code === 'OK' || code === 'path_status=0') return 'ok';
   let match = /^path_status=(\d+)$/u.exec(code);
-  if (match) return Number(match[1]) >= 1 && Number(match[1]) <= 6 ? 'path-failure' : 'other';
+  if (match) {
+    const status = Number(match[1]);
+    if (status === 1) return 'empty';
+    return status >= 2 && status <= 6 ? 'path-failure' : 'other';
+  }
   match = /^NO_MESH\(flat_status=(\d+)\)$/u.exec(code);
-  if (match) return Number(match[1]) >= 1 && Number(match[1]) <= 5 ? 'path-failure' : 'internal';
+  if (match) {
+    const status = Number(match[1]);
+    if (status === 1) return 'empty';
+    return status >= 2 && status <= 5 ? 'path-failure' : 'internal';
+  }
   match = /^batch_status=(\d+)$/u.exec(code);
   if (match) return Number(match[1]) !== 0 ? 'batch' : 'other';
   if (PATH_FAILURE_ERROR.test(code)) return 'path-failure';
@@ -693,7 +702,7 @@ export function classifyFailureToSuccessLayer(layer, base, branch) {
       continue;
     }
     const outcome = classifyOutcome(current.code);
-    if (outcome === 'ok' || outcome === 'path-failure') {
+    if (outcome === 'ok' || outcome === 'path-failure' || outcome === 'empty') {
       result.counts.allowedChange += 1;
       result.allowed.push({ layer, case: name, baseCode: old.code, branchCode: current.code });
     } else {
@@ -1527,6 +1536,8 @@ function selfTestFailureToSuccess() {
       ['rnd/T/0001/fill_v0_cascade', failed('f1', 'path_status=6')],
       ['rnd/T/0002/fill_v0_cascade', failed('f2', 'path_status=5')],
       ['rnd/T/0003/attempt', failed('f3', 'Topology(KnotMismatch)')],
+      ['rnd/T/0004/attempt', failed('e4', 'NO_MESH(flat_status=1)')],
+      ['rnd/T/0005/fill_v0_cascade', failed('e3', 'path_status=1')],
     ]);
   const wasmBase = () =>
     new Map([
@@ -1626,6 +1637,29 @@ function selfTestFailureToSuccess() {
       'internal-regression: path failure becomes an unrecognized code',
       (n) => n.set('rnd/T/0001/fill_v0_cascade', failed('f1d', 'Mystery(7)')),
       { allowed: 0, fail: 1, internal: 1, names: ['rnd/T/0001/fill_v0_cascade'] },
+    ],
+    [
+      'allowed: path failure becomes empty (path_status=1 and NO_MESH(flat_status=1))',
+      (n, w) => {
+        n.set('rnd/T/0003/attempt', failed('e1', 'NO_MESH(flat_status=1)'));
+        w.set('wasm/rnd/T/0002', failed('e2', 'path_status=1'));
+      },
+      { allowed: 2, fail: 0, internal: 0, names: [] },
+    ],
+    [
+      'FAIL: base empty (path_status=1) becomes a failure or ok',
+      (n) => n.set('rnd/T/0005/fill_v0_cascade', failed('e3', 'path_status=6')),
+      { allowed: 0, fail: 1, internal: 0, names: ['rnd/T/0005/fill_v0_cascade'] },
+    ],
+    [
+      'FAIL: base empty (NO_MESH(flat_status=1)) becomes ok',
+      (n) => n.set('rnd/T/0004/attempt', record('k', 'OK')),
+      { allowed: 0, fail: 1, internal: 0, names: ['rnd/T/0004/attempt'] },
+    ],
+    [
+      'FAIL: unchanged-code base empty with a changed digest',
+      (n) => n.set('rnd/T/0004/attempt', failed('e5', 'NO_MESH(flat_status=1)')),
+      { allowed: 0, fail: 1, internal: 0, names: ['rnd/T/0004/attempt'] },
     ],
     [
       'FAIL, not internal-regression: ok record becomes an internal error',
