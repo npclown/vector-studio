@@ -22,6 +22,7 @@ artifacts/p3-v4-paths/
 artifacts/p3-st-u6-stroke/
 artifacts/p3-b2-strokes/
 artifacts/viz-v1-appearance/
+artifacts/viz-v2-path-data/
 artifacts/p3-b0-wasm/
 artifacts/p3-al-ob5/
 *.tsbuildinfo
