@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>V-3 A07 integration test page (UNVERIFIED precision)</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        background: #080d17;
+        color: #e8edf7;
+      }
+      body {
+        margin: 0;
+        padding: 16px;
+        display: grid;
+        grid-template-columns: 720px minmax(300px, 1fr);
+        gap: 16px;
+        align-items: start;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 16px;
+        font-weight: 650;
+      }
+      #viz-v3-surface {
+        display: block;
+        width: 720px;
+        height: 480px;
+      }
+      .label {
+        margin: 8px 0 0;
+        font-size: 12px;
+        color: #ffd27d;
+      }
+      .panel {
+        font-size: 12px;
+      }
+      .panel h2 {
+        margin: 12px 0 6px;
+        font-size: 13px;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+      }
+      button {
+        min-height: 28px;
+        border: 1px solid #394a67;
+        border-radius: 6px;
+        background: #17233a;
+        color: inherit;
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: default;
+        opacity: 0.5;
+      }
+      :focus-visible {
+        outline: 2px solid #ffd27d;
+        outline-offset: 2px;
+      }
+      dl {
+        display: grid;
+        grid-template-columns: 170px 1fr;
+        gap: 4px 8px;
+        margin: 0;
+      }
+      dt {
+        color: #8fa0ba;
+      }
+      dd {
+        margin: 0;
+        font-family: ui-monospace, Consolas, monospace;
+        overflow-wrap: anywhere;
+      }
+      ol {
+        margin: 0;
+        padding-left: 18px;
+      }
+      #viz-v3-diagnostics {
+        max-height: 320px;
+        overflow: auto;
+        font:
+          11px/1.4 ui-monospace,
+          Consolas,
+          monospace;
+      }
+      #viz-v3-diagnostics li[data-severity='warning'] {
+        color: #ffd27d;
+      }
+      #viz-v3-diagnostics li[data-severity='error'] {
+        color: #ff9da5;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>V-3 A07 integration: ordered paths and primitives, churn, device recovery</h1>
+      <canvas
+        id="viz-v3-surface"
+        aria-label="Test page surface: P1 rectangles, ellipses and lines interleaved with P3 fill and stroke paths, a churn zone, and device-loss recovery"
+      ></canvas>
+      <p class="label" id="viz-v3-label">
+        UNVERIFIED: precision is UNVERIFIED against the 0.25 physical-pixel target until A04
+        evidence exists. This is a test page; no performance claim is made.
+      </p>
+    </main>
+    <section class="panel" aria-label="Controls and status">
+      <h2>Test controls</h2>
+      <div class="controls">
+        <button type="button" id="viz-v3-run-ordered" disabled>Run ordered states</button>
+        <button type="button" id="viz-v3-run-churn" disabled>Run churn</button>
+        <button type="button" id="viz-v3-lose-device" disabled>Simulate device loss</button>
+        <button type="button" id="viz-v3-reset" disabled>Reset scene</button>
+      </div>
+      <h2>Status</h2>
+      <p id="viz-v3-lifecycle" aria-live="polite"></p>
+      <dl id="viz-v3-status"></dl>
+      <h2>Diagnostics (newest first)</h2>
+      <ol id="viz-v3-diagnostics"></ol>
+    </section>
+    <script type="module" src="/src/viz-v3-integration.ts"></script>
+  </body>
+</html>
