@@ -1,10 +1,10 @@
 # D9 E3: B4 A04 corpus and measurement contract
 
-Status: DRAFT, 2026-10-22. Written for independent review and user approval. Nothing here is in force until the user approves it in chat. This is rendering-track item E3 ([D9 rendering track](d9-rendering-track.md#status-index)), which is checkpoint B4 of [D8](p3-d8-parallel-tracks.md#two-tracks). It is full tier: it fixes how an acceptance criterion is evidenced and sets a pass rule. It is a contract only. It changes no requirement, threshold, acceptance criterion, past decision or frozen contract text, and it authorizes no code until it is approved.
+Status: DRAFT, 2026-10-22. Written for independent review and user approval. Independent review round 1 was NOT READY; its findings are applied ([review record](#12-review-and-approval-record)), and round 2 is pending. Nothing here is in force until the user approves it in chat. This is rendering-track item E3 ([D9 rendering track](d9-rendering-track.md#status-index)), which is checkpoint B4 of [D8](p3-d8-parallel-tracks.md#two-tracks). It is full tier: it fixes how an acceptance criterion is evidenced and sets a pass rule. It is a contract only. It changes no requirement, threshold, acceptance criterion, past decision or frozen contract text, and it authorizes no code until it is approved.
 
 **Evidence label.** Until the run under this contract has produced an accepted evidence record, every fill and stroke result keeps the label that precision is **UNVERIFIED** against the 0.25 physical-pixel target, as [D8](p3-d8-parallel-tracks.md#rules) requires.
 
-**Identifiers.** IDs in this contract use the prefix **E3-**: definitions E3-K1 to E3-K6, corpus strata E3-C*, positive controls E3-PC1 to E3-PC12, seeded defects E3-D1 to E3-D10, units E3-U1 to E3-U5, acceptance E3-A1 to E3-A9, risks E3-R1 to E3-R9 and open questions E3-Q1 to E3-Q9.
+**Identifiers.** IDs in this contract use the prefix **E3-**: definitions E3-K1 to E3-K6, corpus strata E3-C*, positive controls E3-PC1 to E3-PC14, seeded defects E3-D1 to E3-D14, units E3-U1 to E3-U5, acceptance E3-A1 to E3-A9, risks E3-R1 to E3-R9 and open questions E3-Q1 to E3-Q12.
 
 ## 1. Sources and the A04 criterion
 
@@ -93,13 +93,26 @@ The **drawn region** `M` is defined in five steps:
 4. Each `v_i` becomes the K4 offset `u_i = fround(v_i − m)`. The lanes `A`, `B`, `O_m − camera`, `zoom` and `DPR` are packed exactly as `renderer-core` packs them (V3 section f).
 5. Each point is mapped to physical pixels by the WGSL function the V3 mesh shader uses for a stored point.
 
-`M` is the union of the mapped closed triangles, and `∂M` is its topological boundary. EDGE and VERTEX features use the same offsets as the vertices (V3 section f), so `∂M` is also the boundary that the A5 coverage rule places its 0.5 isoline on. Joint fill and stroke draws keep each paint's features unchanged ([V3 section e, ST-U7 amendment](p3-v3-renderer-mesh-pipeline-contract.md#e-a5-coverage-on-k4)), so a joint draw is measured per paint, with an identity check that its features equal the separate draws' features (E3-C9).
+`M` is the union of the mapped closed **region** triangles of the port mesh, and `∂M` is its topological boundary. The fringe's exterior triangles are not part of `M`: they follow the region triangles in a variant's range ([V3 section f](p3-v3-renderer-mesh-pipeline-contract.md#f-the-mesh-packet-part-and-the-mesh-draw)) and carry coverage, not region. EDGE and VERTEX features use the same offsets as the vertices (V3 section f), so `∂M` is also the boundary that the A5 coverage rule places its 0.5 isoline on. Joint fill and stroke draws keep each paint's features unchanged ([V3 section e, ST-U7 amendment](p3-v3-renderer-mesh-pipeline-contract.md#e-a5-coverage-on-k4)), so a joint draw is measured per paint, with an identity check that its features equal the separate draws' features (E3-C9).
 
-A result of `empty` gives `M = ∅`. It is measured, not excluded: it passes only if `R` has no boundary in the window. The rejected results are listed in section 6.
+**Conformity is not assumed.** A stored port mesh need not be conforming. In the rounded line-fill construction each slab cell becomes two triangles, so a neighbour's node can lie inside a cell side: a T-junction. These T-junctions are on record in the [P3.1j conforming-mesh review](../evidence/p3.1j-conforming-mesh-oracle-review-2026-10-05.md). In the exact mapped mesh `M*` (section 7.1) a T-vertex stays exactly on the edge it touches. On the GPU the T-vertex and the edge's endpoints are mapped independently by the f32 lane products of `toPhysical` (`packages/renderer-webgpu/src/mesh-fill-shader.ts`). Under rotation or shear the three mapped points are no longer collinear, which can open a hairline crack up to about `2β` wide inside the region. The oracle therefore:
+
+- tests conformity exactly: a T-vertex is a mesh vertex in the relative interior of another triangle's edge;
+- extracts `∂M` with every triangle edge split at every T-vertex on it, so that a T-junction is never mistaken for boundary in `M*`;
+- records the T-junction count and the crack bound per case.
+
+How a GPU crack is scored is open question [E3-Q10](#11-open-questions), which the contract does not decide. Until the user answers it, the bound of section 7.1 is stated only for conforming cases.
+
+**`empty` results.** A result of `empty` gives `M = ∅`. It is measured, not excluded. It passes only when `R` has no boundary in `Ω` **and** one point of `Ω` classifies outside `R`. With no boundary of `R` in the connected set `Ω`, `R` is either disjoint from `Ω` or contains it, so one point decides. A missing mesh over a shape that covers the window is therefore a FAIL, not a pass (E3-PC14). The rejected results are listed in section 6.
 
 ### 3.3 E3-K3: the window
 
-`Ω = [−2, 640·d + 2] × [−2, 360·d + 2]` in physical pixels: the viewport plus two physical pixels, P1's rule for visible points. Error is measured only inside `Ω`. Distances are taken to the unclipped `∂M` and `∂R`, so the window adds no boundary of its own. A case whose `R` and `M` both have no boundary inside `Ω` is recorded as `window-empty` and counted, not measured.
+`Ω = [−2, 640·d + 2] × [−2, 360·d + 2]` in physical pixels: the viewport plus two physical pixels, P1's rule for visible points. Error is measured only inside `Ω`. Distances are taken to the unclipped `∂M` and `∂R`, so the window adds no boundary of its own. The window is an interpretation of "visible" that the user approves under [E3-Q12](#11-open-questions).
+
+**`window-empty`.** A case is `window-empty` when neither `∂R` nor `∂M` meets `Ω`. Then `M` and `R` are each constant on the connected set `Ω`, so the oracle classifies one point of `Ω` (its center) against both.
+
+- If the two classifications agree, the case is recorded as `window-empty` and counted, not measured.
+- If they disagree, the case is measured and FAILS. For example, `R` covers the window and `M` does not.
 
 ### 3.4 E3-K4: the error
 
@@ -113,14 +126,28 @@ With `dist` the Euclidean distance in physical pixels, `sup ∅ = 0` and `dist(p
 **Why these three terms.**
 
 - `max(B_R, B_M)` is the two-sided Hausdorff distance between boundaries. It is the boundary displacement that the private contract's rows speak of. It catches a hole or gap that closes: the hole's ideal boundary has no drawn boundary near it. That is the ST-OB3 residual, which a region Hausdorff bound cannot see.
-- `G` catches a wrong fill rule, a flipped orientation and dropped or doubled interior triangles. A boundary distance alone cannot see them, because the complement of a region has the same boundary.
+- `G` catches a wrong fill rule, a missing region and dropped interior triangles. A boundary distance alone cannot see a wrong rule, because the complement of a region has the same boundary.
+- `G` does **not** see flipped or doubled triangles. The mesh pipeline draws with cull mode none (`packages/renderer-webgpu/src/mesh-pipeline.ts`), and `M` is a union of closed triangles, so a flipped or doubled triangle covers the same set. Overlap and orientation are mesh validity, which belongs to A01. Double blending of overlapping triangles is a coverage effect, which belongs to A08.
 - When `E ≤ ε` inside `Ω`, two things hold there. First, `R ⊖ ε ⊆ M ⊆ R ⊕ ε` (erosion and dilation by a disk of radius ε), which is the stroke contract's region Hausdorff bound. Second, the boundaries are within ε of each other.
 
-**Triangle inequality.** For any third region `Z`, `E(M, R) ≤ E(M, Z) + E(Z, R)`. The boundary terms are Hausdorff distances. For `x ∈ M △ R`, either `x ∈ Z △ R`, where `dist(x, ∂R) ≤ G(Z, R)`, or `x ∈ M △ Z`, where `dist(x, ∂R) ≤ dist(x, ∂Z) + d_H(∂Z, ∂R)`. The oracle uses this inequality to bound its own error (section 4.3) and the shader-arithmetic term (section 7.2).
+**Triangle inequality.** For any third region `Z`, `E(M, R) ≤ E(M, Z) + E(Z, R)`. The boundary terms are Hausdorff distances. For `x ∈ M △ R`, either `x ∈ Z △ R`, where `dist(x, ∂R) ≤ G(Z, R)`, or `x ∈ M △ Z`, where `dist(x, ∂R) ≤ dist(x, ∂Z) + d_H(∂Z, ∂R)`.
+
+**Windowed form.** `E` is restricted to `Ω` (written `E_Ω`). The point of `∂Z` nearest a point in `Ω` may lie outside `Ω`, but within `E_Ω(M, Z)` of it. So the windowed inequality is
+
+`E_Ω(M, R) ≤ E_Ω(M, Z) + E_{Ω ⊕ ρ}(Z, R)` with `ρ = E_Ω(M, Z)`,
+
+where `Ω ⊕ ρ` is `Ω` dilated by `ρ`. The harness uses it with `Z = M*` and `ρ = β_c` (section 7.1). The oracle therefore measures `M*` against `R` on the enlarged window `Ω ⊕ 1` px, which covers every `β_c` below 1 px. A case with `β_c ≥ 1` px is UNDECIDED.
 
 **How this maps onto the target.** A case passes A04 when the certified upper bound of `E` is at most 0.25 (section 7.3). `E` is one number in physical pixels, measured after every stage of the pipeline: the kernel's curve and topology construction, the arrangement rounding, Float64-to-binary32 storage, the f32 lanes of the transform and the shader arithmetic. It is the "combined" error of A04 directly. No per-stage share is summed or checked. The three private-contract rows remain design obligations whose sum is designed to fit in 0.25, but A04 does not test the split.
 
-**What `E` does not include.** It does not include the coverage ramp's own isoline offset, which A08's Q4 bounds at 1 px. It does not include rasterizer sample snapping either: on fringe draws the visible edge comes from the fragment shader's feature distance, not from the triangle edge, and region-only draws (`fringe-work-cap`, `fringe-unsupported`) are aliased by design. The same `∂M` is measured for both. E3-Q7 asks whether to treat region-only draws differently.
+**What `E` does not include, and what stays open.**
+
+- **Coverage.** `E` excludes the coverage ramp's own isoline offset, which A08's Q4 bounds at 1 px.
+- **Rasterizer sample snapping.** This is not decided here: [E3-Q7](#11-open-questions) presents it as an explicit term with its known bound, or as an exclusion, for the user to decide.
+  - On fringe draws, the visible edge comes from the fragment shader's feature distance at the pixel center, and snapping only selects which fragments run.
+  - Region-only draws (`fringe-work-cap`, `fringe-unsupported`) are aliased by design, and their edge is the snapped triangle edge.
+  - WebGPU does not expose the subpixel precision. Vulkan's minimum `subPixelPrecisionBits` is 4, which bounds snapping by `2^-5` px per axis, about 0.044 px. Direct3D requires 8 bits, about 0.0028 px.
+- **Clipping.** Clipping of triangles with vertices outside the clip volume is implementation-defined. That is class A in [V3 section m](p3-v3-renderer-mesh-pipeline-contract.md#m-risks). Its treatment is [E3-Q11](#11-open-questions) (section 7.1).
 
 ### 3.5 E3-K5: zoom, DPR, transforms and buckets
 
@@ -182,7 +209,26 @@ The oracle's error on a case is the width `E_hi − E_lo` of its certified inter
   - **Self-intersecting cubics and crossings.** Crossings are isolated as section 4.2 says.
   - **Exact coincidence by construction.** A reversed copy, or the two sides of an exact reversal, is detected exactly and handled by exact cancellation or exact union, never by two separate approximations.
   - **Partial cubic-cubic coincidence.** It does not occur in generated cases and is excluded from named cases. If such a case is detected, the oracle reports `ORACLE-UNSUPPORTED`, which is a freeze failure (section 5.5).
-- **Work limit.** Each case has an oracle work cap: E3-U2 sets the number of cells and roots before the freeze. It is a limit on the oracle, not on the kernel. A case that exceeds it at the freeze check is `ORACLE-WORK`, a freeze failure.
+- **Work limit.** Each case has an oracle work cap: E3-U2 sets the number of cells and roots before the freeze. It is a limit on the oracle, not on the kernel.
+  - At the freeze check, which covers the ideal side only, a case that exceeds the cap is `ORACLE-WORK`, a freeze failure.
+  - At measurement time, a case that exceeds the cap against the drawn mesh is UNDECIDED. It is never dropped or passed.
+- **Oracle version.** The oracle is frozen with the corpus by its source SHA-256. Any oracle change after the freeze is a new oracle version, with its own independent review and a full re-run of the corpus.
+
+### 4.5 Proof obligations
+
+E3-U2 proves each obligation below in its review material, and pairs it with a test. The independent review of E3-U2 checks both before the freeze.
+
+| Obligation | Statement                                                                                                                                                                                                                                                                | Paired test                                                                                      |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| (a)        | Winding: the exact winding number of lines and cubics around a dyadic point, including roots at `t = 0, 1`, tangential crossings and points on a curve                                                                                                                   | Closed-form windings of the E3-C1 star and nested contours; points on vertices and on curves     |
+| (b)        | Sweep membership at stationary parameters: the sweep ranges over regular parameters only, with the limit normal at interval endpoints, per [stroke contract section 2.2](p3-b2-stroke-contract.md#22-the-stroke-region); a cusp contributes its disk, not a sweep normal | ST-F16 and ST-F19 against hand-derived membership at points next to the cusp                     |
+| (c)        | Completeness of the `∂R` portions: every boundary portion of `R` inside `Ω ⊕ 1` is found. A missed portion lowers `B_R` and `G`, so it is **unsound toward PASS**                                                                                                        | E3-PC6 and E3-PC10; a seeded defect that drops one crossing (E3-D12)                             |
+| (d)        | Offset-curve crossings and tangencies, which are not rational: the method that isolates them (interval subdivision with exact sign confirmation, or a resultant on the squared form), and its termination or `ORACLE-WORK`                                               | E3-C9 folded-band and wide-stroke rows with crossing points derived independently in closed form |
+| (e)        | Extraction of `∂M` from a non-conforming mesh: edges split at T-vertices, an edge used once after splitting is boundary, and nothing else is                                                                                                                             | E3-PC13 (a T-junction mesh); seeded defect E3-D11                                                |
+| (f)        | Overlay-face enumeration for `G`: every face of the overlay of `∂M` and the `∂R` portions is enumerated and classified once                                                                                                                                              | E3-PC4 and E3-PC5; seeded defect E3-D13                                                          |
+| (g)        | Outward-rounded intervals: every binary64 interval operation rounds outward, so every reported bound contains the true value                                                                                                                                             | Interval unit tests against BigInt evaluation at random dyadic inputs                            |
+
+The cost of this oracle is plausible only as an offline run of hours (E3-R1). It is not a CI check.
 
 ## 5. The frozen corpus
 
@@ -210,8 +256,12 @@ Counts are the draft's proposal (E3-Q9). "Named" rows take every transform of se
 | E3-C8   | Served buckets `k = 1, 2` on the named rows of E3-C1, E3-C3 and E3-C5 at transform T0 and the nine pairs                                                                                                                                                                                                                                                                                                                                       | 130 named × 2                |
 | E3-C9   | Stroke, cubics: the s2 families R1 to R6 (ST-F15, SB-9), ST-F16, ST-F16p, `ST-U4/cusp-shared-a` and `-b` (SB-8), wide strokes on curves including a width above the curvature radius (SB-5), a stroked four-cubic circle; and fill plus stroke pairs SB-10 and SB-11, measured per paint with the joint-feature identity check                                                                                                                 | 30 named, 150 generated      |
 | E3-C10  | Controls: singular `L`, an empty path, and the closed-form shapes of E3-PC10                                                                                                                                                                                                                                                                                                                                                                   | 12 named, at T0 and one pair |
+| E3-C11  | Region-only draws: 4 fills with more than 128 distinct boundary vertices (`fringe-work-cap`: a 200-gon, the AL-OB5 ring at `λ = 8`, a 4-contour star field, a 160-step staircase), and 4 fills built to be `fringe-unsupported` (a vertex with more than 3 sectors, duplicate coordinates)                                                                                                                                                     | 8 named                      |
+| E3-C12  | T-junction-heavy fills: filled polygons with interior holes and rounded contours, whose meshes have slab T-junctions, at T2 and T6 only                                                                                                                                                                                                                                                                                                        | 8 named × 2 transforms       |
 
 **Size classes.** Every generated stratum draws its physical extent class uniformly from: sub-pixel (below 1 px), small (1 to 16 px), medium (16 to 512 px) and large (512 to 8,192 px, wider than `Ω` at DPR 1). The class is reached by scaling the local geometry against the case's `σ(S)`. So the class is defined in physical pixels and is stable across zoom.
+
+**ST-U3f rows.** The ST-U3f cases in E3-C5 are expected to be rejected (`unsupported-geometry`, a known defect). While they are rejected, they are evidence for A01, not for A04 (section 6). They stay in the corpus so that a later fix moves them into the measured set.
 
 **Coverage of the ST-U8 rows.** SB-2 (the whole scene at zoom 0.01) is covered by every row at `z = 0.01`. SB-12 (non-uniform scale, rotation, shear and negative determinant on strokes) is covered by `T` on E3-C5 and E3-C9. SB-13's 256-path scene is a performance scene, so A04 takes only its 64-subpath path.
 
@@ -232,7 +282,7 @@ Translations: `t` is `0`, a snapped value (integer) or a generic binary64 value,
 
 ### 5.4 Size of v1
 
-As proposed: 196 named path rows and 1,000 generated path rows, about 25,000 cases in all. E3-Q9 sets the size.
+As proposed: 212 named path rows and 1,000 generated path rows, about 25,800 cases in all. E3-Q9 sets the size.
 
 | Part                                                                                   |      Cases |
 | -------------------------------------------------------------------------------------- | ---------: |
@@ -242,7 +292,9 @@ As proposed: 196 named path rows and 1,000 generated path rows, about 25,000 cas
 | E3-C6 (12 rows × 3 placements × 9 pairs)                                               |        324 |
 | E3-C7 (12 rows × 9 pairs)                                                              |        108 |
 | E3-C8 (130 rows × 2 offsets × 9 pairs)                                                 |      2,340 |
-| **Total**                                                                              | **25,032** |
+| E3-C11 (8 rows × 8 transforms × 9 pairs)                                               |        576 |
+| E3-C12 (8 rows × 2 transforms × 9 pairs)                                               |        144 |
+| **Total**                                                                              | **25,752** |
 
 ### 5.5 Freeze procedure and blindness
 
@@ -264,7 +316,7 @@ A case is **rejected**, and excluded from the precision statistic, when no drawn
 | Renderer state failure before a draw (V3 sections c, h) | `tolerance-range`, `packing-range`, `invalid-response`, `invalid-mesh`, `port-version`, `overlay-unsupported` |
 | Not drawable                                            | `det L = 0` (E3-C10 only); `w = 0`                                                                            |
 
-These are **measured, not rejected**: `empty`, because `M = ∅` is a drawn answer; and `fringe-work-cap` and `fringe-unsupported`, because the region still draws and `∂M` is the same.
+These are **measured, not rejected**: `empty`, because `M = ∅` is a drawn answer, measured with the membership check of E3-K2; and `fringe-work-cap` and `fringe-unsupported`, because the region still draws and `∂M` is the same (named rows in E3-C11).
 
 **Reporting.** The record lists every rejected case with its code. It reports the rejection rate per stratum, per transform, per zoom and DPR pair, and per paint.
 
@@ -274,7 +326,7 @@ These are **measured, not rejected**: `empty`, because `M = ∅` is a drawn answ
 - It is evidence for A01 (deterministic failure isolation and bounded adversarial work). The record's rejection list is an input to A01's evidence.
 - A rejected ordinary case is a gap in A02 (fill) or A03 (stroke) semantics coverage. The private contract forbids reducing the ordinary-success corpus or silently returning coarse geometry. So A04 PASS never implies A02 or A03 PASS, and an A04 record makes no A02 or A03 claim.
 - Whether a rejection rate is acceptable is A02's and A03's question, not A04's.
-- To keep "across declared transforms/zoom/DPR" honest, A04 has a coverage condition (E3-A8): every declared cell needs a measured case. A cell is fill or stroke, times a transform, times a zoom and DPR pair. A cell with no measured case makes A04 **UNVERIFIED** for that cell, not PASS (E3-Q3). Today's known stroke `work-limit` cases (ST-U8, stroke contract S7) will probably leave some stroke cells unmeasured until an outcome-changing stroke change such as E2 lands. E1 (ST-U10, #202) preserves every outcome, so it does not change this.
+- To keep "across declared transforms/zoom/DPR" honest, A04 has a coverage condition (E3-A8): every declared cell needs a measured case. A cell is fill or stroke, times a transform, times a zoom and DPR pair. A cell with no measured case makes A04 **UNVERIFIED** for that cell, not PASS. This coverage condition is an interpretation of the criterion's wording, and the user approves it under E3-Q3. Today's known stroke `work-limit` cases (ST-U8, stroke contract S7) will probably leave some stroke cells unmeasured until an outcome-changing stroke change such as E2 lands. E1 (ST-U10, #202) preserves every outcome, so it does not change this.
 
 ## 7. Measurement procedure
 
@@ -282,9 +334,12 @@ These are **measured, not rejected**: `empty`, because `M = ∅` is a drawn answ
 
 - **Kernel.** The release WASM is loaded in Node, at the pinned Node version of `package.json`, through the real `createFillMeshPort` and `createStrokeMeshPort` adapters. Its SHA-256 is recorded. This is the product artifact and the product port path, which is what D8 B4 names ("the V2 export"). Native is not measured. Native and WASM byte identity is already gated by the existing differential and identity checks (`pnpm test:geometry`), and the product never runs native. Measuring native would add a second artifact without adding A04 evidence.
 - **Renderer CPU stages.** `renderer-core`'s own bucket selection and K4 packing are called as unit tests call them. This is the product code under measurement, not part of the oracle.
-- **Shader mapping, CPU model.** For each stored point, the WGSL mapping expression is evaluated exactly over the rationals from the f32 lane values, giving `p*`. The expression is fixed by a shader-identity test that hashes the WGSL source, as P3.1l did. `β(p)` is a forward error bound for f32 evaluation of that expression. It is a standard `γ_n` bound on each multiply and add, and it holds whether or not the compiler fuses multiply and add. `β_c` is the maximum of `β(p)` over the case's points.
-- **No-flip certificate.** Each mapped triangle's orientation is certified stable under a `β_c` perturbation of its vertices, from its exact area and edge lengths. When it holds, the piecewise-affine map moving each vertex by at most `β_c` moves `∂M` by at most `β_c`. Then `E(M_gpu, R) ≤ E(M*, R) + β_c` by the triangle inequality (E3-K4), where `M*` is the mesh at `p*`. A case where the certificate fails is UNDECIDED unless E3-U4's readback covers it (E3-Q1).
-- **GPU model check.** A test-only page in headed Chrome and Edge evaluates the same WGSL mapping function for every stored point of a declared readback subset and reads the positions back. The subset is E3-C1, E3-C3, E3-C5 and E3-C9 named rows, at every transform and pair. The page is owned by the rendering track as a measurement page. Every read-back position must lie within `β(p)` of `p*`, and the browser's mesh bytes must hash equal to Node's. A position outside its box falsifies the model, and A04 is then UNVERIFIED until the model is corrected (E3-R5). This is the "later real GPU evidence" of the private contract's third row. Pixel readback is not used: pixels carry coverage (A08), not sub-pixel geometry.
+- **Shader mapping, CPU model.** For each stored point, the WGSL mapping is evaluated exactly over the rationals from the f32 lane values, giving `p*` in physical pixels. The mapping is fixed by a shader-identity test that hashes the WGSL source, as P3.1l did. `β(p)` is a forward error bound for f32 evaluation of every post-mapping stage that positions the point. It is a standard `γ_n` bound on each multiply and add, and it holds whether or not the compiler fuses multiply and add. `β_c` is the maximum of `β(p)` over the case's points. `β(p)` covers the larger of two paths:
+  - **The vertex path.** `toPhysical`, then the NDC step `x·2/W − 1` and the y flip `1 − y·2/H`, both in f32 (`meshPositionNdc`), then the viewport transform back to pixels, modelled in f32. This is the NDC round trip that P1's position rule includes ([P1 private contract](p1-private-contract.md#precision-and-rebase-contract)).
+  - **The feature path.** `toPhysical` for the EDGE and VERTEX feature points evaluated in the fragment stage, which has no NDC step.
+- **Guard band and clipping.** A triangle with a mapped vertex outside the clip volume is clipped by the GPU, and clipping is implementation-defined (class A, [V3 section m](p3-v3-renderer-mesh-pipeline-contract.md#m-risks)). A case with any mapped vertex outside the stated guard band is **UNDECIDED** unless clipping is modelled. The band and the model are [E3-Q11](#11-open-questions).
+- **No-flip certificate and conformity.** Each mapped triangle's orientation is certified stable under a `β_c` perturbation of its vertices, from its exact area and edge lengths. For a **conforming** mesh with the certificate holding, the piecewise-affine map moving each vertex by at most `β_c` moves `∂M` by at most `β_c`. So `E_Ω(M_gpu, M*) ≤ β_c`, and by the windowed inequality (E3-K4), `E_Ω(M_gpu, R) ≤ β_c + E_{Ω⊕β_c}(M*, R)`. Here `M*` is the mesh at `p*`. For a mesh with T-junctions this bound is false: a crack opened on the GPU lies inside `R`, and `B_M` scores it at its depth. The rule for such cases follows the approved option of [E3-Q10](#11-open-questions). A case where the certificate fails is UNDECIDED unless E3-U4's readback covers it (E3-Q1).
+- **GPU model check.** A test-only page in headed Chrome and Edge evaluates the same WGSL mapping function for every stored point of a declared readback subset and reads the positions back. The subset is the named rows of E3-C1, E3-C3, E3-C5, E3-C9 and E3-C12, at every transform and pair. E3-C12 lets the readback observe real crack widths at T-junctions. The page is owned by the rendering track as a measurement page. Every read-back position must lie within `β(p)` of `p*`, and the browser's mesh bytes must hash equal to Node's. The check reads back both NDC-path and feature-path positions. A position outside its box falsifies the model, and A04 is then UNVERIFIED until the model is corrected (E3-R5). The check contributes to the "later real GPU evidence" of the private contract's third row; it does not complete that evidence. Pixel readback is not used: pixels carry coverage (A08), not sub-pixel geometry.
 
 E3-Q1 records the alternatives: GPU readback for every case, or CPU only.
 
@@ -292,8 +347,10 @@ E3-Q1 records the alternatives: GPU readback for every case, or CPU only.
 
 For each measured case, the record keeps:
 
-- `E_lo` and `E_hi` from the oracle on `M*`;
+- `E_lo` and `E_hi` from the oracle on `M*`, on the window `Ω ⊕ 1`;
 - `β_c`;
+- the T-junction count and the crack bound;
+- the guard-band result;
 - **`U = E_hi + β_c`**, the certified upper bound on the drawn error;
 - **`L = max(0, E_lo − β_c)`**, the certified lower bound;
 - the case status, defined in section 7.3.
@@ -304,7 +361,13 @@ For each measured case, the record keeps:
 
 - **PASS** when `U ≤ 0.25`.
 - **FAIL** when `L > 0.25`.
-- **UNDECIDED** otherwise, after refinement to the resolution floor (E3-Q5). An UNDECIDED case is never counted as a pass.
+- **UNDECIDED** otherwise, after refinement to the resolution floor (E3-Q5). A case is also UNDECIDED when it:
+  - exceeds the oracle work cap at measurement time;
+  - has `β_c ≥ 1` px;
+  - fails the no-flip certificate without readback;
+  - has a mapped vertex outside the guard band with no clipping model.
+
+  An UNDECIDED case is never counted as a pass.
 
 **A04 verdict.**
 
@@ -342,37 +405,43 @@ A04 is a deterministic correctness measurement, not a timing measurement. [`docs
 
 Each control is a deliberate defect applied to a correct case, or a known-answer case. Each must be rejected, or for the negative controls accepted, before any corpus result counts (E3-A5).
 
-| ID      | Control                                                                                                                                                                                                                               | Must be detected by               |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| E3-PC1  | One boundary vertex of a correct mesh moved 0.26 physical px along its outward normal                                                                                                                                                 | FAIL (`B_M`)                      |
-| E3-PC2  | Negative control: the same vertex moved 0.24 px                                                                                                                                                                                       | PASS, with `0.24 ∈ [E_lo, E_hi]`  |
-| E3-PC3  | A curved case requested at `e + 3`, a coarse tolerance that V3 never sends                                                                                                                                                            | FAIL on circle and S-curve rows   |
-| E3-PC4  | One interior triangle dropped from a filled square                                                                                                                                                                                    | FAIL (`G` and `B_M`)              |
-| E3-PC5  | The fill rule flipped on the star (evenodd mesh against a nonzero case)                                                                                                                                                               | FAIL (`G`)                        |
-| E3-PC6  | Hole closing: a ring whose ideal hole is 0.4 px wide, meshed without the hole (the ST-OB3 residual)                                                                                                                                   | FAIL (`B_R`)                      |
-| E3-PC7  | One f32 lane of `A` perturbed by `2^k` ulps so that the projection error at a far-translation case is 0.3 px                                                                                                                          | FAIL                              |
-| E3-PC8  | The pan `O_m − camera` offset by 0.3 px                                                                                                                                                                                               | FAIL                              |
-| E3-PC9  | Stroke: width scaled by `1 + 0.3/r`; a kept miter replaced by a bevel; a round cap replaced by a square cap                                                                                                                           | FAIL on each                      |
-| E3-PC10 | Closed-form controls: an axis-aligned rectangle (known `E = 0`); an inscribed regular `n`-gon of a circle drawn as a mesh against the exact circle as `R` (known `E` = sagitta); an exact polygon translated by a known dyadic offset | Interval contains the known value |
-| E3-PC11 | An `empty` result for a non-empty case                                                                                                                                                                                                | FAIL (`B_R = +∞`)                 |
-| E3-PC12 | A model-check control: a read-back position replaced by `p* + 2β(p)`                                                                                                                                                                  | GPU model check fails             |
+| ID      | Control                                                                                                                                                                                                                                                                                                                                                            | Must be detected by                                                                                                                                                 |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E3-PC1  | One boundary vertex of a correct mesh moved 0.26 physical px along its outward normal                                                                                                                                                                                                                                                                              | FAIL (`B_M`)                                                                                                                                                        |
+| E3-PC2  | Negative control. Base case: a snapped axis-aligned rectangle at T0, `z = 1`, `d = 1`, whose exact mesh has `E = 0`. One boundary vertex is moved 0.24 px along its outward normal                                                                                                                                                                                 | PASS, with `0.24 ∈ [E_lo, E_hi]`                                                                                                                                    |
+| E3-PC3  | Coarse flattening, synthetic, built by the harness and not the kernel: a circle and an S-curve row replaced by inscribed chord polygons at the chord count that the `e + 3` tolerance admits. The rows are chosen so that their independent closed-form chord error is above 0.25 px (0.3 to 1 px)                                                                 | FAIL, with the closed-form error inside `[E_lo, E_hi]`                                                                                                              |
+| E3-PC4  | One interior triangle dropped from a filled square                                                                                                                                                                                                                                                                                                                 | FAIL (`G` and `B_M`)                                                                                                                                                |
+| E3-PC5  | The fill rule flipped on the star (evenodd mesh against a nonzero case)                                                                                                                                                                                                                                                                                            | FAIL (`G`)                                                                                                                                                          |
+| E3-PC6  | Hole closing: a ring whose ideal hole is 0.4 px wide, meshed without the hole (the ST-OB3 residual)                                                                                                                                                                                                                                                                | FAIL (`B_R`)                                                                                                                                                        |
+| E3-PC7  | One f32 lane of `A` perturbed by `2^k` ulps so that the projection error at a far-translation case is 0.3 px                                                                                                                                                                                                                                                       | FAIL                                                                                                                                                                |
+| E3-PC8  | The pan `O_m − camera` offset by 0.3 px                                                                                                                                                                                                                                                                                                                            | FAIL                                                                                                                                                                |
+| E3-PC9  | Stroke, at T0, `z = 1`, `d = 1`, where one local unit is one physical px: the half-width `r` raised by 0.3 local units, so each side moves 0.3 px; a kept miter replaced by a bevel on a row whose tip lies more than 0.3 px beyond the bevel line; a round cap replaced by a square cap with `r ≥ 1` px, whose corner lies `r(√2 − 1) ≥ 0.41` px outside the disk | FAIL on each                                                                                                                                                        |
+| E3-PC10 | Closed-form controls: an axis-aligned rectangle (known `E = 0`); an inscribed regular `n`-gon of a circle drawn as a mesh against the exact circle as `R` (known `E` = sagitta); an exact polygon translated by a known dyadic offset                                                                                                                              | Interval contains the known value                                                                                                                                   |
+| E3-PC11 | An `empty` result for a non-empty case                                                                                                                                                                                                                                                                                                                             | FAIL (`B_R = +∞`)                                                                                                                                                   |
+| E3-PC12 | A model-check control: a read-back position replaced by `p* + 2β(p)`                                                                                                                                                                                                                                                                                               | GPU model check fails                                                                                                                                               |
+| E3-PC13 | A synthetic T-junction mesh under T2: a square split into a two-triangle cell and a neighbour whose node lies inside the shared side                                                                                                                                                                                                                               | In `M*`: `∂M` has no spurious inner boundary and `E = 0`. The T-junction count is 1 and the crack bound is reported. The verdict follows the approved E3-Q10 option |
+| E3-PC14 | A missing mesh over a large shape: `R` covers `Ω`, and the result is `empty` (or `window-empty` with no `∂R` in `Ω`)                                                                                                                                                                                                                                               | FAIL (membership disagrees at the window point)                                                                                                                     |
 
 ### 8.2 Seeded defects in the oracle and harness
 
 Each seeded defect is a mutation that the named control or test must catch. Each is applied in a unit test, not in the committed source.
 
-| ID     | Seeded defect                                                   | Caught by                                                          |
-| ------ | --------------------------------------------------------------- | ------------------------------------------------------------------ |
-| E3-D1  | `G` term omitted                                                | E3-PC4, E3-PC5                                                     |
-| E3-D2  | `B_R` term omitted (one-sided Hausdorff)                        | E3-PC6, E3-PC11                                                    |
-| E3-D3  | Membership with the wrong fill rule                             | E3-PC5 and the E3-C1 star under both rules                         |
-| E3-D4  | Stroke sweep membership by nearest point instead of normal foot | A folded-band row of E3-C9 against a closed-form check             |
-| E3-D5  | Cusp disk omitted in the oracle                                 | ST-F16 row against the kernel's mesh (oracle FAIL)                 |
-| E3-D6  | Branch-and-bound upper bound taken at the cell center only      | E3-PC10 `n`-gon (interval misses the known value)                  |
-| E3-D7  | `β` omitted from `U`                                            | E3-PC7 near the threshold and the `β` unit test                    |
-| E3-D8  | Ideal map with `fround(z)` instead of the binary64 `z`          | A T0 `z = 0.01` row with a closed-form shape                       |
-| E3-D9  | Window `Ω` without the 2 px guard                               | An E3-C6 partial-placement row with a defect inside the guard band |
-| E3-D10 | Rejected cases silently dropped from the record                 | The record validator (counts must reconcile with the corpus)       |
+| ID     | Seeded defect                                                   | Caught by                                                                                                                                                                                                                  |
+| ------ | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E3-D1  | `G` term omitted                                                | E3-PC4, E3-PC5                                                                                                                                                                                                             |
+| E3-D2  | `B_R` term omitted (one-sided Hausdorff)                        | E3-PC6, E3-PC11                                                                                                                                                                                                            |
+| E3-D3  | Membership with the wrong fill rule                             | E3-PC5 and the E3-C1 star under both rules                                                                                                                                                                                 |
+| E3-D4  | Stroke sweep membership by nearest point instead of normal foot | A folded-band row of E3-C9 against a closed-form check                                                                                                                                                                     |
+| E3-D5  | Cusp disk omitted in the oracle                                 | A synthetic mesh for ST-F16 built by the harness with the cusp disk at a closed-form bound (oracle FAIL). The kernel's mesh is not used, because no kernel output is read before the freeze (section 5.5)                  |
+| E3-D6  | Branch-and-bound upper bound taken at the cell center only      | E3-PC10 `n`-gon (interval misses the known value)                                                                                                                                                                          |
+| E3-D7  | `β` omitted from `U`                                            | E3-PC7 near the threshold and the `β` unit test                                                                                                                                                                            |
+| E3-D8  | Ideal map with `fround(z)` instead of the binary64 `z`          | A T0 `z = 0.01` closed-form row of 8,192 px extent, run at resolution `2^-16` px. The f32-versus-f64 `z` effect there is about `5·10^-4` px, below the default `r_m = 2^-10` px, so the default resolution cannot catch it |
+| E3-D9  | Window `Ω` without the 2 px guard                               | An E3-C6 partial-placement row with a defect inside the guard band                                                                                                                                                         |
+| E3-D10 | Rejected cases silently dropped from the record                 | The record validator (counts must reconcile with the corpus)                                                                                                                                                               |
+| E3-D11 | `∂M` extracted without splitting edges at T-vertices            | E3-PC13 (a spurious inner boundary makes `B_M` positive in `M*`)                                                                                                                                                           |
+| E3-D12 | One curve crossing dropped from the `∂R` portions               | E3-C1 star and the E3-C3 crossing ellipses against closed-form boundaries                                                                                                                                                  |
+| E3-D13 | Overlay faces with holes skipped in `G`                         | E3-PC4 on a square with an interior hole                                                                                                                                                                                   |
+| E3-D14 | NDC step omitted from `β`                                       | The `β` unit test on a far-translation point                                                                                                                                                                               |
 
 ### 8.3 Fixtures
 
@@ -384,13 +453,13 @@ The corpus itself is a fixture (section 5). Named rows reuse the literal inputs 
 
 Every unit is test-only. No unit changes product source, a contract, an ABI or a dependency. Each is light tier under this contract once it is frozen, with one independent diff review. E3-U5's evidence also gets an independent evidence review.
 
-| Unit  | Content                                                                                                                                                                                                        | Files (proposed)                                                                                     |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| E3-U1 | Generator, canonical serialization, manifest, regeneration test                                                                                                                                                | `tests/geometry/e3-a04/corpus.ts`, `corpus-v1.manifest.json`, `tests/geometry/e3-a04-corpus.test.ts` |
-| E3-U2 | Oracle with exact membership, boundary portions and certified `E`; E3-PC10; seeded defects E3-D1 to E3-D6 and E3-D8; the oracle-only freeze check and freeze note                                              | `packages/geometry-reference/src/a04-region.ts`, `tests/geometry/e3-a04-oracle.test.ts`              |
-| E3-U3 | Harness: Node WASM through the ports, `renderer-core` buckets and packing, exact shader model and `β`, no-flip certificate, record writer and validator; E3-PC1 to E3-PC9 and E3-PC11; E3-D7, E3-D9 and E3-D10 | `tests/geometry/e3-a04/harness.ts`, `record.ts`, `tooling/run-e3-a04.mjs`                            |
-| E3-U4 | GPU model-check page and headed spec (Chrome, Edge); E3-PC12                                                                                                                                                   | `apps/playground/e3-a04-readback.html` and source, `tests/gpu/e3-a04-readback.spec.ts`               |
-| E3-U5 | Reference run, evidence record, independent evidence review, X1 row update                                                                                                                                     | `docs/evidence/e3-a04/…`, `d9-rendering-track.md`                                                    |
+| Unit  | Content                                                                                                                                                                                                                                                                   | Files (proposed)                                                                                     |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| E3-U1 | Generator, canonical serialization, manifest, regeneration test                                                                                                                                                                                                           | `tests/geometry/e3-a04/corpus.ts`, `corpus-v1.manifest.json`, `tests/geometry/e3-a04-corpus.test.ts` |
+| E3-U2 | Oracle with exact membership, boundary portions, conformity test and certified `E`; proof obligations (a) to (g) of section 4.5; E3-PC10 and E3-PC13; seeded defects E3-D1 to E3-D6, E3-D8 and E3-D11 to E3-D13; the oracle-only freeze check and freeze note             | `packages/geometry-reference/src/a04-region.ts`, `tests/geometry/e3-a04-oracle.test.ts`              |
+| E3-U3 | Harness: Node WASM through the ports, `renderer-core` buckets and packing, exact shader model and `β` with the NDC round trip, guard-band check, no-flip certificate, record writer and validator; E3-PC1 to E3-PC9, E3-PC11 and E3-PC14; E3-D7, E3-D9, E3-D10 and E3-D14 | `tests/geometry/e3-a04/harness.ts`, `record.ts`, `tooling/run-e3-a04.mjs`                            |
+| E3-U4 | GPU model-check page and headed spec (Chrome, Edge); E3-PC12                                                                                                                                                                                                              | `apps/playground/e3-a04-readback.html` and source, `tests/gpu/e3-a04-readback.spec.ts`               |
+| E3-U5 | Reference run, evidence record, independent evidence review, X1 row update                                                                                                                                                                                                | `docs/evidence/e3-a04/…`, `d9-rendering-track.md`                                                    |
 
 ### 9.2 Acceptance criteria
 
@@ -398,9 +467,9 @@ Every unit is test-only. No unit changes product source, a contract, an ABI or a
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
 | E3-A1 | The regenerated corpus equals the manifest's `corpusSha256`                                                                                          | Unit test id, command, pass count               |
 | E3-A2 | The oracle imports nothing from `geometry-wasm`, `renderer-core` or `renderer-webgpu`, and reads no kernel intermediate                              | Boundary check and import test                  |
-| E3-A3 | Every seeded defect E3-D1 to E3-D10 is caught by its named check                                                                                     | Unit test ids                                   |
+| E3-A3 | Every seeded defect E3-D1 to E3-D14 is caught by its named check, and every proof obligation of section 4.5 has its paired test passing              | Unit test ids; E3-U2 review record              |
 | E3-A4 | The freeze check passes, with no `ORACLE-WORK` or `ORACLE-UNSUPPORTED`, and is recorded before any kernel run                                        | Freeze note in this contract                    |
-| E3-A5 | E3-PC1 to E3-PC12 meet their expectations in the reference run, before any corpus result counts                                                      | Evidence record                                 |
+| E3-A5 | E3-PC1 to E3-PC14 meet their expectations in the reference run, before any corpus result counts                                                      | Evidence record                                 |
 | E3-A6 | The GPU model check passes in headed Chrome and Edge                                                                                                 | Browser evidence: versions, spec id, record     |
 | E3-A7 | The record validator reconciles measured, rejected, `window-empty` and UNDECIDED counts with the corpus                                              | Validator output in the record                  |
 | E3-A8 | Coverage: every declared cell (paint × transform × zoom and DPR pair) has at least one measured case; otherwise the record names the cell UNVERIFIED | Evidence record                                 |
@@ -419,7 +488,7 @@ Every unit is test-only. No unit changes product source, a contract, an ABI or a
 ## 10. Risks
 
 - **E3-R1: oracle cost.**
-  - **Cause.** Exact root isolation and certified branch-and-bound on about 25,000 cases may take hours. The AL-OB5 rings and large strokes are the heaviest.
+  - **Cause.** Exact root isolation and certified branch-and-bound on about 25,800 cases may take hours. The cost is plausible only as an offline run of hours, not as a CI check. The AL-OB5 rings and large strokes are the heaviest.
   - **Mitigation.** Grid candidates, early exit on certain FAIL, per-case work caps checked at the freeze, and an E3-Q9 size choice.
   - **Limits.** Cost is a planning risk only. It never changes the metric, the resolution floor or the threshold.
 - **E3-R2: oracle soundness.** The certified interval is only as sound as its primitives. The mitigations are E3-U2's proof obligations, an independent review of them, E3-PC10's closed forms and the seeded defects. A soundness defect found after a run invalidates that run's record: a review record says so, and the run is repeated.
@@ -427,7 +496,11 @@ Every unit is test-only. No unit changes product source, a contract, an ABI or a
   - **The threshold never changes.** A FAIL stays a FAIL: the 0.25 target, the metric and the corpus are not adjusted to pass.
   - **Reporting.** The failing cases and their strata go to the user as a remedy decision, for example a kernel or packing change under its own contract.
   - **Re-run.** A04 is re-run on the same frozen corpus, or on a new version that keeps every failing case (section 5.5).
-  - **Likely failures.** The K4 carrier's known class A limitation (far-offscreen vertices) and the T03 needle and diagonal analogs are the likeliest failures. They are stated here before any run.
+  - **Likely failures.** These are stated here before any run:
+    - the K4 carrier's known class A limitation (far-offscreen vertices);
+    - the T03 needle and diagonal analogs;
+    - collapsed sub-tolerance features. The metric of E3-Q2 (a) is discontinuous there. When a feature narrower than the tolerance collapses in the mesh, `B_R` becomes the distance from its ideal boundary to the nearest surviving drawn boundary. So a `2^-16` px gap of E3-C4, a thin hole, or a needle can score several pixels, not a fraction of the tolerance;
+    - GPU cracks at T-junctions, if E3-Q10 (a) is chosen.
 - **E3-R4: identity drift.** A04 evidence holds for the recorded operation identities, carrier, builder placement and shader hash. Each of these requires a re-run when it changes:
   - a new fill or stroke revision;
   - the K1 carrier;
@@ -439,28 +512,40 @@ Every unit is test-only. No unit changes product source, a contract, an ABI or a
 - **E3-R5: the f32 model.** If the WGSL compiler evaluates the mapping outside the `γ_n` model, E3-U4 detects it. A04 is then UNVERIFIED until `β` is corrected, or until E3-Q1 (b) is adopted for the affected cases.
 - **E3-R6: gaming by rejection.** A kernel could pass A04 by rejecting hard cases. Rejections are listed, rated and routed to A01 to A03 (section 6), and the coverage condition keeps unmeasured cells UNVERIFIED. A later run that rejects more named cases than an earlier one says so in its record.
 - **E3-R7: named rows are not blind.** They are disclosed as chosen from known-hard cases (section 5.5). The generated strata carry the blind evidence.
-- **E3-R8: the fringe-work-cap and region-only edges.** `E` measures the same `∂M` whether or not a fringe exists. Aliasing of region-only draws is not an A04 error (E3-Q7).
+- **E3-R8: the fringe-work-cap and region-only edges.** `E` measures the same `∂M` whether or not a fringe exists. Whether rasterizer snapping, which positions region-only edges, is an explicit term or a stated exclusion is the user's decision under E3-Q7.
 - **E3-R9: coverage is separate.** A04 PASS does not show that the A5 isoline lands on `∂M`. That is A08's Q4, and O02's G1 to G3 PASS does not transfer to K4 (V3 section e).
 
 ## 11. Open questions
 
-The first option of each question is the recommended one.
+The first option of each question is the recommended one, except E3-Q10, whose option letters follow the review's wording and whose recommended option is marked. Independent review round 1 also recommended these options:
+
+- Q1 (a), after the T-junction (B1) and post-mapping (B2) fixes;
+- Q2 (a), with its discontinuity stated;
+- Q3 to Q6 and Q8 (a);
+- Q7 (a), with snapping presented explicitly;
+- Q9 (a).
+
+The review did not rank Q10 to Q12, which it raised.
 
 **E3-Q1: measurement mode.**
 
-- **(a) Recommended.** CPU measurement with an exact shader model plus `β`, and a GPU readback model check on the named subset in Chrome and Edge. The core is deterministic and CI-reproducible. GPU evidence checks the model on real hardware. The cost: no-flip failures and model violations become UNDECIDED or UNVERIFIED cases.
+- **(a) Recommended.** CPU measurement with an exact shader model plus `β`, including the NDC round trip, and a GPU readback model check on the named subset in Chrome and Edge. The core is deterministic and CI-reproducible. GPU evidence checks the model on real hardware. The costs:
+  - no-flip failures, model violations and out-of-band vertices become UNDECIDED or UNVERIFIED cases;
+  - T-junction cases depend on E3-Q10.
 - **(b)** GPU readback of every case's positions, with `M` built from read-back values and no `β`. This is the strongest evidence for the tested GPUs. Its costs are a long headed run per browser and results tied to one adapter.
 - **(c)** CPU only, with no GPU. This leaves the private contract's third row without "later real GPU evidence", so A04 could not reach PASS under it.
 
 **E3-Q2: metric.**
 
 - **(a) Recommended.** `E = max(B_R, B_M, G)` as in E3-K4. It covers boundary displacement, hole closing (ST-OB3) and wrong-side area.
+  - **It is discontinuous.** When a sub-tolerance feature collapses, `B_R` jumps to the distance to the nearest surviving boundary. `2^-16` px gaps, thin holes and T03 needles can then score several pixels (E3-R3).
+  - It does not see flipped or doubled triangles, which go to A01 (E3-K4).
 - **(b)** Two-sided region Hausdorff only, the stroke construction metric. It misses hole closing, which the stroke contract assigns to B4.
 - **(c)** Symmetric-difference area per boundary length. That is an average, so it can hide a local 1 px error. It does not match "a sample that exceeds 0.25 px".
 
 **E3-Q3: rejected cases.**
 
-- **(a) Recommended.** Rejected cases are excluded and reported, and a declared cell with no measured case is UNVERIFIED (E3-A8). No new threshold is added.
+- **(a) Recommended.** Rejected cases are excluded and reported, and a declared cell with no measured case is UNVERIFIED (E3-A8). No new threshold is added. Approving (a) also approves the coverage condition E3-A8, the contract's interpretation of "across declared transforms/zoom/DPR".
 - **(b)** Require a minimum measured fraction per stratum. This adds a numeric criterion, which is a new acceptance threshold that needs the user's decision and an A04 owner update.
 - **(c)** Count every rejection as an A04 failure. This conflates A01 to A03 with A04 and would fail A04 on known `work-limit` strokes that have no precision defect.
 
@@ -482,11 +567,23 @@ The first option of each question is the recommended one.
 - **(b)** Drop the case and report the count. This is faster and leaves a silent hole, possibly at exactly the hard geometry.
 - **(c)** Keep the case as `ORACLE-INDETERMINATE` and measure the rest. This keeps the case visible, but A04 then has unmeasurable cases inside its corpus.
 
-**E3-Q7: region-only draws.**
+**E3-Q7: region-only draws and rasterizer snapping.**
 
-- **(a) Recommended.** Measure the same `∂M` for fringe and region-only draws, and state aliasing as outside A04. This keeps one geometric definition.
+Rasterizer snapping moves a triangle edge by at most `2^-(s+1)` px per axis for `s` subpixel bits. WebGPU does not expose `s`:
+
+- Vulkan's minimum `s = 4` gives `2^-5` px per axis, about 0.044 px in distance;
+- Direct3D's required `s = 8` gives about 0.0028 px.
+
+The options:
+
+- **(a) Recommended.** Measure the same `∂M` for fringe and region-only draws, and **exclude snapping explicitly** as a stated residual with its bound recorded:
+  - on fringe draws, the A5 edge comes from feature distance at pixel centers, so snapping only selects the fragments that run;
+  - region-only draws are aliased by design.
+
+  This keeps one geometric definition. The cost: A04 makes no claim about where a region-only edge's pixels flip, within up to 0.044 px.
+
 - **(b)** Exclude region-only draws (`fringe-work-cap`, `fringe-unsupported`) as rejected. Large meshes above 128 boundary vertices would then never be measured.
-- **(c)** Add a rasterizer sample-snapping allowance to `U` for region-only draws. WebGPU exposes no subpixel precision, so the allowance would be an assumption.
+- **(c)** Add an explicit snapping term `σ_snap = √2 · 2^-5` px, about 0.044 px, the Vulkan-minimum bound, to `U` for region-only draws, or for every draw. This is conservative. It uses up about 18% of the target on an assumption about hardware that WebGPU does not expose.
 
 **E3-Q8: served buckets.**
 
@@ -496,10 +593,59 @@ The first option of each question is the recommended one.
 
 **E3-Q9: corpus v1 size.**
 
-- **(a) Recommended.** About 25,000 cases (section 5.4): named rows cross every transform and pair, and generated rows take one transform at every pair. Every declared cell is covered several times.
-- **(b)** A smoke corpus first (named rows at T0, T2, T5 and T6 only, about 6,600 cases), then v1. It gives an earlier signal at the cost of two freezes.
-- **(c)** The full cross for generated rows too, about 88,000 cases. This is the strongest coverage, at about 3.5 times the oracle cost.
+- **(a) Recommended.** About 25,800 cases (section 5.4): named rows cross every transform and pair, and generated rows take one transform at every pair. Every declared cell is covered several times.
+- **(b)** A smoke corpus first (named rows at T0, T2, T5 and T6 only, about 7,000 cases), then v1. It gives an earlier signal at the cost of two freezes.
+- **(c)** The full cross for generated rows too, about 89,000 cases. This is the strongest coverage, at about 3.5 times the oracle cost.
+
+**E3-Q10: are GPU T-junction cracks A04 errors?**
+
+The kernel's stored meshes may have T-junctions (E3-K2). Under rotation or shear the GPU's per-vertex f32 mapping can open cracks up to about `2β` wide inside the region, and `B_M` would score such a crack at its depth, not its width. The contract does not decide this question.
+
+- **(a)** Model the crack width explicitly in `β`, and score cracks under `E`.
+  - This is the most literal reading of "combined geometric error".
+  - Almost every non-conforming mesh under T1, T2, T5, T6 or T7 would then FAIL A04 at the crack's depth, often many pixels, even though the crack is far narrower than a pixel. A04 would fail on watertightness, not on boundary position.
+- **(b) Recommended.** By an approved decision, route watertightness and cracks to A01 mesh validity. Measure A04 on `M*` with the per-vertex `β` (the T-vertex stays on its edge in `M*`), and report the crack bound and T-junction count separately in the record. The reasons:
+  - It keeps A04 a statement about where the boundary is.
+  - It hands the crack, which is a validity defect that can drop a pixel center, to the criterion that owns mesh validity.
+  - It hides nothing, because the crack bound is published per case.
+  - The cost: an A04 PASS then says nothing about cracks, and A01 must gain a watertightness check before P3 exit.
+- **(c)** Require the kernel to emit conforming meshes, by refinement using existing vertices as P3.1j proposed, as a rendering-track item before the A04 run. This removes the problem at its source and needs no routing decision. It is a kernel change under its own contract, with new fill revisions, the identity runs and the AL-OB5 baseline affected. It delays A04 until it lands. It can also follow (b) later as the remedy for A01.
+
+**E3-Q11: guard band and clipping.**
+
+A triangle with a vertex outside the clip volume is clipped, and clipping is implementation-defined (class A).
+
+- **(a) Recommended.** Use the viewport (NDC `[−1, 1]²`) as the guard band, and model clipping as exact clipping against the four clip planes plus an f32 interpolation bound per new vertex, added to `β`. The model is checked by readback of pixel centers next to the viewport edge on E3-C6 partial-placement rows.
+  - Partial and large cases become measurable.
+  - It adds a model that needs its own review, and that is tested only on the browsers and adapters of the run.
+  - A case whose clip bound cannot be computed, or reaches 0.25 px, is UNDECIDED.
+- **(b)** No clipping model: any case with a mapped vertex outside the viewport is UNDECIDED. This is simple and certainly sound. The large size class, E3-C6's partial placements and many medium cases at DPR 1 become UNDECIDED, so A04 stays UNVERIFIED for them until a model is written.
+- **(c)** Assume a hardware guard band of stated size within which clipping is invisible. WebGPU exposes no guard-band size, so this is an assumption, not evidence.
+
+**E3-Q12: the window `Ω`.**
+
+The contract reads "declared transforms/zoom/DPR" over what can be seen.
+
+- **(a) Recommended.** `Ω` is the viewport plus 2 physical px, P1's rule for visible points (E3-K3). Geometry outside it is not measured, and the triangle inequality uses `Ω ⊕ 1` px for intermediate terms. This matches the P1 precedent and the fringe's reach. Off-screen error is not measured, so class A far-offscreen geometry is measured only where it enters `Ω`.
+- **(b)** The viewport only, with no guard. This is smaller, and it misses geometry within 2 px outside the viewport that still sets coverage of edge pixels.
+- **(c)** The whole plane: every point of `∂R` and `∂M`. It is independent of the camera, but it measures error that never reaches a pixel. Far-offscreen class A cases would fail on invisible geometry, and the cost grows with path size.
 
 ## 12. Review and approval record
 
-- 2026-10-22: DRAFT written for independent review. No review has run yet.
+- 2026-10-22: DRAFT written for independent review.
+- 2026-10-22, independent review round 1 (PR #204): **NOT READY**, with 3 blocking items. The reviewer confirmed the sources and both readings: physical pixels, and the private-contract shares left ungated. Applied in the follow-up commit:
+  - **B1, T-junctions.** E3-K2 no longer assumes conformity. The oracle tests conformity and splits edges at T-vertices, PC13 and D11 are added, the bound of section 7.1 is restricted to conforming cases, and new question E3-Q10 is left for the user.
+  - **B2, post-mapping stages.** `β` includes the NDC round trip, an out-of-band vertex makes a case UNDECIDED unless clipping is modelled (E3-Q11), and snapping is presented explicitly in E3-Q7.
+  - **B3, `empty` and `window-empty`.** Both now check membership at one point of `Ω` (PC14).
+  - **Should-fix items.**
+    - S1: the `G` text is corrected, with overlap and orientation routed to A01 and blending to A08.
+    - S2: the windowed triangle inequality is stated.
+    - S3: the metric's discontinuity is stated in E3-Q2 and E3-R3.
+    - S4: proof obligations (a) to (g) are listed with their tests in section 4.5.
+    - S5: oracle work at measurement time and oracle versioning are defined.
+    - S6: PC2, PC3, PC9, D5 and D8 are made precise.
+    - S7: strata E3-C11 and E3-C12 are added and the ST-U3f rows are routed to A01.
+    - S8: "contributes to" the third row's GPU evidence.
+    - S9: the fringe exterior triangles are excluded from `M`.
+    - The interpretive conditions now have approval points: `Ω` in E3-Q12, and E3-A8 in E3-Q3 (a).
+  - The reviewer's question recommendations are recorded at the head of section 11.
