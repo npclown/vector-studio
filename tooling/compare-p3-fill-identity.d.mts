@@ -78,6 +78,8 @@ export interface IdentityOptions {
   tamper: string | null;
   allowTestChanges: string[];
   revisionChange: boolean;
+  /** Present (true) only when --failure-to-success was given. */
+  failureToSuccess?: boolean;
   selfTest: boolean;
 }
 export function parseArguments(args: readonly string[]): IdentityOptions;
@@ -150,3 +152,28 @@ export function validateChangedPaths(
   directory: string,
   revision: number,
 ): Promise<Map<string, { rung: string; failures: string[] }>>;
+export type OutcomeClass = 'ok' | 'path-failure' | 'internal' | 'batch' | 'other';
+export function classifyOutcome(code: string): OutcomeClass;
+export function differingFields(base: DigestEntry, branch: DigestEntry): string[];
+export interface FailureToSuccessCounts {
+  identical: number;
+  allowedChange: number;
+  fail: number;
+  internalRegression: number;
+}
+export interface FailureToSuccessInput {
+  native: { base: Map<string, DigestEntry>; branch: Map<string, DigestEntry> };
+  wasm: { base: Map<string, DigestEntry>; branch: Map<string, DigestEntry> };
+}
+export function classifyFailureToSuccess(input: FailureToSuccessInput): {
+  counts: FailureToSuccessCounts;
+  perLayer: { native: FailureToSuccessCounts; wasm: FailureToSuccessCounts };
+  allowed: { layer: string; case: string; baseCode: string; branchCode: string }[];
+  fails: { layer: string; case: string; reason: string }[];
+  internalRegressions: { layer: string; case: string; reason: string }[];
+  failures: string[];
+  pass: boolean;
+};
+export function failureToSuccessTamperChecks(
+  input: FailureToSuccessInput,
+): { case: string | null; detected: boolean }[];
