@@ -1,6 +1,8 @@
 # D9: post-MVP 1 rendering and visualization tracks (proposal)
 
-Status: DRAFT, 2026-10-22. Pending independent review and user approval; review round 1 was NOT READY and its findings are applied, see [Review round 1](#review-round-1). Nothing here is in force until the user approves it in chat. It is a full-tier process and ownership proposal. It changes no requirement, no threshold, no acceptance criterion, no milestone order and no milestone gate.
+Status: APPROVED 2026-10-22 by the user (independent review round 2 READY WITH FOLLOW-UPS, follow-ups applied). It takes effect when the MVP 1 closure PR #197 merges and the tag `mvp-1` is placed; see [User decisions, 2026-10-22](#user-decisions-2026-10-22).
+
+Status history (kept as written): DRAFT, 2026-10-22. Pending independent review and user approval; review round 1 was NOT READY and its findings are applied, see [Review round 1](#review-round-1). Nothing here is in force until the user approves it in chat. It is a full-tier process and ownership proposal. It changes no requirement, no threshold, no acceptance criterion, no milestone order and no milestone gate.
 
 ## Decision and authority
 
@@ -151,6 +153,33 @@ D9-Q6 is retired; see the resolved note below. Each question lists the recommend
 The single-Primary question raised in review is answered in [Primary and lanes](#primary-and-lanes), and D9 no longer asks it.
 
 **Resolved note (formerly D9-Q6).** The user's 2026-10-22 decision is the product-level decision that the OB5-U3 entry sends to the user under AL-Q6 (a) of the [fill ladder contract](p3-alt-a1-fill-ladder-contract.md#7-decisions-for-the-user). It confirms Alt-A1 (`fill-v0+r2`) as the product fill direction within the measured scope only and names the unmeasured scope as later measurements. E5 is those measurements. ST-U9 has no lettered options in the documents; its sub-options come from the ST-U3b recommendation of the [P3 plan](p3-fill-stroke-meshes.md#b2-st-u3b-scaling-probe).
+
+## User decisions, 2026-10-22
+
+The user approved D9 in chat on 2026-10-22 and answered the open questions as follows. Each answer is the recommended option (a).
+
+| Question | Answer | Option text                                                                                                                                                                               |
+| -------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D9-Q1    | (a)    | Track plan documents `docs/plans/d9-rendering-track.md` and `docs/plans/d9-visualization-track.md`                                                                                        |
+| D9-Q2    | (a)    | The rendering track plan carries the P3 exit evidence (A01-A08), with the visualization track supplying the headed pages for A07 and A08; the Primary accepts the exit                    |
+| D9-Q3    | (a)    | A weekly integration checkpoint on a fixed day, with the full GPU specs, a demo and a baseline comparison                                                                                 |
+| D9-Q4    | (a)    | The visualization track's first feature set is path appearance editing on the existing P3 surface (interactive editing of fill and stroke parameters), as restated in D9-Q4 above         |
+| D9-Q5    | (a)    | The Track A and Track B names from D8 are retired for post-MVP 1 work; D8 history keeps them and gets a status note                                                                       |
+| D9-Q7    | (a)    | The first ST-U9 alternative is listed as candidate E2-alt (raise `STROKE_V0_LIMITS` or add a swept crossing collector above 64 edges) and decided in the ST-U9 addendum                   |
+| D9-Q8    | (a)    | `tests/`, `tooling/`, the root `package.json`, `pnpm-lock.yaml`, `.prettierignore` and CI are shared: each change is named in the PR Gate line, and either track's reviewer may review it |
+
+**Effect.** D9 takes effect when the MVP 1 closure PR #197 merges and the tag `mvp-1` is placed. Until then the D8 structure applies.
+
+**Amendments follow in separate PRs.** This approval edits no other document. The amendments in the table above are made in their own PRs:
+
+- `AGENTS.md`: the PR Gate checklist line ("track; packages touched; shared surface changed? (y/n → full tier)"), the read-order and ownership entries for the two track plans, and the two-lane model;
+- `ARCHITECTURE.md`: only if package ownership by track is to be stated there, as the table says;
+- `docs/prototype-plan.md`: the "Current position" status line for P3;
+- `docs/plans/p3-d8-parallel-tracks.md`: the dated status note that D9 supersedes the Track A and B split after MVP 1;
+- `docs/plans/p3-b2-stroke-contract.md`: the ST-U9 addendum, which is the E1 and E2 item itself;
+- the two new plan files, `docs/plans/d9-rendering-track.md` and `docs/plans/d9-visualization-track.md`.
+
+`docs/plans/p3-fill-stroke-meshes.md` and `docs/validation.md` follow the same table: the first when the track plans exist, the second only if the checkpoint becomes a validation layer.
 
 ## Risks
 
