@@ -34,6 +34,7 @@ Amended 2026-10-20 (revised 2026-10-21 after the PR #176 reviews), ST-A0 amendme
 - **M1, κ.** The plan's ST-U4 ST-G4 text and the code agree: `κ = 2^-52/(leaf parameter length)`, computed as `UNIT * 2.0 / (split_length * SLACK_DOWN)` at `packages/geometry-wasm/kernel/src/stroke_cubic.rs:511-514` with `UNIT = 2^-53`. The contract note's `κ = 2^-52/(its parameter length)` is the same value.
 - **M2, `t̃`.** The ST-U4 note above is labelled **Algorithm change (§4.6)**; it is not a guard change.
 - **S7, cubic `work-limit` findings.** Recorded only: the cubic findings (the canonical cusp at `e = −8` failing, R5 failing at zoom 1, 64 square-capped line subpaths exhausting `max_work`, and the resulting mostly-`work-limit` P3 stress scene) were **escalated to the user in chat on 2026-10-20 as the pending ST-U9 decision**. The [plan](p3-fill-stroke-meshes.md#b2-st-a0-contract-amendments) names that pending decision and the [ST-U3b recommendation](p3-fill-stroke-meshes.md#b2-st-u3b-scaling-probe) carries a pointer to the cubic fixtures. This amendment decides nothing about them.
+- **S7 user decision, 2026-10-22 (appended note; no frozen text changes).** The pending ST-U9 decision is answered in chat as: deferred (chat option d). MVP 1 keeps the notice-and-not-drawn behavior for `work-limit` strokes. ST-U9 becomes a rendering-track item after D9, in this order: early abort when failure is certain, then the family-B fast-rung contract (§12.1 ST-U9). No threshold or frozen text changes. See the [MVP 1 closure record](p3-fill-stroke-meshes.md#mvp-1-closure-record-2026-10-22).
 
 Amended 2026-10-21 by the [ST-U4 cusp shared triple follow-up](p3-fill-stroke-meshes.md#b2-st-u4-cusp-shared-triple-review-follow-up) (ST-U4 post-merge review SF1), restoring §4.2 and bumping the §7.1 identity:
 
@@ -848,7 +849,7 @@ Each PR follows the `AGENTS.md` description format, states `NOT RUN` with a reas
 
   - Amended 2026-10-21: ST-OB5 is discharged by the ST-U7 addendum (frozen 2026-10-21) and ST-U7c/d. The fill fringe under the stroke at `0 < o < 1` is handled by the joint fill draw (addendum §4.4).
 
-- **ST-OB6.** ST-U9, conditional on ST-U3b and the user.
+- **ST-OB6.** ST-U9, conditional on ST-U3b and the user. Update 2026-10-22: the user deferred it (chat option d); it is a rendering-track item after D9, early abort when failure is certain first, then the family-B fast-rung contract (see the S7 notes in the ST-A0 amendment above).
 - **ST-OB7.** The deferred tighter regular-stroke bound stays deferred unless ST-U4's work limits or B4 show the need (B2-Q7).
 - **ST-OB8.** Dashes, in the later appearance plan.
 
