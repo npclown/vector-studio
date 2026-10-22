@@ -6,9 +6,9 @@ Ownership: the packages and pages listed in [D9, visualization track](d9-post-mv
 
 ## Status index
 
-| Item | Subject                                            | Tier                                                    | State                                                              |
-| ---- | -------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------ |
-| V-1  | Path appearance editing on the existing P3 surface | Full (user-visible behavior, AGENTS.md change workflow) | [contract](viz-v1-path-appearance-contract.md) in review (PR #200) |
+| Item | Subject                                            | Tier                                                    | State                                                                                            |
+| ---- | -------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| V-1  | Path appearance editing on the existing P3 surface | Full (user-visible behavior, AGENTS.md change workflow) | contract approved ([contract](viz-v1-path-appearance-contract.md), PR #200); next implementation |
 
 ## V-1: path appearance editing
 
