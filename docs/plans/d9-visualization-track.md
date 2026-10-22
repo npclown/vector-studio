@@ -61,7 +61,7 @@ Scope: a playground page with a text area for the `d` data of one SVG path, pars
 
 Added 2026-10-22. Source: [D9-Q2 (a)](d9-post-mvp1-tracks-proposal.md#user-decisions-2026-10-22), chosen by the Primary under the user's standing instruction of 2026-10-22.
 
-Scope: a playground page mixing P1 primitives and P3 paths in a defined paint order, with ordered integration probes, add, replace and remove churn observed through the published statistics, and latest-scene device recovery induced with `WebGpuBackend.destroyDeviceForTesting()`. It supplies headed functional evidence for the A07 row of the [P3 exit evidence index](d9-rendering-track.md#p3-exit-evidence-index-x1); what it evidences and what remains are in the [V-3 contract](viz-v3-a07-integration-contract.md#12-what-v-3-evidences-of-a07-and-what-remains), with its acceptance criteria, validation and open questions V3-Q1 to V3-Q10. No product code starts until the contract is approved.
+Scope: a playground page mixing P1 primitives and P3 paths in a defined paint order, with ordered integration probes, add, replace and remove churn observed through the published statistics, and latest-scene device recovery induced with `WebGpuBackend.destroyDeviceForTesting()`. It supplies headed functional evidence for the A07 row of the [P3 exit evidence index](d9-rendering-track.md#p3-exit-evidence-index-x1); what it evidences and what remains are in the [V-3 contract](viz-v3-a07-integration-contract.md#12-what-v-3-evidences-of-a07-and-what-remains), with its acceptance criteria, validation and open questions VZ3-Q1 to VZ3-Q10. No product code starts until the contract is approved.
 
 ## V-4: A08 headed corpus page (candidate)
 
