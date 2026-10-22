@@ -59,7 +59,7 @@ By D9-Q2 (a) this plan carries the evidence index for the P3 exit gate. The visu
 | A04 | None yet          | TODO; depends on E3                            |
 | A05 | None yet          | TODO                                           |
 | A06 | None yet          | TODO                                           |
-| A07 | None yet          | TODO; headed page from the visualization track |
+| A07 | None yet          | TODO; headed page from the visualization track; A07 partial (V-3 evidence): [V-3 implementation evidence](d9-visualization-track.md#v-3-implementation-evidence-2026-10-23), PASS decision at the P3 exit review after C03-C05 |
 | A08 | None yet          | TODO; headed page from the visualization track |
 
 ## Evidence rules
