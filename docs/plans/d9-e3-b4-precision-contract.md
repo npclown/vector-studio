@@ -29,6 +29,8 @@ The user approved this contract in chat on 2026-10-22 and answered every open qu
 
 **Effect.** This contract is in force as approved. Any change needs a dated amendment and the user's approval. The next step is unit E3-U1 (generator, manifest and the corpus freeze path), followed by E3-U2 and the oracle-only freeze check of section 5.5.
 
+**Amendment in review.** The [E3-U1 corpus annex, 2026-10-22](#13-e3-u1-corpus-annex-2026-10-22) (section 13) is a DRAFT. It makes section 5 executable and changes no criterion, threshold or user decision.
+
 **Evidence label.** Until the run under this contract has produced an accepted evidence record, every fill and stroke result keeps the label that precision is **UNVERIFIED** against the 0.25 physical-pixel target, as [D8](p3-d8-parallel-tracks.md#rules) requires.
 
 **Identifiers.** IDs in this contract use the prefix **E3-**: definitions E3-K1 to E3-K6, corpus strata E3-C*, positive controls E3-PC1 to E3-PC14, seeded defects E3-D1 to E3-D14, units E3-U1 to E3-U5, acceptance E3-A1 to E3-A9, risks E3-R1 to E3-R9 and open questions E3-Q1 to E3-Q12.
@@ -710,3 +712,370 @@ The contract reads "declared transforms/zoom/DPR" over what can be seen.
   - **F6.** Under E3-Q10 (b), A04 is defined on the crack-closed region, with the proof that `E(M_gpu,closed, M*) ≤ β_c`.
   - The round 2 ranking of Q10 to Q12 is recorded at the head of section 11.
 - 2026-10-22: **APPROVED by the user** in chat, with the answers of [User decisions, 2026-10-22](#user-decisions-2026-10-22), including explicit approval of the A01 amendment (E3-Q10 (b)).
+
+## 13. E3-U1 corpus annex, 2026-10-22
+
+Status: DRAFT, 2026-10-22, for independent review. Under the user's standing instruction of 2026-10-22 (take the recommended option without asking), every choice below picks the recommended option, and the Primary records the annex as accepted after the independent review. This annex makes section 5 executable for unit E3-U1. It changes no criterion, threshold or user decision. Where section 5 named a family, a count or a construction that cannot be executed as written, the annex says so and gives the executable form. Section 5's text above is unchanged; where the two differ, this section governs.
+
+### 13.1 Decisions taken under the standing instruction
+
+Each line below is decided under the user's standing instruction of 2026-10-22 (recommended option). It gives the alternatives and the reason in one line.
+
+| ID     | Decision                                                                                                                             | Alternatives and reason                                                                                                                                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E3-N1  | C7 bucket edge: `L = s·I` with `s = RD(2^(−3−e₀) / (d·z))`, rounded toward zero to binary64 (section 13.6)                           | Exact edges only at attainable pairs, or nearest-representable `s`. RN can land above the edge and move the case to bucket `e₀ − 1`, so RD keeps the most edge coverage |
+| E3-N2  | Named counts are restated from the enumeration: C5 has 79 rows, not 60; every other named stratum keeps its count                    | Trim C5 to 60. That would drop fixtures that section 5.2 names, so the count follows the list                                                                           |
+| E3-N3  | The depth-positive star and zero-closure rows move from C1 to C3                                                                     | Keep them in C1. They contain a cubic arch, and C1 is lines only                                                                                                        |
+| E3-N4  | C7 takes its stroke rows from C9, not C5                                                                                             | Use lines from C5. C5 has no curve, and C7 needs curved rows                                                                                                            |
+| E3-N5  | ST-U3f gives 3 geometry rows: `chev-1.40625`, `rev-4/3-3-1` and `rev-4/3-1-7`                                                        | Six rows. The "five `λ = 4/3` turns" are two geometries at several `e`, and `e` comes from the camera here                                                              |
+| E3-N6  | ST-F16 and ST-F16p are one row                                                                                                       | Two rows. They share the curve and width and differ only in `e`, which the camera sets                                                                                  |
+| E3-N7  | Gaps in C4 are local units, equal to physical px at T0, `z = 1`, `d = 1`                                                             | Physical gaps per case. That would make a named row's geometry depend on the camera                                                                                     |
+| E3-N8  | Seeds: C1 `1`, C2 `0x12345678`, C3 `0x9e3779b9`, and C5 then C9 on `0xdeadbeef` as one stream                                        | A fifth seed. Only four `P2_CORPUS_SEEDS` exist, and one shared stream keeps C5 and C9 reproducible                                                                     |
+| E3-N9  | Generated shapes use no trigonometry; sizes scale by exact powers of two; widths are powers of two divided by `d·z`                  | Trig and `Math.pow`. They are not specified as correctly rounded, so `corpusSha256` could differ across engines                                                         |
+| E3-N10 | Every irrational-derived constant enters the generator as a hex literal table, with a test that re-derives it on the pinned Node     | Compute at generation, which is engine-dependent                                                                                                                        |
+| E3-N11 | Camera: centered on the binary64 control-point bounding box, not expanded for stroke width, snapped to the `2^-8` document-unit grid | An expanded or exact region box. The camera needs only a deterministic anchor, and a symmetric expansion does not move the center                                       |
+| E3-N12 | The total becomes **27,462 cases**, +1,710 (+6.6%) over 25,752                                                                       | Trim to 25,752. The full list stays within 10% of Q9 (a)'s "about 25.7k", so it is kept                                                                                 |
+
+### 13.2 Case schema
+
+One JSON object per case. Keys are sorted at every level, with no whitespace and LF line ends (section 5.1). Every binary64 value is its 16-digit lower-case hex bit pattern, written `h(x)` here. Integers are JSON integers.
+
+| Key            | Value                                                                                                                                                                                         |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `camera`       | `{"c": [h(cx), h(cy)], "dpr": h(d), "zoom": h(z)}`. `c` is the world point at the surface origin (P1 frame)                                                                                   |
+| `corpus`       | `"a04-corpus/v1"`                                                                                                                                                                             |
+| `id`           | `"<stratum>/<row>/<transform>/z<zoom>-d<dpr>/<placement>/k<offset>"`, for example `"C1/s04-I/T2/z0.01-d3/center/k0"`. A generated row is `g` and a four-digit draw index, for example `g0123` |
+| `index`        | Global position in generation order, from 0                                                                                                                                                   |
+| `joint`        | `null`, or `{"group": "<page node id>", "role": "fill" \| "stroke"}` for SB-10 and SB-11 rows                                                                                                 |
+| `opacity`      | `h(1)`; SB-11 rows `h(0.5)`                                                                                                                                                                   |
+| `paint`        | Fill: `{"kind": "fill", "rule": "nonzero" \| "evenodd"}`. Stroke: `{"cap": …, "join": …, "kind": "stroke", "miterLimit": h(L), "width": h(w)}`                                                |
+| `path`         | `{"points": [h(x0), h(y0), …], "verbs": "ML…Z"}`. Verbs `M`, `L`, `C`, `Z`. `M` and `L` take one point, `C` three and `Z` none                                                                |
+| `placement`    | `"center"`, `"partial"`, `"far"` or `"pan"` (section 13.7)                                                                                                                                    |
+| `row`          | The row id from the tables below, with the grid suffix `-I` or `-Q` for C1, or `g<draw>`                                                                                                      |
+| `servedOffset` | `0`; `1` or `2` in E3-C8 only                                                                                                                                                                 |
+| `sizeClass`    | `null` for named rows; `"sub"`, `"small"`, `"medium"` or `"large"` for generated rows                                                                                                         |
+| `source`       | The source id (fixture, page node or test) of a named row; `"generated:<seed hex>:<draw>"` for a generated row                                                                                |
+| `stratum`      | `"C1"` to `"C12"`                                                                                                                                                                             |
+| `transform`    | `"T0"` to `"T7"`, or `"edge"` (E3-C7)                                                                                                                                                         |
+| `viewport`     | `[640, 360]`, CSS px                                                                                                                                                                          |
+| `world`        | `{"l": [h(a), h(b), h(c), h(d)], "t": [h(tx), h(ty)]}` with `L = [[a, b], [c, d]]`, which maps `(x, y)` to `(a·x + b·y, c·x + d·y)`                                                           |
+
+**Generation order.**
+
+1. Strata C1, C2, C3, C4, C5, C9, C10, C11, C12, C6, C7, C8.
+2. Within a stratum: named rows in table order, then generated rows in draw order.
+3. Within a row: transforms T0 to T7 (or the stratum's subset), then the nine pairs, zoom outer (0.01, 1, 64) and DPR inner (1, 2, 3).
+4. E3-C6 iterates row, placement (partial, far, pan), pair. E3-C8 iterates row, offset (1, 2), pair.
+
+A named row has placement `center`, offset 0 and `t = (0, 0)` unless its table says otherwise.
+
+### 13.3 Transforms
+
+The entries of `world.l`, frozen as hex, not computed at generation:
+
+| ID  | `a`                | `b`                | `c`                | `d`                |
+| --- | ------------------ | ------------------ | ------------------ | ------------------ |
+| T0  | `3ff0000000000000` | `0000000000000000` | `0000000000000000` | `3ff0000000000000` |
+| T1  | `3febb67ae8584cab` | `bfdfffffffffffff` | `3fdfffffffffffff` | `3febb67ae8584cab` |
+| T2  | `3fe97c4efd13afa3` | `bfe35a03c56a1eee` | `3fe35a03c56a1eee` | `3fe97c4efd13afa3` |
+| T3  | `4004000000000000` | `0000000000000000` | `0000000000000000` | `3fd8000000000000` |
+| T4  | `3ff0000000000000` | `3fe0000000000000` | `0000000000000000` | `3ff0000000000000` |
+| T5  | `bfe97c4efd13afa3` | `3fe35a03c56a1eee` | `3fe35a03c56a1eee` | `3fe97c4efd13afa3` |
+| T6  | `3fffdb62bc589b8c` | `3fe899a15250cff3` | `3ff83084b6c4a6aa` | `3ff0df912ad60444` |
+| T7  | `3ff0000000000000` | `0000000000000000` | `0000000000000000` | `3f30000000000000` |
+
+- **T1** holds `cos 30°` and `sin 30°` as one V8 run returned them. The sine is `0.49999999999999994`: this is the intended "exact-looking rotation with inexact entries".
+- **T5** is `diag(−1, 1)·T2`, exact.
+- **T6** is the binary64 product `(T2·T3)·T4`, evaluated left to right.
+- **Width exponent.** `ℓ_T` of section 13.5 is 1 for T3 and T6, and 0 for the others.
+
+Zoom is binary64 `0.01` (`3f847ae147ae147b`), `1` or `64`; DPR is `1`, `2` or `3`.
+
+### 13.4 Named rows
+
+**Conventions for all named-row tables.**
+
+- **Units and stroke defaults.** Coordinates are local units. A stroke row gives `w`, cap, join and miter limit `L`; the defaults are butt, miter, `L = 4`.
+- **Coverage.** Every named row runs at T0 to T7 and the nine pairs (72 cases). The exceptions are E3-C10 (T0, pair (1, 1)) and E3-C12 (T2 and T6).
+- **KAPPA.** `KAPPA = 0.5522847498307936` (`3fe1ac5111534a23`).
+- **Page helpers.** `circle(cx, cy, r)` and `chevron(h, len, apexY)` are the helpers of `apps/playground/src/p3-b2-strokes-scene.ts`, copied by value. `circle` needs only binary64 basic operations and is evaluated at generation. `chevron` needs sine and cosine, so its vertices come from a hex table (E3-N10).
+- **Orientation.** "Reversed" means the point order is reversed (a clockwise contour).
+- **Order within a table line.** When one line expands to several rows, the rows are numbered in the order the factors are listed, with the first factor outermost. In C1 the grid is innermost: `s01-I`, `s01-Q`, `s02-I` and so on.
+
+**E3-C1, fill, lines, snapped: 40 rows.** Grid `I` uses the listed integers. Grid `Q` adds `(37/256, 91/256)` to every point. The rule is nonzero unless the row names one.
+
+| Rows    | Shape                                                                                                                                                                               | Grids | Count |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | ----: |
+| s01     | Rectangle `(0,0) (16,0) (16,8) (0,8)`                                                                                                                                               | I, Q  |     2 |
+| s02     | Triangle `(0,0) (16,0) (4,12)`                                                                                                                                                      | I, Q  |     2 |
+| s03     | Concave L `(0,0) (16,0) (16,4) (4,4) (4,12) (0,12)`                                                                                                                                 | I, Q  |     2 |
+| s04–s05 | Pentagram `(0,−10) (6,8) (−10,−3) (10,−3) (−6,8)`; s04 nonzero, s05 evenodd                                                                                                         | I, Q  |     4 |
+| s06–s07 | Nested squares of side 24, 16 and 8 at the origin: counter-clockwise, reversed, counter-clockwise; s06 nonzero, s07 evenodd                                                         | I, Q  |     4 |
+| s08     | Square of side 16 with a reversed square hole of side 8, both centered                                                                                                              | I, Q  |     2 |
+| s09     | Collinear same-direction overlap: rectangles `(0,0)–(16,8)` and `(8,0)–(24,6)`, both counter-clockwise                                                                              | I, Q  |     2 |
+| s10     | Coincident opposite edges: rectangles `(0,0)–(16,8)` and `(16,0)–(32,8)`, both counter-clockwise                                                                                    | I, Q  |     2 |
+| s11     | Rectangle `(0,0)–(16,8)` plus the zero-area contour `(20,0) (28,0) (20,0)`                                                                                                          | I, Q  |     2 |
+| s12     | Pinch figure-eight `(0,0) (8,8) (16,0) (16,16) (8,8) (0,16)`                                                                                                                        | I, Q  |     2 |
+| s13     | Comb `(0,0) (32,0) (32,16) (28,16) (28,4) (24,4) (24,16) (20,16) (20,4) (16,4) (16,16) (12,16) (12,4) (8,4) (8,16) (4,16) (4,4) (0,4)`                                              | I, Q  |     2 |
+| s14     | Rectangle with a collinear mid-edge vertex `(0,0) (8,0) (16,0) (16,8) (0,8)`                                                                                                        | I, Q  |     2 |
+| s15–s16 | Winding 2: counter-clockwise squares `(0,0)–(16,16)` and `(8,8)–(24,24)`; s15 nonzero, s16 evenodd                                                                                  | I     |     2 |
+| s17–s20 | Needle `(0,0) (A,0) (0,1)`, `A = 10^3, 10^4, 10^5, 10^6`                                                                                                                            | I     |     4 |
+| s21–s26 | T03 analogs at scale 1, as in `tests/geometry/extent-t01/synthetic.ts`: `TRI` `(−64,0) (2^k,0) (−64,64)` and `RECT` `(−64,0) (2^k,0) (2^k,2^(k−2)) (−64,2^(k−2))`, `k = 24, 32, 40` | I     |     6 |
+
+A rectangle `(x0,y0)–(x1,y1)` is `(x0,y0) (x1,y0) (x1,y1) (x0,y1)`.
+
+**E3-C3, fill, cubics: 30 rows.** The rule is nonzero unless the row names one.
+
+| Rows    | Shape                                                                                                                                                                              | Count |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----: |
+| c01     | `circle(0, 0, 8)`                                                                                                                                                                  |     1 |
+| c02     | Ellipse: every point of `circle(0, 0, 1)` multiplied by `(12, 4)`                                                                                                                  |     1 |
+| c03     | Closed S `M(0,0) C(4,8)(8,−8)(12,0) L(12,−6) C(8,−14)(4,2)(0,−6) Z`                                                                                                                |     1 |
+| c04–c05 | Self-intersecting loop `M(0,0) C(12,12)(−4,12)(8,0) Z`; nonzero, evenodd                                                                                                           |     2 |
+| c06     | Exact cusp `M(0,0) C(8,8)(0,8)(8,0) Z`                                                                                                                                             |     1 |
+| c07–c09 | Near-cusps: c06 with the second control's `x` set to `2^-10`, `2^-20` and `2^-40`                                                                                                  |     3 |
+| c10     | Inflection `M(0,0) C(4,8)(8,−8)(12,0) L(12,−4) L(0,−4) Z`                                                                                                                          |     1 |
+| c11–c12 | Crossing ellipses: c02 plus `circle(0, 0, 1)` multiplied by `(4, 12)`, both counter-clockwise; nonzero, evenodd                                                                    |     2 |
+| c13     | `circle(0, 0, 12)` with the reversed holes `circle(−5, 0, 3)` and `circle(5, 0, 3)`                                                                                                |     1 |
+| c14–c19 | AL-OB5 rings: path 0 of OB5-W2, OB5-W4 and OB5-W8, then of the same cell specs with `snapped: false` (W2U, W4U, W8U), from `generateCellPaths` in `tests/geometry/p3-b0/corpus.ts` |     6 |
+| c20–c23 | `depth-positive/star` and `depth-positive/zero-closure` from `tests/geometry/native-depth-positive-cubic/fixtures.ts`; nonzero, evenodd (moved from C1, E3-N3)                     |     4 |
+| c24     | Quarter wedge `M(0,0) L(8,0) C(8,8·KAPPA)(8·KAPPA,8)(0,8) Z`                                                                                                                       |     1 |
+| c25     | Degenerate cubic `M(0,0) C(0,0)(8,8)(8,8) L(0,8) Z`                                                                                                                                |     1 |
+| c26     | D-shape `M(0,0) L(0,16) C(12,16)(12,0)(0,0) Z`                                                                                                                                     |     1 |
+| c27     | `circle(0, 0, 4096)`                                                                                                                                                               |     1 |
+| c28–c29 | Concentric `circle` radii 12, 8 reversed, and 4; nonzero, evenodd                                                                                                                  |     2 |
+| c30     | Double cusp `M(0,0) C(8,8)(0,8)(8,0) C(16,8)(8,8)(16,0) L(16,−4) L(0,−4) Z`                                                                                                        |     1 |
+
+c14–c23 are copied as hex literals. A unit test checks them against `generateCellPaths` and against the fixture module.
+
+**E3-C4, near-coincidence, fill: 24 rows.** `g ∈ {2^-3, 2^-8, 2^-16}` in local units (E3-N7). `g = 0` is exact touching.
+
+| Rows    | Shape                                                                                                        | Gaps    | Count |
+| ------- | ------------------------------------------------------------------------------------------------------------ | ------- | ----: |
+| n01–n04 | Facing rectangles `(0,0)–(16,8)` and `(0,8+g)–(16,16+g)`                                                     | 3 and 0 |     4 |
+| n05–n08 | Oblique facing triangles `(0,0) (16,0) (0,16)` and `(16+g,g) (16+g,16+g) (g,16+g)`; the normal gap is `g·√2` | 3 and 0 |     4 |
+| n09–n11 | `circle(0, 8+g, 8)` over the rectangle `(−16,−8)–(16,0)`                                                     | 3       |     3 |
+| n12–n14 | `circle(0, 0, 8)` and `circle(16+g, 0, 8)`                                                                   | 3       |     3 |
+| n15–n17 | Overlap strip: rectangles `(0,0)–(16,8)` and `(0,8−g)–(16,16)`                                               | 3       |     3 |
+| n18–n20 | Thin wall: square `(0,0)–(16,16)` with the reversed hole `(g,4)–(12,12)`                                     | 3       |     3 |
+| n21–n23 | Thin hole: square `(0,0)–(16,16)` with the reversed hole `(4,4)–(4+g,12)`                                    | 3       |     3 |
+| n24     | Apex contact: triangles `(0,0) (16,0) (8,8)` and `(16,16) (0,16) (8,8)`                                      | 0       |     1 |
+
+**E3-C5, stroke, lines: 79 rows (E3-N2).** `ZIGZAG` is the page's `(−50,22) (−18,−22) (14,22) (46,−22)`.
+
+| Rows    | Source                                                                                                                                                                              | Count |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----: |
+| l01–l03 | ST-F1 (butt), ST-F2 (square), ST-F3 (round)                                                                                                                                         |     3 |
+| l04–l06 | ST-F4: miter `L = 2`, bevel, round                                                                                                                                                  |     3 |
+| l07     | ST-F5: miter `L = 1.25`                                                                                                                                                             |     1 |
+| l08–l10 | ST-F6: miter `L = 4`, bevel, round                                                                                                                                                  |     3 |
+| l11–l12 | ST-F7 and ST-F9, butt (expected `empty`)                                                                                                                                            |     2 |
+| l13–l15 | ST-F8: butt, round, square                                                                                                                                                          |     3 |
+| l16–l18 | ST-F10 (miter `L = 2`), ST-F11 (miter `L = 2`), ST-F12 (bevel)                                                                                                                      |     3 |
+| l19–l20 | ST-F13 and ST-F13x (miter `L = 4`)                                                                                                                                                  |     2 |
+| l21–l22 | ST-F14 (a) and (b)                                                                                                                                                                  |     2 |
+| l23     | ST-F21                                                                                                                                                                              |     1 |
+| l24–l25 | ST-F24 with `L = 2^30` and with `L = 4`                                                                                                                                             |     2 |
+| l26–l37 | ST-F25: three turns × miter `L ∈ {1, Math.SQRT2 (3ff6a09e667f3bcd), 4, 100}`, `w = 2`                                                                                               |    12 |
+| l38     | ST-U4/tip-ratio                                                                                                                                                                     |     1 |
+| l39–l44 | SB-1: `ZIGZAG`, `w ∈ {2^-6, 2^-2, 1}` × (butt, miter) and (round, round)                                                                                                            |     6 |
+| l45–l53 | SB-3: `chevron(h, 60, −30)`, `h ∈ {6, 3, 1}°` × `L ∈ {10, 100, 1000}`, `w = 4`                                                                                                      |     9 |
+| l54–l57 | SB-4: `chevron(h, 60, −30)`, `w = 12`: (14°, `L = 4`), (14.4775°, `L = 4`), (15°, `L = 4`), (14.4775°, `L = 1`)                                                                     |     4 |
+| l58–l63 | SB-6: `chevron(h, 52, −26)`, `h ∈ {45, 30, 15}°` (turns of 90, 60 and 30 degrees) × `w ∈ {4, 12}`, round join                                                                       |     6 |
+| l64–l69 | SB-7 caps: `ZIGZAG` × cap `{round, square}` × `w ∈ {0.25, 1, 14}`                                                                                                                   |     6 |
+| l70–l75 | SB-7 dots: `M(0,0) L(0,0)` × cap `{round, square}` × `w ∈ {0.25, 1, 14}`                                                                                                            |     6 |
+| l76     | SB-13: ST-F26 `edges-1024`, by value from `st_f26_current_cap_fixtures`                                                                                                             |     1 |
+| l77–l79 | ST-U3f: `chev-1.40625` (`stroke_outline_tests.rs`), `rev-4/3-3-1` and `rev-4/3-1-7` (`st_u3e_review_near_reversals_are_turns`), each with its source's width, caps and join (E3-N5) |     3 |
+
+**Not in C5, and why.**
+
+- ST-F15 is covered by C9's R1 to R6.
+- ST-F16 to ST-F20 are in C9.
+- ST-F22, ST-F23 and the other ST-F26 rows are left out. They test numeric guards and work caps, which belong to A01, not precision.
+
+l24 (`L = 2^30`) and l77–l79 are expected to be rejected, so they are evidence for A01 (section 6).
+
+**E3-C9, stroke cubics and joint paints: 30 rows.**
+
+| Rows    | Source                                                                                                                           | Count |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------- | ----: |
+| k01–k06 | R1 to R6 of `STROKE_S2_FAMILIES` in `stroke-region.ts`, at their widths, butt                                                    |     6 |
+| k07     | ST-F16's curve, `w = 0.125`, butt; this row is ST-F16p too (E3-N6)                                                               |     1 |
+| k08–k09 | ST-U4/cusp-shared-a (`w = 1`, butt) and cusp-shared-b (`w = 0.25`, round), from the P3 plan's ST-U4 cusp section                 |     2 |
+| k10–k18 | ST-F20: the inputs of ST-F18, ST-F17 and ST-F19 at `w = 2`, each × cap `{butt, round, square}`                                   |     9 |
+| k19     | ST-U4/folded-arc (stroke contract section 11.3)                                                                                  |     1 |
+| k20     | SB-5: page node `wide-cubic`, `w = 24`, round caps and joins                                                                     |     1 |
+| k21     | SB-5: R5's controls at `w = 8`, round caps and joins (a width above the curvature radius)                                        |     1 |
+| k22     | Self-overlapping stroke `M(0,0) C(12,12)(−4,12)(8,0)`, `w = 2`, round caps and joins                                             |     1 |
+| k23–k26 | SB-10: page nodes `fill-stroke-square` and `fill-stroke-circle`, a fill row and a stroke row each, opacity 1                     |     4 |
+| k27–k30 | SB-11: `fill-only-half` (fill), `stroke-only-half` (stroke), `both-half` (fill and stroke), opacity 0.5; joint group `both-half` |     4 |
+
+SB-10's stroke alpha does not change geometry, so A04 does not vary it. The joint-feature identity check of E3-K2 runs on group `both-half`.
+
+**E3-C10, controls: 12 rows**, at T0 and pair (1, 1).
+
+| Row | Content                                                                                                                      |
+| --- | ---------------------------------------------------------------------------------------------------------------------------- |
+| x01 | s01-I with the singular `L = [1, 2, 2, 4]`                                                                                   |
+| x02 | s01-I with `L = 0`                                                                                                           |
+| x03 | An empty fill path (no verbs)                                                                                                |
+| x04 | The MOVE-only fill path `M(4,5)`                                                                                             |
+| x05 | ST-F1 with `w = 0`                                                                                                           |
+| x06 | s01-I: the base of E3-PC2 and of the PC10 rectangle                                                                          |
+| x07 | `circle(0, 0, 8)`: the base of E3-PC3 and of the PC10 `n`-gon                                                                |
+| x08 | The dyadic polygon `(0,0) (16,0) (12,8) (4,8)`: the base of the PC10 translated polygon                                      |
+| x09 | Three nested contours: a square of side 16, a reversed hole of side 8 and an island of side 4: the base of E3-PC4 and E3-D13 |
+| x10 | s04-I: the base of E3-PC5                                                                                                    |
+| x11 | Thin ring: a square of side 16 with a centered reversed hole 0.4 wide and 8 tall: the base of E3-PC6                         |
+| x12 | s01-I with `t = (2^24, −2^24)`, placement `far`: the base of E3-PC7 and E3-PC8                                               |
+
+**E3-C11, region-only: 8 rows**, at T0 to T7 and the nine pairs.
+
+| Row | Content                                                                                                |
+| --- | ------------------------------------------------------------------------------------------------------ |
+| f01 | A 200-gon with vertices `(round(1024·cos(2πi/200)), round(1024·sin(2πi/200)))`, from a hex table       |
+| f02 | OB5-W8 path 1, by value                                                                                |
+| f03 | Star field: s04-I translated to a 4 × 4 grid with spacing 24, nonzero                                  |
+| f04 | Staircase: `(0,0)`, then `(i+1, i)` and `(i+1, i+1)` for `i = 0` to 159, then `(0,160)`; 322 vertices  |
+| f05 | Four sectors at one vertex: triangles `(0,0) R(8,−2) R(8,2)` for the four exact quarter turns `R`      |
+| f06 | Five sectors: as f05, with the far vertices at multiples of 72°, rounded to integers, from a hex table |
+| f07 | Two squares touching at one corner: `(0,0)–(8,8)` and `(8,8)–(16,16)`                                  |
+| f08 | Six sectors: as f06, with multiples of 60°                                                             |
+
+f01 to f04 are built to reach `fringe-work-cap`, and f05 to f08 to reach `fringe-unsupported`. The status observed in the run is recorded, and no expected status is gated. A row that draws with a fringe anyway is still measured.
+
+**E3-C12, T-junction-heavy: 8 rows**, at T2 and T6 and the nine pairs. Decimal literals are parsed as binary64 by JS.
+
+| Row | Content                                                                                                |
+| --- | ------------------------------------------------------------------------------------------------------ |
+| j01 | Square `(0,0)–(16,16)` with the reversed hole `(5.3,4.7)–(11.1,12.9)`                                  |
+| j02 | Square `(0,0)–(32,32)` with four reversed holes of side 6 at `(5,5)`, `(21,5)`, `(5,21)` and `(21,21)` |
+| j03 | s13-I with the reversed hole `(1.3,1.1)–(30.7,2.9)`                                                    |
+| j04 | s04-I with a reversed square hole of side 2 at `(−1.1,−0.7)`                                           |
+| j05 | A 32-gon ring with radii 16 and 9.7, from a hex table, the inner contour reversed                      |
+| j06 | `circle(0, 0, 12)` with the reversed hole `circle(0.3, −0.2, 5)`                                       |
+| j07 | s06-I with every point offset by `(0.137, 0.291)`                                                      |
+| j08 | s03-I scaled by 2, with the reversed holes `(1.1,1.3)–(6.9,6.7)` and `(1.2,13.1)–(6.8,22.7)`           |
+
+**E3-C6 rows**, 12, at T0:
+
+- C1: s01-I, s04-I, s08-I and s18-I (needle `10^4`);
+- C3: c01, c02, c16 (OB5-W8) and c11;
+- C5: l04, l32 (ST-F25, ratio 5/3, `L = 4`), l44 (SB-1, `w = 1`, round) and l66 (SB-7, round cap, `w = 14`).
+
+**E3-C7 rows**, 12:
+
+- C3: c01, c02, c03, c04, c06, c08, c14 and c16;
+- C9: k03 (R3), k05 (R5), k07 (ST-F16) and k26 (the stroke paint of `fill-stroke-circle`).
+
+**E3-C8 rows.** The 149 named rows of C1, C3 and C5, at T0, offsets 1 and 2, and the nine pairs.
+
+### 13.5 Generated rows
+
+**PRNG.** The PRNG is `nextXorshift32`, copied by value from `packages/geometry-reference/src/corpus.ts`:
+
+```text
+v = state >>> 0
+v = (v ^ (v << 13)) >>> 0
+v = (v ^ (v >>> 17)) >>> 0
+v = (v ^ (v << 5)) >>> 0
+```
+
+- **Draws.** Each draw advances the state once and gives `u = state / 2^32` in `[0, 1)`. Then `int(n) = floor(u·n)`, and `coord = (2u − 1)·64` takes one draw per scalar, `x` before `y`.
+- **Seeds.** Seeds follow E3-N8. C1, C2 and C3 each have their own stream. C5's 150 rows are drawn first, and C9's 150 continue the same stream.
+
+**Draw order per row.**
+
+1. Family.
+2. The family's parameters, in the order listed below.
+3. Paint. A fill draws its rule, `int(2)`: nonzero, evenodd. A stroke draws its width exponent `int(12)`, cap `int(3)`, join `int(3)` and miter index `int(5)`.
+4. Transform, `int(8)`: T0 to T7.
+5. Translation kind, `int(3)`: zero, snapped (`floor(coord·16)` per axis) or generic (`coord·16` per axis).
+6. Size class, `int(4)`: sub, small, medium, large.
+7. Extent exponent `b`, drawn with `int` over the class range.
+
+**Fill families (C1 and C2), `int(4)`.**
+
+- **(0) Star polygon.** `n = 3 + int(10)` `coord` points, sorted by exact pseudo-angle about the origin, ties broken by distance.
+- **(1) Crossing polygon.** `n = 4 + int(6)` points in draw order.
+- **(2) Polygon with hole.** Family 0, plus the same points scaled by `1/4` and reversed.
+- **(3) Rectangle set.** `m = 2 + int(3)` rectangles, each from two `coord` corners, counter-clockwise.
+
+**Snapping.** C1 draws `q = 8·int(2)` after the family parameters, so `q` is 0 or 8, and snaps every coordinate `v` to `floor(v·2^q + 0.5)/2^q`. C2 keeps `coord` unsnapped.
+
+**Cubic families (C3), `int(3)`.**
+
+- **(0) Cubic ring.** `n = 2 + int(7)` anchors, sorted by pseudo-angle. Edge `a → b` gets the controls `a + (b − a)/3 + δ₁` and `a + 2(b − a)/3 + δ₂`, where each `δ` is `coord/4` per axis.
+- **(1) Closed single cubic.** Four `coord` points, closed with `Z`.
+- **(2) Ring with hole.** Family 0, plus its anchors and controls scaled by `1/4` and reversed.
+
+**Stroke families.**
+
+- **C5.** An open polyline of `2 + int(7)` points, closed when `int(10) < 3`.
+- **C9.** An open chain of `1 + int(4)` cubics: a start point, then three points per cubic.
+
+**Stroke paint.**
+
+- **Width target.** `w_phys = 2^(−6 + int(12))` px.
+- **Caps and joins.** Caps are butt, round, square. Joins are miter, round, bevel.
+- **Miter limits.** `1`, `Math.SQRT2`, `4`, `10`, `100`.
+- **Local width.** Per case, `w = RN(RN(w_phys / d) / z) · 2^(−ℓ_T)`, with `ℓ_T` from section 13.3.
+
+**Size per case.**
+
+- **Class ranges.** The ranges of `b` are: sub `[−4, 0)`, small `[0, 4)`, medium `[4, 9)` and large `[9, 13)`.
+- **Current extent.** For each pair, `E_cur` is the larger side of the binary64 bounding box of `d·z·(L·x)` over the row's points. It is evaluated with binary64 basic operations, in the order `a·x + b·y`.
+- **Rescaling.** The row's local coordinates are multiplied by `2^(b − ⌊log2 E_cur⌋)`, where `⌊log2⌋` is read from the binary64 exponent field. The scaling is exact, so a snapped row stays dyadic. The stroke width is set separately, by the rule above.
+- **Realized extent.** It lies in `[2^b, 2^(b+1))` and is recorded as a diagnostic.
+
+**Counts.** C1 200, C2 200, C3 300, C5 150 and C9 150 rows, each at its drawn transform and the nine pairs: 9,000 cases.
+
+### 13.6 C7 bucket-edge construction
+
+**Goal.** `2^e · sigmaMax(d·z·L) = 0.125` exactly with binary64 `L`, so that V3 chooses bucket `e` with its curve share used in full.
+
+**Impossibility at five pairs (checked).** The eigenvalues of `SᵀS` are the roots of `t² − F·t + D²`, with `F = ‖S‖²_F` and `D = det S`. So `sigmaMax(S) = 2^j` requires `16^j − F·4^j + D² = 0`.
+
+- **DPR 3.** With `S = 3z·L` and `z`, `L` dyadic, `F = 9z²‖L‖²_F` and `D² = 81z⁴(det L)²`. Scaled by a power of two to integers, the last two terms are divisible by 9 and `16^j·2^N` is not. No `L` exists.
+- **Zoom 0.01.** With `z = fl(0.01) = m·2^-59` and `m = 5764607523034235`, which is odd and greater than 1, the same argument holds modulo `m²`.
+
+The unattainable pairs are therefore `(0.01, 1)`, `(0.01, 2)`, `(0.01, 3)`, `(1, 3)` and `(64, 3)`. The attainable pairs are `(1, 1)`, `(1, 2)`, `(64, 1)` and `(64, 2)`. This agrees with the implementer's finding.
+
+**Construction (E3-N1).**
+
+1. `e₀` is the largest integer with `2^e₀·d·z ≤ 0.125`, decided exactly.
+2. `L = s·I` with `s = RD(2^(−3−e₀) / (d·z))`, computed in BigInt rationals and rounded toward zero to binary64, so `s ∈ [1, 2)`.
+3. At the attainable pairs `s` is a power of two, and the edge is exact. Elsewhere `2^e₀·sigmaMax(S)` is below 0.125 by a relative gap under `2^-52`. V3's exact predicate still chooses `e₀`, at the largest scale binary64 allows.
+
+The record states per case whether the edge is exact. For these cases `transform` is `"edge"` and `world.l` is `s·I`.
+
+### 13.7 Camera
+
+- **Center** (the default). `B` is the world bounding box of `L·x + t` over the path's points, computed with binary64 basic operations. It includes control points and is not expanded for stroke width (E3-N11). Then `c = mid(B) − (320/z, 180/z)`, and each axis is snapped to `floor(c·256 + 0.5)/256`.
+- **Partial.** As center, with `min(B)` in place of `mid(B)`, so the box's minimum corner lands at the viewport center.
+- **Far.** `t` gains `(2^24, −2^24)` (`4170000000000000` and its negation), then the camera is centered.
+- **Pan.** After centering and snapping, `c` gains `(2^-7, 0.3713)` (`3f80000000000000`, `3fd7c36113404ea5`), not snapped. These are the dyadic and the generic binary64 fractions of E3-K6.
+
+### 13.8 Totals
+
+| Part                                                                        |  Rows |      Cases |
+| --------------------------------------------------------------------------- | ----: | ---------: |
+| Named C1 (40), C3 (30), C4 (24), C5 (79), C9 (30), × 8 transforms × 9 pairs |   203 |     14,616 |
+| E3-C10 (T0, one pair)                                                       |    12 |         12 |
+| Generated C1, C2, C3, C5 and C9 (× 9 pairs)                                 | 1,000 |      9,000 |
+| E3-C6 (× 3 placements × 9 pairs)                                            |    12 |        324 |
+| E3-C7 (× 9 pairs)                                                           |    12 |        108 |
+| E3-C8 (× 2 offsets × 9 pairs)                                               |   149 |      2,682 |
+| E3-C11 (× 8 transforms × 9 pairs)                                           |     8 |        576 |
+| E3-C12 (× 2 transforms × 9 pairs)                                           |     8 |        144 |
+| **Total**                                                                   |       | **27,462** |
+
+That is 1,710 cases, +6.6%, over section 5.4's 25,752. All of the increase comes from C5's restated count: 19 more rows add 1,368 cases to the named cross and 342 to C8. The total stays within ±10% of Q9 (a)'s "about 25.7k" (E3-N12).
+
+### 13.9 What E3-U1 delivers against this annex
+
+- **Generator.** `tests/geometry/e3-a04/corpus.ts`, implementing sections 13.2 to 13.7 mechanically.
+- **Literal tables.** Hex literal tables for every irrational-derived constant: the `chevron` vertices of SB-3, SB-4 and SB-6, and f01, f06, f08 and j05. Each has a unit test that re-derives it on the pinned Node.
+- **Manifest.** `corpus-v1.manifest.json`, with the per-stratum counts above and `corpusSha256`.
+- **Tests.** The regeneration test (E3-A1), and literal checks of c14 to c23 against their source modules.
+- **Out of scope.** No kernel run. The freeze check belongs to E3-U2 (section 5.5).
