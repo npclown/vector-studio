@@ -8,11 +8,11 @@ use crate::fill_predicates::orient2d;
 use crate::geometry::{Point, VERB_CLOSE, VERB_CUBIC, VERB_LINE, VERB_MOVE};
 use crate::rounded_line_fill::RoundedFillError;
 use crate::stroke_outline::{
-    build_directions, disk_level, miter_kept, power_of_two, tip_guard_at, FrontEndError, PieceKind,
-    StrokeCap, StrokeError, StrokeJoin, StrokeOutcome, StrokeRequest, StrokeWorkspace, MAX_PIECES,
-    STROKE_PATH_EMPTY, STROKE_PATH_INVALID_PATH, STROKE_PATH_INVALID_STROKE,
-    STROKE_PATH_INVALID_TOLERANCE, STROKE_PATH_NUMERIC_RANGE, STROKE_PATH_WORK_LIMIT,
-    STROKE_V0_HEAP_CAP, STROKE_V0_LIMITS,
+    build_directions, disk_level, miter_kept, power_of_two, share_factor, tip_guard_at,
+    FrontEndError, JoinClass, PieceKind, StrokeCap, StrokeError, StrokeJoin, StrokeOutcome,
+    StrokeRequest, StrokeWorkspace, MAX_PIECES, STROKE_PATH_EMPTY, STROKE_PATH_INVALID_PATH,
+    STROKE_PATH_INVALID_STROKE, STROKE_PATH_INVALID_TOLERANCE, STROKE_PATH_NUMERIC_RANGE,
+    STROKE_PATH_UNSUPPORTED_GEOMETRY, STROKE_PATH_WORK_LIMIT, STROKE_V0_HEAP_CAP, STROKE_V0_LIMITS,
 };
 
 pub(crate) const SIXTEEN_GON: f64 = 3.061_467_458_920_718_3;
@@ -1464,5 +1464,451 @@ fn st_u3c_disk_vertices_share_the_sweep_offset_points() {
                 );
             }
         }
+    }
+}
+
+// ---- ST-U3d snap radius by disk level, ST-U3e reversal shared triple (PR #190 review) ----
+
+/// ST-U3d: `sqrt(2) * share_factor(k) * (1 + 4u) < 4.5k + 10`, ST-G2's margin over the proved
+/// vertex bound, at every disk level, and `share_factor(k) * 2^-53` is exact (plan: B2
+/// ST-U3d/ST-U3e stroke sharing).
+#[test]
+fn st_u3d_share_factor_stays_inside_the_arc_margin() {
+    let unit = power_of_two(-53);
+    for level in 1..=6u32 {
+        let factor = share_factor(level);
+        let margin = 4.5 * f64::from(level) + 10.0;
+        assert!(
+            core::f64::consts::SQRT_2 * factor * (1.0 + 4.0 * unit) < margin,
+            "level {level}: factor {factor} against margin {margin}"
+        );
+        assert_eq!((factor * unit) / unit, factor, "level {level}: exact");
+        assert!(factor >= 8.0, "level {level}: never below ST-U3c's 8");
+    }
+    assert_eq!(share_factor(3), 16.375);
+}
+
+/// `(name, path, request, inside, outside)`. Every literal was fixed before its first run.
+type SharingCase = (
+    &'static str,
+    PathSpec,
+    StrokeRequest,
+    Vec<Point>,
+    Vec<Point>,
+);
+
+/// The PR #190 review's four near-direction chevrons: half-angles 45 and 11.25 degrees
+/// perturbed by -30e-15 and -27e-15 rad, apex at (100.5, 37.25), arms of length 52,
+/// `w = 12`, round join, `e = -3`, butt and round caps. Before ST-U3d each left a coincident
+/// pair 1.35-1.65 `delta` apart and failed with `Rounded(TopologyAmbiguous)`.
+fn st_u3d_cases() -> Vec<SharingCase> {
+    let p = |x: f64, y: f64| Point { x, y };
+    let near_45 = || {
+        PathSpec::new()
+            .m(63.730_447_378_300_63, 74.019_552_621_701_58)
+            .l(100.5, 37.25)
+            .l(137.269_552_621_699_38, 74.019_552_621_701_58)
+    };
+    let near_11_25 = || {
+        PathSpec::new()
+            .m(90.355_303_255_162_71, 88.250_834_580_968_26)
+            .l(100.5, 37.25)
+            .l(110.644_696_744_837_29, 88.250_834_580_968_26)
+    };
+    let round = StrokeJoin::Round;
+    // B, 5.5 below B (outer side), just inside the inner corner (45.735 and 68.005 above B).
+    let in_45 = vec![p(100.5, 37.25), p(100.5, 31.75), p(100.5, 45.25)];
+    let out_45 = vec![p(100.5, 30.75), p(100.5, 46.25)];
+    let in_11 = vec![p(100.5, 37.25), p(100.5, 31.75), p(100.5, 67.25)];
+    let out_11 = vec![p(100.5, 30.75), p(100.5, 69.25)];
+    vec![
+        (
+            "ST-U3d/near-45-butt",
+            near_45(),
+            request(12.0, BUTT, round, 4.0, -3),
+            in_45.clone(),
+            out_45.clone(),
+        ),
+        (
+            "ST-U3d/near-45-round",
+            near_45(),
+            request(12.0, StrokeCap::Round, round, 4.0, -3),
+            // 5.5 beyond the start along the outward tangent; 6.5 is outside.
+            [in_45, vec![p(59.841_36, 77.908_64)]].concat(),
+            [out_45, vec![p(59.134_253, 78.615_747)]].concat(),
+        ),
+        (
+            "ST-U3d/near-11.25-butt",
+            near_11_25(),
+            request(12.0, BUTT, round, 4.0, -3),
+            in_11.clone(),
+            out_11.clone(),
+        ),
+        (
+            "ST-U3d/near-11.25-round",
+            near_11_25(),
+            request(12.0, StrokeCap::Round, round, 4.0, -3),
+            [in_11, vec![p(89.282_306, 93.645_154)]].concat(),
+            [out_11, vec![p(89.087_216, 94.625_939)]].concat(),
+        ),
+    ]
+}
+
+/// One exact line reversal `M(A) L(B) L(B - lambda (B - A))`: name, `A`, `B`, `lambda`,
+/// width and join.
+type Reversal = (&'static str, [f64; 2], [f64; 2], f64, f64, StrokeJoin);
+
+/// Exact line reversals with non-dyadic `lambda`, every coordinate exact, that failed with
+/// `Rounded(TopologyAmbiguous)` before ST-U3e: the outgoing start triple was computed from its
+/// own normal, a few ulps from the incoming one.
+const ST_U3E_REVERSALS: [Reversal; 5] = [
+    (
+        "ST-U3e/rev-5-2-x3-round",
+        [0.0, 0.0],
+        [5.0, 2.0],
+        3.0,
+        12.0,
+        StrokeJoin::Round,
+    ),
+    (
+        "ST-U3e/rev-5-2-x3-bevel",
+        [0.0, 0.0],
+        [5.0, 2.0],
+        3.0,
+        12.0,
+        StrokeJoin::Bevel,
+    ),
+    (
+        "ST-U3e/rev-1-3-x7-round",
+        [0.0, 0.0],
+        [1.0, 3.0],
+        7.0,
+        12.0,
+        StrokeJoin::Round,
+    ),
+    (
+        "ST-U3e/rev-13-11-x1.5-w2.5",
+        [0.0, 0.0],
+        [13.0, 11.0],
+        1.5,
+        2.5,
+        StrokeJoin::Round,
+    ),
+    (
+        "ST-U3e/rev-2-9-x5-offset",
+        [-3.125, 1000.0],
+        [-1.125, 1009.0],
+        5.0,
+        12.0,
+        StrokeJoin::Round,
+    ),
+];
+
+/// Probes of a reversal fixture, from its unit direction `u` and left normal `n`: `B`; beyond
+/// `B` along `u`, inside at `0.9r` for a round join, outside at `0.1r` for a bevel and at `1.1r`
+/// always; across the doubled sweep at `0.9r` (inside) and `1.1r` (outside) from the line; and
+/// `0.1r` either side of the far end `C` (butt caps).
+fn st_u3e_case(entry: Reversal) -> SharingCase {
+    let (name, a, b, lambda, width, join) = entry;
+    let c = [b[0] - lambda * (b[0] - a[0]), b[1] - lambda * (b[1] - a[1])];
+    let r = width / 2.0;
+    let d = [b[0] - a[0], b[1] - a[1]];
+    let length = (d[0] * d[0] + d[1] * d[1]).sqrt();
+    let u = [d[0] / length, d[1] / length];
+    let n = [-u[1], u[0]];
+    let at = |base: [f64; 2], s: f64, t: f64| Point {
+        x: base[0] + s * u[0] + t * n[0],
+        y: base[1] + s * u[1] + t * n[1],
+    };
+    let mid = -0.5 * length;
+    let mut inside = vec![
+        at(b, 0.0, 0.0),
+        at(b, mid, 0.9 * r),
+        at(b, mid, -0.9 * r),
+        at(c, 0.1 * r, 0.0),
+    ];
+    let mut outside = vec![
+        at(b, 1.1 * r, 0.0),
+        at(b, mid, 1.1 * r),
+        at(b, mid, -1.1 * r),
+        at(c, -0.1 * r, 0.0),
+    ];
+    if join == StrokeJoin::Round {
+        inside.push(at(b, 0.9 * r, 0.0));
+    } else {
+        outside.push(at(b, 0.1 * r, 0.0));
+    }
+    let path = PathSpec::new().m(a[0], a[1]).l(b[0], b[1]).l(c[0], c[1]);
+    (
+        name,
+        path,
+        request(width, BUTT, join, 4.0, -3),
+        inside,
+        outside,
+    )
+}
+
+/// `ok`, the membership probes, and no two distinct piece vertices within `1e-9`.
+fn assert_sharing_case(ws: &mut StrokeWorkspace, case: &SharingCase) {
+    let (name, path, request, inside_points, outside_points) = case;
+    assert_eq!(run(ws, path, *request), StrokeOutcome::Mesh, "{name}");
+    for probe in inside_points {
+        assert!(inside(ws, *probe), "{name}: {probe:?} inside");
+    }
+    for probe in outside_points {
+        assert!(!inside(ws, *probe), "{name}: {probe:?} outside");
+    }
+    let bits = |p: Point| (p.x.to_bits(), p.y.to_bits());
+    let mut all: Vec<Point> = Vec::new();
+    for piece in ws.pieces().iter().filter(|piece| !piece.dropped) {
+        all.extend_from_slice(ws.piece_points(piece).unwrap());
+    }
+    for (index, a) in all.iter().enumerate() {
+        for b in &all[index + 1..] {
+            let close = (a.x - b.x).abs().max((a.y - b.y).abs()) <= 1e-9;
+            assert!(
+                !close || bits(*a) == bits(*b),
+                "{name}: {a:?} and {b:?} are distinct but within 1e-9"
+            );
+        }
+    }
+}
+
+#[test]
+fn st_u3d_near_direction_chevrons_are_ok_and_share_the_disk_vertices() {
+    let mut ws = workspace();
+    let bits = |p: Point| (p.x.to_bits(), p.y.to_bits());
+    for case in st_u3d_cases() {
+        assert_sharing_case(&mut ws, &case);
+        let (name, _, request, ..) = case;
+        // Every E-, E+ of a triple at a round join or cap is a vertex of that piece, bit
+        // for bit: the arms' normals are within the level-3 snap radius of table directions.
+        let mut shared = 0;
+        for piece in ws.pieces().iter().filter(|piece| !piece.dropped) {
+            let points = ws.piece_points(piece).unwrap();
+            let segment = ws.segments()[piece.segment];
+            let triples = match piece.kind {
+                PieceKind::RoundJoin => {
+                    let next = segment.join_after.unwrap().next;
+                    vec![segment.end, ws.segments()[next].start]
+                }
+                PieceKind::RoundCap if piece.t0 == 0.0 => vec![segment.start],
+                PieceKind::RoundCap => vec![segment.end],
+                _ => continue,
+            };
+            for triple in triples {
+                for target in [triple.minus, triple.plus] {
+                    assert!(
+                        points.iter().any(|v| bits(*v) == bits(target)),
+                        "{name}: {target:?} shared bit for bit"
+                    );
+                    shared += 1;
+                }
+            }
+        }
+        let caps = if request.cap == StrokeCap::Round {
+            4
+        } else {
+            0
+        };
+        assert_eq!(shared, 4 + caps, "{name}: shared offset points");
+    }
+}
+
+#[test]
+fn st_u3e_exact_reversals_are_ok_and_share_one_triple() {
+    let mut ws = workspace();
+    let bits = |p: Point| (p.x.to_bits(), p.y.to_bits());
+    for entry in ST_U3E_REVERSALS {
+        let case = st_u3e_case(entry);
+        assert_sharing_case(&mut ws, &case);
+        let name = case.0;
+        let segments = ws.segments();
+        assert_eq!(segments.len(), 2, "{name}");
+        let join = segments[0].join_after.unwrap();
+        assert_eq!(join.class, JoinClass::Reversal, "{name}");
+        // Section 4.2: one sample triple at B, read from the outgoing side with E-, E+ swapped.
+        let (end, start) = (segments[0].end, segments[1].start);
+        assert_eq!(
+            bits(start.minus),
+            bits(end.plus),
+            "{name}: E- is E+ of the end"
+        );
+        assert_eq!(bits(start.center), bits(end.center), "{name}: C");
+        assert_eq!(
+            bits(start.plus),
+            bits(end.minus),
+            "{name}: E+ is E- of the end"
+        );
+    }
+}
+
+/// The review's `M(0,0) L(3,1) L(-1,-1/3)` and `L(1,7)` cases with `lambda = 4/3` are not
+/// exact reversals: `-1/3` and `-7/3` are rounded, so the exact cross product is nonzero and
+/// the join is a turn. ST-U3e (exact reversals only) does not apply to them; they stay
+/// `unsupported-geometry`, recorded as an open observation (plan: B2 ST-U3d/ST-U3e stroke
+/// sharing) and, from 2026-10-22, as the known defect ST-U3f.
+#[test]
+fn st_u3e_review_near_reversals_are_turns() {
+    let mut ws = workspace();
+    for (name, b, c) in [
+        ("3-1", [3.0, 1.0], [-1.0, -0.333_333_333_333_333_26]),
+        (
+            "1-7",
+            [1.0, 7.0],
+            [-0.333_333_333_333_333_26, -2.333_333_333_333_332],
+        ),
+    ] {
+        let path = PathSpec::new().m(0.0, 0.0).l(b[0], b[1]).l(c[0], c[1]);
+        let outcome = run(
+            &mut ws,
+            &path,
+            request(12.0, BUTT, StrokeJoin::Round, 4.0, -3),
+        );
+        assert_eq!(
+            outcome,
+            StrokeOutcome::Status(STROKE_PATH_UNSUPPORTED_GEOMETRY),
+            "{name}"
+        );
+        let join = ws.segments()[0].join_after.unwrap();
+        assert_eq!(join.class, JoinClass::TurnLeft, "{name}");
+    }
+}
+
+/// PR #195 review S1: exact reversals between a line and a cubic, a cubic and a line, and at a
+/// closed subpath's seam, all `w = 2`, butt caps, round join, every coordinate exact. Each was
+/// `unsupported-geometry` on `main` (`tooling/p3-stroke-reversal-corpus.mjs mixed`, cases
+/// `xlc-5,2-3-0,0--3`, `xcl-5,2-3-0,0-1`, `xseam-13,11-1.5-0,0--3` and `xseam-5,2-3-0,0-1`).
+/// `(name, path, exponent, reversal point B, unit direction into B)`.
+type MixedReversal = (&'static str, PathSpec, i32, [f64; 2], [f64; 2]);
+
+fn st_u3e_mixed_reversals() -> Vec<MixedReversal> {
+    let unit = |x: f64, y: f64| {
+        let length = (x * x + y * y).sqrt();
+        [x / length, y / length]
+    };
+    vec![
+        (
+            "ST-U3e/line-cubic-5-2-x3",
+            PathSpec::new()
+                .m(0.0, 0.0)
+                .l(5.0, 2.0)
+                .c([-10.0, -4.0, -27.0, -5.0, -44.0, -6.0]),
+            -3,
+            [5.0, 2.0],
+            unit(5.0, 2.0),
+        ),
+        (
+            "ST-U3e/cubic-line-5-2-x3-e1",
+            PathSpec::new()
+                .m(2.0, -5.0)
+                .c([-2.0, 5.0, 0.0, 0.0, 5.0, 2.0])
+                .l(-10.0, -4.0),
+            1,
+            [5.0, 2.0],
+            unit(5.0, 2.0),
+        ),
+        (
+            "ST-U3e/seam-13-11-x1.5",
+            PathSpec::new()
+                .m(0.0, 0.0)
+                .l(13.0, 11.0)
+                .l(2.0, 24.0)
+                .l(78.0, 66.0)
+                .z(),
+            -3,
+            [0.0, 0.0],
+            unit(-13.0, -11.0),
+        ),
+        (
+            "ST-U3e/seam-5-2-x3-e1",
+            PathSpec::new()
+                .m(0.0, 0.0)
+                .l(5.0, 2.0)
+                .l(3.0, 7.0)
+                .l(60.0, 24.0)
+                .z(),
+            1,
+            [0.0, 0.0],
+            unit(-5.0, -2.0),
+        ),
+    ]
+}
+
+#[test]
+fn st_u3e_mixed_and_seam_reversals_are_ok_and_share_one_triple() {
+    let mut ws = workspace();
+    let bits = |p: Point| (p.x.to_bits(), p.y.to_bits());
+    let r = 1.0;
+    for (name, path, exponent, b, u) in st_u3e_mixed_reversals() {
+        let at = |s: f64| Point {
+            x: b[0] + s * u[0],
+            y: b[1] + s * u[1],
+        };
+        // B and 0.9r beyond it along the incoming direction (the round join's disk) are inside;
+        // 1.1r beyond it is outside. At e = 1 the arrangement rounds to tau = 0.5, so only B
+        // (inside by r) and 3r beyond B are probed.
+        let (inside_points, outside_points) = if exponent < 0 {
+            (vec![at(0.0), at(0.9 * r)], vec![at(1.1 * r)])
+        } else {
+            (vec![at(0.0)], vec![at(3.0 * r)])
+        };
+        let case: SharingCase = (
+            name,
+            path,
+            request(2.0, BUTT, StrokeJoin::Round, 4.0, exponent),
+            inside_points,
+            outside_points,
+        );
+        assert_sharing_case(&mut ws, &case);
+        let mut reversals = 0;
+        for segment in ws.segments() {
+            let Some(join) = segment.join_after else {
+                continue;
+            };
+            if join.class != JoinClass::Reversal {
+                continue;
+            }
+            let start = ws.segments()[join.next].start;
+            let end = segment.end;
+            assert_eq!(bits(start.minus), bits(end.plus), "{name}: E-");
+            assert_eq!(bits(start.center), bits(end.center), "{name}: C");
+            assert_eq!(bits(start.plus), bits(end.minus), "{name}: E+");
+            reversals += 1;
+        }
+        assert_eq!(reversals, 1, "{name}: one exact reversal");
+    }
+}
+
+/// ST-U3f (plan: B2 ST-U3d/ST-U3e stroke sharing), a known defect recorded under the MVP 1
+/// rule: `chev-1.40625` stays `unsupported-geometry` with `Rounded(TopologyAmbiguous)`. An
+/// inexact crossing falls strictly between two adjacent binary64 values that are both pinned
+/// exact events, so the rounded-fill embedding has no free rank for it.
+#[test]
+fn st_u3f_chev_1_40625_is_a_known_topology_ambiguous_defect() {
+    let mut ws = workspace();
+    let path = PathSpec::new()
+        .m(-4.401_143_883_191_439, 1_051.984_338_572_202_7)
+        .l(-3.125, 1000.0)
+        .l(-1.848_856_116_808_561, 1_051.984_338_572_202_7);
+    for (name, exponent) in [
+        ("ST-U3f/chev-1.40625-e-3", -3),
+        ("ST-U3f/chev-1.40625-e0", 0),
+    ] {
+        let outcome = run(
+            &mut ws,
+            &path,
+            request(12.0, StrokeCap::Round, StrokeJoin::Round, 4.0, exponent),
+        );
+        assert_eq!(
+            outcome,
+            StrokeOutcome::Status(STROKE_PATH_UNSUPPORTED_GEOMETRY),
+            "{name}"
+        );
+        assert_eq!(
+            ws.last_error(),
+            Some(StrokeError::Rounded(RoundedFillError::TopologyAmbiguous)),
+            "{name}"
+        );
     }
 }

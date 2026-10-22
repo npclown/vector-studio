@@ -254,7 +254,7 @@ describe('ST-U7 joint overlay on real-port meshes (ST-U7b review S4)', () => {
 });
 
 /**
- * Observed at the first run, 2026-10-21 (stroke-v0+r3). Every case whose ports return both
+ * Observed at the first run, 2026-10-21 (stroke-v0+r3), unchanged at +r4 (2026-10-22). Every case whose ports return both
  * meshes builds, including curve-flattened round joins drawn fringed and region-only; the
  * failures are the ports' own (stroke work-limit on the cubic blob, the open ST-U9 decision;
  * fill unsupported-geometry on the open curves), so no overlay is attempted for them.
