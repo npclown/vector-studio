@@ -11,24 +11,26 @@ Before changing the repository, read the documents relevant to the task in this 
 3. `ARCHITECTURE.md` for system boundaries and allowed dependency direction.
 4. The relevant subsystem design, currently `docs/graphics-engine-architecture.md`.
 5. `docs/prototype-plan.md` for milestone order and exit gates.
-6. The active plans under `docs/plans/`: `docs/plans/p1-instanced-primitives.md` and its linked measurement contracts, plus `docs/plans/p2-geometry-kernel.md` and its private contract under approved D6 entry. P3 planning is tracked in `docs/plans/p3-fill-stroke-meshes.md` under the D7 provisional entry decision. P0 history remains in `docs/plans/p0-webgpu-foundation.md`.
+6. The active plans under `docs/plans/`: `docs/plans/p1-instanced-primitives.md` and its linked measurement contracts, plus `docs/plans/p2-geometry-kernel.md` and its private contract under approved D6 entry. P3 planning is tracked in `docs/plans/p3-fill-stroke-meshes.md` under the D7 provisional entry decision. P0 history remains in `docs/plans/p0-webgpu-foundation.md`. After the MVP 1 cut, work runs in two tracks under approved D9 (`docs/plans/d9-post-mvp1-tracks-proposal.md`): `docs/plans/d9-rendering-track.md` and `docs/plans/d9-visualization-track.md`.
 7. `docs/validation.md` and `docs/benchmarks/README.md` before claiming verification or performance results.
 
 When instructions conflict, the narrower document owns details inside its declared responsibility. A product requirement cannot be changed implicitly by an implementation plan, and a benchmark result cannot redefine its acceptance threshold.
 
 ## Documentation ownership
 
-| Document                                  | Source of truth for                                                 | Must not duplicate              |
-| ----------------------------------------- | ------------------------------------------------------------------- | ------------------------------- |
-| `AGENTS.md`                               | Repository navigation, agent workflow, change discipline            | Product or technical design     |
-| `docs/requirements.md`                    | Product goals, supported behavior, scope and deferrals              | Implementation sequence         |
-| `ARCHITECTURE.md`                         | System boundaries, ownership, dependency direction                  | Renderer algorithms             |
-| `docs/graphics-engine-architecture.md`    | Graphics-engine internals and accepted rendering decisions          | Whole-system package policy     |
-| `docs/prototype-plan.md`                  | P0-P5 milestone order and milestone-level gates                     | Active task checklist           |
-| Active milestone plan under `docs/plans/` | Milestone execution order, status, acceptance criteria and evidence | Cross-project validation policy |
-| `docs/validation.md`                      | Test layers, validation policy and evidence requirements            | Benchmark thresholds or results |
-| `docs/benchmarks/README.md`               | Benchmark methodology, metadata schema and result format            | Milestone scope                 |
-| `docs/benchmarks/results/*`               | Immutable observations from individual runs                         | Requirements or thresholds      |
+| Document                                  | Source of truth for                                                        | Must not duplicate                        |
+| ----------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------- |
+| `AGENTS.md`                               | Repository navigation, agent workflow, change discipline                   | Product or technical design               |
+| `docs/requirements.md`                    | Product goals, supported behavior, scope and deferrals                     | Implementation sequence                   |
+| `ARCHITECTURE.md`                         | System boundaries, ownership, dependency direction                         | Renderer algorithms                       |
+| `docs/graphics-engine-architecture.md`    | Graphics-engine internals and accepted rendering decisions                 | Whole-system package policy               |
+| `docs/prototype-plan.md`                  | P0-P5 milestone order and milestone-level gates                            | Active task checklist                     |
+| Active milestone plan under `docs/plans/` | Milestone execution order, status, acceptance criteria and evidence        | Cross-project validation policy           |
+| `docs/plans/d9-rendering-track.md`        | Rendering-track items, status, acceptance criteria, P3 exit evidence index | The D9 decision text; visualization items |
+| `docs/plans/d9-visualization-track.md`    | Visualization-track items, status, acceptance criteria and evidence        | The D9 decision text; rendering items     |
+| `docs/validation.md`                      | Test layers, validation policy and evidence requirements                   | Benchmark thresholds or results           |
+| `docs/benchmarks/README.md`               | Benchmark methodology, metadata schema and result format                   | Milestone scope                           |
+| `docs/benchmarks/results/*`               | Immutable observations from individual runs                                | Requirements or thresholds                |
 
 ## Working rules
 
@@ -84,7 +86,8 @@ A pull request is ready for merge only when:
 - required CI checks pass;
 - benchmark claims link to committed result records;
 - unresolved risks and intentionally deferred items are explicit;
-- no secrets, machine-local caches, or unrelated files are included.
+- no secrets, machine-local caches, or unrelated files are included;
+- the description, in the Gate section, states the track; packages touched; shared surface changed? (y/n → full tier).
 
 ### Pull-request description format
 
@@ -133,6 +136,8 @@ Work runs in Claude Code. The Primary session owns plans, contracts, integration
 | Command runner       | `runner`      | Haiku 4.5                                             | Running fixed validation commands and reporting their output               |
 
 The Primary may run a high-risk numeric or lifecycle implementation on Opus 5.5 instead. Subagents do not delegate further. Their findings are inputs; the Primary decides adoption.
+
+**Tracks and lanes (D9).** After the MVP 1 cut there is still one Primary. Each track (rendering, visualization) has one development lane and one verification lane, four agents in total under the Primary. A verification lane runs the fixed validation commands for its track and never edits the code it verifies. The fresh-context `reviewer` stays the independent check. Ownership, the shared surface and the operating rules are in `docs/plans/d9-post-mvp1-tracks-proposal.md`.
 
 **Legacy names.** Records before 2026-10-08 were written under Codex and use its worker names: Astra (independent technical review), Sol (implementation or implementability audit), Terra (implementation and fixtures) and Luna (command execution), each with an effort level. Those records stay unchanged.
 

@@ -13,7 +13,7 @@ The prototype validates the custom graphics engine before the full editor. Each 
 | P0 | Complete |
 | P1 | Functionally complete; A09/A10 performance evidence open |
 | P2 | Functionally complete; A08 performance FAIL deferred under D7 |
-| P3 | In progress under [D8](plans/p3-d8-parallel-tracks.md): visualization and engine tracks; A01-A08 open |
+| P3 | 2026-10-22: in progress; MVP 1 (a P3 delivery cut, not the P3 exit) tagged `mvp-1`. After the cut, work runs under [D9](plans/d9-post-mvp1-tracks-proposal.md) (after [D8](plans/p3-d8-parallel-tracks.md)): [rendering track](plans/d9-rendering-track.md) and [visualization track](plans/d9-visualization-track.md); A01-A08 open |
 | P4 | Not started |
 | P5 | Not started |
 

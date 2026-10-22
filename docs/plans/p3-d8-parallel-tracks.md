@@ -2,6 +2,8 @@
 
 Status: user-approved on 2026-10-08; amended the same day, see [Amendment](#amendment-2026-10-08-plan-review-findings). It changes P3 work order, the process tiers and the A04 verification method. No acceptance threshold changes. The Track A and B tables below carry the amended wording.
 
+Status note, 2026-10-22: [D9](d9-post-mvp1-tracks-proposal.md) (approved, D9-Q5 (a)) supersedes the Track A and Track B ownership split after MVP 1. The names are retired for post-MVP 1 work and replaced by the [rendering track](d9-rendering-track.md) and [visualization track](d9-visualization-track.md), split by package ownership. This record is otherwise unchanged; its evidence labels, unchanged gates and the C04 carve-out stay in force.
+
 ## Decision and authority
 
 On 2026-10-08 the user was shown the roadmap position:
