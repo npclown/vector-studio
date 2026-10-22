@@ -63,3 +63,5 @@ X03: all42 rows match literal and independent proof, required corruption control
 X04: pinned fmt/Clippy/full `pnpm test:geometry`, bounded two-worker `pnpm check`, `pnpm build`, unchanged independently built release WASM identity, explicit Markdown/links/diff checks, final evidence review and required protected CI/PR integration.
 
 Preserve any failed observation; diagnose without tuning frozen sources/expectations/tolerances/caps. Local GPU/browser/benchmark/full census are not required. Canonical mixed composition adoption is the following separately contracted checkpoint. Public mesh/coverage, larger capacities and complete P3 remain open; historical P2 A08 FAIL/latest-source performance UNVERIFIED and user-deferred stroke remain unchanged.
+
+E8 pointer, 2026-10-23 (draft, in review): the [E8 addendum](p3-rounded-knot-topology-contract.md#e8-addendum-2026-10-23) proposes a second exact candidate direction for the adjacent pairs of `TransverseArrangementWorkspace::check_pair` and its reference body (E8-U1). Until the addendum is approved, this contract is unchanged.

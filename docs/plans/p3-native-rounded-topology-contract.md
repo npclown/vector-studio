@@ -57,3 +57,5 @@ Keep constructor invalid limit/zero-byte/requested-byte boundaries, successful r
 | N04 | Pinned Rust fmt/Clippy, full `pnpm test:geometry`, bounded two-worker `pnpm check`, `pnpm build`, docs/links/diff, Primary/independent review and required protected CI. |
 
 Primary owns contract/shared test transport/lib wiring/evidence/integration. Sol high owns the native helper and new rounded_cubic_topology_tests.rs local units/emitter; Sol medium owns only disjoint TS data/transport/verification files after fixed seams are agreed. Independent review is read-only, with no recursive delegation. No browser/GPU/benchmark/full-census or CubicFillWorkspace adoption in this checkpoint. General crossings/tangencies, capacity and final P3 C03-C05 remain open.
+
+E8 pointer, 2026-10-23 (draft, in review): the [E8 addendum](p3-rounded-knot-topology-contract.md#e8-addendum-2026-10-23) proposes a second exact candidate direction for the cyclic adjacent test of this helper (E8-U1, `check_pair` and its reference body) and amends the "no direction search" clause of the bounds paragraph for it. Until the addendum is approved, this contract is unchanged.
