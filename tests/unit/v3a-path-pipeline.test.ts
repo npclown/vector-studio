@@ -997,8 +997,9 @@ describe('V3a device loss, ownership and host injection', () => {
   // V4 removed the V3-A18 test ("no host injects a port"), as V3-A18 foresaw, when the
   // playground gained the real port. This V4 test keeps the remaining hosts port-free. B2 ST-U8
   // adds the stroke page as a second host, on V4's pattern: it injects both real ports. The
-  // visualization track's V-1 appearance page is the third host, on the same pattern.
-  it('V4: only the path page, the ST-U8 stroke page and the V-1 appearance page inject the real ports; the V3 smoke fixture keeps its static double', () => {
+  // visualization track's V-1 appearance page is the third host and its V-2 path-data page the
+  // fourth, on the same pattern.
+  it('V4: only the path page, the ST-U8 stroke page, the V-1 appearance page and the V-2 path-data page inject the real ports; the V3 smoke fixture keeps its static double', () => {
     const root = join(__dirname, '../../apps/playground');
     const files: string[] = [];
     const walk = (directory: string) => {
@@ -1031,7 +1032,15 @@ describe('V3a device loss, ownership and host injection', () => {
     expect(vizSource).toMatch(/from '@vector-studio\/geometry-wasm'/);
     expect(vizSource).toMatch(/fillMesh: fill,/);
     expect(vizSource).toMatch(/strokeMesh: strokes,/);
-    const host = [...v4Host, ...b2Host, ...vizHost];
+    // Visualization track V-2: the path-data page is the fourth host, on the same pattern. Only its
+    // host file wires the ports; its parse, state and html files stay under the deny-list below.
+    const viz2Host = files.filter((file) => /[\\/]src[\\/]viz-v2-path-data\.ts$/.test(file));
+    expect(viz2Host).toHaveLength(1);
+    const viz2Source = readFileSync(viz2Host[0]!, 'utf8');
+    expect(viz2Source).toMatch(/from '@vector-studio\/geometry-wasm'/);
+    expect(viz2Source).toMatch(/fillMesh: fill,/);
+    expect(viz2Source).toMatch(/strokeMesh: strokes,/);
+    const host = [...v4Host, ...b2Host, ...vizHost, ...viz2Host];
     // The manifest and project-reference edges of that import (boundary rule P-B1).
     const edges = files.filter((file) =>
       /[\\/]playground[\\/](package|tsconfig)\.json$/.test(file),
