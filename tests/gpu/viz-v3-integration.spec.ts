@@ -252,7 +252,18 @@ for (const dpr of [1, 2]) {
       type LossRecord = Awaited<ReturnType<typeof loseDevice>>;
       const pipelineDeltas: number[] = [];
       /** The checks shared by VZ3-A11, VZ3-A12 and VZ3-A13. */
-      function lossChecks(scenario: string, record: LossRecord, before: Snapshot, after: Snapshot) {
+      function lossChecks(
+        scenario: string,
+        record: LossRecord,
+        inWindow: readonly string[],
+        before: Snapshot,
+        after: Snapshot,
+      ) {
+        if (record.applied.length !== inWindow.length)
+          fail(
+            scenario,
+            `${record.applied.length} in-window applications, expected ${inWindow.length} (${inWindow.join(', ')})`,
+          );
         const window = after.diagnostics
           .slice(record.diagnosticIndexAtLoss)
           .filter((event) => LIFECYCLE_CODES.has(event.code));
@@ -345,6 +356,14 @@ for (const dpr of [1, 2]) {
       // VZ3-A1: the page loads.
       let state!: Snapshot;
       await scenario('a1', async () => {
+        // The served HTML carries the static disabled attribute, so the button is disabled
+        // before the host script runs.
+        const html = await (await page.request.get('/viz-v3-integration.html')).text();
+        if (!/<button[^>]*id="viz-v3-lose-device"[^>]*\sdisabled[\s>]/u.test(html))
+          fail(
+            'a1',
+            'the served HTML lacks the static disabled attribute on "Simulate device loss"',
+          );
         await page.goto('/viz-v3-integration.html');
         const early = await page.evaluate(() => ({
           disabled: document.querySelector<HTMLButtonElement>('#viz-v3-lose-device')!.disabled,
@@ -523,7 +542,7 @@ for (const dpr of [1, 2]) {
             'r1',
             `resources ${before.statistics.resources.live}/${before.statistics.resources.liveBytes} to ${after.statistics.resources.live}/${after.statistics.resources.liveBytes}`,
           );
-        observed.r1 = lossChecks('r1', record, before, after);
+        observed.r1 = lossChecks('r1', record, [], before, after);
       });
 
       // -------------------------------------------------------------------------------------
@@ -563,7 +582,7 @@ for (const dpr of [1, 2]) {
             `resources ${before.statistics.resources.live}/${before.statistics.resources.liveBytes} to ${after.statistics.resources.live}/${after.statistics.resources.liveBytes}`,
           );
         observed.r2 = {
-          ...lossChecks('r2', record, before, after),
+          ...lossChecks('r2', record, ['r2-x-window'], before, after),
           deltas: { x: deltaX, inverse: deltaInverse, window: deltaWindow },
           noLossE: {
             live: xState.statistics.resources.live,
@@ -599,7 +618,13 @@ for (const dpr of [1, 2]) {
             const end = await recordSample(`${churnStepId(c, 'remove')} (recovered)`);
             ends.set(c, end);
             stepSamples.push({ cycle: c, step: 'remove (recovered)', sample: end });
-            observed.r3 = lossChecks('r3', record, before, after);
+            observed.r3 = lossChecks(
+              'r3',
+              record,
+              [churnStepId(c, 'replace'), churnStepId(c, 'remove')],
+              before,
+              after,
+            );
             for (const applied of record.applied) {
               if (applied.status !== 'applied') fail('r3', `${applied.step}: ${applied.status}`);
             }

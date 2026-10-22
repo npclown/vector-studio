@@ -106,6 +106,17 @@ function missingFields(packet: PrimitivePacket, packer: PathMeshPacker | null): 
       'pendingReleases',
     ])
       if (!(key in statistics)) missing.push(`PathMeshPacker.getStatistics().${key}`);
+    // The per-region sub-keys: a rename skips with a report instead of producing NaN.
+    const capacities = statistics.capacities as Record<string, unknown> | undefined;
+    const free = statistics.freeElements as Record<string, unknown> | undefined;
+    for (const region of [...GEOMETRY_REGIONS, 'meshInstances']) {
+      if (typeof capacities?.[region] !== 'number')
+        missing.push(`PathMeshPacker.getStatistics().capacities.${region}`);
+    }
+    for (const region of GEOMETRY_REGIONS) {
+      if (typeof free?.[region] !== 'number')
+        missing.push(`PathMeshPacker.getStatistics().freeElements.${region}`);
+    }
   }
   return [...new Set(missing)];
 }

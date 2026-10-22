@@ -280,7 +280,8 @@ function normalize(v: Point): Point {
 // Painter's order
 // ---------------------------------------------------------------------------------------------
 
-type Layer = Readonly<{ node: RenderNodeSnapshot; world: SceneAffine }>;
+type Bounds = Readonly<{ minX: number; minY: number; maxX: number; maxY: number }>;
+type Layer = Readonly<{ node: RenderNodeSnapshot; world: SceneAffine; box: Bounds | null }>;
 
 const flatCache = new WeakMap<object, Subpath[]>();
 function flattenedOf(node: RenderNodeSnapshot & { kind: 'path' }): Subpath[] {
@@ -310,7 +311,8 @@ export function paintOrder(scene: RenderSceneSnapshot): readonly Layer[] {
       for (const child of node.children) visit(child, world);
       return;
     }
-    layers.push({ node, world });
+    // A conservative world box (control points included) lets the walk skip distant layers.
+    layers.push({ node, world, box: nodeBounds(node, world) });
   };
   for (const id of scene.rootOrder) visit(id, IDENTITY);
   layerCache.set(scene, layers);
@@ -392,6 +394,12 @@ export function oracleColor(scene: RenderSceneSnapshot, x: number, y: number): O
   let destination: Premultiplied = ZERO;
   const covering: string[] = [];
   for (const layer of paintOrder(scene)) {
+    const box = layer.box;
+    if (
+      box !== null &&
+      (x < box.minX - 1 || x > box.maxX + 1 || y < box.minY - 1 || y > box.maxY + 1)
+    )
+      continue;
     const source = contribution(layer, x, y);
     if (source === null) continue;
     covering.push(layer.node.id);
