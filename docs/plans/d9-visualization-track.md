@@ -46,7 +46,7 @@ Files: `apps/playground/viz-v1-appearance.html`, `src/viz-v1-appearance.ts` (hos
 
 Notice literals fixed at the first headed run (identical at DPR 1 and 2, Chrome and Edge): `n0` none (so `v1-circle` fill only meshes); `n1` fill only none, stroke on `v1-circle stroke work-limit`, stroke off the same one entry stays, stroke on again two `v1-circle stroke work-limit`; `n2` butt none, round `v1-zigzag stroke fringe-work-cap`; `s4` `v1-zigzag stroke fringe-work-cap`; `s1`, `s2`, `s3`, `s5`, `a10`, `a7`, `a11`, `a12` none.
 
-Deviation pending disposition: §3.4 per-exponent display. status() shows the latest record; per-exponent records are exposed only via the hook (the current exponent is not published by renderer-core). Residual: independent evidence review not yet run.
+Deviation resolved by the user-approved 2026-10-22 amendment of §3.4 (contract §11). Residual: independent evidence review not yet run.
 
 ## Evidence rules
 

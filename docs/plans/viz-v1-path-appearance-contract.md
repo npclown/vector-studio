@@ -149,6 +149,8 @@ V1-A7 checks this through `getPathMeshStatistics()` (`portCalls`, `strokePortCal
 
 ### 3.4 Notices
 
+_Amended 2026-10-22 (user-approved): the per-exponent display below is superseded by the [amendment in section 11](#amendment-2026-10-22-user-approved-34-per-exponent-display); the original text is kept as written._
+
 The D8-interim notices (`render.path-mesh-interim-failure`) of the [V3 failure outcome](p3-v3-renderer-mesh-pipeline-contract.md#h-d8-interim-failure-outcome) and [stroke contract 9.8](p3-b2-stroke-contract.md#98-notices) stay visible and are never hidden or cleared:
 
 - **Notice log.** Every notice is listed, newest first, with its node id, paint, failure code and tolerance exponent, as the ST-U8 page lists them. An edit or a reset never clears it. Like the ST-U8 page (`p3-b2-strokes.ts`, lines 39 and 64), the log keeps the newest 400 entries; older entries are dropped and counted, and the panel shows "N older notices dropped from this list". The hook keeps every notice, so the spec sees all of them.
@@ -339,5 +341,16 @@ The user approved this contract in chat on 2026-10-22 and answered V1-Q1 to V1-Q
 | V1-Q7    | (a)    | DPR 1 and 2                                                                                                                                                                                                                                                                                       |
 | V1-Q8    | (a)    | Native `<input type="color">` (`#rrggbb`) with a separate alpha number                                                                                                                                                                                                                            |
 | V1-Q9    | (a)    | Width 0 to 64 local units and miter limit 1 to 100, as in section 3.2                                                                                                                                                                                                                             |
+
+### Amendment 2026-10-22 (user-approved): §3.4 per-exponent display
+
+The user approved this amendment in chat on 2026-10-22, after the implementation review (PR #201) found that the implementation shows the latest record where section 3.4 says records are kept per tolerance exponent and a return to an exponent shows the record kept for it.
+
+- The derived target status shows the most recent record for each paint while that paint is on.
+- After any zoom change the status is labelled "may differ; the notice log is authoritative".
+- Per-exponent records are kept and exposed only through the test hook (`snapshot().targetStatus`), not displayed as a status per exponent.
+- Why: renderer-core does not publish the serving exponent, so the page cannot tell which exponent's record applies to a node. A per-node draw-state or exponent query would be a shared-surface change at full tier (see section 2 and V1-Q4 (c)).
+
+Section 3.4's other rules, V1-A9 and the answers above are unchanged.
 
 **Effect.** The acceptance criteria V1-A1 to V1-A16 and the validation of section 5 are fixed. The implementation is one PR on a `claude/viz-v1-*` branch under the gate of section 8. Any change to a criterion, a range or an answer above needs a dated amendment here and the user's approval.

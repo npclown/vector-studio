@@ -697,7 +697,7 @@ describe('V-1 target status (contract section 3.4)', () => {
     expect(tracker.status('v1-square').fill.outcome).toBe('drawn');
   });
 
-  it('labels fringe-work-cap as drawn without its fringe and keeps records per exponent', () => {
+  it('labels fringe-work-cap as drawn without its fringe', () => {
     const tracker = new TargetStatusTracker(initialStates());
     tracker.addNotice(notice('v1-zigzag', 'stroke', 'fringe-work-cap', -3));
     tracker.addNotice(notice('v1-zigzag', 'stroke', 'fringe-work-cap', -5, 2));
@@ -705,6 +705,26 @@ describe('V-1 target status (contract section 3.4)', () => {
     expect(status.stroke.outcome).toBe('drawn without fringe');
     expect(status.pathDrawn).toBe(true);
     expect(status.stroke.perExponent).toEqual(['e=-3 fringe-work-cap', 'e=-5 fringe-work-cap']);
+  });
+
+  it('keeps records per exponent: the status shows the latest record, the hook lists all, and a zoom change labels it may-differ', () => {
+    const tracker = new TargetStatusTracker(initialStates());
+    tracker.addNotice(notice('v1-zigzag', 'stroke', 'fringe-work-cap', -3, 1));
+    tracker.addNotice(notice('v1-zigzag', 'stroke', 'work-limit', -5, 2));
+    let status = tracker.status('v1-zigzag');
+    // Amended section 3.4: the most recent record is shown, whatever its exponent.
+    expect(status.stroke.code).toBe('work-limit');
+    expect(status.stroke.outcome).toBe('not drawn');
+    expect(status.stroke.text).toContain('work-limit');
+    // Per-exponent records are kept and exposed through the status the hook returns.
+    expect(status.stroke.perExponent).toEqual(['e=-3 fringe-work-cap', 'e=-5 work-limit']);
+    expect(status.label).not.toContain('may differ');
+    tracker.zoomChanged();
+    status = tracker.status('v1-zigzag');
+    expect(status.label).toContain('may differ; the notice log is authoritative');
+    // A zoom change drops no per-exponent record that is not a state failure.
+    expect(status.stroke.perExponent).toEqual(['e=-3 fringe-work-cap', 'e=-5 work-limit']);
+    expect(status.stroke.code).toBe('work-limit');
   });
 
   it('shows overlay-unsupported only while 0 < opacity < 1 with both paints on', () => {

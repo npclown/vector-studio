@@ -694,7 +694,7 @@ export class TargetStatusTracker {
       },
       pathDrawn,
       label: this.#zoomChanged
-        ? 'derived from notices; may differ after a zoom change; the notice log is authoritative'
+        ? 'derived from notices; may differ; the notice log is authoritative'
         : 'derived from notices; the notice log is authoritative',
     };
   }
