@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>V-2 SVG path-data playground (UNVERIFIED precision)</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        background: #080d17;
+        color: #e8edf7;
+      }
+      body {
+        margin: 0;
+        padding: 16px;
+        display: grid;
+        grid-template-columns: 720px minmax(300px, 1fr);
+        gap: 16px;
+        align-items: start;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 16px;
+        font-weight: 650;
+      }
+      #viz-v2-surface {
+        display: block;
+        width: 720px;
+        height: 600px;
+        cursor: grab;
+        touch-action: none;
+        background: #1a1f2b;
+      }
+      #viz-v2-surface.dragging {
+        cursor: grabbing;
+      }
+      .label {
+        margin: 8px 0 0;
+        font-size: 12px;
+        color: #ffd27d;
+      }
+      .panel {
+        font-size: 12px;
+      }
+      .panel h2 {
+        margin: 12px 0 6px;
+        font-size: 13px;
+      }
+      fieldset {
+        margin: 0 0 8px;
+        padding: 6px 8px 8px;
+        border: 1px solid #2b3a55;
+        border-radius: 6px;
+      }
+      fieldset fieldset {
+        margin: 6px 0 0;
+      }
+      legend {
+        padding: 0 4px;
+        color: #8fa0ba;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 12px;
+        align-items: center;
+        margin-top: 4px;
+      }
+      .row label {
+        display: inline-flex;
+        gap: 4px;
+        align-items: center;
+      }
+      textarea {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 110px;
+        resize: vertical;
+        background: #0e1626;
+        color: inherit;
+        border: 1px solid #394a67;
+        border-radius: 4px;
+        padding: 4px 6px;
+        font:
+          12px/1.4 ui-monospace,
+          Consolas,
+          monospace;
+      }
+      input[type='number'] {
+        width: 72px;
+        background: #0e1626;
+        color: inherit;
+        border: 1px solid #394a67;
+        border-radius: 4px;
+        padding: 2px 4px;
+      }
+      input[aria-invalid='true'],
+      textarea[aria-invalid='true'] {
+        border-color: #ff9da5;
+        outline: 1px solid #ff9da5;
+      }
+      .message {
+        color: #ff9da5;
+        min-height: 0;
+      }
+      #viz-v2-error {
+        margin: 6px 0 0;
+        color: #ff9da5;
+        font:
+          11px/1.4 ui-monospace,
+          Consolas,
+          monospace;
+        white-space: pre-wrap;
+      }
+      #viz-v2-edit-state {
+        margin: 4px 0 0;
+        color: #ffd27d;
+      }
+      :focus-visible {
+        outline: 2px solid #ffd27d;
+        outline-offset: 2px;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+      }
+      button {
+        min-height: 28px;
+        border: 1px solid #394a67;
+        border-radius: 6px;
+        background: #17233a;
+        color: inherit;
+        cursor: pointer;
+      }
+      dl {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        gap: 4px 8px;
+        margin: 0;
+      }
+      dt {
+        color: #8fa0ba;
+      }
+      dd {
+        margin: 0;
+        font-family: ui-monospace, Consolas, monospace;
+        overflow-wrap: anywhere;
+      }
+      ol,
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+      #viz-v2-notices,
+      #viz-v2-diagnostics,
+      #viz-v2-errors {
+        max-height: 200px;
+        overflow: auto;
+        font:
+          11px/1.4 ui-monospace,
+          Consolas,
+          monospace;
+      }
+      #viz-v2-diagnostics li[data-severity='warning'] {
+        color: #ffd27d;
+      }
+      #viz-v2-diagnostics li[data-severity='error'],
+      #viz-v2-errors li {
+        color: #ff9da5;
+      }
+      #viz-v2-path-status {
+        font:
+          11px/1.5 ui-monospace,
+          Consolas,
+          monospace;
+      }
+      #viz-v2-path-status [data-outcome='not drawn'] {
+        color: #ff9da5;
+      }
+      #viz-v2-path-status [data-outcome='drawn without fringe'] {
+        color: #ffd27d;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>V-2 SVG path data: real fill-mesh and stroke-mesh ports (WASM kernel)</h1>
+      <canvas id="viz-v2-surface" aria-label="SVG path data rendering surface"></canvas>
+      <p class="label" id="viz-v2-label">
+        UNVERIFIED: precision is UNVERIFIED against the 0.25 physical-pixel target until A04
+        evidence exists. The path is parsed on Apply only and drawn through the existing renderer
+        ports. work-limit and fringe-work-cap notices are the D8-interim state of the open ST-U9
+        decision.
+      </p>
+    </main>
+    <section class="panel" aria-label="Controls and status">
+      <fieldset id="viz-v2-path-fieldset">
+        <legend>Path data</legend>
+        <label for="viz-v2-path-text">Path data (SVG d)</label>
+        <textarea
+          id="viz-v2-path-text"
+          spellcheck="false"
+          autocomplete="off"
+          aria-describedby="viz-v2-error"
+        ></textarea>
+        <div class="controls">
+          <button type="button" id="viz-v2-apply">Apply path data</button>
+          <button type="button" id="viz-v2-fit">Fit to path</button>
+        </div>
+        <p id="viz-v2-edit-state" aria-live="off"></p>
+        <p id="viz-v2-error" role="alert"></p>
+        <p>
+          Grammar: M m L l H h V v C c S s Q q T t Z z, strict SVG 2 path data. Arcs (A, a) are
+          rejected. At most 65536 characters, 4096 verbs and a coordinate magnitude of 16777216. The
+          fill kernel admits only a few contours and segments per path, so a path with many subpaths
+          can give a work-limit notice and draw no fill; see docs/plans/viz-v2-path-data-contract.md
+          section 1.5.
+        </p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Fill</legend>
+        <div class="row">
+          <label><input type="checkbox" id="viz-v2-fill-on" /> Fill</label>
+        </div>
+        <fieldset id="viz-v2-fill-rule">
+          <legend>Fill rule</legend>
+          <div class="row">
+            <label><input type="radio" name="viz-v2-fill-rule" value="nonzero" /> nonzero</label>
+            <label><input type="radio" name="viz-v2-fill-rule" value="evenodd" /> evenodd</label>
+          </div>
+        </fieldset>
+      </fieldset>
+
+      <fieldset>
+        <legend>Stroke</legend>
+        <div class="row">
+          <label><input type="checkbox" id="viz-v2-stroke-on" /> Stroke</label>
+          <label
+            >Stroke width
+            <input
+              type="number"
+              id="viz-v2-width-number"
+              min="0"
+              max="1024"
+              step="0.125"
+              aria-describedby="viz-v2-width-message"
+          /></label>
+          <span class="message" id="viz-v2-width-message"></span>
+        </div>
+        <fieldset id="viz-v2-cap">
+          <legend>Cap</legend>
+          <div class="row">
+            <label><input type="radio" name="viz-v2-cap" value="butt" /> butt</label>
+            <label><input type="radio" name="viz-v2-cap" value="round" /> round</label>
+            <label><input type="radio" name="viz-v2-cap" value="square" /> square</label>
+          </div>
+        </fieldset>
+        <fieldset id="viz-v2-join">
+          <legend>Join</legend>
+          <div class="row">
+            <label><input type="radio" name="viz-v2-join" value="miter" /> miter</label>
+            <label><input type="radio" name="viz-v2-join" value="round" /> round</label>
+            <label><input type="radio" name="viz-v2-join" value="bevel" /> bevel</label>
+          </div>
+        </fieldset>
+      </fieldset>
+
+      <h2>View</h2>
+      <div class="controls">
+        <button type="button" id="viz-v2-zoom-in">Zoom in</button>
+        <button type="button" id="viz-v2-zoom-out">Zoom out</button>
+      </div>
+
+      <h2>Path status</h2>
+      <div id="viz-v2-path-status" aria-live="polite" aria-atomic="true"></div>
+      <h2>Applied path</h2>
+      <p id="viz-v2-applied"></p>
+      <h2>View and pipeline</h2>
+      <dl id="viz-v2-status"></dl>
+      <h2>D8-interim notices (newest first, never cleared)</h2>
+      <p id="viz-v2-notices-dropped"></p>
+      <ol id="viz-v2-notices"></ol>
+      <h2>Errors</h2>
+      <ol id="viz-v2-errors"></ol>
+      <h2>Diagnostics</h2>
+      <ol id="viz-v2-diagnostics"></ol>
+    </section>
+    <script type="module" src="/src/viz-v2-path-data.ts"></script>
+  </body>
+</html>
