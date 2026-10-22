@@ -402,6 +402,11 @@ mod stroke_probe_tests;
 mod stroke_export;
 #[cfg(test)]
 mod stroke_export_tests;
+// P3 rendering-track item E1, unit ST-U10 (docs/plans/p3-b2-stroke-contract.md, the ST-U9
+// addendum): the E1-K1 early-abort fixtures and differential sweep, test-only; appended for the
+// same reason as above.
+#[cfg(test)]
+mod stroke_early_abort_tests;
 
 #[cfg(target_arch = "wasm32")]
 struct GlobalStrokeEngine(UnsafeCell<stroke_export::StrokeEngine>);
