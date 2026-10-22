@@ -10,6 +10,8 @@ Ownership: the packages and pages listed in [D9, visualization track](d9-post-mv
 | ---- | -------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | V-1  | Path appearance editing on the existing P3 surface | Full (user-visible behavior, AGENTS.md change workflow) | implemented 2026-10-22 on `claude/viz-v1-path-appearance-impl` ([PR #201](https://github.com/npclown/vector-studio/pull/201)); evidence in [V-1 implementation evidence](#v-1-implementation-evidence-2026-10-22); independent evidence review pending, so not complete ([contract](viz-v1-path-appearance-contract.md), PR #200) |
 | V-2  | SVG path-data input page                           | Full (user-visible behavior, AGENTS.md change workflow) | contract approved ([contract](viz-v2-path-data-contract.md), PR #203); next implementation                                                                                                                                                                                                                                        |
+| V-3  | A07 headed integration page                        | Full (user-visible behavior, P3 exit evidence)          | Added 2026-10-22: contract draft in review ([contract](viz-v3-a07-integration-contract.md))                                                                                                                                                                                                                                       |
+| V-4  | A08 headed corpus page (candidate)                 | To be set by its contract                               | Added 2026-10-22: candidate; after the frozen corpus (C03-C05) and the [V3 section k contract](p3-v3-renderer-mesh-pipeline-contract.md#k-a08-visual-contract)                                                                                                                                                                    |
 
 ## V-1: path appearance editing
 
@@ -54,6 +56,16 @@ Deviation resolved by the user-approved 2026-10-22 amendment of §3.4 (contract 
 Added 2026-10-22. Source: the user's choice of 2026-10-22 (chat) of the next visualization item.
 
 Scope: a playground page with a text area for the `d` data of one SVG path, parsed on an explicit Apply into one scene path node and rendered through the ports with a subset of the V-1 controls. P3 scope; no file import or export, no SVG documents and no persistence. Scope, grammar, acceptance criteria, validation and open questions are in the [V-2 contract](viz-v2-path-data-contract.md), approved by the user on 2026-10-22 with V2-Q1 to V2-Q10 answered (a).
+
+## V-3: A07 headed integration page
+
+Added 2026-10-22. Source: [D9-Q2 (a)](d9-post-mvp1-tracks-proposal.md#user-decisions-2026-10-22), chosen by the Primary under the user's standing instruction of 2026-10-22.
+
+Scope: a playground page mixing P1 primitives and P3 paths in a defined paint order, with ordered integration probes, add, replace and remove churn observed through the published statistics, and latest-scene device recovery induced with `WebGpuBackend.destroyDeviceForTesting()`. It supplies headed functional evidence for the A07 row of the [P3 exit evidence index](d9-rendering-track.md#p3-exit-evidence-index-x1); what it evidences and what remains are in the [V-3 contract](viz-v3-a07-integration-contract.md#12-what-v-3-evidences-of-a07-and-what-remains), with its acceptance criteria, validation and open questions V3-Q1 to V3-Q10. No product code starts until the contract is approved.
+
+## V-4: A08 headed corpus page (candidate)
+
+Added 2026-10-22. Candidate only: the headed Chrome and Edge corpus page with the coverage fringe versus MSAA comparison for A08. It waits for the frozen corpus (C03-C05) and the [V3 section k visual contract](p3-v3-renderer-mesh-pipeline-contract.md#k-a08-visual-contract); its contract is written after those exist.
 
 ## Evidence rules
 
