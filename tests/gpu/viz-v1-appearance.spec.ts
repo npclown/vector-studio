@@ -247,8 +247,21 @@ for (const dpr of [1, 2]) {
       ): Promise<{ state: Snapshot; controls: Controls }> {
         // A fresh page per scenario: notices are emitted on transitions.
         await page.goto(`/viz-v1-appearance.html${query}`);
-        // The dev server may reload the page once while it optimizes dependencies.
-        await page.waitForFunction(() => window.__vectorStudioVizV1Appearance !== undefined);
+        // One earlier run found the hook undefined right after goto, with no page error logged
+        // and a transient resource failure (net::ERR_NO_BUFFER_SPACE) and a 404 in the console.
+        // The cause is unexplained. This bounded wait does not claim to recover from it: on a
+        // timeout the run records the failure and goes on, so observations.json is still written.
+        try {
+          await page.waitForFunction(() => window.__vectorStudioVizV1Appearance !== undefined, {
+            timeout: 60_000,
+          });
+        } catch {
+          fail(
+            'hook-not-installed',
+            `${scenario}: console errors ${JSON.stringify(consoleErrors)}`,
+          );
+          throw new Error('the page hook was not installed within 60 s');
+        }
         const capability = await page.evaluate(() => window.__vectorStudioVizV1Appearance.ready);
         if (!capability.supported) fail(scenario, `capability ${JSON.stringify(capability)}`);
         const state = await settle();
