@@ -3,7 +3,7 @@
   "contract": "docs/plans/d9-e3-b4-precision-contract.md sections 5 and 13",
   "generator": {
     "path": "tests/geometry/e3-a04/corpus.ts",
-    "sha256": "4f535c6be0cbcc7ec4565ccec5b206babed2f179d91f037cfb51158e71af26b0"
+    "sha256": "3c4f12991f0554cad2dde1d96eb549cb343b6ecee3e24539e8083320e7e0d438"
   },
   "serialization": "one JSON object per case in generation order, keys sorted at every level, binary64 as 16-digit lower-case hex, no whitespace, LF line ends; corpusSha256 is the SHA-256 of the UTF-8 text",
   "prng": "nextXorshift32 copied by value from packages/geometry-reference/src/corpus.ts",
@@ -28,8 +28,8 @@
     "C8": 2682
   },
   "cases": 27462,
-  "bytes": 31265408,
-  "corpusSha256": "7f4d090f320b37b42848edac590f2f050af908600effdb90c941d955e670dcbb",
+  "bytes": 31259558,
+  "corpusSha256": "7f4bb1c97b2358ef45d23fdcab31aadc35fe4e7d3d5de25ce1bea7a8203d721c",
   "nodeVersion": "v24.15.0",
   "rustSourceSpans": {
     "commit": "5c691ada9eb58be3d994fb82a4a1dd28f6602a58",

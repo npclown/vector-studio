@@ -147,7 +147,7 @@ Dated append. Unit E3-U1 implements the corpus generator of the [E3 contract](d9
 
 - `tests/geometry/e3-a04/corpus.ts`: the generator. It implements sections 13.2 to 13.7, including the hex literal tables of E3-N10. At generation it uses only binary64 basic operations, `Math.floor`, `Math.round` on exact values, and BigInt. It evaluates no `Math.sin`, `Math.cos`, `Math.sqrt` or `Math.pow`.
 - `tests/geometry/e3-a04/corpus-v1.manifest.json`: the manifest, with the version, the generator SHA-256, the seeds, the per-stratum counts, the byte count, `corpusSha256`, the Node version and the Rust span hashes.
-- `tests/geometry/e3-a04-corpus.test.ts`: 14 tests. `pnpm test:e3-a04` runs them through `vitest.e3-a04.config.ts`, and `pnpm test:geometry`'s glob collects them too, so they also run in CI.
+- `tests/geometry/e3-a04-corpus.test.ts`: 15 tests (14 at first; review round 1 added one). `pnpm test:e3-a04` runs them through `vitest.e3-a04.config.ts`, and `pnpm test:geometry`'s glob collects them too, so they also run in CI.
 - `docs/validation.md`: a row for `pnpm test:e3-a04`, as section 9.3 requires. Prettier re-padded the existing command table: on `main` the file did not pass `prettier --check`.
 
 **Corpus `a04-corpus/v1`.**
@@ -161,9 +161,9 @@ Dated append. Unit E3-U1 implements the corpus generator of the [E3 contract](d9
 | C5      | 7,038 | C11     |   576 |
 | C6      |   324 | C12     |   144 |
 
-- **Total.** 27,462 cases, matching section 13.8. The canonical text is 31,265,408 bytes.
-- **`corpusSha256`.** `7f4d090f320b37b42848edac590f2f050af908600effdb90c941d955e670dcbb`.
-- **Generator SHA-256.** `4f535c6be0cbcc7ec4565ccec5b206babed2f179d91f037cfb51158e71af26b0`.
+- **Total.** 27,462 cases, matching section 13.8. The canonical text is 31,259,558 bytes (31,265,408 before review round 1).
+- **`corpusSha256`.** `7f4bb1c97b2358ef45d23fdcab31aadc35fe4e7d3d5de25ce1bea7a8203d721c` after review round 1. The first push had `7f4d090f320b37b42848edac590f2f050af908600effdb90c941d955e670dcbb`.
+- **Generator SHA-256.** `3c4f12991f0554cad2dde1d96eb549cb343b6ecee3e24539e8083320e7e0d438` after review round 1. The first push had `4f535c6be0cbcc7ec4565ccec5b206babed2f179d91f037cfb51158e71af26b0`.
 - **Node.** v24.15.0. Generation takes about 1 s.
 - **Engine independence.** No generated value depends on a JavaScript transcendental function. T1, T2, T6, the chevron arms, f01, f06, f08 and j05 are hex tables. The test re-derives each of them with a BigInt Taylor series (2^-320 fixed point, accepted only when both ends of its error interval round to the same binary64) and bit-compares the result. T1 and T2 also equal V8's `Math.cos` and `Math.sin`, as section 13.3 states.
 - **Source-module checks.** The AL-OB5 rings (c14 to c19 and f02) come from `generateCellPaths`, which uses `Math.cos` and `Math.sin`. Their check against that module is therefore V8-dependent. The literals themselves are fixed.
@@ -213,8 +213,16 @@ Dated append. Unit E3-U1 implements the corpus generator of the [E3 contract](d9
    - `E_cur` is `(d·z)·(a·x + b·y)`.
    - The empty path (x03) uses the box `{t}`.
    - x01 and x02 keep the label `T0`, with `world.l` overridden.
-   - C7 copies keep the base row's `joint` and `opacity`.
-   - The SB-11 single-paint rows (k27, k28) carry `joint` with their own page node as the group.
+   - The first push kept `joint` on C6, C7 and C8 copies and gave k27 and k28 single-member groups. Review round 1 replaced both, as described below.
 7. **Test fallback in CI.** On a shallow CI checkout without `5c691ad`, the span test fetches exactly that commit (`git fetch --depth=1 origin <sha>`) before it reads the blob.
 
 **Validation.** The commands and their results are in the PR. Still pending: E3-U2 (the oracle and the oracle-only freeze check), then the freeze note, and one independent diff review of this unit.
+
+**Review round 1 (PR #206), 2026-10-22.** The verdict was READY WITH FOLLOW-UPS. The reviewer reproduced `corpusSha256` exactly, and CI passed. The Primary decided the follow-ups under the user's standing instruction, taking the recommended option each time. They are recorded in [contract section 13.11](d9-e3-b4-precision-contract.md#1311-e3-u1-implementation-interpretations-2026-10-22-accepted-under-the-users-standing-instruction) and applied in one commit:
+
+- **Joint.** `joint` is `null` on every C6, C7 and C8 copy, and on k27 and k28, which keep opacity 0.5. A new test asserts that every joint group pairs one fill with one stroke per transform and pair.
+- **No −0.** f01's one −0 entry is now +0, and no other table had one. The new test asserts that no table and no case carries `8000000000000000`.
+- **F1.** The generator comment and section 13.11 state that `gap.phys` is a lower bound for n12 to n14.
+- **F2.** The test comment says that an engine change can fail the `generateCellPaths` comparison without a corpus change, because the literals are authoritative.
+- **F4.** The comment on the error bound of the exact series is tightened.
+- **Rerun.** The corpus and the manifest were regenerated, giving the hashes above. `pnpm test:e3-a04` passes 15 of 15 and `pnpm check` passes.

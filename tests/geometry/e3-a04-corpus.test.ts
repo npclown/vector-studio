@@ -131,8 +131,8 @@ function sinCosFixed(x: number): { sin: bigint; cos: bigint; err: bigint } {
     k += 1n;
     if (k > 400n) throw new Error('series did not converge');
   }
-  // Each term carries a few units of truncation, amplified by at most |x|²/((2k+2)(2k+3)) < 11
-  // per step over the first steps; 2^(k + 16) units bounds the total far above that.
+  // Each term carries a few units of truncation; its amplification is at most the maximum term
+  // ratio, < 2^9 for |x| < 8, so the total error is ≪ 2^(k + 16) units, the bound used here.
   return { sin, cos, err: 1n << (k + 16n) };
 }
 
@@ -275,7 +275,7 @@ describe('E3-U1 literal tables (E3-N10): exact BigInt re-derivation', () => {
     const roundClear = (value: number) => {
       const fraction = value - Math.floor(value);
       expect(Math.abs(fraction - 0.5)).toBeGreaterThan(1e-3);
-      return Math.round(value);
+      return Math.round(value) + 0; // −0 normalized to +0 (review round 1)
     };
     const f01: number[] = [];
     for (let i = 0; i < 200; i += 1) {
@@ -322,6 +322,8 @@ function byRow(stratum: string, row: string): Case {
 
 describe('E3-U1 source checks (13.4)', () => {
   it('c14 to c19 and f02 equal generateCellPaths of the AL-OB5 cells', () => {
+    // generateCellPaths uses Math.cos and Math.sin, so a JavaScript engine change can fail this
+    // check without any corpus change. The hex literals in the generator are authoritative.
     const [w2, w4, w8] = ob5DecisionCells() as [never, never, never];
     const [w8u] = ob5ObservationCells() as [never];
     const cells: Record<string, Parameters<typeof generateCellPaths>[0]> = {
@@ -522,6 +524,23 @@ describe('E3-U1 source checks (13.4)', () => {
 });
 
 describe('E3-U1 construction checks', () => {
+  it('carries no −0 in any table or case, and joint groups only on paired paints', () => {
+    const tables = [F01_HEX, F06_HEX, F08_HEX, J05_HEX, ...Object.values(OB5_HEX)];
+    for (const text of Object.values(DEPTH_POSITIVE_HEX)) tables.push(text.split('|')[1]!);
+    for (const entry of Object.values(CHEVRON_HEX)) tables.push(entry.join(' '));
+    for (const table of tables) expect(table.split(' ')).not.toContain('8000000000000000');
+    const negativeZero = '"8000000000000000"';
+    for (const value of cases) expect(JSON.stringify(value)).not.toContain(negativeZero);
+    const groups = new Map<string, string[]>();
+    for (const value of cases)
+      if (value.joint !== null) {
+        expect(['C9']).toContain(value.stratum);
+        const key = `${value.joint.group}|${value.transform}|${value.camera.zoom}|${value.camera.dpr}`;
+        groups.set(key, [...(groups.get(key) ?? []), value.joint.role]);
+      }
+    for (const roles of groups.values()) expect(roles.sort()).toEqual(['fill', 'stroke']);
+  });
+
   it('partial placements exceed the longer side of Ω after an exact power-of-two rescale', () => {
     const partial = cases.filter((c) => c.placement === 'partial');
     expect(partial.length).toBe(12 * 9);
