@@ -781,7 +781,15 @@ Amended 2026-10-21: ST-U7's files and units are fixed by the [ST-U7 addendum §6
 
 #### ST-U9 addendum, 2026-10-22: E1 early abort (E1, unit ST-U10)
 
-Status: **DRAFT for Primary review**, documentation only. It is the contract step of D9 item E1, "ST-U9 early abort when failure is certain" ([D9](d9-post-mvp1-tracks-proposal.md)), and the ST-U9 addendum under §12.1 that D9 names. No kernel code, threshold or user decision changes with it. The unit that implements it is ST-U10, defined in E1.6. The frozen §12.1 ST-U9 row is unchanged and still means only the family-B fast rung. Early abort is its own item, as the S7 decision and ST-OB6 call it. Every timing below is a **functional observation, not evidence**; this addendum makes no performance claim, and stroke precision stays **UNVERIFIED** against the 0.25 physical-pixel target.
+Status: **APPROVED 2026-10-22 by the user** (independent review round 2 READY WITH FOLLOW-UPS, follow-ups applied). Earlier status, kept as history: DRAFT for Primary review, documentation only. It is the contract step of D9 item E1, "ST-U9 early abort when failure is certain" ([D9](d9-post-mvp1-tracks-proposal.md)), and the ST-U9 addendum under §12.1 that D9 names. No kernel code, threshold or user decision changes with it. The unit that implements it is ST-U10, defined in E1.6. The frozen §12.1 ST-U9 row is unchanged and still means only the family-B fast rung. Early abort is its own item, as the S7 decision and ST-OB6 call it. Every timing below is a **functional observation, not evidence**; this addendum makes no performance claim, and stroke precision stays **UNVERIFIED** against the 0.25 physical-pixel target.
+
+**User decisions, 2026-10-22** (chat). The user approved this addendum and answered its questions (E1.6):
+
+- **E1-Q1: (a).** Full tier. The independent review of this addendum ran in two rounds; ST-U10 gets a diff review and an evidence review.
+- **E1-Q2: (a), the narrowed form.** The per-site argument of E1.3 applies: group 1 decided exactly, group 2 arithmetically impossible, group 3 skipped, group 4 irrelevant.
+- **E1-Q3: (a).** E1 is E1-K1 only: the outcome-preserving abort at ledger start, implemented by unit ST-U10. The `NodeLimit` class is not abortable. Option (b), the sort-time improvement, is recorded as a separate candidate under D9-Q7 / E2-alt. Option (c) is not pursued.
+- **E1-Q4: (a).** No performance claim. E1-A4 is the deterministic acceptance; E1-A5 is a diagnostic timing note.
+- **E1-Q5: (a).** Stroke only, through a separate stroke constructor; `RoundedFillWorkspace::new(limits)` is unchanged.
 
 ##### E1.1 Where failing strokes spend their time
 
