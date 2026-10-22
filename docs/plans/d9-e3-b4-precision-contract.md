@@ -1152,3 +1152,38 @@ That is 1,710 cases, +6.6%, over section 5.4's 25,752. All of the increase comes
   - **F3.** Schema keys `gap`, `duplicateOf` and `partial` are added, so `corpusSha256` covers them. Under partial placement a stroke's width is not rescaled.
   - **F4.** Partial rescaling changes a stroke row's width-to-geometry ratio, and the annex states this.
   - **Acceptance.** On 2026-10-22 the Primary recorded the annex as ACCEPTED under the user's standing instruction.
+
+### 13.11 E3-U1 implementation interpretations, 2026-10-22 (accepted under the user's standing instruction)
+
+Dated note. The E3-U1 implementation (PR #206) reads the points that section 13 leaves silent as listed below. The Primary accepted them under the user's standing instruction of 2026-10-22 after review round 1 of PR #206 (READY WITH FOLLOW-UPS), taking the recommended option each time. Each one is part of `corpusSha256`. The [E3-U1 evidence append](d9-rendering-track.md#e3-e3-u1-evidence-2026-10-22) records the resulting hashes.
+
+1. **Closing and placement.**
+   - Every named fill polygon is closed with `Z`.
+   - "Centered" and "at the origin" squares (s06 to s08, x09, x11) are centered on the origin.
+   - A hole "at (x, y)" (j02, j04) has its minimum corner there.
+2. **`source` strings.** The stroke-oracle fixture name where one exists, `page:<node>`, `T03:S/TRI/k24` and similar, `AL-OB5/<cell>/path<i>`, `SB-<n>`, and `e3-annex/<row>` for annex-defined shapes.
+3. **Generated ids.** The seed is written as `0x%08x`. C9's draw indices continue the shared stream, `g0150` to `g0299`.
+4. **Generated draws.**
+   - C5 and C9 draw no family index.
+   - C5 draws `n`, then the points, then the closed flag.
+   - The C3 ring draws its anchors, then per edge `δ₁x, δ₁y, δ₂x, δ₂y`.
+   - The pseudo-angle order is the exact angle in `[0, 2π)` from +x, counter-clockwise, with the origin first.
+   - C1 snaps after the whole family is built, including the 1/4 hole.
+   - Rectangle-set corners become their minimum and maximum.
+5. **Table expressions.** Each table entry is the JavaScript expression with `sin` and `cos` correctly rounded:
+   - f01: `2 * Math.PI * i / 200`;
+   - f06 and f08: `(deg * k * Math.PI) / 180`, with `R(x, y) = (x·c − y·s, x·s + y·c)`;
+   - j05: `r * cos(2 * Math.PI * i / 32)`;
+   - f03: the grid is row-major, with y outer.
+6. **Camera and leftovers.**
+   - The midpoint is `(min + max) / 2`, and world points are `(a·x + b·y) + t`.
+   - `E_cur` is `(d·z)·(a·x + b·y)`.
+   - The empty path x03 uses the box `{t}`.
+   - x01 and x02 keep the label `T0`, with `world.l` overridden.
+   - The two joint statements of the first reading are replaced by the joint decision below.
+
+**Decisions of review round 1.**
+
+- **Joint.** `joint` is `null` for every copy into C6, C7 and C8. It is also `null` for the SB-11 single-paint rows k27 and k28, which keep opacity 0.5. A joint group therefore always has exactly one fill and one stroke paint per transform and pair: k23 to k26 and k29 to k30. Single-member groups are vacuous, and they would invite pairing failures in E3-U3.
+- **No −0.** No table and no case carries −0. f01's one −0 entry is normalized to +0. No other table had one. The test asserts both properties for every table and every case.
+- **F1, the C4 gap of n12 to n14.** For the two-circle rows, the recorded `gap.phys` interval encloses the slab gap along the contact normal. It is a **lower bound** on the true minimum physical gap, which lies in `[slab, |S·(g_local, 0)|]`. This qualifies the `gap` row of section 13.2 for those rows. No new value is computed.
