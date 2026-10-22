@@ -779,6 +779,219 @@ Each unit is its own PR from an updated `main`. ST-U3, ST-U4 and ST-U5 are high-
 
 Amended 2026-10-21: ST-U7's files and units are fixed by the [ST-U7 addendum §6](p3-b2-st-u7-joint-coverage-addendum.md#6-units): ST-U7a (freeze and architecture note), ST-U7b (overlay and composite, CPU), ST-U7c (packet, shader, backend, renderer and the dated notes), ST-U7d (headed fixtures and evidence). The ST-U6 test edits that ST-U7 makes are listed in the addendum's allow-list.
 
+#### ST-U9 addendum, 2026-10-22: E1 early abort
+
+Status: **DRAFT for Primary review**, documentation only. It is the contract step of D9 item E1, "ST-U9 early abort when failure is certain" ([D9](d9-post-mvp1-tracks-proposal.md)), and the ST-U9 addendum under §12.1 that D9 names. No kernel code, threshold or user decision changes with it. The unit that implements it is ST-U9a, defined in E1.6. Every timing below is a **functional observation, not evidence**; this addendum makes no performance claim, and stroke precision stays **UNVERIFIED** against the 0.25 physical-pixel target.
+
+##### E1.1 Where failing strokes spend their time
+
+The arrangement runs these phases in order (`rounded_line_fill.rs:582-611`):
+
+1. `collect_events`;
+2. `sort_events`;
+3. `build_exact_columns`;
+4. `assign_edge_columns`;
+5. `build_sections_and_nodes`;
+6. `build_cells`;
+7. `build_ledger`;
+8. `build_mesh`.
+
+The first error returned decides the cause, and §7.8 maps it to a port status. Measured on `main` `f3af649`:
+
+- native `cargo test --release`, one thread, AMD Ryzen 7 3700X, Windows 11;
+- the best of 5 builds on one reused workspace;
+- in a scratch copy of the kernel with phase timestamps added. That copy is not committed and changes no behavior.
+
+| Case                                                       | Status and cause                    | Time (ms) | Where the time goes                                     | Counters at the failure                                                      |
+| ---------------------------------------------------------- | ----------------------------------- | --------: | ------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| ST-F26 `edges-1024` (`e = −3`)                             | `work-limit`, `Rounded(WorkLimit)`  |      53.8 | events 10.5, sort 7.1, then the ledger until `max_work` | 1,024 edges, 4 columns, 640 nodes, 192 cells; 1,531,479 work at ledger start |
+| ST-F16, `e = −8`                                           | `work-limit`, `Rounded(NodeLimit)`  |     345.1 | sort 214.3, sections up to the node cap about 125       | 2,222 events; column 183 of 1,076; 10,870 of 101,537 sections                |
+| ST-U3b chords, 16 segments, miter and butt                 | `work-limit`, `Rounded(NodeLimit)`  |     115.0 | sort 19.4, sections about 95                            | column 374 of 439; 8,724 of 9,744 sections                                   |
+| chords, 16 segments, round and round                       | `work-limit`, `Rounded(NodeLimit)`  |     131.4 | sort 41.2, sections about 88                            | column 383 of 590                                                            |
+| chords, 16 segments, bevel and butt                        | `work-limit`, `Rounded(NodeLimit)`  |     113.9 | sort 18.6, sections about 95                            | column 374 of 424                                                            |
+| chords, 32 segments, miter and butt                        | `work-limit`, `Rounded(NodeLimit)`  |     372.4 | sort 263.7, sections about 107                          | column 246 of 1,663; 8,598 of 75,494 sections                                |
+| chords, 64 segments, miter and butt                        | `work-limit`, `Rounded(EventLimit)` |       2.1 | events                                                  | 4,096 events                                                                 |
+| playground `cusp-f16-large` (ST-F16 at scale 60, `e = −9`) | `work-limit`, `Rounded(EventLimit)` |       6.9 | events                                                  | 4,096 events                                                                 |
+| playground `wide-cubic` (`e = −3`)                         | `work-limit`, `Front(PieceLimit)`   |       0.3 | front end                                               | 512 pieces                                                                   |
+| playground `fill-stroke-circle`, stroke (`e = −3`)         | `work-limit`, `Rounded(InputLimit)` |       0.3 | front end, then the arrangement's preflight             | more than 1,024 vertices                                                     |
+
+What these mean for E1:
+
+- **How far the full run would go.** Under `WIDE_TEST_LIMITS`, `edges-1024` is `ok` at 123,993,047 work units; its ledger alone needs 122,461,184. ST-F16 is `ok` at 553,015,839 work units and 78,314 nodes, in 2,882 ms. chords-16 with miter and butt is `ok` at 9,128 nodes, in 149 ms. chords-32 stops at `CellLimit`, in 1,337 ms.
+- **The cheap cases are already early.** The three playground cases fail in under 7 ms. The `front:` failures and `EventLimit` need no change.
+- **The 0.15-0.8 s class.** These are the crossing strokes that stop at `NodeLimit` during phase 5. Their cost is the insertion sort of more than 256 events (`MERGE_SORT_EVENTS`, `rounded_line_fill.rs:2170`) plus the sections built up to the node cap. That class is the one D9 had in mind.
+
+##### E1.2 Failure classes and where each becomes certain
+
+- **`max_work` exhausted in the ledger (abortable).** The ledger's charges are fixed by the state at its start:
+  - every span `(column, rank)` runs two scans of all `E` edges (`build_column_span`, `rounded_line_fill.rs:1570-1682`; for `E ≤ 64` the swept scans charge the same, by B0R Corollary C1, `rounded_line_fill.rs:1869-1904`);
+  - each lookup charges `q + 1` for a match at offset `q` in the column's section range (`lookup_section_node`, `rounded_line_fill.rs:1472-1520`);
+  - `emit_boundary` and `push_contributor` charge nothing.
+
+  So, with `n_c` the node count of column `c`, the ledger charges exactly `F_L = Σ_c (n_c − 1)·(2E + Σ_{nonvertical e, low ≤ c ≤ high} (q_e + 1) + Σ_{vertical e, low = c} (q_{e,1} + q_{e,2} + 2))`. The scratch measurement matched it exactly on all five cases that reached the ledger under `WIDE_TEST_LIMITS`: `edges-1024` 122,461,184; ST-F16 529,663,808; the three chords-16 cases 5,273,554, 12,488,981 and 4,873,374. For `edges-1024` at `STROKE_V0_LIMITS`, `1,531,479 + 122,461,184 > 64,000,000`, so its `WorkLimit` is certain at ledger start.
+
+- **The other ledger errors (bounds).** The ledger can also fail with:
+  - `BoundaryLimit` (`rounded_line_fill.rs:1695-1698`): at most `2·cells + S` boundaries, with `S = Σ_c (n_c − 1)` spans;
+  - `ContributorLimit` (`:1522-1529`): exactly `Σ_{vertical e} |rank(e, 2) − rank(e, 1)|` contributors, known at ledger start;
+  - the spans' `NodeLimit` (`:1648-1650`): unreachable, because `S ≤ nodes − columns < max_nodes`.
+
+  When both bounds are within their caps, `WorkLimit` is the only limit error the ledger can reach.
+
+- **The swept collector's 64-edge guard (no failure).** `SWEEP_EDGES = 64` (`rounded_line_fill.rs:2165`) is a size guard, not a limit. Above 64 edges, `collect_events` takes the all-pairs loop (`:713-741`; 523,776 pair charges for `edges-1024`), and every column, slab and span scan charges `E`. That is why `edges-1024` runs out of work. E1 changes neither the guard nor the limits. Raising either is D9-Q7's alternative.
+- **`NodeLimit` and `SectionLimit` in phase 5 (not abortable under this rule).** After `assign_edge_columns`, the section total is exact, and the number of distinct exact event points is a lower bound on the node count. Phase 5, however, embeds every column and node with `embed_scalar` (`:1159-1213`), which can return `TopologyAmbiguous` (`:1178`, `:1200`, `:1205`, `:1210`, `:1242`, `:1272`; the ST-U3f defect, plan entry), and §7.8 maps that to `unsupported-geometry`. Nothing computed before phase 5 shows that no embedding fails before the node cap. So a node forecast could turn an `unsupported-geometry` run into `work-limit`, which E1.3 forbids. The measured cases also stop late: at column 374 of 439 for chords-16, so little would be saved.
+- **`EventLimit` and front-end limits (already early).** `EventLimit` (`:743-750`) fires inside phase 1 at a few ms. The front end stops at `PieceLimit`, `DiskLimit`, `DepthLimit` or `SourceLimit`. Its vertex check (`stroke_outline.rs:880-885`) runs after every front-end stage on purpose: a later front-end error takes precedence. These stay as they are.
+- **Topology failures.** None is certain before it occurs. `TopologyAmbiguous` is decided only by the embedding that returns it.
+
+##### E1.3 The rule
+
+**The rule.** An early abort may fire only where the full run's result is certain to be the same:
+
+- the same `Err(RoundedFillError)` variant, so the same §7.8 status and the same dumped `failure` field (`stroke_dump_tests.rs:228`);
+- the same `work_units`;
+- no output.
+
+Formally, the abort fires at a checkpoint `K` with work `W` when `W + G_K > max_work`, where:
+
+- `G_K` is a sound lower bound on the charges the full run makes after `K` before it can reach any statement that returns another error;
+- the checkpoint computes `G_K` without charging and without allocating (§7.5).
+
+The full run then fails inside those `G_K` charges with `WorkLimit`, and leaves `work_units = max_work`, as `charge` and `bulk_charge` do (`rounded_line_fill.rs:1831-1858`). The abort returns `WorkLimit` and sets `work_units = max_work`. `tessellate` then clears the publication as on any failure (`:533-551`).
+
+**What ST-U9a implements.** It implements exactly one checkpoint, **E1-K1, at the start of `build_ledger`**:
+
+- it computes `F_L`, `S` and the contributor count of E1.2;
+- it aborts only when `2·cells + S ≤ max_boundaries`, the contributor count is at most `max_contributors`, and `W + F_L > max_work`;
+- otherwise it does nothing, and the full run continues unchanged.
+
+A further checkpoint needs its own dated note with its lower bound, its excluded errors and fixtures.
+
+**`InternalInvariant`.** The forecast treats the ledger's `InternalInvariant` statements as unreachable. They are kernel self-checks that §7.8 maps to a batch `internal-error`. An aborted run therefore skips them. E1-Q2 asks whether that is accepted.
+
+**Diagnostic fields.** On an aborted run, every `RoundedFillStats` field equals the full run's except:
+
+- `boundaries`, which keeps its value at the checkpoint, 0;
+- `contributors`, which also keeps its value at the checkpoint, 0.
+
+The full run would have counted part of the ledger in each. Neither is part of the frozen result contract: a non-`OK` record is zero beyond its echoes and status (§7.4), the dump does not contain stats, and `StrokeWorkspace::rounded_stats` is `cfg(test)` only (`stroke_outline.rs:716-719`). The probe's `arr:<counter>` label is unchanged, because `work_units = max_work` names `arr:work` first and both counters stay below their caps. `st_f26_current_cap_fixtures` (`stroke_outline_tests.rs:849-853`) keeps passing unchanged.
+
+**Stroke only.** The checkpoint runs only in a `RoundedFillWorkspace` that `StrokeWorkspace` constructs with it enabled. `CubicFillWorkspace` (`cubic_fill.rs:450-453`) constructs its workspace without it, so fill takes no new branch outcome. This matters because the fill identity digest prints `rounded_stats` after a failed attempt (`p3_b0r_identity.rs:338-347`), and a fill abort would change `boundaries` and `contributors` there. No field is added to `RoundedFillStats`, whose `Debug` text that digest also prints.
+
+##### E1.4 Identity argument
+
+Under the rule:
+
+- every `ok` mesh is bit-identical, since the checkpoint fires only on a run that fails;
+- every failure has the same status and cause.
+
+So nothing in §7.1's identity rule moves: `'geometry-wasm/stroke-v0+r4'`, `stroke_v0_revision() == 4`, `stroke_v0_version()`, the magics, `abi_version()` and `fill_v0_*` stay. There is no revision bump. Fill and P2 are unchanged.
+
+Evidence, in ST-U9a's PR:
+
+1. **Byte-identical dumps.** `emit_stroke_dump` runs on `main` and on the branch. Its command is `P3_STROKE_INPUT=<in> P3_STROKE_DUMP=<out> cargo test --release --lib stroke_dump_tests::emit_stroke_dump -- --ignored --exact`. The SHA-256 of the two dumps must be equal for each corpus:
+   - the B2 line and cubic corpus (`lineCases` and `cubicCases`, 145 cases, input `36cd8dcb…`);
+   - `node tooling/p3-stroke-reversal-corpus.mjs lines` (4,800 cases) and `… mixed` (720 cases, 102 `work-limit`);
+   - the scratch corpora of the ST-U3d/ST-U3e entry, which exist only by hash: the ST-U3c probe and reproductions, the review cusp corpus and the PR #190 probes;
+   - a new failure-heavy corpus, E1-C1 (E1.5).
+
+   `node tooling/p3-stroke-dump-diff.mjs <before> <after>` reports 0 changed cases. Only byte equality counts, because the checker allows `unsupported-geometry` → `ok`, and E1 allows no change at all.
+
+2. **On-off differential.** A `cfg(test)` switch disables E1-K1. For every case of E1-C1 and a `max_work` sweep (E1.5), on and off give equal outcomes, causes and stats, except `boundaries` and `contributors` on aborted runs.
+3. **Forecast exactness.** A `cfg(test)` assertion: on every case that completes its ledger, `F_L` equals the ledger's actual charges.
+4. **Fill and P2 identity.** `pnpm test:p3-fill-identity` in plain mode, and `pnpm test:p2-identity`.
+
+##### E1.5 Acceptance, fixtures and validation
+
+| ID    | Criterion                                                                                                                                                                                                                              | Check                                                                               |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| E1-A1 | Identity: E1.4 items 1-4 hold                                                                                                                                                                                                          | The dump hashes and commands in the PR; `pnpm test:geometry`; the identity commands |
+| E1-A2 | E1-F1 to E1-F6 pass with their literal expectations, which are fixed before the first run                                                                                                                                              | `pnpm test:geometry` (native)                                                       |
+| E1-A3 | Seeded defects E1-D1 and E1-D2 each fail a named test                                                                                                                                                                                  | The PR lists each defect, its switch and the failing output                         |
+| E1-A4 | Effect, deterministic: on `edges-1024` at `STROKE_V0_LIMITS`, E1-K1 fires and the ledger makes no charge (a `cfg(test)` counter)                                                                                                       | `pnpm test:geometry`                                                                |
+| E1-A5 | Effect, timing: E1-Q4 decides. The minimal form is a diagnostic timing note: the E1.1 cases before and after, on one machine, same protocol. It expects `edges-1024` at about 19 ms against 53.8 ms, and every other case within noise | The PR, labelled diagnostic, not evidence                                           |
+| E1-A6 | Nothing else changes: ST-A9's commands; `git diff --exit-code main -- packages/geometry-wasm/kernel/Cargo.toml packages/geometry-wasm/kernel/Cargo.lock pnpm-lock.yaml` exits 0                                                        | As listed                                                                           |
+| E1-A7 | ST-A12's static checks, documentation and labels                                                                                                                                                                                       | As ST-A12                                                                           |
+
+Fixtures (native, `stroke_outline_tests.rs` or a new `stroke_early_abort_tests.rs`):
+
+- **E1-F1.** `edges-1024` at `STROKE_V0_LIMITS`: `work-limit`, `Rounded(WorkLimit)`, `work_units = max_work`, and E1-K1 fired.
+- **E1-F2.** `edges-1024` under `WIDE_TEST_LIMITS`: `ok`, E1-K1 not fired, and the mesh bit-identical to the switch-off run.
+- **E1-F3, the boundary trio.** `edges-1024` with `STROKE_V0_LIMITS` but `max_work` set to:
+  - `W + F_L − 1`: E1-K1 fires, `WorkLimit`;
+  - `W + F_L`: E1-K1 does not fire; the full run fails with `WorkLimit` in `build_mesh`;
+  - the run's total charges: `ok`.
+- **E1-F4.** A bounds guard case, under a test limit set with `max_boundaries < 2·cells + S` or `max_contributors` below the contributor count: E1-K1 does not fire, and the full-run cause is kept.
+- **E1-F5.** The `NodeLimit` cases of E1.1 (ST-F16 `e = −8`, the chords-16 and chords-32 cases): E1-K1 does not fire, and their status and cause are unchanged.
+- **E1-F6.** ST-U3f `chev-1.40625`: still `unsupported-geometry`, `Rounded(TopologyAmbiguous)`.
+
+Seeded defects:
+
+- **E1-D1.** The comparison `>` becomes `≥` (fires when the run fits exactly). E1-F3 must fail.
+- **E1-D2.** The forecast omits the lookup charges. The exactness assertion of E1.4 item 3 must fail.
+
+**Corpus E1-C1**, committed as a generator mode of a new `tooling/p3-stroke-e1-corpus.mjs`:
+
+- the ST-U3b chords family, 2 to 64 segments, every join and cap, at `e ∈ {−3, −6}`;
+- `edges-N` square-capped subpath stacks for `N` from 8 to 64 subpaths;
+- the E1.1 cases.
+
+The differential sweep runs each case at `max_work ∈ {2^k : 16 ≤ k ≤ 26} ∪ {W + F_L − 1, W + F_L}` wherever the ledger is reached.
+
+Validation commands for ST-U9a:
+
+- `pnpm test:geometry`, which includes kernel `cargo fmt`, `clippy -D warnings` and the native and TypeScript geometry tests;
+- the new ignored tests: `cargo test --release --lib e1_ -- --ignored`;
+- the dump runs of E1.4 item 1, with SHA-256 per corpus;
+- `pnpm test:p3-fill-identity`, plain mode;
+- `pnpm test:p2-identity`;
+- `pnpm check` and `pnpm build`;
+- `pnpm exec prettier --check` on the changed Markdown, the local link and anchor check, and `git diff --check`.
+
+Files expected:
+
+- `packages/geometry-wasm/kernel/src/rounded_line_fill.rs`: the checkpoint and its construction flag; the inline `cfg(test)` modules stay byte-identical, as the fill identity tool's O5 step requires;
+- `stroke_outline.rs`: it enables the flag;
+- the new test file and its `lib.rs` declaration;
+- the corpus generator;
+- the plan entry.
+
+##### E1.6 Unit, tier and open questions
+
+**Unit ST-U9a** is E1's implementation. Its scope is E1-K1 only, after this addendum is approved.
+
+E1-Q1, review tier:
+
+- **(a) Recommended. Full tier, as D9 lists E1 and §12.3 item 4 lists ST-U9:** an independent review of this addendum before code, then of the diff and of the evidence.
+- (b) Light tier: no public API, ABI, threshold or visible outcome changes, so a plan line and one diff review would do. Consequence: the identity argument of E1.4 gets no review before code.
+
+E1-Q2, `InternalInvariant` in the skipped ledger:
+
+- **(a) Recommended. Treat the self-checks as unreachable for the forecast** (E1.3). Consequence: an aborted run skips the ledger's self-checks; a kernel defect there would show only on runs that complete.
+- (b) Strict: no abort where the skipped run contains a self-check. Consequence: no abort is possible, because the first span already contains lookups that can return `InternalInvariant`, so E1 does nothing.
+
+E1-Q3, scope against D9's description. D9 says E1 stops "once its node or section count makes a `work-limit` failure certain". E1.2 shows that node and section counts never make it certain without changing `unsupported-geometry` outcomes:
+
+- **(a) Recommended. E1 is E1-K1 only.** It saves about 35 ms on `max_work` failures such as `edges-1024`, and nothing on the `NodeLimit` class (115-372 ms here). That cost moves to E2 or to (b). Consequence: D9's E1 row overstates E1; the Primary corrects it.
+- (b) Also add an outcome-identical restructure: extend B0R L2's merge sort with the Lemma D charge count (`rounded_line_fill.rs:759-784`, [B0R §5.4](p3-b0r-kernel-performance-contract.md#54-loop-restructuring-b0r-q3-a)) above 256 events, using workspace storage. It keeps every charge, mesh and stat, so fill identity holds bit for bit. It would remove most of the 214 ms (ST-F16) and 264 ms (chords-32) sort time, for `ok` runs too. Consequence: it changes the fill kernel and is a separate B0R-style unit, with its own note and fill identity run.
+- (c) A precedence amendment: abort with `NodeLimit` when the distinct event points exceed `max_nodes`. Consequence: some `unsupported-geometry` strokes become `work-limit`. That is a frozen §7.8 change and full tier, and it breaks E1.3's identity. Not recommended.
+
+E1-Q4, performance evidence:
+
+- **(a) Recommended. No performance claim.** E1-A4 is the deterministic acceptance, and E1-A5 is a diagnostic timing note. Consequence: no benchmark scenario; nothing can cite E1 as a speedup.
+- (b) A small native scenario `p3-stroke-early-abort-v1` under [docs/benchmarks/README.md](../benchmarks/README.md): the E1.1 cases, five repetitions, a committed result record and a prospective threshold (for example `edges-1024` median at most 0.5 times the `main` median, every other case at most 1.10 times). Consequence: a performance claim becomes possible, at the cost of a runner and a record.
+
+E1-Q5, where the checkpoint runs:
+
+- **(a) Recommended. Stroke only**, by the construction flag of E1.3. Consequence: fill identity holds trivially.
+- (b) Fill too. Consequence: fill's identity digest changes (`boundaries` and `contributors` after a failure), which plain mode rejects, so it would need a fill contract note.
+
+##### E1.7 Risks
+
+- **Forecast drift.** `F_L` restates the ledger's charge sequence. A later change to a ledger loop or a lookup without the same change to `F_L` turns the abort unsound. The exactness assertion (E1.4 item 3) and E1-F3 catch this on the corpus. A code comment on each charged ledger loop names the forecast.
+- **Bounds.** The boundary bound `2·cells + S` is not tight. A run whose real boundary count stays below `max_boundaries` while the bound exceeds it gets no abort. This loses speed, never identity.
+- **Small effect.** At `STROKE_V0_LIMITS`, only runs whose ledger exhausts `max_work` gain. Among the measured cases that is `edges-1024`, which is SB-13's dense-subpath row. The crossing-stroke class of the ST-U3b recommendation is not helped (E1-Q3).
+- **Corpus coverage.** Most committed corpora are `ok`-heavy, and several are scratch-only by hash. E1-C1 makes failure coverage reproducible.
+- **Measurement scope.** The timings come from one machine and one scratch instrumentation, and they are diagnostic. B4's stroke rows re-run if E1 changes any stroke outcome; by E1.4 it changes none.
+
 ### 12.2 Acceptance criteria
 
 | ID     | Criterion                                                                                                                                                                                                                                                                                                 | Command or check                                                                                                                                                                                                                                                                    | Units          |
