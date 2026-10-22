@@ -1,6 +1,8 @@
 # V-2 contract: SVG path-data input page on the existing P3 surface
 
-Status: DRAFT, 2026-10-22, revised after independent review round 1 (NOT READY; one blocking item and nine should-fix items, all applied; see [Review round 1](#9-review-round-1)). Round 2 was READY WITH FOLLOW-UPS, and its two follow-ups are applied; see [Review round 2](#10-review-round-2). Pending user approval. Nothing here is in force, and no product code for V-2 starts, until the user approves it in chat ([`AGENTS.md`](../../AGENTS.md#working-rules): no product code before acceptance criteria and validation methods exist).
+Status: APPROVED 2026-10-22 by the user (independent review round 2 READY WITH FOLLOW-UPS, follow-ups applied). V2-Q1 to V2-Q10 are answered (a); see [User decisions, 2026-10-22](#11-user-decisions-2026-10-22). V-2 implementation may start under this contract.
+
+Status history (kept as written): DRAFT, 2026-10-22, revised after independent review round 1 (NOT READY; one blocking item and nine should-fix items, all applied; see [Review round 1](#9-review-round-1)). Round 2 was READY WITH FOLLOW-UPS, and its two follow-ups are applied; see [Review round 2](#10-review-round-2). Pending user approval. Nothing here is in force, and no product code for V-2 starts, until the user approves it in chat ([`AGENTS.md`](../../AGENTS.md#working-rules): no product code before acceptance criteria and validation methods exist).
 
 Track: visualization. Item: V-2 of the [D9 visualization track plan](d9-visualization-track.md#status-index), chosen by the user on 2026-10-22. Tier: full, because V-2 adds user-visible behavior ([`AGENTS.md`](../../AGENTS.md#change-workflow)). Model: the approved [V-1 contract](viz-v1-path-appearance-contract.md), whose page conventions V-2 reuses.
 
@@ -405,3 +407,22 @@ Independent re-review of PR #203, 2026-10-22: **READY WITH FOLLOW-UPS**. Both fo
 | ---- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | F1   | The comma rule (:57, :111) did not define "command letter", and it did not say what other characters after a trailing comma give | Applied in sections 1.2 and 1.4: the command letters are the 20 SVG letters, `A` and `a` included. After a complete group, a comma must be followed by the start of a number; anything else, the end of the input included, is `unexpected-character` at the comma. V2-A4 gains `M 10 10, A`, `M 10 10, X` and `M 10 10, ,` (at the first comma), and V2-A5 states that the mutation oracle follows the same rule |
 | F2   | Fit step 5 (:247): a subnormal positive `hx` or `hy` overflows `336 / hx` to Infinity, which step 6 turned into zoom 1           | Applied in section 3.4: each quotient is clamped to `[2^-20, 2^20]` before the Infinity test, so a finite `hx > 0` with an infinite quotient gives `2^20`; zoom 1 applies only when both extents are exactly 0. V2-A13 gains a unit case (`M 0 0 H 1e-323` gives `2^20`)                                                                                                                                          |
+
+## 11. User decisions, 2026-10-22
+
+The user approved this contract in chat on 2026-10-22, after independent review round 2 (READY WITH FOLLOW-UPS, follow-ups applied), and answered V2-Q1 to V2-Q10 with the recommended option (a) each time.
+
+| Question | Answer | Option text                                                                                                                                      |
+| -------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| V2-Q1    | (a)    | V-2 is a P3 playground page and not the deferred "Import/export" item, because it reads no file or SVG document and keeps nothing (section 1.7)  |
+| V2-Q2    | (a)    | Reject arc commands A/a with `unsupported-command` and the message of section 1.2, without reading the arguments                                 |
+| V2-Q3    | (a)    | The parser lives in `apps/playground/src/viz-v2-path-data-parse.ts`, as page code                                                                |
+| V2-Q4    | (a)    | The path text is parsed only on Apply (button, by pointer or keyboard)                                                                           |
+| V2-Q5    | (a)    | Raw coordinates under an identity transform, with the camera fitted after each geometry-changing Apply and on the Fit button (section 3.4)       |
+| V2-Q6    | (a)    | Page limits of 65,536 code units, 4,096 scene verbs and `abs(v) ≤ 2^24` (section 1.5)                                                            |
+| V2-Q7    | (a)    | Strict SVG 2 grammar with SVG 1.1 numbers, first error only, nothing applied on error (sections 1.2 and 1.4)                                     |
+| V2-Q8    | (a)    | The appearance subset of section 3.2: fill toggle, fill rule, stroke toggle, width, cap and join, with fixed colors, miter limit 4 and opacity 1 |
+| V2-Q9    | (a)    | Import V-1's target-agnostic exports read-only; no V-1 file changes                                                                              |
+| V2-Q10   | (a)    | As V1-Q6 (a): gate the exact operation ids and the observed notice literals; the PR that changes an outcome re-baselines them                    |
+
+**Effect.** The acceptance criteria V2-A1 to V2-A18, the grammar, the limits and the validation of section 5 are fixed. The implementation is one PR on a `claude/viz-v2-*` branch under the gate of section 8. Any change to a criterion, a limit, the grammar or an answer above needs a dated amendment here and the user's approval.

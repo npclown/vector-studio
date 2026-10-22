@@ -9,7 +9,7 @@ Ownership: the packages and pages listed in [D9, visualization track](d9-post-mv
 | Item | Subject                                            | Tier                                                    | State                                                                                                                                                                                                                                                                                                                             |
 | ---- | -------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | V-1  | Path appearance editing on the existing P3 surface | Full (user-visible behavior, AGENTS.md change workflow) | implemented 2026-10-22 on `claude/viz-v1-path-appearance-impl` ([PR #201](https://github.com/npclown/vector-studio/pull/201)); evidence in [V-1 implementation evidence](#v-1-implementation-evidence-2026-10-22); independent evidence review pending, so not complete ([contract](viz-v1-path-appearance-contract.md), PR #200) |
-| V-2  | SVG path-data input page                           | Full (user-visible behavior, AGENTS.md change workflow) | contract draft in review, 2026-10-22 ([contract](viz-v2-path-data-contract.md), PR #203); revised after review round 1 (NOT READY, all items applied); no product code until the user approves it                                                                                                                                 |
+| V-2  | SVG path-data input page                           | Full (user-visible behavior, AGENTS.md change workflow) | contract approved ([contract](viz-v2-path-data-contract.md), PR #203); next implementation                                                                                                                                                                                                                                        |
 
 ## V-1: path appearance editing
 
@@ -53,7 +53,7 @@ Deviation resolved by the user-approved 2026-10-22 amendment of §3.4 (contract 
 
 Added 2026-10-22. Source: the user's choice of 2026-10-22 (chat) of the next visualization item.
 
-Scope: a playground page with a text area for the `d` data of one SVG path, parsed on an explicit Apply into one scene path node and rendered through the ports with a subset of the V-1 controls. P3 scope; no file import or export, no SVG documents and no persistence. Scope, grammar, acceptance criteria, validation and open questions are in the [V-2 contract](viz-v2-path-data-contract.md), a draft pending independent review and user approval.
+Scope: a playground page with a text area for the `d` data of one SVG path, parsed on an explicit Apply into one scene path node and rendered through the ports with a subset of the V-1 controls. P3 scope; no file import or export, no SVG documents and no persistence. Scope, grammar, acceptance criteria, validation and open questions are in the [V-2 contract](viz-v2-path-data-contract.md), approved by the user on 2026-10-22 with V2-Q1 to V2-Q10 answered (a).
 
 ## Evidence rules
 
