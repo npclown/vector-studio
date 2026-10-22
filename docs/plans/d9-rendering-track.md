@@ -60,7 +60,7 @@ By D9-Q2 (a) this plan carries the evidence index for the P3 exit gate. The visu
 
 ## Evidence rules
 
-- Baseline: per the [closure record baseline marking](p3-fill-stroke-meshes.md#mvp-1-closure-record-2026-10-22), AL-OB5 is the only accepted baseline, for fill and for its measured scope; no stroke baseline exists. Compatibility is stated per comparison ([D9, Baseline](d9-post-mvp1-tracks-proposal.md#baseline-and-performance-claims). A performance claim needs a committed record following [`docs/benchmarks/README.md`](../benchmarks/README.md).
+- Baseline: per the [closure record baseline marking](p3-fill-stroke-meshes.md#mvp-1-closure-record-2026-10-22), AL-OB5 is the only accepted baseline, for fill and for its measured scope; no stroke baseline exists. Compatibility is stated per comparison ([D9, Baseline](d9-post-mvp1-tracks-proposal.md#baseline-and-performance-claims)). A performance claim needs a committed record following [`docs/benchmarks/README.md`](../benchmarks/README.md).
 - GPU specs that check kernel outcomes are updated in the same PR as the change that alters the outcome.
 - Every PR names its track, the packages touched and whether the shared surface changed, per the [PR gate in `AGENTS.md`](../../AGENTS.md#pull-request-gate).
 - The weekly integration checkpoint is described in [D9, Operations](d9-post-mvp1-tracks-proposal.md#operations); this plan records its results by link only.
