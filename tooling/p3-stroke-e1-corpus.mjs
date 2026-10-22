@@ -12,9 +12,11 @@
 //   miter limit 4, at e = -3 and e = -6;
 // - the `edges-N` stacks: N = 8 to 64 square-capped horizontal subpaths `M(0, 4i) L(4, 4i)`,
 //   width 2, miter join, e = -3 (ST-F26's `edges-1024` is N = 64);
-// - the E1.1 cases: ST-F16 at e = -8, and the playground paths `cusp-f16-large` (ST-F16's
-//   playground curve at e = -9), `wide-cubic` and the stroke of `fill-stroke-circle`, in local
-//   coordinates. The chords and `edges-1024` cases of E1.1 are already in the families above.
+// - the E1.1 cases: ST-F16 at e = -8, and the playground paths in local coordinates, without
+//   the scene placement or scale, so each case name carries `-local`: `cusp-f16-local` (the
+//   playground's ST-F16 curve at e = -9; the playground's `cusp-f16-large` draws it at scene
+//   scale 60), `wide-cubic-local` and `fill-stroke-circle-local` (its stroke). The chords and
+//   `edges-1024` cases of E1.1 are already in the families above.
 //
 // The chord points come from `Math.cos` and `Math.sin`, so their bits may differ from the Rust
 // probe's in the last place; the corpus is defined by this generator's output.
@@ -83,7 +85,7 @@ for (let stack = 8; stack <= 64; stack += 1) {
 const F16 = [0, 0, 1, 1, 0, 1, 1, 0];
 add('E1.1/ST-F16-e-8', -8, 0.125, 'butt', 'miter', '02', F16);
 add(
-  'E1.1/cusp-f16-large-e-9',
+  'E1.1/cusp-f16-local-e-9',
   -9,
   0.125,
   'butt',
@@ -91,7 +93,15 @@ add(
   '02',
   [-0.5, -0.5, 0.5, 0.5, -0.5, 0.5, 0.5, -0.5],
 );
-add('E1.1/wide-cubic-e-3', -3, 24, 'round', 'round', '02', [-55, 25, -10, -60, 10, 60, 55, -25]);
+add(
+  'E1.1/wide-cubic-local-e-3',
+  -3,
+  24,
+  'round',
+  'round',
+  '02',
+  [-55, 25, -10, -60, 10, 60, 55, -25],
+);
 {
   // `circle(0, 0, 30)` of the playground: four cubics from (30, 0), closed.
   const KAPPA = 0.5522847498307936;
@@ -112,7 +122,7 @@ add('E1.1/wide-cubic-e-3', -3, 24, 'round', 'round', '02', [-55, 25, -10, -60, 1
     points.push(x0 + KAPPA * t0[0], y0 + KAPPA * t0[1], x1 - KAPPA * t1[0], y1 - KAPPA * t1[1]);
     points.push(x1, y1);
   }
-  add('E1.1/fill-stroke-circle-e-3', -3, 8, 'butt', 'round', '022223', points);
+  add('E1.1/fill-stroke-circle-local-e-3', -3, 8, 'butt', 'round', '022223', points);
 }
 
 fs.writeFileSync(out, `${lines.join('\n')}\n`);

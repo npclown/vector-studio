@@ -6,15 +6,15 @@ Ownership: the packages and pages listed in [D9, rendering track](d9-post-mvp1-t
 
 ## Status index
 
-| Item | Subject                                                    | Tier                                       | State                                                   |
-| ---- | ---------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------- |
+| Item | Subject                                                    | Tier                                       | State                                                                                                         |
+| ---- | ---------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
 | E1   | ST-U9 early abort when failure is certain                  | Full                                       | ST-U10 implemented ([evidence](#e1-st-u10-evidence-2026-10-22)); independent diff and evidence review pending |
-| E2   | ST-U9 family-B fast-rung contract                          | Full                                       | Not started                                             |
-| E3   | B4: A04 corpus and measurement contract                    | Full                                       | Not started                                             |
-| E4   | ST-U3f fix decision                                        | Full                                       | Not started                                             |
-| E5   | Unmeasured-scope measurements after the AL-Q6 (a) decision | Full (scenario contract), then light (run) | Not started                                             |
-| E6   | Remove or move the D8-interim overlay and fringe builders  | Full                                       | Not started                                             |
-| X1   | P3 exit evidence A01-A08 index                             | — (Primary acceptance)                     | Open                                                    |
+| E2   | ST-U9 family-B fast-rung contract                          | Full                                       | Not started                                                                                                   |
+| E3   | B4: A04 corpus and measurement contract                    | Full                                       | Not started                                                                                                   |
+| E4   | ST-U3f fix decision                                        | Full                                       | Not started                                                                                                   |
+| E5   | Unmeasured-scope measurements after the AL-Q6 (a) decision | Full (scenario contract), then light (run) | Not started                                                                                                   |
+| E6   | Remove or move the D8-interim overlay and fringe builders  | Full                                       | Not started                                                                                                   |
+| X1   | P3 exit evidence A01-A08 index                             | — (Primary acceptance)                     | Open                                                                                                          |
 
 E1 comes before E2: the early abort is a smaller, independent bound and needs no new certificate. The order is otherwise D9's.
 
@@ -75,21 +75,24 @@ Dated append. Unit ST-U10 implements E1-K1 exactly as the approved [ST-U9 addend
 - `cfg(test)` only: the E1.4 item 3 exactness assertion (`assert_eq!` of the span loop's actual charges against `F_L` whenever a stroke span loop completes), the per-thread probe with the "E1-K1 fired" counter, and the switch `with_early_abort_disabled`.
 - `stroke_outline.rs`: `StrokeWorkspace` calls `new_stroke`.
 - New `stroke_early_abort_tests.rs` (fixtures E1-F1 to E1-F8 and the ignored sweep `e1_c1_differential_sweep`) and its `lib.rs` declaration. No existing `*_tests.rs` file changes.
-- New `tooling/p3-stroke-e1-corpus.mjs`, mode `c1`, for the corpus E1-C1: 1,134 chords cases (2 to 64 segments, every join and cap, `e ∈ {−3, −6}`), 57 `edges-N` stacks (N = 8 to 64), and the four remaining E1.1 cases in local coordinates. 1,195 cases in all.
+- New `tooling/p3-stroke-e1-corpus.mjs`, mode `c1`, for the corpus E1-C1: 1,134 chords cases (2 to 64 segments, every join and cap, `e ∈ {−3, −6}`), 57 `edges-N` stacks (N = 8 to 64), and the four remaining E1.1 cases. 1,195 cases in all. Two deviations are disclosed and were accepted in review round 1:
+
+- (i) The extra guard-blocking sweep points described below.
+- (ii) The three playground cases use their local path data. The scene placement and scale are left out, so their names carry `-local`: `cusp-f16-local` (the playground's `cusp-f16-large` draws this curve at scene scale 60), `wide-cubic-local` and `fill-stroke-circle-local`. The chord points come from JavaScript `Math.cos` and `Math.sin`, so the input hash is stated with its Node version.
 
 **Identity (E1.4 item 1, E1-A1).** `emit_stroke_dump` ran on `origin/main` `485ddd0` (kernel identical to `ff81a93`) and on the branch. Each pair of dumps is byte-identical. `tooling/p3-stroke-dump-diff.mjs` reports `changed: 0` for every corpus.
 
-| Corpus                                            | Cases | Input SHA-256 | Dump SHA-256, before = after |
-| ------------------------------------------------- | ----: | ------------- | ---------------------------- |
-| B2 line and cubic                                 |   145 | `36cd8dcb…`   | `ad6933bc…`                  |
-| `p3-stroke-reversal-corpus.mjs lines`             | 4,800 | `f4914717…`   | `82d7b014…`                  |
-| `p3-stroke-reversal-corpus.mjs mixed`             |   720 | `aa0b9d39…`   | `274c2f35…`                  |
-| E1-C1 (`p3-stroke-e1-corpus.mjs c1`)              | 1,195 | `35964ce6…`   | `7fbb68c8…`                  |
-| Review cusp corpus (scratch)                      |   100 | `044c23b6…`   | `3714546f…`                  |
-| ST-U3c reproductions (scratch)                    |    28 | `f4476fd8…`   | `d937614f…`                  |
-| ST-U3c table-direction probe (scratch)            |   495 | `2d6ded2c…`   | `361eabba…`                  |
-| PR #190 review probe 1 (scratch)                  |   107 | `9630b5e7…`   | `ceec242e…`                  |
-| PR #190 review probe 2 (scratch)                  |   656 | `01a8edba…`   | `d72020c1…`                  |
+| Corpus                                 | Cases | Input SHA-256               | Dump SHA-256, before = after |
+| -------------------------------------- | ----: | --------------------------- | ---------------------------- |
+| B2 line and cubic                      |   145 | `36cd8dcb…`                 | `ad6933bc…`                  |
+| `p3-stroke-reversal-corpus.mjs lines`  | 4,800 | `f4914717…`                 | `82d7b014…`                  |
+| `p3-stroke-reversal-corpus.mjs mixed`  |   720 | `aa0b9d39…`                 | `274c2f35…`                  |
+| E1-C1 (`p3-stroke-e1-corpus.mjs c1`)   | 1,195 | `52940665…` (Node v24.15.0) | `8091e7c7…`                  |
+| Review cusp corpus (scratch)           |   100 | `044c23b6…`                 | `3714546f…`                  |
+| ST-U3c reproductions (scratch)         |    28 | `f4476fd8…`                 | `d937614f…`                  |
+| ST-U3c table-direction probe (scratch) |   495 | `2d6ded2c…`                 | `361eabba…`                  |
+| PR #190 review probe 1 (scratch)       |   107 | `9630b5e7…`                 | `ceec242e…`                  |
+| PR #190 review probe 2 (scratch)       |   656 | `01a8edba…`                 | `d72020c1…`                  |
 
 E1-C1's statuses are the same on both sides: 275 `ok`, 462 `Rounded(NodeLimit)`, 229 `Rounded(EventLimit)`, 215 `Rounded(InputLimit)`, 13 `Rounded(WorkLimit)` and 1 `Front(PieceLimit)`. All scratch inputs were available, so none is NOT RUN.
 
@@ -127,3 +130,9 @@ On and off were equal everywhere. The coverage floor holds: E1-K1 fired 58 times
 **Timing note (E1-A5): diagnostic, not evidence.** This is a functional observation only and makes no performance claim (E1-Q4 (a)). The run used native release, one thread, a Ryzen 7 3700X and Windows 11, with 5 builds on one reused production workspace, twice for each side. On `edges-1024`, E1-K1 on took a best of 18.6 ms and a median of 18.8-18.9 ms. Off took a best of 54.3-54.4 ms and a median of 54.5-54.7 ms. The scratch timing test is not committed.
 
 **Validation.** Run on the branch with `CARGO_HOME` and `RUSTUP_HOME` set to the main checkout's `.tools`, without a junction. The commands and their results are listed in the PR. Still pending: the independent diff review and the evidence review (E1-Q1 (a)).
+
+**Review round 1 (PR #202), 2026-10-22.** The verdict was NOT READY, on one mechanical item; the kernel and the evidence were accepted. The follow-ups below are applied.
+
+- **B1.** This file was reformatted with `prettier --config .prettierrc.json --ignore-path "" --write`. `.prettierignore` excludes `**/*.md`, so `pnpm format:check` does not cover it.
+- **S1.** The playground cases were renamed with `-local`. This changes the E1-C1 input hash from `35964ce6…` to `52940665…` (Node v24.15.0, S2). The before and after dumps were re-run and are again byte-identical (`8091e7c7…`), with `changed: 0` and the same statuses. The sweep was re-run with identical counts.
+- **S3.** The fixture comment on the E1-F4 window now gives the 127 vertical boundaries that are emitted before `WorkLimit`.

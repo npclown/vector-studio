@@ -293,7 +293,8 @@ fn e1_f3_edges_1024_boundary_trio() {
 fn e1_f4_edges_1024_bounds_guard() {
     let (path, request) = edges_1024();
     let max_work = 123_992_662;
-    // BoundaryLimit: 2·cells <= max_boundaries < 2·cells + 127, the window 384 to 511.
+    // BoundaryLimit: 2·cells <= max_boundaries < 2·cells + 127 (127 of the 128 vertical
+    // boundaries are emitted before WorkLimit at W+F_L−1), the window 384 to 511.
     for max_boundaries in [384, 510] {
         let limits = RoundedFillLimits {
             max_work,
