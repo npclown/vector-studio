@@ -218,7 +218,7 @@ V1-A8 and V1-A10 name probe kinds and edits. The exact probe coordinates, colors
 For this contract checkpoint (documentation only):
 
 - `pnpm exec prettier --check --ignore-path "" docs/plans/viz-v1-path-appearance-contract.md`
-- a link and anchor check of the new file (a scratch Node script; links into `d9-visualization-track.md` resolve against PR #198's branch until it merges)
+- a link and anchor check of the new file (a scratch Node script, run against `main` with no fallback branch)
 - `git diff --cached --check`
 
 For the implementation, each run while the change is still uncommitted:
@@ -254,7 +254,7 @@ The GPU specs are not in CI. Their evidence is the headed run on the reference m
 - **Traceability.** `docs/requirements.md` has no IDs, so section 1.3 cites section and bullet text. A later requirements edit can break the citation silently.
 - **Scope drift.** A properties panel, click selection or persistence would cross into P5 or the deferred "Full layers/properties UI". Section 1.2 excludes them; the review checks the diff against it.
 - **No CI for GPU evidence.** The weekly D9 checkpoint and the per-PR headed run are the only GPU gates.
-- **Unmerged dependency.** This contract links `docs/plans/d9-visualization-track.md`, which PR #198 adds. If #198 changes that file's headings, the anchors here must follow.
+- **Linked track plan.** This contract links anchors in `docs/plans/d9-visualization-track.md` (added by PR #198, merged as `485ddd0`). If that file's headings change, the anchors here must follow.
 
 ## 7. Open questions
 
@@ -276,7 +276,7 @@ Each question lists the recommended option first, with its consequences. For V1-
 
 This contract is a full-tier checkpoint. It needs an independent review in a fresh context, its findings disposed by the Primary, and the user's approval with answers to V1-Q1 to V1-Q9 before any V-1 product code.
 
-**Merge order.** This contract's PR merges after PR #198, which adds `docs/plans/d9-visualization-track.md`. Once #198 has merged, this branch is rebased onto `main`, and the V-1 row of that plan's status index is updated to "contract in review" with a link here, in this same PR.
+**Merge order.** This contract's PR merges after PR #198, which adds `docs/plans/d9-visualization-track.md`. #198 merged as `485ddd0`. This branch is rebased onto it, and in this same PR the V-1 row of that plan's status index reads "contract in review (PR #200)".
 
 **Implementation gate line.** The implementation PR states: track visualization; packages touched none (`apps/playground`, `tests/gpu`, `tests/unit` and `docs` only); shared surface changed? n. It also names the shared `tests/` edits under D9-Q8 (a): `tests/unit/v3a-path-pipeline.test.ts` and `tests/unit/v3b-mesh-backend.test.ts` (the host allow-lists), the new `tests/gpu/viz-v1-appearance.spec.ts` and `tests/unit/viz-v1-appearance.test.ts`, and any new `tests/support/` file.
 
@@ -307,5 +307,5 @@ Independent review of PR #200, 2026-10-22: **NOT READY**, with three blocking it
 | S14  | V1-Q9 width range text and option (c)                                                                                                                                                                                  | Applied                                                                                                                                                                                       |
 | S15  | `pnpm build`, the host tests, `apps/playground/package.json` in the diff check                                                                                                                                         | Applied in section 5 and V1-A14                                                                                                                                                               |
 | S16  | Coupling to `B2_PATHS` and `V4_PATHS`                                                                                                                                                                                  | Applied: risk plus the pinned literal in V1-A3                                                                                                                                                |
-| S17  | Merge after #198; then rebase and update the V-1 row                                                                                                                                                                   | Applied in the Gate; the row update waits for #198, which is open as of this revision                                                                                                         |
+| S17  | Merge after #198; then rebase and update the V-1 row                                                                                                                                                                   | Applied: #198 merged as `485ddd0`; rebased, and the V-1 row set to "contract in review (PR #200)"                                                                                             |
 | S18  | Non-exhaustive contracts type list; `RenderCamera`; restate the `applyChanges` precedent                                                                                                                               | Applied in section 2                                                                                                                                                                          |
