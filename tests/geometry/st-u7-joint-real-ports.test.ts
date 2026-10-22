@@ -258,18 +258,22 @@ describe('ST-U7 joint overlay on real-port meshes (ST-U7b review S4)', () => {
  * meshes builds, including curve-flattened round joins drawn fringed and region-only; the
  * failures are the ports' own (stroke work-limit on the cubic blob, the open ST-U9 decision;
  * fill unsupported-geometry on the open curves), so no overlay is attempted for them.
+ *
+ * Note, 2026-10-23 (E8-U1, docs/plans/p3-rounded-knot-topology-contract.md E8 addendum E8.3):
+ * the exact-rung direction hint admits the fill of four of them, which now build (s-curve round
+ * and square caps, arch round caps at e = -2, arch butt at e = -1): failure-to-success changes.
  */
 const EXPECTED_OUTCOMES: Readonly<Record<string, string>> = {
   'blob-round-join': 'port-failure',
   'blob-miter': 'port-failure',
-  's-curve-round-caps': 'port-failure',
-  's-curve-square-caps': 'port-failure',
+  's-curve-round-caps': 'built',
+  's-curve-square-caps': 'built',
   'd-shape-round-join-e-2': 'built',
   'd-shape-round-join-e-3': 'built',
   'd-shape-round-join-e-1': 'built',
   'd-shape-miter-e-1': 'built',
-  'arch-round-caps-e-2': 'port-failure',
-  'arch-butt-e-1': 'port-failure',
+  'arch-round-caps-e-2': 'built',
+  'arch-butt-e-1': 'built',
   'blob-round-join-e-1': 'port-failure',
   'pentagon-round-join': 'built',
   'pentagon-bevel': 'built',

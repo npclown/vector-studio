@@ -186,6 +186,7 @@ type RoundedLeaf = Readonly<{
   sourceStart: ExactPoint;
   sourceEnd: ExactPoint;
   sourceDifferences: readonly ExactPoint[];
+  closure: boolean;
 }>;
 type TopologyFailureResult = Readonly<{
   ok: false;
@@ -563,6 +564,48 @@ function roundedLeafProgresses(leaf: RoundedLeaf, direction: ExactPoint): boolea
   return (
     compare(total, ZERO) > 0 && compare(dot(pointSub(leaf.end, leaf.start), direction), ZERO) > 0
   );
+}
+
+function isZeroVector(vector: ExactPoint): boolean {
+  return sign(vector[0]) === 0 && sign(vector[1]) === 0;
+}
+
+/** E8.3 step 4: cross(from, to) > 0, or cross(from, to) = 0 and dot(from, to) > 0. */
+function turnsLeftOrAlong(from: ExactPoint, to: ExactPoint): boolean {
+  const turn = sign(crossVectors(from, to));
+  return turn > 0 || (turn === 0 && sign(dot(from, to)) > 0);
+}
+
+/**
+ * The common-direction test for a directed cyclic adjacent pair: P3.1f line 11, as amended by
+ * the E8 addendum E8.3 (docs/plans/p3-rounded-knot-topology-contract.md), written from the
+ * addendum text. The frozen test with d1 = N.Q3 - P.Q0 runs first; only if it fails, every
+ * non-closure piece must make exact own progress (dot(B - A, Q3 - Q0) > 0), and the frozen test
+ * runs once more with d2 = J(a - b), or a, from the exact angular extremes a and b of the pair's
+ * source differences (a closure's endpoint derivative) and actual chords.
+ */
+function adjacentPairProjects(previous: RoundedLeaf, next: RoundedLeaf): boolean {
+  const first = pointSub(next.sourceEnd, previous.sourceStart);
+  if (roundedLeafProgresses(previous, first) && roundedLeafProgresses(next, first)) return true;
+  for (const leaf of [previous, next]) {
+    if (leaf.closure) continue;
+    const ownProgress = dot(
+      pointSub(leaf.end, leaf.start),
+      pointSub(leaf.sourceEnd, leaf.sourceStart),
+    );
+    if (sign(ownProgress) <= 0) return false;
+  }
+  const vectors = [previous, next]
+    .flatMap((leaf) => [...leaf.sourceDifferences, pointSub(leaf.end, leaf.start)])
+    .filter((vector) => !isZeroVector(vector));
+  const a = vectors.find((candidate) => vectors.every((u) => turnsLeftOrAlong(candidate, u)));
+  const b = vectors.find((candidate) => vectors.every((u) => turnsLeftOrAlong(u, candidate)));
+  if (a === undefined || b === undefined) return false;
+  const turn = sign(crossVectors(a, b));
+  if (turn < 0) return false;
+  // J(x, y) = (-y, x), so J(a - b) = (b.y - a.y, a.x - b.x).
+  const second: ExactPoint = turn === 0 ? a : [sub(b[1], a[1]), sub(a[0], b[0])];
+  return roundedLeafProgresses(previous, second) && roundedLeafProgresses(next, second);
 }
 
 function directedCyclicAdjacent(
@@ -1290,6 +1333,7 @@ function prepareRoundedTopologySuffix(
           sourceStart: controls[0],
           sourceEnd: controls[3],
           sourceDifferences,
+          closure: false,
         });
         contourLeaf += 1;
         actualStart = line.exactEnd;
@@ -1319,6 +1363,7 @@ function prepareRoundedTopologySuffix(
         sourceStart: actualStart,
         sourceEnd: firstExact,
         sourceDifferences: [difference],
+        closure: true,
       });
       contourLeaf += 1;
     }
@@ -1602,11 +1647,7 @@ export function certifyRoundedKnotCubicTopology(
       const adjacent = directedCyclicAdjacent(left, right, contourLeafCounts);
       if (adjacent) {
         const [previous, next] = adjacent;
-        const direction = pointSub(next.sourceEnd, previous.sourceStart);
-        if (
-          !roundedLeafProgresses(previous, direction) ||
-          !roundedLeafProgresses(next, direction)
-        ) {
+        if (!adjacentPairProjects(previous, next)) {
           return failure(
             'UNRESOLVED',
             `adjacent hull pair ${leftIndex},${rightIndex} lacks a common directed projection`,
@@ -1659,11 +1700,7 @@ function certifyPreparedTransverseArrangement(
       const adjacent = directedCyclicAdjacent(left, right, contourLeafCounts);
       if (adjacent) {
         const [previous, next] = adjacent;
-        const direction = pointSub(next.sourceEnd, previous.sourceStart);
-        if (
-          !roundedLeafProgresses(previous, direction) ||
-          !roundedLeafProgresses(next, direction)
-        ) {
+        if (!adjacentPairProjects(previous, next)) {
           return failure(
             'UNRESOLVED',
             `adjacent hull pair ${leftIndex},${rightIndex} lacks a common directed projection`,

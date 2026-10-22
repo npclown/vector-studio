@@ -2199,13 +2199,16 @@ fn e8_crossing_replacement_meets_its_preconditions() {
     assert_mesh_invariants(&mesh);
 }
 
+/// One E8 fixture row: name, path data, coordinate offset, and (exponent, status) cases.
+type E8Row<'a> = (&'a str, &'a str, f64, &'a [(i32, u32)]);
+
 #[test]
 fn e8_fixtures_reach_their_e8_u1_status_through_the_export() {
     // E8-K2 and E8-C1/E8-C2 (E8 addendum E8.6, column "After E8-U1 alone").
     let ok = FILL_PATH_OK;
     let limit = FILL_PATH_WORK_LIMIT;
     let unsupported = FILL_PATH_UNSUPPORTED_GEOMETRY;
-    let rows: [(&str, &str, f64, &[(i32, u32)]); 8] = [
+    let rows: [E8Row<'_>; 8] = [
         (
             "E8-F1",
             E8_F1,

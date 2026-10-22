@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Point } from '../../packages/geometry-reference/src/types.js';
 import {
+  E8_RETIRED_INHERITED_ID,
   encodeNativeTriangleFreeArrangementFixture,
   fixedNativeTriangleFreeArrangementFixtureRows,
   type NativeTriangleFreeArrangementFixtureRow,
@@ -234,7 +235,7 @@ describe('P3.2x native triangle-free arrangement transport', () => {
     expect(fixtureRows.slice(11, 18).every(({ id }) => id.startsWith('mixed/'))).toBe(true);
     expect(fixtureRows.slice(18).every(({ id }) => id.startsWith('legacy/'))).toBe(true);
     const inherited = fixedNativeMixedLineArrangementFixtureRows().filter(
-      ({ expectation }) => expectation === 'Certified',
+      ({ expectation, id }) => expectation === 'Certified' && id !== E8_RETIRED_INHERITED_ID,
     );
     expect(fixtureRows.slice(11).map(({ id }) => id)).toEqual(inherited.map(({ id }) => id));
     for (const fixture of fixtureRows) {

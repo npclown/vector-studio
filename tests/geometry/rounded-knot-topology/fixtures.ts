@@ -284,6 +284,34 @@ function cyclicOnly(): RawContour {
   ];
 }
 
+/**
+ * E8-U1 (docs/plans/p3-rounded-knot-topology-contract.md, E8 addendum E8.3): the frozen
+ * cyclic-only projection control, whose last-to-first pair fails d1 = (33/4, 9/4), is admitted
+ * by the one further exact candidate d2: its vectors (the C-to-A direction and the A-to-B
+ * direction) lie in an open half plane and every actual chord is its source chord. Its literal
+ * input and its frozen status in `roundedKnotTopologyControls` stay unchanged; the tests read
+ * this record for its outcome after E8-U1 and keep it as a positive. Its replacement as a
+ * cyclic-only rejection is an open question of E8-U1 (it is not one of the four E8-C5 controls).
+ * Polygon: the actual leaf starts; orientation and winding as the P3.1f triangle.
+ */
+export const E8_ADMITTED_CYCLIC_ONLY = Object.freeze({
+  id: 'cyclic-only-projection',
+  leaves: 6,
+  pairs: 15,
+  polygons: [
+    [
+      [0, 0],
+      [9, 0],
+      [6, -9 / 2],
+      [3, -9],
+      [3 / 2, -9 / 2],
+      [3 / 4, -9 / 4],
+    ],
+  ] as readonly (readonly Point[])[],
+  orientations: [-1] as readonly (-1 | 1)[],
+  winding: [[0]] as readonly (readonly (-1 | 0 | 1)[])[],
+});
+
 /** Returns the literal topology-specific rejecting controls and their exact counters. */
 export function roundedKnotTopologyControls(): readonly RoundedKnotTopologyControl[] {
   const base = roundedTriangle(true);

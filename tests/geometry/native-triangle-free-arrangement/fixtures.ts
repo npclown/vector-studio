@@ -20,12 +20,17 @@ function controlExpectation(status: string): 'Unresolved' | 'WorkLimit' {
   throw new Error(`unexpected triangle-free control status ${status}`);
 }
 
+/** The legacy row admitted by E8-U1, kept out of the inherited triangle-free positives. */
+export const E8_RETIRED_INHERITED_ID = 'legacy/control/cyclic-only-projection';
+
 /** Returns the frozen 8 positive + 3 control + 31 inherited carrier. */
 export function fixedNativeTriangleFreeArrangementFixtureRows(): readonly NativeTriangleFreeArrangementFixtureRow[] {
   const positives = fixedTriangleFreeArrangementFixtures();
   const controls = triangleFreeArrangementControls();
+  // E8-U1: the legacy cyclic-only control, admitted by d2, is not inherited, so the frozen
+  // 42-row protocol is unchanged (E8_ADMITTED_CYCLIC_ONLY).
   const inherited = fixedNativeMixedLineArrangementFixtureRows().filter(
-    (row) => row.expectation === 'Certified',
+    (row) => row.expectation === 'Certified' && row.id !== E8_RETIRED_INHERITED_ID,
   );
   if (positives.length !== 8 || controls.length !== 3 || inherited.length !== 31)
     throw new Error(
