@@ -6,17 +6,17 @@ Ownership: the packages and pages listed in [D9, rendering track](d9-post-mvp1-t
 
 ## Status index
 
-| Item | Subject                                                           | Tier                                       | State                                                                                                                                                                                                                                          |
-| ---- | ----------------------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| E1   | ST-U9 early abort when failure is certain                         | Full                                       | ST-U10 implemented ([evidence](#e1-st-u10-evidence-2026-10-22)); independent diff and evidence review pending                                                                                                                                  |
-| E2   | ST-U9 family-B fast-rung contract                                 | Full                                       | Not started                                                                                                                                                                                                                                    |
-| E3   | B4: A04 corpus and measurement contract                           | Full                                       | Not started. Update 2026-10-22: [contract draft](d9-e3-b4-precision-contract.md) in review. Update 2026-10-22 (later): contract approved (PR #204); next E3-U1 corpus freeze                                                                   |
-| E4   | ST-U3f fix decision                                               | Full                                       | Not started                                                                                                                                                                                                                                    |
-| E5   | Unmeasured-scope measurements after the AL-Q6 (a) decision        | Full (scenario contract), then light (run) | Not started                                                                                                                                                                                                                                    |
-| E6   | Remove or move the D8-interim overlay and fringe builders         | Full                                       | Not started                                                                                                                                                                                                                                    |
-| E7   | Conforming refinement (E3-Q10 (c), remedy for A01 watertightness) | Full                                       | Candidate, added 2026-10-22 from the [E3 decisions](d9-e3-b4-precision-contract.md#user-decisions-2026-10-22); not started                                                                                                                     |
-| E8   | Unsupported-geometry on simple smooth Q/T and C/S paths           | Full                                       | Candidate, added 2026-10-22 from the V-2 headed runs. Update 2026-10-23: investigated ([result](#e8-investigation-2026-10-23)); E8-U1/U2 contract draft in review ([E8 addendum](p3-rounded-knot-topology-contract.md#e8-addendum-2026-10-23)) |
-| X1   | P3 exit evidence A01-A08 index                                    | — (Primary acceptance)                     | Open                                                                                                                                                                                                                                           |
+| Item | Subject                                                           | Tier                                       | State                                                                                                                                                                                                                                                                                                                                          |
+| ---- | ----------------------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E1   | ST-U9 early abort when failure is certain                         | Full                                       | ST-U10 implemented ([evidence](#e1-st-u10-evidence-2026-10-22)); independent diff and evidence review pending                                                                                                                                                                                                                                  |
+| E2   | ST-U9 family-B fast-rung contract                                 | Full                                       | Not started                                                                                                                                                                                                                                                                                                                                    |
+| E3   | B4: A04 corpus and measurement contract                           | Full                                       | Not started. Update 2026-10-22: [contract draft](d9-e3-b4-precision-contract.md) in review. Update 2026-10-22 (later): contract approved (PR #204); next E3-U1 corpus freeze                                                                                                                                                                   |
+| E4   | ST-U3f fix decision                                               | Full                                       | Not started                                                                                                                                                                                                                                                                                                                                    |
+| E5   | Unmeasured-scope measurements after the AL-Q6 (a) decision        | Full (scenario contract), then light (run) | Not started                                                                                                                                                                                                                                                                                                                                    |
+| E6   | Remove or move the D8-interim overlay and fringe builders         | Full                                       | Not started                                                                                                                                                                                                                                                                                                                                    |
+| E7   | Conforming refinement (E3-Q10 (c), remedy for A01 watertightness) | Full                                       | Candidate, added 2026-10-22 from the [E3 decisions](d9-e3-b4-precision-contract.md#user-decisions-2026-10-22); not started                                                                                                                                                                                                                     |
+| E8   | Unsupported-geometry on simple smooth Q/T and C/S paths           | Full                                       | Candidate, added 2026-10-22 from the V-2 headed runs. Update 2026-10-23: investigated ([result](#e8-investigation-2026-10-23)); E8-U1/U2 contract draft in review ([E8 addendum](p3-rounded-knot-topology-contract.md#e8-addendum-2026-10-23)); revised after review round 1 (PR #210), E8-Q1 to E8-Q6 decided, unit order E8-U0, E8-U1, E8-U2 |
+| X1   | P3 exit evidence A01-A08 index                                    | — (Primary acceptance)                     | Open                                                                                                                                                                                                                                                                                                                                           |
 
 E1 comes before E2: the early abort is a smaller, independent bound and needs no new certificate. The order is otherwise D9's.
 
@@ -292,4 +292,25 @@ How to read the table:
 - Neither unit changes an `ok` mesh, so `fill_v0_revision()` stays 2 ([V2](p3-v2-fill-mesh-transport-contract.md) lines 36 and 491).
 - No threshold changes, and the A04 target does not change.
 
-**Next.** Independent review of the addendum, then the Primary's decisions on E8-Q1 to E8-Q6, then E8-U1 on its own branch.
+**Review round 1 (PR #210), 2026-10-23.** The verdict was NOT READY on one blocking item. E8-U1 was found sound and byte-identical. The Primary applied every item under the standing instruction. They are recorded in [addendum section E8.12](p3-rounded-knot-topology-contract.md#e812-review-round-1-2026-10-23).
+
+- **B1 (blocking).** The E8-U2 snap now runs on `commands` before `collect_contours`, so the closure rule sees canonical points. A snap after collection gave E8-F5 a zero-length closing owner and an internal error.
+- **S1-S7.**
+  - E8-P1 now blocks E8-U2 (E8-K11).
+  - A light-tier tooling unit, E8-U0, adds a `--failure-to-success` mode to `pnpm test:p3-fill-identity` with a reviewed self-test.
+  - The work bound in P3.2n line 17 is amended.
+  - The TypeScript oracle mirror is added (E8-K10).
+  - Each E8-C5 control has its own replacement.
+  - Every fixture states its result after E8-U1 alone and after both units.
+  - The completeness note is reworded.
+
+**Decisions, 2026-10-23, under the standing instruction:**
+
+- E8-Q1 (a): exact rung only.
+- E8-Q2 (b): TypeScript oracle mirror.
+- E8-Q3: per control.
+- E8-Q4 (a): `p3qc` expectation updated in the E8-U1 PR, with visualization-track review.
+- E8-Q5 (a): separate PRs, E8-U0, then E8-U1, then E8-U2.
+- E8-Q6 (a): M1′ recorded in the addendum and this plan only.
+
+**Next.** Re-review of the revised addendum, then E8-U0 on its own branch.

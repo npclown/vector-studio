@@ -66,7 +66,7 @@ Primary owns the contract and integration. Sol high owns the coupled oracle/shar
 
 ## E8 addendum, 2026-10-23
 
-Status: DRAFT, 2026-10-23. The Primary wrote it under the user's standing instruction (take the recommended option and record the decision). It is in independent review and is not frozen. Item [E8](d9-rendering-track.md#e8-investigation-2026-10-23) of the rendering track owns execution. The frozen text above is unchanged. This addendum amends only the clauses it names, and only for units E8-U1 and E8-U2.
+Status: DRAFT, 2026-10-23, revised after review round 1 (E8.12). The Primary wrote it under the user's standing instruction (take the recommended option and record the decision). It is in independent review and is not frozen. Item [E8](d9-rendering-track.md#e8-investigation-2026-10-23) of the rendering track owns execution. The frozen text above is unchanged. This addendum amends only the clauses it names, and only for units E8-U0, E8-U1 and E8-U2, which run in that order (E8-Q5).
 
 Tier: full. Track: rendering. Shared surface: none. No public API, ABI, export, operation identity, kernel revision, cap, threshold, error allowance or dependency changes. The A04 target of the [E3 contract](d9-e3-b4-precision-contract.md) is unchanged.
 
@@ -74,18 +74,18 @@ Tier: full. Track: rendering. Shared surface: none. No public API, ABI, export, 
 
 This contract owns two rules: the common-direction test for cyclic adjacent pairs (line 11) and the source-final restriction (lines 7, 9 and 15, and step 2 on line 24). Its native successors implement both rules unchanged. The addendum is therefore written here, and each successor carries a pointer to it.
 
-| Site on `main` e6eb90f (`packages/geometry-wasm/kernel/src/`)                                  | Native contract                                                                                                                                                                                                                                           | Unit  |
-| ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| `simple_cubic_topology.rs:831-839`, `RoundedKnotCubicTopologyWorkspace::check_pair`            | [P3.2n](p3-native-rounded-topology-contract.md)                                                                                                                                                                                                           | E8-U1 |
-| `simple_cubic_topology.rs:873-885`, its `reference_pair_body` (the B0R O3 reference)           | P3.2n with [B0R](p3-b0r-kernel-performance-contract.md#62-frozen-clauses-this-contract-amends) U2                                                                                                                                                         | E8-U1 |
-| `simple_cubic_topology.rs:1085-1102`, `TransverseArrangementWorkspace::check_pair`             | [P3.2s](p3-native-transverse-arrangement-contract.md) line 20 ("Adjacent pairs use unchanged directed common projection"), extended by [P3.2v](p3-native-mixed-line-arrangement-contract.md) and [P3.2x](p3-native-triangle-free-arrangement-contract.md) | E8-U1 |
-| `simple_cubic_topology.rs:1190-1207`, its `reference_pair_body`                                | P3.2s and P3.2x with B0R U2                                                                                                                                                                                                                               | E8-U1 |
-| `simple_cubic_topology.rs:2279`, `preflight_source_final`, called at `:664` (`prepare_suffix`) | P3.2n line 17 and step 3 (line 29); inherited by P3.2s and P3.2x                                                                                                                                                                                          | E8-U2 |
-| `cubic_fill.rs:727`, `certify_topology` (the `TopologyInput` build), and the collected contour | [P3.2h](p3-native-cubic-workspace-contract.md), [P3.2o](p3-rounded-topology-adoption-contract.md) line 7, [P3.2y](p3-triangle-free-cubic-composition-contract.md) line 7                                                                                  | E8-U2 |
+| Site on `main` e6eb90f (`packages/geometry-wasm/kernel/src/`)                                    | Native contract                                                                                                                                                                                                                                           | Unit  |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| `simple_cubic_topology.rs:831-839`, `RoundedKnotCubicTopologyWorkspace::check_pair`              | [P3.2n](p3-native-rounded-topology-contract.md)                                                                                                                                                                                                           | E8-U1 |
+| `simple_cubic_topology.rs:873-885`, its `reference_pair_body` (the B0R O3 reference)             | P3.2n with [B0R](p3-b0r-kernel-performance-contract.md#62-frozen-clauses-this-contract-amends) U2                                                                                                                                                         | E8-U1 |
+| `simple_cubic_topology.rs:1085-1102`, `TransverseArrangementWorkspace::check_pair`               | [P3.2s](p3-native-transverse-arrangement-contract.md) line 20 ("Adjacent pairs use unchanged directed common projection"), extended by [P3.2v](p3-native-mixed-line-arrangement-contract.md) and [P3.2x](p3-native-triangle-free-arrangement-contract.md) | E8-U1 |
+| `simple_cubic_topology.rs:1190-1207`, its `reference_pair_body`                                  | P3.2s and P3.2x with B0R U2                                                                                                                                                                                                                               | E8-U1 |
+| `simple_cubic_topology.rs:2279`, `preflight_source_final`, called at `:664` (`prepare_suffix`)   | P3.2n line 17 and step 3 (line 29); inherited by P3.2s and P3.2x                                                                                                                                                                                          | E8-U2 |
+| `cubic_fill.rs:480-515`, `run_prefix` (before `collect_contours` and `validate_leaf_partitions`) | [P3.2h](p3-native-cubic-workspace-contract.md), [P3.2o](p3-rounded-topology-adoption-contract.md) line 7, [P3.2y](p3-triangle-free-cubic-composition-contract.md) line 7                                                                                  | E8-U2 |
 
 Other documents that inherit the test:
 
-- **Test-only oracles.** The oracle of this contract, [P3.1g](p3-transverse-arrangement-contract.md) (line 52) and [P3.1i](p3-triangle-free-arrangement-contract.md) (line 7) inherit the same test. E8-Q2 decides whether they follow the change.
+- **Test-only oracles.** The oracle of this contract, [P3.1g](p3-transverse-arrangement-contract.md) (line 52) and [P3.1i](p3-triangle-free-arrangement-contract.md) (line 7) inherit the same test. By E8-Q2 (b) they follow the change through an independently written TypeScript mirror of E8.3 (E8-K10).
 - **Cascade.** The cascade of the [V2 contract](p3-v2-fill-mesh-transport-contract.md) section c and rung 1 of the [Alt-A1 contract](p3-alt-a1-fill-ladder-contract.md) keep their order and their selection rules. Only the helpers they call accept more inputs.
 - **Unchanged.** The fast rung (Alt-A1 FR4, `fill_ladder.rs:1700-1745`) and the exact-knot helper of [P3.1e](p3-simple-cubic-topology-contract.md) are not changed.
 
@@ -103,6 +103,24 @@ The [E8 investigation](d9-rendering-track.md#e8-investigation-2026-10-23) reprod
 - **M2, an inexact source-final knot.** The flattener emits each final leaf endpoint as `origin + (p3 − origin)` (`geometry.rs:651-654`).
   - With non-dyadic endpoints this often differs from p3, so step 2 (line 24) returns KNOT_MISMATCH.
   - The two V-2 paths do not hit M2.
+
+### E8.2a E8-U0: a failure-to-success mode for the fill identity tool
+
+Added in review round 1 (S2). E8-K3 cannot run in plain mode, because plain `pnpm test:p3-fill-identity` requires equal digests and E8-U1 and E8-U2 turn failures into successes. E8-U0 is a light-tier tooling unit that runs before E8-U1. It changes no kernel code.
+
+- **Mode.** Add `--failure-to-success` to `tooling/compare-p3-fill-identity.mjs`, beside `--revision-change`, with the same `--compare-only <run-dir>` and `--tamper <case>` support. It replaces the digest equality with a per-record classification of merge base against branch:
+  - base `ok`, branch `ok` with identical status, mesh bytes and boundary pairs: **identical**;
+  - base not `ok`, branch anything: **allowed change**, listed with both statuses;
+  - base `ok`, branch different in any byte or status: **FAIL**.
+  - The run passes only if there is no FAIL. It writes the count of each class and the list of allowed changes to the run directory.
+- **Unchanged.** Every other step of the tool stays unchanged: the test-file allow-list (O5), the inline `cfg(test)` module check, the pinned toolchain and the corpus.
+- **Self-test.** `--self-test` gains synthetic run directories for each class, and tamper cases that must FAIL:
+  - one mesh byte changed on a base-`ok` record;
+  - a base-`ok` record that becomes a failure;
+  - a base-`ok` record with a changed boundary pair;
+  - a missing record.
+  - One review of the self-test is required before E8-U1 relies on the mode.
+- **Acceptance.** The self-test passes. A plain-mode run and a `--failure-to-success` run on an unchanged branch both pass, the latter with 0 allowed changes. Prettier, lint and `pnpm check` pass. One independent diff review.
 
 ### E8.3 E8-U1: a second exact candidate direction
 
@@ -135,12 +153,15 @@ The guard of step 2 is not needed for soundness. It keeps the intent of the froz
 
 **Completeness note (not a requirement).**
 
-- When cross(a, b) > 0, every u in V is a nonnegative combination of a and b.
-- dot(d₂, a) = dot(d₂, b) = cross(a, b) > 0, so d₂ has a strictly positive dot with every vector of V.
-- Step 6 therefore passes whenever V lies in an open half-plane and the guard passes.
-- It fails exactly when V spans a closed half-plane or more. That case includes the tangential reversal M1′.
+E8-U1 accepts every pair whose V lies in an open half-plane and whose pieces pass the guard of step 2.
+
+- If V lies in an open half-plane, steps 4 and 5 find a and b with cross(a, b) ≥ 0, and every u in V is a nonnegative combination of a and b.
+- dot(d₂, a) = dot(d₂, b) = cross(a, b) > 0 (or d₂ = a when all vectors point one way), so d₂ has a strictly positive dot with every vector of V, and step 6 passes.
+- A pair whose V does not lie in an open half-plane is UNRESOLVED. That case includes the tangential reversal M1′.
 
 **Clause change.** For E8-U1, two clauses change: the clause on line 11 ("choose the sole candidate d = N.Q3 − P.Q0 … No floating epsilon or adaptive direction search is allowed"), and the matching "no … direction search" of [P3.2n](p3-native-rounded-topology-contract.md) line 17. Both now read: "choose d₁ = N.Q3 − P.Q0, then, only if d₁ fails, the one further exact candidate d₂ of the E8 addendum. No floating epsilon, iteration, subdivision or retry is allowed." d₂ is a single closed-form candidate, not a search.
+
+The work-bound clause of P3.2n line 17, "adjacent pairs require at most eight dots", changes with it. For E8-U1 it reads: "adjacent pairs require at most eight dots for d₁; only if d₁ fails, at most 2 guard dots, 128 cross signs, 128 dots and the 8 dots and 2 totals of the d₂ test more." The nonadjacent bounds of line 17 and the pair ceiling are unchanged.
 
 **Work and width.**
 
@@ -179,12 +200,16 @@ Hence every request whose result was `ok` keeps the same mesh bytes, and every c
 
 ### E8.4 E8-U2: a canonical source-final knot in the exact rung
 
-**Rule.** The snap runs in the exact rung only, inside `CubicFillWorkspace::attempt_body`, after the shared prefix and before `certify_topology`.
+**Rule (revised in review round 1, B1).** The snap runs in the exact rung only, inside `run_prefix`, on the `commands` list after `emit` and **before** `collect_contours` and `validate_leaf_partitions` (`cubic_fill.rs:480-515`).
 
-- **What changes.** For every cubic source, the endpoint of its final flattened leaf (the leaf with `end_numerator == 2^depth`) is replaced by the source's represented canonical p3.
-- **Where.** The replacement is made in the command list that `certify_topology` reads and in the collected actual contour that rounded fill and the ownership check read. It is done in one pass that changes no count, order or provenance.
-- **Not touched.** LINE sources, internal knots and the implicit closure.
-- **Fast rung.** The prefix the fast rung reads (`prepare_prefix`, Alt-A1 S1) is not touched. The exact rung re-runs the prefix inside `attempt`, so the snap applies only to that run.
+- **Flag.** `attempt_body` calls `run_prefix` with a new private flag `canonical_final_knots = true`. `prepare_prefix` (the fast rung's S1 view, Alt-A1) calls it with `false` and is otherwise untouched. Every other caller passes `false`.
+- **What changes.** For every cubic source, the point of its final flattened leaf command (the leaf with `end_numerator == 2^depth`) is replaced by the source's represented canonical p3. The pass changes no count, order or provenance.
+- **Why before collection.** `collect_contours` decides closure on the command points: it drops a returning duplicate when the last point equals the contour's first point, and otherwise pushes a closing owner (`finish_closed_contour` and `finish_open_contour`, `cubic_fill.rs:1019-1062`). It also rejects a zero-length leaf (`:977`). A snap after collection would leave the unsnapped closure decision in place. For E8-F5 that gives a duplicate final point plus a zero-length closing owner, which `validate_topology_ownership` (`:872-875`) rejects as `TopologyOwnership`. That error maps to `Mapped::Internal`, a batch internal error. Snapping first lets collection, the closure rule, the zero-length rule and `validate_leaf_partitions` all see the canonical points, so the command list, the `TopologyInput` and the collected contour agree by construction.
+- **Zero-length final leaf.** If the final leaf command's point equals the previous emitted point before the snap, the snap is skipped for that leaf, so collection rejects it with `ZeroLengthLeaf` exactly as today (fixture E8-C6). If the snap itself makes the final leaf zero-length, collection rejects it with `ZeroLengthLeaf`, which maps to `unsupported-geometry`. That is a failure-to-failure change on a path that failed with KNOT_MISMATCH before. Neither case may reach `Mapped::Internal`.
+- **Not touched.** LINE sources, internal knots and CLOSE commands.
+- **Fast rung.** The fast rung's prefix runs with the flag off. The exact rung re-runs the prefix inside `attempt`, so the snap applies only to that run.
+
+**Executability.** With the snap before collection, E8-F5 becomes executable: its exact-rung run reaches topology with canonical final knots instead of failing at `preflight_source_final`, and no ownership error can arise from the snap. The investigation's E8-U2 numbers came from a prototype that snapped in the flattener (`emit_leaf`), which applies in every rung. The exact-rung-only rule written here has not been prototyped. Its numbers are measured for the first time in E8-U2 (E8-K6).
 
 **No-op on every previously-ok exact-rung path.**
 
@@ -204,6 +229,8 @@ Hence every request whose result was `ok` keeps the same mesh bytes, and every c
   - The flattener certified the final chord [previous actual point, q′] within 2^e, including its guard term.
   - The chord [previous actual point, p3] differs from it by |q′ − p3|, which is at most the rounding of one subtraction and one addition.
   - E8-U2 must show that the guard term of `Cubic::guard` in `geometry.rs` covers that difference, or else that the tolerance relation of V2 section d still holds with the snapped chord.
+  - **Sketch.** With r = fl(p3 − o) and q′ = fl(o + r), each coordinate has |q′ − p3| ≤ u·|p3 − o| + u·|q′| with u = 2^−53, so |q′ − p3| is at most about 2ε·max|·|, where ε = 2^−52 and max|·| is the larger of the original and relative magnitudes. The guard at `geometry.rs:369-372` is 128ε·(max_abs_original + (depth + 1)·max_abs_relative), at least 64 times larger.
+  - E8-U2 does not merge until E8-P1 is discharged by a written proof and a test at the largest admitted magnitudes (E8-K11).
 
 ### E8.5 E8-U3: tangential reversal stays unsupported
 
@@ -217,26 +244,32 @@ The V-2 fixture `p3sc` (`M 0 0 C 0 -100 100 -100 100 -50 S 200 0 200 -50 L 200 5
 
 These fixtures are fixed before code. Paths are written as SVG path data, as the V-2 page parses it: Q and T are raised to cubics in binary64 as `(p + 2q)/3` and `(e + 2q)/3`. The fill rule is NONZERO unless stated. In E8-F4 and E8-C2, each coordinate is the binary64 sum c + 0.1 of the integer c shown in the source path.
 
-| ID    | Path                                                                                               | e         | Expected after E8-U1 and E8-U2                                                                                                                     |
-| ----- | -------------------------------------------------------------------------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| E8-F1 | `M 0 0 L 0 -100 Q 100 -200 200 -100 T 400 -100 L 400 0 Z` (V-2 `p3qc`)                             | −5..0     | `ok` on the exact rung (E8-U1); at −8..−6 unchanged (`work-limit`)                                                                                 |
-| E8-F2 | `M 0 -100 Q 100 -200 200 -100 Z`                                                                   | −7, −3, 0 | `ok` (E8-U1)                                                                                                                                       |
-| E8-F3 | Half disc `M 100 0 C 100 k k 100 0 100 C -k 100 -100 k -100 0 Z` with k = 55.22847498              | −3, 0     | `ok` (E8-U1)                                                                                                                                       |
-| E8-F4 | `M 0 0 C 20 -100 80 -100 100 -40 C 120 20 180 20 200 -40 L 200 50 L 0 50 Z`, each coordinate + 0.1 | −3, 0     | `ok` (E8-U1)                                                                                                                                       |
-| E8-F5 | `M -2.9 33.4 C -2.9 31.4 17.1 23.6 17.1 33.4 C 17.1 47.7 -2.9 37.7 -2.9 33.4 Z`                    | 0         | `ok` (E8-U2); today KNOT_MISMATCH at `preflight_source_final`                                                                                      |
-| E8-F6 | `M 0 0 L 0 -90 Q 90 -180 180 -90 T 360 -90 L 360 0 Z` (V-2 `p3q` variant)                          | −6..0     | unchanged: `ok`, same mesh bytes                                                                                                                   |
-| E8-C1 | `M 0 0 C 0 -100 100 -100 100 -50 S 200 0 200 -50 L 200 50 L 0 50 Z` (V-2 `p3sc`, M1′)              | −6..0     | unchanged: `unsupported-geometry`                                                                                                                  |
-| E8-C2 | E8-C1 with each coordinate + 0.1                                                                   | −3, 0     | `unsupported-geometry` (M1′)                                                                                                                       |
-| E8-C3 | Native counterparts of the frozen collapse and reversal controls (line 46)                         | as frozen | UNRESOLVED at a directed adjacent projection, with and without E8-U1                                                                               |
-| E8-C4 | Every frozen control of this contract and of P3.1g, P3.1i, P3.2n, P3.2s, P3.2v and P3.2x           | as frozen | unchanged, except the four controls of E8-C5                                                                                                       |
-| E8-C5 | The four native controls that become `ok` under E8-U1 in the prototype (list below)                | as frozen | Each keeps its intent with a replacement path that still fails in the same rung and step under E8-U1 (E8-Q3); the old path stays as a new positive |
+| ID    | Path                                                                                                                                                                                                           | e         | After E8-U1 alone                                                                      | After E8-U1 + E8-U2                                                 |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| E8-F1 | `M 0 0 L 0 -100 Q 100 -200 200 -100 T 400 -100 L 400 0 Z` (V-2 `p3qc`)                                                                                                                                         | −5..0     | `ok` on the exact rung; −8..−6 unchanged (`work-limit`)                                | the same (integer endpoints, so the snap is a no-op)                |
+| E8-F2 | `M 0 -100 Q 100 -200 200 -100 Z`                                                                                                                                                                               | −7, −3, 0 | `ok`                                                                                   | the same (snap is a no-op)                                          |
+| E8-F3 | Half disc `M 100 0 C 100 k k 100 0 100 C -k 100 -100 k -100 0 Z` with k = 55.22847498                                                                                                                          | −3, 0     | `ok`                                                                                   | the same (snap is a no-op)                                          |
+| E8-F4 | `M 0 0 C 20 -100 80 -100 100 -40 C 120 20 180 20 200 -40 L 200 50 L 0 50 Z`, each coordinate + 0.1                                                                                                             | −3, 0     | `ok` (needs E8-U1 only)                                                                | `ok`, expected; not prototyped with the exact-rung snap             |
+| E8-F5 | `M -2.9 33.4 C -2.9 31.4 17.1 23.6 17.1 33.4 C 17.1 47.7 -2.9 37.7 -2.9 33.4 Z`                                                                                                                                | 0         | `unsupported-geometry`, unchanged (KNOT_MISMATCH at `preflight_source_final`)          | `ok` (needs E8-U2); never `internal-error`                          |
+| E8-F6 | `M 0 0 L 0 -90 Q 90 -180 180 -90 T 360 -90 L 360 0 Z` (V-2 `p3q` variant)                                                                                                                                      | −6..0     | unchanged: `ok`, same mesh bytes                                                       | unchanged: `ok`, same mesh bytes                                    |
+| E8-C1 | `M 0 0 C 0 -100 100 -100 100 -50 S 200 0 200 -50 L 200 50 L 0 50 Z` (V-2 `p3sc`, M1′)                                                                                                                          | −6..0     | unchanged: `unsupported-geometry`                                                      | unchanged: `unsupported-geometry`                                   |
+| E8-C2 | E8-C1 with each coordinate + 0.1                                                                                                                                                                               | −3, 0     | `unsupported-geometry` (M1′)                                                           | `unsupported-geometry` (M1′)                                        |
+| E8-C3 | Native counterparts of the frozen collapse and reversal controls (line 46)                                                                                                                                     | as frozen | UNRESOLVED at a directed adjacent projection                                           | the same                                                            |
+| E8-C4 | Every frozen control of this contract and of P3.1g, P3.1i, P3.2n, P3.2s, P3.2v and P3.2x                                                                                                                       | as frozen | unchanged, except the four controls of E8-C5                                           | the same                                                            |
+| E8-C5 | The four native controls that become `ok` under E8-U1 in the prototype (list below)                                                                                                                            | as frozen | replaced per control (E8-Q3, decided per control); each old path is kept as a positive | the same                                                            |
+| E8-C6 | A cubic source whose final flattened leaf has the same point as the previous emitted point (zero-length final leaf); the unit builds the input, or a `cfg(test)` command-list injection if no input reaches it | as built  | `unsupported-geometry` (`ZeroLengthLeaf`), as today                                    | the same: the snap is skipped for that leaf; never `internal-error` |
 
-The four E8-C5 controls:
+The E8-C5 controls and their replacements (E8-Q3, decided per control). A control that needs step 2 (triangle-free) to succeed gets a **crossing replacement**. Every other control gets an **M1′ replacement**.
 
-- `fill_export_tests::mapping_row_fixtures_reach_their_kernel_values`, row "Topology(Unresolved) in both cascade steps" (`cubic_bowtie`);
-- `fill_export_tests::cascade_retries_triangle_free_only_after_knot_or_unresolved` (`rounded_failure`);
-- `native_cubic_fill_tests::rounded_topology_failure_preserves_exact_knot_mismatch_and_recovers`;
-- `fill_export_ladder_tests::al_u3_defect_14_cascade_inverted_is_detected` (the step of AL-F6).
+- **Crossing replacement:** a path with one transverse non-adjacent crossing and non-exact internal knots. The exact helper returns KnotMismatch, the rounded helper rejects the crossing (non-adjacent hull intersection), so the step-1 result stays KnotMismatch (P3.2o), and triangle-free certifies the crossing. The starting candidate is the native `transverse_bowtie` with one interior control offset by 2^−54, as `rounded_failure` does. Before the replaced test runs, the unit checks that this candidate meets all of the above and records it; if it does not, the unit picks another crossing path that does.
+- **M1′ replacement:** E8-C1, or E8-C2 where non-exact internal knots are needed. Both fail in every rung under E8-U1.
+
+| Control                                                                                                                                | Its intent                                                           | Replacement                                                      |
+| -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `fill_export_tests::mapping_row_fixtures_reach_their_kernel_values`, row "Topology(Unresolved) in both cascade steps" (`cubic_bowtie`) | UNRESOLVED in both steps maps to `unsupported-geometry`              | M1′: E8-C1                                                       |
+| `fill_export_tests::cascade_retries_triangle_free_only_after_knot_or_unresolved` (`rounded_failure`)                                   | step-1 KnotMismatch is retried and the step-2 result is reported     | crossing replacement (step 2 succeeds)                           |
+| `native_cubic_fill_tests::rounded_topology_failure_preserves_exact_knot_mismatch_and_recovers`                                         | a rounded-helper failure keeps the exact KnotMismatch, then recovers | M1′ with non-exact internal knots: E8-C2                         |
+| `fill_export_ladder_tests::al_u3_defect_14_cascade_inverted_is_detected` (the step of AL-F6)                                           | an inverted cascade is detected on a step-2 success                  | crossing replacement; AL-F6 gets a dated E8 note in its contract |
 
 **The E8 corpus, `e8-corner/v1`.** It is produced by a frozen generator, an E8-U1 deliverable, and is frozen by its SHA-256 before the units run on it. It contains:
 
@@ -253,30 +286,35 @@ The four E8-C5 controls:
 
 Each defect must be detected by the named check before the unit merges.
 
-| ID    | Defect                                                              | Detected by                                                                                                                                                 |
-| ----- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| E8-D1 | Guard of step 2 removed                                             | E8-C3: the reversal control certifies                                                                                                                       |
-| E8-D2 | d₂ = J(b − a) (sign flipped)                                        | E8-F1 to E8-F4 stay unsupported                                                                                                                             |
-| E8-D3 | Equal-direction rule of step 4 uses ≥ (accepts opposite vectors)    | E8-C1, E8-C2 or a literal antiparallel pair certifies                                                                                                       |
-| E8-D4 | Hint applied in a `check_pair` but not in its `reference_pair_body` | The B0R O3 reference-loop equality tests                                                                                                                    |
-| E8-D5 | Hint applied in FR4 (the fast rung)                                 | AL-I3 spike identity and `pnpm test:p3-fill-identity`                                                                                                       |
-| E8-D6 | Snap applied in the shared prefix, so it reaches the fast rung      | `pnpm test:p3-fill-identity`: fast-rung `ok` meshes with an inexact final knot are expected to change (56 of 200 lens tangent /10 paths at e = −3 have one) |
-| E8-D7 | Snap applied to the command list but not to the collected contour   | Ownership validation (`RoundedOwnership`) on E8-F5                                                                                                          |
-| E8-D8 | Snap applied to internal knots                                      | The P3.1e and P3.2n controls with rounded internal knots (E8-C4)                                                                                            |
+| ID     | Defect                                                                                                     | Detected by                                                                                                                                                                                                  |
+| ------ | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| E8-D1  | Guard of step 2 removed                                                                                    | E8-C3: the reversal control certifies                                                                                                                                                                        |
+| E8-D2  | d₂ = J(b − a) (sign flipped)                                                                               | E8-F1 to E8-F4 stay unsupported                                                                                                                                                                              |
+| E8-D3  | Equal-direction rule of step 4 uses ≥ (accepts opposite vectors)                                           | E8-C1, E8-C2 or a literal antiparallel pair certifies                                                                                                                                                        |
+| E8-D4  | Hint applied in a `check_pair` but not in its `reference_pair_body`                                        | The B0R O3 reference-loop equality tests                                                                                                                                                                     |
+| E8-D5  | Hint applied in FR4 (the fast rung)                                                                        | AL-I3 spike identity and `pnpm test:p3-fill-identity`                                                                                                                                                        |
+| E8-D6  | `run_prefix` flag set to true from `prepare_prefix`, so the snap reaches the fast rung                     | `pnpm test:p3-fill-identity --failure-to-success`: fast-rung `ok` meshes with an inexact final knot are expected to change and must classify as FAIL (56 of 200 lens tangent /10 paths at e = −3 have one)   |
+| E8-D7  | Snap applied only to the `TopologyInput` leaves in `certify_topology`, not to `commands` before collection | Ownership validation (`validate_topology_ownership`, `TopologyOwnership`) on E8-F5: the certificate points differ from the collected contour                                                                 |
+| E8-D9  | Snap after collection (the pre-review design): `commands` snapped after `collect_contours`                 | E8-F5 ends with a duplicate final point plus a zero-length closing owner; the ownership check (`cubic_fill.rs:872-875`) must reject it as `TopologyOwnership`, and the E8-F5 test, which expects `ok`, fails |
+| E8-D10 | Snap applied even when the final leaf is already zero-length                                               | E8-C6 changes from `ZeroLengthLeaf`                                                                                                                                                                          |
+| E8-D8  | Snap applied to internal knots                                                                             | The P3.1e and P3.2n controls with rounded internal knots (E8-C4)                                                                                                                                             |
 
 ### E8.8 Acceptance
 
-| ID    | Required evidence                                                                                                                                                                                                                                                                                                              |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| E8-K1 | Independent review of this addendum before code, and the Primary's recorded decisions on E8-Q1 to E8-Q6                                                                                                                                                                                                                        |
-| E8-K2 | E8-F1 to E8-F5 reach their expected status through the export (a `FillEngine` batch) and pass the self-check of `build_path` and the mesh invariants; E8-F6 is unchanged                                                                                                                                                       |
-| E8-K3 | Byte identity. `pnpm test:p3-fill-identity` reports no changed `ok` record, and every differing record was a failure on the merge base. `pnpm test:p2-identity` passes (P2 output unchanged). The AL-OB5 native admission test still matches its committed status, rung and count summary. The AL-U2 ladder dump oracles agree |
-| E8-K4 | E8-C1 to E8-C4 hold; the E8-C5 replacements fail in the same rung and step, and the old paths pass as positives                                                                                                                                                                                                                |
-| E8-K5 | E8-D1 to E8-D8 are each detected, and the detecting command is recorded                                                                                                                                                                                                                                                        |
-| E8-K6 | On `e8-corner/v1`, after both units: 0 `unsupported-geometry` in every lens family at both values of e; in the wave family only paths that fail a non-adjacent crossing check remain. The per-family counts are recorded in the plan                                                                                           |
-| E8-K7 | Headed V-2: `p3qc` draws in Chrome and Edge at DPR 1 and 2, so its gated outcome changes (E8-Q4); `p3sc` stays `v2-path fill unsupported-geometry`                                                                                                                                                                             |
-| E8-K8 | Native and release-WASM results on `e8-corner/v1` agree in status and mesh bytes                                                                                                                                                                                                                                               |
-| E8-K9 | No threshold, cap, A04 target or kernel revision changes; `fill_v0_revision()` stays 2                                                                                                                                                                                                                                         |
+| ID     | Required evidence                                                                                                                                                                                                                                                                                                                                                                     |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E8-K1  | Independent review of this addendum before code. The decisions on E8-Q1 to E8-Q6 are recorded in E8.11 (decided 2026-10-23 under the standing instruction)                                                                                                                                                                                                                            |
+| E8-K2  | E8-F1 to E8-F5 reach their expected status through the export (a `FillEngine` batch) and pass the self-check of `build_path` and the mesh invariants; E8-F6 is unchanged                                                                                                                                                                                                              |
+| E8-K3  | Byte identity, run after E8-U0 has merged. `pnpm test:p3-fill-identity --failure-to-success` reports 0 FAIL: no changed `ok` record, and every allowed change was a failure on the merge base. `pnpm test:p2-identity` passes (P2 output unchanged). The AL-OB5 native admission test still matches its committed status, rung and count summary. The AL-U2 ladder dump oracles agree |
+| E8-K4  | E8-C1 to E8-C4 hold; the E8-C5 replacements fail in the same rung and step, and the old paths pass as positives                                                                                                                                                                                                                                                                       |
+| E8-K5  | E8-D1 to E8-D10 are each detected, and the detecting command is recorded                                                                                                                                                                                                                                                                                                              |
+| E8-K6  | On `e8-corner/v1`, after both units: 0 `unsupported-geometry` in every lens family at both values of e; in the wave family only paths that fail a non-adjacent crossing check remain. The per-family counts are recorded in the plan                                                                                                                                                  |
+| E8-K7  | Headed V-2: `p3qc` draws in Chrome and Edge at DPR 1 and 2, so its gated outcome changes (E8-Q4); `p3sc` stays `v2-path fill unsupported-geometry`                                                                                                                                                                                                                                    |
+| E8-K8  | Native and release-WASM results on `e8-corner/v1` agree in status and mesh bytes                                                                                                                                                                                                                                                                                                      |
+| E8-K9  | No threshold, cap, A04 target or kernel revision changes; `fill_v0_revision()` stays 2                                                                                                                                                                                                                                                                                                |
+| E8-K10 | E8-U1: an independently written TypeScript mirror of E8.3 in the test-only oracles of P3.1f, P3.1g and P3.1i (E8-Q2 (b)), implemented from this text and not from the native code; the native-versus-oracle tests under `tests/geometry/native-*` agree on every existing corpus and on E8-F1 to E8-F4 and E8-C1 to E8-C3                                                             |
+| E8-K11 | E8-U2 does not merge until E8-P1 is discharged: a written proof that the snapped final chord keeps the flattening tolerance relation, and a native test at the largest admitted magnitudes that checks the bound                                                                                                                                                                      |
+| E8-K12 | E8-U0 has merged, with its self-test reviewed, before E8-U1 runs E8-K3                                                                                                                                                                                                                                                                                                                |
 
 ### E8.9 Validation commands
 
@@ -284,7 +322,7 @@ Run these on each unit's branch while its changes are still uncommitted, with `C
 
 - `cargo test --release --lib` in `packages/geometry-wasm/kernel`: all native tests, the E8 fixtures and the seeded defects;
 - `pnpm test:geometry`: the native tests and the TypeScript geometry tests, including the native-versus-oracle tests under `tests/geometry/native-*`;
-- `pnpm test:p3-fill-identity --allow-test-change <path>`, once for each E8-C5 file and each new test file;
+- `pnpm test:p3-fill-identity --failure-to-success --allow-test-change <path>`, once for each E8-C5 file and each new test file (the mode of E8-U0);
 - `pnpm test:p2-identity`;
 - the new E8 corpus test, for E8-K6 and E8-K8;
 - `pnpm check` and `pnpm build`;
@@ -293,32 +331,48 @@ Run these on each unit's branch while its changes are still uncommitted, with `C
 
 ### E8.10 Risks
 
-- **Controls that flip.** Four native controls become `ok` (E8-C5). The TypeScript native-versus-oracle tests may flip too if the oracles stay on d₁ only (E8-Q2). Each replacement control must keep what the original tests.
-- **Identity tool.** `pnpm test:p3-fill-identity` may treat any status change as a failure. If it cannot express "failure to success only", it needs a light-tier tooling change, reviewed before the unit relies on it.
+- **Controls that flip.** Four native controls become `ok` (E8-C5) and are replaced per control. The TypeScript mirror (E8-K10) must flip the oracles' expectations on the same inputs; any other native-versus-oracle difference is a defect. Each replacement control must keep what the original tests.
+- **Identity tool.** Plain `pnpm test:p3-fill-identity` treats any status change as a failure, so E8-U0 adds the `--failure-to-success` mode first (E8.2a). A defect in that mode could hide a changed `ok` mesh; its tamper self-test and review guard against that.
 - **Cost.** Paths that were unsupported now run the exact rung to success. The exact rung is slower than the fast rung, and no performance gate covers this. FR4 is unchanged, so no fast-rung path slows down.
-- **E8-P1.** The flatness bound with the snapped final chord is an open proof obligation.
+- **E8-P1.** The flatness bound with the snapped final chord is an open proof obligation; E8-K11 blocks E8-U2 until it is discharged. The exact-rung-only snap has not been prototyped (E8.4).
 - **Coverage.** The prevalence numbers come from synthetic families, not from a real icon corpus. M1′ and non-adjacent crossings stay unsupported.
 - **Cross-track.** The gated outcome of `p3qc` lives in a visualization-track spec.
 
-### E8.11 Open questions
+### E8.11 Open questions and decisions
 
-The recommended option is listed first. The Primary decides each question under the standing instruction after independent review, and records the decision here.
+All six were decided on 2026-10-23 under the user's standing instruction, after review round 1 of PR #210. The options are kept for the record. Q2 was decided (b), against the draft's recommendation of (a), because the review showed that keeping the oracles on d₁ would hollow out the native-versus-oracle differential.
 
-- **E8-Q1, scope of E8-U1.**
+- **E8-Q1, scope of E8-U1. Decided (a).**
   - (a) Exact rung only, as written; FR4 unchanged.
-  - (b) Also FR4. This moves paths to the fast rung, changes `ok` meshes, and needs revision 3 and new AL-I3 oracles.
-- **E8-Q2, the test-only oracles.**
-  - (a) Keep the oracles of P3.1f, P3.1g and P3.1i on d₁ only, and record the paths on which native and oracle now differ as expected differences. The oracles then stay independent of the change.
-  - (b) Mirror E8.3 in the TypeScript oracles, written separately from the native code.
-- **E8-Q3, replacements for the E8-C5 controls.**
-  - (a) M1′ paths (tangential reversal), which fail in every rung under E8-U1.
-  - (b) Remove the four controls and rely on the remaining ones.
-- **E8-Q4, the V-2 `p3qc` expectation.**
+  - (b) Also FR4: this moves paths to the fast rung, changes `ok` meshes, and needs revision 3 and new AL-I3 oracles.
+- **E8-Q2, the test-only oracles. Decided (b).**
+  - (a) Keep the oracles on d₁ only and record the differences as expected.
+  - (b) An independently written TypeScript mirror of E8.3 in the oracles of P3.1f, P3.1g and P3.1i, so the native-versus-oracle differential stays meaningful (E8-K10).
+- **E8-Q3, replacements for the E8-C5 controls. Decided per control.**
+  - The crossing replacement goes to controls that need a step-2 success.
+  - The M1′ replacement goes to the others (table in E8.6).
+  - The rejected options were all-M1′ and removal.
+- **E8-Q4, the V-2 `p3qc` expectation. Decided (a).**
   - (a) The E8-U1 PR changes the gated outcome of `p3qc` in `tests/gpu/viz-v2-path-data.spec.ts` to drawn, with a visualization-track review.
-  - (b) A follow-up visualization-track PR changes it after E8-U1 merges.
-- **E8-Q5, unit order.**
-  - (a) Two PRs: E8-U1 first, then E8-U2.
-  - (b) One PR for both.
-- **E8-Q6, where M1′ is recorded.**
+  - (b) A follow-up visualization-track PR.
+- **E8-Q5, unit order. Decided (a), extended by review round 1.**
+  - Separate PRs in the order E8-U0 (tooling, light tier), then E8-U1, then E8-U2.
+  - The rejected option was one PR for both kernel units.
+- **E8-Q6, where M1′ is recorded. Decided (a).**
   - (a) In this addendum and in the rendering-track plan only, as a known unsupported case of the fill kernel.
   - (b) Also as a known limitation in `docs/requirements.md`.
+
+### E8.12 Review round 1, 2026-10-23
+
+Independent review of PR #210 returned NOT READY on one blocking item. It found E8-U1 sound and its byte-identity argument correct. The Primary applied every item under the standing instruction:
+
+| Item | Finding                                                                                                                                                                                                                                                                    | Disposition                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B1   | Snapping after collection breaks the closure rule: `collect_contours` decides closure on unsnapped points (`cubic_fill.rs:1019-1062`), so E8-F5 ends with a duplicate point and a zero-length closing owner, `TopologyOwnership` (`:872-875`), mapped to an internal error | E8.4 rule revised: the snap is applied to `commands` before `collect_contours` and `validate_leaf_partitions`, through a `run_prefix` flag set only by `attempt_body`; `prepare_prefix` untouched. E8-C6 (zero-length final leaf) added; E8-D7 revised; E8-D9 (snap after collection) and E8-D10 added; E8-F5 is now executable; the E8-U2 prototype is stated to have snapped in the flattener |
+| S1   | E8-P1 must block E8-U2                                                                                                                                                                                                                                                     | E8-K11 added, with the error sketch in E8.4                                                                                                                                                                                                                                                                                                                                                     |
+| S2   | E8-K3 cannot run in plain mode                                                                                                                                                                                                                                             | E8-U0 (E8.2a) added as a prerequisite light-tier unit; E8-K3, E8-K12 and E8.9 use `--failure-to-success`                                                                                                                                                                                                                                                                                        |
+| S3   | P3.2n line 17's work bound ("at most eight dots") must change too                                                                                                                                                                                                          | Amended in E8.3, beside the "no direction search" clause                                                                                                                                                                                                                                                                                                                                        |
+| S4   | E8-Q2 should be (b)                                                                                                                                                                                                                                                        | Decided (b); E8-K10 added                                                                                                                                                                                                                                                                                                                                                                       |
+| S5   | E8-Q3 should be decided per control                                                                                                                                                                                                                                        | E8.6 lists each control with its intent and replacement                                                                                                                                                                                                                                                                                                                                         |
+| S6   | Each fixture needs its result after E8-U1 alone and after both units                                                                                                                                                                                                       | E8.6 has two result columns                                                                                                                                                                                                                                                                                                                                                                     |
+| S7   | The completeness note should state the acceptance                                                                                                                                                                                                                          | Reworded: "E8-U1 accepts every pair whose V lies in an open half-plane" (and that passes the guard)                                                                                                                                                                                                                                                                                             |
