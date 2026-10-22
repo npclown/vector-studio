@@ -66,7 +66,9 @@ Primary owns the contract and integration. Sol high owns the coupled oracle/shar
 
 ## E8 addendum, 2026-10-23
 
-Status: DRAFT, 2026-10-23, revised after review round 1 (E8.12). The Primary wrote it under the user's standing instruction (take the recommended option and record the decision). It is in independent review and is not frozen. Item [E8](d9-rendering-track.md#e8-investigation-2026-10-23) of the rendering track owns execution. The frozen text above is unchanged. This addendum amends only the clauses it names, and only for units E8-U0, E8-U1 and E8-U2, which run in that order (E8-Q5).
+Status: APPROVED 2026-10-23 by the Primary under the user's standing instruction of 2026-10-22 (independent review round 2 READY WITH FOLLOW-UPS, follow-ups applied; E8.12). Item [E8](d9-rendering-track.md#e8-investigation-2026-10-23) of the rendering track owns execution. The frozen text above is unchanged. This addendum amends only the clauses it names, and only for units E8-U0, E8-U1 and E8-U2, which run in that order (E8-Q5).
+
+Status history: DRAFT, 2026-10-23, written by the Primary under the user's standing instruction (take the recommended option and record the decision), in independent review; revised after review round 1 (E8.12).
 
 Tier: full. Track: rendering. Shared surface: none. No public API, ABI, export, operation identity, kernel revision, cap, threshold, error allowance or dependency changes. The A04 target of the [E3 contract](d9-e3-b4-precision-contract.md) is unchanged.
 
@@ -109,15 +111,20 @@ The [E8 investigation](d9-rendering-track.md#e8-investigation-2026-10-23) reprod
 Added in review round 1 (S2). E8-K3 cannot run in plain mode, because plain `pnpm test:p3-fill-identity` requires equal digests and E8-U1 and E8-U2 turn failures into successes. E8-U0 is a light-tier tooling unit that runs before E8-U1. It changes no kernel code.
 
 - **Mode.** Add `--failure-to-success` to `tooling/compare-p3-fill-identity.mjs`, beside `--revision-change`, with the same `--compare-only <run-dir>` and `--tamper <case>` support. It replaces the digest equality with a per-record classification of merge base against branch:
-  - base `ok`, branch `ok` with identical status, mesh bytes and boundary pairs: **identical**;
-  - base not `ok`, branch anything: **allowed change**, listed with both statuses;
-  - base `ok`, branch different in any byte or status: **FAIL**.
-  - The run passes only if there is no FAIL. It writes the count of each class and the list of allowed changes to the run directory.
+  - A record is the whole tuple the tool already writes per case: `digest`, `allocations`, `code` and `crossings` (`compare-p3-fill-identity.mjs:155-168`). The digest covers status, counts, statistics, diagnostics and mesh bytes. Two records are equal only if every field of the tuple is equal (round 2, F1).
+  - **identical:** the base record is `ok`, and the branch record equals it in every field.
+  - **FAIL:** the base record is `ok`, and the branch record differs in any field, including a change only in diagnostics or statistics.
+  - **allowed change:** the base record is a path failure (a non-`ok` path status), and the branch record is `ok` or another path failure. It is listed with both codes.
+  - **internal-regression (also FAIL):** the base record is a path failure, and the branch record is an internal error or a batch failure. It is reported as its own class and counts as FAIL (round 2, F3).
+  - The run passes only if there is no FAIL or internal-regression. It writes the count of each class and the list of allowed changes to the run directory.
 - **Unchanged.** Every other step of the tool stays unchanged: the test-file allow-list (O5), the inline `cfg(test)` module check, the pinned toolchain and the corpus.
 - **Self-test.** `--self-test` gains synthetic run directories for each class, and tamper cases that must FAIL:
   - one mesh byte changed on a base-`ok` record;
   - a base-`ok` record that becomes a failure;
   - a base-`ok` record with a changed boundary pair;
+  - a base-`ok` record whose digest changes only in diagnostics or statistics, with identical mesh bytes (round 2, F2);
+  - a base-`ok` record whose `allocations` or `crossings` field changes;
+  - a base path failure that becomes an internal error, and one that becomes a batch failure (both internal-regression);
   - a missing record.
   - One review of the self-test is required before E8-U1 relies on the mode.
 - **Acceptance.** The self-test passes. A plain-mode run and a `--failure-to-success` run on an unchanged branch both pass, the latter with 0 allowed changes. Prettier, lint and `pnpm check` pass. One independent diff review.
@@ -295,9 +302,9 @@ Each defect must be detected by the named check before the unit merges.
 | E8-D5  | Hint applied in FR4 (the fast rung)                                                                        | AL-I3 spike identity and `pnpm test:p3-fill-identity`                                                                                                                                                        |
 | E8-D6  | `run_prefix` flag set to true from `prepare_prefix`, so the snap reaches the fast rung                     | `pnpm test:p3-fill-identity --failure-to-success`: fast-rung `ok` meshes with an inexact final knot are expected to change and must classify as FAIL (56 of 200 lens tangent /10 paths at e = −3 have one)   |
 | E8-D7  | Snap applied only to the `TopologyInput` leaves in `certify_topology`, not to `commands` before collection | Ownership validation (`validate_topology_ownership`, `TopologyOwnership`) on E8-F5: the certificate points differ from the collected contour                                                                 |
+| E8-D8  | Snap applied to internal knots                                                                             | The P3.1e and P3.2n controls with rounded internal knots (E8-C4)                                                                                                                                             |
 | E8-D9  | Snap after collection (the pre-review design): `commands` snapped after `collect_contours`                 | E8-F5 ends with a duplicate final point plus a zero-length closing owner; the ownership check (`cubic_fill.rs:872-875`) must reject it as `TopologyOwnership`, and the E8-F5 test, which expects `ok`, fails |
 | E8-D10 | Snap applied even when the final leaf is already zero-length                                               | E8-C6 changes from `ZeroLengthLeaf`                                                                                                                                                                          |
-| E8-D8  | Snap applied to internal knots                                                                             | The P3.1e and P3.2n controls with rounded internal knots (E8-C4)                                                                                                                                             |
 
 ### E8.8 Acceptance
 
@@ -376,3 +383,10 @@ Independent review of PR #210 returned NOT READY on one blocking item. It found 
 | S5   | E8-Q3 should be decided per control                                                                                                                                                                                                                                        | E8.6 lists each control with its intent and replacement                                                                                                                                                                                                                                                                                                                                         |
 | S6   | Each fixture needs its result after E8-U1 alone and after both units                                                                                                                                                                                                       | E8.6 has two result columns                                                                                                                                                                                                                                                                                                                                                                     |
 | S7   | The completeness note should state the acceptance                                                                                                                                                                                                                          | Reworded: "E8-U1 accepts every pair whose V lies in an open half-plane" (and that passes the guard)                                                                                                                                                                                                                                                                                             |
+
+**Round 2, 2026-10-23.** The verdict was READY WITH FOLLOW-UPS. The Primary applied the follow-ups under the standing instruction and approved the addendum:
+
+- **F1.** E8-U0 defines "identical" as equality of the whole record tuple (`digest`, `allocations`, `code`, `crossings`). That tuple covers status, counts, statistics, diagnostics and bytes. FAIL means that a base-`ok` record differs in any field.
+- **F2.** A tamper case is added: a base-`ok` record whose digest changes only in diagnostics or statistics, with identical mesh bytes. It must FAIL.
+- **F3.** A base path failure that becomes an internal error or a batch failure is a new class, internal-regression, and counts as FAIL.
+- **F4.** The defect table of E8.7 is in the order D1 to D10.
