@@ -527,7 +527,7 @@ for (const dpr of [1, 2]) {
         { name: 'just outside the dip', world: [270, -55], expected: 'backdrop' },
       ]);
       // The first cubic peaks near (57.6, -81); the S control reflects to (120, 20), so the second
-      // cubic dips to y = 2.5 at x = 150.
+      // cubic dips to y = 5 at x = 150.
       await knownPath('p3s', P3S, async () => {}, [
         { name: 'just inside the first peak', world: [58, -65], expected: FILL },
         { name: 'just outside the first peak', world: [58, -95], expected: 'backdrop' },
