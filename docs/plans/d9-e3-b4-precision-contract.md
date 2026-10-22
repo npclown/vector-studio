@@ -721,20 +721,22 @@ Status: DRAFT, 2026-10-22, for independent review. Under the user's standing ins
 
 Each line below is decided under the user's standing instruction of 2026-10-22 (recommended option). It gives the alternatives and the reason in one line.
 
-| ID     | Decision                                                                                                                             | Alternatives and reason                                                                                                                                                 |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| E3-N1  | C7 bucket edge: `L = s·I` with `s = RD(2^(−3−e₀) / (d·z))`, rounded toward zero to binary64 (section 13.6)                           | Exact edges only at attainable pairs, or nearest-representable `s`. RN can land above the edge and move the case to bucket `e₀ − 1`, so RD keeps the most edge coverage |
-| E3-N2  | Named counts are restated from the enumeration: C5 has 79 rows, not 60; every other named stratum keeps its count                    | Trim C5 to 60. That would drop fixtures that section 5.2 names, so the count follows the list                                                                           |
-| E3-N3  | The depth-positive star and zero-closure rows move from C1 to C3                                                                     | Keep them in C1. They contain a cubic arch, and C1 is lines only                                                                                                        |
-| E3-N4  | C7 takes its stroke rows from C9, not C5                                                                                             | Use lines from C5. C5 has no curve, and C7 needs curved rows                                                                                                            |
-| E3-N5  | ST-U3f gives 3 geometry rows: `chev-1.40625`, `rev-4/3-3-1` and `rev-4/3-1-7`                                                        | Six rows. The "five `λ = 4/3` turns" are two geometries at several `e`, and `e` comes from the camera here                                                              |
-| E3-N6  | ST-F16 and ST-F16p are one row                                                                                                       | Two rows. They share the curve and width and differ only in `e`, which the camera sets                                                                                  |
-| E3-N7  | Gaps in C4 are local units, equal to physical px at T0, `z = 1`, `d = 1`                                                             | Physical gaps per case. That would make a named row's geometry depend on the camera                                                                                     |
-| E3-N8  | Seeds: C1 `1`, C2 `0x12345678`, C3 `0x9e3779b9`, and C5 then C9 on `0xdeadbeef` as one stream                                        | A fifth seed. Only four `P2_CORPUS_SEEDS` exist, and one shared stream keeps C5 and C9 reproducible                                                                     |
-| E3-N9  | Generated shapes use no trigonometry; sizes scale by exact powers of two; widths are powers of two divided by `d·z`                  | Trig and `Math.pow`. They are not specified as correctly rounded, so `corpusSha256` could differ across engines                                                         |
-| E3-N10 | Every irrational-derived constant enters the generator as a hex literal table, with a test that re-derives it on the pinned Node     | Compute at generation, which is engine-dependent                                                                                                                        |
-| E3-N11 | Camera: centered on the binary64 control-point bounding box, not expanded for stroke width, snapped to the `2^-8` document-unit grid | An expanded or exact region box. The camera needs only a deterministic anchor, and a symmetric expansion does not move the center                                       |
-| E3-N12 | The total becomes **27,462 cases**, +1,710 (+6.6%) over 25,752                                                                       | Trim to 25,752. The full list stays within 10% of Q9 (a)'s "about 25.7k", so it is kept                                                                                 |
+| ID     | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                | Alternatives and reason                                                                                                                                                                          |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| E3-N1  | C7 bucket edge: `L = s·I` with `s = RD(2^(−3−e₀) / (d·z))`, rounded toward zero to binary64 (section 13.6)                                                                                                                                                                                                                                                                                                                              | Exact edges only at attainable pairs, or nearest-representable `s`. RN can land above the edge and move the case to bucket `e₀ − 1`, so RD keeps the most edge coverage                          |
+| E3-N2  | Named counts are restated from the enumeration: C5 has 79 rows, not 60; every other named stratum keeps its count. The C5 list is a superset of section 5.2's, adding ST-F24 and ST-U4/tip-ratio                                                                                                                                                                                                                                        | Trim C5 to 60. That would drop fixtures that section 5.2 names, so the count follows the list                                                                                                    |
+| E3-N3  | The depth-positive star and zero-closure rows move from C1 to C3                                                                                                                                                                                                                                                                                                                                                                        | Keep them in C1. They contain a cubic arch, and C1 is lines only                                                                                                                                 |
+| E3-N4  | C7 takes its stroke rows from C9, not C5                                                                                                                                                                                                                                                                                                                                                                                                | Use lines from C5. C5 has no curve, and C7 needs curved rows                                                                                                                                     |
+| E3-N5  | ST-U3f gives 3 geometry rows: `chev-1.40625`, `rev-4/3-3-1` and `rev-4/3-1-7`                                                                                                                                                                                                                                                                                                                                                           | Six rows. The "five `λ = 4/3` turns" are two geometries at several `e`, and `e` comes from the camera here                                                                                       |
+| E3-N6  | ST-F16 and ST-F16p are one row                                                                                                                                                                                                                                                                                                                                                                                                          | Two rows. They share the curve and width and differ only in `e`, which the camera sets                                                                                                           |
+| E3-N7  | Gaps in C4 are physical, as section 5.2 says: per case, `g_local = g · 2^(−m)`, where `m = ⌊log2 sigmaMax(S)⌋` is decided exactly. This is exact and gives a physical gap in `[g, 2g)` along the direction of largest stretch. Under an anisotropic T (T3, T6, T7) the gap across other directions can be as small as `g·sigmaMin/sigmaMax`; that ratio is recorded per case (review round 1, S1)                                       | Local gaps, equal to physical px only at T0, `z = 1`, `d = 1`. A local `2^-3` gap is 24 px at zoom 64 and DPR 3, so the near-coincidence is lost there, which misses section 5.2's physical gaps |
+| E3-N8  | Seeds: C1 `1`, C2 `0x12345678`, C3 `0x9e3779b9`, and C5 then C9 on `0xdeadbeef` as one stream                                                                                                                                                                                                                                                                                                                                           | A fifth seed. Only four `P2_CORPUS_SEEDS` exist, and one shared stream keeps C5 and C9 reproducible                                                                                              |
+| E3-N9  | Generated shapes use no trigonometry; sizes scale by exact powers of two; widths are powers of two divided by `d·z`                                                                                                                                                                                                                                                                                                                     | Trig and `Math.pow`. They are not specified as correctly rounded, so `corpusSha256` could differ across engines                                                                                  |
+| E3-N10 | Every irrational-derived constant enters the generator as a hex literal table. Its value is the correctly rounded (RN) value of the exact function at the stated binary64 argument. The test re-derives it with exact BigInt arithmetic (series with an error bound, rounded only when the interval is clear of a rounding boundary) and bit-compares against the stored hex. No math library is used at test time (review round 1, S2) | Compute at generation, or re-derive with `Math.*` in the test. Both are engine-dependent                                                                                                         |
+| E3-N11 | Camera: centered on the binary64 control-point bounding box, not expanded for stroke width, snapped to the `2^-8` document-unit grid                                                                                                                                                                                                                                                                                                    | An expanded or exact region box. The camera needs only a deterministic anchor, and a symmetric expansion does not move the center                                                                |
+| E3-N12 | The total becomes **27,462 cases**, +1,710 (+6.6%) over section 5.4's "about 25,800" (25,752)                                                                                                                                                                                                                                                                                                                                           | Trim to 25,752. The full list stays within 10% of Q9 (a)'s "about 25.7k", so it is kept                                                                                                          |
+| E3-N13 | Generic scalars (C2, C3, C5 and C9 points, and generic translations) have a full 53-bit significand from two draws: `u53 = (hi·2^21 + (lo >>> 11)) / 2^53`, then an exact power-of-two affine map (review round 1, B1)                                                                                                                                                                                                                  | One 32-bit draw. That yields only about 31-bit dyadics, which are not generic binary64 coordinates and so narrow A04's generic strata                                                            |
+| E3-N14 | Partial placement (E3-C6) first rescales the row by an exact power of two into the large class (`b = 12`), so its realized extent exceeds `Ω`, and asserts it (review round 1, B2)                                                                                                                                                                                                                                                      | Place rows at their own size. Small rows would then lie wholly inside `Ω` and not be partial at all, which narrows E3-C6                                                                         |
 
 ### 13.2 Case schema
 
@@ -784,7 +786,12 @@ The entries of `world.l`, frozen as hex, not computed at generation:
 | T6  | `3fffdb62bc589b8c` | `3fe899a15250cff3` | `3ff83084b6c4a6aa` | `3ff0df912ad60444` |
 | T7  | `3ff0000000000000` | `0000000000000000` | `0000000000000000` | `3f30000000000000` |
 
-- **T1** holds `cos 30°` and `sin 30°` as one V8 run returned them. The sine is `0.49999999999999994`: this is the intended "exact-looking rotation with inexact entries".
+- **T1** entries are exactly `RN(cos(x))` and `RN(sin(x))` at the binary64 argument `x = Math.PI/6 = 0.5235987755982988`, which equals `30·Math.PI/180`.
+  - `x` is not `RN(π/6)`.
+  - The sine is `0.49999999999999994`: this is the intended "exact-looking rotation with inexact entries".
+  - These are also the values V8 returns, kept as the realistic host input.
+- **T2** entries are exactly `RN(cos(x))` and `RN(sin(x))` at `x = 37.21·Math.PI/180 = 0.64943701466709`, evaluated left to right. These too equal V8's values.
+- **How these were checked.** Both identities were checked on 2026-10-22 with a 200-bit BigInt series evaluation, and E3-U1's exact test repeats the check (E3-N10).
 - **T5** is `diag(−1, 1)·T2`, exact.
 - **T6** is the binary64 product `(T2·T3)·T4`, evaluated left to right.
 - **Width exponent.** `ℓ_T` of section 13.5 is 1 for T3 and T6, and 0 for the others.
@@ -826,29 +833,33 @@ A rectangle `(x0,y0)–(x1,y1)` is `(x0,y0) (x1,y0) (x1,y1) (x0,y1)`.
 
 **E3-C3, fill, cubics: 30 rows.** The rule is nonzero unless the row names one.
 
-| Rows    | Shape                                                                                                                                                                              | Count |
-| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----: |
-| c01     | `circle(0, 0, 8)`                                                                                                                                                                  |     1 |
-| c02     | Ellipse: every point of `circle(0, 0, 1)` multiplied by `(12, 4)`                                                                                                                  |     1 |
-| c03     | Closed S `M(0,0) C(4,8)(8,−8)(12,0) L(12,−6) C(8,−14)(4,2)(0,−6) Z`                                                                                                                |     1 |
-| c04–c05 | Self-intersecting loop `M(0,0) C(12,12)(−4,12)(8,0) Z`; nonzero, evenodd                                                                                                           |     2 |
-| c06     | Exact cusp `M(0,0) C(8,8)(0,8)(8,0) Z`                                                                                                                                             |     1 |
-| c07–c09 | Near-cusps: c06 with the second control's `x` set to `2^-10`, `2^-20` and `2^-40`                                                                                                  |     3 |
-| c10     | Inflection `M(0,0) C(4,8)(8,−8)(12,0) L(12,−4) L(0,−4) Z`                                                                                                                          |     1 |
-| c11–c12 | Crossing ellipses: c02 plus `circle(0, 0, 1)` multiplied by `(4, 12)`, both counter-clockwise; nonzero, evenodd                                                                    |     2 |
-| c13     | `circle(0, 0, 12)` with the reversed holes `circle(−5, 0, 3)` and `circle(5, 0, 3)`                                                                                                |     1 |
-| c14–c19 | AL-OB5 rings: path 0 of OB5-W2, OB5-W4 and OB5-W8, then of the same cell specs with `snapped: false` (W2U, W4U, W8U), from `generateCellPaths` in `tests/geometry/p3-b0/corpus.ts` |     6 |
-| c20–c23 | `depth-positive/star` and `depth-positive/zero-closure` from `tests/geometry/native-depth-positive-cubic/fixtures.ts`; nonzero, evenodd (moved from C1, E3-N3)                     |     4 |
-| c24     | Quarter wedge `M(0,0) L(8,0) C(8,8·KAPPA)(8·KAPPA,8)(0,8) Z`                                                                                                                       |     1 |
-| c25     | Degenerate cubic `M(0,0) C(0,0)(8,8)(8,8) L(0,8) Z`                                                                                                                                |     1 |
-| c26     | D-shape `M(0,0) L(0,16) C(12,16)(12,0)(0,0) Z`                                                                                                                                     |     1 |
-| c27     | `circle(0, 0, 4096)`                                                                                                                                                               |     1 |
-| c28–c29 | Concentric `circle` radii 12, 8 reversed, and 4; nonzero, evenodd                                                                                                                  |     2 |
-| c30     | Double cusp `M(0,0) C(8,8)(0,8)(8,0) C(16,8)(8,8)(16,0) L(16,−4) L(0,−4) Z`                                                                                                        |     1 |
+| Rows    | Shape                                                                                                                                                                                                                                                                                                                                                                                                                   | Count |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----: |
+| c01     | `circle(0, 0, 8)`                                                                                                                                                                                                                                                                                                                                                                                                       |     1 |
+| c02     | Ellipse: every point of `circle(0, 0, 1)` multiplied by `(12, 4)`                                                                                                                                                                                                                                                                                                                                                       |     1 |
+| c03     | Closed S `M(0,0) C(4,8)(8,−8)(12,0) L(12,−6) C(8,−14)(4,2)(0,−6) Z`                                                                                                                                                                                                                                                                                                                                                     |     1 |
+| c04–c05 | Self-intersecting loop `M(0,0) C(12,12)(−4,12)(8,0) Z`; nonzero, evenodd                                                                                                                                                                                                                                                                                                                                                |     2 |
+| c06     | Exact cusp `M(0,0) C(8,8)(0,8)(8,0) Z`                                                                                                                                                                                                                                                                                                                                                                                  |     1 |
+| c07–c09 | Near-cusps: c06 with the second control's `x` set to `2^-10`, `2^-20` and `2^-40`                                                                                                                                                                                                                                                                                                                                       |     3 |
+| c10     | Inflection `M(0,0) C(4,8)(8,−8)(12,0) L(12,−4) L(0,−4) Z`                                                                                                                                                                                                                                                                                                                                                               |     1 |
+| c11–c12 | Crossing ellipses: c02 plus `circle(0, 0, 1)` multiplied by `(4, 12)`, both counter-clockwise; nonzero, evenodd                                                                                                                                                                                                                                                                                                         |     2 |
+| c13     | `circle(0, 0, 12)` with the reversed holes `circle(−5, 0, 3)` and `circle(5, 0, 3)`                                                                                                                                                                                                                                                                                                                                     |     1 |
+| c14–c19 | AL-OB5 rings: path 0 of OB5-W2, OB5-W4 and OB5-W8, then of W2U, W4U and W8U, from `generateCellPaths` in `tests/geometry/p3-b0/corpus.ts`. The cell specs come from `ob5Cell` in `tests/geometry/p3-al-ob5/corpus.ts`; W8U is that module's own observation spec (its `ob5ObservationCells`, line 48). **W2U and W4U are derived**: `ob5Cell` with `snapped: false` at `λ = 2` and `λ = 4`, cells AL-OB5 did not define |     6 |
+| c20–c23 | `depth-positive/star` and `depth-positive/zero-closure` from `tests/geometry/native-depth-positive-cubic/fixtures.ts`; nonzero, evenodd (moved from C1, E3-N3)                                                                                                                                                                                                                                                          |     4 |
+| c24     | Quarter wedge `M(0,0) L(8,0) C(8,8·KAPPA)(8·KAPPA,8)(0,8) Z`                                                                                                                                                                                                                                                                                                                                                            |     1 |
+| c25     | Degenerate cubic `M(0,0) C(0,0)(8,8)(8,8) L(0,8) Z`                                                                                                                                                                                                                                                                                                                                                                     |     1 |
+| c26     | D-shape `M(0,0) L(0,16) C(12,16)(12,0)(0,0) Z`                                                                                                                                                                                                                                                                                                                                                                          |     1 |
+| c27     | `circle(0, 0, 4096)`                                                                                                                                                                                                                                                                                                                                                                                                    |     1 |
+| c28–c29 | Concentric `circle` radii 12, 8 reversed, and 4; nonzero, evenodd                                                                                                                                                                                                                                                                                                                                                       |     2 |
+| c30     | Double cusp `M(0,0) C(8,8)(0,8)(8,0) C(16,8)(8,8)(16,0) L(16,−4) L(0,−4) Z`                                                                                                                                                                                                                                                                                                                                             |     1 |
 
 c14–c23 are copied as hex literals. A unit test checks them against `generateCellPaths` and against the fixture module.
 
-**E3-C4, near-coincidence, fill: 24 rows.** `g ∈ {2^-3, 2^-8, 2^-16}` in local units (E3-N7). `g = 0` is exact touching.
+**E3-C4, near-coincidence, fill: 24 rows.**
+
+- **Gaps.** `g ∈ {2^-3, 2^-8, 2^-16}` physical px. Per case, the shapes below use `g_local = g · 2^(−m)` with `m = ⌊log2 sigmaMax(S)⌋` (E3-N7). `m` is decided exactly, with V3 section c's singular-value predicate.
+- **Touching.** `g = 0` is exact touching.
+- **Per-case geometry.** The row's geometry is therefore per case. The id is unchanged, and the record holds `g_local` and `sigmaMin/sigmaMax`.
 
 | Rows    | Shape                                                                                                        | Gaps    | Count |
 | ------- | ------------------------------------------------------------------------------------------------------------ | ------- | ----: |
@@ -863,29 +874,29 @@ c14–c23 are copied as hex literals. A unit test checks them against `generateC
 
 **E3-C5, stroke, lines: 79 rows (E3-N2).** `ZIGZAG` is the page's `(−50,22) (−18,−22) (14,22) (46,−22)`.
 
-| Rows    | Source                                                                                                                                                                              | Count |
-| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----: |
-| l01–l03 | ST-F1 (butt), ST-F2 (square), ST-F3 (round)                                                                                                                                         |     3 |
-| l04–l06 | ST-F4: miter `L = 2`, bevel, round                                                                                                                                                  |     3 |
-| l07     | ST-F5: miter `L = 1.25`                                                                                                                                                             |     1 |
-| l08–l10 | ST-F6: miter `L = 4`, bevel, round                                                                                                                                                  |     3 |
-| l11–l12 | ST-F7 and ST-F9, butt (expected `empty`)                                                                                                                                            |     2 |
-| l13–l15 | ST-F8: butt, round, square                                                                                                                                                          |     3 |
-| l16–l18 | ST-F10 (miter `L = 2`), ST-F11 (miter `L = 2`), ST-F12 (bevel)                                                                                                                      |     3 |
-| l19–l20 | ST-F13 and ST-F13x (miter `L = 4`)                                                                                                                                                  |     2 |
-| l21–l22 | ST-F14 (a) and (b)                                                                                                                                                                  |     2 |
-| l23     | ST-F21                                                                                                                                                                              |     1 |
-| l24–l25 | ST-F24 with `L = 2^30` and with `L = 4`                                                                                                                                             |     2 |
-| l26–l37 | ST-F25: three turns × miter `L ∈ {1, Math.SQRT2 (3ff6a09e667f3bcd), 4, 100}`, `w = 2`                                                                                               |    12 |
-| l38     | ST-U4/tip-ratio                                                                                                                                                                     |     1 |
-| l39–l44 | SB-1: `ZIGZAG`, `w ∈ {2^-6, 2^-2, 1}` × (butt, miter) and (round, round)                                                                                                            |     6 |
-| l45–l53 | SB-3: `chevron(h, 60, −30)`, `h ∈ {6, 3, 1}°` × `L ∈ {10, 100, 1000}`, `w = 4`                                                                                                      |     9 |
-| l54–l57 | SB-4: `chevron(h, 60, −30)`, `w = 12`: (14°, `L = 4`), (14.4775°, `L = 4`), (15°, `L = 4`), (14.4775°, `L = 1`)                                                                     |     4 |
-| l58–l63 | SB-6: `chevron(h, 52, −26)`, `h ∈ {45, 30, 15}°` (turns of 90, 60 and 30 degrees) × `w ∈ {4, 12}`, round join                                                                       |     6 |
-| l64–l69 | SB-7 caps: `ZIGZAG` × cap `{round, square}` × `w ∈ {0.25, 1, 14}`                                                                                                                   |     6 |
-| l70–l75 | SB-7 dots: `M(0,0) L(0,0)` × cap `{round, square}` × `w ∈ {0.25, 1, 14}`                                                                                                            |     6 |
-| l76     | SB-13: ST-F26 `edges-1024`, by value from `st_f26_current_cap_fixtures`                                                                                                             |     1 |
-| l77–l79 | ST-U3f: `chev-1.40625` (`stroke_outline_tests.rs`), `rev-4/3-3-1` and `rev-4/3-1-7` (`st_u3e_review_near_reversals_are_turns`), each with its source's width, caps and join (E3-N5) |     3 |
+| Rows    | Source                                                                                                                                                                                                                                                                                                                                               | Count |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----: |
+| l01–l03 | ST-F1 (butt), ST-F2 (square), ST-F3 (round)                                                                                                                                                                                                                                                                                                          |     3 |
+| l04–l06 | ST-F4: miter `L = 2`, bevel, round                                                                                                                                                                                                                                                                                                                   |     3 |
+| l07     | ST-F5: miter `L = 1.25`                                                                                                                                                                                                                                                                                                                              |     1 |
+| l08–l10 | ST-F6: miter `L = 4`, bevel, round                                                                                                                                                                                                                                                                                                                   |     3 |
+| l11–l12 | ST-F7 and ST-F9, butt (expected `empty`)                                                                                                                                                                                                                                                                                                             |     2 |
+| l13–l15 | ST-F8: butt, round, square                                                                                                                                                                                                                                                                                                                           |     3 |
+| l16–l18 | ST-F10 (miter `L = 2`), ST-F11 (miter `L = 2`), ST-F12 (bevel)                                                                                                                                                                                                                                                                                       |     3 |
+| l19–l20 | ST-F13 and ST-F13x (miter `L = 4`)                                                                                                                                                                                                                                                                                                                   |     2 |
+| l21–l22 | ST-F14 (a) and (b)                                                                                                                                                                                                                                                                                                                                   |     2 |
+| l23     | ST-F21                                                                                                                                                                                                                                                                                                                                               |     1 |
+| l24–l25 | ST-F24 with `L = 2^30` and with `L = 4`                                                                                                                                                                                                                                                                                                              |     2 |
+| l26–l37 | ST-F25: three turns × miter `L ∈ {1, Math.SQRT2 (3ff6a09e667f3bcd), 4, 100}`, `w = 2`                                                                                                                                                                                                                                                                |    12 |
+| l38     | ST-U4/tip-ratio                                                                                                                                                                                                                                                                                                                                      |     1 |
+| l39–l44 | SB-1: `ZIGZAG`, `w ∈ {2^-6, 2^-2, 1}` × (butt, miter) and (round, round)                                                                                                                                                                                                                                                                             |     6 |
+| l45–l53 | SB-3: `chevron(h, 60, −30)`, `h ∈ {6, 3, 1}°` × `L ∈ {10, 100, 1000}`, `w = 4`                                                                                                                                                                                                                                                                       |     9 |
+| l54–l57 | SB-4: `chevron(h, 60, −30)`, `w = 12`: (14°, `L = 4`), (14.4775°, `L = 4`), (15°, `L = 4`), (14.4775°, `L = 1`)                                                                                                                                                                                                                                      |     4 |
+| l58–l63 | SB-6: `chevron(h, 52, −26)`, `h ∈ {45, 30, 15}°` (interior angles 90, 60 and 30 degrees, so turns of 90, 120 and 150 degrees) × `w ∈ {4, 12}`, round join                                                                                                                                                                                            |     6 |
+| l64–l69 | SB-7 caps: `ZIGZAG` × cap `{round, square}` × `w ∈ {0.25, 1, 14}`                                                                                                                                                                                                                                                                                    |     6 |
+| l70–l75 | SB-7 dots: `M(0,0) L(0,0)` × cap `{round, square}` × `w ∈ {0.25, 1, 14}`                                                                                                                                                                                                                                                                             |     6 |
+| l76     | SB-13: ST-F26 `edges-1024`: 64 subpaths `M(0, 4i) L(4, 4i)`, `i = 0` to 63, `w = 2`, square caps, miter `L = 4`                                                                                                                                                                                                                                      |     1 |
+| l77–l79 | ST-U3f: `chev-1.40625`, `M(−4.401143883191439, 1051.9843385722027) L(−3.125, 1000) L(−1.848856116808561, 1051.9843385722027)`, `w = 12`, round caps, round join; `rev-4/3-3-1`, `M(0,0) L(3,1) L(−1, −0.33333333333333326)`, and `rev-4/3-1-7`, `M(0,0) L(1,7) L(−0.33333333333333326, −2.333333333333332)`, each `w = 12`, butt, round join (E3-N5) |     3 |
 
 **Not in C5, and why.**
 
@@ -894,6 +905,19 @@ c14–c23 are copied as hex literals. A unit test checks them against `generateC
 - ST-F22, ST-F23 and the other ST-F26 rows are left out. They test numeric guards and work caps, which belong to A01, not precision.
 
 l24 (`L = 2^30`) and l77–l79 are expected to be rejected, so they are evidence for A01 (section 6).
+
+**Source checks for C5 (review round 1, S3).**
+
+- **TypeScript fixtures.** A unit test compares every C5 row whose source is an ST-F id present in `tests/geometry/stroke-oracle/fixtures.ts` (ST-F1 to ST-F6, ST-F8, ST-F10, ST-F12 to ST-F14, ST-F21 and ST-F24) against that module's source path and stroke parameters.
+- **Rust literals.** The literals of l76 to l79 are copied from `packages/geometry-wasm/kernel/src/stroke_outline_tests.rs` at `5c691ad`, the file's last change. The generator records each source span's SHA-256, over its LF-terminated lines as stored in git, and a test recomputes it:
+
+| Rows    | Lines     | SHA-256                                                            |
+| ------- | --------- | ------------------------------------------------------------------ |
+| l76     | 728–739   | `d69b3811ec71f4d5e82fbc5788b11a872cd0b89ddd5bc6cd7c4f1eafe2bb8fdc` |
+| l78–l79 | 1752–1776 | `26fb12cd9d5c027f22d05dbb09eabe8051642b7e15da03bcaf8ac65a12471dde` |
+| l77     | 1890–1893 | `9e3fdb50bea4ac2ff0a5475b3cf921c84ea9bdd1af87d0226f5f5046a69dbacd` |
+
+A hash mismatch means the source moved. The literal in the generator stays authoritative, and the mismatch is reported, not silently re-copied.
 
 **E3-C9, stroke cubics and joint paints: 30 rows.**
 
@@ -981,7 +1005,11 @@ v = (v ^ (v >>> 17)) >>> 0
 v = (v ^ (v << 5)) >>> 0
 ```
 
-- **Draws.** Each draw advances the state once and gives `u = state / 2^32` in `[0, 1)`. Then `int(n) = floor(u·n)`, and `coord = (2u − 1)·64` takes one draw per scalar, `x` before `y`.
+- **Draws.** Each draw advances the state once and gives the 32-bit `state`, and `u = state / 2^32` in `[0, 1)`. Then `int(n) = floor(u·n)`. Scalars are drawn `x` before `y`.
+- **53-bit draws (E3-N13).** A 53-bit draw takes two draws, `hi` then `lo`, and gives `u53 = (hi·2^21 + (lo >>> 11)) / 2^53`, an exact binary64 in `[0, 1)` with a full 53-bit significand. Every operation is exact and engine-independent: `hi·2^21 + (lo >>> 11)` is an integer below `2^53`, and the division is by a power of two.
+- **`coord`.**
+  - In C1, `coord = (2u − 1)·64`, one draw, which is then snapped (below).
+  - In C2, C3, C5 and C9, `coord = (2·u53 − 1)·64`, two draws per scalar. Both operations are exact, so the coordinate keeps up to 53 significant bits.
 - **Seeds.** Seeds follow E3-N8. C1, C2 and C3 each have their own stream. C5's 150 rows are drawn first, and C9's 150 continue the same stream.
 
 **Draw order per row.**
@@ -990,7 +1018,10 @@ v = (v ^ (v << 5)) >>> 0
 2. The family's parameters, in the order listed below.
 3. Paint. A fill draws its rule, `int(2)`: nonzero, evenodd. A stroke draws its width exponent `int(12)`, cap `int(3)`, join `int(3)` and miter index `int(5)`.
 4. Transform, `int(8)`: T0 to T7.
-5. Translation kind, `int(3)`: zero, snapped (`floor(coord·16)` per axis) or generic (`coord·16` per axis).
+5. Translation kind, `int(3)`, in every stratum:
+   - zero;
+   - snapped: `floor((2u − 1)·1024)` per axis, one draw each;
+   - generic: `(2·u53 − 1)·1024` per axis, two draws each.
 6. Size class, `int(4)`: sub, small, medium, large.
 7. Extent exponent `b`, drawn with `int` over the class range.
 
@@ -1001,7 +1032,7 @@ v = (v ^ (v << 5)) >>> 0
 - **(2) Polygon with hole.** Family 0, plus the same points scaled by `1/4` and reversed.
 - **(3) Rectangle set.** `m = 2 + int(3)` rectangles, each from two `coord` corners, counter-clockwise.
 
-**Snapping.** C1 draws `q = 8·int(2)` after the family parameters, so `q` is 0 or 8, and snaps every coordinate `v` to `floor(v·2^q + 0.5)/2^q`. C2 keeps `coord` unsnapped.
+**Snapping.** C1 draws `q = 8·int(2)` after the family parameters, so `q` is 0 or 8, and snaps every coordinate `v` to `floor(v·2^q + 0.5)/2^q`. C2 keeps its 53-bit `coord` unsnapped.
 
 **Cubic families (C3), `int(3)`.**
 
@@ -1049,10 +1080,20 @@ The unattainable pairs are therefore `(0.01, 1)`, `(0.01, 2)`, `(0.01, 3)`, `(1,
 
 The record states per case whether the edge is exact. For these cases `transform` is `"edge"` and `world.l` is `s·I`.
 
+**Where C7's value is (review round 1, S5).**
+
+- **Attainable pairs.** At the four attainable pairs `s = 1`, so the C7 case repeats the row's T0 named case: the T0 bucket is already exactly at the edge there.
+- **Unattainable pairs.** C7's added value is at the five unattainable pairs, where T0 sits strictly inside its bucket and `s > 1` moves the case to just below the edge.
+- **Counts.** The repeats stay in the corpus, so the count is unchanged. The record marks them as duplicates of their T0 case.
+
 ### 13.7 Camera
 
 - **Center** (the default). `B` is the world bounding box of `L·x + t` over the path's points, computed with binary64 basic operations. It includes control points and is not expanded for stroke width (E3-N11). Then `c = mid(B) − (320/z, 180/z)`, and each axis is snapped to `floor(c·256 + 0.5)/256`.
-- **Partial.** As center, with `min(B)` in place of `mid(B)`, so the box's minimum corner lands at the viewport center.
+- **Partial** (E3-N14).
+  - **Rescaling.** First the row's local coordinates are rescaled exactly by `2^(12 − ⌊log2 E_cur⌋)`, with `E_cur` as in section 13.5. This puts the realized extent in `[4096, 8192)` px, the top of the large class, above every side of `Ω`. `Ω`'s longest side is at most `640·3 + 4 = 1924` px.
+  - **Placement.** Then the camera is set as for center, with `min(B)` in place of `mid(B)`, so the box's minimum corner lands at the viewport center.
+  - **Assertion.** The generator asserts per case that the realized extent exceeds the longer side of `Ω`.
+  - **Effect on counts.** The rescaling changes coordinates only, so the counts are unchanged.
 - **Far.** `t` gains `(2^24, −2^24)` (`4170000000000000` and its negation), then the camera is centered.
 - **Pan.** After centering and snapping, `c` gains `(2^-7, 0.3713)` (`3f80000000000000`, `3fd7c36113404ea5`), not snapped. These are the dyadic and the generic binary64 fractions of E3-K6.
 
@@ -1075,7 +1116,23 @@ That is 1,710 cases, +6.6%, over section 5.4's 25,752. All of the increase comes
 ### 13.9 What E3-U1 delivers against this annex
 
 - **Generator.** `tests/geometry/e3-a04/corpus.ts`, implementing sections 13.2 to 13.7 mechanically.
-- **Literal tables.** Hex literal tables for every irrational-derived constant: the `chevron` vertices of SB-3, SB-4 and SB-6, and f01, f06, f08 and j05. Each has a unit test that re-derives it on the pinned Node.
+- **Literal tables.** Hex literal tables for every irrational-derived constant: the `chevron` vertices of SB-3, SB-4 and SB-6, and f01, f06, f08 and j05, plus T1 and T2. Each has a unit test that re-derives it exactly with BigInt arithmetic and bit-compares against the stored hex, with no math library (E3-N10).
 - **Manifest.** `corpus-v1.manifest.json`, with the per-stratum counts above and `corpusSha256`.
-- **Tests.** The regeneration test (E3-A1), and literal checks of c14 to c23 against their source modules.
+- **Tests.**
+  - The regeneration test (E3-A1).
+  - Literal checks of c14 to c23 against their source modules.
+  - The C5 check against `tests/geometry/stroke-oracle/fixtures.ts`, and the source-span SHA-256 checks of l76 to l79.
+  - The partial-placement extent assertion.
+  - A check that every generic scalar was built by a 53-bit draw.
 - **Out of scope.** No kernel run. The freeze check belongs to E3-U2 (section 5.5).
+
+### 13.10 Annex review record
+
+- **2026-10-22, independent review round 1 of `a318a3c`: NOT READY.** The arithmetic, ids, hex tables, the C7 proof and the schema were checked and confirmed. Two decisions narrowed A04, and the follow-up commit applies every item, each decided under the user's standing instruction (recommended option):
+  - **B1.** Generic scalars now have full 53-bit significands (E3-N13). This changes the seed-stream consumption in section 13.5.
+  - **B2.** Partial placement rescales into the large class, with an assertion (E3-N14). The counts are unchanged.
+  - **S1.** C4 gaps are physical (E3-N7, revised), with the anisotropic interpretation recorded.
+  - **S2.** T1 and T2 are stated as exact `RN` values at the stated binary64 arguments, and the table tests are exact (E3-N10, revised).
+  - **S3.** A C5 check against the stroke-oracle fixtures, inline Rust literals with source-span SHA-256s, and c14 to c19 labelled, with W2U and W4U derived from `ob5Cell`.
+  - **S4.** The SB-6 turn angles are corrected, E3-N2 notes the superset, and E3-N12 says "about 25,800".
+  - **S5.** C7's attainable pairs repeat the T0 cases; its value is at the five unattainable pairs.
