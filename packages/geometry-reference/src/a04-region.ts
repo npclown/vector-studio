@@ -554,6 +554,20 @@ function prange(p: Poly, lo: Q, hi: Q): { lo: Q; hi: Q } {
 function signAtRoot(hq: Poly, s: Poly, root: Root): number {
   const h = fromZ(toZ(hq));
   if (root.exact !== null) return psign(h, root.exact);
+  // An outward-rounded prefilter (E3-U2c): while the isolating interval is refined, an interval
+  // Horner enclosure of h over it that excludes 0 decides the sign. Only otherwise does the exact
+  // gcd and Sturm test below run.
+  {
+    const hi = hq.map(qIv);
+    for (let step = 0; step < 64 && root.exact === null; step += 1) {
+      const t = { lo: qIv(root.lo).lo, hi: qIv(root.hi).hi };
+      const v = ipoly(hi, t);
+      if (v.lo > 0) return 1;
+      if (v.hi < 0) return -1;
+      refineRoot(s, root);
+    }
+    if (root.exact !== null) return psign(h, root.exact);
+  }
   const g = pgcd(s, h);
   if (g.length >= 2) {
     const a = psign(g, root.lo);
@@ -4277,6 +4291,9 @@ class StrokeTarget implements RegionTarget {
     const tryPoint = (p: [number, number]): [number, number] | null => {
       const x = Math.min(box.x1, Math.max(box.x0, p[0]));
       const y = Math.min(box.y1, Math.max(box.y0, p[1]));
+      // The certified point test first; exact membership only where it is undecided.
+      const v = this.classifyPoint(x, y);
+      if (v !== 0) return v === 1 ? [x, y] : null;
       return this.contains(qpn(x, y)) ? [x, y] : null;
     };
     for (const piece of this.region.pieces) {
