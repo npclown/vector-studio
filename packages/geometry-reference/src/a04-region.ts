@@ -4232,8 +4232,25 @@ class StrokeTarget implements RegionTarget {
     spend(this.work, 1, 'stroke cover');
     this.nodes += 1;
     const cls = this.classifyPhys(box);
+    // The witness pair is searched on first use (E3-U2c): the freeze check reads it only at the
+    // freeze cell size and below, so larger cells on the way down never pay for the samples. It
+    // is a function of the box alone, so the cover is the same whenever it is computed.
+    let witness: CoverNode['witness'] | undefined = cls === 0 ? undefined : null;
+    const find = () => this.findWitness(box);
+    return {
+      box,
+      cls,
+      kids: null,
+      get witness() {
+        if (witness === undefined) witness = find();
+        return witness;
+      },
+    };
+  }
+  /** An exact inside and outside sample of an undecided cell, or null. */
+  private findWitness(box: Box): CoverNode['witness'] {
     let witness: CoverNode['witness'] = null;
-    if (cls === 0) {
+    {
       const xm = (box.x0 + box.x1) / 2;
       const ym = (box.y0 + box.y1) / 2;
       let inside: [number, number] | null = null;
@@ -4269,7 +4286,7 @@ class StrokeTarget implements RegionTarget {
           ib: ivpc(outside[0], outside[1]),
         };
     }
-    return { box, cls, witness, kids: null };
+    return witness;
   }
   /** A point of the box inside R, found from the pieces, or null (candidates are approximate). */
   private pieceCandidate(box: Box): [number, number] | null {
