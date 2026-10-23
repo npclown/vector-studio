@@ -565,10 +565,201 @@ describe('obligation (e): ∂M extraction splits edges at T-vertices', () => {
     );
     expect(a04StorageCracks(port, moved)).toEqual({ tJunctions: 1, storageCracks: 1 });
   });
+  /** The smallest cap at which `done` holds, by bisection on the deterministic work. */
+  const boundary = (done: (cap: number) => boolean): number => {
+    let lo = 0;
+    let hi = 1;
+    while (!done(hi)) hi *= 2;
+    for (let k = 0; k < 60 && hi - lo > 1e-6 * hi; k += 1) {
+      const m = (lo + hi) / 2;
+      if (done(m)) hi = m;
+      else lo = m;
+    }
+    return lo;
+  };
+  it('review of PR #214: a cap hit in the S2 pair scan gives UNDECIDED and no crack bound', () => {
+    // Below the boundary the cap is hit by the last charge before the mesh is complete, which
+    // is in the S2 pair scan (the end of buildMesh).
+    const run = (cap: number) => a04Measure(kase, mesh, { betaC: 2 ** -20, workCap: cap });
+    const cap = boundary((c) => run(c).tJunctions === 1);
+    const m = run(cap);
+    expect(m.status).toBe('undecided');
+    expect(m.reason).toMatch(/^work cap: (mesh pair|rational|gcd step)$/);
+    expect(m.tJunctions).toBe(0);
+    expect(m.crackBound).toBeNull();
+    expect(run(cap * (1 + 1e-5)).crackBound).toBe(a04NextUp(2 ** -19));
+  });
+  it('review of PR #214: the storage-crack check is charged and capped', () => {
+    const port = meshOf(local);
+    const run = (cap: number) =>
+      a04Measure(kase, mesh, { betaC: 2 ** -20, workCap: cap, portMesh: port });
+    const cap = boundary((c) => run(c).storage !== null);
+    const m = run(cap);
+    // The mesh was built (its T-junction is known), and the cap hit in the storage check.
+    expect(m.tJunctions).toBe(1);
+    expect(m.status).toBe('undecided');
+    expect(m.reason).toMatch(/^work cap: /);
+    expect(m.storage).toBeNull();
+    expect(m.crackBound).toBeNull();
+    const after = run(cap * (1 + 1e-5));
+    expect(after.storage).toEqual({ tJunctions: 1, storageCracks: 0 });
+    // Without the port mesh the same cap completes the mesh: the storage check costs work.
+    expect(a04Measure(kase, mesh, { betaC: 2 ** -20, workCap: cap }).tJunctions).toBe(1);
+  });
+  it('S7: the port mesh T-junction of a storage crack keeps the crack bound', () => {
+    // The mapped T-vertex leaves its edge, so M* has no T-junction; the port mesh still has one.
+    const moved = meshOf(
+      local.map((tri) =>
+        tri.map(([x, y]) => (y === ym ? [phi(x, y)[0] + 2 ** -10, phi(x, y)[1]] : phi(x, y))),
+      ),
+    );
+    const port = meshOf(local);
+    const options = { separateTerms: true, betaC: 2 ** -20, resolution: 2 ** -6 };
+    const alone = a04Measure(kase, moved, options);
+    expect(alone.tJunctions).toBe(0);
+    expect(alone.crackBound).toBe(0);
+    expect(alone.storage).toBeNull();
+    const fed = a04Measure(kase, moved, { ...options, portMesh: port });
+    expect(fed.tJunctions).toBe(0);
+    expect(fed.storage).toEqual({ tJunctions: 1, storageCracks: 1 });
+    expect(fed.crackBound).toBe(a04NextUp(2 ** -19));
+  });
   it('E3-D11: without splitting, the shared side becomes a spurious boundary and B_M > 0', () => {
     const m = a04Measure(kase, mesh, { hooks: { splitAtTVertices: false }, separateTerms: true });
     expect(m.bM!.lo).toBeGreaterThan(0.25);
     expect(m.status).toBe('fail');
+  });
+});
+
+// =============================================================================================
+// S3 of PR #212: the weighted work cap
+
+describe('S3: the weighted work cap', () => {
+  const band = makeCase({
+    verbs: 'MC',
+    points: [-3, 4.5, -1, -1.5, 1, -1.5, 3, 4.5],
+    paint: stroke(4),
+    c: ORIGIN,
+  });
+  it('charges the exact-arithmetic and sub-arc work, deterministically', () => {
+    const a = a04FreezeCheck(band);
+    const b = a04FreezeCheck(band);
+    expect(a.status).toBe('ok');
+    expect(b.work).toBe(a.work);
+    expect(b.workByKind).toEqual(a.workByKind);
+    for (const kind of ['structure', 'gcd step', 'rational', 'sub-arc node', 'seam split'])
+      expect(a.workByKind![kind] ?? 0).toBeGreaterThan(0);
+  });
+  it('stops at the cap: ORACLE-WORK at the freeze, UNDECIDED at measurement', () => {
+    const cap = a04FreezeCheck(band).work / 4;
+    const f = a04FreezeCheck(band, { workCap: cap });
+    expect(f.status).toBe('ORACLE-WORK');
+    expect(f.work).toBeGreaterThan(cap);
+    const [A, B, C, D] = shift(rect(-4, -1, 4, 4));
+    const m = a04Measure(
+      band,
+      meshOf([
+        [A!, B!, C!],
+        [A!, C!, D!],
+      ]),
+      { workCap: 1000 },
+    );
+    expect(m.status).toBe('undecided');
+    expect(m.reason).toMatch(/^work cap: /);
+  });
+});
+
+// =============================================================================================
+// S2 of PR #212: the mesh preconditions of ∂M by edge count
+
+describe('S2: meshes outside the ∂M preconditions are UNDECIDED, never PASS', () => {
+  const box = makeCase({ ...polygon(rect(0, 0, 16, 8)), paint: fill(), c: ORIGIN });
+  const [A, B, C, D] = shift(rect(0, 0, 16, 8));
+  const fan = [
+    [A!, B!, C!],
+    [A!, C!, D!],
+  ];
+  it('a valid fan of the rectangle passes (the control)', () => {
+    const m = a04Measure(box, meshOf(fan), { resolution: 2 ** -6 });
+    expect(m.status).toBe('pass');
+  });
+  it("the reviewer's zero-area sliver outside the rectangle is UNDECIDED", () => {
+    const sliver: [number, number][] = [
+      [116, 104],
+      [121, 104],
+      [118.5, 104],
+    ];
+    const m = a04Measure(box, meshOf([...fan, sliver]), { resolution: 2 ** -6 });
+    expect(m.status).toBe('undecided');
+    expect(m.reason).toMatch(/^invalid mesh: zero-area triangle 2$/);
+  });
+  it('a repeated vertex is a zero-area triangle too', () => {
+    const m = a04Measure(box, meshOf([...fan, [A!, A!, B!]]), { resolution: 2 ** -6 });
+    expect(m.reason).toMatch(/zero-area triangle 2/);
+  });
+  it('two overlapping triangles are UNDECIDED, and touching ones are not', () => {
+    const overlap: [number, number][] = [
+      [104, 101],
+      [112, 101],
+      [108, 105],
+    ];
+    const m = a04Measure(box, meshOf([...fan, overlap]), { resolution: 2 ** -6 });
+    expect(m.status).toBe('undecided');
+    expect(m.reason).toMatch(/^invalid mesh: overlapping triangles/);
+    // A triangle sharing only the right side of the rectangle touches, so the mesh is valid.
+    const touching: [number, number][] = [B!, [124, 104], C!];
+    const t = a04Measure(box, meshOf([...fan, touching]), { resolution: 2 ** -6 });
+    expect(t.reason ?? '').not.toMatch(/invalid mesh/);
+    expect(t.status).toBe('fail');
+  });
+  const reasonOf = (tris: (readonly [number, number])[][]) =>
+    a04Measure(box, meshOf(tris), { resolution: 2 ** -6 }).reason ?? '';
+  it('a triangle strictly inside another overlaps it', () => {
+    const outer: [number, number][] = [
+      [100, 100],
+      [116, 100],
+      [100, 108],
+    ];
+    const inner: [number, number][] = [
+      [102, 101],
+      [106, 101],
+      [102, 103],
+    ];
+    expect(reasonOf([outer, inner])).toMatch(/^invalid mesh: overlapping triangles 0 and 1$/);
+    expect(reasonOf([inner, outer])).toMatch(/^invalid mesh: overlapping triangles 0 and 1$/);
+  });
+  it('two triangles on the same side of partly shared collinear edges overlap', () => {
+    const a: [number, number][] = [
+      [100, 100],
+      [110, 100],
+      [105, 105],
+    ];
+    const b: [number, number][] = [
+      [105, 100],
+      [115, 100],
+      [110, 104],
+    ];
+    expect(reasonOf([a, b])).toMatch(/overlapping triangles 0 and 1/);
+  });
+  it('a duplicated triangle overlaps its copy, in either orientation', () => {
+    expect(reasonOf([...fan, fan[0]!])).toMatch(/overlapping triangles 0 and 2/);
+    expect(reasonOf([...fan, [...fan[0]!].reverse()])).toMatch(/overlapping triangles 0 and 2/);
+  });
+  it('a pair that only the second triangle separates is valid, in either order', () => {
+    // A's edge lines all fail to separate B: B has (−2, 5.5) with x + y < 4 and x < 0, and
+    // (9, 0) on y = 0. B's edge x + 2y = 9 has A (at most 8 there) strictly on the other side.
+    const a = shift([
+      [0, 0],
+      [4, 0],
+      [0, 4],
+    ]);
+    const b = shift([
+      [-2, 5.5],
+      [9, 0],
+      [5, 5],
+    ]);
+    expect(reasonOf([a, b])).not.toMatch(/invalid mesh/);
+    expect(reasonOf([b, a])).not.toMatch(/invalid mesh/);
   });
 });
 

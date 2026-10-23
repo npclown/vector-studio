@@ -1219,8 +1219,8 @@ Status: dated note for the independent E3-U2 review. Every choice below is **dec
 | Resolution target and floor  | `r_m = 2^-10` px, halved while E straddles a threshold, down to `2^-20` px (section 4.3)                                                                                                                                                                                                                                                                                                                          |
 | Crossing bit size (fills)    | `2^-24` px                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Margin around `Ω ⊕ 1`        | 64 px. `∂R` is resolved within it. Beyond it a lower bound saturates at the margin, which already exceeds the target                                                                                                                                                                                                                                                                                              |
-| Work cap at measurement      | 2·10^8 units per case (a unit is one cell, element or root step). Exceeding it is UNDECIDED                                                                                                                                                                                                                                                                                                                       |
-| Work cap at the freeze       | 2·10^6 units per case (about 10 min for a stroke at about 0.3 ms per cover cell). Exceeding it is `ORACLE-WORK`                                                                                                                                                                                                                                                                                                   |
+| Work cap at measurement      | Superseded by section 14.7 (2026-10-23). Was 2·10^8 units per case (a unit is one cell, element or root step). Exceeding it is UNDECIDED                                                                                                                                                                                                                                                                          |
+| Work cap at the freeze       | Superseded by section 14.7 (2026-10-23). Was 2·10^6 units per case (about 10 min for a stroke at about 0.3 ms per cover cell). Exceeding it is `ORACLE-WORK`                                                                                                                                                                                                                                                      |
 | Freeze cell size (strokes)   | `2^-4` px. Every undecided cover cell of `∂R ∩ (Ω ⊕ 1)` at that size must hold witnesses. Otherwise, within 12 more levels, its unwitnessed descendants that have no witnessed or opposite-class neighbour must shrink to at most 16 cells (point-like: a thin wedge of R or of its complement narrowing to a corner leaves up to about a dozen per level); a level with more than 4,096 such cells fails at once |
 | Sub-arc refinement (strokes) | Not below `r·2^-36` for a cell (`r·2^-24` for a point, whose exact membership is the fallback), with a budget of 4,096 sub-arcs per test. An exhausted budget leaves the cell undecided, which is sound                                                                                                                                                                                                           |
 
@@ -1229,7 +1229,7 @@ Notes on these parameters (review S4 of PR #212):
 - **The freeze criterion is a heuristic proxy for decidability.** A case that passes the freeze check is not guaranteed to be decided at measurement time. The rule stays conservative: a case the oracle cannot decide is UNDECIDED and never PASS (section 7.2).
 - **The point-like bound was raised from 8 to 16 cells** after the oracle-only observation of `C5/l34/T3/z1-d2` (section 14.4 and the track evidence). No kernel output had been read, so the freeze stays blind (section 5.5).
 - **The stride-25 partial run** predates that change. Its 894 `ok` results are not tied to the committed source SHA `1a85af04…` or to any later SHA. The complete freeze run must use the frozen oracle version.
-- **The two work caps**, 2·10^8 units at measurement and 2·10^6 at the freeze, are an interpretation of the work limit of section 4.4. The contract fixes neither number.
+- **The two work caps**, 2·10^8 units at measurement and 2·10^6 at the freeze, are an interpretation of the work limit of section 4.4. The contract fixes neither number. Section 14.7 replaces both with weighted caps.
 
 ### 14.3 Controls and seeded defects in E3-U2
 
@@ -1264,15 +1264,85 @@ These are the arguments behind the certified steps of the oracle. They were chec
 - **Union-of-brackets IN test (E3-O4).** A point in the bracket of a sub-arc (a sign change of `f` and the distance hull bound at most `r`) is in the sweep, by the intermediate-value theorem. The points that a sub-arc misses are cut with closed half-planes, so each clip over-approximates the uncovered set. When the distance bound fails, the sub-arc misses the whole cell. Strict sign conditions make the true uncovered set an open set intersected with the convex cell. Such a set is empty, or it has positive area. So dropping the zero-area pieces is valid, and an empty remainder proves the cell IN.
 - **Undecided-cell cover (E3-O3).** An IN cell lies in `R`, and an OUT cell misses `R`. So an IN cell and an OUT cell cannot share a point. Take a point `p` of `∂R` inside the root cell. The closed leaves around `p` cover a neighbourhood of it. If they were all IN, `p` would be interior to `R`. If they were all OUT, `p` would not be in `R`, but `R` is closed. A mixture of IN and OUT cannot meet at `p`. So `p` lies in an undecided cell, and `∂R` stays inside the undecided cells.
 - **Witnesses (E3-O3, E3-O7, E3-O12).** An undecided cell with an exact inside point `a` and an exact outside point `b` contains the segment `[a, b]`, because the cell is convex. The parameters of the segment's points in `R` form a closed set that holds 0 and not 1. Its largest element gives a point of `R` that is a limit of points outside `R`, so a point of `∂R` on the segment. Hence `dist(q, ∂R) ≤ max(|q − a|, |q − b|)` for every `q`, which is the "far end of a witness pair" upper bound.
-- **`G` strip certificate (E3-O6).** Every element of `∂R` that can meet the cell is a certain segment, and it and every `∂M` segment that can meet the cell lie on one exact line `L`. Each open side of `L` within the cell is convex, so connected, and it meets neither boundary. So `R` and `M` are each constant on it, and one corner per side decides agreement. Both are closures of their interiors, so on `L` itself each contains a point exactly when it contains an adjacent side. Agreement on both sides therefore gives agreement on `L`, and the cell holds no point of `M △ R`. This step needs `M` to be the closure of its interior: see S2 in section 14.6.
+- **`G` strip certificate (E3-O6).** Every element of `∂R` that can meet the cell is a certain segment, and it and every `∂M` segment that can meet the cell lie on one exact line `L`. Each open side of `L` within the cell is convex, so connected, and it meets neither boundary. So `R` and `M` are each constant on it, and one corner per side decides agreement. Both are closures of their interiors, so on `L` itself each contains a point exactly when it contains an adjacent side. Agreement on both sides therefore gives agreement on `L`, and the cell holds no point of `M △ R`. For `M`, this holds because the oracle measures only meshes of positive-area triangles with disjoint interiors (S2, closed in section 14.7): a finite union of closed triangles of positive area is the closure of its interior.
 - **Early exit (E3-O9).** Each lower bound is attained by an exact or certified point, so `E_lo` is valid whenever the loop stops. A term stopped early still reports the maximum of its unrefined upper bounds. A term that is not computed reports `[0, +∞)`, so `E_hi` becomes `+∞` and the interval is `[E_lo, +∞)`. That interval is valid, and it can only lead to FAIL (`E_lo > 0.25 + β_c`) or UNDECIDED.
 
 ### 14.6 Open pre-freeze items (E3-U2b)
 
 Review of PR #212 found three items that the freeze depends on. Each is **decided under the user's standing instruction of 2026-10-22** (the recommended option): E3-U2 lands as a partial unit, and a follow-up unit E3-U2b closes these items before the freeze note. They are recorded here, not implemented.
 
+Status, 2026-10-23: E3-U2b closes S2, S3 and S7 in code (section 14.7).
+
 | ID  | Item                                                                                                                                                                                                                 | Planned resolution in E3-U2b                                                                                                                   |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | S2  | `∂M` is found by edge count (an edge used once). That is unsound for zero-area or overlapping triangles: their edges can cancel or count once without lying on `∂M`, and `M` is then not the closure of its interior | The oracle rejects such a mesh or marks the case UNDECIDED, or the harness enforces a precondition of positive-area, non-overlapping triangles |
 | S3  | The work cap does not charge root-isolation steps or arc nodes, so the cost of one case is not bounded                                                                                                               | A deterministic weighted work cap that charges every unit of work, required before E3-A4                                                       |
 | S7  | The crack bound counts only the T-junctions of `M*`. Storage cracks of the port mesh, which `a04StorageCracks` finds, do not feed `a04Measure`                                                                       | `a04Measure` takes the storage cracks of `a04StorageCracks` into its crack bound, or E3-U3 closes them in the harness                          |
+
+### 14.7 E3-U2b pre-freeze closure, 2026-10-23
+
+Dated append. E3-U2b closes the three open items of section 14.6 in `a04-region.ts`. Each choice below is **decided under the user's standing instruction of 2026-10-22 (recommended option)**. No A04 threshold, criterion or user decision changes.
+
+**S2, mesh preconditions.** `buildMesh` checks every triangle of `M*` exactly:
+
+- A triangle whose exact orientation is 0 is a zero-area triangle. This includes a repeated vertex.
+- Two triangles overlap when their interiors meet. Candidate pairs come from the triangle grid index. A pair is disjoint exactly when the line of some edge of one triangle has the other triangle in its closed opposite half-plane. This is the separating-axis argument for convex polygons: the edge of the Minkowski difference that faces the origin comes from an edge of one of the two triangles. Triangles that only share an edge or a vertex are disjoint.
+- `a04Measure` reports such a mesh as UNDECIDED, with reason `invalid mesh: zero-area triangle k` or `invalid mesh: overlapping triangles j and k`, before any term is computed. It never reports PASS for it.
+- Under these preconditions, and with edges split at T-vertices, a sub-edge used by one triangle lies on `∂M`. A sub-edge used by two triangles has them on opposite sides, so it is interior, and no sub-edge is used three times. So `∂M` by edge count is exact, and `M` is the closure of its interior (section 14.5).
+- Alternative not taken: let the harness drop zero-area triangles before measurement. That changes the set `M*`, because a zero-area triangle adds a segment to the union of closed triangles. It stays a harness decision for E3-U3, which must disclose it.
+- Tests: the reviewer's sliver (the 16×8 rectangle's fan plus the triangle `(116, 104), (121, 104), (118.5, 104)`), a repeated vertex, an overlapping triangle, a touching triangle (valid, so it is measured, and it FAILS) and a valid fan (PASS).
+
+**S3, a weighted work cap.** Every exact-arithmetic loop whose cost the structural units did not bound is now charged where it runs, through the work of the call in progress. The charges come at its rational normalizations and gcd steps and at the other kinds below. A unit is a nominal microsecond, and the bound on wall time that it gives is empirical (calibration below).
+
+| Kind                 | Where it is charged                                                                   | Weight                       |
+| -------------------- | ------------------------------------------------------------------------------------- | ---------------------------- |
+| structure            | Cover cells, fill elements and pairs, B&B nodes, distance queries (as in E3-U2)       | 3                            |
+| gcd step             | Every BigInt Euclid loop (`qmk`, `toZ`, `zprimitive`): `s·(1 + s/37)` for `s` steps   | 0.3                          |
+| rational             | Every rational normalization (`qmk`)                                                  | 2                            |
+| horner step          | `zsign` (Sturm counts, `isolateRoots`, `refineRoot`, `signAtRoot`), by the point size | 0.13 per `deg·(1 + b(t)/64)` |
+| pseudo-division step | `zpdivmod` (Sturm sequences, gcds, squarefree parts), per coefficient touched         | 0.23                         |
+| sub-arc node         | `CubicSweep` `outside`, both `collect` trees, sign samples, `pointsNear`              | 7.5                          |
+| clip vertex          | `clipExact` in the union-of-brackets IN test                                          | 1.5                          |
+| seam split           | Every `classifyPoly` call, including the seam recursion                               | 85                           |
+| membership           | Every exact membership (stroke `containsLocal`, fill `contains`), witnesses included  | 5                            |
+| cell lookup          | `cellAt`, including the freeze check's `nearBoundary` lookups                         | 2.5                          |
+| mesh pair            | Each candidate triangle pair of the S2 overlap test                                   | 2.5                          |
+
+Here `b(t)` is the bit length of the numerator and denominator of the point `t`.
+
+- **Caps.** Freeze: 1.8·10^9 units, a nominal 30 min. Measurement: 7.2·10^9 units, a nominal 2 h, four times the freeze cap. Exceeding a cap is `ORACLE-WORK` at the freeze and UNDECIDED at measurement, as before. Both remain interpretations of section 4.4.
+- **Determinism.** The charge depends only on the case, the mesh and the options: counts and bit lengths, never a clock. The freeze result also reports the unweighted count per kind (`workByKind`).
+- **Calibration.** The machine is Windows 11 with 16 logical CPUs and Node v24.15.0, loaded with 14 processes as in a freeze run.
+  - A first fit used 114 cases of at most 5 min: every 250th corpus case from index 7, plus the open cases of the E3-U2 run.
+  - The stride-25 freeze run with those weights (commit `4fe4679`, 1,099 cases) then took up to 4.4 µs per unit on long cases. Heap growth and very large rationals make long cases slower per unit.
+  - The weights were therefore refitted on that run's 161 cases above 20 s, by least squares on the log of the time, and scaled by 2.5 so that no case took more than 1 µs per unit. The largest was 0.97 µs per unit, and the median 0.40.
+  - So the freeze cap bounds a case at about 30 min on this machine under that load. A slower machine or a heavier load scales the bound. The bound is empirical, not a proof.
+- **Cost of the bound.** On the first stride-25 run's counts, 17 cases that were `ok` after 4.5 to 38 min exceed the new cap. Under E3-Q6 (a), they become `ORACLE-WORK`, like the slow open cases. The rerun below gives the outcome on the final build.
+
+**S7, storage cracks.** `a04Measure` takes an optional `portMesh`: the Float64 port mesh with the same indices as `M*`.
+
+- It runs `a04StorageCracks` and adds the port mesh's T-junctions to those of `M*` for the crack bound: `2β_c` when either count is positive, else 0.
+- The result reports `storage`: the port T-junctions and the storage cracks.
+- Test: the E3-PC13 mesh, with its T-vertex moved off its edge in `M*`. `M*` then has no T-junction, and the crack bound is `2β_c` only when the port mesh is given.
+- The harness (E3-U3) must pass the port mesh.
+
+**Stride-25 freeze run on the final build.** The command was `pnpm e3-a04:freeze --shards 14 --stride 25`. The oracle was commit `7c8ac51`, with `a04-region.ts` SHA-256 `218ed5891c1392239b5400578d27ea45225af657e2089113422ec777aa1e26e5`. The run went from 05:26 to 06:35 UTC (69 min wall), with 10.5 CPU hours on the machine above.
+
+- **1,099 cases checked: 1,062 `ok` and 37 `ORACLE-WORK`.** No case was `ORACLE-UNSUPPORTED` or `ORACLE-INCONSISTENT`.
+- **Strata.** C1 to C4, C6, C7, C10, C11 and C12 are all `ok`. C5 has 277 `ok` and 5 `ORACLE-WORK`. C8 has 106 `ok` and 1. C9 has 109 `ok` and 31.
+- **Time.** The slowest case took 1,168 s (`C9/g0178/T4/z64-d2`, at the cap). No case above 20 s took more than 0.69 µs per unit. Mean time per case: C5 38 s, C8 9 s and C9 186 s. The fill strata are below 0.2 s.
+- **The `ORACLE-WORK` cases.**
+  - 35 cases reached the work cap: gcd steps (19), sub-arc nodes (14), rationals (1) and seam splits (1). They include `C9/g0220/T5/z1-d2` (473 s) and `C9/g0259/T7/z1-d1` (552 s), and all 17 cases that the refit predicted.
+  - Two cases have a cover cell that does not resolve point-like: `C9/k10/T7/z64-d3` at `(667.9375, 540)` (137 s), and `C9/g0234/T0/z1-d1` at `(316.875, 172.5625)` (173 s).
+- **Full-run estimate.** 25 times this sample is about 263 CPU hours, about 19 h on 14 shards. That is above the 17 h of the E3-U2 estimate, so the full run was **not started**.
+- **Disposition under E3-Q6 (a).** Every `ORACLE-WORK` case fails the freeze, so the corpus is not frozen. About 3.4 % of the sample fails, all in the stroke strata C5, C8 and C9. On the full corpus that is about 900 cases. The freeze needs one of two things:
+  - a faster oracle on these strokes. The dominant costs are BigInt gcds of large rationals in the exact cell tests, and sub-arc refinement;
+  - or a disclosed generator revision.
+
+**Review of PR #214, 2026-10-23.** Decided under the user's standing instruction of 2026-10-22 (recommended option):
+
+- `a04Measure` reports `crackBound: null` whenever the mesh was not fully built and checked: a work cap hit before `buildMesh` returns, or before the port mesh's storage check ends. It never reports 0 for an unknown mesh.
+- `a04StorageCracks` now runs inside the active work, so it is charged and capped. A cap hit there is UNDECIDED.
+- The S2 tests add a triangle strictly inside another, two triangles on the same side of partly shared collinear edges, a duplicated triangle in both orientations, and a pair that only the second triangle's edge separates, in both orders.
+- The source SHA-256 is now `0544b1dc8c4e8fced559e406851ff0dcca9e85b3fee06c9c9ed8992b3b3e0725`.
+- The stride-25 result above (1,062 `ok`, 37 `ORACLE-WORK`) is tied to SHA `218ed589…` and was not rerun. The change adds charges only after the freeze terms: the storage check runs only in `a04Measure`, with a port mesh, and the crack-bound change does not touch the freeze check.

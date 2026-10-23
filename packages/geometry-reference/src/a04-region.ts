@@ -24,6 +24,66 @@ import { classifyStrokeSource } from './stroke-region.js';
 // =============================================================================================
 // 1. Exact rationals
 
+/**
+ * Weighted work (E3-U2b, review S3 of PR #212). Every loop whose cost is not bounded by the
+ * structural units (cover cells, elements, B&B nodes) is charged where it runs, through the work
+ * of the call in progress: BigInt gcd steps, rational normalizations, Horner steps of exact
+ * polynomial signs (weighted by the bit length of the point), pseudo-division steps, sub-arc
+ * nodes and their interval tests, exact clip vertices, seam-split recursion, exact memberships
+ * and cover-cell lookups. The weights are nominal microseconds on the calibration machine
+ * (contract section 14.7), so the cap bounds wall time. The charge is deterministic: it depends
+ * only on the case, the mesh and the options.
+ */
+const WORK_KINDS = [
+  'structure',
+  'gcd step',
+  'rational',
+  'horner step',
+  'pseudo-division step',
+  'sub-arc node',
+  'clip vertex',
+  'seam split',
+  'membership',
+  'cell lookup',
+  'mesh pair',
+] as const;
+
+const W_STRUCTURE = 0;
+const W_GCD = 1;
+const W_RATIONAL = 2;
+const W_HORNER = 3;
+const W_PDIV = 4;
+const W_ARC = 5;
+const W_CLIP = 6;
+const W_SEAM = 7;
+const W_MEMBER = 8;
+const W_CELL = 9;
+const W_PAIR = 10;
+
+/** Nominal microseconds per unit of each kind (contract section 14.7). */
+const WORK_WEIGHTS: readonly number[] = [3, 0.3, 2, 0.13, 0.23, 7.5, 1.5, 85, 5, 2.5, 2.5];
+
+type Work = { units: number; readonly cap: number; readonly counts: number[] };
+
+function newWork(cap: number): Work {
+  return { units: 0, cap, counts: WORK_KINDS.map(() => 0) };
+}
+
+/**
+ * The work of the call in progress. Only `a04Measure` and `a04FreezeCheck` set it; charges
+ * outside them are free. The inspection helpers `a04Contains`, `a04ContainsWith`,
+ * `a04FillPortions` and `a04BoundaryDistance` run uncharged (tests only, never a run).
+ */
+let activeWork: Work | null = null;
+
+function charge(kind: number, count: number): void {
+  const work = activeWork;
+  if (work === null) return;
+  work.counts[kind]! += count;
+  work.units += count * WORK_WEIGHTS[kind]!;
+  if (work.units > work.cap) throw new A04WorkLimitError(WORK_KINDS[kind]!);
+}
+
 type Q = Readonly<{ n: bigint; d: bigint }>;
 type QP = Readonly<{ x: Q; y: Q }>;
 
@@ -54,11 +114,19 @@ function trailingZeros(v: bigint): bigint {
 function gcdB(left: bigint, right: bigint): bigint {
   let a = absB(left);
   let b = absB(right);
-  while (b !== 0n) [a, b] = [b, a % b];
+  let steps = 0;
+  while (b !== 0n) {
+    [a, b] = [b, a % b];
+    steps += 1;
+  }
+  // A step costs in proportion to the operands' words, and Euclid takes about 0.58 steps per
+  // bit (37 per 64-bit word), so the step count also measures the size.
+  if (steps > 0) charge(W_GCD, steps * (1 + steps / 37));
   return a;
 }
 
 function qmk(numerator: bigint, denominator: bigint): Q {
+  charge(W_RATIONAL, 1);
   let n = numerator;
   let d = denominator;
   if (d === 0n) oracleError('zero denominator');
@@ -302,6 +370,7 @@ function zpdivmod(a: readonly bigint[], b: readonly bigint[]): { q: ZPoly; r: ZP
   if (dq < 0) return { q: [], r };
   const q: bigint[] = Array.from({ length: dq + 1 }, () => 0n);
   for (let k = dq; k >= 0; k -= 1) {
+    charge(W_PDIV, r.length + q.length + B.length);
     const top = r.length - 1 >= k + B.length - 1 ? (r[k + B.length - 1] ?? 0n) : 0n;
     // Multiply everything by lead, then subtract top·x^k·B.
     r = r.map((c) => c * lead);
@@ -318,6 +387,8 @@ function zsign(p: readonly bigint[], t: Q): number {
   if (p.length === 0) return 0;
   const n = t.n;
   const d = t.d;
+  // Each step multiplies by n and d, whose size grows with the refinement of t.
+  charge(W_HORNER, (p.length - 1) * (1 + (bitLen(n) + bitLen(d)) / 64));
   let acc = p[p.length - 1]!;
   let dp = 1n;
   for (let i = p.length - 2; i >= 0; i -= 1) {
@@ -649,6 +720,7 @@ function clipConvex(
 
 /** Exact clip of a convex polygon to {y : g(y) ≥ 0}, g affine. */
 function clipExact(poly: readonly QP[], g: (y: QP) => Q): QP[] {
+  charge(W_CLIP, poly.length);
   const out: QP[] = [];
   const v = poly.map(g);
   for (let i = 0; i < poly.length; i += 1) {
@@ -1089,6 +1161,12 @@ type MeshModel = Readonly<{
   triangleBoxes: readonly Box[];
   boundary: readonly Seg[];
   tJunctions: number;
+  /**
+   * Why the mesh is outside the oracle's preconditions (review S2 of PR #212), or null. ∂M is
+   * the set of sub-edges used by exactly one triangle, which equals the topological boundary of
+   * the union only when every triangle has positive area and no two interiors overlap.
+   */
+  invalid: string | null;
   triIndex: GridIndex<number> | null;
   segIndex: GridIndex<Seg> | null;
 }>;
@@ -1136,6 +1214,7 @@ const EMPTY_MESH: MeshModel = {
   triangleBoxes: [],
   boundary: [],
   tJunctions: 0,
+  invalid: null,
   triIndex: null,
   segIndex: null,
 };
@@ -1212,6 +1291,7 @@ function buildMesh(mesh: A04Mesh, hooks: A04Hooks): MeshModel {
   const box = boxOfIvPoints(pointIv);
   const triIndex = new GridIndex<number>(box, gridSize(triangles.length), (k) => triangleBoxes[k]!);
   triangles.forEach((_, k) => triIndex.insert(k));
+  const invalid = meshPreconditionFailure(points, triangles, triangleBoxes, triIndex);
   let segIndex: GridIndex<Seg> | null = null;
   if (boundary.length > 0) {
     segIndex = new GridIndex<Seg>(box, gridSize(boundary.length), (s) => s.box);
@@ -1224,9 +1304,48 @@ function buildMesh(mesh: A04Mesh, hooks: A04Hooks): MeshModel {
     triangleBoxes,
     boundary,
     tJunctions,
+    invalid,
     triIndex,
     segIndex,
   };
+}
+
+/**
+ * The first zero-area triangle or overlapping pair of the mesh, exactly, or null. Two triangles
+ * of positive area have disjoint interiors exactly when the line of an edge of one of them has
+ * the other triangle in its closed opposite half-plane (separating axes of convex polygons: the
+ * edge of the Minkowski difference that faces the origin comes from an edge of one triangle).
+ */
+function meshPreconditionFailure(
+  points: readonly QP[],
+  triangles: readonly (readonly [number, number, number])[],
+  boxes: readonly Box[],
+  index: GridIndex<number>,
+): string | null {
+  const at = (t: readonly [number, number, number]) => t.map((i) => points[i]!);
+  const orientation = triangles.map(([a, b, c]) => orient(points[a]!, points[b]!, points[c]!));
+  const zero = orientation.findIndex((o) => o === 0);
+  if (zero >= 0) return `zero-area triangle ${zero}`;
+  const separated = (p: readonly QP[], sp: number, q: readonly QP[]): boolean => {
+    for (let i = 0; i < 3; i += 1) {
+      const a = p[i]!;
+      const b = p[(i + 1) % 3]!;
+      if (q.every((v) => orient(a, b, v) * sp <= 0)) return true;
+    }
+    return false;
+  };
+  for (let j = 0; j < triangles.length; j += 1) {
+    const tj = at(triangles[j]!);
+    let found = -1;
+    index.visit(boxes[j]!, (k) => {
+      if (found >= 0 || k <= j || !boxesMeet(boxes[k]!, boxes[j]!)) return;
+      charge(W_PAIR, 1);
+      const tk = at(triangles[k]!);
+      if (!separated(tj, orientation[j]!, tk) && !separated(tk, orientation[k]!, tj)) found = k;
+    });
+    if (found >= 0) return `overlapping triangles ${j} and ${found}`;
+  }
+  return null;
 }
 
 /** Exact closed-triangle membership; a degenerate triangle is its segment hull. */
@@ -1352,11 +1471,18 @@ export class A04UnsupportedError extends Error {
   }
 }
 
-type Work = { units: number; readonly cap: number };
-
 function spend(work: Work, units: number, where: string): void {
-  work.units += units;
+  work.counts[W_STRUCTURE]! += units;
+  work.units += units * WORK_WEIGHTS[W_STRUCTURE]!;
   if (work.units > work.cap) throw new A04WorkLimitError(where);
+}
+
+function workByKind(work: Work): Record<string, number> {
+  const out: Record<string, number> = {};
+  WORK_KINDS.forEach((k, i) => {
+    if (work.counts[i]! > 0) out[k] = work.counts[i]!;
+  });
+  return out;
 }
 
 // =============================================================================================
@@ -2641,6 +2767,7 @@ class FillTarget implements RegionTarget {
     for (const e of this.elements) this.index.insert(e);
   }
   contains(p: QP): boolean {
+    charge(W_MEMBER, 1);
     return this.fill.contains(p);
   }
   private candidates(
@@ -3288,6 +3415,7 @@ class CubicSweep implements StrokePiece {
     return pos || neg;
   }
   private outside(node: ArcNode, poly: LPoly, size: number, budget: { n: number }): boolean {
+    charge(W_ARC, 1);
     if (boxBoxDistLo(poly.box, node.box) > this.ir.hi) return true;
     if (this.excludesZero(node, poly)) return true;
     budget.n -= 1;
@@ -3299,6 +3427,7 @@ class CubicSweep implements StrokePiece {
     const nodes: ArcNode[] = [];
     let budget = 4096;
     const collect = (n: ArcNode) => {
+      charge(W_ARC, 1);
       if (boxBoxDistLo(poly.box, n.box) > this.ir.hi) return;
       budget -= 1;
       if (
@@ -3367,6 +3496,7 @@ class CubicSweep implements StrokePiece {
     // refined, within a node budget.
     let budget = 4096;
     const collect = (n: ArcNode) => {
+      charge(W_ARC, 1);
       if (boxBoxDistLo(poly.box, n.box) > this.ir.hi) return;
       budget -= 1;
       if (
@@ -3389,6 +3519,7 @@ class CubicSweep implements StrokePiece {
       while (end + 1 < nodes.length && nodes[end + 1]!.t0 === nodes[end]!.t1) end += 1;
       // The run nodes[k..end] covers [nodes[k].t0, nodes[end].t1] contiguously.
       const ts = [nodes[k]!.t0, ...nodes.slice(k, end + 1).map((n) => n.t1)];
+      charge(W_ARC, ts.length);
       const sig = ts.map((t) => this.sigmaAt(poly, t));
       let last = -1;
       for (let j = 0; j < ts.length; j += 1) {
@@ -3411,6 +3542,7 @@ class CubicSweep implements StrokePiece {
     const out: [number, number][] = [];
     const size = Math.max(box.x1 - box.x0, box.y1 - box.y0);
     const visit = (n: ArcNode) => {
+      charge(W_ARC, 1);
       if (out.length >= 8 || !boxesMeet(n.box, box)) return;
       if (n.size <= size / 4 || n.depth >= 40) {
         const c = n.c[0]!;
@@ -3728,8 +3860,12 @@ function makeStrokeRegion(c: Decoded, hooks: A04Hooks): StrokeRegion {
     else add(new PointSquare(p, r));
   }
   const seamList = [...seams.values()];
-  const containsLocal = (y: QP) => pieces.some((p) => p.contains(y));
+  const containsLocal = (y: QP) => {
+    charge(W_MEMBER, 1);
+    return pieces.some((p) => p.contains(y));
+  };
   const classifyPoly = (poly: LPoly, depth: number): number => {
+    charge(W_SEAM, 1);
     let unknown = false;
     for (const p of pieces) {
       if (!boxesMeet(p.box, poly.box)) continue;
@@ -3946,6 +4082,7 @@ class StrokeTarget implements RegionTarget {
   }
   /** The cell of the given size containing (x, y), built on demand; null outside the root. */
   cellAt(x: number, y: number, size: number): CoverNode | null {
+    charge(W_CELL, 1);
     let n = this.root;
     if (x < n.box.x0 || x >= n.box.x1 || y < n.box.y0 || y >= n.box.y1) return null;
     while (n.box.x1 - n.box.x0 > size && n.cls === 0) {
@@ -4283,9 +4420,9 @@ export const A04_ORACLE_PARAMETERS = Object.freeze({
   /** Margin beyond Ω ⊕ 1 within which ∂R is resolved (px). */
   margin: INDEX_MARGIN,
   /** Work cap per case at measurement time (units). */
-  measureWorkCap: 200_000_000,
+  measureWorkCap: 7_200_000_000,
   /** Work cap per case at the freeze check (units). */
-  freezeWorkCap: 2_000_000,
+  freezeWorkCap: 1_800_000_000,
   /** Freeze-check cell size for the stroke cover (px). */
   freezeCellSize: 2 ** -4,
   /** Extra levels below the freeze cell size in which an undecided cell must resolve. */
@@ -4332,6 +4469,12 @@ export type A04MeasureOptions = Readonly<{
   onlyTerms?: readonly ('bR' | 'bM' | 'g')[];
   /** The case's β_c (from the harness), for the reported crack bound. */
   betaC?: number;
+  /**
+   * The Float64 port mesh that `M*` was mapped from, with the same indices (E3-K2). Its
+   * T-junctions, which `a04StorageCracks` finds, count towards the crack bound too (review S7 of
+   * PR #212): a port T-vertex that leaves its edge in `M*` is no T-junction of `M*`.
+   */
+  portMesh?: A04Mesh;
 }>;
 
 function regionTarget(c: Decoded, f: Frame, hooks: A04Hooks, work: Work): RegionTarget {
@@ -4373,19 +4516,38 @@ export function a04Measure(
   input: A04Case,
   meshInput: A04Mesh,
   options: A04MeasureOptions = {},
-): A04Measurement & Readonly<{ crackBound: number | null }> {
-  const m = measureCase(input, meshInput, options);
+): A04Measurement &
+  Readonly<{
+    crackBound: number | null;
+    storage: Readonly<{ tJunctions: number; storageCracks: number }> | null;
+  }> {
+  const mesh: MeshState = { complete: false, storage: null };
+  const m = measureCase(input, meshInput, options, mesh);
   // E3-Q10 (b): a T-junction can open a crack up to about 2β_c wide on the GPU; it is reported
-  // here and judged by A01, not scored by A04.
+  // here and judged by A01, not scored by A04. The port mesh's T-junctions count as well, so a
+  // storage crack (a port T-vertex off its edge in M*) keeps the bound. A mesh that was not
+  // fully built and checked (a work cap hit before) has no bound: it is null, never 0.
+  const junctions = m.tJunctions + (mesh.storage?.tJunctions ?? 0);
   const crackBound =
-    options.betaC === undefined ? null : m.tJunctions > 0 ? up(2 * options.betaC) : 0;
-  return { ...m, crackBound };
+    options.betaC === undefined || !mesh.complete
+      ? null
+      : junctions > 0
+        ? up(2 * options.betaC)
+        : 0;
+  return { ...m, crackBound, storage: mesh.storage };
 }
+
+/** Set by `measureCase`: whether the mesh (and the port mesh, if given) was fully processed. */
+type MeshState = {
+  complete: boolean;
+  storage: Readonly<{ tJunctions: number; storageCracks: number }> | null;
+};
 
 function measureCase(
   input: A04Case,
   meshInput: A04Mesh,
   options: A04MeasureOptions,
+  state: MeshState,
 ): A04Measurement {
   const hooks = options.hooks ?? {};
   const c = decodeCase(input);
@@ -4404,17 +4566,32 @@ function measureCase(
   const skip = notDrawable(c, f);
   if (skip !== null)
     return { ...base, status: 'not-drawable', reason: skip, resolution: 0, work: 0 };
-  const work: Work = { units: 0, cap: options.workCap ?? A04_ORACLE_PARAMETERS.measureWorkCap };
+  const work = newWork(options.workCap ?? A04_ORACLE_PARAMETERS.measureWorkCap);
   const passBelow = options.passBelow ?? A04_ORACLE_PARAMETERS.target;
   const failAbove = options.failAbove ?? A04_ORACLE_PARAMETERS.target;
   const floor = options.floor ?? A04_ORACLE_PARAMETERS.floor;
   let tol = options.resolution ?? A04_ORACLE_PARAMETERS.resolution;
   let mesh: MeshModel = EMPTY_MESH;
+  const previousWork = activeWork;
+  activeWork = work;
   try {
     const R = regionTarget(c, f, hooks, work);
     mesh = buildMesh(meshInput, hooks);
+    // Inside the active work, so the storage-crack check is charged and capped too.
+    if (options.portMesh !== undefined)
+      state.storage = a04StorageCracks(options.portMesh, meshInput);
+    state.complete = true;
     const M = new MeshTarget(mesh);
     const meshInfo = { tJunctions: mesh.tJunctions, boundaryEdges: mesh.boundary.length };
+    if (mesh.invalid !== null)
+      return {
+        ...base,
+        ...meshInfo,
+        status: 'undecided',
+        reason: `invalid mesh: ${mesh.invalid}`,
+        resolution: tol,
+        work: work.units,
+      };
     let wp: { r: boolean; m: boolean } | null = null;
     if (R.omegaStatus() === 'none' && !meshBoundaryMayMeet(mesh, f.omega)) {
       const point = windowPoint(R, f);
@@ -4502,6 +4679,8 @@ function measureCase(
         work: work.units,
       };
     throw error;
+  } finally {
+    activeWork = previousWork;
   }
 }
 
@@ -4520,7 +4699,10 @@ export type A04FreezeResult = Readonly<{
   elements: number;
   /** ∂R ∩ Ω: 'none', 'some' or 'unknown' (an unknown window is measured, never skipped). */
   window: 'none' | 'some' | 'unknown' | null;
+  /** Weighted work (nominal microseconds, contract section 14.7). */
   work: number;
+  /** Unweighted counts per work kind (absent for a case that was not drawable). */
+  workByKind?: Readonly<Record<string, number>>;
 }>;
 
 export type A04FreezeOptions = Readonly<{
@@ -4544,10 +4726,12 @@ export function a04FreezeCheck(input: A04Case, options: A04FreezeOptions = {}): 
   const skip = notDrawable(c, f);
   if (skip !== null)
     return { ...base, status: 'not-drawable', detail: skip, elements: 0, window: null, work: 0 };
-  const work: Work = { units: 0, cap: options.workCap ?? A04_ORACLE_PARAMETERS.freezeWorkCap };
+  const work = newWork(options.workCap ?? A04_ORACLE_PARAMETERS.freezeWorkCap);
   const cellSize = options.cellSize ?? A04_ORACLE_PARAMETERS.freezeCellSize;
   const extra = options.extraLevels ?? A04_ORACLE_PARAMETERS.freezeExtraLevels;
   let elements = 0;
+  const previousWork = activeWork;
+  activeWork = work;
   try {
     const R = regionTarget(c, f, {}, work);
     let detail: string | null = null;
@@ -4649,7 +4833,15 @@ export function a04FreezeCheck(input: A04Case, options: A04FreezeOptions = {}): 
       status = 'ORACLE-UNSUPPORTED';
       detail = 'no decidable window point';
     }
-    return { ...base, status, detail, elements, window, work: work.units };
+    return {
+      ...base,
+      status,
+      detail,
+      elements,
+      window,
+      work: work.units,
+      workByKind: workByKind(work),
+    };
   } catch (error) {
     if (error instanceof A04WorkLimitError)
       return {
@@ -4659,6 +4851,7 @@ export function a04FreezeCheck(input: A04Case, options: A04FreezeOptions = {}): 
         elements,
         window: null,
         work: work.units,
+        workByKind: workByKind(work),
       };
     if (error instanceof A04UnsupportedError)
       return {
@@ -4668,6 +4861,7 @@ export function a04FreezeCheck(input: A04Case, options: A04FreezeOptions = {}): 
         elements,
         window: null,
         work: work.units,
+        workByKind: workByKind(work),
       };
     if (error instanceof InconsistentError)
       return {
@@ -4677,8 +4871,11 @@ export function a04FreezeCheck(input: A04Case, options: A04FreezeOptions = {}): 
         elements,
         window: null,
         work: work.units,
+        workByKind: workByKind(work),
       };
     throw error;
+  } finally {
+    activeWork = previousWork;
   }
 }
 
@@ -4691,7 +4888,7 @@ class InconsistentError extends Error {}
 export function a04Contains(input: A04Case, point: readonly [A04Scalar, A04Scalar]): boolean {
   const c = decodeCase(input);
   const f = makeFrame(c, {});
-  const work: Work = { units: 0, cap: A04_ORACLE_PARAMETERS.measureWorkCap };
+  const work = newWork(A04_ORACLE_PARAMETERS.measureWorkCap);
   const p = qp(scalarQ(point[0]), scalarQ(point[1]));
   if (c.paint.kind === 'fill') return makeFillRegion(c, f, {}).contains(p);
   return new StrokeTarget(makeStrokeRegion(c, {}), f, work).contains(p);
@@ -4715,7 +4912,7 @@ export function a04ContainsWith(
 export function a04FillPortions(input: A04Case, hooks: A04Hooks = {}): A04Portion[] {
   const c = decodeCase(input);
   const f = makeFrame(c, hooks);
-  const work: Work = { units: 0, cap: A04_ORACLE_PARAMETERS.measureWorkCap };
+  const work = newWork(A04_ORACLE_PARAMETERS.measureWorkCap);
   const t = regionTarget(c, f, hooks, work);
   if (!(t instanceof FillTarget)) oracleError('not a fill case');
   return t.arrangement.portions.map((p) => {
@@ -4746,6 +4943,6 @@ export function a04BoundaryDistance(
 ): A04Interval {
   const c = decodeCase(input);
   const f = makeFrame(c, {});
-  const work: Work = { units: 0, cap: A04_ORACLE_PARAMETERS.measureWorkCap };
+  const work = newWork(A04_ORACLE_PARAMETERS.measureWorkCap);
   return regionTarget(c, f, {}, work).dist(ivpc(point[0], point[1]), tol);
 }
