@@ -358,6 +358,11 @@ Dated append. Unit E3-U2c speeds up the A04 oracle on the stroke strata, the E3-
 
 **Validation.** The commands and their results are in the PR. Still pending: a review of E3-U2c, and a decision on the five remaining cases (a further speed-up, a weight choice, or a disclosed generator revision for `k10`). Then the complete freeze run and the freeze note.
 
+**Update 2026-10-23, review of PR #216.** Review finding B1 was a soundness defect in the integer clip: a kept vertex on the clip line kept a stale outgoing line, so a later clip could place a wrong vertex and drop a piece as covered. It is fixed, and the review's tests are added ([contract section 14.8](d9-e3-b4-precision-contract.md#148-e3-u2c-oracle-speed-up-2026-10-23)). The loose weight fit is kept, decided under the user's standing instruction of 2026-10-22 (recommended option).
+
+- Source SHA-256 `47117f777812e43cb68c0793ac6db7a1dd4238f3500afcadd38a940efc4cbe09` at commit `0941180`. `pnpm test:e3-a04` passes 78 tests (60 before, 18 new).
+- `pnpm e3-a04:freeze --shards 14 --stride 25` on that SHA: 1,094 `ok` and 5 `ORACLE-WORK` of 1,099, the same five cases, in 44 min wall and 6.7 CPU hours. No status changed, and one case's work changed slightly (`C9/k05/T0/z64-d1`, still `ok`). The run directory `.tools/e3-a04-freeze/2026-10-23T14-16-44-666Z/` is machine-local and not committed.
+
 ## E8 investigation, 2026-10-23
 
 Dated append. This is the investigation result for item E8. Kernel `fill-v0+r2`, `main` 6a3a624, natively in `packages/geometry-wasm/kernel` with scratch `cfg(test)` probes that are not committed. Track: rendering. No code changed. The contract for the fix is the draft [E8 addendum](p3-rounded-knot-topology-contract.md#e8-addendum-2026-10-23).

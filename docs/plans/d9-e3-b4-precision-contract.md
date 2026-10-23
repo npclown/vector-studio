@@ -1386,4 +1386,9 @@ Dated append. E3-U2c makes the oracle faster on the stroke strata, so that the `
   - `C9/k10/T7/z64-d3` still has an unresolved cover cell, at `(1333.8125, 540)`. Exact sampling finds no inside point near it. The cell is outside `R`, beside the butt corner of a 4096:1 anisotropic stroke, and the interval test does not certify it OUT.
 - **Full-run estimate.** About 168 CPU hours, or about 12 h on 14 shards, which is below 17 h. The sample is not 100 % `ok`, so the full run was **not started**.
 
+**Rerun after the review of PR #216, 2026-10-23.** The review fixes are the integer clipping fix above (B1), test-only self-tests and an unscaled reference, and comments. The source SHA-256 is now `47117f777812e43cb68c0793ac6db7a1dd4238f3500afcadd38a940efc4cbe09` (commit `0941180`).
+
+- `pnpm test:e3-a04` passes 78 tests in 3 files: the 60 before and 18 new ones in `tests/geometry/e3-a04-oracle-u2c.test.ts`. They check the integer clip against the rational clip of E3-U2b on 4,000 chains, the scaled frame against the unscaled region on T3, T6, T7, T5 and a reflected T3, the Bernstein halvings against exact coefficients, and the `signAtRoot` prefilter against the exact test. The clip test fails on the code before the fix.
+- The stride-25 freeze run, with the same command and 14 shards, went from 14:16 to 15:00 UTC (44 min wall) and took 6.7 CPU hours. **1,099 cases: 1,094 `ok` and 5 `ORACLE-WORK`**, the same five cases with the same outcomes. No status changed. The work of one case changed: `C9/k05/T0/z64-d1` went from 204,105,186 to 204,079,950 units and stays `ok`.
+
 **Disposition under E3-Q6 (a).** Five sampled cases still fail the freeze, so the corpus is not frozen. Left: one further oracle speed-up on sub-arc refinement, or a different weight choice; and the outside certification of the k10 cell, or a disclosed generator revision for it.
