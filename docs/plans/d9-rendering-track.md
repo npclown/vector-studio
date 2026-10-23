@@ -10,7 +10,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 
 | Item | Subject | Tier | Phase | State |
 | --- | --- | --- | --- | --- |
-| E1 | ST-U9 early abort when failure is certain | Full | R0 | Merged (#202); independent diff and evidence review pending ([evidence](#e1-st-u10-evidence-2026-10-22)) |
+| E1 | ST-U9 early abort when failure is certain | Full | R0 | Done: merged (#202), independent review ACCEPTED 2026-10-23 ([review](../evidence/r0-review-closeout-2026-10-23.md#e1)) |
 | E3 | B4: A04 corpus and measurement contract | Full | R1 | In progress: U1 (#206), U2 (#212), U2b (#214), U2c (#216) merged; freeze not met (5 `ORACLE-WORK`); U3, U4 next ([U2c evidence](#e3-e3-u2c-evidence-2026-10-23)) |
 | E8 | Unsupported-geometry on simple smooth Q/T and C/S paths | Full | R1 | In progress: U0 (#211), U0b (#213), U1 (#215) merged; U2 next ([evidence](#e8-u1-evidence-2026-10-23)) |
 | X1 | P3 exit evidence A01-A08 index | — (Primary acceptance) | R1 | Open; all eight TODO ([index](#p3-exit-evidence-index-x1)) |
@@ -19,6 +19,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | E2 | ST-U9 family-B fast-rung contract | Full | Backlog | Not started |
 | E5 | Unmeasured-scope measurements after AL-Q6 (a) | Full, then light | Backlog | Not started |
 | E6 | Remove or move the D8-interim overlay and fringe builders | Full | Backlog | Not started |
+| E9 | E1 review follow-ups: guard equality tests, per-guard blocked counter | Light | Backlog | Not started ([review](../evidence/r0-review-closeout-2026-10-23.md#e1)) |
 
 E1 comes before E2: the early abort is a smaller, independent bound and needs no new certificate. The order is otherwise D9's.
 
@@ -61,7 +62,7 @@ By D9-Q2 (a) this plan carries the evidence index for the P3 exit gate. The visu
 | A04 | None yet                                                                                                                              | TODO; depends on E3                            |
 | A05 | None yet                                                                                                                              | TODO                                           |
 | A06 | None yet                                                                                                                              | TODO                                           |
-| A07 | None yet; A07 partial (V-3 evidence): [V-3 implementation evidence](d9-visualization-track.md#v-3-implementation-evidence-2026-10-23) | TODO; headed page from the visualization track |
+| A07 | Partial (V-3, review accepted 2026-10-23): [V-3 implementation evidence](d9-visualization-track.md#v-3-implementation-evidence-2026-10-23) | TODO; headed page from the visualization track |
 | A08 | None yet                                                                                                                              | TODO; headed page from the visualization track |
 
 ## Evidence rules
