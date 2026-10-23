@@ -107,8 +107,15 @@ function bitLen(v: bigint): number {
 
 function trailingZeros(v: bigint): bigint {
   if (v === 0n) return 0n;
-  const a = absB(v);
-  return BigInt(bitLen(a & -a) - 1);
+  // 32 bits at a time (E3-U2c): no string conversion of a large value.
+  let a = absB(v);
+  let k = 0;
+  while ((a & 0xffffffffn) === 0n) {
+    a >>= 32n;
+    k += 32;
+  }
+  const low = Number(a & 0xffffffffn);
+  return BigInt(k + 31 - Math.clz32(low & -low));
 }
 
 function gcdB(left: bigint, right: bigint): bigint {
@@ -1039,11 +1046,14 @@ type Frame = Readonly<{
   ox: Q;
   oy: Q;
   det: Q;
+  /** The adjugate of L (σ·L⁻¹): `phiInv` maps to scaled local coordinates σ·y. */
   ia: Q;
   ib: Q;
   ic: Q;
   id: Q;
   ivInv: readonly [Iv, Iv, Iv, Iv];
+  /** σ = det L (1 when singular), the scale of the stroke region's local coordinates. */
+  sigma: Q;
   ivO: IvP;
   width: number;
   height: number;
@@ -1065,11 +1075,15 @@ function makeFrame(c: Decoded, hooks: A04Hooks): Frame {
   const oy = qmul(s, qsub(qnum(c.t[1]), qnum(c.c[1])));
   const det = qsub(qmul(a, d), qmul(b, cc));
   const singular = det.n === 0n;
-  const inv = (v: Q): Q => (singular ? Q0 : qdiv(v, det));
-  const ia = inv(d);
-  const ib = inv(qneg(b));
-  const ic = inv(qneg(cc));
-  const idd = inv(a);
+  // The stroke region lives in scaled local coordinates y' = σ·y with σ = det L (E3-U2c): then
+  // Φ⁻¹ scaled by σ is the adjugate, which is dyadic like Φ, so no exact test of a cell needs a
+  // gcd. y ↦ σ·y is a similarity (a uniform scaling, by −|σ| a rotation by π), so every
+  // membership predicate of the stroke pieces is unchanged when the pieces are scaled by σ.
+  const ia = d;
+  const ib = qneg(b);
+  const ic = qneg(cc);
+  const idd = a;
+  const sigma = singular ? Q1 : det;
   const width = c.viewport[0] * c.dpr;
   const height = c.viewport[1] * c.dpr;
   if (!Number.isInteger(width) || !Number.isInteger(height)) oracleError('non-integer window');
@@ -1086,6 +1100,7 @@ function makeFrame(c: Decoded, hooks: A04Hooks): Frame {
     ic,
     id: idd,
     ivInv: [qIv(ia), qIv(ib), qIv(ic), qIv(idd)],
+    sigma,
     ivO: { x: qIv(ox), y: qIv(oy) },
     width,
     height,
@@ -1100,6 +1115,7 @@ const phi = (f: Frame, p: QP): QP => ({
   y: qadd(qadd(qmul(f.c, p.x), qmul(f.d, p.y)), f.oy),
 });
 
+/** σ·Φ⁻¹(p): the scaled local point of a physical point (dyadic for a dyadic p). */
 function phiInv(f: Frame, p: QP): QP {
   const x = qsub(p.x, f.ox);
   const y = qsub(p.y, f.oy);
@@ -3274,6 +3290,9 @@ function arcNode(t0: number, t1: number, c: readonly IvP[], depth: number): ArcN
   return { t0, t1, c, box, size: boxDiam(box), depth, kids: null, range: null };
 }
 
+/** Seam splits per top-level stroke classification (E3-U2c, contract section 14.8). */
+const SEAM_SPLIT_BUDGET = 24;
+
 /** Sub-arc trees are cached to this depth only; deeper sub-arcs are rebuilt on demand. */
 const ARC_CACHE_DEPTH = 14;
 
@@ -3657,15 +3676,31 @@ function splitPoly(poly: LPoly, seam: Seam): [LPoly, LPoly] {
     plus.push(I);
     minus.push(I);
   }
+  // The exact half is computed on first use only (E3-U2c): most halves are decided by the
+  // interval tests, and the exact cut points carry large denominators.
   const make = (g: IvP[], side: number): LPoly => {
     const tags = new Map(poly.tags);
     tags.set(seam.id, side);
-    return { gens: g, tags, box: boxOfIvPoints(g), exact: exactSide(side) };
+    let exact: QP[] | null | undefined;
+    return {
+      gens: g,
+      tags,
+      box: boxOfIvPoints(g),
+      get exact() {
+        if (exact === undefined) exact = exactSide(side);
+        return exact;
+      },
+    };
   };
   return [make(plus, 1), make(minus, -1)];
 }
 
-function makeStrokeRegion(c: Decoded, hooks: A04Hooks): StrokeRegion {
+/**
+ * The stroke region in scaled local coordinates σ·y (see `makeFrame`): every source point and
+ * the half width are scaled by σ, and the radius by |σ|. The classification of the source is
+ * scale-free, so it runs on the unscaled numbers.
+ */
+function makeStrokeRegion(c: Decoded, hooks: A04Hooks, sigma: Q): StrokeRegion {
   if (c.paint.kind !== 'stroke') oracleError('not a stroke case');
   const paint = c.paint;
   const verbCodes = [...c.verbs].map((v) => 'MLCZ'.indexOf(v));
@@ -3683,7 +3718,7 @@ function makeStrokeRegion(c: Decoded, hooks: A04Hooks): StrokeRegion {
   {
     let cursor = 0;
     const take = (): QP => {
-      const p = qpn(c.points[cursor]!, c.points[cursor + 1]!);
+      const p = qpscale(qpn(c.points[cursor]!, c.points[cursor + 1]!), sigma);
       cursor += 2;
       return p;
     };
@@ -3713,7 +3748,7 @@ function makeStrokeRegion(c: Decoded, hooks: A04Hooks): StrokeRegion {
     if (q === undefined) oracleError(`no segment for verb ${verb}`);
     return q;
   };
-  const r = qmul(qnum(paint.width), QHALF);
+  const r = qabs(qmul(qmul(qnum(paint.width), QHALF), sigma));
   const rApprox = qIv(r).hi;
   const seams = new Map<string, Seam>();
   const seamRef = (b: QP, t: QP, side: number, reach: number): SeamRef => {
@@ -3817,7 +3852,7 @@ function makeStrokeRegion(c: Decoded, hooks: A04Hooks): StrokeRegion {
     }
   for (const join of classification.joins) {
     if (join.piece === 'none') continue;
-    const b = qpn(join.point[0], join.point[1]);
+    const b = qpscale(qpn(join.point[0], join.point[1]), sigma);
     if (join.piece === 'round') {
       ratDisk('round-join', b);
       continue;
@@ -3855,7 +3890,7 @@ function makeStrokeRegion(c: Decoded, hooks: A04Hooks): StrokeRegion {
     }
   }
   for (const pc of classification.pointCaps) {
-    const p = qpn(pc.point[0], pc.point[1]);
+    const p = qpscale(qpn(pc.point[0], pc.point[1]), sigma);
     if (paint.cap === 'round') ratDisk('point-cap', p);
     else add(new PointSquare(p, r));
   }
@@ -3864,26 +3899,52 @@ function makeStrokeRegion(c: Decoded, hooks: A04Hooks): StrokeRegion {
     charge(W_MEMBER, 1);
     return pieces.some((p) => p.contains(y));
   };
+  // A vertex whose enclosure lies outside a piece's (outward) box is outside the piece, so the
+  // exact all-vertices test of a convex piece cannot succeed: a sound filter before exact work.
+  const maybeWithin = (poly: LPoly, box: Box): boolean =>
+    poly.gens.every(
+      (g) => g.x.hi >= box.x0 && g.x.lo <= box.x1 && g.y.hi >= box.y0 && g.y.lo <= box.y1,
+    );
+  // Seam splits per top-level classification (E3-U2c). An exhausted budget leaves the polygon
+  // undecided, which is sound; the cover's quadtree then refines it, and a smaller cell meets
+  // fewer seams. Without it a large cell tries every seam to depth 3 (seams³ classifications).
+  let splitBudget = 0;
   const classifyPoly = (poly: LPoly, depth: number): number => {
     charge(W_SEAM, 1);
+    if (depth === 0) splitBudget = SEAM_SPLIT_BUDGET;
     let unknown = false;
     for (const p of pieces) {
       if (!boxesMeet(p.box, poly.box)) continue;
       const v = p.classify(poly);
       if (v === 1) return 1;
       if (v === 0) {
-        if (p.convex && poly.exact !== null && poly.exact.every((y) => p.contains(y))) return 1;
+        if (
+          p.convex &&
+          poly.exact !== null &&
+          maybeWithin(poly, p.box) &&
+          poly.exact.every((y) => p.contains(y))
+        )
+          return 1;
         if (p.corners !== undefined && separatedByEdges(poly.gens, p.corners)) continue;
         unknown = true;
       }
     }
     if (!unknown) return -1;
     if (depth >= 3) return 0;
+    // Nearest seams first, so that the budget goes to the seams most likely to matter.
+    const candidates: { seam: Seam; d: number }[] = [];
     for (const seam of seamList) {
       if (poly.tags.has(seam.id)) continue;
-      if (pointBoxDistLo(seam.ib, poly.box) > seam.reach) continue;
+      const d = pointBoxDistLo(seam.ib, poly.box);
+      if (d > seam.reach) continue;
       const s = poly.gens.map((g) => ivpDot(ivpSub(g, seam.ib), seam.it));
       if (s.every((v) => v.lo > 0) || s.every((v) => v.hi < 0)) continue;
+      candidates.push({ seam, d });
+    }
+    candidates.sort((u, v) => u.d - v.d || u.seam.id - v.seam.id);
+    for (const { seam } of candidates) {
+      if (splitBudget <= 0) return 0;
+      splitBudget -= 1;
       const [plus, minus] = splitPoly(poly, seam);
       if (classifyPoly(plus, depth + 1) === 1 && classifyPoly(minus, depth + 1) === 1) return 1;
     }
@@ -4029,10 +4090,11 @@ class StrokeTarget implements RegionTarget {
       const p = phiInvIv(f, ivpc(x, y));
       return [(p.x.lo + p.x.hi) / 2, (p.y.lo + p.y.hi) / 2];
     };
-    const fa = qapprox(f.a);
-    const fb = qapprox(f.b);
-    const fc = qapprox(f.c);
-    const fd = qapprox(f.d);
+    const sg = qapprox(f.sigma);
+    const fa = qapprox(f.a) / sg;
+    const fb = qapprox(f.b) / sg;
+    const fc = qapprox(f.c) / sg;
+    const fd = qapprox(f.d) / sg;
     const ox = qapprox(f.ox);
     const oy = qapprox(f.oy);
     const toPhys = ([x, y]: readonly [number, number]): [number, number] => [
@@ -4489,7 +4551,7 @@ function regionTarget(c: Decoded, f: Frame, hooks: A04Hooks, work: Work): Region
     const arrangement = buildArrangement(fill.curves, indexRegion(f), inside, hooks, work);
     return new FillTarget(fill, arrangement, f, work);
   }
-  return new StrokeTarget(makeStrokeRegion(c, hooks), f, work);
+  return new StrokeTarget(makeStrokeRegion(c, hooks, f.sigma), f, work);
 }
 
 function notDrawable(c: Decoded, f: Frame): string | null {
@@ -4891,7 +4953,7 @@ export function a04Contains(input: A04Case, point: readonly [A04Scalar, A04Scala
   const work = newWork(A04_ORACLE_PARAMETERS.measureWorkCap);
   const p = qp(scalarQ(point[0]), scalarQ(point[1]));
   if (c.paint.kind === 'fill') return makeFillRegion(c, f, {}).contains(p);
-  return new StrokeTarget(makeStrokeRegion(c, {}), f, work).contains(p);
+  return new StrokeTarget(makeStrokeRegion(c, {}, f.sigma), f, work).contains(p);
 }
 
 /** Exact membership with hooks (seeded-defect tests). */
@@ -4904,7 +4966,7 @@ export function a04ContainsWith(
   const f = makeFrame(c, hooks);
   const p = qp(scalarQ(point[0]), scalarQ(point[1]));
   if (c.paint.kind === 'fill') return makeFillRegion(c, f, hooks).contains(p);
-  const region = makeStrokeRegion(c, hooks);
+  const region = makeStrokeRegion(c, hooks, f.sigma);
   return region.containsLocal(phiInv(f, p));
 }
 
