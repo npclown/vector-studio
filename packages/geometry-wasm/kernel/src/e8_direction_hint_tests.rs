@@ -20,12 +20,12 @@ use crate::codec::{PathInput, Request};
 use crate::cubic_fill::{CubicFillWorkspace, DecodedSource, MAX_FLAT_COMMANDS};
 use crate::fill_export::{tolerances, FILL_V0_LIMITS};
 use crate::fill_filter_tests::THREAD_STACK_BYTES;
-use crate::geometry::{Point, VERB_CUBIC, VERB_LINE};
+use crate::geometry::{Point, Provenance, VERB_CUBIC, VERB_LINE};
 use crate::p3_b0r_identity::{read_file, read_random, run_chunk};
 use crate::simple_cubic_topology::{
     b0r_test_point, e8_test_adjacent_pair, e8_test_second_direction, E8TestLeaf,
-    RoundedKnotCubicTopologyWorkspace, TopologyCubic, TopologyError, TopologyInput, TopologyLeaf,
-    TopologyLimits, TopologyRange, TransverseArrangementWorkspace,
+    RoundedKnotCubicTopologyWorkspace, SimpleCubicTopologyWorkspace, TopologyCubic, TopologyError,
+    TopologyInput, TopologyLeaf, TopologyLimits, TopologyRange, TransverseArrangementWorkspace,
 };
 
 fn p(x: f64, y: f64) -> Point {
@@ -207,6 +207,111 @@ fn widths_hold_at_the_largest_admitted_magnitudes() {
     let previous = line(p(-m, -m), p(m, -m));
     let next = line(p(m, -m), p(-m, m));
     assert_eq!(e8_test_adjacent_pair(previous, next), (false, true));
+}
+
+#[test]
+fn cyclic_only_replacement_is_unresolved_natively() {
+    // E8-Q3 extension of 2026-10-23: the literal input of
+    // `tests/geometry/rounded-knot-topology/fixtures.ts::e8CyclicOnlyReplacement`. Exact linear
+    // A-to-B and B-to-C (one leaf each), then the cubic C, (3, -3), (3, 0), A in four depth-2
+    // leaves, which arrives at A antiparallel to A-to-B. Every native certificate fails at the
+    // last-to-first pair, the fifth inspected pair, like the TypeScript oracles
+    // (`tests/unit/geometry-e8-cyclic-only.test.ts`).
+    let provenance = |source_verb, end_numerator, depth| Provenance {
+        source_verb,
+        end_numerator,
+        depth,
+    };
+    let linear = |start: Point, end: Point| {
+        [
+            start,
+            p((2.0 * start.x + end.x) / 3.0, (2.0 * start.y + end.y) / 3.0),
+            p((start.x + 2.0 * end.x) / 3.0, (start.y + 2.0 * end.y) / 3.0),
+            end,
+        ]
+    };
+    let (a, b, c) = (p(0.0, 0.0), p(9.0, 0.0), p(3.0, -9.0));
+    let cubics = [
+        TopologyCubic {
+            points: linear(a, b),
+            source_verb: 7,
+            leaves: TopologyRange { start: 0, count: 1 },
+        },
+        TopologyCubic {
+            points: linear(b, c),
+            source_verb: 8,
+            leaves: TopologyRange { start: 1, count: 1 },
+        },
+        TopologyCubic {
+            points: [c, p(3.0, -3.0), p(3.0, 0.0), a],
+            source_verb: 9,
+            leaves: TopologyRange { start: 2, count: 4 },
+        },
+    ];
+    let leaves = [
+        TopologyLeaf {
+            end: b,
+            provenance: provenance(7, 1, 0),
+        },
+        TopologyLeaf {
+            end: c,
+            provenance: provenance(8, 1, 0),
+        },
+        TopologyLeaf {
+            end: p(189.0 / 64.0, -81.0 / 16.0),
+            provenance: provenance(9, 1, 2),
+        },
+        TopologyLeaf {
+            end: p(21.0 / 8.0, -9.0 / 4.0),
+            provenance: provenance(9, 2, 2),
+        },
+        TopologyLeaf {
+            end: p(111.0 / 64.0, -9.0 / 16.0),
+            provenance: provenance(9, 3, 2),
+        },
+        TopologyLeaf {
+            end: a,
+            provenance: provenance(9, 4, 2),
+        },
+    ];
+    let contours = [TopologyRange { start: 0, count: 3 }];
+    let input = TopologyInput {
+        contours: &contours,
+        cubics: &cubics,
+        leaves: &leaves,
+    };
+    let expected = (Err(TopologyError::Unresolved), 6, 5);
+    let mut rounded = RoundedKnotCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
+    let result = rounded.certify(input);
+    assert_eq!(
+        (result, rounded.stats().leaves, rounded.stats().pairs),
+        expected
+    );
+    let mut arrangement = TransverseArrangementWorkspace::new(TopologyLimits::default()).unwrap();
+    let result = arrangement.certify(input);
+    assert_eq!(
+        (
+            result,
+            arrangement.stats().leaves,
+            arrangement.stats().pairs
+        ),
+        expected
+    );
+    let result = arrangement.certify_triangle_free(input, &[false; 3]);
+    assert_eq!(
+        (
+            result,
+            arrangement.stats().leaves,
+            arrangement.stats().pairs
+        ),
+        expected
+    );
+    let mut exact = SimpleCubicTopologyWorkspace::new(TopologyLimits::default()).unwrap();
+    let result = exact.certify(input);
+    assert_eq!(
+        (result, exact.stats().leaves, exact.stats().pairs),
+        expected
+    );
 }
 
 // ------------------------------------------------------------------------------------------
