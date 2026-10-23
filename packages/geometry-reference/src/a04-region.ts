@@ -3281,13 +3281,95 @@ type ArcNode = {
   readonly depth: number;
   kids: [ArcNode, ArcNode] | null;
   range: { dx: Iv; dy: Iv; e: Iv } | null;
+  /**
+   * Bernstein coefficients of D_x, D_y and e = C·D on [t0, t1] (E3-U2c), computed on first use
+   * from the parent's by one de Casteljau halving (`bernOf`).
+   */
+  bern: Bern | null;
+  readonly parent: ArcNode | null;
+  readonly half: 0 | 1;
 };
+
+function bernOf(n: ArcNode): Bern | null {
+  if (n.bern === null && n.parent !== null) {
+    const pb = bernOf(n.parent);
+    if (pb === null) return null;
+    n.bern = bernKids(pb)[n.half];
+  }
+  return n.bern;
+}
+
+/** Bernstein coefficients (one common degree) of the sweep equation's parts on a sub-arc. */
+type Bern = Readonly<{ x: readonly Iv[]; y: readonly Iv[]; e: readonly Iv[] }>;
+
+/** De Casteljau halving of interval Bernstein coefficients, by (u + v)·½ as in `arcKids`. */
+function bernHalves(b: readonly Iv[]): [Iv[], Iv[]] {
+  const n = b.length;
+  let row = [...b];
+  const left: Iv[] = [row[0]!];
+  const right: Iv[] = [row[n - 1]!];
+  for (let k = 1; k < n; k += 1) {
+    const next: Iv[] = [];
+    for (let i = 0; i + 1 < row.length; i += 1) next.push(imul(iadd(row[i]!, row[i + 1]!), HALF));
+    row = next;
+    left.push(row[0]!);
+    right.unshift(row[row.length - 1]!);
+  }
+  return [left, right];
+}
+
+function bernKids(b: Bern): [Bern, Bern] {
+  const [x0, x1] = bernHalves(b.x);
+  const [y0, y1] = bernHalves(b.y);
+  const [e0, e1] = bernHalves(b.e);
+  return [
+    { x: x0, y: y0, e: e0 },
+    { x: x1, y: y1, e: e1 },
+  ];
+}
+
+/** Exact power-basis coefficients to Bernstein coefficients of degree n on [0, 1]. */
+function powerToBernstein(a: readonly Q[], n: number): Q[] {
+  const binom = (k: number, j: number): bigint => {
+    let r = 1n;
+    for (let i = 0; i < j; i += 1) r = (r * BigInt(k - i)) / BigInt(i + 1);
+    return r;
+  };
+  const out: Q[] = [];
+  for (let i = 0; i <= n; i += 1) {
+    let v = Q0;
+    for (let j = 0; j <= Math.min(i, a.length - 1); j += 1)
+      v = qadd(v, qmul(a[j]!, qmk(binom(i, j), binom(n, j))));
+    out.push(v);
+  }
+  return out;
+}
 
 const ARC_MAX_DEPTH = 48;
 
-function arcNode(t0: number, t1: number, c: readonly IvP[], depth: number): ArcNode {
+function arcNode(
+  t0: number,
+  t1: number,
+  c: readonly IvP[],
+  depth: number,
+  bern: Bern | null,
+  parent: ArcNode | null,
+  half: 0 | 1,
+): ArcNode {
   const box = boxOfIvPoints(c);
-  return { t0, t1, c, box, size: boxDiam(box), depth, kids: null, range: null };
+  return {
+    t0,
+    t1,
+    c,
+    box,
+    size: boxDiam(box),
+    depth,
+    kids: null,
+    range: null,
+    bern,
+    parent,
+    half,
+  };
 }
 
 /** Seam splits per top-level stroke classification (E3-U2c, contract section 14.8). */
@@ -3309,8 +3391,8 @@ function arcKids(n: ArcNode, cache: { left: number }): [ArcNode, ArcNode] {
     const f = ivpMid(d, e);
     const tm = (n.t0 + n.t1) / 2;
     const kids: [ArcNode, ArcNode] = [
-      arcNode(n.t0, tm, [p0, a, d, f], n.depth + 1),
-      arcNode(tm, n.t1, [f, e, c, p3], n.depth + 1),
+      arcNode(n.t0, tm, [p0, a, d, f], n.depth + 1, null, n, 0),
+      arcNode(tm, n.t1, [f, e, c, p3], n.depth + 1, null, n, 1),
     ];
     if (n.depth >= ARC_CACHE_DEPTH && cache.left <= 0) return kids;
     if (n.depth >= ARC_CACHE_DEPTH) cache.left -= 2;
@@ -3366,7 +3448,17 @@ class CubicSweep implements StrokePiece {
     this.ie = this.e.map(qIv);
     this.irr = qIv(this.rr);
     this.ir = qIv(r);
-    this.root = arcNode(0, 1, controls.map(qpIv), 0);
+    const degree = Math.max(this.dx.length, this.dy.length, this.e.length, 1) - 1;
+    const bern = (a: readonly Q[]) => powerToBernstein(a, degree).map(qIv);
+    this.root = arcNode(
+      0,
+      1,
+      controls.map(qpIv),
+      0,
+      { x: bern(this.dx), y: bern(this.dy), e: bern(this.e) },
+      null,
+      0,
+    );
     const b = this.root.box;
     this.box = {
       x0: dn(b.x0 - this.ir.hi),
@@ -3431,6 +3523,19 @@ class CubicSweep implements StrokePiece {
       if (!(f.lo > 0)) pos = false;
       if (!(f.hi < 0)) neg = false;
     }
+    if (pos || neg) return true;
+    // The Bernstein hull (E3-U2c): f(y, t) = Σ bᵢ(y)·Bᵢ(t) with bᵢ affine in y, so f keeps one
+    // sign over the sub-arc and the polygon when every bᵢ does at every vertex enclosure.
+    const b = bernOf(node);
+    if (b === null) return false;
+    pos = true;
+    neg = true;
+    for (let i = 0; i < b.e.length && (pos || neg); i += 1)
+      for (const g of poly.gens) {
+        const f = isub(iadd(imul(g.x, b.x[i]!), imul(g.y, b.y[i]!)), b.e[i]!);
+        if (!(f.lo > 0)) pos = false;
+        if (!(f.hi < 0)) neg = false;
+      }
     return pos || neg;
   }
   private outside(node: ArcNode, poly: LPoly, size: number, budget: { n: number }): boolean {
