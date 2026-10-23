@@ -783,10 +783,18 @@ function separatedByEdges(gens: readonly IvP[], corners: readonly IvP[]): boolea
   return false;
 }
 const HALF = ivc(0.5);
-const ivpMid = (a: IvP, b: IvP): IvP => ({
-  x: imul(iadd(a.x, b.x), HALF),
-  y: imul(iadd(a.y, b.y), HALF),
-});
+/**
+ * (a + b)·½ with outward rounding (E3-U2c): the sum is rounded outward, and halving a binary64
+ * is exact unless the result is subnormal, where the general product is used.
+ */
+function imid(a: Iv, b: Iv): Iv {
+  const v = iadd(a, b);
+  const tiny = 2 ** -1020;
+  if ((v.lo === 0 || Math.abs(v.lo) >= tiny) && (v.hi === 0 || Math.abs(v.hi) >= tiny))
+    return { lo: v.lo * 0.5, hi: v.hi * 0.5 };
+  return imul(v, HALF);
+}
+const ivpMid = (a: IvP, b: IvP): IvP => ({ x: imid(a.x, b.x), y: imid(a.y, b.y) });
 
 /** Exact interval tests the outward-rounded primitives against BigInt evaluation (g). */
 export function a04IntervalSelfTest(samples: readonly (readonly [number, number])[]): string[] {
@@ -3324,7 +3332,7 @@ function bernHalves(b: readonly Iv[]): [Iv[], Iv[]] {
   const right: Iv[] = [row[n - 1]!];
   for (let k = 1; k < n; k += 1) {
     const next: Iv[] = [];
-    for (let i = 0; i + 1 < row.length; i += 1) next.push(imul(iadd(row[i]!, row[i + 1]!), HALF));
+    for (let i = 0; i + 1 < row.length; i += 1) next.push(imid(row[i]!, row[i + 1]!));
     row = next;
     left.push(row[0]!);
     right.unshift(row[row.length - 1]!);
