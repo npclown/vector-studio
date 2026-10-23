@@ -739,17 +739,52 @@ function clipConvex(
   return out;
 }
 
-/** Exact clip of a convex polygon to {y : g(y) ≥ 0}, g affine. */
-function clipExact(poly: readonly QP[], g: (y: QP) => Q): QP[] {
+/** An integer line A·x + B·y + C (E3-U2c), scaled from rationals by a positive factor. */
+type ZLine = readonly [bigint, bigint, bigint];
+
+function zLine(a: Q, b: Q, c: Q): ZLine {
+  let l = 1n;
+  for (const v of [a, b, c]) if (v.d !== 1n) l = (l / gcdB(l, v.d)) * v.d;
+  return [(a.n * l) / a.d, (b.n * l) / b.d, (c.n * l) / c.d];
+}
+
+const zScale = (g: ZLine, s: bigint): ZLine => (s > 0n ? g : [-g[0], -g[1], -g[2]]);
+
+/** A polygon vertex as the meet of its incoming and outgoing edge lines (homogeneous). */
+type ZVert = Readonly<{ inLine: ZLine; outLine: ZLine; X: bigint; Y: bigint; W: bigint }>;
+
+function zVert(inLine: ZLine, outLine: ZLine): ZVert {
+  return {
+    inLine,
+    outLine,
+    X: inLine[1] * outLine[2] - inLine[2] * outLine[1],
+    Y: inLine[2] * outLine[0] - inLine[0] * outLine[2],
+    W: inLine[0] * outLine[1] - inLine[1] * outLine[0],
+  };
+}
+
+function zSide(g: ZLine, v: ZVert): number {
+  const s = g[0] * v.X + g[1] * v.Y + g[2] * v.W;
+  const sign = s > 0n ? 1 : s < 0n ? -1 : 0;
+  return v.W > 0n ? sign : -sign;
+}
+
+/**
+ * Exact clip of a convex polygon of positive area to {g ≥ 0}, or null when the result has zero
+ * area (no vertex with g > 0). Sutherland–Hodgman on lines: a new vertex is the meet of the cut
+ * edge's line and g.
+ */
+function zClip(poly: readonly ZVert[], g: ZLine): ZVert[] | null {
   charge(W_CLIP, poly.length);
-  const out: QP[] = [];
-  const v = poly.map(g);
+  const side = poly.map((v) => zSide(g, v));
+  if (!side.some((v) => v > 0)) return null;
+  if (side.every((v) => v >= 0)) return [...poly];
+  const out: ZVert[] = [];
   for (let i = 0; i < poly.length; i += 1) {
     const j = (i + 1) % poly.length;
-    const si = qsgn(v[i]!);
-    const sj = qsgn(v[j]!);
-    if (si >= 0) out.push(poly[i]!);
-    if (si * sj < 0) out.push(qplerp(poly[i]!, poly[j]!, qdiv(v[i]!, qsub(v[i]!, v[j]!))));
+    const v = poly[i]!;
+    if (side[i]! >= 0) out.push(v);
+    if (side[i]! * side[j]! < 0) out.push(side[i]! > 0 ? zVert(v.outLine, g) : zVert(g, v.outLine));
   }
   return out;
 }
@@ -3595,7 +3630,7 @@ class CubicSweep implements StrokePiece {
     collect(this.root);
     return nodes;
   }
-  private readonly exactAt = new Map<number, { dx: Q; dy: Q; e: Q }>();
+  private readonly exactAtZ = new Map<number, ZLine>();
   /**
    * IN by a union of brackets, for a polygon with exact vertices. A point y is in the sweep when
    * f(y, ·) changes sign weakly across one sub-arc whose distance bound holds over the polygon.
@@ -3605,20 +3640,41 @@ class CubicSweep implements StrokePiece {
    */
   private insideUnion(poly: LPoly, target: number): boolean {
     if (poly.exact === null || poly.exact.length < 3) return false;
-    const coef = (t: number) => {
-      let v = this.exactAt.get(t);
+    // Integer homogeneous geometry (E3-U2c): every line is an integer triple and every vertex the
+    // cross product of the two lines it lies on, so no rational is normalized and vertex sizes do
+    // not grow with the number of clips. A clip of a convex polygon of positive area by
+    // {g ≥ 0} has positive area exactly when g > 0 at some vertex; otherwise the polygon meets
+    // {g ≥ 0} only on the line g = 0. That replaces the area test.
+    const line = (k: { dx: Q; dy: Q; e: Q }): ZLine => zLine(k.dx, k.dy, qneg(k.e));
+    const coef = (t: number): ZLine => {
+      let v = this.exactAtZ.get(t);
       if (v === undefined) {
         const tq = qnum(t);
-        v = { dx: peval(this.dx, tq), dy: peval(this.dy, tq), e: peval(this.e, tq) };
-        if (this.exactAt.size < 1 << 14) this.exactAt.set(t, v);
+        v = line({ dx: peval(this.dx, tq), dy: peval(this.dy, tq), e: peval(this.e, tq) });
+        if (this.exactAtZ.size < 1 << 14) this.exactAtZ.set(t, v);
       }
       return v;
     };
-    const fAt = (k: { dx: Q; dy: Q; e: Q }, sign: number) => (y: QP) => {
-      const v = qsub(qadd(qmul(y.x, k.dx), qmul(y.y, k.dy)), k.e);
-      return sign > 0 ? v : qneg(v);
-    };
-    let uncovered: QP[][] = [[...poly.exact]];
+    const ex = poly.exact;
+    // The cell itself: its lines through consecutive exact vertices. A cell of zero area is
+    // covered by the empty union, as with the area test it replaces.
+    if (qsgn(polygonArea2(ex)) === 0) return true;
+    const raw: ZLine[] = [];
+    for (let i = 0; i < ex.length; i += 1) {
+      const P = ex[i]!;
+      const Q2 = ex[(i + 1) % ex.length]!;
+      if (qpeq(P, Q2)) continue;
+      raw.push(zLine(qsub(P.y, Q2.y), qsub(Q2.x, P.x), qsub(qmul(P.x, Q2.y), qmul(Q2.x, P.y))));
+    }
+    // Consecutive collinear edges (a vertex inside a side) are one edge: parallel lines of a
+    // convex polygon's consecutive edges coincide.
+    const edges: ZLine[] = raw.filter(
+      (e, i) => zVert(raw[(i + raw.length - 1) % raw.length]!, e).W !== 0n,
+    );
+    if (edges.length < 3) return false;
+    let uncovered: ZVert[][] = [
+      edges.map((e, i) => zVert(edges[(i + edges.length - 1) % edges.length]!, e)),
+    ];
     for (const n of this.collectNodes(poly, target)) {
       let maxD = 0;
       for (const c of n.c)
@@ -3626,11 +3682,13 @@ class CubicSweep implements StrokePiece {
       if (maxD > this.irr.lo) continue;
       const a = coef(n.t0);
       const b = coef(n.t1);
-      const next: QP[][] = [];
+      const next: ZVert[][] = [];
       for (const p of uncovered)
-        for (const sign of [1, -1]) {
-          const piece = clipExact(clipExact(p, fAt(a, sign)), fAt(b, sign));
-          if (piece.length >= 3 && qsgn(polygonArea2(piece)) !== 0) next.push(piece);
+        for (const sign of [1n, -1n]) {
+          const q = zClip(p, zScale(a, sign));
+          if (q === null) continue;
+          const piece = zClip(q, zScale(b, sign));
+          if (piece !== null) next.push(piece);
         }
       uncovered = next;
       if (uncovered.length === 0) return true;
