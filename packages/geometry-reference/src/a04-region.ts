@@ -61,7 +61,7 @@ const W_CELL = 9;
 const W_PAIR = 10;
 
 /** Nominal microseconds per unit of each kind (contract section 14.7). */
-const WORK_WEIGHTS: readonly number[] = [1, 0.07, 0.8, 0.05, 0.05, 2, 1, 2, 2, 1, 1];
+const WORK_WEIGHTS: readonly number[] = [3, 0.3, 2, 0.13, 0.23, 7.5, 1.5, 85, 5, 2.5, 2.5];
 
 type Work = { units: number; readonly cap: number; readonly counts: number[] };
 
