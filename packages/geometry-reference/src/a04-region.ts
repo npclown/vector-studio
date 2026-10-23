@@ -31,7 +31,8 @@ import { classifyStrokeSource } from './stroke-region.js';
  * polynomial signs (weighted by the bit length of the point), pseudo-division steps, sub-arc
  * nodes and their interval tests, exact clip vertices, seam-split recursion, exact memberships
  * and cover-cell lookups. The weights are nominal microseconds on the calibration machine
- * (contract section 14.7), so the cap bounds wall time. The charge is deterministic: it depends
+ * (contract sections 14.7 and 14.8), so the cap bounds wall time empirically. The charge is
+ * deterministic: it depends
  * only on the case, the mesh and the options.
  */
 const WORK_KINDS = [
@@ -60,7 +61,10 @@ const W_MEMBER = 8;
 const W_CELL = 9;
 const W_PAIR = 10;
 
-/** Nominal microseconds per unit of each kind (contract section 14.7). */
+/**
+ * Nominal microseconds per unit of each kind: the E3-U2c refit of contract section 14.8, which
+ * supersedes the weights of section 14.7.
+ */
 const WORK_WEIGHTS: readonly number[] = [9.5, 0.22, 1.15, 0.17, 0.38, 12, 0.26, 80, 8.2, 4.2, 4.2];
 
 type Work = { units: number; readonly cap: number; readonly counts: number[] };
@@ -568,6 +572,12 @@ function signAtRoot(hq: Poly, s: Poly, root: Root): number {
     }
     if (root.exact !== null) return psign(h, root.exact);
   }
+  return signAtRootExact(h, s, root);
+}
+
+/** The exact gcd and Sturm sign test of `signAtRoot`, without the interval prefilter. */
+function signAtRootExact(h: Poly, s: Poly, root: Root): number {
+  if (root.exact !== null) return psign(h, root.exact);
   const g = pgcd(s, h);
   if (g.length >= 2) {
     const a = psign(g, root.lo);
@@ -772,7 +782,8 @@ function zSide(g: ZLine, v: ZVert): number {
 /**
  * Exact clip of a convex polygon of positive area to {g ≥ 0}, or null when the result has zero
  * area (no vertex with g > 0). Sutherland–Hodgman on lines: a new vertex is the meet of the cut
- * edge's line and g.
+ * edge's line and g. A kept vertex on g whose next (previous) vertex is cut away starts (ends)
+ * an edge along g, so its outgoing (incoming) line becomes g; its point is unchanged.
  */
 function zClip(poly: readonly ZVert[], g: ZLine): ZVert[] | null {
   charge(W_CLIP, poly.length);
@@ -780,13 +791,43 @@ function zClip(poly: readonly ZVert[], g: ZLine): ZVert[] | null {
   if (!side.some((v) => v > 0)) return null;
   if (side.every((v) => v >= 0)) return [...poly];
   const out: ZVert[] = [];
-  for (let i = 0; i < poly.length; i += 1) {
-    const j = (i + 1) % poly.length;
+  const n = poly.length;
+  for (let i = 0; i < n; i += 1) {
+    const j = (i + 1) % n;
     const v = poly[i]!;
-    if (side[i]! >= 0) out.push(v);
+    if (side[i]! > 0) out.push(v);
+    else if (side[i] === 0) {
+      // Never both: on a convex polygon, a vertex on g with both neighbours cut away leaves no
+      // vertex with g > 0, which returned null above.
+      if (side[j]! < 0) out.push({ ...v, outLine: g });
+      else if (side[(i + n - 1) % n]! < 0) out.push({ ...v, inLine: g });
+      else out.push(v);
+    }
     if (side[i]! * side[j]! < 0) out.push(side[i]! > 0 ? zVert(v.outLine, g) : zVert(g, v.outLine));
   }
   return out;
+}
+
+/**
+ * The integer homogeneous form of a convex polygon of positive area given by its exact vertices
+ * in order: the lines through consecutive distinct vertices, with consecutive collinear edges (a
+ * vertex inside a side) merged, and each vertex the meet of its two lines. Null when fewer than
+ * three edges remain.
+ */
+function zPolygon(ex: readonly QP[]): ZVert[] | null {
+  const raw: ZLine[] = [];
+  for (let i = 0; i < ex.length; i += 1) {
+    const P = ex[i]!;
+    const Q2 = ex[(i + 1) % ex.length]!;
+    if (qpeq(P, Q2)) continue;
+    raw.push(zLine(qsub(P.y, Q2.y), qsub(Q2.x, P.x), qsub(qmul(P.x, Q2.y), qmul(Q2.x, P.y))));
+  }
+  // Parallel lines of a convex polygon's consecutive edges coincide.
+  const edges: ZLine[] = raw.filter(
+    (e, i) => zVert(raw[(i + raw.length - 1) % raw.length]!, e).W !== 0n,
+  );
+  if (edges.length < 3) return null;
+  return edges.map((e, i) => zVert(edges[(i + edges.length - 1) % edges.length]!, e));
 }
 
 /** Twice the signed area of a polygon. */
@@ -3656,25 +3697,18 @@ class CubicSweep implements StrokePiece {
       return v;
     };
     const ex = poly.exact;
-    // The cell itself: its lines through consecutive exact vertices. A cell of zero area is
-    // covered by the empty union, as with the area test it replaces.
+    // A polygon of zero area is reported IN. Top-level cover cells have positive area, so such a
+    // polygon is a degenerate half of a seam split (`splitPoly`). It is sound by the seam
+    // argument of contract section 14.5: the halves are closed and their union is the cell, so a
+    // half of zero area lies in the other half, which is then the whole cell, and `classifyPoly`
+    // reports the cell IN only when that other half is IN as well. (The union-of-brackets
+    // argument alone does not cover it: it drops zero-area pieces only of a cell of positive
+    // area.)
     if (qsgn(polygonArea2(ex)) === 0) return true;
-    const raw: ZLine[] = [];
-    for (let i = 0; i < ex.length; i += 1) {
-      const P = ex[i]!;
-      const Q2 = ex[(i + 1) % ex.length]!;
-      if (qpeq(P, Q2)) continue;
-      raw.push(zLine(qsub(P.y, Q2.y), qsub(Q2.x, P.x), qsub(qmul(P.x, Q2.y), qmul(Q2.x, P.y))));
-    }
-    // Consecutive collinear edges (a vertex inside a side) are one edge: parallel lines of a
-    // convex polygon's consecutive edges coincide.
-    const edges: ZLine[] = raw.filter(
-      (e, i) => zVert(raw[(i + raw.length - 1) % raw.length]!, e).W !== 0n,
-    );
-    if (edges.length < 3) return false;
-    let uncovered: ZVert[][] = [
-      edges.map((e, i) => zVert(edges[(i + edges.length - 1) % edges.length]!, e)),
-    ];
+    // The cell itself: its lines through consecutive exact vertices.
+    const cell = zPolygon(ex);
+    if (cell === null) return false;
+    let uncovered: ZVert[][] = [cell];
     for (const n of nodes) {
       let maxD = 0;
       for (const c of n.c)
@@ -4541,7 +4575,11 @@ export type A04Hooks = Readonly<{
   combine?: (terms: Readonly<{ bR: A04Interval; bM: A04Interval; g: A04Interval }>) => A04Interval;
   /** E3-D3: the fill rule applied to an exact winding number. */
   fillRule?: (rule: A04FillRule, winding: number) => boolean;
-  /** E3-D4: exact membership of a node-local point in a cubic sweep. */
+  /**
+   * E3-D4: exact membership of a node-local point in a cubic sweep. Since E3-U2c the controls,
+   * the radius and the point are in the scaled local frame σ·y (σ = det L, see `makeFrame`): the
+   * controls and the point are scaled by σ and the radius by |σ|, not the source's numbers.
+   */
   sweepContains?: (
     sweep: Readonly<{
       controls: readonly (readonly [number, number])[];
@@ -5288,4 +5326,307 @@ export function a04BoundaryDistance(
   const f = makeFrame(c, {});
   const work = newWork(A04_ORACLE_PARAMETERS.measureWorkCap);
   return regionTarget(c, f, {}, work).dist(ivpc(point[0], point[1]), tol);
+}
+
+// =============================================================================================
+// 21. Self-tests of the E3-U2c exact steps (tests only, review of PR #216)
+
+/** A deterministic generator of floats in [0, 1) for the self-tests (mulberry32). */
+function selfTestRandom(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** The rational clip of E3-U2b (`clipExact`), kept as the reference of `a04ClipSelfTest`. */
+function clipRational(poly: readonly QP[], g: (y: QP) => Q): QP[] {
+  const out: QP[] = [];
+  const v = poly.map(g);
+  for (let i = 0; i < poly.length; i += 1) {
+    const j = (i + 1) % poly.length;
+    const si = qsgn(v[i]!);
+    const sj = qsgn(v[j]!);
+    if (si >= 0) out.push(poly[i]!);
+    if (si * sj < 0) out.push(qplerp(poly[i]!, poly[j]!, qdiv(v[i]!, qsub(v[i]!, v[j]!))));
+  }
+  return out;
+}
+
+const zDot = (g: ZLine, v: ZVert): bigint => g[0] * v.X + g[1] * v.Y + g[2] * v.W;
+const zSameLine = (a: ZLine, b: ZLine): boolean =>
+  a[1] * b[2] === a[2] * b[1] && a[2] * b[0] === a[0] * b[2] && a[0] * b[1] === a[1] * b[0];
+
+/**
+ * Randomized equivalence of the integer clip `zClip` (with `zPolygon`) against the rational clip
+ * of E3-U2b and its area test, over chains of 3 to 8 clips of convex lattice polygons. Most
+ * clip lines pass exactly through one or two vertices of the current polygon. Per step: the
+ * same nullness (zero area), the same vertex set, and every vertex on its two lines with each
+ * outgoing line the next vertex's incoming line. The first chain is the review's repro.
+ */
+export function a04ClipSelfTest(seed: number, count: number): string[] {
+  const rnd = selfTestRandom(seed);
+  const int = (lo: number, hi: number): number => lo + Math.floor(rnd() * (hi - lo + 1));
+  const findings: string[] = [];
+  const keys = (ps: readonly QP[]): string =>
+    [...new Set(ps.map(qpkey))].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)).join(' ');
+  const hull = (pts: readonly [number, number][]): QP[] => {
+    const s = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const cross = (o: [number, number], a: [number, number], b: [number, number]) =>
+      (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    const half = (list: [number, number][]) => {
+      const h: [number, number][] = [];
+      for (const p of list) {
+        while (h.length >= 2 && cross(h[h.length - 2]!, h[h.length - 1]!, p) <= 0) h.pop();
+        h.push(p);
+      }
+      h.pop();
+      return h;
+    };
+    return [...half(s), ...half([...s].reverse())].map(([x, y]) => qp(qi(x), qi(y)));
+  };
+  let chains = 0;
+  for (let k = 0; chains < count; k += 1) {
+    let start: QP[];
+    let fixed: [Q, Q, Q][] | null = null;
+    if (k === 0) {
+      start = hull([
+        [0, 0],
+        [4, 0],
+        [4, 4],
+        [0, 4],
+      ]);
+      fixed = [
+        [qi(-1), qi(-2), qi(4)],
+        [qi(1), qi(1), qi(-3)],
+        [qi(0), qi(2), qi(-1)],
+      ];
+    } else {
+      const n = int(3, 8);
+      const pts: [number, number][] = [];
+      for (let i = 0; i < n; i += 1) pts.push([int(-12, 12), int(-12, 12)]);
+      start = hull(pts);
+      if (start.length < 3 || qsgn(polygonArea2(start)) === 0) continue;
+    }
+    chains += 1;
+    let ref: QP[] | null = start;
+    let z: ZVert[] | null = zPolygon(start);
+    if (z === null) {
+      findings.push(`chain ${k}: zPolygon rejected a polygon of positive area`);
+      continue;
+    }
+    const steps = fixed === null ? int(3, 8) : fixed.length;
+    for (let step = 0; step < steps && ref !== null && z !== null; step += 1) {
+      let line: [Q, Q, Q];
+      const kind = int(0, 9);
+      const nx = int(-6, 6);
+      const ny = int(-6, 6) || 1;
+      if (fixed !== null) line = fixed[step]!;
+      else if (kind <= 2) line = [qi(nx), qi(ny), qi(int(-30, 30))];
+      else if (kind <= 6) {
+        // Through one vertex of the current polygon, exactly.
+        const p = ref[int(0, ref.length - 1)]!;
+        line = [qi(nx), qi(ny), qneg(qadd(qmul(qi(nx), p.x), qmul(qi(ny), p.y)))];
+      } else {
+        // Through two vertices: a diagonal or an edge line, in either orientation.
+        const i = int(0, ref.length - 1);
+        const j = (i + int(1, ref.length - 1)) % ref.length;
+        const p = ref[i]!;
+        const q = ref[j]!;
+        const sgn = qi(int(0, 1) === 0 ? 1 : -1);
+        line = [
+          qmul(sgn, qsub(p.y, q.y)),
+          qmul(sgn, qsub(q.x, p.x)),
+          qmul(sgn, qsub(qmul(p.x, q.y), qmul(q.x, p.y))),
+        ];
+      }
+      const [a, b, c] = line;
+      if (a.n === 0n && b.n === 0n) continue;
+      const label = `chain ${k} step ${step} (${qpkey(qp(a, b))} ${c.n}/${c.d})`;
+      const r = clipRational(ref, (y) => qadd(qadd(qmul(a, y.x), qmul(b, y.y)), c));
+      const refNext: QP[] | null = r.length >= 3 && qsgn(polygonArea2(r)) !== 0 ? r : null;
+      const zNext = zClip(z, zLine(a, b, c));
+      if ((refNext === null) !== (zNext === null)) {
+        findings.push(
+          `${label}: nullness differs (rational ${refNext === null ? 'null' : 'kept'})`,
+        );
+        break;
+      }
+      if (refNext !== null && zNext !== null) {
+        const pts: QP[] = [];
+        for (let i = 0; i < zNext.length; i += 1) {
+          const v = zNext[i]!;
+          const w = zNext[(i + 1) % zNext.length]!;
+          if (v.W === 0n) findings.push(`${label}: vertex ${i} at infinity`);
+          if (zDot(v.inLine, v) !== 0n || zDot(v.outLine, v) !== 0n)
+            findings.push(`${label}: vertex ${i} is not on its lines`);
+          if (!zSameLine(v.outLine, w.inLine))
+            findings.push(`${label}: vertex ${i}'s outgoing line is not the next incoming line`);
+          if (v.W !== 0n) pts.push(qp(qmk(v.X, v.W), qmk(v.Y, v.W)));
+        }
+        if (keys(pts) !== keys(refNext))
+          findings.push(`${label}: vertices ${keys(pts)} differ from ${keys(refNext)}`);
+      }
+      ref = refNext;
+      z = zNext;
+    }
+  }
+  return findings;
+}
+
+/** p(u0 + h·s) in the power basis of s, exactly. */
+function composeAffine(a: readonly Q[], u0: Q, h: Q): Q[] {
+  let acc: Q[] = [];
+  for (let i = a.length - 1; i >= 0; i -= 1) acc = padd(pmul(acc, [u0, h]), [a[i]!]);
+  return ptrim(acc);
+}
+
+/**
+ * Enclosure of `powerToBernstein` and the outward-rounded `bernHalves`. For random exact
+ * polynomials (degree up to 5, also degree-elevated): the Bernstein form maps back exactly to
+ * the power form, and on each step of a random path of up to 24 halvings to a dyadic
+ * sub-interval [u0, u1], every interval coefficient encloses the exact Bernstein coefficient of
+ * p on it, and the hull of the intervals encloses exact values of p on it.
+ */
+export function a04BernsteinSelfTest(seed: number, count: number): string[] {
+  const rnd = selfTestRandom(seed);
+  const int = (lo: number, hi: number): number => lo + Math.floor(rnd() * (hi - lo + 1));
+  const findings: string[] = [];
+  const inIv = (i: Iv, v: Q): boolean =>
+    (i.lo === -Infinity || qcmp(qnum(i.lo), v) <= 0) &&
+    (i.hi === Infinity || qcmp(qnum(i.hi), v) >= 0);
+  for (let k = 0; k < count; k += 1) {
+    const d = int(0, 5);
+    const a: Q[] = [];
+    for (let i = 0; i <= d; i += 1)
+      a.push(
+        int(0, 2) === 0
+          ? qmk(BigInt(int(-1000, 1000)), BigInt(int(1, 97)))
+          : qnum((rnd() * 2 - 1) * 2 ** int(-30, 30)),
+      );
+    const n = Math.max(1, d + int(0, 1));
+    const exact = powerToBernstein(a, n);
+    const back = bernsteinToPower(exact);
+    const want = ptrim(a);
+    if (back.length !== want.length || back.some((c, i) => !qeq(c, want[i]!)))
+      findings.push(`poly ${k}: the Bernstein form does not map back to the power form`);
+    let b: Iv[] = exact.map(qIv);
+    let u0 = Q0;
+    let u1 = Q1;
+    const depth = int(1, 24);
+    for (let level = 0; level < depth; level += 1) {
+      const [left, right] = bernHalves(b);
+      const m = qmid(u0, u1);
+      if (int(0, 1) === 0) {
+        b = left;
+        u1 = m;
+      } else {
+        b = right;
+        u0 = m;
+      }
+      const sub = powerToBernstein(composeAffine(a, u0, qsub(u1, u0)), n);
+      sub.forEach((c, i) => {
+        if (!inIv(b[i]!, c))
+          findings.push(`poly ${k} level ${level} coefficient ${i}: [${b[i]!.lo}, ${b[i]!.hi}]`);
+      });
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (const c of b) {
+        lo = Math.min(lo, c.lo);
+        hi = Math.max(hi, c.hi);
+      }
+      for (const s of [Q0, qmk(1n, 3n), QHALF, qmk(5n, 7n), Q1]) {
+        const v = peval(a, qadd(u0, qmul(qsub(u1, u0), s)));
+        if (!inIv({ lo, hi }, v)) findings.push(`poly ${k} level ${level}: the hull misses p`);
+      }
+    }
+  }
+  return findings;
+}
+
+/** The floor of the square root of a non-negative BigInt. */
+function isqrtB(v: bigint): bigint {
+  if (v < 2n) return v;
+  let x = 1n << BigInt((bitLen(v) >> 1) + 1);
+  for (;;) {
+    const y = (x + v / x) >> 1n;
+    if (y >= x) return x;
+    x = y;
+  }
+}
+
+/**
+ * Sign agreement of `signAtRoot` (with its interval prefilter) and the exact gcd and Sturm test
+ * alone (`signAtRootExact`), near zeros of h. The root is the irrational √k/m of m²t² − k (also
+ * times a rational linear factor). Each h vanishes at the root or nearly: t − q for rationals q
+ * within a few 2^−p/m of it (p up to 200), multiples of m²t² − k (zero), m²t² − k ± ε, and
+ * products of these. Where the sign has a closed form, it is checked as well.
+ */
+export function a04SignAtRootSelfTest(seed: number, count: number): string[] {
+  const rnd = selfTestRandom(seed);
+  const int = (lo: number, hi: number): number => lo + Math.floor(rnd() * (hi - lo + 1));
+  const findings: string[] = [];
+  for (let k = 0; k < count; k += 1) {
+    const m = BigInt(int(2, 60));
+    let kk = BigInt(int(1, Number(m * m) - 1));
+    while (isqrtB(kk) * isqrtB(kk) === kk) kk += 1n;
+    if (kk >= m * m) kk = m * m - 1n;
+    if (isqrtB(kk) * isqrtB(kk) === kk) continue;
+    const quad: Q[] = [qi(-kk), Q0, qi(m * m)];
+    const withLinear = int(0, 1) === 1;
+    const s0 = withLinear ? pmul(quad, [qmk(-BigInt(int(1, 9)), 10n), Q1]) : quad;
+    const { s, roots } = isolateRoots(s0, Q0, Q1);
+    // The isolating interval of √k/m: m²t² − k changes sign across it (the other root is rational).
+    const root = roots.find((r) => r.exact === null && psign(quad, r.lo) * psign(quad, r.hi) < 0);
+    if (root === undefined) {
+      findings.push(`case ${k}: the root √k/m was not isolated`);
+      continue;
+    }
+    const p = int(4, 200);
+    const scale = 1n << BigInt(p);
+    // q = (⌊√k·2^p⌋ + j) / (m·2^p), within a few 2^−p/m of √k/m.
+    const base = isqrtB(kk * scale * scale);
+    const j = BigInt(int(-2, 3));
+    const q = qmk(base + j, m * scale);
+    const lin: Q[] = [qneg(q), Q1];
+    const eps = qmk(BigInt(int(1, 5)) * (int(0, 1) === 0 ? 1n : -1n), scale);
+    const choices: { h: Q[]; want: number | null }[] = [
+      // For r, q > 0: r > q exactly when k > (q·m)².
+      { h: lin, want: Math.sign(qcmp(qi(kk), qsq(qmul(q, qi(m))))) },
+      { h: pmul(quad, [qmk(BigInt(int(1, 9)), 7n), Q1]), want: 0 },
+      { h: padd(quad, [eps]), want: qsgn(eps) },
+      { h: pmul(lin, padd(quad, [eps])), want: null },
+      { h: pmul(lin, lin), want: 1 },
+      { h: psub(pmul(lin, lin), [qmul(eps, eps)]), want: null },
+    ];
+    const pick = choices[int(0, choices.length - 1)]!;
+    const copy = (r: Root): Root => ({ lo: r.lo, hi: r.hi, exact: r.exact });
+    const fast = signAtRoot(pick.h, s, copy(root));
+    const slow = signAtRootExact(fromZ(toZ(pick.h)), s, copy(root));
+    if (fast !== slow) findings.push(`case ${k} (p ${p}): prefilter ${fast}, exact ${slow}`);
+    if (pick.want !== null && slow !== pick.want)
+      findings.push(`case ${k} (p ${p}): exact ${slow}, closed form ${pick.want}`);
+  }
+  return findings;
+}
+
+/**
+ * Exact membership of a physical point in the stroke region built unscaled (σ = 1), at
+ * Φ⁻¹(p) = (σ·Φ⁻¹(p))/σ: the reference of the scaled local frame of E3-U2c (tests only).
+ */
+export function a04ContainsUnscaled(
+  input: A04Case,
+  point: readonly [A04Scalar, A04Scalar],
+  hooks: A04Hooks = {},
+): boolean {
+  const c = decodeCase(input);
+  const f = makeFrame(c, hooks);
+  if (c.paint.kind !== 'stroke') oracleError('not a stroke case');
+  if (f.singular) oracleError('singular frame');
+  const p = qp(scalarQ(point[0]), scalarQ(point[1]));
+  return makeStrokeRegion(c, hooks, Q1).containsLocal(qpscale(phiInv(f, p), qdiv(Q1, f.sigma)));
 }
