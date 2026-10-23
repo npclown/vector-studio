@@ -114,3 +114,44 @@ export function syntheticPorts(answer: AnswerFn | Answer): MeshPorts {
     },
   };
 }
+
+/** Ear-clipping triangulation of a simple polygon (Float64), returning counter-clockwise triangles. */
+export function earClip(polygon: readonly (readonly [number, number])[]): Tri[] {
+  const pts = polygon.map(([x, y]) => [x, y] as const);
+  let area = 0;
+  for (let i = 0; i < pts.length; i += 1) {
+    const [ax, ay] = pts[i]!;
+    const [bx, by] = pts[(i + 1) % pts.length]!;
+    area += ax * by - ay * bx;
+  }
+  if (area < 0) pts.reverse();
+  const cross = (
+    o: readonly [number, number],
+    a: readonly [number, number],
+    b: readonly [number, number],
+  ) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const idx = pts.map((_, i) => i);
+  const out: Tri[] = [];
+  while (idx.length > 3) {
+    let clipped = false;
+    for (let k = 0; k < idx.length; k += 1) {
+      const a = pts[idx[(k + idx.length - 1) % idx.length]!]!;
+      const b = pts[idx[k]!]!;
+      const c = pts[idx[(k + 1) % idx.length]!]!;
+      if (cross(a, b, c) <= 0) continue;
+      const inside = idx.some((j) => {
+        const p = pts[j]!;
+        if (p === a || p === b || p === c) return false;
+        return cross(a, b, p) >= 0 && cross(b, c, p) >= 0 && cross(c, a, p) >= 0;
+      });
+      if (inside) continue;
+      out.push([a, b, c]);
+      idx.splice(k, 1);
+      clipped = true;
+      break;
+    }
+    if (!clipped) throw new Error('ear clipping failed');
+  }
+  out.push([pts[idx[0]!]!, pts[idx[1]!]!, pts[idx[2]!]!]);
+  return out;
+}

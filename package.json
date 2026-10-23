@@ -37,6 +37,7 @@
     "test:geometry:browser": "node tooling/test-geometry-browser.mjs",
     "test:e3-a04": "vitest run --config vitest.e3-a04.config.ts",
     "e3-a04:freeze": "node tooling/run-e3-a04-freeze.mjs",
+    "e3-a04:run": "node tooling/run-e3-a04.mjs",
     "test:p2-identity": "node tooling/compare-p2-wasm.mjs",
     "test:p3-fill-identity": "node tooling/compare-p3-fill-identity.mjs",
     "compare:p3-b0-records": "node tooling/compare-p3-b0-records.mjs",

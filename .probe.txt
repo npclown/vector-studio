@@ -1,0 +1,4 @@
+E3-PC13 ok=true PASS | E=[6.4196e-7, 0.00097668] beta=1.02e-4 | 33425ms
+E3-PC10 ok=true PASS, PASS, PASS | E=[0.0000, 0.00089146] beta=2.29e-4; E=[0.15175, 0.21424] beta=2.18e-4; E=[0.062500, 0.063435] beta=2.25e-4 | 6249ms
+E3-PC3 ok=true FAIL, FAIL | E=[0.53192, inf] beta=2.18e-4; E=[0.38955, inf] beta=2.19e-4 | 160ms
+E3-PC9 ok=true FAIL, FAIL, FAIL, PASS, PASS, PASS | E=[0.26875, inf] beta=2.28e-4; E=[0.50000, inf] beta=2.44e-4; E=[0.29903, inf] beta=2.29e-4; E=[0.0000, 0.062500] beta=2.27e-4; E=[0.0000, 0.062500] beta=2.44e-4; E=[0.0000, 0.062500] beta=2.28e-4 | 36967ms

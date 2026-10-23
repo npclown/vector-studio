@@ -250,7 +250,11 @@ type Pass = Readonly<{
 function runPass(c: DecodedCase, ports: MeshPorts, builder: PathFringeBuilder | undefined): Pass {
   const log: PortLogEntry[] = [];
   const served = servingPorts(ports, c.servedOffset, log);
-  const mirror = new RetainedSceneMirror(undefined, { pathNodes: 'supported' });
+  const mirror = new RetainedSceneMirror(undefined, {
+    pathNodes: 'supported',
+    pathFills: 'supported',
+    pathStrokes: 'supported',
+  });
   const pipeline = new PathMeshPipeline({
     port: served.fill,
     strokePort: served.stroke,
@@ -461,6 +465,8 @@ export type ScoreOptions = Readonly<{
   workCap?: number;
   resolution?: number;
   floor?: number;
+  /** Refine each term to the resolution on its own, so that E_hi is finite (the controls). */
+  separateTerms?: boolean;
 }>;
 
 const emptyClip = { clipped: false, triangles: 0, crossings: 0, bound: 0 } as const;
@@ -525,6 +531,7 @@ export function scoreRendered(
     ...(options.resolution === undefined ? {} : { resolution: options.resolution }),
     ...(options.floor === undefined ? {} : { floor: options.floor }),
     ...(options.workCap === undefined ? {} : { workCap: options.workCap }),
+    ...(options.separateTerms === true ? { separateTerms: true } : {}),
     ...(hooks.oracle === undefined ? {} : { hooks: hooks.oracle }),
   };
 
@@ -596,15 +603,18 @@ function finish(
   hooks: HarnessHooks,
 ): Omit<CaseRow, 'ms'> {
   const used = hooks.omitBeta === true ? 0 : beta;
-  const eLo = m.e === null ? null : m.e.lo;
-  const eHi = m.e === null ? null : m.e.hi;
-  const u = eHi === null || !Number.isFinite(eHi) ? null : up(eHi + used);
-  const l = eLo === null ? null : Math.max(0, down(eLo - used));
+  const eLoRaw = m.e === null ? null : m.e.lo;
+  const eHiRaw = m.e === null ? null : m.e.hi;
+  const u = eHiRaw === null || !Number.isFinite(eHiRaw) ? null : up(eHiRaw + used);
+  // L = +infinity (E_lo = +infinity, an empty mesh over a non-empty case) is recorded as the
+  // largest binary64 so that the record stays JSON.
+  let l = eLoRaw === null ? null : Math.min(Number.MAX_VALUE, Math.max(0, down(eLoRaw - used)));
+  if (l === null && m.status === 'fail') l = Number.MAX_VALUE;
   const row = {
     ...base,
     variant,
-    eLo,
-    eHi: eHi === null ? null : finiteOrNull(eHi),
+    eLo: eLoRaw === null ? null : Math.min(Number.MAX_VALUE, eLoRaw),
+    eHi: eHiRaw === null ? null : finiteOrNull(eHiRaw),
     u,
     l,
     tJunctions: m.tJunctions,
