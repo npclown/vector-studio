@@ -54,7 +54,9 @@ const OBSERVED_NOTICES: Readonly<Record<string, readonly string[]>> = {
   p2: [],
   p3q: ['v2-path fill fringe-work-cap'],
   p3s: ['v2-path fill fringe-work-cap'],
-  p3qc: ['v2-path fill unsupported-geometry'],
+  // Re-baselined 2026-10-23 by E8-U1 (E8-Q4 (a)): p3qc draws, without fringe like p3q; observed
+  // identical in Chrome and Edge at DPR 1 and 2.
+  p3qc: ['v2-path fill fringe-work-cap'],
   p3sc: ['v2-path fill unsupported-geometry'],
   p4: [],
   r: [],

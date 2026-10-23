@@ -125,7 +125,7 @@ async function runWasm(): Promise<Map<string, DigestRecord>> {
         pathData.rule,
         pathData.exponent,
         index,
-      ) as Uint8Array;
+      );
       new Uint8Array(kernel.memory.buffer, kernel.fill_v0_input_ptr() >>> 0, input.length).set(
         input,
       );
