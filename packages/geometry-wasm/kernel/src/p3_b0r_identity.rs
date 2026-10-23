@@ -7,8 +7,8 @@
 //!
 //! Every case runs one entry on one path and records a SHA-256 digest of every observable
 //! section 2 field: the result with its exact error variant, `CubicFillDiagnostics`,
-//! `topology_stats()` (only when the attempt invoked topology; otherwise a fixed marker, E8-U0b),
-//! `rounded_stats()`, `allocated_bytes()` and, when published, the complete
+//! `topology_stats()` and `rounded_stats()` (each only when the attempt reached its stage;
+//! otherwise a fixed marker, E8-U0b), `allocated_bytes()` and, when published, the complete
 //! `output()` (commands, ranges, points, owners, sources, the rounded mesh with its ledger, and
 //! the mesh vertex f64 bits). Values are rendered with `Debug`, whose f64 form is the shortest
 //! round-trip representation (bit-exact for every non-NaN value, signed zero included); mesh
@@ -330,22 +330,33 @@ fn line(
     );
 }
 
-/// Digest of every section 2 field observable after one `CubicFillWorkspace` entry call, the
-/// outcome code in the B0 harness's vocabulary, and the number of proper crossing events of a
-/// published mesh (raw events are both endpoints of every edge, then the crossings).
-/// E8-U0b: `topology_stats()` is part of the digest only when the attempt invoked topology.
-/// `CubicFillWorkspace::begin_attempt` does not reset the stats, so an attempt that never
-/// reaches topology (a line-only path, or one that stops in the prefix) reports the stats of the
-/// previous attempt in the same workspace; hashing them would make its digest depend on that
-/// earlier case. Such an attempt hashes a fixed marker instead.
-fn hash_topology_stats(hash: &mut Sha256, workspace: &CubicFillWorkspace) {
-    if workspace.diagnostics().topology_invoked {
+/// E8-U0b: `topology_stats()` and `rounded_stats()` are part of the digest only when the
+/// attempt reached the stage that sets them (`topology_invoked`, `rounded_invoked`).
+/// `CubicFillWorkspace::begin_attempt` resets neither, so an attempt that never reaches a stage
+/// (a line-only path never reaches topology; a prefix or topology failure never reaches the
+/// rounded fill) reports that stage's statistics from the previous attempt in the same
+/// workspace; hashing them would make its digest depend on that earlier case. Such an attempt
+/// hashes a fixed marker instead. Residual: `certify_topology` can return `OwnerLimit` or
+/// `InvalidCommand` after `topology_invoked` is set and before the stats are written, so those
+/// error records still hash stale statistics; both are probably unreachable after the prefix's
+/// own checks, and they are error records, not `ok` ones.
+fn hash_stage_stats(hash: &mut Sha256, workspace: &CubicFillWorkspace) {
+    let diagnostics = workspace.diagnostics();
+    if diagnostics.topology_invoked {
         let _ = writeln!(hash, "topology_stats={:?}", workspace.topology_stats());
     } else {
         hash.update(b"topology_stats=NOT_INVOKED\n");
     }
+    if diagnostics.rounded_invoked {
+        let _ = writeln!(hash, "rounded_stats={:?}", workspace.rounded_stats());
+    } else {
+        hash.update(b"rounded_stats=NOT_INVOKED\n");
+    }
 }
 
+/// Digest of every section 2 field observable after one `CubicFillWorkspace` entry call, the
+/// outcome code in the B0 harness's vocabulary, and the number of proper crossing events of a
+/// published mesh (raw events are both endpoints of every edge, then the crossings).
 fn attempt_digest(
     name: &str,
     result: &Result<CubicFillDiagnostics, CubicFillError>,
@@ -357,13 +368,8 @@ fn attempt_digest(
         "entry={name}\nresult={result:?}\ndiagnostics={:?}\n",
         workspace.diagnostics(),
     );
-    hash_topology_stats(&mut hash, workspace);
-    let _ = write!(
-        hash,
-        "rounded_stats={:?}\nallocated_bytes={}\n",
-        workspace.rounded_stats(),
-        workspace.allocated_bytes(),
-    );
+    hash_stage_stats(&mut hash, workspace);
+    let _ = writeln!(hash, "allocated_bytes={}", workspace.allocated_bytes());
     let output = workspace.output();
     match output {
         None => hash.update(b"output=None\n"),
@@ -765,5 +771,77 @@ fn topology_free_attempt_digest_ignores_stale_topology_stats() {
     assert!(!reused.diagnostics().topology_invoked);
     // The precondition of the case: the reused workspace still reports the stale statistics.
     assert_ne!(reused.topology_stats(), fresh.topology_stats());
+    assert_eq!(after, clean);
+}
+
+/// E8-U0b (S1): an attempt that returns before the rounded fill digests the same in a fresh
+/// workspace and in one whose previous attempt left rounded statistics behind.
+#[test]
+fn pre_rounded_failure_digest_ignores_stale_rounded_stats() {
+    let bytes = |values: &[f64]| -> Vec<u8> {
+        values
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect()
+    };
+    let trisect = |start: (f64, f64), end: (f64, f64)| {
+        [
+            start.0 + (end.0 - start.0) / 3.0,
+            start.1 + (end.1 - start.1) / 3.0,
+            start.0 + 2.0 * (end.0 - start.0) / 3.0,
+            start.1 + 2.0 * (end.1 - start.1) / 3.0,
+            end.0,
+            end.1,
+        ]
+    };
+    // A closed cubic that fills (rounded invoked), and the linear-cubic bowtie, whose
+    // self-crossing makes the exact topology certificate fail (rounded never invoked).
+    let curved: (Vec<u8>, Vec<u8>) = (
+        vec![0, 2, 3],
+        bytes(&[0.0, 0.0, 1.0, 2.0, 3.0, 2.0, 4.0, 0.0]),
+    );
+    let corners = [(0.0, 0.0), (3.0, 3.0), (0.0, 3.0), (3.0, 0.0), (0.0, 0.0)];
+    let mut points = vec![0.0, 0.0];
+    for pair in corners.windows(2) {
+        points.extend(trisect(pair[0], pair[1]));
+    }
+    let bowtie: (Vec<u8>, Vec<u8>) = (vec![0, 2, 2, 2, 2, 3], bytes(&points));
+    let run = |workspace: &mut CubicFillWorkspace, (verbs, points): &(Vec<u8>, Vec<u8>)| {
+        let input = PathInput::from_test_parts(
+            Request {
+                request_id: 0,
+                source_epoch: 0,
+                source_revision: 0,
+                tolerance: FLATTEN_TOLERANCE,
+            },
+            verbs,
+            points,
+        );
+        let result = workspace.attempt(
+            input,
+            LineFillRule::Nonzero,
+            TOPOLOGY_TOLERANCE,
+            MAX_FLAT_COMMANDS,
+        );
+        (
+            result.is_ok(),
+            attempt_digest("attempt", &result, workspace),
+        )
+    };
+    let mut fresh = CubicFillWorkspace::new(LIMITS).unwrap();
+    let (fresh_ok, clean) = run(&mut fresh, &bowtie);
+    assert!(!fresh_ok);
+    assert!(fresh.diagnostics().topology_invoked && !fresh.diagnostics().rounded_invoked);
+
+    let mut reused = CubicFillWorkspace::new(LIMITS).unwrap();
+    let (curved_ok, _) = run(&mut reused, &curved);
+    assert!(curved_ok && reused.diagnostics().rounded_invoked);
+    let (reused_ok, after) = run(&mut reused, &bowtie);
+    assert!(!reused_ok && !reused.diagnostics().rounded_invoked);
+    // The precondition of the case: the reused workspace still reports the stale statistics.
+    assert_ne!(
+        format!("{:?}", reused.rounded_stats()),
+        format!("{:?}", fresh.rounded_stats())
+    );
     assert_eq!(after, clean);
 }
