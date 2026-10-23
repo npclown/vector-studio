@@ -47,12 +47,17 @@ const fixtureRows: InputRow[] = E8_FIXTURES.flatMap((fixture) =>
       ...e8PathScalars(fixture.data, fixture.offset),
     })),
 );
-// Every tenth path of every corpus family.
+// A sample of every corpus family: every 40th path by default (5 per family, 70 in all), which
+// keeps the test inside the CI budget (PR #215 review S5). The full corpus runs manually with
+// `P3_E8_CORNER_STRIDE=1 pnpm test:geometry` (any stride from 1 to 200 is accepted).
+const stride = Number(process.env.P3_E8_CORNER_STRIDE ?? 40);
+if (!Number.isInteger(stride) || stride < 1 || stride > 200)
+  throw new Error(`P3_E8_CORNER_STRIDE must be an integer from 1 to 200, received ${stride}`);
 const corpusRows: InputRow[] = generateE8CornerCorpus().flatMap((family) =>
   family.paths
-    .filter((_, index) => index % 10 === 0)
+    .filter((_, index) => index % stride === 0)
     .map((pathData, offset) => ({
-      id: `${family.id}/${offset * 10}`,
+      id: `${family.id}/${offset * stride}`,
       exponent: pathData.exponent,
       verbs: [...pathData.verbs],
       points: [...pathData.points],

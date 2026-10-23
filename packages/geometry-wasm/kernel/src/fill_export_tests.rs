@@ -2274,3 +2274,44 @@ fn e8_fixtures_reach_their_e8_u1_status_through_the_export() {
         Err(CubicFillError::Topology(TopologyError::KnotMismatch))
     );
 }
+
+/// FNV-1a 64 of a byte string, for pinned output digests.
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01b3)
+    })
+}
+
+#[test]
+fn e8_f6_output_bytes_equal_the_merge_base() {
+    // E8-K2, E8-F6 "same mesh bytes" (PR #215 review S3): the FNV-1a 64 of the input and of the
+    // published fill-v0 output of a one-path batch (request id 1, NONZERO), pinned from the
+    // merge-base release WASM (`main` e77dcac, kernel equal to f56c263, SHA-256 a7143f3a…4ef5)
+    // through the same section a input. E8-U1's WASM gives the same values.
+    let pinned: [(i32, u64, u64); 7] = [
+        (-6, 0x792f_033a_ab73_fb36, 0x90e1_6e6a_587e_d26d),
+        (-5, 0xd1a0_c1d4_c598_70b7, 0x3eca_543b_b40b_71c8),
+        (-4, 0xee89_c510_504b_2350, 0x70ba_cfd4_9405_27a0),
+        (-3, 0xeae3_7128_eff7_e3a1, 0x2769_d294_8cbe_1d0d),
+        (-2, 0xcd26_16ce_b8c4_9b22, 0x1132_6f04_2431_6cc2),
+        (-1, 0x5d38_3bbc_99d2_f0e3, 0x429f_46e6_bcac_89df),
+        (0, 0x8c85_c356_a0b1_94d7, 0x1f67_07fa_91b8_eedc),
+    ];
+    for (exponent, input_digest, output_digest) in pinned {
+        let path = svg_path(1, NONZERO, exponent, E8_F6, 0.0);
+        let input = pack(std::slice::from_ref(&path));
+        assert_eq!(
+            fnv1a64(&input),
+            input_digest,
+            "E8-F6 input at e = {exponent}"
+        );
+        let mut engine = FillEngine::new();
+        load(&mut engine, &input, 1 << 20);
+        assert_eq!(engine.process(input.len() as u32), BATCH_OK);
+        assert_eq!(
+            fnv1a64(engine.output_bytes()),
+            output_digest,
+            "E8-F6 output at e = {exponent}"
+        );
+    }
+}

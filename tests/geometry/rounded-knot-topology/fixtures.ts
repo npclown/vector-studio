@@ -291,7 +291,8 @@ function cyclicOnly(): RawContour {
  * direction) lie in an open half plane and every actual chord is its source chord. Its literal
  * input and its frozen status in `roundedKnotTopologyControls` stay unchanged; the tests read
  * this record for its outcome after E8-U1 and keep it as a positive. Its replacement as a
- * cyclic-only rejection is an open question of E8-U1 (it is not one of the four E8-C5 controls).
+ * cyclic-only rejection is `e8CyclicOnlyReplacement` below (E8-Q3 extension, 2026-10-23; it is
+ * not one of the four E8-C5 controls).
  * Polygon: the actual leaf starts; orientation and winding as the P3.1f triangle.
  */
 export const E8_ADMITTED_CYCLIC_ONLY = Object.freeze({
