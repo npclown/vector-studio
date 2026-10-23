@@ -11,7 +11,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | Item | Subject | Tier | Phase | State |
 | --- | --- | --- | --- | --- |
 | E1 | ST-U9 early abort when failure is certain | Full | R0 | Merged (#202); independent diff and evidence review pending ([evidence](#e1-st-u10-evidence-2026-10-22)) |
-| E3 | B4: A04 corpus and measurement contract | Full | R1 | In progress: U1 (#206), U2 (#212), U2b (#214) merged; U2c in PR #216; U3, U4 next ([contract](d9-e3-b4-precision-contract.md)) |
+| E3 | B4: A04 corpus and measurement contract | Full | R1 | In progress: U1 (#206), U2 (#212), U2b (#214), U2c (#216) merged; freeze not met (5 `ORACLE-WORK`); U3, U4 next ([U2c evidence](#e3-e3-u2c-evidence-2026-10-23)) |
 | E8 | Unsupported-geometry on simple smooth Q/T and C/S paths | Full | R1 | In progress: U0 (#211), U0b (#213), U1 (#215) merged; U2 next ([evidence](#e8-u1-evidence-2026-10-23)) |
 | X1 | P3 exit evidence A01-A08 index | — (Primary acceptance) | R1 | Open; all eight TODO ([index](#p3-exit-evidence-index-x1)) |
 | E4 | ST-U3f fix decision | Full | Backlog | Seven cases stay a known defect with fixtures (D10) |
@@ -338,6 +338,32 @@ Dated append. Unit E3-U2b closes the three open pre-freeze items S2, S3 and S7 o
 - The stride-25 result is tied to SHA `218ed589…` and was not rerun. The change adds charges only after the freeze terms (contract section 14.7).
 
 **Validation.** The commands and their results are in the PR. Still pending: the oracle speed or generator decision (E3-U2c), then the complete freeze run and the freeze note (section 5.5, step 4).
+
+## E3 E3-U2c evidence, 2026-10-23
+
+Dated append. Unit E3-U2c speeds up the A04 oracle on the stroke strata, the E3-Q6 (a) path of an oracle fix, with no corpus change. The changes and their soundness are in [contract section 14.8](d9-e3-b4-precision-contract.md#148-e3-u2c-oracle-speed-up-2026-10-23). Each was decided under the user's standing instruction of 2026-10-22 (recommended option). Track: rendering. Packages: geometry-reference and docs. Shared surface changed: no. **No kernel was run.** No A04 threshold or cap changed. The work weights were refitted (disclosed). Precision stays **UNVERIFIED**.
+
+**Files.** `packages/geometry-reference/src/a04-region.ts`, with source SHA-256 `411c81780e0c83439633e64a5eb00a8c7184744bbe5a88f20839912edec442a1` at commit `52f5177`. The tests are unchanged: `pnpm test:e3-a04` passes its 60 tests.
+
+**Results** (Node v24.15.0, Windows 11, 16 logical CPUs, 14 processes).
+
+| Run                                                    | Result                                                                                                                                                                                            |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The 37 `ORACLE-WORK` cases of E3-U2b, cap 6·10^9       | 36 `ok` (up to 1,658 s) and `C9/k10`. The C5 and C8 cases take 1 to 155 s                                                                                                                         |
+| `pnpm e3-a04:freeze --shards 14 --stride 25` (52f5177) | 1,094 `ok` and 5 `ORACLE-WORK` of 1,099, in 42 min wall and 6.7 CPU hours. Four C9 cases reach the cap on sub-arc nodes (each `ok` in 19 to 28 min uncapped), and `C9/k10` has an unresolved cell |
+| Full-run estimate                                      | About 168 CPU hours, about 12 h on 14 shards. **Not started**: the sample is not 100 % `ok`                                                                                                       |
+
+**Disclosed.**
+
+- The refitted weights bound the fitting sample at 1 µs per unit. On the freeze run, the worst stroke case took 1.53 µs per unit, so the cap bounds a stroke case at about 46 min, not 30. One fill case took 5.8 µs per unit (21 s).
+- The run directory `.tools/e3-a04-freeze/2026-10-23T12-28-33-518Z/` is machine-local and not committed.
+
+**Validation.** The commands and their results are in the PR. Still pending: a review of E3-U2c, and a decision on the five remaining cases (a further speed-up, a weight choice, or a disclosed generator revision for `k10`). Then the complete freeze run and the freeze note.
+
+**Update 2026-10-23, review of PR #216.** Review finding B1 was a soundness defect in the integer clip: a kept vertex on the clip line kept a stale outgoing line, so a later clip could place a wrong vertex and drop a piece as covered. It is fixed, and the review's tests are added ([contract section 14.8](d9-e3-b4-precision-contract.md#148-e3-u2c-oracle-speed-up-2026-10-23)). The loose weight fit is kept, decided under the user's standing instruction of 2026-10-22 (recommended option).
+
+- Source SHA-256 `47117f777812e43cb68c0793ac6db7a1dd4238f3500afcadd38a940efc4cbe09` at commit `0941180`. `pnpm test:e3-a04` passes 78 tests (60 before, 18 new).
+- `pnpm e3-a04:freeze --shards 14 --stride 25` on that SHA: 1,094 `ok` and 5 `ORACLE-WORK` of 1,099, the same five cases, in 44 min wall and 6.7 CPU hours. No status changed, and one case's work changed slightly (`C9/k05/T0/z64-d1`, still `ok`). The run directory `.tools/e3-a04-freeze/2026-10-23T14-16-44-666Z/` is machine-local and not committed.
 
 ## E8 investigation, 2026-10-23
 
