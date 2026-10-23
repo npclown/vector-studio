@@ -422,6 +422,17 @@ describe('obligation (c): every boundary portion of R is found', () => {
 // =============================================================================================
 // Obligation (d): offset-curve crossings (strokes)
 
+describe('fill boundary distance', () => {
+  it('S1: a boundary edge clipped from the index still bounds the distance from below', () => {
+    // A tall rectangle at T0, z = 1, d = 1: from (−3, 180) the nearest edge is x = −100, at 97 px,
+    // and lies outside the window the index search visits first (review S1 of PR #212).
+    const tall = makeCase({ ...polygon(rect(-100, -1000, 700, 2000)), paint: fill() });
+    const d = a04BoundaryDistance(tall, [-3, 180], 2 ** -10);
+    expect(d.lo).toBeLessThanOrEqual(97);
+    expect(d.hi).toBeGreaterThanOrEqual(97);
+  });
+});
+
 describe('obligation (d): stroke boundary at closed-form offset crossings', () => {
   it('a folded band: the parabola stroke closes its fold exactly at (0, 2.5)', () => {
     // y = x²/2 on x ∈ [−3, 3] as an elevated quadratic; w = 4. The inner offset folds and the
@@ -940,7 +951,7 @@ function earClip(poly: readonly [number, number][]): [number, number][][] {
 }
 
 describe('E3-D5: the cusp disk omitted in the oracle', () => {
-  it('a synthetic ST-F16 sweep mesh without the disk: the oracle fails, the mutant passes', () => {
+  it('a synthetic ST-F16 sweep mesh without the disk: the oracle fails, the mutant B_M falls below 0.25 (undecided under onlyTerms)', () => {
     // ST-F16 is (4s³, −3s²) + (0.5, 0.75), s ∈ [−1/2, 1/2], r = 1/16, n̂ = (1, 2s)/√(1 + 4s²).
     // Its curvature radius is ρ(s) = 3|s|(1 + 4s²)^(3/2); the sweep's outline is: the outer
     // offsets for |s| ≥ s_r (ρ = r), the evolute C ± ρn̂ for |s| ≤ s_r through the cusp, the butt
@@ -990,27 +1001,13 @@ describe('E3-D5: the cusp disk omitted in the oracle', () => {
       zoom: k,
       c: [-100 / k, -100 / k],
     });
-    // Closed-form bound: the disk's top (0.5, 0.75 + r) lies outside M, so B_R ≥ dist(top, ∂M).
-    const top: [number, number] = [k * 0.5 + 100, k * (0.75 + r) + 100];
-    let bound = Infinity;
-    for (let i = 0; i < phys.length; i += 1) {
-      const [ax, ay] = phys[i]!;
-      const [bx, by] = phys[(i + 1) % phys.length]!;
-      const dx = bx - ax;
-      const dy = by - ay;
-      const t = Math.max(
-        0,
-        Math.min(1, ((top[0] - ax) * dx + (top[1] - ay) * dy) / (dx * dx + dy * dy)),
-      );
-      bound = Math.min(bound, Math.hypot(top[0] - ax - t * dx, top[1] - ay - t * dy));
-    }
-    expect(bound).toBeGreaterThan(0.95);
     // The oracle fails: ∂M runs inside the cusp disk, about r = 1 px from its circle.
     const m = a04Measure(f16, mesh);
     expect(m.status).toBe('fail');
     expect(m.e!.lo).toBeGreaterThan(0.25);
-    // Without the disk, B_M (which failed the oracle above) falls far below the bound, so E3-D5
-    // is caught. Coarse and B_M only, for CI time: B_M is the term the disk decides here.
+    // Without the disk, B_M (above 0.95 px in the oracle) falls below 0.25 px, so E3-D5 is caught.
+    // Coarse and B_M only, for CI time: B_M is the term the disk decides here, and onlyTerms
+    // leaves the mutant's status undecided rather than pass.
     const mutant = a04Measure(f16, mesh, {
       hooks: { dropStrokePiece: (role) => role === 'cusp-disk' },
       resolution: 2 ** -4,
@@ -1019,6 +1016,7 @@ describe('E3-D5: the cusp disk omitted in the oracle', () => {
     });
     expect(m.bM!.lo).toBeGreaterThan(0.95);
     expect(mutant.bM!.hi).toBeLessThan(0.25);
+    expect(mutant.status).toBe('undecided');
   });
 });
 

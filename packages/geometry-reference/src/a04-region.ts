@@ -2669,8 +2669,9 @@ class FillTarget implements RegionTarget {
       list.some((e) => e.upper(p) <= radius),
     );
     const res = nearestBounds(found, p, tol, this.work);
-    const cap = Math.max(r, depthInside(p, this.region));
-    return { lo: Math.min(res.lo, cap), hi: res.hi };
+    // Unvisited elements lie at least r away, and ∂R clipped from the index lies beyond the
+    // region: both bound the lower end (review S1 of PR #212).
+    return { lo: Math.min(res.lo, r, depthInside(p, this.region)), hi: res.hi };
   }
   supUpper(gens: readonly IvP[], tol: number, hooks: A04Hooks): number {
     if (this.elements.length === 0) return Infinity;

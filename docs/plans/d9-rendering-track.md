@@ -235,7 +235,7 @@ Dated append. Unit E3-U2 implements the independent A04 oracle of the [E3 contra
 
 **Files.**
 
-- `packages/geometry-reference/src/a04-region.ts` (new) is the oracle. It imports only `./stroke-region.js` (`classifyStrokeSource`). Its source SHA-256 is `1a85af04aadfa71a51e9dd6214ba9ffd1bbf8a479317e96c57da8817d7b3fba2`. It is exported from the package index.
+- `packages/geometry-reference/src/a04-region.ts` (new) is the oracle. It imports only `./stroke-region.js` (`classifyStrokeSource`). Its source SHA-256 was `1a85af04aadfa71a51e9dd6214ba9ffd1bbf8a479317e96c57da8817d7b3fba2` at the first commit and is `629041a4963c92c0ed4937fb748a31abc07c543e461e66fb175efb1cb819c114` after the review follow-up below. It is exported from the package index.
 - `tests/geometry/e3-a04-oracle.test.ts` (new) holds the paired tests, the controls and the seeded defects. `pnpm test:e3-a04` runs them, and `pnpm test:geometry`'s glob collects them too.
 - `tests/geometry/e3-a04/oracle-cases.ts` (new) builds canonical cases and synthetic meshes for the tests.
 - The freeze check: `tests/geometry/e3-a04/freeze.check.ts`, `vitest.e3-a04-freeze.config.ts` and `tooling/run-e3-a04-freeze.mjs`, with the `package.json` script `pnpm e3-a04:freeze`. It is sharded and manual, never CI.
@@ -255,26 +255,26 @@ Dated append. Unit E3-U2 implements the independent A04 oracle of the [E3 contra
 
 **Controls and seeded defects.**
 
-| ID                                       | Result                                                                                                                                                                      |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| E3-PC1, PC2                              | 0.26 px FAIL and 0.24 px PASS, each with the realized offset inside `[E_lo, E_hi]`                                                                                          |
-| E3-PC3 (circle row)                      | The 14-gon of an exact radius-16 circle FAILS, with the closed-form sagitta (0.40 px) inside the interval                                                                   |
-| E3-PC10                                  | Rectangle `E = 0`. The dyadic polygon translated by `(0, 2^-4)` gives `E = 2^-4`. The inscribed 4-gon and 16-gon of the exact circle (ST-S10 point cap) contain the sagitta |
-| E3-PC11                                  | An empty mesh FAILS, with `B_R = +∞`                                                                                                                                        |
-| E3-PC14                                  | A missing mesh over a cover of Ω FAILS at the window point (`R` in, `M` out). The negative control, a shape away from Ω with no mesh, is `window-empty` and agrees          |
-| E3-D1                                    | Caught on PC4 and PC5 (E misses the closed-form `G`)                                                                                                                        |
-| E3-D2                                    | Caught on PC11 (E becomes finite) and on PC6 (the closed hole passes)                                                                                                       |
-| E3-D3                                    | Caught: membership flips at the pentagram center under both rules, and the PC5 case passes under the wrong rule                                                             |
-| E3-D4                                    | Caught (nearest point puts a point beyond the butt end inside)                                                                                                              |
-| E3-D5                                    | Caught on the synthetic ST-F16 mesh: the oracle FAILS with `B_M > 0.95` px, and without the disk `B_M < 0.25` px                                                            |
-| E3-D6                                    | Caught: on the 16-gon against its every-other-vertex 8-gon, the center-only upper bound makes `B_M` miss the closed-form value                                              |
-| E3-D8                                    | Caught at resolution `2^-16`: z = 0.01, DPR 3, 8,192 px extent; `E_hi ≤ 2^-16` with the binary64 z, and `E_lo > 2^-15` with fround(z)                                       |
-| E3-D11, D12, D13                         | Caught (above)                                                                                                                                                              |
-| E3-PC7 to PC9, PC12; E3-D7, D9, D10, D14 | Not in E3-U2: they need `β`, the record or the GPU (E3-U3, E3-U4)                                                                                                           |
+| ID                                       | Result                                                                                                                                                                        |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E3-PC1, PC2                              | 0.26 px FAIL and 0.24 px PASS, each with the realized offset inside `[E_lo, E_hi]`                                                                                            |
+| E3-PC3 (circle row)                      | The 14-gon of an exact radius-16 circle FAILS, with the closed-form sagitta (0.40 px) inside the interval                                                                     |
+| E3-PC10                                  | Rectangle `E = 0`. The dyadic polygon translated by `(0, 2^-4)` gives `E = 2^-4`. The inscribed 4-gon and 16-gon of the exact circle (ST-S10 point cap) contain the sagitta   |
+| E3-PC11                                  | An empty mesh FAILS, with `B_R = +∞`                                                                                                                                          |
+| E3-PC14                                  | A missing mesh over a cover of Ω FAILS at the window point (`R` in, `M` out). The negative control, a shape away from Ω with no mesh, is `window-empty` and agrees            |
+| E3-D1                                    | Caught on PC4 and PC5 (E misses the closed-form `G`)                                                                                                                          |
+| E3-D2                                    | Caught on PC11 (E becomes finite) and on PC6 (the closed hole passes)                                                                                                         |
+| E3-D3                                    | Caught: membership flips at the pentagram center under both rules, and the PC5 case passes under the wrong rule                                                               |
+| E3-D4                                    | Caught (nearest point puts a point beyond the butt end inside)                                                                                                                |
+| E3-D5                                    | Caught on the synthetic ST-F16 mesh: the oracle FAILS with `B_M > 0.95` px, and without the disk `B_M < 0.25` px (the mutant computes `B_M` only, so its status is UNDECIDED) |
+| E3-D6                                    | Caught: on the 16-gon against its every-other-vertex 8-gon, the center-only upper bound makes `B_M` miss the closed-form value                                                |
+| E3-D8                                    | Caught at resolution `2^-16`: z = 0.01, DPR 3, 8,192 px extent; `E_hi ≤ 2^-16` with the binary64 z, and `E_lo > 2^-15` with fround(z)                                         |
+| E3-D11, D12, D13                         | Caught (above)                                                                                                                                                                |
+| E3-PC7 to PC9, PC12; E3-D7, D9, D10, D14 | Not in E3-U2: they need `β`, the record or the GPU (E3-U3, E3-U4)                                                                                                             |
 
 **Freeze check (section 5.5).** **NOT COMPLETE, so the corpus is not frozen** (section 5.5, step 3). A full run is estimated at about 235 CPU hours, or about 17 hours on 14 shards, so only partial runs were made:
 
-- **Partial run.** `pnpm e3-a04:freeze --shards 14 --stride 25` checks every 25th case, 1,099 cases. It ran on Node v24.15.0, Windows 11, with 16 logical CPUs, and was stopped after 896 cases: 894 `ok` and 2 `ORACLE-WORK`.
+- **Partial run.** `pnpm e3-a04:freeze --shards 14 --stride 25` checks every 25th case, 1,099 cases. It ran on Node v24.15.0, Windows 11, with 16 logical CPUs, and was stopped after 896 cases: 894 `ok` and 2 `ORACLE-WORK`. The run used an oracle build from before the point-like bound change (8 to 16 cells), so its results are not tied to either committed source SHA (contract section 14.2).
   - Every sampled fill case of C1 to C4 passed (523 cases).
   - C5 passed 271 of 272 and C9 78 of 79. Of C8, C11, C12, C6, C7 and C10, 22 cases were reached, all `ok`. Slow C9 cases held the shards, so the later strata were barely reached.
 - **Mean time per case.** Fills: C1 15 ms, C2 22 ms, C3 0.18 s, C4 0.10 s. Strokes: C5 28 s, C9 170 s, with a maximum of 30 min (`C9/k22/T0/z64-d2`). C8 averaged 4.5 s.
@@ -284,7 +284,16 @@ Dated append. Unit E3-U2 implements the independent A04 oracle of the [E3 contra
 - **An earlier run.** A stride-50 run of an earlier oracle build failed `C9/g0220/T5/z1-d2` and `C9/g0259/T7/z1-d1`. Their rechecks with this build did not finish within 90 minutes each and were stopped, so they count as open. A per-case cost that the work cap does not bound is an open item for the review.
 - **Disposition.** Under E3-Q6 (a), a case the oracle cannot certify fails the freeze. Before the freeze note there must be either a new oracle version that certifies `k10` and the remaining cases, or a disclosed generator revision. The complete run then follows.
 
-**Validation.** The commands and their results are in the PR. Still pending: one independent review of E3-U2, then the complete freeze run and the freeze note (section 5.5, step 4).
+**Review follow-up, 2026-10-23 (PR #212).**
+
+- **S1 fixed.** A fill's distance lower bound is now `min(res.lo, depthInside, r)`, as for strokes: a boundary edge that the index search clipped lies at least `r` away. The regression test (a tall rectangle, from `(−3, 180)` the true distance is 97 px) fails without the fix (lower bound about 703 px) and passes with it.
+- **Documents.** The contract annex gains the parameter notes of S4 (section 14.2), the soundness arguments of S6 (section 14.5) and the open pre-freeze items (section 14.6). The E3-O4 row, the E3-D5 and E3-D6 texts and the `pnpm test:e3-a04` row of `docs/validation.md` are corrected.
+- **OPEN before the freeze (E3-U2b).** Decided under the user's standing instruction of 2026-10-22 (the recommended option): E3-U2 lands as a partial unit, and E3-U2b closes these items before the freeze note (contract section 14.6):
+  - S2: `∂M` by edge count is unsound for zero-area or overlapping triangles. The oracle must reject such a mesh or mark it UNDECIDED, or the harness must enforce a precondition.
+  - S3: the work cap does not charge root steps or arc nodes, so the cost of a case is unbounded. A deterministic weighted cap is required before E3-A4.
+  - S7: the crack bound counts only the T-junctions of `M*`. The port mesh's storage cracks from `a04StorageCracks` must feed `a04Measure`, or E3-U3 closes them.
+
+**Validation.** The commands and their results are in the PR. Still pending: E3-U2b (S2, S3 and S7), then the complete freeze run and the freeze note (section 5.5, step 4).
 
 ## E8 investigation, 2026-10-23
 
