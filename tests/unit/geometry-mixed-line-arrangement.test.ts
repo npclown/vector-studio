@@ -221,7 +221,8 @@ describe('P3.1h explicit LINE-kind arrangement positives', () => {
       )
         statuses[mixedResult.status] += 1;
     }
-    expect(statuses).toEqual({ CERTIFIED: 24, KNOT_MISMATCH: 2, UNRESOLVED: 13 });
+    // E8-U1: control/cyclic-only-projection is admitted by d2 (E8_ADMITTED_CYCLIC_ONLY).
+    expect(statuses).toEqual({ CERTIFIED: 25, KNOT_MISMATCH: 2, UNRESOLVED: 12 });
   });
 });
 

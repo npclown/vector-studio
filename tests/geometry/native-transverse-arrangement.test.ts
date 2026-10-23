@@ -205,9 +205,10 @@ beforeAll(() => {
 describe('P3.2s native transverse arrangement preservation', () => {
   it('freezes the reviewed 12+11+5+8+2+1 source transport without result labels', () => {
     expect(fixtureRows).toHaveLength(39);
-    expect(certifiedFixtures).toHaveLength(24);
+    // E8-U1: control/cyclic-only-projection is admitted by d2 (E8_ADMITTED_CYCLIC_ONLY).
+    expect(certifiedFixtures).toHaveLength(25);
     expect(knotMismatchFixtures).toHaveLength(2);
-    expect(unresolvedFixtures).toHaveLength(13);
+    expect(unresolvedFixtures).toHaveLength(12);
     expect(new Set(fixtureRows.map(({ id }) => id)).size).toBe(39);
     expect(fixtureRows.slice(23, 28).map(({ id }) => id)).toEqual([
       'control/multiple-partners',

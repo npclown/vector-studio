@@ -54,7 +54,9 @@ const OBSERVED_NOTICES: Readonly<Record<string, readonly string[]>> = {
   p2: [],
   p3q: ['v2-path fill fringe-work-cap'],
   p3s: ['v2-path fill fringe-work-cap'],
-  p3qc: ['v2-path fill unsupported-geometry'],
+  // Re-baselined 2026-10-23 by E8-U1 (E8-Q4 (a)): p3qc draws, without fringe like p3q; observed
+  // identical in Chrome and Edge at DPR 1 and 2.
+  p3qc: ['v2-path fill fringe-work-cap'],
   p3sc: ['v2-path fill unsupported-geometry'],
   p4: [],
   r: [],
@@ -534,10 +536,13 @@ for (const dpr of [1, 2]) {
         { name: 'just inside the dip', world: [150, 15], expected: FILL },
         { name: 'just outside the dip', world: [150, -10], expected: 'backdrop' },
       ]);
-      // The paths as the contract wrote them: gated as the observed outcome (not drawn, with the
-      // kernel notice), not hidden. See DEVIATION D1 above.
+      // The paths as the contract wrote them: gated as the observed outcome, not hidden. See
+      // DEVIATION D1 above. Note, 2026-10-23 (E8-U1, E8-Q4 (a), D9-Q8): the exact-rung direction
+      // hint of docs/plans/p3-rounded-knot-topology-contract.md E8.3 admits P3Q_CONTRACT, so p3qc
+      // draws. The Q peaks at (100, -150); p3sc (M1', E8.5) stays not drawn.
       await knownPath('p3qc', P3Q_CONTRACT, async () => {}, [
-        { name: 'contract P3Q interior (not drawn)', world: [100, -140], expected: 'backdrop' },
+        { name: 'contract P3Q interior (drawn)', world: [100, -140], expected: FILL },
+        { name: 'contract P3Q outside the peak', world: [100, -160], expected: 'backdrop' },
       ]);
       await knownPath('p3sc', P3S_CONTRACT, async () => {}, [
         { name: 'contract P3S interior (not drawn)', world: [62, -70], expected: 'backdrop' },

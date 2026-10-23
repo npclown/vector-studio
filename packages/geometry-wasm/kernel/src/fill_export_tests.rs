@@ -905,8 +905,14 @@ fn cascade_retries_triangle_free_only_after_knot_or_unresolved() {
     let exported = decode(engine.output_bytes(), std::slice::from_ref(&simple)).remove(0);
     assert_eq!(position_bits(&exported), mesh.unwrap().0);
 
-    // KnotMismatch is retried: the second attempt's result is reported.
-    let knot = rounded_failure(3);
+    // KnotMismatch is retried: the second attempt's result is reported. E8-C5 (E8 addendum
+    // E8.6): the rounded-knot control now passes step 1 under E8-U1, so the crossing
+    // replacement takes its place; its preconditions are checked by
+    // `e8_crossing_replacement_meets_its_preconditions`. The old path is kept as a positive.
+    let old = rounded_failure(3);
+    assert_eq!(direct(&old, false).0, Ok(()));
+    assert_eq!(run_one(old).status, FILL_PATH_OK);
+    let knot = e8_crossing_replacement(3);
     let (legacy, _) = direct(&knot, false);
     assert_eq!(
         legacy,
@@ -935,10 +941,19 @@ fn cascade_retries_triangle_free_only_after_knot_or_unresolved() {
         },
     };
     assert_eq!(reported, expected);
+    assert_eq!(reported, FILL_PATH_OK);
 
-    // Both steps reject the linear-cubic bowtie: Unresolved twice is
-    // reported as unsupported-geometry after the retry.
-    let rejected = cubic_bowtie(6, NONZERO);
+    // Both steps reject the M1' path (E8-C1): Unresolved twice is reported as
+    // unsupported-geometry after the retry. E8-C5: the linear-cubic bowtie that held this role
+    // now passes step 2 under E8-U1 and is kept as a positive.
+    let old = cubic_bowtie(6, NONZERO);
+    assert_eq!(
+        direct(&old, false).0,
+        Err(CubicFillError::Topology(TopologyError::Unresolved))
+    );
+    assert_eq!(direct(&old, true).0, Ok(()));
+    assert_eq!(run_one(old).status, FILL_PATH_OK);
+    let rejected = svg_path(6, NONZERO, -3, E8_C1, 0.0);
     assert_eq!(
         direct(&rejected, false).0,
         Err(CubicFillError::Topology(TopologyError::Unresolved))
@@ -1591,8 +1606,10 @@ fn mapping_row_fixtures_reach_their_kernel_values() {
             FILL_PATH_UNSUPPORTED_GEOMETRY,
         ),
         (
+            // E8-C5 (E8 addendum E8.6): the M1' path E8-C1 replaces the linear-cubic bowtie,
+            // which step 2 admits under E8-U1 (kept as a positive below).
             "Topology(Unresolved) in both cascade steps",
-            cubic_bowtie(1, NONZERO),
+            svg_path(1, NONZERO, -3, E8_C1, 0.0),
             Err(CubicFillError::Topology(TopologyError::Unresolved)),
             FILL_PATH_UNSUPPORTED_GEOMETRY,
         ),
@@ -1613,6 +1630,13 @@ fn mapping_row_fixtures_reach_their_kernel_values() {
         assert_eq!(legacy_value(&path), kernel_value, "{name}");
         assert_eq!(status_of(path), status, "{name}");
     }
+    // The replaced row's old path, now a positive: step 1 still rejects it, step 2 admits it.
+    let old = cubic_bowtie(1, NONZERO);
+    assert_eq!(
+        legacy_value(&old),
+        Err(CubicFillError::Topology(TopologyError::Unresolved))
+    );
+    assert_eq!(status_of(old), FILL_PATH_OK);
 }
 
 // ------------------------------------------------------------------------------------------
@@ -1989,4 +2013,305 @@ fn b1_pre_b1_cap_mode_restores_the_old_caps() {
         .collect();
     assert_eq!(statuses, vec![FILL_PATH_WORK_LIMIT, FILL_PATH_WORK_LIMIT]);
     assert_eq!(run_one(paths[0].clone()).status, FILL_PATH_OK);
+}
+
+// ------------------------------------------------------------------------------------------
+// E8-U1, the exact-rung direction hint (docs/plans/p3-rounded-knot-topology-contract.md, E8
+// addendum E8.6 and E8.8 E8-K2/E8-K4): the E8 fixtures through the export, and the crossing
+// replacement of the E8-C5 controls.
+
+const E8_F1: &str = "M 0 0 L 0 -100 Q 100 -200 200 -100 T 400 -100 L 400 0 Z";
+const E8_F2: &str = "M 0 -100 Q 100 -200 200 -100 Z";
+const E8_F3: &str =
+    "M 100 0 C 100 55.22847498 55.22847498 100 0 100 C -55.22847498 100 -100 55.22847498 -100 0 Z";
+const E8_F4: &str = "M 0 0 C 20 -100 80 -100 100 -40 C 120 20 180 20 200 -40 L 200 50 L 0 50 Z";
+const E8_F5: &str = "M -2.9 33.4 C -2.9 31.4 17.1 23.6 17.1 33.4 C 17.1 47.7 -2.9 37.7 -2.9 33.4 Z";
+const E8_F6: &str = "M 0 0 L 0 -90 Q 90 -180 180 -90 T 360 -90 L 360 0 Z";
+const E8_C1: &str = "M 0 0 C 0 -100 100 -100 100 -50 S 200 0 200 -50 L 200 50 L 0 50 Z";
+
+/// The absolute SVG path data of the E8 fixtures (M, L, C, S, Q, T, Z), raised to fill-v0 verbs
+/// as the V-2 page does: S reflects the previous C/S second control, T the previous Q/T control,
+/// and Q is raised in binary64 to the cubic `(p + 2q)/3`, `(e + 2q)/3`. Every coordinate is
+/// `c + offset` in binary64 (E8-F4 and E8-C2 use 0.1).
+fn e8_svg_scalars(data: &str, offset: f64) -> (Vec<u8>, Vec<f64>) {
+    let tokens: Vec<&str> = data.split_whitespace().collect();
+    let mut verbs = Vec::new();
+    let mut points = Vec::new();
+    let mut index = 0usize;
+    let pair = |index: &mut usize| {
+        let mut number = || {
+            let value: f64 = tokens[*index].parse().expect("E8 fixture number");
+            *index += 1;
+            value + offset
+        };
+        let x = number();
+        (x, number())
+    };
+    let (mut current, mut start) = ((0.0f64, 0.0f64), (0.0f64, 0.0f64));
+    let mut last_cubic: Option<(f64, f64)> = None;
+    let mut last_quad: Option<(f64, f64)> = None;
+    while index < tokens.len() {
+        let command = tokens[index];
+        index += 1;
+        let (mut cubic, mut quad) = (None, None);
+        match command {
+            "M" => {
+                current = pair(&mut index);
+                start = current;
+                verbs.push(MOVE);
+                points.extend([current.0, current.1]);
+            }
+            "L" => {
+                current = pair(&mut index);
+                verbs.push(LINE);
+                points.extend([current.0, current.1]);
+            }
+            "C" | "S" => {
+                let one = if command == "C" {
+                    pair(&mut index)
+                } else {
+                    last_cubic.map_or(current, |c| (2.0 * current.0 - c.0, 2.0 * current.1 - c.1))
+                };
+                let two = pair(&mut index);
+                let end = pair(&mut index);
+                verbs.push(CUBIC);
+                points.extend([one.0, one.1, two.0, two.1, end.0, end.1]);
+                cubic = Some(two);
+                current = end;
+            }
+            "Q" | "T" => {
+                let q = if command == "Q" {
+                    pair(&mut index)
+                } else {
+                    last_quad.map_or(current, |c| (2.0 * current.0 - c.0, 2.0 * current.1 - c.1))
+                };
+                let end = pair(&mut index);
+                verbs.push(CUBIC);
+                points.extend([
+                    (current.0 + 2.0 * q.0) / 3.0,
+                    (current.1 + 2.0 * q.1) / 3.0,
+                    (end.0 + 2.0 * q.0) / 3.0,
+                    (end.1 + 2.0 * q.1) / 3.0,
+                    end.0,
+                    end.1,
+                ]);
+                quad = Some(q);
+                current = end;
+            }
+            "Z" => {
+                verbs.push(CLOSE);
+                current = start;
+            }
+            other => panic!("unsupported E8 fixture command {other}"),
+        }
+        last_cubic = cubic;
+        last_quad = quad;
+    }
+    (verbs, points)
+}
+
+fn svg_path(id: u32, rule: u32, exponent: i32, data: &str, offset: f64) -> TestPath {
+    let (verbs, points) = e8_svg_scalars(data, offset);
+    TestPath {
+        id,
+        rule,
+        exponent,
+        verbs,
+        points,
+    }
+}
+
+/// The E8-C5 crossing replacement (E8 addendum E8.6). The starting candidate, the native
+/// `transverse_bowtie` with one interior control offset by 2^-54, does not meet the
+/// preconditions: its trisection cubics flatten to single exact leaves, and none of its controls
+/// is zero, so a 2^-54 offset rounds away. This path is that bowtie with its top edge bowed
+/// outward (controls at y = 6) and the second top control offset by 2^-50, one ulp at 6. The
+/// top cubic subdivides, its internal knots are not representable, and the diagonal crossing
+/// stays the only non-adjacent hull intersection.
+fn e8_crossing_replacement(id: u32) -> TestPath {
+    let vertices = [
+        (-3.0, -3.0),
+        (3.0, 3.0),
+        (3.0, 4.5),
+        (-3.0, 4.5),
+        (-3.0, 3.0),
+        (3.0, -3.0),
+        (3.0, -4.5),
+        (-3.0, -4.5),
+        (-3.0, -3.0),
+    ];
+    let mut path = TestPath::new(id, NONZERO, -3).move_to(-3.0, -3.0);
+    for (edge, pair) in vertices.windows(2).enumerate() {
+        let (start, end) = (pair[0], pair[1]);
+        path = if edge == 2 {
+            path.cubic_to([1.0, 6.0, -1.0, 6.0 + 2f64.powi(-50), end.0, end.1])
+        } else {
+            path.linear_cubic_to(start, end)
+        };
+    }
+    path.close()
+}
+
+#[test]
+fn e8_crossing_replacement_meets_its_preconditions() {
+    let path = e8_crossing_replacement(1);
+    let mut workspace = CubicFillWorkspace::new(FILL_V0_LIMITS).unwrap();
+    let bytes = point_bytes(&path.points);
+    let (flatten, topology) = tolerances(path.exponent);
+    let input = PathInput::from_parts(
+        Request {
+            request_id: 0,
+            source_epoch: 0,
+            source_revision: 0,
+            tolerance: flatten,
+        },
+        &path.verbs,
+        &bytes,
+    );
+    // Step 1: the exact helper fails at a rounded internal knot (KnotMismatch), the rounded
+    // helper rejects the crossing, and the step-1 result stays KnotMismatch (P3.2o).
+    assert_eq!(
+        workspace.attempt(input, LineFillRule::Nonzero, topology, MAX_FLAT_COMMANDS),
+        Err(CubicFillError::Topology(TopologyError::KnotMismatch))
+    );
+    let diagnostics = workspace.diagnostics();
+    assert!(diagnostics.rounded_topology_invoked);
+    assert!(!diagnostics.rounded_topology_selected);
+    assert_eq!(
+        diagnostics.rounded_topology_error,
+        Some(TopologyError::Unresolved)
+    );
+    // Step 2 (triangle-free) certifies the crossing. It builds the same leaves as the rounded
+    // helper and applies the same adjacent-pair test, so every adjacent pair passes there too:
+    // the rounded helper's Unresolved came from a non-adjacent hull intersection.
+    let diagnostics = workspace
+        .attempt_triangle_free(input, LineFillRule::Nonzero, topology, MAX_FLAT_COMMANDS)
+        .unwrap();
+    assert!(diagnostics.transverse_topology_selected);
+    let stats = workspace.output().unwrap().rounded_stats;
+    assert_eq!(
+        stats.events.saturating_sub(stats.edges.saturating_mul(2)),
+        1,
+        "one transverse non-adjacent crossing"
+    );
+    let mesh = run_one(path);
+    assert_eq!(mesh.status, FILL_PATH_OK);
+    assert_mesh_invariants(&mesh);
+}
+
+/// One E8 fixture row: name, path data, coordinate offset, and (exponent, status) cases.
+type E8Row<'a> = (&'a str, &'a str, f64, &'a [(i32, u32)]);
+
+#[test]
+fn e8_fixtures_reach_their_e8_u1_status_through_the_export() {
+    // E8-K2 and E8-C1/E8-C2 (E8 addendum E8.6, column "After E8-U1 alone").
+    let ok = FILL_PATH_OK;
+    let limit = FILL_PATH_WORK_LIMIT;
+    let unsupported = FILL_PATH_UNSUPPORTED_GEOMETRY;
+    let rows: [E8Row<'_>; 8] = [
+        (
+            "E8-F1",
+            E8_F1,
+            0.0,
+            &[
+                (-8, limit),
+                (-7, limit),
+                (-6, limit),
+                (-5, ok),
+                (-4, ok),
+                (-3, ok),
+                (-2, ok),
+                (-1, ok),
+                (0, ok),
+            ],
+        ),
+        ("E8-F2", E8_F2, 0.0, &[(-7, ok), (-3, ok), (0, ok)]),
+        ("E8-F3", E8_F3, 0.0, &[(-3, ok), (0, ok)]),
+        ("E8-F4", E8_F4, 0.1, &[(-3, ok), (0, ok)]),
+        ("E8-F5", E8_F5, 0.0, &[(0, unsupported)]),
+        (
+            "E8-F6",
+            E8_F6,
+            0.0,
+            &[
+                (-6, ok),
+                (-5, ok),
+                (-4, ok),
+                (-3, ok),
+                (-2, ok),
+                (-1, ok),
+                (0, ok),
+            ],
+        ),
+        (
+            "E8-C1",
+            E8_C1,
+            0.0,
+            &[
+                (-6, unsupported),
+                (-5, unsupported),
+                (-4, unsupported),
+                (-3, unsupported),
+                (-2, unsupported),
+                (-1, unsupported),
+                (0, unsupported),
+            ],
+        ),
+        ("E8-C2", E8_C1, 0.1, &[(-3, unsupported), (0, unsupported)]),
+    ];
+    for (name, data, offset, cases) in rows {
+        for &(exponent, status) in cases {
+            let mesh = run_one(svg_path(1, NONZERO, exponent, data, offset));
+            assert_eq!(mesh.status, status, "{name} at e = {exponent}");
+            if status == FILL_PATH_OK {
+                assert_mesh_invariants(&mesh);
+            }
+        }
+    }
+    // E8-F5 fails at the source-final knot (M2), which only E8-U2 addresses.
+    assert_eq!(
+        legacy_value(&svg_path(1, NONZERO, 0, E8_F5, 0.0)),
+        Err(CubicFillError::Topology(TopologyError::KnotMismatch))
+    );
+}
+
+/// FNV-1a 64 of a byte string, for pinned output digests.
+fn fnv1a64(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01b3)
+    })
+}
+
+#[test]
+fn e8_f6_output_bytes_equal_the_merge_base() {
+    // E8-K2, E8-F6 "same mesh bytes" (PR #215 review S3): the FNV-1a 64 of the input and of the
+    // published fill-v0 output of a one-path batch (request id 1, NONZERO), pinned from the
+    // merge-base release WASM (`main` e77dcac, kernel equal to f56c263, SHA-256 a7143f3a…4ef5)
+    // through the same section a input. E8-U1's WASM gives the same values.
+    let pinned: [(i32, u64, u64); 7] = [
+        (-6, 0x792f_033a_ab73_fb36, 0x90e1_6e6a_587e_d26d),
+        (-5, 0xd1a0_c1d4_c598_70b7, 0x3eca_543b_b40b_71c8),
+        (-4, 0xee89_c510_504b_2350, 0x70ba_cfd4_9405_27a0),
+        (-3, 0xeae3_7128_eff7_e3a1, 0x2769_d294_8cbe_1d0d),
+        (-2, 0xcd26_16ce_b8c4_9b22, 0x1132_6f04_2431_6cc2),
+        (-1, 0x5d38_3bbc_99d2_f0e3, 0x429f_46e6_bcac_89df),
+        (0, 0x8c85_c356_a0b1_94d7, 0x1f67_07fa_91b8_eedc),
+    ];
+    for (exponent, input_digest, output_digest) in pinned {
+        let path = svg_path(1, NONZERO, exponent, E8_F6, 0.0);
+        let input = pack(std::slice::from_ref(&path));
+        assert_eq!(
+            fnv1a64(&input),
+            input_digest,
+            "E8-F6 input at e = {exponent}"
+        );
+        let mut engine = FillEngine::new();
+        load(&mut engine, &input, 1 << 20);
+        assert_eq!(engine.process(input.len() as u32), BATCH_OK);
+        assert_eq!(
+            fnv1a64(engine.output_bytes()),
+            output_digest,
+            "E8-F6 output at e = {exponent}"
+        );
+    }
 }

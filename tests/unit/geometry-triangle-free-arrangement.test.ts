@@ -309,7 +309,8 @@ describe('P3.1i compatibility and preserved matching restrictions', () => {
     const rows = fixedNativeTransverseArrangementFixtureRows().filter(
       ({ expectation }) => expectation === 'Certified',
     );
-    expect(rows).toHaveLength(24);
+    // E8-U1: control/cyclic-only-projection is admitted by d2 (E8_ADMITTED_CYCLIC_ONLY).
+    expect(rows).toHaveLength(25);
     for (const row of rows) {
       const oldResult = certifyTransverseCubicArrangement(row.contours);
       const result = certifyTriangleFreeCubicArrangement(row.contours, allFalse(row.contours));

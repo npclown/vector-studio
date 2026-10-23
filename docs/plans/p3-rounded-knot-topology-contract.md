@@ -391,3 +391,13 @@ Independent review of PR #210 returned NOT READY on one blocking item. It found 
 - **F2.** A tamper case is added: a base-`ok` record whose digest changes only in diagnostics or statistics, with identical mesh bytes. It must FAIL.
 - **F3.** A base path failure that becomes an internal error or a batch failure is a new class, internal-regression, and counts as FAIL.
 - **F4.** The defect table of E8.7 is in the order D1 to D10.
+
+**E8-Q3 extension, 2026-10-23 (E8-U1).** This was decided by the Primary under the user's standing instruction of 2026-10-22 (recommended option). The text above stays unchanged.
+
+- **The fifth flipped control.** E8-U1 found one more frozen control that d₂ admits, beyond the four of E8-C5: the cyclic-only projection control of line 47. Its last-to-first pair fails d₁ = (33/4, 9/4). Its vectors, the C-to-A and A-to-B directions, lie in an open half-plane, and every actual chord equals its source chord. Native and oracle agree. The literal input stays unchanged. It becomes an admitted positive through `E8_ADMITTED_CYCLIC_ONLY` in `tests/geometry/rounded-knot-topology/fixtures.ts`: CERTIFIED, 6 leaves, 15 pairs, its literal polygon, orientation −1.
+- **The replacement negative control.** By the E8-Q3 rule, a replacement cyclic-only rejection is added: `e8CyclicOnlyReplacement`.
+  - **Path.** Exact linear A = (0, 0) to B = (9, 0) and B to C = (3, −9), one leaf each, then the cubic C, (3, −3), (3, 0), A in four depth-2 leaves with exact quarter knots (189/64, −81/16), (21/8, −9/4), (111/64, −9/16) and A.
+  - **Why only the last-to-first pair fails.** The cubic is x = 3(1 − t³), y = −9(1 − t)². It arrives at A with tangent (−9, 0), antiparallel to A-to-B: an M1′ turn at the last-to-first pair. V there is not in an open half-plane, so the pair is UNRESOLVED under d₁ and d₂, at the fifth inspected pair (finding "adjacent hull pair 0,5"), as in the frozen original. Every other directed join passes; the B-to-C join into the cubic needs d₂. The nonadjacent hulls separate.
+  - **Detection of a missing cyclic check.** Without the cyclic check, the same pair is reported as a nonadjacent hull contact, because the last leaf's control (3/4, 0) lies on A-to-B. A seeded oracle without the cyclic branch fails the test.
+  - **Recorded deviation, accepted.** The unchanged P3.1e certificate also rejects the replacement (UNRESOLVED, 6 leaves, 5 pairs), because its adjacent hulls overlap along A-to-B. The original was P3.1e CERTIFIED.
+  - **Evidence.** `tests/unit/geometry-e8-cyclic-only.test.ts` checks P3.1f, P3.1g, P3.1i and P3.1e. `e8_direction_hint_tests::cyclic_only_replacement_is_unresolved_natively` checks P3.2n, P3.2s, P3.2x and the native P3.1e workspace. Both give UNRESOLVED with 6 leaves and 5 pairs.

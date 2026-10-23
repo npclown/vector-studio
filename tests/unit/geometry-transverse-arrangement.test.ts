@@ -5,6 +5,7 @@ import type {
   ReferenceFlattenedLine,
 } from '../../packages/geometry-reference/src/types.js';
 import {
+  E8_ADMITTED_CYCLIC_ONLY,
   fixedRoundedKnotTopologyFixtures,
   roundedKnotMinimumLeafControls,
   roundedKnotTopologyControls,
@@ -224,6 +225,12 @@ describe('P3.1g rejection, precedence, and inclusive limits', () => {
     expect(inherited).toHaveLength(10);
     for (const control of inherited) {
       deepFreeze(control.contours);
+      // E8-U1 (E8 addendum E8.3): d2 admits the cyclic-only control in both oracles.
+      if (control.id === E8_ADMITTED_CYCLIC_ONLY.id) {
+        expect(certifyRoundedKnotCubicTopology(control.contours).status).toBe('CERTIFIED');
+        expectStatus(control.contours, 'CERTIFIED', undefined, E8_ADMITTED_CYCLIC_ONLY);
+        continue;
+      }
       const oldResult = certifyRoundedKnotCubicTopology(control.contours);
       expect(oldResult.status, control.id).toBe(control.status);
       expect(oldResult.leaves, control.id).toBe(control.leaves);
@@ -411,8 +418,9 @@ describe('P3.1g determinism, frozen ownership, and atomic recovery', () => {
       deepFreeze(control.contours);
       const failure = certifyTransverseCubicArrangement(control.contours);
       expect(certifyTransverseCubicArrangement(control.contours), control.id).toEqual(failure);
-      expect(failure.ok, control.id).toBe(false);
-      expect(failure.certificate, control.id).toBeNull();
+      const admitted = control.id === E8_ADMITTED_CYCLIC_ONLY.id; // E8-U1
+      expect(failure.ok, control.id).toBe(admitted);
+      expect(failure.certificate === null, control.id).toBe(!admitted);
     }
   });
 

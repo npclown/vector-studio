@@ -1,5 +1,6 @@
 import type { Point } from '../../../packages/geometry-reference/src/types.js';
 import {
+  E8_ADMITTED_CYCLIC_ONLY,
   fixedRoundedKnotTopologyFixtures,
   roundedKnotMinimumLeafControls,
   roundedKnotTopologyControls,
@@ -118,12 +119,21 @@ export function fixedNativeRoundedTopologyFixtureRows(): readonly NativeRoundedT
       ),
     ),
     ...controls.map((control) =>
-      row(
-        `control/${control.id}`,
-        control.contours,
-        control.status === 'KNOT_MISMATCH' ? 'KnotMismatch' : 'Unresolved',
-        { leaves: control.leaves, pairs: control.pairs },
-      ),
+      // E8-U1: the cyclic-only control is admitted by d2 (E8_ADMITTED_CYCLIC_ONLY).
+      control.id === E8_ADMITTED_CYCLIC_ONLY.id
+        ? row(
+            `control/${control.id}`,
+            control.contours,
+            'Certified',
+            { leaves: E8_ADMITTED_CYCLIC_ONLY.leaves, pairs: E8_ADMITTED_CYCLIC_ONLY.pairs },
+            E8_ADMITTED_CYCLIC_ONLY,
+          )
+        : row(
+            `control/${control.id}`,
+            control.contours,
+            control.status === 'KNOT_MISMATCH' ? 'KnotMismatch' : 'Unresolved',
+            { leaves: control.leaves, pairs: control.pairs },
+          ),
     ),
     ...minimum.map((control) =>
       row(`minimum/${control.id}`, control.contours, 'Unresolved', {

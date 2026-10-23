@@ -687,9 +687,34 @@ fn al_u3_defect_14_cascade_inverted_is_detected() {
     // cascade retries Legacy, which admits it with V2's mesh and resets the diagnostics. The
     // output and that flag are unchanged; the inversion shows in the native ladder record
     // instead (section 3.6): AL-F6's exact step becomes a retry.
-    let path = al_f6();
-    assert_eq!(built(&path, false).reason, Some(Reason::Monotone));
-    assert_eq!(built(&path, false).step, Some(ExactStep::Legacy));
+    //
+    // E8-C5 (docs/plans/p3-rounded-knot-topology-contract.md, E8 addendum E8.6): under E8-U1,
+    // `attempt_triangle_free` admits AL-F6 and the linear-cubic bowtie, so the inverted cascade
+    // no longer retries on either and neither detector fires. The crossing replacement (step 1
+    // KnotMismatch, step 2 success) takes AL-F6's place: its record step is TriangleFree, and
+    // the inverted cascade, which runs triangle-free first and succeeds, records Legacy. The M1'
+    // path E8-C1, Unresolved in both steps, takes the bowtie's place. The old paths are kept as
+    // positives.
+    let old = al_f6();
+    assert_eq!(built(&old, false).reason, Some(Reason::Monotone));
+    assert_eq!(built(&old, false).step, Some(ExactStep::Legacy));
+    let mut defective = engine(false);
+    defective.hooks().defect_cascade_inverted = true;
+    let points = old.point_bytes();
+    let record = defective
+        .build_one(old.request(0), &old.verbs, &points)
+        .unwrap()
+        .unwrap();
+    assert_eq!(record.step, Some(ExactStep::Legacy));
+    assert_eq!(record.outcome, PathOutcome::Mesh);
+    let old_bowtie = cubic_bowtie();
+    assert_eq!(built(&old_bowtie, false).outcome, PathOutcome::Mesh);
+    assert!(transverse_invoked(&old_bowtie, true));
+
+    let path = e8_crossing_replacement();
+    assert_eq!(built(&path, false).rung, Some(Rung::Exact));
+    assert_eq!(built(&path, false).step, Some(ExactStep::TriangleFree));
+    assert_eq!(built(&path, false).outcome, PathOutcome::Mesh);
     let mut defective = engine(false);
     defective.hooks().defect_cascade_inverted = true;
     let points = path.point_bytes();
@@ -699,18 +724,56 @@ fn al_u3_defect_14_cascade_inverted_is_detected() {
         .unwrap();
     assert_eq!(
         record.step,
-        Some(ExactStep::TriangleFree),
-        "defect (14) undetected on AL-F6's ladder record"
+        Some(ExactStep::Legacy),
+        "defect (14) undetected on the crossing replacement's ladder record"
     );
-    // The contract's second detector, which fires: the linear-cubic bowtie, `Unresolved` in
-    // both steps, whose existing assertion is `transverse_topology_invoked` after the cascade.
-    let bowtie = cubic_bowtie();
+    // The contract's second detector, which fires: E8-C1, `Unresolved` in both steps, whose
+    // assertion is `transverse_topology_invoked` after the cascade.
+    let bowtie = e8_c1();
     assert_eq!(built(&bowtie, false).rung, Some(Rung::Exact));
     assert!(transverse_invoked(&bowtie, false));
     assert!(
         !transverse_invoked(&bowtie, true),
-        "defect (14) undetected on the bowtie"
+        "defect (14) undetected on E8-C1"
     );
+}
+
+/// E8-C1 (E8 addendum E8.6), the M1' path `M 0 0 C 0 -100 100 -100 100 -50 S 200 0 200 -50
+/// L 200 50 L 0 50 Z`: the S reflects (100, -100) about (100, -50) to (100, 0).
+fn e8_c1() -> Path {
+    Path::new("E8-C1", NONZERO, -3)
+        .move_to(0.0, 0.0)
+        .cubic_to([0.0, -100.0, 100.0, -100.0, 100.0, -50.0])
+        .cubic_to([100.0, 0.0, 200.0, 0.0, 200.0, -50.0])
+        .line_to(200.0, 50.0)
+        .line_to(0.0, 50.0)
+        .close()
+}
+
+/// The E8-C5 crossing replacement, as `fill_export_tests::e8_crossing_replacement` builds it:
+/// the transverse bowtie with its top edge bowed to controls at y = 6, the second offset by
+/// 2^-50.
+fn e8_crossing_replacement() -> Path {
+    let vertices = [
+        (-3.0, -3.0),
+        (3.0, 3.0),
+        (3.0, 4.5),
+        (-3.0, 4.5),
+        (-3.0, 3.0),
+        (3.0, -3.0),
+        (3.0, -4.5),
+        (-3.0, -4.5),
+        (-3.0, -3.0),
+    ];
+    let mut path = Path::new("e8-crossing-replacement", NONZERO, -3).move_to(-3.0, -3.0);
+    for (edge, pair) in vertices.windows(2).enumerate() {
+        path = if edge == 2 {
+            path.cubic_to([1.0, 6.0, -1.0, 6.0 + 2f64.powi(-50), pair[1].0, pair[1].1])
+        } else {
+            path.linear_cubic_to(pair[0], pair[1])
+        };
+    }
+    path.close()
 }
 
 #[test]

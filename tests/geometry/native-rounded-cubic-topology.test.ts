@@ -193,9 +193,10 @@ beforeAll(() => {
 describe('P3.2n native rounded internal-knot topology certificate', () => {
   it('freezes the reviewed 11+8+2+7+1 source transport without result labels', () => {
     expect(fixtureRows).toHaveLength(29);
-    expect(certifiedFixtures).toHaveLength(12);
+    // E8-U1: control/cyclic-only-projection is admitted by d2 (E8_ADMITTED_CYCLIC_ONLY).
+    expect(certifiedFixtures).toHaveLength(13);
     expect(knotMismatchFixtures).toHaveLength(2);
-    expect(unresolvedFixtures).toHaveLength(15);
+    expect(unresolvedFixtures).toHaveLength(14);
     expect(new Set(fixtureRows.map(({ id }) => id)).size).toBe(29);
     const encoded = encodeNativeRoundedTopologyFixture(fixtureRows);
     expect(encoded.startsWith('# p3-native-rounded-topology-v1\n# rows 29\n')).toBe(true);
