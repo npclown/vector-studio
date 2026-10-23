@@ -401,3 +401,26 @@ Independent review of PR #210 returned NOT READY on one blocking item. It found 
   - **Detection of a missing cyclic check.** Without the cyclic check, the same pair is reported as a nonadjacent hull contact, because the last leaf's control (3/4, 0) lies on A-to-B. A seeded oracle without the cyclic branch fails the test.
   - **Recorded deviation, accepted.** The unchanged P3.1e certificate also rejects the replacement (UNRESOLVED, 6 leaves, 5 pairs), because its adjacent hulls overlap along A-to-B. The original was P3.1e CERTIFIED.
   - **Evidence.** `tests/unit/geometry-e8-cyclic-only.test.ts` checks P3.1f, P3.1g, P3.1i and P3.1e. `e8_direction_hint_tests::cyclic_only_replacement_is_unresolved_natively` checks P3.2n, P3.2s, P3.2x and the native P3.1e workspace. Both give UNRESOLVED with 6 leaves and 5 pairs.
+
+**E8-P1 discharged, 2026-10-23 (E8-U2, E8-K11).** Written by the Primary's E8-U2 lane under the user's standing instruction of 2026-10-22. The text above is unchanged.
+
+- **Setting.** The P2 flattener ([P2 private contract](p2-private-contract.md), line 37) works relative to o = P0. For each coordinate:
+  - it computes r = fl(p3 − o) once, in `Cubic::relative`;
+  - every final leaf keeps r as its relative endpoint, because de Casteljau's right child keeps its last control;
+  - the leaf is accepted when flatness + g ≤ 2^e, with g = 128ε(max(1, max_abs_original) + (depth + 1)·max_abs_relative) (`geometry.rs:369-372`, ε = 2^−52);
+  - it emits q′ = fl(o + r).
+
+  The P2 contract states the budget this guard covers: "the origin subtraction/output addition budget occurs once", next to the rounding of splits, chord evaluation and norms. So g budgets the deviation of each emitted endpoint from its exact value.
+- **Bound on the snap.** Let u = 2^−53. Then
+  - |r − (p3 − o)| ≤ u·|p3 − o| ≤ u·max_abs_relative, and
+  - |q′ − (o + r)| ≤ u·|o + r| ≤ u·(max_abs_original + u·max_abs_relative).
+
+  Hence |q′ − p3| ≤ ε·max_abs_original + (ε/2)·max_abs_relative per coordinate, and less than √2 times that in the plane. The guard of every leaf is at least 128 times this bound. This is the sketch of E8.4, made precise.
+- **Tolerance relation.** Let a be the leaf's actual start, and E the chord between the exact start a* and the exact endpoint p3 (p3 = C(1) lies on the curve).
+  - The certified relation is: every point of the curve piece lies within flatness + g of the emitted chord D = [a, q′].
+  - g includes the endpoint deviations |a − a*| and |q′ − p3| that separate D from E.
+  - The snapped chord S = [a, p3] has the same start and the exact endpoint. Its Hausdorff distance from E is at most |a − a*|, which is no more than the larger of the two endpoint deviations that g budgets for D.
+  - So S is covered by the same guarded relation: flatness + g ≤ 2^e still bounds the distance from the curve piece to S.
+  - The snap consumes none of the endpoint budget. It returns the part budgeted for q′, because S's endpoint is exact.
+  - The V2 tolerance relation (section d: flattening 2^e, topology 2^(e−1)) therefore holds with the snapped chord. The P3.1d per-source positional proof applies with zero error at the source-final knot.
+- **Test at the largest admitted magnitudes.** `e8_canonical_final_knot_tests::emitted_final_knot_error_is_far_inside_the_guard` checks |q′ − p3| ≤ ε·max_abs_original + (ε/2)·max_abs_relative and 128 times that bound ≤ g. It uses the flattener's own computation (the `cfg(test)` hook `geometry::e8_test_final_knot`, which calls `Cubic::relative` and `Cubic::guard`). The sample is 20,000 seeded cubics (binary exponents −60..60 and 900..1021) and two extreme cubics at ±f64::MAX/4. Every case whose relative frame is finite is checked; over 10,000 are, and the sample reaches magnitudes above 1e300.

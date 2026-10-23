@@ -1293,8 +1293,9 @@ fn same_bounds_bits(left: Bounds, right: Bounds) -> bool {
 /// previous emitted point is skipped, so collection rejects it as `ZeroLengthLeaf` as before;
 /// a snap that makes the leaf zero-length is rejected by collection the same way. On every
 /// exact-rung path that could succeed before, the final knot already equals p3 (the P3.1e and
-/// source-final preflights require it), so the snap writes the value that is there. The zero-length test compares the emitted points,
-/// before any snap.
+/// source-final preflights require it), so the snap writes the value that is there, and a knot
+/// equal to p3 in value (for example +0 for -0) is left with its emitted bits. The zero-length
+/// test compares the emitted points, before any snap.
 pub(crate) fn snap_final_knots(commands: &mut [FlatCommand], sources: &[DecodedSource]) {
     let mut previous: Option<Point> = None;
     for command in commands.iter_mut() {
@@ -1312,7 +1313,9 @@ pub(crate) fn snap_final_knots(commands: &mut [FlatCommand], sources: &[DecodedS
                 _ => None,
             });
             if let (Some(canonical), Some(point), Some(previous)) = (canonical, emitted, previous) {
-                if !same_point(point, previous) {
+                // A knot equal to p3 in value keeps its emitted bits, so a signed zero that the
+                // topology preflights already accept as equal is not rewritten.
+                if !same_point(point, previous) && !same_point(point, canonical) {
                     command.point = Some(canonical);
                 }
             }
