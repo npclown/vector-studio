@@ -61,7 +61,7 @@ const W_CELL = 9;
 const W_PAIR = 10;
 
 /** Nominal microseconds per unit of each kind (contract section 14.7). */
-const WORK_WEIGHTS: readonly number[] = [3, 0.3, 2, 0.13, 0.23, 7.5, 1.5, 85, 5, 2.5, 2.5];
+const WORK_WEIGHTS: readonly number[] = [9.5, 0.22, 1.15, 0.17, 0.38, 12, 0.26, 80, 8.2, 4.2, 4.2];
 
 type Work = { units: number; readonly cap: number; readonly counts: number[] };
 
@@ -3638,7 +3638,7 @@ class CubicSweep implements StrokePiece {
    * cut exactly from the polygon. The polygon is IN when no piece of positive area remains. This
    * certifies cells that need different feet for different points (inside a fold).
    */
-  private insideUnion(poly: LPoly, target: number): boolean {
+  private insideUnion(poly: LPoly, nodes: readonly ArcNode[]): boolean {
     if (poly.exact === null || poly.exact.length < 3) return false;
     // Integer homogeneous geometry (E3-U2c): every line is an integer triple and every vertex the
     // cross product of the two lines it lies on, so no rational is normalized and vertex sizes do
@@ -3675,7 +3675,7 @@ class CubicSweep implements StrokePiece {
     let uncovered: ZVert[][] = [
       edges.map((e, i) => zVert(edges[(i + edges.length - 1) % edges.length]!, e)),
     ];
-    for (const n of this.collectNodes(poly, target)) {
+    for (const n of nodes) {
       let maxD = 0;
       for (const c of n.c)
         for (const g of poly.gens) maxD = Math.max(maxD, ivpNorm2(ivpSub(g, c)).hi);
@@ -3696,30 +3696,12 @@ class CubicSweep implements StrokePiece {
     }
     return false;
   }
-  private inside(poly: LPoly, target: number): boolean {
-    const nodes: ArcNode[] = [];
-    // A sub-arc whose sweep equation keeps one sign over the polygon holds no foot, so it is kept
-    // whole: a sign change (and so a bracket) never spans it. Only sub-arcs that may hold feet are
-    // refined, within a node budget.
-    let budget = 4096;
-    const collect = (n: ArcNode) => {
-      charge(W_ARC, 1);
-      if (boxBoxDistLo(poly.box, n.box) > this.ir.hi) return;
-      budget -= 1;
-      if (
-        n.size <= target ||
-        n.depth >= ARC_MAX_DEPTH ||
-        budget <= 0 ||
-        this.excludesZero(n, poly)
-      ) {
-        nodes.push(n);
-        return;
-      }
-      const [a, b] = arcKids(n, this.cache);
-      collect(a);
-      collect(b);
-    };
-    collect(this.root);
+  /**
+   * IN by one bracket over sub-arcs collected by `collectNodes`. A sub-arc whose sweep equation
+   * keeps one sign over the polygon holds no foot, so it is kept whole: a sign change (and so a
+   * bracket) never spans it. The same collection serves the union-of-brackets test (E3-U2c).
+   */
+  private inside(poly: LPoly, nodes: readonly ArcNode[]): boolean {
     let k = 0;
     while (k < nodes.length) {
       let end = k;
@@ -3829,8 +3811,10 @@ class CubicSweep implements StrokePiece {
     // foot) makes the undecided sub-arcs multiply at every level.
     const floor = Math.max(size, this.ir.lo * (size > 0 ? 2 ** -36 : 2 ** -24));
     if (this.outside(this.root, poly, floor, { n: 4096 })) return -1;
-    if (this.inside(poly, floor) || (size > 0 && this.inside(poly, floor / 8))) return 1;
-    return size > 0 && this.insideUnion(poly, floor / 8) ? 1 : 0;
+    if (this.inside(poly, this.collectNodes(poly, floor))) return 1;
+    if (size === 0) return 0;
+    const fine = this.collectNodes(poly, floor / 8);
+    return this.inside(poly, fine) || this.insideUnion(poly, fine) ? 1 : 0;
   }
 }
 
