@@ -284,6 +284,76 @@ function cyclicOnly(): RawContour {
   ];
 }
 
+/**
+ * E8-U1 (docs/plans/p3-rounded-knot-topology-contract.md, E8 addendum E8.3): the frozen
+ * cyclic-only projection control, whose last-to-first pair fails d1 = (33/4, 9/4), is admitted
+ * by the one further exact candidate d2: its vectors (the C-to-A direction and the A-to-B
+ * direction) lie in an open half plane and every actual chord is its source chord. Its literal
+ * input and its frozen status in `roundedKnotTopologyControls` stay unchanged; the tests read
+ * this record for its outcome after E8-U1 and keep it as a positive. Its replacement as a
+ * cyclic-only rejection is `e8CyclicOnlyReplacement` below (E8-Q3 extension, 2026-10-23; it is
+ * not one of the four E8-C5 controls).
+ * Polygon: the actual leaf starts; orientation and winding as the P3.1f triangle.
+ */
+export const E8_ADMITTED_CYCLIC_ONLY = Object.freeze({
+  id: 'cyclic-only-projection',
+  leaves: 6,
+  pairs: 15,
+  polygons: [
+    [
+      [0, 0],
+      [9, 0],
+      [6, -9 / 2],
+      [3, -9],
+      [3 / 2, -9 / 2],
+      [3 / 4, -9 / 4],
+    ],
+  ] as readonly (readonly Point[])[],
+  orientations: [-1] as readonly (-1 | 1)[],
+  winding: [[0]] as readonly (readonly (-1 | 0 | 1)[])[],
+});
+
+/**
+ * E8-U1, E8-Q3 extension of 2026-10-23 (docs/plans/p3-rounded-knot-topology-contract.md): the
+ * replacement cyclic-only rejection. Exact linear A = (0, 0) to B = (9, 0) and B to C = (3, -9),
+ * one leaf each, then the cubic C, (3, -3), (3, 0), A in four depth-2 leaves:
+ * x = 3(1 - t^3), y = -9(1 - t)^2, with exact quarter knots. The cubic arrives at A with tangent
+ * (-9, 0), antiparallel to A-to-B (an M1' turn at the last-to-first pair), so the pair (0, 5)
+ * has no common direction under d1 or d2 and is the first failing pair; every other directed join
+ * passes (B-to-C into the cubic needs d2) and the nonadjacent hulls separate. Without the cyclic
+ * check the same pair fails as a nonadjacent hull contact, because the last leaf's control
+ * (3/4, 0) lies on A-to-B. Unlike the frozen original, the unchanged P3.1e certificate rejects it
+ * too (its adjacent hulls overlap along A-to-B).
+ */
+export function e8CyclicOnlyReplacement(): RoundedKnotTopologyControl {
+  const contour: RawContour = [
+    uniformLinearSegment([0, 0], [9, 0], 0),
+    uniformLinearSegment([9, 0], [3, -9], 0),
+    {
+      cubic: [
+        [3, -9],
+        [3, -3],
+        [3, 0],
+        [0, 0],
+      ],
+      endpoints: [
+        [189 / 64, -81 / 16],
+        [21 / 8, -9 / 4],
+        [111 / 64, -9 / 16],
+        [0, 0],
+      ],
+    },
+  ];
+  return {
+    id: 'e8-cyclic-only-antiparallel',
+    contours: toSegments([contour]),
+    status: 'UNRESOLVED',
+    leaves: 6,
+    pairs: 5,
+    findingIncludes: 'adjacent hull pair 0,5',
+  };
+}
+
 /** Returns the literal topology-specific rejecting controls and their exact counters. */
 export function roundedKnotTopologyControls(): readonly RoundedKnotTopologyControl[] {
   const base = roundedTriangle(true);

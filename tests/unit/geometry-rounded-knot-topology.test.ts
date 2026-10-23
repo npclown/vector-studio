@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Cubic, ReferenceFlattenedLine } from '../../packages/geometry-reference/src/types.js';
 import { certifyCubicBoundary } from '../geometry/cubic-boundary/oracle.js';
 import {
+  E8_ADMITTED_CYCLIC_ONLY,
   fixedRoundedKnotTopologyFixtures,
   roundedKnotMinimumLeafControls,
   roundedKnotTopologyControls,
@@ -209,10 +210,22 @@ describe('P3.1f analytic rejection and precedence controls', () => {
   it.each(roundedKnotTopologyControls())(
     '$id returns its frozen status, counters, and finding class',
     (control) => {
+      // E8-U1 (E8 addendum E8.3): d2 admits the cyclic-only control; kept as a positive.
+      if (control.id === E8_ADMITTED_CYCLIC_ONLY.id) {
+        const result = expectStatus(
+          control.contours,
+          'CERTIFIED',
+          undefined,
+          E8_ADMITTED_CYCLIC_ONLY,
+        );
+        expect(result.certificate!.polygons).toEqual(E8_ADMITTED_CYCLIC_ONLY.polygons);
+        expect(result.certificate!.orientations).toEqual(E8_ADMITTED_CYCLIC_ONLY.orientations);
+        expect(result.certificate!.winding).toEqual(E8_ADMITTED_CYCLIC_ONLY.winding);
+        return;
+      }
       const result = expectStatus(control.contours, control.status, undefined, control);
       if (control.findingIncludes !== undefined)
         expect(result.finding, control.id).toContain(control.findingIncludes);
-      if (control.id === 'cyclic-only-projection') expect(result.finding).toContain('0,5');
     },
   );
 
@@ -398,8 +411,9 @@ describe('P3.1f limits, malformed input, determinism, and ownership', () => {
     expect(first).toEqual(second);
     for (const control of [...roundedKnotTopologyControls(), ...roundedKnotMinimumLeafControls()]) {
       const result = certifyRoundedKnotCubicTopology(control.contours);
-      expect(result.ok, control.id).toBe(false);
-      expect(result.certificate, control.id).toBeNull();
+      const admitted = control.id === E8_ADMITTED_CYCLIC_ONLY.id; // E8-U1
+      expect(result.ok, control.id).toBe(admitted);
+      expect(result.certificate === null, control.id).toBe(!admitted);
     }
   });
 

@@ -87,6 +87,8 @@ Notice literals fixed at the first headed runs (identical at DPR 1 and 2, Chrome
 
 Independent evidence review (appended 2026-10-23): the PR #207 review was READY WITH FOLLOW-UPS; the follow-ups were applied, and the PR merged as `d9b4b8d`.
 
+Note, 2026-10-23 (E8-U1, rendering track, PR #215; E8-Q4 (a), V2-Q10 (a), D9-Q8): `p3qc` now draws on the E8-U1 kernel; its probes (fill at (100, −140), backdrop at (100, −160)) and its notice literal (`v2-path fill fringe-work-cap`) are re-baselined in `tests/gpu/viz-v2-path-data.spec.ts`, headed runs Chrome `2026-10-23T00-46-04-416Z-34280` and Edge `2026-10-23T00-48-57-597Z-18828` (4 passed). `p3sc` is unchanged. The PR #215 review is the visualization-track review that E8-Q4 (a) requires (Primary, standing instruction of 2026-10-22). See the [V-2 contract note](viz-v2-path-data-contract.md#amendment-2026-10-22-primary-standing-instruction-v2-a9-p3-fixtures).
+
 ## V-3: A07 headed integration page
 
 Added 2026-10-22. Source: [D9-Q2 (a)](d9-post-mvp1-tracks-proposal.md#user-decisions-2026-10-22), chosen by the Primary under the user's standing instruction of 2026-10-22.

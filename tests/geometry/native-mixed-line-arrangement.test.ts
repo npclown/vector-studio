@@ -214,9 +214,10 @@ beforeAll(() => {
 describe('P3.2v native mixed LINE arrangement preservation', () => {
   it('freezes the reviewed 7+7+39 source transport with explicit kinds and no result labels', () => {
     expect(fixtureRows).toHaveLength(53);
-    expect(fixtureRows.filter(({ expectation }) => expectation === 'Certified')).toHaveLength(31);
+    // E8-U1: legacy/control/cyclic-only-projection is admitted by d2 (E8_ADMITTED_CYCLIC_ONLY).
+    expect(fixtureRows.filter(({ expectation }) => expectation === 'Certified')).toHaveLength(32);
     expect(fixtureRows.filter(({ expectation }) => expectation === 'KnotMismatch')).toHaveLength(2);
-    expect(fixtureRows.filter(({ expectation }) => expectation === 'Unresolved')).toHaveLength(20);
+    expect(fixtureRows.filter(({ expectation }) => expectation === 'Unresolved')).toHaveLength(19);
     expect(new Set(fixtureRows.map(({ id }) => id)).size).toBe(53);
     expect(fixtureRows.slice(0, 7).every(({ id }) => id.startsWith('mixed/'))).toBe(true);
     expect(fixtureRows.slice(7, 14).every(({ id }) => id.startsWith('cubic/'))).toBe(true);

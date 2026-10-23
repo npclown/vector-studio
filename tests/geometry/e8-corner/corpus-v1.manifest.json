@@ -1,0 +1,38 @@
+{
+  "version": "e8-corner/v1",
+  "contract": "docs/plans/p3-rounded-knot-topology-contract.md, E8 addendum E8.6",
+  "generator": {
+    "path": "tests/geometry/e8-corner/corpus.ts",
+    "sha256": "55ae5f191b334bdad0c894f7edee0a72492e53fa81195d2c719efc8569b1865e"
+  },
+  "serialization": "the P3BRRND1 frame of tests/geometry/e8-corner/corpus.ts (p3-b0r-random/v1 layout); corpusSha256 is the SHA-256 of its bytes",
+  "prng": "64-bit LCG s = s * 6364136223846793005 + 1442695040888963407 mod 2^64, one per shape family; draw in [lo, hi] = lo + floor((s >> 32) * (hi - lo + 1) / 2^32)",
+  "seeds": {
+    "lens/1": "0xe8c0000100000001",
+    "lens/10": "0xe8c000010000000a",
+    "lens/3": "0xe8c0000100000003",
+    "lens-tangent/1": "0xe8c0000200000001",
+    "lens-tangent/10": "0xe8c000020000000a",
+    "lens-tangent/3": "0xe8c0000200000003",
+    "wave": "0xe8c0000300000000"
+  },
+  "families": [
+    "lens/1/e-3",
+    "lens/1/e0",
+    "lens/10/e-3",
+    "lens/10/e0",
+    "lens/3/e-3",
+    "lens/3/e0",
+    "lens-tangent/1/e-3",
+    "lens-tangent/1/e0",
+    "lens-tangent/10/e-3",
+    "lens-tangent/10/e0",
+    "lens-tangent/3/e-3",
+    "lens-tangent/3/e0",
+    "wave/e-3",
+    "wave/e0"
+  ],
+  "paths": 2800,
+  "bytes": 375119,
+  "corpusSha256": "6a77cedbdd727f18fecb1d06e086a7b96ab8bb8833afc62e5993b917f49bbff4"
+}
