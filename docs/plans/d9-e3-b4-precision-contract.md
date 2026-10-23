@@ -1292,7 +1292,7 @@ Dated append. E3-U2b closes the three open items of section 14.6 in `a04-region.
 - Alternative not taken: let the harness drop zero-area triangles before measurement. That changes the set `M*`, because a zero-area triangle adds a segment to the union of closed triangles. It stays a harness decision for E3-U3, which must disclose it.
 - Tests: the reviewer's sliver (the 16×8 rectangle's fan plus the triangle `(116, 104), (121, 104), (118.5, 104)`), a repeated vertex, an overlapping triangle, a touching triangle (valid, so it is measured, and it FAILS) and a valid fan (PASS).
 
-**S3, a weighted work cap.** Every loop whose cost the structural units did not bound is now charged where it runs, through the work of the call in progress. A unit is a nominal microsecond.
+**S3, a weighted work cap.** Every exact-arithmetic loop whose cost the structural units did not bound is now charged where it runs, through the work of the call in progress. The charges come at its rational normalizations and gcd steps and at the other kinds below. A unit is a nominal microsecond, and the bound on wall time that it gives is empirical (calibration below).
 
 | Kind                 | Where it is charged                                                                   | Weight                       |
 | -------------------- | ------------------------------------------------------------------------------------- | ---------------------------- |
@@ -1338,3 +1338,11 @@ Here `b(t)` is the bit length of the numerator and denominator of the point `t`.
 - **Disposition under E3-Q6 (a).** Every `ORACLE-WORK` case fails the freeze, so the corpus is not frozen. About 3.4 % of the sample fails, all in the stroke strata C5, C8 and C9. On the full corpus that is about 900 cases. The freeze needs one of two things:
   - a faster oracle on these strokes. The dominant costs are BigInt gcds of large rationals in the exact cell tests, and sub-arc refinement;
   - or a disclosed generator revision.
+
+**Review of PR #214, 2026-10-23.** Decided under the user's standing instruction of 2026-10-22 (recommended option):
+
+- `a04Measure` reports `crackBound: null` whenever the mesh was not fully built and checked: a work cap hit before `buildMesh` returns, or before the port mesh's storage check ends. It never reports 0 for an unknown mesh.
+- `a04StorageCracks` now runs inside the active work, so it is charged and capped. A cap hit there is UNDECIDED.
+- The S2 tests add a triangle strictly inside another, two triangles on the same side of partly shared collinear edges, a duplicated triangle in both orientations, and a pair that only the second triangle's edge separates, in both orders.
+- The source SHA-256 is now `0544b1dc8c4e8fced559e406851ff0dcca9e85b3fee06c9c9ed8992b3b3e0725`.
+- The stride-25 result above (1,062 `ok`, 37 `ORACLE-WORK`) is tied to SHA `218ed589…` and was not rerun. The change adds charges only after the freeze terms: the storage check runs only in `a04Measure`, with a port mesh, and the crack-bound change does not touch the freeze check.

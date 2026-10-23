@@ -69,7 +69,11 @@ function newWork(cap: number): Work {
   return { units: 0, cap, counts: WORK_KINDS.map(() => 0) };
 }
 
-/** The work of the call in progress; charges outside any call are free (never in a run). */
+/**
+ * The work of the call in progress. Only `a04Measure` and `a04FreezeCheck` set it; charges
+ * outside them are free. The inspection helpers `a04Contains`, `a04ContainsWith`,
+ * `a04FillPortions` and `a04BoundaryDistance` run uncharged (tests only, never a run).
+ */
 let activeWork: Work | null = null;
 
 function charge(kind: number, count: number): void {
@@ -4517,21 +4521,33 @@ export function a04Measure(
     crackBound: number | null;
     storage: Readonly<{ tJunctions: number; storageCracks: number }> | null;
   }> {
-  const m = measureCase(input, meshInput, options);
+  const mesh: MeshState = { complete: false, storage: null };
+  const m = measureCase(input, meshInput, options, mesh);
   // E3-Q10 (b): a T-junction can open a crack up to about 2β_c wide on the GPU; it is reported
   // here and judged by A01, not scored by A04. The port mesh's T-junctions count as well, so a
-  // storage crack (a port T-vertex off its edge in M*) keeps the bound.
-  const storage =
-    options.portMesh === undefined ? null : a04StorageCracks(options.portMesh, meshInput);
-  const junctions = m.tJunctions + (storage?.tJunctions ?? 0);
-  const crackBound = options.betaC === undefined ? null : junctions > 0 ? up(2 * options.betaC) : 0;
-  return { ...m, crackBound, storage };
+  // storage crack (a port T-vertex off its edge in M*) keeps the bound. A mesh that was not
+  // fully built and checked (a work cap hit before) has no bound: it is null, never 0.
+  const junctions = m.tJunctions + (mesh.storage?.tJunctions ?? 0);
+  const crackBound =
+    options.betaC === undefined || !mesh.complete
+      ? null
+      : junctions > 0
+        ? up(2 * options.betaC)
+        : 0;
+  return { ...m, crackBound, storage: mesh.storage };
 }
+
+/** Set by `measureCase`: whether the mesh (and the port mesh, if given) was fully processed. */
+type MeshState = {
+  complete: boolean;
+  storage: Readonly<{ tJunctions: number; storageCracks: number }> | null;
+};
 
 function measureCase(
   input: A04Case,
   meshInput: A04Mesh,
   options: A04MeasureOptions,
+  state: MeshState,
 ): A04Measurement {
   const hooks = options.hooks ?? {};
   const c = decodeCase(input);
@@ -4561,6 +4577,10 @@ function measureCase(
   try {
     const R = regionTarget(c, f, hooks, work);
     mesh = buildMesh(meshInput, hooks);
+    // Inside the active work, so the storage-crack check is charged and capped too.
+    if (options.portMesh !== undefined)
+      state.storage = a04StorageCracks(options.portMesh, meshInput);
+    state.complete = true;
     const M = new MeshTarget(mesh);
     const meshInfo = { tJunctions: mesh.tJunctions, boundaryEdges: mesh.boundary.length };
     if (mesh.invalid !== null)

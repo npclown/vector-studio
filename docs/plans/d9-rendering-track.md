@@ -301,7 +301,7 @@ Dated append. Unit E3-U2b closes the three open pre-freeze items S2, S3 and S7 o
 
 **Files.**
 
-- `packages/geometry-reference/src/a04-region.ts` gains three things. Its source SHA-256 is now `218ed5891c1392239b5400578d27ea45225af657e2089113422ec777aa1e26e5`.
+- `packages/geometry-reference/src/a04-region.ts` gains three things. Its source SHA-256 was `218ed5891c1392239b5400578d27ea45225af657e2089113422ec777aa1e26e5` for the freeze run below, and is `0544b1dc8c4e8fced559e406851ff0dcca9e85b3fee06c9c9ed8992b3b3e0725` after the review follow-up.
   - The exact mesh preconditions.
   - The weighted work accounting, with its new caps, and `workByKind` in the freeze result.
   - The `portMesh` option and the `storage` result of `a04Measure`.
@@ -328,7 +328,14 @@ Dated append. Unit E3-U2b closes the three open pre-freeze items S2, S3 and S7 o
 - **Full-run estimate.** About 263 CPU hours, or about 19 h on 14 shards. That is above 17 h, so the full run was **not started**.
 - **Disposition.** Under E3-Q6 (a), the 37 cases fail the freeze, so the corpus is **not frozen**. About 900 cases of the full corpus would fail at this rate. Before the freeze note there must be either a faster oracle on these strokes or a disclosed generator revision, and then the complete run.
 
-**Validation.** The commands and their results are in the PR. Still pending: one independent review of E3-U2b, the oracle speed or generator decision, then the complete freeze run and the freeze note (section 5.5, step 4).
+**Review follow-up (PR #214).**
+
+- `crackBound` is null whenever the mesh was not fully built and checked.
+- `a04StorageCracks` is charged and capped.
+- Six tests are added: the two cap tests, and the S2 tests for a contained triangle, partly shared collinear edges, a duplicated triangle and a pair that only the second triangle separates.
+- The stride-25 result is tied to SHA `218ed589…` and was not rerun. The change adds charges only after the freeze terms (contract section 14.7).
+
+**Validation.** The commands and their results are in the PR. Still pending: the oracle speed or generator decision (E3-U2c), then the complete freeze run and the freeze note (section 5.5, step 4).
 
 ## E8 investigation, 2026-10-23
 
