@@ -7,7 +7,8 @@
 //!
 //! Every case runs one entry on one path and records a SHA-256 digest of every observable
 //! section 2 field: the result with its exact error variant, `CubicFillDiagnostics`,
-//! `topology_stats()`, `rounded_stats()`, `allocated_bytes()` and, when published, the complete
+//! `topology_stats()` (only when the attempt invoked topology; otherwise a fixed marker, E8-U0b),
+//! `rounded_stats()`, `allocated_bytes()` and, when published, the complete
 //! `output()` (commands, ranges, points, owners, sources, the rounded mesh with its ledger, and
 //! the mesh vertex f64 bits). Values are rendered with `Debug`, whose f64 form is the shortest
 //! round-trip representation (bit-exact for every non-NaN value, signed zero included); mesh
@@ -332,6 +333,19 @@ fn line(
 /// Digest of every section 2 field observable after one `CubicFillWorkspace` entry call, the
 /// outcome code in the B0 harness's vocabulary, and the number of proper crossing events of a
 /// published mesh (raw events are both endpoints of every edge, then the crossings).
+/// E8-U0b: `topology_stats()` is part of the digest only when the attempt invoked topology.
+/// `CubicFillWorkspace::begin_attempt` does not reset the stats, so an attempt that never
+/// reaches topology (a line-only path, or one that stops in the prefix) reports the stats of the
+/// previous attempt in the same workspace; hashing them would make its digest depend on that
+/// earlier case. Such an attempt hashes a fixed marker instead.
+fn hash_topology_stats(hash: &mut Sha256, workspace: &CubicFillWorkspace) {
+    if workspace.diagnostics().topology_invoked {
+        let _ = writeln!(hash, "topology_stats={:?}", workspace.topology_stats());
+    } else {
+        hash.update(b"topology_stats=NOT_INVOKED\n");
+    }
+}
+
 fn attempt_digest(
     name: &str,
     result: &Result<CubicFillDiagnostics, CubicFillError>,
@@ -340,9 +354,13 @@ fn attempt_digest(
     let mut hash = Sha256::new();
     let _ = write!(
         hash,
-        "entry={name}\nresult={result:?}\ndiagnostics={:?}\ntopology_stats={:?}\nrounded_stats={:?}\nallocated_bytes={}\n",
+        "entry={name}\nresult={result:?}\ndiagnostics={:?}\n",
         workspace.diagnostics(),
-        workspace.topology_stats(),
+    );
+    hash_topology_stats(&mut hash, workspace);
+    let _ = write!(
+        hash,
+        "rounded_stats={:?}\nallocated_bytes={}\n",
         workspace.rounded_stats(),
         workspace.allocated_bytes(),
     );
@@ -696,4 +714,56 @@ fn packed_fill_input_has_the_section_a_layout() {
             .unwrap(),
     );
     assert_eq!((id, status), (7, 0));
+}
+
+/// E8-U0b: a topology-free attempt digests the same in a fresh workspace and in one whose
+/// previous attempt left topology statistics behind (`begin_attempt` does not reset them).
+#[test]
+fn topology_free_attempt_digest_ignores_stale_topology_stats() {
+    let bytes = |values: &[f64]| -> Vec<u8> {
+        values
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect()
+    };
+    // A closed cubic (topology invoked) and a line-only square (topology never invoked).
+    let curved: (Vec<u8>, Vec<u8>) = (
+        vec![0, 2, 3],
+        bytes(&[0.0, 0.0, 1.0, 2.0, 3.0, 2.0, 4.0, 0.0]),
+    );
+    let square: (Vec<u8>, Vec<u8>) = (
+        vec![0, 1, 1, 1, 3],
+        bytes(&[0.0, 0.0, 10.0, 0.0, 10.0, 10.0, 0.0, 10.0]),
+    );
+    let run = |workspace: &mut CubicFillWorkspace, (verbs, points): &(Vec<u8>, Vec<u8>)| {
+        let input = PathInput::from_test_parts(
+            Request {
+                request_id: 0,
+                source_epoch: 0,
+                source_revision: 0,
+                tolerance: FLATTEN_TOLERANCE,
+            },
+            verbs,
+            points,
+        );
+        let result = workspace.attempt(
+            input,
+            LineFillRule::Nonzero,
+            TOPOLOGY_TOLERANCE,
+            MAX_FLAT_COMMANDS,
+        );
+        attempt_digest("attempt", &result, workspace)
+    };
+    let mut fresh = CubicFillWorkspace::new(LIMITS).unwrap();
+    let clean = run(&mut fresh, &square);
+    assert!(!fresh.diagnostics().topology_invoked);
+
+    let mut reused = CubicFillWorkspace::new(LIMITS).unwrap();
+    let _ = run(&mut reused, &curved);
+    assert!(reused.diagnostics().topology_invoked);
+    let after = run(&mut reused, &square);
+    assert!(!reused.diagnostics().topology_invoked);
+    // The precondition of the case: the reused workspace still reports the stale statistics.
+    assert_ne!(reused.topology_stats(), fresh.topology_stats());
+    assert_eq!(after, clean);
 }
