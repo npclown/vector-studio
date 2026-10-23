@@ -3662,6 +3662,58 @@ class CubicSweep implements StrokePiece {
     return false;
   }
   /** Up to 8 approximate curve points in a local box (witness candidates for thin strokes). */
+  /**
+   * Up to 16 approximate normal segments C(t) ± r·n̂(t) of sub-arcs within r of a local box
+   * (E3-U2c). Every point of such a segment lies in the sweep (its foot is t, at distance at
+   * most r), so the part inside a cell is a witness candidate where the sweep is thinner than
+   * the samples, such as the tip of the envelope beside a stationary end. Candidates only:
+   * each is tested by exact membership.
+   */
+  normalsNear(box: Box): [[number, number], [number, number]][] {
+    const out: [[number, number], [number, number]][] = [];
+    // Refined to the box's smaller side: under strong anisotropy a cell is a thin local box.
+    const size = Math.min(box.x1 - box.x0, box.y1 - box.y0);
+    const r = (this.ir.lo + this.ir.hi) / 2;
+    const mid = (v: Iv) => (v.lo + v.hi) / 2;
+    let budget = 4096;
+    const visit = (n: ArcNode) => {
+      charge(W_ARC, 1);
+      budget -= 1;
+      if (out.length >= 16 || budget <= 0 || boxBoxDistLo(n.box, box) > this.ir.hi) return;
+      if (n.size <= size / 4 || n.depth >= 40) {
+        for (const t of [n.t0, (n.t0 + n.t1) / 2]) {
+          const k = this.coefAt(t);
+          const dx = mid(k.dx);
+          const dy = mid(k.dy);
+          const l = Math.hypot(dx, dy);
+          if (!(l > 0)) continue;
+          const tq = qnum(t);
+          const cx = qapprox(peval(this.pw.x, tq));
+          const cy = qapprox(peval(this.pw.y, tq));
+          const nx = (-dy / l) * r;
+          const ny = (dx / l) * r;
+          // Only segments whose bounding box meets the box can cross the cell.
+          if (
+            Math.max(cx - nx, cx + nx) < box.x0 ||
+            Math.min(cx - nx, cx + nx) > box.x1 ||
+            Math.max(cy - ny, cy + ny) < box.y0 ||
+            Math.min(cy - ny, cy + ny) > box.y1
+          )
+            continue;
+          out.push([
+            [cx - nx, cy - ny],
+            [cx + nx, cy + ny],
+          ]);
+        }
+        return;
+      }
+      const [a, b] = arcKids(n, this.cache);
+      visit(a);
+      visit(b);
+    };
+    visit(this.root);
+    return out;
+  }
   pointsNear(box: Box): [number, number][] {
     const out: [number, number][] = [];
     const size = Math.max(box.x1 - box.x0, box.y1 - box.y0);
@@ -4235,6 +4287,29 @@ class StrokeTarget implements RegionTarget {
       } else if (piece instanceof CubicSweep) {
         for (const p of piece.pointsNear(local)) {
           const hit = tryPoint(toPhys(p));
+          if (hit !== null) return hit;
+        }
+        // The part of a normal segment inside the cell (Liang–Barsky), at its midpoint.
+        for (const [u, v] of piece.normalsNear(local)) {
+          const [ax, ay] = toPhys(u);
+          const [bx, by] = toPhys(v);
+          let lo = 0;
+          let hi = 1;
+          const clip = (p0: number, d: number, min: number, max: number) => {
+            if (d === 0) {
+              if (p0 < min || p0 > max) hi = -1;
+              return;
+            }
+            const t0 = (min - p0) / d;
+            const t1 = (max - p0) / d;
+            lo = Math.max(lo, Math.min(t0, t1));
+            hi = Math.min(hi, Math.max(t0, t1));
+          };
+          clip(ax, bx - ax, box.x0, box.x1);
+          clip(ay, by - ay, box.y0, box.y1);
+          if (!(lo <= hi)) continue;
+          const t = (lo + hi) / 2;
+          const hit = tryPoint([ax + t * (bx - ax), ay + t * (by - ay)]);
           if (hit !== null) return hit;
         }
       } else if (piece instanceof DiskPiece) {
