@@ -10,11 +10,12 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 
 | Item | Subject | Tier | Phase | State |
 | --- | --- | --- | --- | --- |
-| V-1 | Path appearance editing page | Light under D10 (contract was Full) | R0 | Merged (#201); independent evidence review pending ([evidence](#v-1-implementation-evidence-2026-10-22)) |
-| V-2 | SVG path-data input page | Light under D10 (contract was Full) | R0 | Merged (#207); independent evidence review pending ([evidence](#v-2-implementation-evidence-2026-10-22)) |
-| V-3 | A07 headed integration page | Full (P3 exit evidence) | R0 | Merged (#209); independent evidence review pending ([evidence](#v-3-implementation-evidence-2026-10-23)) |
+| V-1 | Path appearance editing page | Light under D10 (contract was Full) | R0 | Done: merged (#201), independent review ACCEPTED 2026-10-23 ([review](../evidence/r0-review-closeout-2026-10-23.md#v-1)) |
+| V-2 | SVG path-data input page | Light under D10 (contract was Full) | R0 | Done: merged (#207), independent review ACCEPTED 2026-10-23 ([review](../evidence/r0-review-closeout-2026-10-23.md#v-2)) |
+| V-3 | A07 headed integration page | Full (P3 exit evidence) | R0 | Done: merged (#209), independent review ACCEPTED 2026-10-23 as A07 partial evidence ([review](../evidence/r0-review-closeout-2026-10-23.md#v-3)) |
 | V-4 | A08 headed corpus page | Set by its contract | R1 | Candidate; after the frozen corpus |
 | V-5 | P5 editor-slice plan (contract only) | Full | After V-4 | Not started; planning only, implementation after P3 exit or separate approval (D10) |
+| V-6 | V-1 and V-3 review follow-ups (status crediting, zoom clear, field validity, R2 mesh gate) | Light | Backlog | Not started ([review](../evidence/r0-review-closeout-2026-10-23.md#v-1)) |
 
 ## V-1: path appearance editing
 
@@ -52,7 +53,7 @@ Files: `apps/playground/viz-v1-appearance.html`, `src/viz-v1-appearance.ts` (hos
 
 Notice literals fixed at the first headed run (identical at DPR 1 and 2, Chrome and Edge): `n0` none (so `v1-circle` fill only meshes); `n1` fill only none, stroke on `v1-circle stroke work-limit`, stroke off the same one entry stays, stroke on again two `v1-circle stroke work-limit`; `n2` butt none, round `v1-zigzag stroke fringe-work-cap`; `s4` `v1-zigzag stroke fringe-work-cap`; `s1`, `s2`, `s3`, `s5`, `a6`, `blur`, `a10`, `a7`, `a11`, `a12` none.
 
-Deviation resolved by the user-approved 2026-10-22 amendment of §3.4 (contract §11). Residual: independent evidence review not yet run.
+Deviation resolved by the user-approved 2026-10-22 amendment of §3.4 (contract §11). Independent review ACCEPTED 2026-10-23 ([review](../evidence/r0-review-closeout-2026-10-23.md#v-1)).
 
 ## V-2: SVG path-data input
 
@@ -139,6 +140,8 @@ VZ3-A19 report (informational, identical port calls at both DPRs: fill 129 = 1 +
 | `meshFeatures`     | 600    | 560 / 472     | 40 / 128    | 1024 | 464 / 552     | 0.193 / 0.072                    |
 | `meshInstances`    | 12     | 10 / 12       | 2 / 0       | 16   | 6 / 4         | slot leak caught within 6 cycles |
 
+Note (2026-10-23, review): the `meshInstances` row is a high-water mark (see the next paragraph), not a slot count, so its d and H are not leak headroom and the detectable-fraction column does not apply; the slot counts are D_end 10 / 11 and H 6 / 5 (slot counts paragraph above).
+
 DPR 2 differs only in `meshFeatureLists` (D_peak 4,711, D_end 4,376 / 3,773, d 335 / 938, H 3,816 / 4,419, fractions 0.190 / 0.079). `meshInstances` here is the slot high-water mark (largest slot index plus one, from the draws), which stays 12 at even ends because slot indices are not compacted; the count is 11.
 
 Findings and notes:
@@ -149,7 +152,7 @@ Findings and notes:
 
 Review follow-ups (appended 2026-10-23, PR #209 review READY WITH FOLLOW-UPS). VZ3-A1 now also asserts the static `disabled` attribute in the served HTML. The loss checks assert one in-window application per requested step. VZ3-A19 skips with a report when a per-region key of `capacities` or `freeElements` is missing. The oracle skips layers whose conservative world box misses the point, which leaves its results unchanged and cuts the unit test time. The [contract](viz-v3-a07-integration-contract.md#implementation-note-2026-10-23-primary-standing-instruction) records the measured bound and the interpretations. Re-run on the follow-up sources: `pnpm check` PASS (79 files, 1316 tests); V-3 spec Chrome only, 2 of 2 passed (`2026-10-22T17-25-05-290Z-29272`); VZ3-A19 alone PASS.
 
-Residual: independent evidence review not yet run.
+Independent evidence review ACCEPTED 2026-10-23 as A07 partial evidence ([review](../evidence/r0-review-closeout-2026-10-23.md#v-3)).
 
 ## V-4: A08 headed corpus page (candidate)
 
