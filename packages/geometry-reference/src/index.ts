@@ -8,3 +8,4 @@ export * from './line-fill.js';
 export * from './triangle-mesh.js';
 export * from './fill-region.js';
 export * from './stroke-region.js';
+export * from './a04-region.js';
