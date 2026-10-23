@@ -565,10 +565,108 @@ describe('obligation (e): ∂M extraction splits edges at T-vertices', () => {
     );
     expect(a04StorageCracks(port, moved)).toEqual({ tJunctions: 1, storageCracks: 1 });
   });
+  it('S7: the port mesh T-junction of a storage crack keeps the crack bound', () => {
+    // The mapped T-vertex leaves its edge, so M* has no T-junction; the port mesh still has one.
+    const moved = meshOf(
+      local.map((tri) =>
+        tri.map(([x, y]) => (y === ym ? [phi(x, y)[0] + 2 ** -10, phi(x, y)[1]] : phi(x, y))),
+      ),
+    );
+    const port = meshOf(local);
+    const options = { separateTerms: true, betaC: 2 ** -20, resolution: 2 ** -6 };
+    const alone = a04Measure(kase, moved, options);
+    expect(alone.tJunctions).toBe(0);
+    expect(alone.crackBound).toBe(0);
+    expect(alone.storage).toBeNull();
+    const fed = a04Measure(kase, moved, { ...options, portMesh: port });
+    expect(fed.tJunctions).toBe(0);
+    expect(fed.storage).toEqual({ tJunctions: 1, storageCracks: 1 });
+    expect(fed.crackBound).toBe(a04NextUp(2 ** -19));
+  });
   it('E3-D11: without splitting, the shared side becomes a spurious boundary and B_M > 0', () => {
     const m = a04Measure(kase, mesh, { hooks: { splitAtTVertices: false }, separateTerms: true });
     expect(m.bM!.lo).toBeGreaterThan(0.25);
     expect(m.status).toBe('fail');
+  });
+});
+
+// =============================================================================================
+// S2 of PR #212: the mesh preconditions of ∂M by edge count
+
+describe('S3: the weighted work cap', () => {
+  const band = makeCase({
+    verbs: 'MC',
+    points: [-3, 4.5, -1, -1.5, 1, -1.5, 3, 4.5],
+    paint: stroke(4),
+    c: ORIGIN,
+  });
+  it('charges the exact-arithmetic and sub-arc work, deterministically', () => {
+    const a = a04FreezeCheck(band);
+    const b = a04FreezeCheck(band);
+    expect(a.status).toBe('ok');
+    expect(b.work).toBe(a.work);
+    expect(b.workByKind).toEqual(a.workByKind);
+    for (const kind of ['structure', 'gcd step', 'rational', 'sub-arc node', 'seam split'])
+      expect(a.workByKind![kind] ?? 0).toBeGreaterThan(0);
+  });
+  it('stops at the cap: ORACLE-WORK at the freeze, UNDECIDED at measurement', () => {
+    const cap = a04FreezeCheck(band).work / 4;
+    const f = a04FreezeCheck(band, { workCap: cap });
+    expect(f.status).toBe('ORACLE-WORK');
+    expect(f.work).toBeGreaterThan(cap);
+    const [A, B, C, D] = shift(rect(-4, -1, 4, 4));
+    const m = a04Measure(
+      band,
+      meshOf([
+        [A!, B!, C!],
+        [A!, C!, D!],
+      ]),
+      { workCap: 1000 },
+    );
+    expect(m.status).toBe('undecided');
+    expect(m.reason).toMatch(/^work cap: /);
+  });
+});
+
+describe('S2: meshes outside the ∂M preconditions are UNDECIDED, never PASS', () => {
+  const box = makeCase({ ...polygon(rect(0, 0, 16, 8)), paint: fill(), c: ORIGIN });
+  const [A, B, C, D] = shift(rect(0, 0, 16, 8));
+  const fan = [
+    [A!, B!, C!],
+    [A!, C!, D!],
+  ];
+  it('a valid fan of the rectangle passes (the control)', () => {
+    const m = a04Measure(box, meshOf(fan), { resolution: 2 ** -6 });
+    expect(m.status).toBe('pass');
+  });
+  it("the reviewer's zero-area sliver outside the rectangle is UNDECIDED", () => {
+    const sliver: [number, number][] = [
+      [116, 104],
+      [121, 104],
+      [118.5, 104],
+    ];
+    const m = a04Measure(box, meshOf([...fan, sliver]), { resolution: 2 ** -6 });
+    expect(m.status).toBe('undecided');
+    expect(m.reason).toMatch(/^invalid mesh: zero-area triangle 2$/);
+  });
+  it('a repeated vertex is a zero-area triangle too', () => {
+    const m = a04Measure(box, meshOf([...fan, [A!, A!, B!]]), { resolution: 2 ** -6 });
+    expect(m.reason).toMatch(/zero-area triangle 2/);
+  });
+  it('two overlapping triangles are UNDECIDED, and touching ones are not', () => {
+    const overlap: [number, number][] = [
+      [104, 101],
+      [112, 101],
+      [108, 105],
+    ];
+    const m = a04Measure(box, meshOf([...fan, overlap]), { resolution: 2 ** -6 });
+    expect(m.status).toBe('undecided');
+    expect(m.reason).toMatch(/^invalid mesh: overlapping triangles/);
+    // A triangle sharing only the right side of the rectangle touches, so the mesh is valid.
+    const touching: [number, number][] = [B!, [124, 104], C!];
+    const t = a04Measure(box, meshOf([...fan, touching]), { resolution: 2 ** -6 });
+    expect(t.reason ?? '').not.toMatch(/invalid mesh/);
+    expect(t.status).toBe('fail');
   });
 });
 
