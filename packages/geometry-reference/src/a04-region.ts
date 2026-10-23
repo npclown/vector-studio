@@ -3688,7 +3688,9 @@ class CubicSweep implements StrokePiece {
       if (out.length >= 16 || budget <= 0 || boxBoxDistLo(n.box, box) > this.ir.hi) return;
       if (this.excludesZero(n, poly)) return;
       if (n.size <= size / 4 || n.depth >= 40) {
-        for (const t of [n.t0, (n.t0 + n.t1) / 2]) {
+        // The end normals too: beside a butt end the sweep can be a thin wedge along them.
+        const ts = [n.t0, (n.t0 + n.t1) / 2, ...(n.t1 === 1 ? [1] : [])];
+        for (const t of ts) {
           const k = this.coefAt(t);
           const dx = mid(k.dx);
           const dy = mid(k.dy);
@@ -4321,9 +4323,11 @@ class StrokeTarget implements RegionTarget {
           clip(ax, bx - ax, box.x0, box.x1);
           clip(ay, by - ay, box.y0, box.y1);
           if (!(lo <= hi)) continue;
-          const t = (lo + hi) / 2;
-          const hit = tryPoint([ax + t * (bx - ax), ay + t * (by - ay)]);
-          if (hit !== null) return hit;
+          for (const w of [0.5, 0.25, 0.75]) {
+            const t = lo + w * (hi - lo);
+            const hit = tryPoint([ax + t * (bx - ax), ay + t * (by - ay)]);
+            if (hit !== null) return hit;
+          }
         }
       } else if (piece instanceof DiskPiece) {
         const [cx, cy] = toPhys(piece.centerApprox);
