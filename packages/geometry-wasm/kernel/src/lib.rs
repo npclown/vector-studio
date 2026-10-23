@@ -512,3 +512,8 @@ mod p3_al_ob5_bench;
 // Declared at the end of the file so that no existing line moves.
 #[cfg(test)]
 mod e8_direction_hint_tests;
+
+// D9 E8 unit E8-U2, the canonical source-final knot's tests, test-only. Declared at the end of
+// the file so that no existing line moves.
+#[cfg(test)]
+mod e8_canonical_final_knot_tests;

@@ -421,7 +421,9 @@ impl CubicFillWorkspace {
         command_capacity: usize,
         topology_mode: TopologyMode,
     ) -> Result<CubicFillDiagnostics, CubicFillError> {
-        let all_line_eligible = match self.run_prefix(input, command_capacity) {
+        // E8-U2 (docs/plans/p3-rounded-knot-topology-contract.md, E8 addendum E8.4): the exact
+        // rung snaps every cubic source's final flattened knot to its canonical p3.
+        let all_line_eligible = match self.run_prefix(input, command_capacity, true) {
             Ok(all_line_eligible) => all_line_eligible,
             Err(PrefixFailure::Sizing(_)) => return Ok(self.diagnostics),
             Err(PrefixFailure::Error(error)) => return Err(error),
@@ -465,7 +467,7 @@ impl CubicFillWorkspace {
         input: PathInput<'_>,
         command_capacity: usize,
     ) -> Result<S1View<'_>, PrefixFailure> {
-        self.run_prefix(input, command_capacity)?;
+        self.run_prefix(input, command_capacity, false)?;
         Ok(S1View {
             commands: &self.commands[..self.command_len],
             ranges: &self.contour_ranges[..self.range_len],
@@ -477,10 +479,15 @@ impl CubicFillWorkspace {
 
     /// The statements of `attempt_body` up to the B0 stop point S1, in their order. Returns
     /// `all_line_eligible`, a sizing status other than `PATH_OK`, or the first error.
+    ///
+    /// `canonical_final_knots` (E8-U2, set only by `attempt_body`): after emission and before
+    /// collection, the final flattened knot of every cubic source is replaced by its canonical p3
+    /// (`snap_final_knots`).
     fn run_prefix(
         &mut self,
         input: PathInput<'_>,
         command_capacity: usize,
+        canonical_final_knots: bool,
     ) -> Result<bool, PrefixFailure> {
         self.begin_attempt();
         if input.verbs.len() > self.caps.source_verbs
@@ -507,6 +514,12 @@ impl CubicFillWorkspace {
             .map_err(PrefixFailure::Error)?;
         self.emit(input, sizing_plan, sizing_bounds, command_capacity)
             .map_err(PrefixFailure::Error)?;
+        if canonical_final_knots {
+            snap_final_knots(
+                &mut self.commands[..self.command_len],
+                &self.sources[..self.source_len],
+            );
+        }
         self.collect_contours(all_line_eligible)
             .map_err(PrefixFailure::Error)?;
         self.validate_leaf_partitions()
@@ -1270,6 +1283,44 @@ fn same_bounds_bits(left: Bounds, right: Bounds) -> bool {
         && left.min_y.to_bits() == right.min_y.to_bits()
         && left.max_x.to_bits() == right.max_x.to_bits()
         && left.max_y.to_bits() == right.max_y.to_bits()
+}
+
+/// E8-U2 (E8 addendum E8.4): for every cubic source, the point of its final flattened leaf
+/// command (`end_numerator == 2^depth`) becomes the source's represented canonical p3. The
+/// flattener emits that knot as `origin + (p3 - origin)`, which can differ from p3 for
+/// non-dyadic endpoints. Counts, order and provenance are unchanged; LINE sources, internal
+/// knots and CLOSE commands are not touched. A final leaf whose point already equals the
+/// previous emitted point is skipped, so collection rejects it as `ZeroLengthLeaf` as before;
+/// a snap that makes the leaf zero-length is rejected by collection the same way. On every
+/// exact-rung path that could succeed before, the final knot already equals p3 (the P3.1e and
+/// source-final preflights require it), so the snap writes the value that is there. The zero-length test compares the emitted points,
+/// before any snap.
+pub(crate) fn snap_final_knots(commands: &mut [FlatCommand], sources: &[DecodedSource]) {
+    let mut previous: Option<Point> = None;
+    for command in commands.iter_mut() {
+        let emitted = command.point;
+        if command.verb == VERB_LINE
+            && command.provenance.depth < 32
+            && command.provenance.end_numerator == 1u32 << command.provenance.depth
+        {
+            let canonical = sources.iter().find_map(|source| match *source {
+                DecodedSource::Cubic {
+                    points,
+                    source_verb,
+                    ..
+                } if source_verb == command.provenance.source_verb => Some(points[3]),
+                _ => None,
+            });
+            if let (Some(canonical), Some(point), Some(previous)) = (canonical, emitted, previous) {
+                if !same_point(point, previous) {
+                    command.point = Some(canonical);
+                }
+            }
+        }
+        if emitted.is_some() {
+            previous = emitted;
+        }
+    }
 }
 
 fn same_point(left: Point, right: Point) -> bool {

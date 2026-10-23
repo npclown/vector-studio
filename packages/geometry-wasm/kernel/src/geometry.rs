@@ -684,6 +684,19 @@ fn emit_leaf(
     Ok(())
 }
 
+/// E8-U2 test hook (E8 addendum E8.4, obligation E8-P1): the final knot of a cubic as the
+/// flattener emits it, `origin + (p3 - origin)` in the relative frame of `Cubic::relative`, and
+/// the guard of a leaf at `depth`.
+#[cfg(test)]
+pub(crate) fn e8_test_final_knot(points: [Point; 4], depth: u32) -> Result<(Point, f64), u32> {
+    let cubic = Cubic::relative(points)?;
+    let emitted = Point {
+        x: cubic.original_origin.x + cubic.points[3].x,
+        y: cubic.original_origin.y + cubic.points[3].y,
+    };
+    Ok((emitted, cubic.guard(depth)?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

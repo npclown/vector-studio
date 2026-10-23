@@ -8416,6 +8416,14 @@ mod tests {
 
     #[test]
     fn zero_line_classification_uses_original_source_endpoints() {
+        // E8-U2 (docs/plans/p3-rounded-knot-topology-contract.md, E8 addendum E8.4): the exact
+        // rung now snaps the cubic's final knot, which the flattener emits as 1 + (2^-54 - 1) = 0,
+        // to its canonical p3 = (2^-54, 0), so both paths are admitted by `attempt` (failure to
+        // success; kept as positives). The zero-line classification on original source endpoints
+        // is still observable on the unsnapped S1 prefix (`prepare_prefix`, flag off): the LINE
+        // whose original endpoints are equal is dropped although its emitted points differ, while
+        // the LINE whose emitted points are equal and original endpoints differ is a zero-length
+        // leaf.
         let success = zero_triangle_path(ZeroTriangleKind::Line, None, true, true);
         let original_zero = rounded_cubic_endpoint_line(true);
         let emitted_zero = rounded_cubic_endpoint_line(false);
@@ -8429,57 +8437,39 @@ mod tests {
             MAX_COMMANDS,
         )
         .unwrap();
+        assert!(workspace
+            .prepare_prefix(original_zero.input(FLATTEN_TOLERANCE), MAX_COMMANDS)
+            .is_ok());
         assert_eq!(
+            workspace
+                .prepare_prefix(emitted_zero.input(FLATTEN_TOLERANCE), MAX_COMMANDS)
+                .err(),
+            Some(crate::cubic_fill::PrefixFailure::Error(
+                BridgeError::ZeroLengthLeaf
+            ))
+        );
+        for path in [&original_zero, &emitted_zero] {
             measured_raw_attempt(
                 &mut workspace,
-                &original_zero,
+                path,
                 FLATTEN_TOLERANCE,
                 TOPOLOGY_TOLERANCE,
                 MAX_COMMANDS,
-            ),
-            Err(BridgeError::Topology(TopologyError::KnotMismatch))
-        );
-        assert!(workspace.diagnostics().sizing_invoked);
-        assert_eq!(workspace.diagnostics().flat_status, PATH_OK);
-        assert!(workspace.diagnostics().emission_invoked);
-        assert!(workspace.diagnostics().topology_invoked);
-        assert!(!workspace.diagnostics().rounded_invoked);
-        assert!(workspace.output().is_none());
-        measured_raw_attempt(
-            &mut workspace,
-            &success,
-            FLATTEN_TOLERANCE,
-            TOPOLOGY_TOLERANCE,
-            MAX_COMMANDS,
-        )
-        .unwrap();
-        assert!(workspace.output().is_some());
-
-        assert_eq!(
+            )
+            .unwrap();
+            assert!(workspace.diagnostics().topology_invoked);
+            assert!(!workspace.diagnostics().rounded_topology_invoked);
+            assert!(workspace.output().is_some());
             measured_raw_attempt(
                 &mut workspace,
-                &emitted_zero,
+                &success,
                 FLATTEN_TOLERANCE,
                 TOPOLOGY_TOLERANCE,
                 MAX_COMMANDS,
-            ),
-            Err(BridgeError::ZeroLengthLeaf)
-        );
-        assert!(workspace.diagnostics().sizing_invoked);
-        assert_eq!(workspace.diagnostics().flat_status, PATH_OK);
-        assert!(workspace.diagnostics().emission_invoked);
-        assert!(!workspace.diagnostics().topology_invoked);
-        assert!(!workspace.diagnostics().rounded_invoked);
-        assert!(workspace.output().is_none());
-        measured_raw_attempt(
-            &mut workspace,
-            &success,
-            FLATTEN_TOLERANCE,
-            TOPOLOGY_TOLERANCE,
-            MAX_COMMANDS,
-        )
-        .unwrap();
-        assert!(workspace.output().is_some());
+            )
+            .unwrap();
+            assert!(workspace.output().is_some());
+        }
     }
 
     fn zero_line_source_ceiling(zero_count: usize) -> RawPath {
