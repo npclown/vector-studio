@@ -3375,6 +3375,9 @@ function arcNode(
 /** Seam splits per top-level stroke classification (E3-U2c, contract section 14.8). */
 const SEAM_SPLIT_BUDGET = 24;
 
+/** Sub-arc nodes per normal-segment witness search (E3-U2c). */
+const NORMAL_CANDIDATE_BUDGET = 512;
+
 /** Sub-arc trees are cached to this depth only; deeper sub-arcs are rebuilt on demand. */
 const ARC_CACHE_DEPTH = 14;
 
@@ -3669,17 +3672,21 @@ class CubicSweep implements StrokePiece {
    * the samples, such as the tip of the envelope beside a stationary end. Candidates only:
    * each is tested by exact membership.
    */
-  normalsNear(box: Box): [[number, number], [number, number]][] {
+  normalsNear(poly: LPoly): [[number, number], [number, number]][] {
     const out: [[number, number], [number, number]][] = [];
+    const box = poly.box;
     // Refined to the box's smaller side: under strong anisotropy a cell is a thin local box.
+    // Only sub-arcs with a possible foot in the polygon are followed (a sub-arc whose sweep
+    // equation keeps one sign over the polygon has no normal through it), within a node budget.
     const size = Math.min(box.x1 - box.x0, box.y1 - box.y0);
     const r = (this.ir.lo + this.ir.hi) / 2;
     const mid = (v: Iv) => (v.lo + v.hi) / 2;
-    let budget = 4096;
+    let budget = NORMAL_CANDIDATE_BUDGET;
     const visit = (n: ArcNode) => {
       charge(W_ARC, 1);
       budget -= 1;
       if (out.length >= 16 || budget <= 0 || boxBoxDistLo(n.box, box) > this.ir.hi) return;
+      if (this.excludesZero(n, poly)) return;
       if (n.size <= size / 4 || n.depth >= 40) {
         for (const t of [n.t0, (n.t0 + n.t1) / 2]) {
           const k = this.coefAt(t);
@@ -4290,7 +4297,13 @@ class StrokeTarget implements RegionTarget {
           if (hit !== null) return hit;
         }
         // The part of a normal segment inside the cell (Liang–Barsky), at its midpoint.
-        for (const [u, v] of piece.normalsNear(local)) {
+        const cellPoly = this.polyOf([
+          ivpc(box.x0, box.y0),
+          ivpc(box.x1, box.y0),
+          ivpc(box.x1, box.y1),
+          ivpc(box.x0, box.y1),
+        ]);
+        for (const [u, v] of piece.normalsNear(cellPoly)) {
           const [ax, ay] = toPhys(u);
           const [bx, by] = toPhys(v);
           let lo = 0;
