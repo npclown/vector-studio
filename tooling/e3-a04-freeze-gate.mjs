@@ -65,7 +65,9 @@ export function checkFreeze(root) {
     freeze.freezeCheck.oracleUnsupported !== 0 ||
     freeze.freezeCheck.oracleInconsistent !== 0
   )
-    problems.push('the freeze check left ORACLE-WORK, ORACLE-UNSUPPORTED or ORACLE-INCONSISTENT cases');
+    problems.push(
+      'the freeze check left ORACLE-WORK, ORACLE-UNSUPPORTED or ORACLE-INCONSISTENT cases',
+    );
   if (problems.length === 0) {
     if (freeze.version !== manifest.version)
       problems.push(`version ${freeze.version} differs from the manifest's ${manifest.version}`);
@@ -76,7 +78,9 @@ export function checkFreeze(root) {
     if (manifest.generator.sha256 !== freeze.generatorSha256)
       problems.push('the manifest records a different generator SHA-256 than the freeze note');
     if (freeze.oracleSha256 !== sha256(path.join(root, ORACLE)))
-      problems.push('the oracle changed since the freeze (a new oracle version needs a new freeze)');
+      problems.push(
+        'the oracle changed since the freeze (a new oracle version needs a new freeze)',
+      );
   }
   return { frozen: problems.length === 0, problems, freeze, manifest };
 }

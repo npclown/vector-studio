@@ -339,9 +339,15 @@ export type ClipResult = Readonly<{
  * clipping adds is the f32 error of each new vertex, `P0 + t (P1 - P0)` with `t = b0 / (b0 - b1)`,
  * which is bounded here by the same op-by-op propagation as beta, for the four planes in turn
  * (a vertex made by one plane can be cut by the next). A case whose bound cannot be computed
- * (a denominator within its own error of 0, an f32 overflow) has bound Infinity.
+ * (an f32 overflow) has bound Infinity. The error of t slides the new vertex along its edge, so only
+ * its component normal to the plane (e_t times the plane-normal span of the edge) is counted, not
+ * e_t times the edge length (contract 15.3).
  */
-export function clipBound(mesh: MappedMesh, size: readonly [number, number], beta: number): ClipResult {
+export function clipBound(
+  mesh: MappedMesh,
+  size: readonly [number, number],
+  beta: number,
+): ClipResult {
   const [W, H] = size;
   const px = mesh.approx;
   const margin = beta;
@@ -378,44 +384,53 @@ export function clipBound(mesh: MappedMesh, size: readonly [number, number], bet
         const c0 = p0[axis];
         const c1 = p1[axis];
         // Opposite sides of the plane (the margin makes a near-touch count as crossing).
-        if (!((c0 < plane + margin && c1 > plane - margin) || (c1 < plane + margin && c0 > plane - margin)))
+        if (!(
+          (c0 < plane + margin && c1 > plane - margin) ||
+          (c1 < plane + margin && c0 > plane - margin)
+        ))
           continue;
         if (c0 === c1) continue;
         crossings += 1;
-        const b0 = EXACT(Math.abs(c0 - plane));
-        const b1 = EXACT(Math.abs(c1 - plane));
+        const b0 = Math.abs(c0 - plane);
         const den = Math.abs(c1 - c0);
-        const eIn = stage;
-        const in0: B = { m: b0.m, e: eIn };
-        const in1: B = { m: b1.m, e: eIn };
-        const eDen = addB(flag, in0, in1, den).e;
-        if (!(den > eDen)) {
-          worst = Infinity;
-          break;
-        }
-        const t = ru(b0.m / den);
-        const eT = ru((in0.e + t * eDen) / (den - eDen) + F32_DIV * (t + 1));
+        // Input errors only displace the line through P0 and P1 (every point of a segment between two
+        // points that move by at most e moves by at most e), and the plane intersection is computed
+        // from the moved endpoints. So the inputs enter additively through `stage`, and the terms
+        // below are the rounding of this stage alone.
+        const eIn = 0;
+        // t = b0 / (b0 - b1): the plane distances and their difference each round once.
+        const eB0 = ru(eIn + F32_OP * (b0 + eIn));
+        const eDen = ru(2 * eIn + F32_OP * (den + 2 * eIn) + F32_OP * (b0 + den + 2 * eIn));
+        const t = ru(b0 / den);
+        // The error of t slides the new vertex ALONG the edge. Only its component normal to the
+        // plane changes the clipped region, and that is the slide times den / L, that is e_t * den
+        // (an edge nearly parallel to the plane is within den of it, whatever the slide).
+        const eT = den > eDen ? ru((eB0 + t * eDen) / (den - eDen) + F32_DIV * (t + 1)) : Infinity;
+        const slide = Math.min(ru(eT * den), ru(den + 2 * eIn));
+        // The lerp P0 + t (P1 - P0) itself: input error, the difference, the product and the sum.
         let side = 0;
         for (const a of [0, 1] as const) {
           const d = Math.abs(p1[a] - p0[a]);
           const eD = ru(2 * eIn + F32_OP * (d + 2 * eIn));
-          const prod = ru(d * eT + t * eD + eT * eD);
-          const eProd = ru(prod + F32_OP * (t * d + prod));
-          const eN = ru(eIn + eProd + F32_OP * (Math.abs(p0[a]) + Math.abs(p1[a]) + eProd + eIn));
-          side = Math.max(side, eN);
+          const eProd = ru(t * eD + F32_OP * (t * d + t * eD));
+          side = Math.max(side, ru(eIn + eProd + F32_OP * (Math.abs(p0[a]) + t * d + eProd + eIn)));
         }
-        // The two coordinates of the new vertex err independently.
-        worst = Math.max(worst, ru(Math.hypot(side, side)));
+        worst = Math.max(worst, ru(Math.hypot(side, side) + slide));
       }
       if (!Number.isFinite(worst)) {
         bound = Infinity;
         break;
       }
-      stage = Math.max(stage, worst);
+      stage += worst;
     }
     bound = Math.max(bound, stage - beta);
     if (!Number.isFinite(bound)) break;
   }
   if (flag.overflow) bound = Infinity;
-  return { clipped: triangles > 0, triangles, crossings, bound: Number.isFinite(bound) ? ru(bound) : Infinity };
+  return {
+    clipped: triangles > 0,
+    triangles,
+    crossings,
+    bound: Number.isFinite(bound) ? ru(bound) : Infinity,
+  };
 }

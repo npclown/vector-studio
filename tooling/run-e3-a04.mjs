@@ -47,7 +47,9 @@ if (!gate.frozen) {
 }
 
 const stride = Number(option(['--stride', '--sample'], '1'));
-const shards = Number(option(['--shards'], String(Math.max(1, Math.min(12, os.cpus().length - 2)))));
+const shards = Number(
+  option(['--shards'], String(Math.max(1, Math.min(12, os.cpus().length - 2)))),
+);
 if (!Number.isInteger(stride) || stride < 1 || !Number.isInteger(shards) || shards < 1) {
   console.error('--stride/--sample and --shards take positive integers');
   process.exit(2);
@@ -64,7 +66,9 @@ const wasm = path.resolve(
   ),
 );
 if (!existsSync(wasm)) {
-  console.error(`release WASM not found: ${wasm}\nBuild it with pnpm test:geometry, or pass --wasm.`);
+  console.error(
+    `release WASM not found: ${wasm}\nBuild it with pnpm test:geometry, or pass --wasm.`,
+  );
   process.exit(2);
 }
 
@@ -78,8 +82,12 @@ const git = (...a) =>
 const dirty = (await git('status', '--porcelain')).length > 0;
 const allowDirty = flag('--allow-dirty');
 if (dirty && !allowDirty) {
-  console.error('the working tree is dirty; a dirty run is not accepted as evidence (section 7.4).');
-  console.error('Commit first, or pass --allow-dirty for a development run under .tools/e3-a04-run.');
+  console.error(
+    'the working tree is dirty; a dirty run is not accepted as evidence (section 7.4).',
+  );
+  console.error(
+    'Commit first, or pass --allow-dirty for a development run under .tools/e3-a04-run.',
+  );
   process.exit(2);
 }
 
@@ -129,7 +137,8 @@ const run = (mode, extra = {}) =>
 if ((await run('controls')) !== 0) process.exit(1);
 const controls = JSON.parse(readFileSync(path.join(out, 'controls.json'), 'utf8'));
 const unmet = controls.filter((c) => !c.ok && c.id !== 'E3-PC12');
-for (const c of controls) console.log(`${c.ok ? 'ok  ' : 'FAIL'} ${c.id} ${c.observed} ${c.detail}`);
+for (const c of controls)
+  console.log(`${c.ok ? 'ok  ' : 'FAIL'} ${c.id} ${c.observed} ${c.detail}`);
 if (unmet.length > 0) {
   console.error(`controls not met: ${unmet.map((c) => c.id).join(', ')}; no corpus case is run.`);
   process.exit(1);

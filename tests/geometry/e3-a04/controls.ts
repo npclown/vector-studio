@@ -7,21 +7,10 @@
 // Owned here: E3-PC1 to E3-PC9, E3-PC11, E3-PC14, and E3-PC10 and E3-PC13 re-run through the
 // harness (the oracle-level versions are E3-U2's). E3-PC12 belongs to the GPU model check
 // (E3-U4) and is reported as not run.
-import {
-  type CaseRow,
-  type HarnessHooks,
-  type ScoreOptions,
-  measureCase,
-} from './harness.js';
+import { type CaseRow, type HarnessHooks, type ScoreOptions, measureCase } from './harness.js';
 import { fill, makeCase, polygon, polygons, rect, stroke } from './oracle-cases.js';
 import type { ControlOutcome } from './record.js';
-import {
-  type Tri,
-  earClip,
-  fanTriangles,
-  meshFromTriangles,
-  syntheticPorts,
-} from './synthetic.js';
+import { type Tri, earClip, fanTriangles, meshFromTriangles, syntheticPorts } from './synthetic.js';
 
 type Pt = readonly [number, number];
 
@@ -94,7 +83,9 @@ function tipTriangles(star: readonly Pt[]): Tri[] {
     const qIn = near(tip, [cross(inEdge, (k + 1) % n), cross(inEdge, (k + 2) % n)]);
     const qOut = near(tip, [cross(k, (k + 2) % n), cross(k, (k + 3) % n)]);
     const tri: Tri = [tip, qIn, qOut];
-    const c = (tri[1][0] - tri[0][0]) * (tri[2][1] - tri[0][1]) - (tri[1][1] - tri[0][1]) * (tri[2][0] - tri[0][0]);
+    const c =
+      (tri[1][0] - tri[0][0]) * (tri[2][1] - tri[0][1]) -
+      (tri[1][1] - tri[0][1]) * (tri[2][0] - tri[0][0]);
     out.push(c > 0 ? tri : [tri[0], tri[2], tri[1]]);
   }
   return out;
@@ -113,7 +104,10 @@ function circlePolygon(n: number, radius: number, split = 0.3): Tri[] {
   // so that no dyadic cell center falls on a chord midpoint (where the sagitta is attained).
   const ring: Pt[] = [];
   for (let k = 0; k < n; k += 1) {
-    const a: Pt = [radius * Math.cos((2 * Math.PI * k) / n), radius * Math.sin((2 * Math.PI * k) / n)];
+    const a: Pt = [
+      radius * Math.cos((2 * Math.PI * k) / n),
+      radius * Math.sin((2 * Math.PI * k) / n),
+    ];
     const b: Pt = [
       radius * Math.cos((2 * Math.PI * (k + 1)) / n),
       radius * Math.sin((2 * Math.PI * (k + 1)) / n),
@@ -135,8 +129,18 @@ const DISK = makeCase({
 
 // E3-PC3's S-curve row: the closed S of the corpus (row c03), its two cubics replaced by m
 // inscribed chords each.
-const C1 = [[0, 0], [4, 8], [8, -8], [12, 0]] as const;
-const C2 = [[12, -6], [8, -14], [4, 2], [0, -6]] as const;
+const C1 = [
+  [0, 0],
+  [4, 8],
+  [8, -8],
+  [12, 0],
+] as const;
+const C2 = [
+  [12, -6],
+  [8, -14],
+  [4, 2],
+  [0, -6],
+] as const;
 const S_CURVE = makeCase({
   verbs: 'MCLCZ',
   points: [0, 0, 4, 8, 8, -8, 12, 0, 12, -6, 8, -14, 4, 2, 0, -6],
@@ -147,10 +151,7 @@ const S_CURVE = makeCase({
 const cubicAt = (p: readonly (readonly number[])[], t: number): Pt => {
   const s = 1 - t;
   const w = [s * s * s, 3 * s * s * t, 3 * s * t * t, t * t * t];
-  return [
-    w.reduce((a, b, i) => a + b * p[i]![0]!, 0),
-    w.reduce((a, b, i) => a + b * p[i]![1]!, 0),
-  ];
+  return [w.reduce((a, b, i) => a + b * p[i]![0]!, 0), w.reduce((a, b, i) => a + b * p[i]![1]!, 0)];
 };
 
 /** The largest perpendicular distance from a chord of the m-chord approximation to its arc. */
@@ -200,7 +201,9 @@ function pc1(): ControlOutcome {
   const kase = makeCase({ ...base, paint: fill(), c: ORIGIN });
   const row = run(kase, rectWithMidpoint(-0.26), { separateTerms: true });
   return outcome('E3-PC1', 'FAIL', [row], ([r]) =>
-    r!.status === 'fail' && contains(r!, 0.26) ? null : 'a vertex moved 0.26 px did not fail at 0.26',
+    r!.status === 'fail' && contains(r!, 0.26)
+      ? null
+      : 'a vertex moved 0.26 px did not fail at 0.26',
   );
 }
 
@@ -208,7 +211,9 @@ function pc2(): ControlOutcome {
   const kase = makeCase({ ...base, paint: fill(), c: ORIGIN });
   const row = run(kase, rectWithMidpoint(-0.24), { separateTerms: true });
   return outcome('E3-PC2', 'PASS', [row], ([r]) =>
-    r!.status === 'pass' && contains(r!, 0.24) ? null : 'a vertex moved 0.24 px did not pass at 0.24',
+    r!.status === 'pass' && contains(r!, 0.24)
+      ? null
+      : 'a vertex moved 0.24 px did not pass at 0.24',
   );
 }
 
@@ -225,7 +230,8 @@ function pc3(): ControlOutcome {
   const sRow = run(S_CURVE, earClip(sCurvePolygon(m)), SANDWICH);
   return outcome('E3-PC3', 'FAIL', [circleRow, sRow], ([c, s]) => {
     if (!(known > 0.3 && known <= 1)) return `circle sagitta ${known} is not in (0.3, 1]`;
-    if (!(deviation > 0.3 && deviation <= 1)) return `S-curve deviation ${deviation} not in (0.3, 1]`;
+    if (!(deviation > 0.3 && deviation <= 1))
+      return `S-curve deviation ${deviation} not in (0.3, 1]`;
     if (c!.status !== 'fail') return 'the coarse circle did not fail';
     if (!contains(c!, known, 1e-6)) return `the circle sagitta ${known} is outside [E_lo, E_hi]`;
     if (s!.status !== 'fail') return 'the coarse S-curve did not fail';
@@ -248,7 +254,9 @@ function pc4(): ControlOutcome {
   const good = run(kase, fan);
   const dropped = run(kase, [fan[0]!, fan[1]!, fan[3]!]);
   return outcome('E3-PC4', 'FAIL', [dropped, good], ([bad, ok]) =>
-    bad!.status === 'fail' && ok!.status === 'pass' ? null : 'a dropped interior triangle did not fail',
+    bad!.status === 'fail' && ok!.status === 'pass'
+      ? null
+      : 'a dropped interior triangle did not fail',
   );
 }
 
@@ -293,7 +301,10 @@ function pc7(): ControlOutcome {
   const good = run(kase, farRectangle());
   // One f32 lane of A is perturbed by 2^18 ulps (2^-5): the vertices at u = +-10 move 0.3125 px.
   const hooks: HarnessHooks = {
-    mutateLanes: (l) => ({ ...l, linear: [l.linear[0] + 2 ** -5, l.linear[1], l.linear[2], l.linear[3]] }),
+    mutateLanes: (l) => ({
+      ...l,
+      linear: [l.linear[0] + 2 ** -5, l.linear[1], l.linear[2], l.linear[3]],
+    }),
   };
   const bad = run(kase, farRectangle(), { hooks });
   return outcome('E3-PC7', 'FAIL', [bad, good], ([b, g]) =>
@@ -385,7 +396,10 @@ function pc9(): ControlOutcome {
 function pc10(): ControlOutcome {
   // Closed-form controls through the harness: the rectangle (E = 0), an inscribed 16-gon of the
   // exact circle (E = its sagitta), and a polygon translated by 2^-4 (E = 2^-4).
-  const rectRow = run(makeCase({ ...base, paint: fill(), c: ORIGIN }), fanTriangles(rect(0, 0, 16, 8)));
+  const rectRow = run(
+    makeCase({ ...base, paint: fill(), c: ORIGIN }),
+    fanTriangles(rect(0, 0, 16, 8)),
+  );
   const ngonRow = run(DISK, circlePolygon(16, 8), SANDWICH);
   const x08: Pt[] = [
     [0, 0],
@@ -394,7 +408,10 @@ function pc10(): ControlOutcome {
     [4, 8],
   ];
   const moved = x08.map(([x, y]) => [x, y + 2 ** -4] as Pt);
-  const shiftRow = run(makeCase({ ...polygon(x08), paint: fill(), c: ORIGIN }), fanTriangles(moved));
+  const shiftRow = run(
+    makeCase({ ...polygon(x08), paint: fill(), c: ORIGIN }),
+    fanTriangles(moved),
+  );
   return outcome('E3-PC10', 'INTERVAL', [rectRow, ngonRow, shiftRow], ([r, g, s]) => {
     if (!contains(r!, 0, 1e-6) || r!.eHi! > 2 ** -10 + 1e-6) return 'the rectangle is not E = 0';
     if (!contains(g!, sagitta(16, 8), 1e-6)) return 'the 16-gon interval misses its sagitta';
@@ -423,18 +440,39 @@ function pc13(): ControlOutcome {
     c: [-1, -1],
   });
   const tris: Tri[] = [
-    [[0, 0], [a, 0], [a, a]],
-    [[0, 0], [a, a], [0, a]],
-    [[a, 0], [2 * a, 0], [a, ym]],
-    [[2 * a, 0], [2 * a, a], [a, ym]],
-    [[2 * a, a], [a, a], [a, ym]],
+    [
+      [0, 0],
+      [a, 0],
+      [a, a],
+    ],
+    [
+      [0, 0],
+      [a, a],
+      [0, a],
+    ],
+    [
+      [a, 0],
+      [2 * a, 0],
+      [a, ym],
+    ],
+    [
+      [2 * a, 0],
+      [2 * a, a],
+      [a, ym],
+    ],
+    [
+      [2 * a, a],
+      [a, a],
+      [a, ym],
+    ],
   ];
   const row = run(kase, tris);
   return outcome('E3-PC13', 'PASS', [row], ([r]) => {
     if (r!.status !== 'pass') return `the T-junction mesh is ${r!.status}`;
     if (r!.tJunctions !== 1) return `T-junctions: ${r!.tJunctions}, expected 1`;
     if (r!.storageCracks !== 0) return 'the T-vertex left its edge in M*';
-    if (r!.crackBound === null || !(r!.crackBound >= 2 * r!.betaC)) return 'no crack bound reported';
+    if (r!.crackBound === null || !(r!.crackBound >= 2 * r!.betaC))
+      return 'no crack bound reported';
     return null;
   });
 }
@@ -445,9 +483,11 @@ function pc14(): ControlOutcome {
   const away = makeCase({ ...polygon(rect(5000, 5000, 5016, 5008)), paint: fill() });
   const quiet = run(away, 'empty');
   return outcome('E3-PC14', 'FAIL', [row, quiet], ([r, w]) => {
-    if (r!.status !== 'fail' || r!.windowPoint === null) return 'a missing mesh over Ω did not fail';
+    if (r!.status !== 'fail' || r!.windowPoint === null)
+      return 'a missing mesh over Ω did not fail';
     if (!(r!.windowPoint.r && !r!.windowPoint.m)) return 'the window point did not disagree';
-    if (w!.status !== 'window-empty') return 'a shape away from Ω with no mesh was not window-empty';
+    if (w!.status !== 'window-empty')
+      return 'a shape away from Ω with no mesh was not window-empty';
     return null;
   });
 }
@@ -495,4 +535,3 @@ export function runControls(only: readonly string[] = CONTROL_IDS): ControlOutco
     }
   });
 }
-

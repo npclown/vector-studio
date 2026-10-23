@@ -538,7 +538,10 @@ export function stringifyRecord(record: EvidenceRecord): string {
 }
 
 export function utcStamp(date: Date): string {
-  return date.toISOString().replace(/[-:]/gu, '').replace(/\.\d+Z$/u, 'Z');
+  return date
+    .toISOString()
+    .replace(/[-:]/gu, '')
+    .replace(/\.\d+Z$/u, 'Z');
 }
 
 /**
@@ -579,9 +582,17 @@ export function renderMarkdown(record: EvidenceRecord): string {
   lines.push('', '## Provenance', '');
   for (const [key, value] of Object.entries(record.provenance))
     lines.push(`- ${key}: \`${JSON.stringify(value)}\``);
-  lines.push('', '## Controls', '', '| Control | Expected | Observed | OK | Detail |', '| --- | --- | --- | --- | --- |');
+  lines.push(
+    '',
+    '## Controls',
+    '',
+    '| Control | Expected | Observed | OK | Detail |',
+    '| --- | --- | --- | --- | --- |',
+  );
   for (const c of record.controls)
-    lines.push(`| ${c.id} | ${c.expected} | ${c.observed} | ${c.ok ? 'yes' : 'NO'} | ${c.detail} |`);
+    lines.push(
+      `| ${c.id} | ${c.expected} | ${c.observed} | ${c.ok ? 'yes' : 'NO'} | ${c.detail} |`,
+    );
   lines.push('', '## Counts', '');
   lines.push(
     `Cases ${o.cases}: measured ${o.measured} (PASS ${o.pass}, FAIL ${o.fail}), UNDECIDED ${o.undecided}, window-empty ${o.windowEmpty}, rejected ${o.rejected}.`,
@@ -602,14 +613,16 @@ export function renderMarkdown(record: EvidenceRecord): string {
   table('pair', record.aggregates.byPair);
   table('paint', record.aggregates.byPaint);
   lines.push('', '## Coverage (E3-A8)', '');
-  lines.push(`${record.coverage.covered} of ${record.coverage.cells} declared cells have a measured case.`);
+  lines.push(
+    `${record.coverage.covered} of ${record.coverage.cells} declared cells have a measured case.`,
+  );
   for (const cell of record.coverage.unverified)
     lines.push(`- UNVERIFIED: ${cell.paint} ${cell.transform} ${cell.pair}`);
   lines.push('', '## Rejections (routed to A01 to A03, section 6)', '');
   lines.push(`${record.rejections.length} rejected case(s); the full list is in record.json.`);
   lines.push(
     '',
-    'Acceptance is the Primary\'s, after an independent evidence review. Wall times in record.json are diagnostics only.',
+    "Acceptance is the Primary's, after an independent evidence review. Wall times in record.json are diagnostics only.",
     '',
   );
   return lines.join('\n');

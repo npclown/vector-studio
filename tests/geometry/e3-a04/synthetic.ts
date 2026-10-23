@@ -77,10 +77,7 @@ export function fanTriangles(points: readonly (readonly [number, number])[]): Tr
 
 export type Answer = FillMesh | 'empty' | Readonly<{ failed: StrokeMeshFailureCode }>;
 
-type AnswerFn = (
-  request: FillMeshRequest | StrokeMeshRequest,
-  paint: 'fill' | 'stroke',
-) => Answer;
+type AnswerFn = (request: FillMeshRequest | StrokeMeshRequest, paint: 'fill' | 'stroke') => Answer;
 
 /** Ports whose answers are scripted per request; both paints go through one function. */
 export function syntheticPorts(answer: AnswerFn | Answer): MeshPorts {

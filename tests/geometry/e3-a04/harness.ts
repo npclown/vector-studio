@@ -103,7 +103,7 @@ export function decodeCase(kase: CaseObject): DecodedCase {
     },
     verbs: path.verbs,
     points: path.points.map(unhex),
-    opacity: kase.opacity === undefined ? 1 : unhex(String(kase.opacity)),
+    opacity: kase.opacity === undefined ? 1 : unhex(kase.opacity as string),
     servedOffset: Number(kase.servedOffset ?? 0),
     viewport: [viewport[0]!, viewport[1]!],
   };
@@ -134,7 +134,11 @@ function servingPorts(ports: MeshPorts, k: number, log: PortLogEntry[]): MeshPor
       return {
         status: 'ok',
         results: batch.results.map((r) => {
-          log.push({ paint: 'fill', status: r.status, code: r.status === 'failed' ? r.code : null });
+          log.push({
+            paint: 'fill',
+            status: r.status,
+            code: r.status === 'failed' ? r.code : null,
+          });
           return { ...r, toleranceExponent: r.toleranceExponent + k };
         }),
       };
@@ -389,7 +393,7 @@ function isSingular(a: number, b: number, c: number, d: number): boolean {
   const [p, pe] = mul(a, d);
   const [q, qe] = mul(b, c);
   const e = Math.min(pe, qe);
-  return (p << BigInt(pe - e)) === (q << BigInt(qe - e));
+  return p << BigInt(pe - e) === q << BigInt(qe - e);
 }
 
 function exactProduct(x: number, y: number): readonly [bigint, number] {
@@ -537,11 +541,16 @@ export function scoreRendered(
 
   // A result of `empty` (or no request at all) draws nothing: M = ∅, no stored point, beta = 0.
   if (rendered.kind === 'empty') {
-    const m = a04Measure(oracleCase, { positions: [], indices: [] }, { ...measureOptions, betaC: 0 });
+    const m = a04Measure(
+      oracleCase,
+      { positions: [], indices: [] },
+      { ...measureOptions, betaC: 0 },
+    );
     return done(finish(base, m, 0, 'none', hooks));
   }
 
-  const lanes = hooks.mutateLanes === undefined ? rendered.lanes : hooks.mutateLanes(rendered.lanes);
+  const lanes =
+    hooks.mutateLanes === undefined ? rendered.lanes : hooks.mutateLanes(rendered.lanes);
   const mapped = mapMesh(rendered.offsets, rendered.mesh.indices, lanes, hooks.model ?? {});
   const common = {
     ...base,
@@ -566,7 +575,8 @@ export function scoreRendered(
     crossings: clip.crossings,
     bound: finiteOrNull(clip.bound),
   };
-  if (!Number.isFinite(clip.bound)) return undecided('clip bound not computable', { clip: clipRow });
+  if (!Number.isFinite(clip.bound))
+    return undecided('clip bound not computable', { clip: clipRow });
   if (clip.bound >= TARGET_PX) return undecided('clip bound >= 0.25 px', { clip: clipRow });
   const beta = hooks.omitBeta === true ? 0 : up(mapped.beta + clip.bound);
   if (beta >= 1) return undecided('beta_c >= 1 px (with the clip bound)', { clip: clipRow });
@@ -586,7 +596,9 @@ export function scoreRendered(
       portMesh: { positions: rendered.mesh.positions, indices: rendered.mesh.indices },
     },
   );
-  return done(finish({ ...common, clip: clipRow, noFlip: flipRow }, m, beta, rendered.variant, hooks));
+  return done(
+    finish({ ...common, clip: clipRow, noFlip: flipRow }, m, beta, rendered.variant, hooks),
+  );
 }
 
 const up = (x: number): number => a04NextUp(x);
@@ -630,7 +642,7 @@ function finish(
       ...row,
       status: 'rejected',
       rejection: { source: 'not-drawable', code: m.reason ?? 'not-drawable' },
-    } as Omit<CaseRow, 'ms'>;
+    };
   if (m.status === 'undecided' && m.e === null)
     return { ...row, status: 'undecided', reason: m.reason };
   if (u !== null && u <= TARGET_PX) return { ...row, status: 'pass', reason: null };
@@ -642,7 +654,11 @@ function finish(
 // One call for a corpus case
 
 /** Renders and scores one case with the given ports. */
-export function measureCase(kase: CaseObject, ports: MeshPorts, options: ScoreOptions = {}): CaseRow {
+export function measureCase(
+  kase: CaseObject,
+  ports: MeshPorts,
+  options: ScoreOptions = {},
+): CaseRow {
   return scoreRendered(kase, renderCase(kase, ports), options);
 }
 

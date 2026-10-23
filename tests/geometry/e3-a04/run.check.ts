@@ -89,7 +89,7 @@ describe.skipIf(mode === '')('A04 run', () => {
 
   it.skipIf(mode !== 'finalize')(
     'merges the shards into the evidence record',
-    async () => {
+    () => {
       const { freeze, manifest } = gate();
       if (freeze === null || manifest === null) throw new Error('no freeze note');
       const wasm = process.env.P2_WASM_PATH ?? null;
@@ -101,14 +101,20 @@ describe.skipIf(mode === '')('A04 run', () => {
         for (const line of readFileSync(file, 'utf8').split('\n'))
           if (line.length > 0) rows.push(JSON.parse(line) as RecordRow);
       }
-      const controls = JSON.parse(readFileSync(path.join(out, 'controls.json'), 'utf8')) as ControlOutcome[];
+      const controls = JSON.parse(
+        readFileSync(path.join(out, 'controls.json'), 'utf8'),
+      ) as ControlOutcome[];
       // The corpus is regenerated in this run (E3-Q4) and must be the frozen one.
       const summary = summarizeA04Corpus();
       expect(summary.corpusSha256).toBe(freeze.corpusSha256);
       const provenance = collectProvenance(root, {
         wasmPath: wasm,
         operations: { fill: 'geometry-wasm/fill-v0+r2', stroke: 'geometry-wasm/stroke-v0+r4' },
-        corpus: { version: manifest.version, corpusSha256: summary.corpusSha256, cases: summary.cases },
+        corpus: {
+          version: manifest.version,
+          corpusSha256: summary.corpusSha256,
+          cases: summary.cases,
+        },
         generatorSha256: freeze.generatorSha256,
         shaderIdentitySha256: shaderIdentitySha256(),
       });

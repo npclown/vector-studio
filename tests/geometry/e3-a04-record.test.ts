@@ -129,7 +129,9 @@ function cellRows(over: (cell: number) => RowOverride = () => ({})): RecordRow[]
       for (const zoom of ZOOMS)
         for (const dpr of DPRS) {
           const index = rows.length;
-          rows.push(row(index, { id: `cell${index}`, paint, transform, zoom, dpr, ...over(index) }));
+          rows.push(
+            row(index, { id: `cell${index}`, paint, transform, zoom, dpr, ...over(index) }),
+          );
         }
   return rows;
 }
@@ -210,7 +212,9 @@ describe('verdict (section 7.3, E3-A9)', () => {
   });
   it('a declared cell with no measured case is UNVERIFIED (E3-A8)', () => {
     const rows = cellRows((i) =>
-      i === 5 ? { status: 'rejected', rejection: { source: 'port-failed', code: 'work-limit' } } : {},
+      i === 5
+        ? { status: 'rejected', rejection: { source: 'port-failed', code: 'work-limit' } }
+        : {},
     );
     const record = recordOf(rows, cellLayout);
     expect(record.coverage.unverified).toHaveLength(1);
@@ -280,7 +284,10 @@ describe('E3-A7 and E3-D10: the validator reconciles the record with the corpus'
     expect(validateRecord(lie, cellLayout).join('\n')).toMatch(/verdict does not follow/u);
     const twice = { ...record, cases: [record.cases[0]!, ...record.cases.slice(0, -1)] };
     expect(validateRecord(twice as EvidenceRecord, cellLayout).join('\n')).toMatch(/twice/u);
-    const strata = recordOf(cellRows((i) => (i === 0 ? { stratum: 'C2' } : {})), cellLayout);
+    const strata = recordOf(
+      cellRows((i) => (i === 0 ? { stratum: 'C2' } : {})),
+      cellLayout,
+    );
     expect(validateRecord(strata, cellLayout).join('\n')).toMatch(/is stratum C1, not C2/u);
   });
   it('refuses a dirty run, a status without its evidence, and a wrong corpus size', () => {
@@ -289,9 +296,15 @@ describe('E3-A7 and E3-D10: the validator reconciles the record with the corpus'
     });
     expect(validateRecord(dirty, cellLayout).join('\n')).toMatch(/dirty run is not accepted/u);
     expect(validateRecord(dirty, cellLayout, { allowDirty: true })).toEqual([]);
-    const lying = recordOf(cellRows((i) => (i === 1 ? { u: 0.3 } : {})), cellLayout);
+    const lying = recordOf(
+      cellRows((i) => (i === 1 ? { u: 0.3 } : {})),
+      cellLayout,
+    );
     expect(validateRecord(lying, cellLayout).join('\n')).toMatch(/PASS without U <= 0.25/u);
-    const noCode = recordOf(cellRows((i) => (i === 1 ? { status: 'rejected' } : {})), cellLayout);
+    const noCode = recordOf(
+      cellRows((i) => (i === 1 ? { status: 'rejected' } : {})),
+      cellLayout,
+    );
     expect(validateRecord(noCode, cellLayout).join('\n')).toMatch(/rejected without a code/u);
     const small: CorpusLayout = { cases: 150, counts: { C1: 150 } };
     expect(validateRecord(record, small).join('\n')).toMatch(/corpus cases 144 != 150/u);
@@ -324,13 +337,17 @@ describe('the writer (section 7.4)', () => {
     expect(path.basename(dir)).toBe('20261023T123456Z-r1');
     const parsed = JSON.parse(readFileSync(path.join(dir, 'record.json'), 'utf8')) as unknown;
     expect(parsed).toEqual(JSON.parse(JSON.stringify(record)));
-    expect(readFileSync(path.join(dir, 'record.md'), 'utf8')).toMatch(/Verdict as measured: \*\*PASS\*\*/u);
+    expect(readFileSync(path.join(dir, 'record.md'), 'utf8')).toMatch(
+      /Verdict as measured: \*\*PASS\*\*/u,
+    );
     expect(stringifyRecord(record).split('\n').length).toBeGreaterThan(rows.length);
   });
   it('refuses to replace an existing record', () => {
     const root = path.join(scratch, 'b');
     writeEvidenceRecord(root, record, cellLayout, now);
-    expect(() => writeEvidenceRecord(root, record, cellLayout, now)).toThrow(/refusing to replace/u);
+    expect(() => writeEvidenceRecord(root, record, cellLayout, now)).toThrow(
+      /refusing to replace/u,
+    );
   });
   it('never writes a record that does not reconcile', () => {
     const root = path.join(scratch, 'c');
@@ -371,7 +388,13 @@ describe('freeze gate', () => {
       corpusSha256: sha('corpus'),
       generatorSha256: sha('generator'),
       oracleSha256: sha('oracle'),
-      freezeCheck: { checked: 1, ok: 1, oracleWork: 0, oracleUnsupported: 0, oracleInconsistent: 0 },
+      freezeCheck: {
+        checked: 1,
+        ok: 1,
+        oracleWork: 0,
+        oracleUnsupported: 0,
+        oracleInconsistent: 0,
+      },
     });
     mutate(files);
     for (const [file, text] of Object.entries(files)) {
@@ -409,7 +432,13 @@ describe('freeze gate', () => {
         const note = JSON.parse(f[FREEZE_NOTE]!) as Record<string, unknown>;
         f[FREEZE_NOTE] = JSON.stringify({
           ...note,
-          freezeCheck: { checked: 5, ok: 4, oracleWork: 1, oracleUnsupported: 0, oracleInconsistent: 0 },
+          freezeCheck: {
+            checked: 5,
+            ok: 4,
+            oracleWork: 1,
+            oracleUnsupported: 0,
+            oracleInconsistent: 0,
+          },
         });
       }),
     );
@@ -450,7 +479,11 @@ describe('freeze gate', () => {
       {
         cwd: repo,
         encoding: 'utf8',
-        env: { ...process.env, E3_A04_RUN_MODE: 'controls', E3_A04_RUN_OUT: path.join(scratch, 'x') },
+        env: {
+          ...process.env,
+          E3_A04_RUN_MODE: 'controls',
+          E3_A04_RUN_OUT: path.join(scratch, 'x'),
+        },
       },
     );
     if (existsSync(path.join(repo, FREEZE_NOTE))) return;
