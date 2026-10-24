@@ -519,3 +519,11 @@ mod e8_final_knot_tests;
 // existing line moves.
 #[cfg(test)]
 mod e14_fill_limit_diag_tests;
+
+// D9 E2 unit E2-U1 (docs/plans/d9-e2-stroke-fast-rung-contract.md): the lossless seam merge of
+// the stroke pieces, and its tests. Declared at the end of the file so that no existing line
+// moves.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+mod stroke_merge;
+#[cfg(test)]
+mod stroke_merge_tests;

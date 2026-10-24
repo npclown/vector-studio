@@ -44,7 +44,7 @@ use crate::stroke_outline::{
 
 const CAPS: [StrokeCap; 3] = [StrokeCap::Butt, StrokeCap::Round, StrokeCap::Square];
 const JOINS: [StrokeJoin; 3] = [StrokeJoin::Miter, StrokeJoin::Round, StrokeJoin::Bevel];
-const SEGMENTS: [usize; 10] = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512];
+pub(crate) const SEGMENTS: [usize; 10] = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512];
 const MITER_LIMIT: f64 = 4.0;
 /// Zoom 1, DPR 1 in the s2 mapping `e = floor(log2(0.125 / (zoom * DPR)))`.
 const BASE_EXPONENT: i32 = -3;
@@ -58,13 +58,13 @@ const GOLDEN_ANGLE: f64 = 2.399_963_229_728_653;
 const MAX_TIMED_BUILDS: usize = 101;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Family {
+pub(crate) enum Family {
     Zigzag,
     Chords,
 }
 
 impl Family {
-    fn name(self) -> &'static str {
+    pub(crate) fn name(self) -> &'static str {
         match self {
             Family::Zigzag => "zigzag",
             Family::Chords => "chords",
@@ -89,7 +89,7 @@ fn join_name(join: StrokeJoin) -> &'static str {
 }
 
 /// An open polyline of `segments` LINE verbs, as verbs and little-endian point bytes.
-fn polyline(family: Family, segments: usize) -> (Vec<u8>, Vec<u8>) {
+pub(crate) fn polyline(family: Family, segments: usize) -> (Vec<u8>, Vec<u8>) {
     let mut verbs = Vec::with_capacity(segments + 1);
     let mut bytes = Vec::with_capacity((segments + 1) * 16);
     for index in 0..=segments {

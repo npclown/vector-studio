@@ -691,7 +691,7 @@ fn st_f25_miter_exactly_where_the_ratio_is_at_most_the_limit() {
     }
 }
 
-/// ST-F26 current-cap fixtures: `(name, path, request, expected status)`.
+/// ST-F26 current-cap fixtures: `(name, path, request, expected status at stroke-v0+r5)`.
 pub(crate) fn f26_cases() -> Vec<(&'static str, PathSpec, StrokeRequest, u32)> {
     let mut cases = Vec::new();
     // Pieces 512: a closed 256-gon with bevel joins (256 sweeps and 256 joins).
@@ -735,7 +735,7 @@ pub(crate) fn f26_cases() -> Vec<(&'static str, PathSpec, StrokeRequest, u32)> {
         "edges-1024",
         edges,
         request(2.0, StrokeCap::Square, MITER, 4.0, -3),
-        STROKE_PATH_WORK_LIMIT,
+        0,
     ));
     // Edges 1,025: 62 such subpaths, one two-segment bevel staircase (25) and two square
     // points (4 each).
@@ -756,7 +756,7 @@ pub(crate) fn f26_cases() -> Vec<(&'static str, PathSpec, StrokeRequest, u32)> {
         "edges-1025",
         edges,
         request(2.0, StrokeCap::Square, StrokeJoin::Bevel, 4.0, -3),
-        STROKE_PATH_WORK_LIMIT,
+        0,
     ));
     // n = 256: round caps at r = 200; the next width (r = 500) needs 512 vertices.
     cases.push((
@@ -804,8 +804,59 @@ fn convex_edge(j: u32) -> (i64, i64) {
 fn st_f26_current_cap_fixtures() {
     // ST-U6 (contract section 11.2 note, ST-A0 M3): each at-limit status and its cause is
     // asserted as observed at STROKE_V0_LIMITS. These are current-cap observations that a limit
-    // raise may re-baseline.
-    let causes = [
+    // raise may re-baseline. D9 E2-U1 (stroke-v0+r5) re-baselined them: the seam merge turns
+    // the 512 pieces of `pieces-512` into 2 contours and the 513 of `pieces-513` into 1, which
+    // stay over the 1,024 input vertices, and the edge stacks become `ok`. The `r4` causes are
+    // kept below through the A/B switch `unmerged`.
+    let r5 = [
+        (
+            "pieces-512",
+            Some(StrokeError::Rounded(RoundedFillError::InputLimit)),
+            (512, 2, 1_284),
+        ),
+        (
+            "pieces-513",
+            Some(StrokeError::Rounded(RoundedFillError::InputLimit)),
+            (513, 1, 1_283),
+        ),
+        ("edges-1024", None, (192, 64, 512)),
+        ("edges-1025", None, (193, 65, 517)),
+        ("disk-256", None, (3, 3, 518)),
+        (
+            "disk-512",
+            Some(StrokeError::Front(FrontEndError::DiskLimit)),
+            (0, 0, 0),
+        ),
+    ];
+    let mut ws = workspace();
+    let cases = f26_cases();
+    assert_eq!(cases.len(), r5.len());
+    for ((name, path, request, expected), (cause_name, cause, sizes)) in cases.iter().zip(r5) {
+        assert_eq!(*name, cause_name);
+        let found = status(&mut ws, path, *request);
+        let pieces = ws.pieces().len();
+        println!(
+            "ST-F26 {name}: status {found}, cause {:?}, pieces {pieces}, contours {}, vertices {}",
+            ws.last_error(),
+            ws.merge().contour_total(),
+            ws.merge().vertex_total()
+        );
+        assert_eq!(found, *expected, "{name}");
+        assert_eq!(ws.last_error(), cause, "{name}: cause");
+        assert_eq!(
+            (
+                pieces,
+                ws.merge().contour_total(),
+                ws.merge().vertex_total()
+            ),
+            sizes,
+            "{name}: pieces, contours, vertices"
+        );
+        if *name == "disk-256" {
+            assert!(ws.pieces().iter().any(|piece| piece.disk_vertices == 256));
+        }
+    }
+    let r4 = [
         (
             "pieces-512",
             Some(StrokeError::Rounded(RoundedFillError::InputLimit)),
@@ -828,20 +879,13 @@ fn st_f26_current_cap_fixtures() {
             Some(StrokeError::Front(FrontEndError::DiskLimit)),
         ),
     ];
-    let mut ws = workspace();
-    let cases = f26_cases();
-    assert_eq!(cases.len(), causes.len());
-    for ((name, path, request, expected), (cause_name, cause)) in cases.into_iter().zip(causes) {
+    let mut ws = with_defect(|d| d.unmerged = true);
+    for ((name, path, request, _), (cause_name, cause)) in cases.into_iter().zip(r4) {
         assert_eq!(name, cause_name);
         let found = status(&mut ws, &path, request);
         let pieces = ws.pieces().len();
-        println!(
-            "ST-F26 {name}: status {found}, cause {:?}, pieces {pieces}, stats {:?}",
-            ws.last_error(),
-            ws.rounded_stats()
-        );
-        assert_eq!(found, expected, "{name}");
-        assert_eq!(ws.last_error(), cause, "{name}: cause");
+        assert_eq!(found == 0, cause.is_none(), "{name} (r4)");
+        assert_eq!(ws.last_error(), cause, "{name}: r4 cause");
         match name {
             "pieces-513" => assert_eq!(pieces, MAX_PIECES, "{name}: stops at the cap"),
             "pieces-512" => assert_eq!(pieces, 512, "{name}"),
@@ -851,10 +895,6 @@ fn st_f26_current_cap_fixtures() {
                 STROKE_V0_LIMITS.max_work,
                 "{name}"
             ),
-            "disk-256" => {
-                assert_eq!(found, 0, "{name}");
-                assert!(ws.pieces().iter().any(|piece| piece.disk_vertices == 256));
-            }
             _ => {}
         }
     }

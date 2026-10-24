@@ -262,10 +262,13 @@ describe('ST-U7 joint overlay on real-port meshes (ST-U7b review S4)', () => {
  * Note, 2026-10-23 (E8-U1, docs/plans/p3-rounded-knot-topology-contract.md E8 addendum E8.3):
  * the exact-rung direction hint admits the fill of four of them, which now build (s-curve round
  * and square caps, arch round caps at e = -2, arch butt at e = -1): failure-to-success changes.
+ *
+ * Note, 2026-10-24 (D9 E2-U1, stroke-v0+r5): the seam merge makes the stroke of `blob-miter` ok,
+ * so both ports return meshes and the overlay refuses it with a reason (`unsupported`).
  */
 const EXPECTED_OUTCOMES: Readonly<Record<string, string>> = {
   'blob-round-join': 'port-failure',
-  'blob-miter': 'port-failure',
+  'blob-miter': 'unsupported',
   's-curve-round-caps': 'built',
   's-curve-square-caps': 'built',
   'd-shape-round-join-e-2': 'built',

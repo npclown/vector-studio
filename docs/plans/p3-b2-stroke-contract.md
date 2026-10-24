@@ -422,6 +422,8 @@ Amended 2026-10-21 (ST-U3c round-join shared vertex; see the header notes): the 
 
 Amended 2026-10-21 (ST-U3d/ST-U3e stroke sharing; see the header notes): the identity is now `'geometry-wasm/stroke-v0+r4'` with `stroke_v0_revision() == 4`, superseding revision 3 in the same three places.
 
+Amended 2026-10-24 (D9 E2 unit E2-U1, the seam merge E2-K1 of the [E2 contract](d9-e2-stroke-fast-rung-contract.md#4-e2-k1-seam-merge-lossless)): the pieces reach the arrangement as merged contours, which changes `ok` meshes, so the identity is now `'geometry-wasm/stroke-v0+r5'` with `stroke_v0_revision() == 5`, superseding revision 4 in the same three places.
+
 ### 7.2 Exports
 
 All parameters and returns `u32`, as P2 and V2: `stroke_v0_version`, `stroke_v0_revision`, `stroke_v0_reserve(inputBytes, outputBytes)`, `stroke_v0_input_ptr`, `stroke_v0_input_capacity`, `stroke_v0_output_ptr`, `stroke_v0_output_capacity`, `stroke_v0_memory_epoch`, `stroke_v0_process(inputLength)`, `stroke_v0_result_len`, `stroke_v0_required_output_bytes`, `stroke_v0_dispose`. Each has the meaning of its [`fill_v0_` counterpart](p3-v2-fill-mesh-transport-contract.md#exports). A third module-level engine, `StrokeEngine`, owns this state and shares no field, epoch, arena or workspace with the P2 `Engine` or `FillEngine`. Batch statuses are P2's (`OK=0` to `INTERNAL_ERROR=6`). Path statuses: `OK=0`, `EMPTY=1`, `INVALID_PATH=2`, `INVALID_TOLERANCE=3`, `NUMERIC_RANGE=4`, `WORK_LIMIT=5`, `UNSUPPORTED_GEOMETRY=6`, `INVALID_STROKE=7`.
@@ -497,6 +499,8 @@ Amended 2026-10-20, ST-A0 amendment (S6):
 
 - **Piece store.** The 4,096-record piece store above is `MAX_PIECE_RECORDS: usize = 4_096` at `packages/geometry-wasm/kernel/src/stroke_outline.rs:55`; its overflow is `FrontEndError::PieceLimit` (`stroke_outline.rs:129`), mapped to `work-limit` in §7.8. The 512-piece cap (`MAX_PIECES`, `stroke_outline.rs:49`) is unchanged.
 - **Memory rows.** ST-U3's recorded rows are stale after ST-U4 (the front end grew to 1,255,120 B). ST-U5 re-measured them (and corrected ST-U3's native row, which does not reproduce at `ae91297`: front end 376,992 B, total 17,293,472 B) and recorded them in the [ST-U5 plan section](p3-fill-stroke-meshes.md#b2-st-u5-stroke-export): native heap total **18,171,600 B** (front end 1,255,120 B, `RoundedFillWorkspace` 14,262,272 B, `FillScratch` 2,654,208 B), and `wasm32` linear memory **13,828,096 B** after `stroke_v0_reserve(0, 0)` (1,114,112 B before). The native heap total (18,171,600 B) fits the 48 MiB heap cap; the `wasm32` figure is total linear memory, a different quantity from ST-U3's workspace-parts total (11,690,144 B), so it does not replace that figure but is the current `wasm32` row. The native total supersedes ST-U3's 17,117,344 B. The source limits' fit with P2 ABI v1's per-path limits is a separate check (the paragraph above §7.6's tables) and is unaffected. The table needs no change; the ST-U3 text is left as written.
+
+Amended 2026-10-24 (D9 E2 unit E2-U1, [E2 contract section 7](d9-e2-stroke-fast-rung-contract.md#7-caps-identity-and-performance-gate)): the row "Pieces (contours) per path" (512) now caps the contours after the seam merge; the emitted pieces are bounded by the 4,096 records and by 32,768 stored piece points (`MAX_PIECE_POINTS`, over it `work-limit` (`PieceLimit`)), and `InputLimit` is checked on the merged contours. `STROKE_V0_LIMITS` is unchanged.
 
 ### 7.7 Tolerance
 

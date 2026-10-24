@@ -431,7 +431,83 @@ export function cubicCases(): StrokeCase[] {
       'leaf-factor-two',
     ]),
   );
+  cases.push(...e2Cases());
   return cases;
+}
+
+/** `M R 0`, four quarter cubics with the cause record's constant 0.5522847498, `Z`. */
+function e2Circle(radius: number): { verbs: number[]; points: number[] } {
+  const r = radius;
+  const k = radius * 0.5522847498;
+  return {
+    verbs: [0, 2, 2, 2, 2, 3],
+    points: [
+      r,
+      0,
+      r,
+      k,
+      k,
+      r,
+      0,
+      r,
+      -k,
+      r,
+      -r,
+      k,
+      -r,
+      0,
+      -r,
+      -k,
+      -k,
+      -r,
+      0,
+      -r,
+      k,
+      -r,
+      r,
+      -k,
+      r,
+      0,
+    ],
+  };
+}
+
+/**
+ * D9 E2 unit E2-U1 (docs/plans/d9-e2-stroke-fast-rung-contract.md, section 8): the fixtures
+ * E2-F1 to E2-F8 at e = -3, miter joins, so that ST-O1 and ST-O2 run on their dumps (E2-A3).
+ * Their statuses are asserted natively (`stroke_merge_tests`).
+ */
+function e2Cases(): StrokeCase[] {
+  const sCurve = {
+    verbs: [0, 2, 2],
+    points: [0, 0, 30, 0, 50, 20, 50, 50, 50, 80, 70, 100, 100, 100],
+  };
+  return [
+    cubicCase('E2-F1', e2Circle(64), 1, 'butt', -3),
+    cubicCase('E2-F2', e2Circle(64), 4, 'butt', -3),
+    cubicCase('E2-F3', e2Circle(256), 16, 'butt', -3),
+    cubicCase('E2-F4', e2Circle(16), 16, 'butt', -3),
+    cubicCase('E2-F5', e2Circle(1024), 1, 'butt', -3),
+    cubicCase(
+      'E2-F6',
+      { verbs: [0, 1, 1, 1, 3], points: [0, 0, 100, 0, 100, 100, 0, 100] },
+      4,
+      'butt',
+      -3,
+    ),
+    cubicCase('E2-F7', sCurve, 4, 'butt', -3),
+    cubicCase('E2-F7r', sCurve, 4, 'round', -3),
+    cubicCase(
+      'E2-F8',
+      {
+        verbs: [0, 2, 2, 3],
+        points: [0, 0, 60, 60, 60, -60, 0, 0, -60, 60, -60, -60, 0, 0],
+      },
+      1,
+      'butt',
+      -3,
+    ),
+  ];
 }
 
 type Exact = Readonly<{ x: bigint; y: bigint }>;
