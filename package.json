@@ -41,6 +41,7 @@
     "e3-a04:run": "node tooling/run-e3-a04.mjs",
     "viz-v4:expected": "node tooling/run-viz-v4-expected.mjs",
     "p3-exit:sweep": "node tooling/run-p3-exit-sweep.mjs",
+    "e14:fill-diag": "node tooling/run-e14-fill-diag.mjs",
     "test:p2-identity": "node tooling/compare-p2-wasm.mjs",
     "test:p3-fill-identity": "node tooling/compare-p3-fill-identity.mjs",
     "compare:p3-b0-records": "node tooling/compare-p3-b0-records.mjs",

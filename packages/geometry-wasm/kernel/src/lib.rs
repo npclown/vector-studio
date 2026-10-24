@@ -512,3 +512,8 @@ mod p3_al_ob5_bench;
 // Declared at the end of the file so that no existing line moves.
 #[cfg(test)]
 mod e8_direction_hint_tests;
+
+// D9 E14, the fill cap diagnostic, test-only. Declared at the end of the file so that no
+// existing line moves.
+#[cfg(test)]
+mod e14_fill_limit_diag_tests;
