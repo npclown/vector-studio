@@ -1,6 +1,6 @@
 # P5 execution plan: editor integration slice
 
-Status: DRAFT, 2026-10-24. Written for independent review. D10 places this plan after V-4; it is drafted after the V-4 contract's approval and before V-4 code, which waits for E10, under the user's standing instruction of 2026-10-24 to continue to the next step. It is a plan and contract only: under [D10](d10-roadmap-reset.md) decision 4, P5 implementation waits for the P3 exit or a separate user approval, and nothing here starts code. The P5 entry rule of [`prototype-plan.md`](../prototype-plan.md#current-position-and-plan-entry-rule) is unchanged.
+Status: APPROVED 2026-10-24 under the user's standing instruction of 2026-10-24 (adopt the recommended options and continue), after independent review round 2 READY WITH FOLLOW-UPS, follow-ups applied. P5-Q1 to P5-Q8 are decided as recommended. Implementation still waits for the P3 exit or a separate user approval (D10 decision 4). D10 places this plan after V-4; it is drafted after the V-4 contract's approval and before V-4 code, which waits for E10, under the user's standing instruction of 2026-10-24 to continue to the next step. It is a plan and contract only: under [D10](d10-roadmap-reset.md) decision 4, P5 implementation waits for the P3 exit or a separate user approval, and nothing here starts code. The P5 entry rule of [`prototype-plan.md`](../prototype-plan.md#current-position-and-plan-entry-rule) is unchanged.
 
 Track: visualization. Item: V-5 of the [D9 visualization track plan](d9-visualization-track.md#status-index). Tier: full, because it fixes acceptance criteria, adds packages and dependency edges, and defines product behavior.
 
@@ -82,6 +82,7 @@ Selection, hover, active tool, viewport and camera, history, renderer caches, me
 | `document.duplicate-id` | Two entities share an ID |
 | `document.dangling-reference` | A `children` entry names no node; a `parent` names no page or node; a node's `parent` differs from the owner of the `children` list it is in; or a node is in no `children` list or in more than one |
 | `document.unknown-custom-type` | A `custom` node names a type that no registered extension owns (checked by `editor-core` on load, not by `model`) |
+| `document.invalid-custom-data` | A `custom` node's `data` fails its extension's `validate` (checked by `editor-core` on load) |
 
 Unknown fields are rejected (`document.invalid-field`) in v1, so a later version cannot be mistaken for v1 ([P5-Q3](#9-open-questions)).
 
@@ -102,7 +103,8 @@ Unknown fields are rejected (`document.invalid-field`) in v1, so a later version
 ### 4.2 History
 
 - Undo and redo work on transactions. Undo restores the exact durable content from before the transaction: the serialized document is byte-identical. Redo restores the exact content from after it.
-- **Gestures.** A pointer drag is `beginGesture`, `updateGesture`…, `commitGesture` or `cancelGesture`. Updates change the live document and emit change events, but they create no history entry. Commit creates **one** undo step, from the pre-gesture state to the final state. Cancel restores the pre-gesture state and creates no step.
+- **Gestures.** A pointer drag is `beginGesture`, `updateGesture`…, `commitGesture` or `cancelGesture`. Updates change the live document and emit change events, but they create no history entry. Commit creates **one** undo step, from the pre-gesture state to the final state. Cancel restores the pre-gesture state and creates no step. The gesture calls are internal to the tools, reached only through `input`.
+- **During a gesture**, `undo`, `redo`, `loadDocument` and `setTool` first cancel the gesture, then run; a second `pointerdown` is ignored until the gesture ends. So history never records a step from a base state that no longer exists.
 - A new transaction after an undo clears the redo stack. `loadDocument` clears the history.
 - Selection and viewport changes are never history.
 
@@ -115,11 +117,11 @@ Selection (an ordered set of node IDs), the active tool, the viewport (camera po
 | Tool | Behavior |
 | --- | --- |
 | Rectangle | Drag from a to b creates a rectangle with frame `min(a, b)` to `max(a, b)`, as one gesture; a click without movement creates nothing |
-| Path | Each click adds a line anchor; press-and-drag adds a cubic anchor with symmetric handles; Enter or a click on the first anchor ends it (closed on the first anchor, open on Enter); Escape cancels. The whole creation is one transaction |
+| Path | Each click adds a line anchor; press-and-drag adds a cubic anchor with symmetric handles; Enter or a click on the first anchor ends it (closed on the first anchor, open on Enter); Escape cancels. Until it ends, the path lives in the tool's overlay state, not the document, so no change event or scene update is sent; the whole creation is one transaction at the end |
 | Select, click | Selects the topmost visible node hit at the point, in reverse paint order; shift toggles it; a click on empty canvas clears the selection |
-| Select, marquee | Dragging on empty canvas selects every visible node whose frame intersects the marquee rectangle; shift adds to the selection |
+| Select, marquee | Dragging on empty canvas selects every visible node whose frame intersects the marquee rectangle; shift adds to the selection. A path's frame includes its control points, so a marquee near them can select it; this is accepted in P5 |
 | Move | Dragging a selected node moves every selected frame by the same page delta, as one gesture |
-| Resize | Eight handles on the selection's bounding box; the box is scaled about the opposite handle and every selected frame is mapped by the same affine; sizes clamp at 0. On an axis where the box has size 0, that axis is not scaled and its handles do nothing. One gesture |
+| Resize | Eight handles on the selection's bounding box; the box is scaled about the opposite handle and every selected frame is mapped by the same affine; sizes clamp at 0. On an axis where the box has size 0, that axis is not scaled and its handles do nothing; a node clamped to size 0 on an axis is recovered by undo only, which is intended in P5. One gesture |
 
 **Hit testing (P5).** Let `r = max(w / 2, 4 / zoom)` page units, where `w` is the stroke width, or 0 without a stroke. A rectangle is hit inside its frame when it has a fill, and within `r` of its frame outline in every case. A path, and a custom node through its `toScene` geometry, is hit inside its fill region when it has a fill, and within `r` of its outline in every case. Outlines are flattened by `editor-core` itself at a tolerance of `0.25 / zoom` page units. Exact geometry-port hit testing is deferred ([P5-Q4](#9-open-questions)).
 
@@ -133,7 +135,9 @@ Synchronization with the injected `RendererSceneSynchronization` (`packages/cont
 - **Scene revision.** The projector keeps its own revision, separate from the document revision. It increases by one for every scene it sends, so `revision > baseRevision` always holds.
 - **Snapshots.** It sends `replaceSnapshot` when the renderer is attached, after `loadDocument`, and after any `resync-required` result.
 - **Change sets.** It sends one `RenderChangeSet` after every document change: a committed transaction, a gesture update, commit or cancel, an undo and a redo. After each, the renderer's scene equals the projection of the current document.
-- **Rejection.** An `invalid-scene` result is a projector defect: it emits the structured diagnostic `editor.scene-rejected` and is not retried.
+- **Base revision.** Each change set's `baseRevision` is the `current.revision` of the last result, not the projector's own counter.
+- **Rejection.** On `invalid-scene` the projector emits the structured diagnostic `editor.scene-rejected` with the reason and the node IDs of the rejected set, then marks those nodes as excluded: later snapshots and change sets omit them until a document change touches them again. `unsupported-feature` is reported as `editor.renderer-unsupported` (a host capability fact, for example a renderer without path support); any other reason is a projector defect. Neither is retried unchanged, so one rejection never blocks later edits.
+- **Camera.** `setViewport` calls `setCamera`; on `invalid-camera` the viewport is left unchanged and the command returns `{ ok: false, code: 'editor.invalid-camera' }`.
 
 ## 5. Extension slice
 
@@ -156,7 +160,7 @@ Synchronization with the injected `RendererSceneSynchronization` (`packages/cont
 | P5-A01 | Rectangle and path creation produce the expected nodes through `execute` (1) | Unit tests with literal expected documents |
 | P5-A02 | Click and marquee selection, driven through `input` and read through `query`, follow section 4.4, including reverse paint order, shift, empty-canvas and unfilled-shape cases (1) | Unit tests on fixtures with overlapping nodes |
 | P5-A03 | Move and resize, driven through `input`, map frames as section 4.4 states, unit-box path points unchanged, zero-size axes unscaled (1) | Unit tests, exact values |
-| P5-A04 | A continuous drag with 50 updates creates exactly one undo step; undo gives the byte-identical pre-drag JSON; redo gives the byte-identical post-drag JSON; cancel creates no step (1) | Unit tests |
+| P5-A04 | A continuous drag with 50 updates creates exactly one undo step; undo gives the byte-identical pre-drag JSON; redo gives the byte-identical post-drag JSON; cancel creates no step; `undo` during a drag cancels the drag first and then undoes the previous step (1) | Unit tests |
 | P5-A05 | Failed commands change neither document nor history; selection and viewport never enter history (1) | Unit tests |
 | P5-A06 | `parse(serialize(d))` deep-equals `d`, and `serialize(parse(t)) = t` for the committed fixture documents; IDs, frames, path data and paint order are preserved (2) | Unit tests on fixtures, including `ext.star` |
 | P5-A07 | Each section 3.3 code is returned for its own malformed fixture, and no partial document is produced (2) | Unit tests |
@@ -216,3 +220,9 @@ Independent `reviewer` review: NOT READY, three blocking and nine should-fix ite
 - B2: session commands and `input` make creation, selection, move and resize run through the public API; P5-A02 and P5-A03 say so (section 4.1).
 - B3: `createCustomNode` and the extension command signature (sections 4.1, 5).
 - Should-fix: reference rules, the path frame and zero-size axes, zero-size resize, consistent hit testing, custom-node style, the next-host module graph in P5-A11, the `ARCHITECTURE.md` pointer and a second seeded edge, "P3 A04", the D10 timing note, and negative zero.
+
+## 13. Review round 2 and decisions (2026-10-24)
+
+Round 2: READY WITH FOLLOW-UPS, no blocking item; the five follow-ups are applied: rejection recovery with `baseRevision` from the last result and a separate `unsupported-feature` code; commands during a gesture; the path tool's overlay state; the zero-size clamp; `document.invalid-custom-data`, `setCamera` handling and the marquee note.
+
+Decisions: P5-Q1 to P5-Q8 adopted as recommended under the user's standing instruction of 2026-10-24, including the new runtime dependencies `react`, `react-dom` and `next` (P5-Q1), which are added only when P5-U6 starts.
