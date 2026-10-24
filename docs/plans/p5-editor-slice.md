@@ -1,0 +1,198 @@
+# P5 execution plan: editor integration slice
+
+Status: DRAFT, 2026-10-24. Written for independent review. It is a plan and contract only: under [D10](d10-roadmap-reset.md) decision 4, P5 implementation waits for the P3 exit or a separate user approval, and nothing here starts code. The P5 entry rule of [`prototype-plan.md`](../prototype-plan.md#current-position-and-plan-entry-rule) is unchanged.
+
+Track: visualization. Item: V-5 of the [D9 visualization track plan](d9-visualization-track.md#status-index). Tier: full, because it fixes acceptance criteria, adds packages and dependency edges, and defines product behavior.
+
+This plan owns P5's scope, package layout, document schema v1, command and history semantics, the extension slice, acceptance criteria P5-A01 to P5-A14 and their validation. It makes the five exit-gate bullets of [`prototype-plan.md`, P5](../prototype-plan.md#p5-editor-integration-slice) concrete and does not change them. Product behavior stays owned by [`requirements.md`](../requirements.md), and boundaries by [`ARCHITECTURE.md`](../../ARCHITECTURE.md). Questions are P5-Q1 to P5-Q8.
+
+## 1. Scope
+
+### 1.1 In scope (the slice of `prototype-plan.md`)
+
+1. One document with one page and one viewport.
+2. Rectangle creation and path creation.
+3. Click selection and marquee selection.
+4. Move and resize of the selection.
+5. Commands, transactions, undo and redo.
+6. JSON round trip of the document.
+7. One custom node type registered through the extension boundary.
+8. React client bindings, used from a Next.js client component.
+
+### 1.2 Out of scope
+
+Everything else in [`requirements.md`](../requirements.md), as the [requirement coverage table](../prototype-plan.md#requirement-coverage) says: multiple pages, rotate, snapping, align and distribute, clipboard, layer reordering, groups, frames, masks, symbols, text, gradients, dashes, anchor and handle editing, shortcut configuration, IndexedDB and SSR canvas rendering. P5 builds none of them, and its schema must not make them impossible (section 3.4).
+
+## 2. Packages and dependency direction
+
+The packages follow the reserved graph of [`ARCHITECTURE.md`, Dependency direction](../../ARCHITECTURE.md#dependency-direction). Each new package extends `tooling/boundary-policy.mjs` and `pnpm check:boundaries` in the same unit that creates it.
+
+| Package | Imports | Owns in P5 |
+| --- | --- | --- |
+| `@vector-studio/model` (new) | nothing | Schema v1 types, `parseDocument`, `serializeDocument`, validation codes, ID rules |
+| `@vector-studio/editor-core` (new) | `model`, `contracts` | Commands, transactions, history, session (selection, active tool, viewport), tools, queries, hit testing, the scene projector, the extension registry |
+| `@vector-studio/react` (new) | `editor-core`, `contracts` | `EditorProvider`, `useEditorSelector`, `useEditorCommands`, headless `EditorCanvas` |
+| `apps/next-host` (new) | `react`, `editor-core`, `model`, plus the concrete adapters as host composition | The Next.js client-component host |
+| `apps/playground` | unchanged | Keeps its pages; may host a vanilla P5 page |
+
+- `contracts -> model`, which the reserved graph shows, is **not** added in P5: no contract type needs a model type. The edge stays reserved.
+- `editor-core` reaches the renderer only through `RendererSceneSynchronization` and the camera contract in `packages/contracts/src/scene.ts`. It never imports `renderer-core`, `renderer-webgpu` or `geometry-wasm` ([ADR 0001](../decisions/0001-port-composition.md)).
+- **New runtime dependencies.** `react` and `react-dom` in `@vector-studio/react` (peer dependencies) and `apps/next-host`; `next` in `apps/next-host` only. No renderer, scene-graph or tessellation dependency is added ([`AGENTS.md`](../../AGENTS.md#working-rules)). See [P5-Q1](#9-open-questions).
+
+## 3. Document schema v1
+
+### 3.1 Shape
+
+```ts
+type DocumentV1 = {
+  schemaVersion: 1;
+  id: string;
+  pages: [{ id: string; name: string; children: string[] }]; // exactly one page in P5
+  nodes: Record<string, NodeV1>;
+};
+type NodeBase = { id: string; name: string; parent: string; frame: Frame; opacity: number; visible: boolean };
+type Frame = { x: number; y: number; width: number; height: number }; // page units, axis-aligned
+type NodeV1 =
+  | (NodeBase & { type: 'rectangle'; fill: Color | null; stroke: RectStroke | null })
+  | (NodeBase & { type: 'path'; path: PathData; fill: Color | null; stroke: PathStroke | null })
+  | (NodeBase & { type: 'custom'; customType: string; data: JsonValue });
+```
+
+- `PathData` holds `verbs` (`move`, `line`, `cubic`, `close`) and `points` in the unit box `[0, 1]²` of the node's `frame`, plus `fillRule`. Storing path points relative to the frame makes resize a frame change only (section 4.4).
+- `Color` is `{ r, g, b, a }` in `[0, 1]`. `RectStroke` is `{ color, width }`, the fields of the primitive `SceneStroke` in `contracts`; `PathStroke` is `{ color, width, cap, join, miterLimit }`, the fields of the contract's `PathStroke`. Stroke width is in page units.
+- **Paint order** is the order of `children`: index 0 is painted first. In P5 every node's `parent` is the page.
+- **IDs** are opaque non-empty strings, unique across the document (pages and nodes). `editor-core` takes an injected ID source; tests use a deterministic counter.
+- Numbers are finite binary64 values. `width` and `height` are at least 0; `opacity` is in `[0, 1]`.
+
+### 3.2 What is not in the document
+
+Selection, hover, active tool, viewport and camera, history, renderer caches, meshes, GPU or WASM handles, and React state ([`ARCHITECTURE.md`, State classification](../../ARCHITECTURE.md#state-classification)). The last-open-page envelope is a persistence concern and is out of P5.
+
+### 3.3 Parse and serialize
+
+`serializeDocument(doc)` emits JSON with keys in a fixed order, and `parseDocument(text)` returns `{ ok: true, document }` or `{ ok: false, code, path }`. The codes are:
+
+| Code | When |
+| --- | --- |
+| `document.malformed-json` | The text is not JSON |
+| `document.unsupported-version` | `schemaVersion` is missing, not an integer, or not 1 |
+| `document.invalid-field` | A field has the wrong type or range; `path` names it |
+| `document.duplicate-id` | Two entities share an ID |
+| `document.dangling-reference` | A `children` entry or a `parent` names no node, or the two disagree |
+| `document.unknown-custom-type` | A `custom` node names a type that no registered extension owns (checked by `editor-core` on load, not by `model`) |
+
+Unknown fields are rejected (`document.invalid-field`) in v1, so a later version cannot be mistaken for v1 ([P5-Q3](#9-open-questions)).
+
+### 3.4 Migration path
+
+`schemaVersion` is an integer. A future version adds a `migrate(vN -> vN+1)` step in `model`; v1 adds no migration code. Groups, frames and more pages fit the shape without changing any v1 field: `parent` may name a container node, and `pages` may have more entries.
+
+## 4. Editor core
+
+### 4.1 Commands and transactions
+
+- The public API is `editor.execute(command)` and `editor.query(query)`; every persistent change goes through a command inside a transaction ([`ARCHITECTURE.md`, Cross-cutting policies](../../ARCHITECTURE.md#cross-cutting-policies)).
+- P5 commands: `createRectangle`, `createPath`, `setFrames` (move and resize of several nodes), `setNodeProps` (fill, stroke, opacity, visibility, name, custom `data`), `deleteNodes`, `loadDocument`.
+- A transaction applies all of its changes or none. A command that fails validation returns `{ ok: false, code }` and leaves the document and history unchanged.
+- Each committed transaction increments the document revision and emits one change event with the IDs it touched.
+
+### 4.2 History
+
+- Undo and redo work on transactions. Undo restores the exact durable content from before the transaction: the serialized document is byte-identical. Redo restores the exact content from after it.
+- **Gestures.** A pointer drag is `beginGesture`, `updateGesture`…, `commitGesture` or `cancelGesture`. Updates change the live document and emit change events, but they create no history entry. Commit creates **one** undo step, from the pre-gesture state to the final state. Cancel restores the pre-gesture state and creates no step.
+- A new transaction after an undo clears the redo stack. `loadDocument` clears the history.
+- Selection and viewport changes are never history.
+
+### 4.3 Session state
+
+Selection (an ordered set of node IDs), the active tool, the viewport (camera position and zoom) and hover are editor session state. They are readable through queries and subscriptions and are excluded from serialization and history. Deleting or undoing away a selected node removes it from the selection.
+
+### 4.4 Tools
+
+| Tool | Behavior |
+| --- | --- |
+| Rectangle | Drag from a to b creates a rectangle with frame `min(a, b)` to `max(a, b)`, as one gesture; a click without movement creates nothing |
+| Path | Each click adds a line anchor; press-and-drag adds a cubic anchor with symmetric handles; Enter or a click on the first anchor ends it (closed on the first anchor, open on Enter); Escape cancels. The whole creation is one transaction |
+| Select, click | Selects the topmost visible node hit at the point, in reverse paint order; shift toggles it; a click on empty canvas clears the selection |
+| Select, marquee | Dragging on empty canvas selects every visible node whose frame intersects the marquee rectangle; shift adds to the selection |
+| Move | Dragging a selected node moves every selected frame by the same page delta, as one gesture |
+| Resize | Eight handles on the selection's bounding box; the box is scaled about the opposite handle and every selected frame is mapped by the same affine; sizes clamp at 0. One gesture |
+
+**Hit testing (P5).** A rectangle is hit inside its frame. A path is hit if the point is inside its fill region (when it has a fill) or within `max(stroke.width / 2, 4 / zoom)` page units of its flattened outline, flattened by `editor-core` itself at a tolerance of `0.25 / zoom` page units. A custom node is hit inside its frame. Exact geometry-port hit testing is deferred ([P5-Q4](#9-open-questions)).
+
+### 4.5 Scene projector
+
+`editor-core` maps the document to `contracts` scene data: one `RenderNodeSnapshot` per node, in paint order, with `visible` and `opacity` copied. The node's `transform` is the translation to the frame origin only. A rectangle becomes a `primitive` rectangle of the frame's width and height with zero corner radii. A path's unit-box points are multiplied by the frame's width and height on projection, so stroke width stays in page units and is never scaled by a non-uniform resize. On each committed transaction or gesture update it sends a `RenderChangeSet` to the injected `RendererSceneSynchronization`. Selection outlines and handles are an overlay drawn by the host UI, not document nodes. A custom node is projected through its extension's `toScene` (section 5).
+
+## 5. Extension slice
+
+- The host registers extensions at construction: `createEditor({ extensions: [starExtension], ... })`.
+- An extension declares `{ id, nodeTypes: [{ customType, validate(data), defaults(), toScene(data, frame) }], commands?: [...] }`. `toScene` returns plain `contracts` path or primitive geometry.
+- An extension receives only the public `execute`, `query` and `subscribe` API. It gets no mutable store, no renderer, GPU or WASM handle, and no other extension's internals ([`ARCHITECTURE.md`, Extension boundary](../../ARCHITECTURE.md#extension-boundary)).
+- The P5 sample is `ext.star`: `data = { points: integer 3..32, innerRatio: (0, 1) }`, created by its own command, edited through `setNodeProps`, round-tripped through JSON, and undone like any other node.
+
+## 6. React and Next.js
+
+- `EditorProvider` takes an editor instance created by the host. `useEditorSelector(selector)` is built on `useSyncExternalStore` over editor snapshots; `useEditorCommands()` returns `execute`.
+- `EditorCanvas` is headless: it renders a `<canvas>` and pointer handlers, and it creates the renderer only in an effect through a host-supplied factory, so the WebGPU backend stays a host choice.
+- `apps/next-host` uses one `'use client'` page. **No browser access at module import:** importing `model`, `editor-core` and `react` in Node with no `window`, `document` or `navigator` must not throw.
+- SSR canvas rendering stays out of scope.
+
+## 7. Acceptance criteria
+
+| ID | Criterion (exit-gate bullet) | Method |
+| --- | --- | --- |
+| P5-A01 | Rectangle and path creation produce the expected nodes through `execute` (1) | Unit tests with literal expected documents |
+| P5-A02 | Click and marquee selection follow section 4.4, including reverse paint order, shift and empty-canvas cases (1) | Unit tests on fixtures with overlapping nodes |
+| P5-A03 | Move and resize map frames as section 4.4 states, path points unchanged (1) | Unit tests, exact values |
+| P5-A04 | A continuous drag with 50 updates creates exactly one undo step; undo gives the byte-identical pre-drag JSON; redo gives the byte-identical post-drag JSON; cancel creates no step (1) | Unit tests |
+| P5-A05 | Failed commands change neither document nor history; selection and viewport never enter history (1) | Unit tests |
+| P5-A06 | `parse(serialize(d))` deep-equals `d`, and `serialize(parse(t)) = t` for the committed fixture documents; IDs, frames, path data and paint order are preserved (2) | Unit tests on fixtures, including `ext.star` |
+| P5-A07 | Each section 3.3 code is returned for its own malformed fixture, and no partial document is produced (2) | Unit tests |
+| P5-A08 | Serialized output contains no selection, viewport, history or cache field (2) | Unit test on the key set |
+| P5-A09 | The same command script yields identical documents, history and change events with a recording test renderer and with the WebGPU host (3) | Unit test plus headed GPU spec |
+| P5-A10 | `ext.star` registers, creates, edits, round-trips and undoes through public API only; a type-level test shows the extension context exposes no store, renderer or GPU member (4) | Unit and type tests |
+| P5-A11 | `model`, `editor-core` and `react` import in Node without browser globals (5) | Unit test in a clean Node context |
+| P5-A12 | `apps/next-host` builds with `next build` and its page edits a document in headed Chrome and Edge through `EditorCanvas` (5) | CI build, headed GPU spec |
+| P5-A13 | `pnpm check:boundaries` covers the new packages and rejects a seeded forbidden edge (`editor-core -> renderer-webgpu`) | Boundary test |
+| P5-A14 | Independent `reviewer` review of each unit; the exit record lists evidence for P5-A01 to P5-A13 | Review record |
+
+No performance claim is made in P5. Rendering precision stays UNVERIFIED until A04 evidence exists.
+
+## 8. Units and order
+
+| Unit | Content | Tier under this plan |
+| --- | --- | --- |
+| P5-U1 | `model`: schema types, parse, serialize, codes, fixtures (P5-A06 to A08) | Full (new package, boundary) |
+| P5-U2 | `editor-core`: commands, transactions, history, gestures, session (P5-A01, A04, A05) | Full |
+| P5-U3 | Tools and hit testing (P5-A02, A03) | Light |
+| P5-U4 | Scene projector and recording test renderer (P5-A09 unit half) | Light |
+| P5-U5 | Extension registry and `ext.star` (P5-A10) | Full (public extension contract) |
+| P5-U6 | `@vector-studio/react` and `apps/next-host` (P5-A11, A12, A09 headed half) | Full (new dependencies) |
+| P5-U7 | Exit record and review (P5-A13, A14) | Full |
+
+Order: U1, U2, then U3 to U5 in any order, then U6, then U7. Every unit runs `pnpm check`; headed specs run on the user's PC or are reported NOT RUN.
+
+## 9. Open questions
+
+| ID | Question | Recommendation |
+| --- | --- | --- |
+| P5-Q1 | Add `react`, `react-dom` and `next` as new runtime dependencies in P5-U6? | (a) yes, at the versions current when U6 starts, pinned in the lockfile; the requirement names React and Next.js |
+| P5-Q2 | Store path points relative to the frame (unit box), or in page units? | (a) unit box: resize stays a frame change and undo stays exact |
+| P5-Q3 | Reject unknown fields in v1, or preserve them? | (a) reject: keeps v1 strict until a migration policy exists |
+| P5-Q4 | Hit testing in `editor-core` (section 4.4), or a new geometry hit-test port? | (a) in `editor-core` for P5: a new port is a shared-surface change outside the slice |
+| P5-Q5 | Marquee rule: intersect, or full containment? | (a) intersect, the common editor default |
+| P5-Q6 | Create `apps/next-host`, or a Next.js page inside `apps/playground`? | (a) a separate app: the playground is a Vite app, and mixing build systems complicates both |
+| P5-Q7 | Axis-aligned frames only in P5 (no rotation field)? | (a) yes: rotate is out of the slice; a later version adds a rotation field by migration |
+| P5-Q8 | Which renderer does `apps/next-host` use: P1 primitives and P3 paths through `geometry-wasm`, as V-1 composes them? | (a) yes, the same composition as `apps/playground/src/viz-v1-appearance.ts` |
+
+## 10. Risks
+
+- **P3 exit later than planned.** P5 code waits; this plan stays valid because it depends only on the published `contracts` scene surface.
+- **Scene contract gaps.** If `RenderNodeSnapshot` cannot express a node (for example per-node opacity on paths), the gap is filed as a rendering item, not worked around in `editor-core`.
+- **Next.js build time in CI** may lengthen the Windows job; the build may run as a separate job.
+- **Hit-test flattening** in `editor-core` duplicates kernel work in a simpler form; it is test-sized and replaceable by a later port.
+
+## 11. Gate
+
+On approval, this plan is the P5 execution plan. P5 implementation starts at P5-U1 after the P3 exit, or earlier on a separate user approval (D10 decision 4). The P5 exit is the user's acceptance of the record of P5-U7.
