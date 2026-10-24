@@ -781,6 +781,8 @@ Each unit is its own PR from an updated `main`. ST-U3, ST-U4 and ST-U5 are high-
 
 Amended 2026-10-21: ST-U7's files and units are fixed by the [ST-U7 addendum §6](p3-b2-st-u7-joint-coverage-addendum.md#6-units): ST-U7a (freeze and architecture note), ST-U7b (overlay and composite, CPU), ST-U7c (packet, shader, backend, renderer and the dated notes), ST-U7d (headed fixtures and evidence). The ST-U6 test edits that ST-U7 makes are listed in the addendum's allow-list.
 
+Amended 2026-10-24 (D9 item E2, promoted to R1 by the user): the ST-U9 row's own contract is the [E2 contract](d9-e2-stroke-fast-rung-contract.md), with units E2-U1 to E2-U3.
+
 #### ST-U9 addendum, 2026-10-22: E1 early abort (E1, unit ST-U10)
 
 Status: **APPROVED 2026-10-22 by the user** (independent review round 2 READY WITH FOLLOW-UPS, follow-ups applied). Earlier status, kept as history: DRAFT for Primary review, documentation only. It is the contract step of D9 item E1, "ST-U9 early abort when failure is certain" ([D9](d9-post-mvp1-tracks-proposal.md)), and the ST-U9 addendum under §12.1 that D9 names. No kernel code, threshold or user decision changes with it. The unit that implements it is ST-U10, defined in E1.6. The frozen §12.1 ST-U9 row is unchanged and still means only the family-B fast rung. Early abort is its own item, as the S7 decision and ST-OB6 call it. Every timing below is a **functional observation, not evidence**; this addendum makes no performance claim, and stroke precision stays **UNVERIFIED** against the 0.25 physical-pixel target.
