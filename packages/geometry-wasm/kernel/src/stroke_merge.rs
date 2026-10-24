@@ -6,8 +6,8 @@
 //! `E-(a), E-(b), E+(b), E+(a)` is strictly convex and positive) contributes the boundary-
 //! inclusive hull of its quad and of the samples `C` the contract keeps; every other piece
 //! contributes its hull unchanged. Step 2: a `C` strictly outside its quad across a seam, and
-//! outside no other edge of it, is covered when a band piece that shares the whole seam triple from the other side holds it in
-//! its quad. Step 3: opposite directed edges with bit-identical end points cancel in pairs.
+//! outside no other edge of it, is covered when a band piece that shares the whole seam triple
+//! from the other side holds it in its quad. Step 3: opposite directed edges with bit-identical end points cancel in pairs.
 //! Step 4: the remaining edges are traced into closed contours, taking the outgoing edges of a
 //! vertex in emission order. The winding sum of the edges, and so the nonzero region, is the
 //! union of the pieces as before; only the arrangement input changes.

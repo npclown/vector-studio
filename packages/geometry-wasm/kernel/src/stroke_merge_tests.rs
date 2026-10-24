@@ -933,5 +933,15 @@ fn e2_section_7_caps() {
     assert_eq!(found.contours, 0, "stopped at emission, before the merge");
     let stored: usize = ws.pieces().iter().map(|piece| piece.count).sum();
     assert!(stored <= MAX_PIECE_POINTS);
+    let largest = ws
+        .pieces()
+        .iter()
+        .map(|piece| piece.count)
+        .max()
+        .unwrap_or(0);
+    assert!(
+        stored + largest > MAX_PIECE_POINTS,
+        "stopped by the stored-point cap: one more piece of the largest size would cross it"
+    );
     assert!(ws.pieces().len() < 4_096);
 }
