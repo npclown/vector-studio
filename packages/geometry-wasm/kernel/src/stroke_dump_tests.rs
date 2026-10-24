@@ -276,8 +276,12 @@ fn dump_case(workspace: &mut StrokeWorkspace, case: &Case) -> String {
         .unwrap();
     }
     line.push_str("],\"pieces\":[");
-    let stored: usize = workspace.pieces().iter().map(|piece| piece.count).sum();
-    let complete = stored <= crate::stroke_outline::STROKE_V0_LIMITS.max_input_vertices;
+    // Since D9 E2-U1 every emitted piece's points are stored; the `r4` cap of 1,024 stored
+    // points applies only under the A/B switch `unmerged`.
+    let complete = workspace
+        .pieces()
+        .iter()
+        .all(|piece| workspace.piece_points(piece).is_some());
     for (index, piece) in workspace.pieces().iter().enumerate() {
         if index > 0 {
             line.push(',');

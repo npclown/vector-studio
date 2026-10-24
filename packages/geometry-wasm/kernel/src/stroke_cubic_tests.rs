@@ -180,15 +180,22 @@ fn stationary_classification_is_exact() {
 fn st_f16_cusp_disk_under_wide_limits_and_the_production_node_limit() {
     let path = cubic(F16);
     let request = request(0.125, BUTT, MITER, 4.0, -8);
-    // STROKE_V0_LIMITS: ST-F16's expected status is work-limit (user decision 2026-10-20, the
+    // STROKE_V0_LIMITS: ST-F16's expected status was work-limit (user decision 2026-10-20, the
     // contract's dated note): the front end completes and the arrangement's node cap stops it.
+    // That holds on the `r4` input (the A/B switch `unmerged`). Since D9 E2-U1 the seam merge
+    // gives the arrangement 9 contours instead of 91 pieces, and ST-F16 is `ok`.
     let mut ws = workspace();
+    ws.defects_mut().unmerged = true;
     assert_eq!(status(run(&mut ws, &path, request)), STROKE_PATH_WORK_LIMIT);
     assert_eq!(ws.pieces().len(), 91);
     assert_eq!(
         ws.last_error(),
         Some(StrokeError::Rounded(RoundedFillError::NodeLimit))
     );
+    let mut ws = workspace();
+    assert_eq!(run(&mut ws, &path, request), StrokeOutcome::Mesh);
+    assert_eq!(ws.pieces().len(), 91);
+    assert_eq!(ws.merge().contour_total(), 9);
     // Its literal expectation under the test-only wide limits.
     let mut ws = wide();
     assert_eq!(run(&mut ws, &path, request), StrokeOutcome::Mesh);
@@ -384,16 +391,26 @@ fn st_u4_reversal_near_a_segment_end_is_depth_limited() {
 
 /// #169 review M5: after an `InputLimit` overflow the piece records are kept but their points
 /// are not; `piece_points` reports that with `None` instead of panicking. ST-F15 R3 at
-/// `e = -11` is the listed `InputLimit` case.
+/// `e = -11` is the listed `InputLimit` case on the `r4` input (the A/B switch `unmerged`).
+/// Since D9 E2-U1 every emitted piece's points are stored (over `MAX_PIECE_POINTS` the path is
+/// `PieceLimit`), and the merged R3 is `ok`.
 #[test]
 fn piece_points_after_an_input_limit_overflow() {
     let mut ws = workspace();
+    ws.defects_mut().unmerged = true;
     let outcome = run(&mut ws, &cubic(R3), request(2.0, BUTT, MITER, 4.0, -11));
     assert_eq!(status(outcome), STROKE_PATH_WORK_LIMIT);
     assert!(ws
         .pieces()
         .iter()
         .any(|piece| ws.piece_points(piece).is_none()));
+    let mut ws = workspace();
+    let outcome = run(&mut ws, &cubic(R3), request(2.0, BUTT, MITER, 4.0, -11));
+    assert_eq!(outcome, StrokeOutcome::Mesh);
+    assert!(ws
+        .pieces()
+        .iter()
+        .all(|piece| ws.piece_points(piece).is_some()));
 }
 
 #[test]

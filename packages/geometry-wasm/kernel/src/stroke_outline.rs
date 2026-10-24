@@ -26,6 +26,7 @@ use crate::stroke_cubic::{
     classify_cubic, evaluate, measure_leaf, split_at, split_half, stationary_guard, CubicClass,
     LeafContext, MAX_LEAF_DEPTH,
 };
+use crate::stroke_merge::SeamMerge;
 
 /// Section 7.2 path statuses. ST-U5 publishes them through `stroke_v0_*`.
 pub(crate) const STROKE_PATH_OK: u32 = 0;
@@ -50,9 +51,13 @@ pub(crate) const MAX_PIECES: usize = 512;
 pub(crate) const MAX_DISK_VERTICES: usize = 256;
 /// Largest bisection level `k` (`n = 2^(k+2)`, section 4.4).
 pub(crate) const MAX_DISK_LEVEL: u32 = 6;
-/// Piece records including dropped hulls. Beyond it the path is `PieceLimit` (ST-U4: cubic
-/// leaves and their dropped hulls are bounded only by this record cap and `MAX_PIECES`).
-const MAX_PIECE_RECORDS: usize = 4_096;
+/// Piece records including dropped hulls. Beyond it the path is `PieceLimit`. Since E2-U1 it
+/// bounds the emitted pieces, and `MAX_PIECES` caps the contours after the seam merge (D9 E2
+/// contract section 7).
+pub(crate) const MAX_PIECE_RECORDS: usize = 4_096;
+/// E2 section 7: stored piece points before the merge (512 KiB), checked at emission; over it
+/// the path is `PieceLimit`.
+pub(crate) const MAX_PIECE_POINTS: usize = 32_768;
 /// The depth-first leaf stack: one pending right sibling per level plus the current leaf.
 const LEAF_STACK: usize = MAX_LEAF_DEPTH as usize + 2;
 /// Section 7.5 combined stroke heap cap.
@@ -417,13 +422,20 @@ pub(crate) struct StrokeDefects {
     /// ST-D8 (ST-U4): the leaf test with factor 2 instead of 4.
     #[cfg(test)]
     pub(crate) leaf_factor_two: bool,
+    /// E2-D1 (E2-U1): every strictly-outside sample `C` of a band piece dropped as covered.
+    #[cfg(test)]
+    pub(crate) drop_outside: bool,
+    /// Not a defect: the `stroke-v0+r4` path for the E2-G1 and E2-G2 A/B runs (no seam merge,
+    /// 512 emitted pieces, `InputLimit` on the raw vertex total).
+    #[cfg(test)]
+    pub(crate) unmerged: bool,
 }
 
 #[cfg(test)]
 macro_rules! defect {
     ($name:ident) => {
         #[cfg(test)]
-        fn $name(self) -> bool {
+        pub(crate) fn $name(self) -> bool {
             self.$name
         }
     };
@@ -445,64 +457,74 @@ impl StrokeDefects {
     defect!(knot_join);
     defect!(omit_cusp_disk);
     defect!(leaf_factor_two);
+    defect!(drop_outside);
+    defect!(unmerged);
 }
 
 #[cfg(not(test))]
 impl StrokeDefects {
     #[inline(always)]
-    fn float_miter(self) -> bool {
+    pub(crate) fn float_miter(self) -> bool {
         false
     }
     #[inline(always)]
-    fn equality_bevel(self) -> bool {
+    pub(crate) fn equality_bevel(self) -> bool {
         false
     }
     #[inline(always)]
-    fn unshared_continuation(self) -> bool {
+    pub(crate) fn unshared_continuation(self) -> bool {
         false
     }
     #[inline(always)]
-    fn stroke_implicit_close(self) -> bool {
+    pub(crate) fn stroke_implicit_close(self) -> bool {
         false
     }
     #[inline(always)]
-    fn keep_zero_length(self) -> bool {
+    pub(crate) fn keep_zero_length(self) -> bool {
         false
     }
     #[inline(always)]
-    fn halve_disk(self) -> bool {
+    pub(crate) fn halve_disk(self) -> bool {
         false
     }
     #[inline(always)]
-    fn square_along_normal(self) -> bool {
+    pub(crate) fn square_along_normal(self) -> bool {
         false
     }
     #[inline(always)]
-    fn reversal_as_turn(self) -> bool {
+    pub(crate) fn reversal_as_turn(self) -> bool {
         false
     }
     #[inline(always)]
-    fn fill_tolerance(self) -> bool {
+    pub(crate) fn fill_tolerance(self) -> bool {
         false
     }
     #[inline(always)]
-    fn clockwise_piece(self) -> bool {
+    pub(crate) fn clockwise_piece(self) -> bool {
         false
     }
     #[inline(always)]
-    fn skip_tip_guard(self) -> bool {
+    pub(crate) fn skip_tip_guard(self) -> bool {
         false
     }
     #[inline(always)]
-    fn knot_join(self) -> bool {
+    pub(crate) fn knot_join(self) -> bool {
         false
     }
     #[inline(always)]
-    fn omit_cusp_disk(self) -> bool {
+    pub(crate) fn omit_cusp_disk(self) -> bool {
         false
     }
     #[inline(always)]
-    fn leaf_factor_two(self) -> bool {
+    pub(crate) fn leaf_factor_two(self) -> bool {
+        false
+    }
+    #[inline(always)]
+    pub(crate) fn drop_outside(self) -> bool {
+        false
+    }
+    #[inline(always)]
+    pub(crate) fn unmerged(self) -> bool {
         false
     }
 }
@@ -552,6 +574,8 @@ pub(crate) struct StrokeWorkspace {
     leaf_stack: Vec<LeafEntry>,
     /// ST-G1 `g_off` of the current path.
     g_off: f64,
+    /// E2-K1 seam merge storage and the merged contours.
+    merge: SeamMerge,
     rounded: RoundedFillWorkspace,
     scratch: FillScratch,
     front_bytes: usize,
@@ -582,7 +606,7 @@ struct LeafRange {
     source_end: Option<Triple>,
 }
 
-fn reserve<T>(capacity: usize) -> Result<Vec<T>, u32> {
+pub(crate) fn reserve<T>(capacity: usize) -> Result<Vec<T>, u32> {
     let mut buffer = Vec::new();
     buffer
         .try_reserve_exact(capacity)
@@ -617,7 +641,7 @@ impl StrokeWorkspace {
             segments: reserve(MAX_SEGMENTS)?,
             source: reserve(MAX_SOURCE_SCALARS / 2)?,
             pieces: reserve(MAX_PIECE_RECORDS)?,
-            piece_points: reserve(STROKE_V0_LIMITS.max_input_vertices)?,
+            piece_points: reserve(MAX_PIECE_POINTS)?,
             candidates: reserve(MAX_CANDIDATES)?,
             hull: reserve(2 * MAX_CANDIDATES + 1)?,
             directions: build_directions(),
@@ -628,6 +652,7 @@ impl StrokeWorkspace {
             meta: PieceMeta::default(),
             leaf_stack: reserve(LEAF_STACK)?,
             g_off: 0.0,
+            merge: SeamMerge::reserve()?,
             rounded,
             scratch,
             front_bytes: 0,
@@ -647,6 +672,7 @@ impl StrokeWorkspace {
             workspace.candidates.capacity() * size_of::<Point>(),
             workspace.hull.capacity() * size_of::<Point>(),
             workspace.leaf_stack.capacity() * size_of::<LeafEntry>(),
+            workspace.merge.allocated_bytes(),
         ]
         .into_iter()
         .try_fold(0usize, usize::checked_add)
@@ -699,6 +725,11 @@ impl StrokeWorkspace {
         ))
     }
 
+    /// The E2-K1 merge of the last path (its step-1 polygons and contours).
+    pub(crate) fn merge(&self) -> &SeamMerge {
+        &self.merge
+    }
+
     #[cfg(test)]
     pub(crate) fn defects_mut(&mut self) -> &mut StrokeDefects {
         &mut self.defects
@@ -733,6 +764,7 @@ impl StrokeWorkspace {
         self.meta = PieceMeta::default();
         self.leaf_stack.clear();
         self.g_off = 0.0;
+        self.merge.clear();
         #[cfg(test)]
         {
             self.last_tau = None;
@@ -814,9 +846,16 @@ impl StrokeWorkspace {
         }
         let mut references: [&[Point]; MAX_PIECES] = [&[]; MAX_PIECES];
         let mut contours = 0usize;
-        for piece in self.pieces.iter().filter(|piece| !piece.dropped) {
-            references[contours] = &self.piece_points[piece.start..piece.start + piece.count];
-            contours += 1;
+        if self.defects.unmerged() {
+            for piece in self.pieces.iter().filter(|piece| !piece.dropped) {
+                references[contours] = &self.piece_points[piece.start..piece.start + piece.count];
+                contours += 1;
+            }
+        } else {
+            for contour in self.merge.contours() {
+                references[contours] = contour;
+                contours += 1;
+            }
         }
         if let Err(error) =
             self.rounded
@@ -880,7 +919,20 @@ impl StrokeWorkspace {
         self.classify_joins().map_err(StrokeError::Front)?;
         self.emit(request, r, tolerances)
             .map_err(StrokeError::Front)?;
-        if self.vertex_total > STROKE_V0_LIMITS.max_input_vertices {
+        if self.defects.unmerged() {
+            if self.vertex_total > STROKE_V0_LIMITS.max_input_vertices {
+                return Err(StrokeError::Rounded(RoundedFillError::InputLimit));
+            }
+            return Ok(());
+        }
+        // E2-K1: the lossless seam merge, then the caps of E2 section 7 on its contours.
+        self.merge
+            .merge(&self.pieces, &self.piece_points, self.defects)
+            .map_err(StrokeError::Front)?;
+        if self.merge.contour_total() > MAX_PIECES {
+            return Err(StrokeError::Front(FrontEndError::PieceLimit));
+        }
+        if self.merge.vertex_total() > STROKE_V0_LIMITS.max_input_vertices {
             // The arrangement's own preflight result, after every front-end stage.
             return Err(StrokeError::Rounded(RoundedFillError::InputLimit));
         }
@@ -1788,51 +1840,14 @@ impl StrokeWorkspace {
         t1: f64,
         disk_vertices: usize,
     ) -> Result<bool, FrontEndError> {
-        let points = &mut self.candidates;
-        points.sort_unstable_by(|left, right| {
-            left.x
-                .partial_cmp(&right.x)
-                .unwrap_or(Ordering::Equal)
-                .then(left.y.partial_cmp(&right.y).unwrap_or(Ordering::Equal))
-        });
-        points.dedup_by(|a, b| a.x == b.x && a.y == b.y);
-        if points.len() < 3 {
+        if !boundary_hull(&mut self.candidates, &mut self.hull)? {
             return self.record_dropped(kind, segment, t0, t1, disk_vertices);
         }
-        let first = points[0];
-        let last = points[points.len() - 1];
-        let mut has_area = false;
-        for point in points.iter() {
-            if orient(first, last, *point)? != Ordering::Equal {
-                has_area = true;
-                break;
-            }
-        }
-        if !has_area {
-            return self.record_dropped(kind, segment, t0, t1, disk_vertices);
-        }
-        let hull = &mut self.hull;
-        hull.clear();
-        for point in points.iter().copied() {
-            while hull.len() >= 2
-                && orient(hull[hull.len() - 2], hull[hull.len() - 1], point)? == Ordering::Less
-            {
-                hull.pop();
-            }
-            push_hull(hull, point)?;
-        }
-        let lower = hull.len();
-        for point in points.iter().rev().skip(1).copied() {
-            while hull.len() > lower
-                && orient(hull[hull.len() - 2], hull[hull.len() - 1], point)? == Ordering::Less
-            {
-                hull.pop();
-            }
-            push_hull(hull, point)?;
-        }
-        // The last point is the first one again.
-        hull.pop();
-        if self.emitted >= MAX_PIECES {
+        let hull = &self.hull;
+        // E2 section 7: `MAX_PIECES` caps the merged contours (`front_end`), and the emitted
+        // pieces are bounded by the record cap and the stored-point cap. The `r4` baseline switch
+        // keeps the old reading, 512 emitted pieces checked here.
+        if self.defects.unmerged() && self.emitted >= MAX_PIECES {
             return Err(FrontEndError::PieceLimit);
         }
         if self.pieces.len() >= self.pieces.capacity() {
@@ -1845,7 +1860,14 @@ impl StrokeWorkspace {
             .vertex_total
             .checked_add(count)
             .ok_or(FrontEndError::Invariant)?;
-        if self.vertex_total <= self.piece_points.capacity() {
+        if self.defects.unmerged() {
+            // `r4` stored at most the arrangement's input vertices.
+            if self.vertex_total <= STROKE_V0_LIMITS.max_input_vertices {
+                self.piece_points.extend_from_slice(hull);
+            }
+        } else if self.vertex_total > self.piece_points.capacity() {
+            return Err(FrontEndError::PieceLimit);
+        } else {
             self.piece_points.extend_from_slice(hull);
         }
         self.pieces.push(Piece {
@@ -1904,6 +1926,58 @@ impl StrokeWorkspace {
     }
 }
 
+/// Section 4.2's boundary-inclusive convex hull of `points` (sorted and deduplicated in place),
+/// counter-clockwise from the lexicographically smallest point, into `hull`. Returns `false`
+/// for a zero-area set, whose hull is left unspecified.
+pub(crate) fn boundary_hull(
+    points: &mut Vec<Point>,
+    hull: &mut Vec<Point>,
+) -> Result<bool, FrontEndError> {
+    points.sort_unstable_by(|left, right| {
+        left.x
+            .partial_cmp(&right.x)
+            .unwrap_or(Ordering::Equal)
+            .then(left.y.partial_cmp(&right.y).unwrap_or(Ordering::Equal))
+    });
+    points.dedup_by(|a, b| a.x == b.x && a.y == b.y);
+    if points.len() < 3 {
+        return Ok(false);
+    }
+    let first = points[0];
+    let last = points[points.len() - 1];
+    let mut has_area = false;
+    for point in points.iter() {
+        if orient(first, last, *point)? != Ordering::Equal {
+            has_area = true;
+            break;
+        }
+    }
+    if !has_area {
+        return Ok(false);
+    }
+    hull.clear();
+    for point in points.iter().copied() {
+        while hull.len() >= 2
+            && orient(hull[hull.len() - 2], hull[hull.len() - 1], point)? == Ordering::Less
+        {
+            hull.pop();
+        }
+        push_hull(hull, point)?;
+    }
+    let lower = hull.len();
+    for point in points.iter().rev().skip(1).copied() {
+        while hull.len() > lower
+            && orient(hull[hull.len() - 2], hull[hull.len() - 1], point)? == Ordering::Less
+        {
+            hull.pop();
+        }
+        push_hull(hull, point)?;
+    }
+    // The last point is the first one again.
+    hull.pop();
+    Ok(true)
+}
+
 fn push_hull(hull: &mut Vec<Point>, point: Point) -> Result<(), FrontEndError> {
     if hull.len() >= hull.capacity() {
         return Err(FrontEndError::Invariant);
@@ -1912,7 +1986,7 @@ fn push_hull(hull: &mut Vec<Point>, point: Point) -> Result<(), FrontEndError> {
     Ok(())
 }
 
-fn orient(a: Point, b: Point, c: Point) -> Result<Ordering, FrontEndError> {
+pub(crate) fn orient(a: Point, b: Point, c: Point) -> Result<Ordering, FrontEndError> {
     orient2d(a, b, c).map_err(|_| FrontEndError::NumericRange)
 }
 

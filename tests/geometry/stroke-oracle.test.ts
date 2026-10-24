@@ -477,18 +477,16 @@ describe('ST-U4 cubic strokes through the dump hand-off', () => {
       if (found.status === 'work-limit')
         listed.push(`${source.name}: ${found.failure?.error ?? ''}`);
     }
-    // The listed work-limit cases (ST-A3), recorded in the plan entry.
-    expect(listed).toHaveLength(16);
+    // The listed work-limit cases (ST-A3), recorded in the plan entry: 16 up to stroke-v0+r4;
+    // 15 since D9 E2-U1 (r5), where the seam merge makes one of them ok.
+    expect(listed).toHaveLength(15);
   });
 
   it('ST-F16: one reversal at t* = 1/2, cusp center (0.5, 0.75), n = 32, (0.5, 0.8) inside', () => {
-    // STROKE_V0_LIMITS: the arrangement's node cap stops ST-F16 after a complete front end
-    // (its expected status by user decision, 2026-10-20; contract dated note).
-    expect(entry('ST-F16').status).toBe('work-limit');
-    expect(entry('ST-F16').failure).toEqual({
-      stage: 'arrangement',
-      error: 'Rounded(NodeLimit)',
-    });
+    // STROKE_V0_LIMITS: up to stroke-v0+r4 the arrangement's node cap stopped ST-F16 after a
+    // complete front end (its expected status by user decision, 2026-10-20; contract dated
+    // note). Since D9 E2-U1 (r5) the seam merge gives the arrangement 9 contours, and it is ok.
+    expect(entry('ST-F16').status).toBe('ok');
     // The literal expectation under the kernel's test-only wide arrangement limits.
     const classes = classifyStrokeSource(oracleSource(cubicSource('ST-F16'))).cubics;
     expect(classes.map((cubic) => [cubic.kind, cubic.stationary?.value])).toEqual([['cusp', 0.5]]);

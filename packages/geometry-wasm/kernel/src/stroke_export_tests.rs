@@ -508,7 +508,7 @@ fn assert_area(mesh: &Decoded, expected: f64, tolerance: f64, name: &str) {
 #[test]
 fn identity_constants_match_section_7_1() {
     assert_eq!(STROKE_V0_VERSION, 0);
-    assert_eq!(STROKE_V0_REVISION, 4);
+    assert_eq!(STROKE_V0_REVISION, 5);
     assert_eq!(STROKE_INPUT_MAGIC, 0x3054_4756);
     assert_eq!(STROKE_OUTPUT_MAGIC, 0x3055_4756);
     assert_eq!(STROKE_INPUT_MAGIC.to_le_bytes(), *b"VGT0");
@@ -1262,13 +1262,14 @@ fn former_interim_cubics_are_ok_through_the_export() {
     );
     assert_area(&decoded[2], 4.0, 0.0, "ST-F19");
     // ST-F16 itself (e = -8) is a labelled current-cap fixture since the 2026-10-20 decision:
-    // `work-limit` at STROKE_V0_LIMITS, never `unsupported-geometry`.
+    // `work-limit` at STROKE_V0_LIMITS up to `r4`, never `unsupported-geometry`; since D9 E2-U1
+    // (`r5`, seam merge) it is `ok`.
     let f16 = TestPath::new(5)
         .m(0.0, 0.0)
         .c([1.0, 1.0, 0.0, 1.0, 1.0, 0.0])
         .width(0.125)
         .exponent(-8);
-    assert_eq!(status_of(f16), STROKE_PATH_WORK_LIMIT);
+    assert_eq!(status_of(f16), STROKE_PATH_OK);
     // ST-U3's own interim fixture (w = 2, e = -3) is now also a current-cap `work-limit`.
     let interim = TestPath::new(4)
         .m(0.0, 0.0)

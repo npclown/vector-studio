@@ -106,8 +106,13 @@ fn observe_path(
     observe(workspace, &path.verbs, &path.bytes(), request, off)
 }
 
+/// A workspace on the `stroke-v0+r4` arrangement input (no E2-K1 seam merge). The E1 fixtures
+/// and E1-C1 were fixed on that input, and E1-K1 is a property of the arrangement, so since D9
+/// E2 unit E2-U1 they run on it through the A/B switch `unmerged`.
 fn with_limits(limits: RoundedFillLimits) -> StrokeWorkspace {
-    StrokeWorkspace::with_limits(limits).expect("the test workspace reserves")
+    let mut workspace = StrokeWorkspace::with_limits(limits).expect("the test workspace reserves");
+    workspace.defects_mut().unmerged = true;
+    workspace
 }
 
 fn limits_with_work(max_work: u64) -> RoundedFillLimits {
@@ -219,6 +224,7 @@ fn e1_f1_edges_1024_aborts_at_k1() {
     assert_edges_1024_record(&on, "E1-F1");
     // The production workspace aborts the same way.
     let mut production = StrokeWorkspace::new().expect("the stroke workspace reserves");
+    production.defects_mut().unmerged = true;
     assert_eq!(observe_path(&mut production, &path, request, false), on);
     let off = observe_path(&mut ws, &path, request, true);
     assert_on_off_equal(&on, &off, STROKE_V0_LIMITS.max_work, "E1-F1");
@@ -510,11 +516,11 @@ fn e1_fill_workspace_has_no_checkpoint() {
 // ---- The ignored on-off differential and max_work sweep over E1-C1 (E1.4 item 2, E1.5) ----
 
 #[derive(Clone, Debug)]
-struct CorpusCase {
-    name: String,
-    request: StrokeRequest,
-    verbs: Vec<u8>,
-    bytes: Vec<u8>,
+pub(crate) struct CorpusCase {
+    pub(crate) name: String,
+    pub(crate) request: StrokeRequest,
+    pub(crate) verbs: Vec<u8>,
+    pub(crate) bytes: Vec<u8>,
 }
 
 fn parse_bits(text: &str) -> f64 {
@@ -522,7 +528,7 @@ fn parse_bits(text: &str) -> f64 {
 }
 
 /// The `P3STKIN1` input format of `stroke_dump_tests` (no flags).
-fn read_corpus(text: &str) -> Vec<CorpusCase> {
+pub(crate) fn read_corpus(text: &str) -> Vec<CorpusCase> {
     let mut lines = text.lines();
     assert_eq!(lines.next(), Some("P3STKIN1"), "input magic");
     lines
