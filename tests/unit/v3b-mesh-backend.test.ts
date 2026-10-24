@@ -530,7 +530,7 @@ const surface = {
 };
 
 const interim = (diagnostics: readonly RendererDiagnostic[]) =>
-  diagnostics.filter((diagnostic) => diagnostic.code === 'render.path-mesh-interim-failure');
+  diagnostics.filter((diagnostic) => diagnostic.code === 'render.path-mesh-failure');
 
 describe('V3b backend lifecycle (V3-A13)', () => {
   it('V3-A13: reads requiresMeshPipeline at attach, requests the mesh pipeline at initialization and recovery, and emits mesh-pipeline-unavailable once per generation', async () => {
@@ -555,7 +555,6 @@ describe('V3b backend lifecycle (V3-A13)', () => {
     expect(first.createPrimitiveScene.mock.calls[0]![4]).toEqual({ meshPipeline: true });
     expect(interim(diagnostics).map((diagnostic) => diagnostic.context)).toEqual([
       {
-        interim: 'd8',
         nodeId: null,
         failureScope: 'renderer',
         failureCode: 'mesh-pipeline-unavailable',
@@ -563,6 +562,9 @@ describe('V3b backend lifecycle (V3-A13)', () => {
         paint: null,
       },
     ]);
+    expect(interim(diagnostics)[0]!.message).toBe(
+      'Mesh paths are not drawn (renderer mesh-pipeline-unavailable).',
+    );
     service.replaceSnapshot({
       identity,
       revision: 1,
@@ -641,14 +643,13 @@ describe('V3b backend lifecycle (V3-A13)', () => {
       severity: 'warning',
       generation: 1,
       context: {
-        interim: 'd8',
         nodeId: 'p00',
         failureScope: 'path',
         failureCode: 'unsupported-geometry',
         toleranceExponent: -3,
       },
     });
-    expect(emitted[0]!.message.startsWith('D8-interim:')).toBe(true);
+    expect(emitted[0]!.message.startsWith('Path ')).toBe(true);
     backend.invalidate({ reason: 'interaction' });
     clock.flush();
     expect(interim(diagnostics)).toHaveLength(40);

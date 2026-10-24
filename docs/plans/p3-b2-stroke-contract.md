@@ -618,6 +618,8 @@ V3's D8-interim notice context gains `paint: 'fill' | 'stroke' | null`: `'fill'`
 
 Amended 2026-10-21 by ST-U7: the failure-code table loses `composition-unsupported` and gains `overlay-unsupported` (renderer scope, `paint: null`, one notice per marked overlay variant). It is D8-interim and is removed with the TypeScript builder at the R2/K1 placement decision.
 
+E11-U4 pointer (section 9.8), 2026-10-24: the notices are now `render.path-mesh-failure` without the `interim` key; `overlay-unsupported` is O3 while its builder ships ([E11-U4 addendum](d9-e11-u4-failure-behavior-addendum.md)).
+
 ## 10. C04 items for the stroke transport and draw
 
 Under the carve-out extended by B2-Q9 (a), `stroke_v0` is a functional transport v0 and the stroke draw a functional packet extension, both disposable and UNVERIFIED. Nothing here is the C04 layout.
@@ -778,6 +780,8 @@ Each unit is its own PR from an updated `main`. ST-U3, ST-U4 and ST-U5 are high-
 | ST-U9  | Full  | Conditional: a certified direct-tessellation fast rung (family B), only if ST-U3b's report and the user ask for it; its own contract                                                                                                               | Fixed by its contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | ST-U4, probe |
 
 Amended 2026-10-21: ST-U7's files and units are fixed by the [ST-U7 addendum §6](p3-b2-st-u7-joint-coverage-addendum.md#6-units): ST-U7a (freeze and architecture note), ST-U7b (overlay and composite, CPU), ST-U7c (packet, shader, backend, renderer and the dated notes), ST-U7d (headed fixtures and evidence). The ST-U6 test edits that ST-U7 makes are listed in the addendum's allow-list.
+
+Amended 2026-10-24 (D9 item E2, promoted to R1 by the user): the ST-U9 row's own contract is the [E2 contract](d9-e2-stroke-fast-rung-contract.md), with units E2-U1 to E2-U3.
 
 #### ST-U9 addendum, 2026-10-22: E1 early abort (E1, unit ST-U10)
 

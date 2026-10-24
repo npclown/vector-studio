@@ -36,7 +36,7 @@ import {
 } from '../support/v3a-path-harness.js';
 
 // P3 V3 contract unit V3a: port consumption (section b), buckets in use (c), cache and memo
-// (d) and the D8-interim outcome (h). Functional evidence only: precision is UNVERIFIED.
+// (d) and the failure outcome (h). Functional evidence only: precision is UNVERIFIED.
 
 const tagsOf = (port: ScriptedFillMeshPort, call = -1) =>
   port.calls.at(call)!.map((request) => request.tag);
@@ -51,7 +51,7 @@ function notice(
   // paint-free port-version and mesh-pipeline-unavailable codes.
   const paint =
     failureCode === 'port-version' || failureCode === 'mesh-pipeline-unavailable' ? null : 'fill';
-  return { interim: 'd8', nodeId, failureScope, failureCode, toleranceExponent, paint };
+  return { nodeId, failureScope, failureCode, toleranceExponent, paint };
 }
 
 describe('V3a port consumption and cache key', () => {
@@ -815,17 +815,16 @@ describe('V3a failure classes, memo and notices', () => {
     expect(port.callCount).toBe(1);
   });
 
-  it('V3-A8: notices format as the D8-interim warning of section h', () => {
-    expect(DIAGNOSTIC_CODES.PATH_MESH_INTERIM_FAILURE).toBe('render.path-mesh-interim-failure');
+  it('V3-A8: notices format as the path mesh failure warning (section h, E11-U4)', () => {
+    expect(DIAGNOSTIC_CODES.PATH_MESH_FAILURE).toBe('render.path-mesh-failure');
     const diagnostic = pathMeshNoticeDiagnostic(notice('p', 'path', 'work-limit', -3), 7);
-    expect(diagnostic.message.startsWith('D8-interim:')).toBe(true);
+    expect(diagnostic.message.startsWith('Path ')).toBe(true);
     expect({ ...diagnostic, message: 'checked above' }).toEqual({
-      code: 'render.path-mesh-interim-failure',
+      code: 'render.path-mesh-failure',
       severity: 'warning',
       message: 'checked above',
       generation: 7,
       context: {
-        interim: 'd8',
         nodeId: 'p',
         failureScope: 'path',
         failureCode: 'work-limit',

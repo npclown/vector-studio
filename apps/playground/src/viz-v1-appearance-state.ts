@@ -7,6 +7,7 @@ import type {
   SceneColor,
   SceneIdentity,
 } from '@vector-studio/contracts';
+import { PATH_NOTICE_CODE } from './path-notices.js';
 import {
   VIZ_V1_BACKGROUND,
   VIZ_V1_TARGETS,
@@ -507,9 +508,9 @@ export type ParsedNotice = Readonly<{
   toleranceExponent: number | null;
 }>;
 
-export const NOTICE_CODE = 'render.path-mesh-interim-failure';
+export const NOTICE_CODE = PATH_NOTICE_CODE;
 
-/** Reads a D8-interim diagnostic; null for any other event. */
+/** Reads a path mesh failure diagnostic; null for any other event. */
 export function parseNotice(event: {
   code: string;
   sequence: number;

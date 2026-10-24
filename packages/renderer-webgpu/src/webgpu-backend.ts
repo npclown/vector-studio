@@ -119,7 +119,7 @@ const DEFAULT_CAPTURE_TIMEOUT_MS = 5000;
 /** E10 contract, section 3.2: the canvas usage that a frame capture needs. */
 const CAPTURE_CANVAS_USAGE = 0x10 | 0x01;
 const COPY_SOURCE_USAGE = 0x01;
-/** A packet carries at most this many D8-interim notices (P3 V3 contract, section h). */
+/** A packet carries at most this many path mesh failure notices (P3 V3 contract, section h). */
 const NOTICES_PER_PACKET = 32;
 
 /** An array check that does not narrow a typed value to any[]. */
@@ -839,7 +839,6 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       this.#diagnostics.emit(
         pathMeshNoticeDiagnostic(
           Object.freeze({
-            interim: 'd8',
             nodeId: null,
             failureScope: 'renderer',
             failureCode: 'mesh-pipeline-unavailable',
