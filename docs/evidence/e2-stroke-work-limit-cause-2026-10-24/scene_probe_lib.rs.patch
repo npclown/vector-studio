@@ -1,0 +1,13 @@
+diff --git a/packages/geometry-wasm/kernel/src/lib.rs b/packages/geometry-wasm/kernel/src/lib.rs
+index 56ea7a1..b53143a 100644
+--- a/packages/geometry-wasm/kernel/src/lib.rs
++++ b/packages/geometry-wasm/kernel/src/lib.rs
+@@ -407,6 +407,8 @@ mod stroke_export_tests;
+ // same reason as above.
+ #[cfg(test)]
+ mod stroke_early_abort_tests;
++#[cfg(test)]
++mod _e2_scene_probe;
+ 
+ #[cfg(target_arch = "wasm32")]
+ struct GlobalStrokeEngine(UnsafeCell<stroke_export::StrokeEngine>);

@@ -1,0 +1,47 @@
+//! SCRATCH, not committed: E2 diagnosis of the E11-U2 scene strokes.
+use std::time::Instant;
+use crate::rounded_line_fill::RoundedFillLimits;
+use crate::stroke_cubic_tests::WIDE_TEST_LIMITS;
+use crate::stroke_outline::{StrokeCap, StrokeJoin, StrokeOutcome, StrokeRequest, StrokeWorkspace, STROKE_V0_LIMITS};
+
+fn run(ws: &mut StrokeWorkspace, req: StrokeRequest, verbs: &[u8], bytes: &[u8]) -> String {
+    let t = Instant::now();
+    let out = ws.build(req, verbs, bytes).expect("selfcheck");
+    let us = t.elapsed().as_micros();
+    let st = ws.rounded_stats();
+    let pieces = ws.pieces().iter().filter(|p| !p.dropped).count();
+    let records = ws.pieces().len();
+    let emitted: usize = ws.pieces().iter().filter(|p| !p.dropped).map(|p| p.count).sum();
+    let status = match out { StrokeOutcome::Mesh => "ok".to_string(), StrokeOutcome::Status(s) => format!("s{s}") };
+    let err = format!("{:?}", ws.last_error());
+    let tris = match out { StrokeOutcome::Mesh => ws.mesh().map_or(0, |(_, t, _)| t.len() / 3), _ => 0 };
+    format!("{status}\t{err}\t{records}\t{pieces}\t{emitted}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{tris}\t{us}",
+        st.input_vertices, st.edges, st.pair_checks, st.events, st.sections, st.nodes, st.cells, st.work_units)
+}
+
+#[test]
+#[ignore]
+fn e2_scene_probe() {
+    let path = std::env::var("E2_SCENE").unwrap();
+    let text = std::fs::read_to_string(path).unwrap();
+    let mut prod = StrokeWorkspace::new().unwrap();
+    let wide_limits: RoundedFillLimits = WIDE_TEST_LIMITS;
+    let mut wide = StrokeWorkspace::with_limits(wide_limits).unwrap();
+    let wide_on = std::env::var("E2_WIDE").is_ok();
+    for line in text.lines() {
+        let f: Vec<f64> = line.split(' ').map(|v| v.parse().unwrap()).collect();
+        let (i, zoom, dpr, e, width, cap, join, miter) = (f[0] as usize, f[1], f[2], f[3] as i32, f[4], f[5] as u8, f[6] as u8, f[7]);
+        let nv = f[8] as usize;
+        let verbs: Vec<u8> = f[9..9 + nv].iter().map(|v| *v as u8).collect();
+        let np = f[9 + nv] as usize;
+        let pts = &f[10 + nv..10 + nv + np];
+        let mut bytes = Vec::new();
+        let mut rmax: f64 = 0.0;
+        for c in pts.chunks(2) { bytes.extend(c[0].to_le_bytes()); bytes.extend(c[1].to_le_bytes()); rmax = rmax.max((c[0]*c[0]+c[1]*c[1]).sqrt()); }
+        let req = StrokeRequest { request_id: 1, width, cap: [StrokeCap::Butt, StrokeCap::Round, StrokeCap::Square][cap as usize], join: [StrokeJoin::Miter, StrokeJoin::Round, StrokeJoin::Bevel][join as usize], miter_limit: miter, exponent: e };
+        let a = run(&mut prod, req, &verbs, &bytes);
+        let b = if wide_on { run(&mut wide, req, &verbs, &bytes) } else { String::new() };
+        println!("ROW\t{i}\t{}\t{e}\t{width}\t{cap}\t{join}\t{}\t{a}\t|\t{b}", rmax * zoom * dpr, width * zoom * dpr, );
+    }
+    let _ = STROKE_V0_LIMITS;
+}
