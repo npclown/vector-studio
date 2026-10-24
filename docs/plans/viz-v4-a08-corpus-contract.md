@@ -87,11 +87,10 @@ Each case and variant gets one status, recorded with its reason:
 
 | Status | Meaning |
 | --- | --- |
-| `RENDERED` | Drawn, captured, and every check of section 5.1 passed; then judged PASS, FAIL or `UNDECIDED` by section 5.2 |
+| `RENDERED` | Drawn, captured, and every check of section 5.1 passed. The offline runner then judges each `RENDERED` case PASS, FAIL or UNDECIDED (section 5.2); that judgment is not a status |
 | `KERNEL-REJECTED` | The port returned a failure (A01 evidence, not A08) |
 | `REGION-ONLY` | The renderer issued `fringe-work-cap` or `fringe-unsupported` for the path |
-| `UNDECIDED` | No pixel fails a gate, but at least one pixel lies in a section 5.2 uncertainty margin with a value that would fail there |
-| `EMPTY-CROP` | The path covers no pixel of `Ω` |
+| `EMPTY-CROP` | The path covers no pixel of `Ω` ∩ canvas |
 | `MESH-MISMATCH` | The browser's mesh bytes differ from Node's for the same case |
 
 ### 4.5 Test hook
@@ -104,7 +103,7 @@ Each case and variant gets one status, recorded with its reason:
 
 - The mesh is the port's output for the case, regenerated in Node by the same release WASM and checked against the browser's bytes (`MESH-MISMATCH` otherwise).
 - The reference boundary is the port's `boundaryEdges` (`packages/contracts/src/geometry.ts`), the edges the fringe builder consumes, mapped to physical pixels by E3's CPU model of the K4 shader mapping ([E3 section 7.1](d9-e3-b4-precision-contract.md#71-where-it-runs)), giving `p*` and the per-case bound `β_c`. O02's "edges used by exactly one region triangle" is not used: on a mesh with slab T-junctions (E3-K2, E3-C12) it would label interior half-edges as boundary.
-- Vertices outside the viewport are allowed. Clipping follows E3-Q11 (a): the viewport is the guard band and clipping is modelled, so the frame edge is not a coverage boundary and pixels are judged only inside `Ω`.
+- Vertices outside the viewport are allowed. Clipping follows E3-Q11 (a): the viewport is the guard band and clipping is modelled, so the frame edge is not a coverage boundary and pixels are judged only inside `Ω` ∩ canvas (E3's `Ω` extends 2 px beyond the viewport; the capture does not).
 - Corners and sectors follow O02's pairing rule on `boundaryEdges`; a failed pairing is `REGION-ONLY` if the renderer also reported it, otherwise a V-4 failure.
 - **Expected statuses.** `KERNEL-REJECTED`, `REGION-ONLY` and `EMPTY-CROP` are determined in Node before any headed run, by the same WASM and `renderer-core` code. They are committed as a literal list with the subset manifest; a headed status that differs from it is reported and makes the run INCONCLUSIVE.
 
@@ -112,16 +111,16 @@ Each case and variant gets one status, recorded with its reason:
 
 G1, G2 and G3 are O02's, with its 2 px, 1 px and 0.708 px classes unchanged. The drawn boundary is known only within `β_c` of the boundary at `p*`, so a pixel center at exact distance `d` from the `p*` boundary has a true distance in `[d − β_c, d + β_c]`. Each gate is decided per pixel as E3 decides its U and L bounds ([VZ4-Q2](#8-open-questions)):
 
-- **G1 (Q4).** A pixel with `d − β_c ≥ 2` must have `obs` within 2/255 of 255 inside and of 0 outside; a violation FAILS. A pixel with `d < 2 ≤ d + β_c` that violates is UNDECIDED; one that complies is not counted.
+- **G1 (Q4).** A pixel with `d − β_c ≥ 2` must have `obs` within 2/255 of 255 inside and of 0 outside; a violation FAILS. A pixel with `d − β_c < 2 ≤ d + β_c` that violates is UNDECIDED; one that complies is not counted.
 - **G2 (Q4).** A pixel with `obs ≥ 128` is classified inside. A misclassified pixel with `d + β_c ≤ 1` passes, one with `d − β_c > 1` FAILS, and one between is UNDECIDED.
-- **G3 (Q9).** O02's rule in full: the four counts of a pixel are an order-independent multiset; pixels with `d + β_c ≤ 0.708` px inside or on the boundary require all four counts equal to 1 (at 1x, the center count); elsewhere every count is at most 1. A pixel in the `β_c` margin of the 0.708 class is held to "at most 1".
-- **Cracks.** A count-0 sample within 1.104 px of a port-mesh edge that has a mesh vertex in its interior (a T-junction edge) is a GPU crack. Under the approved A01 amendment (E3-Q10 (b)) it is A01 evidence: it is reported with its width and excluded from G3's "equal to 1" rule, never from "at most 1".
+- **G3 (Q9).** O02's rule in full: the four counts of a pixel are an order-independent multiset. All four counts must equal 1 (at 1x, the center count) when the pixel center is inside the region at `p*` and `d − β_c > 0`, or when `d + β_c ≤ 0.708` px on either side. Every other pixel is held to "at most 1"; that includes the `β_c` margins of both classes.
+- **Cracks.** A T-junction edge is a port-mesh edge with a mesh vertex in its interior. A pixel whose center lies within `0.3953 + 2β_c` px (4x) or `2β_c` px (1x) of a mapped T-junction edge, and that shows a count-0 sample or a coverage deficit, is a GPU crack. Under the approved A01 amendment (E3-Q10 (b)) it is A01 evidence: it is reported with its width and excluded from G1, G2 and G3's "equal to 1" rule, never from "at most 1".
 - New metric code is needed for the margins and the crack exclusion: the `metrics-o02.ts` helpers fix the 1 px and 2 px classes on exact distance with no margin. V-4 reuses O02's RLE, crop and distance primitives and adds `tests/visual/viz-v4/metrics.ts`.
 
 ### 5.3 Verdict
 
 - **PASS** when no gated case of `fringe-1x` or `fringe-4x` at DPR 1, 1.5 and 2 FAILS in either browser, and the INCONCLUSIVE conditions do not hold.
-- **INCONCLUSIVE** when, at any gated DPR in either browser, more than 5 % of the gated cases expected `RENDERED` are not `RENDERED`, or are `UNDECIDED`; or when a headed status differs from the expected-status list of section 5.1.
+- **INCONCLUSIVE** when any gated case is UNDECIDED; or when, at any gated DPR in either browser, more than 5 % of the gated cases expected `RENDERED` are not `RENDERED`; or when a headed status differs from the expected-status list of section 5.1.
 - **FAIL** otherwise. The failing cases are listed with their key, variant and gate.
 
 ### 5.4 Reported, with no threshold
@@ -167,7 +166,7 @@ Headed runs are not possible in the cloud container; they run on the user's PC t
 | VZ4-Q3 | Zoom `z = 1` only, or all three E3 zooms? | (a) `z = 1`: coverage is per physical pixel; zoom is A04's axis |
 | VZ4-Q4 | Strokes: report only, or gate them with the same Q4? | (a) report: section k covers fill; a stroke gate needs its own full-tier decision |
 | VZ4-Q5 | The test hooks as rendering item E10 (full tier, both-track review), or a V-4 page that rebuilds the mesh pipeline itself? | (a) E10: a rebuilt pipeline would not be the product path that A08 evidences |
-| VZ4-Q6 | The INCONCLUSIVE threshold of 5 % of expected-`RENDERED` gated cases not `RENDERED` or `UNDECIDED` | (a) 5 %: O02 tolerated about 9 % (130 of 143), and expected rejections are already removed by the Node pre-run |
+| VZ4-Q6 | The INCONCLUSIVE threshold of 5 % of expected-`RENDERED` gated cases not `RENDERED` (any UNDECIDED case is INCONCLUSIVE regardless) | (a) 5 %: O02 tolerated about 9 % (130 of 143), and expected rejections are already removed by the Node pre-run |
 | VZ4-Q7 | Transform subset T0, T2, T5, T7 for named fills | (a) as stated: identity, generic rotation, negative determinant, strong anisotropy |
 
 ## 9. Units and order
@@ -188,9 +187,13 @@ Satisfies nothing yet. After approval, V-4 is complete when VZ4-A1 to VZ4-A12 ha
 
 ## 12. Review round 1 (2026-10-24)
 
-Independent `reviewer` review: NOT READY, three blocking and eight should-fix items, all applied in this revision.
+Independent `reviewer` review: NOT READY, three blocking and eight should-fix items. Applied in revision 2; B1 and S6 were completed in revision 3 (round 2).
 
 - B1: the `β_c` widening of the G1 and G2 classes changed Q4; replaced by per-pixel UNDECIDED margins (section 5.2, VZ4-Q2).
 - B2: the O02 boundary rule mislabels T-junction half-edges; the reference is now the port's `boundaryEdges`, and GPU cracks are routed to A01 (section 5.1, 5.2).
 - B3: `GUARD-BAND` contradicted E3-Q11 (a) and made PASS unreachable on off-viewport rows; clipping is now modelled as in E3, and expected statuses are fixed in Node before the headed run (section 5.1, 5.3).
 - S4 to S11: the E3-U3 dependency (VZ4-D5); one meaning per status; G3 stated in full; controls widened with a negative control (VZ4-A8); VZ4-A5 made testable; DPR 1.5 key rule and gated count without DPR 3 (section 3); new metric code stated; the X1 "not counted" guard (section 11).
+
+## 13. Review round 2 (2026-10-24)
+
+NOT READY, two blocking and six should-fix items, all applied in revision 3: the G1 margin now covers `2 ≤ d < 2 + β_c`; G3's "all four equal 1" class includes every interior pixel; any UNDECIDED gated case makes the run INCONCLUSIVE; the crack zone is `0.3953 + 2β_c` (4x) or `2β_c` (1x) and applies to G1 and G2 too; UNDECIDED is an offline judgment, not a page status; pixels are judged in `Ω` ∩ canvas.
