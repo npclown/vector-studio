@@ -1,6 +1,6 @@
 # D9 E11: P3 C03-C05 closure and exit snapshot
 
-Status: **DRAFT, 2026-10-24.** Written for independent review and user approval. Independent review rounds 1 to 3 were NOT READY and round 4 READY WITH FOLLOW-UPS; all findings are applied (section 11). Nothing here is in force until the user answers [E11-Q1 to E11-Q4](#9-decisions-for-the-user) in chat.
+Status: **APPROVED 2026-10-24 by the user** (E11-Q1 to E11-Q4 all (a), [decision record](#91-user-decisions-2026-10-24)). Independent review rounds 1 to 3 were NOT READY and round 4 READY WITH FOLLOW-UPS; all findings are applied (section 11). C03-C05 are complete once the exit snapshot record of section 3.2 exists.
 
 This is rendering-track item E11 ([D9 rendering track](d9-rendering-track.md#status-index)). It is full tier: it fixes how the P3 exit criteria A01-A08 are evidenced, and its four questions decide what the exit gate requires. It changes no threshold and no tolerance. The frozen sentences it would set aside or settle are quoted in section 9, next to the question that decides them; no other frozen contract text changes. Identifiers use the prefix **E11-**.
 
@@ -190,6 +190,10 @@ Why (a): the defects cause no crash or invalid output, D10 already kept E4 as a 
 - (b) Run a coverage experiment and decide both before the exit. This adds an experiment contract and a threshold decision to R1.
 
 Why (a): the prototype plan lists the "coverage fringe and MSAA quality comparison" in P3's scope, not as an exit gate, and V-4's report gives that comparison. The exit gate's fill-rule image check is covered by the fill gates.
+
+### 9.1 User decisions, 2026-10-24
+
+The user chose "all four recommended (a)" on the decision card in chat on 2026-10-24: E11-Q1 (a), E11-Q2 (a), E11-Q3 (a) and E11-Q4 (a), as worded above. The stroke `work-limit` class was added to E11-Q2 (a) after the card was posted, in review round 3; it was disclosed in the thread before the answer, and the user is told again with this record. Effect: E12 and E13 enter the backlog; E11-U4 is in scope; the next unit is E11-U2.
 
 ## 10. Acceptance and validation for this contract
 
