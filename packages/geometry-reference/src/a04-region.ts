@@ -387,6 +387,8 @@ function zpdivmod(a: readonly bigint[], b: readonly bigint[]): { q: ZPoly; r: ZP
     r = r.map((c) => c * lead);
     for (let i = 0; i < q.length; i += 1) q[i] = q[i]! * lead;
     q[k] = q[k]! + top;
+    // Pad to x^k first: r may have been trimmed below it, and a hole would not be a bigint.
+    while (r.length < k) r.push(0n);
     for (let i = 0; i < B.length; i += 1) r[k + i] = (r[k + i] ?? 0n) - top * B[i]!;
     r = ztrim(r);
   }
@@ -3493,6 +3495,56 @@ function arcNode(
 
 /** Seam splits per top-level stroke classification (E3-U2c, contract section 14.8). */
 const SEAM_SPLIT_BUDGET = 24;
+/** Pair splits (E3-U2e): at most this many open convex pieces, inward normals not within 8°. */
+const PAIR_SPLIT_PIECES = 4;
+const PAIR_SPLIT_COS = 0.99;
+
+/**
+ * The edge of a convex piece's corner polygon that crosses the polygon `gens` nearest to
+ * (cx, cy): the point of its line nearest to (cx, cy) and its unit normal into the piece, or
+ * null. Midpoint floats: the result only steers a split (E3-U2e).
+ */
+function crossingEdge(
+  corners: readonly IvP[],
+  gens: readonly IvP[],
+  cx: number,
+  cy: number,
+): { px: number; py: number; nx: number; ny: number } | null {
+  const m = (v: Iv) => (v.lo + v.hi) / 2;
+  const n = corners.length;
+  const ox = corners.reduce((a, c) => a + m(c.x), 0) / n;
+  const oy = corners.reduce((a, c) => a + m(c.y), 0) / n;
+  let best: { px: number; py: number; nx: number; ny: number } | null = null;
+  let bestD = Infinity;
+  for (let k = 0; k < n; k += 1) {
+    const ax = m(corners[k]!.x);
+    const ay = m(corners[k]!.y);
+    const ex = m(corners[(k + 1) % n]!.x) - ax;
+    const ey = m(corners[(k + 1) % n]!.y) - ay;
+    const len = Math.hypot(ex, ey);
+    if (!(len > 0)) continue;
+    let nx = -ey / len;
+    let ny = ex / len;
+    if (nx * (ox - ax) + ny * (oy - ay) < 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const g of gens) {
+      const v = nx * (m(g.x) - ax) + ny * (m(g.y) - ay);
+      lo = Math.min(lo, v);
+      hi = Math.max(hi, v);
+    }
+    if (!(lo < 0 && hi > 0)) continue;
+    const d = nx * (cx - ax) + ny * (cy - ay);
+    if (Math.abs(d) < bestD) {
+      bestD = Math.abs(d);
+      best = { px: cx - d * nx, py: cy - d * ny, nx, ny };
+    }
+  }
+  return best;
+}
 
 /** Sub-arc nodes per normal-segment witness search (E3-U2c). */
 const NORMAL_CANDIDATE_BUDGET = 512;
@@ -4232,7 +4284,7 @@ function makeStrokeRegion(c: Decoded, hooks: A04Hooks, sigma: Q): StrokeRegion {
   const classifyPoly = (poly: LPoly, depth: number): number => {
     charge(W_SEAM, 1);
     if (depth === 0) splitBudget = SEAM_SPLIT_BUDGET;
-    let unknown = false;
+    const open: StrokePiece[] = [];
     for (const p of pieces) {
       if (!boxesMeet(p.box, poly.box)) continue;
       const v = p.classify(poly);
@@ -4246,10 +4298,10 @@ function makeStrokeRegion(c: Decoded, hooks: A04Hooks, sigma: Q): StrokeRegion {
         )
           return 1;
         if (p.corners !== undefined && separatedByEdges(poly.gens, p.corners)) continue;
-        unknown = true;
+        open.push(p);
       }
     }
-    if (!unknown) return -1;
+    if (open.length === 0) return -1;
     if (depth >= 3) return 0;
     // Nearest seams first, so that the budget goes to the seams most likely to matter.
     const candidates: { seam: Seam; d: number }[] = [];
@@ -4268,7 +4320,51 @@ function makeStrokeRegion(c: Decoded, hooks: A04Hooks, sigma: Q): StrokeRegion {
       const [plus, minus] = splitPoly(poly, seam);
       if (classifyPoly(plus, depth + 1) === 1 && classifyPoly(minus, depth + 1) === 1) return 1;
     }
-    return 0;
+    return pairSplit(poly, depth, open) ? 1 : 0;
+  };
+  // Pair splits (E3-U2e). Two convex pieces whose edges both cross the polygon can cover it
+  // without either containing it, where no registered seam lies: two overlapping line bodies of
+  // a path that turns back on itself, or the crossing of two bodies' edges. In both, the
+  // bisector of the two edge lines (the points at equal signed distance from both) leaves each
+  // half of the polygon inside one piece, so the polygon is split along it and is inside when
+  // both halves are. The line is only a guess: the halves cover the polygon whatever it is, so
+  // the result is sound, and a wrong guess leaves the polygon undecided.
+  const pairSplit = (poly: LPoly, depth: number, open: readonly StrokePiece[]): boolean => {
+    const convex = open.filter((p) => p.convex && p.corners !== undefined);
+    if (convex.length < 2 || convex.length > PAIR_SPLIT_PIECES) return false;
+    const cx = (poly.box.x0 + poly.box.x1) / 2;
+    const cy = (poly.box.y0 + poly.box.y1) / 2;
+    const lines = convex.map((p) => crossingEdge(p.corners!, poly.gens, cx, cy));
+    for (let i = 0; i < lines.length; i += 1)
+      for (let j = i + 1; j < lines.length; j += 1) {
+        const a = lines[i]!;
+        const b = lines[j]!;
+        if (a === null || b === null || a.nx * b.nx + a.ny * b.ny > PAIR_SPLIT_COS) continue;
+        // The bisector {y : n_a·(y − p_a) = n_b·(y − p_b)}, through the point nearest the center.
+        const tx = a.nx - b.nx;
+        const ty = a.ny - b.ny;
+        const k =
+          (a.nx * a.px + a.ny * a.py - b.nx * b.px - b.ny * b.py - tx * cx - ty * cy) /
+          (tx * tx + ty * ty);
+        const bx = cx + k * tx;
+        const by = cy + k * ty;
+        if (![bx, by, tx, ty].every(Number.isFinite)) continue;
+        if (splitBudget <= 0) return false;
+        splitBudget -= 1;
+        // A negative id never names a registered seam, so no piece reads the tag as its own.
+        const seam: Seam = {
+          id: -1 - depth,
+          b: qpn(bx, by),
+          t: qpn(tx, ty),
+          ib: ivpc(bx, by),
+          it: ivpc(tx, ty),
+          reach: Infinity,
+        };
+        const [plus, minus] = splitPoly(poly, seam);
+        if (classifyPoly(plus, depth + 1) === 1 && classifyPoly(minus, depth + 1) === 1)
+          return true;
+      }
+    return false;
   };
   const excludesPoly = (poly: LPoly): boolean => {
     charge(W_SEAM, 1);
@@ -4547,7 +4643,8 @@ class StrokeTarget implements RegionTarget {
       // pieces themselves: the centroid of a convex piece clipped to the cell, or the cell point
       // nearest to a disk's center, is tested by exact membership.
       if (outside !== null && inside === null) inside = this.pieceCandidate(box, arcs);
-      if (outside !== null && inside === null) inside = this.anisotropicCandidate(box, arcs);
+      if (outside !== null && inside === null) inside = this.anisotropicCandidate(box, arcs, 1);
+      if (inside !== null && outside === null) outside = this.anisotropicCandidate(box, arcs, -1);
       if (inside !== null && outside !== null)
         witness = {
           a: qpn(inside[0], inside[1]),
@@ -4559,14 +4656,14 @@ class StrokeTarget implements RegionTarget {
     return witness;
   }
   /**
-   * A point of the box inside R on the cell's midline along its long local axis, or null
-   * (E3-U2d). Under strong anisotropy a cell's local image is a thin strip that can be longer
+   * A point of the box inside R (want 1) or outside it (want −1, E3-U2e) on the cell's midline
+   * along its long local axis, or null (E3-U2d). Under strong anisotropy a cell's local image is a thin strip that can be longer
    * than the stroke is wide, so the part of R in it is a short stretch of the strip, which the
    * nine samples and the normal segments can miss (beside the butt corner of a stroke under
    * T7). The samples are spaced at about the strip's width. Candidates only: each is tested by
    * the certified point test and exact membership.
    */
-  private anisotropicCandidate(box: Box, arcs: ArcHint): [number, number] | null {
+  private anisotropicCandidate(box: Box, arcs: ArcHint, want: 1 | -1): [number, number] | null {
     const f = this.frame;
     const ex = phiInvIv(f, ivpc(box.x1, box.y0));
     const ey = phiInvIv(f, ivpc(box.x0, box.y1));
@@ -4587,13 +4684,19 @@ class StrokeTarget implements RegionTarget {
     );
     const xm = (box.x0 + box.x1) / 2;
     const ym = (box.y0 + box.y1) / 2;
-    for (let i = 0; i < n; i += 1) {
-      const u = (i + 0.5) / n;
+    // Then geometrically toward both ends (E3-U2e): a thin wedge of R or of its complement that
+    // ends at a short edge of the cell (a piece's edge on a dyadic cell edge, beside the crossing
+    // of another piece's edge) is thinner there than any uniform spacing.
+    const us: number[] = [];
+    for (let i = 0; i < n; i += 1) us.push((i + 0.5) / n);
+    for (let k = Math.log2(n) + 1; k <= Math.log2(n) + ANISOTROPIC_MAX_LEVELS; k += 1)
+      us.push(2 ** -k, 1 - 2 ** -k);
+    for (const u of us) {
       const x = lx >= ly ? box.x0 + u * (box.x1 - box.x0) : xm;
       const y = lx >= ly ? ym : box.y0 + u * (box.y1 - box.y0);
       const v = this.classifyPoint(x, y, arcs);
-      if (v === 1) return [x, y];
-      if (v === 0 && this.contains(qpn(x, y))) return [x, y];
+      if (v === want) return [x, y];
+      if (v === 0 && this.contains(qpn(x, y)) === (want === 1)) return [x, y];
     }
     return null;
   }

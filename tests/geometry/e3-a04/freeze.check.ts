@@ -2,7 +2,7 @@
 // (docs/plans/d9-e3-b4-precision-contract.md section 5.5, E3-Q6 (a)). It runs no kernel, port or
 // renderer: it certifies that the oracle can build the ideal boundary of every case within its
 // work cap. Run it through `pnpm e3-a04:freeze` (tooling/run-e3-a04-freeze.mjs), never in CI.
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { it } from 'vitest';
 
@@ -15,16 +15,32 @@ const [shard, shards] = (process.env.E3_A04_FREEZE_SHARD ?? '0/1').split('/').ma
 ];
 const stride = Number(process.env.E3_A04_FREEZE_STRIDE ?? '1');
 const out = process.env.E3_A04_FREEZE_OUT;
+// A partial run over listed case ids, one per line; the listed cases are dealt to the shards.
+const idsFile = process.env.E3_A04_FREEZE_IDS;
+const ids =
+  idsFile === undefined
+    ? null
+    : new Set(
+        readFileSync(idsFile, 'utf8')
+          .split(/\r?\n/u)
+          .map((l) => l.trim())
+          .filter((l) => l !== ''),
+      );
 
 it(`freeze-checks shard ${shard} of ${shards} (stride ${stride})`, () => {
   if (out === undefined) throw new Error('E3_A04_FREEZE_OUT is required');
   mkdirSync(out, { recursive: true });
   const file = path.join(out, `shard-${shard}.ndjson`);
   let k = 0;
+  let listed = 0;
   for (const kase of iterateA04Corpus()) {
     const index = k;
     k += 1;
-    if (index % stride !== 0 || (index / stride) % shards !== shard) continue;
+    if (ids !== null) {
+      if (!ids.has(String(kase.id))) continue;
+      listed += 1;
+      if ((listed - 1) % shards !== shard) continue;
+    } else if (index % stride !== 0 || (index / stride) % shards !== shard) continue;
     const start = performance.now();
     let line: Record<string, unknown>;
     try {

@@ -1,10 +1,11 @@
 // D9 E3 unit E3-U2: the oracle-only freeze check of the A04 corpus
 // (docs/plans/d9-e3-b4-precision-contract.md section 5.5). Manual, never CI.
 //
-//   pnpm e3-a04:freeze [--shards N] [--stride S]
+//   pnpm e3-a04:freeze [--shards N] [--stride S] [--ids FILE]
 //
 // Starts N vitest shards of tests/geometry/e3-a04/freeze.check.ts (each a separate process),
-// optionally checking only every S-th case (a partial run), then merges the shard results into
+// optionally checking only every S-th case, or only the case ids listed in FILE, one per line
+// (a partial run, such as a rerun of a previous run's failures), then merges the shard results into
 // summary.json under .tools/e3-a04-freeze/<UTC timestamp>/. It exits non-zero when any checked
 // case is ORACLE-WORK, ORACLE-UNSUPPORTED, ORACLE-INCONSISTENT or ORACLE-ERROR, which fails the
 // freeze (E3-Q6 (a)). No kernel runs.
@@ -22,6 +23,9 @@ const option = (name, fallback) => {
 };
 const shards = option('--shards', Math.max(1, Math.min(12, os.cpus().length - 2)));
 const stride = option('--stride', 1);
+const idsAt = args.indexOf('--ids');
+const idsFile = idsAt >= 0 ? path.resolve(args[idsAt + 1] ?? '') : null;
+if (idsFile !== null && !existsSync(idsFile)) throw new Error(`--ids file ${idsFile} not found`);
 if (!Number.isInteger(shards) || shards < 1 || !Number.isInteger(stride) || stride < 1)
   throw new Error('--shards and --stride take positive integers');
 
@@ -46,6 +50,7 @@ const runShard = (shard) =>
           E3_A04_FREEZE_SHARD: `${shard}/${shards}`,
           E3_A04_FREEZE_STRIDE: String(stride),
           E3_A04_FREEZE_OUT: out,
+          ...(idsFile === null ? {} : { E3_A04_FREEZE_IDS: idsFile }),
         },
       },
     );
@@ -77,6 +82,7 @@ const failures = rows.filter((r) => String(r.status).startsWith('ORACLE-'));
 const summary = {
   corpus: 'a04-corpus/v1',
   stride,
+  ids: idsFile,
   shards,
   shardExitCodes: codes,
   checked: rows.length,
