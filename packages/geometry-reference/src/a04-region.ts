@@ -1202,7 +1202,10 @@ function makeFrame(c: Decoded, hooks: A04Hooks): Frame {
     ivO: { x: qIv(ox), y: qIv(oy) },
     width,
     height,
-    omega: { x0: -2, y0: -2, x1: width + 2, y1: height + 2 },
+    omega:
+      hooks.window === undefined
+        ? { x0: -2, y0: -2, x1: width + 2, y1: height + 2 }
+        : hooks.window({ x0: -2, y0: -2, x1: width + 2, y1: height + 2 }),
     w1Box: { x0: -3, y0: -3, x1: width + 3, y1: height + 3 },
     singular,
   };
@@ -4596,6 +4599,10 @@ export type A04Hooks = Readonly<{
     center: A04IvPoint,
     dist: (g: A04IvPoint) => number,
   ) => number;
+  /** E3-D9 (E3-U3): the window Ω (default: the viewport plus 2 physical px, E3-K3). */
+  window?: (
+    omega: Readonly<{ x0: number; y0: number; x1: number; y1: number }>,
+  ) => Readonly<{ x0: number; y0: number; x1: number; y1: number }>;
   /** E3-D8: the zoom the ideal map uses (default: the binary64 zoom). */
   idealZoom?: (zoom: number) => number;
   /** E3-D11: whether ∂M extraction splits edges at T-vertices (default true). */
