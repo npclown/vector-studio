@@ -205,7 +205,7 @@ async function start() {
 const ready = start();
 
 /**
- * D8-interim notice codes since `from` for the node, or for no node (a batch or pipeline state
+ * Path mesh failure codes since `from` for the node, or for no node (a batch or pipeline state
  * failure): the scene holds only this case's node, so both are this case's.
  */
 function noticesFor(nodeId: string, from: number): string[] {
@@ -213,7 +213,7 @@ function noticesFor(nodeId: string, from: number): string[] {
     .slice(from)
     .filter(
       (event) =>
-        event.code === DIAGNOSTIC_CODES.PATH_MESH_INTERIM_FAILURE &&
+        event.code === DIAGNOSTIC_CODES.PATH_MESH_FAILURE &&
         (event.context?.['nodeId'] === nodeId || event.context?.['nodeId'] === null),
     )
     .map((event) => String(event.context?.['failureCode'] ?? event.code));
