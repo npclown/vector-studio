@@ -395,6 +395,8 @@ All changes are additive and functional v0 under the carve-out (ST7-J9).
   - `composition-unsupported` is removed from the code, the `PathMeshFailureCode` union and the notice table in one change, following the V3 :441 pattern.
   - `overlay-unsupported` is D8-interim. It is removed with the TypeScript builder at the R2/K1 placement decision, as `fringe-work-cap` is (V3 :410).
 
+E11-U4 pointer (section 4.6, ST7-R10), 2026-10-24: `overlay-unsupported` is product outcome O3 while the TypeScript overlay builder ships, then removed or re-decided with its placement ([E11-U4 addendum](d9-e11-u4-failure-behavior-addendum.md)).
+
 ### 4.7 Consequences
 
 - **Visible.** Paths with both paints at `0 < o < 1` draw, with opacity once, instead of vanishing with `composition-unsupported`.

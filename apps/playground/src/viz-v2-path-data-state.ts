@@ -28,7 +28,7 @@ import { parsePathData, type PathDataError } from './viz-v2-path-data-parse.js';
 // WASM handle (ARCHITECTURE.md, state classification). Reuse of V-1 is read-only (V2-Q9 (a)).
 
 export const VIZ_V2_EVIDENCE_LABEL =
-  'UNVERIFIED: functional V-2 path-data page evidence only; precision is UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence, and no Q4 coverage threshold is claimed. work-limit and fringe-work-cap notices are the D8-interim state of the open ST-U9 decision.';
+  'UNVERIFIED: functional V-2 path-data page evidence only; precision is UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence, and no Q4 coverage threshold is claimed. work-limit paths are not drawn (product outcome O1); fringe-work-cap paints draw without a fringe while the TypeScript builder ships (O2).';
 
 /** The CSS px size of the surface; the same 720 x 600 as the V-1 page. */
 export const VIZ_V2_SURFACE = Object.freeze({ width: 720, height: 600 });

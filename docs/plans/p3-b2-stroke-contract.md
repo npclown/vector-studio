@@ -618,6 +618,8 @@ V3's D8-interim notice context gains `paint: 'fill' | 'stroke' | null`: `'fill'`
 
 Amended 2026-10-21 by ST-U7: the failure-code table loses `composition-unsupported` and gains `overlay-unsupported` (renderer scope, `paint: null`, one notice per marked overlay variant). It is D8-interim and is removed with the TypeScript builder at the R2/K1 placement decision.
 
+E11-U4 pointer (section 9.8), 2026-10-24: the notices are now `render.path-mesh-failure` without the `interim` key; `overlay-unsupported` is O3 while its builder ships ([E11-U4 addendum](d9-e11-u4-failure-behavior-addendum.md)).
+
 ## 10. C04 items for the stroke transport and draw
 
 Under the carve-out extended by B2-Q9 (a), `stroke_v0` is a functional transport v0 and the stroke draw a functional packet extension, both disposable and UNVERIFIED. Nothing here is the C04 layout.

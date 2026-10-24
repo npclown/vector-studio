@@ -247,6 +247,8 @@ V1-Q4 is an exception scoped to D8's functional, UNVERIFIED V2-V4 slice. It does
 
 - U2 says no user-visible rejection is introduced by default. U4 allows reusing `render.submission-failed` only as a last resort and adds no public result variant. The recommended option does introduce a visibly missing path and a new public diagnostic code, so it needs explicit approval as an interim exception.
 - The production failure behavior stays with U2: the R3, R0 and R2 direction, then R5 and U4 as last resorts. It must be decided before P3 acceptance, with requirements text naming the meshes that can reach it. The interim code is then removed or replaced.
+
+E11-U4 pointer (section h), 2026-10-24: decided by E11-Q3 (a) and replaced by E11-U4: requirements text in [requirements](../requirements.md#path-rendering-failures), code `render.path-mesh-failure` ([E11-U4 addendum](d9-e11-u4-failure-behavior-addendum.md)).
 - `render.submission-failed` is not reused.
 
 ## Review and approval record

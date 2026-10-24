@@ -423,6 +423,8 @@ Amended 2026-10-21 by [ST-U7](p3-fill-stroke-meshes.md#b2-st-u7-joint-coverage) 
 
 Amended 2026-10-20 by [V4](p3-fill-stroke-meshes.md#v4-playground-path-page), the builder work cap: a path whose mesh has more than `fringeBoundaryVertexCap` (128) distinct boundary vertices is drawn region-only (no coverage fringe) instead of not drawn, and queues one `render.path-mesh-interim-failure` notice with code `fringe-work-cap` per cache entry. This is V3-Q2 option (c) scoped to that one cause; every other failure keeps this section's rule. It is removed with the TypeScript builder at the R2/K1 placement decision, or when B0's E3 result replaces it.
 
+E11-U4 pointer (V4 amendment), 2026-10-24: `fringe-work-cap` is product outcome O2 while the TypeScript builder ships; the notice code is now `render.path-mesh-failure` ([E11-U4 addendum](d9-e11-u4-failure-behavior-addendum.md)).
+
 **Code.** `packages/contracts/src/diagnostics.ts` gains:
 
 ```ts
@@ -461,6 +463,8 @@ Amended 2026-10-21 by [ST-U6](p3-fill-stroke-meshes.md#b2-st-u6-renderer-stroke)
 - **Outcome.** If either drawable paint of a path fails (any port, response, fringe or state failure), the whole path is not drawn and every other node draws; the other paint's cached mesh stays. This extends V1-Q4 to stroke failures as the ST-A0 S5 note states. `fringe-work-cap` still draws its paint region-only, as amended above.
 
 Amended 2026-10-21 by [ST-U7](p3-fill-stroke-meshes.md#b2-st-u7-joint-coverage) under the [ST-U7 addendum](p3-b2-st-u7-joint-coverage-addendum.md): the table loses `composition-unsupported` and gains `overlay-unsupported` (renderer scope, `paint: null`), D8-interim, removed with the TypeScript builder.
+
+E11-U4 pointer (section h), 2026-10-24: replaced by E11-U4: the code is `render.path-mesh-failure`, the context has no `interim` key, the message has no `D8-interim:` prefix; outcomes, transport and the `notices` field are unchanged ([E11-U4 addendum](d9-e11-u4-failure-behavior-addendum.md)).
 
 ## i) Device loss, generation and lifetime
 
@@ -571,6 +575,8 @@ Edge pixels are captured, not gated. If headed hardware is unavailable, V3-A14 i
 - **P1 hot path.** The optional mesh part touches primitive preparation and submission. V3-A16 and the P1 specs guard bytes and visuals. P1 A09 and A10 stay UNVERIFIED, and no P1 performance claim is made.
 - **Rework.** The mesh part, the carrier and the fringe builder are disposable under the carve-out; K1 and C04 may replace them.
 - **Public debt.** The interim diagnostic code must be removed before P3 acceptance.
+
+E11-U4 pointer (section m), 2026-10-24: settled: no interim diagnostic code remains (E11-U4-A1).
 
 ## n) Decisions for the user
 

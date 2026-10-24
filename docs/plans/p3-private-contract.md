@@ -110,6 +110,12 @@ After the integrated P3.1m [position certificate](p3-position-certificate-contra
 
 D8 interim pointer, 2026-10-08: for D8 checkpoints V2-V4 only, the user approved [V1-Q4](p3-v1-path-scene-port-proposal.md#h-decisions-for-the-user), under which a path the kernel cannot mesh is not drawn and is reported by an interim warning diagnostic. It does not answer U2 or U4, which stay as written above; the interim code is removed or replaced when the production failure behavior is decided.
 
+E11-U4 pointer (U2), 2026-10-24: set aside for the P3 exit by the user's E11-Q3 (a); the not-drawn outcome with a warning ships, and U2's alternatives continue in E12 ([E11-U4 addendum](d9-e11-u4-failure-behavior-addendum.md)).
+
+E11-U4 pointer (U4), 2026-10-24: not invoked: `render.submission-failed` is not reused and no result variant is added; the requirements name the meshes that reach each outcome ([requirements](../requirements.md#path-rendering-failures)).
+
+E11-U4 pointer (D8 interim pointer), 2026-10-24: replaced: the interim code is now the product code `render.path-mesh-failure`, P3 product behavior, not only V2-V4.
+
 U2 follow-up, 2026-10-06: after the reviewed [failure-path proposal](p3-u2-failure-path-proposal.md), the user chose the planning direction R3 (tighter mesh-origin window), then R0 (clearance-aware triangulation for generator-induced slivers), then R2 (bounded-extent tiling with the U1 domain). R5 is limited to documented residual inputs. R1 (bounded region deviation) and R4 (coverage-bounded acceptance) are not opened. Classes B and C may remain uncertified until one of them is decided.
 
 Raster coverage follow-up, 2026-10-07: after the accepted [O01 observations](../evidence/p3.1o-coverage/review-2026-10-07.md), the user made two choices.

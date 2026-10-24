@@ -1,4 +1,5 @@
 import type { RendererCapabilityResult, RendererDiagnostic } from '@vector-studio/contracts';
+import { isPathNotice } from './path-notices.js';
 import { createFillMeshPort, type FillMeshAdapter } from '@vector-studio/geometry-wasm';
 import { PrimitiveRendererService } from '@vector-studio/renderer-core';
 import { WebGpuBackend } from '@vector-studio/renderer-webgpu';
@@ -15,8 +16,8 @@ import {
 
 // P3 D8 checkpoint V4: the playground path page. This page is a host: it injects the real
 // fill-mesh port, `createFillMeshPort` from geometry-wasm (fill-v0, revision 2), into the
-// renderer service, as V3-A18 foresaw for V4. The renderer draws its meshes with the D8-interim
-// TypeScript fringe builder under the V4 builder work cap (more than 128 distinct boundary
+// renderer service, as V3-A18 foresaw for V4. The renderer draws its meshes with the TypeScript
+// fringe builder (a D8-interim placement) under the V4 builder work cap (more than 128 distinct boundary
 // vertices: region-only draw and a `fringe-work-cap` notice). Pan and zoom drive the camera;
 // rotation is the world container's transform about the scene center.
 //
@@ -145,7 +146,7 @@ function renderStatus(): void {
     ['port calls', String(pathMesh?.portCalls ?? 0)],
     ['mesh cache', `${pathMesh?.entries ?? 0} entries, ${pathMesh?.bytes ?? 0} B`],
     ['kernel memory', `${pathMesh?.portLinearMemoryBytes ?? 0} B`],
-    ['D8 notices', String(diagnostics.filter(isInterimNotice).length)],
+    ['Path notices', String(diagnostics.filter(isPathNotice).length)],
   ];
   statusList.replaceChildren(
     ...rows.flatMap(([name, value]) => {
@@ -156,10 +157,6 @@ function renderStatus(): void {
       return [term, detail];
     }),
   );
-}
-
-function isInterimNotice(event: RendererDiagnostic): boolean {
-  return event.code === 'render.path-mesh-interim-failure';
 }
 
 // Interaction: drag pans, the wheel zooms about the cursor, Q/E and the slider rotate.

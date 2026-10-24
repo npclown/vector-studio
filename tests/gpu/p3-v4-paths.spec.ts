@@ -26,7 +26,7 @@ declare global {
 // geometry-wasm fill-mesh port, in Chrome and Edge. Functional evidence only: precision is
 // UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence, and no Q4
 // coverage threshold is claimed. The gates are functional: the page renders through the real
-// port, no error diagnostic and no D8-interim notice occur in the gated views, and interior
+// port, no error diagnostic and no path notice occur in the gated views, and interior
 // probes (far from every edge) show the fill or the hole each fill rule implies.
 
 test.use({ trace: 'off' });
@@ -98,9 +98,7 @@ test('P3 V4 path page screenshots (UNVERIFIED precision)', async ({ browser, pag
     const state = await page.evaluate((next) => window.__vectorStudioP3V4Paths.show(next), view);
     const png = await canvas.screenshot();
     write(`${view.id}.png`, png);
-    const interim = state.diagnostics.filter(
-      (event) => event.code === 'render.path-mesh-interim-failure',
-    );
+    const interim = state.diagnostics.filter((event) => event.code === 'render.path-mesh-failure');
     const errors = state.diagnostics.filter((event) => event.severity === 'error');
     // Interior probes, decoded from the headed screenshot in the page.
     const probes = V4_PATHS.flatMap((spec, pathIndex) =>
@@ -154,9 +152,7 @@ test('P3 V4 path page screenshots (UNVERIFIED precision)', async ({ browser, pag
     if (gated) {
       if (errors.length > 0) failures.push(`${view.id}: ${errors.length} error diagnostics`);
       if (interim.length > 0)
-        failures.push(
-          `${view.id}: ${interim.length} D8-interim notices: ${JSON.stringify(interim)}`,
-        );
+        failures.push(`${view.id}: ${interim.length} path notices: ${JSON.stringify(interim)}`);
       if (probeReports.length === 0) failures.push(`${view.id}: no probe is on the surface`);
       for (const report of probeReports) {
         if (report.deviation > PROBE_TOLERANCE)
@@ -179,7 +175,7 @@ test('P3 V4 path page screenshots (UNVERIFIED precision)', async ({ browser, pag
   const final = await page.evaluate(() => window.__vectorStudioP3V4Paths.snapshot());
   // The zoom-3 view is observed, not gated: after B1 no notice is expected, and any one is recorded.
   const observedNotices = final.diagnostics.filter(
-    (event) => event.code === 'render.path-mesh-interim-failure',
+    (event) => event.code === 'render.path-mesh-failure',
   );
   if (pageErrors.length > 0) failures.push(`page errors: ${pageErrors.join('; ')}`);
   if (final.port?.operationId !== 'geometry-wasm/fill-v0+r2')
