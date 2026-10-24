@@ -1,6 +1,6 @@
 # E10 contract: renderer test hooks for A08 (forced sample count, fringe-off, frame capture, count pass)
 
-Status: DRAFT 2026-10-24, revision 3. Independent review round 2 READY (sections 12 and 13); awaiting user approval of E10-Q1 to E10-Q3 and of the contract. No code is written under this contract before approval.
+Status: APPROVED 2026-10-24 by the user in chat, with E10-Q1 to E10-Q3 as recommended (option (a) each; independent review round 2 READY, sections 12 and 13). E10-U1 may start.
 
 Track: rendering. Item: E10 of the [D9 rendering track plan](d9-rendering-track.md#status-index), phase R1 of [D10](d10-roadmap-reset.md). Tier: full, because E10 adds published members to `renderer-core` and `renderer-webgpu`, which are part of the [D9 shared surface](d9-post-mvp1-tracks-proposal.md#boundary). Both tracks review it.
 
