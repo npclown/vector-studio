@@ -1392,3 +1392,181 @@ Dated append. E3-U2c makes the oracle faster on the stroke strata, so that the `
 - The stride-25 freeze run, with the same command and 14 shards, went from 14:16 to 15:00 UTC (44 min wall) and took 6.7 CPU hours. **1,099 cases: 1,094 `ok` and 5 `ORACLE-WORK`**, the same five cases with the same outcomes. No status changed. The work of one case changed: `C9/k05/T0/z64-d1` went from 204,105,186 to 204,079,950 units and stays `ok`.
 
 **Disposition under E3-Q6 (a).** Five sampled cases still fail the freeze, so the corpus is not frozen. Left: one further oracle speed-up on sub-arc refinement, or a different weight choice; and the outside certification of the k10 cell, or a disclosed generator revision for it.
+
+## 15. E3-U3 harness annex, 2026-10-24
+
+Dated append. E3-U3 is the harness, the record and the run tool of section 9.1. This section is their executable form. Every choice below is **decided under the user's standing instruction of 2026-10-22 (recommended option)**. No A04 threshold, criterion, cap or user decision changes. The items of section 15.9 depart from a premise of this contract or extend it, and are listed for the evidence review.
+
+The corpus is **not frozen** (section 14.8). E3-U3 therefore runs the kernel on no corpus case. Its WASM test and `pnpm e3-a04:run --smoke` use the smoke cases of section 15.6, whose paths are written in the test source. `pnpm e3-a04:run` without `--smoke` refuses to start until this contract holds a `**Freeze record**` line with the manifest's `corpusSha256` (section 5.5).
+
+### 15.1 The product path under measurement
+
+`measureCase` (`tests/geometry/e3-a04/harness.ts`) drives the product path, not a copy of it:
+
+- A one-node scene goes through `RetainedSceneMirror`, `PrimitiveSceneSource` and `PathMeshPipeline`, with the release WASM ports (`createFillMeshPort`, `createStrokeMeshPort`) and `renderer-core`'s `buildPathFringe` builder. The scene affine is `[a, c, b, d, tx, ty]` for the corpus matrix `L = [[a, b], [c, d]]`.
+- The draws and their frame lanes are taken where the pipeline hands them to `PathMeshPacker.prepare`. That is after bucket selection, mesh origin selection and K4 packing, and before the GPU. The harness patches that one method for the call and restores it.
+- For E3-C8 (`k > 0`), one frame at zoom `z·2^k`, centred on the same world point, primes the mesh cache before the measured frame, so the served tolerance is the cached one.
+- Joint cases (SB-10, SB-11) draw the partner paint in the same node. The feature identity of E3-C9 is checked against a second scene at opacity 1. A difference makes the case UNDECIDED (`joint-feature-identity`).
+- A port result of `empty`, and a path the pipeline culls, are measured with `M = ∅` and `β_c = 0` (E3-K2).
+
+### 15.2 The shader model and `β`
+
+For each stored offset `u`, `p*` is the exact rational value of the WGSL `toPhysical`, `((A·u + B) + (O_m − c))·z·d`, from the f32 lane values. Products and sums are exact dyadics.
+
+- **Feature path.** Six roundings on the longest chain, in any association, so `β_f = γ_6·Σ|terms|·|z·d|` per axis. A fused multiply-add only removes roundings, so the bound holds either way.
+- **Vertex path.** `β_f`, then the NDC step `x·2/W − 1` and `1 − y·2/H` (division within 2.5 ulp, WGSL), then the viewport transform modelled in f32 as three roundings (`γ_3`). `ndcAxisError` carries the error through each step.
+- **Absolute and f64 terms.** Each axis adds `η = 2^-100` px for flushed or subnormal results. Every bound the harness evaluates in binary64 is scaled by `1 + 2^-20`.
+- `β(p)` is the Euclidean norm of the two axis bounds. `β_c` is the maximum over the points of both paths, plus the clip bound of section 15.3.
+- A unit test checks the model against an f32 emulation on 20,000 random points, fused and unfused. A shader-identity test pins `toPhysical` and `meshPositionNdc` in `MESH_FILL_SHADER`. The record carries the SHA-256 of the shader source.
+
+### 15.3 Guard band and clipping (E3-Q11 (a))
+
+The guard band is the viewport `[0, W] × [0, H]`. A triangle with a mapped vertex outside it, and not wholly beyond one clip plane, is clipped by the GPU.
+
+- **The clip model.** For each such triangle the bound is `(planes crossed)·γ_8·Σ(|x − W/2| + |y − H/2|) + γ_3·(W + H)`, summed over the triangle's vertices. Each new vertex is an f32 interpolation in clip space along an edge of the polygon clipped so far, then the viewport transform.
+- `β_clip` is the maximum over the crossing triangles. **UNDECIDED** if `β_clip ≥ 0.25` px or if `β_c ≥ 1` px.
+- The readback next to the viewport edge that E3-Q11 (a) asks for is E3-U4's.
+
+### 15.4 No-flip certificate
+
+For every mapped triangle whose box meets `Ω ⊕ 2`, with `e1` and `e2` the edges at the vertex shared by the two shortest edges, the certificate is `|e1 × e2| > 2β_c(|e1| + |e2|) + 4β_c²`.
+
+- The cross product is exact. The lengths are rounded up, and the area is rounded down.
+- A zero-area triangle fails, and the case is UNDECIDED, **unless it is collapsed**: two of its vertices have the same `p*`. They then have the same stored offset and lanes, so the GPU maps them to the same position bit for bit (the bit-identity assumption of section 7.1). The triangle has zero area on the GPU as well and covers no sample.
+- `M*` leaves collapsed triangles out (`withoutCollapsed`), because the oracle's mesh model takes triangles of positive area only. The storage-crack check still sees the full port mesh.
+- See section 15.9, item 2.
+
+### 15.5 `window-empty` on the drawn mesh
+
+When the oracle finds `∂R` and `∂M*` both off `Ω` (status `window-empty`), the harness also checks that no boundary candidate of `M*` meets `Ω ⊕ 1`, so that a `β_c` move cannot bring `∂M_gpu` into `Ω`.
+
+- A candidate is any edge not shared by exactly one triangle on each side. That includes T-junction sub-edges and the edges of zero-area triangles, so the candidates are a superset of `∂M*`.
+- Otherwise the case is UNDECIDED (`window-empty within the guard`).
+
+### 15.6 Smoke cases
+
+`tests/geometry/e3-a04/smoke.ts` holds five non-corpus cases with the centre placement of section 13.7.
+
+| Case                            | Shape                                    | Expected | In `pnpm test:geometry` |
+| ------------------------------- | ---------------------------------------- | -------- | ----------------------- |
+| `smoke/rect/T0/z1-d1`           | 96 × 48 rectangle fill                   | PASS     | Measured                |
+| `smoke/rect/T0/z64-d3`          | 4 × 2 rectangle fill                     | PASS     | Measured                |
+| `smoke/blob/T2/z1-d2`           | Closed four-cubic blob fill              | PASS     | Measured                |
+| `smoke/segment-butt/T0/z1-d1`   | Segment of length 32, width 4, butt caps | PASS     | Drawn only              |
+| `smoke/polyline-miter/T0/z1-d1` | Three-segment polyline, width 3, miter 4 | PASS     | Drawn only              |
+
+They show that the whole path runs on the release WASM. They are not A04 evidence. `tests/geometry/e3-a04-harness-wasm.test.ts` runs them in `pnpm test:geometry`. The oracle takes minutes on a stroke region, so that test only draws the two stroke cases. `pnpm e3-a04:run --smoke` measures all five.
+
+### 15.7 The record (`tests/geometry/e3-a04/record.ts`)
+
+- **Schema.** `e3-a04-record/v1`: provenance, selection (stride, shards, corpus size), the GPU check or `null`, control outcomes, rows, aggregates, rejection counts, uncovered cells, maximum interval width, verdict and the reasons that keep it from PASS.
+- **Aggregates.** Overall, and per stratum, transform, pair and paint. For each: counts, max `U` and its case, and p99 and p50 by nearest rank, over measured cases only.
+- **Coverage (E3-A8).** The cells are paint × T0 to T7 × the nine pairs. A cell with no PASS, FAIL or UNDECIDED case is uncovered.
+- **Verdict (section 7.3).**
+  - **FAIL** on any FAIL case.
+  - Otherwise **UNVERIFIED** if any of these holds: a case is UNDECIDED; a control is not met; there is no GPU check or it failed; a cell is uncovered; the stride is not 1; not every corpus case has a row; the worktree is dirty.
+  - Otherwise **PASS**.
+- **Validator (E3-A7, E3-D10).** It reconciles row indices and ids with the corpus in generation order, and checks that each status agrees with its bounds. It recomputes the aggregates, the coverage and the verdict, and lists every difference.
+- **Encoding.** `record.json` writes non-finite numbers as strings (`"Infinity"`), because JSON has none. `record.md` is the Markdown view.
+
+### 15.8 Controls, seeded defects and the run
+
+**Controls.** `tests/geometry/e3-a04/controls.ts` runs each control as a synthetic port answer through the same `measureCase`. No kernel runs.
+
+| Control                   | Executable form                                                                                                                                       |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E3-PC1, E3-PC2            | A rectangle with one top vertex moved outward by 0.26 or 0.24 px. The realized offset against the ideal top edge must lie in `[E_lo, E_hi]` for PC2 |
+| E3-PC3                    | A 9-gon of a radius-16 disk (sagitta 0.9649 px), and an S-curve as 6 chords (closed-form error 0.8990 px, foot checked): FAIL with the value inside |
+| E3-PC4                    | One interior triangle dropped from a 64 × 64 square                                                                                                   |
+| E3-PC5                    | See section 15.9, item 3                                                                                                                              |
+| E3-PC6                    | A ring with a 0.4 px hole, meshed without the hole                                                                                                    |
+| E3-PC7                    | Linear lane 0 raised by `2^16` ulps at the far translation (about 0.3 px)                                                                            |
+| E3-PC8                    | The pan lanes offset by 0.3 px                                                                                                                        |
+| E3-PC9                    | Width raised by 0.3 px; a kept miter drawn as a bevel; a round cap drawn as a square cap                                                              |
+| E3-PC11, E3-PC14          | An `empty` answer for a rectangle (`B_R = +∞`), and for a shape that covers `Ω` (FAIL at the window point)                                          |
+
+All 14 control outcomes are met (`pnpm test:e3-a04`).
+
+**Seeded defects**, each in `tests/geometry/e3-a04-harness.test.ts`:
+
+- **E3-D7.** A `z = 64`, `d = 3` rectangle bumped by `0.25 − β_c/2` is UNDECIDED, and PASS with `β` omitted.
+- **E3-D9.** A rectangle whose right edge lies at 641.75 px with an inward dent to 641.25 px, inside the 2 px guard. It is FAIL, and not FAIL when an oracle window hook shrinks `Ω ⊕ 2` by 2 px.
+- **E3-D10.** The validator accepts a record with a rejected row, and catches the same record with that row dropped and with a forged PASS verdict.
+- **E3-D14.** On small lanes near the surface origin, where `toPhysical` is almost exact and the NDC round trip dominates, `β` without the NDC step is below the emulated vertex error for some points. The full `β` bounds every one.
+
+**The run** (`pnpm e3-a04:run`, `tooling/run-e3-a04.mjs`, manual and never CI).
+
+- **Before any shard.** It refuses a corpus run without the freeze note. It uses the release WASM that `pnpm test:geometry` builds, or `--wasm <path>`.
+- **Provenance.** It records the commit, the dirty state, the run id, and the SHA-256 of the contract, the generator, the oracle source and the WASM. It also records `corpusSha256`, the Node version and the OS.
+- **Shards.** It measures the corpus in `--shards N` processes of `tests/geometry/e3-a04/run.check.ts`. Each case goes to the shard of its rank, and a joint case is paired with its partner of the same group, transform and camera.
+- **Finalize.** A finalize process adds the operation identities, the shader hash, the carrier `K4` and the builder placement. It runs the controls, attaches `--gpu <file>` if given, and writes and validates the record.
+- **Evidence copy.** A clean, stride-1 run with no validator problem is copied to `docs/evidence/e3-a04/<stamp>-<run id>/`, never over an existing directory.
+
+### 15.9 Departures and extensions, for the evidence review
+
+1. **`fringe-unsupported` is rejected, not measured.** Section 6 measures `fringe-unsupported` because "the region still draws". In the product it does not: `PathMeshPipeline.servePaint` returns no draw, and the path is hidden. With no drawn mesh, the case is rejected with code `fringe-unsupported`, as for a renderer state failure. `fringe-range` is rejected the same way. A joint case whose partner paint fails is rejected as `joint-partner-<code>`, because the product hides the whole path. `fringe-work-cap` still draws and is measured.
+2. **Collapsed triangles** (section 15.4). Kernel meshes can hold triangles that become degenerate after f32 storage, for example at near-duplicate path end points (`smoke/blob/T2/z1-d2` has one). Other zero-area triangles stay UNDECIDED.
+3. **E3-PC5 uses another shape.** The star's evenodd mesh has pinch vertices that the fringe builder rejects as `fringe-unsupported`. PC5 uses two nested squares of the same orientation instead: nonzero fills the inner square, and the evenodd mesh (an annulus) does not. It is FAIL through `G`, which is the control's intent.
+4. **An oracle test hook.** E3-D9 needs a narrower window. `A04Hooks` gains a test-only `window` hook, which `makeFrame` applies to `Ω`. It changes no default behaviour, but it changes the oracle source SHA-256. The freeze note records the SHA of the build it certifies.
+
+## 16. E3-U4 GPU model-check annex, 2026-10-24
+
+Dated append. E3-U4 is the GPU model check of section 7.1: the page, the headed spec and E3-PC12 (section 9.1). Every choice below is **decided under the user's standing instruction of 2026-10-22 (recommended option)**. No A04 threshold, criterion or user decision changes. Section 16.4 lists what the check does not observe.
+
+### 16.1 What runs where
+
+- **Node** (`tests/geometry/e3-a04/readback.ts`, called by the spec) draws each readback case through the product path of section 15.1 on the release WASM. It takes the stored binary32 offsets and the packed lanes of each draw, and computes `p*`, `β_vertex` and `β_feature` for every point with the model of section 15.2.
+- **The page** (`apps/playground/e3-a04-readback.html`, source `apps/playground/src/e3-a04-readback.ts`) receives the WGSL source of `MESH_FILL_SHADER` from the spec. It appends two entry points and draws one point per stored vertex into two `rgba32uint` targets.
+  - The vertex entry point calls `meshPositionNdc`, the helper of both mesh vertex entry points, and carries the result as flat `u32` bits.
+  - The fragment entry point calls `toPhysical`, as the mesh fragment stage does for features.
+  - The page is test-only and is not a host. It has no WASM and no renderer.
+- **The check** (`modelCheck`) requires all of the following:
+  - **Vertex path.** The read-back NDC, taken back to pixels exactly as `(n + 1)·W/2` and `(1 − n)·H/2`, lies within `β_vertex` of `p*`.
+  - **Feature path.** The read-back `toPhysical` lies within `β_feature` of `p*`.
+  - **Invocations.** The NDC bits of each vertex are equal in two separate draws, so the vertex is mapped by two invocations.
+  - **Hashes.** The SHA-256 of the offsets the page uploaded equals Node's, and the SHA-256 of the shader source the page compiled equals the hash in the record.
+- **E3-PC12** (`perturbedReadback`) moves one read-back position to `p* + 2β(p)` along x, on both paths. The check must then fail. The spec applies it to the real readback, and a unit test applies it to a CPU binary32 stand-in.
+
+### 16.2 The cases before the freeze
+
+The named readback subset of section 7.1 (the rows of E3-C1, E3-C3, E3-C5, E3-C9 and E3-C12 at every transform and pair) is made of corpus cases. Its kernel output may be read only after the freeze (section 5.5). Until then the spec reads back non-corpus cases only:
+
+- the five smoke cases of section 15.6;
+- a rectangle at the far translation `2^24` (DPR 2);
+- a rectangle at `z = 0.01`, DPR 3;
+- a rectangle across the viewport's left and top edges.
+
+E3-U5 switches the spec to the named subset after the freeze note. That is a case list change only.
+
+### 16.3 Record and E3-A6
+
+- **Per-browser record.** Each project writes `.tools/e3-a04-readback/<stamp>/<project>.json` (`e3-a04-gpu-check/v1`). It holds:
+  - the browser's version and launch flags, the adapter's vendor, architecture and description, the user agent and the DPR;
+  - the shader and WASM SHA-256;
+  - the counts, the largest error-to-`β` ratios, the failures, the PC12 outcome and the page errors.
+- **Attaching it.** `pnpm e3-a04:run --gpu <chrome.json>,<edge.json>` attaches both files to the record. `combineGpuChecks` passes E3-A6 only when all of these hold:
+  - Chrome and Edge are both present and both passed;
+  - each ran on the run's shader source and release WASM;
+  - neither ran on a software adapter.
+- **Software dry run.** `?allowSoftware=1`, set by `E3_A04_READBACK_ALLOW_SOFTWARE=1`, lets the page run on a software adapter to check that it works. Such a record never passes.
+
+### 16.4 Not observed
+
+- **The fixed-function viewport transform.** The check reads NDC, not the rasterizer's pixel position. The viewport transform stays part of the residual of E3-Q7 (section 7.1). `β_vertex` still includes its `γ_3` model term.
+- **The `@invariant` position output.** The page carries the helper's result through a flat varying, not through `@builtin(position)`. The invocation check compares two draws of the same entry point. It does not compare the two mesh vertex entry points. Both of them call the same helper (section 7.1).
+- **Clipping.** A clipped triangle's new vertices are not read back. The readback next to the viewport edge reads the stored vertices only. The clip model of section 15.3 is therefore not checked against hardware. E3-Q11 (a) asks for that check, and it stays open for E3-U5.
+- **Cracks.** Crack widths at T-junctions (E3-C12) need the named subset, so they wait for E3-U5.
+
+### 16.5 Runs
+
+The spec ran on the cloud container's headless Chromium 153 with SwiftShader WebGPU (software, so it is not evidence). The page produced 8 draws and 77 points, with no failures. The largest error was 0.076 of `β_vertex` and 0.118 of `β_feature`, and E3-PC12 was rejected. The page itself is checked by the headed run below.
+
+**Headed run, 2026-10-24.** The spec ran on the user's machine at commit `f856b96`: Windows 11 Pro (build 26200), NVIDIA GeForce GTX 1660 SUPER (driver 32.0.16.1088, adapter `nvidia`/`turing`, not a fallback adapter), and Node v24.15.0.
+
+- **Build.** The release WASM was rebuilt with `pnpm test:geometry`: exit 0, 1,159 tests passed and 6 skipped. Its SHA-256 is `8034d36ba4491616ea250f7e21745a09abe8c2d3f0a2a05903674d4138101d6f`.
+- **Result.** Both projects passed in 12.5 s: **Chrome 155.0.8059.85 and Edge 156.0.4314.42, each PASS**. Each read back 8 draws and 77 points, with no failures and no page errors.
+  - The largest error was 0.109 of `β_vertex` and 0.118 of `β_feature`.
+  - E3-PC12 was rejected in both browsers, on both paths.
+  - The shader SHA-256 was `d306137cf0770f6bf7f9237f1c98b9ecd0a165cfdbfda916196d299e36b831a3`.
+- **Browser version.** The record's `browser.version` comes from Playwright's `browser.version()`. The `userAgent` field reads 151.0.7922.34 because the `Desktop Chrome` and `Desktop Edge` device presets fix the user agent string, so it is not the browser's version.
+- **Scope.** This is E3-A6 on the non-corpus cases of section 16.2. The named subset follows the freeze.
