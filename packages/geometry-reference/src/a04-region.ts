@@ -4652,6 +4652,43 @@ class StrokeTarget implements RegionTarget {
       });
     return halvesExcluded(box, levels);
   }
+  /**
+   * IN by halves for an anisotropic cell (E3-U2e), the counterpart of `excludesByHalves`. Under
+   * T7 a cell inside a self-overlapping stroke (C9/k22) is a strip whose feet on the curve
+   * spread over more than the bracket test allows; its halves along the long local axis are
+   * shorter, and the cell is inside when both are, recursively.
+   */
+  private includedByHalves(box: Box, arcs: ArcHint): boolean {
+    const { lx, ly } = this.localSides(box);
+    const long = Math.max(lx, ly);
+    const short = Math.min(lx, ly);
+    if (!(long >= ANISOTROPIC_RATIO * short)) return false;
+    const levels = Math.min(ANISOTROPIC_MAX_LEVELS, Math.ceil(Math.log2(long / short)) - 1);
+    const halves = (b: Box): [Box, Box] => {
+      if (lx >= ly) {
+        const xm = (b.x0 + b.x1) / 2;
+        return [
+          { ...b, x1: xm },
+          { ...b, x0: xm },
+        ];
+      }
+      const ym = (b.y0 + b.y1) / 2;
+      return [
+        { ...b, y1: ym },
+        { ...b, y0: ym },
+      ];
+    };
+    const halvesIncluded = (b: Box, left: number): boolean =>
+      halves(b).every((h) => {
+        const poly = this.polyOf(
+          [ivpc(h.x0, h.y0), ivpc(h.x1, h.y0), ivpc(h.x1, h.y1), ivpc(h.x0, h.y1)],
+          [qpn(h.x0, h.y0), qpn(h.x1, h.y0), qpn(h.x1, h.y1), qpn(h.x0, h.y1)],
+          arcs,
+        );
+        return this.region.classifyPoly(poly, 0) === 1 || (left > 1 && halvesIncluded(h, left - 1));
+      });
+    return halvesIncluded(box, levels);
+  }
   /** The class of a point; `arcs` are frontiers of a cell that holds it. */
   classifyPoint(x: number, y: number, arcs?: ArcHint): number {
     return this.region.classifyPoly(this.polyOf([ivpc(x, y)], null, arcs), 0);
@@ -4672,13 +4709,15 @@ class StrokeTarget implements RegionTarget {
     const arcs = classified.arcs;
     let witness: CoverNode['witness'] | undefined = cls === 0 ? undefined : null;
     // An undecided anisotropic cell at the freeze cell size or below (E3-U2d): a cell with a
-    // witness holds a point of R, so only one without is tested OUT by halves. Larger cells are
-    // refined instead, so the cost stays with the small cells that the freeze check reads.
+    // witness meets ∂R, so only one without is tested OUT, then IN (E3-U2e), by halves. Larger
+    // cells are refined instead, so the cost stays with the small cells that the freeze check
+    // reads.
     if (cls === 0 && box.x1 - box.x0 <= A04_ORACLE_PARAMETERS.freezeCellSize) {
       const { lx, ly } = this.localSides(box);
       if (Math.max(lx, ly) >= ANISOTROPIC_RATIO * Math.min(lx, ly)) {
         witness = this.findWitness(box, arcs);
         if (witness === null && this.excludesByHalves(box, arcs)) cls = -1;
+        else if (witness === null && this.includedByHalves(box, arcs)) cls = 1;
       }
     }
     const find = () => this.findWitness(box, this.arcsOf(n));
@@ -6047,6 +6086,59 @@ export function a04SignAtRootSelfTest(seed: number, count: number): string[] {
 }
 
 /**
+ * Checks the pseudo-division of integer polynomials (E3-U2e): lc(b)^(deg a − deg b + 1)·a =
+ * q·b + r with deg r < deg b, on sparse random polynomials, whose remainder can drop by more
+ * than one degree in one step, and on x⁴ + x³ by x + 1, which left holes in the remainder before
+ * E3-U2e (a TypeError on C9/k03 and C9/k04 at T7 in the freeze run of 2026-10-24).
+ */
+export function a04PseudoDivisionSelfTest(seed: number, count: number): string[] {
+  const rnd = selfTestRandom(seed);
+  const int = (lo: number, hi: number): number => lo + Math.floor(rnd() * (hi - lo + 1));
+  const findings: string[] = [];
+  const zmul = (a: readonly bigint[], b: readonly bigint[]): bigint[] => {
+    const out: bigint[] = Array.from({ length: Math.max(0, a.length + b.length - 1) }, () => 0n);
+    a.forEach((x, i) => b.forEach((y, j) => (out[i + j] = out[i + j]! + x * y)));
+    return out;
+  };
+  const cases: [bigint[], bigint[]][] = [
+    [
+      [0n, 0n, 0n, 1n, 1n],
+      [1n, 1n],
+    ],
+  ];
+  for (let k = 0; k < count; k += 1) {
+    const sparse = (n: number) =>
+      Array.from({ length: n }, () => (int(0, 2) === 0 ? BigInt(int(-9, 9)) : 0n));
+    const b = sparse(int(1, 4));
+    b.push(BigInt(int(1, 9) * (int(0, 1) === 0 ? 1 : -1)));
+    cases.push([sparse(int(2, 10)), b]);
+  }
+  cases.forEach(([a, b], k) => {
+    const A = ztrim(a);
+    const B = ztrim(b);
+    let out: { q: ZPoly; r: ZPoly };
+    try {
+      out = zpdivmod(A, B);
+    } catch (error) {
+      findings.push(`case ${k}: ${String(error)}`);
+      return;
+    }
+    if (A.length < B.length) return;
+    const lead = B[B.length - 1]!;
+    const left = A.map((c) => c * lead ** BigInt(A.length - B.length + 1));
+    const right = zmul(out.q, B);
+    out.r.forEach((c, i) => (right[i] = (right[i] ?? 0n) + c));
+    const l = ztrim(left);
+    const rr = ztrim(right);
+    if (l.length !== rr.length || l.some((c, i) => c !== rr[i]))
+      findings.push(`case ${k}: lc^(δ+1)·a ≠ q·b + r`);
+    if (out.r.length >= B.length) findings.push(`case ${k}: deg r ≥ deg b`);
+    if (out.r.some((c) => typeof c !== 'bigint')) findings.push(`case ${k}: a hole in r`);
+  });
+  return findings;
+}
+
+/**
  * Exact membership of a physical point in the stroke region built unscaled (σ = 1), at
  * Φ⁻¹(p) = (σ·Φ⁻¹(p))/σ: the reference of the scaled local frame of E3-U2c (tests only).
  */
@@ -6072,13 +6164,18 @@ export type A04CoverSelfTest = Readonly<{
   witnessed: number;
   /** Cells that the OUT-by-halves test certifies (E3-U2d). */
   halvesOut: number;
+  /** Cells that the IN-by-halves test certifies (E3-U2e). */
+  halvesIn: number;
+  /** Cells that the cell test itself decides (E3-U2e: pair splits). */
+  decided: number;
 }>;
 
 /**
- * Checks the E3-U2d steps on the stroke cover of one case (contract section 17): the point
- * test started from a cell's sub-arc frontiers, against the point test from the root and exact
- * membership at random points of the cell; the witness pair of the cell; and the OUT-by-halves
- * test, against exact membership at the samples. The cells are the given boxes, or else
+ * Checks the E3-U2d and E3-U2e steps on the stroke cover of one case (contract sections 17 and
+ * 18): the cell class, against exact membership at random points of the cell; the point test
+ * started from a cell's sub-arc frontiers, against the point test from the root and exact
+ * membership; the witness pair of the cell; and the OUT-by-halves and IN-by-halves tests,
+ * against exact membership at the samples. The cells are the given boxes, or else
  * undecided cover cells reached by a random descent to sizes between 2^-4 and 2^-9.
  */
 export function a04CoverSelfTest(
@@ -6119,9 +6216,12 @@ export function a04CoverSelfTest(
     let decidedCold = 0;
     let witnessed = 0;
     let halvesOut = 0;
+    let halvesIn = 0;
+    let decided = 0;
     for (const box of boxes) {
       const at = `(${box.x0}, ${box.y0}) size ${box.x1 - box.x0}`;
       const { cls, arcs } = R['classifyCell'](box);
+      if (cls !== 0) decided += 1;
       const w = box.x1 - box.x0;
       const h = box.y1 - box.y0;
       const exactAt: boolean[] = [];
@@ -6180,8 +6280,23 @@ export function a04CoverSelfTest(
         if (exactAt.some((v) => v))
           findings.push(`${at}: an inside sample in a cell OUT by halves`);
       }
+      if (R['includedByHalves'](box, arcs)) {
+        halvesIn += 1;
+        if (witness !== null) findings.push(`${at}: a witnessed cell is IN by halves`);
+        if (exactAt.some((v) => !v))
+          findings.push(`${at}: an outside sample in a cell IN by halves`);
+      }
     }
-    return { findings, cells: boxes.length, decidedWarm, decidedCold, witnessed, halvesOut };
+    return {
+      findings,
+      cells: boxes.length,
+      decided,
+      decidedWarm,
+      decidedCold,
+      witnessed,
+      halvesOut,
+      halvesIn,
+    };
   } finally {
     activeWork = previousWork;
   }
