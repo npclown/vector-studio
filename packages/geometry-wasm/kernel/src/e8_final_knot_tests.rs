@@ -113,6 +113,36 @@ fn e8_f5_snaps_only_source_final_knots_in_the_exact_rung() {
 }
 
 #[test]
+fn an_endpoint_equal_in_value_keeps_its_emitted_bits() {
+    // p3.x = -0 is emitted as fl(1 + fl(-0 - 1)) = +0: equal in value, so the exact rung
+    // certified it before E8-U2, and the snap must not rewrite the bits (identity of `ok`
+    // records, found on `p3-b0r-random/v1` F6-slivers in the E8-K3 run of 2026-10-24).
+    let verbs = [VERB_MOVE, VERB_CUBIC, VERB_LINE, VERB_CLOSE];
+    let points = [1.0, 0.0, 1.0, 1.0, 0.25, 1.0, -0.0, 0.5, 0.5, -1.0];
+    let point_bytes = bytes(&points);
+    let (flatten, topology) = tolerances(0);
+    let mut workspace = CubicFillWorkspace::new(FILL_V0_LIMITS).unwrap();
+    workspace
+        .attempt(
+            input(&verbs, &point_bytes, flatten),
+            LineFillRule::Nonzero,
+            topology,
+            MAX_FLAT_COMMANDS,
+        )
+        .expect("certified");
+    let output = workspace.output().expect("published");
+    let last_leaf = output
+        .commands
+        .iter()
+        .rev()
+        .find(|command| command.verb == VERB_LINE && command.provenance.source_verb == 1)
+        .and_then(|command| command.point)
+        .expect("a final leaf");
+    assert_eq!(last_leaf.x.to_bits(), 0.0f64.to_bits(), "emitted +0 kept");
+    assert_eq!(last_leaf.y, 0.5);
+}
+
+#[test]
 fn e8_c6_zero_length_final_leaf_is_left_as_emitted() {
     let point_bytes = bytes(&E8_F5_POINTS);
     let (flatten, topology) = tolerances(0);

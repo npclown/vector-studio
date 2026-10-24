@@ -403,6 +403,14 @@ describe('P3 B0 spike SL-U2 independent oracles', () => {
     const fast = { ranges: [[0, 3] as const], points: [a, b, cEmitted], owners, sources };
     const exact = { ranges: [[0, 3] as const], points: [a, b, c], owners, sources };
     expect(snapViewFinalKnots(fast)).toEqual(exact);
+    // A final knot equal in value keeps its emitted bits (+0 for a -0 endpoint).
+    const zeroEnd = point(-0, 0);
+    const signed = {
+      ...fast,
+      points: [a, b, point(0, 0)],
+      sources: [{ ...sources[0]!, points: [a, point(3, 9), point(7, 9), zeroEnd] }, sources[1]!],
+    };
+    expect(snapViewFinalKnots(signed)).toEqual(signed);
     // An internal knot is never moved: the snap of a view that differs there stays different.
     const internal = { ...fast, points: [a, point(5, 7.000000000000001), cEmitted] };
     expect(snapViewFinalKnots(internal)?.points[1]).toEqual(internal.points[1]);

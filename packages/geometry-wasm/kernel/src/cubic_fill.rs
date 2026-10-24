@@ -770,7 +770,10 @@ impl CubicFillWorkspace {
             else {
                 continue;
             };
-            if source_verb != provenance.source_verb {
+            // A point equal in value is kept with its emitted bits (for example +0 for a -0
+            // endpoint), so an exact-rung output that succeeded before E8-U2 is unchanged bit
+            // for bit.
+            if source_verb != provenance.source_verb || same_point(point, points[3]) {
                 continue;
             }
             let previous = index

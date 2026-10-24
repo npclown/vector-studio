@@ -1159,6 +1159,10 @@ export function snapViewFinalKnots(view: SpikeView): SpikeView | null {
   for (const source of view.sources)
     if (source.kind === 'cubic') ends.set(source.sourceVerb, source.points[3]!);
   const same = (a: HexPoint, b: HexPoint) => a[0] === b[0] && a[1] === b[1];
+  // The kernel keeps a point equal in value with its emitted bits (+0 for a -0 endpoint).
+  const value = (hex: Hex) => fromBits(BigInt(`0x${hex}`));
+  const equal = (a: HexPoint, b: HexPoint) =>
+    value(a[0]) === value(b[0]) && value(a[1]) === value(b[1]);
   const ranges: (readonly [number, number])[] = [];
   const points: HexPoint[] = [];
   const owners: SpikeOwner[] = [];
@@ -1179,8 +1183,9 @@ export function snapViewFinalKnots(view: SpikeView): SpikeView | null {
       const end = ends.get(edge.sourceVerb);
       if (end === undefined) return;
       const at = (index + 1) % count;
+      if (equal(end, contour[at]!)) return;
       if (at === 0) {
-        if (!same(end, contour[0]!)) snapped.length = 0;
+        snapped.length = 0;
         return;
       }
       snapped[at] = end;
