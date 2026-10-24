@@ -1594,19 +1594,23 @@ Dated append. E3-U2d makes the oracle fast enough that the five `ORACLE-WORK` ca
 | Collect first | `CubicSweep.classify` collects to the polygon's size first. The OUT test and the fine collection continue from that collection instead of the root | Starting from the frontier only skips the sub-arcs that are certified far. Every test on the way down is the same sound test |
 | Warm start in the cover | A cover cell's classification starts from its parent's frontiers. The root starts from the sub-arc roots | A child cell lies inside its parent. By induction, a cell's class and frontiers are a function of its box alone, however the cover is built |
 | Warm start inside a cell | The witness samples and candidates, the seam halves and the halves below start from the cell's own frontiers | Each of them lies inside the cell |
-| Frontier cache | The frontiers of at most 2^14 undecided cells are kept, least recently used first. An evicted cell's frontiers are recomputed from its parent's on demand, and charged again | The recomputation is the same classification, so it gives the same frontiers. The charge depends on the order of the run, which is deterministic, never on a clock |
-| Anisotropic witness samples | A cell whose local image has one side 8 or more times the other, and which has an outside sample but no inside one, tries up to 64 points on its midline along the long local axis, spaced at about the short side | A witness is a function of the box alone. Each candidate is still tested by the certified point test and exact membership |
-| OUT by halves | An undecided anisotropic cell at the freeze cell size or below, without a witness, is OUT when both halves along its long local axis miss every piece. The test recurses to a local aspect of about 2, at most 12 levels, and stops at the first half that is not certified | Two closed halves cover the cell. A half misses R when every piece's OUT test certifies it (`excludesPoly`). A witnessed cell holds a point of R, so it is never tested |
+| Frontier cache | The frontiers of at most 2^14 undecided cells are kept, least recently used first. An evicted cell's frontiers are recomputed from its parent's on demand, and charged again | The recomputation is the same classification, so it gives the same frontiers. The charge depends on the order of the run, which is deterministic, never on a clock. A measurement builds its cover in another order, so the freeze work approximates the measurement work, as the freeze already does (section 14.2) |
+| Anisotropic witness samples | A cell whose local image has one side 8 or more times the other, and which has an outside sample but no inside one, tries points on its midline along the long local axis: `min(64, 2^⌈log2(long/short)⌉)` of them, so spaced at about the short side up to an aspect of 64 and at `long/64` above it (64 times the short side under T7) | A witness is a function of the box alone. Each candidate is still tested by the certified point test and exact membership |
+| OUT by halves | An undecided anisotropic cell at the freeze cell size or below, without a witness, is OUT when both halves along its long local axis miss every piece. The test recurses to a local aspect of about 2, at most 12 levels, and stops at the first half that is not certified. The first half is certified in full before the second is tried, so a cell on `∂R` can cost up to about 2^11 `excludesPoly` calls plus one chain, all charged | Two closed halves cover the cell. A half misses R when every piece's OUT test certifies it (`excludesPoly`). A witnessed cell holds a point of R, so it is never tested |
+
+**The node budget.** The sub-arc budget of 4,096 per test (section 14.2) is unchanged, but a test now starts at a frontier instead of the root. So the refinement that a cell gets adds up over its ancestors, and a kept frontier is not bounded by one budget. Each node is still charged. This changes what the budget limits, not a cap or a weight, and it can change a class only toward a more refined, still sound one.
+
+**Memory.** The cache bounds the number of kept cells, 2^14. Each keeps one frontier per sweep piece, and its sub-arcs below the cache depth stay alive through their parents.
 
 **Scope of the halves test.** It runs only at the freeze cell size and below. Larger cells are refined anyway, so the cost stays with the small cells that the freeze check reads. A larger undecided cell keeps class 0, which is sound.
 
-**Classification is unchanged in practice.** On `C9/g0187` and `C9/g0270` the cover has the same number of cells as before (761,329 and 1,376,069). The rational and structure counts are the same, so the classes are the same. The point test from a frontier decides every sample that the root traversal decides (section 17.3).
+**Classification is unchanged in practice.** On `C9/g0187` and `C9/g0270` the cover has the same number of cells as before (761,329 and 1,376,069). The rational and structure counts are the same, so the classes are the same. In the tests of section 17.3, the point test from a frontier decides every sample that the root traversal decides. That is observed, not a theorem: the budgets are spent on other nodes.
 
 ### 17.3 Tests
 
 `tests/geometry/e3-a04-oracle-u2d.test.ts` adds six tests through `a04CoverSelfTest`, a test-only export.
 
-- **Warm against cold.** It takes random undecided cover cells of four stroke cases, under T0, T4, T6 and T7. In each cell it tests random points and 24 bisection points between the witness pair, which lie next to `∂R`. The point test runs from the cell's frontiers and from the root, and exact membership decides the truth. No point disagrees, the cell classes agree with the samples, every witness is exact, and the warm test decides at least as often as the cold one.
+- **Warm against cold.** It takes random undecided cover cells of four stroke cases, under T0, T4, T6 and T7. In each cell it tests random points and 24 bisection points between the witness pair, which lie next to `∂R`. The point test runs from the frontiers of the cell's own classification from the sub-arc roots, and from the root. Exact membership decides the truth. No point disagrees, the cell classes agree with the samples, every witness is exact, and the warm test decides at least as often as the cold one.
 - **The k10 cells.** Three cells across the wedge get a witness. Cells past the corner are certified OUT by halves, and no exact sample inside them is in R.
 
 `pnpm test:e3-a04` passes 113 tests in 6 files.
@@ -1635,3 +1639,18 @@ The oracle is commit `c4a9644`. `a04-region.ts` has SHA-256 `3211486c2417f446f81
 - **Time per unit.** Of the ten slowest cases, the highest was 1.24 µs per unit (`C9/g0189/T2/z64-d3`, 852 s for 0.69·10^9 units). That is within the 1.53 µs of section 14.8.
 - **Full-run estimate.** 25 times the sample is about 86 CPU hours, about 6 to 7 h on 14 shards.
 - The run directory `.tools/e3-a04-freeze/2026-10-24T04-15-44-388Z/` is machine-local and not committed.
+
+### 17.5 Independent review of PR #227, 2026-10-24
+
+A fresh-context review of the diff (`dbbaaeb..367450c`) found **no soundness, determinism or charging defect** (verdict READY WITH FOLLOW-UPS). It checked these arguments against the code: the frontier, the reorder of `classify`, the warm start, the cache and the halves. Disposition, decided under the user's standing instruction of 2026-10-24 (recommended option):
+
+- **Applied here, in this section's text.**
+  - The cost of the halves test.
+  - The sample count above an aspect of 64.
+  - The changed meaning of the node budget, and memory.
+  - That "decides at least as often" is observed, not proved.
+  - That freeze work only approximates measurement work.
+- **Deferred to the first oracle change after the freeze.** The full freeze run pins the oracle SHA `3211486c…0fa`, so its source does not change before the freeze record. Three items wait for that change:
+  - `a04CoverSelfTest` should also use the cover's own frontiers, inherited and recomputed after eviction (`arcsOf`), and compare the cover's classes with the cold class and exact membership. An injectable cache size would let a test force eviction.
+  - Two code comments repeat the overstatements corrected above (the halves cost and the sample spacing).
+  - `splitPoly` builds the merged frontier map twice.
