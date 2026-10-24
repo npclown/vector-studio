@@ -2992,7 +2992,23 @@ type LPoly = Readonly<{
   box: Box;
   /** The exact vertices, when known (cells and their exact seam splits). */
   exact: readonly QP[] | null;
+  /**
+   * Sub-arc frontiers of an enclosing polygon, per sweep piece (E3-U2d): a sweep's traversals
+   * start from these nodes instead of its root.
+   */
+  arcs?: ArcHint | undefined;
+  /** Filled by each sweep piece that classifies this polygon: its frontier for the polygon. */
+  found?: Map<StrokePiece, readonly ArcNode[]>;
 }>;
+
+/**
+ * Per sweep piece, a frontier of sub-arc nodes for a polygon P (E3-U2d): disjoint nodes that
+ * cover every t of [0, 1] except those whose sub-arc is certified farther than r from P. Since
+ * the certificate is a statement about the true sets, it holds for every polygon inside P: such
+ * a t has no foot within r of it. So a traversal for a polygon inside P may start from the
+ * frontier instead of the root. Every test on the way down is the same sound test.
+ */
+type ArcHint = ReadonlyMap<StrokePiece, readonly ArcNode[]>;
 
 /** An end-normal line through B with normal vector T (canonically oriented). */
 type Seam = {
@@ -3021,6 +3037,8 @@ interface StrokePiece {
   contains(y: QP): boolean;
   /** 1 when the polygon lies in the piece, −1 when it misses it, 0 when undecided. */
   classify(poly: LPoly): number;
+  /** True only when the polygon misses the piece: the OUT part of `classify`, when cheaper. */
+  excludes?(poly: LPoly): boolean;
 }
 
 const ivSignOk = (v: Iv, sign: number): boolean => (sign > 0 ? v.lo >= 0 : v.hi <= 0);
@@ -3479,6 +3497,15 @@ const SEAM_SPLIT_BUDGET = 24;
 /** Sub-arc nodes per normal-segment witness search (E3-U2c). */
 const NORMAL_CANDIDATE_BUDGET = 512;
 
+/**
+ * Witness samples along the long local axis of an anisotropic cell (E3-U2d): at most this many,
+ * and only when one side of the cell's local image is at least ANISOTROPIC_RATIO times the other.
+ */
+const ANISOTROPIC_SAMPLES = 64;
+const ANISOTROPIC_RATIO = 8;
+/** Halving levels of the OUT-by-halves test of an anisotropic cell (E3-U2d). */
+const ANISOTROPIC_MAX_LEVELS = 12;
+
 /** Sub-arc trees are cached to this depth only; deeper sub-arcs are rebuilt on demand. */
 const ARC_CACHE_DEPTH = 14;
 
@@ -3651,7 +3678,10 @@ class CubicSweep implements StrokePiece {
     const [a, b] = arcKids(node, this.cache);
     return this.outside(a, poly, size, budget) && this.outside(b, poly, size, budget);
   }
-  private collectNodes(poly: LPoly, target: number): ArcNode[] {
+  private starts(poly: LPoly): readonly ArcNode[] {
+    return poly.arcs?.get(this) ?? [this.root];
+  }
+  private collectNodes(poly: LPoly, target: number, from = this.starts(poly)): ArcNode[] {
     const nodes: ArcNode[] = [];
     let budget = 4096;
     const collect = (n: ArcNode) => {
@@ -3671,7 +3701,7 @@ class CubicSweep implements StrokePiece {
       collect(a);
       collect(b);
     };
-    collect(this.root);
+    for (const n of from) collect(n);
     return nodes;
   }
   private readonly exactAtZ = new Map<number, ZLine>();
@@ -3819,7 +3849,7 @@ class CubicSweep implements StrokePiece {
       visit(a);
       visit(b);
     };
-    visit(this.root);
+    for (const n of this.starts(poly)) visit(n);
     return out;
   }
   pointsNear(box: Box): [number, number][] {
@@ -3840,17 +3870,30 @@ class CubicSweep implements StrokePiece {
     visit(this.root);
     return out;
   }
+  excludes(poly: LPoly): boolean {
+    const size = boxDiam(poly.box);
+    const floor = Math.max(size, this.ir.lo * (size > 0 ? 2 ** -36 : 2 ** -24));
+    const budget = { n: 4096 };
+    return this.starts(poly).every((n) => this.outside(n, poly, floor, budget));
+  }
   classify(poly: LPoly): number {
     const size = boxDiam(poly.box);
     // Sub-arcs are refined to the polygon's size, never below r·2^-36 (r·2^-24 for a point, whose
     // exact membership is the fallback), and within a node budget: an undecided polygon stays
     // undecided, which is sound. Without the budget, a point at the evolute's cusp (a triple
     // foot) makes the undecided sub-arcs multiply at every level.
+    //
+    // The sub-arcs are collected to the polygon's size first (E3-U2d), and the OUT test and the
+    // finer collection continue from that collection instead of the root. It is a frontier for
+    // the polygon (`ArcHint`), and it is kept for the polygons inside it.
     const floor = Math.max(size, this.ir.lo * (size > 0 ? 2 ** -36 : 2 ** -24));
-    if (this.outside(this.root, poly, floor, { n: 4096 })) return -1;
-    if (this.inside(poly, this.collectNodes(poly, floor))) return 1;
+    const coarse = this.collectNodes(poly, floor);
+    poly.found?.set(this, coarse);
+    const budget = { n: 4096 };
+    if (coarse.every((n) => this.outside(n, poly, floor, budget))) return -1;
+    if (this.inside(poly, coarse)) return 1;
     if (size === 0) return 0;
-    const fine = this.collectNodes(poly, floor / 8);
+    const fine = this.collectNodes(poly, floor / 8, coarse);
     return this.inside(poly, fine) || this.insideUnion(poly, fine) ? 1 : 0;
   }
 }
@@ -3880,6 +3923,8 @@ type StrokeRegion = Readonly<{
   containsLocal: (y: QP) => boolean;
   /** Seam-aware union classification of a local polygon: 1 inside, −1 outside, 0 undecided. */
   classifyPoly: (poly: LPoly, depth: number) => number;
+  /** True only when the polygon misses every piece (an OUT certificate without seam splits). */
+  excludesPoly: (poly: LPoly) => boolean;
 }>;
 
 function startTangentOf(q: readonly QP[]): QP {
@@ -3897,6 +3942,13 @@ function endTangentOf(q: readonly QP[]): QP {
     if (!qpzero(d)) return d;
   }
   return oracleError('zero-length segment has no tangent');
+}
+
+/** The frontiers that a polygon inside `poly` may start from: its own, else its enclosing ones. */
+function hintOf(poly: LPoly): ArcHint | undefined {
+  if (poly.found === undefined || poly.found.size === 0) return poly.arcs;
+  if (poly.arcs === undefined) return poly.found;
+  return new Map([...poly.arcs, ...poly.found]);
 }
 
 function splitPoly(poly: LPoly, seam: Seam): [LPoly, LPoly] {
@@ -3953,6 +4005,7 @@ function splitPoly(poly: LPoly, seam: Seam): [LPoly, LPoly] {
       gens: g,
       tags,
       box: boxOfIvPoints(g),
+      arcs: hintOf(poly),
       get exact() {
         if (exact === undefined) exact = exactSide(side);
         return exact;
@@ -4217,7 +4270,16 @@ function makeStrokeRegion(c: Decoded, hooks: A04Hooks, sigma: Q): StrokeRegion {
     }
     return 0;
   };
-  return { pieces, seams: seamList, r, containsLocal, classifyPoly };
+  const excludesPoly = (poly: LPoly): boolean => {
+    charge(W_SEAM, 1);
+    for (const p of pieces) {
+      if (!boxesMeet(p.box, poly.box)) continue;
+      if (p.corners !== undefined && separatedByEdges(poly.gens, p.corners)) continue;
+      if (p.excludes !== undefined ? !p.excludes(poly) : p.classify(poly) !== -1) return false;
+    }
+    return true;
+  };
+  return { pieces, seams: seamList, r, containsLocal, classifyPoly, excludesPoly };
 }
 
 // =============================================================================================
@@ -4228,7 +4290,12 @@ type CoverNode = {
   readonly cls: number;
   readonly witness: Readonly<{ a: QP; b: QP; ia: IvP; ib: IvP }> | null;
   kids: CoverNode[] | null;
+  /** The quadtree parent, whose sub-arc frontiers the cell's classification starts from. */
+  readonly parent: CoverNode | null;
 };
+
+/** Sub-arc frontiers of undecided cover cells kept for reuse (E3-U2d), a memory bound. */
+const COVER_FRONTIER_CACHE = 1 << 14;
 
 /** One cover cell as a ∂R element: certain when it holds an inside and an outside witness. */
 class CellElement implements RElement {
@@ -4280,6 +4347,13 @@ class StrokeTarget implements RegionTarget {
   readonly kind = 'stroke' as const;
   readonly root: CoverNode;
   nodes = 0;
+  /**
+   * The sub-arc frontiers of undecided cells (E3-U2d), least recently used first. An evicted
+   * cell's frontiers are recomputed from its parent's on demand: the same classification, so
+   * the same frontiers, charged again.
+   */
+  private readonly frontiers = new Map<CoverNode, ArcHint>();
+  private rootArcs: ArcHint | null = null;
   constructor(
     readonly region: StrokeRegion,
     private readonly frame: Frame,
@@ -4287,47 +4361,163 @@ class StrokeTarget implements RegionTarget {
   ) {
     const reg = indexRegion(frame);
     const side = 2 ** Math.ceil(Math.log2(Math.max(reg.x1 - reg.x0, reg.y1 - reg.y0)));
-    this.root = this.node({ x0: reg.x0, y0: reg.y0, x1: reg.x0 + side, y1: reg.y0 + side });
+    this.root = this.node({ x0: reg.x0, y0: reg.y0, x1: reg.x0 + side, y1: reg.y0 + side }, null);
+  }
+  private keepArcs(n: CoverNode, arcs: ArcHint): void {
+    if (n.parent === null) {
+      this.rootArcs = arcs;
+      return;
+    }
+    this.frontiers.delete(n);
+    this.frontiers.set(n, arcs);
+    if (this.frontiers.size > COVER_FRONTIER_CACHE)
+      this.frontiers.delete(this.frontiers.keys().next().value!);
+  }
+  /** The sub-arc frontiers of an undecided cell: kept, or recomputed from its parent's. */
+  private arcsOf(n: CoverNode): ArcHint {
+    if (n.parent === null && this.rootArcs !== null) return this.rootArcs;
+    const kept = this.frontiers.get(n);
+    if (kept !== undefined) {
+      this.keepArcs(n, kept);
+      return kept;
+    }
+    const { arcs } = this.classifyCell(
+      n.box,
+      n.parent === null ? undefined : this.arcsOf(n.parent),
+    );
+    this.keepArcs(n, arcs);
+    return arcs;
   }
   /** The local polygon of a physical box (or a point). */
-  polyOf(points: readonly IvP[], exact: readonly QP[] | null = null): LPoly {
+  polyOf(points: readonly IvP[], exact: readonly QP[] | null = null, arcs?: ArcHint): LPoly {
     const gens = points.map((p) => phiInvIv(this.frame, p));
     const local = exact === null ? null : exact.map((p) => phiInv(this.frame, p));
-    return { gens, tags: new Map(), box: boxOfIvPoints(gens), exact: local };
+    return {
+      gens,
+      tags: new Map(),
+      box: boxOfIvPoints(gens),
+      exact: local,
+      arcs,
+      found: new Map(),
+    };
   }
-  classifyPhys(box: Box): number {
-    return this.region.classifyPoly(
-      this.polyOf(
-        [ivpc(box.x0, box.y0), ivpc(box.x1, box.y0), ivpc(box.x1, box.y1), ivpc(box.x0, box.y1)],
-        [qpn(box.x0, box.y0), qpn(box.x1, box.y0), qpn(box.x1, box.y1), qpn(box.x0, box.y1)],
-      ),
-      0,
+  /** The local polygon of a physical box, without its exact vertices. */
+  private boxPoly(box: Box, arcs?: ArcHint): LPoly {
+    return this.polyOf(
+      [ivpc(box.x0, box.y0), ivpc(box.x1, box.y0), ivpc(box.x1, box.y1), ivpc(box.x0, box.y1)],
+      null,
+      arcs,
     );
   }
-  classifyPoint(x: number, y: number): number {
-    return this.region.classifyPoly(this.polyOf([ivpc(x, y)]), 0);
+  /** A cell's class, and the sub-arc frontiers that its classification found (E3-U2d). */
+  private classifyCell(box: Box, from?: ArcHint): { cls: number; arcs: ArcHint } {
+    const poly = this.polyOf(
+      [ivpc(box.x0, box.y0), ivpc(box.x1, box.y0), ivpc(box.x1, box.y1), ivpc(box.x0, box.y1)],
+      [qpn(box.x0, box.y0), qpn(box.x1, box.y0), qpn(box.x1, box.y1), qpn(box.x0, box.y1)],
+      from,
+    );
+    const cls = this.region.classifyPoly(poly, 0);
+    return { cls, arcs: hintOf(poly) ?? new Map() };
   }
-  private node(box: Box): CoverNode {
+  /** The class of a box that need not be a cover cell, from the sub-arc roots. */
+  classifyPhys(box: Box): number {
+    return this.classifyCell(box).cls;
+  }
+  /** The lengths of the local images of a box's x and y edges. */
+  private localSides(box: Box): { lx: number; ly: number } {
+    const o = phiInvIv(this.frame, ivpc(box.x0, box.y0));
+    const len = (p: IvP) =>
+      Math.hypot(
+        (p.x.lo + p.x.hi) / 2 - (o.x.lo + o.x.hi) / 2,
+        (p.y.lo + p.y.hi) / 2 - (o.y.lo + o.y.hi) / 2,
+      );
+    return {
+      lx: len(phiInvIv(this.frame, ivpc(box.x1, box.y0))),
+      ly: len(phiInvIv(this.frame, ivpc(box.x0, box.y1))),
+    };
+  }
+  /**
+   * OUT by halves for an anisotropic cell (E3-U2d). Under strong anisotropy (T7) a cell's local
+   * image is a strip longer than the stroke is wide. Beside a butt corner such a strip holds
+   * points within r of the end and points on the end normal, but no point that is both, and
+   * the sub-arc test, which bounds the distance over the whole strip, cannot see that. The cell
+   * misses R when both halves along its long local axis miss every piece, which holds
+   * recursively, so the halves are tested down to a local aspect of about 2. The search stops at
+   * the first half that is not certified, so a cell on ∂R costs one chain of halves.
+   */
+  private excludesByHalves(box: Box, arcs: ArcHint): boolean {
+    const { lx, ly } = this.localSides(box);
+    const long = Math.max(lx, ly);
+    const short = Math.min(lx, ly);
+    if (!(long >= ANISOTROPIC_RATIO * short)) return false;
+    const levels = Math.min(ANISOTROPIC_MAX_LEVELS, Math.ceil(Math.log2(long / short)) - 1);
+    const halves = (b: Box): [Box, Box] => {
+      if (lx >= ly) {
+        const xm = (b.x0 + b.x1) / 2;
+        return [
+          { ...b, x1: xm },
+          { ...b, x0: xm },
+        ];
+      }
+      const ym = (b.y0 + b.y1) / 2;
+      return [
+        { ...b, y1: ym },
+        { ...b, y0: ym },
+      ];
+    };
+    // The cell itself is not certified (classifyPoly), so the search starts at its halves.
+    const halvesExcluded = (b: Box, left: number): boolean =>
+      halves(b).every((h) => {
+        const poly = this.boxPoly(h, arcs);
+        return this.region.excludesPoly(poly) || (left > 1 && halvesExcluded(h, left - 1));
+      });
+    return halvesExcluded(box, levels);
+  }
+  /** The class of a point; `arcs` are frontiers of a cell that holds it. */
+  classifyPoint(x: number, y: number, arcs?: ArcHint): number {
+    return this.region.classifyPoly(this.polyOf([ivpc(x, y)], null, arcs), 0);
+  }
+  private node(box: Box, parent: CoverNode | null): CoverNode {
     spend(this.work, 1, 'stroke cover');
     this.nodes += 1;
-    const cls = this.classifyPhys(box);
+    // A cell's classification starts from its parent's sub-arc frontiers (E3-U2d). The root's
+    // starts from the sub-arc roots, so by induction a cell's class and frontiers are a function
+    // of its box alone, however the cover is built.
+    const classified = this.classifyCell(box, parent === null ? undefined : this.arcsOf(parent));
+    let cls = classified.cls;
     // The witness pair is searched on first use (E3-U2c): the freeze check reads it only at the
     // freeze cell size and below, so larger cells on the way down never pay for the samples. It
-    // is a function of the box alone, so the cover is the same whenever it is computed.
+    // is a function of the box alone, so the cover is the same whenever it is computed. Its
+    // samples start from the cell's own sub-arc frontiers (E3-U2d), a function of the box too:
+    // kept, or recomputed from the parent's when they were evicted.
+    const arcs = classified.arcs;
     let witness: CoverNode['witness'] | undefined = cls === 0 ? undefined : null;
-    const find = () => this.findWitness(box);
-    return {
+    // An undecided anisotropic cell at the freeze cell size or below (E3-U2d): a cell with a
+    // witness holds a point of R, so only one without is tested OUT by halves. Larger cells are
+    // refined instead, so the cost stays with the small cells that the freeze check reads.
+    if (cls === 0 && box.x1 - box.x0 <= A04_ORACLE_PARAMETERS.freezeCellSize) {
+      const { lx, ly } = this.localSides(box);
+      if (Math.max(lx, ly) >= ANISOTROPIC_RATIO * Math.min(lx, ly)) {
+        witness = this.findWitness(box, arcs);
+        if (witness === null && this.excludesByHalves(box, arcs)) cls = -1;
+      }
+    }
+    const find = () => this.findWitness(box, this.arcsOf(n));
+    const n: CoverNode = {
       box,
       cls,
       kids: null,
+      parent,
       get witness() {
         if (witness === undefined) witness = find();
         return witness;
       },
     };
+    if (cls === 0) this.keepArcs(n, arcs);
+    return n;
   }
   /** An exact inside and outside sample of an undecided cell, or null. */
-  private findWitness(box: Box): CoverNode['witness'] {
+  private findWitness(box: Box, arcs: ArcHint): CoverNode['witness'] {
     let witness: CoverNode['witness'] = null;
     {
       const xm = (box.x0 + box.x1) / 2;
@@ -4345,7 +4535,7 @@ class StrokeTarget implements RegionTarget {
         [xm, box.y1],
         [box.x0, ym],
       ] as const) {
-        let v = this.classifyPoint(x, y);
+        let v = this.classifyPoint(x, y, arcs);
         // A sample the certified cell test leaves open (it lies on or next to ∂R) is decided by
         // exact membership; a point of ∂R is inside the closed region.
         if (v === 0) v = this.contains(qpn(x, y)) ? 1 : -1;
@@ -4356,7 +4546,8 @@ class StrokeTarget implements RegionTarget {
       // A piece thinner than the sample spacing (a thin wedge or strip) is found through the
       // pieces themselves: the centroid of a convex piece clipped to the cell, or the cell point
       // nearest to a disk's center, is tested by exact membership.
-      if (outside !== null && inside === null) inside = this.pieceCandidate(box);
+      if (outside !== null && inside === null) inside = this.pieceCandidate(box, arcs);
+      if (outside !== null && inside === null) inside = this.anisotropicCandidate(box, arcs);
       if (inside !== null && outside !== null)
         witness = {
           a: qpn(inside[0], inside[1]),
@@ -4367,8 +4558,47 @@ class StrokeTarget implements RegionTarget {
     }
     return witness;
   }
+  /**
+   * A point of the box inside R on the cell's midline along its long local axis, or null
+   * (E3-U2d). Under strong anisotropy a cell's local image is a thin strip that can be longer
+   * than the stroke is wide, so the part of R in it is a short stretch of the strip, which the
+   * nine samples and the normal segments can miss (beside the butt corner of a stroke under
+   * T7). The samples are spaced at about the strip's width. Candidates only: each is tested by
+   * the certified point test and exact membership.
+   */
+  private anisotropicCandidate(box: Box, arcs: ArcHint): [number, number] | null {
+    const f = this.frame;
+    const ex = phiInvIv(f, ivpc(box.x1, box.y0));
+    const ey = phiInvIv(f, ivpc(box.x0, box.y1));
+    const o = phiInvIv(f, ivpc(box.x0, box.y0));
+    const len = (p: IvP) =>
+      Math.hypot(
+        (p.x.lo + p.x.hi) / 2 - (o.x.lo + o.x.hi) / 2,
+        (p.y.lo + p.y.hi) / 2 - (o.y.lo + o.y.hi) / 2,
+      );
+    const lx = len(ex);
+    const ly = len(ey);
+    const long = Math.max(lx, ly);
+    const short = Math.min(lx, ly);
+    if (!(long >= ANISOTROPIC_RATIO * short)) return null;
+    const n = Math.min(
+      ANISOTROPIC_SAMPLES,
+      2 ** Math.ceil(Math.log2(long / Math.max(short, Number.MIN_VALUE))),
+    );
+    const xm = (box.x0 + box.x1) / 2;
+    const ym = (box.y0 + box.y1) / 2;
+    for (let i = 0; i < n; i += 1) {
+      const u = (i + 0.5) / n;
+      const x = lx >= ly ? box.x0 + u * (box.x1 - box.x0) : xm;
+      const y = lx >= ly ? ym : box.y0 + u * (box.y1 - box.y0);
+      const v = this.classifyPoint(x, y, arcs);
+      if (v === 1) return [x, y];
+      if (v === 0 && this.contains(qpn(x, y))) return [x, y];
+    }
+    return null;
+  }
   /** A point of the box inside R, found from the pieces, or null (candidates are approximate). */
-  private pieceCandidate(box: Box): [number, number] | null {
+  private pieceCandidate(box: Box, arcs: ArcHint): [number, number] | null {
     const f = this.frame;
     const toLocal = (x: number, y: number): [number, number] => {
       const p = phiInvIv(f, ivpc(x, y));
@@ -4396,7 +4626,7 @@ class StrokeTarget implements RegionTarget {
       const x = Math.min(box.x1, Math.max(box.x0, p[0]));
       const y = Math.min(box.y1, Math.max(box.y0, p[1]));
       // The certified point test first; exact membership only where it is undecided.
-      const v = this.classifyPoint(x, y);
+      const v = this.classifyPoint(x, y, arcs);
       if (v !== 0) return v === 1 ? [x, y] : null;
       return this.contains(qpn(x, y)) ? [x, y] : null;
     };
@@ -4420,12 +4650,7 @@ class StrokeTarget implements RegionTarget {
           if (hit !== null) return hit;
         }
         // The part of a normal segment inside the cell (Liang–Barsky), at its midpoint.
-        const cellPoly = this.polyOf([
-          ivpc(box.x0, box.y0),
-          ivpc(box.x1, box.y0),
-          ivpc(box.x1, box.y1),
-          ivpc(box.x0, box.y1),
-        ]);
+        const cellPoly = this.boxPoly(box, arcs);
         for (const [u, v] of piece.normalsNear(cellPoly)) {
           const [ax, ay] = toPhys(u);
           const [bx, by] = toPhys(v);
@@ -4484,10 +4709,10 @@ class StrokeTarget implements RegionTarget {
       const ym = (y0 + y1) / 2;
       if (!(xm > x0 && xm < x1 && ym > y0 && ym < y1)) return [];
       n.kids = [
-        this.node({ x0, y0, x1: xm, y1: ym }),
-        this.node({ x0: xm, y0, x1, y1: ym }),
-        this.node({ x0, y0: ym, x1: xm, y1 }),
-        this.node({ x0: xm, y0: ym, x1, y1 }),
+        this.node({ x0, y0, x1: xm, y1: ym }, n),
+        this.node({ x0: xm, y0, x1, y1: ym }, n),
+        this.node({ x0, y0: ym, x1: xm, y1 }, n),
+        this.node({ x0: xm, y0: ym, x1, y1 }, n),
       ];
     }
     return n.kids.filter((k) => k.cls === 0);
@@ -5636,4 +5861,128 @@ export function a04ContainsUnscaled(
   if (f.singular) oracleError('singular frame');
   const p = qp(scalarQ(point[0]), scalarQ(point[1]));
   return makeStrokeRegion(c, hooks, Q1).containsLocal(qpscale(phiInv(f, p), qdiv(Q1, f.sigma)));
+}
+
+export type A04CoverSelfTest = Readonly<{
+  findings: string[];
+  cells: number;
+  /** Sample points decided by the point test from the cell's frontiers, and from the root. */
+  decidedWarm: number;
+  decidedCold: number;
+  witnessed: number;
+  /** Cells that the OUT-by-halves test certifies (E3-U2d). */
+  halvesOut: number;
+}>;
+
+/**
+ * Checks the E3-U2d steps on the stroke cover of one case (contract section 17): the point
+ * test started from a cell's sub-arc frontiers, against the point test from the root and exact
+ * membership at random points of the cell; the witness pair of the cell; and the OUT-by-halves
+ * test, against exact membership at the samples. The cells are the given boxes, or else
+ * undecided cover cells reached by a random descent to sizes between 2^-4 and 2^-9.
+ */
+export function a04CoverSelfTest(
+  input: A04Case,
+  seed: number,
+  options: Readonly<{ cells?: number; samples?: number; boxes?: readonly Box[] }> = {},
+): A04CoverSelfTest {
+  const c = decodeCase(input);
+  const f = makeFrame(c, {});
+  const work = newWork(A04_ORACLE_PARAMETERS.measureWorkCap);
+  const previousWork = activeWork;
+  activeWork = work;
+  try {
+    const R = regionTarget(c, f, {}, work);
+    if (!(R instanceof StrokeTarget)) oracleError('a04CoverSelfTest takes a stroke case');
+    const rnd = selfTestRandom(seed);
+    const findings: string[] = [];
+    let boxes = options.boxes;
+    if (boxes === undefined) {
+      const found: Box[] = [];
+      for (
+        let k = 0;
+        k < (options.cells ?? 24) * 32 && found.length < (options.cells ?? 24);
+        k += 1
+      ) {
+        const stop = 2 ** -(4 + Math.floor(rnd() * 6));
+        let n = R.root;
+        while (n.box.x1 - n.box.x0 > stop) {
+          const kids = R.children(n).filter((m) => boxMeetsW1(f, m.box));
+          if (kids.length === 0) break;
+          n = kids[Math.floor(rnd() * kids.length)]!;
+        }
+        if (n.cls === 0 && n.box.x1 - n.box.x0 <= stop) found.push(n.box);
+      }
+      boxes = found;
+    }
+    let decidedWarm = 0;
+    let decidedCold = 0;
+    let witnessed = 0;
+    let halvesOut = 0;
+    for (const box of boxes) {
+      const at = `(${box.x0}, ${box.y0}) size ${box.x1 - box.x0}`;
+      const { cls, arcs } = R['classifyCell'](box);
+      const w = box.x1 - box.x0;
+      const h = box.y1 - box.y0;
+      const exactAt: boolean[] = [];
+      for (let k = 0; k < (options.samples ?? 24); k += 1) {
+        // Dyadic offsets, so that the points are exact.
+        const x = box.x0 + w * (Math.floor(rnd() * 1024) / 1024);
+        const y = box.y0 + h * (Math.floor(rnd() * 1024) / 1024);
+        const inside = R.contains(qpn(x, y));
+        exactAt.push(inside);
+        const warm = R.classifyPoint(x, y, arcs);
+        const cold = R.classifyPoint(x, y);
+        if (warm !== 0) decidedWarm += 1;
+        if (cold !== 0) decidedCold += 1;
+        if (warm !== 0 && (warm === 1) !== inside) findings.push(`${at}: warm point (${x}, ${y})`);
+        if (cold !== 0 && (cold === 1) !== inside) findings.push(`${at}: cold point (${x}, ${y})`);
+        if (cls !== 0 && (cls === 1) !== inside) findings.push(`${at}: cell class at (${x}, ${y})`);
+      }
+      if (cls !== 0) continue;
+      const witness = R['findWitness'](box, arcs);
+      if (witness !== null) {
+        witnessed += 1;
+        const inBox = (q: QP) =>
+          qcmp(q.x, qnum(box.x0)) >= 0 &&
+          qcmp(q.x, qnum(box.x1)) <= 0 &&
+          qcmp(q.y, qnum(box.y0)) >= 0 &&
+          qcmp(q.y, qnum(box.y1)) <= 0;
+        if (
+          !R.contains(witness.a) ||
+          R.contains(witness.b) ||
+          !inBox(witness.a) ||
+          !inBox(witness.b)
+        )
+          findings.push(`${at}: witness`);
+        // Points next to ∂R, where the point tests are hardest: bisection between the pair.
+        let a = [qapprox(witness.a.x), qapprox(witness.a.y)] as const;
+        let b = [qapprox(witness.b.x), qapprox(witness.b.y)] as const;
+        for (let k = 0; k < 24; k += 1) {
+          const x = (a[0] + b[0]) / 2;
+          const y = (a[1] + b[1]) / 2;
+          const inside = R.contains(qpn(x, y));
+          const warm = R.classifyPoint(x, y, arcs);
+          const cold = R.classifyPoint(x, y);
+          if (warm !== 0) decidedWarm += 1;
+          if (cold !== 0) decidedCold += 1;
+          if (warm !== 0 && (warm === 1) !== inside)
+            findings.push(`${at}: warm point (${x}, ${y})`);
+          if (cold !== 0 && (cold === 1) !== inside)
+            findings.push(`${at}: cold point (${x}, ${y})`);
+          if (inside) a = [x, y];
+          else b = [x, y];
+        }
+      }
+      if (R['excludesByHalves'](box, arcs)) {
+        halvesOut += 1;
+        if (witness !== null) findings.push(`${at}: a witnessed cell is OUT by halves`);
+        if (exactAt.some((v) => v))
+          findings.push(`${at}: an inside sample in a cell OUT by halves`);
+      }
+    }
+    return { findings, cells: boxes.length, decidedWarm, decidedCold, witnessed, halvesOut };
+  } finally {
+    activeWork = previousWork;
+  }
 }

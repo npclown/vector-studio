@@ -1570,3 +1570,87 @@ The spec ran on the cloud container's headless Chromium 153 with SwiftShader Web
   - The shader SHA-256 was `d306137cf0770f6bf7f9237f1c98b9ecd0a165cfdbfda916196d299e36b831a3`.
 - **Browser version.** The record's `browser.version` comes from Playwright's `browser.version()`. The `userAgent` field reads 151.0.7922.34 because the `Desktop Chrome` and `Desktop Edge` device presets fix the user agent string, so it is not the browser's version.
 - **Scope.** This is E3-A6 on the non-corpus cases of section 16.2. The named subset follows the freeze.
+
+## 17. E3-U2d oracle speed-up and freeze annex, 2026-10-24
+
+Dated append. E3-U2d makes the oracle fast enough that the five `ORACLE-WORK` cases of section 14.8 end within the freeze cap, then runs the freeze. It is the E3-Q6 (a) path of an oracle fix, with no corpus change. Every choice below is **decided under the user's standing instruction of 2026-10-22 (recommended option)**. On 2026-10-23 the user kept the 1.8·10^9 freeze cap and asked for a faster oracle (E3-U2d). No A04 threshold, criterion, cap or work weight changes.
+
+### 17.1 What the five cases needed
+
+- **Four cases reached the cap on sub-arc nodes** (`C9/g0270/T2/z1-d2`, `C9/g0195/T4/z1-d2`, `C9/g0178/T4/z64-d2`, `C9/g0187/T4/z0.01-d2`).
+  - A CPU profile of the E3-U2c build shows that every sweep traversal started at the root sub-arc. This held for each cover cell's OUT test, for both of its collections, and for every witness sample point.
+  - Counted by call site on `C9/g0187`, the coarse collection of the cover cells was 60 % of the sub-arc nodes, the point samples' collections 14 %, and the fine collections 9 %.
+  - The garbage collector took 56 to 62 % of the time, mostly on sub-arcs below the cache depth that are rebuilt for every traversal.
+- **`C9/k10/T7/z64-d3` had a line of unresolved cells**, beside the butt corner of the end cap. The cause was not one test but two.
+  - The local image of a 2^-4 px cell under T7 (`diag(1, 2^-12)`, so 4096:1) is a strip 6 local units long and 0.0015 wide, longer than the stroke is wide (`r = 9` in the scaled frame).
+  - Inside R, a cell next to the corner holds only a thin wedge, about 6 % of the strip. The nine samples missed it, and the normal-segment candidates of section 14.8 used up their node budget on sub-arcs whose normals cross the strip beyond `r`. In a fine grid of 585 exact samples, 37 were inside.
+  - Past the corner, a cell is outside R, but its strip holds points within `r` of the end and points on the end normal, and no point that is both. The sub-arc test bounds the distance over the whole strip, so it cannot certify the cell OUT.
+
+### 17.2 Changes, each a sound filter or an exact identity
+
+| Change | What it does | Why it is sound |
+| ------ | ------------ | --------------- |
+| Sub-arc frontier (`ArcHint`) | A sweep's coarse collection for a polygon P is kept as P's frontier: disjoint sub-arcs that cover every `t` except those certified farther than `r` from P | The certificate is a statement about the true sets: the sub-arc's enclosure is farther than `r` from an enclosure of P. So it holds for every polygon inside P, and such a `t` has no foot within `r` of it |
+| Collect first | `CubicSweep.classify` collects to the polygon's size first. The OUT test and the fine collection continue from that collection instead of the root | Starting from the frontier only skips the sub-arcs that are certified far. Every test on the way down is the same sound test |
+| Warm start in the cover | A cover cell's classification starts from its parent's frontiers. The root starts from the sub-arc roots | A child cell lies inside its parent. By induction, a cell's class and frontiers are a function of its box alone, however the cover is built |
+| Warm start inside a cell | The witness samples and candidates, the seam halves and the halves below start from the cell's own frontiers | Each of them lies inside the cell |
+| Frontier cache | The frontiers of at most 2^14 undecided cells are kept, least recently used first. An evicted cell's frontiers are recomputed from its parent's on demand, and charged again | The recomputation is the same classification, so it gives the same frontiers. The charge depends on the order of the run, which is deterministic, never on a clock. A measurement builds its cover in another order, so the freeze work approximates the measurement work, as the freeze already does (section 14.2) |
+| Anisotropic witness samples | A cell whose local image has one side 8 or more times the other, and which has an outside sample but no inside one, tries points on its midline along the long local axis: `min(64, 2^⌈log2(long/short)⌉)` of them, so spaced at about the short side up to an aspect of 64 and at `long/64` above it (64 times the short side under T7) | A witness is a function of the box alone. Each candidate is still tested by the certified point test and exact membership |
+| OUT by halves | An undecided anisotropic cell at the freeze cell size or below, without a witness, is OUT when both halves along its long local axis miss every piece. The test recurses to a local aspect of about 2, at most 12 levels, and stops at the first half that is not certified. The first half is certified in full before the second is tried, so a cell on `∂R` can cost up to about 2^11 `excludesPoly` calls plus one chain, all charged | Two closed halves cover the cell. A half misses R when every piece's OUT test certifies it (`excludesPoly`). A witnessed cell holds a point of R, so it is never tested |
+
+**The node budget.** The sub-arc budget of 4,096 per test (section 14.2) is unchanged, but a test now starts at a frontier instead of the root. So the refinement that a cell gets adds up over its ancestors, and a kept frontier is not bounded by one budget. Each node is still charged. This changes what the budget limits, not a cap or a weight, and it can change a class only toward a more refined, still sound one.
+
+**Memory.** The cache bounds the number of kept cells, 2^14. Each keeps one frontier per sweep piece, and its sub-arcs below the cache depth stay alive through their parents.
+
+**Scope of the halves test.** It runs only at the freeze cell size and below. Larger cells are refined anyway, so the cost stays with the small cells that the freeze check reads. A larger undecided cell keeps class 0, which is sound.
+
+**Classification is unchanged in practice.** On `C9/g0187` and `C9/g0270` the cover has the same number of cells as before (761,329 and 1,376,069). The rational and structure counts are the same, so the classes are the same. In the tests of section 17.3, the point test from a frontier decides every sample that the root traversal decides. That is observed, not a theorem: the budgets are spent on other nodes.
+
+### 17.3 Tests
+
+`tests/geometry/e3-a04-oracle-u2d.test.ts` adds six tests through `a04CoverSelfTest`, a test-only export.
+
+- **Warm against cold.** It takes random undecided cover cells of four stroke cases, under T0, T4, T6 and T7. In each cell it tests random points and 24 bisection points between the witness pair, which lie next to `∂R`. The point test runs from the frontiers of the cell's own classification from the sub-arc roots, and from the root. Exact membership decides the truth. No point disagrees, the cell classes agree with the samples, every witness is exact, and the warm test decides at least as often as the cold one.
+- **The k10 cells.** Three cells across the wedge get a witness. Cells past the corner are certified OUT by halves, and no exact sample inside them is in R.
+
+`pnpm test:e3-a04` passes 113 tests in 6 files.
+
+### 17.4 Results
+
+The oracle is commit `c4a9644`. `a04-region.ts` has SHA-256 `3211486c2417f446f8187d3b26324f72b15378b83274a578317b0b35b65fc0fa`.
+
+**Single cases, on the cloud container** (4 CPUs, Node v22, up to 3 processes). The cap was 6·10^9. Work is in units, `ok` unless stated.
+
+| Case | E3-U2c | With the first warm start (inside a cell) | E3-U2d |
+| ---- | ------ | ----------------------------------------- | ------ |
+| `C9/g0187/T4/z0.01-d2` | 1.82·10^9, 813 s | 0.94·10^9, 307 s | 0.58·10^9, 225 s |
+| `C9/g0195/T4/z1-d2` | 2.80·10^9, 1,290 s | 1.53·10^9, 696 s | 0.92·10^9 (freeze run below) |
+| `C9/g0178/T4/z64-d2` | above the cap | 1.68·10^9, 929 s | 1.39·10^9 (freeze run below) |
+| `C9/g0270/T2/z1-d2` | above the cap | 1.85·10^9, 836 s | 1.14·10^9, 479 s |
+| `C9/k10/T7/z64-d3` | `ORACLE-WORK`, unresolved cell, 0.42·10^9 | `ok`, 0.22·10^9 (anisotropic steps only) | `ok`, 0.19·10^9, 53 s |
+
+- **The anisotropic steps alone, on T7.** On the 43 T7 stroke cases of the stride-25 sample, they leave the work within 20 % of E3-U2c, except `C9/k10` (now `ok`) and `C9/k09/T7/z1-d3` (5.9·10^6 down to 0.7·10^6). A first version that also ran the halves test above the freeze cell size cost 2 to 4 times as much on T7, so it was not kept.
+
+**Stride-25 freeze run.** The machine is the one of section 14.7: Windows 11, 16 logical CPUs, Node v24.15.0, 14 shards. The command was `pnpm e3-a04:freeze --shards 14 --stride 25`. It ran from 04:15:43 to 04:37:28 UTC (21.7 min wall), with case times summing to 3.43 h.
+
+- **1,099 cases: all `ok`.** No case was `ORACLE-WORK`, `ORACLE-UNSUPPORTED` or `ORACLE-INCONSISTENT`.
+- **Strata.** C1 188, C2 72, C3 194, C4 69, C5 282, C6 13, C7 5, C8 107, C9 140, C10 1, C11 23 and C12 5 cases. C9 took 10.6 of the 12.3 million case milliseconds and C5 1.6.
+- **Work.** The largest was 1.39·10^9 units (`C9/g0178/T4/z64-d2`, 976 s), 77 % of the cap. 43 cases were above 10^8 units and 37 took more than 60 s. The ten largest are all C9, from 0.58 to 1.39·10^9.
+- **Time per unit.** Of the ten slowest cases, the highest was 1.24 µs per unit (`C9/g0189/T2/z64-d3`, 852 s for 0.69·10^9 units). That is within the 1.53 µs of section 14.8.
+- **Full-run estimate.** 25 times the sample is about 86 CPU hours, about 6 to 7 h on 14 shards.
+- The run directory `.tools/e3-a04-freeze/2026-10-24T04-15-44-388Z/` is machine-local and not committed.
+
+### 17.5 Independent review of PR #227, 2026-10-24
+
+A fresh-context review of the diff (`dbbaaeb..367450c`) found **no soundness, determinism or charging defect** (verdict READY WITH FOLLOW-UPS). It checked these arguments against the code: the frontier, the reorder of `classify`, the warm start, the cache and the halves. Disposition, decided under the user's standing instruction of 2026-10-24 (recommended option):
+
+- **Applied here, in this section's text.**
+  - The cost of the halves test.
+  - The sample count above an aspect of 64.
+  - The changed meaning of the node budget, and memory.
+  - That "decides at least as often" is observed, not proved.
+  - That freeze work only approximates measurement work.
+- **Deferred to the first oracle change after the freeze.** The full freeze run pins the oracle SHA `3211486c…0fa`, so its source does not change before the freeze record. Three items wait for that change:
+  - `a04CoverSelfTest` should also use the cover's own frontiers, inherited and recomputed after eviction (`arcsOf`), and compare the cover's classes with the cold class and exact membership. An injectable cache size would let a test force eviction.
+  - Two code comments repeat the overstatements corrected above (the halves cost and the sample spacing).
+  - `splitPoly` builds the merged frontier map twice.
