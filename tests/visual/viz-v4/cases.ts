@@ -6,19 +6,36 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import type { FillMeshPort, StrokeMeshPort } from '@vector-studio/contracts';
+import type {
+  FillMeshBatchResult,
+  FillMeshPort,
+  FillMeshRequest,
+  FillMeshResult,
+  StrokeMeshBatchResult,
+  StrokeMeshPort,
+  StrokeMeshRequest,
+  StrokeMeshResult,
+} from '@vector-studio/contracts';
 
 import {
+  fillRequestRecord,
   meshDigestBytes,
+  strokeRequestRecord,
   type VizV4CaseInput,
   type VizV4MeshCall,
+  type VizV4MeshRequest,
 } from '../../../apps/playground/src/viz-v4-a08-cases.js';
 import { decodeCase, drawCase, type HarnessPorts } from '../../geometry/e3-a04/harness.js';
 import type { A08Case } from './subset.js';
 
 /** The statuses of section 4.4; PASS, FAIL and UNDECIDED are offline judgments, not statuses. */
 export type VizV4Status =
-  'RENDERED' | 'KERNEL-REJECTED' | 'REGION-ONLY' | 'EMPTY-CROP' | 'MESH-MISMATCH';
+  | 'RENDERED'
+  | 'KERNEL-REJECTED'
+  | 'REGION-ONLY'
+  | 'EMPTY-CROP'
+  | 'MESH-MISMATCH'
+  | 'RENDERER-FAILED';
 
 export type VizV4Variant = 'fringe-1x' | 'fringe-4x' | 'msaa-4x';
 export const VIZ_V4_VARIANTS: readonly VizV4Variant[] = ['fringe-1x', 'fringe-4x', 'msaa-4x'];
@@ -74,26 +91,133 @@ export function a04FreezeRecorded(root: string): boolean {
     .some((line) => line.includes('**Freeze record**') && line.includes(manifest.corpusSha256));
 }
 
-const REGION_ONLY_CODES = new Set(['fringe-work-cap', 'fringe-unsupported']);
+/** The renderer codes for a path drawn without its fringe (`fringe-work-cap`) or hidden for it. */
+const REGION_ONLY_CODES: ReadonlySet<string> = new Set(['fringe-work-cap', 'fringe-unsupported']);
+
+function sha256(bytes: Uint8Array | string): string {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+/** One port call as a comparable line: the request's SHA-256 and the outcome. */
+export function callKey(call: VizV4MeshCall): string {
+  return `${sha256(JSON.stringify(call.request))} ${call.outcome}`;
+}
+
+/** The outcome string of one port result, as the page writes it. */
+export function resultOutcome(result: FillMeshResult | StrokeMeshResult): string {
+  if (result.status === 'ok') return `ok:${sha256(meshDigestBytes(result.mesh))}`;
+  return result.status === 'empty' ? 'empty' : `failed:${result.code}`;
+}
+
+/** Wraps Node's ports to record every call as the page records it (section 4.4, MESH-MISMATCH). */
+export function recordingPorts(
+  ports: Readonly<{ fill: FillMeshPort; stroke: StrokeMeshPort }>,
+): Readonly<{
+  ports: Readonly<{ fill: FillMeshPort; stroke: StrokeMeshPort }>;
+  take(): VizV4MeshCall[];
+}> {
+  const calls: VizV4MeshCall[] = [];
+  const record = (
+    requests: readonly VizV4MeshRequest[],
+    batch: FillMeshBatchResult | StrokeMeshBatchResult,
+  ) => {
+    requests.forEach((request, index) =>
+      calls.push({
+        request,
+        outcome:
+          batch.status === 'ok' ? resultOutcome(batch.results[index]!) : `batch:${batch.code}`,
+      }),
+    );
+  };
+  return {
+    ports: {
+      fill: {
+        portVersion: ports.fill.portVersion,
+        operationId: ports.fill.operationId,
+        buildFillMeshes(requests: readonly FillMeshRequest[]) {
+          const batch = ports.fill.buildFillMeshes(requests);
+          record(requests.map(fillRequestRecord), batch);
+          return batch;
+        },
+      },
+      stroke: {
+        portVersion: ports.stroke.portVersion,
+        operationId: ports.stroke.operationId,
+        buildStrokeMeshes(requests: readonly StrokeMeshRequest[]) {
+          const batch = ports.stroke.buildStrokeMeshes(requests);
+          record(requests.map(strokeRequestRecord), batch);
+          return batch;
+        },
+      },
+    },
+    take: () => calls.splice(0),
+  };
+}
+
+/** What one draw of a case showed, on either side. */
+export type CaseObservation = Readonly<{
+  calls: readonly VizV4MeshCall[];
+  /** Renderer notice codes for the case (`fringe-work-cap`, `tolerance-range`, ...). */
+  notices: readonly string[];
+  drawn: boolean;
+}>;
 
 /**
- * The expected status of a case under a fringe variant, from the product CPU path (E3's
- * `drawCase`, which wires the mirror, the scene source and PathMeshPipeline with the exact fringe
- * builder as PrimitiveRendererService does). Under `msaa-4x` there is no fringe, so REGION-ONLY
- * becomes RENDERED. MESH-MISMATCH is never expected.
+ * The section 4.4 status of one observation, in this order: a port failure (KERNEL-REJECTED,
+ * A01 evidence); a fringe notice (REGION-ONLY); any other renderer notice (RENDERER-FAILED, a
+ * renderer defect, never A01 evidence); nothing drawn (EMPTY-CROP, reason `port-empty` when the
+ * port answered `empty`); otherwise RENDERED. MESH-MISMATCH is decided by the caller.
  */
-export function expectedStatus(
-  c: A08Case,
-  ports: HarnessPorts,
-  variant: VizV4Variant,
-): VizV4Status {
-  const outcome = drawCase(c.kase, ports);
-  const regionOnly = outcome.notices.some((notice) =>
-    REGION_ONLY_CODES.has(notice.slice(notice.indexOf(':') + 1)),
+export function classify(
+  observation: CaseObservation,
+): Readonly<{ status: VizV4Status; reason: string }> {
+  const failed = observation.calls.find(
+    (call) => call.outcome.startsWith('failed:') || call.outcome.startsWith('batch:'),
   );
-  if (outcome.kind === 'rejected') return 'KERNEL-REJECTED';
-  if (outcome.kind === 'empty' || outcome.kind === 'culled') return 'EMPTY-CROP';
-  return regionOnly && variant !== 'msaa-4x' ? 'REGION-ONLY' : 'RENDERED';
+  if (failed !== undefined) return { status: 'KERNEL-REJECTED', reason: failed.outcome };
+  const regionOnly = observation.notices.find((code) => REGION_ONLY_CODES.has(code));
+  if (regionOnly !== undefined) return { status: 'REGION-ONLY', reason: regionOnly };
+  const renderer = observation.notices[0];
+  if (renderer !== undefined) return { status: 'RENDERER-FAILED', reason: renderer };
+  if (!observation.drawn)
+    return {
+      status: 'EMPTY-CROP',
+      reason: observation.calls.some((call) => call.outcome === 'empty')
+        ? 'port-empty'
+        : 'no mesh triangle drawn',
+    };
+  return { status: 'RENDERED', reason: '' };
+}
+
+/** One case and variant of the expected-status list (section 5.1). */
+export type ExpectedEntry = Readonly<{
+  status: VizV4Status;
+  reason: string;
+  calls: readonly string[];
+}>;
+
+/**
+ * The expected status of a case under a variant, from the product CPU path: E3's `drawCase`,
+ * which wires the mirror, the scene source and PathMeshPipeline as PrimitiveRendererService does,
+ * with the fringe builder for the fringe variants and none for `msaa-4x` (E10 fringe off). The
+ * port calls are recorded, so the headed run is held to Node's requests and mesh digests.
+ */
+export function expectedEntry(
+  c: A08Case,
+  ports: Readonly<{ fill: FillMeshPort; stroke: StrokeMeshPort }>,
+  variant: VizV4Variant,
+): ExpectedEntry {
+  const recorder = recordingPorts(ports);
+  const outcome = drawCase(c.kase, recorder.ports satisfies HarnessPorts, {
+    fringe: variantQuery(variant).fringe,
+  });
+  const calls = recorder.take();
+  const { status, reason } = classify({
+    calls,
+    notices: outcome.notices.map((notice) => notice.slice(notice.indexOf(':') + 1)),
+    drawn: outcome.kind === 'drawn',
+  });
+  return { status, reason, calls: calls.map(callKey).sort() };
 }
 
 /** The page's result fields this module reads. */
@@ -103,71 +227,24 @@ export type PageResultView = Readonly<{
   meshCalls: readonly VizV4MeshCall[];
 }>;
 
-/** Port failure codes; a notice with one of them means the kernel rejected the path. */
-const PORT_FAILURES = new Set([
-  'invalid-path',
-  'invalid-tolerance',
-  'numeric-range',
-  'work-limit',
-  'unsupported-geometry',
-  'invalid-stroke',
-]);
-
-/** The digest outcome Node's own port gives for a request the page made. */
-export function nodeOutcome(
-  call: VizV4MeshCall,
-  ports: Readonly<{ fill: FillMeshPort; stroke: StrokeMeshPort }>,
-): string {
-  const r = call.request;
-  const result =
-    r.paint === 'fill'
-      ? ports.fill.buildFillMeshes([
-          {
-            requestId: 1,
-            verbs: Uint8Array.from(r.verbs),
-            points: Float64Array.from(r.points),
-            fillRule: r.fillRule,
-            toleranceExponent: r.toleranceExponent,
-          },
-        ])
-      : ports.stroke.buildStrokeMeshes([
-          {
-            requestId: 1,
-            verbs: Uint8Array.from(r.verbs),
-            points: Float64Array.from(r.points),
-            width: r.width,
-            cap: r.cap as 'butt' | 'round' | 'square',
-            join: r.join as 'miter' | 'round' | 'bevel',
-            miterLimit: r.miterLimit,
-            toleranceExponent: r.toleranceExponent,
-          },
-        ]);
-  if (result.status !== 'ok') return `batch:${result.status}`;
-  const one = result.results[0]!;
-  if (one.status === 'ok')
-    return `ok:${createHash('sha256').update(meshDigestBytes(one.mesh)).digest('hex')}`;
-  return one.status === 'empty' ? 'empty' : `failed:${one.code}`;
-}
-
-/** The headed status of a page result (section 4.4), with its reason. */
+/**
+ * The headed status of a page result (section 4.4), with its reason. MESH-MISMATCH when the
+ * browser's port calls (requests and mesh digests) differ from Node's for the same case and
+ * variant, which also catches a missing or extra call.
+ */
 export function headedStatus(
   result: PageResultView,
-  ports: Readonly<{ fill: FillMeshPort; stroke: StrokeMeshPort }>,
+  expectedCalls: readonly string[],
 ): Readonly<{ status: VizV4Status; reason: string }> {
-  for (const call of result.meshCalls) {
-    const node = nodeOutcome(call, ports);
-    if (node !== call.outcome)
-      return { status: 'MESH-MISMATCH', reason: `browser ${call.outcome}, node ${node}` };
-  }
-  // A port failure, or any other failure that left nothing drawn (E3's drawCase "rejected").
-  const rejected =
-    result.notices.find((code) => PORT_FAILURES.has(code)) ??
-    (result.meshTriangles === 0
-      ? result.notices.find((code) => !REGION_ONLY_CODES.has(code))
-      : undefined);
-  if (rejected !== undefined) return { status: 'KERNEL-REJECTED', reason: rejected };
-  const regionOnly = result.notices.find((code) => REGION_ONLY_CODES.has(code));
-  if (regionOnly !== undefined) return { status: 'REGION-ONLY', reason: regionOnly };
-  if (result.meshTriangles === 0) return { status: 'EMPTY-CROP', reason: 'no mesh triangle drawn' };
-  return { status: 'RENDERED', reason: '' };
+  const calls = result.meshCalls.map(callKey).sort();
+  if (calls.join('\n') !== expectedCalls.join('\n'))
+    return {
+      status: 'MESH-MISMATCH',
+      reason: `browser [${calls.join(', ')}], node [${expectedCalls.join(', ')}]`,
+    };
+  return classify({
+    calls: result.meshCalls,
+    notices: result.notices,
+    drawn: result.meshTriangles > 0,
+  });
 }

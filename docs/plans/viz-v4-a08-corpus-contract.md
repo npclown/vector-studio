@@ -88,10 +88,11 @@ Each case and variant gets one status, recorded with its reason:
 | Status | Meaning |
 | --- | --- |
 | `RENDERED` | Drawn, captured, and every check of section 5.1 passed. The offline runner then judges each `RENDERED` case PASS, FAIL or UNDECIDED (section 5.2); that judgment is not a status |
-| `KERNEL-REJECTED` | The port returned a failure (A01 evidence, not A08) |
+| `KERNEL-REJECTED` | The port returned a path or batch failure (A01 evidence, not A08) |
 | `REGION-ONLY` | The renderer issued `fringe-work-cap` or `fringe-unsupported` for the path |
 | `EMPTY-CROP` | The path covers no pixel of `Ω` ∩ canvas |
-| `MESH-MISMATCH` | The browser's mesh bytes differ from Node's for the same case |
+| `MESH-MISMATCH` | The browser's port requests or mesh bytes differ from Node's for the same case and variant |
+| `RENDERER-FAILED` | The renderer reported any other state failure (`tolerance-range`, `packing-range`, ...): a renderer defect, never A01 evidence (added 2026-10-24, section 15) |
 
 ### 4.5 Test hook
 
@@ -105,7 +106,7 @@ Each case and variant gets one status, recorded with its reason:
 - The reference boundary is the port's `boundaryEdges` (`packages/contracts/src/geometry.ts`), the edges the fringe builder consumes, mapped to physical pixels by E3's CPU model of the K4 shader mapping ([E3 section 7.1](d9-e3-b4-precision-contract.md#71-where-it-runs)), giving `p*` and the per-case bound `β_c`. O02's "edges used by exactly one region triangle" is not used: on a mesh with slab T-junctions (E3-K2, E3-C12) it would label interior half-edges as boundary.
 - Vertices outside the viewport are allowed. Clipping follows E3-Q11 (a): the viewport is the guard band and clipping is modelled, so the frame edge is not a coverage boundary and pixels are judged only inside `Ω` ∩ canvas (E3's `Ω` extends 2 px beyond the viewport; the capture does not).
 - Corners and sectors follow O02's pairing rule on `boundaryEdges`; a failed pairing is `REGION-ONLY` if the renderer also reported it, otherwise a V-4 failure.
-- **Expected statuses.** `KERNEL-REJECTED`, `REGION-ONLY` and `EMPTY-CROP` are determined in Node before any headed run, by the same WASM and `renderer-core` code. They are committed as a literal list with the subset manifest; a headed status that differs from it is reported and makes the run INCONCLUSIVE.
+- **Expected statuses.** `KERNEL-REJECTED`, `REGION-ONLY`, `RENDERER-FAILED` and `EMPTY-CROP` are determined in Node before any headed run, by the same WASM and `renderer-core` code. They are committed as a literal list with the subset manifest; a headed status that differs from it is reported and makes the run INCONCLUSIVE.
 
 ### 5.2 Gates
 
@@ -204,9 +205,11 @@ READY, no blocking or should-fix items. Its optional follow-up, reporting the pi
 
 ## 15. Implementation notes (VZ4-U1, 2026-10-24)
 
-- Subset: `tests/visual/viz-v4/subset.ts`, `a08-subset/v1`, 2280 cases (1032 gated), pinned by `tests/visual/viz-v4/a08-subset.manifest.json` with the `a04-corpus/v1` `corpusSha256`. VZ4-A2 is closed for the subset definition; it is re-checked unchanged after the E3 freeze record.
+- Subset: `tests/visual/viz-v4/subset.ts`, `a08-subset/v1`, 2280 cases (1032 gated), pinned by `tests/visual/viz-v4/a08-subset.manifest.json` with the `a04-corpus/v1` `corpusSha256`. VZ4-A2 is closed for the subset definition; it is re-checked unchanged after the E3 freeze record. DPR 1.5 cases keep the DPR 1 case's `gap` block; VZ4-U2 must not read `gap.phys` for them. The strokes part holds C9's fill-role and opacity rows too, drawn alone at opacity 1.
 - E3 blindness (E3 section 5.5): `pnpm viz-v4:expected` and the headed spec refuse to run until the E3 contract holds the freeze record. Before that, unit tests use scripted ports only.
-- Expected statuses: `pnpm viz-v4:expected` runs the product CPU path (E3's `drawCase`) on the release WASM and writes `tests/visual/viz-v4/a08-expected-status.json`, keyed by the subset keys SHA and the WASM SHA. The spec records any headed deviation from it in `meta.json`.
-- `MESH-MISMATCH`: the page records each port request and its result digest (`meshDigestBytes`); Node re-issues the request to its own WASM port and compares. The case key is the node id, so no mesh is served from another case.
-- Capture identity (E10 section 14 carry-overs): per case, capture size equals the physical size, `sampleCount` equals the variant's, one submitted frame and one prepare per capture, and mesh triangle totals equal the draw record.
-- Artifacts: `artifacts/viz-v4-a08/<run>/<project>/<variant>/dpr<D>/` with `meta.json` (label `PRE-FREEZE`), `observations.ndjson` and `UNVERIFIED.txt`. The headed command is `pnpm test:gpu:viz-v4`.
+- Expected statuses: `pnpm viz-v4:expected` runs the product CPU path (E3's `drawCase`, given a `fringe: 'off'` option for `msaa-4x`) on the release WASM and writes `tests/visual/viz-v4/a08-expected-status.json`, keyed by the subset keys SHA and the WASM SHA, with each case and variant's status, reason and port calls. The spec records any headed deviation in `meta.json`.
+- `MESH-MISMATCH`: both sides record every port call as the request's SHA-256 and its outcome (mesh digest by `meshDigestBytes`, `empty`, `failed:<code>` or `batch:<code>`). The headed calls must equal Node's for the case, so a different request, mesh or call count is a mismatch. The case key is the node id, so no mesh is served from another case.
+- `fringe-unsupported` hides the path under fringe, so it is `REGION-ONLY` with nothing drawn; under `msaa-4x` the same case is `RENDERED`. A port `empty` on a subset case is `EMPTY-CROP` with reason `port-empty` and is listed in `meta.json` (`portEmpty`) for review, since a centred named row should cover pixels (E3-PC11).
+- Section 4.5 was rewritten to the built hook (`window.__vectorStudioVizV4`, `render(caseInput)`, query-string variant, `observations.ndjson`); section 4.3 states the backend's opaque black clear. Neither changes a gate.
+- Capture identity (E10 section 14 carry-overs): per case, capture size equals the physical size, `sampleCount` and `devicePixelRatio` equal the variant's and the DPR, one submitted frame and one prepare per capture, and mesh triangle totals equal the draw record.
+- Artifacts: `artifacts/viz-v4-a08/<run>/<project>/<variant>/dpr<D>/` with `meta.json` (label `PRE-FREEZE`, `complete`), `observations.ndjson` and `UNVERIFIED.txt`, the labels written before the first case. The headed command is `pnpm test:gpu:viz-v4`; `pnpm test:gpu` also collects the spec, which skips before the freeze.

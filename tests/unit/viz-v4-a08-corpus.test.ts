@@ -18,10 +18,12 @@ import {
 } from '../../apps/playground/src/viz-v4-a08-cases.js';
 import { ScriptedFillMeshPort, failedResult } from '../support/v3a-path-harness.js';
 import {
+  callKey,
   caseInput,
-  expectedStatus,
+  classify,
+  expectedEntry,
   headedStatus,
-  nodeOutcome,
+  recordingPorts,
   variantQuery,
   VIZ_V4_VARIANTS,
 } from '../visual/viz-v4/cases.js';
@@ -183,43 +185,109 @@ describe('mesh digest (section 4.4, MESH-MISMATCH)', () => {
     expect(sha(meshDigestBytes(other))).not.toBe(sha(meshDigestBytes(MESH)));
   });
 
-  it("re-issues the page's request to Node's port", () => {
-    expect(nodeOutcome(call(''), portsAnswering('ok'))).toBe(`ok:${sha(meshDigestBytes(MESH))}`);
-    expect(nodeOutcome(call(''), portsAnswering('empty'))).toBe('empty');
-    expect(nodeOutcome(call(''), portsAnswering('work-limit'))).toBe('failed:work-limit');
+  it("records Node's calls as the page does, batch failures included", () => {
+    const outcome = (answer: 'ok' | 'empty' | 'work-limit') => {
+      const recorder = recordingPorts(portsAnswering(answer));
+      recorder.ports.fill.buildFillMeshes([fillRequest]);
+      return recorder.take().map((c) => c.outcome);
+    };
+    expect(outcome('ok')).toEqual([`ok:${sha(meshDigestBytes(MESH))}`]);
+    expect(outcome('empty')).toEqual(['empty']);
+    expect(outcome('work-limit')).toEqual(['failed:work-limit']);
+    const recorder = recordingPorts(portsAnswering('ok'));
+    recorder.ports.stroke.buildStrokeMeshes([
+      { ...fillRequest, width: 1, cap: 'butt', join: 'miter', miterLimit: 4 },
+    ]);
+    expect(recorder.take().map((c) => c.outcome)).toEqual(['batch:internal-error']);
   });
 });
 
 describe('headed status (section 4.4)', () => {
   const ok = `ok:${sha(meshDigestBytes(MESH))}`;
-  const ports = portsAnswering('ok');
   const view = (notices: string[], meshTriangles: number, outcome = ok) => ({
     notices,
     meshTriangles,
     meshCalls: [call(outcome)],
   });
 
+  it('is MESH-MISMATCH when a request, a digest or a call differs from Node', () => {
+    const node = [callKey(call(ok))];
+    expect(headedStatus(view([], 4), node)).toEqual({ status: 'RENDERED', reason: '' });
+    expect(headedStatus(view([], 4, 'empty'), node).status).toBe('MESH-MISMATCH');
+    const other = { ...call(ok), request: { ...call(ok).request, toleranceExponent: -7 } };
+    expect(headedStatus({ notices: [], meshTriangles: 4, meshCalls: [other] }, node).status).toBe(
+      'MESH-MISMATCH',
+    );
+    expect(headedStatus({ notices: [], meshTriangles: 4, meshCalls: [] }, node).status).toBe(
+      'MESH-MISMATCH',
+    );
+  });
+
   it('classifies in the declared order', () => {
-    expect(headedStatus(view([], 4, 'empty'), ports).status).toBe('MESH-MISMATCH');
-    expect(headedStatus(view(['work-limit'], 0), ports)).toEqual({
+    const at = (notices: string[], drawn: boolean, outcome = ok) =>
+      classify({ calls: [call(outcome)], notices, drawn });
+    expect(at(['work-limit'], false, 'failed:work-limit')).toEqual({
       status: 'KERNEL-REJECTED',
-      reason: 'work-limit',
+      reason: 'failed:work-limit',
     });
-    expect(headedStatus(view(['batch-failed'], 0), ports).status).toBe('KERNEL-REJECTED');
-    expect(headedStatus(view(['fringe-work-cap'], 2), ports)).toEqual({
+    expect(at(['internal-error'], false, 'batch:internal-error').status).toBe('KERNEL-REJECTED');
+    expect(at(['fringe-work-cap'], true)).toEqual({
       status: 'REGION-ONLY',
       reason: 'fringe-work-cap',
     });
-    expect(headedStatus(view(['fringe-unsupported'], 0), ports).status).toBe('REGION-ONLY');
-    expect(headedStatus(view([], 0), ports).status).toBe('EMPTY-CROP');
-    expect(headedStatus(view([], 4), ports)).toEqual({ status: 'RENDERED', reason: '' });
+    expect(at(['fringe-unsupported'], false).status).toBe('REGION-ONLY');
+    expect(at(['packing-range'], false)).toEqual({
+      status: 'RENDERER-FAILED',
+      reason: 'packing-range',
+    });
+    expect(at([], false, 'empty')).toEqual({ status: 'EMPTY-CROP', reason: 'port-empty' });
+    expect(classify({ calls: [], notices: [], drawn: false }).reason).toBe(
+      'no mesh triangle drawn',
+    );
+    expect(at([], true)).toEqual({ status: 'RENDERED', reason: '' });
   });
+});
 
-  it('expects KERNEL-REJECTED and EMPTY-CROP from scripted port answers', () => {
+describe('expected status (section 5.1), scripted ports only', () => {
+  it('follows port failures and empty answers', () => {
     const fill = subset.find((c) => c.part === 'C1-named-fill-lines')!;
     for (const variant of VIZ_V4_VARIANTS) {
-      expect(expectedStatus(fill, portsAnswering('work-limit'), variant)).toBe('KERNEL-REJECTED');
-      expect(expectedStatus(fill, portsAnswering('empty'), variant)).toBe('EMPTY-CROP');
+      const rejected = expectedEntry(fill, portsAnswering('work-limit'), variant);
+      expect(rejected.status).toBe('KERNEL-REJECTED');
+      expect(rejected.calls).toHaveLength(1);
+      expect(rejected.calls[0]).toMatch(/ failed:work-limit$/u);
+      expect(expectedEntry(fill, portsAnswering('empty'), variant)).toMatchObject({
+        status: 'EMPTY-CROP',
+        reason: 'port-empty',
+      });
     }
+  });
+
+  it('is REGION-ONLY for an unsupported fringe and RENDERED for it under msaa-4x', () => {
+    // Two squares meeting at one corner: the fringe builder refuses the pinch vertex.
+    const c = subset.find((s) => s.a04Id.startsWith('C11/f07/') && s.dpr === 1)!;
+    const pinch: FillMesh = {
+      positions: Float64Array.from([0, 0, 8, 0, 8, 8, 0, 8, 8, 8, 16, 8, 16, 16, 8, 16]),
+      indices: Uint32Array.from([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]),
+      boundaryEdges: Uint32Array.from([0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4]),
+      bounds: { minX: 0, minY: 0, maxX: 16, maxY: 16 },
+    };
+    const ports = {
+      ...portsAnswering('ok'),
+      fill: new ScriptedFillMeshPort({
+        request: (r) => ({
+          requestId: r.requestId,
+          toleranceExponent: r.toleranceExponent,
+          status: 'ok',
+          mesh: pinch,
+        }),
+      }),
+    };
+    for (const variant of ['fringe-1x', 'fringe-4x'] as const)
+      expect(expectedEntry(c, ports, variant)).toMatchObject({
+        status: 'REGION-ONLY',
+        reason: 'fringe-unsupported',
+      });
+    expect(expectedEntry(c, ports, 'msaa-4x')).toMatchObject({ status: 'RENDERED', reason: '' });
   });
 });

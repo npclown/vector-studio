@@ -1,13 +1,14 @@
-import type {
-  FillMeshBatchResult,
-  FillMeshPort,
-  FillMeshRequest,
-  FillMeshResult,
-  RendererDiagnostic,
-  StrokeMeshBatchResult,
-  StrokeMeshPort,
-  StrokeMeshRequest,
-  StrokeMeshResult,
+import {
+  DIAGNOSTIC_CODES,
+  type FillMeshBatchResult,
+  type FillMeshPort,
+  type FillMeshRequest,
+  type FillMeshResult,
+  type RendererDiagnostic,
+  type StrokeMeshBatchResult,
+  type StrokeMeshPort,
+  type StrokeMeshRequest,
+  type StrokeMeshResult,
 } from '@vector-studio/contracts';
 import { createFillMeshPort, createStrokeMeshPort } from '@vector-studio/geometry-wasm';
 import {
@@ -87,7 +88,11 @@ async function sha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-type PendingCall = { request: VizV4MeshCall['request']; result: FillMeshResult | StrokeMeshResult };
+type PendingCall = {
+  request: VizV4MeshCall['request'];
+  /** The port's result, or `batch:<code>` for a failed batch. */
+  result: FillMeshResult | StrokeMeshResult | string;
+};
 
 /** Records every request and result; digests are taken after the frame, off the port call. */
 const pending: PendingCall[] = [];
@@ -98,10 +103,12 @@ function recordedFill(inner: FillMeshPort): FillMeshPort {
     operationId: inner.operationId,
     buildFillMeshes(requests: readonly FillMeshRequest[]): FillMeshBatchResult {
       const batch = inner.buildFillMeshes(requests);
-      if (batch.status === 'ok')
-        batch.results.forEach((result, index) =>
-          pending.push({ request: fillRequestRecord(requests[index]!), result }),
-        );
+      requests.forEach((request, index) =>
+        pending.push({
+          request: fillRequestRecord(request),
+          result: batch.status === 'ok' ? batch.results[index]! : `batch:${batch.code}`,
+        }),
+      );
       return batch;
     },
   };
@@ -113,10 +120,12 @@ function recordedStroke(inner: StrokeMeshPort): StrokeMeshPort {
     operationId: inner.operationId,
     buildStrokeMeshes(requests: readonly StrokeMeshRequest[]): StrokeMeshBatchResult {
       const batch = inner.buildStrokeMeshes(requests);
-      if (batch.status === 'ok')
-        batch.results.forEach((result, index) =>
-          pending.push({ request: strokeRequestRecord(requests[index]!), result }),
-        );
+      requests.forEach((request, index) =>
+        pending.push({
+          request: strokeRequestRecord(request),
+          result: batch.status === 'ok' ? batch.results[index]! : `batch:${batch.code}`,
+        }),
+      );
       return batch;
     },
   };
@@ -128,11 +137,13 @@ async function settleCalls(): Promise<VizV4MeshCall[]> {
     calls.map(async ({ request, result }) => ({
       request,
       outcome:
-        result.status === 'ok'
-          ? `ok:${await sha256Hex(meshDigestBytes(result.mesh))}`
-          : result.status === 'empty'
-            ? 'empty'
-            : `failed:${result.code}`,
+        typeof result === 'string'
+          ? result
+          : result.status === 'ok'
+            ? `ok:${await sha256Hex(meshDigestBytes(result.mesh))}`
+            : result.status === 'empty'
+              ? 'empty'
+              : `failed:${result.code}`,
     })),
   );
 }
@@ -193,11 +204,18 @@ async function start() {
 
 const ready = start();
 
-/** Notice codes the renderer reported for the node since `from`, from its diagnostics. */
+/**
+ * D8-interim notice codes since `from` for the node, or for no node (a batch or pipeline state
+ * failure): the scene holds only this case's node, so both are this case's.
+ */
 function noticesFor(nodeId: string, from: number): string[] {
   return diagnostics
     .slice(from)
-    .filter((event) => event.context?.['nodeId'] === nodeId)
+    .filter(
+      (event) =>
+        event.code === DIAGNOSTIC_CODES.PATH_MESH_INTERIM_FAILURE &&
+        (event.context?.['nodeId'] === nodeId || event.context?.['nodeId'] === null),
+    )
     .map((event) => String(event.context?.['failureCode'] ?? event.code));
 }
 

@@ -8,15 +8,12 @@ import type {
   VizV4CorpusApi,
   VizV4RenderResult,
 } from '../../apps/playground/src/viz-v4-a08-corpus.js';
-import {
-  createFillMeshPort,
-  createStrokeMeshPort,
-} from '../../packages/geometry-wasm/src/index.js';
 import { encodeRleBase64 } from '../geometry/coverage-oracle/rle.js';
 import {
   a04FreezeRecorded,
   caseInput,
   headedStatus,
+  type ExpectedEntry,
   VIZ_V4_VARIANTS,
   variantQuery,
   type VizV4Variant,
@@ -61,7 +58,7 @@ const subset = a08Subset();
 type Expected = Readonly<{
   subsetKeysSha256: string;
   wasmSha256: string;
-  statuses: Record<string, Record<VizV4Variant, string>>;
+  statuses: Record<string, Record<VizV4Variant, ExpectedEntry>>;
 }>;
 
 for (const variant of VIZ_V4_VARIANTS) {
@@ -80,11 +77,9 @@ for (const variant of VIZ_V4_VARIANTS) {
       expect(wasmSha256, 'the expected statuses were taken on another WASM').toBe(
         expected.wasmSha256,
       );
-      const module = await WebAssembly.compile(wasmBytes);
-      const ports = {
-        fill: await createFillMeshPort(module),
-        stroke: await createStrokeMeshPort(module),
-      };
+      const cases = subset.filter((c) => c.dpr === dpr);
+      // VZ4-A3: the expected list covers exactly the subset.
+      expect(Object.keys(expected.statuses).sort()).toEqual(subset.map((c) => c.key).sort());
 
       const pageErrors: string[] = [];
       page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -92,7 +87,9 @@ for (const variant of VIZ_V4_VARIANTS) {
       await page.goto(
         `/viz-v4-a08-corpus.html?samples=${String(samples)}&fringe=${fringe}&dpr=${String(dpr)}`,
       );
-      await page.waitForFunction(() => window.__vectorStudioVizV4 !== undefined);
+      await page.waitForFunction(() => window.__vectorStudioVizV4 !== undefined, undefined, {
+        timeout: 60_000,
+      });
       const ready = await page.evaluate(() => window.__vectorStudioVizV4.ready);
       // VZ4-A1: the page runs only with the E10 hooks; initialization fails otherwise.
       expect(ready.supported, String(ready.reason)).toBe(true);
@@ -102,8 +99,19 @@ for (const variant of VIZ_V4_VARIANTS) {
       mkdirSync(out, { recursive: true });
       const observations = path.join(out, 'observations.ndjson');
       writeFileSync(observations, '');
+      // Written first, so a run that stops early still carries its labels.
+      writeFileSync(
+        path.join(out, 'UNVERIFIED.txt'),
+        'PRE-FREEZE: A08 evidence counts only after C03-C05 (V-4 section 1.2). Precision UNVERIFIED until A04 evidence.\n',
+      );
+      writeFileSync(
+        path.join(out, 'meta.json'),
+        `${JSON.stringify({ label: 'PRE-FREEZE', complete: false, variant, dpr }, null, 2)}\n`,
+      );
       const physical = physicalSize(dpr);
-      const cases = subset.filter((c) => c.dpr === dpr);
+      const seen = new Set<string>();
+      // Section 15: a port `empty` on a centred named row is suspect (E3-PC11); listed for review.
+      const portEmpty: string[] = [];
       const counts: Record<string, number> = {};
       const deviations: string[] = [];
       for (const c of cases) {
@@ -115,15 +123,18 @@ for (const variant of VIZ_V4_VARIANTS) {
         expect(result.width, c.key).toBe(physical.width);
         expect(result.height, c.key).toBe(physical.height);
         expect(result.sampleCount, c.key).toBe(samples);
+        expect(result.devicePixelRatio, c.key).toBe(dpr);
         expect(result.framesSubmittedDelta, c.key).toBe(1);
         expect(result.prepareSerialDelta, c.key).toBe(1);
         if (result.recordTriangles !== null && !Number.isNaN(result.recordTriangles))
           expect(result.meshTriangles, c.key).toBe(result.recordTriangles);
-        const { status, reason } = headedStatus(result, ports);
+        const want = expected.statuses[c.key]![variant];
+        const { status, reason } = headedStatus(result, want.calls);
         counts[status] = (counts[status] ?? 0) + 1;
-        const want = expected.statuses[c.key]?.[variant];
-        if (want !== status)
-          deviations.push(`${c.key}: expected ${String(want)}, headed ${status}`);
+        seen.add(result.key);
+        if (reason === 'port-empty') portEmpty.push(c.key);
+        if (want.status !== status)
+          deviations.push(`${c.key}: expected ${want.status}, headed ${status} (${reason})`);
         const rgba = new Uint8Array(Buffer.from(result.rgbaBase64, 'base64'));
         const red = new Uint8Array(rgba.length / 4);
         let notGrey = 0;
@@ -147,7 +158,7 @@ for (const variant of VIZ_V4_VARIANTS) {
             gated: c.gated,
             status,
             reason,
-            expected: want ?? null,
+            expected: want.status,
             width: result.width,
             height: result.height,
             sampleCount: result.sampleCount,
@@ -167,6 +178,7 @@ for (const variant of VIZ_V4_VARIANTS) {
         `${JSON.stringify(
           {
             label: 'PRE-FREEZE',
+            complete: true,
             contract: 'docs/plans/viz-v4-a08-corpus-contract.md',
             variant,
             dpr,
@@ -177,18 +189,16 @@ for (const variant of VIZ_V4_VARIANTS) {
             cases: cases.length,
             statusCounts: counts,
             deviations,
+            portEmpty,
             pageErrors,
           },
           null,
           2,
         )}\n`,
       );
-      writeFileSync(
-        path.join(out, 'UNVERIFIED.txt'),
-        'PRE-FREEZE: A08 evidence counts only after C03-C05 (V-4 section 1.2). Precision UNVERIFIED until A04 evidence.\n',
-      );
       expect(pageErrors).toEqual([]);
-      // VZ4-A3: every case has exactly one status.
+      // VZ4-A3: every case of the DPR was rendered once and has exactly one status.
+      expect([...seen].sort()).toEqual(cases.map((c) => c.key).sort());
       expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(cases.length);
     });
   }
