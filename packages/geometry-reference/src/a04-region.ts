@@ -4708,17 +4708,13 @@ class StrokeTarget implements RegionTarget {
     // kept, or recomputed from the parent's when they were evicted.
     const arcs = classified.arcs;
     let witness: CoverNode['witness'] | undefined = cls === 0 ? undefined : null;
-    // An undecided anisotropic cell at the freeze cell size or below (E3-U2d): a cell with a
-    // witness meets ∂R, so only one without is tested OUT, then IN (E3-U2e), by halves. Larger
-    // cells are refined instead, so the cost stays with the small cells that the freeze check
-    // reads.
+    // An undecided anisotropic cell at the freeze cell size or below gets its witness, or its
+    // class by halves, at once (`anisotropicGate`). Larger cells are refined instead, so the cost
+    // stays with the small cells that the freeze check reads.
     if (cls === 0 && box.x1 - box.x0 <= A04_ORACLE_PARAMETERS.freezeCellSize) {
       const { lx, ly } = this.localSides(box);
-      if (Math.max(lx, ly) >= ANISOTROPIC_RATIO * Math.min(lx, ly)) {
-        witness = this.findWitness(box, arcs);
-        if (witness === null && this.excludesByHalves(box, arcs)) cls = -1;
-        else if (witness === null && this.includedByHalves(box, arcs)) cls = 1;
-      }
+      if (Math.max(lx, ly) >= ANISOTROPIC_RATIO * Math.min(lx, ly))
+        ({ cls, witness } = this.anisotropicGate(box, arcs));
     }
     const find = () => this.findWitness(box, this.arcsOf(n));
     const n: CoverNode = {
@@ -4752,44 +4748,73 @@ class StrokeTarget implements RegionTarget {
     return v;
   }
   /** An exact inside and outside sample of an undecided cell, or null. */
-  private findWitness(box: Box, arcs: ArcHint): CoverNode['witness'] {
-    let witness: CoverNode['witness'] = null;
-    {
-      const xm = (box.x0 + box.x1) / 2;
-      const ym = (box.y0 + box.y1) / 2;
-      let inside: [number, number] | null = null;
-      let outside: [number, number] | null = null;
-      for (const [x, y] of [
-        [xm, ym],
-        [box.x0, box.y0],
-        [box.x1, box.y0],
-        [box.x1, box.y1],
-        [box.x0, box.y1],
-        [xm, box.y0],
-        [box.x1, ym],
-        [xm, box.y1],
-        [box.x0, ym],
-      ] as const) {
-        const v = this.sampleClass(x, y, arcs);
-        if (v === 1 && inside === null) inside = [x, y];
-        if (v === -1 && outside === null) outside = [x, y];
-        if (inside !== null && outside !== null) break;
-      }
-      // A piece thinner than the sample spacing (a thin wedge or strip) is found through the
-      // pieces themselves: the centroid of a convex piece clipped to the cell, or the cell point
-      // nearest to a disk's center, is tested by exact membership.
-      if (outside !== null && inside === null) inside = this.pieceCandidate(box, arcs);
-      if (outside !== null && inside === null) inside = this.anisotropicCandidate(box, arcs, 1);
-      if (inside !== null && outside === null) outside = this.anisotropicCandidate(box, arcs, -1);
-      if (inside !== null && outside !== null)
-        witness = {
-          a: qpn(inside[0], inside[1]),
-          b: qpn(outside[0], outside[1]),
-          ia: ivpc(inside[0], inside[1]),
-          ib: ivpc(outside[0], outside[1]),
-        };
+  /** The first inside and outside points among the nine samples of a cell. */
+  private sampleSides(
+    box: Box,
+    arcs: ArcHint,
+  ): { inside: [number, number] | null; outside: [number, number] | null } {
+    const xm = (box.x0 + box.x1) / 2;
+    const ym = (box.y0 + box.y1) / 2;
+    let inside: [number, number] | null = null;
+    let outside: [number, number] | null = null;
+    for (const [x, y] of [
+      [xm, ym],
+      [box.x0, box.y0],
+      [box.x1, box.y0],
+      [box.x1, box.y1],
+      [box.x0, box.y1],
+      [xm, box.y0],
+      [box.x1, ym],
+      [xm, box.y1],
+      [box.x0, ym],
+    ] as const) {
+      const v = this.sampleClass(x, y, arcs);
+      if (v === 1 && inside === null) inside = [x, y];
+      if (v === -1 && outside === null) outside = [x, y];
+      if (inside !== null && outside !== null) break;
     }
-    return witness;
+    return { inside, outside };
+  }
+  private findWitness(box: Box, arcs: ArcHint): CoverNode['witness'] {
+    let { inside, outside } = this.sampleSides(box, arcs);
+    // A piece thinner than the sample spacing (a thin wedge or strip) is found through the
+    // pieces themselves: the centroid of a convex piece clipped to the cell, or the cell point
+    // nearest to a disk's center, is tested by exact membership.
+    if (outside !== null && inside === null) inside = this.pieceCandidate(box, arcs);
+    if (outside !== null && inside === null) inside = this.anisotropicCandidate(box, arcs, 1);
+    if (inside !== null && outside === null) outside = this.anisotropicCandidate(box, arcs, -1);
+    if (inside === null || outside === null) return null;
+    return {
+      a: qpn(inside[0], inside[1]),
+      b: qpn(outside[0], outside[1]),
+      ia: ivpc(inside[0], inside[1]),
+      ib: ivpc(outside[0], outside[1]),
+    };
+  }
+  /**
+   * The class and witness of an undecided anisotropic cell at the freeze cell size or below
+   * (E3-U2d, E3-U2e). A cell with a witness meets ∂R; one without is tested OUT, then IN, by
+   * halves. When the nine samples are all on one side, the halves test of that side runs before
+   * the candidate search of the other side, which is the costly step (E3-U2e: C9/k22 at T7): a
+   * cell certified by halves holds no point of the other side, so the search would fail.
+   */
+  private anisotropicGate(box: Box, arcs: ArcHint): { cls: number; witness: CoverNode['witness'] } {
+    const { inside, outside } = this.sampleSides(box, arcs);
+    let triedIn = false;
+    let triedOut = false;
+    if (inside !== null && outside === null) {
+      triedIn = true;
+      if (this.includedByHalves(box, arcs)) return { cls: 1, witness: null };
+    }
+    if (outside !== null && inside === null) {
+      triedOut = true;
+      if (this.excludesByHalves(box, arcs)) return { cls: -1, witness: null };
+    }
+    const witness = this.findWitness(box, arcs);
+    if (witness !== null) return { cls: 0, witness };
+    if (!triedOut && this.excludesByHalves(box, arcs)) return { cls: -1, witness: null };
+    if (!triedIn && this.includedByHalves(box, arcs)) return { cls: 1, witness: null };
+    return { cls: 0, witness: null };
   }
   /**
    * A point of the box inside R (want 1) or outside it (want −1, E3-U2e) on the cell's midline
