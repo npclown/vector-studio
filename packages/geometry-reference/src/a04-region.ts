@@ -817,12 +817,17 @@ function zClip(poly: readonly ZVert[], g: ZLine): ZVert[] | null {
  * three edges remain.
  */
 function zPolygon(ex: readonly QP[]): ZVert[] | null {
+  // Each vertex in homogeneous integers (x.n·y.d, y.n·x.d, x.d·y.d), W > 0, and each line the
+  // cross product of two of them (E3-U2e): a positive multiple of the line through the two
+  // points, with no rational normalized (the gcds of the rational form dominated C9/k19).
+  const hom = ex.map((p) => [p.x.n * p.y.d, p.y.n * p.x.d, p.x.d * p.y.d] as const);
   const raw: ZLine[] = [];
   for (let i = 0; i < ex.length; i += 1) {
-    const P = ex[i]!;
-    const Q2 = ex[(i + 1) % ex.length]!;
-    if (qpeq(P, Q2)) continue;
-    raw.push(zLine(qsub(P.y, Q2.y), qsub(Q2.x, P.x), qsub(qmul(P.x, Q2.y), qmul(Q2.x, P.y))));
+    const j = (i + 1) % ex.length;
+    if (qpeq(ex[i]!, ex[j]!)) continue;
+    const [x1, y1, w1] = hom[i]!;
+    const [x2, y2, w2] = hom[j]!;
+    raw.push([y1 * w2 - w1 * y2, w1 * x2 - x1 * w2, x1 * y2 - y1 * x2]);
   }
   // Parallel lines of a convex polygon's consecutive edges coincide.
   const edges: ZLine[] = raw.filter(
@@ -3011,6 +3016,11 @@ type LPoly = Readonly<{
  * frontier instead of the root. Every test on the way down is the same sound test.
  */
 type ArcHint = ReadonlyMap<StrokePiece, readonly ArcNode[]>;
+/**
+ * The sub-arcs of a collection whose sweep equation keeps one sign over the polygon it was
+ * collected for (E3-U2e). They have no foot in that polygon, so none in any polygon inside it.
+ */
+const NO_FOOT = new WeakMap<readonly ArcNode[], ReadonlyMap<ArcNode, number>>();
 
 /** An end-normal line through B with normal vector T (canonically oriented). */
 type Seam = {
@@ -3495,6 +3505,8 @@ function arcNode(
 
 /** Seam splits per top-level stroke classification (E3-U2c, contract section 14.8). */
 const SEAM_SPLIT_BUDGET = 24;
+/** The sub-arc floors of a point's classification, as exponents of r·2^-e (E3-U2e). */
+const POINT_FLOOR_STAGES = [8, 16, 24] as const;
 /** Pair splits (E3-U2e): at most this many open convex pieces, inward normals not within 8°. */
 const PAIR_SPLIT_PIECES = 4;
 const PAIR_SPLIT_COS = 0.99;
@@ -3694,6 +3706,10 @@ class CubicSweep implements StrokePiece {
     return pos ? 1 : neg ? -1 : 0;
   }
   private excludesZero(node: ArcNode, poly: LPoly): boolean {
+    return this.footSign(node, poly) !== 0;
+  }
+  /** The one sign of the sweep equation over the sub-arc and the polygon, or 0 if not shown. */
+  private footSign(node: ArcNode, poly: LPoly): number {
     if (node.range === null) {
       const t = { lo: node.t0, hi: node.t1 };
       node.range = { dx: ipoly(this.idx, t), dy: ipoly(this.idy, t), e: ipoly(this.ie, t) };
@@ -3706,11 +3722,11 @@ class CubicSweep implements StrokePiece {
       if (!(f.lo > 0)) pos = false;
       if (!(f.hi < 0)) neg = false;
     }
-    if (pos || neg) return true;
+    if (pos || neg) return pos ? 1 : -1;
     // The Bernstein hull (E3-U2c): f(y, t) = Σ bᵢ(y)·Bᵢ(t) with bᵢ affine in y, so f keeps one
     // sign over the sub-arc and the polygon when every bᵢ does at every vertex enclosure.
     const b = bernOf(node);
-    if (b === null) return false;
+    if (b === null) return 0;
     pos = true;
     neg = true;
     for (let i = 0; i < b.e.length && (pos || neg); i += 1)
@@ -3719,9 +3735,17 @@ class CubicSweep implements StrokePiece {
         if (!(f.lo > 0)) pos = false;
         if (!(f.hi < 0)) neg = false;
       }
-    return pos || neg;
+    return pos ? 1 : neg ? -1 : 0;
   }
-  private outside(node: ArcNode, poly: LPoly, size: number, budget: { n: number }): boolean {
+  private outside(
+    node: ArcNode,
+    poly: LPoly,
+    size: number,
+    budget: { n: number },
+    none?: ReadonlyMap<ArcNode, number>,
+  ): boolean {
+    // A sub-arc without a foot in the polygon is outside it (E3-U2e: known from the collection).
+    if (none?.has(node) === true) return true;
     charge(W_ARC, 1);
     if (boxBoxDistLo(poly.box, node.box) > this.ir.hi) return true;
     if (this.excludesZero(node, poly)) return true;
@@ -3735,18 +3759,30 @@ class CubicSweep implements StrokePiece {
   }
   private collectNodes(poly: LPoly, target: number, from = this.starts(poly)): ArcNode[] {
     const nodes: ArcNode[] = [];
+    // Sub-arcs without a foot in an enclosing polygon have none in this one (E3-U2e): they are
+    // kept whole without the sign test, which is the same outcome at no cost.
+    const known = NO_FOOT.get(from);
+    const none = new Map<ArcNode, number>();
     let budget = 4096;
     const collect = (n: ArcNode) => {
+      const sign = known?.get(n);
+      if (sign !== undefined) {
+        if (boxBoxDistLo(poly.box, n.box) > this.ir.hi) return;
+        nodes.push(n);
+        none.set(n, sign);
+        return;
+      }
       charge(W_ARC, 1);
       if (boxBoxDistLo(poly.box, n.box) > this.ir.hi) return;
       budget -= 1;
-      if (
-        n.size <= target ||
-        n.depth >= ARC_MAX_DEPTH ||
-        budget <= 0 ||
-        this.excludesZero(n, poly)
-      ) {
+      if (n.size <= target || n.depth >= ARC_MAX_DEPTH || budget <= 0) {
         nodes.push(n);
+        return;
+      }
+      const foot = this.footSign(n, poly);
+      if (foot !== 0) {
+        nodes.push(n);
+        none.set(n, foot);
         return;
       }
       const [a, b] = arcKids(n, this.cache);
@@ -3754,6 +3790,7 @@ class CubicSweep implements StrokePiece {
       collect(b);
     };
     for (const n of from) collect(n);
+    NO_FOOT.set(nodes, none);
     return nodes;
   }
   private readonly exactAtZ = new Map<number, ZLine>();
@@ -3789,10 +3826,12 @@ class CubicSweep implements StrokePiece {
     // reports the cell IN only when that other half is IN as well. (The union-of-brackets
     // argument alone does not cover it: it drops zero-area pieces only of a cell of positive
     // area.)
-    if (qsgn(polygonArea2(ex)) === 0) return true;
-    // The cell itself: its lines through consecutive exact vertices.
+    //
+    // The polygon is convex, its vertices in order, so its area is zero exactly when its
+    // vertices are collinear, which is when `zPolygon` keeps fewer than three edges (E3-U2e:
+    // this replaces a rational area, whose gcds were most of the work of C9/k19).
     const cell = zPolygon(ex);
-    if (cell === null) return false;
+    if (cell === null) return true;
     let uncovered: ZVert[][] = [cell];
     for (const n of nodes) {
       let maxD = 0;
@@ -3820,15 +3859,29 @@ class CubicSweep implements StrokePiece {
    * keeps one sign over the polygon holds no foot, so it is kept whole: a sign change (and so a
    * bracket) never spans it. The same collection serves the union-of-brackets test (E3-U2c).
    */
-  private inside(poly: LPoly, nodes: readonly ArcNode[]): boolean {
+  private inside(
+    poly: LPoly,
+    nodes: readonly ArcNode[],
+    none?: ReadonlyMap<ArcNode, number>,
+  ): boolean {
     let k = 0;
     while (k < nodes.length) {
       let end = k;
       while (end + 1 < nodes.length && nodes[end + 1]!.t0 === nodes[end]!.t1) end += 1;
       // The run nodes[k..end] covers [nodes[k].t0, nodes[end].t1] contiguously.
       const ts = [nodes[k]!.t0, ...nodes.slice(k, end + 1).map((n) => n.t1)];
-      charge(W_ARC, ts.length);
-      const sig = ts.map((t) => this.sigmaAt(poly, t));
+      // At an end of a sub-arc without a foot, the sign is that sub-arc's one sign over the
+      // polygon (E3-U2e), except at t = 0 and 1, where a seam tag can set it.
+      const sig = ts.map((t, j) => {
+        if (none !== undefined && t !== 0 && t !== 1) {
+          const known =
+            (j > 0 ? none.get(nodes[k + j - 1]!) : undefined) ??
+            (j <= end - k ? none.get(nodes[k + j]!) : undefined);
+          if (known !== undefined) return known;
+        }
+        charge(W_ARC, 1);
+        return this.sigmaAt(poly, t);
+      });
       let last = -1;
       for (let j = 0; j < ts.length; j += 1) {
         if (sig[j] === 0) continue;
@@ -3930,23 +3983,50 @@ class CubicSweep implements StrokePiece {
   }
   classify(poly: LPoly): number {
     const size = boxDiam(poly.box);
-    // Sub-arcs are refined to the polygon's size, never below r·2^-36 (r·2^-24 for a point, whose
-    // exact membership is the fallback), and within a node budget: an undecided polygon stays
-    // undecided, which is sound. Without the budget, a point at the evolute's cusp (a triple
+    // Sub-arcs are refined to the polygon's size, never below r·2^-36 (a point is refined in
+    // stages to r·2^-24, `classifyPointPoly`, its exact membership the fallback), and within a
+    // node budget: an undecided polygon stays undecided, which is sound. Without the budget, a point at the evolute's cusp (a triple
     // foot) makes the undecided sub-arcs multiply at every level.
     //
     // The sub-arcs are collected to the polygon's size first (E3-U2d), and the OUT test and the
     // finer collection continue from that collection instead of the root. It is a frontier for
     // the polygon (`ArcHint`), and it is kept for the polygons inside it.
-    const floor = Math.max(size, this.ir.lo * (size > 0 ? 2 ** -36 : 2 ** -24));
+    if (size === 0) return this.classifyPointPoly(poly);
+    const floor = Math.max(size, this.ir.lo * 2 ** -36);
     const coarse = this.collectNodes(poly, floor);
     poly.found?.set(this, coarse);
     const budget = { n: 4096 };
-    if (coarse.every((n) => this.outside(n, poly, floor, budget))) return -1;
-    if (this.inside(poly, coarse)) return 1;
-    if (size === 0) return 0;
+    const none = NO_FOOT.get(coarse);
+    if (coarse.every((n) => this.outside(n, poly, floor, budget, none))) return -1;
+    if (this.inside(poly, coarse, none)) return 1;
     const fine = this.collectNodes(poly, floor / 8, coarse);
-    return this.inside(poly, fine) || this.insideUnion(poly, fine) ? 1 : 0;
+    return this.inside(poly, fine, NO_FOOT.get(fine)) || this.insideUnion(poly, fine) ? 1 : 0;
+  }
+  /**
+   * A point's class (E3-U2e): the sub-arcs are refined in stages, to r·2^-8, r·2^-16 and
+   * r·2^-24, each continuing from the last, and the OUT and IN tests run after each. A point
+   * a fair way from ∂R is decided at the first stage instead of at r·2^-24 (the witness samples
+   * of the freeze check were most of the work of C9/g0154), and the last stage is the former
+   * single collection, so a point is decided whenever it was before.
+   */
+  private classifyPointPoly(poly: LPoly): number {
+    let nodes = this.starts(poly);
+    for (const e of POINT_FLOOR_STAGES) {
+      const floor = this.ir.lo * 2 ** -e;
+      nodes = this.collectNodes(poly, floor, nodes);
+      const budget = { n: 4096 };
+      const none = NO_FOOT.get(nodes);
+      if (nodes.every((n) => this.outside(n, poly, floor, budget, none))) {
+        poly.found?.set(this, nodes);
+        return -1;
+      }
+      if (this.inside(poly, nodes, none)) {
+        poly.found?.set(this, nodes);
+        return 1;
+      }
+    }
+    poly.found?.set(this, nodes);
+    return 0;
   }
 }
 
@@ -4392,6 +4472,7 @@ type CoverNode = {
 
 /** Sub-arc frontiers of undecided cover cells kept for reuse (E3-U2d), a memory bound. */
 const COVER_FRONTIER_CACHE = 1 << 14;
+const SAMPLE_CACHE = 1 << 16;
 
 /** One cover cell as a ∂R element: certain when it holds an inside and an outside witness. */
 class CellElement implements RElement {
@@ -4450,6 +4531,8 @@ class StrokeTarget implements RegionTarget {
    */
   private readonly frontiers = new Map<CoverNode, ArcHint>();
   private rootArcs: ArcHint | null = null;
+  /** Memberships of witness samples by position, oldest first (E3-U2e). */
+  private readonly samples = new Map<string, number>();
   constructor(
     readonly region: StrokeRegion,
     private readonly frame: Frame,
@@ -4612,6 +4695,23 @@ class StrokeTarget implements RegionTarget {
     if (cls === 0) this.keepArcs(n, arcs);
     return n;
   }
+  /**
+   * The membership of a witness sample, ±1 (E3-U2e). A sample the certified point test leaves
+   * open (it lies on or next to ∂R) is decided by exact membership; a point of ∂R is inside the
+   * closed region. Either way the value is the point's membership, whichever cell's frontiers
+   * the test started from, so it is kept: neighbouring cells share their corner and edge-middle
+   * samples.
+   */
+  private sampleClass(x: number, y: number, arcs: ArcHint): number {
+    const key = `${x},${y}`;
+    const kept = this.samples.get(key);
+    if (kept !== undefined) return kept;
+    let v = this.classifyPoint(x, y, arcs);
+    if (v === 0) v = this.contains(qpn(x, y)) ? 1 : -1;
+    this.samples.set(key, v);
+    if (this.samples.size > SAMPLE_CACHE) this.samples.delete(this.samples.keys().next().value!);
+    return v;
+  }
   /** An exact inside and outside sample of an undecided cell, or null. */
   private findWitness(box: Box, arcs: ArcHint): CoverNode['witness'] {
     let witness: CoverNode['witness'] = null;
@@ -4631,10 +4731,7 @@ class StrokeTarget implements RegionTarget {
         [xm, box.y1],
         [box.x0, ym],
       ] as const) {
-        let v = this.classifyPoint(x, y, arcs);
-        // A sample the certified cell test leaves open (it lies on or next to ∂R) is decided by
-        // exact membership; a point of ∂R is inside the closed region.
-        if (v === 0) v = this.contains(qpn(x, y)) ? 1 : -1;
+        const v = this.sampleClass(x, y, arcs);
         if (v === 1 && inside === null) inside = [x, y];
         if (v === -1 && outside === null) outside = [x, y];
         if (inside !== null && outside !== null) break;
