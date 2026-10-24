@@ -14,6 +14,8 @@ export { PrimitiveRendererService } from './primitive-renderer-service.js';
 export type { PrimitiveRendererServiceOptions } from './primitive-renderer-service.js';
 export { pathMeshNoticeDiagnostic } from './path-mesh-pipeline.js';
 export type {
+  PathDrawRecordEntryForTesting,
+  PathDrawRecordForTesting,
   PathMeshDraw,
   PathMeshFailureCode,
   PathMeshFailureScope,

@@ -18,7 +18,7 @@ import {
 // P3 D8 checkpoint V4: the fringe-builder work cap that gates a real host port (plan entry
 // "V4 playground path page"). A mesh whose boundaryEdges name more distinct vertices than
 // fringeBoundaryVertexCap is drawn region-only, the builder is never called for it, and one
-// D8-interim notice `renderer fringe-work-cap` is queued per cache entry. Functional evidence
+// path notice `renderer fringe-work-cap` is queued per cache entry. Functional evidence
 // only: precision is UNVERIFIED against the 0.25 physical-pixel target.
 
 /** A convex counterclockwise n-gon fan with its n boundary edges. */
@@ -101,7 +101,6 @@ describe('V4 fringe-builder work cap', () => {
     ]);
     expect(first.notices).toEqual([
       {
-        interim: 'd8',
         nodeId: 'a',
         failureScope: 'renderer',
         failureCode: 'fringe-work-cap',
@@ -254,7 +253,6 @@ describe('V4 fringe-builder work cap', () => {
   it('V4: the fringe-work-cap diagnostic says the path is drawn without its fringe', () => {
     const diagnostic = pathMeshNoticeDiagnostic(
       {
-        interim: 'd8',
         nodeId: 'a',
         failureScope: 'renderer',
         failureCode: 'fringe-work-cap',
@@ -264,11 +262,10 @@ describe('V4 fringe-builder work cap', () => {
       2,
     );
     expect(diagnostic).toMatchObject({
-      code: DIAGNOSTIC_CODES.PATH_MESH_INTERIM_FAILURE,
+      code: DIAGNOSTIC_CODES.PATH_MESH_FAILURE,
       severity: 'warning',
       generation: 2,
-      message:
-        'D8-interim: path a is drawn without its coverage fringe (renderer fringe-work-cap).',
+      message: 'Path a is drawn without its coverage fringe (renderer fringe-work-cap).',
       context: { failureCode: 'fringe-work-cap', failureScope: 'renderer', nodeId: 'a' },
     });
   });

@@ -45,7 +45,7 @@ import {
 } from './scene-numeric.js';
 
 // CPU path-mesh pipeline of the P3 V3 contract: port consumption, batch isolation, exact
-// buckets, the mesh cache, the failure memo and the D8-interim notice queue (unit V3a), plus the
+// buckets, the mesh cache, the failure memo and the failure notice queue (unit V3a), plus the
 // geometry-owned K4 offsets and the transform-owned instance lanes of section f (unit V3b), and
 // the fringe variants of section e (unit V3c). The packet mesh part itself is assembled by
 // path-mesh-packet.ts; the exact fringe builder lives in path-fringe.ts.
@@ -60,7 +60,7 @@ import {
 // both paints drawable at 0 < opacity < 1 is drawn by a joint-coverage fill draw over a
 // renderer-derived overlay (path-joint-overlay.ts), then the unchanged stroke draw, so opacity
 // applies once. The overlay is built on first need and cached on the fill entry, at most two per
-// node; a failed build is the D8-interim state `overlay-unsupported` (paint null), which hides
+// node; a failed build is the state `overlay-unsupported` (paint null), which hides
 // the path and keeps both cached meshes. Functional evidence only: precision is UNVERIFIED.
 
 export type { PathFringe, PathFringeBuilder, PathFringeBuildResult };
@@ -94,9 +94,9 @@ export type PathMeshRendererFailureCode =
 export type PathMeshFailureCode =
   StrokeMeshFailureCode | PathMeshBatchFailureCode | PathMeshRendererFailureCode;
 
-/** One D8-interim failure notice (P3 V3 contract, section h; B2 stroke contract, section 9.8). */
+/** One path mesh failure notice (P3 V3 contract, section h; B2 stroke contract, section 9.8;
+ *  E11-U4 addendum). */
 export type PathMeshNotice = Readonly<{
-  interim: 'd8';
   nodeId: string | null;
   failureScope: PathMeshFailureScope;
   failureCode: PathMeshFailureCode;
@@ -180,8 +180,9 @@ export type PathMeshLimits = Readonly<{
   toleranceVariantsPerNode: number;
   fringeVariantsPerEntry: number;
   /**
-   * V4 builder work cap (D8 interim): a mesh with more distinct boundary vertices than this is
-   * drawn region-only, without calling the fringe builder, and notifies `fringe-work-cap` once.
+   * V4 builder work cap (outcome O2 while the TypeScript fringe builder ships): a mesh with more
+   * distinct boundary vertices than this is drawn region-only, without calling the fringe
+   * builder, and notifies `fringe-work-cap` once.
    */
   fringeBoundaryVertexCap: number;
   /** ST-U7 addendum, section 4.6: at most this many overlay variants (or marks) per node. */
@@ -670,6 +671,14 @@ export class PathMeshPipeline {
    */
   public getOverlayBuildCount(): number {
     return this.#overlayBuilds;
+  }
+
+  /**
+   * @internal Tests only (E10 contract, section 3.1): false when the pipeline was built
+   * without a fringe builder; it classifies the draw record's region-only draws.
+   */
+  public get hasFringeBuilder(): boolean {
+    return this.#fringeBuilder !== undefined;
   }
 
   /** At most `noticesPerPacket` queued notices, oldest first; the rest stay queued. */
@@ -1273,7 +1282,7 @@ export class PathMeshPipeline {
       return;
     }
     this.#notices.push(
-      Object.freeze({ interim: 'd8', nodeId, failureScope, failureCode, toleranceExponent, paint }),
+      Object.freeze({ nodeId, failureScope, failureCode, toleranceExponent, paint }),
     );
   }
 
@@ -1356,24 +1365,25 @@ export class PathMeshPipeline {
   }
 }
 
-/** Formats a queued notice as the D8-interim diagnostic of section h (B2 section 9.8). */
+/** Formats a queued notice as the path mesh failure diagnostic (V3 section h, B2 section 9.8,
+ *  E11-U4 addendum section 5). */
 export function pathMeshNoticeDiagnostic(
   notice: PathMeshNotice,
   generation: number,
 ): DiagnosticInput {
-  const subject = notice.nodeId === null ? 'the mesh path' : `path ${notice.nodeId}`;
   // fringe-work-cap (the V4 builder work cap) still draws the region triangles, without a fringe.
   const outcome =
     notice.failureCode === 'fringe-work-cap'
       ? 'is drawn without its coverage fringe'
       : 'is not drawn';
+  const subject =
+    notice.nodeId === null ? 'Mesh paths are not drawn' : `Path ${notice.nodeId} ${outcome}`;
   return Object.freeze({
-    code: DIAGNOSTIC_CODES.PATH_MESH_INTERIM_FAILURE,
+    code: DIAGNOSTIC_CODES.PATH_MESH_FAILURE,
     severity: 'warning',
-    message: `D8-interim: ${subject} ${outcome} (${notice.failureScope} ${notice.failureCode}).`,
+    message: `${subject} (${notice.failureScope} ${notice.failureCode}).`,
     generation,
     context: Object.freeze({
-      interim: notice.interim,
       nodeId: notice.nodeId,
       failureScope: notice.failureScope,
       failureCode: notice.failureCode,
@@ -1702,3 +1712,24 @@ function numbersEqual(left: readonly number[], right: readonly number[]): boolea
 function compareOrdinal(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
+
+/**
+ * @internal Tests only (E10 contract, section 3.1): one mesh draw of the last non-null prepare.
+ * The triangle split is null for a joint fill draw, whose records carry two role bits.
+ */
+export type PathDrawRecordEntryForTesting = Readonly<{
+  nodeId: string;
+  paint: PathPaint;
+  composite: 'plain' | 'joint-fill';
+  fringe: 'built' | 'region-only-cap' | 'region-only-off';
+  triangleCount: number;
+  regionTriangles: number | null;
+  exteriorTriangles: number | null;
+}>;
+
+/** @internal Tests only (E10 contract, section 3.1). */
+export type PathDrawRecordForTesting = Readonly<{
+  /** Non-null prepares so far, from 1. */
+  prepareSerial: number;
+  draws: readonly PathDrawRecordEntryForTesting[];
+}>;

@@ -10,6 +10,7 @@ import { createNativeFoundationSceneCreation } from './native-foundation-scene.j
 import { createNativePrimitiveSceneCreation } from './native-primitive-scene.js';
 
 const COPY_SOURCE_AND_DESTINATION_USAGE = 0x0c;
+const RENDER_ATTACHMENT_USAGE = 0x10;
 
 export type WebGpuDeviceErrorType = 'validation' | 'out-of-memory' | 'internal' | 'unknown';
 
@@ -66,7 +67,43 @@ export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
   readonly meshPipelineAvailable?: boolean;
   setTarget(target: PrimitiveTarget): void;
   submitPrimitivePacket: PrimitivePacketConsumer['submitPrimitivePacket'];
+  /**
+   * @internal Tests only (E10 contract, section 3.2): arms the copy, and the count pass when
+   * requested, for the next submitPrimitivePacket call, which always settles the request.
+   */
+  captureNextSubmissionForTesting?(request: WebGpuSceneCaptureRequestForTesting): void;
   dispose(): void;
+}
+
+/** @internal Tests only (E10 contract, section 4): the scene's part of a frame capture. */
+export interface WebGpuSceneCaptureForTesting {
+  readonly generation: number;
+  readonly surfaceRevision: number;
+  readonly cameraRevision: number;
+  readonly width: number;
+  readonly height: number;
+  readonly sampleCount: 1 | 4;
+  readonly targetFormat: 'bgra8unorm' | 'rgba8unorm';
+  /** R, G, B, A bytes, rows top first, tightly packed, swizzled from bgra8unorm. */
+  readonly rgba: Uint8Array;
+  readonly meshDraws: readonly Readonly<{
+    instance: number;
+    firstTriangle: number;
+    triangleCount: number;
+    composite: 'plain' | 'joint-fill';
+  }>[];
+  /** `samples` integer counts per pixel, in sample index order (section 5). */
+  readonly counts?: Readonly<{ samples: 1 | 4; data: Uint16Array }>;
+}
+
+/** @internal Tests only (E10 contract, section 4). */
+export interface WebGpuSceneCaptureRequestForTesting {
+  readonly counts: boolean;
+  /** Called once the copy is encoded into the frame's submission. */
+  encoded(): void;
+  resolve(capture: WebGpuSceneCaptureForTesting): void;
+  /** The error message starts with a section 4 code. */
+  reject(error: Error): void;
 }
 
 export interface WebGpuPrimitiveSceneResult {
@@ -82,6 +119,13 @@ export interface WebGpuPrimitiveSceneCreationPort {
 /** Creation options; the mesh pipeline is created with the P1 pipeline, never on the frame path. */
 export interface WebGpuPrimitiveSceneOptions {
   readonly meshPipeline?: boolean;
+  /**
+   * @internal Tests only (E10 contract, section 3.2): a forced sample count. 4 fails creation
+   * when a 4x pipeline is unavailable; 1 creates 1x only. Absent: try 4x, then fall back.
+   */
+  readonly sampleCount?: 1 | 4;
+  /** @internal Tests only (E10 contract, section 5): creates the count pipelines. */
+  readonly countPass?: boolean;
 }
 
 export interface WebGpuDevicePort {
@@ -114,9 +158,13 @@ export interface WebGpuCanvasConfiguration {
   readonly device: WebGpuDevicePort;
   readonly format: string;
   readonly alphaMode: 'opaque' | 'premultiplied';
+  /** @internal Tests only (E10 contract, section 3.2): passed to configure only when present. */
+  readonly usage?: number;
 }
 
 export interface WebGpuCanvasContextPort {
+  /** @internal Tests only (E10 contract, section 3.2): the usage configure applied, if known. */
+  readonly configuredUsage?: number | undefined;
   configure(configuration: WebGpuCanvasConfiguration): void;
   unconfigure(): void;
 }
@@ -247,7 +295,13 @@ class BrowserAdapterPort implements WebGpuAdapterPort {
 }
 
 class BrowserCanvasContextPort implements WebGpuCanvasContextPort {
+  #configuredUsage: number | undefined;
+
   constructor(readonly native: GPUCanvasContext) {}
+
+  get configuredUsage(): number | undefined {
+    return this.#configuredUsage;
+  }
 
   configure(configuration: WebGpuCanvasConfiguration): void {
     if (!(configuration.device instanceof BrowserDevicePort)) {
@@ -259,7 +313,10 @@ class BrowserCanvasContextPort implements WebGpuCanvasContextPort {
       format: configuration.format as GPUTextureFormat,
       alphaMode: configuration.alphaMode,
       colorSpace: 'srgb',
+      ...(configuration.usage === undefined ? {} : { usage: configuration.usage }),
     });
+    // The WebGPU default usage is RENDER_ATTACHMENT.
+    this.#configuredUsage = configuration.usage ?? RENDER_ATTACHMENT_USAGE;
   }
 
   unconfigure(): void {

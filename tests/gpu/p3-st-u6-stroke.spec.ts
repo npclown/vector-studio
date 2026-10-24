@@ -123,9 +123,7 @@ for (const samples of [1, 4] as const) {
     const state = await page.evaluate(() => window.__vectorStudioP3V3Mesh.snapshot());
     const disposed = await page.evaluate(() => window.__vectorStudioP3V3Mesh.dispose());
     const sourceAtEnd = p1Source();
-    const interim = state.diagnostics.filter(
-      (event) => event.code === 'render.path-mesh-interim-failure',
-    );
+    const interim = state.diagnostics.filter((event) => event.code === 'render.path-mesh-failure');
     write(
       'observations.json',
       JSON.stringify(
@@ -165,7 +163,7 @@ for (const samples of [1, 4] as const) {
     expect(recovery).not.toBeNull();
     expect(sourceAtEnd.manifestSha256).toBe(source.manifestSha256);
     expect(pageErrors).toEqual([]);
-    // ST-U7: the overlap case draws, so no D8-interim diagnostic is emitted.
+    // ST-U7: the overlap case draws, so no path notice is emitted.
     expect(interim.map((event) => event.context)).toEqual([]);
     const errors = state.diagnostics.filter(
       (event) => event.severity === 'error' && event.code !== 'device-loss.detected',

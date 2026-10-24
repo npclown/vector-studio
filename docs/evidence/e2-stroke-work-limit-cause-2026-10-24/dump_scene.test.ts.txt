@@ -1,0 +1,12 @@
+// Scene dump used by the E2 cause record. Copy to tests/unit/, with scene.ts from the E11-U2
+// branch at tests/geometry/p3-exit-sweep/scene.ts, set OUT, and run `pnpm exec vitest run` on it.
+import { test } from 'vitest';
+import { writeFileSync } from 'node:fs';
+import { stressScene } from '../geometry/p3-exit-sweep/scene.js';
+test('dump', () => {
+  const out = stressScene().map((p) => ({
+    i: p.index, verbs: Array.from(p.verbs), points: Array.from(p.points),
+    zoom: p.zoom, dpr: p.dpr, e: p.toleranceExponent, ...p.stroke,
+  }));
+  writeFileSync(process.env.OUT ?? 'scene.json', JSON.stringify(out));
+});

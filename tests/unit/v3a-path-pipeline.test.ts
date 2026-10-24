@@ -36,7 +36,7 @@ import {
 } from '../support/v3a-path-harness.js';
 
 // P3 V3 contract unit V3a: port consumption (section b), buckets in use (c), cache and memo
-// (d) and the D8-interim outcome (h). Functional evidence only: precision is UNVERIFIED.
+// (d) and the failure outcome (h). Functional evidence only: precision is UNVERIFIED.
 
 const tagsOf = (port: ScriptedFillMeshPort, call = -1) =>
   port.calls.at(call)!.map((request) => request.tag);
@@ -51,7 +51,7 @@ function notice(
   // paint-free port-version and mesh-pipeline-unavailable codes.
   const paint =
     failureCode === 'port-version' || failureCode === 'mesh-pipeline-unavailable' ? null : 'fill';
-  return { interim: 'd8', nodeId, failureScope, failureCode, toleranceExponent, paint };
+  return { nodeId, failureScope, failureCode, toleranceExponent, paint };
 }
 
 describe('V3a port consumption and cache key', () => {
@@ -815,17 +815,16 @@ describe('V3a failure classes, memo and notices', () => {
     expect(port.callCount).toBe(1);
   });
 
-  it('V3-A8: notices format as the D8-interim warning of section h', () => {
-    expect(DIAGNOSTIC_CODES.PATH_MESH_INTERIM_FAILURE).toBe('render.path-mesh-interim-failure');
+  it('V3-A8: notices format as the path mesh failure warning (section h, E11-U4)', () => {
+    expect(DIAGNOSTIC_CODES.PATH_MESH_FAILURE).toBe('render.path-mesh-failure');
     const diagnostic = pathMeshNoticeDiagnostic(notice('p', 'path', 'work-limit', -3), 7);
-    expect(diagnostic.message.startsWith('D8-interim:')).toBe(true);
+    expect(diagnostic.message.startsWith('Path ')).toBe(true);
     expect({ ...diagnostic, message: 'checked above' }).toEqual({
-      code: 'render.path-mesh-interim-failure',
+      code: 'render.path-mesh-failure',
       severity: 'warning',
       message: 'checked above',
       generation: 7,
       context: {
-        interim: 'd8',
         nodeId: 'p',
         failureScope: 'path',
         failureCode: 'work-limit',
@@ -998,8 +997,9 @@ describe('V3a device loss, ownership and host injection', () => {
   // playground gained the real port. This V4 test keeps the remaining hosts port-free. B2 ST-U8
   // adds the stroke page as a second host, on V4's pattern: it injects both real ports. The
   // visualization track's V-1 appearance page is the third host, its V-2 path-data page the
-  // fourth and its V-3 integration page the fifth, on the same pattern.
-  it('V4: only the path page, the ST-U8 stroke page, the V-1 appearance page, the V-2 path-data page and the V-3 integration page inject the real ports; the V3 smoke fixture keeps its static double', () => {
+  // fourth, its V-3 integration page the fifth and its V-4 A08 corpus page the sixth, on the
+  // same pattern.
+  it('V4: only the path page, the ST-U8 stroke page, the V-1 appearance page, the V-2 path-data page, the V-3 integration page and the V-4 A08 corpus page inject the real ports; the V3 smoke fixture keeps its static double', () => {
     const root = join(__dirname, '../../apps/playground');
     const files: string[] = [];
     const walk = (directory: string) => {
@@ -1048,15 +1048,24 @@ describe('V3a device loss, ownership and host injection', () => {
     expect(viz3Source).toMatch(/from '@vector-studio\/geometry-wasm'/);
     expect(viz3Source).toMatch(/fillMesh: fill,/);
     expect(viz3Source).toMatch(/strokeMesh: strokes,/);
-    const host = [...v4Host, ...b2Host, ...vizHost, ...viz2Host, ...viz3Host];
+    // Visualization track V-4: the A08 corpus page is the sixth host. It wraps each real port in a
+    // recorder for the MESH-MISMATCH check; its cases file stays under the deny-list below.
+    const viz4Host = files.filter((file) => /[\\/]src[\\/]viz-v4-a08-corpus\.ts$/.test(file));
+    expect(viz4Host).toHaveLength(1);
+    const viz4Source = readFileSync(viz4Host[0]!, 'utf8');
+    expect(viz4Source).toMatch(/from '@vector-studio\/geometry-wasm'/);
+    expect(viz4Source).toMatch(/fillMesh: recordedFill\(fill\),/);
+    expect(viz4Source).toMatch(/strokeMesh: recordedStroke\(stroke\),/);
+    const host = [...v4Host, ...b2Host, ...vizHost, ...viz2Host, ...viz3Host, ...viz4Host];
     // The manifest and project-reference edges of that import (boundary rule P-B1).
     const edges = files.filter((file) =>
       /[\\/]playground[\\/](package|tsconfig)\.json$/.test(file),
     );
     expect(edges).toHaveLength(2);
-    // The V3-A14 smoke fixture page is a test fixture with a static test-double port.
-    const fixture = files.filter((file) => /p3-v3-mesh\.(ts|html)$/.test(file));
-    expect(fixture).toHaveLength(2);
+    // The V3-A14 smoke fixture page and the E10-U3 test-hooks check page are test fixtures with a
+    // static test-double port.
+    const fixture = files.filter((file) => /(p3-v3-mesh|e10-test-hooks)\.(ts|html)$/.test(file));
+    expect(fixture).toHaveLength(4);
     for (const file of fixture)
       expect(readFileSync(file, 'utf8'), file).not.toMatch(/geometry-wasm/);
     const allowed = new Set([...host, ...edges, ...fixture]);
