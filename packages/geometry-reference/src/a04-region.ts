@@ -938,6 +938,50 @@ function boxBoxDistLo(a: Box, b: Box): number {
   return Math.max(0, dn(Math.sqrt(dn(dn(dx * dx) + dn(dy * dy)))));
 }
 
+/**
+ * Lower bound on the distance between the hull of `gens` and a box (E3-U2e): the larger of the
+ * boxes' distance and the separations along the hull's edge normals and the direction between
+ * the centers. A projection onto a direction shortens distances, so each separation, divided by
+ * the direction's length, is a bound. Under strong anisotropy a cell's local hull is a thin
+ * parallelogram far smaller than its box.
+ */
+function hullBoxDistLo(gens: readonly IvP[], hullBox: Box, box: Box): number {
+  let best = boxBoxDistLo(hullBox, box);
+  if (gens.length < 3) return best;
+  const corners = [
+    ivpc(box.x0, box.y0),
+    ivpc(box.x1, box.y0),
+    ivpc(box.x1, box.y1),
+    ivpc(box.x0, box.y1),
+  ];
+  const mid = (v: Iv) => (v.lo + v.hi) / 2;
+  const along = (dx: number, dy: number) => {
+    if (!(dx !== 0 || dy !== 0) || !Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    const d = ivpc(dx, dy);
+    let lo = Infinity;
+    for (const g of gens) lo = Math.min(lo, ivpDot(g, d).lo);
+    let hi = -Infinity;
+    for (const c of corners) hi = Math.max(hi, ivpDot(c, d).hi);
+    const sep = dn(lo - hi);
+    if (!(sep > 0)) return;
+    best = Math.max(best, dn(sep / isqrt(ivpNorm2(d)).hi));
+  };
+  along(
+    (hullBox.x0 + hullBox.x1) / 2 - (box.x0 + box.x1) / 2,
+    (hullBox.y0 + hullBox.y1) / 2 - (box.y0 + box.y1) / 2,
+  );
+  for (let i = 0; i < gens.length; i += 1) {
+    const a = gens[i]!;
+    const b = gens[(i + 1) % gens.length]!;
+    const ex = mid(b.x) - mid(a.x);
+    const ey = mid(b.y) - mid(a.y);
+    // Both normals: the outward one separates when the box is beyond that edge.
+    along(ey, -ex);
+    along(-ey, ex);
+  }
+  return best;
+}
+
 class Heap<T> {
   private readonly items: { key: number; value: T }[] = [];
   get size(): number {
@@ -3006,6 +3050,13 @@ type LPoly = Readonly<{
   arcs?: ArcHint | undefined;
   /** Filled by each sweep piece that classifies this polygon: its frontier for the polygon. */
   found?: Map<StrokePiece, readonly ArcNode[]>;
+  /** Classify without the finer second collection (E3-U2e: cover cells above the freeze size). */
+  coarseOnly?: boolean;
+  /**
+   * Refine the OUT test's sub-arcs 16 times finer than the polygon (E3-U2e: freeze cells, where
+   * an outside cell near a foot is otherwise left to the freeze check's descent).
+   */
+  deepOut?: boolean;
 }>;
 
 /**
@@ -3747,7 +3798,7 @@ class CubicSweep implements StrokePiece {
     // A sub-arc without a foot in the polygon is outside it (E3-U2e: known from the collection).
     if (none?.has(node) === true) return true;
     charge(W_ARC, 1);
-    if (boxBoxDistLo(poly.box, node.box) > this.ir.hi) return true;
+    if (hullBoxDistLo(poly.gens, poly.box, node.box) > this.ir.hi) return true;
     if (this.excludesZero(node, poly)) return true;
     budget.n -= 1;
     if (node.depth >= ARC_MAX_DEPTH || node.size <= size / 4 || budget.n <= 0) return false;
@@ -4010,8 +4061,10 @@ class CubicSweep implements StrokePiece {
     poly.found?.set(this, coarse);
     const budget = { n: 4096 };
     const none = NO_FOOT.get(coarse);
-    if (coarse.every((n) => this.outside(n, poly, floor, budget, none))) return -1;
+    const outFloor = poly.deepOut === true ? floor / 16 : floor;
+    if (coarse.every((n) => this.outside(n, poly, outFloor, budget, none))) return -1;
     if (this.inside(poly, coarse, none)) return 1;
+    if (poly.coarseOnly === true) return 0;
     const fine = this.collectNodes(poly, floor / 8, coarse);
     return this.inside(poly, fine, NO_FOOT.get(fine)) || this.insideUnion(poly, fine) ? 1 : 0;
   }
@@ -4603,11 +4656,17 @@ class StrokeTarget implements RegionTarget {
   }
   /** A cell's class, and the sub-arc frontiers that its classification found (E3-U2d). */
   private classifyCell(box: Box, from?: ArcHint): { cls: number; arcs: ArcHint } {
-    const poly = this.polyOf(
-      [ivpc(box.x0, box.y0), ivpc(box.x1, box.y0), ivpc(box.x1, box.y1), ivpc(box.x0, box.y1)],
-      [qpn(box.x0, box.y0), qpn(box.x1, box.y0), qpn(box.x1, box.y1), qpn(box.x0, box.y1)],
-      from,
-    );
+    // A cell above the freeze cell size skips the finer collection (E3-U2e): on ∂R it never
+    // decides, and an inside cell that only it would decide is refined instead.
+    const poly: LPoly = {
+      ...this.polyOf(
+        [ivpc(box.x0, box.y0), ivpc(box.x1, box.y0), ivpc(box.x1, box.y1), ivpc(box.x0, box.y1)],
+        [qpn(box.x0, box.y0), qpn(box.x1, box.y0), qpn(box.x1, box.y1), qpn(box.x0, box.y1)],
+        from,
+      ),
+      coarseOnly: box.x1 - box.x0 > A04_ORACLE_PARAMETERS.freezeCellSize,
+      deepOut: box.x1 - box.x0 === A04_ORACLE_PARAMETERS.freezeCellSize,
+    };
     const cls = this.region.classifyPoly(poly, 0);
     return { cls, arcs: hintOf(poly) ?? new Map() };
   }
@@ -4963,11 +5022,15 @@ class StrokeTarget implements RegionTarget {
     return null;
   }
   /** The cell of the given size containing (x, y), built on demand; null outside the root. */
-  cellAt(x: number, y: number, size: number): CoverNode | null {
+  cellAt(x: number, y: number, size: number): CoverNode | null;
+  /** Without `build`, undefined where the cell is not in the cover yet (E3-U2e). */
+  cellAt(x: number, y: number, size: number, build: false): CoverNode | null | undefined;
+  cellAt(x: number, y: number, size: number, build = true): CoverNode | null | undefined {
     charge(W_CELL, 1);
     let n = this.root;
     if (x < n.box.x0 || x >= n.box.x1 || y < n.box.y0 || y >= n.box.y1) return null;
     while (n.box.x1 - n.box.x0 > size && n.cls === 0) {
+      if (!build && n.kids === null) return undefined;
       this.children(n);
       const k = (n.kids ?? []).find(
         (c) => x >= c.box.x0 && x < c.box.x1 && y >= c.box.y0 && y < c.box.y1,
@@ -5672,16 +5735,35 @@ export function a04FreezeCheck(input: A04Case, options: A04FreezeOptions = {}): 
         const w = b.x1 - b.x0;
         const xm = (b.x0 + b.x1) / 2;
         const ym = (b.y0 + b.y1) / 2;
-        const fast = R.classifyPoint(xm, ym);
-        const inside = fast !== 0 ? fast === 1 : R.contains(qpn(xm, ym));
+        // The cheaper tests go first (E3-U2e): the neighbours already in the cover before those
+        // that need new cells, the uniform ones before the witness searches, and the center's
+        // class only for a uniform neighbour. The outcome is the same in any order.
+        let inside: boolean | undefined;
+        const undecided: CoverNode[] = [];
+        const opposite = (m: CoverNode | null): boolean => {
+          if (m === null) return false;
+          if (m.cls === 0) {
+            undecided.push(m);
+            return false;
+          }
+          if (inside === undefined) {
+            const fast = R.classifyPoint(xm, ym);
+            inside = fast !== 0 ? fast === 1 : R.contains(qpn(xm, ym));
+          }
+          return (m.cls === 1) !== inside;
+        };
+        const later: [number, number][] = [];
         for (const dx of [-1, 0, 1])
           for (const dy of [-1, 0, 1]) {
             if (dx === 0 && dy === 0) continue;
-            const m = R.cellAt(b.x0 + w * (dx + 0.5), b.y0 + w * (dy + 0.5), w);
-            if (m === null) continue;
-            if (m.witness !== null || (m.cls !== 0 && (m.cls === 1) !== inside)) return true;
+            const x = b.x0 + w * (dx + 0.5);
+            const y = b.y0 + w * (dy + 0.5);
+            const m = R.cellAt(x, y, w, false);
+            if (m === undefined) later.push([x, y]);
+            else if (opposite(m)) return true;
           }
-        return false;
+        for (const [x, y] of later) if (opposite(R.cellAt(x, y, w) ?? null)) return true;
+        return undecided.some((m) => m.witness !== null);
       };
       const resolves = (n: CoverNode, levels: number): boolean => {
         let current = n.witness === null ? [n] : [];

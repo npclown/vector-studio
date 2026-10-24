@@ -63,3 +63,16 @@ describe('E3-U2e: anisotropic cells (T7)', () => {
     expect(r.halvesIn).toBeGreaterThan(0);
   });
 });
+
+describe('E3-U2e: OUT by the local hull (T6)', () => {
+  // A freeze cell outside the stroke by about 0.02 local units, beside a foot, whose local
+  // image is a skewed parallelogram well inside its axis-aligned box's reach of the curve.
+  it('decides an outside cell that the box distance leaves open (C9/g0249)', () => {
+    const r = a04CoverSelfTest(corpusCase('C9/g0249/T6/z1-d2/center/k0'), 0x2e5, {
+      boxes: [{ x0: 44.875, y0: 59.5, x1: 44.9375, y1: 59.5625 }],
+      samples: 32,
+    });
+    expect(r.findings).toEqual([]);
+    expect(r.decided).toBe(1);
+  });
+});
