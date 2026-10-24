@@ -6,7 +6,7 @@ Track: visualization. Item: V-4 of the [D9 visualization track plan](d9-visualiz
 
 Source of the item: [D9-Q2 (a)](d9-post-mvp1-tracks-proposal.md#user-decisions-2026-10-22) makes the visualization track supply the headed page for A08, and the [P3 exit evidence index (X1)](d9-rendering-track.md#p3-exit-evidence-index-x1) lists A08 as "headed page from the visualization track". A08's text, in the [P3 acceptance table](p3-fill-stroke-meshes.md#runtime-acceptance-coverage-to-freeze-in-p30b), is "Headed Chrome/Edge corpus, coverage fringe versus MSAA comparison and reproducible evidence". Its visual contract is fixed by [V3 section k](p3-v3-renderer-mesh-pipeline-contract.md#k-a08-visual-contract) and is not restated or changed here.
 
-This contract owns V-4's corpus selection, page design, capture, offline metrics, acceptance criteria and validation. It changes no requirement, threshold (Q4, Q9), milestone order, gate, port, ABI or `packages/contracts` export. Criteria are VZ4-A1 to VZ4-A12 and questions VZ4-Q1 to VZ4-Q7.
+This contract owns V-4's corpus selection, page design, capture, offline metrics, acceptance criteria and validation. It changes no requirement, threshold (Q4, Q9), milestone order, gate, port, ABI or `packages/contracts` export. Where the drawn position is uncertain (section 5.2), a pixel is left UNDECIDED rather than judged against a widened class, so Q4's 2 px and 1 px classes stay as written. Criteria are VZ4-A1 to VZ4-A12 and questions VZ4-Q1 to VZ4-Q7.
 
 ## 1. Scope
 
@@ -40,12 +40,13 @@ V-4 needs three things that do not exist today. The page cannot obtain them from
 | VZ4-D2 | Test-only render options: force `sampleCount` 1 or 4 (failing, not falling back, when 4x is unavailable), and a fringe-off mode that draws region triangles with `c = 1` and no exterior triangles (section k's MSAA-only variant) | Rendering track, new item E10 |
 | VZ4-D3 | Test-only exact readback of the presented frame in physical pixels, and the O02 count pass on the same vertex stage, buffers and draw ranges (1x center count; 4x per-sample count via `textureLoad`) | Rendering track, E10 |
 | VZ4-D4 | C03-C05 complete, for the evidence to count (not for the page to run) | Unassigned today ([VZ4-Q1](#8-open-questions)) |
+| VZ4-D5 | E3-U3's harness: the exact K4 mapping model `p*`, the bound `β_c` and the clipping model of E3-Q11 (a) ([E3 section 9.1](d9-e3-b4-precision-contract.md#91-units)) | Rendering track, E3 |
 
 D2 and D3 add published `…ForTesting` members to `renderer-core` or `renderer-webgpu`, as `destroyDeviceForTesting()` is. That is a shared-surface change: E10 is full tier under its own short contract, reviewed by both tracks. V-4 itself edits no file under `packages/` and adds no dependency.
 
 ## 3. The A08 corpus
 
-The A08 corpus is a declared subset of the frozen `a04-corpus/v1`, so A04 and A08 measure the same cases. It is identified by the A04 `corpusSha256` plus the subset rule below; a manifest `tests/visual/viz-v4/a08-subset.manifest.json` lists the case keys and its SHA-256.
+The A08 corpus is a declared subset of the frozen `a04-corpus/v1`, so A04 and A08 measure the same geometry. It is identified by the A04 `corpusSha256` plus the subset rule below. A manifest `tests/visual/viz-v4/a08-subset.manifest.json` lists the case keys and its SHA-256. A case key is the A04 case key of the row, transform and `z = 1` pair, plus the V-4 DPR; for DPR 1.5, which A04 lacks, the key is the DPR 1 A04 key with `dpr = 1.5`.
 
 | Part | Rows | Transforms | DPR | Role |
 | --- | --- | --- | --- | --- |
@@ -59,7 +60,7 @@ The A08 corpus is a declared subset of the frozen `a04-corpus/v1`, so A04 and A0
 - **Zoom.** `z = 1` only. Coverage is a physical-pixel property and section k names DPR, not zoom ([VZ4-Q3](#8-open-questions)).
 - **DPR 1.5.** A04 does not use DPR 1.5. The case is re-projected at `d = 1.5` exactly as O02 re-projects its rows: only `dpr`, `width` and `height` change; geometry, transform, camera and origin are unchanged.
 - **Camera.** E3's center placement ([section 13.7](d9-e3-b4-precision-contract.md#137-camera)) and E3's window `Ω`.
-- **Size.** Gated: (40 + 30) × 4 + 24 × 2 + 8 × 2 = 344 row-transforms × 4 DPR = 1,376 cases. Reported: 8 × 4 + 109 × 2 × 4 = 904 cases. Each case renders 3 variants: 6,840 renders per browser.
+- **Size.** Gated part: (40 + 30) × 4 + 24 × 2 + 8 × 2 = 344 row-transforms; × 3 gated DPRs = 1,032 gated cases, plus 344 observed at DPR 3. Reported part: 8 × 4 + 109 × 2 × 4 = 904 cases. All 2,280 cases render 3 variants: 6,840 renders per browser.
 - **Blindness.** The corpus is chosen before any V-4 capture and is not changed after the first capture; a change is a new subset version that keeps every failing or undecided case.
 
 ## 4. Page design
@@ -86,10 +87,10 @@ Each case and variant gets one status, recorded with its reason:
 
 | Status | Meaning |
 | --- | --- |
-| `RENDERED` | Drawn, captured, and every check of section 5.1 passed |
+| `RENDERED` | Drawn, captured, and every check of section 5.1 passed; then judged PASS, FAIL or `UNDECIDED` by section 5.2 |
 | `KERNEL-REJECTED` | The port returned a failure (A01 evidence, not A08) |
 | `REGION-ONLY` | The renderer issued `fringe-work-cap` or `fringe-unsupported` for the path |
-| `GUARD-BAND` | A mapped vertex lies outside E3's guard band (E3-Q11); undecided, as in E3 |
+| `UNDECIDED` | No pixel fails a gate, but at least one pixel lies in a section 5.2 uncertainty margin with a value that would fail there |
 | `EMPTY-CROP` | The path covers no pixel of `Ω` |
 | `MESH-MISMATCH` | The browser's mesh bytes differ from Node's for the same case |
 
@@ -102,22 +103,25 @@ Each case and variant gets one status, recorded with its reason:
 ### 5.1 Reference boundary
 
 - The mesh is the port's output for the case, regenerated in Node by the same release WASM and checked against the browser's bytes (`MESH-MISMATCH` otherwise).
-- The reference boundary follows O02's Q1: boundary edges are mesh edges used by exactly one region triangle, region on the left, mapped to physical pixels by E3's CPU model of the K4 shader mapping ([E3 section 7.1](d9-e3-b4-precision-contract.md#71-where-it-runs)), giving `p*` and the per-case bound `β_c`.
-- Corners and sectors follow O02's pairing rule; a failed pairing is `REGION-ONLY` if the renderer also reported it, otherwise a V-4 failure.
+- The reference boundary is the port's `boundaryEdges` (`packages/contracts/src/geometry.ts`), the edges the fringe builder consumes, mapped to physical pixels by E3's CPU model of the K4 shader mapping ([E3 section 7.1](d9-e3-b4-precision-contract.md#71-where-it-runs)), giving `p*` and the per-case bound `β_c`. O02's "edges used by exactly one region triangle" is not used: on a mesh with slab T-junctions (E3-K2, E3-C12) it would label interior half-edges as boundary.
+- Vertices outside the viewport are allowed. Clipping follows E3-Q11 (a): the viewport is the guard band and clipping is modelled, so the frame edge is not a coverage boundary and pixels are judged only inside `Ω`.
+- Corners and sectors follow O02's pairing rule on `boundaryEdges`; a failed pairing is `REGION-ONLY` if the renderer also reported it, otherwise a V-4 failure.
+- **Expected statuses.** `KERNEL-REJECTED`, `REGION-ONLY` and `EMPTY-CROP` are determined in Node before any headed run, by the same WASM and `renderer-core` code. They are committed as a literal list with the subset manifest; a headed status that differs from it is reported and makes the run INCONCLUSIVE.
 
 ### 5.2 Gates
 
-G1, G2 and G3 are O02's, evaluated by the existing `tests/geometry/coverage-oracle/metrics-o02.ts` functions where they apply, with one change of input: the exact distance to the boundary is widened by `β_c`, because the drawn vertices are known only within `β_c` of `p*` ([VZ4-Q2](#8-open-questions)).
+G1, G2 and G3 are O02's, with its 2 px, 1 px and 0.708 px classes unchanged. The drawn boundary is known only within `β_c` of the boundary at `p*`, so a pixel center at exact distance `d` from the `p*` boundary has a true distance in `[d − β_c, d + β_c]`. Each gate is decided per pixel as E3 decides its U and L bounds ([VZ4-Q2](#8-open-questions)):
 
-- **G1 (Q4).** At pixel centers whose distance to every boundary segment is at least `2 + β_c` px, `obs` is within 2/255 of 255 inside and of 0 outside.
-- **G2 (Q4).** A pixel with `obs ≥ 128` is classified inside; every misclassified pixel center lies within `1 + β_c` px of the boundary.
-- **G3 (Q9).** At most one covered sample per pixel per sample, with O02's classes and its order-independent multiset rule; at 1x the center count.
-- A case with `β_c > 0.25` px is `GUARD-BAND` for A08 (the widening would no longer be small against the 1 px class).
+- **G1 (Q4).** A pixel with `d − β_c ≥ 2` must have `obs` within 2/255 of 255 inside and of 0 outside; a violation FAILS. A pixel with `d < 2 ≤ d + β_c` that violates is UNDECIDED; one that complies is not counted.
+- **G2 (Q4).** A pixel with `obs ≥ 128` is classified inside. A misclassified pixel with `d + β_c ≤ 1` passes, one with `d − β_c > 1` FAILS, and one between is UNDECIDED.
+- **G3 (Q9).** O02's rule in full: the four counts of a pixel are an order-independent multiset; pixels with `d + β_c ≤ 0.708` px inside or on the boundary require all four counts equal to 1 (at 1x, the center count); elsewhere every count is at most 1. A pixel in the `β_c` margin of the 0.708 class is held to "at most 1".
+- **Cracks.** A count-0 sample within 1.104 px of a port-mesh edge that has a mesh vertex in its interior (a T-junction edge) is a GPU crack. Under the approved A01 amendment (E3-Q10 (b)) it is A01 evidence: it is reported with its width and excluded from G3's "equal to 1" rule, never from "at most 1".
+- New metric code is needed for the margins and the crack exclusion: the `metrics-o02.ts` helpers fix the 1 px and 2 px classes on exact distance with no margin. V-4 reuses O02's RLE, crop and distance primitives and adds `tests/visual/viz-v4/metrics.ts`.
 
 ### 5.3 Verdict
 
-- **PASS** when G1, G2 and G3 hold for every `RENDERED` gated case of `fringe-1x` and `fringe-4x` at DPR 1, 1.5 and 2, in both browsers.
-- **INCONCLUSIVE** when, at any gated DPR in either browser, more than 5 % of gated cases are not `RENDERED`, or any named E3-C1 row at T0 is not `RENDERED`.
+- **PASS** when no gated case of `fringe-1x` or `fringe-4x` at DPR 1, 1.5 and 2 FAILS in either browser, and the INCONCLUSIVE conditions do not hold.
+- **INCONCLUSIVE** when, at any gated DPR in either browser, more than 5 % of the gated cases expected `RENDERED` are not `RENDERED`, or are `UNDECIDED`; or when a headed status differs from the expected-status list of section 5.1.
 - **FAIL** otherwise. The failing cases are listed with their key, variant and gate.
 
 ### 5.4 Reported, with no threshold
@@ -132,10 +136,10 @@ Per variant and DPR: `obs − rule` by class (interior, exterior, band), as O02 
 | VZ4-A2 | The subset manifest regenerates byte-identically from `a04-corpus/v1`, and its `corpusSha256` equals the E3 freeze record | Unit test |
 | VZ4-A3 | Every case and variant has exactly one status of section 4.4 | GPU spec, completeness assertion |
 | VZ4-A4 | Browser mesh bytes equal Node's for every `RENDERED` case | Offline runner |
-| VZ4-A5 | The `msaa-4x` variant draws no exterior triangle (count pass shows no coverage outside the region beyond MSAA) and `c = 1` | Offline runner, from counts |
+| VZ4-A5 | The `msaa-4x` variant is region-only: its recorded exterior draw range is empty for every case, and its interior pixels (`d − β_c ≥ 2`) have `obs` = 255 | Offline runner, from the draw record and captures |
 | VZ4-A6 | G1 and G2 on `fringe-1x` and `fringe-4x`, DPR 1, 1.5, 2 | Offline runner |
 | VZ4-A7 | G3 on `fringe-1x` and `fringe-4x`, DPR 1, 1.5, 2 | Offline runner |
-| VZ4-A8 | Positive controls reject: a 1.5 px boundary shift fails G2; a doubled exterior draw fails G3; an inverted ramp fails G1 | Unit tests on synthetic captures |
+| VZ4-A8 | Controls on synthetic captures and records. Must FAIL: a 2 px boundary shift (G2); an interior pixel at 3/255 off (G1); a doubled exterior draw (G3, count 2); a dropped region triangle (G3, count 0 away from T-junction edges); a fringe left on in `msaa-4x` (VZ4-A5); a one-byte mesh change (`MESH-MISMATCH`); a missing case (VZ4-A3); a readback from a cleared texture (G1). Must PASS: a 2/255 interior deviation and a known-good synthetic rendering of the rule | Unit tests |
 | VZ4-A9 | Offline metrics replay byte-identically from the committed record's inputs | `pnpm coverage:viz-v4 --replay` |
 | VZ4-A10 | The section 5.4 report exists for both browsers | Evidence record |
 | VZ4-A11 | The record states `PRE-FREEZE` or names the C03-C05 completion it relies on | Evidence record review |
@@ -159,16 +163,16 @@ Headed runs are not possible in the cloud container; they run on the user's PC t
 | ID | Question | Recommendation |
 | --- | --- | --- |
 | VZ4-Q1 | Start V-4 before the E3 freeze and C03-C05, labelling runs `PRE-FREEZE`? Who owns C03-C05 completion? | (a) yes, contract and harness now; C03-C05 ownership is a user decision raised separately |
-| VZ4-Q2 | Widen the G1 and G2 distance classes by `β_c` (section 5.2), or use O02's exact classes on `p*`? | (a) widen: the drawn vertex is known only within `β_c`; exact classes would attribute mapping error to coverage |
+| VZ4-Q2 | Decide pixels in the `β_c` margin as UNDECIDED (section 5.2), or ignore `β_c` and use O02's classes on `p*` as if exact? | (a) UNDECIDED: keeps Q4's classes unchanged and never lets a mapping error pass or fail as coverage |
 | VZ4-Q3 | Zoom `z = 1` only, or all three E3 zooms? | (a) `z = 1`: coverage is per physical pixel; zoom is A04's axis |
 | VZ4-Q4 | Strokes: report only, or gate them with the same Q4? | (a) report: section k covers fill; a stroke gate needs its own full-tier decision |
 | VZ4-Q5 | The test hooks as rendering item E10 (full tier, both-track review), or a V-4 page that rebuilds the mesh pipeline itself? | (a) E10: a rebuilt pipeline would not be the product path that A08 evidences |
-| VZ4-Q6 | The INCONCLUSIVE threshold of 5 % non-`RENDERED` gated cases | (a) 5 %, as O02's 130 of 143 is about 9 % and A08 runs on a larger, known-hard corpus |
+| VZ4-Q6 | The INCONCLUSIVE threshold of 5 % of expected-`RENDERED` gated cases not `RENDERED` or `UNDECIDED` | (a) 5 %: O02 tolerated about 9 % (130 of 143), and expected rejections are already removed by the Node pre-run |
 | VZ4-Q7 | Transform subset T0, T2, T5, T7 for named fills | (a) as stated: identity, generic rotation, negative determinant, strong anisotropy |
 
 ## 9. Units and order
 
-`this contract APPROVED -> E10 contract and implementation (rendering track) -> E3 freeze record -> VZ4-U1 page, spec and subset manifest -> VZ4-U2 offline runner and positive controls -> VZ4-U3 headed run on the user's PC, PRE-FREEZE record -> independent evidence review -> counted run after C03-C05`. VZ4-U1 and VZ4-U2 may start before the E3 freeze against the unfrozen `a04-corpus/v1`; their tests then pin the corpus SHA as a TODO that VZ4-A2 closes.
+`this contract APPROVED -> E10 contract and implementation (rendering track) -> E3 freeze record and E3-U3 harness -> VZ4-U1 page, spec and subset manifest -> VZ4-U2 offline runner and positive controls -> VZ4-U3 headed run on the user's PC, PRE-FREEZE record -> independent evidence review -> counted run after C03-C05`. VZ4-U1 and VZ4-U2 may start before the E3 freeze against the unfrozen `a04-corpus/v1`; their tests then pin the corpus SHA as a TODO that VZ4-A2 closes.
 
 ## 10. Risks
 
@@ -180,4 +184,13 @@ Headed runs are not possible in the cloud container; they run on the user's PC t
 
 ## 11. Gate
 
-Satisfies nothing yet. After approval, V-4 is complete when VZ4-A1 to VZ4-A12 have evidence on a counted run; until then the X1 row of A08 links the `PRE-FREEZE` record as partial evidence.
+Satisfies nothing yet. After approval, V-4 is complete when VZ4-A1 to VZ4-A12 have evidence on a counted run. A `PRE-FREEZE` record may be linked from the X1 row of A08 only with the words "PRE-FREEZE, not counted" in that cell, and the row stays TODO.
+
+## 12. Review round 1 (2026-10-24)
+
+Independent `reviewer` review: NOT READY, three blocking and eight should-fix items, all applied in this revision.
+
+- B1: the `β_c` widening of the G1 and G2 classes changed Q4; replaced by per-pixel UNDECIDED margins (section 5.2, VZ4-Q2).
+- B2: the O02 boundary rule mislabels T-junction half-edges; the reference is now the port's `boundaryEdges`, and GPU cracks are routed to A01 (section 5.1, 5.2).
+- B3: `GUARD-BAND` contradicted E3-Q11 (a) and made PASS unreachable on off-viewport rows; clipping is now modelled as in E3, and expected statuses are fixed in Node before the headed run (section 5.1, 5.3).
+- S4 to S11: the E3-U3 dependency (VZ4-D5); one meaning per status; G3 stated in full; controls widened with a negative control (VZ4-A8); VZ4-A5 made testable; DPR 1.5 key rule and gated count without DPR 3 (section 3); new metric code stated; the X1 "not counted" guard (section 11).
