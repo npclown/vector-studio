@@ -226,9 +226,12 @@ export function checkMeshStructure(mesh: FillMesh): StructureReport {
 
   // Conformity: a vertex strictly inside an unmatched edge is a T-junction. Vertices are
   // sorted by x so each edge scans only the vertices within its x range.
-  const order = Array.from({ length: vertexCount }, (_, v) => v).sort(
-    (p, q) => positions[2 * p]! - positions[2 * q]!,
-  );
+  // Only vertices some triangle uses count: an unused position is not part of the mesh.
+  const used = new Uint8Array(vertexCount);
+  for (let i = 0; i < indices.length; i += 1) used[indices[i]!] = 1;
+  const order = Array.from({ length: vertexCount }, (_, v) => v)
+    .filter((v) => used[v] === 1)
+    .sort((p, q) => positions[2 * p]! - positions[2 * q]!);
   const xs = order.map((v) => positions[2 * v]!);
   const lowerBound = (x: number) => {
     let [lo, hi] = [0, xs.length];

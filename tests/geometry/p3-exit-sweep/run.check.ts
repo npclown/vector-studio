@@ -65,18 +65,25 @@ function corpusItems(): { items: SweepItem[]; cases: number; state: Record<strin
   for (const kase of iterateA04Corpus() as Iterable<A04Case>) {
     cases += 1;
     const d = decodeCase(kase);
+    // Not drawable, as the A04 harness rules: a singular transform or a stroke of width 0.
     const [a, c, b, dd] = d.transform;
-    const buckets = computePathBuckets([a, b, c, dd], d.zoom, d.dpr);
+    const buckets = computePathBuckets([a, c, b, dd], d.zoom, d.dpr);
     if (buckets.singular) {
       state.singular = (state.singular ?? 0) + 1;
       continue;
     }
-    const e = buckets.e - d.servedOffset;
-    const min = d.paint === 'fill' ? E_MIN : STROKE_E_MIN;
-    if (e < min || e > E_MAX) {
+    if (d.stroke !== null && d.stroke.width === 0) {
+      state['w = 0'] = (state['w = 0'] ?? 0) + 1;
+      continue;
+    }
+    // The served request, as the renderer makes it (V3 section c): below the port's minimum is
+    // `tolerance-range` (no request); above E_MAX is clamped to E_MAX.
+    const unclamped = buckets.e - d.servedOffset;
+    if (unclamped < (d.paint === 'fill' ? E_MIN : STROKE_E_MIN)) {
       state['tolerance-range'] = (state['tolerance-range'] ?? 0) + 1;
       continue;
     }
+    const e = Math.min(unclamped, E_MAX);
     const verbs = Uint8Array.from(d.verbs.map((v) => VERB_CODE[v]));
     const points = Float64Array.from(d.points);
     const key = JSON.stringify([d.paint, d.verbs, d.points, d.fillRule, d.stroke, e]);

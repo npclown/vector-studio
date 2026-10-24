@@ -84,6 +84,9 @@ writeFileSync(
   )}\n`,
 );
 
+/** Every seeded control of sweep.ts, the T-junction one included, must run on each kind. */
+const CONTROL_COUNT = 9;
+
 const vitest = path.join(root, 'node_modules', 'vitest', 'vitest.mjs');
 let failed = false;
 for (const phase of phases) {
@@ -119,7 +122,8 @@ for (const phase of phases) {
     r.isolationFailures.length > 0 ||
     r.batchFailures.length > 0 ||
     missed.length > 0 ||
-    Object.keys(r.controls).length < 2;
+    Object.keys(r.controls).length < 2 ||
+    Object.values(r.controls).some((c) => c.results.length < CONTROL_COUNT);
   failed ||= bad;
   console.log(
     JSON.stringify(
