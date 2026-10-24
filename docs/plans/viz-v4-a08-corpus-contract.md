@@ -120,9 +120,9 @@ G1, G2 and G3 are O02's, with its 2 px, 1 px and 0.708 px classes unchanged. The
 
 ### 5.3 Verdict
 
-- **PASS** when no gated case of `fringe-1x` or `fringe-4x` at DPR 1, 1.5 and 2 FAILS in either browser, and the INCONCLUSIVE conditions do not hold.
+- **FAIL** when any gated case of `fringe-1x` or `fringe-4x` at DPR 1, 1.5 and 2 FAILS in either browser. The failing cases are listed with their key, variant and gate. FAIL outranks INCONCLUSIVE (decided 2026-10-24 under the standing instruction, section 16).
+- **PASS** when no gated case FAILS in either browser, both browsers are present, and the INCONCLUSIVE conditions do not hold.
 - **INCONCLUSIVE** when any gated case is UNDECIDED; or when, at any gated DPR in either browser, more than 5 % of the gated cases expected `RENDERED` are not `RENDERED`; or when a headed status differs from the expected-status list of section 5.1; or when any gated case is `RENDERER-FAILED`, or `EMPTY-CROP` with reason `port-empty`, in that list or in the headed run (added 2026-10-24 under the standing instruction, section 15).
-- **FAIL** otherwise. The failing cases are listed with their key, variant and gate.
 
 ### 5.4 Reported, with no threshold
 
@@ -213,3 +213,15 @@ READY, no blocking or should-fix items. Its optional follow-up, reporting the pi
 - Section 4.5 was rewritten to the built hook (`window.__vectorStudioVizV4`, `render(caseInput)`, query-string variant, `observations.ndjson`); section 4.3 states the backend's opaque black clear. Neither changes a gate.
 - Capture identity (E10 section 14 carry-overs): per case, capture size equals the physical size, `sampleCount` and `devicePixelRatio` equal the variant's and the DPR, one submitted frame and one prepare per capture, and mesh triangle totals equal the draw record.
 - Artifacts: `artifacts/viz-v4-a08/<run>/<project>/<variant>/dpr<D>/` with `meta.json` (label `PRE-FREEZE`, `complete`), `observations.ndjson` and `UNVERIFIED.txt`, the labels written before the first case. The headed command is `pnpm test:gpu:viz-v4`; `pnpm test:gpu` also collects the spec, which skips before the freeze.
+
+## 16. Implementation notes (VZ4-U2, 2026-10-24)
+
+`tests/visual/viz-v4/metrics.ts` and `runner.ts`, run by `pnpm coverage:viz-v4 --run <dir> [--wasm] [--out] [--label] [--expected]` or `--replay <record dir>`. It refuses before the E3 freeze record. `record.json` is canonical JSON (`body`, `bodySha256`, `provenance`), labelled `PRE-FREEZE` by default. Readings of this contract, none of which changes a gate:
+
+- **β_c** is E3's composition: the upward bound of the maximum over every mapped mesh vertex of `max(betaVertex, betaFeature)` plus the guard-band clip term, times E3's slack. A case whose E3 no-flip certificate fails, or whose mapped boundary winding is not 0 or ±1 at a pixel centre, is UNDECIDED.
+- **Inside at `p*`** is the exact nonzero winding of the mapped `boundaryEdges`; all class tests are exact rational comparisons on dyadic `p*`. Ω ∩ canvas is the whole capture.
+- **Crack** (section 5.2): a pixel in the crack zone that is inside at `p*` with `d − β_c > 0` and shows a count-0 sample, or has `d − β_c ≥ 2` and `obs` more than 2/255 below 255. Exterior pixels are never excused. VZ4-A5's interior check excludes cracks as G1 does, since cracks are A01 evidence (decided 2026-10-24, review round 1).
+- **Verdict precedence** (decided 2026-10-24 under the standing instruction, recommended option of review round 1): FAIL outranks INCONCLUSIVE, as in E3's A04 verdict, so one ungated deviation cannot hide a decided gated failure. A run lacking the `chrome` or `edge` project fails VZ4-A3, which makes the record's `result` FAIL; the `verdict` field judges only the gates. The 5 % rule pools both fringe variants per browser and gated DPR. The deviation rule applies to every case and variant.
+- **Criteria result**: VZ4-A3, VZ4-A4 or VZ4-A5 failing makes the record's `result` FAIL beside the section 5.3 `verdict`, as VZ4-A8 requires for a mismatch or a missing case. A capture-identity mismatch makes the case FAIL.
+- The "band" class of section 5.4 is `d ≤ 1` at `p*`. `β_c` covers the mapped region-mesh vertices; the fringe's exterior vertices are not separately bounded, and the evidence record states this. Replay needs the same Node and V8 version (recorded in `provenance`; another version is refused, so a record from the user's PC replays there), since `Math.hypot` in `β` is not correctly rounded.
+- **Risk.** The product fringe builder refuses a mesh with an interior T-junction (`fringe-unsupported`), so E3-C12 cases may be mostly `REGION-ONLY` under the fringe variants, leaving G3's crack rule exercised mainly by `msaa-4x`. The expected-status list shows this before the headed run; if it holds, it is raised before any counted run.
