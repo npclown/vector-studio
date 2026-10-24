@@ -14,12 +14,15 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | E3 | B4: A04 corpus and measurement contract | Full | R1 | In progress: U1 (#206), U2 (#212), U2b (#214), U2c (#216) merged; freeze not met (5 `ORACLE-WORK`); U3 harness and U4 GPU model check in review (headed Chrome and Edge PASS on non-corpus cases), no corpus run ([U3 evidence](#e3-e3-u3-evidence-2026-10-24), [U4 evidence](#e3-e3-u4-evidence-2026-10-24)) |
 | E8 | Unsupported-geometry on simple smooth Q/T and C/S paths | Full | R1 | In progress: U0 (#211), U0b (#213), U1 (#215) merged; U2 next ([evidence](#e8-u1-evidence-2026-10-23)) |
 | E10 | A08 test hooks for V-4: forced sample count, fringe-off, frame readback, count pass | Full (shared surface) | R1 | Proposed by V-4 ([VZ4-D2, D3](viz-v4-a08-corpus-contract.md#2-dependencies-and-shared-surface)); not started |
+| E11 | P3 C03-C05 closure and exit snapshot | Full | R1 | Contract APPROVED 2026-10-24 (Q1-Q4 (a)); next E11-U2 ([contract](d9-e11-p3-c03-c05-closure-contract.md)) |
 | X1 | P3 exit evidence A01-A08 index | — (Primary acceptance) | R1 | Open; all eight TODO ([index](#p3-exit-evidence-index-x1)) |
 | E4 | ST-U3f fix decision | Full | Backlog | Seven cases stay a known defect with fixtures (D10) |
 | E7 | Conforming refinement (A01 watertightness remedy) | Full | Backlog | Candidate; first to promote if A01 needs it |
 | E2 | ST-U9 family-B fast-rung contract | Full | Backlog | Not started |
 | E5 | Unmeasured-scope measurements after AL-Q6 (a) | Full, then light | Backlog | Not started |
 | E6 | Remove or move the D8-interim overlay and fringe builders | Full | Backlog | Not started |
+| E12 | Production mesh layout: the C04 parts and A07 gaps left open by v0 (K1, E1-E3, limits) | Full | Backlog | Proposed by E11 under E11-Q1 (a) ([E11 section 5](d9-e11-p3-c03-c05-closure-contract.md#5-c04-layout-ownership-cache-and-lifetime)) |
+| E13 | Partial-coverage tolerance and stroke coverage gate | Full | Backlog | Proposed by E11 under E11-Q4 (a) ([E11 section 4.1](d9-e11-p3-c03-c05-closure-contract.md#41-the-coverage-blockers-of-the-private-contract)) |
 | E9 | E1 review follow-ups: guard equality tests, per-guard blocked counter | Light | Backlog | Not started ([review](../evidence/r0-review-closeout-2026-10-23.md#e1)) |
 
 E1 comes before E2: the early abort is a smaller, independent bound and needs no new certificate. The order is otherwise D9's.
