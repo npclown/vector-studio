@@ -15,11 +15,11 @@ import type {
 // is UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence.
 //
 // Cubic strokes cost more than lines (the open ST-U9 decision), so several cubic and crossing
-// strokes report the D8-interim `work-limit` notice at some views. That is shown, not hidden:
-// the page lists every D8 notice, and the paths below are chosen to show both outcomes.
+// strokes report the `work-limit` notice at some views. That is shown, not hidden:
+// the page lists every path notice, and the paths below are chosen to show both outcomes.
 
 export const B2_EVIDENCE_LABEL =
-  'UNVERIFIED: functional ST-U8 stroke playground evidence only; precision is UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence, and no Q4 coverage threshold is claimed. work-limit notices are the D8-interim state of the open ST-U9 decision.';
+  'UNVERIFIED: functional ST-U8 stroke playground evidence only; precision is UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence, and no Q4 coverage threshold is claimed. work-limit paths are not drawn (product outcome O1).';
 
 export const B2_SURFACE = Object.freeze({ width: 720, height: 600 });
 

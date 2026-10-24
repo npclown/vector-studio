@@ -24,7 +24,7 @@ declare global {
 // geometry-wasm fill-mesh and stroke-mesh ports, in Chrome and Edge. Functional evidence only:
 // precision is UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence, and
 // no Q4 coverage threshold is claimed. The gates are what the contract requires of the page: it
-// renders through both real ports, no page error and no error diagnostic occur, the D8-interim
+// renders through both real ports, no page error and no error diagnostic occur, the path
 // notices of each view are exactly the expected set (work-limit is the open ST-U9 decision; it is
 // shown, never hidden; ST-U7 draws the both-paints-at-0.5 node through the joint fill draw), the mesh
 // draw count equals the expected count, and a few probes far from every edge show the paint
@@ -46,7 +46,7 @@ const DPR_VIEWS: Readonly<Record<number, readonly string[]>> = {
 };
 
 type Expectation = Readonly<{
-  /** Sorted `nodeId paint failureCode` of every D8-interim notice. */
+  /** Sorted `nodeId paint failureCode` of every path notice. */
   notices: readonly string[];
   /** Mesh draws of the last submitted packet. */
   meshDraws: number;
@@ -208,7 +208,7 @@ for (const dpr of [1, 2, 3]) {
         write(`${id}.png`, png);
 
         const interim = state.diagnostics.filter(
-          (event) => event.code === 'render.path-mesh-interim-failure',
+          (event) => event.code === 'render.path-mesh-failure',
         );
         const notices = interim
           .map((event) => {

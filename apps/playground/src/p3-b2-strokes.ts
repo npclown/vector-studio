@@ -13,6 +13,7 @@ import {
   type PrimitiveTarget,
 } from '@vector-studio/renderer-core';
 import { WebGpuBackend } from '@vector-studio/renderer-webgpu';
+import { isPathNotice } from './path-notices.js';
 import {
   B2_PATHS,
   B2_SURFACE,
@@ -26,7 +27,7 @@ import {
 // the real fill-mesh port (`createFillMeshPort`, fill-v0 revision 2) and the real stroke-mesh
 // port (`createStrokeMeshPort`, stroke-v0 revision 4) from geometry-wasm into the renderer
 // service. A path whose stroke or fill the kernel cannot mesh within its limits is not drawn and
-// reports the D8-interim `work-limit` notice; this page lists those notices (the open ST-U9
+// reports the `work-limit` notice; this page lists those notices (the open ST-U9
 // decision) instead of hiding them.
 //
 // Functional evidence only: precision is UNVERIFIED against the 0.25 physical-pixel target until
@@ -65,14 +66,10 @@ backend.subscribeDiagnostics((event) => {
   const item = document.createElement('li');
   item.dataset.severity = event.severity;
   item.textContent = `#${event.sequence} ${event.code}: ${event.message}`;
-  (isInterimNotice(event) ? noticeList : diagnosticList).prepend(item);
+  (isPathNotice(event) ? noticeList : diagnosticList).prepend(item);
   while (diagnosticList.childElementCount > MAX_DIAGNOSTICS)
     diagnosticList.lastElementChild!.remove();
 });
-
-function isInterimNotice(event: RendererDiagnostic): boolean {
-  return event.code === 'render.path-mesh-interim-failure';
-}
 
 let service: PrimitiveRendererService | null = null;
 /** The mesh and analytic draw counts of the most recently submitted packet. */
@@ -194,7 +191,7 @@ function renderStatus(): void {
     ['fill port calls', String(pathMesh?.portCalls ?? 0)],
     ['stroke port calls', String(pathMesh?.strokePortCalls ?? 0)],
     ['mesh cache', `${pathMesh?.entries ?? 0} entries, ${pathMesh?.bytes ?? 0} B`],
-    ['D8 notices', String(diagnostics.filter(isInterimNotice).length)],
+    ['Path notices', String(diagnostics.filter(isPathNotice).length)],
   ];
   statusList.replaceChildren(
     ...rows.flatMap(([name, value]) => {
