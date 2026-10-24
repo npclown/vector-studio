@@ -15,7 +15,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | E8 | Unsupported-geometry on simple smooth Q/T and C/S paths | Full | R1 | In progress: U0 (#211), U0b (#213), U1 (#215) merged; U2 next ([evidence](#e8-u1-evidence-2026-10-23)) |
 | E10 | A08 test hooks for V-4: forced sample count, fringe-off, frame readback, count pass | Full (shared surface) | R1 | Proposed by V-4 ([VZ4-D2, D3](viz-v4-a08-corpus-contract.md#2-dependencies-and-shared-surface)); not started |
 | E11 | P3 C03-C05 closure and exit snapshot | Full | R1 | Contract APPROVED 2026-10-24 (Q1-Q4 (a)); next E11-U2 ([contract](d9-e11-p3-c03-c05-closure-contract.md)) |
-| E2 | ST-U9 family-B fast-rung contract: stroke seam merge, band leaves, family-B rung | Full | R1 | Promoted by the user 2026-10-24; contract DRAFT in review ([contract](d9-e2-stroke-fast-rung-contract.md), [cause](../evidence/e2-stroke-work-limit-cause-2026-10-24.md)) |
+| E2 | ST-U9 family-B fast-rung contract: stroke seam merge, band leaves, family-B rung | Full | R1 | Promoted by the user 2026-10-24; contract APPROVED 2026-10-24 (Q1-Q4 (a) auto-adopted), next E2-U1 ([contract](d9-e2-stroke-fast-rung-contract.md), [cause](../evidence/e2-stroke-work-limit-cause-2026-10-24.md)) |
 | X1 | P3 exit evidence A01-A08 index | — (Primary acceptance) | R1 | Open; all eight TODO ([index](#p3-exit-evidence-index-x1)) |
 | E4 | ST-U3f fix decision | Full | Backlog | Seven cases stay a known defect with fixtures (D10) |
 | E7 | Conforming refinement (A01 watertightness remedy) | Full | Backlog | Candidate; first to promote if A01 needs it |
