@@ -52,6 +52,8 @@ export const DEFAULT_LABEL = 'PRE-FREEZE';
 /** VZ4-Q6: more than 5 % of the gated cases expected RENDERED not RENDERED is INCONCLUSIVE. */
 export const NOT_RENDERED_LIMIT = Object.freeze({ num: 5, den: 100 });
 const GATED_VARIANTS: readonly VizV4Variant[] = ['fringe-1x', 'fringe-4x'];
+/** The headed browsers, by their playwright.gpu.config.ts project names (VZ4-A1, VZ4-A3). */
+export const A08_PROJECTS: readonly string[] = ['chrome', 'edge'];
 const STATUSES: readonly VizV4Status[] = [
   'RENDERED',
   'KERNEL-REJECTED',
@@ -239,12 +241,12 @@ const flaggedStatus = (status: VizV4Status | null, reason: string) =>
   status === 'RENDERER-FAILED' || (status === 'EMPTY-CROP' && reason === 'port-empty');
 
 /**
- * Section 5.3, as written: INCONCLUSIVE when any gated case is UNDECIDED, when more than 5 % of
- * the gated cases expected RENDERED are not RENDERED at a gated DPR in a browser (both fringe
- * variants pooled), when a headed status differs from the expected list, or when a gated case is
- * RENDERER-FAILED or `port-empty` EMPTY-CROP in the list or the headed run; otherwise PASS when no
- * gated case FAILS, and FAIL when one does. The INCONCLUSIVE conditions take precedence over FAIL,
- * because the contract's FAIL is "otherwise"; failing cases are listed either way.
+ * Section 5.3: FAIL when any gated case FAILS (FAIL outranks INCONCLUSIVE, decided 2026-10-24
+ * under the standing instruction, review round 1 S2). Otherwise INCONCLUSIVE when any gated case
+ * is UNDECIDED, when more than 5 % of the gated cases expected RENDERED are not RENDERED at a gated
+ * DPR in a browser (both fringe variants pooled), when a headed status differs from the expected
+ * list, or when a gated case is RENDERER-FAILED or `port-empty` EMPTY-CROP in the list or the
+ * headed run. Otherwise PASS. The INCONCLUSIVE conditions are reported either way.
  */
 export function decideVerdict(
   entries: readonly VerdictEntry[],
@@ -312,7 +314,7 @@ export function decideVerdict(
   if (deviations.length > 0) inconclusive.push('headed status differs from the expected list');
   if (flagged.length > 0) inconclusive.push('gated RENDERER-FAILED or port-empty');
   const result: VerdictResult =
-    inconclusive.length > 0 ? 'INCONCLUSIVE' : failing.length > 0 ? 'FAIL' : 'PASS';
+    failing.length > 0 ? 'FAIL' : inconclusive.length > 0 ? 'INCONCLUSIVE' : 'PASS';
   return { result, inconclusive, failing, undecided, notRendered, deviations, flagged };
 }
 
@@ -375,7 +377,7 @@ type Tally = {
   g1: { fail: number; undecided: number; maxInsideError: number; maxOutsideError: number };
   g2: { misclassified: number; fail: number; undecided: number };
   g3: { fullFail: number; otherFail: number; maxCount: number };
-  a5: { interiorPixels: number; violations: number };
+  a5: { interiorPixels: number; violations: number; crackExcluded: number };
   cracks: { casesWithTJunctions: number; zonePixels: number; pixels: number };
   rule: RuleAccumulators;
 };
@@ -388,7 +390,7 @@ function tally(): Tally {
     g1: { fail: 0, undecided: 0, maxInsideError: 0, maxOutsideError: 0 },
     g2: { misclassified: 0, fail: 0, undecided: 0 },
     g3: { fullFail: 0, otherFail: 0, maxCount: 0 },
-    a5: { interiorPixels: 0, violations: 0 },
+    a5: { interiorPixels: 0, violations: 0, crackExcluded: 0 },
     cracks: { casesWithTJunctions: 0, zonePixels: 0, pixels: 0 },
     rule: ruleAccumulators(),
   };
@@ -413,6 +415,7 @@ function add(t: Tally, entry: CaseEntry, rule: RuleAccumulators | null): void {
   t.g3.maxCount = Math.max(t.g3.maxCount, m.g3.maxCount);
   t.a5.interiorPixels += m.a5.interiorPixels;
   t.a5.violations += m.a5.violations;
+  t.a5.crackExcluded += m.a5.crackExcluded;
   if (m.tJunctionEdges > 0) t.cracks.casesWithTJunctions += 1;
   t.cracks.zonePixels += m.crack.zonePixels;
   t.cracks.pixels += m.crack.pixels;
@@ -492,6 +495,7 @@ export function evaluateRun(input: RunInput): RecordBody {
     groupOf.set(groupPath(group.project, group.variant, group.dpr), group);
 
   const a3 = {
+    missingProjects: A08_PROJECTS.filter((p) => !run.projects.includes(p)),
     missingGroups: [] as string[],
     incompleteGroups: [] as string[],
     missingCases: [] as string[],
@@ -559,11 +563,14 @@ export function evaluateRun(input: RunInput): RecordBody {
             if (byGroup.get(id)!.size > 0 || groupOf.has(id))
               a3.missingCases.push(`${id}:${c.key}`);
           } else {
-            // VZ4-A5, the draw record: no exterior triangles in any msaa-4x draw.
+            // VZ4-A5, the draw record: no exterior triangles in any msaa-4x draw, and a RENDERED
+            // case has at least one draw of its node.
             if (variant === 'msaa-4x' && o.record !== null) {
               const draws = o.record.draws.filter((d) => d.nodeId === c.key);
               if (draws.some((d) => d.fringe !== 'region-only-off' || d.exteriorTriangles !== 0))
                 a5Records.push(`${id}:${c.key}`);
+              else if (o.status === 'RENDERED' && draws.length === 0)
+                a5Records.push(`${id}:${c.key}:no draw of the case`);
             }
             if (variant === 'msaa-4x' && o.record === null && o.status === 'RENDERED')
               a5Records.push(`${id}:${c.key}:no draw record`);
@@ -733,7 +740,16 @@ export function evaluateRun(input: RunInput): RecordBody {
 // =============================================================================================
 // Record files
 
-export type Provenance = Readonly<{ runDir: string; wasm: string; expected: string }>;
+/**
+ * Where the inputs were and which Node evaluated them (review round 1 L4): binary64 report values
+ * and BigInt formatting are reproducible only on the same engine, so a replay refuses another one.
+ */
+export type Provenance = Readonly<{
+  runDir: string;
+  wasm: string;
+  expected: string;
+  node: Readonly<{ version: string; v8: string }>;
+}>;
 
 /** record.json: the body, its SHA-256 and the provenance paths (no timestamp anywhere). */
 export function recordText(body: RecordBody, provenance: Provenance): string {
@@ -827,6 +843,7 @@ async function evaluateFromFiles(options: RunnerOptions, label: string) {
     runDir: relative(options.root, options.runDir),
     wasm: relative(options.root, options.wasmPath),
     expected: relative(options.root, options.expectedPath),
+    node: { version: process.version, v8: process.versions.v8 },
   };
   return { body, provenance };
 }
@@ -859,6 +876,11 @@ export async function replayRecord(
     label: record.body.label,
   };
   guard(full);
+  const node = record.provenance.node;
+  if (node?.version !== process.version || node.v8 !== process.versions.v8)
+    throw new Error(
+      `refusing the VZ4-A9 replay: the record was evaluated on Node ${String(node?.version)} (V8 ${String(node?.v8)}), this is Node ${process.version} (V8 ${process.versions.v8})`,
+    );
   const storedFiles = (record.body.inputs['run'] as { files: Record<string, string> }).files;
   const current = loadRun(full.runDir).files;
   if (canonicalJson(storedFiles) !== canonicalJson(current))

@@ -358,6 +358,36 @@ describe('VZ4-A8 controls on synthetic captures', () => {
     expect(over.reasons).toEqual(['G3-at-most']);
   });
 
+  it('never excuses an outside pixel near a T-junction edge that ends on the boundary', () => {
+    // The T-junction mesh with its top at y = 9.75: the T-junction edge (120.5, 9.75)-(120.5, 30)
+    // ends on the boundary, and pixel (120, 9), centre (120.5, 9.5), is outside at d = 0.25,
+    // 0.25 px from the edge's end, so inside the 4x crack zone and in G3's 0.708 px class.
+    const top = Float64Array.from(TJUNCTION.positions);
+    for (const v of [0, 1, 2]) top[2 * v + 1] = 9.75;
+    const c = synthCase('TEST/tjunction-top/T0/z1-d1', 300);
+    const p = ports(() => ({
+      ...TJUNCTION,
+      positions: top,
+      bounds: { ...TJUNCTION.bounds, minY: 9.75 },
+    }));
+    const outcome = drawCase(c.kase, p, { fringe: 'off' });
+    if (outcome.kind !== 'drawn') throw new Error('not drawn');
+    const ref = buildReference(outcome.draw, outcome.frame);
+    expect(ref.tJunctionEdges).toEqual([[1, 4]]);
+    expect(pixelClassForTesting(ref, 120, 9, 0.25)).toEqual({ inside: false, within: true });
+    const base = ruleRenderingForTesting(ref, 4);
+    expect(evaluateCapture(ref, base, 4).metrics.judgment).toBe('PASS');
+    const m = evaluateCapture(
+      ref,
+      edit(base, (_r, k) => k.fill(0, at(120, 9) * 4, at(120, 9) * 4 + 4)),
+      4,
+    ).metrics;
+    expect(m.crack.zonePixels).toBe(21); // rows 10 to 29 on the edge, and pixel (120, 9)
+    expect(m.crack.pixels).toBe(0);
+    expect(m.judgment).toBe('FAIL');
+    expect(m.reasons).toEqual(['G3-equal']);
+  });
+
   it('gives the 1x crack zone a width of 2β_c, centres on the edge only', () => {
     const base = ruleRenderingForTesting(tjReference(), 1);
     const m = tjJudge(base, 1);
@@ -458,20 +488,31 @@ function goodCapture(c: A08Case, variant: VizV4Variant): Capture {
   return GOOD.get(k)!;
 }
 
-type Tweak = (c: A08Case, variant: VizV4Variant, o: Observation) => Observation | null;
+type Tweak = (
+  c: A08Case,
+  variant: VizV4Variant,
+  o: Observation,
+  project: string,
+) => Observation | null;
 
-function syntheticRun(tweak: Tweak = (_c, _v, o) => o): LoadedRun {
-  const groups: RunGroup[] = VIZ_V4_VARIANTS.map((variant) => ({
-    project: 'chromium',
-    variant,
-    dpr: 1,
-    meta: { label: 'PRE-FREEZE', complete: true, variant, dpr: 1 },
-    observations: SUBSET.flatMap((c) => {
-      const o = tweak(c, variant, observation(c, variant, goodCapture(c, variant)));
-      return o === null ? [] : [o];
-    }),
-  }));
-  return { projects: ['chromium'], groups, files: {} };
+/** A run of both headed browsers, `chrome` and `edge` (playwright.gpu.config.ts). */
+function syntheticRun(
+  tweak: Tweak = (_c, _v, o) => o,
+  projects: readonly string[] = ['chrome', 'edge'],
+): LoadedRun {
+  const groups: RunGroup[] = projects.flatMap((project) =>
+    VIZ_V4_VARIANTS.map((variant) => ({
+      project,
+      variant,
+      dpr: 1 as const,
+      meta: { label: 'PRE-FREEZE', complete: true, variant, dpr: 1 },
+      observations: SUBSET.flatMap((c) => {
+        const o = tweak(c, variant, observation(c, variant, goodCapture(c, variant)), project);
+        return o === null ? [] : [o];
+      }),
+    })),
+  );
+  return { projects, groups, files: {} };
 }
 
 const WASM_SHA = createHash('sha256').update('test-wasm').digest('hex');
@@ -520,17 +561,29 @@ describe('runner (sections 4.4, 5.3, VZ4-A3 to A7)', () => {
     expect(body.verdict.result).toBe('PASS');
     for (const id of ['VZ4-A3', 'VZ4-A4', 'VZ4-A5', 'VZ4-A6', 'VZ4-A7'])
       expect(body.criteria[id]!.result, id).toBe('PASS');
-    expect(body.cases).toHaveLength(6);
-    expect(body.cases.map((c) => c.judgment)).toEqual(['PASS', 'PASS', 'PASS', null, null, 'PASS']);
+    expect(body.cases).toHaveLength(12);
+    expect(body.cases.map((c) => c.judgment)).toEqual([
+      ...['PASS', 'PASS', 'PASS', 'PASS', 'PASS', 'PASS'],
+      ...[null, null, null, null, 'PASS', 'PASS'],
+    ]);
+    expect((body.inputs['run'] as { projects: string[] }).projects).toEqual(['chrome', 'edge']);
     const report = body.report as { groups: { variant: string }[]; difference1x4x: unknown[] };
-    expect(report.groups.map((g) => g.variant)).toEqual(['fringe-1x', 'fringe-4x', 'msaa-4x']);
-    expect(report.difference1x4x).toHaveLength(1);
+    expect(report.groups.map((g) => g.variant)).toEqual([
+      ...['fringe-1x', 'fringe-1x', 'fringe-4x', 'fringe-4x', 'msaa-4x', 'msaa-4x'],
+    ]);
+    expect(report.difference1x4x).toHaveLength(2);
+  });
+
+  it('FAILS VZ4-A3 when one browser is missing', () => {
+    const body = evaluate(syntheticRun(undefined, ['chrome']));
+    expect(body.criteria['VZ4-A3']).toMatchObject({ result: 'FAIL', missingProjects: ['edge'] });
+    expect(body.result).toBe('FAIL');
   });
 
   it('FAILS a run with an interior pixel 3/255 off', () => {
     const body = evaluate(
-      syntheticRun((c, variant, o) =>
-        c === RECT_CASE && variant === 'fringe-1x'
+      syntheticRun((c, variant, o, project) =>
+        project === 'chrome' && c === RECT_CASE && variant === 'fringe-1x'
           ? observation(
               c,
               variant,
@@ -541,7 +594,7 @@ describe('runner (sections 4.4, 5.3, VZ4-A3 to A7)', () => {
     );
     expect(body.result).toBe('FAIL');
     expect(body.verdict.failing).toEqual([
-      { project: 'chromium', key: RECT_CASE.key, variant: 'fringe-1x', gates: ['G1'] },
+      { project: 'chrome', key: RECT_CASE.key, variant: 'fringe-1x', gates: ['G1'] },
     ]);
     expect(body.criteria['VZ4-A6']!.result).toBe('FAIL');
     expect(body.criteria['VZ4-A7']!.result).toBe('PASS');
@@ -549,8 +602,8 @@ describe('runner (sections 4.4, 5.3, VZ4-A3 to A7)', () => {
 
   it('FAILS VZ4-A5 when the fringe is left on in msaa-4x', () => {
     const body = evaluate(
-      syntheticRun((c, variant, o) =>
-        variant === 'msaa-4x' && c === RECT_CASE
+      syntheticRun((c, variant, o, project) =>
+        project === 'chrome' && variant === 'msaa-4x' && c === RECT_CASE
           ? observation(c, variant, goodCapture(c, variant), {
               record: DRAW_RECORD(c.key, 'built', 8),
             })
@@ -559,15 +612,15 @@ describe('runner (sections 4.4, 5.3, VZ4-A3 to A7)', () => {
     );
     expect(body.criteria['VZ4-A5']).toMatchObject({
       result: 'FAIL',
-      recordFailures: [`chromium/msaa-4x/dpr1:${RECT_CASE.key}`],
+      recordFailures: [`chrome/msaa-4x/dpr1:${RECT_CASE.key}`],
     });
     expect(body.result).toBe('FAIL');
   });
 
   it('FAILS VZ4-A5 when an msaa-4x interior pixel is not 255', () => {
     const body = evaluate(
-      syntheticRun((c, variant, o) =>
-        variant === 'msaa-4x' && c === RECT_CASE
+      syntheticRun((c, variant, o, project) =>
+        project === 'chrome' && variant === 'msaa-4x' && c === RECT_CASE
           ? observation(
               c,
               variant,
@@ -581,21 +634,68 @@ describe('runner (sections 4.4, 5.3, VZ4-A3 to A7)', () => {
     expect(body.result).toBe('FAIL');
   });
 
+  it('FAILS VZ4-A5 when a RENDERED msaa-4x case has no draw of its node in the record', () => {
+    const body = evaluate(
+      syntheticRun((c, variant, o, project) =>
+        project === 'chrome' && variant === 'msaa-4x' && c === RECT_CASE
+          ? observation(c, variant, goodCapture(c, variant), {
+              record: { prepareSerial: 1, draws: [] },
+            })
+          : o,
+      ),
+    );
+    expect(body.criteria['VZ4-A5']).toMatchObject({
+      result: 'FAIL',
+      recordFailures: [`chrome/msaa-4x/dpr1:${RECT_CASE.key}:no draw of the case`],
+    });
+    expect(body.result).toBe('FAIL');
+  });
+
+  it('keeps VZ4-A5 PASS for an msaa-4x crack at a T-junction edge, and reports it', () => {
+    const body = evaluate(
+      syntheticRun((c, variant, o, project) =>
+        project === 'chrome' && variant === 'msaa-4x' && c === TJ_CASE
+          ? observation(
+              c,
+              variant,
+              edit(goodCapture(c, variant), (r, k) => {
+                r[at(120, 20)] = 191;
+                k[at(120, 20) * 4 + 3] = 0;
+              }),
+            )
+          : o,
+      ),
+    );
+    expect(body.criteria['VZ4-A5']!.result).toBe('PASS');
+    const entry = body.cases.find(
+      (c) => c.project === 'chrome' && c.key === TJ_CASE.key && c.variant === 'msaa-4x',
+    )!;
+    expect(entry.metrics!.crack.pixels).toBe(1);
+    expect(entry.metrics!.a5).toMatchObject({ violations: 0, crackExcluded: 1 });
+    const group = (
+      body.report as {
+        groups: { project: string; variant: string; part: string; a5: { crackExcluded: number } }[];
+      }
+    ).groups.find((g) => g.project === 'chrome' && g.variant === 'msaa-4x')!;
+    expect(group.a5.crackExcluded).toBe(1);
+    expect(body.result).toBe('PASS');
+  });
+
   it('FAILS VZ4-A4 on a one-byte mesh change (MESH-MISMATCH)', () => {
     const positions = Float64Array.from(RECT.positions);
     const bytes = new Uint8Array(positions.buffer);
     bytes[2 * 8] = bytes[2 * 8]! ^ 1; // the lowest byte of x of vertex 1
     const changed = ports((tag) => (tag === 10 ? { ...RECT, positions } : TJUNCTION));
     const body = evaluate(
-      syntheticRun((c, variant, o) =>
-        c === RECT_CASE && variant === 'fringe-4x'
+      syntheticRun((c, variant, o, project) =>
+        project === 'chrome' && c === RECT_CASE && variant === 'fringe-4x'
           ? observation(c, variant, goodCapture(c, variant), { browserPorts: changed })
           : o,
       ),
     );
     expect(body.criteria['VZ4-A4']).toMatchObject({
       result: 'FAIL',
-      mismatches: [`chromium/fringe-4x/dpr1:${RECT_CASE.key}`],
+      mismatches: [`chrome/fringe-4x/dpr1:${RECT_CASE.key}`],
     });
     const entry = body.cases.find((c) => c.key === RECT_CASE.key && c.variant === 'fringe-4x')!;
     expect(entry.status).toBe('MESH-MISMATCH');
@@ -605,19 +705,21 @@ describe('runner (sections 4.4, 5.3, VZ4-A3 to A7)', () => {
 
   it('FAILS VZ4-A3 on a missing case', () => {
     const body = evaluate(
-      syntheticRun((c, variant, o) => (c === TJ_CASE && variant === 'fringe-1x' ? null : o)),
+      syntheticRun((c, variant, o, project) =>
+        project === 'chrome' && c === TJ_CASE && variant === 'fringe-1x' ? null : o,
+      ),
     );
     expect(body.criteria['VZ4-A3']).toMatchObject({
       result: 'FAIL',
-      missingCases: [`chromium/fringe-1x/dpr1:${TJ_CASE.key}`],
+      missingCases: [`chrome/fringe-1x/dpr1:${TJ_CASE.key}`],
     });
     expect(body.result).toBe('FAIL');
   });
 
   it('is INCONCLUSIVE when a gated case is UNDECIDED', () => {
     const body = evaluate(
-      syntheticRun((c, variant, o) =>
-        c === RECT_CASE && variant === 'fringe-4x'
+      syntheticRun((c, variant, o, project) =>
+        project === 'chrome' && c === RECT_CASE && variant === 'fringe-4x'
           ? observation(
               c,
               variant,
@@ -648,7 +750,7 @@ describe('runner (sections 4.4, 5.3, VZ4-A3 to A7)', () => {
 
 describe('verdict (section 5.3)', () => {
   const entry = (index: number, overrides: Partial<VerdictEntry> = {}): VerdictEntry => ({
-    project: 'chromium',
+    project: 'chrome',
     key: `C1/r${String(index)}@dpr1`,
     variant: 'fringe-1x',
     dpr: 1,
@@ -664,37 +766,53 @@ describe('verdict (section 5.3)', () => {
     Array.from({ length: 20 }, (_, i) => entry(i, changes[i] ?? {}));
 
   it('applies the 5 % rule per browser and gated DPR', () => {
-    // One case of twenty not RENDERED, as expected: 5 %, not more.
-    const one = { expected: { status: 'KERNEL-REJECTED' as const, reason: 'failed:work-limit' } };
-    const atLimit = twenty({
-      0: { headed: 'KERNEL-REJECTED', judgment: null, ...one },
-    });
-    expect(decideVerdict(atLimit, ['chromium']).result).toBe('PASS');
-    // Two of twenty expected RENDERED and headed MESH-MISMATCH: more than 5 %.
-    const over = twenty({
-      0: { headed: 'MESH-MISMATCH', judgment: null },
-      1: { headed: 'MESH-MISMATCH', judgment: null },
-    });
-    const v = decideVerdict(over, ['chromium']);
-    expect(v.result).toBe('INCONCLUSIVE');
-    expect(v.inconclusive).toContain('more than 5 % not RENDERED');
-    expect(v.notRendered[0]).toMatchObject({ expectedRendered: 20, notRendered: 2, exceeds: true });
-    // One of nineteen expected RENDERED headed otherwise is 5.3 %: also more than 5 %.
-    const nineteen = twenty({
-      0: { headed: 'KERNEL-REJECTED', judgment: null, ...one },
-      1: { headed: 'REGION-ONLY', headedReason: 'fringe-work-cap', judgment: null },
-    });
-    expect(decideVerdict(nineteen, ['chromium']).notRendered[0]).toMatchObject({
-      expectedRendered: 19,
+    // A not-RENDERED case expected RENDERED is also a deviation, so the rule is read from
+    // `notRendered` and from whether its condition is among the INCONCLUSIVE ones. The pool is
+    // the twenty gated cases expected RENDERED; a case expected KERNEL-REJECTED stays out of it.
+    const rejected = {
+      expected: { status: 'KERNEL-REJECTED' as const, reason: 'failed:work-limit' },
+    };
+    const outOfPool = entry(20, { headed: 'KERNEL-REJECTED', judgment: null, ...rejected });
+    const rule = 'more than 5 % not RENDERED';
+    // One missing of a pool of twenty: exactly 5 %, not more.
+    const atLimit = decideVerdict(
+      [...twenty({ 0: { headed: 'MESH-MISMATCH', judgment: null } }), outOfPool],
+      ['chrome'],
+    );
+    expect(atLimit.notRendered[0]).toMatchObject({
+      project: 'chrome',
+      dpr: 1,
+      expectedRendered: 20,
       notRendered: 1,
+      exceeds: false,
+    });
+    expect(atLimit.inconclusive).not.toContain(rule);
+    // Two missing of twenty: 10 %, INCONCLUSIVE.
+    const over = decideVerdict(
+      [
+        ...twenty({
+          0: { headed: 'MESH-MISMATCH', judgment: null },
+          1: { headed: 'REGION-ONLY', headedReason: 'fringe-work-cap', judgment: null },
+        }),
+        outOfPool,
+      ],
+      ['chrome'],
+    );
+    expect(over.result).toBe('INCONCLUSIVE');
+    expect(over.inconclusive).toContain(rule);
+    expect(over.notRendered[0]).toMatchObject({
+      expectedRendered: 20,
+      notRendered: 2,
       exceeds: true,
     });
+    // A complete run inside the pool is PASS.
+    expect(decideVerdict([...twenty({}), outOfPool], ['chrome']).result).toBe('PASS');
   });
 
   it('is INCONCLUSIVE on a deviation from the expected list, even of an ungated case', () => {
     const v = decideVerdict(
       [entry(0), entry(1, { gated: false, headed: 'REGION-ONLY', judgment: null })],
-      ['chromium'],
+      ['chrome'],
     );
     expect(v.result).toBe('INCONCLUSIVE');
     expect(v.inconclusive).toEqual(['headed status differs from the expected list']);
@@ -713,7 +831,7 @@ describe('verdict (section 5.3)', () => {
           judgment: null,
         }),
       ],
-      ['chromium'],
+      ['chrome'],
     );
     expect(v.result).toBe('INCONCLUSIVE');
     expect(v.inconclusive).toEqual(['gated RENDERER-FAILED or port-empty']);
@@ -730,7 +848,7 @@ describe('verdict (section 5.3)', () => {
             judgment: null,
           }),
         ],
-        ['chromium'],
+        ['chrome'],
       ).inconclusive,
     ).toEqual(['gated RENDERER-FAILED or port-empty']);
     // Ungated, the same statuses are only reported.
@@ -740,24 +858,28 @@ describe('verdict (section 5.3)', () => {
           entry(0),
           entry(32, { gated: false, expected: failed, headed: 'RENDERER-FAILED', judgment: null }),
         ],
-        ['chromium'],
+        ['chrome'],
       ).result,
     ).toBe('PASS');
   });
 
-  it('FAILS on a failing gated case and lets INCONCLUSIVE take precedence', () => {
+  it('FAILS on a failing gated case, and FAIL outranks INCONCLUSIVE', () => {
     const failing = twenty({ 3: { judgment: 'FAIL', reasons: ['G2'] } });
-    expect(decideVerdict(failing, ['chromium'])).toMatchObject({
+    expect(decideVerdict(failing, ['chrome'])).toMatchObject({
       result: 'FAIL',
       failing: [{ key: 'C1/r3@dpr1', gates: ['G2'] }],
     });
     const both = twenty({ 3: { judgment: 'FAIL', reasons: ['G2'] }, 4: { judgment: 'UNDECIDED' } });
-    const v = decideVerdict(both, ['chromium']);
-    expect(v.result).toBe('INCONCLUSIVE');
+    const v = decideVerdict(both, ['chrome']);
+    expect(v.result).toBe('FAIL');
     expect(v.failing).toHaveLength(1);
+    expect(v.inconclusive).toEqual(['gated case UNDECIDED']);
+    expect(decideVerdict(twenty({ 4: { judgment: 'UNDECIDED' } }), ['chrome']).result).toBe(
+      'INCONCLUSIVE',
+    );
     // msaa-4x and DPR 3 are never gated.
     expect(
-      decideVerdict([entry(0, { variant: 'msaa-4x', judgment: 'FAIL' })], ['chromium']).result,
+      decideVerdict([entry(0, { variant: 'msaa-4x', judgment: 'FAIL' })], ['chrome']).result,
     ).toBe('PASS');
   });
 });
@@ -801,12 +923,14 @@ describe('record and replay (VZ4-A9, VZ4-A11)', () => {
     expect(body.result).toBe('PASS');
     expect(readFileSync(path.join(out, 'record.json'), 'utf8')).toBe(text);
     expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}T/u);
-    const parsed = JSON.parse(text) as { provenance: Record<string, string>; body: unknown };
+    const parsed = JSON.parse(text) as { provenance: Record<string, unknown>; body: unknown };
     expect(parsed.provenance).toEqual({
       runDir: 'run',
       wasm: 'kernel.wasm',
       expected: 'expected.json',
+      node: { version: process.version, v8: process.versions.v8 },
     });
+    expect(canonicalJson(parsed.body)).not.toContain(process.version);
     expect(canonicalJson(parsed.body)).toBe(canonicalJson(body));
     expect(Object.keys(body.inputs['run'] as object)).toEqual(['projects', 'files']);
     const md = readFileSync(path.join(out, 'record.md'), 'utf8');
@@ -817,8 +941,16 @@ describe('record and replay (VZ4-A9, VZ4-A11)', () => {
     expect(replay).toMatchObject({ identical: true, reason: null });
     expect(replay.text).toBe(text);
 
+    // A record evaluated on another Node is refused.
+    const recordPath = path.join(out, 'record.json');
+    writeFileSync(recordPath, text.replace(`"version":"${process.version}"`, '"version":"v0.0.0"'));
+    await expect(replayRecord({ ...options(root), recordDir: out })).rejects.toThrow(
+      /evaluated on Node v0\.0\.0/u,
+    );
+    writeFileSync(recordPath, text);
+
     // A changed capture byte changes the inputs, and the replay says so.
-    const file = path.join(root, 'run/chromium/fringe-1x/dpr1/observations.ndjson');
+    const file = path.join(root, 'run/chrome/fringe-1x/dpr1/observations.ndjson');
     writeFileSync(
       file,
       readFileSync(file, 'utf8').replace('"notGreyPixels":0', '"notGreyPixels":1'),

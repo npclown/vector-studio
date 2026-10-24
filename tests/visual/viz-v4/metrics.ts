@@ -561,8 +561,11 @@ export type CaseMetrics = Readonly<{
     otherFail: number;
     maxCount: number;
   }>;
-  /** VZ4-A5's pixel half: pixels inside with d − β_c ≥ 2 whose obs is not 255. */
-  a5: Readonly<{ interiorPixels: number; violations: number }>;
+  /**
+   * VZ4-A5's pixel half: pixels inside with d − β_c ≥ 2 whose obs is not 255, crack pixels
+   * excluded and counted in `crackExcluded`.
+   */
+  a5: Readonly<{ interiorPixels: number; violations: number; crackExcluded: number }>;
   /** The first failing or undecided pixels, per gate. */
   pixels: readonly PixelRef[];
 }>;
@@ -643,6 +646,7 @@ export function evaluateCapture(
   let otherFail = 0;
   let maxCount = 0;
   let a5Interior = 0;
+  let a5CrackExcluded = 0;
   let a5Violations = 0;
   const pixels: PixelRef[] = [];
   const listed = new Map<string, number>();
@@ -679,16 +683,23 @@ export function evaluateCapture(
         if (count === 0) anyZero = true;
         if (count > 1) atMostOne = false;
       }
-      // A GPU crack: in the zone, with a count-0 sample or a coverage deficit (an inside pixel
-      // more than G1's 2/255 below 255).
-      const crack = zone.has(index) && (anyZero || (inside && 255 - obs > G1_LIMIT));
+      // A GPU crack (section 5.2, review round 1 S1): in the T-junction zone, inside at p* with
+      // d − β_c > 0 (G3's decided-interior "equal to 1" class), and showing a count-0 sample or,
+      // where G1 decides (d − β_c ≥ 2), a deficit of more than 2/255. Exterior pixels and the
+      // exterior 0.708 px class are never excused.
+      const crack =
+        zone.has(index) && inside && beyondBeta && (anyZero || (decided && 255 - obs > G1_LIMIT));
       if (crack) crackPixels += 1;
 
       const error = inside ? 255 - obs : obs;
-      // VZ4-A5's interior check (reported per variant; the runner applies it to msaa-4x).
+      // VZ4-A5's interior check (reported per variant; the runner applies it to msaa-4x). Crack
+      // pixels are excluded as from G1 and G2, since cracks are A01 evidence (section 5.2).
       if (inside && decided) {
-        a5Interior += 1;
-        if (obs !== 255) a5Violations += 1;
+        if (crack) a5CrackExcluded += 1;
+        else {
+          a5Interior += 1;
+          if (obs !== 255) a5Violations += 1;
+        }
       }
       if (!crack) {
         // G1.
@@ -787,7 +798,7 @@ export function evaluateCapture(
       },
       g2: { misclassified, fail: g2Fail, undecided: g2Undecided },
       g3: { fullPixels, fullFail, otherPixels, otherFail, maxCount },
-      a5: { interiorPixels: a5Interior, violations: a5Violations },
+      a5: { interiorPixels: a5Interior, violations: a5Violations, crackExcluded: a5CrackExcluded },
       pixels,
     },
     rule,
