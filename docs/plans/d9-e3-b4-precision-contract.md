@@ -1557,6 +1557,16 @@ E3-U5 switches the spec to the named subset after the freeze note. That is a cas
 - **Clipping.** A clipped triangle's new vertices are not read back. The readback next to the viewport edge reads the stored vertices only. The clip model of section 15.3 is therefore not checked against hardware. E3-Q11 (a) asks for that check, and it stays open for E3-U5.
 - **Cracks.** Crack widths at T-junctions (E3-C12) need the named subset, so they wait for E3-U5.
 
-### 16.5 Dry run
+### 16.5 Runs
 
-The spec ran on the cloud container's headless Chromium 153 with SwiftShader WebGPU (software, so it is not evidence). The page produced 8 draws and 77 points, with no failures. The largest error was 0.076 of `β_vertex` and 0.118 of `β_feature`, and E3-PC12 was rejected. The headed Chrome and Edge runs on a hardware adapter are **NOT RUN**: the container has no GPU.
+The spec ran on the cloud container's headless Chromium 153 with SwiftShader WebGPU (software, so it is not evidence). The page produced 8 draws and 77 points, with no failures. The largest error was 0.076 of `β_vertex` and 0.118 of `β_feature`, and E3-PC12 was rejected. The page itself is checked by the headed run below.
+
+**Headed run, 2026-10-24.** The spec ran on the user's machine at commit `f856b96`: Windows 11 Pro (build 26200), NVIDIA GeForce GTX 1660 SUPER (driver 32.0.16.1088, adapter `nvidia`/`turing`, not a fallback adapter), and Node v24.15.0.
+
+- **Build.** The release WASM was rebuilt with `pnpm test:geometry`: exit 0, 1,159 tests passed and 6 skipped. Its SHA-256 is `8034d36ba4491616ea250f7e21745a09abe8c2d3f0a2a05903674d4138101d6f`.
+- **Result.** Both projects passed in 12.5 s: **Chrome 155.0.8059.85 and Edge 156.0.4314.42, each PASS**. Each read back 8 draws and 77 points, with no failures and no page errors.
+  - The largest error was 0.109 of `β_vertex` and 0.118 of `β_feature`.
+  - E3-PC12 was rejected in both browsers, on both paths.
+  - The shader SHA-256 was `d306137cf0770f6bf7f9237f1c98b9ecd0a165cfdbfda916196d299e36b831a3`.
+- **Browser version.** The record's `browser.version` comes from Playwright's `browser.version()`. The `userAgent` field reads 151.0.7922.34 because the `Desktop Chrome` and `Desktop Edge` device presets fix the user agent string, so it is not the browser's version.
+- **Scope.** This is E3-A6 on the non-corpus cases of section 16.2. The named subset follows the freeze.

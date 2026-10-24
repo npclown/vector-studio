@@ -11,7 +11,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | Item | Subject | Tier | Phase | State |
 | --- | --- | --- | --- | --- |
 | E1 | ST-U9 early abort when failure is certain | Full | R0 | Done: merged (#202), independent review ACCEPTED 2026-10-23 ([review](../evidence/r0-review-closeout-2026-10-23.md#e1)) |
-| E3 | B4: A04 corpus and measurement contract | Full | R1 | In progress: U1 (#206), U2 (#212), U2b (#214), U2c (#216) merged; freeze not met (5 `ORACLE-WORK`); U3 harness and U4 GPU model check in review (headed GPU run pending), no corpus run ([U3 evidence](#e3-e3-u3-evidence-2026-10-24), [U4 evidence](#e3-e3-u4-evidence-2026-10-24)) |
+| E3 | B4: A04 corpus and measurement contract | Full | R1 | In progress: U1 (#206), U2 (#212), U2b (#214), U2c (#216) merged; freeze not met (5 `ORACLE-WORK`); U3 harness and U4 GPU model check in review (headed Chrome and Edge PASS on non-corpus cases), no corpus run ([U3 evidence](#e3-e3-u3-evidence-2026-10-24), [U4 evidence](#e3-e3-u4-evidence-2026-10-24)) |
 | E8 | Unsupported-geometry on simple smooth Q/T and C/S paths | Full | R1 | In progress: U0 (#211), U0b (#213), U1 (#215) merged; U2 next ([evidence](#e8-u1-evidence-2026-10-23)) |
 | X1 | P3 exit evidence A01-A08 index | — (Primary acceptance) | R1 | Open; all eight TODO ([index](#p3-exit-evidence-index-x1)) |
 | E4 | ST-U3f fix decision | Full | Backlog | Seven cases stay a known defect with fixtures (D10) |
@@ -417,7 +417,7 @@ Dated append. Unit E3-U4 implements the GPU model check of the [E3 contract](d9-
 **Results.**
 
 - **Software dry run.** Headless Chromium 153 on SwiftShader, which is not evidence: 8 draws and 77 points, no failures, largest error 0.076 of `β_vertex` and 0.118 of `β_feature`, and E3-PC12 rejected.
-- **Headed Chrome and Edge** on a hardware adapter: NOT RUN, because the container has no GPU. That run gives E3-A6 for the non-corpus cases. The named subset follows after the freeze (E3-U5).
+- **Headed Chrome 155.0.8059.85 and Edge 156.0.4314.42** on the user's NVIDIA GTX 1660 SUPER (Windows 11, commit `f856b96`, WASM `8034d36b…1d6f`): **both PASS**. Each read back 8 draws and 77 points within `β`: the largest ratio was 0.109 on the vertex path and 0.118 on the feature path. E3-PC12 was rejected. This is E3-A6 for the non-corpus cases; the named subset follows after the freeze (E3-U5). Details are in [contract section 16.5](d9-e3-b4-precision-contract.md#165-runs).
 
 ## E8 investigation, 2026-10-23
 
