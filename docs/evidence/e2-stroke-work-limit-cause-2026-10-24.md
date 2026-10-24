@@ -74,3 +74,7 @@ Front-end demand only, non-looping paths (750). A path counts when its leaves fi
 Rule E2-K2 on the circles: radius 64 width 4 needs 64 leaves (256 today), radius 256 width 16 needs 128, radius 1,024 width 1 needs 256 (408 today); radius 16 width 16 is at the `r · Kup ≤ 1/2` margin, so E2-K2 accepts only some leaves (808 against 1,024).
 
 The scene's noisy 32-cubic rings above about 256 device px in radius exceed any cap of 1,024 to 4,096 vertices under every lever, as fill does (E14); clean shapes go further (the radius-1,024 circle above). That part is not E2's.
+
+## Scene report after E2-U1 (E2-A7), 2026-10-24
+
+At `stroke-v0+r5` (seam merge E2-K1), the same scene gives 223 stroke `ok` of 1,000 (121 at `r4`) and 0 structure issues. The `work-limit` causes are `Front(PieceLimit)` 275, `Front(DepthLimit)` 261, `Rounded(InputLimit)` 203, `Rounded(NodeLimit)` 35 and `Rounded(EventLimit)` 3. Details, the run identity and the A/B gates are in the [E2-U1 record](e2-u1-2026-10-24.md).
