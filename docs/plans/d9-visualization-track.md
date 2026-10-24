@@ -13,7 +13,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | V-1 | Path appearance editing page | Light under D10 (contract was Full) | R0 | Done: merged (#201), independent review ACCEPTED 2026-10-23 ([review](../evidence/r0-review-closeout-2026-10-23.md#v-1)) |
 | V-2 | SVG path-data input page | Light under D10 (contract was Full) | R0 | Done: merged (#207), independent review ACCEPTED 2026-10-23 ([review](../evidence/r0-review-closeout-2026-10-23.md#v-2)) |
 | V-3 | A07 headed integration page | Full (P3 exit evidence) | R0 | Done: merged (#209), independent review ACCEPTED 2026-10-23 as A07 partial evidence ([review](../evidence/r0-review-closeout-2026-10-23.md#v-3)) |
-| V-4 | A08 headed corpus page | Set by its contract | R1 | Candidate; after the frozen corpus |
+| V-4 | A08 headed corpus page | Full (P3 exit evidence) | R1 | Contract APPROVED 2026-10-24 ([contract](viz-v4-a08-corpus-contract.md)); code waits for E10, the E3 freeze and E3-U3 |
 | V-5 | P5 editor-slice plan (contract only) | Full | After V-4 | Not started; planning only, implementation after P3 exit or separate approval (D10) |
 | V-6 | V-1 and V-3 review follow-ups (status crediting, zoom clear, field validity, R2 mesh gate) | Light | Backlog | Not started ([review](../evidence/r0-review-closeout-2026-10-23.md#v-1)) |
 
@@ -157,6 +157,8 @@ Independent evidence review ACCEPTED 2026-10-23 as A07 partial evidence ([review
 ## V-4: A08 headed corpus page (candidate)
 
 Added 2026-10-22. Candidate only: the headed Chrome and Edge corpus page with the coverage fringe versus MSAA comparison for A08. It waits for the frozen corpus (C03-C05) and the [V3 section k visual contract](p3-v3-renderer-mesh-pipeline-contract.md#k-a08-visual-contract); its contract is written after those exist.
+
+Contract drafted 2026-10-24 ahead of the E3 freeze, as [VZ4-Q1](viz-v4-a08-corpus-contract.md#8-open-questions) proposes: [V-4 contract](viz-v4-a08-corpus-contract.md). Runs before the freeze and before C03-C05 are labelled `PRE-FREEZE` and close nothing. The test hooks it needs are filed as rendering item [E10](d9-rendering-track.md#status-index).
 
 ## V-5: P5 editor-slice plan
 
