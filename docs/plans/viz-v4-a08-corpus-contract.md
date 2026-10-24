@@ -1,6 +1,6 @@
 # V-4 contract: A08 headed corpus page (coverage fringe versus MSAA)
 
-Status: DRAFT, 2026-10-24. Written for independent review and user approval. Nothing here is in force, and no V-4 product or test code starts, until this contract is approved ([`AGENTS.md`](../../AGENTS.md#working-rules)).
+Status: DRAFT, 2026-10-24. Independent review round 3 READY (sections 12 to 14); user approval pending. Nothing here is in force, and no V-4 product or test code starts, until this contract is approved ([`AGENTS.md`](../../AGENTS.md#working-rules)).
 
 Track: visualization. Item: V-4 of the [D9 visualization track plan](d9-visualization-track.md#status-index), phase R1 of [D10](d10-roadmap-reset.md). Tier: full, because V-4 supplies exit evidence for a P3 acceptance criterion and needs test hooks that the rendering track publishes (section 2). Structural model: the approved [V-3 contract](viz-v3-a07-integration-contract.md).
 
@@ -125,7 +125,7 @@ G1, G2 and G3 are O02's, with its 2 px, 1 px and 0.708 px classes unchanged. The
 
 ### 5.4 Reported, with no threshold
 
-Per variant and DPR: `obs − rule` by class (interior, exterior, band), as O02 reports it; the `msaa-4x` G1 and G2 results and band deviation, beside the fringe variants (the comparison A08 names); the 1x/4x difference; DPR 3 results; stroke results; and status counts.
+Per variant and DPR: `obs − rule` by class (interior, exterior, band), as O02 reports it; the `msaa-4x` G1 and G2 results and band deviation, beside the fringe variants (the comparison A08 names); the 1x/4x difference; per case, the crack widths and the number of pixels excluded as cracks; DPR 3 results; stroke results; and status counts.
 
 ## 6. Acceptance criteria
 
@@ -197,3 +197,7 @@ Independent `reviewer` review: NOT READY, three blocking and eight should-fix it
 ## 13. Review round 2 (2026-10-24)
 
 NOT READY, two blocking and six should-fix items, all applied in revision 3: the G1 margin now covers `2 ≤ d < 2 + β_c`; G3's "all four equal 1" class includes every interior pixel; any UNDECIDED gated case makes the run INCONCLUSIVE; the crack zone is `0.3953 + 2β_c` (4x) or `2β_c` (1x) and applies to G1 and G2 too; UNDECIDED is an offline judgment, not a page status; pixels are judged in `Ω` ∩ canvas.
+
+## 14. Review round 3 (2026-10-24)
+
+READY, no blocking or should-fix items. Its optional follow-up, reporting the pixels excluded as cracks per case, is applied in section 5.4.
