@@ -997,8 +997,9 @@ describe('V3a device loss, ownership and host injection', () => {
   // playground gained the real port. This V4 test keeps the remaining hosts port-free. B2 ST-U8
   // adds the stroke page as a second host, on V4's pattern: it injects both real ports. The
   // visualization track's V-1 appearance page is the third host, its V-2 path-data page the
-  // fourth and its V-3 integration page the fifth, on the same pattern.
-  it('V4: only the path page, the ST-U8 stroke page, the V-1 appearance page, the V-2 path-data page and the V-3 integration page inject the real ports; the V3 smoke fixture keeps its static double', () => {
+  // fourth, its V-3 integration page the fifth and its V-4 A08 corpus page the sixth, on the
+  // same pattern.
+  it('V4: only the path page, the ST-U8 stroke page, the V-1 appearance page, the V-2 path-data page, the V-3 integration page and the V-4 A08 corpus page inject the real ports; the V3 smoke fixture keeps its static double', () => {
     const root = join(__dirname, '../../apps/playground');
     const files: string[] = [];
     const walk = (directory: string) => {
@@ -1047,7 +1048,15 @@ describe('V3a device loss, ownership and host injection', () => {
     expect(viz3Source).toMatch(/from '@vector-studio\/geometry-wasm'/);
     expect(viz3Source).toMatch(/fillMesh: fill,/);
     expect(viz3Source).toMatch(/strokeMesh: strokes,/);
-    const host = [...v4Host, ...b2Host, ...vizHost, ...viz2Host, ...viz3Host];
+    // Visualization track V-4: the A08 corpus page is the sixth host. It wraps each real port in a
+    // recorder for the MESH-MISMATCH check; its cases file stays under the deny-list below.
+    const viz4Host = files.filter((file) => /[\\/]src[\\/]viz-v4-a08-corpus\.ts$/.test(file));
+    expect(viz4Host).toHaveLength(1);
+    const viz4Source = readFileSync(viz4Host[0]!, 'utf8');
+    expect(viz4Source).toMatch(/from '@vector-studio\/geometry-wasm'/);
+    expect(viz4Source).toMatch(/fillMesh: recordedFill\(fill\),/);
+    expect(viz4Source).toMatch(/strokeMesh: recordedStroke\(stroke\),/);
+    const host = [...v4Host, ...b2Host, ...vizHost, ...viz2Host, ...viz3Host, ...viz4Host];
     // The manifest and project-reference edges of that import (boundary rule P-B1).
     const edges = files.filter((file) =>
       /[\\/]playground[\\/](package|tsconfig)\.json$/.test(file),

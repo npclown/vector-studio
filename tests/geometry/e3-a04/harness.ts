@@ -361,7 +361,7 @@ function prepareFrame(
 export function drawCase(
   kase: A04Case,
   ports: HarnessPorts,
-  options: Readonly<{ partner?: A04Case; opacity?: number }> = {},
+  options: Readonly<{ partner?: A04Case; opacity?: number; fringe?: 'on' | 'off' }> = {},
 ): DrawOutcome {
   const own = decodeCase(kase);
   const partner = options.partner === undefined ? null : decodeCase(options.partner);
@@ -373,7 +373,8 @@ export function drawCase(
   const pipeline = new PathMeshPipeline({
     ...(ports.fill === undefined ? {} : { port: ports.fill }),
     ...(ports.stroke === undefined ? {} : { strokePort: ports.stroke }),
-    fringeBuilder: buildPathFringe,
+    // V-4's `msaa-4x` variant: no builder, as PrimitiveRendererService's `fringeForTesting: 'off'`.
+    ...(options.fringe === 'off' ? {} : { fringeBuilder: buildPathFringe }),
   });
   const source = new PrimitiveSceneSource(mirror, pipeline);
   const applied = mirror.replaceSnapshot({

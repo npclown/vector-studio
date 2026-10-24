@@ -1,0 +1,48 @@
+{
+  "contract": "docs/plans/viz-v4-a08-corpus-contract.md",
+  "a04CorpusSha256": "7f4bb1c97b2358ef45d23fdcab31aadc35fe4e7d3d5de25ce1bea7a8203d721c",
+  "version": "a08-subset/v1",
+  "a04CorpusVersion": "a04-corpus/v1",
+  "cases": 2280,
+  "gatedCases": 1032,
+  "byPart": {
+    "C1-named-fill-lines": {
+      "dpr1": 160,
+      "dpr1.5": 160,
+      "dpr2": 160,
+      "dpr3": 160
+    },
+    "C3-named-fill-cubics": {
+      "dpr1": 120,
+      "dpr1.5": 120,
+      "dpr2": 120,
+      "dpr3": 120
+    },
+    "C4-near-coincidence": {
+      "dpr1": 48,
+      "dpr1.5": 48,
+      "dpr2": 48,
+      "dpr3": 48
+    },
+    "C12-t-junction-fills": {
+      "dpr1": 16,
+      "dpr1.5": 16,
+      "dpr2": 16,
+      "dpr3": 16
+    },
+    "C11-region-only-fills": {
+      "dpr1": 8,
+      "dpr1.5": 8,
+      "dpr2": 8,
+      "dpr3": 8
+    },
+    "C5-C9-named-strokes": {
+      "dpr1": 218,
+      "dpr1.5": 218,
+      "dpr2": 218,
+      "dpr3": 218
+    }
+  },
+  "keysSha256": "1d406287fc3b8141d0494f15f68f0e628062320927d8610e5923cdc71ff192a4",
+  "casesSha256": "b658f9777d69e1425550aac88183fd205169de8daf559099ec70a867ecf4e496"
+}
