@@ -14,7 +14,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | E3 | B4: A04 corpus and measurement contract | Full | R1 | In progress: U1 (#206), U2 (#212), U2b (#214), U2c (#216) merged; freeze not met (5 `ORACLE-WORK`); U3 harness and U4 GPU model check in review (headed Chrome and Edge PASS on non-corpus cases), no corpus run ([U3 evidence](#e3-e3-u3-evidence-2026-10-24), [U4 evidence](#e3-e3-u4-evidence-2026-10-24)) |
 | E8 | Unsupported-geometry on simple smooth Q/T and C/S paths | Full | R1 | In progress: U0 (#211), U0b (#213), U1 (#215) merged; U2 next ([evidence](#e8-u1-evidence-2026-10-23)) |
 | E10 | A08 test hooks for V-4: forced sample count, fringe-off, frame readback, count pass | Full (shared surface) | R1 | Contract APPROVED 2026-10-24 ([contract](d9-e10-renderer-test-hooks-contract.md)); U1, U2 and U3 in review in one pull request (departure from contract section 7, which plans separate pull requests: the session has one branch, and U3 needs U1 and U2); E10-A7 headed run PASS 2026-10-24, 12/12 in Chrome and Edge ([record](../evidence/e10-test-hooks-2026-10-24/record.md)); E10-A9 evidence review READY 2026-10-24 (contract section 14); merge of #228 closes E10 |
-| E11 | P3 C03-C05 closure and exit snapshot | Full | R1 | Contract APPROVED 2026-10-24 (Q1-Q4 (a)); U2 sweep tool merged (#225), scene: 0 structure issues, fill 318 and stroke 121 of 1,000 meshed ([U2 evidence](#e11-e11-u2-evidence-2026-10-24)); U4 addendum APPROVED 2026-10-24 ([addendum](d9-e11-u4-failure-behavior-addendum.md)), implementation merged (#232), headed GPU check (E11-U4-A4) not run yet ([contract](d9-e11-p3-c03-c05-closure-contract.md)) |
+| E11 | P3 C03-C05 closure and exit snapshot | Full | R1 | Contract APPROVED 2026-10-24 (Q1-Q4 (a)); U2 sweep tool merged (#225), scene: 0 structure issues, fill 318 and stroke 121 of 1,000 meshed ([U2 evidence](#e11-e11-u2-evidence-2026-10-24)); U4 addendum APPROVED 2026-10-24 ([addendum](d9-e11-u4-failure-behavior-addendum.md)), implementation merged (#232), headed GPU check E11-U4-A4 PASS 2026-10-24 ([U4 evidence](#e11-e11-u4-evidence-2026-10-24)); next U3 after E8-U2 and the E3 freeze ([contract](d9-e11-p3-c03-c05-closure-contract.md)) |
 | E14 | Fill and stroke `work-limit` on ordinary smooth 32-cubic paths | Full | R1 | Promoted to R1 by the user 2026-10-24 (with E2); fill cause found: the S1 prefix edge cap 256 (`CommandLimit`); next E14-U1 contract, a separate rung-0 cap ([cause](../evidence/e14-fill-work-limit-cause-2026-10-24.md)) |
 | E2 | ST-U9 family-B fast-rung contract: stroke seam merge, band leaves, family-B rung | Full | R1 | Promoted by the user 2026-10-24; contract APPROVED 2026-10-24 (Q1-Q4 (a) auto-adopted), next E2-U1 ([contract](d9-e2-stroke-fast-rung-contract.md), [cause](../evidence/e2-stroke-work-limit-cause-2026-10-24.md)) |
 | X1 | P3 exit evidence A01-A08 index | — (Primary acceptance) | R1 | Open; all eight TODO ([index](#p3-exit-evidence-index-x1)) |
@@ -424,6 +424,28 @@ Dated append. Unit E3-U4 implements the GPU model check of the [E3 contract](d9-
 
 - **Software dry run.** Headless Chromium 153 on SwiftShader, which is not evidence: 8 draws and 77 points, no failures, largest error 0.076 of `β_vertex` and 0.118 of `β_feature`, and E3-PC12 rejected.
 - **Headed Chrome 155.0.8059.85 and Edge 156.0.4314.42** on the user's NVIDIA GTX 1660 SUPER (Windows 11, commit `f856b96`, WASM `8034d36b…1d6f`): **both PASS**. Each read back 8 draws and 77 points within `β`: the largest ratio was 0.109 on the vertex path and 0.118 on the feature path. E3-PC12 was rejected. This is E3-A6 for the non-corpus cases; the named subset follows after the freeze (E3-U5). Details are in [contract section 16.5](d9-e3-b4-precision-contract.md#165-runs).
+
+## E11 E11-U4 evidence, 2026-10-24
+
+Dated append. Acceptance check E11-U4-A4 of the [E11-U4 addendum](d9-e11-u4-failure-behavior-addendum.md#6-acceptance-criteria): the headed GPU specs that read path notices, run on the user's machine after PR #232 merged.
+
+- Commit: `fe94c4983e2564af8ad2429f9a8ad7134b30c87a` on `main`, which contains #232 (`55e1fa0`). Working tree clean for tracked files; nothing edited or committed during the run.
+- Build: `pnpm install --frozen-lockfile`, `pnpm build`; release geometry WASM rebuilt with the pinned Rust 1.94.1, SHA-256 `8034D36B…101D6F`, the same as the build already on that machine. The container's `9b39af75` difference noted under E11-U2 is still unexplained and is still to be checked before the exit run.
+- Command: `pnpm test:gpu -- --reporter=list` with the eight files below, headed, Chrome and Edge. GPU adapter name: not logged by the list reporter.
+- Result: **PASS**, 34 tests passed, 0 failed, 0 skipped, exit 0, 10.0 min.
+
+| Spec | Chrome | Edge |
+| --- | --- | --- |
+| `p3-b2-strokes` (DPR 1, 2, 3) | 3 passed | 3 passed |
+| `p3-st-u6-stroke` (samples 1, 4) | 2 passed | 2 passed |
+| `p3-st-u7-joint` (samples 1, 4, seeded defects) | 3 passed | 3 passed |
+| `p3-v3-mesh-smoke` | 2 passed | 2 passed |
+| `p3-v4-paths` | 1 passed | 1 passed |
+| `viz-v1-appearance` (DPR 1, 2) | 2 passed | 2 passed |
+| `viz-v2-path-data` (DPR 1, 2) | 2 passed | 2 passed |
+| `viz-v3-integration` (DPR 1, 2) | 2 passed | 2 passed |
+
+With E11-U4-A1, A2, A3 and A5 checked by CI on #232, unit E11-U4 is complete.
 
 ## E11 E11-U2 evidence, 2026-10-24
 
