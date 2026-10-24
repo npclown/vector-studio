@@ -25,10 +25,10 @@ use std::time::Instant;
 
 use crate::cubic_fill::{
     ContourRange, CubicFillDiagnostics, CubicFillError, CubicFillWorkspace, DecodedSource,
-    EdgeOwner, MAX_FLAT_COMMANDS,
+    EdgeOwner, FlatCommand, MAX_FLAT_COMMANDS,
 };
 use crate::fill_filter::{self, FilterId};
-use crate::geometry::{Point, PATH_OK};
+use crate::geometry::{Point, PATH_OK, VERB_LINE};
 use crate::line_fill::LineFillRule;
 use crate::native_cubic_fill_tests::{LIMITS, TOPOLOGY_TOLERANCE};
 use crate::p3_b0_bench::{
@@ -807,6 +807,36 @@ fn owned_view(ranges: &[ContourRange], points: &[Point], owners: &[EdgeOwner]) -
     )
 }
 
+/// E8-U2: the exact rung's command list equals the fast rung's except that a cubic source's
+/// final leaf may carry the source's p3.
+fn snaps_only_final_knots(
+    fast: &[FlatCommand],
+    exact: &[FlatCommand],
+    sources: &[DecodedSource],
+) -> bool {
+    fast.len() == exact.len()
+        && fast.iter().zip(exact).all(|(fast, exact)| {
+            if fast.verb != exact.verb || fast.provenance != exact.provenance {
+                return false;
+            }
+            if fast.point.map(point_bits) == exact.point.map(point_bits) {
+                return true;
+            }
+            let provenance = exact.provenance;
+            exact.verb == VERB_LINE
+                && 1u32.checked_shl(provenance.depth) == Some(provenance.end_numerator)
+                && sources.iter().any(|source| {
+                    matches!(source, DecodedSource::Cubic { points, source_verb, .. }
+                        if *source_verb == provenance.source_verb
+                            && exact.point.map(point_bits) == Some(point_bits(points[3])))
+                })
+        })
+}
+
+fn point_bits(point: Point) -> (u64, u64) {
+    (point.x.to_bits(), point.y.to_bits())
+}
+
 /// Section 2.2's S1 accessor equality, corpus-wide: on a path whose exact attempt published,
 /// the accessor's points, ranges and owners equal the output's bit for bit; otherwise the
 /// accessor succeeds (a failure after S1) or fails exactly as the attempt did in its prefix.
@@ -818,14 +848,32 @@ fn accessor_matches(
     diagnostics: CubicFillDiagnostics,
 ) -> bool {
     // Since E8-U2 (2026-10-24) a published exact attempt carries the canonical source-final
-    // knots; it then equals the production exact prefix, and the spike accessor equals the
+    // knots; it then equals the production exact prefix, whose commands differ from the fast
+    // prefix's only at source-final knots moved onto p3, and the spike accessor equals the
     // production fast prefix (E8 addendum E8.4: the fast rung's prefix is unchanged).
     if let Some((ranges, points, owners)) = published {
         let exact = probe
             .prepare_exact_prefix(path.input(), MAX_FLAT_COMMANDS)
             .ok()
-            .map(|view| owned_view(view.ranges, view.points, view.owners));
-        if exact.as_ref() == Some(&(ranges.clone(), points.clone(), owners.clone())) {
+            .map(|view| {
+                (
+                    owned_view(view.ranges, view.points, view.owners),
+                    view.commands.to_vec(),
+                    view.sources.to_vec(),
+                )
+            });
+        if let Some((_, exact_commands, sources)) =
+            exact.filter(|(view, _, _)| view == &(ranges.clone(), points.clone(), owners.clone()))
+        {
+            // The snap moves only source-final knots of cubic sources, and only onto p3.
+            // The fast prefix may fail in collection (OwnerLimit) where the exact one succeeds,
+            // so its commands are read as emitted.
+            let _ = probe.prepare_prefix(path.input(), MAX_FLAT_COMMANDS);
+            let snapped_only_final_knots =
+                snaps_only_final_knots(probe.emitted_commands(), &exact_commands, &sources);
+            if !snapped_only_final_knots {
+                return false;
+            }
             // The spike accessor reports a prefix failure as its own enum; compare by Debug text.
             let fast = probe
                 .prepare_prefix(path.input(), MAX_FLAT_COMMANDS)

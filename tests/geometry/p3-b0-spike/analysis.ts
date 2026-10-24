@@ -445,11 +445,12 @@ function sliverAggregate(
 
 /**
  * SL-O4 amendment, 2026-10-24 (E8-U2, docs/evidence/e8-u2-2026-10-24.md): the exact rung's
- * canonical source-final knot may turn a recorded failure into OK. Every recorded OK outcome,
- * and every failure that stays a failure, must still equal the record.
+ * canonical source-final knot may turn a recorded KnotMismatch, or the OwnerLimit it can cause,
+ * into OK (757 B0 O1 paths: 741 and 16). Every recorded OK outcome, every other recorded
+ * failure, and every failure that stays a failure must still equal the record.
  */
 export function e8U2FailureToSuccess(recorded: string, exact: string): boolean {
-  return recorded !== 'OK' && exact === 'OK';
+  return (recorded === 'Topology(KnotMismatch)' || recorded === 'OwnerLimit') && exact === 'OK';
 }
 
 /** The exact-rung fields that SL-O4 compares with the 2026-10-17 record. */

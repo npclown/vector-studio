@@ -744,8 +744,11 @@ impl CubicFillWorkspace {
     /// collection to reject.
     fn snap_final_knots(&mut self) {
         let mut source = 0usize;
+        // The previous command's point as emitted, before any snap (E8.4's zero-length rule).
+        let mut emitted_previous = None;
         for index in 0..self.command_len {
             let command = self.commands[index];
+            let previous = core::mem::replace(&mut emitted_previous, command.point);
             if command.verb != VERB_LINE {
                 continue;
             }
@@ -776,9 +779,6 @@ impl CubicFillWorkspace {
             if source_verb != provenance.source_verb || same_point(point, points[3]) {
                 continue;
             }
-            let previous = index
-                .checked_sub(1)
-                .and_then(|previous| self.commands[previous].point);
             if previous.is_some_and(|previous| same_point(previous, point)) {
                 continue;
             }
@@ -1432,6 +1432,12 @@ impl CubicFillWorkspace {
             owners: &self.edge_owners[..self.owner_len],
             sources: &self.sources[..self.source_len],
         })
+    }
+
+    /// The commands of the last prefix as emitted (and snapped in the exact rung), also after a
+    /// failure in collection.
+    pub(crate) fn emitted_commands(&self) -> &[FlatCommand] {
+        &self.commands[..self.command_len]
     }
 
     fn e8_test_collapse_final_leaf(&mut self) {
