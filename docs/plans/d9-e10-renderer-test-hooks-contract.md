@@ -124,7 +124,7 @@ The page matches a capture to the draw record by checking that `framesSubmitted`
 | E10-U2 | Sample count, capture and count pass | `packages/renderer-webgpu/src/webgpu-backend.ts`, `native-primitive-scene.ts`, `webgpu-platform.ts`, new `mesh-count-shader.ts`, `tests/unit/e10-capture.test.ts`, `tests/unit/e10-default-invariance.test.ts` and its golden log |
 | E10-U3 | Check page, headed spec, evidence | `apps/playground/e10-test-hooks.html`, `src/e10-test-hooks.ts`, the rollup input, `tests/gpu/e10-test-hooks.spec.ts`, a `docs/validation.md` row, an evidence section in the rendering track plan |
 
-The order is E10-U1, then E10-U2, then E10-U3. U1 and U2 are separate pull requests under this contract. U3 needs the user's PC. VZ4-U1 may start against the published hooks once U2 is merged, and its VZ4-A1 refusal check runs against them.
+The order is E10-U1, then E10-U2, then E10-U3. U1 and U2 are separate pull requests under this contract. (Departure, 2026-10-24: U1, U2 and U3 ship in one pull request, because the session has one branch and U3 needs U1 and U2; the review and evidence criteria are unchanged.) U3 needs the user's PC. VZ4-U1 may start against the published hooks once U2 is merged, and its VZ4-A1 refusal check runs against them.
 
 ## 8. Validation commands
 

@@ -13,7 +13,13 @@ import type {
   PrimitiveTarget,
 } from '@vector-studio/renderer-core';
 
-import { MESH_FILL_SHADER } from './mesh-fill-shader.js';
+import { CaptureError, PendingCapture, type CountPipelineState } from './frame-capture.js';
+import {
+  MESH_COUNT_FRAGMENT_ENTRY_POINT,
+  MESH_COUNT_READOUT_SHADER,
+  MESH_COUNT_SHADER,
+} from './mesh-count-shader.js';
+import { MESH_FILL_SHADER, MESH_JOINT_VERTEX_ENTRY_POINT } from './mesh-fill-shader.js';
 import {
   MESH_FRAME_SIZE,
   MESH_PACKET_BINDINGS,
@@ -52,7 +58,22 @@ import type {
   WebGpuPrimitiveScenePort,
   WebGpuPrimitiveSceneResult,
   WebGpuResourceTracker,
+  WebGpuSceneCaptureRequestForTesting,
 } from './webgpu-platform.js';
+
+/**
+ * @internal Tests only (E10 contract, section 3.2): a creation failure caused by a test hook,
+ * reported by the backend with this context instead of the error's name and message.
+ */
+export class TestHookCreationError extends Error {
+  public constructor(
+    message: string,
+    public readonly context: Readonly<Record<string, string | number>>,
+  ) {
+    super(message);
+    this.name = 'TestHookCreationError';
+  }
+}
 
 const RESOURCE_ORDER = ['transforms', 'geometry', 'styles', 'order', 'frame'] as const;
 const RESOURCE_STRIDES: Readonly<Record<PrimitiveResourceId, number>> = Object.freeze({
@@ -68,6 +89,7 @@ const COPY_DESTINATION_USAGE = 0x08;
 const VERTEX_BUFFER_USAGE = 0x20;
 const INDEX_BUFFER_USAGE = 0x10;
 const RENDER_ATTACHMENT_USAGE = 0x10;
+const FRAGMENT_STAGE = 0x2;
 
 interface NativeCanvasContextPort extends WebGpuCanvasContextPort {
   readonly native: GPUCanvasContext;
@@ -218,6 +240,13 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   #attachmentId: string | undefined;
   #currentArena: ArenaState | undefined;
   readonly #mesh: MeshPipelineState | null;
+  /** E10 contract, section 5: the count pipelines, created only with the countPass option. */
+  readonly #count: CountPipelineState | null;
+  /** E10 contract, section 4: the capture armed for the next submission. */
+  #capture: WebGpuSceneCaptureRequestForTesting | undefined;
+  #nextCapture = 1;
+  /** The capture of a captured submission until it settles; failed on dispose. */
+  #inFlight: PendingCapture | null = null;
   #currentMeshArena: MeshArenaState | undefined;
   #retiredArenas: ArenaBase[] = [];
   #nextArenaId = 1;
@@ -241,11 +270,16 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     staticResourceIds: readonly string[],
     mesh: MeshPipelineState | null = null,
     meshShaderModulesCreated = 0,
+    count: CountPipelineState | null = null,
   ) {
     this.#mesh = mesh;
+    this.#count = count;
     this.meshPipelineAvailable = mesh !== null;
-    this.shaderModulesCreated = 1 + meshShaderModulesCreated;
-    this.pipelinesCreated = mesh === null ? 1 : 3;
+    // E10 contract, section 5: one count module (two at 4x, with the readout) and two count
+    // pipelines (three at 4x); none without the countPass option.
+    const countModules = count === null ? 0 : count.readout === null ? 1 : 2;
+    this.shaderModulesCreated = 1 + meshShaderModulesCreated + countModules;
+    this.pipelinesCreated = (mesh === null ? 1 : 3) + (count === null ? 0 : countModules + 1);
     this.#device = device;
     this.#context = context;
     this.#format = format;
@@ -330,7 +364,40 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       throw asError(releaseError, 'Previous attachment release failed.');
   }
 
+  /** @internal Tests only (E10 contract, section 4). */
+  public captureNextSubmissionForTesting(request: WebGpuSceneCaptureRequestForTesting): void {
+    if (this.#capture !== undefined) {
+      request.reject(new CaptureError('capture-pending', 'a capture is already armed'));
+      return;
+    }
+    if (request.counts && this.#count === null) {
+      request.reject(new CaptureError('capture-disabled', 'no count pipelines'));
+      return;
+    }
+    this.#capture = request;
+  }
+
   public submitPrimitivePacket(packet: PrimitivePacket): PrimitiveSubmitResult {
+    const request = this.#capture;
+    this.#capture = undefined;
+    if (request === undefined) return this.#submit(packet, null);
+    const target = this.#target;
+    if (target !== null && (target.width === 0 || target.height === 0)) {
+      // Nothing to copy; the product frame still goes through as without a capture.
+      request.reject(new CaptureError('no-submission', 'zero-size target'));
+      return this.#submit(packet, null);
+    }
+    const capture: PendingCapture = new PendingCapture(request, this.#resources, () => {
+      if (this.#inFlight === capture) this.#inFlight = null;
+    });
+    this.#inFlight = capture;
+    const result = this.#submit(packet, capture);
+    if (result.status === 'submitted') capture.submitted();
+    else capture.fail(new CaptureError('no-submission', `submission ${result.status}`));
+    return result;
+  }
+
+  #submit(packet: PrimitivePacket, capture: PendingCapture | null): PrimitiveSubmitResult {
     if (this.#disposed || this.#target === null) return Object.freeze({ status: 'not-ready' });
     if (packet.generation !== this.#generation) {
       return Object.freeze({ status: 'stale-generation' });
@@ -386,7 +453,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       if (!Number.isSafeInteger(this.#nextSubmissionSerial)) {
         throw new Error('Primitive submission serial exhausted.');
       }
-      const presentationView = this.#context.native.getCurrentTexture().createView();
+      const presentation = this.#context.native.getCurrentTexture();
+      const presentationView = presentation.createView();
       const multisampleView = this.#attachment?.createView();
       const encoder = this.#device.createCommandEncoder({ label: 'vector-studio/primitive-frame' });
       const pass = encoder.beginRenderPass({
@@ -442,6 +510,25 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       });
       drawMeshesAt(packet.draws.length);
       pass.end();
+      if (capture !== null) {
+        // E10 contract, sections 4 and 5: in this encoder, after the main pass, so the copy is
+        // of the presented texture in the frame's one submission.
+        const target = this.#target;
+        capture.encode({
+          device: this.#device,
+          encoder,
+          resources: this.#resources,
+          idPrefix: `test/${this.#generation}/capture-${this.#nextCapture++}`,
+          packet,
+          presentation,
+          width: target.width,
+          height: target.height,
+          sampleCount: this.sampleCount,
+          format: this.#format,
+          mesh: meshArena === null ? null : { bindGroup: meshArena.bindGroup, draws: meshDraws },
+          count: this.#count,
+        });
+      }
       const commandBuffer = encoder.finish();
       this.#device.queue.submit([commandBuffer]);
 
@@ -482,6 +569,11 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   public dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
+    this.#capture?.reject(new CaptureError('disposed', 'the scene was disposed'));
+    this.#capture = undefined;
+    // Section 4: a submitted capture releases its objects before its promise settles.
+    this.#inFlight?.fail(new CaptureError('disposed', 'the scene was disposed'));
+    this.#inFlight = null;
     let firstError: unknown;
     const release = (action: () => void) => {
       try {
@@ -1404,15 +1496,26 @@ export function createNativePrimitiveSceneCreation(
         ),
       );
     let pipeline: GPURenderPipeline;
-    let sampleCount: 1 | 4 = 4;
+    // E10 contract, section 3.2: a forced sample count never falls back.
+    const forced = options.sampleCount;
+    let sampleCount: 1 | 4 = forced ?? 4;
     let fellBackFrom4x = false;
-    try {
-      pipeline = await createPipeline(4);
-    } catch (error) {
-      if (disposed) throw asError(error, '4x pipeline creation failed after disposal.');
-      sampleCount = 1;
-      fellBackFrom4x = true;
+    if (forced === 1) {
       pipeline = await createPipeline(1);
+    } else {
+      try {
+        pipeline = await createPipeline(4);
+      } catch (error) {
+        if (disposed) throw asError(error, '4x pipeline creation failed after disposal.');
+        if (forced === 4) {
+          throw new TestHookCreationError('The forced 4x pipeline is unavailable.', {
+            forcedSampleCount: 4,
+          });
+        }
+        sampleCount = 1;
+        fellBackFrom4x = true;
+        pipeline = await createPipeline(1);
+      }
     }
     if (disposed) throw new Error('Primitive scene creation completed after disposal.');
     track(`${prefix}/pipeline`, { category: 'render-pipeline' });
@@ -1420,6 +1523,11 @@ export function createNativePrimitiveSceneCreation(
     // recovery, next to the P1 pipeline, and never on the frame path.
     let mesh: MeshPipelineState | null = null;
     let meshShaderModulesCreated = 0;
+    let count: CountPipelineState | null = null;
+    // A forced 4x mesh pipeline that fails reports the forced sample count (section 3.2).
+    let meshFailure: unknown;
+    // Whether the mesh pipelines were built and only the count pipelines failed.
+    let countFailed = false;
     if (options.meshPipeline === true) {
       const meshTracked: string[] = [];
       const trackMesh = (id: string, descriptor: ResourceDescriptor) => {
@@ -1478,7 +1586,18 @@ export function createNativePrimitiveSceneCreation(
             jointPipeline,
             bindGroupLayout: meshBindGroupLayout,
           });
-        } catch {
+          if (options.countPass === true) {
+            count = await createCountPipelines(
+              device,
+              meshPipelineLayout,
+              sampleCount,
+              prefix,
+              trackMesh,
+            );
+          }
+        } catch (error) {
+          meshFailure = error;
+          countFailed = mesh !== null;
           // The mesh path is unavailable for this generation; primitives still draw.
           for (const id of meshTracked) {
             tracked.delete(id);
@@ -1489,7 +1608,18 @@ export function createNativePrimitiveSceneCreation(
             }
           }
           mesh = null;
+          count = null;
         }
+      }
+      if (meshFailure !== undefined && forced === 4) {
+        throw new TestHookCreationError('The forced 4x mesh pipeline is unavailable.', {
+          forcedSampleCount: 4,
+        });
+      }
+      if (countFailed) {
+        throw new TestHookCreationError('The count pipelines are unavailable.', {
+          countPipeline: 'unavailable',
+        });
       }
     }
     if (disposed || vertexBuffer === undefined || indexBuffer === undefined) {
@@ -1511,6 +1641,7 @@ export function createNativePrimitiveSceneCreation(
       staticIds,
       mesh,
       meshShaderModulesCreated,
+      count,
     );
     vertexBuffer = undefined;
     indexBuffer = undefined;
@@ -1525,4 +1656,70 @@ export function createNativePrimitiveSceneCreation(
   });
 
   return Object.freeze({ result, dispose });
+}
+
+/**
+ * E10 contract, section 5: the count pipelines over MESH_COUNT_SHADER with the mesh pipeline
+ * layout, and at 4x the readout pipeline. Created at initialization and recovery only.
+ */
+async function createCountPipelines(
+  device: GPUDevice,
+  meshPipelineLayout: GPUPipelineLayout,
+  sampleCount: 1 | 4,
+  prefix: string,
+  track: (id: string, descriptor: ResourceDescriptor) => void,
+): Promise<CountPipelineState> {
+  const module = device.createShaderModule({
+    label: `${prefix}/e10-count-shader`,
+    code: MESH_COUNT_SHADER,
+  });
+  track(`${prefix}/e10-count-shader`, { category: 'shader-module' });
+  const additive = { srcFactor: 'one', dstFactor: 'one', operation: 'add' } as const;
+  const countPipeline = (vertexEntryPoint: string, kind: 'fill' | 'joint') =>
+    device.createRenderPipelineAsync({
+      label: `vector-studio/e10-count-${kind}-${sampleCount}x`,
+      layout: meshPipelineLayout,
+      vertex: { module, entryPoint: vertexEntryPoint, buffers: [] },
+      fragment: {
+        module,
+        entryPoint: MESH_COUNT_FRAGMENT_ENTRY_POINT,
+        targets: [{ format: 'rgba16float', blend: { color: additive, alpha: additive } }],
+      },
+      primitive: { topology: 'triangle-list', frontFace: 'ccw', cullMode: 'none' },
+      multisample: { count: sampleCount, mask: 0xffffffff, alphaToCoverageEnabled: false },
+    });
+  const fill = await countPipeline('meshVertexMain', 'fill');
+  track(`${prefix}/e10-count-fill-pipeline`, { category: 'render-pipeline' });
+  const joint = await countPipeline(MESH_JOINT_VERTEX_ENTRY_POINT, 'joint');
+  track(`${prefix}/e10-count-joint-pipeline`, { category: 'render-pipeline' });
+  if (sampleCount === 1) return Object.freeze({ fill, joint, readout: null });
+  const layout = device.createBindGroupLayout({
+    label: `${prefix}/e10-count-readout-layout`,
+    entries: [
+      {
+        binding: 0,
+        visibility: FRAGMENT_STAGE,
+        texture: { sampleType: 'unfilterable-float', multisampled: true },
+      },
+    ],
+  });
+  track(`${prefix}/e10-count-readout-layout`, { category: 'bind-group-layout' });
+  const readoutModule = device.createShaderModule({
+    label: `${prefix}/e10-count-readout-shader`,
+    code: MESH_COUNT_READOUT_SHADER,
+  });
+  track(`${prefix}/e10-count-readout-shader`, { category: 'shader-module' });
+  const pipeline = await device.createRenderPipelineAsync({
+    label: 'vector-studio/e10-count-readout',
+    layout: device.createPipelineLayout({ bindGroupLayouts: [layout] }),
+    vertex: { module: readoutModule, entryPoint: 'countReadoutVertexMain' },
+    fragment: {
+      module: readoutModule,
+      entryPoint: 'countReadoutFragmentMain',
+      targets: [{ format: 'rgba16float' }],
+    },
+    primitive: { topology: 'triangle-list' },
+  });
+  track(`${prefix}/e10-count-readout-pipeline`, { category: 'render-pipeline' });
+  return Object.freeze({ fill, joint, readout: Object.freeze({ pipeline, layout }) });
 }

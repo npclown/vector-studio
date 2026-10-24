@@ -28,6 +28,8 @@ import {
   type PrimitiveTarget,
 } from '@vector-studio/renderer-core';
 
+import { CaptureError } from './frame-capture.js';
+import { TestHookCreationError } from './native-primitive-scene.js';
 import { computeSurfaceSize } from './surface-size.js';
 import {
   FoundationExperiment,
@@ -46,6 +48,7 @@ import {
   type WebGpuPlatform,
   type WebGpuPrimitiveSceneCreationPort,
   type WebGpuPrimitiveScenePort,
+  type WebGpuSceneCaptureForTesting,
 } from './webgpu-platform.js';
 
 export interface WebGpuSurface {
@@ -60,6 +63,42 @@ export interface WebGpuBackendOptions {
   readonly now?: () => number;
   readonly platform?: WebGpuPlatform;
   readonly foundationFixture?: FoundationFixture;
+  /**
+   * @internal Tests only (E10 contract, section 3.2): a forced sample count for the primitive
+   * scene. 4 fails initialization when 4x is unavailable; it never falls back.
+   */
+  readonly sampleCountForTesting?: 1 | 4;
+  /** @internal Tests only (E10 contract, section 3.2): COPY_SRC on the canvas and captures. */
+  readonly frameCaptureForTesting?: boolean;
+  /** @internal Tests only (E10 contract, section 5): count pipelines; needs frame capture. */
+  readonly countPassForTesting?: boolean;
+}
+
+/** @internal Tests only (E10 contract, section 3.2): one captured frame. */
+export interface WebGpuFrameCaptureForTesting extends WebGpuSceneCaptureForTesting {
+  readonly devicePixelRatio: number;
+  /** The backend's framesSubmitted statistic after this frame. */
+  readonly framesSubmitted: number;
+}
+
+/** @internal Tests only (E10 contract, section 3.2). */
+export interface WebGpuFrameCaptureOptionsForTesting {
+  readonly counts?: boolean;
+  /** From arming to encoding; default 5,000 ms. */
+  readonly timeoutMs?: number;
+}
+
+interface ArmedCapture {
+  readonly counts: boolean;
+  readonly generation: number;
+  readonly resolve: (capture: WebGpuFrameCaptureForTesting) => void;
+  readonly reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout> | undefined;
+  handed: boolean;
+  /** Set once the captured frame is counted; 0 until then. */
+  framesSubmitted: number;
+  /** The surface DPR when the capture was encoded. */
+  devicePixelRatio: number;
 }
 
 export interface WebGpuFrameMeasurements {
@@ -76,12 +115,23 @@ export interface WebGpuFrameMeasurements {
 }
 
 const DEFAULT_MEASUREMENT_CAPACITY = 4096;
+const DEFAULT_CAPTURE_TIMEOUT_MS = 5000;
+/** E10 contract, section 3.2: the canvas usage that a frame capture needs. */
+const CAPTURE_CANVAS_USAGE = 0x10 | 0x01;
+const COPY_SOURCE_USAGE = 0x01;
 /** A packet carries at most this many D8-interim notices (P3 V3 contract, section h). */
 const NOTICES_PER_PACKET = 32;
 
 /** An array check that does not narrow a typed value to any[]. */
 function isList(value: unknown): boolean {
   return Array.isArray(value);
+}
+
+/** A test hook's creation failure carries its section 3.2 context (E10 contract). */
+function hookErrorContext(error: unknown): DiagnosticContext {
+  return error instanceof TestHookCreationError
+    ? Object.freeze({ ...error.context })
+    : errorContext(error);
 }
 
 function errorContext(error: unknown): DiagnosticContext {
@@ -138,6 +188,10 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   #state: RendererLifecycleState = 'idle';
   #surfaceRevision = 0;
   #surfaceSize: RendererSurfaceSize | undefined;
+  readonly #sampleCountForTesting: 1 | 4 | undefined;
+  readonly #frameCapture: boolean;
+  readonly #countPass: boolean;
+  #capture: ArmedCapture | undefined;
 
   constructor(options: WebGpuBackendOptions = {}) {
     if (
@@ -152,6 +206,16 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     this.#platform = options.platform ?? createBrowserWebGpuPlatform();
     this.#foundationFixture = options.foundationFixture;
     this.#now = options.now ?? (() => performance.now());
+    const forced = options.sampleCountForTesting;
+    if (forced !== undefined && forced !== 1 && forced !== 4) {
+      throw new RangeError('sampleCountForTesting must be 1 or 4.');
+    }
+    this.#sampleCountForTesting = forced;
+    this.#frameCapture = options.frameCaptureForTesting === true;
+    this.#countPass = options.countPassForTesting === true;
+    if (this.#countPass && !this.#frameCapture) {
+      throw new RangeError('countPassForTesting needs frameCaptureForTesting.');
+    }
     this.#scheduler = new FrameScheduler({
       ...(options.animationFrameClock === undefined ? {} : { clock: options.animationFrameClock }),
       render: (timestampMs) => this.#render(timestampMs),
@@ -296,6 +360,59 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       throw new Error('The backend must be ready before destroying the device.');
     }
     this.#device.destroy();
+  }
+
+  /**
+   * @internal Tests only (E10 contract, section 4): arms one capture and invalidates. The next
+   * render copies the presented texture, and with counts the count pass, in its own submission.
+   */
+  captureFrameForTesting(
+    options: WebGpuFrameCaptureOptionsForTesting = {},
+  ): Promise<WebGpuFrameCaptureForTesting> {
+    const counts = options.counts === true;
+    const fail = (code: string, detail: string) =>
+      Promise.reject<WebGpuFrameCaptureForTesting>(new CaptureError(code, detail));
+    if (!this.#frameCapture || (counts && !this.#countPass)) {
+      return fail('capture-disabled', 'the backend was created without the capture options');
+    }
+    if (this.#state === 'disposed') return fail('disposed', 'the backend is disposed');
+    if (this.#capture !== undefined) return fail('capture-pending', 'a capture is armed');
+    if (this.#state !== 'ready') return fail('not-ready', `the backend is ${this.#state}`);
+    if (!this.#primitiveMode) return fail('foundation-mode', 'no primitive scene');
+    if (this.#primitiveScene?.captureNextSubmissionForTesting === undefined) {
+      return fail('capture-unsupported', 'the scene port cannot capture');
+    }
+    const timeoutMs = options.timeoutMs ?? DEFAULT_CAPTURE_TIMEOUT_MS;
+    return new Promise<WebGpuFrameCaptureForTesting>((resolve, reject) => {
+      const armed: ArmedCapture = {
+        counts,
+        generation: this.#generation,
+        resolve,
+        reject,
+        timer: undefined,
+        handed: false,
+        framesSubmitted: 0,
+        devicePixelRatio: 1,
+      };
+      armed.timer = setTimeout(
+        () =>
+          this.#settleCapture(
+            armed,
+            new CaptureError('timeout', `no render encoded the capture in ${timeoutMs} ms`),
+          ),
+        timeoutMs,
+      );
+      this.#capture = armed;
+      this.invalidate({ reason: 'scene' });
+    });
+  }
+
+  #settleCapture(armed: ArmedCapture, result: Error | WebGpuFrameCaptureForTesting): void {
+    if (this.#capture !== armed) return;
+    this.#capture = undefined;
+    if (armed.timer !== undefined) clearTimeout(armed.timer);
+    if (result instanceof Error) armed.reject(result);
+    else armed.resolve(result);
   }
 
   waitForSubmittedWork(): Promise<void> {
@@ -547,7 +664,18 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         maxTextureDimension2D,
       );
       contextConfigured = true;
-      context.configure({ device, format, alphaMode: 'premultiplied' });
+      context.configure({
+        device,
+        format,
+        alphaMode: 'premultiplied',
+        ...(this.#frameCapture ? { usage: CAPTURE_CANVAS_USAGE } : {}),
+      });
+      // E10 contract, section 3.2: a platform that drops the usage is refused, never copied.
+      if (this.#frameCapture && ((context.configuredUsage ?? 0) & COPY_SOURCE_USAGE) === 0) {
+        throw new TestHookCreationError('The canvas was configured without COPY_SRC.', {
+          captureUsage: 'missing',
+        });
+      }
     } catch (error: unknown) {
       releaseAttempt();
       if (this.#pendingAttemptRelease === releaseAttempt) this.#pendingAttemptRelease = undefined;
@@ -557,7 +685,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         'The WebGPU canvas configuration failed.',
         token,
         generation,
-        errorContext(error),
+        hookErrorContext(error),
       );
     }
     if (!this.#isCurrent(token)) {
@@ -599,12 +727,31 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
           },
         };
         // The mesh pipeline is requested only for a source that sets requiresMeshPipeline.
-        primitiveCreation = this.#meshPipelineRequired
-          ? device.createPrimitiveScene(context, format, generation, tracker, {
-              meshPipeline: true,
-            })
-          : device.createPrimitiveScene(context, format, generation, tracker);
+        const hooks = {
+          ...(this.#sampleCountForTesting === undefined
+            ? {}
+            : { sampleCount: this.#sampleCountForTesting }),
+          ...(this.#countPass && this.#meshPipelineRequired ? { countPass: true } : {}),
+        };
+        primitiveCreation =
+          this.#meshPipelineRequired || Object.keys(hooks).length > 0
+            ? device.createPrimitiveScene(context, format, generation, tracker, {
+                ...(this.#meshPipelineRequired ? { meshPipeline: true } : {}),
+                ...hooks,
+              })
+            : device.createPrimitiveScene(context, format, generation, tracker);
         primitive = await primitiveCreation.result;
+        // E10 contract, section 3.2: under a backend hook, a missing mesh path fails the
+        // generation instead of drawing primitives only.
+        if (
+          this.#hooksSet() &&
+          this.#meshPipelineRequired &&
+          primitive.scene.meshPipelineAvailable !== true
+        ) {
+          throw new TestHookCreationError('The mesh pipeline is unavailable.', {
+            meshPipeline: 'unavailable',
+          });
+        }
       }
     } catch (error: unknown) {
       binding?.creationSettled();
@@ -617,7 +764,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         'The WebGPU render scene could not be created.',
         token,
         generation,
-        errorContext(error),
+        hookErrorContext(error),
       );
     }
     if (!this.#isCurrent(token)) {
@@ -958,13 +1105,40 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     this.#capabilityResult = undefined;
     this.#presentationFormat = undefined;
     this.#resources.clear();
+    // E10 contract, section 4: after the scene released a submitted capture's objects, a capture
+    // still pending settles with the reason its generation ended.
+    if (this.#capture !== undefined) {
+      this.#settleCapture(
+        this.#capture,
+        this.#state === 'disposed'
+          ? new CaptureError('disposed', 'the backend was disposed')
+          : new CaptureError('device-lost', 'the generation ended'),
+      );
+    }
   }
 
   #isReady(): boolean {
     return this.#state === 'ready';
   }
 
+  #hooksSet(): boolean {
+    return this.#sampleCountForTesting !== undefined || this.#frameCapture;
+  }
+
   #render(timestampMs: number): void {
+    // E10 contract, section 4: every render after arming settles a capture it did not submit.
+    const armed = this.#capture !== undefined && !this.#capture.handed ? this.#capture : undefined;
+    if (armed !== undefined && armed.generation !== this.#generation) {
+      this.#settleCapture(armed, new CaptureError('device-lost', 'the generation changed'));
+      return this.#renderFrame(timestampMs, undefined);
+    }
+    this.#renderFrame(timestampMs, armed);
+    if (armed !== undefined && !armed.handed) {
+      this.#settleCapture(armed, new CaptureError('no-submission', 'the render did not submit'));
+    }
+  }
+
+  #renderFrame(timestampMs: number, armed: ArmedCapture | undefined): void {
     if (
       this.#state !== 'ready' ||
       (!this.#scene && !this.#primitiveScene) ||
@@ -1019,6 +1193,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         ) {
           return;
         }
+        if (armed !== undefined) this.#handCapture(scene, armed);
         const submission = scene.submitPrimitivePacket(packet);
         if (submission.status !== 'submitted') {
           this.#reportPrimitiveSubmission(submission);
@@ -1038,6 +1213,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       }
       this.#framesSubmitted += 1;
       this.#framesPresented += 1;
+      if (armed?.handed === true) armed.framesSubmitted = this.#framesSubmitted;
       if (this.#measurementActive) {
         if (this.#encodeAndSubmitMs.length < this.#measurementCapacity) {
           this.#encodeAndSubmitMs.push(this.#now() - startedMs);
@@ -1054,6 +1230,48 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         errorContext(error),
       );
     }
+  }
+
+  #handCapture(scene: WebGpuPrimitiveScenePort, armed: ArmedCapture): void {
+    armed.handed = true;
+    scene.captureNextSubmissionForTesting!({
+      counts: armed.counts,
+      encoded: () => {
+        if (armed.timer !== undefined) clearTimeout(armed.timer);
+        armed.timer = undefined;
+        armed.devicePixelRatio = this.#surfaceSize?.devicePixelRatio ?? 1;
+      },
+      resolve: (capture) => {
+        if (capture.generation !== this.#generation || this.#state !== 'ready') {
+          this.#settleCapture(armed, new CaptureError('device-lost', 'the generation changed'));
+          return;
+        }
+        if (armed.framesSubmitted === 0) {
+          // The submission went through but the render failed before counting the frame.
+          this.#settleCapture(
+            armed,
+            new CaptureError('no-submission', 'the frame was not counted'),
+          );
+          return;
+        }
+        this.#settleCapture(
+          armed,
+          Object.freeze({
+            ...capture,
+            devicePixelRatio: armed.devicePixelRatio,
+            framesSubmitted: armed.framesSubmitted,
+          }),
+        );
+      },
+      reject: (error) =>
+        this.#settleCapture(
+          armed,
+          // A scene disposed by a device loss reports the loss.
+          this.#state === 'lost' || armed.generation !== this.#generation
+            ? new CaptureError('device-lost', error.message)
+            : error,
+        ),
+    });
   }
 
   #emitPathMeshNotices(notices: readonly PathMeshNotice[] | undefined, generation: number): void {

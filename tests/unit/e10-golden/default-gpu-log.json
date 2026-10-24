@@ -1,0 +1,763 @@
+[
+  ["canvas#5.width=", 480],
+  ["canvas#5.height=", 270],
+  [
+    "context#4.configure",
+    {
+      "alphaMode": "premultiplied",
+      "colorSpace": "srgb",
+      "device": "device#2",
+      "format": "bgra8unorm"
+    }
+  ],
+  [
+    "device#2.createBindGroupLayout",
+    {
+      "entries": [
+        {
+          "binding": 0,
+          "buffer": {
+            "type": "read-only-storage"
+          },
+          "visibility": 3
+        },
+        {
+          "binding": 1,
+          "buffer": {
+            "type": "read-only-storage"
+          },
+          "visibility": 3
+        },
+        {
+          "binding": 2,
+          "buffer": {
+            "type": "read-only-storage"
+          },
+          "visibility": 3
+        },
+        {
+          "binding": 3,
+          "buffer": {
+            "type": "read-only-storage"
+          },
+          "visibility": 3
+        },
+        {
+          "binding": 4,
+          "buffer": {
+            "type": "uniform"
+          },
+          "visibility": 3
+        }
+      ],
+      "label": "vector-studio/p1-primitive-packet-layout"
+    }
+  ],
+  [
+    "device#2.createPipelineLayout",
+    {
+      "bindGroupLayouts": ["BindGroupLayout#7"],
+      "label": "primitive/1/pipeline-layout"
+    }
+  ],
+  [
+    "device#2.createShaderModule",
+    {
+      "code": "sha256:06b0839c15b93141d1caa72596484b0aa02f53e74f1e58b74959fb5b92af527d",
+      "label": "primitive/1/shader"
+    }
+  ],
+  [
+    "device#2.createBuffer",
+    {
+      "label": "primitive/1/quad-vertices",
+      "size": 32,
+      "usage": 40
+    }
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#10",
+    0,
+    "bytes:32:57a4ad6a5dda1d1cb845be6039169c69a740bc7ee39cd385ffa082da7104b769",
+    0,
+    8
+  ],
+  [
+    "device#2.createBuffer",
+    {
+      "label": "primitive/1/quad-indices",
+      "size": 12,
+      "usage": 24
+    }
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#12",
+    0,
+    "bytes:12:769df21c80974149d13f85ca9f01b8361bfe89e3fcadf7aac71e3c59c247ef7b",
+    0,
+    6
+  ],
+  [
+    "device#2.createRenderPipelineAsync",
+    {
+      "fragment": {
+        "entryPoint": "fragmentMain",
+        "module": "ShaderModule#9",
+        "targets": [
+          {
+            "blend": {
+              "alpha": {
+                "dstFactor": "one-minus-src-alpha",
+                "operation": "add",
+                "srcFactor": "one"
+              },
+              "color": {
+                "dstFactor": "one-minus-src-alpha",
+                "operation": "add",
+                "srcFactor": "one"
+              }
+            },
+            "format": "bgra8unorm",
+            "writeMask": 15
+          }
+        ]
+      },
+      "label": "vector-studio/p1-analytic-primitive-4x",
+      "layout": "PipelineLayout#8",
+      "multisample": {
+        "alphaToCoverageEnabled": false,
+        "count": 4,
+        "mask": 4294967295
+      },
+      "primitive": {
+        "cullMode": "none",
+        "frontFace": "ccw",
+        "topology": "triangle-list"
+      },
+      "vertex": {
+        "buffers": [
+          {
+            "arrayStride": 8,
+            "attributes": [
+              {
+                "format": "float32x2",
+                "offset": 0,
+                "shaderLocation": 0
+              }
+            ],
+            "stepMode": "vertex"
+          }
+        ],
+        "entryPoint": "vertexMain",
+        "module": "ShaderModule#9"
+      }
+    }
+  ],
+  [
+    "device#2.createBindGroupLayout",
+    {
+      "entries": [
+        {
+          "binding": 0,
+          "buffer": {
+            "type": "read-only-storage"
+          },
+          "visibility": 3
+        },
+        {
+          "binding": 1,
+          "buffer": {
+            "type": "read-only-storage"
+          },
+          "visibility": 3
+        },
+        {
+          "binding": 2,
+          "buffer": {
+            "type": "read-only-storage"
+          },
+          "visibility": 3
+        },
+        {
+          "binding": 3,
+          "buffer": {
+            "type": "read-only-storage"
+          },
+          "visibility": 3
+        },
+        {
+          "binding": 4,
+          "buffer": {
+            "type": "read-only-storage"
+          },
+          "visibility": 3
+        },
+        {
+          "binding": 5,
+          "buffer": {
+            "type": "uniform"
+          },
+          "visibility": 3
+        }
+      ],
+      "label": "vector-studio/p3-mesh-packet-layout"
+    }
+  ],
+  [
+    "device#2.createPipelineLayout",
+    {
+      "bindGroupLayouts": ["BindGroupLayout#15"],
+      "label": "primitive/1/mesh-pipeline-layout"
+    }
+  ],
+  [
+    "device#2.createShaderModule",
+    {
+      "code": "sha256:d306137cf0770f6bf7f9237f1c98b9ecd0a165cfdbfda916196d299e36b831a3",
+      "label": "primitive/1/mesh-shader"
+    }
+  ],
+  [
+    "device#2.createRenderPipelineAsync",
+    {
+      "fragment": {
+        "entryPoint": "meshFragmentMain",
+        "module": "ShaderModule#17",
+        "targets": [
+          {
+            "blend": {
+              "alpha": {
+                "dstFactor": "one-minus-src-alpha",
+                "operation": "add",
+                "srcFactor": "one"
+              },
+              "color": {
+                "dstFactor": "one-minus-src-alpha",
+                "operation": "add",
+                "srcFactor": "one"
+              }
+            },
+            "format": "bgra8unorm",
+            "writeMask": 15
+          }
+        ]
+      },
+      "label": "vector-studio/p3-mesh-fill-4x",
+      "layout": "PipelineLayout#16",
+      "multisample": {
+        "alphaToCoverageEnabled": false,
+        "count": 4,
+        "mask": 4294967295
+      },
+      "primitive": {
+        "cullMode": "none",
+        "frontFace": "ccw",
+        "topology": "triangle-list"
+      },
+      "vertex": {
+        "buffers": [],
+        "entryPoint": "meshVertexMain",
+        "module": "ShaderModule#17"
+      }
+    }
+  ],
+  [
+    "device#2.createRenderPipelineAsync",
+    {
+      "fragment": {
+        "entryPoint": "meshJointFragmentMain",
+        "module": "ShaderModule#17",
+        "targets": [
+          {
+            "blend": {
+              "alpha": {
+                "dstFactor": "one-minus-src-alpha",
+                "operation": "add",
+                "srcFactor": "one"
+              },
+              "color": {
+                "dstFactor": "one-minus-src-alpha",
+                "operation": "add",
+                "srcFactor": "one"
+              }
+            },
+            "format": "bgra8unorm",
+            "writeMask": 15
+          }
+        ]
+      },
+      "label": "vector-studio/p3-mesh-joint-4x",
+      "layout": "PipelineLayout#16",
+      "multisample": {
+        "alphaToCoverageEnabled": false,
+        "count": 4,
+        "mask": 4294967295
+      },
+      "primitive": {
+        "cullMode": "none",
+        "frontFace": "ccw",
+        "topology": "triangle-list"
+      },
+      "vertex": {
+        "buffers": [],
+        "entryPoint": "meshJointVertexMain",
+        "module": "ShaderModule#17"
+      }
+    }
+  ],
+  [
+    "device#2.createTexture",
+    {
+      "format": "bgra8unorm",
+      "label": "primitive/1/attachment-1",
+      "sampleCount": 4,
+      "size": {
+        "height": 270,
+        "width": 480
+      },
+      "usage": 16
+    }
+  ],
+  [
+    "device#2.createBuffer",
+    {
+      "label": "primitive/1/arena-1",
+      "size": 4096,
+      "usage": 200
+    }
+  ],
+  [
+    "device#2.createBindGroup",
+    {
+      "entries": [
+        {
+          "binding": 0,
+          "resource": {
+            "buffer": "Buffer#21",
+            "offset": 0,
+            "size": 512
+          }
+        },
+        {
+          "binding": 1,
+          "resource": {
+            "buffer": "Buffer#21",
+            "offset": 512,
+            "size": 768
+          }
+        },
+        {
+          "binding": 2,
+          "resource": {
+            "buffer": "Buffer#21",
+            "offset": 1280,
+            "size": 768
+          }
+        },
+        {
+          "binding": 3,
+          "resource": {
+            "buffer": "Buffer#21",
+            "offset": 2048,
+            "size": 64
+          }
+        },
+        {
+          "binding": 4,
+          "resource": {
+            "buffer": "Buffer#21",
+            "offset": 2304,
+            "size": 32
+          }
+        }
+      ],
+      "label": "primitive/1/arena-1/bind-group",
+      "layout": "BindGroupLayout#7"
+    }
+  ],
+  [
+    "device#2.createBuffer",
+    {
+      "label": "primitive/1/mesh-arena-2",
+      "size": 16384,
+      "usage": 200
+    }
+  ],
+  [
+    "device#2.createBindGroup",
+    {
+      "entries": [
+        {
+          "binding": 0,
+          "resource": {
+            "buffer": "Buffer#23",
+            "offset": 0,
+            "size": 512
+          }
+        },
+        {
+          "binding": 1,
+          "resource": {
+            "buffer": "Buffer#23",
+            "offset": 512,
+            "size": 4096
+          }
+        },
+        {
+          "binding": 2,
+          "resource": {
+            "buffer": "Buffer#23",
+            "offset": 4608,
+            "size": 4096
+          }
+        },
+        {
+          "binding": 3,
+          "resource": {
+            "buffer": "Buffer#23",
+            "offset": 8704,
+            "size": 4096
+          }
+        },
+        {
+          "binding": 4,
+          "resource": {
+            "buffer": "Buffer#23",
+            "offset": 12800,
+            "size": 1024
+          }
+        },
+        {
+          "binding": 5,
+          "resource": {
+            "buffer": "Buffer#23",
+            "offset": 13824,
+            "size": 32
+          }
+        }
+      ],
+      "label": "primitive/1/mesh-arena-2/bind-group",
+      "layout": "BindGroupLayout#15"
+    }
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#21",
+    0,
+    "bytes:32:fbc0ab4c9c4edb7dcb82e15b0f88e84f99dfcc56b2939f78236dcf004158a87a",
+    0,
+    32
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#21",
+    512,
+    "bytes:48:336d1a79b2b218c19a0ebb7afe8cb15b00a4abd97378adb33b4ed85bddec10bf",
+    0,
+    48
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#21",
+    1280,
+    "bytes:48:ee35911cddf900e97f93602ea5846f3f017ac0bcf3bdb00303f4cad423c7cd7f",
+    0,
+    48
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#21",
+    2048,
+    "bytes:4:df3f619804a92fdb4057192dc43dd748ea778adc52bc498ce80524c014b81119",
+    0,
+    4
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#21",
+    2304,
+    "bytes:32:3a70f2cf80c37e15ed741949424bcbaab7fea9eaa872b6593da524cfc515e1c9",
+    0,
+    32
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#23",
+    0,
+    "bytes:448:985f669e7bbf1b84531fd735c6d083ea34360c9662159cb28f452ecc558a64ef",
+    0,
+    448
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#23",
+    512,
+    "bytes:2432:03830e5e7005ef05e8701766c5f65a083204cae52b51546401598e3bb3de6f58",
+    0,
+    2432
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#23",
+    4608,
+    "bytes:2128:6480f09818598f2cd9bc9b694d46802d48ecca79ce81140a33bdb3dc390d223f",
+    0,
+    2128
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#23",
+    8704,
+    "bytes:3584:e3c0e3b3c4e242c289931c7bdf950d6ad9229bf6a2c593b3454476fe3a1c351c",
+    0,
+    3584
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#23",
+    12800,
+    "bytes:320:c0f6dcfa028cfb8b902e2c319202915df7aa3b8ee921e16658b2aca2f9243f33",
+    0,
+    320
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#23",
+    13824,
+    "bytes:32:486aad6ce24eaaae83bd5e806cf5e65d41bac06e72715f0f3baa6e4c808a7784",
+    0,
+    32
+  ],
+  ["context#4.getCurrentTexture"],
+  ["getCurrentTexture#36.createView"],
+  ["Texture#20.createView"],
+  [
+    "device#2.createCommandEncoder",
+    {
+      "label": "vector-studio/primitive-frame"
+    }
+  ],
+  [
+    "CommandEncoder#39.beginRenderPass",
+    {
+      "colorAttachments": [
+        {
+          "clearValue": {
+            "a": 1,
+            "b": 0,
+            "g": 0,
+            "r": 0
+          },
+          "loadOp": "clear",
+          "resolveTarget": "View#37",
+          "storeOp": "discard",
+          "view": "View#38"
+        }
+      ],
+      "label": "vector-studio/primitive-pass"
+    }
+  ],
+  ["beginRenderPass#40.setPipeline", "RenderPipeline#14"],
+  ["beginRenderPass#40.setBindGroup", 0, "BindGroup#22"],
+  ["beginRenderPass#40.setVertexBuffer", 0, "Buffer#10", 0, 32],
+  ["beginRenderPass#40.setIndexBuffer", "Buffer#12", "uint16", 0, 12],
+  ["beginRenderPass#40.setPipeline", "RenderPipeline#18"],
+  ["beginRenderPass#40.setBindGroup", 0, "BindGroup#24"],
+  ["beginRenderPass#40.draw", 30, 1, 0, 0],
+  ["beginRenderPass#40.draw", 30, 1, 30, 1],
+  ["beginRenderPass#40.draw", 54, 1, 60, 2],
+  ["beginRenderPass#40.setPipeline", "RenderPipeline#19"],
+  ["beginRenderPass#40.draw", 30, 1, 144, 3],
+  ["beginRenderPass#40.setPipeline", "RenderPipeline#18"],
+  ["beginRenderPass#40.draw", 54, 1, 174, 4],
+  ["beginRenderPass#40.setPipeline", "RenderPipeline#14"],
+  ["beginRenderPass#40.setBindGroup", 0, "BindGroup#22"],
+  ["beginRenderPass#40.setVertexBuffer", 0, "Buffer#10", 0, 32],
+  ["beginRenderPass#40.setIndexBuffer", "Buffer#12", "uint16", 0, 12],
+  ["beginRenderPass#40.drawIndexed", 6, 1, 0, 0, 0],
+  ["beginRenderPass#40.end"],
+  ["CommandEncoder#39.finish"],
+  ["queue#1.submit", ["finish#60"]],
+  ["queue#1.onSubmittedWorkDone"],
+  [
+    "device#2.createBuffer",
+    {
+      "label": "primitive/1/mesh-arena-3",
+      "size": 16384,
+      "usage": 200
+    }
+  ],
+  [
+    "device#2.createBindGroup",
+    {
+      "entries": [
+        {
+          "binding": 0,
+          "resource": {
+            "buffer": "Buffer#63",
+            "offset": 0,
+            "size": 512
+          }
+        },
+        {
+          "binding": 1,
+          "resource": {
+            "buffer": "Buffer#63",
+            "offset": 512,
+            "size": 4096
+          }
+        },
+        {
+          "binding": 2,
+          "resource": {
+            "buffer": "Buffer#63",
+            "offset": 4608,
+            "size": 4096
+          }
+        },
+        {
+          "binding": 3,
+          "resource": {
+            "buffer": "Buffer#63",
+            "offset": 8704,
+            "size": 4096
+          }
+        },
+        {
+          "binding": 4,
+          "resource": {
+            "buffer": "Buffer#63",
+            "offset": 12800,
+            "size": 1024
+          }
+        },
+        {
+          "binding": 5,
+          "resource": {
+            "buffer": "Buffer#63",
+            "offset": 13824,
+            "size": 32
+          }
+        }
+      ],
+      "label": "primitive/1/mesh-arena-3/bind-group",
+      "layout": "BindGroupLayout#15"
+    }
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#21",
+    2304,
+    "bytes:32:40966af5e3cdd81583286ef27f00601a9ecb6e4adc8590f81279e1dd3a0249a7",
+    0,
+    32
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#63",
+    0,
+    "bytes:448:b8f3fedf4d98f54a6b011c9ae0d85d69dfb93d328528d1d0597202ea1b5e64cc",
+    0,
+    448
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#63",
+    512,
+    "bytes:2432:1dbda8b88b2d6d5360b82085029cc0a0ecf7b2691a78980cd5ca9dbcb81a69ec",
+    0,
+    2432
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#63",
+    4608,
+    "bytes:1808:4b1321f528f3c04e854e025d496104beb2fdde4a94ef109d02ec4e55618b2bd6",
+    0,
+    1808
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#63",
+    8704,
+    "bytes:3584:e3c0e3b3c4e242c289931c7bdf950d6ad9229bf6a2c593b3454476fe3a1c351c",
+    0,
+    3584
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#63",
+    12800,
+    "bytes:320:60a8b82aadf9a1379778a736e88ffcfc3df780f9c1849a8153f6760000e08f27",
+    0,
+    320
+  ],
+  [
+    "queue#1.writeBuffer",
+    "Buffer#63",
+    13824,
+    "bytes:32:c1c66d0dabfa3f7e9c46c2988121f915a7408af39f613a44aa9fba2ebf3b6f6c",
+    0,
+    32
+  ],
+  ["context#4.getCurrentTexture"],
+  ["getCurrentTexture#72.createView"],
+  ["Texture#20.createView"],
+  [
+    "device#2.createCommandEncoder",
+    {
+      "label": "vector-studio/primitive-frame"
+    }
+  ],
+  [
+    "CommandEncoder#75.beginRenderPass",
+    {
+      "colorAttachments": [
+        {
+          "clearValue": {
+            "a": 1,
+            "b": 0,
+            "g": 0,
+            "r": 0
+          },
+          "loadOp": "clear",
+          "resolveTarget": "View#73",
+          "storeOp": "discard",
+          "view": "View#74"
+        }
+      ],
+      "label": "vector-studio/primitive-pass"
+    }
+  ],
+  ["beginRenderPass#76.setPipeline", "RenderPipeline#14"],
+  ["beginRenderPass#76.setBindGroup", 0, "BindGroup#22"],
+  ["beginRenderPass#76.setVertexBuffer", 0, "Buffer#10", 0, 32],
+  ["beginRenderPass#76.setIndexBuffer", "Buffer#12", "uint16", 0, 12],
+  ["beginRenderPass#76.setPipeline", "RenderPipeline#18"],
+  ["beginRenderPass#76.setBindGroup", 0, "BindGroup#64"],
+  ["beginRenderPass#76.draw", 30, 1, 0, 0],
+  ["beginRenderPass#76.draw", 30, 1, 30, 1],
+  ["beginRenderPass#76.draw", 54, 1, 60, 2],
+  ["beginRenderPass#76.setPipeline", "RenderPipeline#19"],
+  ["beginRenderPass#76.draw", 30, 1, 144, 3],
+  ["beginRenderPass#76.setPipeline", "RenderPipeline#18"],
+  ["beginRenderPass#76.draw", 54, 1, 174, 4],
+  ["beginRenderPass#76.setPipeline", "RenderPipeline#14"],
+  ["beginRenderPass#76.setBindGroup", 0, "BindGroup#22"],
+  ["beginRenderPass#76.setVertexBuffer", 0, "Buffer#10", 0, 32],
+  ["beginRenderPass#76.setIndexBuffer", "Buffer#12", "uint16", 0, 12],
+  ["beginRenderPass#76.drawIndexed", 6, 1, 0, 0, 0],
+  ["beginRenderPass#76.end"],
+  ["CommandEncoder#75.finish"],
+  ["queue#1.submit", ["finish#96"]],
+  ["Texture#20.destroy"],
+  ["Buffer#21.destroy"],
+  ["Buffer#63.destroy"],
+  ["Buffer#23.destroy"],
+  ["Buffer#10.destroy"],
+  ["Buffer#12.destroy"],
+  ["context#4.unconfigure"],
+  ["device#2.destroy"]
+]

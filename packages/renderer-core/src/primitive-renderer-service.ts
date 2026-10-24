@@ -19,7 +19,11 @@ import type {
   PrimitiveTarget,
 } from './primitive-packet.js';
 import { buildPathFringe } from './path-fringe.js';
-import { PathMeshPipeline, type PathMeshStatistics } from './path-mesh-pipeline.js';
+import {
+  PathMeshPipeline,
+  type PathDrawRecordForTesting,
+  type PathMeshStatistics,
+} from './path-mesh-pipeline.js';
 import { PrimitiveSceneSource } from './primitive-scene-source.js';
 import { RetainedSceneMirror } from './scene-mirror.js';
 
@@ -31,6 +35,11 @@ export type PrimitiveRendererServiceOptions = Readonly<{
   strokeMesh?: StrokeMeshPort;
   /** Host-supplied accounting hook for the stroke port's linear memory. Not part of the port. */
   strokeMeshMemoryBytes?: () => number;
+  /**
+   * @internal Tests only (E10 contract, section 3.1): 'off' draws every path paint region-only
+   * (c = 1, no exterior triangles) and never calls the fringe builder. Default 'on'.
+   */
+  fringeForTesting?: 'on' | 'off';
 }>;
 
 /** Owns the CPU scene mirror and packet source while the backend owns scheduling and native state. */
@@ -63,6 +72,10 @@ export class PrimitiveRendererService
     if (strokeMemoryBytes !== undefined && typeof strokeMemoryBytes !== 'function') {
       throw new TypeError('strokeMeshMemoryBytes must be a function.');
     }
+    const fringe = options.fringeForTesting ?? 'on';
+    if (fringe !== 'on' && fringe !== 'off') {
+      throw new TypeError("fringeForTesting must be 'on' or 'off'.");
+    }
     this.#invalidationTarget = invalidationTarget;
     const anyPort = port !== undefined || strokePort !== undefined;
     this.requiresMeshPipeline = anyPort;
@@ -84,8 +97,8 @@ export class PrimitiveRendererService
             ...(strokePort === undefined ? {} : { strokePort }),
             ...(strokeMemoryBytes === undefined ? {} : { strokeMemoryBytes }),
             // P3 V3 section e: the exact fringe builder, a D8-interim placement (V3-Q3 c); the
-            // stroke mesh uses it unchanged (B2 section 9.5).
-            fringeBuilder: buildPathFringe,
+            // stroke mesh uses it unchanged (B2 section 9.5). E10: no builder when 'off'.
+            ...(fringe === 'on' ? { fringeBuilder: buildPathFringe } : {}),
           }),
     );
   }
@@ -134,6 +147,14 @@ export class PrimitiveRendererService
    */
   public getOverlayBuildCountForTesting(): number {
     return this.#source.getOverlayBuildCountForTesting();
+  }
+
+  /**
+   * @internal Tests only (E10 contract, section 3.1): the draw record of the last non-null
+   * prepare; null before the first one and without a port.
+   */
+  public getLastDrawRecordForTesting(): PathDrawRecordForTesting | null {
+    return this.#source.getLastDrawRecordForTesting();
   }
 
   /** CPU attributions of the path-mesh cache; null without a port. */
