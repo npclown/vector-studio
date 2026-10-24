@@ -735,3 +735,38 @@ fn e1_corpus_reader_reads_the_input_format() {
     assert_eq!(on.status, Some(0));
     assert_eq!(on.probe.exact_checks, 1);
 }
+
+/// D9 E2-U1 review S3: E1-K1 on the shipped `stroke-v0+r5` input (the seam-merged contours),
+/// not only on the `r4` input. `edges-1024` is `ok` at r5; with `max_work` one below its
+/// `W + F_L` at the ledger the abort is certain, and on and off agree.
+#[test]
+fn e1_k1_on_the_r5_merged_input() {
+    let (path, request) = edges_1024();
+    let r5 = |limits| StrokeWorkspace::with_limits(limits).expect("the test workspace reserves");
+    let mut ws = r5(STROKE_V0_LIMITS);
+    let (full, _) = on_off(
+        &mut ws,
+        &path,
+        request,
+        STROKE_V0_LIMITS.max_work,
+        "r5 edges-1024",
+    );
+    assert_eq!(full.status, Some(0));
+    assert_eq!(full.probe.reached, 1, "the ledger is reached");
+    let total = full.probe.last.work + full.probe.last.forecast;
+    let max_work = total - 1;
+    let mut ws = r5(limits_with_work(max_work));
+    let (on, _) = on_off(
+        &mut ws,
+        &path,
+        request,
+        max_work,
+        "r5 edges-1024, W + F_L - 1",
+    );
+    println!(
+        "r5 edges-1024: total work {total}, probe at total - 1 {:?}",
+        on.probe
+    );
+    assert_eq!(on.status, Some(STROKE_PATH_WORK_LIMIT));
+    assert_eq!(on.probe.fired, 1, "E1-K1 fired");
+}

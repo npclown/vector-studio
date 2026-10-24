@@ -5,8 +5,8 @@
 //! and before the arrangement. Step 1: every band piece (a sweep piece whose band quad
 //! `E-(a), E-(b), E+(b), E+(a)` is strictly convex and positive) contributes the boundary-
 //! inclusive hull of its quad and of the samples `C` the contract keeps; every other piece
-//! contributes its hull unchanged. Step 2: a `C` strictly outside its quad across a seam is
-//! covered when a band piece that shares the whole seam triple from the other side holds it in
+//! contributes its hull unchanged. Step 2: a `C` strictly outside its quad across a seam, and
+//! outside no other edge of it, is covered when a band piece that shares the whole seam triple from the other side holds it in
 //! its quad. Step 3: opposite directed edges with bit-identical end points cancel in pairs.
 //! Step 4: the remaining edges are traced into closed contours, taking the outgoing edges of a
 //! vertex in emission order. The winding sum of the edges, and so the nonzero region, is the
@@ -31,8 +31,8 @@ const LIVE: u8 = 0;
 const CANCELLED: u8 = 1;
 const TRACED: u8 = 2;
 
-/// The bit pattern of a point; equal keys are bit-identical points (emitted coordinates are
-/// normalized with `+ 0.0`, so no `-0`).
+/// The bit pattern of a point; equal keys are bit-identical points (hull points and band
+/// polygon points are normalized with `+ 0.0`, so no `-0`).
 type PointKey = (u64, u64);
 type TripleKey = [u64; 6];
 
@@ -51,13 +51,22 @@ fn triple_key(triple: &Triple) -> TripleKey {
     ]
 }
 
+/// `point` with `-0` replaced by `+0`, as `push_candidate` stores every hull point, so that a
+/// band polygon's edges cancel against a hull neighbour's bit for bit.
+fn normalized(point: Point) -> Point {
+    Point {
+        x: point.x + 0.0,
+        y: point.y + 0.0,
+    }
+}
+
 /// The band quad of a sweep piece (section 3), or `None` when the piece is not a band piece.
 pub(crate) fn band_quad(piece: &Piece) -> Result<Option<[Point; 4]>, FrontEndError> {
     if piece.dropped || !matches!(piece.kind, PieceKind::LineSweep | PieceKind::CubicLeaf) {
         return Ok(None);
     }
     let [a, b] = piece.meta.samples;
-    let quad = [a.minus, b.minus, b.plus, a.plus];
+    let quad = [a.minus, b.minus, b.plus, a.plus].map(normalized);
     for index in 0..4 {
         if orient(quad[index], quad[(index + 1) % 4], quad[(index + 2) % 4])? != Ordering::Greater {
             return Ok(None);
@@ -214,9 +223,11 @@ impl SeamMerge {
             }
             let count = self.polygon_points.len() - start;
             // ST-D13 (B2 section 11.3): the step-1 polygon of an odd line sweep clockwise.
+            // A non-band polygon is the stored hull, which `emit_line_part` already reversed.
             if defects.clockwise_piece()
                 && piece.kind == PieceKind::LineSweep
                 && piece.segment % 2 == 1
+                && band_quad(piece)?.is_some()
             {
                 self.polygon_points[start..].reverse();
             }
@@ -278,14 +289,22 @@ impl SeamMerge {
         self.candidates.clear();
         self.candidates.extend_from_slice(&quad);
         let [a, b] = piece.meta.samples;
-        // (sample, seam edge from, seam edge to, the neighbour's side that must match).
-        let seams = [(a, quad[3], quad[0], 1usize), (b, quad[1], quad[2], 0usize)];
-        for (sample, from, to, side) in seams {
-            let c = sample.center;
-            if quad_position(&quad, c)? == Ordering::Greater {
+        // (sample, its seam edge `quad[seam] -> quad[seam + 1]`, the neighbour's matching side).
+        let seams = [(a, 3usize, 1usize), (b, 1usize, 0usize)];
+        for (sample, seam, side) in seams {
+            let c = normalized(sample.center);
+            let mut sides = [Ordering::Equal; 4];
+            for (index, value) in sides.iter_mut().enumerate() {
+                *value = orient(quad[index], quad[(index + 1) % 4], c)?;
+            }
+            if sides.iter().all(|&value| value == Ordering::Greater) {
                 continue;
             }
-            if orient(from, to, c)? == Ordering::Less {
+            // Only a `C` strictly outside its seam and on no other edge's outer side adds
+            // exactly the triangle `E-, C, E+`, which a covering quad then holds.
+            let across = sides[seam] == Ordering::Less
+                && (0..4).all(|index| index == seam || sides[index] != Ordering::Less);
+            if across {
                 let covered = if defects.drop_outside() {
                     true
                 } else {

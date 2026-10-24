@@ -135,6 +135,13 @@ fn sign(a: Point, b: Point, c: Point) -> Ordering {
     orient2d(a, b, c).expect("finite")
 }
 
+fn plus_zero(point: Point) -> Point {
+    Point {
+        x: point.x + 0.0,
+        y: point.y + 0.0,
+    }
+}
+
 /// An independent band test (contract section 3): a sweep piece whose band quad is strictly
 /// convex and positive.
 fn band_of(piece: &Piece) -> Option<[Point; 4]> {
@@ -142,7 +149,7 @@ fn band_of(piece: &Piece) -> Option<[Point; 4]> {
         return None;
     }
     let [a, b] = piece.meta.samples;
-    let quad = [a.minus, b.minus, b.plus, a.plus];
+    let quad = [a.minus, b.minus, b.plus, a.plus].map(plus_zero);
     (0..4)
         .all(|i| sign(quad[i], quad[(i + 1) % 4], quad[(i + 2) % 4]) == Ordering::Greater)
         .then_some(quad)
@@ -295,7 +302,7 @@ fn lossless(ws: &StrokeWorkspace, seeded: usize, extra: &[Point]) -> Result<A4Co
         let allowed: Vec<Key> = quad
             .iter()
             .chain([a.center, b.center].iter())
-            .map(|p| key(*p))
+            .map(|p| key(plus_zero(*p)))
             .collect();
         if polygon.iter().any(|point| !allowed.contains(&key(*point))) {
             return Err(format!(
@@ -307,9 +314,9 @@ fn lossless(ws: &StrokeWorkspace, seeded: usize, extra: &[Point]) -> Result<A4Co
                 "piece {record}: the polygon does not hold its quad"
             ));
         }
-        let seams = [(a, quad[3], quad[0], 1usize), (b, quad[1], quad[2], 0usize)];
-        for (sample, from, to, side) in seams {
-            let c = sample.center;
+        let seams = [(a, 3usize, 1usize), (b, 1usize, 0usize)];
+        for (sample, seam, side) in seams {
+            let c = plus_zero(sample.center);
             let vertex = polygon.iter().any(|point| key(*point) == key(c));
             if strictly_inside(&quad, c) {
                 if vertex {
@@ -319,11 +326,14 @@ fn lossless(ws: &StrokeWorkspace, seeded: usize, extra: &[Point]) -> Result<A4Co
             } else if vertex {
                 counts.kept += 1;
             } else {
-                // Dropped: strictly outside across its seam and inside a band neighbour's quad
-                // that shares the whole seam triple from the other side.
-                if sign(from, to, c) != Ordering::Less {
+                // Dropped: strictly outside its seam, outside no other edge (so the dropped part
+                // is the triangle E-, C, E+), and inside a band neighbour's quad that shares the
+                // whole seam triple from the other side.
+                let outside =
+                    |index: usize| sign(quad[index], quad[(index + 1) % 4], c) == Ordering::Less;
+                if !outside(seam) || (0..4).any(|index| index != seam && outside(index)) {
                     return Err(format!(
-                        "piece {record}: a dropped C is not strictly outside its seam"
+                        "piece {record}: a dropped C is not strictly outside its seam alone"
                     ));
                 }
                 let covered = pieces.iter().enumerate().any(|(other, neighbour)| {
@@ -874,4 +884,54 @@ fn e2_differential() {
         println!("  r5 {family}: {cause} {count}");
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+// ---- E2 section 7 caps at r5 (review S2) ----
+
+/// Over 512 merged contours the path is `PieceLimit`, checked before `InputLimit`; over
+/// `MAX_PIECE_POINTS` stored points it is `PieceLimit` at emission.
+#[test]
+fn e2_section_7_caps() {
+    let mut ws = workspace(false);
+    // 256 separate round-capped dashes: a sweep and two cap disks each, no cancellation between
+    // dashes.
+    let mut dashes = PathSpec::new();
+    for index in 0..256u32 {
+        let x = f64::from(index) * 8.0;
+        dashes = dashes.m(x, 0.0).l(x + 2.0, 0.0);
+    }
+    let found = observe(
+        &mut ws,
+        &dashes.verbs,
+        &dashes.bytes(),
+        request(1.0, StrokeCap::Round, MITER, 4.0, -3),
+    );
+    println!("dashes: {found:?}");
+    assert_eq!(found.status, STROKE_PATH_WORK_LIMIT);
+    assert_eq!(
+        found.error,
+        Some(StrokeError::Front(FrontEndError::PieceLimit))
+    );
+    assert!(found.contours > MAX_PIECES);
+    assert!(found.vertices > STROKE_V0_LIMITS.max_input_vertices);
+    // 200 zigzag segments with round joins at r = 200: about 199 disks of 256 vertices.
+    let mut zigzag = PathSpec::new().m(0.0, 0.0);
+    for index in 1..=200u32 {
+        zigzag = zigzag.l(16.0 * f64::from(index), 16.0 * f64::from(index % 2));
+    }
+    let found = observe(
+        &mut ws,
+        &zigzag.verbs,
+        &zigzag.bytes(),
+        request(400.0, BUTT, StrokeJoin::Round, 4.0, -3),
+    );
+    println!("zigzag: {found:?}");
+    assert_eq!(
+        found.error,
+        Some(StrokeError::Front(FrontEndError::PieceLimit))
+    );
+    assert_eq!(found.contours, 0, "stopped at emission, before the merge");
+    let stored: usize = ws.pieces().iter().map(|piece| piece.count).sum();
+    assert!(stored <= MAX_PIECE_POINTS);
+    assert!(ws.pieces().len() < 4_096);
 }
