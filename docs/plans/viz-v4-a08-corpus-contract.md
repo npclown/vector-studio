@@ -79,7 +79,7 @@ The A08 corpus is a declared subset of the frozen `a04-corpus/v1`, so A04 and A0
 
 ### 4.3 Scene and color
 
-Each case is one path node, fill opaque white `#ffffff`, on a cleared transparent black target, so the captured channel value is the coverage `obs` in 8-bit encoded sRGB under P1's premultiplied blending (Q12). The canvas is sized to the case's physical `width × height` at its DPR. The page uses the published scene contracts as the V-1 page does; it adds no draw work.
+Each case is one path node at opacity 1, filled only (fill cases) or stroked only (stroke cases) in opaque white `#ffffff`, on the backend's opaque black clear, so the captured channel value is the coverage `obs` in 8-bit encoded sRGB under P1's premultiplied blending (Q12). The canvas is sized to the case's physical `width × height` at its DPR. The page uses the published scene contracts as the V-1 page does; it adds no draw work.
 
 ### 4.4 Per-case statuses
 
@@ -95,7 +95,7 @@ Each case and variant gets one status, recorded with its reason:
 
 ### 4.5 Test hook
 
-`window.__vizV4` exposes `ready`, `cases()`, `render(caseKey, variant)` returning the capture and the counts, and `statistics()`. The spec iterates the corpus, writes one RLE capture per render (O02's `rle.ts` format) and `observations.json` per browser and DPR, and asserts only completeness (every case has a status). Gates are evaluated offline (section 5).
+`window.__vectorStudioVizV4` exposes `ready`, `physical`, `render(caseInput)` returning the capture, the counts, the draw record, the notices and every port call with its mesh digest, and `diagnostics()`. The variant and DPR are page query parameters. The spec decodes each case in Node, renders it, writes one `observations.ndjson` line per case (red channel and counts as O02 `rle.ts` RLE) per browser, variant and DPR, and asserts only completeness (every case has a status). Gates are evaluated offline (section 5).
 
 ## 5. Reference and metrics
 
@@ -201,3 +201,12 @@ NOT READY, two blocking and six should-fix items, all applied in revision 3: the
 ## 14. Review round 3 (2026-10-24)
 
 READY, no blocking or should-fix items. Its optional follow-up, reporting the pixels excluded as cracks per case, is applied in section 5.4.
+
+## 15. Implementation notes (VZ4-U1, 2026-10-24)
+
+- Subset: `tests/visual/viz-v4/subset.ts`, `a08-subset/v1`, 2280 cases (1032 gated), pinned by `tests/visual/viz-v4/a08-subset.manifest.json` with the `a04-corpus/v1` `corpusSha256`. VZ4-A2 is closed for the subset definition; it is re-checked unchanged after the E3 freeze record.
+- E3 blindness (E3 section 5.5): `pnpm viz-v4:expected` and the headed spec refuse to run until the E3 contract holds the freeze record. Before that, unit tests use scripted ports only.
+- Expected statuses: `pnpm viz-v4:expected` runs the product CPU path (E3's `drawCase`) on the release WASM and writes `tests/visual/viz-v4/a08-expected-status.json`, keyed by the subset keys SHA and the WASM SHA. The spec records any headed deviation from it in `meta.json`.
+- `MESH-MISMATCH`: the page records each port request and its result digest (`meshDigestBytes`); Node re-issues the request to its own WASM port and compares. The case key is the node id, so no mesh is served from another case.
+- Capture identity (E10 section 14 carry-overs): per case, capture size equals the physical size, `sampleCount` equals the variant's, one submitted frame and one prepare per capture, and mesh triangle totals equal the draw record.
+- Artifacts: `artifacts/viz-v4-a08/<run>/<project>/<variant>/dpr<D>/` with `meta.json` (label `PRE-FREEZE`), `observations.ndjson` and `UNVERIFIED.txt`. The headed command is `pnpm test:gpu:viz-v4`.
