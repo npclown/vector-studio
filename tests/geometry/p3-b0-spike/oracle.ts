@@ -1146,6 +1146,59 @@ export function viewIdentity(view: SpikeView): string {
   return JSON.stringify([view.ranges, view.points, view.owners, view.sources]);
 }
 
+/**
+ * The S1 view as the exact rung sees it since E8-U2 (docs/plans/p3-rounded-knot-topology-contract.md,
+ * E8 addendum E8.4), written from that text: the end point of each cubic source's final leaf
+ * (`endNumerator === 2^depth`) becomes the source's represented p3, and the closure rule runs
+ * again on the snapped points (a last point equal to the first is dropped with its closing
+ * owner). Returns null when the snap would need a closing owner the view does not carry (the
+ * emitted final knot equal to the first point but p3 not), so that the caller compares strictly.
+ */
+export function snapViewFinalKnots(view: SpikeView): SpikeView | null {
+  const ends = new Map<number, HexPoint>();
+  for (const source of view.sources)
+    if (source.kind === 'cubic') ends.set(source.sourceVerb, source.points[3]!);
+  const same = (a: HexPoint, b: HexPoint) => a[0] === b[0] && a[1] === b[1];
+  const ranges: (readonly [number, number])[] = [];
+  const points: HexPoint[] = [];
+  const owners: SpikeOwner[] = [];
+  let owner = 0;
+  for (const [start, count] of view.ranges) {
+    const first = points.length;
+    if (count < 2) {
+      for (let index = 0; index < count; index += 1) points.push(view.points[start + index]!);
+      ranges.push([first, count]);
+      continue;
+    }
+    const contour = view.points.slice(start, start + count);
+    const edges = view.owners.slice(owner, owner + count);
+    owner += count;
+    const snapped = [...contour];
+    edges.forEach((edge, index) => {
+      if (edge.kind !== 'cubicLeaf' || 2 ** edge.depth !== edge.endNumerator) return;
+      const end = ends.get(edge.sourceVerb);
+      if (end === undefined) return;
+      const at = (index + 1) % count;
+      if (at === 0) {
+        if (!same(end, contour[0]!)) snapped.length = 0;
+        return;
+      }
+      snapped[at] = end;
+    });
+    if (snapped.length === 0) return null;
+    const last = edges[count - 1]!;
+    const closing = last.kind === 'implicitClosure' || last.kind === 'explicitClose';
+    if (closing && same(snapped[count - 1]!, snapped[0]!)) {
+      snapped.pop();
+      edges.pop();
+    }
+    points.push(...snapped);
+    owners.push(...edges);
+    ranges.push([first, snapped.length]);
+  }
+  return { ranges, points, owners, sources: view.sources };
+}
+
 /** Same input polygon, and |A(exact mesh) − A(R(P))| ≤ Σ_e (2τ (|Δx| + |Δy|) + 4τ²). */
 export function verifyAgreement(
   fast: SpikeView,
@@ -1164,7 +1217,10 @@ export function verifyAgreement(
     band = add(band, add(mul(twoTau, length), fourTau2));
   }
   return {
-    samePolygon: viewIdentity(fast) === viewIdentity(exact),
+    // Since E8-U2 the exact rung may see the view with snapped source-final knots.
+    samePolygon:
+      viewIdentity(fast) === viewIdentity(exact) ||
+      viewIdentity(snapViewFinalKnots(fast) ?? fast) === viewIdentity(exact),
     difference,
     band,
     withinBand: compare(difference, band) <= 0,

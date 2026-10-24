@@ -796,6 +796,17 @@ fn json_mesh(json: &mut Json, vertices: &[Point], triangles: impl Iterator<Item 
 
 type PublishedView = (Vec<ContourRange>, Vec<u64>, Vec<EdgeOwner>);
 
+fn owned_view(ranges: &[ContourRange], points: &[Point], owners: &[EdgeOwner]) -> PublishedView {
+    (
+        ranges.to_vec(),
+        points
+            .iter()
+            .flat_map(|point| [point.x.to_bits(), point.y.to_bits()])
+            .collect(),
+        owners.to_vec(),
+    )
+}
+
 /// Section 2.2's S1 accessor equality, corpus-wide: on a path whose exact attempt published,
 /// the accessor's points, ranges and owners equal the output's bit for bit; otherwise the
 /// accessor succeeds (a failure after S1) or fails exactly as the attempt did in its prefix.
@@ -806,6 +817,27 @@ fn accessor_matches(
     result: Result<CubicFillDiagnostics, CubicFillError>,
     diagnostics: CubicFillDiagnostics,
 ) -> bool {
+    // Since E8-U2 (2026-10-24) a published exact attempt carries the canonical source-final
+    // knots; it then equals the production exact prefix, and the spike accessor equals the
+    // production fast prefix (E8 addendum E8.4: the fast rung's prefix is unchanged).
+    if let Some((ranges, points, owners)) = published {
+        let exact = probe
+            .prepare_exact_prefix(path.input(), MAX_FLAT_COMMANDS)
+            .ok()
+            .map(|view| owned_view(view.ranges, view.points, view.owners));
+        if exact.as_ref() == Some(&(ranges.clone(), points.clone(), owners.clone())) {
+            // The spike accessor reports a prefix failure as its own enum; compare by Debug text.
+            let fast = probe
+                .prepare_prefix(path.input(), MAX_FLAT_COMMANDS)
+                .map(|view| owned_view(view.ranges, view.points, view.owners))
+                .map_err(|failure| format!("{failure:?}"));
+            let accessor = probe
+                .prepare_for_spike(path.input(), MAX_FLAT_COMMANDS)
+                .map(|view| owned_view(view.ranges, view.points, view.owners))
+                .map_err(|failure| format!("{failure:?}"));
+            return fast == accessor;
+        }
+    }
     let accessor = probe.prepare_for_spike(path.input(), MAX_FLAT_COMMANDS);
     match (published, accessor) {
         (Some((ranges, points, owners)), Ok(view)) => {

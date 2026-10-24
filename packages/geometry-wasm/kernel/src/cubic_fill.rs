@@ -421,7 +421,7 @@ impl CubicFillWorkspace {
         command_capacity: usize,
         topology_mode: TopologyMode,
     ) -> Result<CubicFillDiagnostics, CubicFillError> {
-        let all_line_eligible = match self.run_prefix(input, command_capacity) {
+        let all_line_eligible = match self.run_prefix(input, command_capacity, true) {
             Ok(all_line_eligible) => all_line_eligible,
             Err(PrefixFailure::Sizing(_)) => return Ok(self.diagnostics),
             Err(PrefixFailure::Error(error)) => return Err(error),
@@ -465,7 +465,7 @@ impl CubicFillWorkspace {
         input: PathInput<'_>,
         command_capacity: usize,
     ) -> Result<S1View<'_>, PrefixFailure> {
-        self.run_prefix(input, command_capacity)?;
+        self.run_prefix(input, command_capacity, false)?;
         Ok(S1View {
             commands: &self.commands[..self.command_len],
             ranges: &self.contour_ranges[..self.range_len],
@@ -477,10 +477,13 @@ impl CubicFillWorkspace {
 
     /// The statements of `attempt_body` up to the B0 stop point S1, in their order. Returns
     /// `all_line_eligible`, a sizing status other than `PATH_OK`, or the first error.
+    /// `canonical_final_knots` is set only by `attempt_body` (the exact rung): it runs the E8-U2
+    /// snap between `emit` and `collect_contours` (E8 addendum section E8.4).
     fn run_prefix(
         &mut self,
         input: PathInput<'_>,
         command_capacity: usize,
+        canonical_final_knots: bool,
     ) -> Result<bool, PrefixFailure> {
         self.begin_attempt();
         if input.verbs.len() > self.caps.source_verbs
@@ -507,6 +510,13 @@ impl CubicFillWorkspace {
             .map_err(PrefixFailure::Error)?;
         self.emit(input, sizing_plan, sizing_bounds, command_capacity)
             .map_err(PrefixFailure::Error)?;
+        #[cfg(test)]
+        if E8_COLLAPSE_FINAL_LEAF.with(core::cell::Cell::get) {
+            self.e8_test_collapse_final_leaf();
+        }
+        if canonical_final_knots {
+            self.snap_final_knots();
+        }
         self.collect_contours(all_line_eligible)
             .map_err(PrefixFailure::Error)?;
         self.validate_leaf_partitions()
@@ -722,6 +732,55 @@ impl CubicFillWorkspace {
         }
         self.diagnostics.flat_bounds = Some(emission_bounds);
         Ok(())
+    }
+
+    /// E8-U2 (E8 addendum section E8.4): replaces the point of each cubic source's final
+    /// flattened leaf (`end_numerator == 2^depth`) with the source's represented p3, before
+    /// collection, so the closure rule, the zero-length rule and the source-final restriction all
+    /// see the canonical knot. Counts, order and provenance are unchanged. A final leaf whose
+    /// point already equals the previous emitted point is left as emitted, so collection rejects
+    /// it with `ZeroLengthLeaf` as before (E8-C6). LINE sources, internal knots and CLOSE
+    /// commands are not touched. A command whose provenance names no cubic source is left for
+    /// collection to reject.
+    fn snap_final_knots(&mut self) {
+        let mut source = 0usize;
+        for index in 0..self.command_len {
+            let command = self.commands[index];
+            if command.verb != VERB_LINE {
+                continue;
+            }
+            let Some(point) = command.point else {
+                continue;
+            };
+            let provenance = command.provenance;
+            if 1u32.checked_shl(provenance.depth) != Some(provenance.end_numerator) {
+                continue;
+            }
+            // Commands and sources are both in source-verb order.
+            while source < self.source_len
+                && self.sources[source].source_verb() < provenance.source_verb
+            {
+                source += 1;
+            }
+            let Some(DecodedSource::Cubic {
+                points,
+                source_verb,
+                ..
+            }) = self.sources[..self.source_len].get(source).copied()
+            else {
+                continue;
+            };
+            if source_verb != provenance.source_verb {
+                continue;
+            }
+            let previous = index
+                .checked_sub(1)
+                .and_then(|previous| self.commands[previous].point);
+            if previous.is_some_and(|previous| same_point(previous, point)) {
+                continue;
+            }
+            self.commands[index].point = Some(points[3]);
+        }
     }
 
     fn certify_topology(&mut self, mode: TopologyMode) -> Result<(), CubicFillError> {
@@ -1334,5 +1393,59 @@ impl CubicFillWorkspace {
             owners: &self.edge_owners[..self.owner_len],
             sources: &self.sources[..self.source_len],
         })
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static E8_COLLAPSE_FINAL_LEAF: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
+/// E8-C6's command-list injection (E8 addendum E8.6): runs `action` with the first cubic
+/// source's final flattened leaf moved onto the previous emitted point, after `emit` and before
+/// the E8-U2 snap, then switches it off.
+#[cfg(test)]
+pub(crate) fn with_e8_collapsed_final_leaf<T>(action: impl FnOnce() -> T) -> T {
+    E8_COLLAPSE_FINAL_LEAF.with(|switch| switch.set(true));
+    let result = action();
+    E8_COLLAPSE_FINAL_LEAF.with(|switch| switch.set(false));
+    result
+}
+
+#[cfg(test)]
+impl CubicFillWorkspace {
+    /// The exact rung's prefix (`attempt_body` up to S1, with the E8-U2 snap), for the E8-K10
+    /// topology emitter: borrowed views of the state `certify_topology` reads.
+    pub(crate) fn prepare_exact_prefix(
+        &mut self,
+        input: PathInput<'_>,
+        command_capacity: usize,
+    ) -> Result<S1View<'_>, PrefixFailure> {
+        self.run_prefix(input, command_capacity, true)?;
+        Ok(S1View {
+            commands: &self.commands[..self.command_len],
+            ranges: &self.contour_ranges[..self.range_len],
+            points: &self.contour_points[..self.point_len],
+            owners: &self.edge_owners[..self.owner_len],
+            sources: &self.sources[..self.source_len],
+        })
+    }
+
+    fn e8_test_collapse_final_leaf(&mut self) {
+        for index in 1..self.command_len {
+            let command = self.commands[index];
+            let cubic = self.sources[..self.source_len].iter().any(|source| {
+                matches!(source, DecodedSource::Cubic { source_verb, .. }
+                    if *source_verb == command.provenance.source_verb)
+            });
+            if command.verb == VERB_LINE
+                && cubic
+                && 1u32.checked_shl(command.provenance.depth)
+                    == Some(command.provenance.end_numerator)
+            {
+                self.commands[index].point = self.commands[index - 1].point;
+                return;
+            }
+        }
     }
 }

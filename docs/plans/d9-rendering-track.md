@@ -12,7 +12,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | --- | --- | --- | --- | --- |
 | E1 | ST-U9 early abort when failure is certain | Full | R0 | Done: merged (#202), independent review ACCEPTED 2026-10-23 ([review](../evidence/r0-review-closeout-2026-10-23.md#e1)) |
 | E3 | B4: A04 corpus and measurement contract | Full | R1 | In progress: U1 (#206), U2 (#212), U2b (#214), U2c (#216) merged; freeze not met (5 `ORACLE-WORK`); U3, U4 next ([U2c evidence](#e3-e3-u2c-evidence-2026-10-23)) |
-| E8 | Unsupported-geometry on simple smooth Q/T and C/S paths | Full | R1 | In progress: U0 (#211), U0b (#213), U1 (#215) merged; U2 next ([evidence](#e8-u1-evidence-2026-10-23)) |
+| E8 | Unsupported-geometry on simple smooth Q/T and C/S paths | Full | R1 | In review: U2 (final-knot snap) PR open; U0 (#211), U0b (#213), U1 (#215) merged ([U2 evidence](../evidence/e8-u2-2026-10-24.md)) |
 | X1 | P3 exit evidence A01-A08 index | — (Primary acceptance) | R1 | Open; all eight TODO ([index](#p3-exit-evidence-index-x1)) |
 | E4 | ST-U3f fix decision | Full | Backlog | Seven cases stay a known defect with fixtures (D10) |
 | E7 | Conforming refinement (A01 watertightness remedy) | Full | Backlog | Candidate; first to promote if A01 needs it |

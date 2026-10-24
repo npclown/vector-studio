@@ -443,6 +443,15 @@ function sliverAggregate(
   };
 }
 
+/**
+ * SL-O4 amendment, 2026-10-24 (E8-U2, docs/evidence/e8-u2-2026-10-24.md): the exact rung's
+ * canonical source-final knot may turn a recorded failure into OK. Every recorded OK outcome,
+ * and every failure that stays a failure, must still equal the record.
+ */
+export function e8U2FailureToSuccess(recorded: string, exact: string): boolean {
+  return recorded !== 'OK' && exact === 'OK';
+}
+
 /** The exact-rung fields that SL-O4 compares with the 2026-10-17 record. */
 function outcomeKey(path: {
   status: string;
@@ -555,7 +564,10 @@ export function evaluateOracle(
       gates['SL-O4'].checked += 1;
       const expected = reference?.paths[path.path];
       if (!expected) fail('SL-O4', path, 'no outcome in the identity record');
-      else if (outcomeKey(path.exact) !== outcomeKey(expected))
+      else if (
+        outcomeKey(path.exact) !== outcomeKey(expected) &&
+        !e8U2FailureToSuccess(expected.status, path.exact.status)
+      )
         fail('SL-O4', path, `exact ${outcomeKey(path.exact)} != record ${outcomeKey(expected)}`);
       // The ladder's own output agrees with its rung (section 2.1).
       if (path.rung === 'exact' && path.ladderStatus !== path.exact.status)

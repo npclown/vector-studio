@@ -239,6 +239,7 @@ Hence every request whose result was `ok` keeps the same mesh bytes, and every c
   - E8-U2 must show that the guard term of `Cubic::guard` in `geometry.rs` covers that difference, or else that the tolerance relation of V2 section d still holds with the snapped chord.
   - **Sketch.** With r = fl(p3 − o) and q′ = fl(o + r), each coordinate has |q′ − p3| ≤ u·|p3 − o| + u·|q′| with u = 2^−53, so |q′ − p3| is at most about 2ε·max|·|, where ε = 2^−52 and max|·| is the larger of the original and relative magnitudes. The guard at `geometry.rs:369-372` is 128ε·(max_abs_original + (depth + 1)·max_abs_relative), at least 64 times larger.
   - E8-U2 does not merge until E8-P1 is discharged by a written proof and a test at the largest admitted magnitudes (E8-K11).
+  - Discharged 2026-10-24 in E8-U2: [proof and test](../evidence/e8-u2-2026-10-24.md#e8-p1-discharged).
 
 ### E8.5 E8-U3: tangential reversal stays unsupported
 

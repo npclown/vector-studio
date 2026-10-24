@@ -512,3 +512,5 @@ mod p3_al_ob5_bench;
 // Declared at the end of the file so that no existing line moves.
 #[cfg(test)]
 mod e8_direction_hint_tests;
+#[cfg(test)]
+mod e8_final_knot_tests;
