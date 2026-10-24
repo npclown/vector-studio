@@ -19,6 +19,7 @@ export type StructureIssue =
   | 'BOUNDARY_LENGTH'
   | 'BOUNDARY_INDEX_RANGE'
   | 'BOUNDARY_MISMATCH'
+  | 'T_JUNCTION'
   | 'OVERLAPPING_TRIANGLES'
   | 'ORACLE_DISAGREES';
 
@@ -105,8 +106,9 @@ function positionKey(x: number, y: number): string {
  * in threes and are in range; `bounds` is the exact component-wise minimum and maximum of the
  * positions (V2 section g); every triangle is counter-clockwise with positive area (V2 section
  * g); no directed edge occurs twice, by exact position (a duplicated or overlapping fan would);
- * and the boundary edges (V1 rule 5) equal the directed edges whose reverse no triangle uses,
- * again by exact position. The last rule also fails a missing triangle and a T-junction.
+ * the boundary edges (V1 rule 5) equal the directed edges whose reverse no triangle uses,
+ * again by exact position, which fails a missing triangle; and conformity: no vertex lies
+ * strictly inside such an edge (a T-junction), decided exactly.
  */
 export function checkMeshStructure(mesh: FillMesh): StructureReport {
   const issues: StructureIssue[] = [];
@@ -221,6 +223,48 @@ export function checkMeshStructure(mesh: FillMesh): StructureReport {
     listed.add(key);
   }
   if (mismatch || listed.size !== expected.size) issues.push('BOUNDARY_MISMATCH');
+
+  // Conformity: a vertex strictly inside an unmatched edge is a T-junction. Vertices are
+  // sorted by x so each edge scans only the vertices within its x range.
+  const order = Array.from({ length: vertexCount }, (_, v) => v).sort(
+    (p, q) => positions[2 * p]! - positions[2 * q]!,
+  );
+  const xs = order.map((v) => positions[2 * v]!);
+  const lowerBound = (x: number) => {
+    let [lo, hi] = [0, xs.length];
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (xs[mid]! < x) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+  let tJunction = false;
+  for (const key of expected) {
+    if (tJunction) break;
+    const from = Math.floor(key / vertexCount);
+    const to = key % vertexCount;
+    const [ax, ay, bx, by] = [
+      positions[2 * from]!,
+      positions[2 * from + 1]!,
+      positions[2 * to]!,
+      positions[2 * to + 1]!,
+    ];
+    const [minX, maxX] = [Math.min(ax, bx), Math.max(ax, bx)];
+    const [minY, maxY] = [Math.min(ay, by), Math.max(ay, by)];
+    for (let k = lowerBound(minX); k < order.length && xs[k]! <= maxX; k += 1) {
+      const v = order[k]!;
+      const x = positions[2 * v]!;
+      const y = positions[2 * v + 1]!;
+      if (y < minY || y > maxY) continue;
+      if ((x === ax && y === ay) || (x === bx && y === by)) continue;
+      if (orientation(ax, ay, bx, by, x, y) === 0) {
+        tJunction = true;
+        break;
+      }
+    }
+  }
+  if (tJunction) issues.push('T_JUNCTION');
 
   // Independent second opinion inside the reference oracle's cap.
   let oracleChecked = false;

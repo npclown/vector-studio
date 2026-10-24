@@ -54,6 +54,16 @@ describe('checkMeshStructure', () => {
     expect(checkMeshStructure(mesh).issues).toContain('BOUNDARY_MISMATCH');
   });
 
+  it('fails a T-junction even when the boundary list names the edges used once', () => {
+    const mesh: FillMesh = {
+      positions: new Float64Array([0, 0, 2, 0, 2, 1, 0, 1, 4, 0, 4, 1, 2, 0.5]),
+      indices: new Uint32Array([0, 1, 2, 0, 2, 3, 1, 4, 6, 6, 4, 5, 6, 5, 2]),
+      boundaryEdges: new Uint32Array([0, 1, 1, 2, 2, 3, 3, 0, 1, 4, 6, 1, 4, 5, 5, 2, 2, 6]),
+      bounds: { minX: 0, minY: 0, maxX: 4, maxY: 1 },
+    };
+    expect(checkMeshStructure(mesh).issues).toEqual(['T_JUNCTION']);
+  });
+
   it('reports an overlap that shares no edge through the reference oracle', () => {
     const mesh: FillMesh = {
       positions: new Float64Array([0, 0, 4, 0, 0, 4, 1, 1, 5, 1, 1, 5]),
@@ -75,8 +85,70 @@ describe('checkMeshStructure', () => {
 
   it('catches every seeded control', () => {
     const results = runSeededControls(rectangle());
-    expect(results.length).toBe(8);
+    expect(results.length).toBe(9);
     expect(results.filter((r) => !r.caught)).toEqual([]);
+  });
+});
+
+describe('runSweep echo checks', () => {
+  it('flags an adapter that echoes positions or answers with extra results', () => {
+    const p = stressPath(0);
+    const request = {
+      verbs: p.verbs,
+      points: p.points,
+      fillRule: p.fillRule,
+      toleranceExponent: 0,
+    };
+    const make = (extra: boolean) => ({
+      portVersion: 0 as const,
+      operationId: 'test/fill',
+      buildFillMeshes(requests: readonly { requestId: number; toleranceExponent: number }[]) {
+        const results = requests.map((r, i) => ({
+          requestId: extra ? r.requestId : i,
+          toleranceExponent: r.toleranceExponent,
+          status: 'empty' as const,
+        }));
+        if (extra) results.push({ requestId: 0, toleranceExponent: 0, status: 'empty' as const });
+        return { status: 'ok' as const, results };
+      },
+    });
+    const stroke = {
+      portVersion: 0 as const,
+      operationId: 'test/stroke',
+      buildStrokeMeshes: () => ({
+        status: 'batch-failed' as const,
+        code: 'internal-error' as const,
+      }),
+    };
+    for (const extra of [false, true]) {
+      const result = runSweep({ fill: make(extra), stroke }, [
+        { id: 'a', kind: 'fill', request },
+        { id: 'b', kind: 'fill', request },
+      ]);
+      expect(result.echoFailures).toEqual(['a', 'b']);
+    }
+  });
+
+  it('lists a request that fails its whole batch both in the batch and alone', () => {
+    const p = stressPath(0);
+    const fill = {
+      portVersion: 0 as const,
+      operationId: 'test/fill',
+      buildFillMeshes: () => ({ status: 'batch-failed' as const, code: 'internal-error' as const }),
+    };
+    const result = runSweep({ fill, stroke: fill as never }, [
+      {
+        id: 'a',
+        kind: 'fill',
+        request: { verbs: p.verbs, points: p.points, fillRule: p.fillRule, toleranceExponent: 0 },
+      },
+      {
+        id: 'b',
+        kind: 'fill',
+        request: { verbs: p.verbs, points: p.points, fillRule: p.fillRule, toleranceExponent: 0 },
+      },
+    ]);
+    expect(result.batchFailures.map((f) => f.id)).toEqual(['a', 'b']);
   });
 });
 

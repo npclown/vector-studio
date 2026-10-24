@@ -50,6 +50,14 @@ const VERB_CODE = { move: 0, line: 1, cubic: 2, close: 3 } as const;
 /** Distinct port requests of the corpus: a case's request depends only on its path, paint and
  *  bucket, so cases differing only in camera or placement share one. */
 function corpusItems(): { items: SweepItem[]; cases: number; state: Record<string, number> } {
+  // The same freeze gate as the tool, so a direct vitest run cannot bypass it.
+  const manifest = JSON.parse(
+    readFileSync('tests/geometry/e3-a04/corpus-v1.manifest.json', 'utf8'),
+  ) as { corpusSha256: string };
+  const frozen = readFileSync('docs/plans/d9-e3-b4-precision-contract.md', 'utf8')
+    .split('\n')
+    .some((line) => line.includes('**Freeze record**') && line.includes(manifest.corpusSha256));
+  if (!frozen) throw new Error('corpus phase refused: no E3 freeze record (E3 section 5.5)');
   const seen = new Set<string>();
   const items: SweepItem[] = [];
   const state: Record<string, number> = {};
@@ -134,6 +142,21 @@ it(
       if (mesh.indices.length >= 6)
         controls[item.kind] = { base: item.id, results: runSeededControls(mesh) };
     }
+    // Scene only: the largest device-pixel radius of each path (largest distance of any point
+    // from the origin × zoom × DPR), so the size table of the evidence can be rebuilt.
+    const sceneSizes =
+      phase === 'scene'
+        ? stressScene().map((p) => {
+            let r = 0;
+            for (let i = 0; i < p.points.length; i += 2)
+              r = Math.max(r, Math.hypot(p.points[i]!, p.points[i + 1]!));
+            return {
+              index: p.index,
+              looping: p.index % 4 === 3,
+              devicePixelRadius: r * p.zoom * p.dpr,
+            };
+          })
+        : null;
     const record = {
       schema: 'p3-exit-sweep/v1',
       phase,
@@ -142,6 +165,7 @@ it(
       skippedByState: source.state,
       requests: source.items.length,
       controls,
+      sceneSizes,
       ...result,
     };
     writeFileSync(path.join(out, `${phase}.json`), `${JSON.stringify(record, null, 2)}\n`);

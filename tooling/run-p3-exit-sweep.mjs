@@ -10,7 +10,8 @@
 // <phase>.json to .tools/p3-exit-sweep/<stamp>-<run id>/ with provenance.json.
 //
 // It exits non-zero when a mesh breaks a structure rule, an echo is wrong, an outcome depends on
-// its batch, or a seeded control is not caught. Rejected requests are listed, not failed: they
+// its batch, a request fails its whole batch both in the batch and alone, or a seeded control is
+// not caught. Rejected requests are listed, not failed: they
 // are classified against E11 section 7.2 by the evidence review.
 import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
@@ -116,6 +117,7 @@ for (const phase of phases) {
     r.structureFailures.length > 0 ||
     r.echoFailures.length > 0 ||
     r.isolationFailures.length > 0 ||
+    r.batchFailures.length > 0 ||
     missed.length > 0 ||
     Object.keys(r.controls).length < 2;
   failed ||= bad;
@@ -129,6 +131,7 @@ for (const phase of phases) {
         structureFailures: r.structureFailures.length,
         echoFailures: r.echoFailures.length,
         isolationFailures: r.isolationFailures.length,
+        batchFailures: r.batchFailures.length,
         controlsMissed: missed,
         controlKinds: Object.keys(r.controls),
         outcomeDigest: r.outcomeDigest,

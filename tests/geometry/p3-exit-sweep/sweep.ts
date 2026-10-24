@@ -12,7 +12,7 @@ import type {
   StrokeMeshPort,
   StrokeMeshRequest,
 } from '../../../packages/contracts/src/geometry.js';
-import { checkMeshStructure, type StructureIssue } from './structure.js';
+import { checkMeshStructure, orientation, type StructureIssue } from './structure.js';
 
 export type SweepItem =
   | Readonly<{ id: string; kind: 'fill'; request: Omit<FillMeshRequest, 'requestId'> }>
@@ -40,10 +40,14 @@ export type SweepResult = Readonly<{
   stroke: KindTotals;
   /** Requests whose mesh broke a structure rule, with their issues (all of them). */
   structureFailures: readonly Readonly<{ id: string; issues: readonly StructureIssue[] }>[];
-  /** Results whose requestId or toleranceExponent echo was wrong, or that were missing. */
+  /** Results whose requestId or toleranceExponent echo was wrong, that were missing, or whose
+   *  batch answered with more results than requests (in the batch or alone). */
   echoFailures: readonly string[];
   /** Requests whose outcome alone differs from their outcome in the batch. */
   isolationFailures: readonly Readonly<{ id: string; batch: Outcome; alone: Outcome }>[];
+  /** Requests whose batch failed as a whole both in the batch and alone (a crash class: the
+   *  exit gate's "no crashes" fails on any of these). */
+  batchFailures: readonly Readonly<{ id: string; outcome: Outcome }>[];
   /** The non-ok outcomes, by id, for the known-defect classification of E11 section 7.2. */
   rejected: readonly Readonly<{ id: string; outcome: Outcome }>[];
   /** sha256 over every id and outcome in order: equal across runs when the kernel is. */
@@ -53,8 +57,10 @@ export type SweepResult = Readonly<{
 
 function meshDigest(mesh: FillMesh): string {
   const h = createHash('sha256');
-  for (const array of [mesh.positions, mesh.indices, mesh.boundaryEdges])
+  for (const array of [mesh.positions, mesh.indices, mesh.boundaryEdges]) {
+    h.update(`${array.length}:`);
     h.update(new Uint8Array(array.buffer, array.byteOffset, array.byteLength));
+  }
   h.update(JSON.stringify(mesh.bounds));
   return h.digest('hex');
 }
@@ -78,20 +84,27 @@ type Built = Readonly<{
   echoOk: boolean;
 }>;
 
+/** A requestId that is not the position, so an adapter echoing positions is caught. */
+const requestIdAt = (i: number) => 1_000_003 + 7 * i;
+
 /** Runs one batch of a single kind and maps each item to its outcome. */
 function runBatch(ports: SweepPorts, items: readonly SweepItem[]): Built[] {
   const kind = items[0]!.kind;
-  const requests = items.map((item, i) => ({ ...item.request, requestId: i }));
+  const requests = items.map((item, i) => ({ ...item.request, requestId: requestIdAt(i) }));
   const result =
     kind === 'fill'
       ? ports.fill.buildFillMeshes(requests as FillMeshRequest[])
       : ports.stroke.buildStrokeMeshes(requests as StrokeMeshRequest[]);
   if (result.status === 'batch-failed')
     return items.map(() => ({ outcome: `batch-failed:${result.code}`, mesh: null, echoOk: true }));
+  const lengthOk = result.results.length === items.length;
   return items.map((item, i) => {
     const r = result.results[i];
     if (r === undefined) return { outcome: 'missing', mesh: null, echoOk: false };
-    const echoOk = r.requestId === i && r.toleranceExponent === item.request.toleranceExponent;
+    const echoOk =
+      lengthOk &&
+      r.requestId === requestIdAt(i) &&
+      r.toleranceExponent === item.request.toleranceExponent;
     if (r.status === 'ok') return { outcome: `ok:${meshDigest(r.mesh)}`, mesh: r.mesh, echoOk };
     if (r.status === 'empty') return { outcome: 'empty', mesh: null, echoOk };
     return { outcome: `failed:${r.code}`, mesh: null, echoOk };
@@ -111,6 +124,7 @@ export function runSweep(
   const echoFailures: string[] = [];
   const isolationFailures: { id: string; batch: Outcome; alone: Outcome }[] = [];
   const rejected: { id: string; outcome: Outcome }[] = [];
+  const batchFailures: { id: string; outcome: Outcome }[] = [];
   const digest = createHash('sha256');
 
   // Batches never mix kinds; consecutive items of one kind form a batch.
@@ -142,11 +156,16 @@ export function runSweep(
       } else {
         rejected.push({ id: item.id, outcome: b.outcome });
       }
+      let aloneOutcome = b.outcome;
       if (isolation && batch.length > 1) {
         const alone = runBatch(ports, [item])[0]!;
+        aloneOutcome = alone.outcome;
+        if (!alone.echoOk && b.echoOk) echoFailures.push(item.id);
         if (alone.outcome !== b.outcome)
           isolationFailures.push({ id: item.id, batch: b.outcome, alone: alone.outcome });
       }
+      if (b.outcome.startsWith('batch-failed:') && aloneOutcome.startsWith('batch-failed:'))
+        batchFailures.push({ id: item.id, outcome: aloneOutcome });
     });
   }
   return Object.freeze({
@@ -156,6 +175,7 @@ export function runSweep(
     structureFailures,
     echoFailures,
     isolationFailures,
+    batchFailures,
     rejected,
     outcomeDigest: digest.digest('hex'),
     wallMilliseconds: Date.now() - started,
@@ -231,6 +251,50 @@ export function runSeededControls(mesh: FillMesh): readonly ControlResult[] {
     'BOUNDARY_MISMATCH',
     copy(mesh, { boundaryEdges: boundary }),
   ]);
+
+  // A T-junction with a consistent boundary list: split one triangle at the midpoint of an
+  // interior edge but not its neighbor, and list exactly the edges then used once.
+  const tri = (t: number) => [
+    mesh.indices[3 * t]!,
+    mesh.indices[3 * t + 1]!,
+    mesh.indices[3 * t + 2]!,
+  ];
+  const triangles = mesh.indices.length / 3;
+  const edgeOwner = new Map<string, number>();
+  for (let t = 0; t < triangles; t += 1) {
+    const v = tri(t);
+    for (let k = 0; k < 3; k += 1) edgeOwner.set(`${v[k]},${v[(k + 1) % 3]}`, t);
+  }
+  let tCase: FillMesh | null = null;
+  for (let t = 0; t < triangles && tCase === null; t += 1) {
+    const v = tri(t);
+    for (let k = 0; k < 3 && tCase === null; k += 1) {
+      const [a, b, c] = [v[k]!, v[(k + 1) % 3]!, v[(k + 2) % 3]!];
+      if (!edgeOwner.has(`${b},${a}`)) continue;
+      const [ax, ay, bx, by] = [
+        mesh.positions[2 * a]!,
+        mesh.positions[2 * a + 1]!,
+        mesh.positions[2 * b]!,
+        mesh.positions[2 * b + 1]!,
+      ];
+      const [mx, my] = [ax / 2 + bx / 2, ay / 2 + by / 2];
+      if (orientation(ax, ay, bx, by, mx, my) !== 0) continue;
+      if ((mx === ax && my === ay) || (mx === bx && my === by)) continue;
+      const positions = new Float64Array(mesh.positions.length + 2);
+      positions.set(mesh.positions);
+      positions.set([mx, my], mesh.positions.length);
+      const m = vertices;
+      const indices = new Uint32Array(mesh.indices.length + 3);
+      indices.set(mesh.indices);
+      indices.set([a, m, c], 3 * t);
+      indices.set([m, b, c], mesh.indices.length);
+      const boundaryEdges = new Uint32Array(mesh.boundaryEdges.length + 6);
+      boundaryEdges.set(mesh.boundaryEdges);
+      boundaryEdges.set([a, m, m, b, b, a], mesh.boundaryEdges.length);
+      tCase = copy(mesh, { positions, indices, boundaryEdges });
+    }
+  }
+  if (tCase !== null) cases.push(['unsplit-neighbor', 'T_JUNCTION', tCase]);
 
   return cases.map(([id, expected, corrupted]) => ({
     id,
