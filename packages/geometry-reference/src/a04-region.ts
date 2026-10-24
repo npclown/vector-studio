@@ -3916,7 +3916,11 @@ class CubicSweep implements StrokePiece {
     const r = (this.ir.lo + this.ir.hi) / 2;
     const mid = (v: Iv) => (v.lo + v.hi) / 2;
     let budget = NORMAL_CANDIDATE_BUDGET;
+    // Sub-arcs known to have no foot in the polygon (E3-U2e) are skipped at no cost.
+    const from = this.starts(poly);
+    const none = NO_FOOT.get(from);
     const visit = (n: ArcNode) => {
+      if (none?.has(n) === true) return;
       charge(W_ARC, 1);
       budget -= 1;
       if (out.length >= 16 || budget <= 0 || boxBoxDistLo(n.box, box) > this.ir.hi) return;
@@ -3930,9 +3934,12 @@ class CubicSweep implements StrokePiece {
           const dy = mid(k.dy);
           const l = Math.hypot(dx, dy);
           if (!(l > 0)) continue;
-          const tq = qnum(t);
-          const cx = qapprox(peval(this.pw.x, tq));
-          const cy = qapprox(peval(this.pw.y, tq));
+          // Float Horner on rounded coefficients (E3-U2e): a candidate need not be exact.
+          const [px, py] = this.pwApprox();
+          let cx = 0;
+          let cy = 0;
+          for (let i = px.length - 1; i >= 0; i -= 1) cx = cx * t + px[i]!;
+          for (let i = py.length - 1; i >= 0; i -= 1) cy = cy * t + py[i]!;
           const nx = (-dy / l) * r;
           const ny = (dx / l) * r;
           // Only segments whose bounding box meets the box can cross the cell.
@@ -3954,8 +3961,14 @@ class CubicSweep implements StrokePiece {
       visit(a);
       visit(b);
     };
-    for (const n of this.starts(poly)) visit(n);
+    for (const n of from) visit(n);
     return out;
+  }
+  private pwFloat: [number[], number[]] | null = null;
+  /** The power-basis coefficients rounded to binary64, for approximate candidates only. */
+  private pwApprox(): [number[], number[]] {
+    this.pwFloat ??= [this.pw.x.map(qapprox), this.pw.y.map(qapprox)];
+    return this.pwFloat;
   }
   pointsNear(box: Box): [number, number][] {
     const out: [number, number][] = [];
