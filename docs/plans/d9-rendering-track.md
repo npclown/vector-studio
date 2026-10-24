@@ -11,7 +11,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | Item | Subject | Tier | Phase | State |
 | --- | --- | --- | --- | --- |
 | E1 | ST-U9 early abort when failure is certain | Full | R0 | Done: merged (#202), independent review ACCEPTED 2026-10-23 ([review](../evidence/r0-review-closeout-2026-10-23.md#e1)) |
-| E3 | B4: A04 corpus and measurement contract | Full | R1 | In progress: U1 (#206), U2 (#212), U2b (#214), U2c (#216) merged; freeze not met (5 `ORACLE-WORK`); U3 harness in review, no corpus run; U4 next ([U3 evidence](#e3-e3-u3-evidence-2026-10-24)) |
+| E3 | B4: A04 corpus and measurement contract | Full | R1 | In progress: U1 (#206), U2 (#212), U2b (#214), U2c (#216) merged; freeze not met (5 `ORACLE-WORK`); U3 harness and U4 GPU model check in review (headed GPU run pending), no corpus run ([U3 evidence](#e3-e3-u3-evidence-2026-10-24), [U4 evidence](#e3-e3-u4-evidence-2026-10-24)) |
 | E8 | Unsupported-geometry on simple smooth Q/T and C/S paths | Full | R1 | In progress: U0 (#211), U0b (#213), U1 (#215) merged; U2 next ([evidence](#e8-u1-evidence-2026-10-23)) |
 | X1 | P3 exit evidence A01-A08 index | — (Primary acceptance) | R1 | Open; all eight TODO ([index](#p3-exit-evidence-index-x1)) |
 | E4 | ST-U3f fix decision | Full | Backlog | Seven cases stay a known defect with fixtures (D10) |
@@ -401,6 +401,23 @@ The blob has one collapsed triangle. Before the exemption of section 15.4 it was
 - The oracle's cost on stroke cases decides the length of the reference run. The freeze estimate covers only the ideal boundary. The measurement also scores the mesh, and on the smoke strokes that took about a minute to more than ten minutes per case. The full-run cost is unknown until the freeze. It is an input to E3-U2d's oracle work.
 
 **Validation.** The commands and their results are in the PR. Still pending: E3-U4 (the GPU model check, headed, on the user's machine), the corpus freeze note, then E3-U5's reference run.
+
+## E3 E3-U4 evidence, 2026-10-24
+
+Dated append. Unit E3-U4 implements the GPU model check of the [E3 contract](d9-e3-b4-precision-contract.md), section 7.1: the page, the headed spec and E3-PC12. The executable form is in the contract's [section 16 annex](d9-e3-b4-precision-contract.md#16-e3-u4-gpu-model-check-annex-2026-10-24), which also lists what the check does not observe (section 16.4). Each choice was decided under the user's standing instruction of 2026-10-22. Track: rendering. Packages: apps/playground (a test-only page), tests, tooling and docs. Shared surface changed: no. **No kernel was run on the corpus.** Precision stays **UNVERIFIED**.
+
+**Files.**
+
+- `apps/playground/e3-a04-readback.html` and `apps/playground/src/e3-a04-readback.ts`: the page.
+- `tests/geometry/e3-a04/readback.ts`: the payload, the model check, a CPU stand-in for the page, and E3-PC12.
+- `tests/gpu/e3-a04-readback.spec.ts`: the headed spec.
+- `tests/geometry/e3-a04-readback.test.ts`: in `pnpm test:e3-a04`.
+- `combineGpuChecks` in `record.ts`, and `--gpu <chrome.json>,<edge.json>` in `pnpm e3-a04:run`.
+
+**Results.**
+
+- **Software dry run.** Headless Chromium 153 on SwiftShader, which is not evidence: 8 draws and 77 points, no failures, largest error 0.076 of `β_vertex` and 0.118 of `β_feature`, and E3-PC12 rejected.
+- **Headed Chrome and Edge** on a hardware adapter: NOT RUN, because the container has no GPU. That run gives E3-A6 for the non-corpus cases. The named subset follows after the freeze (E3-U5).
 
 ## E8 investigation, 2026-10-23
 

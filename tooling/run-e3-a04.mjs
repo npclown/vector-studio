@@ -2,7 +2,7 @@
 // executable form in section 15.8). Manual, never CI.
 //
 //   pnpm e3-a04:run --smoke [--wasm <path>]
-//   pnpm e3-a04:run [--shards N] [--stride S] [--gpu <gpu-check.json>] [--wasm <path>]
+//   pnpm e3-a04:run [--shards N] [--stride S] [--gpu <chrome.json>,<edge.json>] [--wasm <path>]
 //
 // Uses the release WASM that `pnpm test:geometry` builds (or --wasm <path>), then:
 //
@@ -141,7 +141,13 @@ if (smoke) {
   );
   const finalize = await runPhase({
     E3_A04_RUN_PHASE: 'finalize',
-    E3_A04_RUN_GPU: gpu === undefined ? '' : path.resolve(gpu),
+    E3_A04_RUN_GPU:
+      gpu === undefined
+        ? ''
+        : gpu
+            .split(',')
+            .map((p) => path.resolve(p))
+            .join(','),
   });
   const recordFile = path.join(out, 'record.json');
   if (finalize !== 0 || !existsSync(recordFile)) throw new Error('the finalize phase failed');

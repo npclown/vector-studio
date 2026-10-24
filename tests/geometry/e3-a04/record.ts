@@ -68,6 +68,40 @@ export type A04Record = Readonly<{
   verdictReasons: readonly string[];
 }>;
 
+/** One browser's output of tests/gpu/e3-a04-readback.spec.ts (`e3-a04-gpu-check/v1`). */
+export type GpuBrowserCheck = Readonly<{
+  schema: string;
+  passed: boolean;
+  browser: Readonly<{ project: string } & Record<string, unknown>>;
+  shaderSha256: string;
+  wasmSha256: string;
+}> &
+  Readonly<Record<string, unknown>>;
+
+/**
+ * E3-A6 from the per-browser files: it passes only when Chrome and Edge both passed, on this
+ * shader source and this release WASM.
+ */
+export function combineGpuChecks(
+  checks: readonly GpuBrowserCheck[],
+  expected: Readonly<{ shaderSha256: string; wasmSha256: string }>,
+  record: string,
+): GpuCheck {
+  const projects = new Set(checks.map((c) => c.browser.project));
+  const passed =
+    projects.has('chrome') &&
+    projects.has('edge') &&
+    checks.every(
+      (c) =>
+        c.schema === 'e3-a04-gpu-check/v1' &&
+        c.passed &&
+        (c.browser.adapter as Readonly<{ software?: boolean }> | undefined)?.software !== true &&
+        c.shaderSha256 === expected.shaderSha256 &&
+        c.wasmSha256 === expected.wasmSha256,
+    );
+  return { passed, browsers: checks.map((c) => c.browser), record };
+}
+
 const MEASURED: ReadonlySet<CaseStatus> = new Set(['pass', 'fail', 'undecided']);
 
 /** Nearest rank (docs/benchmarks/README.md, samples and aggregation). */

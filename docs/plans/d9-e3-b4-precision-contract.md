@@ -1508,3 +1508,55 @@ All 14 control outcomes are met (`pnpm test:e3-a04`).
 2. **Collapsed triangles** (section 15.4). Kernel meshes can hold triangles that become degenerate after f32 storage, for example at near-duplicate path end points (`smoke/blob/T2/z1-d2` has one). Other zero-area triangles stay UNDECIDED.
 3. **E3-PC5 uses another shape.** The star's evenodd mesh has pinch vertices that the fringe builder rejects as `fringe-unsupported`. PC5 uses two nested squares of the same orientation instead: nonzero fills the inner square, and the evenodd mesh (an annulus) does not. It is FAIL through `G`, which is the control's intent.
 4. **An oracle test hook.** E3-D9 needs a narrower window. `A04Hooks` gains a test-only `window` hook, which `makeFrame` applies to `Ω`. It changes no default behaviour, but it changes the oracle source SHA-256. The freeze note records the SHA of the build it certifies.
+
+## 16. E3-U4 GPU model-check annex, 2026-10-24
+
+Dated append. E3-U4 is the GPU model check of section 7.1: the page, the headed spec and E3-PC12 (section 9.1). Every choice below is **decided under the user's standing instruction of 2026-10-22 (recommended option)**. No A04 threshold, criterion or user decision changes. Section 16.4 lists what the check does not observe.
+
+### 16.1 What runs where
+
+- **Node** (`tests/geometry/e3-a04/readback.ts`, called by the spec) draws each readback case through the product path of section 15.1 on the release WASM. It takes the stored binary32 offsets and the packed lanes of each draw, and computes `p*`, `β_vertex` and `β_feature` for every point with the model of section 15.2.
+- **The page** (`apps/playground/e3-a04-readback.html`, source `apps/playground/src/e3-a04-readback.ts`) receives the WGSL source of `MESH_FILL_SHADER` from the spec. It appends two entry points and draws one point per stored vertex into two `rgba32uint` targets.
+  - The vertex entry point calls `meshPositionNdc`, the helper of both mesh vertex entry points, and carries the result as flat `u32` bits.
+  - The fragment entry point calls `toPhysical`, as the mesh fragment stage does for features.
+  - The page is test-only and is not a host. It has no WASM and no renderer.
+- **The check** (`modelCheck`) requires all of the following:
+  - **Vertex path.** The read-back NDC, taken back to pixels exactly as `(n + 1)·W/2` and `(1 − n)·H/2`, lies within `β_vertex` of `p*`.
+  - **Feature path.** The read-back `toPhysical` lies within `β_feature` of `p*`.
+  - **Invocations.** The NDC bits of each vertex are equal in two separate draws, so the vertex is mapped by two invocations.
+  - **Hashes.** The SHA-256 of the offsets the page uploaded equals Node's, and the SHA-256 of the shader source the page compiled equals the hash in the record.
+- **E3-PC12** (`perturbedReadback`) moves one read-back position to `p* + 2β(p)` along x, on both paths. The check must then fail. The spec applies it to the real readback, and a unit test applies it to a CPU binary32 stand-in.
+
+### 16.2 The cases before the freeze
+
+The named readback subset of section 7.1 (the rows of E3-C1, E3-C3, E3-C5, E3-C9 and E3-C12 at every transform and pair) is made of corpus cases. Its kernel output may be read only after the freeze (section 5.5). Until then the spec reads back non-corpus cases only:
+
+- the five smoke cases of section 15.6;
+- a rectangle at the far translation `2^24` (DPR 2);
+- a rectangle at `z = 0.01`, DPR 3;
+- a rectangle across the viewport's left and top edges.
+
+E3-U5 switches the spec to the named subset after the freeze note. That is a case list change only.
+
+### 16.3 Record and E3-A6
+
+- **Per-browser record.** Each project writes `.tools/e3-a04-readback/<stamp>/<project>.json` (`e3-a04-gpu-check/v1`). It holds:
+  - the browser's version and launch flags, the adapter's vendor, architecture and description, the user agent and the DPR;
+  - the shader and WASM SHA-256;
+  - the counts, the largest error-to-`β` ratios, the failures, the PC12 outcome and the page errors.
+- **Attaching it.** `pnpm e3-a04:run --gpu <chrome.json>,<edge.json>` attaches both files to the record. `combineGpuChecks` passes E3-A6 only when all of these hold:
+  - Chrome and Edge are both present and both passed;
+  - each ran on the run's shader source and release WASM;
+  - neither ran on a software adapter.
+- **Software dry run.** `?allowSoftware=1`, set by `E3_A04_READBACK_ALLOW_SOFTWARE=1`, lets the page run on a software adapter to check that it works. Such a record never passes.
+
+### 16.4 Not observed
+
+- **The fixed-function viewport transform.** The check reads NDC, not the rasterizer's pixel position. The viewport transform stays part of the residual of E3-Q7 (section 7.1). `β_vertex` still includes its `γ_3` model term.
+- **The `@invariant` position output.** The page carries the helper's result through a flat varying, not through `@builtin(position)`. The invocation check compares two draws of the same entry point. It does not compare the two mesh vertex entry points. Both of them call the same helper (section 7.1).
+- **Clipping.** A clipped triangle's new vertices are not read back. The readback next to the viewport edge reads the stored vertices only. The clip model of section 15.3 is therefore not checked against hardware. E3-Q11 (a) asks for that check, and it stays open for E3-U5.
+- **Cracks.** Crack widths at T-junctions (E3-C12) need the named subset, so they wait for E3-U5.
+
+### 16.5 Dry run
+
+The spec ran on the cloud container's headless Chromium 153 with SwiftShader WebGPU (software, so it is not evidence). The page produced 8 draws and 77 points, with no failures. The largest error was 0.076 of `β_vertex` and 0.118 of `β_feature`, and E3-PC12 was rejected. The headed Chrome and Edge runs on a hardware adapter are **NOT RUN**: the container has no GPU.

@@ -23,7 +23,13 @@ import { MESH_FILL_SHADER } from '../../../packages/renderer-webgpu/src/mesh-fil
 import { runHarnessControls } from './controls.js';
 import { iterateA04Corpus } from './corpus.js';
 import { measureCase, type HarnessPorts, type HarnessRow } from './harness.js';
-import { buildRecord, renderRecordMarkdown, validateRecord, type GpuCheck } from './record.js';
+import {
+  buildRecord,
+  combineGpuChecks,
+  renderRecordMarkdown,
+  validateRecord,
+  type GpuBrowserCheck,
+} from './record.js';
 import { SMOKE_CASES } from './smoke.js';
 
 const phase = process.env.E3_A04_RUN_PHASE ?? 'smoke';
@@ -129,17 +135,22 @@ it(`runs the A04 ${phase} phase`, async () => {
     string,
     unknown
   >;
-  const gpuPath = process.env.E3_A04_RUN_GPU;
+  const shaderSha256 = createHash('sha256').update(MESH_FILL_SHADER, 'utf8').digest('hex');
+  const gpuPaths = (process.env.E3_A04_RUN_GPU ?? '').split(',').filter((p) => p !== '');
   const gpu =
-    gpuPath === undefined || gpuPath === ''
+    gpuPaths.length === 0
       ? null
-      : (JSON.parse(readFileSync(gpuPath, 'utf8')) as GpuCheck);
+      : combineGpuChecks(
+          gpuPaths.map((p) => JSON.parse(readFileSync(p, 'utf8')) as GpuBrowserCheck),
+          { shaderSha256, wasmSha256: String(base.wasmSha256) },
+          gpuPaths.join(', '),
+        );
   const ports = await loadPorts();
   const record = buildRecord({
     provenance: {
       ...(base as { commit: string; dirty: boolean; corpusSha256: string }),
       operationIds: [ports.fill.operationId, ports.stroke.operationId],
-      shaderSha256: createHash('sha256').update(MESH_FILL_SHADER, 'utf8').digest('hex'),
+      shaderSha256,
       carrier: 'K4',
       builderPlacement: 'renderer-core buildPathFringe via PathMeshPipeline ports',
     },
