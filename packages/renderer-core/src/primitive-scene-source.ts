@@ -22,6 +22,8 @@ import {
 } from './primitive-packing.js';
 import type {
   DerivedPath,
+  PathDrawRecordEntryForTesting,
+  PathDrawRecordForTesting,
   PathMeshDraw,
   PathMeshPipeline,
   PathMeshStatistics,
@@ -137,6 +139,9 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   #meshOriginRevision = Symbol('mesh-origin');
   /** The generation whose first skipped mesh receipt stopped mesh draws and writes. */
   #meshStoppedGeneration: number | null = null;
+  /** E10 contract, section 3.1: non-null prepares so far and the last one's draw record. */
+  #prepareSerial = 0;
+  #drawRecord: PathDrawRecordForTesting | null = null;
   /** P3 V3 section f: true exactly when this source consumes a fill-mesh or stroke-mesh port. */
   public readonly requiresMeshPipeline: boolean;
 
@@ -276,7 +281,21 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       expected: expectedRecords(writes),
       meshExpected: mesh?.expected ?? null,
     });
+    this.#prepareSerial += 1;
+    if (this.#pathMeshes !== undefined) {
+      this.#drawRecord = drawRecord(
+        this.#prepareSerial,
+        pathDraws,
+        packet.mesh?.draws ?? [],
+        this.#pathMeshes.hasFringeBuilder,
+      );
+    }
     return packet;
+  }
+
+  /** @internal Tests only (E10 contract, section 3.1): null before a prepare or without a port. */
+  public getLastDrawRecordForTesting(): PathDrawRecordForTesting | null {
+    return this.#drawRecord;
   }
 
   public getPathMeshStatistics(): PathMeshStatistics | null {
@@ -1217,4 +1236,29 @@ function validateTarget(target: PrimitiveTarget): void {
     (target.targetFormat !== 'bgra8unorm' && target.targetFormat !== 'rgba8unorm')
   )
     throw new RangeError('Invalid primitive target.');
+}
+
+/** E10 contract, section 3.1: one entry per packet mesh draw, which follows pathDraws in order. */
+function drawRecord(
+  prepareSerial: number,
+  pathDraws: readonly PathMeshDraw[],
+  meshDraws: readonly MeshFillDraw[],
+  hasFringeBuilder: boolean,
+): PathDrawRecordForTesting {
+  const draws = meshDraws.map((meshDraw, index): PathDrawRecordEntryForTesting => {
+    const draw = pathDraws[index]!;
+    const joint = meshDraw.composite === 'joint-fill';
+    // A joint fill draw reports its fill paint's fringe state.
+    const fringe = draw.fringe?.data ?? null;
+    return Object.freeze({
+      nodeId: draw.nodeId,
+      paint: draw.paint ?? 'fill',
+      composite: joint ? 'joint-fill' : 'plain',
+      fringe: fringe !== null ? 'built' : hasFringeBuilder ? 'region-only-cap' : 'region-only-off',
+      triangleCount: meshDraw.triangleCount,
+      regionTriangles: joint ? null : (fringe?.regionTriangles ?? meshDraw.triangleCount),
+      exteriorTriangles: joint ? null : (fringe?.exteriorTriangles ?? 0),
+    });
+  });
+  return Object.freeze({ prepareSerial, draws: Object.freeze(draws) });
 }
