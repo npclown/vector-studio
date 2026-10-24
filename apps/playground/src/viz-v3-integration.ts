@@ -13,8 +13,8 @@ import {
   type StrokeMeshAdapter,
 } from '@vector-studio/geometry-wasm';
 import { PrimitiveRendererService } from '@vector-studio/renderer-core';
-import { isPathNotice } from './path-notices.js';
 import { WebGpuBackend } from '@vector-studio/renderer-webgpu';
+import { isPathNotice } from './path-notices.js';
 import {
   VIZ_V3_CAMERA,
   VIZ_V3_CHURN,

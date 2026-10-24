@@ -180,8 +180,9 @@ export type PathMeshLimits = Readonly<{
   toleranceVariantsPerNode: number;
   fringeVariantsPerEntry: number;
   /**
-   * V4 builder work cap (tied to the TypeScript fringe builder's placement, E11-U4 O2): a mesh with more distinct boundary vertices than this is
-   * drawn region-only, without calling the fringe builder, and notifies `fringe-work-cap` once.
+   * V4 builder work cap (outcome O2 while the TypeScript fringe builder ships): a mesh with more
+   * distinct boundary vertices than this is drawn region-only, without calling the fringe
+   * builder, and notifies `fringe-work-cap` once.
    */
   fringeBoundaryVertexCap: number;
   /** ST-U7 addendum, section 4.6: at most this many overlay variants (or marks) per node. */

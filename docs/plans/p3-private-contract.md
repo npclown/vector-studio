@@ -112,7 +112,7 @@ D8 interim pointer, 2026-10-08: for D8 checkpoints V2-V4 only, the user approved
 
 E11-U4 pointer (U2), 2026-10-24: set aside for the P3 exit by the user's E11-Q3 (a); the not-drawn outcome with a warning ships, and U2's alternatives continue in E12 ([E11-U4 addendum](d9-e11-u4-failure-behavior-addendum.md)).
 
-E11-U4 pointer (U4), 2026-10-24: not invoked: `render.submission-failed` is not reused and no result variant is added; the requirements name the meshes that reach each outcome ([requirements](../requirements.md#path-rendering-failures)).
+E11-U4 pointer (U4), 2026-10-24: not invoked: `render.submission-failed` is not reused and no result variant is added; the requirements name the codes per outcome ([requirements](../requirements.md#path-rendering-failures)); the classes of input are in the addendum.
 
 E11-U4 pointer (D8 interim pointer), 2026-10-24: replaced: the interim code is now the product code `render.path-mesh-failure`, P3 product behavior, not only V2-V4.
 

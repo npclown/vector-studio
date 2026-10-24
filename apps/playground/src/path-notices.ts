@@ -1,6 +1,7 @@
 // The path mesh failure notices the playground pages list (docs/requirements.md, "Path rendering
 // failures"; D9 E11-U4 addendum). One filter for every page, so a page cannot drift from the
-// renderer's code.
+// renderer's code. A visualization-owned playground file that the P3 pages share; changing the
+// code it filters on is a shared-surface change (D9 boundary).
 import { DIAGNOSTIC_CODES } from '@vector-studio/contracts';
 
 export const PATH_NOTICE_CODE = DIAGNOSTIC_CODES.PATH_MESH_FAILURE;

@@ -151,9 +151,9 @@ V1-A7 checks this through `getPathMeshStatistics()` (`portCalls`, `strokePortCal
 
 _Amended 2026-10-22 (user-approved): the per-exponent display below is superseded by the [amendment in section 11](#amendment-2026-10-22-user-approved-34-per-exponent-display); the original text is kept as written._
 
-The D8-interim notices (`render.path-mesh-interim-failure`) of the [V3 failure outcome](p3-v3-renderer-mesh-pipeline-contract.md#h-d8-interim-failure-outcome) and [stroke contract 9.8](p3-b2-stroke-contract.md#98-notices) stay visible and are never hidden or cleared:
-
 E11-U4 pointer (section 3.4), 2026-10-24: the code is renamed to `render.path-mesh-failure` with the same meaning; V1-A9, this section, its acceptance records and the notice literals stand. The notice meaning follows `pathMeshNoticeDiagnostic` by name ([E11-U4 addendum](d9-e11-u4-failure-behavior-addendum.md)).
+
+The D8-interim notices (`render.path-mesh-interim-failure`) of the [V3 failure outcome](p3-v3-renderer-mesh-pipeline-contract.md#h-d8-interim-failure-outcome) and [stroke contract 9.8](p3-b2-stroke-contract.md#98-notices) stay visible and are never hidden or cleared:
 
 - **Notice log.** Every notice is listed, newest first, with its node id, paint, failure code and tolerance exponent, as the ST-U8 page lists them. An edit or a reset never clears it. Like the ST-U8 page (`p3-b2-strokes.ts`, lines 39 and 64), the log keeps the newest 400 entries; older entries are dropped and counted, and the panel shows "N older notices dropped from this list". The hook keeps every notice, so the spec sees all of them.
 - **Notice meaning.** It follows `pathMeshNoticeDiagnostic` (`path-mesh-pipeline.ts`): `fringe-work-cap` means "drawn without its coverage fringe", and every other code means "not drawn". The whole path is not drawn when one paint fails (stroke contract 9.6). `overlay-unsupported` has `paint: null` and a null exponent, and it applies only while the joint condition holds, that is with both paints drawable and `0 < o < 1`.

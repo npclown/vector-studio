@@ -43,7 +43,7 @@ function files(dir: string): string[] {
     if (name === 'node_modules' || name === 'dist') continue;
     const rel = path.join(dir, name);
     if (statSync(path.join(root, rel)).isDirectory()) out.push(...files(rel));
-    else if (/\.(ts|mjs|html)$/u.test(name)) out.push(rel);
+    else if (/\.(ts|mts|js|mjs|json|txt|html)$/u.test(name)) out.push(rel);
   }
   return out;
 }
@@ -56,8 +56,19 @@ describe('E11-U4', () => {
       'apps',
       'tests',
     ];
-    const pattern =
-      /path-mesh-interim-failure|PATH_MESH_INTERIM_FAILURE|interim: 'd8'|d8[- ]interim/iu;
+    const code = /path-mesh-interim-failure|PATH_MESH_INTERIM_FAILURE|interim: 'd8'/iu;
+    const label = /d8[- ]interim/iu;
+    // The fringe and overlay builders keep their D8-interim placement label (addendum section 5
+    // item 3): exactly these lines, by file and text.
+    const allowed = new Map<string, string>([
+      [
+        'packages/renderer-core/src/primitive-renderer-service.ts',
+        'a D8-interim placement (V3-Q3 c)',
+      ],
+      ['packages/renderer-core/src/path-joint-overlay.ts', '// D8-interim placement (ST7-Q2 a)'],
+      ['packages/renderer-core/src/path-fringe.ts', '// D8-interim placement (V3-Q3 c)'],
+      ['apps/playground/src/p3-v4-paths.ts', 'fringe builder (a D8-interim placement)'],
+    ]);
     const hits: string[] = [];
     for (const tree of trees) {
       let list: string[];
@@ -68,12 +79,14 @@ describe('E11-U4', () => {
       }
       for (const file of list) {
         if (file === self) continue;
+        const posix = file.split(path.sep).join('/');
         read(file)
           .split('\n')
           .forEach((line, i) => {
-            // The fringe and overlay builders keep their D8-interim placement label (addendum
-            // section 5 item 3).
-            if (pattern.test(line) && !/placement/u.test(line)) hits.push(`${file}:${i + 1}`);
+            const allowedText = allowed.get(posix);
+            const allowedLabel = allowedText !== undefined && line.includes(allowedText);
+            if (code.test(line) || (label.test(line) && !allowedLabel))
+              hits.push(`${posix}:${i + 1}`);
           });
       }
     }
@@ -127,5 +140,7 @@ describe('E11-U4', () => {
     expect(NOTICE_CODE).toBe(DIAGNOSTIC_CODES.PATH_MESH_FAILURE);
     expect(isPathNotice({ code: DIAGNOSTIC_CODES.PATH_MESH_FAILURE })).toBe(true);
     expect(isPathNotice({ code: 'render.path-mesh-interim-failure' })).toBe(false);
+    for (const page of ['viz-v3-integration', 'p3-b2-strokes', 'p3-v4-paths'])
+      expect(read(`apps/playground/src/${page}.ts`), page).toContain('isPathNotice');
   });
 });

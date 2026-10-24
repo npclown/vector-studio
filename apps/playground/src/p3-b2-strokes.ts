@@ -1,5 +1,4 @@
 import type { RendererCapabilityResult, RendererDiagnostic } from '@vector-studio/contracts';
-import { isPathNotice } from './path-notices.js';
 import {
   createFillMeshPort,
   createStrokeMeshPort,
@@ -14,6 +13,7 @@ import {
   type PrimitiveTarget,
 } from '@vector-studio/renderer-core';
 import { WebGpuBackend } from '@vector-studio/renderer-webgpu';
+import { isPathNotice } from './path-notices.js';
 import {
   B2_PATHS,
   B2_SURFACE,

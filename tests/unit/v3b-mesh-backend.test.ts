@@ -562,6 +562,9 @@ describe('V3b backend lifecycle (V3-A13)', () => {
         paint: null,
       },
     ]);
+    expect(interim(diagnostics)[0]!.message).toBe(
+      'Mesh paths are not drawn (renderer mesh-pipeline-unavailable).',
+    );
     service.replaceSnapshot({
       identity,
       revision: 1,
