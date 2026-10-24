@@ -11,7 +11,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | Item | Subject | Tier | Phase | State |
 | --- | --- | --- | --- | --- |
 | E1 | ST-U9 early abort when failure is certain | Full | R0 | Done: merged (#202), independent review ACCEPTED 2026-10-23 ([review](../evidence/r0-review-closeout-2026-10-23.md#e1)) |
-| E3 | B4: A04 corpus and measurement contract | Full | R1 | In progress: U1 (#206), U2 (#212), U2b (#214), U2c (#216) merged; freeze not met (5 `ORACLE-WORK`); U3, U4 next ([U2c evidence](#e3-e3-u2c-evidence-2026-10-23)) |
+| E3 | B4: A04 corpus and measurement contract | Full | R1 | In progress: U1 (#206), U2 (#212), U2b (#214), U2c (#216) merged; freeze not met (5 `ORACLE-WORK`); U3 harness in review, no corpus run; U4 next ([U3 evidence](#e3-e3-u3-evidence-2026-10-24)) |
 | E8 | Unsupported-geometry on simple smooth Q/T and C/S paths | Full | R1 | In progress: U0 (#211), U0b (#213), U1 (#215) merged; U2 next ([evidence](#e8-u1-evidence-2026-10-23)) |
 | X1 | P3 exit evidence A01-A08 index | — (Primary acceptance) | R1 | Open; all eight TODO ([index](#p3-exit-evidence-index-x1)) |
 | E4 | ST-U3f fix decision | Full | Backlog | Seven cases stay a known defect with fixtures (D10) |
@@ -365,6 +365,42 @@ Dated append. Unit E3-U2c speeds up the A04 oracle on the stroke strata, the E3-
 
 - Source SHA-256 `47117f777812e43cb68c0793ac6db7a1dd4238f3500afcadd38a940efc4cbe09` at commit `0941180`. `pnpm test:e3-a04` passes 78 tests (60 before, 18 new).
 - `pnpm e3-a04:freeze --shards 14 --stride 25` on that SHA: 1,094 `ok` and 5 `ORACLE-WORK` of 1,099, the same five cases, in 44 min wall and 6.7 CPU hours. No status changed, and one case's work changed slightly (`C9/k05/T0/z64-d1`, still `ok`). The run directory `.tools/e3-a04-freeze/2026-10-23T14-16-44-666Z/` is machine-local and not committed.
+
+## E3 E3-U3 evidence, 2026-10-24
+
+Dated append. Unit E3-U3 implements the A04 harness, the evidence record and the run tool of the [E3 contract](d9-e3-b4-precision-contract.md), section 9.1. The executable choices are in the contract's [section 15 annex](d9-e3-b4-precision-contract.md#15-e3-u3-harness-annex-2026-10-24). Each was decided under the user's standing instruction of 2026-10-22 (recommended option), and section 15.9 lists the four departures for the evidence review. Track: rendering. Packages: tests, tooling, docs, and a test-only hook in `geometry-reference`. Shared surface changed: no. **No kernel was run on the corpus**, because the corpus is not frozen. Precision stays **UNVERIFIED**.
+
+**Files.**
+
+- `tests/geometry/e3-a04/harness.ts`: the product path through the release WASM ports, `PathMeshPipeline` and K4 packing. Also the exact shader model, `β` with the NDC round trip, the guard band and clip model, the no-flip certificate, and the call to the oracle.
+- `tests/geometry/e3-a04/record.ts`: the record, its aggregates, the coverage, the verdict, the validator and the Markdown view.
+- `tests/geometry/e3-a04/controls.ts`: E3-PC1 to E3-PC9, E3-PC11 and E3-PC14 as synthetic port answers.
+- `tests/geometry/e3-a04/smoke.ts`: the five non-corpus smoke cases.
+- `tests/geometry/e3-a04/run.check.ts` and `vitest.e3-a04-run.config.ts`: the shard, finalize and smoke phases.
+- `tooling/run-e3-a04.mjs`: `pnpm e3-a04:run`.
+- `tests/geometry/e3-a04-harness.test.ts`: in `pnpm test:e3-a04`.
+- `tests/geometry/e3-a04-harness-wasm.test.ts`: in `pnpm test:geometry`.
+- `packages/geometry-reference/src/a04-region.ts`: the test-only `window` hook for E3-D9.
+
+**Smoke cases on the release WASM** (Linux container, Node v22.22.0, one process per case; diagnostic timing only).
+
+| Case                            | Status | `U` (px) | `β_c` (px) | Oracle time |
+| ------------------------------- | ------ | -------- | ---------- | ----------- |
+| `smoke/rect/T0/z1-d1`           | PASS   | 0.00128  | 0.00046    | 0.1 s       |
+| `smoke/rect/T0/z64-d3`          | PASS   | 0.00198  | 0.00132    | 0.1 s       |
+| `smoke/blob/T2/z1-d2`           | PASS   | 0.0764   | 0.00064    | 8 s         |
+| `smoke/segment-butt/T0/z1-d1`   | PASS   | 0.00137  | 0.00040    | 274 s       |
+| `smoke/polyline-miter/T0/z1-d1` | PASS   | 0.0161   | 0.00043    | 59 s        |
+
+The blob has one collapsed triangle. Before the exemption of section 15.4 it was UNDECIDED (`invalid mesh: zero-area triangle 15`). An earlier, larger segment (length 96, width 8) did not end within 10 min.
+
+**Findings for the evidence review.**
+
+- `fringe-unsupported` hides the path in the product, so it is rejected, not measured (section 15.9, item 1).
+- Kernel meshes can hold triangles that collapse after f32 storage (section 15.9, item 2).
+- The oracle's cost on stroke cases decides the length of the reference run. The freeze estimate covers only the ideal boundary. The measurement also scores the mesh, and on the smoke strokes that took about a minute to more than ten minutes per case. The full-run cost is unknown until the freeze. It is an input to E3-U2d's oracle work.
+
+**Validation.** The commands and their results are in the PR. Still pending: E3-U4 (the GPU model check, headed, on the user's machine), the corpus freeze note, then E3-U5's reference run.
 
 ## E8 investigation, 2026-10-23
 
