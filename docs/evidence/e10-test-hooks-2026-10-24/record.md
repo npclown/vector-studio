@@ -6,7 +6,7 @@ Contract: [d9-e10-renderer-test-hooks-contract.md](../../plans/d9-e10-renderer-t
 
 - **Code:** PR #228 head `1be1945` (`origin/claude/project-thread-uhlsgk`). It ran in a separate, detached worktree on the user's PC, with no source or spec change.
 - **Setup:** `pnpm install --frozen-lockfile`, then `tsc --build` for contracts, renderer-core, renderer-webgpu and geometry-wasm. The playground imports package `dist`, and the config serves it with the Vite dev server on port 4175.
-- **Command:** `pnpm exec playwright test -c playwright.gpu.config.ts tests/gpu/e10-test-hooks.spec.ts`
+- **Command:** `pnpm exec playwright test -c playwright.gpu.config.ts tests/gpu/e10-test-hooks.spec.ts` (the direct form of `pnpm test:gpu` for this spec).
 - **Result:** `12 passed (1.3m)`, with no failures and no retries.
 
 ## Environment
@@ -18,7 +18,7 @@ Contract: [d9-e10-renderer-test-hooks-contract.md](../../plans/d9-e10-renderer-t
 | Adapter  | vendor `nvidia`, architecture `turing`, description empty (both runs) |
 | Chrome   | 155.0.8059.85, headed, `--enable-unsafe-webgpu`                       |
 | Edge     | 156.0.4314.42, headed, `--enable-unsafe-webgpu`                       |
-| Viewport | 96 x 48 physical pixels; DPR is the backend input (`dprSource`)       |
+| Canvas   | 96 x 48 physical pixels; DPR is the backend input (`dprSource`)       |
 
 ## Outcomes
 
@@ -42,3 +42,10 @@ The spec wrote the raw records to `.tools/e10-test-hooks/2026-10-24T04-44-31-750
 
 - Only one adapter was tested: NVIDIA Turing on Windows. No other vendor or OS was run.
 - The scenes are the spec's fixed rectangle and triangle, drawn with the static convex-fan fill double. The product geometry kernel was not used.
+- The browser's own DPR was 1: the Playwright viewport is 800 x 500 CSS pixels with `deviceScaleFactor` 1. DPR 1.5 and 2 were exercised only as the backend's input, which sizes the canvas in physical pixels. The browser and compositor DPR path was not exercised.
+- The JSON records hold each control's failure list, not measured values such as capture size or frame deltas.
+- In the spec, the (h) check has a fallback for an empty scene that keeps no draw record. That branch is unreachable, because the source records a draw on every prepare, so the run did not depend on it.
+- OS, GPU and driver were reported from the user's PC. They are not in the JSON.
+- The commits after `1be1945` change only documentation, so the spec and the page that ran are the ones merged.
+
+Independent evidence review (E10-A9): READY, evidence accepted. See contract section 14.
