@@ -39,7 +39,7 @@ function notice(
   toleranceExponent: number | null,
   paint: PathMeshNotice['paint'],
 ): PathMeshNotice {
-  return { interim: 'd8', nodeId, failureScope, failureCode, toleranceExponent, paint };
+  return { nodeId, failureScope, failureCode, toleranceExponent, paint };
 }
 
 function both() {

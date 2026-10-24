@@ -16,7 +16,7 @@ import { V4_PATHS } from './p3-v4-paths-scene.js';
 // is UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence.
 
 export const VIZ_V1_EVIDENCE_LABEL =
-  'UNVERIFIED: functional V-1 path appearance page evidence only; precision is UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence, and no Q4 coverage threshold is claimed. work-limit and fringe-work-cap notices are the D8-interim state of the open ST-U9 decision.';
+  'UNVERIFIED: functional V-1 path appearance page evidence only; precision is UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence, and no Q4 coverage threshold is claimed. work-limit paths are not drawn (product outcome O1); fringe-work-cap paints draw without a fringe while the TypeScript builder ships (O2).';
 
 export const VIZ_V1_SURFACE = Object.freeze({ width: 720, height: 600 });
 

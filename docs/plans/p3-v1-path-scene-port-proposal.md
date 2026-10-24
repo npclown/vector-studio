@@ -249,6 +249,8 @@ V1-Q4 is an exception scoped to D8's functional, UNVERIFIED V2-V4 slice. It does
 - The production failure behavior stays with U2: the R3, R0 and R2 direction, then R5 and U4 as last resorts. It must be decided before P3 acceptance, with requirements text naming the meshes that can reach it. The interim code is then removed or replaced.
 - `render.submission-failed` is not reused.
 
+E11-U4 pointer (section h), 2026-10-24: decided by E11-Q3 (a) and replaced by E11-U4: requirements text in [requirements](../requirements.md#path-rendering-failures), code `render.path-mesh-failure` ([E11-U4 addendum](d9-e11-u4-failure-behavior-addendum.md)).
+
 ## Review and approval record
 
 - **Independent review.** A fresh-context `reviewer` agent returned NOT READY with three blocking items: V1-Q4 conflicted with U2 and U4 as first worded, the cache key lacked the operation and budget identity, and failed results were cached against C04 item 5. All three are resolved above, with 15 SHOULD-FIX items. The re-review returned READY with no blocking items; its two minor items, the status line qualifier and a pointer from U4 in the private contract, are applied.

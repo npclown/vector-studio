@@ -14,6 +14,7 @@ import {
 } from '@vector-studio/geometry-wasm';
 import { PrimitiveRendererService } from '@vector-studio/renderer-core';
 import { WebGpuBackend } from '@vector-studio/renderer-webgpu';
+import { isPathNotice } from './path-notices.js';
 import {
   VIZ_V3_CAMERA,
   VIZ_V3_CHURN,
@@ -334,7 +335,7 @@ function snapshot() {
     synchronization: service?.getSynchronizationState() ?? null,
     requiresMeshPipeline: service?.requiresMeshPipeline ?? null,
     diagnostics: diagnostics.slice(),
-    notices: diagnostics.filter((event) => event.code === 'render.path-mesh-interim-failure'),
+    notices: diagnostics.filter(isPathNotice),
     diagnosticsOnPage: diagnosticList.childElementCount,
     ports:
       fillPort === null || strokePort === null

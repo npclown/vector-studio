@@ -633,11 +633,11 @@ describe('V-1 target status (contract section 3.4)', () => {
     sequence = 1,
   ) => ({ sequence, nodeId, paint, failureCode, toleranceExponent });
 
-  it('parses only the D8-interim diagnostic', () => {
+  it('parses only the path mesh failure diagnostic', () => {
     expect(parseNotice({ code: 'render.other', sequence: 1 })).toBeNull();
     expect(
       parseNotice({
-        code: 'render.path-mesh-interim-failure',
+        code: 'render.path-mesh-failure',
         sequence: 4,
         context: {
           nodeId: 'v1-circle',

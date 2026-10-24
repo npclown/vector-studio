@@ -119,6 +119,15 @@ All persistent changes occur through commands and transactions. Continuous point
 - Restore document content and the last open page
 - Do not restore transient selection, hover, zoom, or panel state initially
 
+## Path rendering failures
+
+Decided 2026-10-24 for P3 ([E11-Q3 (a)](plans/d9-e11-p3-c03-c05-closure-contract.md#91-user-decisions-2026-10-24); classes and sources in the [E11-U4 addendum](plans/d9-e11-u4-failure-behavior-addendum.md)). The document is never rejected because a path cannot be meshed: every other node draws in paint order, and each failure is reported by one warning diagnostic, `render.path-mesh-failure` (at most 4,096 queued and 32 per frame; overflow is counted, not reported).
+
+- **O1, not drawn.** If either drawable paint of a path fails, the whole path (fill and stroke) is not drawn. Codes: `invalid-path`, `invalid-tolerance`, `invalid-stroke`, `numeric-range`, `work-limit`, `unsupported-geometry` (path scope); `internal-error`, `resource-limit`, `invalid-request`, `disposed` (batch scope); `tolerance-range`, `fringe-range`, `fringe-unsupported`, `packing-range`, `invalid-response`, `invalid-mesh`, `port-version`, `mesh-pipeline-unavailable` (renderer scope). This is P3 product behavior; later kernel work may shrink the inputs that reach it (classes of input: see the addendum).
+- **O2, drawn without its coverage fringe.** Code `fringe-work-cap`: a paint mesh with more than 128 distinct boundary vertices draws its region triangles only. This outcome lasts only while the TypeScript fringe builder ships; its placement decision (E12, or E6) removes or re-decides it.
+- **O3, hidden by the joint overlay.** Code `overlay-unsupported`: a path with both paints at an opacity between 0 and 1 whose joint overlay cannot be built is not drawn, fill included. This outcome lasts only while the TypeScript overlay builder ships, as O2.
+- **Not failures.** A renderer without a stroke port draws fills only, a renderer without a fringe builder draws meshes without a fringe, and a path with a singular transform is not drawn. None of these is reported.
+
 ## Platform and performance
 
 - Current desktop Chrome and Edge are the prototype target.

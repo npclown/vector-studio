@@ -18,7 +18,7 @@ import type {
 // such that 2^e * zoom * DPR <= 1/8, so each zoom doubling roughly multiplies a cubic's flat
 // segments by sqrt(2). Probed against the fill-v0+r2 kernel after B1, every shape below meshes
 // for e >= -7, that is up to zoom * DPR = 16. A path beyond a kernel cap would still fail with
-// the D8-interim `work-limit` notice and not be drawn. A mesh with more than 128 boundary
+// the `work-limit` notice and not be drawn. A mesh with more than 128 boundary
 // vertices draws region-only with the `fringe-work-cap` notice (V3-Q2 (c)); the teardrop
 // reaches 198 at e = -7, but the spec's views (zoom <= 3) stay under it.
 

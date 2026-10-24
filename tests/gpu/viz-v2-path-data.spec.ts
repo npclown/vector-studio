@@ -39,7 +39,7 @@ const OPERATION_IDS = {
 } as const;
 
 /**
- * Sorted `nodeId paint failureCode` of every D8-interim notice, per scenario and stage. Observed
+ * Sorted `nodeId paint failureCode` of every path notice, per scenario and stage. Observed
  * literals, fixed at the first headed run of V-2 with the operation ids above and identical in
  * Chrome and Edge. They are current-kernel observations (production limits): a limit raise, an
  * operation-id bump or ST-U9's fast rung may re-baseline them, in the PR that changes the outcome
