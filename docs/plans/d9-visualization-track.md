@@ -13,7 +13,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | V-1 | Path appearance editing page | Light under D10 (contract was Full) | R0 | Done: merged (#201), independent review ACCEPTED 2026-10-23 ([review](../evidence/r0-review-closeout-2026-10-23.md#v-1)) |
 | V-2 | SVG path-data input page | Light under D10 (contract was Full) | R0 | Done: merged (#207), independent review ACCEPTED 2026-10-23 ([review](../evidence/r0-review-closeout-2026-10-23.md#v-2)) |
 | V-3 | A07 headed integration page | Full (P3 exit evidence) | R0 | Done: merged (#209), independent review ACCEPTED 2026-10-23 as A07 partial evidence ([review](../evidence/r0-review-closeout-2026-10-23.md#v-3)) |
-| V-4 | A08 headed corpus page | Full (P3 exit evidence) | R1 | Contract DRAFT, review pending ([contract](viz-v4-a08-corpus-contract.md)); needs E10 and the E3 freeze |
+| V-4 | A08 headed corpus page | Full (P3 exit evidence) | R1 | Contract APPROVED 2026-10-24 ([contract](viz-v4-a08-corpus-contract.md)); code waits for E10, the E3 freeze and E3-U3 |
 | V-5 | P5 editor-slice plan (contract only) | Full | After V-4 | Not started; planning only, implementation after P3 exit or separate approval (D10) |
 | V-6 | V-1 and V-3 review follow-ups (status crediting, zoom clear, field validity, R2 mesh gate) | Light | Backlog | Not started ([review](../evidence/r0-review-closeout-2026-10-23.md#v-1)) |
 

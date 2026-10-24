@@ -1,6 +1,6 @@
 # V-4 contract: A08 headed corpus page (coverage fringe versus MSAA)
 
-Status: DRAFT, 2026-10-24. Independent review round 3 READY (sections 12 to 14); user approval pending. Nothing here is in force, and no V-4 product or test code starts, until this contract is approved ([`AGENTS.md`](../../AGENTS.md#working-rules)).
+Status: APPROVED 2026-10-24 by the user in chat, with VZ4-Q1 to VZ4-Q7 as recommended (independent review round 3 READY, sections 12 to 14). V-4 code may start once its section 9 dependencies (E10, the E3 freeze and the E3-U3 harness) exist.
 
 Track: visualization. Item: V-4 of the [D9 visualization track plan](d9-visualization-track.md#status-index), phase R1 of [D10](d10-roadmap-reset.md). Tier: full, because V-4 supplies exit evidence for a P3 acceptance criterion and needs test hooks that the rendering track publishes (section 2). Structural model: the approved [V-3 contract](viz-v3-a07-integration-contract.md).
 
