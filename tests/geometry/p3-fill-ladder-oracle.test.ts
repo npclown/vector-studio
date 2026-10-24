@@ -350,7 +350,9 @@ describe('P3 Alt-A1 AL-U2 permanent oracles', () => {
     expect(entry('fixture/big-circle').exact?.status).toBe('CommandLimit');
     expectFallback('b0/O1/P2/s=3#0', 'CLOSURE');
     expectFallback('b0/O1/P4/s=16#0', 'PREFIX');
-    expect(entry('b0/O1/P4/s=16#0').exact?.status).toBe('OwnerLimit');
+    // Re-baselined 2026-10-24 by E8-U2 (failure-to-success): with the canonical final knot the
+    // exact rung no longer exceeds the owner cap (docs/evidence/e8-u2-2026-10-24.md).
+    expect(entry('b0/O1/P4/s=16#0').exact?.status).toBe('OK');
     // AL-F9: SL-F13's two B0 paths are fast, and SL-O3 holds against the exact rung.
     for (const name of ['b0/P4/s=4#0', 'b0/K2/s=3#0']) {
       expectFast(name, null);

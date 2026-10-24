@@ -7,7 +7,7 @@ use crate::codec::{PathInput, Request};
 use crate::cubic_fill::{
     CubicFillDiagnostics as AttemptDiagnostics, CubicFillError as BridgeError,
     CubicFillOutput as BridgeOutput, CubicFillWorkspace as BridgeWorkspace, DecodedSource,
-    EdgeOwner, FlatCommand, MAX_FLAT_COMMANDS as MAX_COMMANDS,
+    EdgeOwner, FlatCommand, PrefixFailure, MAX_FLAT_COMMANDS as MAX_COMMANDS,
 };
 use crate::geometry::{
     Plan, Point, WorkStatistics, PATH_EMPTY, PATH_INVALID, PATH_INVALID_TOLERANCE,
@@ -8416,61 +8416,27 @@ mod tests {
 
     #[test]
     fn zero_line_classification_uses_original_source_endpoints() {
+        // E8-U2 (E8 addendum E8.4), dated 2026-10-24: the cubic's final knot is emitted as 0, not
+        // its represented endpoint 2^-54. The unsnapped S1 prefix (the fast rung's view) still
+        // classifies the zero line by its original endpoints: the original zero line is skipped
+        // and the emitted zero line is rejected. The exact rung snaps the final knot to 2^-54
+        // before collection, so both paths now certify (before E8-U2: KnotMismatch and
+        // ZeroLengthLeaf, failure-to-success).
         let success = zero_triangle_path(ZeroTriangleKind::Line, None, true, true);
         let original_zero = rounded_cubic_endpoint_line(true);
         let emitted_zero = rounded_cubic_endpoint_line(false);
         let mut workspace = BridgeWorkspace::new(LIMITS).unwrap();
 
-        measured_raw_attempt(
-            &mut workspace,
-            &success,
-            FLATTEN_TOLERANCE,
-            TOPOLOGY_TOLERANCE,
-            MAX_COMMANDS,
-        )
-        .unwrap();
+        assert!(workspace
+            .prepare_prefix(original_zero.input(FLATTEN_TOLERANCE), MAX_COMMANDS)
+            .is_ok());
         assert_eq!(
-            measured_raw_attempt(
-                &mut workspace,
-                &original_zero,
-                FLATTEN_TOLERANCE,
-                TOPOLOGY_TOLERANCE,
-                MAX_COMMANDS,
-            ),
-            Err(BridgeError::Topology(TopologyError::KnotMismatch))
+            workspace
+                .prepare_prefix(emitted_zero.input(FLATTEN_TOLERANCE), MAX_COMMANDS)
+                .map(|_| ()),
+            Err(PrefixFailure::Error(BridgeError::ZeroLengthLeaf))
         );
-        assert!(workspace.diagnostics().sizing_invoked);
-        assert_eq!(workspace.diagnostics().flat_status, PATH_OK);
-        assert!(workspace.diagnostics().emission_invoked);
-        assert!(workspace.diagnostics().topology_invoked);
-        assert!(!workspace.diagnostics().rounded_invoked);
-        assert!(workspace.output().is_none());
-        measured_raw_attempt(
-            &mut workspace,
-            &success,
-            FLATTEN_TOLERANCE,
-            TOPOLOGY_TOLERANCE,
-            MAX_COMMANDS,
-        )
-        .unwrap();
-        assert!(workspace.output().is_some());
 
-        assert_eq!(
-            measured_raw_attempt(
-                &mut workspace,
-                &emitted_zero,
-                FLATTEN_TOLERANCE,
-                TOPOLOGY_TOLERANCE,
-                MAX_COMMANDS,
-            ),
-            Err(BridgeError::ZeroLengthLeaf)
-        );
-        assert!(workspace.diagnostics().sizing_invoked);
-        assert_eq!(workspace.diagnostics().flat_status, PATH_OK);
-        assert!(workspace.diagnostics().emission_invoked);
-        assert!(!workspace.diagnostics().topology_invoked);
-        assert!(!workspace.diagnostics().rounded_invoked);
-        assert!(workspace.output().is_none());
         measured_raw_attempt(
             &mut workspace,
             &success,
@@ -8479,7 +8445,30 @@ mod tests {
             MAX_COMMANDS,
         )
         .unwrap();
-        assert!(workspace.output().is_some());
+        for path in [&original_zero, &emitted_zero] {
+            measured_raw_attempt(
+                &mut workspace,
+                path,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            assert!(workspace.diagnostics().topology_invoked);
+            assert!(workspace.diagnostics().rounded_invoked);
+            let output = workspace.output().expect("published output");
+            let endpoint = f64::from_bits(0x3c90_0000_0000_0000);
+            assert_eq!(output.commands[1].point, Some(point(endpoint, 0.0)));
+            measured_raw_attempt(
+                &mut workspace,
+                &success,
+                FLATTEN_TOLERANCE,
+                TOPOLOGY_TOLERANCE,
+                MAX_COMMANDS,
+            )
+            .unwrap();
+            assert!(workspace.output().is_some());
+        }
     }
 
     fn zero_line_source_ceiling(zero_count: usize) -> RawPath {

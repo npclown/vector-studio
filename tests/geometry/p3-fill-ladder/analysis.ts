@@ -43,6 +43,7 @@ import {
   B0_IDENTITY_RECORD,
   B0_REFERENCE_CONFIG_HASH,
   CORPUS_SHA256,
+  e8U2FailureToSuccess,
   SPIKE_SCENARIO_ID,
   SPIKE_SCENARIO_VERSION,
 } from '../p3-b0-spike/analysis.js';
@@ -699,7 +700,10 @@ export function evaluateLadderOracle(
       gates['SL-O4'].checked += 1;
       const want = expected?.paths[index];
       if (!want) fail('SL-O4', `${spec.id}#${index}: no outcome in the identity record`);
-      else if (outcomeKey(path) !== outcomeKey(want))
+      else if (
+        outcomeKey(path) !== outcomeKey(want) &&
+        !e8U2FailureToSuccess(want.status, path.status)
+      )
         fail('SL-O4', `${spec.id}#${index}: exact ${outcomeKey(path)} != ${outcomeKey(want)}`);
     });
   }

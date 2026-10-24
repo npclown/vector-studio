@@ -432,7 +432,8 @@ fn emit_e8_corner_topology() {
         );
         let mut output = String::new();
         let _ = write!(output, "{{\"id\":\"{}\",\"exponent\":{exponent}", fields[0]);
-        let Ok(view) = workspace.prepare_prefix(input, MAX_FLAT_COMMANDS) else {
+        // The exact rung's prefix, with the E8-U2 snap of the source-final knots.
+        let Ok(view) = workspace.prepare_exact_prefix(input, MAX_FLAT_COMMANDS) else {
             println!("{output},\"prefix\":\"FAILED\"}}");
             continue;
         };

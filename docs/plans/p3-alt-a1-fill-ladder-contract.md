@@ -248,6 +248,8 @@ The extensions live in a new module `tests/geometry/p3-fill-ladder/oracle.ts` th
 | AL-I3        | Differential against the frozen spike module (section 4.4)                                                                                                                                              | Test failure  |
 | SL-O5, SL-O6 | Sliver statistics and the geometric-error observation                                                                                                                                                   | Reported only |
 
+**Amendment, 2026-10-24 (user decision, E8-U2).** SL-O3 also accepts an exact polygon equal to the S1 view after the E8-U2 snap of source-final knots, and SL-O4 (here and in section 5) accepts a recorded exact-rung failure that becomes OK. A recorded OK must still match exactly. See the [E8-U2 evidence](../evidence/e8-u2-2026-10-24.md#alt-a1-frozen-oracles-not-foreseen-by-the-addendum-user-decision-requested-2026-10-24).
+
 **Hand-off.** An ignored Rust test, `emit_fill_ladder_dump`, writes framed JSON per path: request, source and polygon bits, owners, provenance, rung, reason, certified bounds, the export's fast mesh and, through `exact_only`, the exact rung's result. The new `tests/geometry/p3-fill-ladder-oracle.test.ts` runs it with the pinned toolchain and the existing Rust runner environment, as the spike's oracle test does, then applies the oracles.
 
 **Dump sets.**

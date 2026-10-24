@@ -9,7 +9,7 @@ export type E8Fixture = Readonly<{
   id: string;
   data: string;
   offset: number;
-  /** Tolerance exponents and the status after E8-U1 alone (E8.6). */
+  /** Tolerance exponents and the status after E8-U1 + E8-U2 (E8.6); only E8-F5 changed in E8-U2. */
   cases: readonly Readonly<{
     exponent: number;
     status: 'ok' | 'work-limit' | 'unsupported-geometry';
@@ -57,7 +57,7 @@ export const E8_FIXTURES: readonly E8Fixture[] = Object.freeze([
     id: 'E8-F5',
     data: 'M -2.9 33.4 C -2.9 31.4 17.1 23.6 17.1 33.4 C 17.1 47.7 -2.9 37.7 -2.9 33.4 Z',
     offset: 0,
-    cases: [{ exponent: 0, status: 'unsupported-geometry' }],
+    cases: [{ exponent: 0, status: 'ok' }],
   },
   {
     id: 'E8-F6',
