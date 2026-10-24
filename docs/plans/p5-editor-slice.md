@@ -1,6 +1,6 @@
 # P5 execution plan: editor integration slice
 
-Status: DRAFT, 2026-10-24. Written for independent review. It is a plan and contract only: under [D10](d10-roadmap-reset.md) decision 4, P5 implementation waits for the P3 exit or a separate user approval, and nothing here starts code. The P5 entry rule of [`prototype-plan.md`](../prototype-plan.md#current-position-and-plan-entry-rule) is unchanged.
+Status: DRAFT, 2026-10-24. Written for independent review. D10 places this plan after V-4; it is drafted after the V-4 contract's approval and before V-4 code, which waits for E10, under the user's standing instruction of 2026-10-24 to continue to the next step. It is a plan and contract only: under [D10](d10-roadmap-reset.md) decision 4, P5 implementation waits for the P3 exit or a separate user approval, and nothing here starts code. The P5 entry rule of [`prototype-plan.md`](../prototype-plan.md#current-position-and-plan-entry-rule) is unchanged.
 
 Track: visualization. Item: V-5 of the [D9 visualization track plan](d9-visualization-track.md#status-index). Tier: full, because it fixes acceptance criteria, adds packages and dependency edges, and defines product behavior.
 
@@ -55,12 +55,14 @@ type Frame = { x: number; y: number; width: number; height: number }; // page un
 type NodeV1 =
   | (NodeBase & { type: 'rectangle'; fill: Color | null; stroke: RectStroke | null })
   | (NodeBase & { type: 'path'; path: PathData; fill: Color | null; stroke: PathStroke | null })
-  | (NodeBase & { type: 'custom'; customType: string; data: JsonValue });
+  | (NodeBase & { type: 'custom'; customType: string; data: JsonValue; fill: Color | null; stroke: PathStroke | null });
 ```
 
 - `PathData` holds `verbs` (`move`, `line`, `cubic`, `close`) and `points` in the unit box `[0, 1]²` of the node's `frame`, plus `fillRule`. Storing path points relative to the frame makes resize a frame change only (section 4.4).
+- **Path frame.** On creation the frame is the bounding box of all points, cubic control points included. Points are mapped into the unit box by `(p − origin) / size` per axis; on an axis whose size is 0 every unit coordinate is 0. Parsing rejects a unit coordinate outside `[0, 1]` (`document.invalid-field`).
+- **Negative zero** is normalized to 0 by every command and by `parseDocument`, so the byte-identical rules of section 4.2 hold.
 - `Color` is `{ r, g, b, a }` in `[0, 1]`. `RectStroke` is `{ color, width }`, the fields of the primitive `SceneStroke` in `contracts`; `PathStroke` is `{ color, width, cap, join, miterLimit }`, the fields of the contract's `PathStroke`. Stroke width is in page units.
-- **Paint order** is the order of `children`: index 0 is painted first. In P5 every node's `parent` is the page.
+- **Paint order** is the order of `children`: index 0 is painted first. A node's `parent` is the ID of a page or of a node; in P5 it is always the page.
 - **IDs** are opaque non-empty strings, unique across the document (pages and nodes). `editor-core` takes an injected ID source; tests use a deterministic counter.
 - Numbers are finite binary64 values. `width` and `height` are at least 0; `opacity` is in `[0, 1]`.
 
@@ -78,7 +80,7 @@ Selection, hover, active tool, viewport and camera, history, renderer caches, me
 | `document.unsupported-version` | `schemaVersion` is missing, not an integer, or not 1 |
 | `document.invalid-field` | A field has the wrong type or range; `path` names it |
 | `document.duplicate-id` | Two entities share an ID |
-| `document.dangling-reference` | A `children` entry or a `parent` names no node, or the two disagree |
+| `document.dangling-reference` | A `children` entry names no node; a `parent` names no page or node; a node's `parent` differs from the owner of the `children` list it is in; or a node is in no `children` list or in more than one |
 | `document.unknown-custom-type` | A `custom` node names a type that no registered extension owns (checked by `editor-core` on load, not by `model`) |
 
 Unknown fields are rejected (`document.invalid-field`) in v1, so a later version cannot be mistaken for v1 ([P5-Q3](#9-open-questions)).
@@ -92,7 +94,8 @@ Unknown fields are rejected (`document.invalid-field`) in v1, so a later version
 ### 4.1 Commands and transactions
 
 - The public API is `editor.execute(command)` and `editor.query(query)`; every persistent change goes through a command inside a transaction ([`ARCHITECTURE.md`, Cross-cutting policies](../../ARCHITECTURE.md#cross-cutting-policies)).
-- P5 commands: `createRectangle`, `createPath`, `setFrames` (move and resize of several nodes), `setNodeProps` (fill, stroke, opacity, visibility, name, custom `data`), `deleteNodes`, `loadDocument`.
+- Document commands: `createRectangle`, `createPath`, `createCustomNode(customType, frame, data, style)` (runs the extension's `validate`), `setFrames` (move and resize of several nodes), `setNodeProps` (fill, stroke, opacity, visibility, name, custom `data`, validated likewise), `deleteNodes`, `loadDocument`, `undo`, `redo`.
+- Session commands, never in history: `setSelection(ids)`, `setTool(tool)`, `setViewport(camera)`, and `input(event)`, which feeds pointer and key events (`pointerdown`, `pointermove`, `pointerup`, `keydown`, with page-space point and modifiers) to the active tool. Tools act only by issuing the commands above, so creation, selection, move and resize all run through the public API.
 - A transaction applies all of its changes or none. A command that fails validation returns `{ ok: false, code }` and leaves the document and history unchanged.
 - Each committed transaction increments the document revision and emits one change event with the IDs it touched.
 
@@ -105,7 +108,7 @@ Unknown fields are rejected (`document.invalid-field`) in v1, so a later version
 
 ### 4.3 Session state
 
-Selection (an ordered set of node IDs), the active tool, the viewport (camera position and zoom) and hover are editor session state. They are readable through queries and subscriptions and are excluded from serialization and history. Deleting or undoing away a selected node removes it from the selection.
+Selection (an ordered set of node IDs), the active tool, the viewport (camera position and zoom) and hover are editor session state. They are set by the session commands of section 4.1 and read through queries and subscriptions and are excluded from serialization and history. Deleting or undoing away a selected node removes it from the selection.
 
 ### 4.4 Tools
 
@@ -116,26 +119,34 @@ Selection (an ordered set of node IDs), the active tool, the viewport (camera po
 | Select, click | Selects the topmost visible node hit at the point, in reverse paint order; shift toggles it; a click on empty canvas clears the selection |
 | Select, marquee | Dragging on empty canvas selects every visible node whose frame intersects the marquee rectangle; shift adds to the selection |
 | Move | Dragging a selected node moves every selected frame by the same page delta, as one gesture |
-| Resize | Eight handles on the selection's bounding box; the box is scaled about the opposite handle and every selected frame is mapped by the same affine; sizes clamp at 0. One gesture |
+| Resize | Eight handles on the selection's bounding box; the box is scaled about the opposite handle and every selected frame is mapped by the same affine; sizes clamp at 0. On an axis where the box has size 0, that axis is not scaled and its handles do nothing. One gesture |
 
-**Hit testing (P5).** A rectangle is hit inside its frame. A path is hit if the point is inside its fill region (when it has a fill) or within `max(stroke.width / 2, 4 / zoom)` page units of its flattened outline, flattened by `editor-core` itself at a tolerance of `0.25 / zoom` page units. A custom node is hit inside its frame. Exact geometry-port hit testing is deferred ([P5-Q4](#9-open-questions)).
+**Hit testing (P5).** Let `r = max(w / 2, 4 / zoom)` page units, where `w` is the stroke width, or 0 without a stroke. A rectangle is hit inside its frame when it has a fill, and within `r` of its frame outline in every case. A path, and a custom node through its `toScene` geometry, is hit inside its fill region when it has a fill, and within `r` of its outline in every case. Outlines are flattened by `editor-core` itself at a tolerance of `0.25 / zoom` page units. Exact geometry-port hit testing is deferred ([P5-Q4](#9-open-questions)).
 
 ### 4.5 Scene projector
 
-`editor-core` maps the document to `contracts` scene data: one `RenderNodeSnapshot` per node, in paint order, with `visible` and `opacity` copied. The node's `transform` is the translation to the frame origin only. A rectangle becomes a `primitive` rectangle of the frame's width and height with zero corner radii. A path's unit-box points are multiplied by the frame's width and height on projection, so stroke width stays in page units and is never scaled by a non-uniform resize. On each committed transaction or gesture update it sends a `RenderChangeSet` to the injected `RendererSceneSynchronization`. Selection outlines and handles are an overlay drawn by the host UI, not document nodes. A custom node is projected through its extension's `toScene` (section 5).
+`editor-core` maps the document to `contracts` scene data: one `RenderNodeSnapshot` per node, in paint order, with `visible` and `opacity` copied. The node's `transform` is the translation to the frame origin only. A rectangle becomes a `primitive` rectangle of the frame's width and height with zero corner radii. A path's unit-box points are multiplied by the frame's width and height on projection, so stroke width stays in page units and is never scaled by a non-uniform resize. Selection outlines and handles are an overlay drawn by the host UI, not document nodes. A custom node is projected as a `path` node whose geometry is its extension's frame-local `toScene` output and whose style is the node's own `fill` and `stroke` (section 5).
+
+Synchronization with the injected `RendererSceneSynchronization` (`packages/contracts/src/scene.ts`):
+
+- **Identity.** `SceneIdentity = { documentId: document.id, pageId: page.id }`. Page children are root nodes: `parentId: null`, in `rootOrder`.
+- **Scene revision.** The projector keeps its own revision, separate from the document revision. It increases by one for every scene it sends, so `revision > baseRevision` always holds.
+- **Snapshots.** It sends `replaceSnapshot` when the renderer is attached, after `loadDocument`, and after any `resync-required` result.
+- **Change sets.** It sends one `RenderChangeSet` after every document change: a committed transaction, a gesture update, commit or cancel, an undo and a redo. After each, the renderer's scene equals the projection of the current document.
+- **Rejection.** An `invalid-scene` result is a projector defect: it emits the structured diagnostic `editor.scene-rejected` and is not retried.
 
 ## 5. Extension slice
 
 - The host registers extensions at construction: `createEditor({ extensions: [starExtension], ... })`.
-- An extension declares `{ id, nodeTypes: [{ customType, validate(data), defaults(), toScene(data, frame) }], commands?: [...] }`. `toScene` returns plain `contracts` path or primitive geometry.
+- An extension declares `{ id, nodeTypes: [{ customType, validate(data), defaults(), toScene(data, frame) }], commands?: [{ id, run(args, api) }] }`. `toScene` returns plain `contracts` path geometry in frame-local page units. An extension command's `run` receives only `api = { execute, query }` and composes core commands, so it creates nodes through `createCustomNode`.
 - An extension receives only the public `execute`, `query` and `subscribe` API. It gets no mutable store, no renderer, GPU or WASM handle, and no other extension's internals ([`ARCHITECTURE.md`, Extension boundary](../../ARCHITECTURE.md#extension-boundary)).
-- The P5 sample is `ext.star`: `data = { points: integer 3..32, innerRatio: (0, 1) }`, created by its own command, edited through `setNodeProps`, round-tripped through JSON, and undone like any other node.
+- The P5 sample is `ext.star`: `data = { points: integer 3..32, innerRatio: (0, 1) }`, created by its own command `ext.star.create` (which calls `createCustomNode`), edited through `setNodeProps`, round-tripped through JSON, and undone like any other node.
 
 ## 6. React and Next.js
 
 - `EditorProvider` takes an editor instance created by the host. `useEditorSelector(selector)` is built on `useSyncExternalStore` over editor snapshots; `useEditorCommands()` returns `execute`.
 - `EditorCanvas` is headless: it renders a `<canvas>` and pointer handlers, and it creates the renderer only in an effect through a host-supplied factory, so the WebGPU backend stays a host choice.
-- `apps/next-host` uses one `'use client'` page. **No browser access at module import:** importing `model`, `editor-core` and `react` in Node with no `window`, `document` or `navigator` must not throw.
+- `apps/next-host` uses one `'use client'` page. **No browser access at module import:** importing `model`, `editor-core` and `react`, and the next-host page module graph, in Node with no `window`, `document` or `navigator` must not throw. The page loads `renderer-webgpu` and `geometry-wasm` by dynamic `import()` inside the canvas effect, so they are not evaluated during prerender.
 - SSR canvas rendering stays out of scope.
 
 ## 7. Acceptance criteria
@@ -143,21 +154,21 @@ Selection (an ordered set of node IDs), the active tool, the viewport (camera po
 | ID | Criterion (exit-gate bullet) | Method |
 | --- | --- | --- |
 | P5-A01 | Rectangle and path creation produce the expected nodes through `execute` (1) | Unit tests with literal expected documents |
-| P5-A02 | Click and marquee selection follow section 4.4, including reverse paint order, shift and empty-canvas cases (1) | Unit tests on fixtures with overlapping nodes |
-| P5-A03 | Move and resize map frames as section 4.4 states, path points unchanged (1) | Unit tests, exact values |
+| P5-A02 | Click and marquee selection, driven through `input` and read through `query`, follow section 4.4, including reverse paint order, shift, empty-canvas and unfilled-shape cases (1) | Unit tests on fixtures with overlapping nodes |
+| P5-A03 | Move and resize, driven through `input`, map frames as section 4.4 states, unit-box path points unchanged, zero-size axes unscaled (1) | Unit tests, exact values |
 | P5-A04 | A continuous drag with 50 updates creates exactly one undo step; undo gives the byte-identical pre-drag JSON; redo gives the byte-identical post-drag JSON; cancel creates no step (1) | Unit tests |
 | P5-A05 | Failed commands change neither document nor history; selection and viewport never enter history (1) | Unit tests |
 | P5-A06 | `parse(serialize(d))` deep-equals `d`, and `serialize(parse(t)) = t` for the committed fixture documents; IDs, frames, path data and paint order are preserved (2) | Unit tests on fixtures, including `ext.star` |
 | P5-A07 | Each section 3.3 code is returned for its own malformed fixture, and no partial document is produced (2) | Unit tests |
 | P5-A08 | Serialized output contains no selection, viewport, history or cache field (2) | Unit test on the key set |
-| P5-A09 | The same command script yields identical documents, history and change events with a recording test renderer and with the WebGPU host (3) | Unit test plus headed GPU spec |
+| P5-A09 | The same command script yields identical documents, history and change events with a recording test renderer and with the WebGPU host; the recording renderer's final scene equals the document's projection after a commit, a cancelled drag, an undo, a redo and a `loadDocument`, and its first call is `replaceSnapshot` (3) | Unit test plus headed GPU spec |
 | P5-A10 | `ext.star` registers, creates, edits, round-trips and undoes through public API only; a type-level test shows the extension context exposes no store, renderer or GPU member (4) | Unit and type tests |
-| P5-A11 | `model`, `editor-core` and `react` import in Node without browser globals (5) | Unit test in a clean Node context |
+| P5-A11 | `model`, `editor-core`, `react` and the next-host page module graph import in Node without browser globals (5) | Unit test in a clean Node context |
 | P5-A12 | `apps/next-host` builds with `next build` and its page edits a document in headed Chrome and Edge through `EditorCanvas` (5) | CI build, headed GPU spec |
-| P5-A13 | `pnpm check:boundaries` covers the new packages and rejects a seeded forbidden edge (`editor-core -> renderer-webgpu`) | Boundary test |
+| P5-A13 | `pnpm check:boundaries` covers the new packages and rejects the seeded forbidden edges `editor-core -> renderer-webgpu` and `react -> renderer-webgpu` | Boundary test |
 | P5-A14 | Independent `reviewer` review of each unit; the exit record lists evidence for P5-A01 to P5-A13 | Review record |
 
-No performance claim is made in P5. Rendering precision stays UNVERIFIED until A04 evidence exists.
+No performance claim is made in P5. Rendering precision stays UNVERIFIED until P3 A04 evidence exists.
 
 ## 8. Units and order
 
@@ -168,7 +179,7 @@ No performance claim is made in P5. Rendering precision stays UNVERIFIED until A
 | P5-U3 | Tools and hit testing (P5-A02, A03) | Light |
 | P5-U4 | Scene projector and recording test renderer (P5-A09 unit half) | Light |
 | P5-U5 | Extension registry and `ext.star` (P5-A10) | Full (public extension contract) |
-| P5-U6 | `@vector-studio/react` and `apps/next-host` (P5-A11, A12, A09 headed half) | Full (new dependencies) |
+| P5-U6 | `@vector-studio/react` and `apps/next-host` (P5-A11, A12, A09 headed half); the `ARCHITECTURE.md` pointer that `apps/next-host`, as host composition, may depend on `geometry-wasm` and `renderer-webgpu`, and its `boundary-policy.mjs` entry | Full (new dependencies) |
 | P5-U7 | Exit record and review (P5-A13, A14) | Full |
 
 Order: U1, U2, then U3 to U5 in any order, then U6, then U7. Every unit runs `pnpm check`; headed specs run on the user's PC or are reported NOT RUN.
@@ -196,3 +207,12 @@ Order: U1, U2, then U3 to U5 in any order, then U6, then U7. Every unit runs `pn
 ## 11. Gate
 
 On approval, this plan is the P5 execution plan. P5 implementation starts at P5-U1 after the P3 exit, or earlier on a separate user approval (D10 decision 4). The P5 exit is the user's acceptance of the record of P5-U7.
+
+## 12. Review round 1 (2026-10-24)
+
+Independent `reviewer` review: NOT READY, three blocking and nine should-fix items, all applied.
+
+- B1: the projector now states identity, the initial and resync `replaceSnapshot`, a separate monotonic scene revision, change sets for undo, redo and cancel, and rejection handling; P5-A09 checks the final scene (section 4.5).
+- B2: session commands and `input` make creation, selection, move and resize run through the public API; P5-A02 and P5-A03 say so (section 4.1).
+- B3: `createCustomNode` and the extension command signature (sections 4.1, 5).
+- Should-fix: reference rules, the path frame and zero-size axes, zero-size resize, consistent hit testing, custom-node style, the next-host module graph in P5-A11, the `ARCHITECTURE.md` pointer and a second seeded edge, "P3 A04", the D10 timing note, and negative zero.
