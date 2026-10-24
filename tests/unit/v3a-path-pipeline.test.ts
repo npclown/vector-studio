@@ -1054,9 +1054,10 @@ describe('V3a device loss, ownership and host injection', () => {
       /[\\/]playground[\\/](package|tsconfig)\.json$/.test(file),
     );
     expect(edges).toHaveLength(2);
-    // The V3-A14 smoke fixture page is a test fixture with a static test-double port.
-    const fixture = files.filter((file) => /p3-v3-mesh\.(ts|html)$/.test(file));
-    expect(fixture).toHaveLength(2);
+    // The V3-A14 smoke fixture page and the E10-U3 test-hooks check page are test fixtures with a
+    // static test-double port.
+    const fixture = files.filter((file) => /(p3-v3-mesh|e10-test-hooks)\.(ts|html)$/.test(file));
+    expect(fixture).toHaveLength(4);
     for (const file of fixture)
       expect(readFileSync(file, 'utf8'), file).not.toMatch(/geometry-wasm/);
     const allowed = new Set([...host, ...edges, ...fixture]);

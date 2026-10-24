@@ -1,0 +1,44 @@
+{
+  "schema": "e10-test-hooks/v1",
+  "browser": {
+    "name": "edge",
+    "version": "156.0.4314.42"
+  },
+  "adapter": {
+    "architecture": "turing",
+    "description": "",
+    "vendor": "nvidia"
+  },
+  "samples": 1,
+  "dpr": 1,
+  "dprSource": "backend-input",
+  "outcomes": {
+    "on/h-matching-empty": [],
+    "on/e-empty": [],
+    "on/f-sample-count": [],
+    "on/h-matching-rect": [],
+    "on/a-rect": [],
+    "on/c-rect": [],
+    "on/h-matching-triangle": [],
+    "on/c-triangle": [],
+    "on/b-analytic": [],
+    "on/h-matching-doubled": [],
+    "on/c-doubled": [],
+    "on/d-doubled": [],
+    "on/page-errors": [],
+    "off/h-matching-empty": [],
+    "off/e-empty": [],
+    "off/f-sample-count": [],
+    "off/h-matching-rect": [],
+    "off/a-rect": [],
+    "off/c-rect": [],
+    "off/b-no-exterior": [],
+    "off/h-matching-triangle": [],
+    "off/c-triangle": [],
+    "off/b-msaa-steps": [],
+    "off/h-matching-doubled": [],
+    "off/c-doubled": [],
+    "off/d-doubled": [],
+    "off/page-errors": []
+  }
+}

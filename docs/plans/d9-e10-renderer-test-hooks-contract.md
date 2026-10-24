@@ -124,7 +124,7 @@ The page matches a capture to the draw record by checking that `framesSubmitted`
 | E10-U2 | Sample count, capture and count pass | `packages/renderer-webgpu/src/webgpu-backend.ts`, `native-primitive-scene.ts`, `webgpu-platform.ts`, new `mesh-count-shader.ts`, `tests/unit/e10-capture.test.ts`, `tests/unit/e10-default-invariance.test.ts` and its golden log |
 | E10-U3 | Check page, headed spec, evidence | `apps/playground/e10-test-hooks.html`, `src/e10-test-hooks.ts`, the rollup input, `tests/gpu/e10-test-hooks.spec.ts`, a `docs/validation.md` row, an evidence section in the rendering track plan |
 
-The order is E10-U1, then E10-U2, then E10-U3. U1 and U2 are separate pull requests under this contract. U3 needs the user's PC. VZ4-U1 may start against the published hooks once U2 is merged, and its VZ4-A1 refusal check runs against them.
+The order is E10-U1, then E10-U2, then E10-U3. U1 and U2 are separate pull requests under this contract. (Departure, 2026-10-24: U1, U2 and U3 ship in one pull request, because the session has one branch and U3 needs U1 and U2; the review and evidence criteria are unchanged.) U3 needs the user's PC. VZ4-U1 may start against the published hooks once U2 is merged, and its VZ4-A1 refusal check runs against them.
 
 ## 8. Validation commands
 
@@ -168,3 +168,25 @@ Independent `reviewer` review: NOT READY, one blocking, six should-fix and four 
 ## 13. Review round 2 (2026-10-24)
 
 READY, two should-fix and five nit items, all applied in revision 3: `count-overflow` joins the section 4 list and A4; A6's sum rule is for plain entries, with `null` for joint entries; the port members are exempt from the naming rule; the mesh-unavailable rule applies to backend options on generations that require the mesh pipeline, and `forcedSampleCount` wins over `meshPipeline`; an absent `usage` leaves the `configure` call as today's; the timeout covers arming to encoding only.
+
+## 14. Evidence review and visualization-track check (2026-10-24)
+
+E10-A7 ran headed on PR #228 head `1be1945` and passed 12/12 ([record](../evidence/e10-test-hooks-2026-10-24/record.md)). An independent `reviewer` did two checks.
+
+- **E10-A9 evidence review: READY, evidence accepted.**
+  - All 12 cells are present, and all 24 runs (fringe on and off) are present. Each JSON matches the spec's key set, and the spec's predicates test what A7 says. There is no precision claim.
+  - Should-fix items that the record states as limits:
+    - The browser's own DPR was 1 throughout, so only the backend DPR input was exercised.
+    - The JSONs hold failure lists, not measured values.
+    - The spec's (h) has an unreachable fallback branch for an empty scene. The measured run did not take it, because the source records a draw on every prepare.
+  - These are left to VZ4-U1, which records measured capture size, DPR and deltas for its own corpus. The spec that ran stays unchanged, so the evidence keeps matching the merged code.
+- **VZ4-D2 and VZ4-D3: READY.** Every item V-4 needs is present:
+  - forced sample count without fallback;
+  - fringe-off;
+  - an exact readback of the presented frame;
+  - a count pass on the same vertex stage, bind group and draw ranges, with 1x and per-sample 4x counts;
+  - the draw record.
+- **Carried to VZ4-U1:**
+  - The draw record labels a path whose fringe builder returned unsupported as `region-only-cap`. VZ4-U1 takes REGION-ONLY from the notices, as V-4 section 4.4 already does.
+  - VZ4-U1 corrects V-4 section 4.3, which should say opaque black.
+  - VZ4-U1 asserts the capture size against each case's physical size.
