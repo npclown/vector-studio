@@ -383,7 +383,9 @@ describe('P3 B0 spike oracle harness on the B0 corpus (sections 2.2, 4.4 and SL-
     expect(harness.allocatingCalls).toEqual([]);
     expect(dump.paths.every((path) => path.allocations === 0)).toBe(true);
     expect(harness.s1Accessor.failures).toEqual([]);
-    expect(harness.s1Accessor.published).toBe(453);
+    // 453 before E8-U2; its canonical source-final knot publishes 757 more exact attempts, all
+    // recorded failures in the 2026-10-17 record (SL-O4 amendment, 2026-10-24).
+    expect(harness.s1Accessor.published).toBe(1210);
     expect(harness.s1Accessor.published + harness.s1Accessor.other).toBe(1270);
   });
 
