@@ -672,6 +672,14 @@ export class PathMeshPipeline {
     return this.#overlayBuilds;
   }
 
+  /**
+   * @internal Tests only (E10 contract, section 3.1): false when the pipeline was built
+   * without a fringe builder; it classifies the draw record's region-only draws.
+   */
+  public get hasFringeBuilder(): boolean {
+    return this.#fringeBuilder !== undefined;
+  }
+
   /** At most `noticesPerPacket` queued notices, oldest first; the rest stay queued. */
   public takePacketNotices(): readonly PathMeshNotice[] {
     return Object.freeze(this.#notices.splice(0, this.#limits.noticesPerPacket));
@@ -1702,3 +1710,24 @@ function numbersEqual(left: readonly number[], right: readonly number[]): boolea
 function compareOrdinal(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
+
+/**
+ * @internal Tests only (E10 contract, section 3.1): one mesh draw of the last non-null prepare.
+ * The triangle split is null for a joint fill draw, whose records carry two role bits.
+ */
+export type PathDrawRecordEntryForTesting = Readonly<{
+  nodeId: string;
+  paint: PathPaint;
+  composite: 'plain' | 'joint-fill';
+  fringe: 'built' | 'region-only-cap' | 'region-only-off';
+  triangleCount: number;
+  regionTriangles: number | null;
+  exteriorTriangles: number | null;
+}>;
+
+/** @internal Tests only (E10 contract, section 3.1). */
+export type PathDrawRecordForTesting = Readonly<{
+  /** Non-null prepares so far, from 1. */
+  prepareSerial: number;
+  draws: readonly PathDrawRecordEntryForTesting[];
+}>;
