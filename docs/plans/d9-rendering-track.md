@@ -433,7 +433,7 @@ Dated append. Unit E11-U2 of the [E11 contract](d9-e11-p3-c03-c05-closure-contra
 
 **Disclosure.** A first, unsmoothed scene draft was probed on the release WASM before v1 was fixed: every one of its 2,000 requests failed, most with `work-limit`. v1 (smooth Catmull-Rom contours, every fourth path looping) was then written and pinned. E11 section 8 says the generator and seed "are committed before its first run"; v1 was committed before its record run below, but not before that probe. The probe tuned the scene toward meshing more paths, which gives the checker more meshes, not fewer. The disposition of this departure is the evidence review's. The scene is a structure-sweep input, not a blind acceptance corpus.
 
-**Run.** Container, Node 22.22.0 (the repo pins 24.15.0), on the clean committed head of this PR (`provenance.json`: `dirty: false`), WASM `9b39af75…2193` built here by `pnpm test:geometry` (the user's machine had `8034d36b…1d6f`; the difference is not explained and must be checked before any exit run), batch 32, about 70 s. RUN_SUMMARY
+**Run.** Container, Node 22.22.0 (the repo pins 24.15.0), on the clean committed head of this PR (`provenance.json`: `dirty: false`), WASM `9b39af75…2193` built here by `pnpm test:geometry` (the user's machine had `8034d36b…1d6f`; the difference is not explained and must be checked before any exit run), batch 32, 70 s: run `2026-10-24T04-08-28-979Z-394ead0b` at commit `b1f12f1`. Outcome digest `fcec1941…48ff` (the earlier dirty runs gave `129fa819…a5a3` twice; the digest changed only because mesh hashes now include array lengths).
 
 | Kind | ok | `work-limit` | `unsupported-geometry` | Triangles | Oracle-checked | Structure issues |
 | --- | --- | --- | --- | --- | --- | --- |
