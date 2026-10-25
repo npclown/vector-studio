@@ -63,14 +63,16 @@ type Expectation = Readonly<{
  * showed it at `work-limit`, `wide-cubic` at DPR 1 overview and zoom 0.25, `cusp-f16-large` at zoom 0.25,
  * `cusp-f16p` at DPR 3 overview), drawn without a fringe (`fringe-work-cap`), so those views
  * have more mesh draws; `cusp-f16p` at DPR 1 overview and `cusp-shared-a` at DPR 3 overview now
- * build their fringe too, so their notices are gone. Every probe is unchanged. Keyed `dpr/view`.
+ * build their fringe too, so their notices are gone. Every probe is unchanged. Re-baselined
+ * 2026-10-25 by E2-U3 (stroke revision 7) from the headed run at `dbc8b13`, identical in Chrome
+ * and Edge: `fill-stroke-circle` at DPR 1 overview and zoom 0.25 now meshes through the family-B
+ * rung and its fringe is built, so its `fringe-work-cap` notice is gone there; mesh draws and probes are unchanged. Keyed `dpr/view`.
  */
 const EXPECTED: Readonly<Record<string, Expectation>> = {
   '1/overview-zoom-1': {
     notices: [
       'cap-round stroke fringe-work-cap',
       'cusp-f16-large stroke work-limit',
-      'fill-stroke-circle stroke fringe-work-cap',
       'wide-cubic stroke fringe-work-cap',
     ],
     meshDraws: 22,
@@ -80,11 +82,7 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
     meshDraws: 23,
   },
   '1/zoom-0.25': {
-    notices: [
-      'cusp-f16-large stroke fringe-work-cap',
-      'fill-stroke-circle stroke fringe-work-cap',
-      'wide-cubic stroke fringe-work-cap',
-    ],
+    notices: ['cusp-f16-large stroke fringe-work-cap', 'wide-cubic stroke fringe-work-cap'],
     meshDraws: 23,
   },
   '1/zoom-2-cusp': {
