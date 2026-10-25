@@ -318,6 +318,8 @@ fn e1_f4_edges_1024_bounds_guard() {
         );
         assert_eq!(on.probe.fired, 0, "{label}: E1-K1 did not fire");
         assert_eq!(on.probe.blocked, 1, "{label}: the guard blocked");
+        assert_eq!(on.probe.boundary_blocked, 1, "{label}: the boundary guard");
+        assert_eq!(on.probe.contributor_blocked, 0, "{label}");
     }
     // ContributorLimit: 384 cells' contributors + 640 vertical > 1,000 >= 640.
     let limits = RoundedFillLimits {
@@ -334,7 +336,86 @@ fn e1_f4_edges_1024_bounds_guard() {
     );
     assert_eq!(on.probe.fired, 0, "E1-K1 did not fire");
     assert_eq!(on.probe.blocked, 1, "the guard blocked");
+    assert_eq!(on.probe.boundary_blocked, 0, "the boundary guard holds");
+    assert_eq!(on.probe.contributor_blocked, 1, "the contributor guard");
     assert_edges_1024_record(&on, "E1-F4 contributors");
+}
+
+/// D9 E9 (E1 review follow-up 1): the guards' equality points. At `max_work = W + F_L - 1`,
+/// E1-K1 fires at `max_boundaries = boundaries + S` and at `max_contributors = contributors +
+/// Σ_vertical |Δrank|`; one below each, the named guard blocks it and the full run keeps its
+/// cause. A `<` in place of `<=` in either guard fails here.
+#[test]
+fn e9_edges_1024_guard_equality_points() {
+    /// Which guard blocks E1-K1, or `None` when it fires.
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    enum Guard {
+        Boundary,
+        Contributor,
+    }
+    let (path, request) = edges_1024();
+    let max_work = EDGES_1024_W + EDGES_1024_F_L - 1;
+    let boundaries = 2 * EDGES_1024_CELLS + EDGES_1024_SPANS;
+    let contributors = 384 + EDGES_1024_VERTICAL;
+    assert_eq!((boundaries, contributors), (1_020, 1_024));
+    let default_boundaries = STROKE_V0_LIMITS.max_boundaries;
+    let default_contributors = STROKE_V0_LIMITS.max_contributors;
+    // Below the boundary point the full run still fails with WorkLimit (511 boundaries, E1-F3);
+    // below the contributor point it pushes the 1,024th contributor and keeps ContributorLimit.
+    let cases = [
+        (
+            boundaries,
+            default_contributors,
+            None,
+            RoundedFillError::WorkLimit,
+        ),
+        (
+            boundaries - 1,
+            default_contributors,
+            Some(Guard::Boundary),
+            RoundedFillError::WorkLimit,
+        ),
+        (
+            default_boundaries,
+            contributors,
+            None,
+            RoundedFillError::WorkLimit,
+        ),
+        (
+            default_boundaries,
+            contributors - 1,
+            Some(Guard::Contributor),
+            RoundedFillError::ContributorLimit,
+        ),
+    ];
+    for (max_boundaries, max_contributors, blocked_by, cause) in cases {
+        let limits = RoundedFillLimits {
+            max_work,
+            max_boundaries,
+            max_contributors,
+            ..STROKE_V0_LIMITS
+        };
+        let label =
+            format!("E9 max_boundaries {max_boundaries} max_contributors {max_contributors}");
+        let mut ws = with_limits(limits);
+        let (on, _) = on_off(&mut ws, &path, request, max_work, &label);
+        assert_edges_1024_record(&on, &label);
+        assert_eq!(on.status, Some(STROKE_PATH_WORK_LIMIT), "{label}");
+        assert_eq!(on.error, Some(StrokeError::Rounded(cause)), "{label}");
+        let count = |guard| u64::from(blocked_by == Some(guard));
+        assert_eq!(
+            on.probe.fired,
+            u64::from(blocked_by.is_none()),
+            "{label}: fired"
+        );
+        assert_eq!(on.probe.blocked, u64::from(blocked_by.is_some()), "{label}");
+        assert_eq!(on.probe.boundary_blocked, count(Guard::Boundary), "{label}");
+        assert_eq!(
+            on.probe.contributor_blocked,
+            count(Guard::Contributor),
+            "{label}"
+        );
+    }
 }
 
 /// The ST-U3b chords polyline (`stroke_probe_tests.rs`): `segments` LINE verbs on a circle of
@@ -585,6 +666,8 @@ struct SweepTally {
     fired_small: u64,
     fired_large: u64,
     blocked: u64,
+    boundary_blocked: u64,
+    contributor_blocked: u64,
     vertical_reaching: u64,
     exact_checks: u64,
 }
@@ -597,6 +680,8 @@ impl SweepTally {
         self.fired_small += other.fired_small;
         self.fired_large += other.fired_large;
         self.blocked += other.blocked;
+        self.boundary_blocked += other.boundary_blocked;
+        self.contributor_blocked += other.contributor_blocked;
         self.vertical_reaching += other.vertical_reaching;
         self.exact_checks += other.exact_checks;
     }
@@ -617,6 +702,8 @@ fn sweep_point(case: &CorpusCase, limits: RoundedFillLimits, label: &str, tally:
         }
     }
     tally.blocked += on.probe.blocked;
+    tally.boundary_blocked += on.probe.boundary_blocked;
+    tally.contributor_blocked += on.probe.contributor_blocked;
 }
 
 fn sweep_case(case: &CorpusCase, tally: &mut SweepTally) {
@@ -635,6 +722,8 @@ fn sweep_case(case: &CorpusCase, tally: &mut SweepTally) {
         }
     }
     tally.blocked += on.probe.blocked;
+    tally.boundary_blocked += on.probe.boundary_blocked;
+    tally.contributor_blocked += on.probe.contributor_blocked;
     if off.probe.reached == 0 {
         return;
     }
@@ -658,7 +747,13 @@ fn sweep_case(case: &CorpusCase, tally: &mut SweepTally) {
             ..STROKE_V0_LIMITS
         };
         let label = format!("{} boundary guard", case.name);
+        let before = tally.boundary_blocked;
         sweep_point(case, limits, &label, tally);
+        assert_eq!(
+            tally.boundary_blocked,
+            before + 1,
+            "{label}: the boundary guard"
+        );
     }
     if let Some(vertical) = record.vertical_contributors.filter(|sum| *sum > 0) {
         let limits = RoundedFillLimits {
@@ -667,7 +762,13 @@ fn sweep_case(case: &CorpusCase, tally: &mut SweepTally) {
             ..STROKE_V0_LIMITS
         };
         let label = format!("{} contributor guard", case.name);
+        let before = tally.contributor_blocked;
         sweep_point(case, limits, &label, tally);
+        assert_eq!(
+            tally.contributor_blocked,
+            before + 1,
+            "{label}: the contributor guard"
+        );
     }
 }
 
@@ -707,6 +808,11 @@ fn e1_c1_differential_sweep() {
     assert!(tally.fired_small >= 1, "coverage: E1-K1 fires with E <= 64");
     assert!(tally.fired_large >= 1, "coverage: E1-K1 fires with E > 64");
     assert!(tally.blocked >= 1, "coverage: a guard blocks");
+    assert_eq!(
+        tally.blocked,
+        tally.boundary_blocked + tally.contributor_blocked,
+        "each block names one guard"
+    );
     assert!(
         tally.vertical_reaching >= 1,
         "coverage: a case reaching E1-K1 has vertical edges"

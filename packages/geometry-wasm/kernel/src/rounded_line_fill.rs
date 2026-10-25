@@ -1683,8 +1683,12 @@ impl RoundedFillWorkspace {
         {
             let disabled = e1_k1_disabled();
             e1_probe(|probe| {
-                if !contributors_fit {
+                if !boundaries_fit {
                     probe.blocked += 1;
+                    probe.boundary_blocked += 1;
+                } else if !contributors_fit {
+                    probe.blocked += 1;
+                    probe.contributor_blocked += 1;
                 } else {
                     probe.certain += 1;
                     if !disabled {
@@ -3717,8 +3721,13 @@ pub(crate) struct EarlyAbortProbe {
     pub(crate) certain: u64,
     /// Runs that E1-K1 aborted (the "E1-K1 fired" counter).
     pub(crate) fired: u64,
-    /// Runs where `W + F_L > max_work` but a guard blocks the abort.
+    /// Runs where `W + F_L > max_work` but a guard blocks the abort
+    /// (`boundary_blocked + contributor_blocked`).
     pub(crate) blocked: u64,
+    /// Blocked runs where the boundary guard fails.
+    pub(crate) boundary_blocked: u64,
+    /// Blocked runs where the boundary guard holds and the contributor guard fails.
+    pub(crate) contributor_blocked: u64,
     /// Span loops entered.
     pub(crate) span_loops: u64,
     /// Span loops completed with the forecast exactness assertion.
@@ -3733,6 +3742,8 @@ const NO_EARLY_ABORT_PROBE: EarlyAbortProbe = EarlyAbortProbe {
     certain: 0,
     fired: 0,
     blocked: 0,
+    boundary_blocked: 0,
+    contributor_blocked: 0,
     span_loops: 0,
     exact_checks: 0,
     last: EarlyAbortRecord {
