@@ -82,24 +82,34 @@ const cause = (row) => {
   if (/^Rounded\(/.test(last)) return 'exact-rung topology cap';
   return `other: ${row.legacy} / ${row.triangleFree}`;
 };
+/** The exact rung's segment cap on a line-only path (E16-U1, `B1_LINE_CAPS`): E = 256. */
+const EXACT_LINE_SEGMENT_CAP = 256;
+const CAP_STOP = /^(CommandLimit|OwnerLimit|Rounded\(.*\)|Topology\(WorkLimit\))$/;
+
 /**
- * The closed-list class (E11 section 7.2) of a failed request, as far as the native outcome
- * decides it. "Fill stop in the exact rung's caps" (update 2026-10-25, E11 section 9.2): rung 0
- * did not mesh, and the exact rung's terminal error is `CommandLimit`, `OwnerLimit`, `Rounded(_)`
- * or `Topology(WorkLimit)`, at e or
- * as the stop error of the last E16-K2 retry (`retryStop`, when the diagnostic prints it), and
- * the row is not in E14-Q1. The E4 and E8 classes are assigned by the evidence review, so the
- * rest is reported as outside, with its cause.
+ * The closed-list class (E11 section 7.2, update 2026-10-25, the user decision of E11 section
+ * 9.2) of a failed request, as far as the native outcome decides it:
+ * - "fill stop in the exact rung's caps": rung 0 did not mesh, the row is not in E14-Q1, and the
+ *   exact rung's terminal error, at e or as the stop error of the last E16-K2 retry, is
+ *   `CommandLimit`, `OwnerLimit`, `Rounded(_)` or `Topology(WorkLimit)`, or `SourceLimit` on a
+ *   line-only path over the exact rung's line segment cap;
+ * - "fill `ZeroLengthLeaf`": the exact rung ends in `ZeroLengthLeaf` (E16-K2 does not retry it).
+ * The E4 and E8 classes are assigned by the evidence review, so the rest is reported as outside,
+ * with its cause.
  */
 const closedClass = (row, side) => {
   if (side.e14) return 'E14-Q1';
   const atE = row.triangleFree === '-' ? row.legacy : row.triangleFree;
-  const terminal = row.retryStop !== undefined && row.retryStop !== '-' ? row.retryStop : atE;
-  if (
-    row.fast !== 'MESH' &&
-    /^(CommandLimit|OwnerLimit|Rounded\(.*\)|Topology\(WorkLimit\))$/.test(terminal)
-  )
-    return 'exact-rung cap stop';
+  // E16-U1 prints the last retry's stop as `depth:error`, or `-` when no retry ran. The class
+  // takes either error.
+  const terminals = [atE];
+  if (row.retryStop !== undefined && row.retryStop !== '-')
+    terminals.push(row.retryStop.replace(/^\d+:/, ''));
+  const capStop = (error) =>
+    CAP_STOP.test(error) ||
+    (error === 'SourceLimit' && side.cubics === 0 && side.segments > EXACT_LINE_SEGMENT_CAP);
+  if (row.fast !== 'MESH' && terminals.some(capStop)) return 'exact-rung cap stop';
+  if (atE === 'ZeroLengthLeaf') return 'zero-length leaf';
   return `outside: ${cause(row)}`;
 };
 const classes = new Map();
