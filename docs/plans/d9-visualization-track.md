@@ -13,7 +13,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | V-1 | Path appearance editing page | Light under D10 (contract was Full) | R0 | Done: merged (#201), independent review ACCEPTED 2026-10-23 ([review](../evidence/r0-review-closeout-2026-10-23.md#v-1)) |
 | V-2 | SVG path-data input page | Light under D10 (contract was Full) | R0 | Done: merged (#207), independent review ACCEPTED 2026-10-23 ([review](../evidence/r0-review-closeout-2026-10-23.md#v-2)) |
 | V-3 | A07 headed integration page | Full (P3 exit evidence) | R0 | Done: merged (#209), independent review ACCEPTED 2026-10-23 as A07 partial evidence ([review](../evidence/r0-review-closeout-2026-10-23.md#v-3)) |
-| V-4 | A08 headed corpus page | Full (P3 exit evidence) | R1 | Contract APPROVED 2026-10-24 ([contract](viz-v4-a08-corpus-contract.md)); VZ4-U1 page and spec and VZ4-U2 metrics runner landed; headed run waits for the E3 freeze |
+| V-4 | A08 headed corpus page | Full (P3 exit evidence) | R1 | Contract APPROVED 2026-10-24 ([contract](viz-v4-a08-corpus-contract.md)); U1 page and U2 metrics landed; PRE-FREEZE headed run 2026-10-25 FAIL on a renderer sliver-flip defect ([record](../evidence/viz-v4-a08-pre-freeze-2026-10-25.md)); counted run waits for the E11 snapshot |
 | V-5 | P5 editor slice | Full | Parallel with the P3 exit (user approval 2026-10-25) | Plan APPROVED 2026-10-24; implementation approved 2026-10-25; P5-U1 to U3 merged, P5-U4 in review ([plan, section 14](p5-editor-slice.md#14-implementation-decision-and-progress-2026-10-25)) |
 | V-6 | V-1 and V-3 review follow-ups (status crediting, zoom clear, field validity, R2 mesh gate) | Light | Backlog | Not started ([review](../evidence/r0-review-closeout-2026-10-23.md#v-1)) |
 
