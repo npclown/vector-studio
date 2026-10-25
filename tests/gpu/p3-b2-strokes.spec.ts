@@ -60,7 +60,7 @@ type Expectation = Readonly<{
  * mesh draw. Re-baselined 2026-10-25 for E2-U1 and E2-U2 (stroke revisions 5 and 6, #237 and
  * #239, merged without a headed run) from the headed run at main 7662310, identical in Chrome and
  * Edge: strokes that stopped at `work-limit` now mesh (`fill-stroke-circle` in every view that
- * showed it, `wide-cubic` at DPR 1 overview and zoom 0.25, `cusp-f16-large` at zoom 0.25,
+ * showed it at `work-limit`, `wide-cubic` at DPR 1 overview and zoom 0.25, `cusp-f16-large` at zoom 0.25,
  * `cusp-f16p` at DPR 3 overview), drawn without a fringe (`fringe-work-cap`), so those views
  * have more mesh draws; `cusp-f16p` at DPR 1 overview and `cusp-shared-a` at DPR 3 overview now
  * build their fringe too, so their notices are gone. Every probe is unchanged. Keyed `dpr/view`.

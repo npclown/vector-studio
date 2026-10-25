@@ -61,8 +61,8 @@ const OBSERVED_NOTICES: Readonly<Record<string, readonly string[]>> = {
   s4: ['v1-zigzag stroke fringe-work-cap'],
   s5: [],
   // N1: v1-circle fill only, stroke on, stroke off (the log keeps its entry), stroke on again
-  // (the stroke is rebuilt and a second notice arrives). Since 2026-10-25 (stroke revision 6,
-  // E2-U2) N1 strokes at width 48: at the initial width 8 the circle stroke meshes and reports
+  // (the stroke is rebuilt and a second notice arrives). Since 2026-10-25 N1 strokes at
+  // width 48: at the initial width 8 the circle stroke meshes at stroke revision 6 and reports
   // `fringe-work-cap`, so N1 would no longer exercise a path that is not drawn.
   'n1.a-fill-only': [],
   'n1.b-stroke-on': ['v1-circle stroke work-limit'],
@@ -547,8 +547,8 @@ for (const dpr of [1, 2]) {
           { name: 'circle interior', at: CIRCLE_CENTER, expected: fill },
         ]);
         noticeSet('n1', 'a-fill-only', await snapshot());
-        // Stroke on at width 48 (butt, round): the whole path is not drawn. Width 8 meshes since
-        // stroke revision 6 (2026-10-25), so N1 sets a width that still ends at work-limit.
+        // Stroke on at width 48 (butt, round): the whole path is not drawn. Width 8 meshes at stroke
+        // revision 6 (2026-10-25), so N1 sets a width that still ends at work-limit.
         await commit(c.widthNumber, N1_STROKE_WIDTH);
         await settle();
         await c.strokeOn.check();
