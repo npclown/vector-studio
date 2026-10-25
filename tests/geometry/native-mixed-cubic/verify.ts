@@ -305,8 +305,8 @@ export function assertNativeMixedCubicCarrier(
   assert.equal(row.topology_tolerance_bits, TOPOLOGY_BITS);
   assert.equal(row.flat_status, 0);
   assert.equal(row.allocations, 0);
-  assert.equal(row.allocated_bytes, 2_908_672);
-  assert.equal(row.inline_bytes, 42_952);
+  assert.equal(row.allocated_bytes, 3_498_880);
+  assert.equal(row.inline_bytes, 24_304);
   if (!row.emission_plan || !row.commands || !row.edge_owners || !row.rounded?.output)
     throw new Error('mixed cubic carrier incomplete');
   assert.equal(row.commands.length, fixture.expectedCommandCount);

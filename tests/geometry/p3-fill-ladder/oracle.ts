@@ -188,6 +188,7 @@ const AFTER_FR3: readonly LadderReason[] = [
   'CLEARANCE',
   'TRIANGLE',
   'MESH_CHECK',
+  'WORK',
 ];
 
 /**
@@ -213,6 +214,13 @@ export function judgeLadder(
           conservative: null,
           reason: outcome.reason === 'PREFIX' ? 'no-condition' : null,
         };
+  // E14-K3's `WORK` is a cost bound raised in FR5 or FR7, after FR3: it names no condition.
+  if (outcome.reason === 'WORK')
+    return {
+      unsound: certificate.alM5.holds === true ? [] : ['AL-M5'],
+      conservative: null,
+      reason: 'no-condition',
+    };
   const spikeReason = outcome.reason === 'MESH_CHECK' ? 'TRIANGLE' : outcome.reason;
   const base = judgeRung(
     { rung: outcome.rung, reason: spikeReason, stop: 'Fr8' } as unknown as SpikeEntry,

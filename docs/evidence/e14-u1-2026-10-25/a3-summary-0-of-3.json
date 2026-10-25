@@ -1,0 +1,14 @@
+{
+  "entries": 1003,
+  "fastOverE": 145,
+  "shard": "0/3",
+  "fallbackOverE": {
+    "MONOTONE": 190,
+    "PREFIX": 21
+  },
+  "checkedSlO2": 145,
+  "overInspectorCap": 145,
+  "maxEdges": 8192,
+  "maxTriangles": 8190,
+  "failures": []
+}

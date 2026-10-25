@@ -689,12 +689,12 @@ impl DumpHarness {
         let workspace =
             || CubicFillWorkspace::new_pre_b1(PRE_B1_FILL_V0_LIMITS).expect("workspace");
         Self {
-            ladder: FillLadder::reserve(PRE_B1_FILL_V0_LIMITS).expect("ladder"),
+            ladder: FillLadder::for_tests(),
             workspace: workspace(),
             probe: workspace(),
             exact: workspace(),
             spike_workspace: workspace(),
-            fast: Box::new(FastRung::new()),
+            fast: Box::new(FastRung::reserve().expect("fast rung")),
             spike: Box::new(p3_b0_spike::FastRung::new()),
             scan: OnceScan::new(),
             engine,
@@ -713,13 +713,13 @@ impl DumpHarness {
         );
         let workspace = || CubicFillWorkspace::new(FILL_V0_LIMITS).expect("workspace");
         Self {
-            ladder: FillLadder::reserve(FILL_V0_LIMITS).expect("ladder"),
+            ladder: FillLadder::for_tests(),
             workspace: workspace(),
             probe: workspace(),
             exact: workspace(),
             spike_workspace: CubicFillWorkspace::new_pre_b1(PRE_B1_FILL_V0_LIMITS)
                 .expect("workspace"),
-            fast: Box::new(FastRung::new()),
+            fast: Box::new(FastRung::reserve().expect("fast rung")),
             spike: Box::new(p3_b0_spike::FastRung::new()),
             scan: OnceScan::new(),
             engine,
@@ -865,7 +865,10 @@ impl DumpHarness {
             verbs,
             point_bytes,
         );
-        let (view, prefix_failure) = match self.probe.prepare_prefix(input, MAX_FLAT_COMMANDS) {
+        // Rung 0's own prefix caps (E14-K1): equal to the exact caps in the pre-B1 mode, E0 on
+        // the production caps.
+        let fast_commands = self.probe.fast_flat_commands();
+        let (view, prefix_failure) = match self.probe.prepare_prefix(input, fast_commands) {
             Ok(view) => (
                 json_view(view.ranges, view.points, view.owners, view.sources),
                 "null".to_owned(),
@@ -970,6 +973,25 @@ fn emit_fill_ladder_dump() {
         entries.len(),
         text.len()
     );
+}
+
+/// E14-A3: the same hand-off on the production caps (`dump_production`), so rung 0's meshes
+/// with E + 1 to E0 flat edges reach SL-O1 and SL-O2. Run by `tests/geometry/e14/rung0-oracle.check.ts`.
+#[test]
+#[ignore = "E14-A3 oracle hand-off; needs P3_FILL_LADDER_INPUT and P3_FILL_LADDER_DUMP"]
+fn emit_fill_ladder_dump_production() {
+    let input = env::var("P3_FILL_LADDER_INPUT").expect("P3_FILL_LADDER_INPUT is required");
+    let bytes = std::fs::read(&input).unwrap_or_else(|error| panic!("read {input}: {error}"));
+    let entries = read_input(&bytes);
+    let text = dump_production(&entries);
+    let path = env::var("P3_FILL_LADDER_DUMP").expect("P3_FILL_LADDER_DUMP is required");
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .expect("create the exclusive ladder dump");
+    file.write_all(text.as_bytes())
+        .expect("write the ladder dump");
 }
 
 /// The debug layer's check of the hand-off: a `P3FLDIN1` input built here with one real path

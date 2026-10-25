@@ -54,9 +54,7 @@ use std::env;
 use std::time::Instant;
 
 use crate::codec::{PathInput, Request};
-use crate::cubic_fill::{
-    ContourRange, CubicFillWorkspace, DecodedSource, EdgeOwner, S1View, MAX_FLAT_COMMANDS,
-};
+use crate::cubic_fill::{ContourRange, CubicFillWorkspace, DecodedSource, EdgeOwner, S1View};
 use crate::fill_export::{tolerances, FillRequest, FILL_V0_LIMITS};
 use crate::fill_filter::{self, compare_enclosures, FilterId, Interval, UNDECIDED};
 use crate::fill_ladder::{
@@ -1719,7 +1717,8 @@ fn load_mirror(
     point_bytes: &[u8],
 ) -> Result<(), Reason> {
     let input = path_input(verbs, point_bytes);
-    match workspace.prepare_prefix(input, MAX_FLAT_COMMANDS) {
+    let commands = workspace.fast_flat_commands();
+    match workspace.prepare_prefix(input, commands) {
         Ok(view) => mirror.load(view, input.request.tolerance),
         Err(_) => Err(Reason::Prefix),
     }
@@ -2157,7 +2156,7 @@ fn al_u4a_certificate_sub_stage_split() {
         inner: env_or("P3_AL_DIAG_INNER", 50).max(1),
     };
     let quantum = clock_quantum();
-    let mut ladder = FillLadder::reserve(FILL_V0_LIMITS).expect("ladder");
+    let mut ladder = FillLadder::for_tests();
     let mut workspace = CubicFillWorkspace::new(FILL_V0_LIMITS).expect("workspace");
     let mut prefix = CubicFillWorkspace::new(FILL_V0_LIMITS).expect("prefix workspace");
     let mut scan = DiagScan::new();

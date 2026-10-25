@@ -424,10 +424,17 @@ fn fallback_fixtures() -> Vec<(Path, Reason)> {
     fixtures.push((cubic_bowtie(), Reason::Monotone));
     fixtures.push((rounded_failure(), Reason::Monotone));
     // AL-F7, one real export input per reachable reason.
+    // E14-K1: rung 0's prefix enforces E0, so the command-limit input is a circle of radius
+    // 2^21 at e = −3, over E0 flat edges, instead of the fine cubic over E (radius 2^20 still
+    // meshes in rung 0).
+    let (r, k) = (2_097_152.0, 2_097_152.0 * 0.552_284_749_8);
     fixtures.push((
-        Path::new("command-limit", NONZERO, -12)
-            .move_to(0.0, 0.0)
-            .cubic_to([0.0, 64.0, 64.0, 64.0, 64.0, 0.0])
+        Path::new("command-limit", NONZERO, -3)
+            .move_to(r, 0.0)
+            .cubic_to([r, k, k, r, 0.0, r])
+            .cubic_to([-k, r, -r, k, -r, 0.0])
+            .cubic_to([-r, -k, -k, -r, 0.0, -r])
+            .cubic_to([k, -r, r, -k, r, 0.0])
             .close(),
         Reason::Prefix,
     ));
@@ -468,7 +475,7 @@ fn fallback_fixtures() -> Vec<(Path, Reason)> {
 
 #[test]
 fn al_u3_fallback_fixtures_take_the_exact_rung_and_equal_exact_only() {
-    assert_eq!(FILL_V0_REVISION, 2);
+    assert_eq!(FILL_V0_REVISION, 3);
     let fixtures = fallback_fixtures();
     for (path, expected) in &fixtures {
         let record = built(path, false);
@@ -820,13 +827,15 @@ fn al_u3_rung_zero_storage_is_reserved_with_the_engine() {
     assert_eq!(engine.reserve(64, 64), BATCH_OK);
     let workspace = engine.workspace().unwrap().allocated_bytes();
     let (_, _, scratch) = FillEngine::scratch_sizes().unwrap();
-    assert_eq!(
-        engine.heap_bytes(),
-        workspace + scratch + core::mem::size_of::<FastRung>()
-    );
+    // E14-K1 item 5: the scratch also holds rung 0's AL-FR9 records at E0.
+    assert!(FillEngine::scratch_bytes() > scratch);
     let ladder = engine.storage()[6];
     assert_ne!(ladder.0, 0);
-    assert_eq!(ladder.1, core::mem::size_of::<FastRung>());
+    assert!(ladder.1 > core::mem::size_of::<FastRung>());
+    assert_eq!(
+        engine.heap_bytes(),
+        workspace + FillEngine::scratch_bytes() + ladder.1
+    );
     assert_eq!(engine.dispose(), BATCH_OK);
     assert_eq!(engine.storage()[6], (0, 0));
     assert_eq!(engine.heap_bytes(), 0);

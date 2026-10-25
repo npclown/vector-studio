@@ -17,7 +17,7 @@ use crate::fill_export::{
     FILL_PATH_UNSUPPORTED_GEOMETRY, FILL_PATH_WORK_LIMIT, FILL_V0_LIMITS, FILL_V0_REVISION,
     FILL_V0_VERSION, INPUT_CAP_BYTES, OUTPUT_CAP_BYTES,
 };
-use crate::fill_ladder::{with_ladder_faults, LadderFault, Reason, Rung};
+use crate::fill_ladder::{with_ladder_faults, LadderFault, Reason, Rung, MAX_FAST_WORK};
 use crate::fill_predicates::orient2d;
 use crate::geometry::{
     Point, PATH_EMPTY, PATH_INVALID, PATH_INVALID_TOLERANCE, PATH_NUMERIC_RANGE, PATH_OK,
@@ -444,7 +444,7 @@ fn runtime_limits_equal_the_native_test_limits() {
         assert!(runtime >= test);
     }
     assert_eq!(FILL_V0_VERSION, 0);
-    assert_eq!(FILL_V0_REVISION, 2);
+    assert_eq!(FILL_V0_REVISION, 3);
     assert_eq!(FILL_INPUT_MAGIC.to_le_bytes(), *b"VGF0");
     assert_eq!(FILL_OUTPUT_MAGIC.to_le_bytes(), *b"VGM0");
     let (slots, split, bytes) = FillEngine::scratch_sizes().unwrap();
@@ -717,12 +717,16 @@ fn reachable_mapping_rows_have_fixtures() {
     }
     assert_eq!(source.verbs.len(), 73);
     assert_eq!(status_of(source), FILL_PATH_WORK_LIMIT);
-    // Flat command cap: a fine cubic flattens to more than 264 commands.
+    // Flat command cap: a fine cubic flattens to more than 264 commands. Since E14-K1 rung 0
+    // meshes it (at most E0 flat edges); its self-crossing variant still reaches the exact
+    // rung's command cap.
     let fine = TestPath::new(3, NONZERO, -12)
         .move_to(0.0, 0.0)
         .cubic_to([0.0, 64.0, 64.0, 64.0, 64.0, 0.0])
         .close();
-    assert_eq!(status_of(fine), FILL_PATH_WORK_LIMIT);
+    assert_eq!(legacy_value(&fine), Err(CubicFillError::CommandLimit));
+    assert_eq!(status_of(fine), FILL_PATH_OK);
+    assert_eq!(status_of(fine_crossing(3)), FILL_PATH_WORK_LIMIT);
     // MOVE + 65,536 LINE = 65,537 output verbs, above P2's frozen 65,536 per
     // path (P2 counts the MOVE); today SourceLimit fires first. Both map to
     // work-limit, independent of B1.
@@ -1306,6 +1310,102 @@ fn self_check_failure_is_internal_error_and_the_engine_recovers() {
     assert_eq!(engine.output_bytes(), expected.as_slice());
 }
 
+/// D9 E14-F1: the 256-edge circle's export output (status, positions, indices, boundary pairs
+/// and bounds, FNV-1a 64 over their bits) is the `r2` output, pinned from the merge base
+/// daf9f62 (E14-U1 evidence).
+#[test]
+fn e14_f1_output_is_the_r2_output() {
+    let fixture = crate::e14_fill_rung0_tests::circle(-3, 512.0);
+    let mut path = TestPath::new(1, NONZERO, fixture.exponent);
+    path.verbs = fixture.verbs;
+    path.points = fixture.points;
+    let mesh = run_one(path);
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut eat = |bytes: &[u8]| {
+        for byte in bytes {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x0100_0000_01b3);
+        }
+    };
+    eat(&mesh.status.to_le_bytes());
+    for value in &mesh.positions {
+        eat(&value.to_bits().to_le_bytes());
+    }
+    for value in mesh.indices.iter().chain(&mesh.boundary) {
+        eat(&value.to_le_bytes());
+    }
+    for value in &mesh.bounds {
+        eat(&value.to_bits().to_le_bytes());
+    }
+    assert_eq!(
+        (mesh.positions.len() / 2, mesh.indices.len() / 3),
+        (256, 254)
+    );
+    assert_eq!(hash, 0x4ed8_07b3_d10d_eec3);
+}
+
+/// D9 E14-G3: `process` allocates nothing and moves no storage on rung 0's E14-F2, E14-F3 and
+/// E14-F5, on a circle over E0 (`PREFIX`), and on E14-F2 and E14-F3 under a lowered work cap
+/// (rung 0 `WORK`), which stands in for E14-F8: no path within E0 and 64 sources reaches W0
+/// (E14-U1 evidence).
+#[test]
+fn e14_g3_process_does_not_allocate_on_rung0_fixtures() {
+    use crate::e14_fill_rung0_tests::{circle, f5, Fixture};
+    let test_path = |id: u32, fixture: Fixture| TestPath {
+        id,
+        rule: match fixture.rule {
+            LineFillRule::Nonzero => NONZERO,
+            LineFillRule::Evenodd => EVENODD,
+        },
+        exponent: fixture.exponent,
+        verbs: fixture.verbs,
+        points: fixture.points,
+    };
+    let paths = [
+        test_path(1, circle(-3, 2_048.0)),
+        test_path(2, circle(-3, 32_768.0)),
+        test_path(3, f5()),
+        // Over E0: rung 0's `PREFIX`, then the exact rung's `CommandLimit`.
+        test_path(4, circle(-3, 2_097_152.0)),
+    ];
+    let input = pack(&paths);
+    let mut engine = FillEngine::new();
+    load(&mut engine, &input, 1 << 20);
+    let workspace_bytes = engine.workspace().unwrap().allocated_bytes();
+    let storage = engine.storage();
+    for cap in [None, Some(1_000)] {
+        let statuses = crate::fill_ladder::with_work_cap(cap.or(Some(MAX_FAST_WORK)), || {
+            engine.input_bytes_mut()[..input.len()].copy_from_slice(&input);
+            crate::allocation_test_support::start();
+            let status = engine.process(input.len() as u32);
+            let allocations = crate::allocation_test_support::stop();
+            assert_eq!(status, BATCH_OK);
+            assert_eq!(allocations, 0, "process must not allocate");
+            assert_eq!(engine.storage(), storage);
+            decode(engine.output_bytes(), &paths)
+                .iter()
+                .map(|mesh| mesh.status)
+                .collect::<Vec<_>>()
+        });
+        // Under the lowered cap E14-F2 and E14-F3 stop at `WORK` and fall back to the exact
+        // rung, whose `CommandLimit` is `work-limit`.
+        let rung0 = if cap.is_none() {
+            FILL_PATH_OK
+        } else {
+            FILL_PATH_WORK_LIMIT
+        };
+        assert_eq!(
+            statuses,
+            [rung0, rung0, FILL_PATH_WORK_LIMIT, FILL_PATH_WORK_LIMIT],
+            "{cap:?}"
+        );
+    }
+    assert_eq!(
+        engine.workspace().unwrap().allocated_bytes(),
+        workspace_bytes
+    );
+}
+
 #[test]
 fn process_does_not_allocate_or_move_storage() {
     let paths = [
@@ -1426,7 +1526,8 @@ fn process_does_not_allocate_or_move_storage() {
         fallback(Reason::Monotone),
         (None, None),
         fallback(Reason::Range),
-        fallback(Reason::Prefix),
+        // E14-K1: over E but within E0, rung 0's prefix admits the path.
+        fast,
         fallback(Reason::Structure),
         fallback(Reason::Closure),
         fallback(Reason::Clearance),
@@ -1445,7 +1546,7 @@ fn process_does_not_allocate_or_move_storage() {
             assert_eq!(status, BATCH_OK);
             assert_eq!(allocations, 0, "process must not allocate");
             assert_eq!(engine.storage(), storage);
-            for index in [0, 11] {
+            for index in [0, 7, 11] {
                 expected[index] = fallback(reason);
             }
             assert_eq!(reasons(&mut engine), expected);
@@ -1507,6 +1608,18 @@ fn star_21_10() -> TestPath {
 }
 
 /// The legacy attempt's kernel value: `Ok(flat_status)` or the error.
+/// E14: the fine cubic of the `CommandLimit` row (more than 264 flat commands at e = −12),
+/// closed by two lines whose segments cross, so rung 0 falls back and the exact rung's command
+/// cap fires.
+fn fine_crossing(id: u32) -> TestPath {
+    TestPath::new(id, NONZERO, -12)
+        .move_to(0.0, 0.0)
+        .cubic_to([0.0, 64.0, 64.0, 64.0, 64.0, 0.0])
+        .line_to(0.0, -32.0)
+        .line_to(64.0, -32.0)
+        .close()
+}
+
 fn legacy_value(path: &TestPath) -> Result<u32, CubicFillError> {
     legacy_attempt(path).0
 }
@@ -1567,11 +1680,10 @@ fn mapping_row_fixtures_reach_their_kernel_values() {
             FILL_PATH_WORK_LIMIT,
         ),
         (
+            // E14-K1: rung 0 meshes the simple fine cubic over E; its self-crossing variant
+            // falls back to the exact rung's command cap.
             "CommandLimit (264 flat commands)",
-            TestPath::new(1, NONZERO, -12)
-                .move_to(0.0, 0.0)
-                .cubic_to([0.0, 64.0, 64.0, 64.0, 64.0, 0.0])
-                .close(),
+            fine_crossing(1),
             Err(CubicFillError::CommandLimit),
             FILL_PATH_WORK_LIMIT,
         ),
@@ -1730,10 +1842,11 @@ fn b1_ring_of_32_cubics_at_lambda_8_is_fast_admitted() {
         assert!(mesh.twice_area() > 0.0, "ring {rho}");
         assert_mesh_invariants(&mesh);
     }
-    // One cubic more is 264 leaves and 266 flat commands, above the 264-command cap.
+    // One cubic more is 264 leaves and 266 flat commands, above the exact rung's 264-command
+    // cap; since E14-K1 rung 0 meshes it.
     let over = b1_ring(9, 33, 0.0);
     assert_eq!(legacy_value(&over), Err(CubicFillError::CommandLimit));
-    assert_eq!(status_of(over), FILL_PATH_WORK_LIMIT);
+    assert_eq!(status_of(over), FILL_PATH_OK);
 }
 
 #[test]
@@ -1774,7 +1887,8 @@ fn b1_rings_process_without_allocation_or_storage_change() {
             FILL_PATH_OK,
             FILL_PATH_OK,
             FILL_PATH_OK,
-            FILL_PATH_WORK_LIMIT
+            // E14-K1: the 33-cubic ring is over E and meshes in rung 0.
+            FILL_PATH_OK
         ]
     );
 }
@@ -1899,18 +2013,16 @@ fn prefix_counts(path: &TestPath) -> Result<[usize; 4], PrefixFailure> {
 
 /// One edge owner above the cap: 31 ring cubics (248 leaves) and a side of nine collinear lines
 /// make 257 leaves. The 259 flat commands still fit the 264-command cap (up to 262 leaves of one
-/// contour do), so the owner cap is the limit that fires. It is `OwnerLimit` in the legacy
-/// attempt and in the fast rung's prefix, and `WORK_LIMIT` through the export.
+/// contour do), so the owner cap is the limit that fires in the legacy attempt (`OwnerLimit`).
+/// Since E14-K1 the fast rung's prefix enforces E0, admits the path and meshes it, and its
+/// self-crossing variant is `WORK_LIMIT` through the export.
 #[test]
 fn b1_257_leaves_fail_with_owner_limit() {
     let path = b1_ring_contour(TestPath::new(1, NONZERO, -3), 32, 8.0, (0.0, 0.0), 9);
     assert_eq!(path.verbs.len(), 1 + 31 + 9 + 1);
     assert_eq!(legacy_value(&path), Err(CubicFillError::OwnerLimit));
-    assert_eq!(
-        prefix_counts(&path),
-        Err(PrefixFailure::Error(CubicFillError::OwnerLimit))
-    );
-    assert_eq!(status_of(path), FILL_PATH_WORK_LIMIT);
+    assert_eq!(prefix_counts(&path), Ok([259, 257, 257, 40]));
+    assert_eq!(status_of(path), FILL_PATH_OK);
     // 262 leaves still fit 264 commands and fail on the owner cap. 263 leaves are 265 commands,
     // one above the command cap, and that limit fires first, in the emission.
     let at_commands = b1_ring_contour(TestPath::new(3, NONZERO, -3), 32, 8.0, (0.0, 0.0), 14);
@@ -1920,7 +2032,7 @@ fn b1_257_leaves_fail_with_owner_limit() {
         legacy_value(&over_commands),
         Err(CubicFillError::CommandLimit)
     );
-    assert_eq!(status_of(over_commands), FILL_PATH_WORK_LIMIT);
+    assert_eq!(status_of(over_commands), FILL_PATH_OK);
     // The same path with eight lines is 256 leaves and meshes; the cap is exactly 256.
     let at_cap = b1_ring_contour(TestPath::new(2, NONZERO, -3), 32, 8.0, (0.0, 0.0), 8);
     assert_eq!(prefix_counts(&at_cap).map(|counts| counts[2]), Ok(256));

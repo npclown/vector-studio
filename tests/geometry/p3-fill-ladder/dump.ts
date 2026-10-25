@@ -17,7 +17,10 @@ export const DUMP_SCHEMA = 'p3-fill-ladder-dump/1';
 export const DUMP_BEGIN = 'P3_FILL_LADDER_DUMP_BEGIN';
 export const DUMP_END = 'P3_FILL_LADDER_DUMP_END';
 
-/** Section 3.1's fallback reasons, in stage order: the spike's, between `RANGE` and `MESH_CHECK`. */
+/**
+ * Section 3.1's fallback reasons, in stage order: the spike's, between `RANGE` and `MESH_CHECK`,
+ * then E14-K3's `WORK` (fill revision 3), appended so the earlier codes keep their slots.
+ */
 export type LadderReason =
   | 'RANGE'
   | 'PREFIX'
@@ -28,7 +31,8 @@ export type LadderReason =
   | 'CROSSING'
   | 'CLEARANCE'
   | 'TRIANGLE'
-  | 'MESH_CHECK';
+  | 'MESH_CHECK'
+  | 'WORK';
 export const LADDER_REASONS: readonly LadderReason[] = [
   'RANGE',
   'PREFIX',
@@ -40,6 +44,7 @@ export const LADDER_REASONS: readonly LadderReason[] = [
   'CLEARANCE',
   'TRIANGLE',
   'MESH_CHECK',
+  'WORK',
 ];
 /** Section 3.1's stages: AL-FR0, the spike's S1 and FR1-FR8, then AL-FR9. */
 export type LadderStage =

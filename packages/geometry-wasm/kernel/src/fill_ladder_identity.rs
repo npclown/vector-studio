@@ -115,7 +115,7 @@ fn random_paths(file: &str) -> Vec<Vec<RungPath>> {
 
 /// The rung record lines of one chunk, from fresh workspaces.
 fn run_chunk(chunk: &[RungPath]) -> String {
-    let mut ladder = FillLadder::reserve(FILL_V0_LIMITS).expect("ladder");
+    let mut ladder = FillLadder::for_tests();
     let mut workspace = CubicFillWorkspace::new(FILL_V0_LIMITS).expect("workspace");
     let mut scan = OnceScan::new();
     let mut out = String::new();

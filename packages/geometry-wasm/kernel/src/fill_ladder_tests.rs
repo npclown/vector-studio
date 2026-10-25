@@ -20,10 +20,12 @@ use std::fmt::Write as _;
 use crate::codec::{PathInput, Request};
 use crate::cubic_fill::{
     ContourRange, CubicFillWorkspace, DecodedSource, EdgeOwner, PrefixFailure, S1View,
-    MAX_FLAT_COMMANDS,
+    MAX_FAST_CONTOUR_POINTS, MAX_FLAT_COMMANDS,
 };
 use crate::engine::BATCH_INTERNAL_ERROR;
-use crate::fill_export::{tolerances, FillRequest, FILL_V0_LIMITS, PRE_B1_FILL_V0_LIMITS};
+use crate::fill_export::{
+    tolerances, FillRequest, FillScratch, FILL_V0_LIMITS, PRE_B1_FILL_V0_LIMITS,
+};
 use crate::fill_filter::{with_fault, Fault};
 use crate::fill_ladder::{
     exact_cascade, with_ladder_faults, BoundaryScan, ExactOutcome, ExactStep, FastRung, FillLadder,
@@ -857,7 +859,7 @@ fn check_mesh(
 /// Runs one fixture through the production fast rung (FR1 to AL-FR9) and compares the outcome
 /// with its literal expectation.
 fn check_fixture(fixture: &Fixture) -> Result<(), String> {
-    let mut fast = Box::new(FastRung::new());
+    let mut fast = Box::new(FastRung::reserve().expect("fast rung"));
     let mut scan = TestScan::new();
     fast.load(fixture.view.view(), DELTA, fixture.rule)
         .map_err(|reason| format!("{}: load failed with {reason:?}", fixture.id))?;
@@ -911,7 +913,7 @@ fn production_fixtures_match_their_literal_expectations() {
 fn sl_f21a_full_run_is_recorded() {
     // SL-F21 (a) asserts FR3 only. The full production run must publish or be `TRIANGLE`.
     let fixture = fixture("SL-F21a");
-    let mut fast = Box::new(FastRung::new());
+    let mut fast = Box::new(FastRung::reserve().expect("fast rung"));
     let mut scan = TestScan::new();
     fast.load(fixture.view.view(), DELTA, fixture.rule).unwrap();
     let result = fast.run(Stage::Fr9, &mut scan);
@@ -933,7 +935,7 @@ fn sl_f21a_full_run_is_recorded() {
 
 #[test]
 fn stage_stops_return_after_their_stage_and_publish_only_after_al_fr9() {
-    let mut fast = Box::new(FastRung::new());
+    let mut fast = Box::new(FastRung::reserve().expect("fast rung"));
     let mut scan = TestScan::new();
     let fixture = fixture("SL-F11");
     fast.load(fixture.view.view(), DELTA, fixture.rule).unwrap();
@@ -1078,7 +1080,7 @@ fn al_defect_11_al_m5_omitted_is_detected() {
     // AL-F3 is admitted past FR3 when AL-M5 is omitted.
     assert_detected("(11)", &["AL-F3"], under(LadderFault::AlM5Omitted));
     let fixture = fixture("AL-F3");
-    let mut fast = Box::new(FastRung::new());
+    let mut fast = Box::new(FastRung::reserve().expect("fast rung"));
     let mut scan = TestScan::new();
     fast.load(fixture.view.view(), DELTA, fixture.rule).unwrap();
     with_ladder_faults(&[LadderFault::AlM5Omitted], || {
@@ -1266,7 +1268,7 @@ struct Harness {
 impl Harness {
     fn new() -> Self {
         Self {
-            ladder: FillLadder::reserve(PRE_B1_FILL_V0_LIMITS).expect("ladder"),
+            ladder: FillLadder::for_tests(),
             workspace: CubicFillWorkspace::new_pre_b1(PRE_B1_FILL_V0_LIMITS).expect("workspace"),
             scan: TestScan::new(),
         }
@@ -1580,7 +1582,7 @@ fn al_f10_triangle_is_covered_by_its_fault_variant() {
     // plan's AL-U1 entry), so AL-F10 is the contract's `cfg(test)` fault variant.
     let fixture = fixture("SL-F5/nonzero");
     check_fixture(&fixture).unwrap();
-    let mut fast = Box::new(FastRung::new());
+    let mut fast = Box::new(FastRung::reserve().expect("fast rung"));
     let mut scan = TestScan::new();
     fast.load(fixture.view.view(), DELTA, fixture.rule).unwrap();
     let result = with_ladder_faults(&[LadderFault::Fr7OrientationRejected], || {
@@ -1640,20 +1642,47 @@ fn production_prefix_equals_the_spike_accessor() {
 
 #[test]
 fn ladder_storage_is_reserved_once_and_checked_against_the_fill_scratch() {
-    let ladder = FillLadder::reserve(FILL_V0_LIMITS).expect("ladder");
-    assert_eq!(ladder.allocated_bytes(), core::mem::size_of::<FastRung>());
+    let ladder = FillLadder::for_tests();
+    assert_eq!(ladder.allocated_bytes(), ladder.fast().allocated_bytes());
     println!(
-        "FastRung {} bytes; MAX_TRIANGLES boundary records {MAX_BOUNDARY_RECORDS}",
-        ladder.allocated_bytes()
+        "FastRung {} bytes (struct {}); MAX_TRIANGLES boundary records {MAX_BOUNDARY_RECORDS}",
+        ladder.allocated_bytes(),
+        core::mem::size_of::<FastRung>()
     );
-    // V2 section a: 3 · (256 + 2 · 256) records, far above the fast mesh's.
-    const { assert!(MAX_BOUNDARY_RECORDS <= 3 * (256 + 2 * 256)) };
+    // E14-K1 item 5: 3 · (E0 + 10) records, above V2 section a's 3 · (256 + 2 · 256).
+    const { assert!(MAX_BOUNDARY_RECORDS == 3 * (8_192 + 10)) };
     let tiny = crate::rounded_line_fill::RoundedFillLimits {
         max_triangles: 1,
         max_vertices: 1,
         ..FILL_V0_LIMITS
     };
-    assert_eq!(FillLadder::reserve(tiny).err(), Some(BATCH_INTERNAL_ERROR));
+    let (scratch, _) = FillScratch::reserve(tiny, 0).expect("scratch");
+    assert_eq!(
+        FillLadder::reserve(scratch.records(), MAX_FAST_CONTOUR_POINTS).err(),
+        Some(BATCH_INTERNAL_ERROR)
+    );
+}
+
+/// E14-D3: a fill scratch sized from `FILL_V0_LIMITS` only (9,216 slots) does not hold rung 0's
+/// AL-FR9 records at E0, so the reserve check refuses it; the pre-B1 ladder's check passes
+/// with the pre-B1 scratch (2,304 records), and the grown scratch passes at E0.
+#[test]
+fn e14_d3_scratch_sized_from_the_exact_limits_only_is_refused() {
+    let (exact_only, _) = FillScratch::reserve(FILL_V0_LIMITS, 0).expect("scratch");
+    assert_eq!(exact_only.records(), 9_216);
+    assert_eq!(
+        FillLadder::reserve(exact_only.records(), MAX_FAST_CONTOUR_POINTS).err(),
+        Some(BATCH_INTERNAL_ERROR)
+    );
+    let (grown, _) = FillScratch::reserve(FILL_V0_LIMITS, MAX_BOUNDARY_RECORDS).expect("scratch");
+    assert_eq!(grown.records(), MAX_BOUNDARY_RECORDS);
+    assert!(FillLadder::reserve(grown.records(), MAX_FAST_CONTOUR_POINTS).is_ok());
+    let (pre_b1, _) = FillScratch::reserve(PRE_B1_FILL_V0_LIMITS, 0).expect("scratch");
+    assert_eq!(pre_b1.records(), 2_304);
+    let pre_b1_points = CubicFillWorkspace::new_pre_b1(PRE_B1_FILL_V0_LIMITS)
+        .expect("workspace")
+        .fast_contour_points();
+    assert!(FillLadder::reserve(pre_b1.records(), pre_b1_points).is_ok());
 }
 
 /// The debug sample of AL-I3 and AL-A6: the real paths at e = −3, plus generated generic-
@@ -1749,6 +1778,67 @@ fn rung_zero_allocates_nothing_on_the_debug_sample() {
         allocating.is_empty(),
         "allocating rung-0 calls: {allocating:?}"
     );
+}
+
+/// E14-D4, differential: rung 0 over `cases` with every indexed `next_half` call compared with
+/// today's linear scan, at the pre-B1 caps (the AL-I3 harness) and at the production caps.
+fn next_half_differential(
+    cases: &[(String, FillRequest, RealPath)],
+) -> crate::fill_ladder::NextHalfCounts {
+    let mut harness = Harness::new();
+    let mut workspace = CubicFillWorkspace::new(crate::fill_export::FILL_V0_LIMITS).unwrap();
+    let mut scan = TestScan::new();
+    let ((), counts) = crate::fill_ladder::with_next_half_differential(|| {
+        for (_, request, path) in cases {
+            let _ = harness.fast(*request, &path.verbs, &path.point_bytes);
+            let _ = harness.ladder.fast_rung(
+                &mut workspace,
+                *request,
+                &path.verbs,
+                &path.point_bytes,
+                &mut scan,
+            );
+        }
+    });
+    counts
+}
+
+/// E14-D4 on the AL-I3 debug sample: indexed and linear `next_half` agree on every call, and
+/// some calls had diagonal candidates, so the comparison is not only w → next(w).
+#[test]
+fn e14_d4_next_half_differential_on_the_debug_sample() {
+    // The sample's rings are convex and its real paths do not reach FR7 with a diagonal; a
+    // nonconvex smooth path gives FR7 diagonals, so some calls compare diagonal candidates.
+    let mut cases = sample_cases();
+    // A kidney of five cubics with tangent-continuous joins, dented on top, scaled by 4.
+    let kidney: Vec<f64> = [
+        0.0, 0.0, 4.0, -2.0, 8.0, -2.0, 12.0, 0.0, 16.0, 2.0, 16.0, 10.0, 12.0, 12.0, 10.0, 13.0,
+        8.0, 8.0, 6.0, 8.0, 4.0, 8.0, 2.0, 13.0, 0.0, 12.0, -4.0, 10.0, -4.0, 2.0, 0.0, 0.0,
+    ]
+    .iter()
+    .map(|value| 4.0 * value)
+    .collect();
+    cases.push((
+        "kidney".to_owned(),
+        request(LineFillRule::Nonzero, B0_EXPONENT),
+        real_path("kidney", vec![0, 2, 2, 2, 2, 2, 3], &kidney),
+    ));
+    let counts = next_half_differential(&cases);
+    println!("E14-D4 debug sample: {counts:?}");
+    assert!(counts.with_diagonals > 0, "{counts:?}");
+}
+
+/// E14-D4 on the full AL-I3 corpus (B0 framed and `p3-b0r-random/v1`).
+#[test]
+#[ignore = "E14-D4 full corpus; needs P3_B0R_B0_CORPUS and P3_B0R_RANDOM_CORPUS; release profile"]
+fn e14_d4_next_half_differential_on_the_full_corpus() {
+    let mut cases = b0_corpus();
+    let random = std::fs::read(env::var("P3_B0R_RANDOM_CORPUS").expect("P3_B0R_RANDOM_CORPUS"))
+        .expect("randomized corpus");
+    cases.extend(random_corpus(&random));
+    let counts = next_half_differential(&cases);
+    println!("E14-D4 full corpus: {} paths, {counts:?}", cases.len());
+    assert!(counts.with_diagonals > 0, "{counts:?}");
 }
 
 // ------------------------------------------------------------------------------------------
@@ -1910,7 +2000,7 @@ impl DifferentialRunner {
 fn al_i3_fixtures_and_debug_sample_equal_the_spike() {
     // Fixtures: both modules' rung 0 on the same synthetic view at δ = 1/8.
     let mut scan = TestScan::new();
-    let mut production = Box::new(FastRung::new());
+    let mut production = Box::new(FastRung::reserve().expect("fast rung"));
     let mut spike = Box::new(p3_b0_spike::FastRung::new());
     let mut closure = Vec::new();
     for fixture in fixtures() {
@@ -1958,7 +2048,11 @@ fn al_i3_fixtures_and_debug_sample_equal_the_spike() {
     );
     assert_eq!(runner.result.allocating, 0);
     assert!(runner.result.identical_fast > 0);
-    assert_eq!(runner.result.reasons[Reason::ALL.len()], 0, "MESH_CHECK");
+    assert_eq!(
+        runner.result.reasons[1 + Reason::MeshCheck as usize],
+        0,
+        "MESH_CHECK"
+    );
 }
 
 // ------------------------------------------------------------------------------------------
@@ -2063,7 +2157,11 @@ fn al_i3_full_corpus_equals_the_spike_and_allocates_nothing() {
             "every corpus exponent is in range"
         );
         assert_eq!(runner.result.allocating, 0, "allocating rung-0 calls");
-        assert_eq!(runner.result.reasons[Reason::ALL.len()], 0, "MESH_CHECK");
+        assert_eq!(
+            runner.result.reasons[1 + Reason::MeshCheck as usize],
+            0,
+            "MESH_CHECK"
+        );
     }
     println!(
         "AL-F7 TRIANGLE search: B0 {} and randomized {} rung-0 TRIANGLE outcomes",
@@ -2280,7 +2378,9 @@ fn al_f7_triangle_search_on_synthetic_line_paths() {
     }
     println!("AL-F7 TRIANGLE search: first TRIANGLE inputs {found:#?}");
     assert!(
-        counts.iter().all(|family| family[Reason::ALL.len()] == 0),
+        counts
+            .iter()
+            .all(|family| family[1 + Reason::MeshCheck as usize] == 0),
         "MESH_CHECK"
     );
 }
@@ -2569,7 +2669,7 @@ impl DeviationBits {
 fn al_u4b1_fixtures_and_debug_sample_keep_the_spike_max_deviation_bits() {
     let mut fixtures_bits = DeviationBits::default();
     let mut scan = TestScan::new();
-    let mut production = Box::new(FastRung::new());
+    let mut production = Box::new(FastRung::reserve().expect("fast rung"));
     let mut spike = Box::new(p3_b0_spike::FastRung::new());
     for fixture in fixtures() {
         let left = production
@@ -2876,7 +2976,7 @@ fn al_u4b2_fr4_shared_operands_decide_as_before() {
     // Fixtures: the synthetic views through FR3, then FR4 by both versions, and the hook's
     // result against the production stops after FR4 (with and without defect (3)).
     let mut scan = TestScan::new();
-    let mut production = Box::new(FastRung::new());
+    let mut production = Box::new(FastRung::reserve().expect("fast rung"));
     let mut fixtures_equivalence = MonotoneEquivalence::default();
     let mut reached = 0usize;
     for fixture in fixtures() {
@@ -3354,7 +3454,7 @@ fn al_u4b3_fr5_boxes_once_decide_as_before() {
     // Fixtures: the synthetic views through FR4, then FR5 by both versions, and the hook's
     // result and counters against the production stop after FR5.
     let mut scan = TestScan::new();
-    let mut production = Box::new(FastRung::new());
+    let mut production = Box::new(FastRung::reserve().expect("fast rung"));
     let mut fixtures_fr5 = ClearanceEquivalence::default();
     for fixture in fixtures() {
         let through_fr4 = production

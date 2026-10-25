@@ -407,7 +407,7 @@ fn admission(
         let ladder = ladder_record(&mut harness.engine, FramePath::corpus(path), 0);
         json_ladder(json, &ladder);
         let flat = probe
-            .prepare_prefix(path.input(), MAX_FLAT_COMMANDS)
+            .prepare_prefix(path.input(), probe.fast_flat_commands())
             .ok()
             .map(|view| view.commands.len());
         if let Some(flat) = flat {

@@ -27,7 +27,7 @@ use std::env;
 use std::fs;
 use std::time::Instant;
 
-use crate::cubic_fill::{CubicFillWorkspace, MAX_FLAT_COMMANDS};
+use crate::cubic_fill::CubicFillWorkspace;
 use crate::engine::{BATCH_OK, BATCH_OUTPUT_CAPACITY};
 use crate::fill_export::{
     FillEngine, FillRequest, PathOutcome, FILL_INPUT_MAGIC, FILL_PATH_OK, FILL_V0_LIMITS,
@@ -432,7 +432,7 @@ fn native_set(
         meshes.push(usize::from(record.mesh));
         flat_commands.push(
             probe
-                .prepare_prefix(cell.paths[index].input(), MAX_FLAT_COMMANDS)
+                .prepare_prefix(cell.paths[index].input(), probe.fast_flat_commands())
                 .map_or(0, |view| view.commands.len()),
         );
     }
