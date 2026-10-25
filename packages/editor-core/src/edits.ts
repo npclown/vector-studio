@@ -26,7 +26,17 @@ export const DEFAULT_PATH_STROKE = {
 } as const;
 
 const ID_ATTEMPTS = 1000;
+const PENDING_ID = 'pending';
 const PROP_KEYS = ['name', 'fill', 'stroke', 'opacity', 'visible', 'data'] as const;
+
+/** Freezes a fresh value in place; history holds these objects, so nobody may mutate them. */
+export function deepFreeze<T>(value: T): T {
+  if (typeof value === 'object' && value !== null && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const key of Object.keys(value)) deepFreeze((value as Record<string, unknown>)[key]);
+  }
+  return value;
+}
 
 function fail(code: EditorErrorCode, path?: string): Extract<CommandResult, { ok: false }> {
   return path === undefined ? { ok: false, code } : { ok: false, code, path };
@@ -34,7 +44,7 @@ function fail(code: EditorErrorCode, path?: string): Extract<CommandResult, { ok
 
 function checked(id: string, value: unknown): NodeV1 | Extract<CommandResult, { ok: false }> {
   const result = validateNode(value);
-  if (result.ok) return result.node;
+  if (result.ok) return deepFreeze(result.node);
   return fail(
     result.code,
     `/nodes/${id.replaceAll('~', '~0').replaceAll('/', '~1')}${result.path}`,
@@ -68,30 +78,17 @@ function withNodes(
   removed: ReadonlySet<string> = new Set(),
   appended: readonly string[] = [],
 ): DocumentV1 {
-  const nodes: Record<string, NodeV1> = {};
-  for (const [id, node] of Object.entries(document.nodes)) {
-    if (!removed.has(id))
-      Object.defineProperty(nodes, id, {
-        value: node,
-        enumerable: true,
-        writable: true,
-        configurable: true,
-      });
-  }
-  for (const node of replaced) {
-    Object.defineProperty(nodes, node.id, {
-      value: node,
-      enumerable: true,
-      writable: true,
-      configurable: true,
-    });
-  }
+  // fromEntries defines own properties, so a "__proto__" ID stays data.
+  const nodes: Record<string, NodeV1> = Object.fromEntries([
+    ...Object.entries(document.nodes).filter(([id]) => !removed.has(id)),
+    ...replaced.map((node) => [node.id, node] as const),
+  ]);
   const [page] = document.pages;
   const children =
     removed.size === 0 && appended.length === 0
       ? page.children
       : [...page.children.filter((child) => !removed.has(child)), ...appended];
-  return { ...document, pages: [{ ...page, children }], nodes };
+  return deepFreeze({ ...document, pages: [{ ...page, children }], nodes });
 }
 
 function uniqueIds(ids: unknown): readonly string[] | null {
@@ -142,12 +139,12 @@ export function applyEdit(
   switch (command.type) {
     case 'createRectangle':
     case 'createPath': {
-      const id = freshId(document, ids);
-      if (id === null) return fail('editor.duplicate-id');
+      // Validate before drawing an ID, so a failed create leaves the ID source untouched.
+      // Failure paths are relative to the new node.
       let candidate: Record<string, unknown>;
       if (command.type === 'createRectangle') {
         candidate = {
-          id,
+          id: PENDING_ID,
           name: command.name ?? 'Rectangle',
           parent: page.id,
           frame: command.frame,
@@ -158,12 +155,18 @@ export function applyEdit(
           stroke: command.stroke ?? null,
         };
       } else {
-        if (!Array.isArray(command.points) || command.points.length < 2) {
+        const points: unknown = command.points;
+        if (!Array.isArray(points) || points.length < 2) {
           return fail('editor.invalid-command', '/points');
         }
-        const { frame, unit } = unitBox(command.points);
+        for (let i = 0; i < points.length; i += 1) {
+          if (typeof points[i] !== 'number' || !Number.isFinite(points[i])) {
+            return fail('editor.invalid-command', `/points/${i}`);
+          }
+        }
+        const { frame, unit } = unitBox(points as readonly number[]);
         candidate = {
-          id,
+          id: PENDING_ID,
           name: command.name ?? 'Path',
           parent: page.id,
           frame,
@@ -175,8 +178,11 @@ export function applyEdit(
           stroke: command.stroke === undefined ? DEFAULT_PATH_STROKE : command.stroke,
         };
       }
-      const node = checked(id, candidate);
-      if (isFailure(node)) return node;
+      const result = validateNode(candidate);
+      if (!result.ok) return fail(result.code, result.path);
+      const id = freshId(document, ids);
+      if (id === null) return fail('editor.duplicate-id');
+      const node = deepFreeze({ ...result.node, id });
       return {
         ok: true,
         document: withNodes(document, [node], new Set(), [id]),
@@ -189,7 +195,9 @@ export function applyEdit(
       if (!Array.isArray(frames)) return fail('editor.invalid-command', '/frames');
       const entries = frames as readonly { id: string; frame: unknown }[];
       const frameIds = uniqueIds(entries.map((entry) => (entry as { id?: unknown } | null)?.id));
-      if (frameIds === null) return fail('editor.invalid-command', '/frames');
+      if (frameIds === null || frameIds.length === 0) {
+        return fail('editor.invalid-command', '/frames');
+      }
       const replaced: NodeV1[] = [];
       for (const entry of entries) {
         const node = nodeOf(document, entry.id);
@@ -204,8 +212,9 @@ export function applyEdit(
       const node = typeof command.id === 'string' ? nodeOf(document, command.id) : undefined;
       if (node === undefined) return fail('editor.unknown-node');
       const props = command.props as Record<string, unknown> | null;
-      if (typeof props !== 'object' || props === null)
+      if (typeof props !== 'object' || props === null || Object.keys(props).length === 0) {
         return fail('editor.invalid-command', '/props');
+      }
       for (const key of Object.keys(props)) {
         if (!(PROP_KEYS as readonly string[]).includes(key)) {
           return fail('editor.invalid-command', `/props/${key}`);

@@ -17,6 +17,7 @@ import { boundaries, evaluatePackageBoundaries } from '../../tooling/boundary-po
 // P5-U2 (P5 editor-slice plan, sections 4.1 to 4.3): P5-A01, P5-A04 and P5-A05.
 
 const black = { r: 0, g: 0, b: 0, a: 1 };
+const noModifiers = { shift: false, alt: false, meta: false, ctrl: false };
 
 function editor(): Editor {
   return createEditor({ ids: createCounterIdSource('n') });
@@ -152,7 +153,7 @@ describe('P5-A01 creation through execute', () => {
 
   it('skips IDs that already exist', () => {
     const target = createEditor({ ids: () => 'n' });
-    // The empty document took ID "n" for itself; every later "n" is a collision.
+    // The empty document and its page both took ID "n"; every later "n" collides with the page.
     expect(
       target.execute({ type: 'createRectangle', frame: { x: 0, y: 0, width: 1, height: 1 } }),
     ).toEqual({ ok: false, code: 'editor.duplicate-id' });
@@ -265,24 +266,70 @@ describe('P5-A04 gestures and history', () => {
   });
 
   it.each<[string, Command]>([
-    ['redo', { type: 'redo' }],
     ['setTool', { type: 'setTool', tool: 'rectangle' }],
-    ['loadDocument', { type: 'loadDocument', document: null }],
+    ['setTool to the same tool', { type: 'setTool', tool: 'select' }],
     ['a document command', { type: 'setNodeProps', id: 'n3', props: { name: 'x' } }],
-  ])('%s during a drag cancels the drag first', (label, command) => {
+  ])('%s during a drag cancels the drag first and resets the tool', (label, command) => {
     const { target, a, gesture } = withTwoRectangles();
+    const resets: string[] = [];
+    internalsOf(target).tools.set('select', { input: () => {}, reset: () => resets.push('reset') });
     const before = text(target);
     drag(target, a, 3);
-    const result = target.execute(command);
-    if (label === 'loadDocument') {
-      // A failed load changes nothing, so the drag goes on.
-      expect(result.ok).toBe(false);
-      expect(gesture.active).toBe(true);
-      return;
-    }
+    ok(target, command);
     expect(gesture.active).toBe(false);
+    expect(resets).toEqual(['reset']);
     if (label !== 'a document command') expect(text(target)).toBe(before);
     expect(target.query({ type: 'node', id: a })?.frame.x).toBe(0);
+  });
+
+  it('a host document command during a drag applies to the pre-drag document', () => {
+    const { target, a, gesture } = withTwoRectangles();
+    drag(target, a, 3);
+    ok(target, { type: 'setNodeProps', id: a, props: { name: 'x' } });
+    ok(target, { type: 'undo' });
+    expect(target.query({ type: 'node', id: a })).toMatchObject({
+      name: 'Rectangle',
+      frame: { x: 0, y: 0, width: 10, height: 10 },
+    });
+    expect(gesture.active).toBe(false);
+  });
+
+  it('redo during a drag cancels it, then redoes', () => {
+    const { target, a, b, gesture } = withTwoRectangles();
+    ok(target, { type: 'undo' });
+    drag(target, a, 3);
+    ok(target, { type: 'redo' });
+    expect(gesture.active).toBe(false);
+    expect(target.query({ type: 'node', id: b })).not.toBeNull();
+    expect(target.query({ type: 'node', id: a })?.frame.x).toBe(0);
+  });
+
+  it.each<[string, Command]>([
+    ['an empty redo stack', { type: 'redo' }],
+    ['an invalid loadDocument', { type: 'loadDocument', document: null }],
+    ['a failing document command', { type: 'setNodeProps', id: 'n3', props: { opacity: 2 } }],
+    ['an unknown tool', { type: 'setTool', tool: 'lasso' } as never],
+  ])('%s during a drag changes nothing and the drag goes on', (_label, command) => {
+    const { target, a, gesture } = withTwoRectangles();
+    drag(target, a, 3);
+    const before = state(target);
+    const seen = events(target);
+    expect(target.execute(command).ok).toBe(false);
+    expect(gesture.active).toBe(true);
+    expect(state(target)).toEqual(before);
+    expect(seen).toEqual([]);
+  });
+
+  it('an empty undo stack during a drag changes nothing', () => {
+    const target = editor();
+    const { gesture } = internalsOf(target);
+    gesture.begin();
+    ok(target, { type: 'input', event: { kind: 'keydown', key: 'x', modifiers: noModifiers } });
+    gesture.update({ type: 'createRectangle', frame: { x: 0, y: 0, width: 1, height: 1 } });
+    const before = state(target);
+    expect(target.execute({ type: 'undo' }).ok).toBe(false);
+    expect(gesture.active).toBe(true);
+    expect(state(target)).toEqual(before);
   });
 
   it('a successful loadDocument during a drag cancels it and clears history', () => {
@@ -515,6 +562,111 @@ describe('P5-A05 failed commands and session state', () => {
     expect(() => createEditor({ document: { schemaVersion: 1 } })).toThrow(
       /document\.invalid-field/u,
     );
+  });
+});
+
+describe('P5-U2 review round 1 cases', () => {
+  it('delivers events in change order when a listener executes a command', () => {
+    const target = editor();
+    let nested = false;
+    target.subscribe((event) => {
+      if (event.type === 'document' && !nested) {
+        nested = true;
+        ok(target, { type: 'createRectangle', frame: { x: 0, y: 0, width: 1, height: 1 } });
+      }
+    });
+    const revisions: number[] = [];
+    target.subscribe((event) => {
+      if (event.type === 'document') revisions.push(event.revision);
+    });
+    ok(target, { type: 'createRectangle', frame: { x: 0, y: 0, width: 1, height: 1 } });
+    expect(revisions).toEqual([1, 2]);
+  });
+
+  it('keeps delivering when a listener throws, and rethrows asynchronously', async () => {
+    const target = editor();
+    const errors: unknown[] = [];
+    const onError = (error: unknown) => errors.push(error);
+    process.on('unhandledRejection', onError);
+    try {
+      target.subscribe(() => {
+        throw new Error('boom');
+      });
+      const seen = events(target);
+      ok(target, { type: 'createRectangle', frame: { x: 0, y: 0, width: 1, height: 1 } });
+      expect(seen).toHaveLength(1);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(errors).toEqual([new Error('boom')]);
+    } finally {
+      process.off('unhandledRejection', onError);
+    }
+  });
+
+  it('hands out frozen documents, so history cannot be corrupted', () => {
+    const target = editor();
+    const [a] = ok(target, { type: 'createRectangle', frame: { x: 0, y: 0, width: 1, height: 1 } });
+    const document = target.query({ type: 'document' });
+    expect(Object.isFrozen(document)).toBe(true);
+    expect(Object.isFrozen(document.pages[0].children)).toBe(true);
+    expect(Object.isFrozen(document.nodes[a!]?.frame)).toBe(true);
+    expect(() => (document.pages[0].children as string[]).push('zz')).toThrow(TypeError);
+    const loaded = createEditor({ document: JSON.parse(JSON.stringify(document)) as unknown });
+    expect(Object.isFrozen(loaded.query({ type: 'document' }).nodes[a!])).toBe(true);
+  });
+
+  it.each<[string, Command, string]>([
+    [
+      'string points',
+      { type: 'createPath', verbs: ['move', 'line'], points: ['0', 0, 1, 1] as never },
+      '/points/0',
+    ],
+    [
+      'null points',
+      { type: 'createPath', verbs: ['move', 'line'], points: [0, null, 1, 1] as never },
+      '/points/1',
+    ],
+    ['no frames', { type: 'setFrames', frames: [] }, '/frames'],
+    ['no props', { type: 'setNodeProps', id: 'n3', props: {} }, '/props'],
+    [
+      'null modifiers',
+      { type: 'input', event: { kind: 'keydown', key: 'a', modifiers: null as never } },
+      '/event',
+    ],
+    [
+      'a missing modifier',
+      { type: 'input', event: { kind: 'keydown', key: 'a', modifiers: { shift: false } as never } },
+      '/event',
+    ],
+  ])('rejects %s as editor.invalid-command', (_label, command, at) => {
+    const target = editor();
+    ok(target, { type: 'createRectangle', frame: { x: 0, y: 0, width: 1, height: 1 } });
+    const before = state(target);
+    expect(target.execute(command)).toEqual({
+      ok: false,
+      code: 'editor.invalid-command',
+      path: at,
+    });
+    expect(state(target)).toEqual(before);
+  });
+
+  it('reports create failures relative to the new node and draws no ID for them', () => {
+    const target = editor();
+    expect(
+      target.execute({ type: 'createRectangle', frame: { x: 0, y: 0, width: -1, height: 1 } }),
+    ).toEqual({ ok: false, code: 'document.invalid-field', path: '/frame/width' });
+    expect(
+      ok(target, { type: 'createRectangle', frame: { x: 0, y: 0, width: 1, height: 1 } }),
+    ).toEqual(['n3']);
+  });
+
+  it('rejects an ID source that cannot build a valid empty document', () => {
+    expect(() => createEditor({ ids: () => '' })).toThrow(/document\.invalid-field at \/id/u);
+  });
+
+  it('normalizes negative zero in the viewport', () => {
+    const target = editor();
+    ok(target, { type: 'setViewport', camera: { position: { x: -0, y: -0 }, zoom: 1 } });
+    expect(Object.is(target.query({ type: 'viewport' }).position.x, 0)).toBe(true);
   });
 });
 

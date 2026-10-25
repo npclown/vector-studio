@@ -1,6 +1,6 @@
 import type { RenderCamera } from '@vector-studio/contracts';
 import { validateDocument, type DocumentV1 } from '@vector-studio/model';
-import { applyEdit } from './edits.js';
+import { applyEdit, deepFreeze } from './edits.js';
 import { createCounterIdSource } from './ids.js';
 import type {
   Command,
@@ -91,7 +91,13 @@ function isCamera(value: unknown): value is RenderCamera {
 
 function isInputEvent(value: unknown): value is InputEvent {
   const event = value as InputEvent | null;
-  if (typeof event !== 'object' || event === null || typeof event.modifiers !== 'object') {
+  if (typeof event !== 'object' || event === null) return false;
+  const modifiers = event.modifiers as Record<string, unknown> | null;
+  if (
+    typeof modifiers !== 'object' ||
+    modifiers === null ||
+    !['shift', 'alt', 'meta', 'ctrl'].every((key) => typeof modifiers[key] === 'boolean')
+  ) {
     return false;
   }
   if (event.kind === 'keydown') return typeof event.key === 'string';
@@ -106,6 +112,7 @@ function sorted(ids: Iterable<string>): string[] {
   return [...new Set(ids)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
 
+/** Validated by the caller like any initial document, so a bad ID source fails at creation. */
 function emptyDocument(ids: IdSource): DocumentV1 {
   return {
     schemaVersion: 1,
@@ -126,19 +133,17 @@ class EditorCore implements Editor {
   private gestureState: Gesture | null = null;
   private snapshot: EditorSnapshot;
   private readonly listeners = new Set<(event: EditorEvent) => void>();
+  private readonly pending: EditorEvent[] = [];
+  private draining = false;
   private readonly ids: IdSource;
   readonly tools = new Map<ToolName, Tool>();
   readonly gesture: GestureControl;
 
   constructor(options: EditorOptions) {
     this.ids = options.ids ?? createCounterIdSource('node-');
-    if (options.document === undefined) {
-      this.document = emptyDocument(this.ids);
-    } else {
-      const result = validateDocument(options.document);
-      if (!result.ok) throw new Error(`createEditor: ${result.code} at ${result.path}`);
-      this.document = result.document;
-    }
+    const result = validateDocument(options.document ?? emptyDocument(this.ids));
+    if (!result.ok) throw new Error(`createEditor: ${result.code} at ${result.path}`);
+    this.document = deepFreeze(result.document);
     this.snapshot = this.buildSnapshot();
     const isActive = () => this.gestureState !== null;
     this.gesture = {
@@ -155,11 +160,13 @@ class EditorCore implements Editor {
   execute(command: Command): CommandResult {
     if (typeof command !== 'object' || command === null) return failure('editor.invalid-command');
     if (DOCUMENT_COMMANDS.has(command.type)) {
-      // A host command during a drag would leave the gesture's base stale, so it cancels first.
-      this.cancelGesture();
-      const result = applyEdit(this.document, command as DocumentCommand, this.ids);
+      // A host command during a drag would leave the gesture's base stale, so it applies to the
+      // pre-gesture document and, only if it succeeds, cancels the drag first.
+      const base = this.gestureState?.base ?? this.document;
+      const result = applyEdit(base, command as DocumentCommand, this.ids);
       if (!result.ok) return result;
-      const entry = { before: this.document, after: result.document, touched: result.touched };
+      this.interrupt();
+      const entry = { before: base, after: result.document, touched: result.touched };
       this.undoStack.push(entry);
       this.redoStack = [];
       this.changeDocument(result.document, 'command', result.touched);
@@ -168,15 +175,16 @@ class EditorCore implements Editor {
     switch (command.type) {
       case 'undo':
       case 'redo': {
-        this.cancelGesture();
         const from = command.type === 'undo' ? this.undoStack : this.redoStack;
         const to = command.type === 'undo' ? this.redoStack : this.undoStack;
-        const entry = from.pop();
-        if (entry === undefined) {
+        // An empty stack fails before anything changes, so the drag goes on.
+        if (from.length === 0) {
           return failure(
             command.type === 'undo' ? 'editor.nothing-to-undo' : 'editor.nothing-to-redo',
           );
         }
+        this.interrupt();
+        const entry = from.pop()!;
         to.push(entry);
         const target = command.type === 'undo' ? entry.before : entry.after;
         this.changeDocument(target, command.type, entry.touched);
@@ -185,14 +193,14 @@ class EditorCore implements Editor {
       case 'loadDocument': {
         const result = validateDocument(command.document);
         if (!result.ok) return failure(result.code, result.path);
-        this.cancelGesture();
+        this.interrupt(true);
         const touched = [
           ...Object.keys(this.document.nodes),
           ...Object.keys(result.document.nodes),
         ];
         this.undoStack = [];
         this.redoStack = [];
-        this.changeDocument(result.document, 'load', touched);
+        this.changeDocument(deepFreeze(result.document), 'load', touched);
         return { ok: true, ids: [] };
       }
       case 'setSelection': {
@@ -206,9 +214,8 @@ class EditorCore implements Editor {
       }
       case 'setTool': {
         if (!TOOLS.includes(command.tool)) return failure('editor.unknown-tool');
-        this.cancelGesture();
+        this.interrupt(true);
         if (command.tool !== this.tool) {
-          this.tools.get(this.tool)?.reset();
           this.tool = command.tool;
           this.refresh({ type: 'session', field: 'tool' });
         }
@@ -217,7 +224,7 @@ class EditorCore implements Editor {
       case 'setViewport': {
         if (!isCamera(command.camera)) return failure('editor.invalid-camera');
         const { position, zoom } = command.camera;
-        this.viewport = { position: { x: position.x, y: position.y }, zoom };
+        this.viewport = { position: { x: position.x + 0, y: position.y + 0 }, zoom };
         this.refresh({ type: 'session', field: 'viewport' });
         return { ok: true, ids: [] };
       }
@@ -297,6 +304,17 @@ class EditorCore implements Editor {
     this.changeDocument(this.document, 'gesture-commit', touched);
   }
 
+  /**
+   * Ends any drag before a command that replaces its base, and tells the active tool, so its
+   * drag or overlay state does not outlive the change. `always` resets the tool even without a
+   * drag (load and tool switches drop overlay state).
+   */
+  private interrupt(always = false): void {
+    const active = this.gestureState !== null;
+    this.cancelGesture();
+    if (active || always) this.tools.get(this.tool)?.reset();
+  }
+
   private cancelGesture(): void {
     const gesture = this.gestureState;
     if (gesture === null) return;
@@ -343,8 +361,30 @@ class EditorCore implements Editor {
     this.emit(event);
   }
 
+  /**
+   * Delivers events in the order the changes happened: an event raised by a listener waits until
+   * every listener has seen the current one. A listener that throws does not stop delivery; its
+   * error is rethrown asynchronously, after the change has been committed.
+   */
   private emit(event: EditorEvent): void {
-    for (const listener of [...this.listeners]) listener(event);
+    this.pending.push(event);
+    if (this.draining) return;
+    this.draining = true;
+    try {
+      for (let next = this.pending.shift(); next !== undefined; next = this.pending.shift()) {
+        for (const listener of [...this.listeners]) {
+          try {
+            listener(next);
+          } catch (error) {
+            void Promise.resolve().then(() => {
+              throw error;
+            });
+          }
+        }
+      }
+    } finally {
+      this.draining = false;
+    }
   }
 }
 
