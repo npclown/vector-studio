@@ -181,6 +181,12 @@ function mergeHosts(dirs) {
   return hosts;
 }
 
+/** The corpus position in a shard's `.current` file, or null when it is not one. */
+function readCurrent(file) {
+  const at = Number(readFileSync(file, 'utf8').trim());
+  return Number.isInteger(at) && at >= 0 && readFileSync(file, 'utf8').trim() !== '' ? at : null;
+}
+
 const vitest = path.join(root, 'node_modules', 'vitest', 'vitest.mjs');
 const MAX_RESTARTS = 64;
 const runPhase = (env) =>
@@ -241,18 +247,30 @@ if (smoke) {
         ...(resume === undefined ? {} : { E3_A04_RUN_RESUME: resume }),
       });
       if (code === 0 || !existsSync(current) || restarts[i].length >= MAX_RESTARTS) return code;
-      const at = Number(readFileSync(current, 'utf8').trim());
-      if (resume !== undefined && Number(resume.split(':')[0]) >= at) return code;
-      restarts[i].push(at);
+      const at = readCurrent(current);
+      if (at === null || (resume !== undefined && Number(resume.split(':')[0]) >= at)) return code;
+      restarts[i].push({ at, code });
       resume = `${at}:worker exited (code ${code}) while measuring`;
     }
   };
-  const restarted =
-    mergeDirs === undefined ? restarts : provenance.hosts.flatMap((h) => h.restarts);
-  const codes =
-    mergeDirs === undefined
-      ? await Promise.all(here.map((i) => runShard(i)))
-      : provenance.hosts.flatMap((h) => h.exitCodes);
+  const hereCodes =
+    mergeDirs === undefined ? await Promise.all(here.map((i) => runShard(i))) : null;
+  // Exit codes and restarts indexed by shard, whichever host ran it.
+  const shardCodes = Array.from({ length: shards }, () => null);
+  const shardRestarts = Array.from({ length: shards }, () => []);
+  if (hereCodes !== null)
+    here.forEach((i, k) => {
+      shardCodes[i] = hereCodes[k];
+      shardRestarts[i] = restarts[i];
+    });
+  else
+    for (const h of provenance.hosts)
+      h.shards.forEach((i, k) => {
+        shardCodes[i] = h.exitCodes[k];
+        shardRestarts[i] = h.restarts[k];
+      });
+  const codes = hereCodes ?? shardCodes;
+  const restarted = shardRestarts;
   if (partial) {
     writeFileSync(
       path.join(out, 'host.json'),
@@ -268,6 +286,11 @@ if (smoke) {
     console.log(`partial run: ${out} (finalize with --merge on every host's run directory)`);
     process.exit(codes.some((c) => c !== 0) ? 1 : 0);
   }
+  // The record carries the shards' exit codes and restarts (contract section 19.5).
+  writeFileSync(
+    path.join(out, 'provenance.json'),
+    `${JSON.stringify({ ...provenance, shardExitCodes: shardCodes, shardRestarts }, null, 2)}\n`,
+  );
   const finalize = await runPhase({
     E3_A04_RUN_PHASE: 'finalize',
     E3_A04_RUN_GPU:

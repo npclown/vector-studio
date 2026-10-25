@@ -100,9 +100,11 @@ const runShard = async (shard) => {
   for (;;) {
     const code = await runOnce(shard, resume);
     if (code === 0 || !existsSync(current) || restarts[shard].length >= MAX_RESTARTS) return code;
-    const at = Number(readFileSync(current, 'utf8').trim());
+    const text = readFileSync(current, 'utf8').trim();
+    const at = text === '' ? NaN : Number(text);
+    if (!Number.isInteger(at) || at < 0) return code;
     if (resume !== undefined && Number(resume.split(':')[0]) >= at) return code;
-    restarts[shard].push(at);
+    restarts[shard].push({ at, code });
     resume = `${at}:worker exited (code ${code}) while checking`;
   }
 };
@@ -141,6 +143,20 @@ const codes =
   hosts === null
     ? await Promise.all(here.map((i) => runShard(i)))
     : hosts.flatMap((h) => h.exitCodes);
+// Exit codes and restarts indexed by shard, whichever host ran it.
+const shardCodes = Array.from({ length: shards }, () => null);
+const shardRestarts = Array.from({ length: shards }, () => []);
+if (hosts === null)
+  here.forEach((i, k) => {
+    shardCodes[i] = codes[k];
+    shardRestarts[i] = restarts[i];
+  });
+else
+  for (const h of hosts)
+    h.shardsHere.forEach((i, k) => {
+      shardCodes[i] = h.exitCodes[k];
+      shardRestarts[i] = h.restarts[k];
+    });
 if (partial) {
   const h = {
     ...common,
@@ -189,8 +205,8 @@ const summary = {
   stride,
   ids: idsFile,
   shards,
-  shardExitCodes: codes,
-  shardRestarts: hosts === null ? restarts : hosts.flatMap((h) => h.restarts),
+  shardExitCodes: shardCodes,
+  shardRestarts,
   checked: rows.length,
   byStatus,
   byStratum,

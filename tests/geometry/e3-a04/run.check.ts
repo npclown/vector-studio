@@ -23,6 +23,7 @@ import { MESH_FILL_SHADER } from '../../../packages/renderer-webgpu/src/mesh-fil
 import { runHarnessControls } from './controls.js';
 import { iterateA04Corpus } from './corpus.js';
 import {
+  caseMeta,
   jointPartners,
   measureCase,
   partnerOf,
@@ -77,16 +78,21 @@ function measureLogged(kase: A04Case, ports: HarnessPorts, partner?: A04Case): H
 
 /** A harness exception is never a measurement: the case stays UNDECIDED (section 7.3). */
 function errorRow(kase: A04Case, error: string): HarnessRow {
-  return {
-    index: typeof kase.index === 'number' ? kase.index : null,
-    id: String(kase.id),
-    stratum: typeof kase.stratum === 'string' ? kase.stratum : null,
-    transform: typeof kase.transform === 'string' ? kase.transform : null,
-    pair: '-',
-    paint: 'fill',
-    status: 'undecided',
-    reason: `harness-error: ${error}`,
-  } as HarnessRow;
+  let meta: Partial<HarnessRow>;
+  try {
+    meta = caseMeta(kase);
+  } catch {
+    // The case does not decode: name it as far as its fields allow.
+    meta = {
+      index: typeof kase.index === 'number' ? kase.index : null,
+      id: String(kase.id),
+      stratum: typeof kase.stratum === 'string' ? kase.stratum : null,
+      transform: typeof kase.transform === 'string' ? kase.transform : null,
+      pair: '-',
+      paint: 'fill',
+    };
+  }
+  return { ...meta, status: 'undecided', reason: `harness-error: ${error}` } as HarnessRow;
 }
 
 /** `E3_A04_RUN_RESUME` is "<corpus position>:<cause>", set by the tool after a worker died. */

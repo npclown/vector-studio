@@ -1785,7 +1785,7 @@ The spec now reads back, after the non-corpus cases of section 16.2, the named s
 - **What does not change.** The oracle still halves the resolution while `E` straddles a threshold, down to the floor `2^-20`. So PASS (`U ≤ 0.25`), FAIL (`L > 0.25`) and UNDECIDED are decided by the same rule. A coarser start widens the reported intervals, never past `2^-K` plus `β_c` for a PASS case.
 - **The cost.** On two `C1` cases, `K = 6` took 6 s and 55 s, against 78 s and 109 s at `K = 10`. `K = 4` took 2 s and 23 s.
 - **`K = 2` (2026-10-25).** The stride-200 container sample of section 19.4 gave the same status and reason at `K = 2` as at `K = 6` on every one of its 138 cases (81 PASS, 0 FAIL, 27 UNDECIDED, 24 rejected, 6 `window-empty`), in 24 CPU minutes instead of about 150. Its max `U` is 0.2499 px and its p50 `U` 0.148 px, against 0.080 px at `K = 6`, which is the looser bound of the next item. A full run at `K = 2` is about 80 container CPU hours, plus the heavy stroke cases of section 19.5.
-  - **Decided 2026-10-25 (standing rule, recommended option).** The freeze-check-certified reference run uses `K = 2`. The status of every case is decided by the same rule, and the cost is about a sixth. The U statistics of the record are upper bounds at the resolution that decided each case.
+  - **Decided 2026-10-25 (standing rule, recommended option).** The freeze-check-certified reference run uses `K = 2`, given on every host as `--start-resolution 2`. The tool's default stays `K = 10`, and the merge refuses hosts whose `K` differs. The status of every case is decided by the same rule, and the cost is about a sixth. The U statistics of the record are upper bounds at the resolution that decided each case.
 - **The departure.** The section 7.3 statistics (p50, p99 and max `U`) are upper bounds that are looser by up to `2^-K`. This is recorded for the evidence review.
 
 ### 19.3 Oracle defect found by the first sample (E3-R2)
@@ -1826,7 +1826,7 @@ The PC sample of section 19.4 reported `C1/s15-I/T3/z64-d2` as FAIL with `E = 38
   - Before each case, a shard writes the case's corpus position to `shard-<i>.current`.
   - When the worker exits non-zero, `pnpm e3-a04:run` starts the shard again after that case. The case gets an UNDECIDED row with reason `harness-error: worker exited (code …) while measuring`, unless its row was already written. A shard is restarted at most 64 times, and never twice at the same position.
   - `pnpm e3-a04:freeze` does the same. There the case is `ORACLE-ERROR`, which fails the freeze check (E3-Q6 (a)).
-  - The record lists the restarts per shard (`shardRestarts`).
+  - The record's provenance lists each shard's exit code and restarts (`shardExitCodes`, `shardRestarts`, indexed by shard), and so does the freeze summary. A restart names the position and the exit code. Any non-zero exit counts, so a harness bug outside a case's measurement shows up as restarts with code 1, not as a failed shard.
 - **No oracle change.** The cover cache is not bounded in the oracle. A bound would only turn these cases into `ORACLE-WORK`, which is UNDECIDED too. The remedy for the cost is the starting resolution of section 19.2.
 
 ### 19.6 One run on several hosts
@@ -1838,4 +1838,5 @@ The PC sample of section 19.4 reported `C1/s15-I/T3/z64-d2` as FAIL with `E = 38
   - It then finalizes as a single-host run does. The record's provenance lists each host's run id, Node version, OS, CPU count, shards, exit codes and restarts.
   - `pnpm e3-a04:freeze` takes the same `--only` and `--merge`. Its summary names the oracle SHA-256 and commit, and lists the hosts.
 - **WASM.** Since E11 PR #242, a Linux build of the pinned toolchain gives the same release WASM as the PC. The merge compares WASM hashes, so a host whose build differs cannot take part.
+- **Checkouts.** Each host's run directory stays under `.tools/`. A copy inside the tracked tree makes the merging checkout dirty, and the merge then refuses.
 - **Memory.** A container has 15 GB and every shard gets a 6 GB heap, so a container runs two or three shards.
