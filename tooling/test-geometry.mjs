@@ -19,7 +19,14 @@ const env = {
   CARGO_TARGET_DIR: target,
   TEMP: temporary,
   TMP: temporary,
-  CARGO_ENCODED_RUSTFLAGS: ['--remap-path-prefix', `${root}=.`].join('\x1f'),
+  // Windows writes crate-relative panic paths as `src\…`; the second remap makes the release
+  // WASM identical to the Linux build (E11 WASM host identity, d9-rendering-track.md).
+  CARGO_ENCODED_RUSTFLAGS: [
+    '--remap-path-prefix',
+    `${root}=.`,
+    '--remap-path-prefix',
+    'src\\=src/',
+  ].join('\x1f'),
 };
 
 function run(binary, args, overrides = {}) {
@@ -177,6 +184,11 @@ const hash = (file) => createHash('sha256').update(readFileSync(file)).digest('h
 const firstHash = hash(wasm);
 if (firstHash !== hash(path.join(independentTarget, wasmRelative))) {
   throw new Error('Independent release build differs from the first WASM artifact.');
+}
+if (readFileSync(wasm).includes('src\\')) {
+  throw new Error(
+    'Release WASM embeds a `src\\` source path; the host-identity remap did not apply.',
+  );
 }
 console.log(`WASM independent-build SHA-256: ${firstHash}`);
 run(
