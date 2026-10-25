@@ -30,7 +30,7 @@
     "lint": "eslint .",
     "test:browser": "playwright test --config playwright.config.ts",
     "test:gpu": "playwright test --config playwright.gpu.config.ts",
-    "test:gpu:viz-v4": "playwright test --config playwright.gpu.config.ts tests/gpu/viz-v4-a08-corpus.spec.ts",
+    "test:gpu:viz-v4": "node tooling/run-viz-v4-gpu.mjs",
     "test:gpu:p3-projection": "playwright test --config playwright.p3-native-projection.config.ts",
     "test:gpu:p3-coverage": "playwright test --config playwright.p3-coverage.config.ts",
     "test:gpu:p3-o02": "playwright test --config playwright.p3-o02.config.ts",
