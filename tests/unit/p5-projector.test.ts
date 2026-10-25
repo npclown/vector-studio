@@ -333,7 +333,7 @@ describe('P5-U4 scene projector', () => {
     expect(diagnostics(events)).toEqual([]);
   });
 
-  it('resyncs when an isolated retry gets resync-required, and still reports', () => {
+  it('resyncs when an isolated retry gets resync-required', () => {
     const { target, renderer, events } = attached();
     const a = rect(target, 0, 0);
     const b = rect(target, 50, 0);
@@ -357,6 +357,33 @@ describe('P5-U4 scene projector', () => {
     expect(renderer.calls.at(-1)?.method).toBe('replaceSnapshot');
     expectSynchronized(target, renderer);
     expect(diagnostics(events)).toEqual([]);
+  });
+
+  it('reports a node rejected during isolation before a later retry forces a resync', () => {
+    const { target, renderer, events } = attached();
+    const a = rect(target, 0, 0);
+    const b = rect(target, 50, 0);
+    const current = () => renderer.getSynchronizationState().current;
+    const results = [
+      { status: 'invalid-scene' as const, reason: 'invalid-value' as const, current: current() },
+      { status: 'invalid-scene' as const, reason: 'invalid-value' as const, current: current() },
+      { status: 'resync-required' as const, current: null },
+    ];
+    const apply = renderer.applyChanges.bind(renderer);
+    renderer.applyChanges = (changes) => results.shift() ?? apply(changes);
+    ok(target, {
+      type: 'setFrames',
+      frames: [
+        { id: a, frame: { x: 1, y: 1, width: 40, height: 30 } },
+        { id: b, frame: { x: 51, y: 1, width: 40, height: 30 } },
+      ],
+    });
+    expect(diagnostics(events)).toEqual([
+      { type: 'diagnostic', code: 'editor.scene-rejected', reason: 'invalid-value', nodeIds: [a] },
+    ]);
+    const scene = renderer.mirror.readRetainedScene()!;
+    expect(scene.rootOrder).toEqual([b]);
+    expect(scene.getNode(b)?.transform).toEqual([1, 0, 0, 1, 51, 1]);
   });
 
   it('resyncs after a rejected removal, so the renderer drops the removed node', () => {
