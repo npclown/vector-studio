@@ -8,8 +8,9 @@
 //! Every case runs one entry on one path and records a SHA-256 digest of every observable
 //! section 2 field: the result with its exact error variant, `CubicFillDiagnostics`,
 //! `topology_stats()` and `rounded_stats()` (each only when the attempt reached its stage;
-//! otherwise a fixed marker, E8-U0b), `allocated_bytes()` and, when published, the complete
-//! `output()` (commands, ranges, points, owners, sources, the rounded mesh with its ledger, and
+//! otherwise a fixed marker, E8-U0b), the growth of `allocated_bytes()` over the workspace's
+//! constructed value (E14-U1; the absolute value is in `meta/cubic-workspace-sizes`) and, when
+//! published, the complete `output()` (commands, ranges, points, owners, sources, the rounded mesh with its ledger, and
 //! the mesh vertex f64 bits). Values are rendered with `Debug`, whose f64 form is the shortest
 //! round-trip representation (bit-exact for every non-NaN value, signed zero included); mesh
 //! vertices are also hashed as raw bits. The V2 cascade case digests the `FillEngine` batch

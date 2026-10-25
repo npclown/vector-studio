@@ -14,7 +14,8 @@ use crate::fill_export::{
     FILL_V0_LIMITS,
 };
 use crate::fill_ladder::{
-    graph_select_for_tests, with_next_half_differential, with_work_cap, Reason, Rung, MAX_FAST_WORK,
+    graph_select_for_tests, with_ladder_faults, with_next_half_differential, with_work_cap,
+    LadderFault, Reason, Rung, MAX_FAST_WORK,
 };
 use crate::fill_predicates::orient2d;
 use crate::geometry::{Point, VERB_CLOSE, VERB_CUBIC, VERB_LINE, VERB_MOVE};
@@ -505,9 +506,13 @@ fn e14_d4_diagonal_order_is_observable_on_a_tie() {
     let next = [1, 2, 3, 4, 0];
     let diagonals = [(1, 3), (1, 4)];
     // Half-edge 0 is the boundary edge 0 → 1.
-    let today = graph_select_for_tests(&vertices, &next, &diagonals, 0, false);
+    let today = graph_select_for_tests(&vertices, &next, &diagonals, 0);
     assert_eq!(today, Err(Reason::Triangle));
-    let reversed = graph_select_for_tests(&vertices, &next, &diagonals, 0, true);
+    // The seeded defect: `index_diagonals` under `LadderFault::DiagonalIndexReversed`, the fault
+    // the production FR7 build reads.
+    let reversed = with_ladder_faults(&[LadderFault::DiagonalIndexReversed], || {
+        graph_select_for_tests(&vertices, &next, &diagonals, 0)
+    });
     // Diagonal 1's forward half-edge, n + 2 = 7, goes to vertex 4.
     assert_eq!(reversed, Ok(7));
 }

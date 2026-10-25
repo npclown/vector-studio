@@ -1,0 +1,16 @@
+{
+  "entries": 1003,
+  "edges": "0-256",
+  "fast": 103,
+  "fastOverE": 0,
+  "shard": "0/1",
+  "fallbackOverE": {
+    "MONOTONE": 190,
+    "PREFIX": 21
+  },
+  "checkedSlO2": 103,
+  "overInspectorCap": 0,
+  "maxEdges": 256,
+  "maxTriangles": 254,
+  "failures": []
+}

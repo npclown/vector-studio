@@ -1,6 +1,6 @@
 // D9 E14-U1, E14-A3 (docs/plans/d9-e14-fill-rung0-edge-cap-contract.md, section 8): SL-O2
 // (tests/geometry/p3-fill-ladder/oracle.ts, independent region and mesh validity, with the
-// edges-used-once check and the export-equals-module check) on every rung-0 mesh over E, and AL-FR9
+// edges-used-once check and the export-equals-module check) on every rung-0 mesh, and AL-FR9
 // (no `MESH_CHECK` fallback over E). The input is E14-F2 to E14-F4 and every path of the stress
 // scene `p3-exit-stress/v1`; the hand-off is
 // `fill_ladder_dump_tests::emit_fill_ladder_dump_production` (release, production caps).
@@ -13,7 +13,8 @@
 //   pnpm e14:rung0-oracle
 //
 // Writes .tools/e14-rung0-oracle/<stamp>/{input.bin,dump.txt,summary-<i>-of-<n>.json}.
-// E14_ORACLE_DUMP=<dump.txt> reuses a dump; E14_ORACLE_SHARD=i/n evaluates one shard.
+// E14_ORACLE_DUMP=<dump.txt> reuses a dump; E14_ORACLE_SHARD=i/n evaluates one shard;
+// E14_ORACLE_EDGES=<min>-<max> evaluates only meshes with that many flat edges.
 
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -64,7 +65,7 @@ function cubicPath(name: string, cubics: Cubic[]): DumpInput {
   };
 }
 
-test('E14-A3: SL-O2 and AL-FR9 on rung 0 over E', () => {
+test('E14-A3: SL-O2 and AL-FR9 on rung 0', () => {
   const root = path.resolve(import.meta.dirname, '../../..');
   const rustup = process.env.P2_NATIVE_RUSTUP;
   expect(rustup, 'P2_NATIVE_RUSTUP selects the pinned toolchain').toBeTruthy();
@@ -125,6 +126,8 @@ test('E14-A3: SL-O2 and AL-FR9 on rung 0 over E', () => {
   const [shard, shards] = (process.env.E14_ORACLE_SHARD ?? '0/1').split('/').map(Number);
   const summary = {
     entries: dump.entries.length,
+    edges: process.env.E14_ORACLE_EDGES ?? 'all',
+    fast: 0,
     fastOverE: 0,
     shard: `${shard}/${shards}`,
     fallbackOverE: {} as Record<string, number>,
@@ -137,8 +140,9 @@ test('E14-A3: SL-O2 and AL-FR9 on rung 0 over E', () => {
   // E14_ORACLE_SHARD=i/n evaluates every n-th mesh, ordered by edge count.
   const edgesOf = (entry: (typeof dump.entries)[number]) =>
     entry.view?.owners.length ?? Number.POSITIVE_INFINITY;
+  const [low, high] = (process.env.E14_ORACLE_EDGES ?? '0-Infinity').split('-').map(Number);
   const selected = dump.entries
-    .filter((entry) => entry.rung === 'fast' && edgesOf(entry) > E)
+    .filter((entry) => entry.rung === 'fast' && edgesOf(entry) >= low! && edgesOf(entry) <= high!)
     .sort((a, b) => edgesOf(a) - edgesOf(b))
     .filter((_, index) => index % shards! === shard);
   for (const entry of dump.entries)
@@ -154,7 +158,8 @@ test('E14-A3: SL-O2 and AL-FR9 on rung 0 over E', () => {
   for (const entry of selected) {
     const started = Date.now();
     const output = fastOutput(entry, dump.revision);
-    summary.fastOverE += 1;
+    summary.fast += 1;
+    if (edgesOf(entry) > E) summary.fastOverE += 1;
     summary.maxEdges = Math.max(summary.maxEdges, edgesOf(entry));
     if (entry.view === null || output === null) {
       summary.failures.push(
@@ -193,5 +198,5 @@ test('E14-A3: SL-O2 and AL-FR9 on rung 0 over E', () => {
   console.log(JSON.stringify(summary, null, 2), `\n${dir}`);
   expect(summary.failures).toEqual([]);
   expect(summary.fallbackOverE.MESH_CHECK ?? 0).toBe(0);
-  expect(summary.fastOverE).toBeGreaterThan(0);
+  expect(summary.fast).toBeGreaterThan(0);
 });

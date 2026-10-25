@@ -2894,14 +2894,14 @@ fn index_diagonals(
 }
 
 /// E14-D4 hook: `next_half` on half-edge `half` of a synthetic graph (`next` is the boundary
-/// successor of each vertex), with the diagonal index in today's order or reversed.
+/// successor of each vertex), with the diagonal index in today's order, or reversed under
+/// `LadderFault::DiagonalIndexReversed`.
 #[cfg(test)]
 pub(crate) fn graph_select_for_tests(
     vertices: &[Point],
     next: &[usize],
     diagonals: &[(usize, usize)],
     half: usize,
-    reversed: bool,
 ) -> Result<usize, Reason> {
     let count = vertices.len();
     let mut start = vec![0; count + 1];
@@ -2913,7 +2913,7 @@ pub(crate) fn graph_select_for_tests(
         &mut start,
         &mut halves,
         &mut cursor,
-        reversed,
+        fault(LadderFault::DiagonalIndexReversed),
     );
     let graph = Graph {
         vertices,
