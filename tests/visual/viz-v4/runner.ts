@@ -46,7 +46,12 @@ import {
   type A08Dpr,
 } from './subset.js';
 
-export const RECORD_VERSION = 'viz-v4-metrics/v1';
+/**
+ * The record and metrics version. v2 (contract section 17): local no-flip zone over every drawn
+ * triangle, σ in β_c, count above 1 FAILS unconditionally, merged equal p* before pairing, and
+ * E3's case-level reasons. v1 records (such as the c12af63a PRE-FREEZE record) are not replayed.
+ */
+export const RECORD_VERSION = 'viz-v4-metrics/v2';
 export const CONTRACT = 'docs/plans/viz-v4-a08-corpus-contract.md';
 export const DEFAULT_LABEL = 'PRE-FREEZE';
 /** VZ4-Q6: more than 5 % of the gated cases expected RENDERED not RENDERED is INCONCLUSIVE. */
@@ -376,7 +381,7 @@ type Tally = {
   judgments: Record<string, number>;
   g1: { fail: number; undecided: number; maxInsideError: number; maxOutsideError: number };
   g2: { misclassified: number; fail: number; undecided: number };
-  g3: { fullFail: number; otherFail: number; maxCount: number };
+  g3: { fullFail: number; otherFail: number; overCount: number; maxCount: number };
   a5: { interiorPixels: number; violations: number; crackExcluded: number };
   cracks: { casesWithTJunctions: number; zonePixels: number; pixels: number };
   rule: RuleAccumulators;
@@ -389,7 +394,7 @@ function tally(): Tally {
     judgments: {},
     g1: { fail: 0, undecided: 0, maxInsideError: 0, maxOutsideError: 0 },
     g2: { misclassified: 0, fail: 0, undecided: 0 },
-    g3: { fullFail: 0, otherFail: 0, maxCount: 0 },
+    g3: { fullFail: 0, otherFail: 0, overCount: 0, maxCount: 0 },
     a5: { interiorPixels: 0, violations: 0, crackExcluded: 0 },
     cracks: { casesWithTJunctions: 0, zonePixels: 0, pixels: 0 },
     rule: ruleAccumulators(),
@@ -412,6 +417,7 @@ function add(t: Tally, entry: CaseEntry, rule: RuleAccumulators | null): void {
   t.g2.undecided += m.g2.undecided;
   t.g3.fullFail += m.g3.fullFail;
   t.g3.otherFail += m.g3.otherFail;
+  t.g3.overCount += m.g3.overCount;
   t.g3.maxCount = Math.max(t.g3.maxCount, m.g3.maxCount);
   t.a5.interiorPixels += m.a5.interiorPixels;
   t.a5.violations += m.a5.violations;
@@ -456,16 +462,19 @@ function criterionFrom(entries: readonly CaseEntry[], gate: 'g12' | 'g3'): Crite
       else if (e.judgment === 'UNDECIDED') undecided += 1;
       continue;
     }
+    // As the case judgment: a count above 1 FAILS G3 unconditionally; a case-level reason
+    // leaves the gate open; a decided failure outranks an undecided or in-zone pixel.
+    const zone = m.zone;
     const failed =
+      gate === 'g12' ? m.g1.fail + m.g2.fail > 0 || m.pairing !== 'OK' : m.g3.fullFail > 0;
+    const pixelOpen =
       gate === 'g12'
-        ? m.g1.fail + m.g2.fail > 0 || m.pairing !== 'OK'
-        : m.g3.fullFail + m.g3.otherFail > 0;
-    const open =
-      m.noFlip.failed > 0 ||
-      m.windingAnomalies > 0 ||
-      (gate === 'g12' && m.g1.undecided + m.g2.undecided > 0);
-    if (open) undecided += 1;
+        ? m.g1.undecided + m.g2.undecided + (zone?.g1 ?? 0) + (zone?.g2 ?? 0) > 0
+        : (zone?.g3 ?? 0) > 0;
+    if (gate === 'g3' && m.g3.overCount > 0) fail += 1;
+    else if (m.caseUndecided.length > 0) undecided += 1;
     else if (failed) fail += 1;
+    else if (pixelOpen) undecided += 1;
   }
   return {
     result: fail > 0 ? 'FAIL' : undecided > 0 ? 'UNDECIDED' : 'PASS',
@@ -876,6 +885,10 @@ export async function replayRecord(
     label: record.body.label,
   };
   guard(full);
+  if (record.body.version !== RECORD_VERSION)
+    throw new Error(
+      `refusing the VZ4-A9 replay: the record is ${String(record.body.version)}, this runner writes ${RECORD_VERSION}`,
+    );
   const node = record.provenance.node;
   if (node?.version !== process.version || node.v8 !== process.versions.v8)
     throw new Error(

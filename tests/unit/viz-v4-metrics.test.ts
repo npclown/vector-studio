@@ -25,6 +25,7 @@ import {
   buildReference,
   evaluateCapture,
   pixelClassForTesting,
+  SIGMA,
   ruleRenderingForTesting,
   type Capture,
   type Reference,
@@ -158,9 +159,12 @@ describe('reference (section 5.1)', () => {
       [50, 30],
       [10.5, 30],
     ]);
-    expect(ref.betaC).toBeGreaterThan(0);
-    expect(ref.betaC).toBeLessThan(1e-3);
-    expect(ref.betaC).toBeGreaterThanOrEqual(ref.betaVertex);
+    // β_c is E3's bound (below 1e-3 px here) plus σ = √2·2^-5 (contract section 17).
+    expect(ref.betaSnap).toBe(SIGMA);
+    expect(SIGMA).toBeGreaterThanOrEqual(Math.SQRT2 * 2 ** -5);
+    expect(ref.betaC).toBeGreaterThan(SIGMA);
+    expect(ref.betaC).toBeLessThan(SIGMA + 1e-3);
+    expect(ref.betaC).toBeGreaterThanOrEqual(ref.betaVertex + SIGMA);
     expect(ref.noFlip.failed).toBe(0);
     expect(ref.sectors.status).toBe('OK');
     expect(ref.tJunctionEdges).toEqual([]);
@@ -392,7 +396,8 @@ describe('VZ4-A8 controls on synthetic captures', () => {
     const base = ruleRenderingForTesting(tjReference(), 1);
     const m = tjJudge(base, 1);
     expect(m.judgment).toBe('PASS');
-    expect(m.crack.zoneWidth).toBeLessThan(1e-3);
+    expect(m.crack.zoneWidth).toBeGreaterThan(2 * SIGMA);
+    expect(m.crack.zoneWidth).toBeLessThan(2 * SIGMA + 2e-3);
     expect(m.crack.zonePixels).toBe(20);
     // A centre count of 0 on the edge is a crack, excluded from "equal to 1".
     const cracked = tjJudge(
@@ -404,6 +409,212 @@ describe('VZ4-A8 controls on synthetic captures', () => {
     );
     expect(cracked.crack.pixels).toBe(1);
     expect(cracked.judgment).toBe('PASS');
+  });
+});
+
+describe('contract section 17: count above 1, no-flip zone, σ, pairing, case reasons', () => {
+  // Pixel (30, 20): centre (30.5, 20.5), decided interior of RECT (d = 9.5 px), 0.333 px from
+  // the diagonal (10.5, 10)-(50, 30) shared by RECT's two triangles: inside the 4x zone of
+  // triangle [0, 1, 2] (r = β_c + σ + 0.3953 ≈ 0.48 px), outside the 1x zone (r ≈ 0.089 px).
+  // Pixel (20, 27): centre (20.5, 27.5), more than 7 px from every edge of [0, 1, 2].
+  const withFlip = (ref: Reference): Reference => ({ ...ref, flipped: [[0, 1, 2]] });
+
+  it('FAILS a count above 1 whatever β, the certificate or the zone', () => {
+    const ref = reference(RECT_CASE, 'fringe-4x');
+    const base = ruleRenderingForTesting(ref, 4);
+    const doubled = edit(base, (_r, k) => (k[at(30, 20) * 4 + 1] = 2));
+    // A full-class pixel: both "equal to 1" and "at most 1" fail; a separate counter.
+    const plain = evaluateCapture(ref, doubled, 4).metrics;
+    expect(plain.judgment).toBe('FAIL');
+    expect(plain.reasons).toEqual(['G3-equal', 'G3-at-most']);
+    expect(plain.g3).toMatchObject({ fullFail: 1, otherFail: 0, overCount: 1, maxCount: 2 });
+    // In the no-flip zone: still FAIL, the in-zone "equal to 1" violation is only UNDECIDED.
+    const zoned = evaluateCapture(withFlip(ref), doubled, 4).metrics;
+    expect(zoned.judgment).toBe('FAIL');
+    expect(zoned.reasons).toEqual(['G3-at-most', 'no-flip zone']);
+    expect(zoned.g3.overCount).toBe(1);
+    expect(zoned.zone).toMatchObject({ triangles: 1, g3: 1 });
+    // β_c ≥ 1 px makes every other gate open, but not "at most 1".
+    const wide: Reference = { ...ref, betaC: 1.5 };
+    expect(evaluateCapture(wide, base, 4).metrics).toMatchObject({
+      judgment: 'UNDECIDED',
+      caseUndecided: ['beta ≥ 1 px'],
+      zone: null,
+    });
+    const wideDoubled = evaluateCapture(wide, doubled, 4).metrics;
+    expect(wideDoubled.judgment).toBe('FAIL');
+    expect(wideDoubled.reasons).toContain('G3-at-most');
+    expect(wideDoubled.reasons).toContain('beta ≥ 1 px');
+  });
+
+  it('is UNDECIDED with E3’s reasons when β_c ≥ 1 px or the clip bound ≥ 0.25 px', () => {
+    const ref = reference(RECT_CASE, 'fringe-1x');
+    const base = ruleRenderingForTesting(ref, 1);
+    const clipped = evaluateCapture({ ...ref, betaClip: 0.25 }, base, 1).metrics;
+    expect(clipped.judgment).toBe('UNDECIDED');
+    expect(clipped.reasons).toEqual(['clip bound ≥ 0.25 px']);
+    // A decided G1 failure does not outrank a case-level reason (E3 measures no such case).
+    const off = edit(base, (r) => (r[at(30, 20)] = 252));
+    const both = evaluateCapture({ ...ref, betaC: 1, betaClip: 0.3 }, off, 1).metrics;
+    expect(both.judgment).toBe('UNDECIDED');
+    expect(both.caseUndecided).toEqual(['beta ≥ 1 px', 'clip bound ≥ 0.25 px']);
+    expect(evaluateCapture({ ...ref, betaClip: 0.2499 }, base, 1).metrics.judgment).toBe('PASS');
+  });
+
+  it('makes only in-zone violations UNDECIDED and leaves compliant zone pixels uncounted', () => {
+    const ref = reference(RECT_CASE, 'fringe-4x');
+    const base = ruleRenderingForTesting(ref, 4);
+    const clean = evaluateCapture(ref, base, 4).metrics;
+    const zoned = evaluateCapture(withFlip(ref), base, 4).metrics;
+    expect(zoned.judgment).toBe('PASS');
+    expect(zoned.zone!.pixels).toBeGreaterThan(30);
+    expect(zoned.zone!.radius).toBeGreaterThan(0.3953 + SIGMA);
+    expect(zoned.zone!.radius).toBeLessThan(0.3953 + SIGMA + 2e-3);
+    expect(zoned.g1.decided).toBeLessThan(clean.g1.decided);
+    expect(zoned.g3.fullPixels).toBeLessThan(clean.g3.fullPixels);
+    expect(zoned.a5.zoneExcluded).toBeGreaterThan(0);
+    // G1 in the zone: UNDECIDED; the same deviation away from it: FAIL.
+    const near = evaluateCapture(
+      withFlip(ref),
+      edit(base, (r) => (r[at(30, 20)] = 250)),
+      4,
+    );
+    expect(near.metrics).toMatchObject({
+      judgment: 'UNDECIDED',
+      reasons: ['no-flip zone'],
+      g1: { fail: 0 },
+      zone: { g1: 1, g2: 0, g3: 0 },
+    });
+    const far = evaluateCapture(
+      withFlip(ref),
+      edit(base, (r) => (r[at(20, 27)] = 250)),
+      4,
+    );
+    expect(far.metrics.judgment).toBe('FAIL');
+    expect(far.metrics.reasons).toEqual(['G1']);
+    // G3's "equal to 1" in the zone (a count-0 sample): UNDECIDED.
+    const hole = evaluateCapture(
+      withFlip(ref),
+      edit(base, (_r, k) => (k[at(30, 20) * 4] = 0)),
+      4,
+    );
+    expect(hole.metrics).toMatchObject({ judgment: 'UNDECIDED', zone: { g3: 1 } });
+    // G2 in the zone: a misclassified interior pixel.
+    const flipped = evaluateCapture(
+      withFlip(ref),
+      edit(base, (r) => (r[at(30, 20)] = 0)),
+      4,
+    );
+    expect(flipped.metrics).toMatchObject({ judgment: 'UNDECIDED', zone: { g1: 1, g2: 1 } });
+    // A decided failure elsewhere outranks the zone.
+    const mixed = evaluateCapture(
+      withFlip(ref),
+      edit(base, (r) => {
+        r[at(30, 20)] = 250;
+        r[at(20, 27)] = 250;
+      }),
+      4,
+    ).metrics;
+    expect(mixed.judgment).toBe('FAIL');
+    expect(mixed.reasons).toEqual(['G1', 'no-flip zone']);
+    // At 1x the zone has no sample term: pixel (30, 20) is outside it.
+    const ref1 = reference(RECT_CASE, 'fringe-1x');
+    const one = evaluateCapture(
+      withFlip(ref1),
+      edit(ruleRenderingForTesting(ref1, 1), (r) => (r[at(30, 20)] = 250)),
+      1,
+    ).metrics;
+    expect(one.judgment).toBe('FAIL');
+    expect(one.zone!.radius).toBeLessThan(2 * SIGMA + 2e-3);
+  });
+
+  it('certifies every drawn triangle: region, exterior fringe triangles and frame corners', () => {
+    const fringe = reference(RECT_CASE, 'fringe-4x');
+    expect(fringe.drawnPoints).toHaveLength(8);
+    expect(fringe.noFlip.exteriorChecked).toBeGreaterThan(0);
+    expect(fringe.noFlip.checked).toBe(2 + fringe.noFlip.exteriorChecked);
+    expect(fringe.noFlip.failed).toBe(0);
+    // The corners lie outside the region's bounds.
+    const scale = Number(fringe.scale);
+    for (const [x, y] of fringe.drawnPoints.slice(4)) {
+      const px = Number(x) / scale;
+      const py = Number(y) / scale;
+      expect(px < 10.5 || px > 50 || py < 10 || py > 30).toBe(true);
+    }
+    const off = reference(RECT_CASE, 'msaa-4x');
+    expect(off.drawnPoints).toHaveLength(4);
+    expect(off.noFlip).toMatchObject({ checked: 2, exteriorChecked: 0 });
+  });
+
+  it('decides a case whose only failing triangle is a sliver with an empty zone', () => {
+    // RECT with a boundary vertex 2^-12 px above its top edge: region triangle [0, 4, 1] is a
+    // sliver that fails the certificate. Its zone holds no pixel centre (they are 0.5 px from
+    // y = 10), so the case is decided; E3's whole-case veto made it UNDECIDED.
+    const eps = 2 ** -12;
+    const sliver: FillMesh = {
+      positions: Float64Array.from([10, 10, 50, 10, 50, 30, 10, 30, 30, 10 - eps]),
+      indices: Uint32Array.from([0, 4, 1, 0, 1, 2, 0, 2, 3]),
+      boundaryEdges: Uint32Array.from([0, 4, 4, 1, 1, 2, 2, 3, 3, 0]),
+      bounds: { minX: 10, minY: 10 - eps, maxX: 50, maxY: 30 },
+    };
+    const c = synthCase('TEST/sliver/T0/z1-d1', 10);
+    for (const [fringe, samples] of [
+      ['on', 1],
+      ['on', 4],
+    ] as const) {
+      const outcome = drawCase(
+        c.kase,
+        ports(() => sliver),
+        { fringe },
+      );
+      if (outcome.kind !== 'drawn') throw new Error('not drawn');
+      const ref = buildReference(outcome.draw, outcome.frame);
+      expect(ref.flipped).toEqual([[0, 4, 1]]);
+      const base = ruleRenderingForTesting(ref, samples);
+      const m = evaluateCapture(ref, base, samples).metrics;
+      expect(m.noFlip.failed).toBe(1);
+      expect(m.zone).toMatchObject({ triangles: 1, pixels: 0 });
+      expect(m.judgment).toBe('PASS');
+      // A count above 1 next to the sliver still FAILS.
+      const over = evaluateCapture(
+        ref,
+        edit(base, (_r, k) => (k[at(30, 10) * samples] = 2)),
+        samples,
+      ).metrics;
+      expect(over.judgment).toBe('FAIL');
+      expect(over.g3.overCount).toBe(1);
+    }
+  });
+
+  it('merges vertices of equal p* before pairing (no VERTEX_UNSUPPORTED:duplicate)', () => {
+    // Vertex 4 is 1 ulp right of vertex 0 in node-local f64; both round to the same f32 offset
+    // fround(v − m), so they have the same p*. Triangle [0, 4, 3] is collapsed at p*.
+    const dup: FillMesh = {
+      positions: Float64Array.from([10.5, 10, 50, 10, 50, 30, 10.5, 30, 10.5 + 2 ** -49, 10]),
+      indices: Uint32Array.from([4, 1, 2, 4, 2, 3, 0, 4, 3]),
+      boundaryEdges: Uint32Array.from([0, 4, 4, 1, 1, 2, 2, 3, 3, 0]),
+      bounds: { minX: 10.5, minY: 10, maxX: 50, maxY: 30 },
+    };
+    const c = synthCase('TEST/duplicate/T0/z1-d1', 10);
+    for (const fringe of ['on', 'off'] as const) {
+      const outcome = drawCase(
+        c.kase,
+        ports(() => dup),
+        { fringe },
+      );
+      if (outcome.kind !== 'drawn') throw new Error('not drawn');
+      const ref = buildReference(outcome.draw, outcome.frame);
+      expect(ref.points[4]).toEqual(ref.points[0]);
+      expect(ref.merge).toEqual({ vertices: 1, droppedEdges: 1 });
+      expect(ref.sectors.status).toBe('OK');
+      expect(ref.directed).toHaveLength(4);
+      // [0, 4, 3], and on the fringe draw also the exterior triangle on the edge 0-4.
+      expect(ref.noFlip.collapsed).toBe(fringe === 'off' ? 1 : 2);
+      expect(ref.noFlip.failed).toBe(0);
+      const m = evaluateCapture(ref, ruleRenderingForTesting(ref, 4), 4).metrics;
+      expect(m.pairing).toBe('OK');
+      expect(m.judgment).toBe('PASS');
+    }
   });
 });
 
@@ -733,6 +944,27 @@ describe('runner (sections 4.4, 5.3, VZ4-A3 to A7)', () => {
     expect(body.criteria['VZ4-A6']!.result).toBe('UNDECIDED');
   });
 
+  it('FAILS VZ4-A7 on a sample count above 1, and reports it per group', () => {
+    const body = evaluate(
+      syntheticRun((c, variant, o, project) =>
+        project === 'edge' && c === RECT_CASE && variant === 'fringe-4x'
+          ? observation(
+              c,
+              variant,
+              edit(goodCapture(c, variant), (_r, k) => (k[at(30, 20) * 4 + 2] = 3)),
+            )
+          : o,
+      ),
+    );
+    expect(body.result).toBe('FAIL');
+    expect(body.criteria['VZ4-A7']!.result).toBe('FAIL');
+    expect(body.criteria['VZ4-A6']!.result).toBe('PASS');
+    const group = (
+      body.report as { groups: { project: string; variant: string; g3: { overCount: number } }[] }
+    ).groups.find((g) => g.project === 'edge' && g.variant === 'fringe-4x')!;
+    expect(group.g3.overCount).toBe(1);
+  });
+
   it('refuses inputs that do not belong together', () => {
     expect(() =>
       evaluateRun({
@@ -946,6 +1178,17 @@ describe('record and replay (VZ4-A9, VZ4-A11)', () => {
     writeFileSync(recordPath, text.replace(`"version":"${process.version}"`, '"version":"v0.0.0"'));
     await expect(replayRecord({ ...options(root), recordDir: out })).rejects.toThrow(
       /evaluated on Node v0\.0\.0/u,
+    );
+    writeFileSync(recordPath, text);
+
+    // A record of another metrics version (the v1 PRE-FREEZE record) is refused.
+    expect(text).toContain('"version":"viz-v4-metrics/v2"');
+    writeFileSync(
+      recordPath,
+      text.replace('"version":"viz-v4-metrics/v2"', '"version":"viz-v4-metrics/v1"'),
+    );
+    await expect(replayRecord({ ...options(root), recordDir: out })).rejects.toThrow(
+      /record is viz-v4-metrics\/v1, this runner writes viz-v4-metrics\/v2/u,
     );
     writeFileSync(recordPath, text);
 
