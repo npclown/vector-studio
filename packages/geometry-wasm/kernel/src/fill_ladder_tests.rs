@@ -1780,6 +1780,67 @@ fn rung_zero_allocates_nothing_on_the_debug_sample() {
     );
 }
 
+/// E14-D4, differential: rung 0 over `cases` with every indexed `next_half` call compared with
+/// today's linear scan, at the pre-B1 caps (the AL-I3 harness) and at the production caps.
+fn next_half_differential(
+    cases: &[(String, FillRequest, RealPath)],
+) -> crate::fill_ladder::NextHalfCounts {
+    let mut harness = Harness::new();
+    let mut workspace = CubicFillWorkspace::new(crate::fill_export::FILL_V0_LIMITS).unwrap();
+    let mut scan = TestScan::new();
+    let ((), counts) = crate::fill_ladder::with_next_half_differential(|| {
+        for (_, request, path) in cases {
+            let _ = harness.fast(*request, &path.verbs, &path.point_bytes);
+            let _ = harness.ladder.fast_rung(
+                &mut workspace,
+                *request,
+                &path.verbs,
+                &path.point_bytes,
+                &mut scan,
+            );
+        }
+    });
+    counts
+}
+
+/// E14-D4 on the AL-I3 debug sample: indexed and linear `next_half` agree on every call, and
+/// some calls had diagonal candidates, so the comparison is not only w → next(w).
+#[test]
+fn e14_d4_next_half_differential_on_the_debug_sample() {
+    // The sample's rings are convex and its real paths do not reach FR7 with a diagonal; a
+    // nonconvex smooth path gives FR7 diagonals, so some calls compare diagonal candidates.
+    let mut cases = sample_cases();
+    // A kidney of five cubics with tangent-continuous joins, dented on top, scaled by 4.
+    let kidney: Vec<f64> = [
+        0.0, 0.0, 4.0, -2.0, 8.0, -2.0, 12.0, 0.0, 16.0, 2.0, 16.0, 10.0, 12.0, 12.0, 10.0, 13.0,
+        8.0, 8.0, 6.0, 8.0, 4.0, 8.0, 2.0, 13.0, 0.0, 12.0, -4.0, 10.0, -4.0, 2.0, 0.0, 0.0,
+    ]
+    .iter()
+    .map(|value| 4.0 * value)
+    .collect();
+    cases.push((
+        "kidney".to_owned(),
+        request(LineFillRule::Nonzero, B0_EXPONENT),
+        real_path("kidney", vec![0, 2, 2, 2, 2, 2, 3], &kidney),
+    ));
+    let counts = next_half_differential(&cases);
+    println!("E14-D4 debug sample: {counts:?}");
+    assert!(counts.with_diagonals > 0, "{counts:?}");
+}
+
+/// E14-D4 on the full AL-I3 corpus (B0 framed and `p3-b0r-random/v1`).
+#[test]
+#[ignore = "E14-D4 full corpus; needs P3_B0R_B0_CORPUS and P3_B0R_RANDOM_CORPUS; release profile"]
+fn e14_d4_next_half_differential_on_the_full_corpus() {
+    let mut cases = b0_corpus();
+    let random = std::fs::read(env::var("P3_B0R_RANDOM_CORPUS").expect("P3_B0R_RANDOM_CORPUS"))
+        .expect("randomized corpus");
+    cases.extend(random_corpus(&random));
+    let counts = next_half_differential(&cases);
+    println!("E14-D4 full corpus: {} paths, {counts:?}", cases.len());
+    assert!(counts.with_diagonals > 0, "{counts:?}");
+}
+
 // ------------------------------------------------------------------------------------------
 // AL-I3: the production rung 0 against the frozen spike module (contract section 4.4).
 

@@ -43,6 +43,7 @@
     "coverage:viz-v4": "node tooling/run-viz-v4-metrics.mjs",
     "p3-exit:sweep": "node tooling/run-p3-exit-sweep.mjs",
     "e14:fill-diag": "node tooling/run-e14-fill-diag.mjs",
+    "e14:rung0-oracle": "vitest run --config vitest.e14-rung0-oracle.config.ts",
     "test:p2-identity": "node tooling/compare-p2-wasm.mjs",
     "test:p3-fill-identity": "node tooling/compare-p3-fill-identity.mjs",
     "compare:p3-b0-records": "node tooling/compare-p3-b0-records.mjs",

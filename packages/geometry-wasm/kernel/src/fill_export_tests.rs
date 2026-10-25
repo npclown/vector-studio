@@ -1310,9 +1310,44 @@ fn self_check_failure_is_internal_error_and_the_engine_recovers() {
     assert_eq!(engine.output_bytes(), expected.as_slice());
 }
 
+/// D9 E14-F1: the 256-edge circle's export output (status, positions, indices, boundary pairs
+/// and bounds, FNV-1a 64 over their bits) is the `r2` output, pinned from the merge base
+/// daf9f62 (E14-U1 evidence).
+#[test]
+fn e14_f1_output_is_the_r2_output() {
+    let fixture = crate::e14_fill_rung0_tests::circle(-3, 512.0);
+    let mut path = TestPath::new(1, NONZERO, fixture.exponent);
+    path.verbs = fixture.verbs;
+    path.points = fixture.points;
+    let mesh = run_one(path);
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut eat = |bytes: &[u8]| {
+        for byte in bytes {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x0100_0000_01b3);
+        }
+    };
+    eat(&mesh.status.to_le_bytes());
+    for value in &mesh.positions {
+        eat(&value.to_bits().to_le_bytes());
+    }
+    for value in mesh.indices.iter().chain(&mesh.boundary) {
+        eat(&value.to_le_bytes());
+    }
+    for value in &mesh.bounds {
+        eat(&value.to_bits().to_le_bytes());
+    }
+    assert_eq!(
+        (mesh.positions.len() / 2, mesh.indices.len() / 3),
+        (256, 254)
+    );
+    assert_eq!(hash, 0x4ed8_07b3_d10d_eec3);
+}
+
 /// D9 E14-G3: `process` allocates nothing and moves no storage on rung 0's E14-F2, E14-F3 and
-/// E14-F5, and on E14-F3 under a lowered work cap (rung 0 `WORK`), which stands in for E14-F8:
-/// no path within E0 and 64 sources reaches W0 (E14-U1 evidence).
+/// E14-F5, on a circle over E0 (`PREFIX`), and on E14-F2 and E14-F3 under a lowered work cap
+/// (rung 0 `WORK`), which stands in for E14-F8: no path within E0 and 64 sources reaches W0
+/// (E14-U1 evidence).
 #[test]
 fn e14_g3_process_does_not_allocate_on_rung0_fixtures() {
     use crate::e14_fill_rung0_tests::{circle, f5, Fixture};
@@ -1330,6 +1365,8 @@ fn e14_g3_process_does_not_allocate_on_rung0_fixtures() {
         test_path(1, circle(-3, 2_048.0)),
         test_path(2, circle(-3, 32_768.0)),
         test_path(3, f5()),
+        // Over E0: rung 0's `PREFIX`, then the exact rung's `CommandLimit`.
+        test_path(4, circle(-3, 2_097_152.0)),
     ];
     let input = pack(&paths);
     let mut engine = FillEngine::new();
@@ -1357,7 +1394,11 @@ fn e14_g3_process_does_not_allocate_on_rung0_fixtures() {
         } else {
             FILL_PATH_WORK_LIMIT
         };
-        assert_eq!(statuses, [rung0, rung0, FILL_PATH_WORK_LIMIT], "{cap:?}");
+        assert_eq!(
+            statuses,
+            [rung0, rung0, FILL_PATH_WORK_LIMIT, FILL_PATH_WORK_LIMIT],
+            "{cap:?}"
+        );
     }
     assert_eq!(
         engine.workspace().unwrap().allocated_bytes(),

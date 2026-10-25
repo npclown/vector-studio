@@ -57,8 +57,9 @@
 // d9-e14-fill-rung0-edge-cap-contract.md section 7, E14-G1): the failure-to-success
 // classification with the revision rule of `--revision-change` (branch = merge base + 1). The two
 // size records `meta/cubic-workspace-sizes` and `meta/fill-engine-sizes` are recorded as changes,
-// printed base against branch, instead of failing; every other META record and every output
-// record keeps the failure-to-success rule. The rung record and the oracle validation of
+// printed base against branch, instead of failing. Every other entry or META record must be
+// identical whatever its base code (AL-I1), and a cascade or WASM record may change only from
+// `work-limit` (`path_status=5`) to `ok`. The rung record and the oracle validation of
 // `--revision-change` alone do not run in this mode.
 //
 // Re-comparison of a finished run, with an optional tampered digest:
@@ -463,6 +464,8 @@ export const FILL_ENGINE_META = 'meta/fill-engine-sizes';
 /** The size records that the combined mode (E14-G1) records as changes, by exact name. */
 export const SIZE_RECORDS = ['meta/cubic-workspace-sizes', FILL_ENGINE_META];
 const PATH_OK_CODE = 'path_status=0';
+/** `FILL_PATH_WORK_LIMIT`, the one base status the combined mode lets change (to `ok`). */
+const WORK_LIMIT_CODE = 'path_status=5';
 
 /** The rung-record path of a native cascade or WASM case, or null for an entry or meta case. */
 export function rungPathOf(name) {
@@ -677,6 +680,11 @@ export function differingFields(base, branch) {
  * field; a base path failure may become `ok` or another path failure (an allowed change, listed
  * with both codes) and otherwise is an internal-regression. A record missing from the branch or
  * only on the branch is a FAIL. `fail` includes `internalRegression`.
+ *
+ * With `recordedChanges` (the combined mode, E14-G1) two rules tighten this: an entry or META
+ * record not named there must be identical whatever its base code (AL-I1: the exact rung's entry
+ * layer is bit-identical, so a base path failure there may not change), and a cascade or WASM
+ * record may change only from `work-limit` to `ok`; any other change is a FAIL.
  */
 export function classifyFailureToSuccessLayer(layer, base, branch, recordedChanges = []) {
   const result = {
@@ -701,6 +709,20 @@ export function classifyFailureToSuccessLayer(layer, base, branch, recordedChang
     // E14-G1: a size record named by the combined mode is recorded, base against branch.
     if (recorded.has(name) && differing.length > 0) {
       result.recordedChanges.push({ layer, case: name, base: old.digest, branch: current.digest });
+      continue;
+    }
+    if (recorded.size > 0) {
+      if (differing.length === 0) result.counts.identical += 1;
+      else if (rungPathOf(name) === null)
+        fail(
+          name,
+          `AL-I1: entry case differs in ${differing.join(', ')} (${old.code} -> ${current.code})`,
+        );
+      else if (old.code === WORK_LIMIT_CODE && current.code === PATH_OK_CODE) {
+        result.counts.allowedChange += 1;
+        result.allowed.push({ layer, case: name, baseCode: old.code, branchCode: current.code });
+      } else
+        fail(name, `E14-G1: only work-limit -> ok may change (${old.code} -> ${current.code})`);
       continue;
     }
     if (classifyOutcome(old.code) !== 'path-failure') {
@@ -1791,6 +1813,8 @@ function selfTestCombined() {
   });
   const A = 'rnd/T/0000/fill_v0_cascade';
   const F = 'rnd/T/0001/fill_v0_cascade';
+  const U = 'rnd/T/0002/fill_v0_cascade';
+  const E = 'rnd/T/0001/fill_v0_entry';
   const nativeBase = () =>
     new Map([
       ['meta/cubic-workspace-sizes', record('cubic', 'META')],
@@ -1798,6 +1822,8 @@ function selfTestCombined() {
       ['meta/other', record('other', 'META')],
       [A, record('a')],
       [F, record('f', 'path_status=5')],
+      [U, record('u', 'path_status=6')],
+      [E, record('e', 'CommandLimit')],
     ]);
   const wasmBase = () =>
     new Map([
@@ -1837,6 +1863,20 @@ function selfTestCombined() {
   const okChanged = resized();
   okChanged.set(A, record('a2'));
   const okFails = !classify(okChanged, SIZE_RECORDS).pass;
+  // E14-G1: an entry case that was a path failure (E14-D1 changes the exact rung's entries), a
+  // non-work-limit failure becoming ok, and work-limit becoming another failure all FAIL.
+  const entryChanged = resized();
+  entryChanged.set(E, record('e2'));
+  const unsupportedOk = resized();
+  unsupportedOk.set(U, record('u-ok'));
+  const workToUnsupported = resized();
+  workToUnsupported.set(F, record('f6', 'path_status=6'));
+  const g1Rules =
+    !classify(entryChanged, SIZE_RECORDS).pass &&
+    !classify(unsupportedOk, SIZE_RECORDS).pass &&
+    !classify(workToUnsupported, SIZE_RECORDS).pass &&
+    // failure-to-success alone allows it (it fails there only on the size records).
+    !classify(entryChanged, []).failures.some((failure) => failure.includes(E));
   const tamperChecks = failureToSuccessTamperChecks(
     {
       native: { base: nativeBase(), branch: resized() },
@@ -1874,9 +1914,9 @@ function selfTestCombined() {
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
-  const pass = sizedOk && aloneFails && otherFails && okFails && tampers && plumbing;
+  const pass = sizedOk && aloneFails && otherFails && okFails && g1Rules && tampers && plumbing;
   console.log(
-    `P3 B0R identity self-test (failure-to-success+revision-change): size records recorded ${sizedOk ? 'ok' : 'WRONG'}; failure-to-success alone ${aloneFails ? 'fails them' : 'NOT DETECTED'}; other META ${otherFails ? 'detected' : 'NOT DETECTED'}; ok record ${okFails ? 'detected' : 'NOT DETECTED'}; tamper checks ${tampers ? 'detected' : 'NOT DETECTED'}; compare-only ${plumbing ? 'ok' : 'WRONG'}; ${pass ? 'PASS' : 'FAIL'}`,
+    `P3 B0R identity self-test (failure-to-success+revision-change): size records recorded ${sizedOk ? 'ok' : 'WRONG'}; failure-to-success alone ${aloneFails ? 'fails them' : 'NOT DETECTED'}; other META ${otherFails ? 'detected' : 'NOT DETECTED'}; ok record ${okFails ? 'detected' : 'NOT DETECTED'}; E14-G1 rules ${g1Rules ? 'detected' : 'NOT DETECTED'}; tamper checks ${tampers ? 'detected' : 'NOT DETECTED'}; compare-only ${plumbing ? 'ok' : 'WRONG'}; ${pass ? 'PASS' : 'FAIL'}`,
   );
   return pass;
 }

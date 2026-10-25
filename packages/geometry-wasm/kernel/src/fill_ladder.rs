@@ -231,6 +231,8 @@ thread_local! {
     static WORK_CAP_DISABLED: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
     /// E14-D4: every indexed `next_half` call is compared with today's linear scan.
     static NEXT_HALF_DIFFERENTIAL: core::cell::Cell<u64> = const { core::cell::Cell::new(0) };
+    /// E14-D4: the compared calls whose vertex has at least one diagonal half-edge.
+    static NEXT_HALF_WITH_DIAGONALS: core::cell::Cell<u64> = const { core::cell::Cell::new(0) };
 }
 
 /// The work cap of a call: W0, or a test override.
@@ -273,20 +275,34 @@ pub(crate) fn with_work_cap<T>(cap: Option<u32>, action: impl FnOnce() -> T) -> 
 
 /// Runs `action` with the E14-D4 differential on: every indexed `next_half` call in this thread
 /// is compared with today's linear scan, and a difference panics. Returns the action's result
-/// and the number of calls compared.
+/// and the counts of compared calls.
 #[cfg(test)]
-pub(crate) fn with_next_half_differential<T>(action: impl FnOnce() -> T) -> (T, u64) {
+pub(crate) fn with_next_half_differential<T>(action: impl FnOnce() -> T) -> (T, NextHalfCounts) {
     struct Reset;
     impl Drop for Reset {
         fn drop(&mut self) {
             NEXT_HALF_DIFFERENTIAL.with(|value| value.set(0));
+            NEXT_HALF_WITH_DIAGONALS.with(|value| value.set(0));
         }
     }
     NEXT_HALF_DIFFERENTIAL.with(|value| value.set(1));
+    NEXT_HALF_WITH_DIAGONALS.with(|value| value.set(0));
     let _reset = Reset;
     let result = action();
-    let compared = NEXT_HALF_DIFFERENTIAL.with(core::cell::Cell::get) - 1;
-    (result, compared)
+    let counts = NextHalfCounts {
+        compared: NEXT_HALF_DIFFERENTIAL.with(core::cell::Cell::get) - 1,
+        with_diagonals: NEXT_HALF_WITH_DIAGONALS.with(core::cell::Cell::get),
+    };
+    (result, counts)
+}
+
+/// E14-D4: the `next_half` calls the differential compared, and those among them whose vertex
+/// had at least one diagonal half-edge (only those can show an order difference).
+#[cfg(test)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct NextHalfCounts {
+    pub(crate) compared: u64,
+    pub(crate) with_diagonals: u64,
 }
 
 /// E14-K3: rung 0's per-call work counter. Each charge comes before the visit it pays for; at
@@ -2992,6 +3008,9 @@ impl Graph<'_> {
                 "E14-D4: indexed and linear next_half differ at half-edge {half}"
             );
             NEXT_HALF_DIFFERENTIAL.with(|value| value.set(value.get() + 1));
+            if !indexed.is_empty() {
+                NEXT_HALF_WITH_DIAGONALS.with(|value| value.set(value.get() + 1));
+            }
         }
         result
     }

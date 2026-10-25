@@ -14,11 +14,12 @@ use crate::fill_export::{
     FILL_V0_LIMITS,
 };
 use crate::fill_ladder::{
-    graph_select_for_tests, with_ladder_faults, with_next_half_differential, with_work_cap,
-    LadderFault, Reason, Rung, MAX_FAST_WORK,
+    graph_select_for_tests, with_next_half_differential, with_work_cap, Reason, Rung, MAX_FAST_WORK,
 };
+use crate::fill_predicates::orient2d;
 use crate::geometry::{Point, VERB_CLOSE, VERB_CUBIC, VERB_LINE, VERB_MOVE};
 use crate::line_fill::LineFillRule;
+use core::cmp::Ordering;
 
 /// The fixtures' circle constant (section 8).
 const KAPPA: f64 = 0.552_284_749_8;
@@ -286,6 +287,43 @@ fn f6() -> Fixture {
     )
 }
 
+/// The first pair of edges of the path's S1 polygon (rung 0's prefix) that cross properly:
+/// strictly opposite exact `orient2d` signs at both edges, the E14-Q1 class test.
+fn proper_crossing(path: &Fixture) -> Option<(usize, usize)> {
+    let mut workspace = CubicFillWorkspace::new(FILL_V0_LIMITS).expect("workspace");
+    let bytes = path.point_bytes();
+    let commands = workspace.fast_flat_commands();
+    let view = workspace
+        .prepare_prefix(path.input(&bytes), commands)
+        .map_err(|failure| format!("{failure:?}"))
+        .expect("prefix");
+    let mut edges = Vec::new();
+    for range in view.ranges {
+        let points = &view.points[range.start..range.start + range.count];
+        for index in 0..points.len() {
+            edges.push((points[index], points[(index + 1) % points.len()]));
+        }
+    }
+    let side = |a: Point, b: Point, c: Point| orient2d(a, b, c).expect("orient2d");
+    let opposite = |x: Ordering, y: Ordering| x != Ordering::Equal && y == x.reverse();
+    for i in 0..edges.len() {
+        let (a, b) = edges[i];
+        for (j, &(c, d)) in edges.iter().enumerate().skip(i + 1) {
+            if a.x.max(b.x) < c.x.min(d.x)
+                || c.x.max(d.x) < a.x.min(b.x)
+                || a.y.max(b.y) < c.y.min(d.y)
+                || c.y.max(d.y) < a.y.min(b.y)
+            {
+                continue;
+            }
+            if opposite(side(a, b, c), side(a, b, d)) && opposite(side(c, d, a), side(c, d, b)) {
+                return Some((i, j));
+            }
+        }
+    }
+    None
+}
+
 fn engine() -> FillEngine {
     let mut engine = FillEngine::new();
     assert_eq!(engine.reserve(1 << 16, 1 << 20), BATCH_OK);
@@ -345,7 +383,8 @@ fn assert_fallback(engine: &mut FillEngine, path: &Fixture, reason: Reason, name
 #[test]
 fn e14_f1_to_f3_circles() {
     let mut engine = engine();
-    // E14-F1: 256 flat edges, rung 0 today and at r3 (the identity run checks the bytes).
+    // E14-F1: 256 flat edges, rung 0 today and at r3 (`fill_export_tests::e14_f1_output_is_the_r2_output`
+    // pins the bytes).
     let f1 = circle(-3, 512.0);
     assert_eq!(fast_edges(&f1), Ok(MAX_EDGE_OWNERS));
     assert_eq!(exact(&f1), Ok(()));
@@ -389,10 +428,7 @@ fn e14_f7_near_touching_simple_path_falls_back() {
     let record = built(&mut engine, &path);
     println!("E14-F7: {edges} flat edges, reason {:?}", record.reason);
     assert_eq!(record.rung, Some(Rung::Exact));
-    assert!(matches!(
-        record.reason,
-        Some(Reason::Clearance | Reason::Monotone)
-    ));
+    assert_eq!(record.reason, Some(Reason::Clearance));
     assert_eq!(record.outcome, PathOutcome::Status(FILL_PATH_WORK_LIMIT));
     assert_eq!(exact(&path), Err(CubicFillError::CommandLimit));
 }
@@ -402,6 +438,11 @@ fn e14_f5_f6_scene_paths_stay_work_limit() {
     let mut engine = engine();
     let path = f5();
     let edges = fast_edges(&path).expect("prefix");
+    // The E14-Q1 class test: two edges of the S1 polygon cross properly (exact `orient2d`).
+    assert!(
+        proper_crossing(&path).is_some(),
+        "E14-F5 has no proper crossing"
+    );
     assert_eq!(edges, 3_463, "E14-F5 flat edges");
     assert_eq!(exact(&path), Err(CubicFillError::CommandLimit));
     assert_fallback(&mut engine, &path, Reason::Monotone, "E14-F5");
@@ -471,12 +512,13 @@ fn e14_d4_diagonal_order_is_observable_on_a_tie() {
     assert_eq!(reversed, Ok(7));
 }
 
-/// E14-D4, differential: the indexed `next_half` equals today's linear scan on every call over
-/// the fixtures, the B1 rings and the AL-I3 debug sample's real paths; and with the seeded
-/// reversed index the differential itself is exercised (it compares, so a reversed order that
-/// changes a pick would panic).
+/// E14-D4, differential over the E14 fixtures: the indexed `next_half` equals today's linear
+/// scan on every call. The circles and E14-F4 are convex, so monotone decomposition adds no
+/// diagonal and every call compares only w → next(w); the differential that reaches diagonal
+/// candidates runs over the AL-I3 corpus in `fill_ladder_tests`
+/// (`e14_d4_next_half_differential_on_the_debug_sample` and its full-corpus release test).
 #[test]
-fn e14_d4_indexed_next_half_equals_the_linear_scan() {
+fn e14_d4_indexed_next_half_equals_the_linear_scan_on_the_fixtures() {
     let mut engine = engine();
     let paths = [
         circle(-3, 512.0),
@@ -484,22 +526,16 @@ fn e14_d4_indexed_next_half_equals_the_linear_scan() {
         circle(-3, 32_768.0),
         f4(false),
     ];
-    let ((), compared) = with_next_half_differential(|| {
+    let ((), counts) = with_next_half_differential(|| {
         for path in &paths {
             assert_fast(&mut engine, path, "differential");
         }
     });
-    assert!(compared > 10_000, "{compared} next_half calls compared");
-    // The seeded order changes no successful pick here (only a tie can show it), so the
-    // differential still passes; the tie test above is what catches E14-D4.
-    let ((), compared) = with_ladder_faults(&[LadderFault::DiagonalIndexReversed], || {
-        with_next_half_differential(|| {
-            for path in &paths[..2] {
-                assert_fast(&mut engine, path, "reversed index");
-            }
-        })
-    });
-    assert!(compared > 0);
+    assert!(counts.compared > 10_000, "{counts:?}");
+    assert_eq!(
+        counts.with_diagonals, 0,
+        "convex fixtures have no diagonals"
+    );
 }
 
 /// Section 8 search for E14-F4: the radius at which every one of the 64 halved cubics

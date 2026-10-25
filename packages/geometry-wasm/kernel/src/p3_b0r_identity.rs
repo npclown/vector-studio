@@ -357,10 +357,18 @@ fn hash_stage_stats(hash: &mut Sha256, workspace: &CubicFillWorkspace) {
 /// Digest of every section 2 field observable after one `CubicFillWorkspace` entry call, the
 /// outcome code in the B0 harness's vocabulary, and the number of proper crossing events of a
 /// published mesh (raw events are both endpoints of every edge, then the crossings).
+///
+/// E14-U1 (`docs/plans/d9-e14-fill-rung0-edge-cap-contract.md`, E14-G1): `allocated_bytes()` is
+/// hashed as its growth over `constructed_bytes`, the workspace's value after construction. The
+/// absolute value is a workspace size, which `meta/cubic-workspace-sizes` records once and
+/// which E14-U1 changes by moving the prefix buffers to the heap; hashing it in every entry
+/// record made every record differ with it. Any growth inside an attempt still changes the
+/// digest.
 fn attempt_digest(
     name: &str,
     result: &Result<CubicFillDiagnostics, CubicFillError>,
     workspace: &CubicFillWorkspace,
+    constructed_bytes: usize,
 ) -> (String, String, usize) {
     let mut hash = Sha256::new();
     let _ = write!(
@@ -369,7 +377,11 @@ fn attempt_digest(
         workspace.diagnostics(),
     );
     hash_stage_stats(&mut hash, workspace);
-    let _ = writeln!(hash, "allocated_bytes={}", workspace.allocated_bytes());
+    let _ = writeln!(
+        hash,
+        "allocated_growth={}",
+        workspace.allocated_bytes().wrapping_sub(constructed_bytes)
+    );
     let output = workspace.output();
     match output {
         None => hash.update(b"output=None\n"),
@@ -462,6 +474,7 @@ fn pack(path: &CorpusPath, request_id: u32) -> Vec<u8> {
 
 pub(crate) fn run_chunk(chunk: &Chunk) -> String {
     let mut workspace = CubicFillWorkspace::new(LIMITS).expect("construct identity workspace");
+    let constructed_bytes = workspace.allocated_bytes();
     let mut engine = FillEngine::new();
     assert_eq!(
         engine.reserve(ENGINE_INPUT_BYTES, ENGINE_OUTPUT_BYTES),
@@ -500,7 +513,8 @@ pub(crate) fn run_chunk(chunk: &Chunk) -> String {
                 }
             };
             let allocations = crate::allocation_test_support::stop();
-            let (digest, code, crossings) = attempt_digest(name, &result, &workspace);
+            let (digest, code, crossings) =
+                attempt_digest(name, &result, &workspace, constructed_bytes);
             let case = format!("{}/{index:04}/{name}", chunk.prefix);
             line(&mut output, &case, &digest, allocations, &code, crossings);
         }
@@ -741,6 +755,7 @@ fn topology_free_attempt_digest_ignores_stale_topology_stats() {
         vec![0, 1, 1, 1, 3],
         bytes(&[0.0, 0.0, 10.0, 0.0, 10.0, 10.0, 0.0, 10.0]),
     );
+    let constructed = CubicFillWorkspace::new(LIMITS).unwrap().allocated_bytes();
     let run = |workspace: &mut CubicFillWorkspace, (verbs, points): &(Vec<u8>, Vec<u8>)| {
         let input = PathInput::from_test_parts(
             Request {
@@ -758,7 +773,7 @@ fn topology_free_attempt_digest_ignores_stale_topology_stats() {
             TOPOLOGY_TOLERANCE,
             MAX_FLAT_COMMANDS,
         );
-        attempt_digest("attempt", &result, workspace)
+        attempt_digest("attempt", &result, workspace, constructed)
     };
     let mut fresh = CubicFillWorkspace::new(LIMITS).unwrap();
     let clean = run(&mut fresh, &square);
@@ -806,6 +821,7 @@ fn pre_rounded_failure_digest_ignores_stale_rounded_stats() {
         points.extend(trisect(pair[0], pair[1]));
     }
     let bowtie: (Vec<u8>, Vec<u8>) = (vec![0, 2, 2, 2, 2, 3], bytes(&points));
+    let constructed = CubicFillWorkspace::new(LIMITS).unwrap().allocated_bytes();
     let run = |workspace: &mut CubicFillWorkspace, (verbs, points): &(Vec<u8>, Vec<u8>)| {
         let input = PathInput::from_test_parts(
             Request {
@@ -825,7 +841,7 @@ fn pre_rounded_failure_digest_ignores_stale_rounded_stats() {
         );
         (
             result.is_ok(),
-            attempt_digest("attempt", &result, workspace),
+            attempt_digest("attempt", &result, workspace, constructed),
         )
     };
     let mut fresh = CubicFillWorkspace::new(LIMITS).unwrap();
