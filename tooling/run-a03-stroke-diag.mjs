@@ -7,8 +7,10 @@
 // `emit_stroke_dump` (release profile) on it, and summarizes each request's kernel status and
 // unmapped error by stratum, named or generated row, and class: the E4 class (ST-U3f,
 // `Rounded(TopologyAmbiguous)`), a B2 section 11.2 literal expectation of the row's named
-// fixture, the stroke `work-limit` class, or outside the closed list. Output goes to
-// .tools/a03-stroke-diag/<stamp>/.
+// fixture, the stroke `work-limit` class, or outside the closed list. It also lists every named
+// row with a non-ok stroke result, with its source and class, since E11 section 7.2 records
+// named known defects row by row (named.tsv). Output goes to .tools/a03-stroke-diag/<stamp>/,
+// with the commit and clean flag in provenance.json.
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -22,6 +24,20 @@ const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const dir = path.join(root, '.tools', 'a03-stroke-diag', stamp);
 mkdirSync(dir, { recursive: true });
 const base = path.join(dir, 'input');
+const git = (...a) => spawnSync('git', a, { cwd: root, encoding: 'utf8' }).stdout.trim();
+writeFileSync(
+  path.join(dir, 'provenance.json'),
+  `${JSON.stringify(
+    {
+      commit: git('rev-parse', 'HEAD'),
+      dirty: git('status', '--porcelain') !== '',
+      record: path.resolve(record),
+      all: process.argv.includes('--all'),
+    },
+    null,
+    2,
+  )}\n`,
+);
 
 const run = (command, args, env) => {
   const result = spawnSync(command, args, {
@@ -80,12 +96,23 @@ const sidecar = JSON.parse(readFileSync(`${base}.side.json`, 'utf8'));
 if (rows.length !== Object.keys(sidecar).length)
   throw new Error(`native rows ${rows.length}, inputs ${Object.keys(sidecar).length}`);
 
-// Named fixtures whose B2 section 11.2 expectation is a failure status.
-const LITERAL = { 'ST-F24/2^30': 'numeric-range' };
+// Named fixtures whose B2 section 11.2 expectation is not `ok`.
+const LITERAL = {
+  'ST-F24/2^30': 'numeric-range',
+  'ST-F7/butt-miter': 'empty',
+  'ST-F9/butt-miter': 'empty',
+  'ST-F8/butt': 'empty',
+};
+const named = (id) => !/^g\d+$/.test(id.split('/')[1]);
 const classOf = (row, side) => {
   const error = row.failure?.error ?? '-';
   if (LITERAL[side.source] === row.status) return `B2 literal (${side.source})`;
-  if (row.status === 'unsupported-geometry' && error === 'Rounded(TopologyAmbiguous)')
+  // The E4 class on the native outcome; a named row also needs an ST-U3f fixture as its source.
+  if (
+    row.status === 'unsupported-geometry' &&
+    error === 'Rounded(TopologyAmbiguous)' &&
+    (!named(row.name) || side.source.startsWith('ST-U3f/'))
+  )
     return 'E4 class';
   if (row.status === 'work-limit') return 'stroke work-limit';
   return `outside: ${row.status} ${error}`;
@@ -125,4 +152,36 @@ for (const key of [...table.keys()].sort()) {
   );
 }
 writeFileSync(path.join(dir, 'summary.tsv'), `${lines.join('\n')}\n`);
-process.stdout.write(`${lines.join('\n')}\n\n${dir}\n`);
+
+// Every named row with a non-ok stroke result: its outcomes and its class. A `work-limit`
+// outcome is the stroke `work-limit` class (backlog E15) and an `empty` outcome passes only as
+// a B2 literal; the diagnosed classes come from the native run above.
+const sweep = JSON.parse(readFileSync(record, 'utf8'));
+const sources = JSON.parse(readFileSync(`${base}.named.json`, 'utf8'));
+const diagnosed = new Map(perRequest.map((r) => [r.id, r.class]));
+const byRow = new Map();
+for (const { id, outcome } of sweep.strokeRejections) {
+  if (!named(id)) continue;
+  const row = id.split('/').slice(0, 2).join('/');
+  const source = sources[row];
+  const cls =
+    outcome === 'failed:work-limit'
+      ? 'stroke work-limit (E15)'
+      : outcome === 'empty'
+        ? LITERAL[source] === 'empty'
+          ? `B2 literal (${source})`
+          : 'outside: empty'
+        : (diagnosed.get(id) ?? `undiagnosed: ${outcome}`);
+  const cell = byRow.get(row) ?? { source, classes: new Map() };
+  cell.classes.set(cls, (cell.classes.get(cls) ?? 0) + 1);
+  byRow.set(row, cell);
+}
+const namedLines = ['row\tsource\tclass: requests'];
+for (const row of [...byRow.keys()].sort()) {
+  const c = byRow.get(row);
+  namedLines.push(
+    [row, c.source, [...c.classes.entries()].map(([k, n]) => `${k}: ${n}`).join('; ')].join('\t'),
+  );
+}
+writeFileSync(path.join(dir, 'named.tsv'), `${namedLines.join('\n')}\n`);
+process.stdout.write(`${lines.join('\n')}\n\n${namedLines.join('\n')}\n\n${dir}\n`);

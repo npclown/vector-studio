@@ -40,7 +40,7 @@ const value = (name) => {
   const i = args.indexOf(name);
   return i >= 0 ? args[i + 1] : undefined;
 };
-const read = (p) => readFileSync(path.join(root, p), 'utf8');
+const read = (p) => readFileSync(path.resolve(root, p), 'utf8');
 const mapFile = value('--map') ?? 'tooling/p3-exit-a05-a06-map.json';
 const map = JSON.parse(read(mapFile));
 // p3-exit-a03-map/v1 -> p3-exit-a03
@@ -191,7 +191,7 @@ const provenance = {
     ),
     'Release WASM SHA-256': sha256(readFileSync(wasm)),
     Map: mapFile,
-    'Map SHA-256': sha256(readFileSync(path.join(root, mapFile))),
+    'Map SHA-256': sha256(readFileSync(path.resolve(root, mapFile))),
     'Rust host': host,
     Node: process.version,
     OS: `${os.type()} ${os.release()} ${os.arch()}`,
