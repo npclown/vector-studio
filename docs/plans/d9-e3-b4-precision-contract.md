@@ -1756,3 +1756,58 @@ It ended at 11:37:28 UTC, after 6.93 h wall, and every shard exited with code 0.
 - 27,462 cases, with the strata counts above.
 - Freeze check: passed. There were 27,459 `ok`, 3 `not-drawable` (C10, section 6) and no `ORACLE-*` case. The largest work was 1.62·10^9 units, against a cap of 1.8·10^9.
 - No kernel output on the corpus was inspected before this record (section 5.5).
+
+## 19. E3-U5 measurement annex, 2026-10-25 (in progress)
+
+Dated append. E3-U5 is the reference run of section 9.1, after the freeze of section 18.6. Choices below are **decided under the user's standing instruction of 2026-10-24 (recommended option)**. No A04 threshold, criterion, cap, work weight or corpus case changes. This section records the work so far. The reference run itself has not been made.
+
+### 19.1 The GPU model check on the named subset
+
+The spec now reads back, after the non-corpus cases of section 16.2, the named subset of section 7.1. That is the named rows of E3-C1, E3-C3, E3-C5, E3-C9 and E3-C12 at every transform and pair. E3-C6 is added for the clip readback. The subset holds 13,364 corpus cases, drawn in chunks of 64. Joint cases of E3-C9 are drawn with their partner, as the measurement draws them.
+
+- **Clip readback (E3-Q11 (a)).** For a draw that the GPU clips, the page also rasterizes the mesh at `meshPositionNdc` into an `r32uint` target of the frame's size, with one sample at each pixel centre. It returns the coverage of a 4 px strip along the viewport edge.
+  - `clipCheck` requires the GPU to cover a centre exactly when `M*` contains it. This applies to centres farther than `β_c` plus the snapping residual from every boundary candidate of `M*` and from every edge of a clipped triangle. The snapping residual is `√2·2^-5` px, Vulkan's minimum of 4 subpixel bits, E3-Q7 (a).
+  - The clipped-triangle edges are left out because clipping makes new vertices per triangle. A shared clipped edge can therefore open a hairline crack within the clip bound. The SwiftShader dry run saw such cracks. The crack-closed region of E3-Q10 (b) does not score them.
+  - A draw that `measureCase` makes UNDECIDED for `β` is counted but not compared. That covers `β_c ≥ 1` px and a clip bound of 0.25 px or more.
+  - As E3-Q11 (a) states, agreement confirms the model only to pixel resolution. A mismatch falsifies it.
+- **Cracks (E3-Q10 (b)).** At each T-junction of `M*`, found exactly on `p*`, the record gives the read-back distance of the T-vertex from its edge. It is reported, never gated.
+- **Dry run.** The spec was run on the container's SwiftShader. That is software, so it is not evidence (section 16.3).
+  - 11,545 draws and 1,211,506 points, with no failure.
+  - The largest error-to-`β` ratios were 0.19 on the vertex path and 0.37 on the feature path.
+  - 2,644 clipped draws were compared over 41.1 million pixel centres with no mismatch. 591 clipped draws were not measurable for `β`.
+  - There were 159,636 T-junctions. The largest crack was 7.7·10^-4 px, on `C9/k26/T2/z64-d2`.
+  - The headed run on the user's machine waits for main after E11's PR #242, which makes the WASM SHA host-independent.
+
+### 19.2 Starting resolution
+
+`pnpm e3-a04:run --start-resolution K` starts the oracle at `2^-K` px instead of `r_m = 2^-10` (section 4.3). The default stays `K = 10`. The record's selection names `K`.
+
+- **What does not change.** The oracle still halves the resolution while `E` straddles a threshold, down to the floor `2^-20`. So PASS (`U ≤ 0.25`), FAIL (`L > 0.25`) and UNDECIDED are decided by the same rule. A coarser start widens the reported intervals, never past `2^-K` plus `β_c` for a PASS case.
+- **The cost.** On two `C1` cases, `K = 6` took 6 s and 55 s, against 78 s and 109 s at `K = 10`. `K = 4` took 2 s and 23 s.
+- **The departure.** The section 7.3 statistics (p50, p99 and max `U`) are upper bounds that are looser by up to `2^-K`. This is recorded for the evidence review.
+
+### 19.3 Oracle defect found by the first sample (E3-R2)
+
+The PC sample of section 19.4 reported `C1/s15-I/T3/z64-d2` as FAIL with `E = 384` px. Its kernel mesh is exactly `R`: the union of the squares `[0, 16]²` and `[8, 24]²`, nonzero, as eight triangles of the same area.
+
+- **The cause.** `buildArrangement` cut its curves only at crossings with curves that meet the index region (`Ω ⊕ 1` plus the 64 px margin). A kept edge that extends beyond the region was not cut where a dropped edge crosses it outside the region, so its one portion was classified at its midpoint. Here the top edge of the first square runs through the window inside the second square, and its midpoint lies on the second square's left edge, outside the region. The edge was taken as `∂R`, and `B_R` scored it at 384 px. `C1/s15-I/T4/z64-d2` gave 512 px the same way.
+- **The fix.** Each kept piece is now also cut at its crossings with the dropped pieces whose boxes meet it. Those are the pieces of curves outside the region, filtered by the hull of the kept boxes. They are recorded on the kept piece only. A dropped piece has a different parameter range from every kept piece, so no crossing is counted twice, and same-origin pieces stay with `selfIntersections`.
+- **The test.** `tests/geometry/e3-a04-oracle-u5.test.ts` measures that case on the exact union. It is `window-empty`, because the window lies inside `R` and `M`. Without the fix it is FAIL. A mesh missing two triangles stays FAIL. `pnpm test:e3-a04` passes 125 tests in 8 files. On the `z = 64` rows of `s15` and `s16`, 42 measured with the fix gave no FAIL.
+- **Consequence (E3-R2 and section 4.2).** This is a new oracle version, and it needs a full freeze check before a measurement on it counts.
+  - The run tool now refuses a stride-1 corpus run on an oracle whose SHA-256 has no freeze check record in this contract.
+  - A strided sample may still run. Its record names the oracle as uncertified, and the verdict gives that as a reason.
+  - Records made on the oracle of section 18.6 are superseded. No such record was committed.
+
+### 19.4 Samples (not evidence)
+
+| Run | Machine and WASM | Selection | Result |
+| --- | ---------------- | --------- | ------ |
+| Container | Linux build of the kernel (cost estimate only) | Stride 200, 138 cases, `K = 6`, oracle of section 18.6 | 108 measured: 81 PASS, 0 FAIL, 27 UNDECIDED. Also 24 rejected and 6 `window-empty`. Max `U` 0.080 px. 83 min wall on 3 shards |
+| PC | Release WASM `0bc67a3a…7373`, commit `4e18e58` | Stride 25, about 1,100 cases, `K = 6`, oracle of section 18.6 | Running. At 156 cases: 116 PASS, 1 FAIL (the defect of section 19.3), 33 UNDECIDED |
+
+- **Cost.** The container sample took about 1.1 CPU-min per case, and 3.2 min per `C5` stroke case. A full run at `K = 6` is about 600 container CPU hours, or about two days on the PC.
+- **UNDECIDED.** About a quarter of the measured cases are UNDECIDED. The reasons are known before the reference run, and they keep A04 UNVERIFIED under section 7.3 until they are remedied:
+  - The no-flip certificate (section 15.4) fails on sub-pixel or sliver triangles, mostly at `z = 0.01` and under T4, T6 and T7.
+  - `β_c ≥ 1` px or a clip bound of 0.25 px or more comes from far vertices at `z = 64`. These are the far-offscreen vertices of E3-R3, the K4 carrier's class A limitation.
+  - `window-empty` within the guard (section 15.5).
+- **Next.** The remedies go to the user with the stride-25 results (E3-R3). After that come the freeze check of the new oracle, the headed GPU check, and the reference run on the E11 exit snapshot, once E2-U3 lands.

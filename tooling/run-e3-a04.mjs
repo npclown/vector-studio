@@ -2,7 +2,8 @@
 // executable form in section 15.8). Manual, never CI.
 //
 //   pnpm e3-a04:run --smoke [--wasm <path>]
-//   pnpm e3-a04:run [--shards N] [--stride S] [--gpu <chrome.json>,<edge.json>] [--wasm <path>]
+//   pnpm e3-a04:run [--shards N] [--stride S] [--start-resolution K] [--gpu <chrome.json>,<edge.json>]
+//                   [--wasm <path>]
 //
 // Uses the release WASM that `pnpm test:geometry` builds (or --wasm <path>), then:
 //
@@ -34,6 +35,11 @@ const smoke = args.includes('--smoke');
 const shards = Number(value('--shards') ?? Math.max(1, Math.min(12, os.cpus().length - 2)));
 const stride = Number(value('--stride') ?? 1);
 const gpu = value('--gpu');
+// The oracle's starting resolution 2^-K px (default K = 10, r_m of contract section 4.3). It still
+// halves while E straddles a threshold, down to the floor 2^-20 (contract section 19).
+const startResolution = Number(value('--start-resolution') ?? 10);
+if (!Number.isInteger(startResolution) || startResolution < 0 || startResolution > 20)
+  throw new Error('--start-resolution takes an integer K from 0 to 20 (2^-K px)');
 if (!Number.isInteger(shards) || shards < 1 || !Number.isInteger(stride) || stride < 1)
   throw new Error('--shards and --stride take positive integers');
 
@@ -56,6 +62,25 @@ if (!smoke) {
         `${manifest.corpusSha256} (section 5.5). Use --smoke for the smoke cases.`,
     );
 }
+
+// Section 4.2 and E3-R2: a measurement counts only on an oracle version whose full freeze check
+// the contract records, as the oracle line of a freeze record: a line that is exactly
+// "- Oracle `packages/geometry-reference/src/a04-region.ts` SHA-256: `<sha>`" plus an optional
+// "(commit …)." A strided sample may run on another version; its record names it as uncertified.
+const oracleSha256 = sha256(read(oraclePath));
+const oracleLine = new RegExp(
+  `^- Oracle \`${oraclePath.replaceAll('.', '\\.')}\` SHA-256: \`${oracleSha256}\`( \\(commit \`[0-9a-f]+\`\\))?\\.?$`,
+  'u',
+);
+const oracleCertified = read(contractPath)
+  .toString('utf8')
+  .split('\n')
+  .some((line) => oracleLine.test(line.trimEnd()));
+if (!smoke && stride === 1 && !oracleCertified)
+  throw new Error(
+    `refusing a full corpus run: oracle SHA-256 ${oracleSha256} has no freeze check record in ` +
+      `${contractPath} (section 4.2, E3-R2). Run pnpm e3-a04:freeze on it first, or use --stride.`,
+  );
 
 const git = (...a) => spawnSync('git', a, { cwd: root, encoding: 'utf8' }).stdout.trim();
 const wasm = path.resolve(
@@ -81,7 +106,8 @@ const provenance = {
   contractSha256: sha256(read(contractPath)),
   corpusSha256: manifest.corpusSha256,
   generatorSha256: manifest.generator.sha256,
-  oracleSha256: sha256(read(oraclePath)),
+  oracleSha256,
+  oracleCertified,
   wasmSha256: sha256(readFileSync(wasm)),
   node: process.version,
   os: `${os.type()} ${os.release()} ${os.arch()}`,
@@ -105,6 +131,7 @@ const runPhase = (env) =>
           E3_A04_RUN_OUT: out,
           E3_A04_RUN_SHARD: `0/${shards}`,
           E3_A04_RUN_STRIDE: String(stride),
+          E3_A04_RUN_START_RESOLUTION: String(startResolution),
           ...env,
         },
       },

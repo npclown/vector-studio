@@ -32,6 +32,8 @@ export type Selection = Readonly<{
   stride: number;
   shards: number;
   corpusCases: number;
+  /** The oracle's starting resolution exponent K (2^-K px; contract section 19). */
+  startResolution?: number;
 }>;
 
 export type Provenance = Readonly<Record<string, unknown>> &
@@ -204,6 +206,8 @@ export function verdictOf(
   if (input.rows.length !== input.selection.corpusCases)
     reasons.push(`${input.rows.length} of ${input.selection.corpusCases} corpus cases`);
   if (input.provenance.dirty) reasons.push('a dirty worktree');
+  if (input.provenance.oracleCertified === false)
+    reasons.push('an oracle version without a freeze check record (E3-R2)');
   return { verdict: reasons.length === 0 ? 'PASS' : 'UNVERIFIED', reasons };
 }
 
@@ -310,7 +314,7 @@ export function renderRecordMarkdown(record: A04Record, problems: readonly strin
     ...Object.entries(p).map(
       ([k, v]) => `- ${k}: \`${typeof v === 'string' ? v : JSON.stringify(v)}\``,
     ),
-    `- selection: stride ${record.selection.stride}, ${record.selection.shards} shard(s), corpus ${record.selection.corpusCases} cases`,
+    `- selection: stride ${record.selection.stride}, ${record.selection.shards} shard(s), corpus ${record.selection.corpusCases} cases, oracle start resolution 2^-${record.selection.startResolution ?? 10} px`,
     `- GPU model check: ${record.gpu === null ? 'none attached' : record.gpu.passed ? `passed (${record.gpu.record})` : `failed (${record.gpu.record})`}`,
     '',
     '## Verdict',

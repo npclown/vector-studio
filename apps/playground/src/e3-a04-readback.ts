@@ -5,7 +5,10 @@
 // the mapping it evaluates is the shader's own toPhysical and meshPositionNdc, and returns raw
 // u32 words: the NDC vec4f of meshPositionNdc from the vertex stage (twice, from two separate
 // draws) and toPhysical from the fragment stage. It draws one point per stored vertex into
-// rgba32uint targets; no pixel coverage is read. Node does the comparison (readback.ts).
+// rgba32uint targets. For a draw that the GPU clips (E3-U5, E3-Q11 (a)) it also rasterizes the
+// mesh triangles at meshPositionNdc into an r32uint target of the frame's size and returns the
+// pixel-centre coverage of the strip along the viewport edge. Node does the comparison
+// (readback.ts).
 
 export type E3A04ReadbackDraw = Readonly<{
   id: string;
@@ -19,6 +22,8 @@ export type E3A04ReadbackDraw = Readonly<{
   linear: readonly [number, number, number, number];
   anchor: readonly [number, number];
   offsets: readonly number[];
+  /** Clipped draws only: the triangle indices, for the strip coverage readback. */
+  indices?: readonly number[];
 }>;
 
 export type E3A04ReadbackResult = Readonly<{
@@ -26,6 +31,8 @@ export type E3A04ReadbackResult = Readonly<{
   ndc: number[];
   feature: number[];
   meshSha256: string;
+  /** Clipped draws only: strip pixel-centre coverage, one bit each, packed in u32. */
+  coverage?: number[];
 }>;
 
 export type E3A04ReadbackApi = Readonly<{
@@ -54,6 +61,9 @@ const BUFFER_STORAGE = 0x80;
 const MAP_READ = 0x01;
 /** Readback texture width in texels: 256 rgba32uint texels make a 4,096-byte row. */
 const TEXTURE_WIDTH = 256;
+const BUFFER_INDEX = 0x10;
+/** Width of the strip along each viewport edge whose pixel centres are read (readback.ts). */
+const CLIP_STRIP = 4;
 
 /**
  * Appended to the mesh shader. The vertex entry point calls meshPositionNdc, the helper of both
@@ -99,6 +109,17 @@ fn e3ReadbackVertex(@builtin(vertex_index) vertexIndex: u32) -> E3ReadbackVaryin
   output.ndc = bitcast<vec4u>(ndc);
   output.local = vertexIndex;
   return output;
+}
+
+@vertex
+fn e3ClipVertex(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f {
+  let instance = instances[0];
+  return meshPositionNdc(instance.vertexBase + vertexIndex, instance);
+}
+
+@fragment
+fn e3ClipFragment() -> @location(0) vec4u {
+  return vec4u(1u, 0u, 0u, 0u);
 }
 
 @fragment
@@ -173,9 +194,88 @@ async function readTexture(target: GPUDevice, texture: GPUTexture, rows: number)
   return words;
 }
 
+/**
+ * Rasterizes the mesh at meshPositionNdc into an r32uint target of the frame's size, one sample
+ * at each pixel centre, and returns the coverage of the edge strip in canonical order (rows top to
+ * bottom, each left to right), one bit per pixel.
+ */
+async function clipCoverage(
+  target: GPUDevice,
+  pipeline: GPURenderPipeline,
+  draw: E3A04ReadbackDraw,
+  buffers: Readonly<{ positions: GPUBuffer; instances: GPUBuffer; frame: GPUBuffer }>,
+): Promise<number[]> {
+  const indices = Uint32Array.from(draw.indices ?? []);
+  const { width, height } = draw.frame;
+  const index = target.createBuffer({
+    size: Math.max(16, indices.byteLength),
+    usage: BUFFER_INDEX | BUFFER_COPY_DESTINATION,
+  });
+  target.queue.writeBuffer(index, 0, indices);
+  const texture = target.createTexture({
+    size: { width, height },
+    format: 'r32uint',
+    usage: TEXTURE_RENDER_ATTACHMENT | TEXTURE_COPY_SOURCE,
+  });
+  const group = target.createBindGroup({
+    layout: pipeline.getBindGroupLayout(0),
+    entries: [
+      { binding: 0, resource: { buffer: buffers.positions } },
+      { binding: 4, resource: { buffer: buffers.instances } },
+      { binding: 5, resource: { buffer: buffers.frame } },
+    ],
+  });
+  const bytesPerRow = Math.ceil((width * 4) / 256) * 256;
+  const readback = target.createBuffer({
+    size: bytesPerRow * height,
+    usage: BUFFER_MAP_READ | BUFFER_COPY_DESTINATION,
+  });
+  const encoder = target.createCommandEncoder();
+  const pass = encoder.beginRenderPass({
+    colorAttachments: [
+      {
+        view: texture.createView(),
+        clearValue: { r: 0, g: 0, b: 0, a: 0 },
+        loadOp: 'clear' as const,
+        storeOp: 'store' as const,
+      },
+    ],
+  });
+  pass.setPipeline(pipeline);
+  pass.setBindGroup(0, group);
+  pass.setIndexBuffer(index, 'uint32');
+  pass.drawIndexed(indices.length);
+  pass.end();
+  encoder.copyTextureToBuffer(
+    { texture },
+    { buffer: readback, bytesPerRow, rowsPerImage: height },
+    { width, height },
+  );
+  target.queue.submit([encoder.finish()]);
+  await readback.mapAsync(MAP_READ);
+  const words = new Uint32Array(readback.getMappedRange().slice(0));
+  readback.unmap();
+  readback.destroy();
+  index.destroy();
+  texture.destroy();
+  const stride = bytesPerRow / 4;
+  const bits: number[] = [];
+  let k = 0;
+  for (let y = 0; y < height; y += 1)
+    for (let x = 0; x < width; x += 1) {
+      if (x >= CLIP_STRIP && x < width - CLIP_STRIP && y >= CLIP_STRIP && y < height - CLIP_STRIP)
+        continue;
+      if ((k & 31) === 0) bits.push(0);
+      if (words[y * stride + x] !== 0) bits[k >>> 5] = (bits[k >>> 5]! | (1 << (k & 31))) >>> 0;
+      k += 1;
+    }
+  return bits;
+}
+
 async function runDraw(
   target: GPUDevice,
   pipeline: GPURenderPipeline,
+  clipPipeline: GPURenderPipeline,
   draw: E3A04ReadbackDraw,
 ): Promise<E3A04ReadbackResult> {
   const points = draw.offsets.length / 2;
@@ -263,6 +363,10 @@ async function runDraw(
   const [ndcWords, featureWords] = await Promise.all(
     textures.map((texture) => readTexture(target, texture, rows)),
   );
+  const coverage =
+    draw.indices === undefined
+      ? undefined
+      : await clipCoverage(target, clipPipeline, draw, { positions, instances, frame });
   for (const buffer of [positions, instances, frame, ...params]) buffer.destroy();
   for (const texture of textures) texture.destroy();
   return {
@@ -270,6 +374,7 @@ async function runDraw(
     ndc: Array.from(ndcWords!.subarray(0, 8 * points)),
     feature: Array.from(featureWords!.subarray(0, 4 * points)),
     meshSha256,
+    ...(coverage === undefined ? {} : { coverage }),
   };
 }
 
@@ -290,8 +395,14 @@ async function run(shader: string, draws: readonly E3A04ReadbackDraw[]) {
     },
     primitive: { topology: 'point-list' },
   });
+  const clipPipeline = await target.createRenderPipelineAsync({
+    layout: 'auto',
+    vertex: { module, entryPoint: 'e3ClipVertex' },
+    fragment: { module, entryPoint: 'e3ClipFragment', targets: [{ format: 'r32uint' }] },
+    primitive: { topology: 'triangle-list', cullMode: 'none' },
+  });
   const results: E3A04ReadbackResult[] = [];
-  for (const draw of draws) results.push(await runDraw(target, pipeline, draw));
+  for (const draw of draws) results.push(await runDraw(target, pipeline, clipPipeline, draw));
   const error = await target.popErrorScope();
   if (error !== null) throw new Error(`WebGPU validation: ${error.message}`);
   return { shaderSha256, results };
