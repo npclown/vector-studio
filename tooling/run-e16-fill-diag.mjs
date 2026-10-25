@@ -103,8 +103,12 @@ const closedClass = (row, side) => {
   // E16-U1 prints the last retry's stop as `depth:error`, or `-` when no retry ran. The class
   // takes either error.
   const terminals = [atE];
-  if (row.retryStop !== undefined && row.retryStop !== '-')
+  if (row.retryStop !== undefined && row.retryStop !== '-') {
+    if (!/^\d+:.+$/.test(row.retryStop))
+      throw new Error(`${row.id}: retryStop ${JSON.stringify(row.retryStop)} is not depth:error`);
     terminals.push(row.retryStop.replace(/^\d+:/, ''));
+  }
+  // `segments` counts LINE and CUBIC verbs, as `decode_sources` counts sources (CLOSE adds none).
   const capStop = (error) =>
     CAP_STOP.test(error) ||
     (error === 'SourceLimit' && side.cubics === 0 && side.segments > EXACT_LINE_SEGMENT_CAP);
