@@ -1,0 +1,129 @@
+// E2-U2 diagnostic (not a test of record): numeric two-sided distance between each cubic
+// leaf's ideal band (offset curves sampled at 401 parameters) and its band quad, per fixture,
+// at r5, r6 and r6 under E2-D3. Appended to src/stroke_band_tests.rs and run with
+// `cargo test --release --lib scratch_hausdorff -- --ignored --nocapture`; it uses that file's
+// helpers (`build`, `leaf_depths`, `f4f`, `point`). Binary64 sampling, so it is evidence of
+// scale only; ST-O1's exact certificate is the check.
+
+#[test]
+#[ignore]
+fn scratch_d3_scan() {
+    for radius in [160.0, 192.0, 224.0, 256.0, 288.0, 320.0, 352.0, 384.0, 416.0, 448.0, 480.0, 512.0, 640.0, 768.0] {
+        for width in [4.0, 8.0, 16.0] {
+            let (r, k) = (radius, radius * 0.552_284_749_8);
+            let circle = PathSpec::new()
+                .m(r, 0.0)
+                .c([r, k, k, r, 0.0, r])
+                .c([-k, r, -r, k, -r, 0.0])
+                .c([-r, -k, -k, -r, 0.0, -r])
+                .c([k, -r, r, -k, r, 0.0])
+                .z();
+            let mut ws = workspace(Rev::R6);
+            let o = build(&mut ws, &circle, width);
+            let mut d = workspace(Rev::R6);
+            d.defects_mut().band_half_bound = true;
+            let o2 = build(&mut d, &circle, width);
+            println!("R {radius} w {width}: {o:?} {} | D3 {o2:?} {}", leaf_depths(&ws).len(), leaf_depths(&d).len());
+        }
+    }
+}
+
+fn ev(c: [Point; 4], t: f64) -> (Point, Point) {
+    let u = 1.0 - t;
+    let p = point(
+        u * u * u * c[0].x + 3.0 * u * u * t * c[1].x + 3.0 * u * t * t * c[2].x + t * t * t * c[3].x,
+        u * u * u * c[0].y + 3.0 * u * u * t * c[1].y + 3.0 * u * t * t * c[2].y + t * t * t * c[3].y,
+    );
+    let d = point(
+        3.0 * (u * u * (c[1].x - c[0].x) + 2.0 * u * t * (c[2].x - c[1].x) + t * t * (c[3].x - c[2].x)),
+        3.0 * (u * u * (c[1].y - c[0].y) + 2.0 * u * t * (c[2].y - c[1].y) + t * t * (c[3].y - c[2].y)),
+    );
+    (p, d)
+}
+fn seg_dist(p: Point, a: Point, b: Point) -> f64 {
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
+    let l2 = dx * dx + dy * dy;
+    let s = if l2 > 0.0 { (((p.x - a.x) * dx + (p.y - a.y) * dy) / l2).clamp(0.0, 1.0) } else { 0.0 };
+    ((p.x - a.x - s * dx).powi(2) + (p.y - a.y - s * dy).powi(2)).sqrt()
+}
+fn poly_dist(p: Point, poly: &[Point]) -> f64 {
+    let n = poly.len();
+    let mut inside = false;
+    let mut best = f64::INFINITY;
+    for i in 0..n {
+        let (a, b) = (poly[i], poly[(i + 1) % n]);
+        best = best.min(seg_dist(p, a, b));
+        if (a.y > p.y) != (b.y > p.y) && p.x < a.x + (p.y - a.y) * (b.x - a.x) / (b.y - a.y) {
+            inside = !inside;
+        }
+    }
+    if inside { 0.0 } else { best }
+}
+
+#[test]
+#[ignore]
+fn scratch_hausdorff() {
+    let s_curve = PathSpec::new().m(0.0, 0.0).c([30.0, 0.0, 50.0, 20.0, 50.0, 50.0]).c([50.0, 80.0, 70.0, 100.0, 100.0, 100.0]);
+    let eight = PathSpec::new().m(0.0, 0.0).c([60.0, 60.0, 60.0, -60.0, 0.0, 0.0]).c([-60.0, 60.0, -60.0, -60.0, 0.0, 0.0]).z();
+    let circle = |radius: f64| {
+        let (r, k) = (radius, radius * 0.552_284_749_8);
+        PathSpec::new().m(r, 0.0).c([r, k, k, r, 0.0, r]).c([-k, r, -r, k, -r, 0.0]).c([-r, -k, -k, -r, 0.0, -r]).c([k, -r, r, -k, r, 0.0]).z()
+    };
+    let mut list = vec![("F7".to_string(), s_curve, 4.0), ("F8".to_string(), eight, 1.0), ("F4f".to_string(), f4f(), 12.0)];
+    for (radius, width) in [(160.0, 4.0), (160.0, 16.0), (192.0, 4.0), (256.0, 16.0), (352.0, 16.0), (416.0, 16.0), (512.0, 16.0), (768.0, 16.0)] {
+        list.push((format!("C{radius}-{width}"), circle(radius), width));
+    }
+    for (name, path, width) in list {
+        for (rev, d3) in [(Rev::R5, false), (Rev::R6, false), (Rev::R6, true)] {
+            let mut ws = workspace(rev);
+            ws.defects_mut().band_half_bound = d3;
+            let _ = build(&mut ws, &path, width);
+            let r = width / 2.0;
+            let (mut worst_out, mut worst_in) = (0.0f64, 0.0f64);
+            for piece in ws.pieces().iter().filter(|p| p.kind == PieceKind::CubicLeaf) {
+                let c = ws.segments()[piece.segment].controls;
+                let [a, b] = piece.meta.samples;
+                let quad = [a.minus, b.minus, b.plus, a.plus];
+                let (t0, t1) = (piece.t0, piece.t1);
+                let n = 400;
+                let mut band = Vec::new();
+                let mut lower = Vec::new();
+                for k in 0..=n {
+                    let t = t0 + (t1 - t0) * k as f64 / n as f64;
+                    let (p, d) = ev(c, t);
+                    let l = (d.x * d.x + d.y * d.y).sqrt();
+                    let nn = point(-d.y / l, d.x / l);
+                    let plus = point(p.x + r * nn.x, p.y + r * nn.y);
+                    let minus = point(p.x - r * nn.x, p.y - r * nn.y);
+                    worst_out = worst_out.max(poly_dist(plus, &quad)).max(poly_dist(minus, &quad));
+                    band.push(minus);
+                    lower.push(plus);
+                }
+                lower.reverse();
+                band.extend(lower);
+                for i in 0..4 {
+                    for k in 0..=100 {
+                        let s = k as f64 / 100.0;
+                        let (qa, qb) = (quad[i], quad[(i + 1) % 4]);
+                        let p = point(qa.x + s * (qb.x - qa.x), qa.y + s * (qb.y - qa.y));
+                        worst_in = worst_in.max(poly_dist(p, &band));
+                    }
+                }
+            }
+            println!("{name} {rev:?} d3={d3}: leaves {} band->quad {worst_out:.4} quad->band {worst_in:.4}", leaf_depths(&ws).len());
+        }
+    }
+}
+
+#[test]
+#[ignore]
+fn scratch_r3() {
+    for (name, c, w, e) in [("R4", [1.0, 0.0, 2.0, 1.0 / 64.0, 3.0, 3.0 / 64.0], 64.0, -5), ("R5e3", [1.0, 1.0, 2.0, -1.0, 3.0, 0.0], 2.0, -3), ("R5e4", [1.0, 1.0, 2.0, -1.0, 3.0, 0.0], 2.0, -4)] {
+        let path = PathSpec::new().m(0.0, 0.0).c(c);
+        for rev in [Rev::R5, Rev::R6] {
+            let mut ws = workspace(rev);
+            let o = ws.build(request(w, StrokeCap::Butt, StrokeJoin::Miter, 4.0, e), &path.verbs, &path.bytes()).unwrap();
+            println!("{name} {rev:?} {o:?} leaves {}", leaf_depths(&ws).len());
+        }
+    }
+}

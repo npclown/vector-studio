@@ -736,7 +736,7 @@ fn e1_corpus_reader_reads_the_input_format() {
     assert_eq!(on.probe.exact_checks, 1);
 }
 
-/// D9 E2-U1 review S3: E1-K1 on the shipped `stroke-v0+r5` input (the seam-merged contours),
+/// D9 E2-U1 review S3: E1-K1 on the seam-merged input (shipped since `stroke-v0+r5`),
 /// not only on the `r4` input. `edges-1024` is `ok` at r5; with `max_work` one below its
 /// `W + F_L` at the ledger the abort is certain, and on and off agree.
 #[test]

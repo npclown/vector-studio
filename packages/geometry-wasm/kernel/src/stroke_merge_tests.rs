@@ -1,6 +1,7 @@
-//! D9 rendering-track item E2, unit E2-U1 (`docs/plans/d9-e2-stroke-fast-rung-contract.md`,
-//! sections 4, 7 and 8): the fixture table E2-F1 to E2-F8 at `stroke-v0+r5` beside the `r4`
-//! input (the A/B switch `unmerged`), the lossless-merge check E2-A4 on every fixture, the
+//! D9 rendering-track item E2, units E2-U1 and E2-U2
+//! (`docs/plans/d9-e2-stroke-fast-rung-contract.md`, sections 4, 7 and 8): the fixture table
+//! E2-F1 to E2-F8 at `stroke-v0+r6` beside the `r5` and `r4` inputs (the A/B switches
+//! `no_band_rule` and `unmerged`), the lossless-merge check E2-A4 on every fixture, the
 //! seeded defect E2-D1, storage, determinism and allocation, and the ignored differential that
 //! runs E2-G1, E2-G2 and E2-A4 over the E11-U2 scene, the corpus E1-C1 and the ST-U3b families.
 //!
@@ -11,6 +12,9 @@
 //! E2_SCENE=<scene.txt> P3_E1_CORPUS=<e1-c1.txt> cargo test --release --lib \
 //!     stroke_merge_tests::e2_differential -- --ignored --nocapture --test-threads 1
 //! ```
+//!
+//! `e2_differential` is E2-U1's `r4` against `r5`; `e2_u2_differential` is E2-U2's `r5`
+//! against `r6`, run the same way.
 //!
 //! `scene.txt` is the E11-U2 scene `p3-exit-stress/v1` written by the dump in
 //! `docs/evidence/e2-u1-2026-10-24/dump_scene_lines.test.ts.txt`. Either variable may be left
@@ -90,9 +94,19 @@ fn status_of(outcome: StrokeOutcome) -> u32 {
     }
 }
 
-fn workspace(unmerged: bool) -> StrokeWorkspace {
+/// The stroke front-end revision a workspace runs: `R4` and `R5` are the test-only A/B
+/// switches `unmerged` and `no_band_rule`; `R6` is production.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Rev {
+    R4,
+    R5,
+    R6,
+}
+
+pub(crate) fn workspace(rev: Rev) -> StrokeWorkspace {
     let mut workspace = StrokeWorkspace::new().expect("the stroke workspace reserves");
-    workspace.defects_mut().unmerged = unmerged;
+    workspace.defects_mut().unmerged = rev == Rev::R4;
+    workspace.defects_mut().no_band_rule = rev == Rev::R5;
     workspace
 }
 
@@ -424,7 +438,7 @@ fn centroids(ws: &StrokeWorkspace) -> Vec<Point> {
 enum Expected {
     Ok,
     WorkLimit,
-    /// Recorded by E2-U1; a later unit fixes the expectation.
+    /// Recorded by E2-U1 or E2-U2; a later unit fixes the expectation.
     Recorded,
 }
 
@@ -434,6 +448,8 @@ struct Fixture {
     request: StrokeRequest,
     r4: (u32, Option<StrokeError>),
     r5: Expected,
+    /// E2-U2 (contract section 8): F3 meets the band rule; F4 stays `work-limit`.
+    r6: Expected,
 }
 
 fn fixtures() -> Vec<Fixture> {
@@ -448,6 +464,7 @@ fn fixtures() -> Vec<Fixture> {
             request: at(1.0, BUTT),
             r4: (0, None),
             r5: Expected::Ok,
+            r6: Expected::Ok,
         },
         Fixture {
             name: "E2-F2",
@@ -455,6 +472,7 @@ fn fixtures() -> Vec<Fixture> {
             request: at(4.0, BUTT),
             r4: (work, input),
             r5: Expected::Ok,
+            r6: Expected::Ok,
         },
         Fixture {
             name: "E2-F3",
@@ -462,6 +480,7 @@ fn fixtures() -> Vec<Fixture> {
             request: at(16.0, BUTT),
             r4: (work, pieces),
             r5: Expected::WorkLimit,
+            r6: Expected::Ok,
         },
         Fixture {
             name: "E2-F4",
@@ -469,6 +488,7 @@ fn fixtures() -> Vec<Fixture> {
             request: at(16.0, BUTT),
             r4: (work, pieces),
             r5: Expected::WorkLimit,
+            r6: Expected::WorkLimit,
         },
         Fixture {
             name: "E2-F5",
@@ -476,6 +496,7 @@ fn fixtures() -> Vec<Fixture> {
             request: at(1.0, BUTT),
             r4: (work, input),
             r5: Expected::Ok,
+            r6: Expected::Ok,
         },
         Fixture {
             name: "E2-F6",
@@ -483,6 +504,7 @@ fn fixtures() -> Vec<Fixture> {
             request: at(4.0, BUTT),
             r4: (0, None),
             r5: Expected::Ok,
+            r6: Expected::Ok,
         },
         Fixture {
             name: "E2-F7",
@@ -490,6 +512,7 @@ fn fixtures() -> Vec<Fixture> {
             request: at(4.0, BUTT),
             r4: (0, None),
             r5: Expected::Recorded,
+            r6: Expected::Recorded,
         },
         Fixture {
             name: "E2-F7r",
@@ -497,6 +520,7 @@ fn fixtures() -> Vec<Fixture> {
             request: at(4.0, StrokeCap::Round),
             r4: (0, None),
             r5: Expected::Recorded,
+            r6: Expected::Recorded,
         },
         Fixture {
             name: "E2-F8",
@@ -504,68 +528,73 @@ fn fixtures() -> Vec<Fixture> {
             request: at(1.0, BUTT),
             r4: (0, None),
             r5: Expected::Recorded,
+            r6: Expected::Recorded,
         },
     ]
 }
 
 #[test]
 fn e2_fixture_table_and_lossless_merge() {
-    let mut r4 = workspace(true);
-    let mut r5 = workspace(false);
+    let mut sides = [Rev::R4, Rev::R5, Rev::R6].map(workspace);
     for fixture in fixtures() {
         let bytes = fixture.path.bytes();
-        let old = observe(&mut r4, &fixture.path.verbs, &bytes, fixture.request);
-        let extra = centroids(&r4);
-        let new = observe(&mut r5, &fixture.path.verbs, &bytes, fixture.request);
-        let a4 = lossless(&r5, 4_096, &extra);
+        let [r4, r5, r6] = &mut sides;
+        let old = observe(r4, &fixture.path.verbs, &bytes, fixture.request);
+        let extra = centroids(r4);
+        let mid = observe(r5, &fixture.path.verbs, &bytes, fixture.request);
+        let new = observe(r6, &fixture.path.verbs, &bytes, fixture.request);
+        let a4 = [lossless(r5, 4_096, &extra), lossless(r6, 4_096, &extra)];
         println!(
-            "{}: r4 {} {:?} ({} pieces) | r5 {} {:?}, {} pieces -> {} contours, {} vertices | A4 {a4:?}",
-            fixture.name, old.status, old.error, old.pieces, new.status, new.error, new.pieces,
-            new.contours, new.vertices
+            "{}: r4 {} {:?} ({} pieces) | r5 {} {:?}, {} pieces -> {} contours, {} vertices | r6 {} {:?}, {} pieces -> {} contours, {} vertices | A4 {a4:?}",
+            fixture.name, old.status, old.error, old.pieces, mid.status, mid.error, mid.pieces,
+            mid.contours, mid.vertices, new.status, new.error, new.pieces, new.contours,
+            new.vertices
         );
         assert_eq!((old.status, old.error), fixture.r4, "{}: r4", fixture.name);
-        match fixture.r5 {
-            Expected::Ok => assert_eq!(new.status, 0, "{}", fixture.name),
-            Expected::WorkLimit => {
-                assert_eq!(new.status, STROKE_PATH_WORK_LIMIT, "{}", fixture.name)
+        for (side, found, expected) in [("r5", mid, fixture.r5), ("r6", new, fixture.r6)] {
+            match expected {
+                Expected::Ok => assert_eq!(found.status, 0, "{}: {side}", fixture.name),
+                Expected::WorkLimit => assert_eq!(
+                    found.status, STROKE_PATH_WORK_LIMIT,
+                    "{}: {side}",
+                    fixture.name
+                ),
+                Expected::Recorded => {}
             }
-            Expected::Recorded => {}
+            assert_ne!(
+                found.status, STROKE_PATH_UNSUPPORTED_GEOMETRY,
+                "{}: {side}",
+                fixture.name
+            );
+            assert_ne!(
+                found.status, STROKE_PATH_NUMERIC_RANGE,
+                "{}: {side}",
+                fixture.name
+            );
         }
-        // E2-G1 on the fixtures.
+        // E2-G1 on the fixtures, for each unit.
         if old.status == 0 {
-            assert_eq!(new.status, 0, "{}: an r4 ok stays ok", fixture.name);
+            assert_eq!(mid.status, 0, "{}: an r4 ok stays ok", fixture.name);
         }
-        assert_ne!(
-            new.status, STROKE_PATH_UNSUPPORTED_GEOMETRY,
-            "{}",
-            fixture.name
-        );
-        assert_ne!(new.status, STROKE_PATH_NUMERIC_RANGE, "{}", fixture.name);
+        if mid.status == 0 {
+            assert_eq!(new.status, 0, "{}: an r5 ok stays ok", fixture.name);
+        }
         // E2-A4 wherever the merge ran.
-        if new.contours > 0 {
-            let counts = a4.unwrap_or_else(|error| panic!("{}: E2-A4: {error}", fixture.name));
-            assert!(counts.points > 0, "{}", fixture.name);
+        for (side, found, a4) in [("r5", mid, &a4[0]), ("r6", new, &a4[1])] {
+            if found.contours > 0 {
+                let counts = a4
+                    .as_ref()
+                    .unwrap_or_else(|error| panic!("{}: {side} E2-A4: {error}", fixture.name));
+                assert!(counts.points > 0, "{}", fixture.name);
+            }
         }
     }
 }
 
-/// The recorded literals of the table (contract section 8): contour and vertex counts and the
-/// cause of each `work-limit`, so a later unit sees every change.
-#[test]
-fn e2_fixture_literals() {
-    let mut ws = workspace(false);
-    let input = Some(StrokeError::Rounded(RoundedFillError::InputLimit));
-    let expected: [(&str, u32, Option<StrokeError>, usize, usize); 9] = [
-        ("E2-F1", 0, None, 2, 256),
-        ("E2-F2", 0, None, 2, 512),
-        ("E2-F3", STROKE_PATH_WORK_LIMIT, input, 2, 2_048),
-        ("E2-F4", STROKE_PATH_WORK_LIMIT, input, 2, 2_048),
-        ("E2-F5", 0, None, 2, 816),
-        ("E2-F6", 0, None, 2, 24),
-        ("E2-F7", 0, None, 1, 260),
-        ("E2-F7r", 0, None, 3, 324),
-        ("E2-F8", 0, None, 2, 304),
-    ];
+type Literal = (&'static str, u32, Option<StrokeError>, usize, usize);
+
+fn check_literals(rev: Rev, expected: [Literal; 9]) {
+    let mut ws = workspace(rev);
     for (fixture, (name, status, error, contours, vertices)) in fixtures().into_iter().zip(expected)
     {
         assert_eq!(fixture.name, name);
@@ -578,9 +607,45 @@ fn e2_fixture_literals() {
         assert_eq!(
             (found.status, found.error, found.contours, found.vertices),
             (status, error, contours, vertices),
-            "{name}"
+            "{rev:?} {name}"
         );
     }
+}
+
+/// The recorded literals of the table (contract section 8) at `r5` (E2-U1) and `r6` (E2-U2):
+/// contour and vertex counts and the cause of each `work-limit`, so a later unit sees every
+/// change.
+#[test]
+fn e2_fixture_literals() {
+    let input = Some(StrokeError::Rounded(RoundedFillError::InputLimit));
+    check_literals(
+        Rev::R5,
+        [
+            ("E2-F1", 0, None, 2, 256),
+            ("E2-F2", 0, None, 2, 512),
+            ("E2-F3", STROKE_PATH_WORK_LIMIT, input, 2, 2_048),
+            ("E2-F4", STROKE_PATH_WORK_LIMIT, input, 2, 2_048),
+            ("E2-F5", 0, None, 2, 816),
+            ("E2-F6", 0, None, 2, 24),
+            ("E2-F7", 0, None, 1, 260),
+            ("E2-F7r", 0, None, 3, 324),
+            ("E2-F8", 0, None, 2, 304),
+        ],
+    );
+    check_literals(
+        Rev::R6,
+        [
+            ("E2-F1", 0, None, 2, 128),
+            ("E2-F2", 0, None, 2, 128),
+            ("E2-F3", 0, None, 2, 256),
+            ("E2-F4", STROKE_PATH_WORK_LIMIT, input, 2, 1_616),
+            ("E2-F5", 0, None, 2, 512),
+            ("E2-F6", 0, None, 2, 24),
+            ("E2-F7", 0, None, 1, 68),
+            ("E2-F7r", 0, None, 3, 132),
+            ("E2-F8", 0, None, 2, 176),
+        ],
+    );
 }
 
 // ---- E2-D1 ----
@@ -591,7 +656,7 @@ fn e2_fixture_literals() {
 fn e2_d1_dropped_outside_sample_is_caught() {
     let path = outside_end();
     let request = request(2.0, BUTT, MITER, 4.0, -3);
-    let mut ws = workspace(false);
+    let mut ws = workspace(Rev::R6);
     assert_eq!(
         observe(&mut ws, &path.verbs, &path.bytes(), request).status,
         0
@@ -607,7 +672,7 @@ fn e2_d1_dropped_outside_sample_is_caught() {
     );
     let counts = lossless(&ws, 256, &[]).expect("E2-A4 passes");
     assert!(counts.kept >= 1);
-    let mut defective = workspace(false);
+    let mut defective = workspace(Rev::R6);
     defective.defects_mut().drop_outside = true;
     let _ = observe(&mut defective, &path.verbs, &path.bytes(), request);
     let error = lossless(&defective, 256, &[]).expect_err("E2-D1 is caught");
@@ -618,7 +683,7 @@ fn e2_d1_dropped_outside_sample_is_caught() {
 
 #[test]
 fn e2_storage_fits_the_heap_cap() {
-    let ws = workspace(false);
+    let ws = workspace(Rev::R6);
     let (front, rounded, scratch) = ws.byte_parts();
     let total = ws.allocated_bytes().expect("bytes");
     println!(
@@ -638,7 +703,7 @@ fn e2_merge_is_deterministic_and_allocates_nothing() {
         .map(|fixture| (fixture.path, fixture.request))
         .collect();
     let bytes: Vec<Vec<u8>> = cases.iter().map(|case| case.0.bytes()).collect();
-    let mut ws = workspace(false);
+    let mut ws = workspace(Rev::R6);
     let snapshot = |ws: &StrokeWorkspace| -> Vec<u64> {
         ws.merge()
             .contours()
@@ -650,7 +715,7 @@ fn e2_merge_is_deterministic_and_allocates_nothing() {
         let _ = ws.build(*request, &path.verbs, points);
         first.push(snapshot(&ws));
     }
-    let mut fresh = workspace(false);
+    let mut fresh = workspace(Rev::R6);
     crate::allocation_test_support::start();
     for ((path, request), points) in cases.iter().zip(&bytes).rev() {
         let _ = fresh.build(*request, &path.verbs, points);
@@ -665,18 +730,18 @@ fn e2_merge_is_deterministic_and_allocates_nothing() {
 // ---- The ignored differential: E2-G1, E2-G2 and E2-A4 ----
 
 /// Per family: cases, `ok` on each side, gained and lost `ok`s, E2-A4 checks and totals, and
-/// the per-stroke median times of the `r4`-`ok` strokes on each side.
+/// the per-stroke median times of the strokes `ok` on the old side, on each side.
 #[derive(Default)]
 struct Tally {
     cases: usize,
-    r4_ok: usize,
-    r5_ok: usize,
+    old_ok: usize,
+    new_ok: usize,
     gained: usize,
     lost: usize,
     checked: usize,
     a4: A4Counts,
-    r4_times: Vec<u64>,
-    r5_times: Vec<u64>,
+    old_times: Vec<u64>,
+    new_times: Vec<u64>,
 }
 
 struct Case {
@@ -752,11 +817,11 @@ fn median(values: &mut [u64]) -> u64 {
 }
 
 /// Interleaved timed builds of one case on both sides, reusing the two workspaces.
-fn time_pair(r4: &mut StrokeWorkspace, r5: &mut StrokeWorkspace, case: &Case) -> (u64, u64) {
+fn time_pair(old: &mut StrokeWorkspace, new: &mut StrokeWorkspace, case: &Case) -> (u64, u64) {
     let (mut left, mut right) = (Vec::new(), Vec::new());
     let started = Instant::now();
     while left.len() < 31 && (left.len() < 3 || started.elapsed().as_millis() < 300) {
-        for (ws, times) in [(&mut *r4, &mut left), (&mut *r5, &mut right)] {
+        for (ws, times) in [(&mut *old, &mut left), (&mut *new, &mut right)] {
             let start = Instant::now();
             let _ = core::hint::black_box(ws.build(case.request, &case.verbs, &case.bytes));
             times.push(start.elapsed().as_nanos() as u64);
@@ -768,6 +833,22 @@ fn time_pair(r4: &mut StrokeWorkspace, r5: &mut StrokeWorkspace, case: &Case) ->
 #[test]
 #[ignore = "E2-U1 differential (E2-G1, E2-G2, E2-A4); release profile, --nocapture, one thread"]
 fn e2_differential() {
+    differential("E2-U1", Rev::R4, Rev::R5);
+}
+
+#[test]
+#[ignore = "E2-U2 differential (E2-G1, E2-G2, E2-A4); release profile, --nocapture, one thread"]
+fn e2_u2_differential() {
+    differential("E2-U2", Rev::R5, Rev::R6);
+}
+
+/// E2-G1, E2-G2 and E2-A4 of `new` against `old` over the ST-U3b families and, when their
+/// variables are set, the scene and E1-C1.
+fn differential(unit: &str, old_rev: Rev, new_rev: Rev) {
+    let (o, n) = (
+        format!("{old_rev:?}").to_lowercase(),
+        format!("{new_rev:?}").to_lowercase(),
+    );
     let mut cases = probe_cases();
     match env::var("E2_SCENE") {
         Ok(path) => cases.extend(scene_cases(&std::fs::read_to_string(path).expect("scene"))),
@@ -787,8 +868,8 @@ fn e2_differential() {
         ),
         Err(_) => println!("P3_E1_CORPUS not set: E1-C1 skipped"),
     }
-    let mut r4 = workspace(true);
-    let mut r5 = workspace(false);
+    let mut r4 = workspace(old_rev);
+    let mut r5 = workspace(new_rev);
     let mut families: Vec<&'static str> = Vec::new();
     let mut tallies: HashMap<&'static str, Tally> = HashMap::new();
     let mut causes: HashMap<(&'static str, String), usize> = HashMap::new();
@@ -802,8 +883,8 @@ fn e2_differential() {
         let new = observe(&mut r5, &case.verbs, &case.bytes, case.request);
         let tally = tallies.entry(case.family).or_default();
         tally.cases += 1;
-        tally.r4_ok += usize::from(old.status == 0);
-        tally.r5_ok += usize::from(new.status == 0);
+        tally.old_ok += usize::from(old.status == 0);
+        tally.new_ok += usize::from(new.status == 0);
         tally.gained += usize::from(old.status != 0 && new.status == 0);
         tally.lost += usize::from(old.status == 0 && new.status != 0);
         *causes
@@ -818,7 +899,7 @@ fn e2_differential() {
             .or_default() += 1;
         if old.status == 0 && new.status != 0 {
             failures.push(format!(
-                "E2-G1 {}: r4 ok, r5 {} {:?}",
+                "E2-G1 {}: {o} ok, {n} {} {:?}",
                 case.name, new.status, new.error
             ));
         }
@@ -843,18 +924,18 @@ fn e2_differential() {
         }
         if old.status == 0 {
             let (left, right) = time_pair(&mut r4, &mut r5, case);
-            tally.r4_times.push(left);
-            tally.r5_times.push(right);
+            tally.old_times.push(left);
+            tally.new_times.push(right);
         }
     }
-    println!("E2-U1 differential: diagnostic A/B, not a performance claim (E2-G3).");
-    println!("family | cases | r4 ok | r5 ok | gained | lost | A4 checked | A4 points | r4 median us | r5 median us | ratio");
+    println!("{unit} differential: diagnostic A/B, not a performance claim (E2-G3).");
+    println!("family | cases | {o} ok | {n} ok | gained | lost | A4 checked | A4 points | {o} median us | {n} median us | ratio");
     for family in &families {
         let t = tallies.get_mut(family).expect("family");
-        let (left, right) = if t.r4_times.is_empty() {
+        let (left, right) = if t.old_times.is_empty() {
             (0, 0)
         } else {
-            (median(&mut t.r4_times), median(&mut t.r5_times))
+            (median(&mut t.old_times), median(&mut t.new_times))
         };
         let ratio = if left == 0 {
             0.0
@@ -864,8 +945,8 @@ fn e2_differential() {
         println!(
             "{family} | {} | {} | {} | {} | {} | {} | {} | {:.1} | {:.1} | {ratio:.3}",
             t.cases,
-            t.r4_ok,
-            t.r5_ok,
+            t.old_ok,
+            t.new_ok,
             t.gained,
             t.lost,
             t.checked,
@@ -875,13 +956,13 @@ fn e2_differential() {
         );
         println!("  A4 totals: {:?}", t.a4);
         if ratio > 1.10 {
-            failures.push(format!("E2-G2 {family}: r5/r4 median {ratio:.3} > 1.10"));
+            failures.push(format!("E2-G2 {family}: {n}/{o} median {ratio:.3} > 1.10"));
         }
     }
     let mut rows: Vec<_> = causes.into_iter().collect();
     rows.sort();
     for ((family, cause), count) in rows {
-        println!("  r5 {family}: {cause} {count}");
+        println!("  {n} {family}: {cause} {count}");
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
@@ -892,7 +973,7 @@ fn e2_differential() {
 /// `MAX_PIECE_POINTS` stored points it is `PieceLimit` at emission.
 #[test]
 fn e2_section_7_caps() {
-    let mut ws = workspace(false);
+    let mut ws = workspace(Rev::R6);
     // 256 separate round-capped dashes: a sweep and two cap disks each, no cancellation between
     // dashes.
     let mut dashes = PathSpec::new();

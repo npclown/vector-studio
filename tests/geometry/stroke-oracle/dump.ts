@@ -17,10 +17,12 @@ export type StrokeCap = 'butt' | 'round' | 'square';
 export type StrokeJoin = 'miter' | 'round' | 'bevel';
 
 /**
- * ST-U4 test flags (the input's ninth field): seeded defects ST-D6 to ST-D8, and `wide`, which
- * runs the case under the kernel's test-only arrangement limits `WIDE_TEST_LIMITS`.
+ * ST-U4 test flags (the input's ninth field): seeded defects ST-D6 to ST-D8, D9 E2-U2's E2-D2
+ * (`band-no-fold`) and E2-D3 (`band-half-bound`), and `wide`, which runs the case under the
+ * kernel's test-only arrangement limits `WIDE_TEST_LIMITS`.
  */
-export type StrokeFlag = 'wide' | 'knot-join' | 'omit-cusp-disk' | 'leaf-factor-two';
+export type StrokeFlag =
+  'wide' | 'knot-join' | 'omit-cusp-disk' | 'leaf-factor-two' | 'band-no-fold' | 'band-half-bound';
 
 /** One dump case: a path and a stroke request. */
 export type StrokeCase = Readonly<{
