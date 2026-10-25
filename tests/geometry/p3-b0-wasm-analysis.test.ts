@@ -39,7 +39,7 @@ import { parseArguments } from '../../tooling/run-p3-b0-wasm-benchmark.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 /** Recorded in the plan when AL-U6 merges; any configuration change shows up here. */
-const REFERENCE_CONFIG_HASH = 'f337d0efb6c457118c624dacc9bcd6a9946f2c495437282c987f20be884c2bfd';
+const REFERENCE_CONFIG_HASH = '645199a8a96be4c3056d0f4c008ec210fbf8a4d7a35fe9f4bf322500415394d1';
 type Mutable<T> = { -readonly [K in keyof T]: Mutable<T[K]> };
 const clone = <T>(value: T): Mutable<T> => JSON.parse(JSON.stringify(value)) as Mutable<T>;
 const decision = corpusCells().filter((cell) => cell.role === 'decision');

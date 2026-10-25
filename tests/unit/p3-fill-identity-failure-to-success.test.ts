@@ -31,12 +31,12 @@ function input(branchChange: (native: Map<string, DigestEntry>) => void) {
 }
 
 describe('E8-U0 failure-to-success identity mode', () => {
-  it('parses --failure-to-success and refuses it with --revision-change', () => {
+  it('parses --failure-to-success, alone or combined with --revision-change (E14-G1)', () => {
     expect(parseArguments(['--failure-to-success']).failureToSuccess).toBe(true);
     expect(parseArguments([]).failureToSuccess).toBeUndefined();
-    expect(() => parseArguments(['--failure-to-success', '--revision-change'])).toThrow(
-      /exclude each other/u,
-    );
+    const combined = parseArguments(['--failure-to-success', '--revision-change']);
+    expect(combined.failureToSuccess).toBe(true);
+    expect(combined.revisionChange).toBe(true);
   });
 
   it('classifies outcome codes by the fill-v0 port mapping', () => {

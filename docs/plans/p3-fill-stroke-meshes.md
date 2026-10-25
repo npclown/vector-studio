@@ -1931,7 +1931,7 @@ Open risks:
 
 Plan entry (light tier): raise the fill-kernel caps so that one single-contour path of 32 cubics at B0's densities up to λ = 8 (L\* = 256 leaves, [B0 contract section 5](p3-b0-feasibility-benchmark-contract.md#5-extrapolation-and-the-feasibility-decision)) is admitted, on the fast rung where it applies, with no allocation in a call. Authority: the [D8 B1 row](p3-d8-parallel-tracks.md) and the user's decision of 2026-10-20 (chat) to resume feature development, which relaxes AL-Q6's "B1 starts only after a FEASIBLE product verdict". Acceptance check: the 32-cubic λ = 8 rings are fast-admitted, their exact rung admits them too, and `process` on them allocates nothing; every existing test passes, with only old-cap assertions re-baselined; `pnpm test:geometry`, `pnpm check`, `pnpm build`, `pnpm test:p2-identity` and `git diff --check` pass.
 
-**Caps.** Three base values fix the rest, derived as the pre-B1 caps were. The topology and fast-rung caps follow `cubic_fill.rs`.
+**Caps.** Three base values fix the rest, derived as the pre-B1 caps were. The topology and fast-rung caps follow `cubic_fill.rs`. Update 2026-10-25: E14-U1 (fill `r3`) gives rung 0's prefix its own edge cap E0 = 8,192 and a work cap W0 = 2^22; the exact rung and `FILL_V0_LIMITS` keep the B1 values below ([E14 contract](d9-e14-fill-rung0-edge-cap-contract.md)).
 
 | Cap                                                    | Pre-B1             | B1                     | Rule                                                           |
 | ------------------------------------------------------ | ------------------ | ---------------------- | -------------------------------------------------------------- |

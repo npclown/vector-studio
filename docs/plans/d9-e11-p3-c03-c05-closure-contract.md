@@ -40,7 +40,7 @@ Under E11-Q1 (a), "the frozen layout and carrier" is the following set, recorded
 
 | Identity            | Current value on `main` dbbaaeb                                                                                                                                             |
 | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Fill operation      | `geometry-wasm/fill-v0+r2`, `fill_v0_revision() == 2`, transport version 0 ([V2](p3-v2-fill-mesh-transport-contract.md), [Alt-A1](p3-alt-a1-fill-ladder-contract.md))       |
+| Fill operation      | `geometry-wasm/fill-v0+r2`, `fill_v0_revision() == 2`, transport version 0 ([V2](p3-v2-fill-mesh-transport-contract.md), [Alt-A1](p3-alt-a1-fill-ladder-contract.md)); `+r3` from 2026-10-25 (E14-U1, [E14 §6](d9-e14-fill-rung0-edge-cap-contract.md#6-identity-documents-and-the-precision-label)) |
 | Stroke operation    | `geometry-wasm/stroke-v0+r4`, `stroke_v0_revision() == 4` ([B2 section 7](p3-b2-stroke-contract.md#7-kernel-export-stroke_v0_)); `+r5` from 2026-10-24 (E2-U1, E2-R5)        |
 | Release WASM        | SHA-256 of the built artifact                                                                                                                                               |
 | Renderer mesh part  | Version 0 of [V3 section f](p3-v3-renderer-mesh-pipeline-contract.md#f-the-mesh-packet-part-and-the-mesh-draw); the WGSL shader-identity hash used by E3                    |
@@ -51,7 +51,7 @@ Under E11-Q1 (a), "the frozen layout and carrier" is the following set, recorded
 
 ### 3.2 Snapshot record, valid runs and invalidation
 
-- **Preconditions.** The record is made only after these have merged: E8-U2 (and E7, if A01 promotes it), E10, the E3 freeze record, E11-U2, the V-4 page and runner, and E11-U4 when E11-Q3 (a) is chosen. E10 may add WGSL, so the shader hash is read after it.
+- **Preconditions.** The record is made only after these have merged: E8-U2 (and E7, if A01 promotes it), E10, the E3 freeze record, E11-U2, the V-4 page and runner, and E11-U4 when E11-Q3 (a) is chosen. E10 may add WGSL, so the shader hash is read after it. Update 2026-10-25: E14-U1 is added to the preconditions, so the snapshot names `fill-v0+r3` ([E14 §6](d9-e14-fill-rung0-edge-cap-contract.md#6-identity-documents-and-the-precision-label)).
 - **Record.** A dated "**Exit snapshot record**" line is appended to this contract with the commit and every identity of E11-K1, by a docs PR, after `pnpm build` and `pnpm test:geometry` pass at that commit. It also carries the closed known-defect list of section 7.2.
 - **Valid run.** A run counts for A01-A08 when it is made on a clean commit whose E11-K1 identities equal the record's, and its record names them. Commits that change only tooling, tests or documents keep a run valid. Runs before the record are `PRE-FREEZE` and close nothing, as V-4 rules.
 - **Invalidation.** A later change re-runs the criteria it touches on a new snapshot record:
@@ -148,6 +148,7 @@ The exit gate requires "no crashes, invalid indices, NaN vertices, or out-of-ran
 
 - **Named fixtures** are those of section 4 and the named rows of `a04-corpus/v1`. Under E11-Q2 (a), a closed list of named known defects, each with a fixture and a backlog item, is recorded in the snapshot record. Any other named fixture that fails to mesh fails A02 or A03.
 - **Generated `a04-corpus/v1` rows** that are rejected are excluded from A04 under E3-Q3, and E3 section 6 leaves "whether a rejection rate is acceptable" to A02 and A03. Under E11-Q2 (a), A02 or A03 passes only if every rejected generated row falls into a class on the closed list (the E4 class, the E8 class, the stroke `work-limit` class, or a transport cap at limit + 1), with counts per class and stratum in the A01 sweep record. A rejection in any other class fails A02 or A03.
+- **Update 2026-10-25 (E14-Q1 (a), [E14 §10](d9-e14-fill-rung0-edge-cap-contract.md)).** After E14-U1 has merged, the closed list gains the class "fill `work-limit` on a self-crossing path over E": a rejected fill row whose S1 polygon at the row's tolerance has more than E = 256 flat edges, two of whose edges cross properly by exact `orient2d`, and whose port result is `work-limit`. The A01 sweep applies the test with its own exact predicates and counts the class per stratum. Fixture E14-F5, backlog item E14-U2. It does not cover smooth paths over E0 (E14-F6) or simple near-touching paths (E14-F7): those rows still fail A02.
 
 **A04 cells.** E11 does not change E3-A8: a declared cell with no measured case keeps A04 UNVERIFIED, and A04 PASS needs the coverage condition. If stroke cells stay unmeasured until E2 (E3 section 6), the exit waits, and promoting E2 becomes a user decision then.
 

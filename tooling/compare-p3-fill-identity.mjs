@@ -737,7 +737,12 @@ export function classifyFailureToSuccessLayer(layer, base, branch, recordedChang
  */
 export function classifyFailureToSuccess(input, recordedChanges = []) {
   const layers = [
-    classifyFailureToSuccessLayer('native', input.native.base, input.native.branch, recordedChanges),
+    classifyFailureToSuccessLayer(
+      'native',
+      input.native.base,
+      input.native.branch,
+      recordedChanges,
+    ),
     classifyFailureToSuccessLayer('wasm', input.wasm.base, input.wasm.branch, recordedChanges),
   ];
   const counts = { identical: 0, allowedChange: 0, fail: 0, internalRegression: 0 };
@@ -1840,7 +1845,7 @@ function selfTestCombined() {
     SIZE_RECORDS,
   );
   const tampers = tamperChecks.length === 2 && tamperChecks.every((check) => check.detected);
-  let plumbing = false;
+  let plumbing;
   mkdirSync(temporary, { recursive: true });
   const directory = mkdtempSync(path.join(temporary, 'p3-fill-identity-combined-self-test-'));
   try {
@@ -1856,7 +1861,10 @@ function selfTestCombined() {
     writeFileSync(path.join(directory, 'wasm-base.tsv'), rows(wasmBase()));
     writeFileSync(path.join(directory, 'wasm-branch.tsv'), rows(wasmResized()));
     const revisions = (base, branch) =>
-      writeFileSync(path.join(directory, 'revisions.json'), `${JSON.stringify({ base, branch })}\n`);
+      writeFileSync(
+        path.join(directory, 'revisions.json'),
+        `${JSON.stringify({ base, branch })}\n`,
+      );
     revisions(2, 3);
     const combined = compareOnly(directory, null, true, true);
     const alone = compareOnly(directory, null, false, true);
@@ -2122,10 +2130,10 @@ async function fullRun(options) {
         ? revisionTamperChecks(revisionInput)
         : options.failureToSuccess
           ? failureToSuccessTamperChecks(f2sInput)
-        : [
-            tamperSelfCheck(native.base, native.branch, nativeTamperCase),
-            tamperSelfCheck(wasm.base, wasm.branch, wasmTamperCase),
-          ];
+          : [
+              tamperSelfCheck(native.base, native.branch, nativeTamperCase),
+              tamperSelfCheck(wasm.base, wasm.branch, wasmTamperCase),
+            ];
     for (const check of tamperChecks)
       if (!check.detected) failures.push(`tamper self-check not detected for ${check.case}`);
 

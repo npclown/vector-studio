@@ -34,7 +34,10 @@ function quarters(r: number): Cubic[] {
 
 /** De Casteljau at 1/2 with binary64 basic operations, as `e14_fill_rung0_tests.rs` does. */
 function halves(c: Cubic): [Cubic, Cubic] {
-  const mid = (i: number, j: number, a: number[]) => [(a[i]! + a[j]!) * 0.5, (a[i + 1]! + a[j + 1]!) * 0.5];
+  const mid = (i: number, j: number, a: number[]) => [
+    (a[i]! + a[j]!) * 0.5,
+    (a[i + 1]! + a[j + 1]!) * 0.5,
+  ];
   const [x01, y01] = mid(0, 2, c);
   const [x12, y12] = mid(2, 4, c);
   const [x23, y23] = mid(4, 6, c);
