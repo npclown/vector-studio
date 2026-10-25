@@ -20,6 +20,9 @@ importers:
       '@vector-studio/contracts':
         specifier: workspace:*
         version: link:packages/contracts
+      '@vector-studio/editor-core':
+        specifier: workspace:*
+        version: link:packages/editor-core
       '@vector-studio/model':
         specifier: workspace:*
         version: link:packages/model
@@ -64,6 +67,15 @@ importers:
         version: link:../../packages/renderer-webgpu
 
   packages/contracts: {}
+
+  packages/editor-core:
+    dependencies:
+      '@vector-studio/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@vector-studio/model':
+        specifier: workspace:*
+        version: link:../model
 
   packages/geometry-reference: {}
 
