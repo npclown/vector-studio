@@ -28,6 +28,18 @@ export type InputEvent =
     }>
   | Readonly<{ kind: 'keydown'; key: string; modifiers: Modifiers }>;
 
+/** A path-tool anchor; `in` and `out` are its handles, null for a corner. */
+export type PathAnchor = Readonly<{
+  point: PagePoint;
+  in: PagePoint | null;
+  out: PagePoint | null;
+}>;
+
+/** Tool state the host UI draws over the canvas; it is never document content. */
+export type ToolOverlay =
+  | Readonly<{ kind: 'marquee'; frame: Frame }>
+  | Readonly<{ kind: 'path'; anchors: readonly PathAnchor[] }>;
+
 export type NodeProps = Readonly<{
   name?: string;
   fill?: Color | null;
@@ -109,7 +121,8 @@ export type Query =
   | Readonly<{ type: 'tool' }>
   | Readonly<{ type: 'viewport' }>
   | Readonly<{ type: 'history' }>
-  | Readonly<{ type: 'revision' }>;
+  | Readonly<{ type: 'revision' }>
+  | Readonly<{ type: 'overlay' }>;
 
 export type QueryResult<Q extends Query> = Q extends { type: 'document' }
   ? DocumentV1
@@ -123,7 +136,9 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' }
           ? RenderCamera
           : Q extends { type: 'history' }
             ? HistoryState
-            : number;
+            : Q extends { type: 'overlay' }
+              ? ToolOverlay | null
+              : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';

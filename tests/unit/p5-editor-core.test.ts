@@ -274,7 +274,11 @@ describe('P5-A04 gestures and history', () => {
   ])('%s during a drag cancels the drag first and resets the tool', (label, command) => {
     const { target, a, gesture } = withTwoRectangles();
     const resets: string[] = [];
-    internalsOf(target).tools.set('select', { input: () => {}, reset: () => resets.push('reset') });
+    internalsOf(target).tools.set('select', {
+      input: () => {},
+      reset: () => resets.push('reset'),
+      overlay: () => null,
+    });
     const before = text(target);
     drag(target, a, 3);
     ok(target, command);
@@ -547,6 +551,7 @@ describe('P5-A05 failed commands and session state', () => {
     internalsOf(target).tools.set('select', {
       input: (event) => received.push(event.kind),
       reset: () => received.push('reset'),
+      overlay: () => null,
     });
     const modifiers = { shift: false, alt: false, meta: false, ctrl: false };
     ok(target, { type: 'input', event: { kind: 'pointerdown', point: { x: 1, y: 2 }, modifiers } });

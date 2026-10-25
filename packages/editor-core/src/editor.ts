@@ -2,6 +2,7 @@ import type { RenderCamera } from '@vector-studio/contracts';
 import { validateDocument, type DocumentV1 } from '@vector-studio/model';
 import { applyEdit, deepFreeze } from './edits.js';
 import { createCounterIdSource } from './ids.js';
+import { createPathTool, createRectangleTool, createSelectTool } from './tools.js';
 import type {
   Command,
   CommandResult,
@@ -16,6 +17,7 @@ import type {
   Query,
   QueryResult,
   ToolName,
+  ToolOverlay,
 } from './types.js';
 
 // Editor core (P5 plan, section 4): commands, transactions, history, gestures and session.
@@ -30,8 +32,9 @@ export type EditorOptions = Readonly<{
 /** A tool receives input and acts only through the editor's commands and the gesture API. */
 export interface Tool {
   input(event: InputEvent, context: ToolContext): void;
-  /** Drops overlay state, for example when the tool is switched away. Must issue no command. */
+  /** Drops drag and overlay state, for example when the tool is switched away. Must issue no command. */
   reset(): void;
+  overlay(): ToolOverlay | null;
 }
 
 export interface ToolContext {
@@ -150,6 +153,13 @@ class EditorCore implements Editor {
     if (!result.ok) throw new Error(`createEditor: ${result.code} at ${result.path}`);
     this.document = deepFreeze(result.document);
     this.snapshot = this.buildSnapshot();
+    // Custom nodes become hittable through their extension's geometry in P5-U5.
+    this.tools.set(
+      'select',
+      createSelectTool(() => null),
+    );
+    this.tools.set('rectangle', createRectangleTool());
+    this.tools.set('path', createPathTool());
     const isActive = () => this.gestureState !== null;
     this.gesture = {
       get active() {
@@ -281,6 +291,8 @@ class EditorCore implements Editor {
           return this.snapshot.history;
         case 'revision':
           return this.revision;
+        case 'overlay':
+          return this.tools.get(this.tool)?.overlay() ?? null;
       }
     })();
     return value as QueryResult<Q>;
