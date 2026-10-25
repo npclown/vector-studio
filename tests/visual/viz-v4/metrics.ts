@@ -14,12 +14,14 @@
 // test `d² ≥ (2 + β_c)²`. The only binary64 steps outside β_c are report values: the band
 // mean square (`rms`, summed in pixel order, so it is deterministic) and the reported crack-zone
 // width, which is printed, never compared; the zone test itself is exact on `0.3953 + 2β_c`.
-// The no-flip zone radius `β_c + σ` is likewise an upward binary64 bound tested exactly.
+// The uncertain zone's radius is `β_c` (which includes σ), plus the 4x sample term, tested
+// exactly; its canvas-border strip is `betaClip` plus the sample term, also exact.
 //
 // Contract section 17 (2026-10-25): β_c covers every drawn vertex and triangle (frame corners
 // and exterior fringe triangles included) and adds σ; the no-flip certificate is local, per
-// drawn triangle; a sample count above 1 FAILS unconditionally; equal p* are merged before
-// pairing; and E3's `beta ≥ 1 px` and `clip bound ≥ 0.25 px` make a case UNDECIDED.
+// drawn triangle, and the edges of every clipped (guard-band crossing) triangle join its zone;
+// a sample count above 1 FAILS unconditionally; equal p* are merged before pairing; and E3's
+// `beta ≥ 1 px` and `clip bound ≥ 0.25 px`, or a reference winding anomaly, make a case UNDECIDED.
 //
 // Pixels are judged on the whole canvas: E3-Q11 (a) makes the viewport the guard band and E3's
 // Ω is the viewport plus 2 px, so Ω ∩ canvas is the canvas. Distances are taken to the unclipped
@@ -150,6 +152,12 @@ export type Reference = Readonly<{
   drawnPoints: readonly P[];
   /** The triangles that fail the certificate, as indices into `drawnPoints`. */
   flipped: readonly (readonly [number, number, number])[];
+  /**
+   * The drawn triangles that cross the guard band (E3's `guardBand` on the one triangle): the GPU
+   * clips each with its own new vertices, so their edges are known only within the clip bound
+   * and a shared clipped edge may open a hairline crack (E3-Q11 (a), readback.ts `clipCheck`).
+   */
+  clipped: readonly (readonly [number, number, number])[];
   /** Sign of the determinant of the f32 linear lanes. */
   orientation: 1 | -1;
 }>;
@@ -271,6 +279,7 @@ export function buildReference(draw: PathMeshDraw, frame: Frame): Reference {
   let exteriorChecked = 0;
   let exteriorFailed = 0;
   const flipped: [number, number, number][] = [];
+  const clipped: [number, number, number][] = [];
   const regionCount = draw.mesh.indices.length / 3;
   for (let t = 0; t * 3 + 2 < drawn.indices.length; t += 1) {
     const tri: [number, number, number] = [
@@ -287,6 +296,7 @@ export function buildReference(draw: PathMeshDraw, frame: Frame): Reference {
       exteriorFailed += one.failed;
     }
     if (one.failed > 0) flipped.push(tri);
+    if (guardBand({ points: mapped, indices: tri, width, height }).crossing > 0) clipped.push(tri);
   }
   const { shift, scaled: drawnPoints } = scaledPoints(mapped);
   const scaled = drawnPoints.slice(0, portVertices);
@@ -369,6 +379,7 @@ export function buildReference(draw: PathMeshDraw, frame: Frame): Reference {
     noFlip: { checked, failed, collapsed, exteriorChecked, exteriorFailed },
     drawnPoints,
     flipped,
+    clipped,
     orientation,
   };
 }
@@ -673,19 +684,23 @@ export type CaseMetrics = Readonly<{
    */
   caseUndecided: readonly string[];
   /**
-   * The no-flip zone (contract section 17): pixels whose centre lies within β_c + σ (plus the 4x
-   * sample term 0.3953 px) of an edge of a triangle that fails the certificate. Its pixels are
-   * not counted by G1, G2, G3's "equal to 1" or VZ4-A5; one that violates any of them is
-   * UNDECIDED, by gate. Null when the case is UNDECIDED at case level and the zone is not built.
+   * The uncertain zone (contract section 17): pixels whose centre lies within β_c (σ included,
+   * plus the 4x sample term 0.3953 px) of an edge of a triangle that fails the certificate or
+   * crosses the guard band, and, when any drawn triangle crosses it, within betaClip plus the
+   * sample term of the canvas border. Its pixels are not counted by G1, G2, G3's "equal to 1" or
+   * VZ4-A5; one that violates any of them is UNDECIDED, by gate. Built whatever the case-level
+   * reasons, so that VZ4-A5 never counts its pixels.
    */
   zone: Readonly<{
     radius: number;
     triangles: number;
+    clipped: number;
+    border: number;
     pixels: number;
     g1: number;
     g2: number;
     g3: number;
-  }> | null;
+  }>;
   boundaryEdges: number;
   merge: Reference['merge'];
   pairing: string;
@@ -720,6 +735,8 @@ export type CaseMetrics = Readonly<{
   a5: Readonly<{
     interiorPixels: number;
     violations: number;
+    /** Violations that do not decide: the reference winding is not a region boundary. */
+    undecided: number;
     crackExcluded: number;
     zoneExcluded: number;
   }>;
@@ -758,15 +775,22 @@ function crackZone(reference: Reference, width: Rational): Set<number> {
 }
 
 /**
- * The no-flip zone: pixels whose centre is within `radius` of an edge of a triangle that fails
- * the certificate. A sample farther than every vertex's move from all three edges of a triangle
- * keeps its containment in it through any motion of the vertices, a flip included, because no
- * edge reaches it on the way; so outside the zone each triangle covers each sample as at p*.
+ * The uncertain zone. (1) Pixels whose centre is within `radius` of an edge of a triangle that
+ * fails the certificate: a sample farther than every vertex's move from all three edges of an
+ * unclipped triangle keeps its containment in it through any motion of the vertices, a flip
+ * included, because no edge reaches it on the way; so outside the zone each such triangle covers
+ * each sample as at p*. (2) The same for every edge of a clipped triangle, whose edges the GPU
+ * rebuilds per triangle (E3's clipCheck leaves those centres out). (3) When any triangle is
+ * clipped, the pixels whose centre is within `border` of the canvas border, where the clipped
+ * polygon's new frame-edge vertices lie.
  */
-function flipZone(reference: Reference, radius: Rational): Set<number> {
+function uncertainZone(
+  reference: Reference,
+  radius: Rational,
+  border: Rational,
+): { zone: Set<number>; border: number } {
   const { width: W, height: H, scale: S } = reference;
   const zone = new Set<number>();
-  if (reference.flipped.length === 0) return zone;
   const points = reference.drawnPoints;
   const half = S >> 1n;
   const s2 = S * S;
@@ -774,8 +798,10 @@ function flipZone(reference: Reference, radius: Rational): Set<number> {
   const reach = Math.max(1, Math.ceil(approxNumber(radius) * SLACK));
   const limit = squared(radius);
   const geometry: CoverageRowGeometry = { ...reference.geometry, scaled: points };
-  for (const tri of reference.flipped)
+  for (const tri of [...reference.flipped, ...reference.clipped])
     for (let k = 0; k < 3; k += 1) {
+      // Once every pixel is in the zone (β_c of the canvas size), no edge adds one.
+      if (zone.size === W * H) break;
       const a = tri[k]!;
       const b = tri[(k + 1) % 3]!;
       const single: CoverageRowGeometry = {
@@ -793,7 +819,18 @@ function flipZone(reference: Reference, radius: Rational): Set<number> {
         if (compareSquared(num, den, s2, limit) <= 0) zone.add(index);
       });
     }
-  return zone;
+  let strip = 0;
+  if (reference.clipped.length > 0) {
+    // Centre i + ½ is within `border` of the border x = 0 when 2i + 1 ≤ 2·border, exactly.
+    const within = (k: number) => BigInt(2 * k + 1) * border.d <= 2n * border.n;
+    for (let j = 0; j < H; j += 1)
+      for (let i = 0; i < W; i += 1)
+        if (within(i) || within(W - 1 - i) || within(j) || within(H - 1 - j)) {
+          strip += 1;
+          zone.add(j * W + i);
+        }
+  }
+  return { zone, border: strip };
 }
 
 /**
@@ -827,18 +864,20 @@ export function evaluateCapture(
   const one = rational(1n);
   const rule = options.rule === true ? ruleAccumulators() : null;
   // E3's case-level reasons (harness.ts measureCase), and a boundary that is not a region
-  // boundary (E3 section 7.1): no pixel decides, except a count above 1.
+  // boundary (E3 section 7.1): no pixel decides, except a count above 1. They decide only the
+  // judgment: the zone is built regardless, so VZ4-A5 never counts its pixels.
   const caseUndecided: string[] = [];
   if (betaC >= BETA_LIMIT) caseUndecided.push('beta ≥ 1 px');
   if (reference.betaClip >= CLIP_LIMIT) caseUndecided.push('clip bound ≥ 0.25 px');
   if (field.windingAnomalies > 0) caseUndecided.push('reference winding');
-  // The no-flip zone: r = β_c (which includes σ), plus the 4x sample term, since a 4x sample
-  // lies up to 0.3953 px from its pixel centre. Not built when the case is UNDECIDED at case level.
-  const zoneRadius =
-    caseUndecided.length > 0
-      ? null
-      : add(q64(betaC), sampleCount === 4 ? CRACK_SAMPLE_TERM : rational(0n));
-  const noFlipZone = zoneRadius === null ? new Set<number>() : flipZone(reference, zoneRadius);
+  // The uncertain zone: r = β_c (which includes σ), plus the 4x sample term, since a 4x sample
+  // lies up to 0.3953 px from its pixel centre; the border strip is betaClip plus that term.
+  const sampleTerm = sampleCount === 4 ? CRACK_SAMPLE_TERM : rational(0n);
+  const zoneRadius = add(q64(betaC), sampleTerm);
+  const built = uncertainZone(reference, zoneRadius, add(q64(reference.betaClip), sampleTerm));
+  const noFlipZone = built.zone;
+  // With a reference winding anomaly the interior at p* is not known: VZ4-A5 does not decide.
+  const a5Open = field.windingAnomalies > 0;
 
   let crackPixels = 0;
   let g1Decided = 0;
@@ -859,6 +898,7 @@ export function evaluateCapture(
   let a5CrackExcluded = 0;
   let a5ZoneExcluded = 0;
   let a5Violations = 0;
+  let a5Undecided = 0;
   let zoneG1 = 0;
   let zoneG2 = 0;
   let zoneG3 = 0;
@@ -913,8 +953,9 @@ export function evaluateCapture(
       const error = inside ? 255 - obs : obs;
       const full = !crack && ((inside && beyondBeta) || g3Near);
       if (noFlipZone.has(index)) {
-        // In the no-flip zone the drawn boundary is not known within β_c: a violation of G1, G2
-        // or "equal to 1" is UNDECIDED and a compliant pixel is not counted (the margin rule of
+        // In the uncertain zone (near a failing or clipped triangle's edge, or the border strip)
+        // the drawn boundary is not known within β_c: a violation of G1, G2 or "equal to 1",
+        // reason `no-flip zone`, is UNDECIDED and a compliant pixel is not counted (the margin rule of
         // section 5.2). A crack is still excused as outside the zone.
         if (inside && decided) a5ZoneExcluded += 1;
         if (!crack && (decided || g1Margin) && error > G1_LIMIT) {
@@ -936,7 +977,10 @@ export function evaluateCapture(
           if (crack) a5CrackExcluded += 1;
           else {
             a5Interior += 1;
-            if (obs !== 255) a5Violations += 1;
+            if (obs !== 255) {
+              if (a5Open) a5Undecided += 1;
+              else a5Violations += 1;
+            }
           }
         }
         if (!crack) {
@@ -1020,24 +1064,31 @@ export function evaluateCapture(
   return {
     metrics: {
       judgment,
-      reasons: [...reasons, ...caseUndecided, ...uncertified],
+      // Under a case-level reason a gate failure other than "at most 1" does not decide: its
+      // name is prefixed `open:`.
+      reasons: [
+        ...(caseUndecided.length > 0
+          ? reasons.map((r) => (r === 'G3-at-most' ? r : `open:${r}`))
+          : reasons),
+        ...caseUndecided,
+        ...uncertified,
+      ],
       betaC,
       betaVertex: reference.betaVertex,
       betaClip: reference.betaClip,
       betaSnap: reference.betaSnap,
       noFlip: reference.noFlip,
       caseUndecided,
-      zone:
-        zoneRadius === null
-          ? null
-          : {
-              radius: approxNumber(zoneRadius),
-              triangles: reference.flipped.length,
-              pixels: noFlipZone.size,
-              g1: zoneG1,
-              g2: zoneG2,
-              g3: zoneG3,
-            },
+      zone: {
+        radius: approxNumber(zoneRadius),
+        triangles: reference.flipped.length,
+        clipped: reference.clipped.length,
+        border: built.border,
+        pixels: noFlipZone.size,
+        g1: zoneG1,
+        g2: zoneG2,
+        g3: zoneG3,
+      },
       boundaryEdges: reference.directed.length,
       merge: reference.merge,
       pairing,
@@ -1056,6 +1107,7 @@ export function evaluateCapture(
       a5: {
         interiorPixels: a5Interior,
         violations: a5Violations,
+        undecided: a5Undecided,
         crackExcluded: a5CrackExcluded,
         zoneExcluded: a5ZoneExcluded,
       },

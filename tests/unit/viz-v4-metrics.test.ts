@@ -439,7 +439,7 @@ describe('contract section 17: count above 1, no-flip zone, σ, pairing, case re
     expect(evaluateCapture(wide, base, 4).metrics).toMatchObject({
       judgment: 'UNDECIDED',
       caseUndecided: ['beta ≥ 1 px'],
-      zone: null,
+      zone: { triangles: 0, pixels: 0 },
     });
     const wideDoubled = evaluateCapture(wide, doubled, 4).metrics;
     expect(wideDoubled.judgment).toBe('FAIL');
@@ -458,6 +458,8 @@ describe('contract section 17: count above 1, no-flip zone, σ, pairing, case re
     const both = evaluateCapture({ ...ref, betaC: 1, betaClip: 0.3 }, off, 1).metrics;
     expect(both.judgment).toBe('UNDECIDED');
     expect(both.caseUndecided).toEqual(['beta ≥ 1 px', 'clip bound ≥ 0.25 px']);
+    // The gate failure that does not decide is labelled open.
+    expect(both.reasons).toEqual(['open:G1', 'beta ≥ 1 px', 'clip bound ≥ 0.25 px']);
     expect(evaluateCapture({ ...ref, betaClip: 0.2499 }, base, 1).metrics.judgment).toBe('PASS');
   });
 
@@ -467,9 +469,9 @@ describe('contract section 17: count above 1, no-flip zone, σ, pairing, case re
     const clean = evaluateCapture(ref, base, 4).metrics;
     const zoned = evaluateCapture(withFlip(ref), base, 4).metrics;
     expect(zoned.judgment).toBe('PASS');
-    expect(zoned.zone!.pixels).toBeGreaterThan(30);
-    expect(zoned.zone!.radius).toBeGreaterThan(0.3953 + SIGMA);
-    expect(zoned.zone!.radius).toBeLessThan(0.3953 + SIGMA + 2e-3);
+    expect(zoned.zone.pixels).toBeGreaterThan(30);
+    expect(zoned.zone.radius).toBeGreaterThan(0.3953 + SIGMA);
+    expect(zoned.zone.radius).toBeLessThan(0.3953 + SIGMA + 2e-3);
     expect(zoned.g1.decided).toBeLessThan(clean.g1.decided);
     expect(zoned.g3.fullPixels).toBeLessThan(clean.g3.fullPixels);
     expect(zoned.a5.zoneExcluded).toBeGreaterThan(0);
@@ -525,7 +527,125 @@ describe('contract section 17: count above 1, no-flip zone, σ, pairing, case re
       1,
     ).metrics;
     expect(one.judgment).toBe('FAIL');
-    expect(one.zone!.radius).toBeLessThan(2 * SIGMA + 2e-3);
+    expect(one.zone.radius).toBeLessThan(2 * SIGMA + 2e-3);
+  });
+
+  it('adds every edge of a clipped triangle, and a border strip, to the zone', () => {
+    // RECT extended to x = −20, off the canvas: both region triangles cross the guard band.
+    // Pixel (30, 24): centre (30.5, 24.5), 0.069 px from the clipped diagonal (−20, 10)-(50, 30)
+    // and 5.5 px from the boundary, so decided interior, inside the 4x zone (r ≈ 0.44 px).
+    const wide: FillMesh = {
+      positions: Float64Array.from([-20, 10, 50, 10, 50, 30, -20, 30]),
+      indices: Uint32Array.from([0, 1, 2, 0, 2, 3]),
+      boundaryEdges: Uint32Array.from([0, 1, 1, 2, 2, 3, 3, 0]),
+      bounds: { minX: -20, minY: 10, maxX: 50, maxY: 30 },
+    };
+    const c = synthCase('TEST/clipped/T0/z1-d1', -20);
+    const outcome = drawCase(
+      c.kase,
+      ports(() => wide),
+      { fringe: 'off' },
+    );
+    if (outcome.kind !== 'drawn') throw new Error('not drawn');
+    const ref = buildReference(outcome.draw, outcome.frame);
+    expect(ref.clipped).toHaveLength(2);
+    expect(ref.flipped).toEqual([]);
+    expect(ref.betaClip).toBeGreaterThan(0);
+    const base = ruleRenderingForTesting(ref, 4);
+    const clean = evaluateCapture(ref, base, 4).metrics;
+    expect(clean.judgment).toBe('PASS');
+    expect(clean.zone).toMatchObject({ triangles: 0, clipped: 2, border: 0 });
+    expect(clean.zone.pixels).toBeGreaterThan(0);
+    const near = evaluateCapture(
+      ref,
+      edit(base, (r) => (r[at(30, 24)] = 250)),
+      4,
+    ).metrics;
+    expect(near).toMatchObject({ judgment: 'UNDECIDED', reasons: ['no-flip zone'] });
+    expect(near.g1.fail).toBe(0);
+    // A count above 1 at a clipped edge still FAILS.
+    const over = evaluateCapture(
+      ref,
+      edit(base, (_r, k) => (k[at(30, 24) * 4] = 2)),
+      4,
+    ).metrics;
+    expect(over.judgment).toBe('FAIL');
+    expect(over.reasons).toContain('G3-at-most');
+    // The border strip: centres within betaClip + 0.3953 px of the canvas border (one ring when
+    // that is in [0.5, 1.5)); at 1x the same clip bound reaches no centre.
+    const strip = evaluateCapture({ ...ref, betaClip: 0.2 }, base, 4).metrics;
+    expect(strip.zone.border).toBe(2 * 640 + 2 * 360 - 4);
+    const ref1 = { ...ref, betaClip: 0.2 };
+    expect(evaluateCapture(ref1, ruleRenderingForTesting(ref, 1), 1).metrics.zone.border).toBe(0);
+    // Without a clipped triangle there is no strip.
+    const rect = reference(RECT_CASE, 'msaa-4x');
+    expect(rect.clipped).toEqual([]);
+    const noStrip = { ...rect, betaClip: 0.2 };
+    expect(evaluateCapture(noStrip, ruleRenderingForTesting(rect, 4), 4).metrics.zone.border).toBe(
+      0,
+    );
+  });
+
+  it('builds the zone under a case-level reason, so VZ4-A5 never fails on in-zone pixels', () => {
+    // msaa-4x with β_c ≥ 1: the sliver's certificate fails and its zone is built.
+    const eps = 2 ** -12;
+    const sliver: FillMesh = {
+      positions: Float64Array.from([10, 10, 50, 10, 50, 30, 10, 30, 30, 10 - eps]),
+      indices: Uint32Array.from([0, 4, 1, 0, 1, 2, 0, 2, 3]),
+      boundaryEdges: Uint32Array.from([0, 4, 4, 1, 1, 2, 2, 3, 3, 0]),
+      bounds: { minX: 10, minY: 10 - eps, maxX: 50, maxY: 30 },
+    };
+    const outcome = drawCase(
+      synthCase('TEST/sliver-a5/T0/z1-d1', 10).kase,
+      ports(() => sliver),
+      {
+        fringe: 'off',
+      },
+    );
+    if (outcome.kind !== 'drawn') throw new Error('not drawn');
+    const sliverRef = buildReference(outcome.draw, outcome.frame);
+    const sliverWide: Reference = { ...sliverRef, betaC: 1.5 };
+    const sliverBase = ruleRenderingForTesting(sliverRef, 4);
+    const m = evaluateCapture(sliverWide, sliverBase, 4).metrics;
+    expect(m.judgment).toBe('UNDECIDED');
+    expect(m.zone.triangles).toBe(1);
+    expect(m.zone.pixels).toBeGreaterThan(0);
+    // An A5 deviation at a decided interior pixel in a zone (RECT's diagonal flipped, β_c 1.5:
+    // pixel (30, 20) has d − β_c = 8 ≥ 2) is excluded, not a violation.
+    const ref = reference(RECT_CASE, 'msaa-4x');
+    const flipped: Reference = { ...ref, betaC: 1.5, flipped: [[0, 1, 2]] };
+    const off = edit(ruleRenderingForTesting(ref, 4), (r) => (r[at(30, 20)] = 250));
+    const a5 = evaluateCapture(flipped, off, 4).metrics;
+    expect(a5.a5.violations).toBe(0);
+    expect(a5.a5.zoneExcluded).toBeGreaterThan(0);
+    expect(a5.judgment).toBe('UNDECIDED');
+    // The same deviation without the zone is an A5 violation.
+    expect(evaluateCapture({ ...ref, betaC: 1.5 }, off, 4).metrics.a5.violations).toBe(1);
+  });
+
+  it('reports VZ4-A5 violations as undecided under a reference winding anomaly', () => {
+    // RECT with its boundary loop listed twice: winding 2 inside, not a region boundary.
+    const doubled: FillMesh = {
+      ...RECT,
+      boundaryEdges: Uint32Array.from([...RECT.boundaryEdges, ...RECT.boundaryEdges]),
+    };
+    const outcome = drawCase(
+      synthCase('TEST/winding/T0/z1-d1', 10).kase,
+      ports(() => doubled),
+      {
+        fringe: 'off',
+      },
+    );
+    if (outcome.kind !== 'drawn') throw new Error('not drawn');
+    const ref = buildReference(outcome.draw, outcome.frame);
+    const capture = edit(ruleRenderingForTesting(reference(RECT_CASE, 'msaa-4x'), 4), (r) => {
+      r[at(30, 20)] = 250;
+    });
+    const m = evaluateCapture(ref, capture, 4).metrics;
+    expect(m.windingAnomalies).toBeGreaterThan(0);
+    expect(m.caseUndecided).toEqual(['reference winding']);
+    expect(m.judgment).toBe('UNDECIDED');
+    expect(m.a5).toMatchObject({ violations: 0, undecided: 1 });
   });
 
   it('certifies every drawn triangle: region, exterior fringe triangles and frame corners', () => {
@@ -963,6 +1083,11 @@ describe('runner (sections 4.4, 5.3, VZ4-A3 to A7)', () => {
       body.report as { groups: { project: string; variant: string; g3: { overCount: number } }[] }
     ).groups.find((g) => g.project === 'edge' && g.variant === 'fringe-4x')!;
     expect(group.g3.overCount).toBe(1);
+    // The tally reports the zone totals and the A5 zone exclusions.
+    expect(group).toMatchObject({
+      zone: { cases: 0, pixels: 0, g1: 0, g2: 0, g3: 0 },
+      a5: { undecided: 0, zoneExcluded: 0 },
+    });
   });
 
   it('refuses inputs that do not belong together', () => {

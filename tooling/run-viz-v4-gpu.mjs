@@ -34,22 +34,36 @@ const runId =
   process.env.VIZ_V4_RUN_ID ??
   `${new Date().toISOString().replaceAll(/[:.]/gu, '-')}-${process.pid}`;
 console.log(`viz-v4 run id: ${runId}`);
-const result = spawnSync(
-  'pnpm',
-  [
-    'exec',
-    'playwright',
-    'test',
-    '--config',
-    'playwright.gpu.config.ts',
-    'tests/gpu/viz-v4-a08-corpus.spec.ts',
-    ...process.argv.slice(2),
-  ],
-  {
-    cwd: root,
-    stdio: 'inherit',
-    shell: process.platform === 'win32',
-    env: { ...process.env, VIZ_V4_RUN_ID: runId },
-  },
-);
+// No shell: arguments reach Playwright as given. Under `pnpm test:gpu:viz-v4`, pnpm sets
+// npm_execpath to its own entry point, run here by this Node; elsewhere pnpm is spawned by name,
+// which Windows cannot do without a shell (pnpm.cmd), so there the script must run through pnpm.
+const pnpmArgs = [
+  'exec',
+  'playwright',
+  'test',
+  '--config',
+  'playwright.gpu.config.ts',
+  'tests/gpu/viz-v4-a08-corpus.spec.ts',
+  ...process.argv.slice(2),
+];
+const execPath = process.env.npm_execpath;
+let command;
+let commandArgs;
+if (execPath !== undefined && execPath !== '' && /pnpm/u.test(path.basename(execPath))) {
+  const script = /\.[cm]?js$/u.test(execPath);
+  command = script ? process.execPath : execPath;
+  commandArgs = script ? [execPath, ...pnpmArgs] : pnpmArgs;
+} else if (process.platform === 'win32') {
+  throw new Error('run this launcher through pnpm: pnpm test:gpu:viz-v4 [-- <playwright args>]');
+} else {
+  command = 'pnpm';
+  commandArgs = pnpmArgs;
+}
+const result = spawnSync(command, commandArgs, {
+  cwd: root,
+  stdio: 'inherit',
+  shell: false,
+  env: { ...process.env, VIZ_V4_RUN_ID: runId },
+});
+if (result.error !== undefined) throw result.error;
 process.exit(result.status ?? 1);

@@ -382,8 +382,15 @@ type Tally = {
   g1: { fail: number; undecided: number; maxInsideError: number; maxOutsideError: number };
   g2: { misclassified: number; fail: number; undecided: number };
   g3: { fullFail: number; otherFail: number; overCount: number; maxCount: number };
-  a5: { interiorPixels: number; violations: number; crackExcluded: number };
+  a5: {
+    interiorPixels: number;
+    violations: number;
+    undecided: number;
+    crackExcluded: number;
+    zoneExcluded: number;
+  };
   cracks: { casesWithTJunctions: number; zonePixels: number; pixels: number };
+  zone: { cases: number; pixels: number; g1: number; g2: number; g3: number };
   rule: RuleAccumulators;
 };
 
@@ -395,8 +402,9 @@ function tally(): Tally {
     g1: { fail: 0, undecided: 0, maxInsideError: 0, maxOutsideError: 0 },
     g2: { misclassified: 0, fail: 0, undecided: 0 },
     g3: { fullFail: 0, otherFail: 0, overCount: 0, maxCount: 0 },
-    a5: { interiorPixels: 0, violations: 0, crackExcluded: 0 },
+    a5: { interiorPixels: 0, violations: 0, undecided: 0, crackExcluded: 0, zoneExcluded: 0 },
     cracks: { casesWithTJunctions: 0, zonePixels: 0, pixels: 0 },
+    zone: { cases: 0, pixels: 0, g1: 0, g2: 0, g3: 0 },
     rule: ruleAccumulators(),
   };
 }
@@ -422,6 +430,13 @@ function add(t: Tally, entry: CaseEntry, rule: RuleAccumulators | null): void {
   t.a5.interiorPixels += m.a5.interiorPixels;
   t.a5.violations += m.a5.violations;
   t.a5.crackExcluded += m.a5.crackExcluded;
+  t.a5.undecided += m.a5.undecided;
+  t.a5.zoneExcluded += m.a5.zoneExcluded;
+  if (m.zone.pixels > 0) t.zone.cases += 1;
+  t.zone.pixels += m.zone.pixels;
+  t.zone.g1 += m.zone.g1;
+  t.zone.g2 += m.zone.g2;
+  t.zone.g3 += m.zone.g3;
   if (m.tJunctionEdges > 0) t.cracks.casesWithTJunctions += 1;
   t.cracks.zonePixels += m.crack.zonePixels;
   t.cracks.pixels += m.crack.pixels;
@@ -441,6 +456,7 @@ function tallyJson(t: Tally) {
     g2: t.g2,
     g3: t.g3,
     a5: t.a5,
+    zone: t.zone,
     cracks: t.cracks,
     rule: {
       interior: t.rule.interior.result(),
@@ -468,9 +484,7 @@ function criterionFrom(entries: readonly CaseEntry[], gate: 'g12' | 'g3'): Crite
     const failed =
       gate === 'g12' ? m.g1.fail + m.g2.fail > 0 || m.pairing !== 'OK' : m.g3.fullFail > 0;
     const pixelOpen =
-      gate === 'g12'
-        ? m.g1.undecided + m.g2.undecided + (zone?.g1 ?? 0) + (zone?.g2 ?? 0) > 0
-        : (zone?.g3 ?? 0) > 0;
+      gate === 'g12' ? m.g1.undecided + m.g2.undecided + zone.g1 + zone.g2 > 0 : zone.g3 > 0;
     if (gate === 'g3' && m.g3.overCount > 0) fail += 1;
     else if (m.caseUndecided.length > 0) undecided += 1;
     else if (failed) fail += 1;
@@ -515,6 +529,7 @@ export function evaluateRun(input: RunInput): RecordBody {
   const a4: string[] = [];
   const a5Records: string[] = [];
   const a5Pixels: string[] = [];
+  const a5Undecided: string[] = [];
   const entries: CaseEntry[] = [];
   const verdictEntries: VerdictEntry[] = [];
   const tallies = new Map<string, Tally>();
@@ -631,6 +646,8 @@ export function evaluateRun(input: RunInput): RecordBody {
                   reasons = [...metrics.reasons];
                   if (variant === 'msaa-4x' && metrics.a5.violations > 0)
                     a5Pixels.push(`${id}:${c.key}`);
+                  if (variant === 'msaa-4x' && metrics.a5.undecided > 0)
+                    a5Undecided.push(`${id}:${c.key}`);
                   // The 1x/4x difference (section 5.4), on the two fringe variants.
                   if (variant === 'fringe-1x') fringeRed.set(project, red);
                   if (variant === 'fringe-4x' && fringeRed.has(project)) {
@@ -701,9 +718,15 @@ export function evaluateRun(input: RunInput): RecordBody {
     'VZ4-A3': { result: a3Fail ? 'FAIL' : 'PASS', ...a3 },
     'VZ4-A4': { result: a4.length > 0 ? 'FAIL' : 'PASS', mismatches: a4 },
     'VZ4-A5': {
-      result: a5Records.length + a5Pixels.length > 0 ? 'FAIL' : 'PASS',
+      result:
+        a5Records.length + a5Pixels.length > 0
+          ? 'FAIL'
+          : a5Undecided.length > 0
+            ? 'UNDECIDED'
+            : 'PASS',
       recordFailures: a5Records,
       pixelFailures: a5Pixels,
+      pixelUndecided: a5Undecided,
     },
     'VZ4-A6': criterionFrom(entries, 'g12'),
     'VZ4-A7': criterionFrom(entries, 'g3'),
