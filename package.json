@@ -57,6 +57,7 @@
     "@playwright/test": "1.62.1",
     "@types/node": "26.3.0",
     "@vector-studio/contracts": "workspace:*",
+    "@vector-studio/editor-core": "workspace:*",
     "@vector-studio/model": "workspace:*",
     "@vector-studio/renderer-core": "workspace:*",
     "@vector-studio/renderer-webgpu": "workspace:*",
