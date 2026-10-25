@@ -1,5 +1,7 @@
 import path from 'node:path';
 import {
+  DEFAULT_PATH_STROKE,
+  DEFAULT_RECTANGLE_FILL,
   createCounterIdSource,
   createEditor,
   type Command,
@@ -581,6 +583,72 @@ describe('P5-U2 review round 1 cases', () => {
     });
     ok(target, { type: 'createRectangle', frame: { x: 0, y: 0, width: 1, height: 1 } });
     expect(revisions).toEqual([1, 2]);
+  });
+
+  it('runs a command raised on gesture-cancel only after the cancelling command commits', () => {
+    const target = editor();
+    const [a] = ok(target, { type: 'createRectangle', frame: { x: 0, y: 0, width: 1, height: 1 } });
+    const { gesture } = internalsOf(target);
+    let created: readonly string[] = [];
+    target.subscribe((event) => {
+      if (event.type === 'document' && event.cause === 'gesture-cancel') {
+        created = ok(target, {
+          type: 'createRectangle',
+          frame: { x: 5, y: 5, width: 1, height: 1 },
+        });
+      }
+    });
+    gesture.begin();
+    gesture.update({
+      type: 'setFrames',
+      frames: [{ id: a!, frame: { x: 2, y: 0, width: 1, height: 1 } }],
+    });
+    ok(target, { type: 'setNodeProps', id: a!, props: { name: 'X' } });
+    expect(target.query({ type: 'document' }).pages[0].children).toEqual([a, ...created]);
+    expect(target.query({ type: 'node', id: a! })?.name).toBe('X');
+    ok(target, { type: 'undo' });
+    expect(target.query({ type: 'node', id: created[0]! })).toBeNull();
+    ok(target, { type: 'undo' });
+    expect(target.query({ type: 'node', id: a! })?.name).toBe('Rectangle');
+  });
+
+  it('undo during a drag undoes the previous step even when a listener edits on cancel', () => {
+    const target = editor();
+    const [a] = ok(target, { type: 'createRectangle', frame: { x: 0, y: 0, width: 1, height: 1 } });
+    const [b] = ok(target, { type: 'createRectangle', frame: { x: 5, y: 0, width: 1, height: 1 } });
+    const { gesture } = internalsOf(target);
+    target.subscribe((event) => {
+      if (event.type === 'document' && event.cause === 'gesture-cancel') {
+        ok(target, { type: 'setNodeProps', id: a!, props: { name: 'L' } });
+      }
+    });
+    gesture.begin();
+    gesture.update({
+      type: 'setFrames',
+      frames: [{ id: a!, frame: { x: 2, y: 0, width: 1, height: 1 } }],
+    });
+    ok(target, { type: 'undo' });
+    // The undo took back b's creation; the listener's rename came after it.
+    expect(target.query({ type: 'node', id: b! })).toBeNull();
+    expect(target.query({ type: 'node', id: a! })?.name).toBe('L');
+  });
+
+  it('hands out frozen session state and defaults', () => {
+    const target = editor();
+    const [a] = ok(target, { type: 'createRectangle', frame: { x: 0, y: 0, width: 1, height: 1 } });
+    ok(target, { type: 'setSelection', ids: [a!] });
+    ok(target, { type: 'setViewport', camera: { position: { x: 1, y: 2 }, zoom: 3 } });
+    const snapshot = target.getSnapshot();
+    for (const value of [snapshot, snapshot.selection, snapshot.viewport, snapshot.history]) {
+      expect(Object.isFrozen(value)).toBe(true);
+    }
+    expect(Object.isFrozen(target.query({ type: 'selection' }))).toBe(true);
+    expect(Object.isFrozen(DEFAULT_RECTANGLE_FILL)).toBe(true);
+    expect(Object.isFrozen(DEFAULT_PATH_STROKE.color)).toBe(true);
+  });
+
+  it('rejects a null initial document', () => {
+    expect(() => createEditor({ document: null })).toThrow(/document\.invalid-field/u);
   });
 
   it('keeps delivering when a listener throws, and rethrows asynchronously', async () => {

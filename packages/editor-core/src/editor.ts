@@ -62,7 +62,7 @@ type HistoryEntry = Readonly<{
 type Gesture = { base: DocumentV1; touched: Set<string>; updated: boolean };
 
 const TOOLS: readonly ToolName[] = ['select', 'rectangle', 'path'];
-const DEFAULT_VIEWPORT: RenderCamera = { position: { x: 0, y: 0 }, zoom: 1 };
+const DEFAULT_VIEWPORT: RenderCamera = deepFreeze({ position: { x: 0, y: 0 }, zoom: 1 });
 const DOCUMENT_COMMANDS = new Set([
   'createRectangle',
   'createPath',
@@ -125,7 +125,7 @@ function emptyDocument(ids: IdSource): DocumentV1 {
 class EditorCore implements Editor {
   private document: DocumentV1;
   private revision = 0;
-  private selection: readonly string[] = [];
+  private selection: readonly string[] = Object.freeze([]);
   private tool: ToolName = 'select';
   private viewport: RenderCamera = DEFAULT_VIEWPORT;
   private undoStack: HistoryEntry[] = [];
@@ -135,13 +135,16 @@ class EditorCore implements Editor {
   private readonly listeners = new Set<(event: EditorEvent) => void>();
   private readonly pending: EditorEvent[] = [];
   private draining = false;
+  private holding = false;
   private readonly ids: IdSource;
   readonly tools = new Map<ToolName, Tool>();
   readonly gesture: GestureControl;
 
   constructor(options: EditorOptions) {
     this.ids = options.ids ?? createCounterIdSource('node-');
-    const result = validateDocument(options.document ?? emptyDocument(this.ids));
+    const result = validateDocument(
+      options.document === undefined ? emptyDocument(this.ids) : options.document,
+    );
     if (!result.ok) throw new Error(`createEditor: ${result.code} at ${result.path}`);
     this.document = deepFreeze(result.document);
     this.snapshot = this.buildSnapshot();
@@ -157,7 +160,22 @@ class EditorCore implements Editor {
     };
   }
 
+  /**
+   * Events raised while a top-level command runs are held until it has fully committed, so a
+   * listener that executes a command never lands inside another command's change.
+   */
   execute(command: Command): CommandResult {
+    if (this.holding) return this.run(command);
+    this.holding = true;
+    try {
+      return this.run(command);
+    } finally {
+      this.holding = false;
+      this.flush();
+    }
+  }
+
+  private run(command: Command): CommandResult {
     if (typeof command !== 'object' || command === null) return failure('editor.invalid-command');
     if (DOCUMENT_COMMANDS.has(command.type)) {
       // A host command during a drag would leave the gesture's base stale, so it applies to the
@@ -224,7 +242,7 @@ class EditorCore implements Editor {
       case 'setViewport': {
         if (!isCamera(command.camera)) return failure('editor.invalid-camera');
         const { position, zoom } = command.camera;
-        this.viewport = { position: { x: position.x + 0, y: position.y + 0 }, zoom };
+        this.viewport = deepFreeze({ position: { x: position.x + 0, y: position.y + 0 }, zoom });
         this.refresh({ type: 'session', field: 'viewport' });
         return { ok: true, ids: [] };
       }
@@ -332,7 +350,7 @@ class EditorCore implements Editor {
     // Deleting or undoing away a selected node removes it from the selection.
     const kept = this.selection.filter((id) => Object.hasOwn(document.nodes, id));
     const selectionChanged = kept.length !== this.selection.length;
-    if (selectionChanged) this.selection = kept;
+    if (selectionChanged) this.selection = Object.freeze(kept);
     this.refresh({ type: 'document', cause, revision: this.revision, touched: sorted(touched) });
     if (selectionChanged) this.emit({ type: 'session', field: 'selection' });
   }
@@ -341,19 +359,19 @@ class EditorCore implements Editor {
     const same =
       ids.length === this.selection.length && ids.every((id, i) => id === this.selection[i]);
     if (same) return;
-    this.selection = ids;
+    this.selection = Object.freeze([...ids]);
     this.refresh({ type: 'session', field: 'selection' });
   }
 
   private buildSnapshot(): EditorSnapshot {
-    return {
+    return deepFreeze({
       document: this.document,
       revision: this.revision,
       selection: this.selection,
       tool: this.tool,
       viewport: this.viewport,
       history: { undoDepth: this.undoStack.length, redoDepth: this.redoStack.length },
-    };
+    });
   }
 
   private refresh(event: EditorEvent): void {
@@ -361,13 +379,18 @@ class EditorCore implements Editor {
     this.emit(event);
   }
 
-  /**
-   * Delivers events in the order the changes happened: an event raised by a listener waits until
-   * every listener has seen the current one. A listener that throws does not stop delivery; its
-   * error is rethrown asynchronously, after the change has been committed.
-   */
   private emit(event: EditorEvent): void {
     this.pending.push(event);
+    if (!this.holding) this.flush();
+  }
+
+  /**
+   * Delivers events in the order the changes happened: an event raised by a listener waits until
+   * every listener has seen the current one, so the snapshot a listener reads may already be
+   * newer than its event. A listener that throws does not stop delivery; its error is rethrown
+   * as a rejected promise, after the change has been committed.
+   */
+  private flush(): void {
     if (this.draining) return;
     this.draining = true;
     try {

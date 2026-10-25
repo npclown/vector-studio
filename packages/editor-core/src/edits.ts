@@ -16,14 +16,14 @@ export type EditResult =
   | Extract<CommandResult, { ok: false }>;
 
 /** Defaults for creation when the command gives no style (P5 plan section 14). */
-export const DEFAULT_RECTANGLE_FILL = { r: 0.8, g: 0.8, b: 0.8, a: 1 } as const;
-export const DEFAULT_PATH_STROKE = {
+export const DEFAULT_RECTANGLE_FILL = deepFreeze({ r: 0.8, g: 0.8, b: 0.8, a: 1 } as const);
+export const DEFAULT_PATH_STROKE = deepFreeze({
   color: { r: 0, g: 0, b: 0, a: 1 },
   width: 1,
   cap: 'butt',
   join: 'miter',
   miterLimit: 4,
-} as const;
+} as const);
 
 const ID_ATTEMPTS = 1000;
 const PENDING_ID = 'pending';
