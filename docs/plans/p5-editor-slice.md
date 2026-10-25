@@ -1,6 +1,6 @@
 # P5 execution plan: editor integration slice
 
-Status: APPROVED 2026-10-24 under the user's standing instruction of 2026-10-24 (adopt the recommended options and continue), after independent review round 2 READY WITH FOLLOW-UPS, follow-ups applied. P5-Q1 to P5-Q8 are decided as recommended. Implementation still waits for the P3 exit or a separate user approval (D10 decision 4). D10 places this plan after V-4; it is drafted after the V-4 contract's approval and before V-4 code, which waits for E10, under the user's standing instruction of 2026-10-24 to continue to the next step. It is a plan and contract only: under [D10](d10-roadmap-reset.md) decision 4, P5 implementation waits for the P3 exit or a separate user approval, and nothing here starts code. The P5 entry rule of [`prototype-plan.md`](../prototype-plan.md#current-position-and-plan-entry-rule) is unchanged.
+Status: APPROVED 2026-10-24 under the user's standing instruction of 2026-10-24 (adopt the recommended options and continue), after independent review rounds 1 and 2 (sections 12 and 13); P5-Q1 to P5-Q8 are decided as recommended. **Implementation approved 2026-10-25** by the user's separate approval under [D10](d10-roadmap-reset.md) decision 4: P5 units run in plan order in parallel with the P3 exit (section 14). The P5 entry rule of [`prototype-plan.md`](../prototype-plan.md#current-position-and-plan-entry-rule) is otherwise unchanged.
 
 Track: visualization. Item: V-5 of the [D9 visualization track plan](d9-visualization-track.md#status-index). Tier: full, because it fixes acceptance criteria, adds packages and dependency edges, and defines product behavior.
 
@@ -210,7 +210,7 @@ Order: U1, U2, then U3 to U5 in any order, then U6, then U7. Every unit runs `pn
 
 ## 11. Gate
 
-On approval, this plan is the P5 execution plan. P5 implementation starts at P5-U1 after the P3 exit, or earlier on a separate user approval (D10 decision 4). The P5 exit is the user's acceptance of the record of P5-U7.
+On approval, this plan is the P5 execution plan. P5 implementation starts at P5-U1 after the P3 exit, or earlier on a separate user approval (D10 decision 4); that approval was given on 2026-10-25 (section 14). The P5 exit is the user's acceptance of the record of P5-U7.
 
 ## 12. Review round 1 (2026-10-24)
 
@@ -226,3 +226,14 @@ Independent `reviewer` review: NOT READY, three blocking and nine should-fix ite
 Round 2: READY WITH FOLLOW-UPS, no blocking item; the five follow-ups are applied: rejection recovery with `baseRevision` from the last result and a separate `unsupported-feature` code; commands during a gesture; the path tool's overlay state; the zero-size clamp; `document.invalid-custom-data`, `setCamera` handling and the marquee note.
 
 Decisions: P5-Q1 to P5-Q8 adopted as recommended under the user's standing instruction of 2026-10-24, including the new runtime dependencies `react`, `react-dom` and `next` (P5-Q1), which are added only when P5-U6 starts.
+
+## 14. Implementation decision and progress (2026-10-25)
+
+Decision, 2026-10-25: the user approved starting P5 implementation now, in parallel with the P3 exit (the separate approval of D10 decision 4). Units run in the order of section 8 on `claude/viz-p5-...` branches. They do not touch rendering-kernel files under change for the P3 exit, and headed GPU runs on the user's PC are scheduled around the rendering track's runs and V-4. Rendering precision stays UNVERIFIED until P3 A04 evidence exists.
+
+| Unit | State |
+| --- | --- |
+| P5-U1 | Implemented ([PR #252](https://github.com/npclown/vector-studio/pull/252), review round 1 NOT READY, findings applied): `packages/model`, fixtures `tests/fixtures/p5-model/`, `tests/unit/p5-model.test.ts` (P5-A06 to A08; the two `editor-core` codes of P5-A07 land with P5-U5) |
+| P5-U2 to U7 | Not started |
+
+P5-U1 notes. Serialization is two-space JSON with a final newline; node and custom-data keys are written in sorted order, so the text does not depend on creation or undo order. A key repeated inside one JSON object is rejected (`document.duplicate-id` under `nodes`, `document.invalid-field` elsewhere), because `JSON.parse` would silently keep one of the two. Path verbs follow the renderer's path grammar (a `move` opens each subpath), so a valid document never projects to a rejected path. `validateDocument` checks an in-memory value with the same rules, for `loadDocument` in P5-U2, and `validateNode` applies the field rules to one node, for the commands. Nesting deeper than 256 containers, data included, is rejected as `document.invalid-field` (text and in-memory values alike), so a small hostile file cannot exhaust memory or the stack; sparse arrays are rejected. The node key is the node's ID, so a node whose `id` differs from its key is `document.invalid-field`, not `document.duplicate-id`. Parsing checks unit-box points only for `[0, 1]`; that a path's points span its frame is a creation rule of P5-U2.
