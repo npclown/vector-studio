@@ -115,7 +115,7 @@ export function sourceManifest() {
 }
 
 function cargoEnvironment(targetDirectory) {
-  const flags = ['--remap-path-prefix', `${root}=.`];
+  const flags = ['--remap-path-prefix', `${root}=.`, '--remap-path-prefix', 'src\\=src/'];
   return {
     flags,
     env: {
