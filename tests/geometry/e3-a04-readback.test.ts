@@ -132,7 +132,9 @@ describe('E3-U4 GPU model check, Node side (section 16)', () => {
     expect(check.failures).toEqual([]);
     expect(check.clip.draws).toBe(1);
     expect(check.clip.compared).toBeGreaterThan(1000);
-    expect(check.clip.excluded).toBe(2);
+    // Column 2 near the right edge (2 centres), and one centre near the shared diagonal of the
+    // two clipped triangles.
+    expect(check.clip.excluded).toBe(3);
     // Pixel 0 of the strip is (0, 0), the top-left corner: flip the first compared pixel.
     const coverage = [...good.results[0]!.coverage!];
     const bad = clipCheck(

@@ -99,7 +99,8 @@ test('E3-U4 GPU model check and E3-PC12', async ({ browser, page }, info) => {
   let junctions = 0;
   let maxCrackWidth = 0;
   let maxCrackDraw: string | null = null;
-  const clip = { draws: 0, compared: 0, excluded: 0, mismatches: 0 };
+  const clip = { draws: 0, unmeasurable: 0, compared: 0, excluded: 0, mismatches: 0 };
+  const clipFailures: ModelCheck['clipFailures'][number][] = [];
   let pc12: ModelCheck | null = null;
   for (const chunk of chunks(allCases())) {
     for (const kase of chunk) ids.push(String(kase.id));
@@ -140,9 +141,11 @@ test('E3-U4 GPU model check and E3-PC12', async ({ browser, page }, info) => {
       maxCrackDraw = check.maxCrackDraw;
     }
     clip.draws += check.clip.draws;
+    clip.unmeasurable += check.clip.unmeasurable;
     clip.compared += check.clip.compared;
     clip.excluded += check.clip.excluded;
     clip.mismatches += check.clip.mismatches;
+    clipFailures.push(...check.clipFailures);
     for (const f of check.failures) if (failures.length < 200) failures.push(f);
   }
   expect(drawCount, JSON.stringify(skipped.slice(0, 20))).toBeGreaterThan(0);
@@ -180,7 +183,7 @@ test('E3-U4 GPU model check and E3-PC12', async ({ browser, page }, info) => {
     maxVertexRatio,
     maxFeatureRatio,
     crack: { junctions, maxWidth: maxCrackWidth, maxWidthDraw: maxCrackDraw },
-    clip,
+    clip: { ...clip, failedDraws: clipFailures.length, failures: clipFailures.slice(0, 500) },
     failures,
     pc12: { rejected: pc12 !== null && !pc12.passed, failures: pc12?.failures.slice(0, 5) ?? [] },
     pageErrors,

@@ -13,7 +13,10 @@
 // crack width between the read-back positions is reported (E3-Q10 (b), never gated).
 import { createHash } from 'node:crypto';
 
-import type { A04Case } from '../../../packages/geometry-reference/src/a04-region.js';
+import {
+  A04_ORACLE_PARAMETERS,
+  type A04Case,
+} from '../../../packages/geometry-reference/src/a04-region.js';
 import { MESH_FILL_SHADER } from '../../../packages/renderer-webgpu/src/mesh-fill-shader.js';
 import { iterateA04Corpus } from './corpus.js';
 import {
@@ -117,6 +120,11 @@ export type ReadbackDraw = Readonly<{
   clip: boolean;
   /** β_c of the case (vertex path and clip bound), as in measureCase. */
   betaC: number;
+  /**
+   * False when measureCase makes the case UNDECIDED for β (β_c ≥ 1 px or a clip bound ≥ 0.25
+   * px, section 7.3): the clip model is then not relied on, and the strip is not compared.
+   */
+  measurable: boolean;
   /** Boundary candidates of M* as point index pairs (section 15.5). */
   boundary: readonly number[];
   /** T-junctions of M* as point index triples [v, a, b]. */
@@ -223,6 +231,8 @@ function meshExtras(points: readonly MappedPoint[], indices: ArrayLike<number>, 
     indices: Array.from(indices),
     clip: guard.crossing > 0,
     betaC: (betaVertex + guard.betaClip) * SLACK,
+    measurable:
+      (betaVertex + guard.betaClip) * SLACK < 1 && guard.betaClip < A04_ORACLE_PARAMETERS.target,
     boundary: candidates.flatMap((e) => [e.ia, e.ib]),
     junctions: tJunctionTriples(mapped, candidates).flat(),
   };
@@ -250,7 +260,23 @@ export type ModelCheck = Readonly<{
   maxCrackWidth: number;
   maxCrackDraw: string | null;
   /** The clip readback (E3-Q11 (a)): draws, strip pixels compared and left out, mismatches. */
-  clip: Readonly<{ draws: number; compared: number; excluded: number; mismatches: number }>;
+  clip: Readonly<{
+    draws: number;
+    unmeasurable: number;
+    compared: number;
+    excluded: number;
+    mismatches: number;
+  }>;
+  /** The clipped draws with a mismatch: compared and mismatched centres, β_c, largest |p*|. */
+  clipFailures: readonly ClipDrawSummary[];
+}>;
+
+export type ClipDrawSummary = Readonly<{
+  id: string;
+  compared: number;
+  mismatches: number;
+  betaC: number;
+  maxAbs: number;
 }>;
 
 /**
@@ -269,7 +295,8 @@ export function modelCheck(
   let junctions = 0;
   let maxCrackWidth = 0;
   let maxCrackDraw: string | null = null;
-  const clip = { draws: 0, compared: 0, excluded: 0, mismatches: 0 };
+  const clip = { draws: 0, unmeasurable: 0, compared: 0, excluded: 0, mismatches: 0 };
+  const clipFailures: ClipDrawSummary[] = [];
   if (page.shaderSha256 !== payload.shaderSha256)
     failures.push(`shader SHA-256 ${page.shaderSha256} ≠ ${payload.shaderSha256}`);
   if (page.results.length !== payload.draws.length)
@@ -337,7 +364,8 @@ export function modelCheck(
         maxCrackDraw = draw.id;
       }
     }
-    if (draw.clip) {
+    if (draw.clip && !draw.measurable) clip.unmeasurable += 1;
+    else if (draw.clip) {
       if (result.coverage === undefined) {
         failures.push(`${draw.id}: no clip coverage`);
         return;
@@ -347,6 +375,17 @@ export function modelCheck(
       clip.compared += c.compared;
       clip.excluded += c.excluded;
       clip.mismatches += c.mismatches.length;
+      if (c.mismatches.length > 0) {
+        let maxAbs = 0;
+        for (const e of draw.expected) maxAbs = Math.max(maxAbs, Math.abs(e.x), Math.abs(e.y));
+        clipFailures.push({
+          id: draw.id,
+          compared: c.compared,
+          mismatches: c.mismatches.length,
+          betaC: draw.betaC,
+          maxAbs,
+        });
+      }
       for (const m of c.mismatches.slice(0, 5)) failures.push(`${draw.id}: clip ${m}`);
     }
   });
@@ -360,16 +399,27 @@ export function modelCheck(
     maxCrackWidth,
     maxCrackDraw,
     clip,
+    clipFailures,
   };
 }
+
+/**
+ * Rasterizer snapping (E3-Q7 (a)): with Vulkan's minimum of 4 subpixel bits each vertex moves by
+ * up to 2^-5 px per axis, so an edge moves by up to √2·2^-5 px. Pixel-centre coverage is decided
+ * on the snapped positions, so the clip check leaves out centres within this residual too.
+ */
+export const RASTER_SNAP = Math.SQRT2 * 2 ** -5;
 
 /** Grid cell size, physical px, of the clip check's spatial index. */
 const CELL = 16;
 
 /**
- * The clip readback of E3-Q11 (a). For each pixel centre q of the edge strip farther than β_c
- * from every boundary candidate of M*, the GPU covers q exactly when M* contains q. Within β_c
- * of a candidate the GPU may differ, so those centres are left out. Pixel-centre coverage
+ * The clip readback of E3-Q11 (a). For each pixel centre q of the edge strip farther than
+ * β_c + RASTER_SNAP from every boundary candidate of M* and from every edge of a clipped
+ * triangle, the GPU covers q exactly when M* contains q. Nearer such an edge the GPU may differ,
+ * so those centres are left out: clipping makes new vertices in each triangle on its own, so an
+ * edge shared by two clipped triangles may open a hairline crack within the clip bound, which
+ * the crack-closed region of E3-Q10 (b) does not score. Pixel-centre coverage
  * confirms the clip model only to pixel resolution near the edge: a mismatch falsifies it,
  * agreement does not prove it (E3-Q11 (a), "the readback's limit").
  */
@@ -382,7 +432,7 @@ export function clipCheck(
   let scale = width + height;
   for (const p of pts) scale = Math.max(scale, Math.abs(p.x), Math.abs(p.y));
   // f64 evaluation of distances from binary64 copies of p*: a margin far above its rounding.
-  const thr = draw.betaC * SLACK + 2 ** -30 * scale + 2 ** -20;
+  const thr = (draw.betaC + RASTER_SNAP) * SLACK + 2 ** -30 * scale + 2 ** -20;
   const cols = Math.ceil(width / CELL);
   const rows = Math.ceil(height / CELL);
   const strip = (cx: number, cy: number) =>
@@ -424,9 +474,19 @@ export function clipCheck(
       Math.max(a!.y, b!.y, c!.y) + thr,
     );
   }
-  for (let e = 0; e + 1 < draw.boundary.length; e += 2) {
-    const a = pts[draw.boundary[e]!]!;
-    const b = pts[draw.boundary[e + 1]!]!;
+  // The excluding edges: the boundary candidates, and every edge of a triangle with a vertex
+  // outside the viewport (within a margin, so a vertex on the edge counts as outside).
+  const edges = [...draw.boundary];
+  const out = (p: (typeof pts)[number]) =>
+    p.x < thr || p.y < thr || p.x > width - thr || p.y > height - thr;
+  for (let t = 0; t + 2 < draw.indices.length; t += 3) {
+    const tri = [draw.indices[t]!, draw.indices[t + 1]!, draw.indices[t + 2]!];
+    if (tri.some((i) => out(pts[i]!)))
+      for (let k = 0; k < 3; k += 1) edges.push(tri[k]!, tri[(k + 1) % 3]!);
+  }
+  for (let e = 0; e + 1 < edges.length; e += 2) {
+    const a = pts[edges[e]!]!;
+    const b = pts[edges[e + 1]!]!;
     register(
       edgeCells,
       e,
@@ -467,7 +527,7 @@ export function clipCheck(
     const qy = py + 0.5;
     const key = Math.floor(py / CELL) * cols + Math.floor(px / CELL);
     const near = (edgeCells.get(key) ?? []).some(
-      (e) => segmentDistance(qx, qy, pts[draw.boundary[e]!]!, pts[draw.boundary[e + 1]!]!) <= thr,
+      (e) => segmentDistance(qx, qy, pts[edges[e]!]!, pts[edges[e + 1]!]!) <= thr,
     );
     if (near) {
       excluded += 1;
