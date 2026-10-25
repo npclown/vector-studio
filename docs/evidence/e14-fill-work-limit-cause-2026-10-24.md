@@ -83,3 +83,7 @@ Agreed with the E2 thread on 2026-10-24: E2 owns the stroke side (which stroke c
 E2's stroke breakdown on the same scene (reported by the E2 thread, to be recorded as `docs/evidence/e2-stroke-work-limit-cause-2026-10-24.md` on its branch; not reproduced here): of 879 stroke `work-limit` results, 712 are the front end's `PieceLimit` (512 pieces), 140 the arrangement's `InputLimit` (1,024 vertices), 109 `DepthLimit`, 12 `NodeLimit` and 3 `EventLimit`. The stroke knee is not the fill cause: it is B2's cubic-leaf rule, whose 4·r·sin term makes leaf demand grow linearly with device stroke width. Only for very large radii does stroke meet the same √(R/tol) growth as fill.
 
 Shared constraint: E2's proposed family-B rung feeds stroke rings to the fill ladder's rung 0 under its own stroke cap. E14-U1 therefore adds the rung-0 cap E0 as its own constant and does not change any stroke cap.
+
+## Update 2026-10-25: E14-U1 result
+
+E14-U1 implemented option F1 at `fill-v0+r3` (rung-0 cap E0 = 8,192, work cap W0 = 2^22). On the same scene the fill `ok` count is 748 of 1,000 (318 at `r2`, 731 in the 4,096-cap experiment above), with zero structure issues; every smooth path up to E0 meshes in rung 0, and of the 252 remaining failures, 250 are looping paths (209 `CommandLimit`, 41 `Topology(Unresolved)`) and 2 are smooth paths over E0 (`CommandLimit`). Evidence: [e14-u1-2026-10-25.md](e14-u1-2026-10-25.md).

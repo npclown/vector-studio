@@ -94,6 +94,8 @@ Fixtures at `e = −3`, zoom 1, DPR 1, nonzero, unless named. Circles are four c
 
 **Validation.** `pnpm check`, `pnpm build`, `pnpm test:geometry` (native kernel tests with the fixtures and seeded defects), `pnpm test:p3-fill-identity --failure-to-success --revision-change`, the E14-G2 A/B run and the scene report. The five GPU specs that pin the operation id run headed in Chrome and Edge on the user's PC, because E11's invalidation table re-runs VZ3-A1 on a fill revision change. They need no new assertion: E14-U1 changes mesh content and the operation id, not the renderer.
 
+**Implementation note, 2026-10-25 (E14-U1, [evidence](../evidence/e14-u1-2026-10-25.md#departures-from-the-contract)).** Departures recorded with their reasons in the evidence: E14-F5 is scene path 3 with reason `MONOTONE` (no looping path over E reaches `CROSSING`, since FR4 runs before FR5; it is in the E14-Q1 class by the exact crossing test); E14-F8 has no literal fixture (E14-D2 and G3 use a lowered work cap); A3's `triangle-mesh` oracle cannot run above its 256-vertex cap, and SL-O2 items 1 to 4 imply its checks there; the identity harness hashes `allocated_bytes()` as growth over the constructed value, so G1's size-record exemption is not repeated in every entry record.
+
 ## 9. Units
 
 | Unit | Tier | Scope | Files |

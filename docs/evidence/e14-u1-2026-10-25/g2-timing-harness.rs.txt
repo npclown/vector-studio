@@ -1,0 +1,47 @@
+
+// E14-G2 diagnostic A/B timing (temporary, not committed).
+fn e14_scene_corpus() -> Vec<(String, FillRequest, RealPath)> {
+    let text = std::fs::read_to_string(env::var("E14_FILL_INPUT").expect("E14_FILL_INPUT")).unwrap();
+    text.lines()
+        .filter(|row| !row.is_empty())
+        .map(|row| {
+            let fields: Vec<&str> = row.split('\t').collect();
+            let rule = if fields[2] == "evenodd" { LineFillRule::Evenodd } else { LineFillRule::Nonzero };
+            let verbs: Vec<u8> = fields[3].split(',').map(|v| v.parse().unwrap()).collect();
+            let point_bytes: Vec<u8> = fields[4]
+                .split(',')
+                .flat_map(|v| f64::from_bits(u64::from_str_radix(v, 16).unwrap()).to_le_bytes())
+                .collect();
+            let name = format!("scene/{}", fields[0]);
+            (name.clone(), request(rule, fields[1].parse().unwrap()), RealPath { name, verbs, point_bytes })
+        })
+        .collect()
+}
+
+#[test]
+#[ignore = "E14-G2 timing"]
+fn e14_g2_timing() {
+    let reps: usize = env::var("E14_REPS").ok().and_then(|v| v.parse().ok()).unwrap_or(15);
+    let mut cases = b0_corpus();
+    cases.extend(random_corpus(&std::fs::read(env::var("P3_B0R_RANDOM_CORPUS").unwrap()).unwrap()));
+    cases.extend(e14_scene_corpus());
+    let mut engine = crate::fill_export::FillEngine::new();
+    assert_eq!(engine.reserve(1 << 16, 1 << 20), crate::engine::BATCH_OK);
+    println!("E14_G2_BEGIN");
+    for (name, request, path) in &cases {
+        let mut times = Vec::with_capacity(reps);
+        let mut rung = String::new();
+        for _ in 0..reps {
+            let clock = std::time::Instant::now();
+            let built = engine.build_one(*request, &path.verbs, &path.point_bytes).unwrap();
+            times.push(clock.elapsed().as_nanos());
+            rung = match built {
+                Ok(b) => format!("{:?}/{:?}/{:?}", b.rung, b.reason, b.outcome),
+                Err(_) => "selfcheck".to_owned(),
+            };
+        }
+        times.sort_unstable();
+        println!("{{\"name\":\"{name}\",\"ns\":{},\"rung\":\"{rung}\"}}", times[reps / 2]);
+    }
+    println!("E14_G2_END");
+}

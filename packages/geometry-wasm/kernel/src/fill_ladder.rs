@@ -9,9 +9,9 @@
 //! and AL-FR9 (an always-on output check). From AL-U3 (revision 2) `fill_export::build_path`
 //! runs rung 0 as step 0 of stage 4, and V2's exact cascade on a fallback.
 //!
-//! Nothing in a call allocates: the fast rung's storage is reserved once by
-//! `FillLadder::reserve` (section 3.4), the rest is bounded stack scratch, and the exact rung
-//! allocates nothing inside its `attempt*` entries (B0R O7).
+//! Nothing in a call allocates: the fast rung's storage and its stage scratch are reserved once
+//! by `FillLadder::reserve` (section 3.4; E14-K1 item 4 moves both to the heap), and the exact
+//! rung allocates nothing inside its `attempt*` entries (B0R O7).
 //!
 //! Correspondence of checks to the proof, in stage order:
 //!
@@ -26,6 +26,7 @@
 //! | FR5    | `clearance`: sweep, box gap, `segment_relation`, SL-L4 tests    | SL-C3, SL-L3/L4, spike 3.9 | `CROSSING`, `CLEARANCE` |
 //! | FR6    | `classify`: orientation, nesting, winding, boundary contours    | SL-T1, SL-T2             | `STRUCTURE`             |
 //! | FR7    | `triangulate`: monotone decomposition, stack triangulation      | positive triangles       | `TRIANGLE`              |
+//! | E14-K3 | `Work::charge` in FR5, FR7's status scans and face tracing      | none (cost bound)        | `WORK`                  |
 //! | FR8    | `assemble`                                                      | none                     | `TRIANGLE` (empty)      |
 //! | AL-FR9 | `check_output`: items 1-3 of contract 3.5                       | SL-O2's argument; SL-OB4 | `MESH_CHECK`            |
 //!
@@ -42,7 +43,7 @@ use crate::codec::{PathInput, Request};
 use crate::cubic_fill::{
     ContourRange, CubicFillDiagnostics, CubicFillError, CubicFillWorkspace, DecodedSource,
     EdgeOwner, S1View, MAX_CONTOURS as PREFIX_MAX_CONTOURS,
-    MAX_CONTOUR_POINTS as PREFIX_MAX_POINTS, MAX_EDGE_OWNERS as PREFIX_MAX_EDGES,
+    MAX_FAST_CONTOUR_POINTS as PREFIX_MAX_POINTS, MAX_FAST_EDGE_OWNERS as PREFIX_MAX_EDGES,
     MAX_FLAT_COMMANDS, MAX_SOURCE_SEGMENTS as PREFIX_MAX_SOURCES,
 };
 use crate::engine::{BATCH_ALLOCATION_FAILED, BATCH_INTERNAL_ERROR};
@@ -51,7 +52,6 @@ use crate::fill_filter::{compare_enclosures, Interval, UNDECIDED};
 use crate::fill_predicates::{orient2d, segment_relation, SegmentRelation};
 use crate::geometry::Point;
 use crate::line_fill::LineFillRule;
-use crate::rounded_line_fill::RoundedFillLimits;
 use crate::simple_cubic_topology::TopologyError;
 
 /// Contract section 3.2, AL-FR0: the smallest tolerance exponent rung 0 accepts.
@@ -59,8 +59,8 @@ pub(crate) const MIN_FAST_EXPONENT: i32 = -511;
 /// Contract section 3.2, AL-FR0: the largest tolerance exponent rung 0 accepts.
 pub(crate) const MAX_FAST_EXPONENT: i32 = 510;
 
-/// Section 3.4: the caps the S1 prefix enforces (`cubic_fill.rs`). The fast rung's arrays are
-/// derived from them, so a B1 cap raise resizes them with the prefix.
+/// Section 3.4: the caps the S1 prefix enforces for rung 0 (`cubic_fill.rs`). Since E14-K1 they
+/// are the fast caps (E0 = `MAX_FAST_EDGE_OWNERS`), not the exact rung's B1 caps.
 pub(crate) const MAX_POINTS: usize = PREFIX_MAX_POINTS;
 pub(crate) const MAX_EDGES: usize = PREFIX_MAX_EDGES;
 pub(crate) const MAX_CONTOURS: usize = PREFIX_MAX_CONTOURS;
@@ -74,7 +74,12 @@ pub(crate) const MAX_TRIANGLES: usize = MAX_POINTS + 2 * MAX_CONTOURS - 2;
 /// `TRIANGLE`.
 pub(crate) const MAX_DIAGONALS: usize = MAX_POINTS + 3 * MAX_CONTOURS - 3;
 /// Section 3.4, boundary scratch: AL-FR9 scans at most this many directed-edge records.
-pub(crate) const MAX_BOUNDARY_RECORDS: usize = 3 * MAX_TRIANGLES;
+pub(crate) const MAX_BOUNDARY_RECORDS: usize = boundary_records(MAX_POINTS);
+/// AL-FR9's boundary records for a prefix of at most `points` contour points: three per
+/// triangle of the bound n + 2h − 2k (E14-K1 item 5).
+pub(crate) const fn boundary_records(points: usize) -> usize {
+    3 * (points + 2 * MAX_CONTOURS - 2)
+}
 /// Boundary half-edges plus both directions of every diagonal (FR7 face tracing).
 const MAX_HALF_EDGES: usize = MAX_POINTS + 2 * MAX_DIAGONALS;
 /// P2's deepest leaf (`geometry.rs` `MAX_DEPTH`, enforced by `validate_leaf_partitions`).
@@ -82,8 +87,13 @@ const MAX_LEAF_DEPTH: u32 = 20;
 
 /// The FR5 candidate bitset holds one row per certified edge (spike section 2.5). Before B1 a
 /// row was one u64 (`MAX_EDGES <= 64`); B1 widens it to EDGE_WORDS words, bit j in word j / 64,
-/// which for at most 64 edges is the pre-B1 word.
+/// which for at most 64 edges is the pre-B1 word. Since E14-K1 it is heap scratch reserved only
+/// with debug assertions.
+#[cfg(debug_assertions)]
 const EDGE_WORDS: usize = MAX_EDGES.div_ceil(64);
+/// E14-K3: rung 0's work cap W0, inclusive. With at most E = 256 flat edges a call charges
+/// fewer than 400,000 times (contract section 5), so `WORK` cannot occur there.
+pub(crate) const MAX_FAST_WORK: u32 = 1 << 22;
 // FR7 and AL-FR9 store vertex indices as u32.
 const _: () = assert!(MAX_POINTS <= u32::MAX as usize);
 
@@ -100,10 +110,12 @@ pub(crate) enum Reason {
     Clearance,
     Triangle,
     MeshCheck,
+    /// E14-K3: rung 0's work cap W0 was reached. Appended last, after the stage reasons.
+    Work,
 }
 
 impl Reason {
-    pub(crate) const ALL: [Self; 10] = [
+    pub(crate) const ALL: [Self; 11] = [
         Self::Range,
         Self::Prefix,
         Self::Structure,
@@ -114,6 +126,7 @@ impl Reason {
         Self::Clearance,
         Self::Triangle,
         Self::MeshCheck,
+        Self::Work,
     ];
 
     pub(crate) fn code(self) -> &'static str {
@@ -128,6 +141,7 @@ impl Reason {
             Self::Clearance => "CLEARANCE",
             Self::Triangle => "TRIANGLE",
             Self::MeshCheck => "MESH_CHECK",
+            Self::Work => "WORK",
         }
     }
 }
@@ -203,11 +217,117 @@ pub(crate) enum LadderFault {
     VertexSubstituted,
     /// AL-F10: the FR7 orientation check fails at the first emitted triangle.
     Fr7OrientationRejected,
+    /// E14-D4: the FR7 per-vertex diagonal index lists each vertex's half-edges in reverse
+    /// order.
+    DiagonalIndexReversed,
 }
 
 #[cfg(test)]
 thread_local! {
     static LADDER_FAULTS: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
+    /// E14-D2 and E14-F8: a lowered work cap for this thread; `None` is W0.
+    static WORK_CAP: core::cell::Cell<Option<u32>> = const { core::cell::Cell::new(None) };
+    /// E14-D2: W0 not enforced in this thread.
+    static WORK_CAP_DISABLED: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+    /// E14-D4: every indexed `next_half` call is compared with today's linear scan.
+    static NEXT_HALF_DIFFERENTIAL: core::cell::Cell<u64> = const { core::cell::Cell::new(0) };
+    /// E14-D4: the compared calls whose vertex has at least one diagonal half-edge.
+    static NEXT_HALF_WITH_DIAGONALS: core::cell::Cell<u64> = const { core::cell::Cell::new(0) };
+}
+
+/// The work cap of a call: W0, or a test override.
+#[cfg(not(test))]
+#[inline(always)]
+fn work_cap() -> Option<u32> {
+    Some(MAX_FAST_WORK)
+}
+
+#[cfg(test)]
+fn work_cap() -> Option<u32> {
+    if WORK_CAP_DISABLED.with(core::cell::Cell::get) {
+        return None;
+    }
+    Some(
+        WORK_CAP
+            .with(core::cell::Cell::get)
+            .unwrap_or(MAX_FAST_WORK),
+    )
+}
+
+/// Runs `action` with rung 0's work cap set to `cap` in this thread (`None`: not enforced, the
+/// seeded defect E14-D2), then restores W0.
+#[cfg(test)]
+pub(crate) fn with_work_cap<T>(cap: Option<u32>, action: impl FnOnce() -> T) -> T {
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            WORK_CAP.with(|value| value.set(None));
+            WORK_CAP_DISABLED.with(|value| value.set(false));
+        }
+    }
+    match cap {
+        Some(cap) => WORK_CAP.with(|value| value.set(Some(cap))),
+        None => WORK_CAP_DISABLED.with(|value| value.set(true)),
+    }
+    let _reset = Reset;
+    action()
+}
+
+/// Runs `action` with the E14-D4 differential on: every indexed `next_half` call in this thread
+/// is compared with today's linear scan, and a difference panics. Returns the action's result
+/// and the counts of compared calls.
+#[cfg(test)]
+pub(crate) fn with_next_half_differential<T>(action: impl FnOnce() -> T) -> (T, NextHalfCounts) {
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            NEXT_HALF_DIFFERENTIAL.with(|value| value.set(0));
+            NEXT_HALF_WITH_DIAGONALS.with(|value| value.set(0));
+        }
+    }
+    NEXT_HALF_DIFFERENTIAL.with(|value| value.set(1));
+    NEXT_HALF_WITH_DIAGONALS.with(|value| value.set(0));
+    let _reset = Reset;
+    let result = action();
+    let counts = NextHalfCounts {
+        compared: NEXT_HALF_DIFFERENTIAL.with(core::cell::Cell::get) - 1,
+        with_diagonals: NEXT_HALF_WITH_DIAGONALS.with(core::cell::Cell::get),
+    };
+    (result, counts)
+}
+
+/// E14-D4: the `next_half` calls the differential compared, and those among them whose vertex
+/// had at least one diagonal half-edge (only those can show an order difference).
+#[cfg(test)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct NextHalfCounts {
+    pub(crate) compared: u64,
+    pub(crate) with_diagonals: u64,
+}
+
+/// E14-K3: rung 0's per-call work counter. Each charge comes before the visit it pays for; at
+/// the cap the next charge is `WORK`.
+#[derive(Clone, Copy, Debug)]
+struct Work {
+    used: u32,
+    cap: Option<u32>,
+}
+
+impl Work {
+    fn new() -> Self {
+        Self {
+            used: 0,
+            cap: work_cap(),
+        }
+    }
+
+    fn charge(&mut self) -> Result<(), Reason> {
+        if self.cap.is_some_and(|cap| self.used >= cap) {
+            return Err(Reason::Work);
+        }
+        self.used = self.used.saturating_add(1);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -488,6 +608,8 @@ pub(crate) struct FastStats {
     pub(crate) diagonals: u32,
     /// The AL-FR9 item (1, 2 or 3) that returned `MESH_CHECK`, otherwise 0.
     pub(crate) mesh_check_item: u8,
+    /// E14-K3: the work charges of the call (at most W0).
+    pub(crate) work: u32,
 }
 
 /// Kinds of polygon vertices in the FR7 monotone decomposition (de Berg et al., chapter 3).
@@ -506,74 +628,200 @@ enum VertexKind {
 /// One fast-rung stage body.
 type StageBody = fn(&mut FastRung) -> Result<(), Reason>;
 
-/// The fast rung (contract section 3.1). Its storage is inline and fixed (section 3.4) and is
-/// reserved once, inside `FillLadder`.
+/// A heap buffer of `length` copies of `value`, reserved fallibly (E14-K1 item 4): a refusal is
+/// `BATCH_ALLOCATION_FAILED`.
+fn reserved<T: Clone>(value: T, length: usize) -> Result<Vec<T>, u32> {
+    let mut buffer = Vec::new();
+    buffer
+        .try_reserve_exact(length)
+        .map_err(|_| BATCH_ALLOCATION_FAILED)?;
+    buffer.resize(length, value);
+    Ok(buffer)
+}
+
+fn heap_bytes<T>(buffer: &Vec<T>) -> usize {
+    buffer.capacity() * size_of::<T>()
+}
+
+/// E14-K1 item 4: the stage-local arrays of FR5, FR7 and AL-FR9, reserved once with the fast
+/// rung. A stage reads and writes only the prefix `[..n]` of each and first sets that prefix to
+/// the value the stage's former local declaration gave it, so nothing from an earlier path is
+/// read and no call touches a full-capacity array.
+#[derive(Default)]
+struct RungScratch {
+    /// FR5: the edge boxes and the sort's (key, index) items and merge scratch.
+    boxes: Vec<EdgeBox>,
+    edge_order: Vec<(i64, usize)>,
+    edge_scratch: Vec<(i64, usize)>,
+    /// FR5's candidate bitset, `MAX_EDGES` rows of `EDGE_WORDS` words; it only feeds a
+    /// `debug_assert!`.
+    #[cfg(debug_assertions)]
+    marks: Vec<u64>,
+    /// FR7, sized `MAX_POINTS`.
+    next: Vec<usize>,
+    previous: Vec<usize>,
+    order: Vec<usize>,
+    order_scratch: Vec<usize>,
+    rank: Vec<usize>,
+    kind: Vec<VertexKind>,
+    active: Vec<usize>,
+    helper: Vec<usize>,
+    /// FR7, sized `MAX_DIAGONALS`.
+    diagonals: Vec<(usize, usize)>,
+    /// E14-K3: the per-vertex diagonal index, `MAX_POINTS + 1` offsets into `2 · MAX_DIAGONALS`
+    /// half-edges.
+    diagonal_start: Vec<usize>,
+    diagonal_halves: Vec<usize>,
+    /// FR7 face tracing and monotone triangulation, sized `MAX_HALF_EDGES`.
+    visited: Vec<bool>,
+    face: Vec<usize>,
+    is_left: Vec<bool>,
+    face_scratch: Vec<usize>,
+    sorted: Vec<usize>,
+    stack: Vec<usize>,
+    /// AL-FR9 item 3, sized `MAX_POINTS`.
+    check_next: Vec<usize>,
+    seen: Vec<bool>,
+}
+
+impl RungScratch {
+    fn reserve() -> Result<Self, u32> {
+        Ok(Self {
+            boxes: reserved(EdgeBox::default(), MAX_EDGES)?,
+            edge_order: reserved((0, 0), MAX_EDGES)?,
+            edge_scratch: reserved((0, 0), MAX_EDGES)?,
+            #[cfg(debug_assertions)]
+            marks: reserved(0, MAX_EDGES * EDGE_WORDS)?,
+            next: reserved(0, MAX_POINTS)?,
+            previous: reserved(0, MAX_POINTS)?,
+            order: reserved(0, MAX_POINTS)?,
+            order_scratch: reserved(0, MAX_POINTS)?,
+            rank: reserved(0, MAX_POINTS)?,
+            kind: reserved(VertexKind::RegularLeft, MAX_POINTS)?,
+            active: reserved(0, MAX_POINTS)?,
+            helper: reserved(0, MAX_POINTS)?,
+            diagonals: reserved((0, 0), MAX_DIAGONALS)?,
+            diagonal_start: reserved(0, MAX_POINTS + 1)?,
+            diagonal_halves: reserved(0, 2 * MAX_DIAGONALS)?,
+            visited: reserved(false, MAX_HALF_EDGES)?,
+            face: reserved(0, MAX_HALF_EDGES)?,
+            is_left: reserved(false, MAX_HALF_EDGES)?,
+            face_scratch: reserved(0, MAX_HALF_EDGES)?,
+            sorted: reserved(0, MAX_HALF_EDGES)?,
+            stack: reserved(0, MAX_HALF_EDGES)?,
+            check_next: reserved(0, MAX_POINTS)?,
+            seen: reserved(false, MAX_POINTS)?,
+        })
+    }
+
+    fn allocated_bytes(&self) -> usize {
+        let fr5 =
+            heap_bytes(&self.boxes) + heap_bytes(&self.edge_order) + heap_bytes(&self.edge_scratch);
+        #[cfg(debug_assertions)]
+        let fr5 = fr5 + heap_bytes(&self.marks);
+        let fr7 = heap_bytes(&self.next)
+            + heap_bytes(&self.previous)
+            + heap_bytes(&self.order)
+            + heap_bytes(&self.order_scratch)
+            + heap_bytes(&self.rank)
+            + heap_bytes(&self.kind)
+            + heap_bytes(&self.active)
+            + heap_bytes(&self.helper)
+            + heap_bytes(&self.diagonals)
+            + heap_bytes(&self.diagonal_start)
+            + heap_bytes(&self.diagonal_halves)
+            + heap_bytes(&self.visited)
+            + heap_bytes(&self.face)
+            + heap_bytes(&self.is_left)
+            + heap_bytes(&self.face_scratch)
+            + heap_bytes(&self.sorted)
+            + heap_bytes(&self.stack);
+        fr5 + fr7 + heap_bytes(&self.check_next) + heap_bytes(&self.seen)
+    }
+}
+
+/// The fast rung (contract section 3.1). Its arrays are fixed in size (section 3.4) and, since
+/// E14-K1 item 4, heap buffers reserved once by `FastRung::reserve`, inside `FillLadder`: at E0
+/// they no longer fit a WebAssembly stack frame.
 pub(crate) struct FastRung {
     delta: f64,
     rule: LineFillRule,
-    points: [Point; MAX_POINTS],
+    points: Vec<Point>,
     point_len: usize,
     ranges: [ContourRange; MAX_CONTOURS],
     range_len: usize,
-    owners: [EdgeOwner; MAX_EDGES],
+    owners: Vec<EdgeOwner>,
     owner_len: usize,
     sources: [DecodedSource; MAX_SOURCES],
     source_len: usize,
     contours: [ContourInfo; MAX_CONTOURS],
-    pieces: [Piece; MAX_EDGES],
-    cert: [CertEdge; MAX_EDGES],
+    pieces: Vec<Piece>,
+    cert: Vec<CertEdge>,
     cert_len: usize,
     orientation: [i32; MAX_CONTOURS],
     boundary: [bool; MAX_CONTOURS],
     reversed: [bool; MAX_CONTOURS],
-    vertices: [Point; MAX_POINTS],
+    vertices: Vec<Point>,
     vertex_len: usize,
-    triangles: [[u32; 3]; MAX_TRIANGLES],
+    triangles: Vec<[u32; 3]>,
     triangle_len: usize,
     published: bool,
     stats: FastStats,
-}
-
-impl Default for FastRung {
-    fn default() -> Self {
-        Self::new()
-    }
+    work: Work,
+    scratch: RungScratch,
 }
 
 impl FastRung {
-    pub(crate) fn new() -> Self {
-        Self {
+    /// Reserves the fast rung's storage and stage scratch on the heap, fallibly (E14-K1 item 4):
+    /// the one constructor of production and tests. A refusal is `BATCH_ALLOCATION_FAILED`.
+    pub(crate) fn reserve() -> Result<Self, u32> {
+        Ok(Self {
             delta: 0.0,
             rule: LineFillRule::Nonzero,
-            points: [Point::default(); MAX_POINTS],
+            points: reserved(Point::default(), MAX_POINTS)?,
             point_len: 0,
             ranges: [ContourRange::default(); MAX_CONTOURS],
             range_len: 0,
-            owners: [EdgeOwner::ImplicitClosure { contour: 0 }; MAX_EDGES],
+            owners: reserved(EdgeOwner::ImplicitClosure { contour: 0 }, MAX_EDGES)?,
             owner_len: 0,
             sources: [DecodedSource::default(); MAX_SOURCES],
             source_len: 0,
             contours: [ContourInfo::default(); MAX_CONTOURS],
-            pieces: [Piece::Unset; MAX_EDGES],
-            cert: [CertEdge::default(); MAX_EDGES],
+            pieces: reserved(Piece::Unset, MAX_EDGES)?,
+            cert: reserved(CertEdge::default(), MAX_EDGES)?,
             cert_len: 0,
             orientation: [0; MAX_CONTOURS],
             boundary: [false; MAX_CONTOURS],
             reversed: [false; MAX_CONTOURS],
-            vertices: [Point::default(); MAX_POINTS],
+            vertices: reserved(Point::default(), MAX_POINTS)?,
             vertex_len: 0,
-            triangles: [[0; 3]; MAX_TRIANGLES],
+            triangles: reserved([0; 3], MAX_TRIANGLES)?,
             triangle_len: 0,
             published: false,
             stats: FastStats::default(),
-        }
+            work: Work::new(),
+            scratch: RungScratch::reserve()?,
+        })
+    }
+
+    /// The fast rung's bytes: the struct and every heap buffer (E14-G3).
+    pub(crate) fn allocated_bytes(&self) -> usize {
+        size_of::<Self>()
+            + heap_bytes(&self.points)
+            + heap_bytes(&self.owners)
+            + heap_bytes(&self.pieces)
+            + heap_bytes(&self.cert)
+            + heap_bytes(&self.vertices)
+            + heap_bytes(&self.triangles)
+            + self.scratch.allocated_bytes()
     }
 
     /// Clears the outputs of an earlier call, so that no fallback path can read rung 0's
-    /// partial state (contract section 3.6, defect (15)).
+    /// partial state (contract section 3.6, defect (15)), and starts the call's work count.
     fn reset(&mut self) {
         self.published = false;
         self.stats = FastStats::default();
+        self.work = Work::new();
         self.cert_len = 0;
         self.vertex_len = 0;
         self.triangle_len = 0;
@@ -1037,13 +1285,23 @@ impl FastRung {
 
     /// FR5 (SL-C3): `clearance_edges` on the certified edges of P′.
     fn clearance(&mut self) -> Result<(), Reason> {
-        clearance_edges(
+        let result = clearance_edges(
             &self.cert[..self.cert_len],
             &self.contours,
             self.delta,
+            ClearanceScratch {
+                boxes: &mut self.scratch.boxes,
+                order: &mut self.scratch.edge_order,
+                scratch: &mut self.scratch.edge_scratch,
+                #[cfg(debug_assertions)]
+                marks: &mut self.scratch.marks,
+            },
+            &mut self.work,
             &mut self.stats,
             &mut |_, _, _| {},
-        )
+        );
+        self.stats.work = self.work.used;
+        result
     }
 
     // ------------------------------------------------------------------------------------
@@ -1150,8 +1408,43 @@ impl FastRung {
     // capacity overflow is `TRIANGLE`.
 
     fn triangulate(&mut self) -> Result<(), Reason> {
-        let mut next = [0usize; MAX_POINTS];
-        let mut previous = [0usize; MAX_POINTS];
+        // E14-K1 item 4: the stage scratch and the vertex buffer leave `self` for the stage, so
+        // that FR7 borrows them instead of copying the vertex array (both moves are pointer
+        // swaps), and come back on every return.
+        let mut scratch = core::mem::take(&mut self.scratch);
+        let mut vertices = core::mem::take(&mut self.vertices);
+        let result = self.triangulate_with(&mut scratch, &mut vertices);
+        self.vertices = vertices;
+        self.scratch = scratch;
+        self.stats.work = self.work.used;
+        result
+    }
+
+    fn triangulate_with(
+        &mut self,
+        scratch: &mut RungScratch,
+        vertex_buffer: &mut [Point],
+    ) -> Result<(), Reason> {
+        let RungScratch {
+            next,
+            previous,
+            order,
+            order_scratch,
+            rank,
+            kind,
+            active,
+            helper,
+            diagonals,
+            diagonal_start,
+            diagonal_halves,
+            visited,
+            face,
+            is_left,
+            face_scratch,
+            sorted,
+            stack,
+            ..
+        } = scratch;
         self.vertex_len = 0;
         self.triangle_len = 0;
         for contour in 0..self.range_len {
@@ -1166,7 +1459,7 @@ impl FastRung {
                 } else {
                     index
                 };
-                self.vertices[self.vertex_len] = self.points[info.point_start + source];
+                vertex_buffer[self.vertex_len] = self.points[info.point_start + source];
                 self.vertex_len += 1;
             }
             for index in 0..info.edges {
@@ -1180,18 +1473,17 @@ impl FastRung {
         if count < 3 {
             return Err(Reason::Triangle);
         }
-        let vertices = self.vertices;
+        let vertices: &[Point] = vertex_buffer;
 
         // Event order, ties by vertex index; equal points cannot occur under SL-T1.
-        let mut order = [0usize; MAX_POINTS];
-        let mut scratch = [0usize; MAX_POINTS];
+        order_scratch[..count].fill(0);
         for (index, slot) in order[..count].iter_mut().enumerate() {
             *slot = index;
         }
-        merge_sort(&mut order[..count], &mut scratch[..count], |a, b| {
+        merge_sort(&mut order[..count], &mut order_scratch[..count], |a, b| {
             above(vertices[a], vertices[b]).then(a.cmp(&b))
         });
-        let mut rank = [0usize; MAX_POINTS];
+        rank[..count].fill(0);
         for (position, vertex) in order[..count].iter().copied().enumerate() {
             if position > 0
                 && above(vertices[order[position - 1]], vertices[vertex]) != Ordering::Less
@@ -1202,7 +1494,7 @@ impl FastRung {
         }
 
         // Vertex classification from the neighbours' order and the orient2d sign at the vertex.
-        let mut kind = [VertexKind::RegularLeft; MAX_POINTS];
+        kind[..count].fill(VertexKind::RegularLeft);
         for vertex in 0..count {
             let (before, after) = (previous[vertex], next[vertex]);
             let before_below = rank[before] > rank[vertex];
@@ -1227,11 +1519,13 @@ impl FastRung {
         }
 
         // MakeMonotone. The status holds edges e_v = (v, next(v)) that have the interior to
-        // their east, each with its helper; a small array searched linearly (AL-OB8).
-        let mut active = [0usize; MAX_POINTS];
+        // their east, each with its helper; a small array searched linearly (AL-OB8). Each
+        // vertex inserts at most one edge, so the status stays inside `active[..count]`.
+        active[..count].fill(0);
         let mut active_len = 0usize;
-        let mut helper = [0usize; MAX_POINTS];
-        let mut diagonals = [(0usize, 0usize); MAX_DIAGONALS];
+        helper[..count].fill(0);
+        // At most n + 3h − 3k diagonals (section 3.4); a longer list overflows `MAX_DIAGONALS`.
+        diagonals[..(count + 3 * MAX_CONTOURS - 3).min(MAX_DIAGONALS)].fill((0, 0));
         let mut diagonal_len = 0usize;
         let mut add_diagonal = |a: usize, b: usize| -> Result<(), Reason> {
             if diagonal_len >= MAX_DIAGONALS {
@@ -1242,36 +1536,37 @@ impl FastRung {
             Ok(())
         };
         let sweep = Sweep {
-            vertices: &vertices,
-            next: &next,
-            rank: &rank,
+            vertices,
+            next,
+            rank,
         };
+        let work = &mut self.work;
         for vertex in order[..count].iter().copied() {
             let incoming = previous[vertex];
             match kind[vertex] {
                 VertexKind::Start => {
-                    insert_edge(&mut active, &mut active_len, vertex)?;
+                    insert_edge(active, &mut active_len, vertex)?;
                     helper[vertex] = vertex;
                 }
                 VertexKind::End => {
                     if kind[helper[incoming]] == VertexKind::Merge {
                         add_diagonal(vertex, helper[incoming])?;
                     }
-                    remove_edge(&mut active, &mut active_len, incoming)?;
+                    remove_edge(active, &mut active_len, incoming, work)?;
                 }
                 VertexKind::Split => {
-                    let left = sweep.left_edge(vertex, &active[..active_len])?;
+                    let left = sweep.left_edge(vertex, &active[..active_len], work)?;
                     add_diagonal(vertex, helper[left])?;
                     helper[left] = vertex;
-                    insert_edge(&mut active, &mut active_len, vertex)?;
+                    insert_edge(active, &mut active_len, vertex)?;
                     helper[vertex] = vertex;
                 }
                 VertexKind::Merge => {
                     if kind[helper[incoming]] == VertexKind::Merge {
                         add_diagonal(vertex, helper[incoming])?;
                     }
-                    remove_edge(&mut active, &mut active_len, incoming)?;
-                    let left = sweep.left_edge(vertex, &active[..active_len])?;
+                    remove_edge(active, &mut active_len, incoming, work)?;
+                    let left = sweep.left_edge(vertex, &active[..active_len], work)?;
                     if kind[helper[left]] == VertexKind::Merge {
                         add_diagonal(vertex, helper[left])?;
                     }
@@ -1281,12 +1576,12 @@ impl FastRung {
                     if kind[helper[incoming]] == VertexKind::Merge {
                         add_diagonal(vertex, helper[incoming])?;
                     }
-                    remove_edge(&mut active, &mut active_len, incoming)?;
-                    insert_edge(&mut active, &mut active_len, vertex)?;
+                    remove_edge(active, &mut active_len, incoming, work)?;
+                    insert_edge(active, &mut active_len, vertex)?;
                     helper[vertex] = vertex;
                 }
                 VertexKind::RegularLeft => {
-                    let left = sweep.left_edge(vertex, &active[..active_len])?;
+                    let left = sweep.left_edge(vertex, &active[..active_len], work)?;
                     if kind[helper[left]] == VertexKind::Merge {
                         add_diagonal(vertex, helper[left])?;
                     }
@@ -1295,19 +1590,35 @@ impl FastRung {
             }
         }
         self.stats.diagonals = u32::try_from(diagonal_len).unwrap_or(u32::MAX);
+        let diagonals = &diagonals[..diagonal_len];
+
+        // E14-K3: the per-vertex diagonal index, a counting sort of the diagonal half-edges by
+        // origin that keeps half-edge order, so `next_half` considers the half-edges at a
+        // vertex in today's order (diagonal index, then direction). `helper` is free after the
+        // sweep and serves as the write cursor.
+        let half_count = count + 2 * diagonal_len;
+        index_diagonals(
+            count,
+            diagonals,
+            diagonal_start,
+            diagonal_halves,
+            helper,
+            fault(LadderFault::DiagonalIndexReversed),
+        );
 
         // Monotone pieces: trace the faces left of every boundary half-edge (v → next(v)) and of
         // both directions of every diagonal. At w, arriving from u, the next half-edge is the
         // first outgoing one clockwise from the direction w → u.
         let graph = Graph {
-            vertices: &vertices,
-            next: &next,
-            diagonals: &diagonals[..diagonal_len],
+            vertices,
+            next,
+            diagonals,
             count,
+            diagonal_start,
+            diagonal_halves,
         };
-        let half_count = count + 2 * diagonal_len;
-        let mut visited = [false; MAX_HALF_EDGES];
-        let mut face = [0usize; MAX_HALF_EDGES];
+        visited[..half_count].fill(false);
+        face[..half_count].fill(0);
         for first in 0..half_count {
             if visited[first] {
                 continue;
@@ -1327,14 +1638,24 @@ impl FastRung {
                 }
                 face[length] = graph.origin(half);
                 length += 1;
-                half = graph.next_half(half)?;
+                half = graph.next_half(half, &mut self.work)?;
             }
-            self.triangulate_monotone(&face[..length], &vertices, &rank)?;
+            self.triangulate_monotone(
+                &face[..length],
+                vertices,
+                rank,
+                FaceScratch {
+                    is_left,
+                    sorted,
+                    scratch: face_scratch,
+                    stack,
+                },
+            )?;
         }
         Ok(())
     }
 
-    fn emit(&mut self, vertices: &[Point; MAX_POINTS], triangle: [usize; 3]) -> Result<(), Reason> {
+    fn emit(&mut self, vertices: &[Point], triangle: [usize; 3]) -> Result<(), Reason> {
         // Every triangle positive: a non-positive one (collinear chains can produce it) is
         // `TRIANGLE`, never emitted or skipped. AL-F10's fault variant fails this check.
         if orient(
@@ -1363,13 +1684,23 @@ impl FastRung {
     fn triangulate_monotone(
         &mut self,
         face: &[usize],
-        vertices: &[Point; MAX_POINTS],
-        rank: &[usize; MAX_POINTS],
+        vertices: &[Point],
+        rank: &[usize],
+        FaceScratch {
+            is_left,
+            sorted,
+            scratch,
+            stack,
+        }: FaceScratch<'_>,
     ) -> Result<(), Reason> {
         let length = face.len();
         if length < 3 {
             return Err(Reason::Triangle);
         }
+        is_left[..length].fill(false);
+        sorted[..length].fill(0);
+        scratch[..length].fill(0);
+        stack[..length].fill(0);
         let mut top = 0usize;
         let mut bottom = 0usize;
         for (position, vertex) in face.iter().copied().enumerate() {
@@ -1382,7 +1713,6 @@ impl FastRung {
         }
         // Forward from the top the boundary descends to the bottom (the left chain of a
         // counterclockwise face), then ascends back (the right chain).
-        let mut is_left = [false; MAX_HALF_EDGES];
         let mut position = top;
         while position != bottom {
             let following = (position + 1) % length;
@@ -1399,8 +1729,6 @@ impl FastRung {
             }
             position = following;
         }
-        let mut sorted = [0usize; MAX_HALF_EDGES];
-        let mut scratch = [0usize; MAX_HALF_EDGES];
         for (index, slot) in sorted[..length].iter_mut().enumerate() {
             *slot = index;
         }
@@ -1408,7 +1736,6 @@ impl FastRung {
             rank[face[a]].cmp(&rank[face[b]])
         });
         let vertex = |slot: usize| face[slot];
-        let mut stack = [0usize; MAX_HALF_EDGES];
         stack[0] = sorted[0];
         stack[1] = sorted[1];
         let mut depth = 2usize;
@@ -1476,7 +1803,7 @@ impl FastRung {
     /// in counterclockwise order.
     fn emit_fan(
         &mut self,
-        vertices: &[Point; MAX_POINTS],
+        vertices: &[Point],
         apex: usize,
         upper: usize,
         lower: usize,
@@ -1598,7 +1925,8 @@ impl FastRung {
         // each vertex must equal, bit for bit, the S1 polygon point that FR6's boundary contour
         // and orientation put there (reversed contours in reverse order), an O(n) check.
         if !fault(LadderFault::MeshCheckItem3Disabled) {
-            let mut next = [0usize; MAX_POINTS];
+            let next = &mut self.scratch.check_next[..count];
+            next.fill(0);
             let mut assigned = 0usize;
             let mut layout = true;
             for contour in 0..self.range_len {
@@ -1625,7 +1953,8 @@ impl FastRung {
                 }
                 assigned += edges;
             }
-            let mut seen = [false; MAX_POINTS];
+            let seen = &mut self.scratch.seen[..count];
+            seen.fill(false);
             let exact = layout
                 && assigned == count
                 && once.len() == count
@@ -1913,13 +2242,27 @@ fn consecutive(a: &CertEdge, b: &CertEdge, contours: &[ContourInfo], skip_two_ap
 /// The sort, the scan order and bound, the consecutive skip, the step order and every decided
 /// quantity are unchanged, so the result and the counters are the same for every input.
 /// `observe` sees each visit's outcome (`VISIT_*`) in order.
+///
+/// E14-K1 item 4: the boxes, the sort arrays and the debug bitset are the caller's reserved
+/// scratch; only their prefixes for `edges.len()` are set and read, and the bitset clears only
+/// the rows and words it can set. E14-K3: every sweep candidate is charged to `work` before its
+/// visit; at the cap the call returns `WORK`.
 fn clearance_edges(
     edges: &[CertEdge],
     contours: &[ContourInfo],
     delta: f64,
+    scratch: ClearanceScratch<'_>,
+    work: &mut Work,
     stats: &mut FastStats,
     observe: &mut impl FnMut(usize, usize, u8),
 ) -> Result<(), Reason> {
+    let ClearanceScratch {
+        boxes,
+        order,
+        scratch,
+        #[cfg(debug_assertions)]
+        marks,
+    } = scratch;
     let count = edges.len();
     // Contract section 3.2: r = 2δ and r² enclosed exactly as the spike does.
     let radius = 2.0 * delta;
@@ -1928,7 +2271,7 @@ fn clearance_edges(
     let scan_without_radius = fault(LadderFault::ScanBoundWithoutRadius);
     let skip_two_apart = fault(LadderFault::SkipTwoApart);
     let simplicity_only = fault(LadderFault::SimplicityOnly);
-    let mut boxes = [EdgeBox::default(); MAX_EDGES];
+    let boxes = &mut boxes[..count];
     for (slot, edge) in boxes.iter_mut().zip(edges) {
         *slot = EdgeBox::new(edge);
     }
@@ -1937,14 +2280,21 @@ fn clearance_edges(
     // items this gives the result of AL-U4b2's comparator
     // `xlo[a].total_cmp(&xlo[b]).then(a.cmp(&b))` (see `total_order_key`), so the same merge
     // sort makes the same moves and yields the same order.
-    let mut order = [(0i64, 0usize); MAX_EDGES];
-    let mut scratch = [(0i64, 0usize); MAX_EDGES];
-    for (index, slot) in order[..count].iter_mut().enumerate() {
+    let order = &mut order[..count];
+    let scratch = &mut scratch[..count];
+    scratch.fill((0, 0));
+    for (index, slot) in order.iter_mut().enumerate() {
         *slot = (total_order_key(boxes[index].xlo), index);
     }
-    merge_sort(&mut order[..count], &mut scratch[..count], |a, b| a.cmp(&b));
+    merge_sort(order, scratch, |a, b| a.cmp(&b));
+    // Row `low` holds bit `high` in word `high / 64`; only rows below `count` and words below
+    // `count.div_ceil(64)` can be set.
     #[cfg(debug_assertions)]
-    let mut marks = [[0u64; EDGE_WORDS]; MAX_EDGES];
+    let words = count.div_ceil(64);
+    #[cfg(debug_assertions)]
+    for row in 0..count {
+        marks[row * EDGE_WORDS..row * EDGE_WORDS + words].fill(0);
+    }
     stats.sweep_candidates = 0;
     stats.clearance_step2 = 0;
     stats.clearance_step3 = 0;
@@ -1970,10 +2320,11 @@ fn clearance_edges(
                 observe(a, b, VISIT_CONSECUTIVE);
                 continue;
             }
+            work.charge()?;
             #[cfg(debug_assertions)]
             {
                 let (low, high) = (a.min(b), a.max(b));
-                marks[low][high / 64] |= 1u64 << (high % 64);
+                marks[low * EDGE_WORDS + high / 64] |= 1u64 << (high % 64);
             }
             stats.sweep_candidates += 1;
             let outcome = clear_pair(
@@ -1994,14 +2345,30 @@ fn clearance_edges(
     }
     #[cfg(debug_assertions)]
     debug_assert!(
-        marks
-            .iter()
-            .flatten()
+        (0..count)
+            .flat_map(|row| &marks[row * EDGE_WORDS..row * EDGE_WORDS + words])
             .map(|word| word.count_ones())
             .sum::<u32>()
             == stats.sweep_candidates
     );
     Ok(())
+}
+
+/// FR5's reserved scratch (E14-K1 item 4), borrowed from `RungScratch` or from a test.
+struct ClearanceScratch<'a> {
+    boxes: &'a mut [EdgeBox],
+    order: &'a mut [(i64, usize)],
+    scratch: &'a mut [(i64, usize)],
+    #[cfg(debug_assertions)]
+    marks: &'a mut [u64],
+}
+
+/// FR7's per-face scratch for `triangulate_monotone` (E14-K1 item 4).
+struct FaceScratch<'a> {
+    is_left: &'a mut [bool],
+    sorted: &'a mut [usize],
+    scratch: &'a mut [usize],
+    stack: &'a mut [usize],
 }
 
 /// Spike section 3.9 steps 1-3 for one non-consecutive pair e = [a, b], f = [c, d], with each
@@ -2111,9 +2478,31 @@ pub(crate) fn clearance_trace(
         .collect();
     let mut stats = FastStats::default();
     let mut trace = Vec::new();
-    let result = clearance_edges(&cert, &contours, delta, &mut stats, &mut |a, b, outcome| {
-        trace.push((a, b, outcome));
-    });
+    let count = cert.len();
+    let (mut boxes, mut order, mut scratch) = (
+        vec![EdgeBox::default(); count],
+        vec![(0, 0); count],
+        vec![(0, 0); count],
+    );
+    #[cfg(debug_assertions)]
+    let mut marks = vec![0; count * EDGE_WORDS];
+    let result = clearance_edges(
+        &cert,
+        &contours,
+        delta,
+        ClearanceScratch {
+            boxes: &mut boxes,
+            order: &mut order,
+            scratch: &mut scratch,
+            #[cfg(debug_assertions)]
+            marks: &mut marks,
+        },
+        &mut Work::new(),
+        &mut stats,
+        &mut |a, b, outcome| {
+            trace.push((a, b, outcome));
+        },
+    );
     (
         result,
         [
@@ -2365,12 +2754,8 @@ fn merge_sort<T: Copy>(
     }
 }
 
-fn insert_edge(
-    active: &mut [usize; MAX_POINTS],
-    length: &mut usize,
-    edge: usize,
-) -> Result<(), Reason> {
-    if *length >= MAX_POINTS {
+fn insert_edge(active: &mut [usize], length: &mut usize, edge: usize) -> Result<(), Reason> {
+    if *length >= active.len() {
         return Err(Reason::Triangle);
     }
     active[*length] = edge;
@@ -2378,15 +2763,21 @@ fn insert_edge(
     Ok(())
 }
 
+/// Removes `edge` from the status. E14-K3: each status entry shifted down is charged to `work`
+/// first.
 fn remove_edge(
-    active: &mut [usize; MAX_POINTS],
+    active: &mut [usize],
     length: &mut usize,
     edge: usize,
+    work: &mut Work,
 ) -> Result<(), Reason> {
     let position = active[..*length]
         .iter()
         .position(|candidate| *candidate == edge)
         .ok_or(Reason::Triangle)?;
+    for _ in position + 1..*length {
+        work.charge()?;
+    }
     active.copy_within(position + 1..*length, position);
     *length -= 1;
     Ok(())
@@ -2394,20 +2785,22 @@ fn remove_edge(
 
 /// Read-only sweep state for the status searches of FR7.
 struct Sweep<'a> {
-    vertices: &'a [Point; MAX_POINTS],
-    next: &'a [usize; MAX_POINTS],
-    rank: &'a [usize; MAX_POINTS],
+    vertices: &'a [Point],
+    next: &'a [usize],
+    rank: &'a [usize],
 }
 
 impl Sweep<'_> {
     /// The status edge directly left of `vertex`. Active edges are directed downward, so the
     /// vertex is east of edge (a, b) exactly when orient2d(a, b, vertex) > 0; the left-right
     /// order of two active edges is decided by orient2d of endpoints, valid because SL-T1
-    /// makes all edges pairwise disjoint except at shared vertices.
-    fn left_edge(&self, vertex: usize, active: &[usize]) -> Result<usize, Reason> {
+    /// makes all edges pairwise disjoint except at shared vertices. E14-K3: each status entry
+    /// is charged to `work` before it is visited.
+    fn left_edge(&self, vertex: usize, active: &[usize], work: &mut Work) -> Result<usize, Reason> {
         let point = self.vertices[vertex];
         let mut best: Option<usize> = None;
         for edge in active.iter().copied() {
+            work.charge()?;
             let (start, end) = (edge, self.next[edge]);
             if start == vertex || end == vertex {
                 continue;
@@ -2462,13 +2855,88 @@ impl Sweep<'_> {
     }
 }
 
+/// E14-K3: the per-vertex diagonal index of `Graph`, a counting sort of the diagonal half-edges
+/// n + 2k (origin a) and n + 2k + 1 (origin b) by origin that keeps half-edge order. `cursor`
+/// (at least `count` long) is scratch. `reversed` is the seeded defect E14-D4.
+fn index_diagonals(
+    count: usize,
+    diagonals: &[(usize, usize)],
+    start: &mut [usize],
+    halves: &mut [usize],
+    cursor: &mut [usize],
+    reversed: bool,
+) {
+    start[..=count].fill(0);
+    for &(a, b) in diagonals {
+        start[a + 1] += 1;
+        start[b + 1] += 1;
+    }
+    for vertex in 0..count {
+        start[vertex + 1] += start[vertex];
+    }
+    halves[..2 * diagonals.len()].fill(0);
+    cursor[..count].copy_from_slice(&start[..count]);
+    for half in count..count + 2 * diagonals.len() {
+        let (a, b) = diagonals[(half - count) / 2];
+        let origin = if (half - count).is_multiple_of(2) {
+            a
+        } else {
+            b
+        };
+        halves[cursor[origin]] = half;
+        cursor[origin] += 1;
+    }
+    if reversed {
+        for vertex in 0..count {
+            halves[start[vertex]..start[vertex + 1]].reverse();
+        }
+    }
+}
+
+/// E14-D4 hook: `next_half` on half-edge `half` of a synthetic graph (`next` is the boundary
+/// successor of each vertex), with the diagonal index in today's order, or reversed under
+/// `LadderFault::DiagonalIndexReversed`.
+#[cfg(test)]
+pub(crate) fn graph_select_for_tests(
+    vertices: &[Point],
+    next: &[usize],
+    diagonals: &[(usize, usize)],
+    half: usize,
+) -> Result<usize, Reason> {
+    let count = vertices.len();
+    let mut start = vec![0; count + 1];
+    let mut halves = vec![0; 2 * diagonals.len()];
+    let mut cursor = vec![0; count];
+    index_diagonals(
+        count,
+        diagonals,
+        &mut start,
+        &mut halves,
+        &mut cursor,
+        fault(LadderFault::DiagonalIndexReversed),
+    );
+    let graph = Graph {
+        vertices,
+        next,
+        diagonals,
+        count,
+        diagonal_start: &start,
+        diagonal_halves: &halves,
+    };
+    graph.next_half(half, &mut Work::new())
+}
+
 /// The planar graph of boundary edges and diagonals for the FR7 face tracing. Half-edge h < n
 /// is the boundary edge h → next(h); n + 2k and n + 2k + 1 are diagonal k in both directions.
+/// E14-K3: `diagonal_halves[diagonal_start[v]..diagonal_start[v + 1]]` are the diagonal
+/// half-edges with origin v, in increasing half-edge order.
 struct Graph<'a> {
-    vertices: &'a [Point; MAX_POINTS],
-    next: &'a [usize; MAX_POINTS],
+    vertices: &'a [Point],
+    next: &'a [usize],
     diagonals: &'a [(usize, usize)],
     count: usize,
+    diagonal_start: &'a [usize],
+    diagonal_halves: &'a [usize],
 }
 
 impl Graph<'_> {
@@ -2524,11 +2992,62 @@ impl Graph<'_> {
         }
     }
 
-    fn next_half(&self, half: usize) -> Result<usize, Reason> {
+    /// The half-edge after `half` in its face. It considers w → next(w) and then the diagonal
+    /// half-edges at w from the index, in the order today's scan over every diagonal met them
+    /// (E14-K3), so the choice and every `TRIANGLE` error are today's. Each `consider` call is
+    /// charged to `work` first.
+    fn next_half(&self, half: usize, work: &mut Work) -> Result<usize, Reason> {
+        let w = self.destination(half);
+        let indexed = &self.diagonal_halves[self.diagonal_start[w]..self.diagonal_start[w + 1]];
+        let result = self.select(half, indexed.iter().copied(), Some(work));
+        #[cfg(test)]
+        if NEXT_HALF_DIFFERENTIAL.with(core::cell::Cell::get) > 0 {
+            assert_eq!(
+                result,
+                self.next_half_linear(half),
+                "E14-D4: indexed and linear next_half differ at half-edge {half}"
+            );
+            NEXT_HALF_DIFFERENTIAL.with(|value| value.set(value.get() + 1));
+            if !indexed.is_empty() {
+                NEXT_HALF_WITH_DIAGONALS.with(|value| value.set(value.get() + 1));
+            }
+        }
+        result
+    }
+
+    /// Today's `next_half` before E14-K3: the scan over every diagonal (E14-D4 differential).
+    #[cfg(test)]
+    fn next_half_linear(&self, half: usize) -> Result<usize, Reason> {
+        let w = self.destination(half);
+        let candidates = self
+            .diagonals
+            .iter()
+            .copied()
+            .enumerate()
+            .flat_map(|(index, (a, b))| {
+                [
+                    (a == w).then_some(self.count + 2 * index),
+                    (b == w).then_some(self.count + 2 * index + 1),
+                ]
+            })
+            .flatten();
+        self.select(half, candidates, None)
+    }
+
+    /// The selection of `next_half`: `consider` on w → next(w), then on `candidates` in order.
+    fn select(
+        &self,
+        half: usize,
+        candidates: impl Iterator<Item = usize>,
+        mut work: Option<&mut Work>,
+    ) -> Result<usize, Reason> {
         let u = self.origin(half);
         let w = self.destination(half);
         let mut best: Option<(usize, u8)> = None;
         let mut consider = |candidate: usize| -> Result<(), Reason> {
+            if let Some(work) = work.as_deref_mut() {
+                work.charge()?;
+            }
             let x = self.destination(candidate);
             let class = self.class(w, u, x)?;
             let better = match best {
@@ -2560,13 +3079,8 @@ impl Graph<'_> {
             Ok(())
         };
         consider(w)?;
-        for (index, (a, b)) in self.diagonals.iter().copied().enumerate() {
-            if a == w {
-                consider(self.count + 2 * index)?;
-            }
-            if b == w {
-                consider(self.count + 2 * index + 1)?;
-            }
+        for candidate in candidates {
+            consider(candidate)?;
         }
         best.map(|(candidate, _)| candidate).ok_or(Reason::Triangle)
     }
@@ -2597,23 +3111,21 @@ pub(crate) struct FillLadder {
 impl FillLadder {
     /// Reserves rung 0's storage once, with fallible reservation (contract section 3.4): a
     /// refused reservation is `BATCH_ALLOCATION_FAILED`. It also checks that the fill scratch
-    /// reserved from `limits` holds AL-FR9's boundary records (`BATCH_INTERNAL_ERROR`
-    /// otherwise), with V2 section a's record count 3 · (max_triangles + 2 · max_vertices).
-    pub(crate) fn reserve(limits: RoundedFillLimits) -> Result<Self, u32> {
-        let scratch_records = limits
-            .max_vertices
-            .checked_mul(2)
-            .and_then(|vertices| vertices.checked_add(limits.max_triangles))
-            .and_then(|triangles| triangles.checked_mul(3))
-            .ok_or(BATCH_INTERNAL_ERROR)?;
-        if MAX_BOUNDARY_RECORDS > scratch_records {
+    /// holds AL-FR9's boundary records (`BATCH_INTERNAL_ERROR` otherwise): `scratch_records` is
+    /// the scratch's reserved record count, and E14-K1 item 5 derives the records rung 0 needs
+    /// from the workspace's fast contour point cap (`boundary_records`), so a pre-B1 ladder
+    /// checks the pre-B1 count.
+    pub(crate) fn reserve(scratch_records: usize, fast_contour_points: usize) -> Result<Self, u32> {
+        if fast_contour_points > MAX_POINTS
+            || boundary_records(fast_contour_points) > scratch_records
+        {
             return Err(BATCH_INTERNAL_ERROR);
         }
         let mut storage: Vec<FastRung> = Vec::new();
         if storage.try_reserve_exact(1).is_err() {
             return Err(BATCH_ALLOCATION_FAILED);
         }
-        storage.push(FastRung::new());
+        storage.push(FastRung::reserve()?);
         let fast: Box<[FastRung; 1]> = storage
             .into_boxed_slice()
             .try_into()
@@ -2621,9 +3133,16 @@ impl FillLadder {
         Ok(Self { fast })
     }
 
+    /// A ladder for tests that bring their own boundary scan: the check against the fill
+    /// scratch passes by construction.
+    #[cfg(test)]
+    pub(crate) fn for_tests() -> Self {
+        Self::reserve(MAX_BOUNDARY_RECORDS, MAX_POINTS).expect("ladder")
+    }
+
     /// Bytes reserved by the ladder, for the reserve-time totals and `linearMemoryBytes()`.
     pub(crate) fn allocated_bytes(&self) -> usize {
-        size_of::<FastRung>()
+        self.fast[0].allocated_bytes()
     }
 
     pub(crate) fn fast(&self) -> &FastRung {
@@ -2668,7 +3187,9 @@ impl FillLadder {
             return Err(Reason::Range);
         }
         let input = path_input(request, verbs, point_bytes).0;
-        match workspace.prepare_prefix(input, MAX_FLAT_COMMANDS) {
+        // E14-K1 item 2: the prefix run over the workspace's fast caps.
+        let command_capacity = workspace.fast_flat_commands();
+        match workspace.prepare_prefix(input, command_capacity) {
             Ok(view) => {
                 fast.load(view, input.request.tolerance, request.rule)?;
                 fast.run(stop, scan)

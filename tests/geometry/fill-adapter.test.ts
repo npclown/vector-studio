@@ -68,7 +68,7 @@ describe('fill-v0 adapter factory', () => {
       const adapter = await createFillMeshPort(source);
       expect(adapter.portVersion).toBe(0);
       expect(adapter.operationId).toBe(FILL_V0_OPERATION_ID);
-      expect(adapter.operationId).toBe('geometry-wasm/fill-v0+r2');
+      expect(adapter.operationId).toBe('geometry-wasm/fill-v0+r3');
       expect(adapter.linearMemoryBytes()).toBeGreaterThan(0);
       const result = adapter.buildFillMeshes([square()]);
       expect(result.status).toBe('ok');

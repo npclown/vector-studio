@@ -1,0 +1,19 @@
+
+#[test]
+#[ignore = "E14-G3 sizes"]
+fn e14_g3_sizes() {
+    let mut engine = FillEngine::new();
+    assert_eq!(engine.reserve(1 << 16, 1 << 20), BATCH_OK);
+    let s = engine.storage();
+    let w = engine.workspace().unwrap();
+    println!(
+        "G3 engine_heap={} engine_inline={} cubic_allocated={} cubic_inline={} ladder={} scratch_caps={:?} scratch_sizes={:?}",
+        engine.heap_bytes(),
+        core::mem::size_of::<FillEngine>(),
+        w.allocated_bytes(),
+        core::mem::size_of::<CubicFillWorkspace>(),
+        s[6].1,
+        &s[2..6].iter().map(|x| x.1).collect::<Vec<_>>(),
+        FillEngine::scratch_sizes(),
+    );
+}
