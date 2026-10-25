@@ -25,7 +25,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | E6 | Remove or move the D8-interim overlay and fringe builders | Full | Backlog | Not started |
 | E12 | Production mesh layout: the C04 parts and A07 gaps left open by v0 (K1, E1-E3, limits) | Full | Backlog | Proposed by E11 under E11-Q1 (a) ([E11 section 5](d9-e11-p3-c03-c05-closure-contract.md#5-c04-layout-ownership-cache-and-lifetime)) |
 | E13 | Partial-coverage tolerance and stroke coverage gate | Full | Backlog | Proposed by E11 under E11-Q4 (a) ([E11 section 4.1](d9-e11-p3-c03-c05-closure-contract.md#41-the-coverage-blockers-of-the-private-contract)) |
-| E9 | E1 review follow-ups: guard equality tests, per-guard blocked counter | Light | R1 | Implemented 2026-10-25, test-only, no output change, in review ([record](../evidence/e9-review-followups-2026-10-25.md)) |
+| E9 | E1 review follow-ups: guard equality tests, per-guard blocked counter | Light | R1 | Done: merged (#256) 2026-10-25, test-only, no output change, independent review READY ([record](../evidence/e9-review-followups-2026-10-25.md)) |
 | E15 | Stroke `work-limit` on non-simple merged outlines (joins, caps, folds) after E2 | Full | Backlog | Candidate 2026-10-25 from E2-U3: E2-K3 publishes no scene stroke, every `MONOTONE`-refused outline self-crosses ([U3](../evidence/e2-u3-2026-10-25.md)); E2-R2 follow-up |
 
 E1 comes before E2: the early abort is a smaller, independent bound and needs no new certificate. The order is otherwise D9's.
