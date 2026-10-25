@@ -497,7 +497,16 @@ impl CubicFillWorkspace {
         command_capacity: usize,
         topology_mode: TopologyMode,
     ) -> Result<CubicFillDiagnostics, CubicFillError> {
-        let all_line_eligible = match self.run_prefix(input, command_capacity, true, self.caps) {
+        // E14-D1: the seeded defect runs the exact rung with the fast caps and command count.
+        #[cfg(test)]
+        let (caps, command_capacity) = if E14_EXACT_FAST_CAPS.with(core::cell::Cell::get) {
+            (self.fast_caps, self.fast_caps.flat_commands)
+        } else {
+            (self.caps, command_capacity)
+        };
+        #[cfg(not(test))]
+        let caps = self.caps;
+        let all_line_eligible = match self.run_prefix(input, command_capacity, true, caps) {
             Ok(all_line_eligible) => all_line_eligible,
             Err(PrefixFailure::Sizing(_)) => return Ok(self.diagnostics),
             Err(PrefixFailure::Error(error)) => return Err(error),
@@ -1484,6 +1493,17 @@ impl CubicFillWorkspace {
 #[cfg(test)]
 thread_local! {
     static E8_COLLAPSE_FINAL_LEAF: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+    static E14_EXACT_FAST_CAPS: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
+/// E14-D1 (`docs/plans/d9-e14-fill-rung0-edge-cap-contract.md` section 8): runs `action` with
+/// the exact rung's prefix enforcing the fast caps instead of `caps`, then switches it off.
+#[cfg(test)]
+pub(crate) fn with_exact_rung_fast_caps<T>(action: impl FnOnce() -> T) -> T {
+    E14_EXACT_FAST_CAPS.with(|switch| switch.set(true));
+    let result = action();
+    E14_EXACT_FAST_CAPS.with(|switch| switch.set(false));
+    result
 }
 
 /// E8-C6's command-list injection (E8 addendum E8.6): runs `action` with the first cubic

@@ -178,7 +178,7 @@ test('P3 V4 path page screenshots (UNVERIFIED precision)', async ({ browser, pag
     (event) => event.code === 'render.path-mesh-failure',
   );
   if (pageErrors.length > 0) failures.push(`page errors: ${pageErrors.join('; ')}`);
-  if (final.port?.operationId !== 'geometry-wasm/fill-v0+r2')
+  if (final.port?.operationId !== 'geometry-wasm/fill-v0+r3')
     failures.push(`unexpected port ${JSON.stringify(final.port)}`);
   write(
     'observations.json',

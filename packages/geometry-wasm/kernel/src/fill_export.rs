@@ -431,6 +431,7 @@ impl FillScratch {
     }
 
     /// Capacities and bytes of the exact rung's scratch alone (before E14-K1).
+    #[cfg(test)]
     fn sizes(limits: RoundedFillLimits) -> Option<(usize, usize, usize)> {
         Self::sizes_for(limits, 0)
     }
@@ -1476,6 +1477,14 @@ impl FillEngine {
         ))
     }
 
+    /// Rung 0's work charges in the last path (E14-K3).
+    #[cfg(test)]
+    pub(crate) fn fast_work(&self) -> u32 {
+        self.ladder
+            .as_ref()
+            .map_or(0, |ladder| ladder.fast().stats().work)
+    }
+
     /// Rung 0's published fast mesh after the last path, if that path was fast.
     pub(crate) fn fast_mesh(&self) -> Option<(&[Point], &[[u32; 3]])> {
         self.ladder.as_ref().and_then(FillLadder::mesh)
@@ -1538,6 +1547,7 @@ impl FillEngine {
         ]
     }
 
+    #[cfg(test)]
     pub(crate) fn scratch_sizes() -> Option<(usize, usize, usize)> {
         FillScratch::sizes(FILL_V0_LIMITS)
     }

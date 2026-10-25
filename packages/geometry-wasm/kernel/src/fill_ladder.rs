@@ -1581,32 +1581,14 @@ impl FastRung {
         // vertex in today's order (diagonal index, then direction). `helper` is free after the
         // sweep and serves as the write cursor.
         let half_count = count + 2 * diagonal_len;
-        diagonal_start[..=count].fill(0);
-        for &(a, b) in diagonals {
-            diagonal_start[a + 1] += 1;
-            diagonal_start[b + 1] += 1;
-        }
-        for vertex in 0..count {
-            diagonal_start[vertex + 1] += diagonal_start[vertex];
-        }
-        diagonal_halves[..2 * diagonal_len].fill(0);
-        helper[..count].copy_from_slice(&diagonal_start[..count]);
-        let reversed_index = fault(LadderFault::DiagonalIndexReversed);
-        for half in count..half_count {
-            let (a, b) = diagonals[(half - count) / 2];
-            let origin = if (half - count).is_multiple_of(2) {
-                a
-            } else {
-                b
-            };
-            diagonal_halves[helper[origin]] = half;
-            helper[origin] += 1;
-        }
-        if reversed_index {
-            for vertex in 0..count {
-                diagonal_halves[diagonal_start[vertex]..diagonal_start[vertex + 1]].reverse();
-            }
-        }
+        index_diagonals(
+            count,
+            diagonals,
+            diagonal_start,
+            diagonal_halves,
+            helper,
+            fault(LadderFault::DiagonalIndexReversed),
+        );
 
         // Monotone pieces: trace the faces left of every boundary half-edge (v → next(v)) and of
         // both directions of every diagonal. At w, arriving from u, the next half-edge is the
@@ -2855,6 +2837,77 @@ impl Sweep<'_> {
             }
         }
     }
+}
+
+/// E14-K3: the per-vertex diagonal index of `Graph`, a counting sort of the diagonal half-edges
+/// n + 2k (origin a) and n + 2k + 1 (origin b) by origin that keeps half-edge order. `cursor`
+/// (at least `count` long) is scratch. `reversed` is the seeded defect E14-D4.
+fn index_diagonals(
+    count: usize,
+    diagonals: &[(usize, usize)],
+    start: &mut [usize],
+    halves: &mut [usize],
+    cursor: &mut [usize],
+    reversed: bool,
+) {
+    start[..=count].fill(0);
+    for &(a, b) in diagonals {
+        start[a + 1] += 1;
+        start[b + 1] += 1;
+    }
+    for vertex in 0..count {
+        start[vertex + 1] += start[vertex];
+    }
+    halves[..2 * diagonals.len()].fill(0);
+    cursor[..count].copy_from_slice(&start[..count]);
+    for half in count..count + 2 * diagonals.len() {
+        let (a, b) = diagonals[(half - count) / 2];
+        let origin = if (half - count).is_multiple_of(2) {
+            a
+        } else {
+            b
+        };
+        halves[cursor[origin]] = half;
+        cursor[origin] += 1;
+    }
+    if reversed {
+        for vertex in 0..count {
+            halves[start[vertex]..start[vertex + 1]].reverse();
+        }
+    }
+}
+
+/// E14-D4 hook: `next_half` on half-edge `half` of a synthetic graph (`next` is the boundary
+/// successor of each vertex), with the diagonal index in today's order or reversed.
+#[cfg(test)]
+pub(crate) fn graph_select_for_tests(
+    vertices: &[Point],
+    next: &[usize],
+    diagonals: &[(usize, usize)],
+    half: usize,
+    reversed: bool,
+) -> Result<usize, Reason> {
+    let count = vertices.len();
+    let mut start = vec![0; count + 1];
+    let mut halves = vec![0; 2 * diagonals.len()];
+    let mut cursor = vec![0; count];
+    index_diagonals(
+        count,
+        diagonals,
+        &mut start,
+        &mut halves,
+        &mut cursor,
+        reversed,
+    );
+    let graph = Graph {
+        vertices,
+        next,
+        diagonals,
+        count,
+        diagonal_start: &start,
+        diagonal_halves: &halves,
+    };
+    graph.next_half(half, &mut Work::new())
 }
 
 /// The planar graph of boundary edges and diagonals for the FR7 face tracing. Half-edge h < n

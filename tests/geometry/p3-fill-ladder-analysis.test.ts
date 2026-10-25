@@ -49,7 +49,7 @@ const manifest = path.join(root, 'packages/geometry-wasm/kernel/Cargo.toml');
 type Mutable<T> = { -readonly [K in keyof T]: Mutable<T[K]> };
 const clone = <T>(value: T): Mutable<T> => JSON.parse(JSON.stringify(value)) as Mutable<T>;
 /** `configHash(ratioModeConfig('reference'))`, recorded in the plan for AL-U6. */
-const RATIO_CONFIG_HASH = 'ff36ec78a920d704df431cf411f9c064bf1d3a0cb21523c83857a6bdad9ef9c3';
+const RATIO_CONFIG_HASH = '4c0b7b0569e77a1f0d87c0cff733fafdbd9afe6328c59c54f254c2d0d4059157';
 /** `configHash(scenarioConfig('reference'))`, recorded in the plan when AL-U5 merges. */
 const REFERENCE_CONFIG_HASH = '8f07f1467b1e396fd1a9c02e6f27c17131cf203e287b5ea690391536b7f3672e';
 
@@ -60,7 +60,7 @@ describe('P3 Alt-A1 AL-S1 configuration (section 5.3)', () => {
     const config = scenarioConfig('reference');
     expect(config.scenario).toEqual({ id: 'p3-fill-ladder', version: 1 });
     expect(config.runner).toBe('p3-fill-ladder-runner/1');
-    expect(config.operation).toMatchObject({ id: 'geometry-wasm/fill-v0+r2', revision: 2 });
+    expect(config.operation).toMatchObject({ id: 'geometry-wasm/fill-v0+r3', revision: 3 });
     expect(config.cells).toEqual(b0ScenarioConfig('reference').cells);
     expect(config.decision).toEqual(b0ScenarioConfig('reference').decision);
     expect(config.decision.wasmFactor).toBe(2);
@@ -116,7 +116,7 @@ describe('P3 Alt-A1 AL-S1 configuration (section 5.3)', () => {
 
 function syntheticOracle(): LadderOracleResults {
   return {
-    dump: { sha256: '0', bytes: 1, entries: 1, revision: 2 },
+    dump: { sha256: '0', bytes: 1, entries: 1, revision: 3 },
     gates: Object.fromEntries(
       ORACLE_GATES.map((id) => [id, { checked: 1, failures: [] }]),
     ) as unknown as LadderOracleResults['gates'],
@@ -144,7 +144,7 @@ function syntheticRecord(
     (_, repetition) => ({
       kind: 'decision',
       repetition,
-      revision: 2,
+      revision: 3,
       clockQuantumNs: 1,
       engine: { inlineBytes: 1, heapBytes: 1 },
       admission: decision.map((cell) => ({
@@ -435,7 +435,7 @@ function syntheticRatio(repetition: number): RatioOutput {
   return {
     kind: 'ratio',
     repetition,
-    revision: 2,
+    revision: 3,
     clockQuantumNs: 100,
     calls: config.calls,
     onePathCalls: config.onePath.calls,

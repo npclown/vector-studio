@@ -64,9 +64,9 @@ describe('AL-S2 configuration', () => {
     expect(CORPUS_SHA256.startsWith('206cf6e9') && CORPUS_SHA256.endsWith('9796')).toBe(true);
     expect(config.native).toEqual(ratioModeConfig('reference'));
     expect(configHash(config.native)).toBe(
-      'ff36ec78a920d704df431cf411f9c064bf1d3a0cb21523c83857a6bdad9ef9c3',
+      '4c0b7b0569e77a1f0d87c0cff733fafdbd9afe6328c59c54f254c2d0d4059157',
     );
-    expect(config.operation.id).toBe('geometry-wasm/fill-v0+r2');
+    expect(config.operation.id).toBe('geometry-wasm/fill-v0+r3');
     expect(config.sampling).toMatchObject({ repetitions: 5, warmup: 3, timed: 20, calls: 100 });
     expect(config.sampling.onePath).toEqual({ cells: largestCells(), path: 0, calls: 1000 });
     expect(largestCells()).toEqual(['P2/s=16', 'P4/s=16', 'P8/s=8']);
@@ -210,7 +210,7 @@ function nativeOutputs(profile: 'functional' | 'reference'): RatioOutput[] {
     return {
       kind: 'ratio',
       repetition,
-      revision: 2,
+      revision: 3,
       clockQuantumNs: 100,
       calls: config.calls,
       onePathCalls: config.onePath.calls,
@@ -255,7 +255,7 @@ function captureFor(
     options: { ...pageOptions(config, wasmSha256), repetition },
     wasmSha256,
     corpusSha256: CORPUS_SHA256,
-    adapter: { operationId: 'geometry-wasm/fill-v0+r2', portVersion: 0 },
+    adapter: { operationId: 'geometry-wasm/fill-v0+r3', portVersion: 0 },
     crossOriginIsolated: true,
     clockProbe: {
       attempts: 10,

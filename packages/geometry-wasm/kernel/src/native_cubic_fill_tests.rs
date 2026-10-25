@@ -1878,8 +1878,8 @@ fn emit_composition_rows(
     let mut workspace = BridgeWorkspace::new(LIMITS).expect("construct mixed cubic workspace");
     let allocated_bytes = workspace.allocated_bytes();
     let inline_bytes = size_of::<BridgeWorkspace>();
-    assert_eq!(allocated_bytes, 2_908_672);
-    assert_eq!(inline_bytes, 42_952);
+    assert_eq!(allocated_bytes, 3_498_880);
+    assert_eq!(inline_bytes, 24_304);
     println!("{begin_marker}");
     for (row, expectation) in rows.iter().zip(expected) {
         assert_eq!(row.id, expectation.id);

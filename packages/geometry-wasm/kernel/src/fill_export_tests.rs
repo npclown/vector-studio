@@ -17,7 +17,7 @@ use crate::fill_export::{
     FILL_PATH_UNSUPPORTED_GEOMETRY, FILL_PATH_WORK_LIMIT, FILL_V0_LIMITS, FILL_V0_REVISION,
     FILL_V0_VERSION, INPUT_CAP_BYTES, OUTPUT_CAP_BYTES,
 };
-use crate::fill_ladder::{with_ladder_faults, LadderFault, Reason, Rung};
+use crate::fill_ladder::{with_ladder_faults, LadderFault, Reason, Rung, MAX_FAST_WORK};
 use crate::fill_predicates::orient2d;
 use crate::geometry::{
     Point, PATH_EMPTY, PATH_INVALID, PATH_INVALID_TOLERANCE, PATH_NUMERIC_RANGE, PATH_OK,
@@ -1308,6 +1308,61 @@ fn self_check_failure_is_internal_error_and_the_engine_recovers() {
     engine.hooks().fault_path = None;
     assert_eq!(engine.process(input.len() as u32), BATCH_OK);
     assert_eq!(engine.output_bytes(), expected.as_slice());
+}
+
+/// D9 E14-G3: `process` allocates nothing and moves no storage on rung 0's E14-F2, E14-F3 and
+/// E14-F5, and on E14-F3 under a lowered work cap (rung 0 `WORK`), which stands in for E14-F8:
+/// no path within E0 and 64 sources reaches W0 (E14-U1 evidence).
+#[test]
+fn e14_g3_process_does_not_allocate_on_rung0_fixtures() {
+    use crate::e14_fill_rung0_tests::{circle, f5, Fixture};
+    let test_path = |id: u32, fixture: Fixture| TestPath {
+        id,
+        rule: match fixture.rule {
+            LineFillRule::Nonzero => NONZERO,
+            LineFillRule::Evenodd => EVENODD,
+        },
+        exponent: fixture.exponent,
+        verbs: fixture.verbs,
+        points: fixture.points,
+    };
+    let paths = [
+        test_path(1, circle(-3, 2_048.0)),
+        test_path(2, circle(-3, 32_768.0)),
+        test_path(3, f5()),
+    ];
+    let input = pack(&paths);
+    let mut engine = FillEngine::new();
+    load(&mut engine, &input, 1 << 20);
+    let workspace_bytes = engine.workspace().unwrap().allocated_bytes();
+    let storage = engine.storage();
+    for cap in [None, Some(1_000)] {
+        let statuses = crate::fill_ladder::with_work_cap(cap.or(Some(MAX_FAST_WORK)), || {
+            engine.input_bytes_mut()[..input.len()].copy_from_slice(&input);
+            crate::allocation_test_support::start();
+            let status = engine.process(input.len() as u32);
+            let allocations = crate::allocation_test_support::stop();
+            assert_eq!(status, BATCH_OK);
+            assert_eq!(allocations, 0, "process must not allocate");
+            assert_eq!(engine.storage(), storage);
+            decode(engine.output_bytes(), &paths)
+                .iter()
+                .map(|mesh| mesh.status)
+                .collect::<Vec<_>>()
+        });
+        // Under the lowered cap E14-F2 and E14-F3 stop at `WORK` and fall back to the exact
+        // rung, whose `CommandLimit` is `work-limit`.
+        let rung0 = if cap.is_none() {
+            FILL_PATH_OK
+        } else {
+            FILL_PATH_WORK_LIMIT
+        };
+        assert_eq!(statuses, [rung0, rung0, FILL_PATH_WORK_LIMIT], "{cap:?}");
+    }
+    assert_eq!(
+        engine.workspace().unwrap().allocated_bytes(),
+        workspace_bytes
+    );
 }
 
 #[test]

@@ -51,7 +51,15 @@
 // FAIL: the base is not a path failure and any field differs, or a record is missing or extra.
 // internal-regression (also FAIL, reported separately): a base path failure becomes an internal
 // error, a batch failure or an unrecognized code. The run passes only with no FAIL. Every other
-// step (O5, O7, coverage floors, oracles, revisions) is unchanged. Excludes `--revision-change`.
+// step (O5, O7, coverage floors, oracles, revisions) is unchanged.
+//
+// `--failure-to-success --revision-change` together (E14-U1, docs/plans/
+// d9-e14-fill-rung0-edge-cap-contract.md section 7, E14-G1): the failure-to-success
+// classification with the revision rule of `--revision-change` (branch = merge base + 1). The two
+// size records `meta/cubic-workspace-sizes` and `meta/fill-engine-sizes` are recorded as changes,
+// printed base against branch, instead of failing; every other META record and every output
+// record keeps the failure-to-success rule. The rung record and the oracle validation of
+// `--revision-change` alone do not run in this mode.
 //
 // Re-comparison of a finished run, with an optional tampered digest:
 //   node tooling/compare-p3-fill-identity.mjs --compare-only <run-dir> [--tamper <case>]
@@ -393,8 +401,6 @@ export function parseArguments(args) {
     else throw new Error(`Unknown argument ${flag}.`);
     index += 2;
   }
-  if (options.revisionChange && options.failureToSuccess)
-    throw new Error('--revision-change and --failure-to-success exclude each other.');
   if (options.tamper !== null && options.compareOnly === null)
     throw new Error('--tamper is accepted only with --compare-only.');
   if (options.selfTest && args.length !== 1)
@@ -454,6 +460,8 @@ export function parseRungRecord(text) {
 const CASCADE_SUFFIX = '/fill_v0_cascade';
 /** The one case that `--revision-change` exempts from identity, by exact name. */
 export const FILL_ENGINE_META = 'meta/fill-engine-sizes';
+/** The size records that the combined mode (E14-G1) records as changes, by exact name. */
+export const SIZE_RECORDS = ['meta/cubic-workspace-sizes', FILL_ENGINE_META];
 const PATH_OK_CODE = 'path_status=0';
 
 /** The rung-record path of a native cascade or WASM case, or null for an entry or meta case. */
@@ -670,13 +678,15 @@ export function differingFields(base, branch) {
  * with both codes) and otherwise is an internal-regression. A record missing from the branch or
  * only on the branch is a FAIL. `fail` includes `internalRegression`.
  */
-export function classifyFailureToSuccessLayer(layer, base, branch) {
+export function classifyFailureToSuccessLayer(layer, base, branch, recordedChanges = []) {
   const result = {
     counts: { identical: 0, allowedChange: 0, fail: 0, internalRegression: 0 },
     allowed: [],
     fails: [],
     internalRegressions: [],
+    recordedChanges: [],
   };
+  const recorded = new Set(recordedChanges);
   const fail = (name, reason) => {
     result.counts.fail += 1;
     result.fails.push({ layer, case: name, reason });
@@ -688,6 +698,11 @@ export function classifyFailureToSuccessLayer(layer, base, branch) {
       continue;
     }
     const differing = differingFields(old, current);
+    // E14-G1: a size record named by the combined mode is recorded, base against branch.
+    if (recorded.has(name) && differing.length > 0) {
+      result.recordedChanges.push({ layer, case: name, base: old.digest, branch: current.digest });
+      continue;
+    }
     if (classifyOutcome(old.code) !== 'path-failure') {
       if (differing.length === 0) result.counts.identical += 1;
       else
@@ -716,11 +731,14 @@ export function classifyFailureToSuccessLayer(layer, base, branch) {
   return result;
 }
 
-/** Both layers: `input` is { native: { base, branch }, wasm: { base, branch } }. */
-export function classifyFailureToSuccess(input) {
+/**
+ * Both layers: `input` is { native: { base, branch }, wasm: { base, branch } }. `recordedChanges`
+ * names the records the combined mode records as changes (`SIZE_RECORDS`), none otherwise.
+ */
+export function classifyFailureToSuccess(input, recordedChanges = []) {
   const layers = [
-    classifyFailureToSuccessLayer('native', input.native.base, input.native.branch),
-    classifyFailureToSuccessLayer('wasm', input.wasm.base, input.wasm.branch),
+    classifyFailureToSuccessLayer('native', input.native.base, input.native.branch, recordedChanges),
+    classifyFailureToSuccessLayer('wasm', input.wasm.base, input.wasm.branch, recordedChanges),
   ];
   const counts = { identical: 0, allowedChange: 0, fail: 0, internalRegression: 0 };
   for (const layer of layers)
@@ -730,6 +748,7 @@ export function classifyFailureToSuccess(input) {
     counts,
     perLayer: { native: layers[0].counts, wasm: layers[1].counts },
     allowed: layers.flatMap((layer) => layer.allowed),
+    recordedChanges: layers.flatMap((layer) => layer.recordedChanges),
     fails,
     internalRegressions: layers.flatMap((layer) => layer.internalRegressions),
     failures: fails.map((item) => `${item.layer}: ${item.case}: ${item.reason}`),
@@ -742,7 +761,7 @@ export function classifyFailureToSuccess(input) {
  * and one WASM case whose base record is `ok`, each tampered on its own, must be reported as a
  * FAIL naming that case.
  */
-export function failureToSuccessTamperChecks(input) {
+export function failureToSuccessTamperChecks(input, recordedChanges = []) {
   const pick = (layer) =>
     [...input[layer].base].find(
       ([name, entry]) => classifyOutcome(entry.code) === 'ok' && input[layer].branch.has(name),
@@ -754,7 +773,7 @@ export function failureToSuccessTamperChecks(input) {
       ...input,
       [layer]: { ...input[layer], branch: tamper(input[layer].branch, name) },
     };
-    const { fails } = classifyFailureToSuccess(tampered);
+    const { fails } = classifyFailureToSuccess(tampered, recordedChanges);
     return {
       case: name,
       detected: fails.some((item) => item.layer === layer && item.case === name),
@@ -1347,6 +1366,10 @@ function reportFailureToSuccess(result) {
     console.log(
       `  allowed change ${item.layer} ${item.case}: ${item.baseCode} -> ${item.branchCode}`,
     );
+  for (const item of result.recordedChanges ?? [])
+    console.log(
+      `  recorded change ${item.layer} ${item.case}: base ${item.base} -> branch ${item.branch}`,
+    );
   for (const failure of result.failures.slice(0, 25))
     console.error(`P3 B0R identity: failure-to-success FAIL ${failure}`);
 }
@@ -1357,6 +1380,7 @@ function failureToSuccessRecord(result) {
     counts: result.counts,
     perLayer: result.perLayer,
     allowedChanges: result.allowed,
+    recordedChanges: result.recordedChanges ?? [],
     internalRegressions: result.internalRegressions,
     fails: result.fails,
     pass: result.pass,
@@ -1387,7 +1411,7 @@ function compareOnly(directory, tamperCase, revisionChange, failureToSuccess = f
       ? ['revisions.json is missing from the run directory']
       : [];
   for (const failure of revisionFailures) console.error(`P3 B0R identity: FAIL ${failure}`);
-  if (revisionChange) {
+  if (revisionChange && !failureToSuccess) {
     const rungs = parseRungRecord(readFileSync(path.join(directory, 'rungs-branch.tsv'), 'utf8'));
     const validation = loadValidation(path.join(directory, 'oracle-validation.json'));
     const result = revisionChangeResult({ native, wasm, rungs }, validation);
@@ -1395,7 +1419,7 @@ function compareOnly(directory, tamperCase, revisionChange, failureToSuccess = f
     return cross.equal && revisionFailures.length === 0 && result.failures.length === 0;
   }
   if (failureToSuccess) {
-    const result = classifyFailureToSuccess({ native, wasm });
+    const result = classifyFailureToSuccess({ native, wasm }, revisionChange ? SIZE_RECORDS : []);
     reportFailureToSuccess(result);
     if (tamperCase === null && existsSync(directory))
       writeFileSync(
@@ -1747,10 +1771,113 @@ function selfTestFailureToSuccess() {
   return pass;
 }
 
+/**
+ * The combined `--failure-to-success --revision-change` self-test (E14-G1) on synthetic records:
+ * the two size records are recorded as changes and every other record keeps the
+ * failure-to-success rule; the compare-only plumbing requires branch = base + 1, and
+ * failure-to-success alone still fails a size record change.
+ */
+function selfTestCombined() {
+  const record = (label, code = 'path_status=0') => ({
+    digest: sha256(label),
+    allocations: 0,
+    code,
+    crossings: 0,
+  });
+  const A = 'rnd/T/0000/fill_v0_cascade';
+  const F = 'rnd/T/0001/fill_v0_cascade';
+  const nativeBase = () =>
+    new Map([
+      ['meta/cubic-workspace-sizes', record('cubic', 'META')],
+      [FILL_ENGINE_META, record('engine', 'META')],
+      ['meta/other', record('other', 'META')],
+      [A, record('a')],
+      [F, record('f', 'path_status=5')],
+    ]);
+  const wasmBase = () =>
+    new Map([
+      ['wasm/rnd/T/0000', record('a')],
+      ['wasm/rnd/T/0001', record('f', 'path_status=5')],
+    ]);
+  const resized = () => {
+    const native = nativeBase();
+    native.set('meta/cubic-workspace-sizes', record('cubic2', 'META'));
+    native.set(FILL_ENGINE_META, record('engine2', 'META'));
+    native.set(F, record('f-ok'));
+    return native;
+  };
+  const wasmResized = () => {
+    const wasm = wasmBase();
+    wasm.set('wasm/rnd/T/0001', record('f-ok'));
+    return wasm;
+  };
+  const classify = (native, recorded) =>
+    classifyFailureToSuccess(
+      {
+        native: { base: nativeBase(), branch: native },
+        wasm: { base: wasmBase(), branch: wasmResized() },
+      },
+      recorded,
+    );
+  const sized = classify(resized(), SIZE_RECORDS);
+  const sizedOk =
+    sized.pass &&
+    sized.recordedChanges.length === 2 &&
+    sized.counts.allowedChange === 2 &&
+    sized.counts.fail === 0;
+  const aloneFails = !classify(resized(), []).pass;
+  const otherMeta = resized();
+  otherMeta.set('meta/other', record('other2', 'META'));
+  const otherFails = !classify(otherMeta, SIZE_RECORDS).pass;
+  const okChanged = resized();
+  okChanged.set(A, record('a2'));
+  const okFails = !classify(okChanged, SIZE_RECORDS).pass;
+  const tamperChecks = failureToSuccessTamperChecks(
+    {
+      native: { base: nativeBase(), branch: resized() },
+      wasm: { base: wasmBase(), branch: wasmResized() },
+    },
+    SIZE_RECORDS,
+  );
+  const tampers = tamperChecks.length === 2 && tamperChecks.every((check) => check.detected);
+  let plumbing = false;
+  mkdirSync(temporary, { recursive: true });
+  const directory = mkdtempSync(path.join(temporary, 'p3-fill-identity-combined-self-test-'));
+  try {
+    const rows = (map) =>
+      `${[...map]
+        .map(
+          ([name, entry]) =>
+            `${name}\t${entry.digest}\t${entry.allocations}\t${entry.code}\t${entry.crossings}`,
+        )
+        .join('\n')}\n`;
+    writeFileSync(path.join(directory, 'native-base.tsv'), rows(nativeBase()));
+    writeFileSync(path.join(directory, 'native-branch.tsv'), rows(resized()));
+    writeFileSync(path.join(directory, 'wasm-base.tsv'), rows(wasmBase()));
+    writeFileSync(path.join(directory, 'wasm-branch.tsv'), rows(wasmResized()));
+    const revisions = (base, branch) =>
+      writeFileSync(path.join(directory, 'revisions.json'), `${JSON.stringify({ base, branch })}\n`);
+    revisions(2, 3);
+    const combined = compareOnly(directory, null, true, true);
+    const alone = compareOnly(directory, null, false, true);
+    revisions(3, 3);
+    const unrevised = compareOnly(directory, null, true, true);
+    plumbing = combined && !alone && !unrevised;
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+  const pass = sizedOk && aloneFails && otherFails && okFails && tampers && plumbing;
+  console.log(
+    `P3 B0R identity self-test (failure-to-success+revision-change): size records recorded ${sizedOk ? 'ok' : 'WRONG'}; failure-to-success alone ${aloneFails ? 'fails them' : 'NOT DETECTED'}; other META ${otherFails ? 'detected' : 'NOT DETECTED'}; ok record ${okFails ? 'detected' : 'NOT DETECTED'}; tamper checks ${tampers ? 'detected' : 'NOT DETECTED'}; compare-only ${plumbing ? 'ok' : 'WRONG'}; ${pass ? 'PASS' : 'FAIL'}`,
+  );
+  return pass;
+}
+
 function selfTest() {
   const revisionChange = selfTestRevisionChange();
   const failureToSuccess = selfTestFailureToSuccess();
-  return revisionChange && failureToSuccess;
+  const combined = selfTestCombined();
+  return revisionChange && failureToSuccess && combined;
 }
 
 async function fullRun(options) {
@@ -1770,7 +1897,7 @@ async function fullRun(options) {
   const output = path.join(root, 'artifacts/p3-b0r-identity', runId);
   mkdirSync(output, { recursive: true });
   console.log(
-    `P3 B0R identity: base ${baseCommit}, head ${headCommit}, mode ${options.revisionChange ? 'revision-change' : options.failureToSuccess ? 'failure-to-success' : 'plain'}, output ${path.relative(root, output)}`,
+    `P3 B0R identity: base ${baseCommit}, head ${headCommit}, mode ${options.revisionChange && options.failureToSuccess ? 'failure-to-success+revision-change' : options.revisionChange ? 'revision-change' : options.failureToSuccess ? 'failure-to-success' : 'plain'}, output ${path.relative(root, output)}`,
   );
 
   const b0 = await import(pathToFileURL(path.join(root, 'tests/geometry/p3-b0/corpus.ts')).href);
@@ -1902,7 +2029,8 @@ async function fullRun(options) {
     let revisionInput = null;
     let f2sInput = null;
     let failureToSuccess = null;
-    if (options.revisionChange) {
+    const combined = options.revisionChange && options.failureToSuccess;
+    if (options.revisionChange && !combined) {
       const rungs = timed(durations, 'rungRecordMs', () =>
         dumpRungs(corpora, path.join(output, 'rungs-branch.tsv'), options.threads),
       );
@@ -1940,7 +2068,7 @@ async function fullRun(options) {
         native: { base: native.base, branch: native.branch },
         wasm: { base: wasm.base, branch: wasm.branch },
       };
-      const result = classifyFailureToSuccess(f2sInput);
+      const result = classifyFailureToSuccess(f2sInput, combined ? SIZE_RECORDS : []);
       reportFailureToSuccess(result);
       writeFileSync(
         path.join(output, 'failure-to-success.json'),
@@ -1988,10 +2116,12 @@ async function fullRun(options) {
     const wasmTamperCase = [...wasm.branch.keys()][0];
     // Revision-change mode tampers an AL-I1 entry case and an unchanged WASM case and needs the
     // classification to report each (AL-U3); plain mode keeps its exactly-one-difference check.
-    const tamperChecks = options.revisionChange
-      ? revisionTamperChecks(revisionInput)
-      : options.failureToSuccess
-        ? failureToSuccessTamperChecks(f2sInput)
+    const tamperChecks = combined
+      ? failureToSuccessTamperChecks(f2sInput, SIZE_RECORDS)
+      : options.revisionChange
+        ? revisionTamperChecks(revisionInput)
+        : options.failureToSuccess
+          ? failureToSuccessTamperChecks(f2sInput)
         : [
             tamperSelfCheck(native.base, native.branch, nativeTamperCase),
             tamperSelfCheck(wasm.base, wasm.branch, wasmTamperCase),
@@ -2004,11 +2134,13 @@ async function fullRun(options) {
       tool: 'compare-p3-fill-identity/2',
       contract: 'docs/plans/p3-b0r-kernel-performance-contract.md',
       amendedBy: 'docs/plans/p3-alt-a1-fill-ladder-contract.md',
-      mode: options.revisionChange
-        ? 'revision-change'
-        : options.failureToSuccess
-          ? 'failure-to-success'
-          : 'plain',
+      mode: combined
+        ? 'failure-to-success+revision-change'
+        : options.revisionChange
+          ? 'revision-change'
+          : options.failureToSuccess
+            ? 'failure-to-success'
+            : 'plain',
       runId,
       utcStart: started.toISOString(),
       utcEnd: new Date().toISOString(),
