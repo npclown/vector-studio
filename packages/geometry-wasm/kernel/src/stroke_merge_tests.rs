@@ -1,9 +1,10 @@
-//! D9 rendering-track item E2, units E2-U1 and E2-U2
-//! (`docs/plans/d9-e2-stroke-fast-rung-contract.md`, sections 4, 7 and 8): the fixture table
-//! E2-F1 to E2-F8 at `stroke-v0+r6` beside the `r5` and `r4` inputs (the A/B switches
-//! `no_band_rule` and `unmerged`), the lossless-merge check E2-A4 on every fixture, the
-//! seeded defect E2-D1, storage, determinism and allocation, and the ignored differential that
-//! runs E2-G1, E2-G2 and E2-A4 over the E11-U2 scene, the corpus E1-C1 and the ST-U3b families.
+//! D9 rendering-track item E2, units E2-U1 to E2-U3
+//! (`docs/plans/d9-e2-stroke-fast-rung-contract.md`, sections 4 to 8): the fixture table
+//! E2-F1 to E2-F8 at `stroke-v0+r7` beside the `r6`, `r5` and `r4` inputs (the A/B switches
+//! `no_family_b`, `no_band_rule` and `unmerged`), the lossless-merge check E2-A4 on every
+//! fixture, E2-K3's region check E2-A5, the seeded defects E2-D1 and E2-D4, storage,
+//! determinism and allocation, and the ignored differential that runs E2-G1, E2-G2, E2-A4 and
+//! E2-A5 over the E11-U2 scene, the corpus E1-C1 and the ST-U3b families.
 //!
 //! The ignored differential runs by hand, in the release profile, with one test thread:
 //!
@@ -14,7 +15,8 @@
 //! ```
 //!
 //! `e2_differential` is E2-U1's `r4` against `r5`; `e2_u2_differential` is E2-U2's `r5`
-//! against `r6`, run the same way.
+//! against `r6`; `e2_u3_differential` is `r4` against E2-U3's `r7`, the whole of E2 against
+//! its baseline (the E2-U2 record's gate reading); all run the same way.
 //!
 //! `scene.txt` is the E11-U2 scene `p3-exit-stress/v1` written by the dump in
 //! `docs/evidence/e2-u1-2026-10-24/dump_scene_lines.test.ts.txt`. Either variable may be left
@@ -25,6 +27,7 @@ use std::collections::HashMap;
 use std::env;
 use std::time::Instant;
 
+use crate::fill_ladder::Reason;
 use crate::fill_predicates::orient2d;
 use crate::geometry::Point;
 use crate::rounded_line_fill::RoundedFillError;
@@ -94,19 +97,21 @@ fn status_of(outcome: StrokeOutcome) -> u32 {
     }
 }
 
-/// The stroke front-end revision a workspace runs: `R4` and `R5` are the test-only A/B
-/// switches `unmerged` and `no_band_rule`; `R6` is production.
+/// The stroke front-end revision a workspace runs: `R4`, `R5` and `R6` are the test-only A/B
+/// switches `unmerged`, `no_band_rule` and `no_family_b`; `R7` is production.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Rev {
     R4,
     R5,
     R6,
+    R7,
 }
 
 pub(crate) fn workspace(rev: Rev) -> StrokeWorkspace {
     let mut workspace = StrokeWorkspace::new().expect("the stroke workspace reserves");
     workspace.defects_mut().unmerged = rev == Rev::R4;
     workspace.defects_mut().no_band_rule = rev == Rev::R5;
+    workspace.defects_mut().no_family_b = rev == Rev::R6;
     workspace
 }
 
@@ -411,6 +416,53 @@ fn lossless(ws: &StrokeWorkspace, seeded: usize, extra: &[Point]) -> Result<A4Co
     Ok(counts)
 }
 
+/// E2-A5 on the last build of `ws`, which E2-K3 published: every triangle is strictly
+/// positive (AL-FR9 item 1, rechecked), and at the seeded points and every triangle centroid
+/// the mesh covers a point exactly once where the merged contours' nonzero winding is nonzero
+/// and not at all elsewhere (no overlap, no gap, the same region). Points on an edge of either
+/// side are skipped. Returns the number of points compared.
+fn family_b_region(ws: &StrokeWorkspace, seeded: usize) -> Result<usize, String> {
+    if ws.family_b() != Some(Ok(())) {
+        return Err(format!("E2-K3 did not publish: {:?}", ws.family_b()));
+    }
+    let (vertices, triangles, _) = ws.mesh().ok_or("no mesh")?;
+    let corners: Vec<[Point; 3]> = triangles
+        .chunks_exact(3)
+        .map(|t| {
+            [
+                vertices[t[0] as usize],
+                vertices[t[1] as usize],
+                vertices[t[2] as usize],
+            ]
+        })
+        .collect();
+    for (index, [a, b, c]) in corners.iter().enumerate() {
+        if orient2d(*a, *b, *c) != Ok(Ordering::Greater) {
+            return Err(format!("triangle {index} is not strictly positive"));
+        }
+    }
+    let mut points = seeded_points(ws, seeded);
+    points.extend(centroids(ws));
+    let mut compared = 0usize;
+    for point in points {
+        let Some(region) = winding(ws.merge().contours(), point) else {
+            continue;
+        };
+        let Some(covered) = winding(corners.iter().map(|corner| &corner[..]), point) else {
+            continue;
+        };
+        let expected = i64::from(region != 0);
+        if covered != expected {
+            return Err(format!(
+                "at ({}, {}): mesh cover {covered}, contour winding {region}",
+                point.x, point.y
+            ));
+        }
+        compared += 1;
+    }
+    Ok(compared)
+}
+
 /// The centroids of the triangles of the last mesh of `ws`, if it published one.
 fn centroids(ws: &StrokeWorkspace) -> Vec<Point> {
     let Some((vertices, triangles, _)) = ws.mesh() else {
@@ -450,6 +502,9 @@ struct Fixture {
     r5: Expected,
     /// E2-U2 (contract section 8): F3 meets the band rule; F4 stays `work-limit`.
     r6: Expected,
+    /// E2-U3 (contract section 8): E2-K3's outcome, `Ok(())` when it publishes, otherwise its
+    /// fallback reason; `None` when it is not tried.
+    r7: Option<Result<(), Reason>>,
 }
 
 fn fixtures() -> Vec<Fixture> {
@@ -465,6 +520,7 @@ fn fixtures() -> Vec<Fixture> {
             r4: (0, None),
             r5: Expected::Ok,
             r6: Expected::Ok,
+            r7: Some(Ok(())),
         },
         Fixture {
             name: "E2-F2",
@@ -473,6 +529,7 @@ fn fixtures() -> Vec<Fixture> {
             r4: (work, input),
             r5: Expected::Ok,
             r6: Expected::Ok,
+            r7: Some(Ok(())),
         },
         Fixture {
             name: "E2-F3",
@@ -481,6 +538,7 @@ fn fixtures() -> Vec<Fixture> {
             r4: (work, pieces),
             r5: Expected::WorkLimit,
             r6: Expected::Ok,
+            r7: Some(Ok(())),
         },
         Fixture {
             name: "E2-F4",
@@ -489,6 +547,7 @@ fn fixtures() -> Vec<Fixture> {
             r4: (work, pieces),
             r5: Expected::WorkLimit,
             r6: Expected::WorkLimit,
+            r7: Some(Err(Reason::Clearance)),
         },
         Fixture {
             name: "E2-F5",
@@ -497,6 +556,7 @@ fn fixtures() -> Vec<Fixture> {
             r4: (work, input),
             r5: Expected::Ok,
             r6: Expected::Ok,
+            r7: Some(Ok(())),
         },
         Fixture {
             name: "E2-F6",
@@ -505,6 +565,7 @@ fn fixtures() -> Vec<Fixture> {
             r4: (0, None),
             r5: Expected::Ok,
             r6: Expected::Ok,
+            r7: Some(Err(Reason::Crossing)),
         },
         Fixture {
             name: "E2-F7",
@@ -513,6 +574,7 @@ fn fixtures() -> Vec<Fixture> {
             r4: (0, None),
             r5: Expected::Recorded,
             r6: Expected::Recorded,
+            r7: Some(Ok(())),
         },
         Fixture {
             name: "E2-F7r",
@@ -521,6 +583,7 @@ fn fixtures() -> Vec<Fixture> {
             r4: (0, None),
             r5: Expected::Recorded,
             r6: Expected::Recorded,
+            r7: Some(Err(Reason::Crossing)),
         },
         Fixture {
             name: "E2-F8",
@@ -529,21 +592,46 @@ fn fixtures() -> Vec<Fixture> {
             r4: (0, None),
             r5: Expected::Recorded,
             r6: Expected::Recorded,
+            r7: Some(Err(Reason::Crossing)),
         },
     ]
 }
 
 #[test]
 fn e2_fixture_table_and_lossless_merge() {
-    let mut sides = [Rev::R4, Rev::R5, Rev::R6].map(workspace);
+    let mut sides = [Rev::R4, Rev::R5, Rev::R6, Rev::R7].map(workspace);
     for fixture in fixtures() {
         let bytes = fixture.path.bytes();
-        let [r4, r5, r6] = &mut sides;
+        let [r4, r5, r6, r7] = &mut sides;
         let old = observe(r4, &fixture.path.verbs, &bytes, fixture.request);
         let extra = centroids(r4);
         let mid = observe(r5, &fixture.path.verbs, &bytes, fixture.request);
         let new = observe(r6, &fixture.path.verbs, &bytes, fixture.request);
         let a4 = [lossless(r5, 4_096, &extra), lossless(r6, 4_096, &extra)];
+        let last = observe(r7, &fixture.path.verbs, &bytes, fixture.request);
+        println!(
+            "{}: r7 {} {:?}, E2-K3 {:?}",
+            fixture.name,
+            last.status,
+            last.error,
+            r7.family_b()
+        );
+        // E2-U3: E2-K3's outcome is the table's; a published path is `ok`; a refusal leaves
+        // the r6 result (family A on the same contours).
+        assert_eq!(r7.family_b(), fixture.r7, "{}: r7 E2-K3", fixture.name);
+        if fixture.r7 == Some(Ok(())) {
+            assert_eq!(last.status, 0, "{}: r7", fixture.name);
+        } else {
+            assert_eq!(
+                (last.status, last.error),
+                (new.status, new.error),
+                "{}: r7 falls back to r6's family A",
+                fixture.name
+            );
+        }
+        if new.status == 0 {
+            assert_eq!(last.status, 0, "{}: an r6 ok stays ok", fixture.name);
+        }
         println!(
             "{}: r4 {} {:?} ({} pieces) | r5 {} {:?}, {} pieces -> {} contours, {} vertices | r6 {} {:?}, {} pieces -> {} contours, {} vertices | A4 {a4:?}",
             fixture.name, old.status, old.error, old.pieces, mid.status, mid.error, mid.pieces,
@@ -632,20 +720,102 @@ fn e2_fixture_literals() {
             ("E2-F8", 0, None, 2, 304),
         ],
     );
-    check_literals(
-        Rev::R6,
-        [
-            ("E2-F1", 0, None, 2, 128),
-            ("E2-F2", 0, None, 2, 128),
-            ("E2-F3", 0, None, 2, 256),
-            ("E2-F4", STROKE_PATH_WORK_LIMIT, input, 2, 1_616),
-            ("E2-F5", 0, None, 2, 512),
-            ("E2-F6", 0, None, 2, 24),
-            ("E2-F7", 0, None, 1, 68),
-            ("E2-F7r", 0, None, 3, 132),
-            ("E2-F8", 0, None, 2, 176),
-        ],
+    let r6 = [
+        ("E2-F1", 0, None, 2, 128),
+        ("E2-F2", 0, None, 2, 128),
+        ("E2-F3", 0, None, 2, 256),
+        ("E2-F4", STROKE_PATH_WORK_LIMIT, input, 2, 1_616),
+        ("E2-F5", 0, None, 2, 512),
+        ("E2-F6", 0, None, 2, 24),
+        ("E2-F7", 0, None, 1, 68),
+        ("E2-F7r", 0, None, 3, 132),
+        ("E2-F8", 0, None, 2, 176),
+    ];
+    check_literals(Rev::R6, r6);
+    // E2-U3 changes no contour and no status of the table (E2-K3's outcomes are in the table
+    // test); F4 stays `InputLimit` on its 1,616 merged points after E2-K3's `CLEARANCE`.
+    check_literals(Rev::R7, r6);
+}
+
+// ---- E2-A5 and E2-D4 ----
+
+/// E2-A5 on every fixture E2-K3 publishes, with the rung's vertices bit-identical to the merged
+/// contours' points (rung 0's output form: unrounded piece vertices).
+#[test]
+fn e2_a5_family_b_meshes_cover_the_contour_region() {
+    let mut ws = workspace(Rev::R7);
+    let mut published = 0;
+    for fixture in fixtures() {
+        let _ = observe(
+            &mut ws,
+            &fixture.path.verbs,
+            &fixture.path.bytes(),
+            fixture.request,
+        );
+        if ws.family_b() != Some(Ok(())) {
+            continue;
+        }
+        published += 1;
+        let compared = family_b_region(&ws, 4_096)
+            .unwrap_or_else(|error| panic!("{}: E2-A5: {error}", fixture.name));
+        let contour_points: Vec<Key> = ws.merge().contours().flatten().map(|p| key(*p)).collect();
+        let (vertices, _, boundary) = ws.mesh().expect("mesh");
+        assert!(
+            vertices.iter().all(|v| contour_points.contains(&key(*v))),
+            "{}: every vertex is a contour point",
+            fixture.name
+        );
+        assert_eq!(
+            boundary.len(),
+            vertices.len(),
+            "{}: one boundary edge per vertex",
+            fixture.name
+        );
+        println!("{}: E2-A5 compared {compared} points", fixture.name);
+        assert!(compared > 1_000, "{}", fixture.name);
+    }
+    assert_eq!(published, 5, "F1, F2, F3, F5 and F7");
+}
+
+/// E2-A6 / E2-D4: with FR5 skipped, E2-F8 (whose contours cross) is never published with a
+/// wrong region: a later stage refuses it, or E2-A5 fails. The catching stage is recorded.
+#[test]
+fn e2_d4_skipped_clearance_is_caught() {
+    use crate::fill_ladder::{with_ladder_faults, LadderFault};
+    let fixture = fixtures()
+        .into_iter()
+        .find(|fixture| fixture.name == "E2-F8")
+        .expect("E2-F8");
+    let mut ws = workspace(Rev::R7);
+    let found = with_ladder_faults(&[LadderFault::ClearanceSkipped], || {
+        observe(
+            &mut ws,
+            &fixture.path.verbs,
+            &fixture.path.bytes(),
+            fixture.request,
+        )
+    });
+    let caught = match ws.family_b() {
+        Some(Err(reason)) => format!("refused by {}", reason.code()),
+        Some(Ok(())) => {
+            let error = family_b_region(&ws, 4_096).expect_err("E2-A5 catches it");
+            format!("published, E2-A5 fails: {error}")
+        }
+        None => panic!("E2-K3 was tried"),
+    };
+    println!("E2-D4 on E2-F8: {caught}; status {}", found.status);
+    assert!(
+        matches!(ws.family_b(), Some(Err(_))) || caught.contains("E2-A5"),
+        "{caught}"
     );
+    // Without the fault, FR5 itself refuses it.
+    let _ = observe(
+        &mut ws,
+        &fixture.path.verbs,
+        &fixture.path.bytes(),
+        fixture.request,
+    );
+    assert_eq!(ws.family_b(), Some(Err(Reason::Crossing)));
 }
 
 // ---- E2-D1 ----
@@ -683,13 +853,14 @@ fn e2_d1_dropped_outside_sample_is_caught() {
 
 #[test]
 fn e2_storage_fits_the_heap_cap() {
-    let ws = workspace(Rev::R6);
+    let ws = workspace(Rev::R7);
     let (front, rounded, scratch) = ws.byte_parts();
     let total = ws.allocated_bytes().expect("bytes");
     println!(
-        "E2-U1 stroke workspace ({}): front end {front} B (seam merge {} B), RoundedFillWorkspace {rounded} B, FillScratch {scratch} B, total {total} B of {STROKE_V0_HEAP_CAP}",
+        "E2-U3 stroke workspace ({}): front end {front} B (seam merge {} B, stroke rung {} B), RoundedFillWorkspace {rounded} B, FillScratch {scratch} B, total {total} B of {STROKE_V0_HEAP_CAP}",
         std::env::consts::ARCH,
-        ws.merge().allocated_bytes()
+        ws.merge().allocated_bytes(),
+        ws.rung_bytes()
     );
     assert!(total <= STROKE_V0_HEAP_CAP);
     const { assert!(MAX_POLYGON_POINTS >= MAX_PIECE_POINTS) };
@@ -703,7 +874,7 @@ fn e2_merge_is_deterministic_and_allocates_nothing() {
         .map(|fixture| (fixture.path, fixture.request))
         .collect();
     let bytes: Vec<Vec<u8>> = cases.iter().map(|case| case.0.bytes()).collect();
-    let mut ws = workspace(Rev::R6);
+    let mut ws = workspace(Rev::R7);
     let snapshot = |ws: &StrokeWorkspace| -> Vec<u64> {
         ws.merge()
             .contours()
@@ -715,7 +886,7 @@ fn e2_merge_is_deterministic_and_allocates_nothing() {
         let _ = ws.build(*request, &path.verbs, points);
         first.push(snapshot(&ws));
     }
-    let mut fresh = workspace(Rev::R6);
+    let mut fresh = workspace(Rev::R7);
     crate::allocation_test_support::start();
     for ((path, request), points) in cases.iter().zip(&bytes).rev() {
         let _ = fresh.build(*request, &path.verbs, points);
@@ -742,6 +913,8 @@ struct Tally {
     a4: A4Counts,
     old_times: Vec<u64>,
     new_times: Vec<u64>,
+    /// E2-K3 meshes checked by E2-A5 on the new side.
+    a5: usize,
 }
 
 struct Case {
@@ -842,6 +1015,12 @@ fn e2_u2_differential() {
     differential("E2-U2", Rev::R5, Rev::R6);
 }
 
+#[test]
+#[ignore = "E2-U3 differential r4 vs r7 (E2-G1, E2-G2, E2-A4, E2-A5); release, --nocapture, one thread"]
+fn e2_u3_differential() {
+    differential("E2-U3", Rev::R4, Rev::R7);
+}
+
 /// E2-G1, E2-G2 and E2-A4 of `new` against `old` over the ST-U3b families and, when their
 /// variables are set, the scene and E1-C1.
 fn differential(unit: &str, old_rev: Rev, new_rev: Rev) {
@@ -873,6 +1052,7 @@ fn differential(unit: &str, old_rev: Rev, new_rev: Rev) {
     let mut families: Vec<&'static str> = Vec::new();
     let mut tallies: HashMap<&'static str, Tally> = HashMap::new();
     let mut causes: HashMap<(&'static str, String), usize> = HashMap::new();
+    let mut family_b: HashMap<(&'static str, &'static str), usize> = HashMap::new();
     let mut failures = Vec::new();
     for case in &cases {
         if !families.contains(&case.family) {
@@ -911,6 +1091,20 @@ fn differential(unit: &str, old_rev: Rev, new_rev: Rev) {
                 "E2-G1 {}: moved to {} from {}",
                 case.name, new.status, old.status
             ));
+        }
+        // E2-K3's outcome on the new side (E2-A7, E2-R2), and E2-A5 on each mesh it publishes.
+        if let Some(outcome) = r5.family_b() {
+            let label = match outcome {
+                Ok(()) => "published",
+                Err(reason) => reason.code(),
+            };
+            *family_b.entry((case.family, label)).or_default() += 1;
+            if outcome.is_ok() {
+                match family_b_region(&r5, 256) {
+                    Ok(_) => tally.a5 += 1,
+                    Err(error) => failures.push(format!("E2-A5 {}: {error}", case.name)),
+                }
+            }
         }
         // The merge ran wherever it produced contours.
         if new.contours > 0 {
@@ -954,7 +1148,7 @@ fn differential(unit: &str, old_rev: Rev, new_rev: Rev) {
             left as f64 / 1e3,
             right as f64 / 1e3
         );
-        println!("  A4 totals: {:?}", t.a4);
+        println!("  A4 totals: {:?}; E2-A5 checked {}", t.a4, t.a5);
         if ratio > 1.10 {
             failures.push(format!("E2-G2 {family}: {n}/{o} median {ratio:.3} > 1.10"));
         }
@@ -963,6 +1157,11 @@ fn differential(unit: &str, old_rev: Rev, new_rev: Rev) {
     rows.sort();
     for ((family, cause), count) in rows {
         println!("  {n} {family}: {cause} {count}");
+    }
+    let mut rows: Vec<_> = family_b.into_iter().collect();
+    rows.sort();
+    for ((family, outcome), count) in rows {
+        println!("  {n} {family} E2-K3: {outcome} {count}");
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

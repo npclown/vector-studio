@@ -51,7 +51,7 @@ const runRoot = path.resolve(
 /** The operation ids the predicted literals were fixed with (VZ3-A1, section 4.1). */
 const OPERATION_IDS = {
   fill: 'geometry-wasm/fill-v0+r3',
-  stroke: 'geometry-wasm/stroke-v0+r6',
+  stroke: 'geometry-wasm/stroke-v0+r7',
 } as const;
 /** Section 4.1: no path notice is expected anywhere in the run (VZ3-A15). */
 const EXPECTED_NOTICES: readonly string[] = [];

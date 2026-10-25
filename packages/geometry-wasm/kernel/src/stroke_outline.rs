@@ -18,6 +18,7 @@ use crate::codec::{PathInput, Request};
 use crate::engine::{BATCH_ALLOCATION_FAILED, BATCH_INTERNAL_ERROR};
 use crate::fill_exact::{multiply, Signed, COORDINATE_LIMBS, LINE_LIMBS};
 use crate::fill_export::{FillScratch, Mapped, SelfCheckFailure};
+use crate::fill_ladder::{FastRung, Reason, RungCaps, MAX_FAST_EXPONENT, MIN_FAST_EXPONENT};
 use crate::fill_predicates::orient2d;
 use crate::geometry::{validate_path, Point, VERB_CLOSE, VERB_CUBIC, VERB_LINE, VERB_MOVE};
 use crate::line_fill::LineFillRule;
@@ -60,6 +61,17 @@ pub(crate) const MAX_PIECE_RECORDS: usize = 4_096;
 pub(crate) const MAX_PIECE_POINTS: usize = 32_768;
 /// The depth-first leaf stack: one pending right sibling per level plus the current leaf.
 const LEAF_STACK: usize = MAX_LEAF_DEPTH as usize + 2;
+/// D9 E2 contract section 7: the merged contour vertices above which E2-K3 is not tried and the
+/// path goes to family A.
+pub(crate) const STROKE_B_MAX_POINTS: usize = 4_096;
+/// E2 section 6: the stroke rung instance's caps (4,096 points and edges, 512 contours and
+/// 4,096 sources), separate from the fill instance's.
+pub(crate) const STROKE_RUNG_CAPS: RungCaps = RungCaps {
+    points: STROKE_B_MAX_POINTS,
+    edges: STROKE_B_MAX_POINTS,
+    contours: MAX_PIECES,
+    sources: STROKE_B_MAX_POINTS,
+};
 /// Section 7.5 combined stroke heap cap.
 pub(crate) const STROKE_V0_HEAP_CAP: usize = 48 * 1024 * 1024;
 
@@ -436,9 +448,13 @@ pub(crate) struct StrokeDefects {
     /// E2-D3 (E2-U2): the E2-K2 chord bound halved.
     #[cfg(test)]
     pub(crate) band_half_bound: bool,
-    /// Not a defect: the `stroke-v0+r5` path (no E2-K2) for the E2-G1 and E2-G2 A/B runs.
+    /// Not a defect: the `stroke-v0+r5` path (no E2-K2, and no E2-K3, which `r5` predates) for
+    /// the E2-G1 and E2-G2 A/B runs.
     #[cfg(test)]
     pub(crate) no_band_rule: bool,
+    /// Not a defect: the `stroke-v0+r6` path (no E2-K3) for the E2-G1 and E2-G2 A/B runs.
+    #[cfg(test)]
+    pub(crate) no_family_b: bool,
 }
 
 #[cfg(test)]
@@ -472,6 +488,7 @@ impl StrokeDefects {
     defect!(band_no_fold);
     defect!(band_half_bound);
     defect!(no_band_rule);
+    defect!(no_family_b);
 }
 
 impl StrokeDefects {
@@ -562,6 +579,10 @@ impl StrokeDefects {
     pub(crate) fn no_band_rule(self) -> bool {
         false
     }
+    #[inline(always)]
+    pub(crate) fn no_family_b(self) -> bool {
+        false
+    }
 }
 
 /// Tolerances of one request (section 3), built from exponent bits.
@@ -611,6 +632,12 @@ pub(crate) struct StrokeWorkspace {
     g_off: f64,
     /// E2-K1 seam merge storage and the merged contours.
     merge: SeamMerge,
+    /// E2-K3: the stroke instance of Alt-A1 rung 0, and whether it published the last path.
+    rung: FastRung,
+    fast_published: bool,
+    /// E2-K3's outcome on the last path: `None` when it was not tried, otherwise `Ok` or the
+    /// fallback reason (`TOO_MANY_POINTS` is `Prefix`). Observational (E2-A7, E2-R2).
+    family_b: Option<Result<(), Reason>>,
     rounded: RoundedFillWorkspace,
     scratch: FillScratch,
     front_bytes: usize,
@@ -670,7 +697,10 @@ impl StrokeWorkspace {
     fn reserved(limits: RoundedFillLimits) -> Result<Self, u32> {
         // The stroke constructor enables E1-K1 (ST-U9 addendum E1.3, unit ST-U10).
         let rounded = RoundedFillWorkspace::new_stroke(limits).map_err(construction_status)?;
-        let (scratch, scratch_bytes) = FillScratch::reserve(limits, 0)?;
+        // E2-K3 publishes through the same scratch: AL-FR9's boundary records of the stroke
+        // instance (`FillScratch` takes the larger of them and the exact rung's slots).
+        let (scratch, scratch_bytes) =
+            FillScratch::reserve(limits, STROKE_RUNG_CAPS.boundary_records())?;
         let mut workspace = Self {
             subpaths: reserve(MAX_SUBPATHS)?,
             segments: reserve(MAX_SEGMENTS)?,
@@ -688,6 +718,9 @@ impl StrokeWorkspace {
             leaf_stack: reserve(LEAF_STACK)?,
             g_off: 0.0,
             merge: SeamMerge::reserve()?,
+            rung: FastRung::reserve_with(STROKE_RUNG_CAPS)?,
+            fast_published: false,
+            family_b: None,
             rounded,
             scratch,
             front_bytes: 0,
@@ -708,6 +741,7 @@ impl StrokeWorkspace {
             workspace.hull.capacity() * size_of::<Point>(),
             workspace.leaf_stack.capacity() * size_of::<LeafEntry>(),
             workspace.merge.allocated_bytes(),
+            workspace.rung.allocated_bytes(),
         ]
         .into_iter()
         .try_fold(0usize, usize::checked_add)
@@ -752,6 +786,10 @@ impl StrokeWorkspace {
 
     /// The published mesh vertices, triangles and boundary pairs after `Mesh`.
     pub(crate) fn mesh(&self) -> Option<MeshView<'_>> {
+        if self.fast_published {
+            let (vertices, _) = self.rung.mesh()?;
+            return Some((vertices, self.scratch.triangles(), self.scratch.boundary()));
+        }
         let output = self.rounded.output()?;
         Some((
             output.vertices,
@@ -763,6 +801,17 @@ impl StrokeWorkspace {
     /// The E2-K1 merge of the last path (its step-1 polygons and contours).
     pub(crate) fn merge(&self) -> &SeamMerge {
         &self.merge
+    }
+
+    /// The stroke rung instance's bytes (E2 section 6), part of the front-end total.
+    #[cfg(test)]
+    pub(crate) fn rung_bytes(&self) -> usize {
+        self.rung.allocated_bytes()
+    }
+
+    /// E2-K3's outcome on the last path (`None`: not tried).
+    pub(crate) fn family_b(&self) -> Option<Result<(), Reason>> {
+        self.family_b
     }
 
     #[cfg(test)]
@@ -800,6 +849,8 @@ impl StrokeWorkspace {
         self.leaf_stack.clear();
         self.g_off = 0.0;
         self.merge.clear();
+        self.fast_published = false;
+        self.family_b = None;
         #[cfg(test)]
         {
             self.last_tau = None;
@@ -878,6 +929,30 @@ impl StrokeWorkspace {
         #[cfg(test)]
         {
             self.last_tau = Some(tau);
+        }
+        // E2-K3 (D9 E2 contract section 6): the family-B rung on the merged contours. A
+        // published mesh is the path's result; any refusal goes to family A below.
+        if !self.defects.unmerged() && !self.defects.no_band_rule() && !self.defects.no_family_b() {
+            let attempt = self.try_family_b(request.exponent, tau);
+            self.family_b = Some(attempt);
+            if attempt.is_ok() {
+                self.fast_published = true;
+                return Ok(StrokeOutcome::Mesh);
+            }
+        }
+        if !self.defects.unmerged()
+            && self.merge.vertex_total() > STROKE_V0_LIMITS.max_input_vertices
+        {
+            // The arrangement's own preflight result (E2 section 7).
+            let error = RoundedFillError::InputLimit;
+            #[cfg(test)]
+            {
+                self.last_error = Some(StrokeError::Rounded(error));
+            }
+            return match map_rounded_error(error) {
+                Mapped::Path(status) => Ok(StrokeOutcome::Status(status)),
+                Mapped::Internal => Err(SelfCheckFailure),
+            };
         }
         let mut references: [&[Point]; MAX_PIECES] = [&[]; MAX_PIECES];
         let mut contours = 0usize;
@@ -967,11 +1042,23 @@ impl StrokeWorkspace {
         if self.merge.contour_total() > MAX_PIECES {
             return Err(StrokeError::Front(FrontEndError::PieceLimit));
         }
-        if self.merge.vertex_total() > STROKE_V0_LIMITS.max_input_vertices {
-            // The arrangement's own preflight result, after every front-end stage.
-            return Err(StrokeError::Rounded(RoundedFillError::InputLimit));
-        }
+        // The arrangement's `InputLimit` on the merged contours is checked in `build`, after
+        // E2-K3, which admits up to `STROKE_B_MAX_POINTS` of them.
         Ok(())
+    }
+
+    /// E2-K3 on the merged contours: AL-FR0 on `e − 2`, at most `STROKE_B_MAX_POINTS` vertices,
+    /// then rung 0's FR1 to FR8 and AL-FR9 with `δ = tau` under nonzero.
+    fn try_family_b(&mut self, exponent: i32, tau: f64) -> Result<(), Reason> {
+        if !(MIN_FAST_EXPONENT..=MAX_FAST_EXPONENT).contains(&(exponent - 2)) {
+            return Err(Reason::Range);
+        }
+        if self.merge.vertex_total() > STROKE_B_MAX_POINTS {
+            return Err(Reason::Prefix);
+        }
+        self.rung
+            .load_rings(self.merge.contours(), tau, LineFillRule::Nonzero)?;
+        self.rung.run_rings(&mut self.scratch)
     }
 
     /// ST-S1: subpaths and remaining drawing segments.
