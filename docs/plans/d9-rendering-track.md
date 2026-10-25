@@ -430,7 +430,7 @@ Dated append. Unit E3-U4 implements the GPU model check of the [E3 contract](d9-
 Dated append. Acceptance check E11-U4-A4 of the [E11-U4 addendum](d9-e11-u4-failure-behavior-addendum.md#6-acceptance-criteria): the headed GPU specs that read path notices, run on the user's machine after PR #232 merged.
 
 - Commit: `fe94c4983e2564af8ad2429f9a8ad7134b30c87a` on `main`, which contains #232 (`55e1fa0`). Working tree clean for tracked files; nothing edited or committed during the run.
-- Build: `pnpm install --frozen-lockfile`, `pnpm build`; release geometry WASM rebuilt with the pinned Rust 1.94.1, SHA-256 `8034D36B…101D6F`, the same as the build already on that machine. The container's `9b39af75` difference noted under E11-U2 is still unexplained and is still to be checked before the exit run.
+- Build: `pnpm install --frozen-lockfile`, `pnpm build`; release geometry WASM rebuilt with the pinned Rust 1.94.1, SHA-256 `8034D36B…101D6F`, the same as the build already on that machine. The container's `9b39af75` difference noted under E11-U2 is explained below (WASM host identity).
 - Command: `pnpm test:gpu -- --reporter=list` with the eight files below, headed, Chrome and Edge. GPU adapter name: not logged by the list reporter.
 - Result: **PASS**, 34 tests passed, 0 failed, 0 skipped, exit 0, 10.0 min.
 
@@ -446,6 +446,18 @@ Dated append. Acceptance check E11-U4-A4 of the [E11-U4 addendum](d9-e11-u4-fail
 | `viz-v3-integration` (DPR 1, 2) | 2 passed | 2 passed |
 
 With E11-U4-A1, A2, A3 and A5 checked by CI on #232, unit E11-U4 is complete.
+
+**WASM host identity, 2026-10-25.** Same commit `fe94c49`, same rustc 1.94.1 (`e408947bf`, LLVM 21.1.8), same wasm32 `libstd` rlib (SHA-256 `5453c26b…3184` on both hosts):
+
+| Host | Extra `CARGO_ENCODED_RUSTFLAGS` | SHA-256 | Embedded panic paths |
+| --- | --- | --- | --- |
+| Linux container (`x86_64-unknown-linux-gnu`) | none, or `--remap-path-prefix <root>=.` | `9b39af75…2193` | `src/engine.rs` |
+| User's PC (`x86_64-pc-windows-msvc`) | none, or `--remap-path-prefix <root>=.` | `8034d36b…1d6f` | `src\engine.rs` |
+| User's PC | `--remap-path-prefix <root>=.` and `--remap-path-prefix src\=src/` | `9b39af75…2193` | `src/engine.rs` |
+
+Cargo passes the kernel's sources as relative paths, so the existing root remap does not touch them. On Windows the panic location strings carry the `\` separator, and that is the only difference: remapping it reproduces the Linux build byte for byte. Line endings are not a cause; `.gitattributes` keeps every kernel file `eol=lf` on the PC. Every recorded WASM SHA is therefore host-specific. `8034d36b…` is the Windows build and `9b39af75…` is the Linux build of the same source.
+
+Decided under the user's standing instruction of 2026-10-24 (recommended option): the build tooling is not changed now. Adding the `src\=src/` remap would change every Windows WASM SHA while the E3 freeze evidence that names them is still in flight. E11-U3 adds the remap to the shared build flags, after the freeze record lands, so that one SHA holds on both hosts. Until then, a recorded WASM SHA names its host.
 
 ## E11 E11-U2 evidence, 2026-10-24
 
