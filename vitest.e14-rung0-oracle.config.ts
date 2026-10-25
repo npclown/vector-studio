@@ -4,6 +4,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     include: ['tests/geometry/e14/rung0-oracle.check.ts'],
-    testTimeout: 3_600_000,
+    // The largest shard runs about 4.7 hours on a 4-core container; no per-test timeout.
+    testTimeout: 0,
   },
 });
