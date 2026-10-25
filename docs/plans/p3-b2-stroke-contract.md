@@ -426,6 +426,8 @@ Amended 2026-10-24 (D9 E2 unit E2-U1, the seam merge E2-K1 of the [E2 contract](
 
 Amended 2026-10-25 (D9 E2 unit E2-U2, the band leaf rule E2-K2 of the [E2 contract](d9-e2-stroke-fast-rung-contract.md#5-e2-k2-the-band-leaf-rule)): full-cone cubic leaves may also be accepted by E2-K2, which changes `ok` meshes, so the identity is now `'geometry-wasm/stroke-v0+r6'` with `stroke_v0_revision() == 6`, superseding revision 5 in the same three places.
 
+Amended 2026-10-25 (D9 E2 unit E2-U3, the family-B rung E2-K3 of the [E2 contract](d9-e2-stroke-fast-rung-contract.md#6-e2-k3-the-family-b-rung-and-its-fallback)): a path whose merged contours pass rung 0 is published with rung 0's mesh instead of family A's, which changes `ok` meshes, so the identity is now `'geometry-wasm/stroke-v0+r7'` with `stroke_v0_revision() == 7`, superseding revision 6 in the same three places.
+
 ### 7.2 Exports
 
 All parameters and returns `u32`, as P2 and V2: `stroke_v0_version`, `stroke_v0_revision`, `stroke_v0_reserve(inputBytes, outputBytes)`, `stroke_v0_input_ptr`, `stroke_v0_input_capacity`, `stroke_v0_output_ptr`, `stroke_v0_output_capacity`, `stroke_v0_memory_epoch`, `stroke_v0_process(inputLength)`, `stroke_v0_result_len`, `stroke_v0_required_output_bytes`, `stroke_v0_dispose`. Each has the meaning of its [`fill_v0_` counterpart](p3-v2-fill-mesh-transport-contract.md#exports). A third module-level engine, `StrokeEngine`, owns this state and shares no field, epoch, arena or workspace with the P2 `Engine` or `FillEngine`. Batch statuses are P2's (`OK=0` to `INTERNAL_ERROR=6`). Path statuses: `OK=0`, `EMPTY=1`, `INVALID_PATH=2`, `INVALID_TOLERANCE=3`, `NUMERIC_RANGE=4`, `WORK_LIMIT=5`, `UNSUPPORTED_GEOMETRY=6`, `INVALID_STROKE=7`.
