@@ -30,7 +30,11 @@ import {
   MESH_RESOURCE_STRIDES,
   createMeshBindGroupLayoutDescriptor,
   createMeshPipelineDescriptor,
+  createMeshStencilResetPipelineDescriptor,
+  MESH_STENCIL_RESET_SHADER,
   meshPipelineKey,
+  meshStencilStep,
+  meshWriteOnceStencilState,
 } from './mesh-pipeline.js';
 import { PipelineCache } from './pipeline-cache.js';
 import { PRIMITIVE_ANALYTIC_SHADER } from './primitive-analytic-shader.js';
@@ -47,6 +51,7 @@ import {
 import {
   type PrimitiveTargetFormat,
   createPrimitivePipelineDescriptor,
+  MESH_STENCIL_FORMAT,
   primitivePipelineKey,
 } from './primitive-pipeline.js';
 import { SharedBufferAllocator, type SharedBufferAllocation } from './shared-buffer-allocator.js';
@@ -134,6 +139,10 @@ interface MeshPipelineState {
   readonly pipeline: GPURenderPipeline;
   /** ST-U7 addendum, section 4.5: the joint fill pipeline over the same module and layout. */
   readonly jointPipeline: GPURenderPipeline;
+  /** E17 contract, section 3: the stencil reset draw's pipeline for the main pass. */
+  readonly resetPipeline: GPURenderPipeline;
+  /** E17 contract, section 3: the reset module, shared with E10's count reset pipeline. */
+  readonly resetShader: GPUShaderModule;
   readonly bindGroupLayout: GPUBindGroupLayout;
 }
 
@@ -238,6 +247,13 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   #target: PrimitiveTarget | null = null;
   #attachment: GPUTexture | undefined;
   #attachmentId: string | undefined;
+  /**
+   * E17 contract, section 3: a generation created with the mesh pipeline option draws in a pass
+   * with this write-once stencil attachment (`stencil8`, the scene's sample count).
+   */
+  readonly #stencil: boolean;
+  #stencilAttachment: GPUTexture | undefined;
+  #stencilAttachmentId: string | undefined;
   #currentArena: ArenaState | undefined;
   readonly #mesh: MeshPipelineState | null;
   /** E10 contract, section 5: the count pipelines, created only with the countPass option. */
@@ -271,15 +287,18 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     mesh: MeshPipelineState | null = null,
     meshShaderModulesCreated = 0,
     count: CountPipelineState | null = null,
+    stencil = false,
   ) {
     this.#mesh = mesh;
     this.#count = count;
+    this.#stencil = stencil;
     this.meshPipelineAvailable = mesh !== null;
     // E10 contract, section 5: one count module (two at 4x, with the readout) and two count
-    // pipelines (three at 4x); none without the countPass option.
+    // pipelines (three at 4x); none without the countPass option. E17 section 3: the mesh path
+    // adds the reset pipeline, and the count pass its own reset pipeline over the same module.
     const countModules = count === null ? 0 : count.readout === null ? 1 : 2;
     this.shaderModulesCreated = 1 + meshShaderModulesCreated + countModules;
-    this.pipelinesCreated = (mesh === null ? 1 : 3) + (count === null ? 0 : countModules + 1);
+    this.pipelinesCreated = (mesh === null ? 1 : 4) + (count === null ? 0 : countModules + 2);
     this.#device = device;
     this.#context = context;
     this.#format = format;
@@ -320,8 +339,15 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       this.#target = copyTarget(target);
       return;
     }
-    if (this.sampleCount === 1 || target.width === 0 || target.height === 0) {
+    if (target.width === 0 || target.height === 0) {
       this.#releaseAttachment();
+      this.#target = copyTarget(target);
+      return;
+    }
+    // E17 contract, section 3: the stencil attachment follows the target at 1x and 4x.
+    if (this.#stencil) this.#replaceStencilAttachment(target);
+    if (this.sampleCount === 1) {
+      this.#releaseColorAttachment();
       this.#target = copyTarget(target);
       return;
     }
@@ -457,6 +483,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       const presentationView = presentation.createView();
       const multisampleView = this.#attachment?.createView();
       const encoder = this.#device.createCommandEncoder({ label: 'vector-studio/primitive-frame' });
+      const stencilView = this.#stencilAttachment?.createView();
       const pass = encoder.beginRenderPass({
         label: 'vector-studio/primitive-pass',
         colorAttachments: [
@@ -468,6 +495,17 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
             storeOp: multisampleView === undefined ? 'store' : 'discard',
           },
         ],
+        // E17 contract, section 3: cleared to 0 each frame, not stored.
+        ...(stencilView === undefined
+          ? {}
+          : {
+              depthStencilAttachment: {
+                view: stencilView,
+                stencilClearValue: 0,
+                stencilLoadOp: 'clear',
+                stencilStoreOp: 'discard',
+              },
+            }),
       });
       const bindAnalytic = () => {
         pass.setPipeline(this.#pipeline);
@@ -480,6 +518,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       // switch only at a variant change.
       // ST-U7 addendum, section 4.5: a joint fill draw switches to the joint pipeline and the
       // next plain mesh draw back; the mesh bind group is shared.
+      // E17 contract, section 3: every mesh draw sets its write-once reference; a reset draw
+      // clears the stencil before the references repeat.
       let analyticBound = true;
       let jointBound = false;
       let nextMeshDraw = 0;
@@ -487,6 +527,13 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         while (meshDraws[nextMeshDraw]?.position === position) {
           const draw = meshDraws[nextMeshDraw]!;
           const joint = draw.composite === 'joint-fill';
+          const step = meshStencilStep(nextMeshDraw);
+          if (step.reset) {
+            // The reset pipeline has no bind group; the next mesh draw rebinds its pipeline.
+            pass.setPipeline(this.#mesh!.resetPipeline);
+            pass.draw(3);
+            analyticBound = true;
+          }
           if (analyticBound) {
             pass.setPipeline(joint ? this.#mesh!.jointPipeline : this.#mesh!.pipeline);
             pass.setBindGroup(0, meshArena!.bindGroup);
@@ -496,6 +543,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
             pass.setPipeline(joint ? this.#mesh!.jointPipeline : this.#mesh!.pipeline);
             jointBound = joint;
           }
+          pass.setStencilReference(step.reference);
           pass.draw(3 * draw.triangleCount, 1, 3 * draw.firstTriangle, draw.instance);
           nextMeshDraw += 1;
         }
@@ -1321,7 +1369,67 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     if (firstError !== undefined) throw asError(firstError, 'Primitive arena release failed.');
   }
 
+  /** Releases the color and stencil attachments; both are rebuilt by the next setTarget. */
   #releaseAttachment(): void {
+    let firstError: unknown;
+    for (const release of [() => this.#releaseColorAttachment(), () => this.#releaseStencil()]) {
+      try {
+        release();
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    if (firstError !== undefined) throw asError(firstError, 'Primitive attachment release failed.');
+  }
+
+  /** E17 contract, section 3: creates and tracks the target's stencil attachment, replacing any. */
+  #replaceStencilAttachment(target: PrimitiveTarget): void {
+    const id = `primitive/${this.#generation}/stencil-${target.surfaceRevision}`;
+    const stencil = this.#device.createTexture({
+      label: id,
+      size: { width: target.width, height: target.height },
+      sampleCount: this.sampleCount,
+      format: MESH_STENCIL_FORMAT,
+      usage: RENDER_ATTACHMENT_USAGE,
+    });
+    try {
+      this.#resources.track(id, {
+        category: 'texture',
+        dimension: '2d',
+        width: target.width,
+        height: target.height,
+        depthOrArrayLayers: 1,
+        mipLevelCount: 1,
+        sampleCount: this.sampleCount,
+        // The WebGPU texel size of stencil8; a backend may store it in a wider texel (E17-R1).
+        bytesPerTexel: 1,
+      });
+    } catch (error) {
+      stencil.destroy();
+      throw asError(error, 'Primitive stencil attachment accounting failed.');
+    }
+    this.#releaseStencil();
+    this.#stencilAttachment = stencil;
+    this.#stencilAttachmentId = id;
+  }
+
+  #releaseStencil(): void {
+    const stencil = this.#stencilAttachment;
+    const stencilId = this.#stencilAttachmentId;
+    this.#stencilAttachment = undefined;
+    this.#stencilAttachmentId = undefined;
+    let destroyError: unknown;
+    try {
+      stencil?.destroy();
+    } catch (error) {
+      destroyError = error;
+    }
+    if (stencilId !== undefined) this.#resources.release(stencilId);
+    if (destroyError !== undefined)
+      throw asError(destroyError, 'Primitive stencil attachment release failed.');
+  }
+
+  #releaseColorAttachment(): void {
     const attachment = this.#attachment;
     const attachmentId = this.#attachmentId;
     this.#attachment = undefined;
@@ -1489,10 +1597,13 @@ export function createNativePrimitiveSceneCreation(
     device.queue.writeBuffer(indexBuffer, 0, quad.indices, 0, quad.indices.length);
 
     pipelineCache = new PipelineCache<GPURenderPipeline>(generation);
+    // E17 contract, section 3: a generation created with the mesh pipeline option draws in a
+    // pass with the write-once stencil attachment, so its analytic pipeline declares it too.
+    const stencil = options.meshPipeline === true;
     const createPipeline = (sampleCount: 1 | 4) =>
-      pipelineCache!.getOrCreate(primitivePipelineKey(format, sampleCount), () =>
+      pipelineCache!.getOrCreate(primitivePipelineKey(format, sampleCount, stencil), () =>
         device.createRenderPipelineAsync(
-          createPrimitivePipelineDescriptor(shader, pipelineLayout, format, sampleCount),
+          createPrimitivePipelineDescriptor(shader, pipelineLayout, format, sampleCount, stencil),
         ),
       );
     let pipeline: GPURenderPipeline;
@@ -1581,15 +1692,34 @@ export function createNativePrimitiveSceneCreation(
               ),
           );
           trackMesh(`${prefix}/mesh-joint-pipeline`, { category: 'render-pipeline' });
+          // E17 contract, section 3: the stencil reset draw, from its own small module.
+          const resetShader = device.createShaderModule({
+            label: `${prefix}/mesh-stencil-reset-shader`,
+            code: MESH_STENCIL_RESET_SHADER,
+          });
+          meshShaderModulesCreated = 2;
+          trackMesh(`${prefix}/mesh-stencil-reset-shader`, { category: 'shader-module' });
+          const resetPipeline = await device.createRenderPipelineAsync(
+            createMeshStencilResetPipelineDescriptor(
+              resetShader,
+              format,
+              sampleCount,
+              `vector-studio/p3-mesh-stencil-reset-${sampleCount}x`,
+            ),
+          );
+          trackMesh(`${prefix}/mesh-stencil-reset-pipeline`, { category: 'render-pipeline' });
           mesh = Object.freeze({
             pipeline: meshPipeline,
             jointPipeline,
+            resetPipeline,
+            resetShader,
             bindGroupLayout: meshBindGroupLayout,
           });
           if (options.countPass === true) {
             count = await createCountPipelines(
               device,
               meshPipelineLayout,
+              resetShader,
               sampleCount,
               prefix,
               trackMesh,
@@ -1609,6 +1739,7 @@ export function createNativePrimitiveSceneCreation(
           }
           mesh = null;
           count = null;
+          meshShaderModulesCreated = 0;
         }
       }
       if (meshFailure !== undefined && forced === 4) {
@@ -1642,6 +1773,7 @@ export function createNativePrimitiveSceneCreation(
       mesh,
       meshShaderModulesCreated,
       count,
+      stencil,
     );
     vertexBuffer = undefined;
     indexBuffer = undefined;
@@ -1665,6 +1797,7 @@ export function createNativePrimitiveSceneCreation(
 async function createCountPipelines(
   device: GPUDevice,
   meshPipelineLayout: GPUPipelineLayout,
+  resetShader: GPUShaderModule,
   sampleCount: 1 | 4,
   prefix: string,
   track: (id: string, descriptor: ResourceDescriptor) => void,
@@ -1686,13 +1819,24 @@ async function createCountPipelines(
         targets: [{ format: 'rgba16float', blend: { color: additive, alpha: additive } }],
       },
       primitive: { topology: 'triangle-list', frontFace: 'ccw', cullMode: 'none' },
+      // E17 contract, section 3: the count pass replays the mesh draws' write-once stencil.
+      depthStencil: meshWriteOnceStencilState(),
       multisample: { count: sampleCount, mask: 0xffffffff, alphaToCoverageEnabled: false },
     });
   const fill = await countPipeline('meshVertexMain', 'fill');
   track(`${prefix}/e10-count-fill-pipeline`, { category: 'render-pipeline' });
   const joint = await countPipeline(MESH_JOINT_VERTEX_ENTRY_POINT, 'joint');
   track(`${prefix}/e10-count-joint-pipeline`, { category: 'render-pipeline' });
-  if (sampleCount === 1) return Object.freeze({ fill, joint, readout: null });
+  const reset = await device.createRenderPipelineAsync(
+    createMeshStencilResetPipelineDescriptor(
+      resetShader,
+      'rgba16float',
+      sampleCount,
+      `vector-studio/e10-count-stencil-reset-${sampleCount}x`,
+    ),
+  );
+  track(`${prefix}/e10-count-stencil-reset-pipeline`, { category: 'render-pipeline' });
+  if (sampleCount === 1) return Object.freeze({ fill, joint, reset, readout: null });
   const layout = device.createBindGroupLayout({
     label: `${prefix}/e10-count-readout-layout`,
     entries: [
@@ -1721,5 +1865,5 @@ async function createCountPipelines(
     primitive: { topology: 'triangle-list' },
   });
   track(`${prefix}/e10-count-readout-pipeline`, { category: 'render-pipeline' });
-  return Object.freeze({ fill, joint, readout: Object.freeze({ pipeline, layout }) });
+  return Object.freeze({ fill, joint, reset, readout: Object.freeze({ pipeline, layout }) });
 }

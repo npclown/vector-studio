@@ -1,6 +1,7 @@
 import type { MeshFillDraw, PrimitivePacket } from '@vector-studio/renderer-core';
 
 import { halfToNumber } from './mesh-count-shader.js';
+import { meshStencilStep } from './mesh-pipeline.js';
 import type {
   WebGpuResourceTracker,
   WebGpuSceneCaptureForTesting,
@@ -24,6 +25,8 @@ const COUNT_OVERFLOW = 2048;
 export interface CountPipelineState {
   readonly fill: GPURenderPipeline;
   readonly joint: GPURenderPipeline;
+  /** E17 contract, section 3: the stencil reset draw's pipeline for the count target. */
+  readonly reset: GPURenderPipeline;
   /** 4x only: the readout pipeline and its bind group layout. */
   readonly readout: Readonly<{ pipeline: GPURenderPipeline; layout: GPUBindGroupLayout }> | null;
 }
@@ -73,6 +76,9 @@ export class PendingCapture {
       // Assert: the scene refuses a counts capture without count pipelines when it is armed.
       if (frame.count === null) throw new CaptureError('capture-disabled', 'no count pipelines');
       const counts = this.#texture(frame, 'counts', frame.sampleCount, frame.sampleCount === 1);
+      // E17 contract, section 3: the count pass has the main pass's stencil attachment and
+      // replays its reference sequence and reset draws, so it counts what the product writes.
+      const stencil = this.#texture(frame, 'count-stencil', frame.sampleCount, false, 'stencil8');
       const pass = encoder.beginRenderPass({
         label: 'vector-studio/e10-count-pass',
         colorAttachments: [
@@ -83,18 +89,32 @@ export class PendingCapture {
             storeOp: 'store',
           },
         ],
+        depthStencilAttachment: {
+          view: stencil.createView(),
+          stencilClearValue: 0,
+          stencilLoadOp: 'clear',
+          stencilStoreOp: 'discard',
+        },
       });
       if (frame.mesh !== null && frame.mesh.draws.length > 0) {
+        // The reset pipeline has no bind group; group 0 stays set across it.
         pass.setBindGroup(0, frame.mesh.bindGroup);
         let bound: GPURenderPipeline | null = null;
-        for (const draw of frame.mesh.draws) {
-          const pipeline = draw.composite === 'joint-fill' ? frame.count.joint : frame.count.fill;
+        frame.mesh.draws.forEach((draw, ordinal) => {
+          const step = meshStencilStep(ordinal);
+          if (step.reset) {
+            pass.setPipeline(frame.count!.reset);
+            pass.draw(3);
+            bound = null;
+          }
+          const pipeline = draw.composite === 'joint-fill' ? frame.count!.joint : frame.count!.fill;
           if (pipeline !== bound) {
             pass.setPipeline(pipeline);
             bound = pipeline;
           }
+          pass.setStencilReference(step.reference);
           pass.draw(3 * draw.triangleCount, 1, 3 * draw.firstTriangle, draw.instance);
-        }
+        });
       }
       pass.end();
       let source = counts;
@@ -249,15 +269,23 @@ export class PendingCapture {
     );
   }
 
-  #texture(frame: CaptureFrame, name: string, sampleCount: 1 | 4, copySource: boolean) {
+  #texture(
+    frame: CaptureFrame,
+    name: string,
+    sampleCount: 1 | 4,
+    copySource: boolean,
+    format: 'rgba16float' | 'stencil8' = 'rgba16float',
+  ) {
     const id = `${frame.idPrefix}/${name}`;
+    const stencil = format === 'stencil8';
     const texture = frame.device.createTexture({
       label: id,
       size: { width: frame.width, height: frame.height },
       sampleCount,
-      format: 'rgba16float',
+      format,
       usage:
-        RENDER_ATTACHMENT_USAGE | (copySource ? TEXTURE_COPY_SOURCE_USAGE : TEXTURE_BINDING_USAGE),
+        RENDER_ATTACHMENT_USAGE |
+        (stencil ? 0 : copySource ? TEXTURE_COPY_SOURCE_USAGE : TEXTURE_BINDING_USAGE),
     });
     this.#own(id, () => texture.destroy(), {
       category: 'texture',
@@ -267,7 +295,7 @@ export class PendingCapture {
       depthOrArrayLayers: 1,
       mipLevelCount: 1,
       sampleCount,
-      bytesPerTexel: 8,
+      bytesPerTexel: stencil ? 1 : 8,
     });
     return texture;
   }
