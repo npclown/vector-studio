@@ -1784,6 +1784,8 @@ The spec now reads back, after the non-corpus cases of section 16.2, the named s
 
 - **What does not change.** The oracle still halves the resolution while `E` straddles a threshold, down to the floor `2^-20`. So PASS (`U ≤ 0.25`), FAIL (`L > 0.25`) and UNDECIDED are decided by the same rule. A coarser start widens the reported intervals, never past `2^-K` plus `β_c` for a PASS case.
 - **The cost.** On two `C1` cases, `K = 6` took 6 s and 55 s, against 78 s and 109 s at `K = 10`. `K = 4` took 2 s and 23 s.
+- **`K = 2` (2026-10-25).** The stride-200 container sample of section 19.4 gave the same status and reason at `K = 2` as at `K = 6` on every one of its 138 cases (81 PASS, 0 FAIL, 27 UNDECIDED, 24 rejected, 6 `window-empty`), in 24 CPU minutes instead of about 150. Its max `U` is 0.2499 px and its p50 `U` 0.148 px, against 0.080 px at `K = 6`, which is the looser bound of the next item. A full run at `K = 2` is about 80 container CPU hours, plus the heavy stroke cases of section 19.5.
+  - **Decided 2026-10-25 (standing rule, recommended option).** The freeze-check-certified reference run uses `K = 2`. The status of every case is decided by the same rule, and the cost is about a sixth. The U statistics of the record are upper bounds at the resolution that decided each case.
 - **The departure.** The section 7.3 statistics (p50, p99 and max `U`) are upper bounds that are looser by up to `2^-K`. This is recorded for the evidence review.
 
 ### 19.3 Oracle defect found by the first sample (E3-R2)
@@ -1803,11 +1805,37 @@ The PC sample of section 19.4 reported `C1/s15-I/T3/z64-d2` as FAIL with `E = 38
 | Run | Machine and WASM | Selection | Result |
 | --- | ---------------- | --------- | ------ |
 | Container | Linux build of the kernel (cost estimate only) | Stride 200, 138 cases, `K = 6`, oracle of section 18.6 | 108 measured: 81 PASS, 0 FAIL, 27 UNDECIDED. Also 24 rejected and 6 `window-empty`. Max `U` 0.080 px. 83 min wall on 3 shards |
-| PC | Release WASM `0bc67a3a…7373`, commit `4e18e58` | Stride 25, about 1,100 cases, `K = 6`, oracle of section 18.6 | Running. At 156 cases: 116 PASS, 1 FAIL (the defect of section 19.3), 33 UNDECIDED |
+| Container | Linux build at `e84cceb` | Stride 200, 138 cases, `K = 2`, oracle of section 19.3 | Same statuses as the `K = 6` row. Max `U` 0.2499 px. 24 CPU min, 17 min wall on 2 shards |
+| PC | Release WASM `0bc67a3a…7373`, commit `4e18e58` | Stride 25, 1,099 cases, `K = 6`, oracle of section 18.6 | At 978 cases: 542 PASS, 3 FAIL, 238 UNDECIDED, 164 rejected, 31 `window-empty`. Max `U` on a PASS 0.137 px. Shard 2 died after 104 cases (section 19.5); its other cases were measured in the container at `K = 2` |
 
 - **Cost.** The container sample took about 1.1 CPU-min per case, and 3.2 min per `C5` stroke case. A full run at `K = 6` is about 600 container CPU hours, or about two days on the PC.
 - **UNDECIDED.** About a quarter of the measured cases are UNDECIDED. The reasons are known before the reference run, and they keep A04 UNVERIFIED under section 7.3 until they are remedied:
   - The no-flip certificate (section 15.4) fails on sub-pixel or sliver triangles, mostly at `z = 0.01` and under T4, T6 and T7.
   - `β_c ≥ 1` px or a clip bound of 0.25 px or more comes from far vertices at `z = 64`. These are the far-offscreen vertices of E3-R3, the K4 carrier's class A limitation.
   - `window-empty` within the guard (section 15.5).
-- **Next.** The remedies go to the user with the stride-25 results (E3-R3). After that come the freeze check of the new oracle, the headed GPU check, and the reference run on the E11 exit snapshot, once E2-U3 lands.
+- **FAIL.** `C1/s15-I/T3/z64-d2` was the oracle defect of section 19.3: on the fixed oracle it is `window-empty`. `C4/n07/T5/z64-d3` (`L` 1536 px) and `C4/n23/T2/z64-d3` (`L` 768 px) stay FAIL on the fixed oracle. Both are the collapsed sub-tolerance features E3-R3 predicted: the mesh closes a `2^-16` px gap (n07) or slit (n23), and `B_R` is half the feature's length at that scale. They are kernel results, not oracle defects.
+- **UNDECIDED in the PC sample.** No-flip certificate 196, `β_c ≥ 1` px 22, `window-empty` within the guard 9, clip bound 5, zero-area triangle 5, gcd-step work cap 1.
+- **Next.** The remedies go to the user with these results (E3-R3). After that come the freeze check of the new oracle, the headed GPU check, and the reference run on the E11 exit snapshot. The snapshot now waits for the E16 fill remedy.
+
+### 19.5 A worker that dies
+
+- **What happened.** The stride-25 sample lost one shard of six. Its worker ran out of its 6 GB heap on `C5/l36/T6/z64-d3` (corpus position 15650), and the shard's 79 remaining cases were never measured.
+  - The oracle's lazy stroke cover (section 15 of `a04-region.ts`) keeps every cell it builds, about 1.3 KB each. At `K = 6` the distance queries along a stroke boundary thousands of pixels long build cells faster than the work cap charges for them, so the heap fills before the work cap is reached.
+  - At `K = 2` the same case is a PASS after 6 minutes in the container (`E ∈ [0.00095, 0.126]`, `β_c = 0.043`).
+- **The rule.** A heap limit is not an exception the harness can catch, so section 7.3's rule for harness exceptions is applied by the tool:
+  - Before each case, a shard writes the case's corpus position to `shard-<i>.current`.
+  - When the worker exits non-zero, `pnpm e3-a04:run` starts the shard again after that case. The case gets an UNDECIDED row with reason `harness-error: worker exited (code …) while measuring`, unless its row was already written. A shard is restarted at most 64 times, and never twice at the same position.
+  - `pnpm e3-a04:freeze` does the same. There the case is `ORACLE-ERROR`, which fails the freeze check (E3-Q6 (a)).
+  - The record lists the restarts per shard (`shardRestarts`).
+- **No oracle change.** The cover cache is not bounded in the oracle. A bound would only turn these cases into `ORACLE-WORK`, which is UNDECIDED too. The remedy for the cost is the starting resolution of section 19.2.
+
+### 19.6 One run on several hosts
+
+- **Decided 2026-10-25 by the user.** The full freeze check and the reference run may be split across cloud containers and the PC, to bring the PC's two days down to under one.
+- **How.** Every host runs the same global shard count `N`, on the same commit, release WASM and options, with `--only` and its own shard indices. One host then runs `--merge` on every host's run directory.
+  - The merge refuses when any host differs from the merging checkout in commit, dirty state, contract, corpus, generator, oracle or WASM SHA-256, `N`, stride or `K`.
+  - It also refuses when a shard is missing or appears twice.
+  - It then finalizes as a single-host run does. The record's provenance lists each host's run id, Node version, OS, CPU count, shards, exit codes and restarts.
+  - `pnpm e3-a04:freeze` takes the same `--only` and `--merge`. Its summary names the oracle SHA-256 and commit, and lists the hosts.
+- **WASM.** Since E11 PR #242, a Linux build of the pinned toolchain gives the same release WASM as the PC. The merge compares WASM hashes, so a host whose build differs cannot take part.
+- **Memory.** A container has 15 GB and every shard gets a 6 GB heap, so a container runs two or three shards.
