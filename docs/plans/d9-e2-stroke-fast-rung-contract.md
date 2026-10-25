@@ -117,7 +117,7 @@ Fixtures at `e = −3`, zoom 1, DPR 1, butt cap and miter join unless named; "to
 | E2-A6 | Seeded defects are caught: E2-D1 every strictly-outside `C` dropped as covered, or `C` kept when strictly inside the quad (A4 (i) fails on a fixture that E2-U1 asserts to contain a strictly-outside, uncovered `C`); E2-D2 the fold test removed (E2-F4f accepted, ST-O1 fails); E2-D3 the bound halved (ST-O1 fails on E2-F3); E2-D4 FR5 skipped in E2-K3 (E2-F8 is never published with a wrong region: FR6, FR7 or AL-FR9 rejects it, or A5 fails; the catching stage is recorded) | U1-U3 |
 | E2-A7 | Scene report: `pnpm p3-exit:sweep --scene` on the release WASM after each unit, with the stroke `ok` count, the cause breakdown, the number of strokes E2-K3 refused by reason (E2-R2) and zero structure issues, appended to the cause record. The projections (275, 326) are for comparison, not a gate | each |
 
-**Validation per unit.** `pnpm check`, `pnpm build`, `pnpm test:geometry` (native kernel tests including the new fixtures and seeded defects), the E2-G2 A/B run, and the scene report. No GPU or headed run is needed: E2 changes mesh content, not the renderer. The E3 stroke rows follow E2-Q3.
+**Validation per unit.** `pnpm check`, `pnpm build`, `pnpm test:geometry` (native kernel tests including the new fixtures and seeded defects), the E2-G2 A/B run, and the scene report. No GPU or headed run is needed: E2 changes mesh content, not the renderer. (Superseded 2026-10-25 by the section 9 amendment: E2 changes the notice and draw literals of headed specs, so each unit runs them.) The E3 stroke rows follow E2-Q3.
 
 ## 9. Units
 
@@ -128,6 +128,8 @@ Fixtures at `e = −3`, zoom 1, DPR 1, butt cap and miter join unless named; "to
 | E2-U3 | Full | E2-K3, `STROKE_B_MAX_POINTS`, the separate rung instance, `r7`, E2-A5, E2-D4 | `stroke_outline.rs`, `fill_ladder.rs` (the rung made generic over its caps, with an indexed source lookup and a line-only entry that skips S1 and FR2; no change to the fill instance's stage order, outcomes or bytes), tests |
 
 Each unit: independent review of the diff and evidence; it starts only when the rendering track's WIP limit allows. The order is fixed: E2-K2 and E2-K3 assume E2-K1's contours. B2 [§12.1](p3-b2-stroke-contract.md#121-units)'s ST-U9 row points here.
+
+Amended 2026-10-25 (headed GPU re-baseline, decided under the user's standing instruction of 2026-10-24, recommended option, 추천안 자동 채택): E2-U1 and E2-U2 changed stroke outcomes that `tests/gpu/p3-b2-strokes.spec.ts` and `tests/gpu/viz-v1-appearance.spec.ts` gate as observed literals, and both merged without a headed run, so the specs failed at main `7662310`. The outcome change is E2's goal, so the literals are re-baselined (D9 rule; [V-1 §4.1](viz-v1-path-appearance-contract.md#41-expected-literal-rule)) rather than the kernel changed; the record is [e2-gpu-rebaseline-2026-10-25](../evidence/e2-gpu-rebaseline-2026-10-25.md). From E2-U3 on, every E2 unit (each changes stroke mesh output and the operation id, so notice sets and draw counts can move even where no `ok` outcome changes) runs those two specs headed on the user's machine, with `viz-v2-path-data` and `viz-v3-integration`, which gate the stroke operation id, and re-baselines them in its own PR, or marks them NOT RUN with the reason and runs them before E2 closes.
 
 ## 10. Questions and decisions
 
