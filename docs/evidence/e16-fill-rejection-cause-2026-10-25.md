@@ -49,6 +49,23 @@ Generated rows can appear in more than one line at different transforms (for exa
 
 The order and scope are a user decision (new kernel work, Full tier). Without F1 to F3, A02 cannot pass at the snapshot unless the closed list grows, which E11 section 7.2 and the private contract's "named ordinary fixtures must succeed" do not allow without a user decision.
 
+## Closed-list class count (update 2026-10-25)
+
+E11 section 7.2 (update 2026-10-25, the user decision of E11 section 9.2) adds the class "fill stop in the exact rung's caps": rung 0 did not mesh, the exact rung's terminal error is `CommandLimit`, `OwnerLimit`, `Rounded(_)` or `Topology(WorkLimit)` (at e, or as the stop error of the last E16-K2 retry), and the row is not in E14-Q1. The sweep cannot see native errors, so `pnpm e16:fill-diag` assigns it: it also writes `classes.tsv`, each stratum's failed fill requests by closed-list class (`E14-Q1`, `exact-rung cap stop` for this class, or `outside:` with the cause). The terminal error at e is the triangle-free retry's error when that retry ran, else the exact attempt's. A `retryStop` field, if the diagnostic prints one after E16-K2, takes precedence. The E4 and E8 classes are left to the evidence review, as before.
+
+On the same input (`fill-v0+r3`, PRE-FREEZE), with `summary.tsv` unchanged:
+
+| Stratum | E14-Q1 | Exact-rung cap stop | Outside |
+| --- | --- | --- | --- |
+| C3 generated | 267 | 159 | 972 (topology unresolved) |
+| C3 named | 32 | 31 | 21 (topology unresolved), 22 (zero-length leaf) |
+| C4 named | 0 | 54 | 0 |
+| C6 named | 8 | 0 | 0 |
+| C11 named | 0 | 0 | 70 (source cap) |
+| C12 named | 5 | 0 | 14 (source cap) |
+
+The class takes all of causes 2 and 4 (244). Causes 1 and 3 (1,099) stay outside until the E16 remedy.
+
 ## Coordination
 
 - E11 (exit snapshot): told on 2026-10-25 that A02 would fail on `fill-v0+r3` and that this record exists, so its snapshot plan accounts for it.

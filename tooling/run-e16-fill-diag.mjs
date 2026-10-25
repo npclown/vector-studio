@@ -5,7 +5,8 @@
 //
 // Writes every failed fill request of the sweep record as input, runs the ignored native test
 // `e14_fill_limit_diag` (release profile) on it, and prints each request's unmapped kernel
-// outcome, summarized by stratum, named or generated row, sweep class and cause. Output goes to
+// outcome, summarized by stratum, named or generated row, sweep class and cause (summary.tsv),
+// and counts each stratum's requests by closed-list class (classes.tsv). Output goes to
 // .tools/e16-fill-diag/<stamp>/. It is a diagnostic: its timings are not performance evidence.
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -81,6 +82,27 @@ const cause = (row) => {
   if (/^Rounded\(/.test(last)) return 'exact-rung topology cap';
   return `other: ${row.legacy} / ${row.triangleFree}`;
 };
+/**
+ * The closed-list class (E11 section 7.2) of a failed request, as far as the native outcome
+ * decides it. "Fill stop in the exact rung's caps" (update 2026-10-25, E11 section 9.2): rung 0
+ * did not mesh, and the exact rung's terminal error is `CommandLimit`, `OwnerLimit`, `Rounded(_)`
+ * or `Topology(WorkLimit)`, at e or
+ * as the stop error of the last E16-K2 retry (`retryStop`, when the diagnostic prints it), and
+ * the row is not in E14-Q1. The E4 and E8 classes are assigned by the evidence review, so the
+ * rest is reported as outside, with its cause.
+ */
+const closedClass = (row, side) => {
+  if (side.e14) return 'E14-Q1';
+  const atE = row.triangleFree === '-' ? row.legacy : row.triangleFree;
+  const terminal = row.retryStop !== undefined && row.retryStop !== '-' ? row.retryStop : atE;
+  if (
+    row.fast !== 'MESH' &&
+    /^(CommandLimit|OwnerLimit|Rounded\(.*\)|Topology\(WorkLimit\))$/.test(terminal)
+  )
+    return 'exact-rung cap stop';
+  return `outside: ${cause(row)}`;
+};
+const classes = new Map();
 const table = new Map();
 for (const row of rows) {
   const side = sidecar[row.id];
@@ -88,6 +110,8 @@ for (const row of rows) {
   const kind = /^g\d+$/.test(name) ? 'generated' : 'named';
   const sweep = side.e14 ? 'E14-Q1' : side.outcome.replace('failed:', '');
   const key = [`${stratum}/${kind}`, sweep, cause(row), `rung0 ${row.fast}`].join('\t');
+  const classKey = `${stratum}/${kind}\t${closedClass(row, side)}`;
+  classes.set(classKey, (classes.get(classKey) ?? 0) + 1);
   const cell = table.get(key) ?? {
     requests: 0,
     rows: new Set(),
@@ -120,4 +144,9 @@ for (const key of [...table.keys()].sort()) {
   );
 }
 writeFileSync(path.join(dir, 'summary.tsv'), `${lines.join('\n')}\n`);
-process.stdout.write(`${lines.join('\n')}\n\n${dir}\n`);
+const classLines = [
+  'stratum\tclosed-list class\trequests',
+  ...[...classes.keys()].sort().map((key) => `${key}\t${classes.get(key)}`),
+];
+writeFileSync(path.join(dir, 'classes.tsv'), `${classLines.join('\n')}\n`);
+process.stdout.write(`${lines.join('\n')}\n\n${classLines.join('\n')}\n\n${dir}\n`);
