@@ -234,7 +234,7 @@ Decision, 2026-10-25: the user approved starting P5 implementation now, in paral
 | Unit | State |
 | --- | --- |
 | P5-U1 | Merged ([PR #252](https://github.com/npclown/vector-studio/pull/252)); independent review round 1 NOT READY, findings applied, round 2 READY: `packages/model`, fixtures `tests/fixtures/p5-model/`, `tests/unit/p5-model.test.ts` (P5-A06 to A08; the two `editor-core` codes of P5-A07 land with P5-U5) |
-| P5-U2 | Implemented; independent review rounds 1 and 2 NOT READY, findings applied, round 3 READY: `packages/editor-core` (commands, transactions, history, gestures, session), `tests/unit/p5-editor-core.test.ts` (P5-A01, A04, A05) |
+| P5-U2 | Merged ([PR #255](https://github.com/npclown/vector-studio/pull/255)); independent review rounds 1 and 2 NOT READY, findings applied, round 3 READY: `packages/editor-core` (commands, transactions, history, gestures, session), `tests/unit/p5-editor-core.test.ts` (P5-A01, A04, A05) |
 | P5-U3 | Implemented; independent review READY WITH FOLLOW-UPS, follow-ups applied: select, rectangle and path tools and hit testing in `packages/editor-core` (`tools.ts`, `hit-test.ts`), `tests/unit/p5-tools.test.ts` (P5-A02, A03) |
 | P5-U4 to U7 | Not started |
 
