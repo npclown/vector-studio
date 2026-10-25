@@ -78,3 +78,5 @@ The scene's noisy 32-cubic rings above about 256 device px in radius exceed any 
 ## Scene report after E2-U1 (E2-A7), 2026-10-24
 
 At `stroke-v0+r5` (seam merge E2-K1), the same scene gives 223 stroke `ok` of 1,000 (121 at `r4`) and 0 structure issues. The `work-limit` causes are `Front(PieceLimit)` 275, `Front(DepthLimit)` 261, `Rounded(InputLimit)` 203, `Rounded(NodeLimit)` 35 and `Rounded(EventLimit)` 3. Details, the run identity and the A/B gates are in the [E2-U1 record](e2-u1-2026-10-24.md).
+
+At `stroke-v0+r6` (band leaf rule E2-K2, 2026-10-25), the same scene gives 254 stroke `ok` of 1,000 and 0 structure issues. The `work-limit` causes are `Rounded(InputLimit)` 296, `Front(DepthLimit)` 283, `Front(PieceLimit)` 120, `Rounded(NodeLimit)` 43, `Rounded(EventLimit)` 3 and `Front(DiskLimit)` 1. Details are in the [E2-U2 record](e2-u2-2026-10-25.md).
