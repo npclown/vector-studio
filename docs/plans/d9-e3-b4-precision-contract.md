@@ -1732,4 +1732,27 @@ A fresh-context review of `9a72534..0d0bf50` found **no soundness defect** (verd
 
 The oracle is commit `0d0bf50`. `a04-region.ts` has SHA-256 `aad4b5829989b191250adca44c18d4658dc38fb21814c897578630a6dde1fb00`. The run is `pnpm e3-a04:freeze --shards 8` on the machine of section 17.4 (31.9 GB RAM, so 8 shards). It started at 04:41:55 UTC on 2026-10-25, with output in `.tools/e3-a04-freeze/2026-10-25T04-41-55-181Z/`.
 
-Result: pending.
+It ended at 11:37:28 UTC, after 6.93 h wall, and every shard exited with code 0.
+
+- **All 27,462 cases were checked: 27,459 `ok` and 3 `not-drawable`.** No case was `ORACLE-WORK`, `ORACLE-UNSUPPORTED`, `ORACLE-INCONSISTENT` or `ORACLE-ERROR`. The 3 `not-drawable` cases are the `C10` inputs that section 6 expects: `x01` and `x02` (`det L = 0`) and `x05` (`w = 0`).
+- **Strata.** These are case counts, all `ok` except in C10.
+
+  | C1 | C2 | C3 | C4 | C5 | C6 | C7 | C8 | C9 | C10 | C11 | C12 |
+  | -- | -- | -- | -- | -- | -- | -- | -- | -- | --- | --- | --- |
+  | 4,680 | 1,800 | 4,860 | 1,728 | 7,038 | 324 | 108 | 2,682 | 3,510 | 12 | 576 | 144 |
+
+- **Time.** Case times sum to 52.9 h, against 107.0 h for the run of section 18.1. C9 took 151.0 million of the 190.3 million case milliseconds, and C5 35.5 million.
+- **Work.**
+  - The largest was 1.62·10^9 units (`C9/g0154/T6/z0.01-d3`, 1,895 s), 90 % of the cap.
+  - The next were `C9/g0154/T6/z64-d3` at 1.31·10^9 and `C9/g0154/T6/z1-d3` at 1.31·10^9.
+  - Then `C9/g0252/T7/z0.01-d3` at 1.11·10^9 and `C9/g0260/T0/z0.01-d3` at 1.08·10^9.
+- **Time per unit.** Of the ten slowest cases, the highest was 1.27 µs per unit (`C9/g0154/T6/z64-d3`, 1,670 s for 1.31·10^9 units). The lowest was 1.01 µs. Both are within the 1.53 µs of section 14.8.
+- The run directory is machine-local and not committed. It holds 27,462 shard lines with 27,462 distinct ids.
+
+**Freeze record** (2026-10-25): the A04 corpus `a04-corpus/v1` with `corpusSha256` `7f4bb1c97b2358ef45d23fdcab31aadc35fe4e7d3d5de25ce1bea7a8203d721c` is frozen.
+
+- Generator `tests/geometry/e3-a04/corpus.ts` SHA-256: `3c4f12991f0554cad2dde1d96eb549cb343b6ecee3e24539e8083320e7e0d438`.
+- Oracle `packages/geometry-reference/src/a04-region.ts` SHA-256: `aad4b5829989b191250adca44c18d4658dc38fb21814c897578630a6dde1fb00` (commit `0d0bf50`).
+- 27,462 cases, with the strata counts above.
+- Freeze check: passed. There were 27,459 `ok`, 3 `not-drawable` (C10, section 6) and no `ORACLE-*` case. The largest work was 1.62·10^9 units, against a cap of 1.8·10^9.
+- No kernel output on the corpus was inspected before this record (section 5.5).
