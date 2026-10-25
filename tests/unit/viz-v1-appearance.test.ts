@@ -337,6 +337,15 @@ describe('V1-A5 edit flow', () => {
     expect(editor.revision).toBe(2);
   });
 
+  it('keeps the applied states until the flush sends the queued edit', () => {
+    const { editor, run } = fake({});
+    editor.edit('v1-zigzag', edit('stroke-width-number', '9'));
+    expect(editor.states['v1-zigzag']!.stroke.width).toBe(9);
+    expect(editor.applied['v1-zigzag']!.stroke.width).toBe(14);
+    run();
+    expect(editor.applied['v1-zigzag']!.stroke.width).toBe(9);
+  });
+
   it('drops an edit that changes nothing', () => {
     const { calls, queue, editor, run } = fake({});
     expect(editor.edit('v1-square', edit('fill-rule', 'nonzero'))).toBe(false);
@@ -760,5 +769,23 @@ describe('V-1 target status (contract section 3.4)', () => {
     expect(status.fill.outcome).toBe('drawn');
     expect(status.label).toContain('may differ');
     expect(status.label).toContain('the notice log is authoritative');
+  });
+
+  it('clears every state failure on a zoom change, not only the latest notice', () => {
+    const tracker = new TargetStatusTracker(initialStates());
+    tracker.addNotice(notice('v1-zigzag', 'stroke', 'tolerance-range', -9, 1));
+    tracker.addNotice(notice('v1-zigzag', 'stroke', 'fringe-work-cap', -3, 2));
+    tracker.addNotice(notice('v1-zigzag', 'stroke', 'packing-range', -4, 3));
+    tracker.zoomChanged();
+    let status = tracker.status('v1-zigzag');
+    expect(status.stroke.perExponent).toEqual(['e=-3 fringe-work-cap']);
+    expect(status.stroke.code).toBe('fringe-work-cap');
+    // A state failure that is not the latest notice is cleared too, and the latest stays.
+    tracker.addNotice(notice('v1-zigzag', 'stroke', 'tolerance-range', -9, 4));
+    tracker.addNotice(notice('v1-zigzag', 'stroke', 'work-limit', -5, 5));
+    tracker.zoomChanged();
+    status = tracker.status('v1-zigzag');
+    expect(status.stroke.perExponent).toEqual(['e=-3 fringe-work-cap', 'e=-5 work-limit']);
+    expect(status.stroke.code).toBe('work-limit');
   });
 });
