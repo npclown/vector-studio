@@ -1,4 +1,4 @@
-import { findDuplicateKey } from './duplicate-keys.js';
+import { MAX_DEPTH, scanJson } from './json-scan.js';
 import type {
   Color,
   DocumentV1,
@@ -54,14 +54,16 @@ export function parseDocument(text: string): ParseResult {
   }
   const version = checkVersion(value);
   if (version !== null) return version;
-  // JSON.parse keeps the last of two equal keys, which would silently drop an entity.
-  const duplicate = findDuplicateKey(text);
-  if (duplicate !== null) {
-    const nodeKey = duplicate.length === 2 && duplicate[0] === 'nodes';
+  // JSON.parse keeps the last of two equal keys, which would silently drop an entity. The scan
+  // also bounds nesting, so validation never recurses deeper than MAX_DEPTH.
+  const finding = scanJson(text);
+  if (finding !== null) {
+    const nodeKey =
+      finding.kind === 'duplicate-key' && finding.path.length === 2 && finding.path[0] === 'nodes';
     return {
       ok: false,
       code: nodeKey ? 'document.duplicate-id' : 'document.invalid-field',
-      path: pointer(duplicate),
+      path: pointer(finding.path),
     };
   }
   return validateDocument(value);
@@ -78,6 +80,26 @@ export function validateDocument(value: unknown): ParseResult {
     return { ok: true, document: readDocument(value as Record<string, unknown>) };
   } catch (error) {
     if (error instanceof Failure) return { ok: false, code: error.code, path: pointer(error.path) };
+    throw error;
+  }
+}
+
+export type NodeResult =
+  | Readonly<{ ok: true; node: NodeV1 }>
+  | Readonly<{ ok: false; code: 'document.invalid-field'; path: string }>;
+
+/**
+ * Validates one node with the field rules of `validateDocument`, so commands reject the values
+ * a load would reject. `path` is relative to the node; references are not checked here.
+ */
+export function validateNode(value: unknown): NodeResult {
+  try {
+    const id = isPlainObject(value) ? value.id : undefined;
+    return { ok: true, node: readNode(typeof id === 'string' ? id : '', value, []) };
+  } catch (error) {
+    if (error instanceof Failure) {
+      return { ok: false, code: 'document.invalid-field', path: pointer(error.path) };
+    }
     throw error;
   }
 }
@@ -152,9 +174,18 @@ function readEnum<T extends string>(value: unknown, options: readonly T[], path:
   return value as T;
 }
 
-function readArray(value: unknown, path: Path): readonly unknown[] {
+/** Reads every index, holes included: a sparse array fails on its first hole. */
+function readArray<T>(
+  value: unknown,
+  path: Path,
+  read: (entry: unknown, path: Path, index: number) => T,
+): T[] {
   if (!Array.isArray(value)) invalid(path);
-  return value;
+  const items: T[] = [];
+  for (let index = 0; index < value.length; index += 1) {
+    items.push(read(value[index], [...path, index], index));
+  }
+  return items;
 }
 
 function readColor(value: unknown, path: Path): Color {
@@ -213,29 +244,36 @@ function readPathData(value: unknown, path: Path): PathData {
   // The renderer's path grammar: move opens a subpath, line and cubic need one, close ends one.
   let open = false;
   let pointCount = 0;
-  const verbs = readArray(record.verbs, verbsPath).map((entry, index) => {
-    const verb = readEnum(entry, VERBS, [...verbsPath, index]);
-    if (verb !== 'move' && !open) invalid([...verbsPath, index]);
+  const verbs = readArray(record.verbs, verbsPath, (entry, entryPath) => {
+    const verb = readEnum(entry, VERBS, entryPath);
+    if (verb !== 'move' && !open) invalid(entryPath);
     open = verb !== 'close';
     pointCount += VERB_POINTS[verb];
     return verb;
   });
   const pointsPath = [...path, 'points'];
-  const points = readArray(record.points, pointsPath).map((entry, index) =>
-    readNumber(entry, [...pointsPath, index], 0, 1),
+  const points = readArray(record.points, pointsPath, (entry, entryPath) =>
+    readNumber(entry, entryPath, 0, 1),
   );
   if (points.length !== pointCount * 2) invalid(pointsPath);
   return { verbs, points, fillRule: readEnum(record.fillRule, FILL_RULES, [...path, 'fillRule']) };
 }
 
-function readJson(value: unknown, path: Path): JsonValue {
+// Custom data sits below the document, nodes and node containers, so in-memory values get the
+// same nesting bound as text (MAX_DEPTH); this also stops a cyclic value.
+const MAX_DATA_DEPTH = MAX_DEPTH - 3;
+
+function readJson(value: unknown, path: Path, depth = 1): JsonValue {
   if (value === null || typeof value === 'boolean' || typeof value === 'string') return value;
   if (typeof value === 'number') return readNumber(value, path);
-  if (Array.isArray(value)) return value.map((entry, index) => readJson(entry, [...path, index]));
+  if (depth > MAX_DATA_DEPTH) invalid(path);
+  if (Array.isArray(value)) {
+    return readArray(value, path, (entry, entryPath) => readJson(entry, entryPath, depth + 1));
+  }
   if (!isPlainObject(value)) invalid(path);
   // fromEntries defines own properties, so a "__proto__" key stays data.
   return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => [key, readJson(entry, [...path, key])]),
+    Object.entries(value).map(([key, entry]) => [key, readJson(entry, [...path, key], depth + 1)]),
   );
 }
 
@@ -251,7 +289,7 @@ function readNode(key: string, value: unknown, path: Path): NodeV1 {
   if (!isPlainObject(value)) invalid(path);
   const type = readEnum(value.type, Object.keys(NODE_KEYS) as NodeType[], [...path, 'type']);
   const record = readRecord(value, NODE_KEYS[type], path);
-  if (record.id !== key) invalid([...path, 'id']);
+  if (!isValidId(key) || record.id !== key) invalid([...path, 'id']);
   const base = {
     id: key,
     name: readString(record.name, [...path, 'name']),
@@ -294,18 +332,15 @@ function readPage(value: unknown, path: Path): PageV1 {
   return {
     id: readId(record.id, [...path, 'id']),
     name: readString(record.name, [...path, 'name']),
-    children: readArray(record.children, childrenPath).map((child, index) =>
-      readId(child, [...childrenPath, index]),
-    ),
+    children: readArray(record.children, childrenPath, readId),
   };
 }
 
 function readDocument(value: Record<string, unknown>): DocumentV1 {
   const record = readRecord(value, ['schemaVersion', 'id', 'pages', 'nodes'], []);
   const id = readId(record.id, ['id']);
-  const pages = readArray(record.pages, ['pages']);
-  if (pages.length !== 1) invalid(['pages']);
-  const page = readPage(pages[0], ['pages', 0]);
+  if (!Array.isArray(record.pages) || record.pages.length !== 1) invalid(['pages']);
+  const page = readPage(record.pages[0], ['pages', 0]);
   if (!isPlainObject(record.nodes)) invalid(['nodes']);
   const entries = Object.entries(record.nodes).map(
     ([key, node]) => [key, readNode(key, node, ['nodes', key])] as const,

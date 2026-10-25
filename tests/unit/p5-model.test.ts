@@ -3,9 +3,11 @@ import path from 'node:path';
 import {
   DOCUMENT_ERROR_CODES,
   isValidId,
+  MAX_DEPTH,
   parseDocument,
   serializeDocument,
   validateDocument,
+  validateNode,
   type DocumentV1,
   type ParseResult,
 } from '@vector-studio/model';
@@ -84,6 +86,15 @@ function customNode(data: unknown): Record<string, unknown> {
     fill: null,
     stroke: null,
   };
+}
+
+/** `values` with a hole at `index`, as a sparse array. */
+function holed(values: unknown[], index: number): unknown[] {
+  const copy = new Array<unknown>(values.length);
+  values.forEach((value, at) => {
+    if (at !== index) copy[at] = value;
+  });
+  return copy;
 }
 
 type Edit =
@@ -390,6 +401,94 @@ describe('P5-A07 validation codes', () => {
     });
   });
 
+  it.each([
+    ['an escaped equal key', '{"k":1,"\\u006b":2}', 'invalid-field', '/nodes/c/data/k'],
+    ['an escaped node ID', null, 'duplicate-id', '/nodes/a'],
+    ['braces, commas and quotes inside strings', '{"s":"{,}[\\"]","t":"\\\\","s2":"}"}', null, ''],
+    ['empty containers', '{"a":{},"b":[],"c":[{},[]],"d":{"a":[]}}', null, ''],
+    [
+      'the same key in sibling objects',
+      '{"a":{"z":1},"b":{"z":1},"q":[{"z":1},{"z":2}]}',
+      null,
+      '',
+    ],
+    [
+      'a repeat inside an array element',
+      '{"q":[{},{},{"z":1,"z":2}]}',
+      'invalid-field',
+      '/nodes/c/data/q/2/z',
+    ],
+  ])('scans %s', (_label, data, code, at) => {
+    let text: string;
+    if (data === null) {
+      text = JSON.stringify(smallDocument()).replace('"b":{"id":"b"', '"\\u0061":{"id":"a"');
+    } else {
+      const doc = edited(['set', '/nodes/c', customNode(0)], ['push', '/pages/0/children', 'c']);
+      text = JSON.stringify(doc).replace('"data":0', `"data":${data}`);
+      expect(() => JSON.parse(text) as unknown).not.toThrow();
+    }
+    const result = parseDocument(text);
+    if (code === null) expect(result.ok).toBe(true);
+    else expect(failure(result)).toEqual({ code: `document.${code}`, path: at });
+  });
+
+  it('rejects nesting deeper than MAX_DEPTH in text, in linear time', () => {
+    const doc = edited(['set', '/nodes/c', customNode(0)], ['push', '/pages/0/children', 'c']);
+    const deep = (n: number) =>
+      JSON.stringify(doc).replace('"data":0', `"data":${'['.repeat(n)}${']'.repeat(n)}`);
+    // The document, nodes and node objects are three levels above the data.
+    expect(parseDocument(deep(MAX_DEPTH - 3)).ok).toBe(true);
+    const tooDeep = failure(parseDocument(deep(MAX_DEPTH - 2)));
+    expect(tooDeep.code).toBe('document.invalid-field');
+    expect(tooDeep.path).toBe(`/nodes/c/data${'/0'.repeat(MAX_DEPTH - 3)}`);
+    expect(failure(parseDocument(deep(20000))).code).toBe('document.invalid-field');
+  });
+
+  it('rejects deep or cyclic in-memory custom data', () => {
+    let nested: unknown = 0;
+    for (let i = 0; i < 10000; i += 1) nested = [nested];
+    const cyclic: unknown[] = [];
+    cyclic.push(cyclic);
+    for (const data of [nested, cyclic]) {
+      const doc = edited(['set', '/nodes/c', customNode(data)], ['push', '/pages/0/children', 'c']);
+      expect(failure(validateDocument(doc)).code).toBe('document.invalid-field');
+    }
+  });
+
+  it.each<[string, Edit[], string]>([
+    ['points', [['set', '/nodes/b/path/points', new Array(4)]], '/nodes/b/path/points/0'],
+    ['children', [['set', '/pages/0/children', holed(['a', 'x', 'b'], 1)]], '/pages/0/children/1'],
+    [
+      'verbs',
+      [['set', '/nodes/b/path/verbs', holed(['move', 'line', 'close'], 1)]],
+      '/nodes/b/path/verbs/1',
+    ],
+  ])('rejects a sparse %s array', (_label, edits, at) => {
+    expect(failure(validateDocument(edited(...edits)))).toEqual({
+      code: 'document.invalid-field',
+      path: at,
+    });
+  });
+
+  it('rejects sparse custom data', () => {
+    const doc = edited(
+      ['set', '/nodes/c', customNode(holed([1, 0, 2], 1))],
+      ['push', '/pages/0/children', 'c'],
+    );
+    expect(failure(validateDocument(doc))).toEqual({
+      code: 'document.invalid-field',
+      path: '/nodes/c/data/1',
+    });
+  });
+
+  it('rejects an empty node key', () => {
+    const text = JSON.stringify(smallDocument()).replace('"a":{"id":"a"', '"":{"id":""');
+    expect(failure(parseDocument(text))).toEqual({
+      code: 'document.invalid-field',
+      path: '/nodes//id',
+    });
+  });
+
   it('rejects a non-object document and non-JSON custom data', () => {
     expect(failure(parseDocument('[]'))).toEqual({ code: 'document.invalid-field', path: '' });
     const doc = edited(
@@ -409,6 +508,22 @@ describe('P5-A07 validation codes', () => {
       false,
       false,
     ]);
+  });
+});
+
+describe('validateNode', () => {
+  it('applies the document field rules to one node', () => {
+    const node = (smallDocument().nodes as Record<string, Record<string, unknown>>).a!;
+    const result = validateNode(node);
+    expect(result.ok && result.node).toEqual(node);
+    expect(failure(validateNode({ ...node, opacity: 2 }) as ParseResult)).toEqual({
+      code: 'document.invalid-field',
+      path: '/opacity',
+    });
+    expect(failure(validateNode({ ...node, id: '' }) as ParseResult)).toEqual({
+      code: 'document.invalid-field',
+      path: '/id',
+    });
   });
 });
 
@@ -482,7 +597,7 @@ describe('P5-U1 model package boundary', () => {
     const directory = path.join(root, 'packages/model/src');
     for (const name of await readdir(directory)) {
       const text = await readFile(path.join(directory, name), 'utf8');
-      for (const match of text.matchAll(/from\s+['"]([^'"]+)['"]/gu)) {
+      for (const match of text.matchAll(/(?:from\s+|import\s*\(?\s*)['"]([^'"]+)['"]/gu)) {
         expect(match[1], name).toMatch(/^\.\/[\w-]+\.js$/u);
       }
     }
