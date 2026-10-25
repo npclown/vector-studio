@@ -2185,13 +2185,25 @@ type Arrangement = Readonly<{
   crossings: number;
 }>;
 
-/** Pre-subdivides the curves to the index region and drops pieces that miss it. */
-function clipCurves(curves: readonly FCurve[], region: Box, work: Work): FCurve[] {
+/**
+ * Pre-subdivides the curves to the index region and drops pieces that miss it. The dropped pieces
+ * are returned too: a kept piece may extend beyond the region, and a dropped piece can cross it
+ * there, so the arrangement still cuts the kept piece at that crossing (E3-U5, contract section 19).
+ */
+function clipCurves(
+  curves: readonly FCurve[],
+  region: Box,
+  work: Work,
+): { kept: FCurve[]; dropped: FCurve[] } {
   const out: FCurve[] = [];
+  const dropped: FCurve[] = [];
   const size = Math.max(region.x1 - region.x0, region.y1 - region.y0);
   const visit = (c: FCubic, depth: number) => {
     spend(work, 1, 'fill clipping');
-    if (!boxesMeet(c.box, region)) return;
+    if (!boxesMeet(c.box, region)) {
+      dropped.push(c);
+      return;
+    }
     const inside =
       c.box.x0 >= region.x0 &&
       c.box.x1 <= region.x1 &&
@@ -2209,9 +2221,10 @@ function clipCurves(curves: readonly FCurve[], region: Box, work: Work): FCurve[
   for (const c of curves) {
     if (c.kind === 'line') {
       if (boxesMeet(c.box, region)) out.push(c);
+      else dropped.push(c);
     } else visit(c, 0);
   }
-  return out;
+  return { kept: out, dropped };
 }
 
 function addCut(curve: ArrCurve, lo: Q, hi: Q, id: number, unique: boolean): void {
@@ -2234,11 +2247,36 @@ function buildArrangement(
   work: Work,
 ): Arrangement {
   const clipped = clipCurves(allCurves, region, work);
-  const curves: ArrCurve[] = clipped.map((c, index) => ({ ...c, index, cuts: [] }));
+  const curves: ArrCurve[] = clipped.kept.map((c, index) => ({ ...c, index, cuts: [] }));
   let nextId = 0;
   const crossings: A04Crossing[] = [];
-  const record = (curve: ArrCurve, lo: Q, hi: Q, id: number, unique: boolean) =>
-    crossings.push({ curve: curve.index, lo, hi, id, unique });
+  // A dropped piece has index −1: its own crossings are not recorded, it only cuts kept pieces.
+  const record = (curve: ArrCurve, lo: Q, hi: Q, id: number, unique: boolean) => {
+    if (curve.index >= 0) crossings.push({ curve: curve.index, lo, hi, id, unique });
+  };
+  const pair = (A: ArrCurve, B: ArrCurve) => {
+    spend(work, 1, 'fill pairs');
+    if (A.kind === 'line' && B.kind === 'line') {
+      const d1 = qpsub(A.b, A.a);
+      const d2 = qpsub(B.b, B.a);
+      const den = qpcross(d1, d2);
+      if (den.n === 0n) return;
+      const w = qpsub(B.a, A.a);
+      const s = qdiv(qpcross(w, d2), den);
+      const u = qdiv(qpcross(w, d1), den);
+      if (qsgn(s) < 0 || qcmp(s, Q1) > 0 || qsgn(u) < 0 || qcmp(u, Q1) > 0) return;
+      const id = nextId++;
+      record(A, s, s, id, true);
+      record(B, u, u, id, true);
+    } else if (A.kind === 'cubic' && B.kind === 'cubic') {
+      if (A.origin === B.origin) return;
+      cubicCubic(A, B, () => nextId++, record, work);
+    } else {
+      const L = (A.kind === 'line' ? A : B) as ArrCurve & FLine;
+      const C = (A.kind === 'cubic' ? A : B) as ArrCurve & FCubic;
+      lineCubic(L, C, () => nextId++, record, work);
+    }
+  };
   // Pairs with overlapping boxes (sorted sweep on x).
   const order = [...curves].sort((a, b) => a.box.x0 - b.box.x0);
   for (let i = 0; i < order.length; i += 1) {
@@ -2246,28 +2284,40 @@ function buildArrangement(
     for (let j = i + 1; j < order.length; j += 1) {
       const B = order[j]!;
       if (B.box.x0 > A.box.x1) break;
-      if (!boxesMeet(A.box, B.box)) continue;
-      spend(work, 1, 'fill pairs');
-      if (A.kind === 'line' && B.kind === 'line') {
-        const d1 = qpsub(A.b, A.a);
-        const d2 = qpsub(B.b, B.a);
-        const den = qpcross(d1, d2);
-        if (den.n === 0n) continue;
-        const w = qpsub(B.a, A.a);
-        const s = qdiv(qpcross(w, d2), den);
-        const u = qdiv(qpcross(w, d1), den);
-        if (qsgn(s) < 0 || qcmp(s, Q1) > 0 || qsgn(u) < 0 || qcmp(u, Q1) > 0) continue;
-        const id = nextId++;
-        record(A, s, s, id, true);
-        record(B, u, u, id, true);
-      } else if (A.kind === 'cubic' && B.kind === 'cubic') {
-        if (A.origin === B.origin) continue;
-        cubicCubic(A, B, () => nextId++, record, work);
-      } else {
-        const L = (A.kind === 'line' ? A : B) as ArrCurve & FLine;
-        const C = (A.kind === 'cubic' ? A : B) as ArrCurve & FCubic;
-        lineCubic(L, C, () => nextId++, record, work);
-      }
+      if (boxesMeet(A.box, B.box)) pair(A, B);
+    }
+  }
+  // Kept pieces against dropped pieces whose boxes meet them: such a crossing lies outside the
+  // region, but it still splits the kept piece into portions of different classes. A dropped
+  // piece is a different parameter range from every kept piece, so no crossing is found twice;
+  // same-origin pieces of one cubic are left to selfIntersections, as above.
+  let hull: Box | null = null;
+  for (const c of curves)
+    hull =
+      hull === null
+        ? c.box
+        : {
+            x0: Math.min(hull.x0, c.box.x0),
+            y0: Math.min(hull.y0, c.box.y0),
+            x1: Math.max(hull.x1, c.box.x1),
+            y1: Math.max(hull.y1, c.box.y1),
+          };
+  const dropped: ArrCurve[] = clipped.dropped
+    .filter((c) => hull !== null && boxesMeet(c.box, hull))
+    .map((c) => ({ ...c, index: -1, cuts: [] }))
+    .sort((a, b) => a.box.x0 - b.box.x0);
+  const dropX0 = dropped.map((c) => c.box.x0);
+  for (const A of order) {
+    let lo = 0;
+    let hi = dropped.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (dropX0[mid]! <= A.box.x1) lo = mid + 1;
+      else hi = mid;
+    }
+    for (let j = 0; j < lo; j += 1) {
+      const B = dropped[j]!;
+      if (boxesMeet(A.box, B.box)) pair(A, B);
     }
   }
   selfIntersections(allCurves, curves, () => nextId++, record);

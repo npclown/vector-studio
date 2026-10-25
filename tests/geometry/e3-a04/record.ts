@@ -206,6 +206,8 @@ export function verdictOf(
   if (input.rows.length !== input.selection.corpusCases)
     reasons.push(`${input.rows.length} of ${input.selection.corpusCases} corpus cases`);
   if (input.provenance.dirty) reasons.push('a dirty worktree');
+  if (input.provenance.oracleCertified === false)
+    reasons.push('an oracle version without a freeze check record (E3-R2)');
   return { verdict: reasons.length === 0 ? 'PASS' : 'UNVERIFIED', reasons };
 }
 

@@ -63,6 +63,20 @@ if (!smoke) {
     );
 }
 
+// Section 4.2 and E3-R2: a measurement counts only on an oracle version whose full freeze check
+// the contract records ("Oracle `…a04-region.ts` SHA-256: `<sha>`" in a freeze or oracle record).
+// A strided sample may run on another version; its record names it as uncertified.
+const oracleSha256 = sha256(read(oraclePath));
+const oracleCertified = read(contractPath)
+  .toString('utf8')
+  .split('\n')
+  .some((line) => line.includes('a04-region.ts` SHA-256') && line.includes(oracleSha256));
+if (!smoke && stride === 1 && !oracleCertified)
+  throw new Error(
+    `refusing a full corpus run: oracle SHA-256 ${oracleSha256} has no freeze check record in ` +
+      `${contractPath} (section 4.2, E3-R2). Run pnpm e3-a04:freeze on it first, or use --stride.`,
+  );
+
 const git = (...a) => spawnSync('git', a, { cwd: root, encoding: 'utf8' }).stdout.trim();
 const wasm = path.resolve(
   value('--wasm') ??
@@ -87,7 +101,8 @@ const provenance = {
   contractSha256: sha256(read(contractPath)),
   corpusSha256: manifest.corpusSha256,
   generatorSha256: manifest.generator.sha256,
-  oracleSha256: sha256(read(oraclePath)),
+  oracleSha256,
+  oracleCertified,
   wasmSha256: sha256(readFileSync(wasm)),
   node: process.version,
   os: `${os.type()} ${os.release()} ${os.arch()}`,
