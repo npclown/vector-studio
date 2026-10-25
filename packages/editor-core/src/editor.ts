@@ -2,6 +2,7 @@ import type { RenderCamera } from '@vector-studio/contracts';
 import { validateDocument, type DocumentV1 } from '@vector-studio/model';
 import { applyEdit, deepFreeze } from './edits.js';
 import { createCounterIdSource } from './ids.js';
+import { createPathTool, createRectangleTool, createSelectTool } from './tools.js';
 import type {
   Command,
   CommandResult,
@@ -16,6 +17,7 @@ import type {
   Query,
   QueryResult,
   ToolName,
+  ToolOverlay,
 } from './types.js';
 
 // Editor core (P5 plan, section 4): commands, transactions, history, gestures and session.
@@ -30,8 +32,9 @@ export type EditorOptions = Readonly<{
 /** A tool receives input and acts only through the editor's commands and the gesture API. */
 export interface Tool {
   input(event: InputEvent, context: ToolContext): void;
-  /** Drops overlay state, for example when the tool is switched away. Must issue no command. */
+  /** Drops drag and overlay state, for example when the tool is switched away. Must issue no command. */
   reset(): void;
+  overlay(): ToolOverlay | null;
 }
 
 export interface ToolContext {
@@ -43,8 +46,8 @@ export interface ToolContext {
 /**
  * A pointer drag (plan section 4.2). Updates change the live document without history; commit
  * records one undo step from the pre-gesture state; cancel restores that state. Events are held
- * only for calls made inside `input`; a listener's command can still end the drag, so callers
- * check `active` after `update`.
+ * during `input`, so a tool's drag cannot end under it; a caller outside `input` checks `active`
+ * after `update`, because a listener's command can end the drag.
  */
 export interface GestureControl {
   readonly active: boolean;
@@ -110,6 +113,16 @@ function isInputEvent(value: unknown): value is InputEvent {
   );
 }
 
+function copyInput(event: InputEvent): InputEvent {
+  const { shift, alt, meta, ctrl } = event.modifiers;
+  const modifiers = { shift, alt, meta, ctrl };
+  return deepFreeze(
+    event.kind === 'keydown'
+      ? { kind: event.kind, key: event.key, modifiers }
+      : { kind: event.kind, point: { x: event.point.x, y: event.point.y }, modifiers },
+  );
+}
+
 function sorted(ids: Iterable<string>): string[] {
   return [...new Set(ids)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
@@ -150,6 +163,13 @@ class EditorCore implements Editor {
     if (!result.ok) throw new Error(`createEditor: ${result.code} at ${result.path}`);
     this.document = deepFreeze(result.document);
     this.snapshot = this.buildSnapshot();
+    // Custom nodes become hittable through their extension's geometry in P5-U5.
+    this.tools.set(
+      'select',
+      createSelectTool(() => null),
+    );
+    this.tools.set('rectangle', createRectangleTool());
+    this.tools.set('path', createPathTool());
     const isActive = () => this.gestureState !== null;
     this.gesture = {
       get active() {
@@ -250,7 +270,9 @@ class EditorCore implements Editor {
       }
       case 'input': {
         if (!isInputEvent(command.event)) return failure('editor.invalid-command', '/event');
-        this.tools.get(this.tool)?.input(command.event, {
+        // Tools keep points, so they get a frozen copy, never the host's objects.
+        const event = copyInput(command.event);
+        this.tools.get(this.tool)?.input(event, {
           execute: (next) => this.execute(next),
           query: (query) => this.query(query),
           gesture: this.gesture,
@@ -281,6 +303,8 @@ class EditorCore implements Editor {
           return this.snapshot.history;
         case 'revision':
           return this.revision;
+        case 'overlay':
+          return this.tools.get(this.tool)?.overlay() ?? null;
       }
     })();
     return value as QueryResult<Q>;
