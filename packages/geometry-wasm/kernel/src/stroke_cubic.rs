@@ -604,8 +604,8 @@ pub(crate) fn measure_band(
     }
     let r = context.r;
     // The absolute `u M` terms cover the binary64 evaluation of `D_i`, `D_i - D_(i-1)` and
-    // `V` (at most about 102, 51 and 3 `u M`), which the relative slack does not cover when the
-    // differences are small.
+    // `V` (in norm at most about 17, 51 and 3 `u M`, so 102 on `c2Up`), which the relative slack
+    // does not cover when the differences are small.
     let c2_up =
         (2.0 * norm(sub(d[1], d[0])).max(norm(sub(d[2], d[1]))) + 36.0 * eps + 256.0 * UNIT * m)
             * SLACK_UP;
