@@ -8,10 +8,7 @@ export const boundaries = new Map([
   // P5-U2: the editor core reaches the renderer only through contracts (P5 plan, section 2).
   ['@vector-studio/editor-core', new Set(['@vector-studio/contracts', '@vector-studio/model'])],
   // P5-U6: the React bindings reach the renderer only through contracts (P5 plan, section 2).
-  [
-    '@vector-studio/react',
-    new Set(['@vector-studio/contracts', '@vector-studio/editor-core', '@vector-studio/model']),
-  ],
+  ['@vector-studio/react', new Set(['@vector-studio/contracts', '@vector-studio/editor-core'])],
   ['@vector-studio/geometry-reference', new Set(['@vector-studio/contracts'])],
   ['@vector-studio/geometry-wasm', new Set(['@vector-studio/contracts'])],
   ['@vector-studio/renderer-core', new Set(['@vector-studio/contracts'])],
@@ -43,6 +40,16 @@ export const boundaries = new Map([
       '@vector-studio/renderer-webgpu',
     ]),
   ],
+]);
+
+// P5-U6: npm packages a workspace package may not import, by manifest or source, though the
+// root devDependencies make them resolvable (ARCHITECTURE.md, forbidden examples).
+const UI_PACKAGES = ['react', 'react-dom', 'next'];
+export const externalDenied = new Map([
+  ['@vector-studio/contracts', new Set(UI_PACKAGES)],
+  ['@vector-studio/model', new Set(UI_PACKAGES)],
+  ['@vector-studio/editor-core', new Set(UI_PACKAGES)],
+  ['@vector-studio/react', new Set(['next'])],
 ]);
 
 export const packageDirectories = [
@@ -107,8 +114,23 @@ export function evaluatePackageBoundaries({ manifest, sources, packageRoots, dis
       failures.push(`${manifest.name}: manifest dependency on ${dependency} is forbidden`);
     }
   }
+  const denied = externalDenied.get(manifest.name) ?? new Set();
+  for (const field of dependencyFields) {
+    for (const dependency of Object.keys(manifest[field] ?? {})) {
+      if (denied.has(dependency)) {
+        failures.push(`${manifest.name}: manifest dependency on ${dependency} is forbidden`);
+      }
+    }
+  }
   for (const source of sources) {
     for (const match of source.text.matchAll(sourceImportPattern)) {
+      const bare = match[1].startsWith('@')
+        ? match[1].split('/').slice(0, 2).join('/')
+        : match[1].split('/')[0];
+      if (denied.has(bare)) {
+        const shown = displayPath ? displayPath(source.path) : source.path;
+        failures.push(`${shown}: source import of ${bare} is forbidden`);
+      }
       const dependency = workspaceImportTarget(match[1], source.path, packageRoots);
       if (dependency && dependency !== manifest.name && !allowed.has(dependency)) {
         const shown = displayPath ? displayPath(source.path) : source.path;

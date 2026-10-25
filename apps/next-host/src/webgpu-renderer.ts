@@ -22,31 +22,41 @@ export const createWebGpuRenderer: RendererFactory = async (canvas, size) => {
     );
   }
   const bytes = await response.arrayBuffer();
-  // Two instances of the one kernel: each port owns its own linear memory.
-  const fill = await geometry.createFillMeshPort(bytes);
-  const stroke = await geometry.createStrokeMeshPort(bytes);
-  const backend = new webgpu.WebGpuBackend();
-  const service = new core.PrimitiveRendererService(backend, {
-    fillMesh: fill,
-    fillMeshMemoryBytes: () => fill.linearMemoryBytes(),
-    strokeMesh: stroke,
-    strokeMeshMemoryBytes: () => stroke.linearMemoryBytes(),
-  });
-  const source = backend.attachPrimitiveFrameSource(service);
-  const capability = await backend.initialize({
-    canvas,
-    cssSize: { width: size.width, height: size.height },
-    devicePixelRatio: size.devicePixelRatio,
-  });
+  // Everything created so far is released on any failure, in the playground's order: service,
+  // backend, then the kernel ports (apps/playground/src/viz-v1-appearance.ts).
+  const releases: (() => void)[] = [];
   const dispose = () => {
-    source.dispose();
-    service.dispose();
-    backend.dispose();
+    for (const release of releases.splice(0).reverse()) release();
   };
-  if (!capability.supported) {
+  try {
+    // Two instances of the one kernel: each port owns its own linear memory.
+    const fill = await geometry.createFillMeshPort(bytes);
+    releases.push(() => fill.dispose());
+    const stroke = await geometry.createStrokeMeshPort(bytes);
+    releases.push(() => stroke.dispose());
+    const backend = new webgpu.WebGpuBackend();
+    releases.push(() => backend.dispose());
+    const service = new core.PrimitiveRendererService(backend, {
+      fillMesh: fill,
+      fillMeshMemoryBytes: () => fill.linearMemoryBytes(),
+      strokeMesh: stroke,
+      strokeMeshMemoryBytes: () => stroke.linearMemoryBytes(),
+    });
+    releases.push(() => service.dispose());
+    const source = backend.attachPrimitiveFrameSource(service);
+    releases.push(() => source.dispose());
+    const capability = await backend.initialize({
+      canvas,
+      cssSize: { width: size.width, height: size.height },
+      devicePixelRatio: size.devicePixelRatio,
+    });
+    if (!capability.supported) {
+      throw new Error(`WebGPU is not available: ${capability.diagnostic.message}`);
+    }
+    const handle: RendererHandle = { renderer: service, dispose };
+    return handle;
+  } catch (error) {
     dispose();
-    throw new Error(`WebGPU is not available: ${capability.diagnostic.message}`);
+    throw error;
   }
-  const handle: RendererHandle = { renderer: service, dispose };
-  return handle;
 };

@@ -99,12 +99,42 @@ describe('P5-U6 React bindings', () => {
 });
 
 describe('P5-A13 boundaries of the React and Next.js packages', () => {
-  it('allows react only contracts, editor-core and model', () => {
+  it('allows react only contracts and editor-core', () => {
     expect([...policy.get('@vector-studio/react')!].sort()).toEqual([
       '@vector-studio/contracts',
       '@vector-studio/editor-core',
-      '@vector-studio/model',
     ]);
+  });
+
+  it('rejects the seeded edges editor-core -> React and react -> next', () => {
+    const core = {
+      path: path.join(root, 'packages/editor-core/src/seeded.ts'),
+      text: "import { useState } from 'react';\nimport 'react-dom/client';\n",
+    };
+    expect(
+      evaluate({
+        manifest: { name: '@vector-studio/editor-core', dependencies: { react: '19.3.1' } },
+        sources: [core],
+        packageRoots: new Map([
+          ['@vector-studio/editor-core', path.join(root, 'packages/editor-core')],
+        ]),
+      }),
+    ).toEqual([
+      '@vector-studio/editor-core: manifest dependency on react is forbidden',
+      `${core.path}: source import of react is forbidden`,
+      `${core.path}: source import of react-dom is forbidden`,
+    ]);
+    const bindings = {
+      path: path.join(root, 'packages/react/src/seeded.tsx'),
+      text: "import Link from 'next/link';\n",
+    };
+    expect(
+      evaluate({
+        manifest: { name: '@vector-studio/react' },
+        sources: [bindings],
+        packageRoots: new Map([['@vector-studio/react', path.join(root, 'packages/react')]]),
+      }),
+    ).toEqual([`${bindings.path}: source import of next is forbidden`]);
   });
 
   it('rejects the seeded edge react -> renderer-webgpu, by source and by manifest', () => {

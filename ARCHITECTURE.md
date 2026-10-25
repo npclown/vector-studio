@@ -118,7 +118,7 @@ P3 V1 ([ADR 0002](docs/decisions/0002-path-scene-and-fill-mesh-port.md)) adds th
 
 Pointer, 2026-10-20 (B2 ST-U5): stroke now has its own approved contract, the [B2 stroke contract](docs/plans/p3-b2-stroke-contract.md). `contracts` defines `StrokeMeshPort` beside `FillMeshPort`, with the same plain-data rules and the same mesh form. `geometry-wasm` implements it with `createStrokeMeshPort` over its own kernel instance, and the host composition root injects it into `renderer-core` (ST-U6). No dependency edge changes.
 
-Pointer, 2026-10-25 (P5-U6, [P5 editor-slice plan](docs/plans/p5-editor-slice.md)): `apps/next-host` is a second host composition root beside the playground. Like the playground, it may depend on `geometry-wasm`, `renderer-core` and `renderer-webgpu`, and it also depends on `model`, `editor-core` and `react`. It loads the renderer and geometry packages only by dynamic `import()` inside the canvas effect. `@vector-studio/react` depends only on `contracts`, `editor-core` and `model`; the renderer reaches it as a host-supplied factory.
+Pointer, 2026-10-25 (P5-U6, [P5 editor-slice plan](docs/plans/p5-editor-slice.md)): `apps/next-host` is a second host composition root beside the playground. Like the playground, it may depend on `geometry-wasm`, `renderer-core` and `renderer-webgpu`, and it also depends on `model`, `editor-core` and `react`. It loads the renderer and geometry packages only by dynamic `import()` inside the canvas effect. `@vector-studio/react` depends only on `contracts` and `editor-core`; the renderer reaches it as a host-supplied factory. The boundary checker also rejects `react`, `react-dom` and `next` in `contracts`, `model` and `editor-core`, and `next` in `react`.
 
 Forbidden dependency examples:
 

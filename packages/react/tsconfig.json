@@ -8,5 +8,5 @@
     "tsBuildInfoFile": "dist/react.tsbuildinfo"
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "references": [{ "path": "../contracts" }, { "path": "../editor-core" }, { "path": "../model" }]
+  "references": [{ "path": "../contracts" }, { "path": "../editor-core" }]
 }

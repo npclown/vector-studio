@@ -90,7 +90,7 @@ function Toolbar() {
   );
 }
 
-function Status({ errors }: { errors: readonly string[] }) {
+function Status({ errors, renderer }: { errors: readonly string[]; renderer: string }) {
   const revision = useEditorSelector((snapshot) => snapshot.revision);
   const count = useEditorSelector((snapshot) => snapshot.document.pages[0].children.length);
   const selected = useEditorSelector((snapshot) => snapshot.selection.length);
@@ -100,6 +100,7 @@ function Status({ errors }: { errors: readonly string[] }) {
       data-revision={revision}
       data-nodes={count}
       data-selected={selected}
+      data-renderer={renderer}
       style={{ padding: 8 }}
     >
       revision {revision}, {count} nodes, {selected} selected
@@ -115,6 +116,7 @@ function Status({ errors }: { errors: readonly string[] }) {
 function Surface() {
   const snapshot = useEditorSelector((value) => value);
   const [errors, setErrors] = useState<readonly string[]>([]);
+  const [renderer, setRenderer] = useState('pending');
   return (
     <>
       <Toolbar />
@@ -122,12 +124,16 @@ function Surface() {
         width={WIDTH}
         height={HEIGHT}
         createRenderer={createWebGpuRenderer}
-        onRendererError={(error) => setErrors((list) => [...list, String(error)])}
+        onRendererError={(error) => {
+          setRenderer('error');
+          setErrors((list) => [...list, String(error)]);
+        }}
+        onRendererReady={() => setRenderer('ready')}
         style={{ border: '1px solid #ccc' }}
       >
         <SelectionOverlay snapshot={snapshot} width={WIDTH} height={HEIGHT} />
       </EditorCanvas>
-      <Status errors={errors} />
+      <Status errors={errors} renderer={renderer} />
     </>
   );
 }

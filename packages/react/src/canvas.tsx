@@ -27,11 +27,20 @@ export type EditorCanvasProps = Readonly<{
   height: number;
   createRenderer?: RendererFactory;
   onRendererError?: (error: unknown) => void;
+  /** Called once the factory's renderer is attached to the editor. */
+  onRendererReady?: () => void;
   className?: string;
   style?: CSSProperties;
   /** Drawn over the canvas, for example the host's selection overlay. */
   children?: ReactNode;
 }>;
+
+/**
+ * Renderer creation per canvas, chained: a creation waits until the previous one has settled
+ * and been released, so two renderers never configure one canvas context at once (StrictMode
+ * runs every effect twice in development, and a size change re-runs it).
+ */
+const creations = new WeakMap<HTMLCanvasElement, Promise<void>>();
 
 function modifiersOf(event: {
   shiftKey: boolean;
@@ -47,6 +56,7 @@ export function EditorCanvas({
   height,
   createRenderer,
   onRendererError,
+  onRendererReady,
   className,
   style,
   children,
@@ -57,6 +67,9 @@ export function EditorCanvas({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const onError = useRef(onRendererError);
   onError.current = onRendererError;
+  const onReady = useRef(onRendererReady);
+  onReady.current = onRendererReady;
+  const dragging = useRef(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -64,8 +77,15 @@ export function EditorCanvas({
     // The effect may be torn down (StrictMode, unmount) before the factory resolves.
     let active = true;
     let release: (() => void) | null = null;
-    createRenderer(canvas, { width, height, devicePixelRatio: window.devicePixelRatio }).then(
-      (handle) => {
+    const previous = creations.get(canvas) ?? Promise.resolve();
+    const current = previous.then(async () => {
+      if (!active) return;
+      try {
+        const handle = await createRenderer(canvas, {
+          width,
+          height,
+          devicePixelRatio: window.devicePixelRatio,
+        });
         if (!active) {
           handle.dispose();
           return;
@@ -75,33 +95,42 @@ export function EditorCanvas({
           detach();
           handle.dispose();
         };
-      },
-      (error: unknown) => {
+        onReady.current?.();
+      } catch (error) {
         if (active) onError.current?.(error);
-      },
-    );
+      }
+    });
+    creations.set(canvas, current);
     return () => {
       active = false;
       release?.();
+      release = null;
     };
   }, [editor, createRenderer, width, height]);
 
   const toPage = (event: PointerEvent<HTMLCanvasElement>): PagePoint => {
-    const rect = event.currentTarget.getBoundingClientRect();
+    // The renderer draws in the content box, inside any border the host styles on the canvas.
+    const canvas = event.currentTarget;
+    const rect = canvas.getBoundingClientRect();
     return {
-      x: viewport.position.x + (event.clientX - rect.left) / viewport.zoom,
-      y: viewport.position.y + (event.clientY - rect.top) / viewport.zoom,
+      x: viewport.position.x + (event.clientX - rect.left - canvas.clientLeft) / viewport.zoom,
+      y: viewport.position.y + (event.clientY - rect.top - canvas.clientTop) / viewport.zoom,
     };
   };
   const pointer =
     (kind: 'pointerdown' | 'pointermove' | 'pointerup') =>
     (event: PointerEvent<HTMLCanvasElement>) => {
       if (kind === 'pointerdown') {
+        // P5 tools use the primary button only.
+        if (event.button !== 0) return;
         event.currentTarget.setPointerCapture(event.pointerId);
         event.currentTarget.focus();
+        dragging.current = true;
+      } else if (!dragging.current) {
+        // Moves without a press are hover, and a release without one is not ours.
+        return;
       }
-      // Moves without a pressed button are hover; P5 tools act only on drags.
-      if (kind === 'pointermove' && event.buttons === 0) return;
+      if (kind === 'pointerup') dragging.current = false;
       execute({
         type: 'input',
         event: { kind, point: toPage(event), modifiers: modifiersOf(event) },
@@ -120,6 +149,19 @@ export function EditorCanvas({
         onPointerDown={pointer('pointerdown')}
         onPointerMove={pointer('pointermove')}
         onPointerUp={pointer('pointerup')}
+        onPointerCancel={() => {
+          // A cancelled pointer (pen or touch, lost capture) cancels the drag, as Escape does.
+          if (!dragging.current) return;
+          dragging.current = false;
+          execute({
+            type: 'input',
+            event: {
+              kind: 'keydown',
+              key: 'Escape',
+              modifiers: { shift: false, alt: false, meta: false, ctrl: false },
+            },
+          });
+        }}
         onKeyDown={(event) => {
           const result = execute({
             type: 'input',

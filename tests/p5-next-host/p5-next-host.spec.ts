@@ -63,8 +63,10 @@ async function open(page: Page) {
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/?test=1');
   await page.waitForFunction(() => window.__p5Host !== undefined);
-  // The renderer attaches in the canvas effect after WebGPU initializes.
-  await page.waitForTimeout(1500);
+  // The renderer attaches in the canvas effect after WebGPU initializes; nothing runs before.
+  await expect(page.getByTestId('status')).toHaveAttribute('data-renderer', 'ready', {
+    timeout: 30_000,
+  });
   await expect(page.getByTestId('error')).toHaveCount(0);
   return errors;
 }

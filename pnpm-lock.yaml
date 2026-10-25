@@ -147,9 +147,6 @@ importers:
       '@vector-studio/editor-core':
         specifier: workspace:*
         version: link:../editor-core
-      '@vector-studio/model':
-        specifier: workspace:*
-        version: link:../model
     devDependencies:
       '@types/react':
         specifier: 19.3.0
