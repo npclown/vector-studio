@@ -1,7 +1,8 @@
-import type { RenderCamera } from '@vector-studio/contracts';
+import type { RenderCamera, RendererSceneSynchronization } from '@vector-studio/contracts';
 import { validateDocument, type DocumentV1 } from '@vector-studio/model';
 import { applyEdit, deepFreeze } from './edits.js';
 import { createCounterIdSource } from './ids.js';
+import { SceneProjector } from './projector.js';
 import { createPathTool, createRectangleTool, createSelectTool } from './tools.js';
 import type {
   Command,
@@ -150,6 +151,9 @@ class EditorCore implements Editor {
   private readonly listeners = new Set<(event: EditorEvent) => void>();
   private readonly pending: EditorEvent[] = [];
   private draining = false;
+  private projector: SceneProjector | null = null;
+  private reportTo: EditorEvent[] | null = null;
+  private renderer: RendererSceneSynchronization | null = null;
   private holding = false;
   private readonly ids: IdSource;
   readonly tools = new Map<ToolName, Tool>();
@@ -264,7 +268,10 @@ class EditorCore implements Editor {
       case 'setViewport': {
         if (!isCamera(command.camera)) return failure('editor.invalid-camera');
         const { position, zoom } = command.camera;
-        this.viewport = deepFreeze({ position: { x: position.x + 0, y: position.y + 0 }, zoom });
+        const camera = deepFreeze({ position: { x: position.x + 0, y: position.y + 0 }, zoom });
+        // The renderer's camera check is the last word; on invalid-camera nothing changes.
+        if (!this.applyCamera(camera)) return failure('editor.invalid-camera');
+        this.viewport = camera;
         this.refresh({ type: 'session', field: 'viewport' });
         return { ok: true, ids: [] };
       }
@@ -317,6 +324,39 @@ class EditorCore implements Editor {
 
   getSnapshot(): EditorSnapshot {
     return this.snapshot;
+  }
+
+  attachRenderer(renderer: RendererSceneSynchronization): () => void {
+    // Custom nodes are projected through their extension's geometry in P5-U5.
+    const projector = new SceneProjector(
+      renderer,
+      () => null,
+      (event) => (this.reportTo ?? this.pending).push(event),
+    );
+    this.projector = projector;
+    this.renderer = renderer;
+    const diagnostics: EditorEvent[] = [];
+    this.withProjector((attached) => attached.replace(this.document), diagnostics);
+    this.applyCamera(this.viewport);
+    diagnostics.forEach((event) => this.emit(event));
+    return () => {
+      if (this.projector === projector) {
+        this.projector = null;
+        this.renderer = null;
+      }
+    };
+  }
+
+  /** Sends the camera to the attached renderer; false only when it rejects the camera. */
+  private applyCamera(camera: RenderCamera): boolean {
+    if (this.renderer === null) return true;
+    const result = this.renderer.setCamera(camera);
+    if (result.status === 'disposed') {
+      this.projector = null;
+      this.renderer = null;
+      return true;
+    }
+    return result.status !== 'invalid-camera';
   }
 
   private beginGesture(): boolean {
@@ -373,12 +413,36 @@ class EditorCore implements Editor {
   ): void {
     this.document = document;
     this.revision += 1;
+    const ids = sorted(touched);
+    // The renderer follows before any listener runs; its diagnostics follow the change event.
+    const diagnostics: EditorEvent[] = [];
+    this.withProjector((projector) => {
+      if (cause === 'load') projector.replace(document);
+      else projector.change(document, ids);
+    }, diagnostics);
     // Deleting or undoing away a selected node removes it from the selection.
     const kept = this.selection.filter((id) => Object.hasOwn(document.nodes, id));
     const selectionChanged = kept.length !== this.selection.length;
     if (selectionChanged) this.selection = Object.freeze(kept);
-    this.refresh({ type: 'document', cause, revision: this.revision, touched: sorted(touched) });
+    this.refresh({ type: 'document', cause, revision: this.revision, touched: ids });
     if (selectionChanged) this.emit({ type: 'session', field: 'selection' });
+    diagnostics.forEach((event) => this.emit(event));
+  }
+
+  /** Runs `action` on the attached projector, collecting its diagnostics into `into`. */
+  private withProjector(action: (projector: SceneProjector) => void, into: EditorEvent[]): void {
+    const projector = this.projector;
+    if (projector === null) return;
+    this.reportTo = into;
+    try {
+      action(projector);
+    } finally {
+      this.reportTo = null;
+    }
+    if (!projector.active && this.projector === projector) {
+      this.projector = null;
+      this.renderer = null;
+    }
   }
 
   private setSelectionState(ids: readonly string[]): void {
