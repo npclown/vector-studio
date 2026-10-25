@@ -1,4 +1,5 @@
-import { validateNode, type DocumentV1, type NodeV1 } from '@vector-studio/model';
+import { validateNode, type DocumentV1, type JsonValue, type NodeV1 } from '@vector-studio/model';
+import type { CustomFailure } from './extensions.js';
 import type { CommandResult, DocumentCommand, EditorErrorCode, IdSource } from './types.js';
 
 // Pure document edits: each takes a valid document and returns a new valid document, or a
@@ -25,6 +26,18 @@ export const DEFAULT_PATH_STROKE = deepFreeze({
   miterLimit: 4,
 } as const);
 
+/** The extension checks edits need (an `ExtensionRegistry`). */
+export type CustomRules = Readonly<{
+  check(node: NodeV1): CustomFailure | null;
+  defaults(customType: string): JsonValue | undefined;
+}>;
+
+const NO_CUSTOM: CustomRules = {
+  check: (node) =>
+    node.type === 'custom' ? { code: 'document.unknown-custom-type', path: '/customType' } : null,
+  defaults: () => undefined,
+};
+
 const ID_ATTEMPTS = 1000;
 const PENDING_ID = 'pending';
 const PROP_KEYS = ['name', 'fill', 'stroke', 'opacity', 'visible', 'data'] as const;
@@ -42,12 +55,17 @@ function fail(code: EditorErrorCode, path?: string): Extract<CommandResult, { ok
   return path === undefined ? { ok: false, code } : { ok: false, code, path };
 }
 
-function checked(id: string, value: unknown): NodeV1 | Extract<CommandResult, { ok: false }> {
+function checked(
+  id: string,
+  value: unknown,
+  custom: CustomRules,
+): NodeV1 | Extract<CommandResult, { ok: false }> {
   const result = validateNode(value);
-  if (result.ok) return deepFreeze(result.node);
+  const failure = result.ok ? custom.check(result.node) : result;
+  if (failure === null && result.ok) return deepFreeze(result.node);
   return fail(
-    result.code,
-    `/nodes/${id.replaceAll('~', '~0').replaceAll('/', '~1')}${result.path}`,
+    failure!.code,
+    `/nodes/${id.replaceAll('~', '~0').replaceAll('/', '~1')}${failure!.path}`,
   );
 }
 
@@ -134,11 +152,13 @@ export function applyEdit(
   document: DocumentV1,
   command: DocumentCommand,
   ids: IdSource,
+  custom: CustomRules = NO_CUSTOM,
 ): EditResult {
   const [page] = document.pages;
   switch (command.type) {
     case 'createRectangle':
-    case 'createPath': {
+    case 'createPath':
+    case 'createCustomNode': {
       // Validate before drawing an ID, so a failed create leaves the ID source untouched.
       // Failure paths are relative to the new node.
       let candidate: Record<string, unknown>;
@@ -153,6 +173,22 @@ export function applyEdit(
           type: 'rectangle',
           fill: command.fill === undefined ? DEFAULT_RECTANGLE_FILL : command.fill,
           stroke: command.stroke ?? null,
+        };
+      } else if (command.type === 'createCustomNode') {
+        const data = command.data ?? custom.defaults(command.customType);
+        if (data === undefined) return fail('document.unknown-custom-type', '/customType');
+        candidate = {
+          id: PENDING_ID,
+          name: command.name ?? command.customType,
+          parent: page.id,
+          frame: command.frame,
+          opacity: 1,
+          visible: true,
+          type: 'custom',
+          customType: command.customType,
+          data,
+          fill: command.fill ?? null,
+          stroke: command.stroke === undefined ? DEFAULT_PATH_STROKE : command.stroke,
         };
       } else {
         const points: unknown = command.points;
@@ -180,6 +216,8 @@ export function applyEdit(
       }
       const result = validateNode(candidate);
       if (!result.ok) return fail(result.code, result.path);
+      const rejected = custom.check(result.node);
+      if (rejected !== null) return fail(rejected.code, rejected.path);
       const id = freshId(document, ids);
       if (id === null) return fail('editor.duplicate-id');
       const node = deepFreeze({ ...result.node, id });
@@ -202,7 +240,7 @@ export function applyEdit(
       for (const entry of entries) {
         const node = nodeOf(document, entry.id);
         if (node === undefined) return fail('editor.unknown-node');
-        const next = checked(entry.id, { ...node, frame: entry.frame });
+        const next = checked(entry.id, { ...node, frame: entry.frame }, custom);
         if (isFailure(next)) return next;
         replaced.push(next);
       }
@@ -223,7 +261,7 @@ export function applyEdit(
       if ('data' in props && node.type !== 'custom') {
         return fail('editor.invalid-command', '/props/data');
       }
-      const next = checked(node.id, { ...node, ...props });
+      const next = checked(node.id, { ...node, ...props }, custom);
       if (isFailure(next)) return next;
       return { ok: true, document: withNodes(document, [next]), touched: [node.id], created: [] };
     }
