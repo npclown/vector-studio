@@ -30,7 +30,7 @@ export type EditorOptions = Readonly<{
 /** A tool receives input and acts only through the editor's commands and the gesture API. */
 export interface Tool {
   input(event: InputEvent, context: ToolContext): void;
-  /** Drops overlay state, for example when the tool is switched away. */
+  /** Drops overlay state, for example when the tool is switched away. Must issue no command. */
   reset(): void;
 }
 
@@ -42,7 +42,9 @@ export interface ToolContext {
 
 /**
  * A pointer drag (plan section 4.2). Updates change the live document without history; commit
- * records one undo step from the pre-gesture state; cancel restores that state.
+ * records one undo step from the pre-gesture state; cancel restores that state. Events are held
+ * only for calls made inside `input`; a listener's command can still end the drag, so callers
+ * check `active` after `update`.
  */
 export interface GestureControl {
   readonly active: boolean;
