@@ -762,7 +762,13 @@ fn sweep_case(case: &CorpusCase, tally: &mut SweepTally) {
             ..STROKE_V0_LIMITS
         };
         let label = format!("{} contributor guard", case.name);
+        let before = tally.contributor_blocked;
         sweep_point(case, limits, &label, tally);
+        assert_eq!(
+            tally.contributor_blocked,
+            before + 1,
+            "{label}: the contributor guard"
+        );
     }
 }
 
