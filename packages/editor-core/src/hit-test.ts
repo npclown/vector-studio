@@ -9,7 +9,8 @@ export type CustomGeometry = (node: NodeV1) => PathData | null;
 
 type Polyline = { points: PagePoint[]; closed: boolean };
 
-const MAX_SEGMENTS_PER_CUBIC = 256;
+/** Holds the 0.25 / zoom bound for curves up to about 10^5 / zoom page units across. */
+const MAX_SEGMENTS_PER_CUBIC = 4096;
 
 function cubicSegments(
   p0: PagePoint,

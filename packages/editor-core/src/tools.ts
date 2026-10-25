@@ -1,5 +1,6 @@
 import type { Frame } from '@vector-studio/model';
 import type { Tool, ToolContext } from './editor.js';
+import { deepFreeze } from './edits.js';
 import { boundsOf, marqueeHits, topmostHit, type CustomGeometry } from './hit-test.js';
 import type { InputEvent, PagePoint, PathAnchor, ToolOverlay } from './types.js';
 
@@ -44,10 +45,8 @@ export function createRectangleTool(): Tool {
         return;
       }
       if (drag === null) return;
-      if (
-        event.kind === 'pointermove' &&
-        (drag.id !== null || distance(event.point, drag.start) > 0)
-      ) {
+      // The up point is the drag's end point b, so it updates like a move first.
+      if (drag.id !== null || distance(event.point, drag.start) > 0) {
         const frame = boxOf(drag.start, event.point);
         if (drag.id === null) {
           const result = context.gesture.update({ type: 'createRectangle', frame });
@@ -55,7 +54,8 @@ export function createRectangleTool(): Tool {
         } else {
           context.gesture.update({ type: 'setFrames', frames: [{ id: drag.id, frame }] });
         }
-      } else if (event.kind === 'pointerup') {
+      }
+      if (event.kind === 'pointerup') {
         // A click without movement made no update, so the commit creates nothing.
         const id = drag.id;
         drag = null;
@@ -95,11 +95,13 @@ export function createPathTool(): Tool {
       segment(anchors[anchors.length - 1]!, anchors[0]!);
       verbs.push('close');
     }
+    // The whole creation is one transaction, sent only now (plan section 4.4); a failed create
+    // keeps the anchors.
+    const result = context.execute({ type: 'createPath', verbs, points });
+    if (!result.ok) return;
     anchors = [];
     pressed = null;
-    // The whole creation is one transaction, sent only now (plan section 4.4).
-    const result = context.execute({ type: 'createPath', verbs, points });
-    if (result.ok) context.execute({ type: 'setSelection', ids: result.ids });
+    context.execute({ type: 'setSelection', ids: result.ids });
   }
 
   return {
@@ -120,6 +122,9 @@ export function createPathTool(): Tool {
           finish(context, true);
           return;
         }
+        // A second press on the last anchor (a double click) adds no anchor.
+        const last = anchors[anchors.length - 1];
+        if (last !== undefined && distance(event.point, last.point) === 0) return;
         pressed = { point: event.point, in: null, out: null };
         anchors.push(pressed);
       } else if (event.kind === 'pointermove' && pressed !== null) {
@@ -141,7 +146,7 @@ export function createPathTool(): Tool {
     overlay(): ToolOverlay | null {
       if (anchors.length === 0) return null;
       const copy = (anchor: Anchor): PathAnchor => ({ ...anchor });
-      return { kind: 'path', anchors: anchors.map(copy) };
+      return deepFreeze({ kind: 'path', anchors: anchors.map(copy) });
     },
   };
 }
@@ -162,7 +167,7 @@ type Handle = (typeof HANDLES)[number];
 
 type SelectState =
   | { kind: 'idle' }
-  | { kind: 'move'; start: PagePoint; frames: Map<string, Frame>; moved: boolean }
+  | { kind: 'move'; start: PagePoint; frames: Map<string, Frame>; moved: boolean; hit: string }
   | { kind: 'resize'; start: PagePoint; frames: Map<string, Frame>; box: Frame; handle: Handle }
   | { kind: 'marquee'; start: PagePoint; current: PagePoint; additive: boolean };
 
@@ -203,7 +208,20 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     const selection = context.query({ type: 'selection' });
     const zoom = zoomOf(context);
     const box = boundsOf(document, selection);
-    const handle = box === null ? null : handleAt(box, event.point, zoom);
+    const hit = topmostHit(document, event.point, zoom, custom);
+    // On a box too small for its handles to stay apart, a press on a selected node inside it
+    // moves; otherwise a handle wins over the node under it.
+    const reach = (4 * HANDLE_RADIUS) / zoom;
+    const small = box !== null && (box.width < reach || box.height < reach);
+    const movesSmall =
+      small &&
+      hit !== null &&
+      selection.includes(hit) &&
+      event.point.x > box.x &&
+      event.point.x < box.x + box.width &&
+      event.point.y > box.y &&
+      event.point.y < box.y + box.height;
+    const handle = box === null || movesSmall ? null : handleAt(box, event.point, zoom);
     if (box !== null && handle !== null) {
       if (context.gesture.begin()) {
         state = {
@@ -216,7 +234,6 @@ export function createSelectTool(custom: CustomGeometry): Tool {
       }
       return;
     }
-    const hit = topmostHit(document, event.point, zoom, custom);
     if (hit === null) {
       state = {
         kind: 'marquee',
@@ -236,7 +253,13 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     if (!selection.includes(hit)) context.execute({ type: 'setSelection', ids: [hit] });
     if (context.gesture.begin()) {
       const ids = context.query({ type: 'selection' });
-      state = { kind: 'move', start: event.point, frames: framesOf(context, ids), moved: false };
+      state = {
+        kind: 'move',
+        start: event.point,
+        frames: framesOf(context, ids),
+        moved: false,
+        hit,
+      };
     }
   }
 
@@ -282,10 +305,16 @@ export function createSelectTool(custom: CustomGeometry): Tool {
   }
 
   function pointerUp(event: Pointer, context: ToolContext): void {
+    // The up point ends the drag, so it updates like a move first.
+    if (state.kind === 'move' || state.kind === 'resize') pointerMove(event, context);
     const current = state;
     state = { kind: 'idle' };
     if (current.kind === 'move' || current.kind === 'resize') {
       context.gesture.commit();
+      // A click without movement selects the node hit, even inside a larger selection.
+      if (current.kind === 'move' && !current.moved) {
+        context.execute({ type: 'setSelection', ids: [current.hit] });
+      }
     } else if (current.kind === 'marquee') {
       current.current = event.point;
       if (distance(current.start, current.current) === 0) {
@@ -322,7 +351,7 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     },
     overlay(): ToolOverlay | null {
       return state.kind === 'marquee'
-        ? { kind: 'marquee', frame: boxOf(state.start, state.current) }
+        ? deepFreeze({ kind: 'marquee', frame: boxOf(state.start, state.current) })
         : null;
     },
   };

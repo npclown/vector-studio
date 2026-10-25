@@ -460,3 +460,162 @@ describe('Path tool', () => {
     expect(target.query({ type: 'overlay' })).toBeNull();
   });
 });
+
+describe('P5-U3 review follow-ups', () => {
+  it('uses the pointerup point as the drag end', () => {
+    const target = editor();
+    ok(target, { type: 'setTool', tool: 'rectangle' });
+    pointer(target, 'pointerdown', 0, 0);
+    pointer(target, 'pointermove', 5, 5);
+    pointer(target, 'pointerup', 10, 10);
+    const [id] = target.query({ type: 'document' }).pages[0].children;
+    expect(frame(target, id!)).toEqual({ x: 0, y: 0, width: 10, height: 10 });
+    ok(target, { type: 'setTool', tool: 'select' });
+    pointer(target, 'pointerdown', 5, 5);
+    pointer(target, 'pointermove', 6, 5);
+    pointer(target, 'pointerup', 25, 5);
+    expect(frame(target, id!)).toEqual({ x: 20, y: 0, width: 10, height: 10 });
+  });
+
+  it('a click on a node inside a multi-selection selects only that node', () => {
+    const target = editor();
+    const a = rect(target, 0, 0, 40, 40);
+    const b = rect(target, 60, 0, 40, 40);
+    ok(target, { type: 'setSelection', ids: [a, b] });
+    const depth = history(target).undoDepth;
+    click(target, 20, 20);
+    expect(selection(target)).toEqual([a]);
+    expect(history(target).undoDepth).toBe(depth);
+  });
+
+  it('moves a selected node too small to keep its handles apart', () => {
+    const target = editor();
+    const a = rect(target, 0, 0, 4, 4);
+    ok(target, { type: 'setSelection', ids: [a] });
+    drag(target, [2, 2], [12, 2]);
+    expect(frame(target, a)).toEqual({ x: 10, y: 0, width: 4, height: 4 });
+    // From outside the box, the nearest handle still resizes.
+    drag(target, [15, 5], [20, 10]);
+    expect(frame(target, a)).toEqual({ x: 10, y: 0, width: 9, height: 9 });
+  });
+
+  it('copies host points, so a reused event object does not move the drag start', () => {
+    const target = editor();
+    const a = rect(target, 0, 0, 40, 40);
+    const point = { x: 20, y: 20 };
+    ok(target, { type: 'input', event: { kind: 'pointerdown', point, modifiers: none } });
+    point.x = 30;
+    ok(target, { type: 'input', event: { kind: 'pointermove', point, modifiers: none } });
+    ok(target, { type: 'input', event: { kind: 'pointerup', point, modifiers: none } });
+    expect(frame(target, a)).toEqual({ x: 10, y: 0, width: 40, height: 40 });
+  });
+
+  it('resizes about the opposite handle with a non-zero origin and a top handle', () => {
+    const target = editor();
+    const a = rect(target, 100, 200, 40, 20);
+    ok(target, { type: 'setSelection', ids: [a] });
+    // The top-left handle at (100, 200) scales about (140, 220).
+    drag(target, [100, 200], [60, 180]);
+    expect(frame(target, a)).toEqual({ x: 60, y: 180, width: 80, height: 40 });
+    // The top edge handle at (100, 180) scales y only.
+    drag(target, [100, 180], [100, 200]);
+    expect(frame(target, a)).toEqual({ x: 60, y: 200, width: 80, height: 20 });
+  });
+
+  it('an edge handle on a zero-size axis is not a handle', () => {
+    const target = editor();
+    const [line] = ok(target, {
+      type: 'createPath',
+      verbs: ['move', 'line'],
+      points: [10, 0, 10, 40],
+    });
+    ok(target, { type: 'setSelection', ids: [line!] });
+    // (10, 20) is the east and west edge handle of a zero-width box: the press moves the line.
+    drag(target, [10, 20], [30, 20]);
+    expect(frame(target, line!)).toEqual({ x: 30, y: 0, width: 0, height: 40 });
+  });
+
+  it('Escape cancels a resize and a rectangle drag; a second press during a resize is ignored', () => {
+    const target = editor();
+    const a = rect(target, 0, 0, 40, 40);
+    ok(target, { type: 'setSelection', ids: [a] });
+    const depth = history(target).undoDepth;
+    pointer(target, 'pointerdown', 40, 40);
+    pointer(target, 'pointermove', 60, 60);
+    pointer(target, 'pointerdown', 0, 0);
+    pointer(target, 'pointermove', 80, 80);
+    expect(frame(target, a)).toEqual({ x: 0, y: 0, width: 80, height: 80 });
+    key(target, 'Escape');
+    pointer(target, 'pointerup', 80, 80);
+    expect(frame(target, a)).toEqual({ x: 0, y: 0, width: 40, height: 40 });
+    ok(target, { type: 'setTool', tool: 'rectangle' });
+    pointer(target, 'pointerdown', 100, 100);
+    pointer(target, 'pointermove', 120, 120);
+    key(target, 'Escape');
+    pointer(target, 'pointerup', 120, 120);
+    expect(target.query({ type: 'document' }).pages[0].children).toEqual([a]);
+    expect(history(target).undoDepth).toBe(depth);
+  });
+
+  it('undo, loadDocument and setTool during a real drag leave no stale tool state', () => {
+    const target = editor();
+    const a = rect(target, 0, 0, 40, 40);
+    const empty = createEditor({ ids: createCounterIdSource('m') }).query({ type: 'document' });
+    for (const interrupt of [
+      { type: 'undo' },
+      { type: 'loadDocument', document: target.query({ type: 'document' }) },
+      { type: 'setTool', tool: 'rectangle' },
+    ] as Command[]) {
+      if (interrupt.type === 'undo')
+        ok(target, { type: 'createRectangle', frame: { x: 0, y: 60, width: 1, height: 1 } });
+      ok(target, { type: 'setTool', tool: 'select' });
+      pointer(target, 'pointerdown', 20, 20);
+      pointer(target, 'pointermove', 30, 20);
+      ok(target, interrupt);
+      pointer(target, 'pointermove', 50, 20);
+      pointer(target, 'pointerup', 50, 20);
+      expect(frame(target, a)).toEqual({ x: 0, y: 0, width: 40, height: 40 });
+    }
+    ok(target, { type: 'loadDocument', document: empty });
+    expect(target.query({ type: 'history' })).toEqual({ undoDepth: 0, redoDepth: 0 });
+  });
+
+  it('hits the closing chord of an unfilled closed path, and flattens by zoom', () => {
+    const target = editor();
+    const [triangle] = ok(target, {
+      type: 'createPath',
+      verbs: ['move', 'line', 'line', 'close'],
+      points: [0, 0, 100, 0, 50, 100],
+    });
+    const probe = (x: number, y: number) => {
+      ok(target, { type: 'setSelection', ids: [] });
+      click(target, x, y);
+      return selection(target);
+    };
+    expect(probe(25, 50)).toEqual([triangle]);
+    ok(target, { type: 'deleteNodes', ids: [triangle!] });
+    // A cubic reaching y = 75 at t = 1/2, without a stroke: at zoom 64 the pick radius is 1/16
+    // page unit, so the flattened outline must lie within 0.25 / 64 of the curve at the apex.
+    const [curve] = ok(target, {
+      type: 'createPath',
+      verbs: ['move', 'cubic'],
+      points: [0, 0, 0, 100, 100, 100, 100, 0],
+      stroke: null,
+    });
+    ok(target, { type: 'setViewport', camera: { position: { x: 0, y: 0 }, zoom: 64 } });
+    expect(probe(50, 75)).toEqual([curve]);
+    expect(probe(50, 74.9)).toEqual([]);
+  });
+
+  it('a double click adds no second anchor at the same point', () => {
+    const target = editor();
+    ok(target, { type: 'setTool', tool: 'path' });
+    click(target, 0, 0);
+    click(target, 0, 0);
+    key(target, 'Enter');
+    expect(target.query({ type: 'document' }).pages[0].children).toEqual([]);
+    const overlay = target.query({ type: 'overlay' });
+    expect(overlay?.kind === 'path' && overlay.anchors).toHaveLength(1);
+    expect(Object.isFrozen(overlay)).toBe(true);
+  });
+});

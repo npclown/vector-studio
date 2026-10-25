@@ -46,8 +46,8 @@ export interface ToolContext {
 /**
  * A pointer drag (plan section 4.2). Updates change the live document without history; commit
  * records one undo step from the pre-gesture state; cancel restores that state. Events are held
- * only for calls made inside `input`; a listener's command can still end the drag, so callers
- * check `active` after `update`.
+ * during `input`, so a tool's drag cannot end under it; a caller outside `input` checks `active`
+ * after `update`, because a listener's command can end the drag.
  */
 export interface GestureControl {
   readonly active: boolean;
@@ -110,6 +110,16 @@ function isInputEvent(value: unknown): value is InputEvent {
     (event.kind === 'pointerdown' || event.kind === 'pointermove' || event.kind === 'pointerup') &&
     Number.isFinite(event.point?.x) &&
     Number.isFinite(event.point?.y)
+  );
+}
+
+function copyInput(event: InputEvent): InputEvent {
+  const { shift, alt, meta, ctrl } = event.modifiers;
+  const modifiers = { shift, alt, meta, ctrl };
+  return deepFreeze(
+    event.kind === 'keydown'
+      ? { kind: event.kind, key: event.key, modifiers }
+      : { kind: event.kind, point: { x: event.point.x, y: event.point.y }, modifiers },
   );
 }
 
@@ -260,7 +270,9 @@ class EditorCore implements Editor {
       }
       case 'input': {
         if (!isInputEvent(command.event)) return failure('editor.invalid-command', '/event');
-        this.tools.get(this.tool)?.input(command.event, {
+        // Tools keep points, so they get a frozen copy, never the host's objects.
+        const event = copyInput(command.event);
+        this.tools.get(this.tool)?.input(event, {
           execute: (next) => this.execute(next),
           query: (query) => this.query(query),
           gesture: this.gesture,
