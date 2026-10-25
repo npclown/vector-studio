@@ -689,12 +689,12 @@ impl DumpHarness {
         let workspace =
             || CubicFillWorkspace::new_pre_b1(PRE_B1_FILL_V0_LIMITS).expect("workspace");
         Self {
-            ladder: FillLadder::reserve(PRE_B1_FILL_V0_LIMITS).expect("ladder"),
+            ladder: FillLadder::for_tests(),
             workspace: workspace(),
             probe: workspace(),
             exact: workspace(),
             spike_workspace: workspace(),
-            fast: Box::new(FastRung::new()),
+            fast: Box::new(FastRung::reserve().expect("fast rung")),
             spike: Box::new(p3_b0_spike::FastRung::new()),
             scan: OnceScan::new(),
             engine,
@@ -713,13 +713,13 @@ impl DumpHarness {
         );
         let workspace = || CubicFillWorkspace::new(FILL_V0_LIMITS).expect("workspace");
         Self {
-            ladder: FillLadder::reserve(FILL_V0_LIMITS).expect("ladder"),
+            ladder: FillLadder::for_tests(),
             workspace: workspace(),
             probe: workspace(),
             exact: workspace(),
             spike_workspace: CubicFillWorkspace::new_pre_b1(PRE_B1_FILL_V0_LIMITS)
                 .expect("workspace"),
-            fast: Box::new(FastRung::new()),
+            fast: Box::new(FastRung::reserve().expect("fast rung")),
             spike: Box::new(p3_b0_spike::FastRung::new()),
             scan: OnceScan::new(),
             engine,

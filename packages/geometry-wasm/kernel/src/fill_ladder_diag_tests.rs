@@ -2157,7 +2157,7 @@ fn al_u4a_certificate_sub_stage_split() {
         inner: env_or("P3_AL_DIAG_INNER", 50).max(1),
     };
     let quantum = clock_quantum();
-    let mut ladder = FillLadder::reserve(FILL_V0_LIMITS).expect("ladder");
+    let mut ladder = FillLadder::for_tests();
     let mut workspace = CubicFillWorkspace::new(FILL_V0_LIMITS).expect("workspace");
     let mut prefix = CubicFillWorkspace::new(FILL_V0_LIMITS).expect("prefix workspace");
     let mut scan = DiagScan::new();

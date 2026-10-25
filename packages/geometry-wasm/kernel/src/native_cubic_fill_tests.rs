@@ -7,7 +7,8 @@ use crate::codec::{PathInput, Request};
 use crate::cubic_fill::{
     CubicFillDiagnostics as AttemptDiagnostics, CubicFillError as BridgeError,
     CubicFillOutput as BridgeOutput, CubicFillWorkspace as BridgeWorkspace, DecodedSource,
-    EdgeOwner, FlatCommand, PrefixFailure, MAX_FLAT_COMMANDS as MAX_COMMANDS,
+    EdgeOwner, FlatCommand, PrefixFailure, MAX_FAST_CONTOUR_POINTS, MAX_FAST_EDGE_OWNERS,
+    MAX_FAST_FLAT_COMMANDS, MAX_FLAT_COMMANDS as MAX_COMMANDS,
 };
 use crate::geometry::{
     Plan, Point, WorkStatistics, PATH_EMPTY, PATH_INVALID, PATH_INVALID_TOLERANCE,
@@ -3325,6 +3326,12 @@ mod tests {
             .and_then(|bytes| bytes.checked_add(transverse.allocated_bytes()))
             .unwrap();
         assert_eq!(expected, 2_908_672);
+        // E14-K1 item 4: the prefix buffers, sized for E0, are heap buffers counted here too.
+        let prefix = MAX_FAST_FLAT_COMMANDS * size_of::<FlatCommand>()
+            + MAX_FAST_CONTOUR_POINTS * size_of::<Point>()
+            + MAX_FAST_EDGE_OWNERS * size_of::<EdgeOwner>();
+        assert_eq!(prefix, 590_208);
+        let expected = expected + prefix;
         assert_eq!(workspace.allocated_bytes(), expected);
         assert!(workspace.allocated_bytes() <= MAX_BRIDGE_HEAP_BYTES);
         assert!(size_of::<BridgeWorkspace>() < 64 * 1024);

@@ -33,8 +33,9 @@ fn outcome<T>(result: &Result<T, CubicFillError>) -> String {
 fn run() {
     let text = String::from_utf8(read_file("E14_FILL_INPUT")).expect("UTF-8 input");
     let mut workspace = CubicFillWorkspace::new(FILL_V0_LIMITS).unwrap();
-    let (mut scratch, _) = FillScratch::reserve(FILL_V0_LIMITS).unwrap();
-    let mut ladder = FillLadder::reserve(FILL_V0_LIMITS).unwrap();
+    let (mut scratch, _) =
+        FillScratch::reserve(FILL_V0_LIMITS, crate::fill_ladder::MAX_BOUNDARY_RECORDS).unwrap();
+    let mut ladder = FillLadder::for_tests();
     println!("E14_FILL_DIAG_BEGIN");
     for row in text.lines().filter(|row| !row.is_empty()) {
         let fields: Vec<&str> = row.split('\t').collect();

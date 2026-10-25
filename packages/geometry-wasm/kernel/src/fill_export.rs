@@ -19,7 +19,7 @@ use crate::engine::{
     BATCH_ALLOCATION_FAILED, BATCH_DISPOSED, BATCH_INTERNAL_ERROR, BATCH_INVALID_BATCH, BATCH_OK,
     BATCH_OUTPUT_CAPACITY, BATCH_RESOURCE_LIMIT,
 };
-use crate::fill_ladder::{BoundaryScan, ExactStep, FillLadder, Reason, Rung};
+use crate::fill_ladder::{boundary_records, BoundaryScan, ExactStep, FillLadder, Reason, Rung};
 use crate::fill_predicates::orient2d;
 use crate::geometry::{
     validate_path, Point, PATH_EMPTY, PATH_INVALID, PATH_INVALID_TOLERANCE, PATH_NUMERIC_RANGE,
@@ -30,7 +30,7 @@ use crate::rounded_line_fill::{RoundedFillError, RoundedFillLimits, RoundedFillO
 use crate::simple_cubic_topology::TopologyError;
 
 pub const FILL_V0_VERSION: u32 = 0;
-pub const FILL_V0_REVISION: u32 = 2;
+pub const FILL_V0_REVISION: u32 = 3;
 pub const FILL_INPUT_MAGIC: u32 = 0x3046_4756;
 pub const FILL_OUTPUT_MAGIC: u32 = 0x304D_4756;
 
@@ -379,12 +379,16 @@ struct SplitEdge {
 
 const UNUSED_PAIR: [u32; 2] = [u32::MAX, u32::MAX];
 
-/// Section a fill scratch, reserved once from `FILL_V0_LIMITS`.
+/// Section a fill scratch, reserved once from `FILL_V0_LIMITS`. Since E14-K1 item 5 its index,
+/// edge and boundary buffers hold the larger of the exact rung's slots and rung 0's AL-FR9
+/// records; the exact rung's own checks stay bounded by `exact_slots`.
 pub(crate) struct FillScratch {
     triangles: Vec<u32>,
     edges: Vec<DirectedEdge>,
     boundary: Vec<[u32; 2]>,
     split: Vec<SplitEdge>,
+    /// The index slots of `FillScratch::sizes` for the reserve's limits.
+    exact_slots: usize,
 }
 
 /// Marker for a refinement or boundary self-check failure.
@@ -398,15 +402,22 @@ impl FillScratch {
             edges: Vec::new(),
             boundary: Vec::new(),
             split: Vec::new(),
+            exact_slots: 0,
         }
     }
 
-    /// Capacities `(index slots, split pairs)` and the total byte size.
-    fn sizes(limits: RoundedFillLimits) -> Option<(usize, usize, usize)> {
-        let triangles = limits
+    /// The exact rung's index slots `3 · (max_triangles + 2 · max_vertices)` (V2 section a).
+    pub(crate) fn exact_slots(limits: RoundedFillLimits) -> Option<usize> {
+        limits
             .max_triangles
-            .checked_add(limits.max_vertices.checked_mul(2)?)?;
-        let slots = triangles.checked_mul(3)?;
+            .checked_add(limits.max_vertices.checked_mul(2)?)?
+            .checked_mul(3)
+    }
+
+    /// Capacities `(index slots, split pairs)` and the total byte size, for at least
+    /// `records` index slots (E14-K1 item 5: rung 0's AL-FR9 records).
+    fn sizes_for(limits: RoundedFillLimits, records: usize) -> Option<(usize, usize, usize)> {
+        let slots = Self::exact_slots(limits)?.max(records);
         let split = limits.max_boundaries.checked_add(limits.max_nodes)?;
         let bytes = [
             slots.checked_mul(size_of::<u32>())?,
@@ -419,10 +430,17 @@ impl FillScratch {
         Some((slots, split, bytes))
     }
 
-    /// Reserves every scratch buffer; `Err(status)` on refusal.
-    pub(crate) fn reserve(limits: RoundedFillLimits) -> Result<(Self, usize), u32> {
-        let (slots, split, bytes) = Self::sizes(limits).ok_or(BATCH_INTERNAL_ERROR)?;
+    /// Capacities and bytes of the exact rung's scratch alone (before E14-K1).
+    fn sizes(limits: RoundedFillLimits) -> Option<(usize, usize, usize)> {
+        Self::sizes_for(limits, 0)
+    }
+
+    /// Reserves every scratch buffer for at least `records` index slots; `Err(status)` on
+    /// refusal.
+    pub(crate) fn reserve(limits: RoundedFillLimits, records: usize) -> Result<(Self, usize), u32> {
+        let (slots, split, bytes) = Self::sizes_for(limits, records).ok_or(BATCH_INTERNAL_ERROR)?;
         let mut scratch = Self::empty();
+        scratch.exact_slots = Self::exact_slots(limits).ok_or(BATCH_INTERNAL_ERROR)?;
         if scratch.triangles.try_reserve_exact(slots).is_err()
             || scratch.edges.try_reserve_exact(slots).is_err()
             || scratch.boundary.try_reserve_exact(slots).is_err()
@@ -431,6 +449,14 @@ impl FillScratch {
             return Err(BATCH_ALLOCATION_FAILED);
         }
         Ok((scratch, bytes))
+    }
+
+    /// The reserved index slots, which `FillLadder::reserve` checks against AL-FR9's records.
+    pub(crate) fn records(&self) -> usize {
+        self.triangles
+            .capacity()
+            .min(self.edges.capacity())
+            .min(self.boundary.capacity())
     }
 
     pub(crate) fn triangles(&self) -> &[u32] {
@@ -449,7 +475,7 @@ impl FillScratch {
         self.boundary.clear();
         self.split.clear();
         self.build_ladders(mesh)?;
-        self.collect_boundary()?;
+        self.collect_boundary(self.exact_slots)?;
         self.cross_check_ledger(mesh)
     }
 
@@ -526,7 +552,7 @@ impl FillScratch {
         if orient2d(points[0], points[1], points[2]) != Ok(Ordering::Greater) {
             return Err(SelfCheckFailure);
         }
-        if self.triangles.len() + 3 > self.triangles.capacity() {
+        if self.triangles.len() + 3 > self.exact_slots.min(self.triangles.capacity()) {
             return Err(SelfCheckFailure);
         }
         for node in nodes {
@@ -536,9 +562,11 @@ impl FillScratch {
         Ok(())
     }
 
-    fn collect_boundary(&mut self) -> Result<(), SelfCheckFailure> {
+    /// V2 section f's once-only scan over at most `limit` index slots: the exact rung passes
+    /// its own slot count (E14-K1 item 5), rung 0's AL-FR9 the reserved capacity.
+    fn collect_boundary(&mut self, limit: usize) -> Result<(), SelfCheckFailure> {
         let slots = self.triangles.len();
-        if slots > self.edges.capacity() || slots > self.boundary.capacity() {
+        if slots > limit || slots > self.edges.capacity() || slots > self.boundary.capacity() {
             return Err(SelfCheckFailure);
         }
         for position in 0..slots {
@@ -662,7 +690,7 @@ impl BoundaryScan for FillScratch {
             return None;
         }
         self.triangles.extend_from_slice(triangles);
-        self.collect_boundary().ok()?;
+        self.collect_boundary(self.triangles.capacity()).ok()?;
         Some(&self.boundary)
     }
 }
@@ -1262,7 +1290,6 @@ impl FillEngine {
         } else {
             limits
         };
-        let (scratch, scratch_bytes) = FillScratch::reserve(limits)?;
         #[cfg(test)]
         let workspace = match self.test_hooks.pre_b1_caps {
             true => CubicFillWorkspace::new_pre_b1(limits),
@@ -1271,9 +1298,12 @@ impl FillEngine {
         #[cfg(not(test))]
         let workspace = CubicFillWorkspace::new(limits);
         let workspace = workspace.map_err(construction_status)?;
+        // E14-K1 item 5: the scratch also holds the AL-FR9 records of the workspace's fast caps.
+        let fast_points = workspace.fast_contour_points();
+        let (scratch, scratch_bytes) = FillScratch::reserve(limits, boundary_records(fast_points))?;
         // Alt-A1 contract section 3.4: rung 0's storage, reserved once and fallibly beside the
         // workspace and the scratch, after the check that the scratch holds AL-FR9's records.
-        let ladder = FillLadder::reserve(limits)?;
+        let ladder = FillLadder::reserve(scratch.records(), fast_points)?;
         let total = workspace
             .allocated_bytes()
             .checked_add(scratch_bytes)
@@ -1510,6 +1540,15 @@ impl FillEngine {
 
     pub(crate) fn scratch_sizes() -> Option<(usize, usize, usize)> {
         FillScratch::sizes(FILL_V0_LIMITS)
+    }
+
+    /// The bytes of the production fill scratch, which since E14-K1 item 5 also holds rung 0's
+    /// AL-FR9 records at E0.
+    #[cfg(test)]
+    pub(crate) fn scratch_bytes() -> usize {
+        FillScratch::sizes_for(FILL_V0_LIMITS, crate::fill_ladder::MAX_BOUNDARY_RECORDS)
+            .expect("scratch sizes")
+            .2
     }
 }
 
