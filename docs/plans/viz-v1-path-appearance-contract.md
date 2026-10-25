@@ -209,6 +209,8 @@ All results are functional evidence. Precision is UNVERIFIED against the 0.25 ph
 
 V1-A9's notice sets and any draw counts are current-kernel observations, as in the ST-U8 spec. They are fixed at the first headed run, recorded in the spec with the date and the operation ids, and must be identical in Chrome and Edge. Under [D9](d9-post-mvp1-tracks-proposal.md#two-tracks), a later PR whose change alters them updates them in the same PR with a dated note. A literal is never changed to make a failing run pass without that note.
 
+Amended 2026-10-25 (E2-U2, stroke revision 6; recommended option, 추천안 자동 채택): `v1-circle` at width 8 now meshes and reports `fringe-work-cap`, so N1 sets the stroke width to 48 before turning the stroke on. At that width the circle still ends at `work-limit` (it meshes up to width 24 and fails from 32 at every tolerance exponent from -6 to -2), so V1-A9's N1 checks and literals stand with "width 8" read as "width 48". A later revision that meshes width 48 re-baselines N1 again. Record: [e2-gpu-rebaseline-2026-10-25](../evidence/e2-gpu-rebaseline-2026-10-25.md).
+
 ### 4.2 Scenario values left to the first headed run
 
 V1-A8 and V1-A10 name probe kinds and edits. The exact probe coordinates, colors A to D and the switch ratio of `v1-chevron` are fixed in the spec from the scene geometry before the first run, by the probe rule, not by reading the first run's pixels. Only notice sets are fixed from the first run: V1-A9's N0 to N2, and the notice set of each V1-A8 and V1-A10 scenario.

@@ -129,6 +129,8 @@ Fixtures at `e = −3`, zoom 1, DPR 1, butt cap and miter join unless named; "to
 
 Each unit: independent review of the diff and evidence; it starts only when the rendering track's WIP limit allows. The order is fixed: E2-K2 and E2-K3 assume E2-K1's contours. B2 [§12.1](p3-b2-stroke-contract.md#121-units)'s ST-U9 row points here.
 
+Amended 2026-10-25 (headed GPU re-baseline, decided under the user's standing instruction of 2026-10-24, recommended option, 추천안 자동 채택): E2-U1 and E2-U2 changed stroke outcomes that `tests/gpu/p3-b2-strokes.spec.ts` and `tests/gpu/viz-v1-appearance.spec.ts` gate as observed literals, and both merged without a headed run, so the specs failed at main `7662310`. The outcome change is E2's goal, so the literals are re-baselined (D9 rule; [V-1 §4.1](viz-v1-path-appearance-contract.md#41-expected-literal-rule)) rather than the kernel changed; the record is [e2-gpu-rebaseline-2026-10-25](../evidence/e2-gpu-rebaseline-2026-10-25.md). From E2-U3 on, a unit that can change an `ok` outcome runs those two specs headed on the user's machine and re-baselines them in its own PR, or marks them NOT RUN with the reason and runs them before E2 closes.
+
 ## 10. Questions and decisions
 
 **E2-Q1. Which remedy?** (a) **Recommended.** E2-K1 to E2-K3 in three units; E2-alt not pursued; `STROKE_V0_LIMITS` unchanged. (b) E2-alt: raise `STROKE_V0_LIMITS` (a 1 px stroke needs about 7,500 vertices, with all-pairs cost). (c) E2-K1 only (projected 275 of 750, nothing above about 1 px).

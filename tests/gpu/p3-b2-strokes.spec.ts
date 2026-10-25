@@ -57,18 +57,23 @@ type Expectation = Readonly<{
  * Edge. They are current-kernel observations (production limits): a limit raise or ST-U9's fast
  * rung may re-baseline them. Re-baselined 2026-10-21 by ST-U3c (stroke revision 3): `join-round`
  * is drawn, so its `unsupported-geometry` notice is gone and each view that shows it has one more
- * mesh draw. Keyed `dpr/view`.
+ * mesh draw. Re-baselined 2026-10-25 for E2-U1 and E2-U2 (stroke revisions 5 and 6, #237 and
+ * #239, merged without a headed run) from the headed run at main 7662310, identical in Chrome and
+ * Edge: strokes that stopped at `work-limit` now mesh (`fill-stroke-circle` in every view that
+ * showed it, `wide-cubic` at DPR 1 overview and zoom 0.25, `cusp-f16-large` at zoom 0.25,
+ * `cusp-f16p` at DPR 3 overview), drawn without a fringe (`fringe-work-cap`), so those views
+ * have more mesh draws; `cusp-f16p` at DPR 1 overview and `cusp-shared-a` at DPR 3 overview now
+ * build their fringe too, so their notices are gone. Every probe is unchanged. Keyed `dpr/view`.
  */
 const EXPECTED: Readonly<Record<string, Expectation>> = {
   '1/overview-zoom-1': {
     notices: [
       'cap-round stroke fringe-work-cap',
       'cusp-f16-large stroke work-limit',
-      'cusp-f16p stroke fringe-work-cap',
-      'fill-stroke-circle stroke work-limit',
-      'wide-cubic stroke work-limit',
+      'fill-stroke-circle stroke fringe-work-cap',
+      'wide-cubic stroke fringe-work-cap',
     ],
-    meshDraws: 19,
+    meshDraws: 22,
   },
   '1/zoom-0.01': {
     notices: [],
@@ -76,19 +81,19 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
   },
   '1/zoom-0.25': {
     notices: [
-      'cusp-f16-large stroke work-limit',
+      'cusp-f16-large stroke fringe-work-cap',
       'fill-stroke-circle stroke fringe-work-cap',
-      'wide-cubic stroke work-limit',
+      'wide-cubic stroke fringe-work-cap',
     ],
-    meshDraws: 21,
+    meshDraws: 23,
   },
   '1/zoom-2-cusp': {
     notices: [
       'cusp-f16p stroke fringe-work-cap',
-      'fill-stroke-circle stroke work-limit',
+      'fill-stroke-circle stroke fringe-work-cap',
       'wide-cubic stroke work-limit',
     ],
-    meshDraws: 8,
+    meshDraws: 10,
   },
   '1/zoom-4-joins': {
     notices: ['cap-round stroke fringe-work-cap'],
@@ -111,10 +116,10 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
       'cap-round stroke fringe-work-cap',
       'cusp-f16-large stroke work-limit',
       'cusp-f16p stroke fringe-work-cap',
-      'fill-stroke-circle stroke work-limit',
+      'fill-stroke-circle stroke fringe-work-cap',
       'wide-cubic stroke work-limit',
     ],
-    meshDraws: 19,
+    meshDraws: 21,
   },
   '2/zoom-0.01': {
     notices: ['wide-cubic stroke fringe-work-cap'],
@@ -128,13 +133,12 @@ const EXPECTED: Readonly<Record<string, Expectation>> = {
     notices: [
       'cap-round stroke fringe-work-cap',
       'cusp-f16-large stroke work-limit',
-      'cusp-f16p stroke work-limit',
-      'cusp-shared-a stroke fringe-work-cap',
-      'fill-stroke-circle stroke work-limit',
+      'cusp-f16p stroke fringe-work-cap',
+      'fill-stroke-circle stroke fringe-work-cap',
       'thin-one-px stroke fringe-work-cap',
       'wide-cubic stroke work-limit',
     ],
-    meshDraws: 18,
+    meshDraws: 21,
   },
   '3/zoom-0.01': {
     notices: ['wide-cubic stroke fringe-work-cap'],

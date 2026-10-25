@@ -61,7 +61,9 @@ const OBSERVED_NOTICES: Readonly<Record<string, readonly string[]>> = {
   s4: ['v1-zigzag stroke fringe-work-cap'],
   s5: [],
   // N1: v1-circle fill only, stroke on, stroke off (the log keeps its entry), stroke on again
-  // (the stroke is rebuilt and a second notice arrives).
+  // (the stroke is rebuilt and a second notice arrives). Since 2026-10-25 (stroke revision 6,
+  // E2-U2) N1 strokes at width 48: at the initial width 8 the circle stroke meshes and reports
+  // `fringe-work-cap`, so N1 would no longer exercise a path that is not drawn.
   'n1.a-fill-only': [],
   'n1.b-stroke-on': ['v1-circle stroke work-limit'],
   'n1.c-stroke-off': ['v1-circle stroke work-limit'],
@@ -164,6 +166,9 @@ const CHEVRON_SWITCH_RATIO = 1 / Math.sin((15 * Math.PI) / 180);
 const CHEVRON_TIP_PROBE = at(CHEVRON, 0, -30 - 12);
 // v1-circle: the center of the cubic circle.
 const CIRCLE_CENTER = at(CIRCLE, 0, 0);
+// N1's stroke width: the radius-30 circle meshes up to width 24 and ends at work-limit from 32
+// at stroke revision 6 (every tolerance exponent from -6 to -2); 48 is inside that range.
+const N1_STROKE_WIDTH = '48';
 
 function sortedNotices(
   notices: ReadonlyArray<{ nodeId: string | null; paint: string | null; failureCode: string }>,
@@ -542,7 +547,10 @@ for (const dpr of [1, 2]) {
           { name: 'circle interior', at: CIRCLE_CENTER, expected: fill },
         ]);
         noticeSet('n1', 'a-fill-only', await snapshot());
-        // Stroke on (width 8, butt, round): the whole path is not drawn.
+        // Stroke on at width 48 (butt, round): the whole path is not drawn. Width 8 meshes since
+        // stroke revision 6 (2026-10-25), so N1 sets a width that still ends at work-limit.
+        await commit(c.widthNumber, N1_STROKE_WIDTH);
+        await settle();
         await c.strokeOn.check();
         let state = await settle();
         await check('n1', 'stroke-on', [
