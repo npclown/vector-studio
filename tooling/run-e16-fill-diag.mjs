@@ -71,7 +71,7 @@ const sidecar = JSON.parse(readFileSync(`${base}.side.json`, 'utf8'));
 if (rows.length !== Object.keys(sidecar).length)
   throw new Error(`native rows ${rows.length}, inputs ${Object.keys(sidecar).length}`);
 
-/** The kernel step that refused the request, from the exact cascade's unmapped errors. */
+/** The kernel step that refused the request at r3, from the cascade at e's unmapped errors. */
 const cause = (row) => {
   const last = row.triangleFree === '-' ? row.legacy : row.triangleFree;
   if (row.legacy === 'SourceLimit') return 'source cap';
@@ -81,13 +81,22 @@ const cause = (row) => {
   if (/^Rounded\(/.test(last)) return 'exact-rung topology cap';
   return `other: ${row.legacy} / ${row.triangleFree}`;
 };
+/**
+ * The request's exact-rung result at fill-v0+r4 (E16-U1): `mesh`, or the error of the cascade
+ * at e with the last E16-K2 retry's stop error, which the E11 closed-list class reads.
+ */
+const r4 = (row) => {
+  if (row.fast === 'MESH' || row.exact === 'OK') return 'mesh';
+  const stop = row.retryStop === '-' ? '' : ` (retry stop ${row.retryStop})`;
+  return `${row.exact}${stop}`;
+};
 const table = new Map();
 for (const row of rows) {
   const side = sidecar[row.id];
   const [stratum, name] = row.id.split('/');
   const kind = /^g\d+$/.test(name) ? 'generated' : 'named';
   const sweep = side.e14 ? 'E14-Q1' : side.outcome.replace('failed:', '');
-  const key = [`${stratum}/${kind}`, sweep, cause(row), `rung0 ${row.fast}`].join('\t');
+  const key = [`${stratum}/${kind}`, sweep, cause(row), `rung0 ${row.fast}`, r4(row)].join('\t');
   const cell = table.get(key) ?? {
     requests: 0,
     rows: new Set(),
@@ -103,7 +112,7 @@ for (const row of rows) {
   table.set(key, cell);
 }
 const lines = [
-  'stratum\tsweep class\tcause\trung 0\trequests [rows]\tflat verbs min/median/max\tmax contours/segments\trows',
+  'stratum\tsweep class\tcause\trung 0\tr4 exact rung\trequests [rows]\tflat verbs min/median/max\tmax contours/segments\trows',
 ];
 for (const key of [...table.keys()].sort()) {
   const c = table.get(key);

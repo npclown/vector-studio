@@ -401,12 +401,13 @@ fn assert_mesh_invariants(mesh: &Decoded) {
 fn runtime_limits_equal_the_native_test_limits() {
     // B1: `FILL_V0_LIMITS` no longer equals the frozen native `LIMITS`. It is the
     // same scaling rule at E = 256 edge owners instead of 64, and it is at least
-    // `LIMITS` in every field, so every path `LIMITS` admits it admits.
+    // `LIMITS` in every field, so every path `LIMITS` admits it admits. E16-K1 item 2: the
+    // contour cap is the exact rung's line-only cap, 64.
     let native = crate::native_cubic_fill_tests::LIMITS;
     assert_eq!(
         FILL_V0_LIMITS,
         RoundedFillLimits {
-            max_contours: 4,
+            max_contours: 64,
             max_input_vertices: 256,
             max_edges: 256,
             max_pairs: 32_640,
@@ -444,7 +445,7 @@ fn runtime_limits_equal_the_native_test_limits() {
         assert!(runtime >= test);
     }
     assert_eq!(FILL_V0_VERSION, 0);
-    assert_eq!(FILL_V0_REVISION, 3);
+    assert_eq!(FILL_V0_REVISION, 4);
     assert_eq!(FILL_INPUT_MAGIC.to_le_bytes(), *b"VGF0");
     assert_eq!(FILL_OUTPUT_MAGIC.to_le_bytes(), *b"VGM0");
     let (slots, split, bytes) = FillEngine::scratch_sizes().unwrap();
@@ -710,12 +711,12 @@ fn reachable_mapping_rows_have_fixtures() {
     coarse.exponent = -3;
     assert_eq!(status_of(coarse), FILL_PATH_OK);
 
-    // Current-cap fixtures (re-baselined by B1): source verbs 72 + 1.
+    // Current-cap fixtures (re-baselined by B1 and E16-K1): line-only source verbs 384 + 1.
     let mut source = TestPath::new(2, NONZERO, 0).move_to(0.0, 0.0);
-    for index in 0..72 {
+    for index in 0..384 {
         source = source.line_to(f64::from(index + 1), f64::from(index % 2));
     }
-    assert_eq!(source.verbs.len(), 73);
+    assert_eq!(source.verbs.len(), 385);
     assert_eq!(status_of(source), FILL_PATH_WORK_LIMIT);
     // Flat command cap: a fine cubic flattens to more than 264 commands. Since E14-K1 rung 0
     // meshes it (at most E0 flat edges); its self-crossing variant still reaches the exact
@@ -970,12 +971,26 @@ fn cascade_retries_triangle_free_only_after_knot_or_unresolved() {
     let mut engine = FillEngine::new();
     load(&mut engine, &input, 1 << 16);
     assert_eq!(engine.process(input.len() as u32), BATCH_OK);
-    assert!(
-        engine
-            .workspace()
-            .unwrap()
-            .diagnostics()
-            .transverse_topology_invoked
+    // E16-K2 item 3: after the refinement retries the workspace holds the last retry's
+    // diagnostics, so the cascade at e is read from `exact_rung`'s outcome: the triangle-free
+    // step ran, and no retry succeeded (M1' stays unsupported).
+    let mut workspace = CubicFillWorkspace::new(FILL_V0_LIMITS).unwrap();
+    let outcome = crate::fill_export::exact_rung(
+        &mut workspace,
+        FillRequest {
+            request_id: 6,
+            rule: LineFillRule::Nonzero,
+            exponent: rejected.exponent,
+        },
+        &rejected.verbs,
+        &point_bytes(&rejected.points),
+        false,
+    );
+    assert_eq!(outcome.step, crate::fill_ladder::ExactStep::TriangleFree);
+    assert_eq!(outcome.depth, 0);
+    assert_eq!(
+        outcome.result,
+        Err(CubicFillError::Topology(TopologyError::Unresolved))
     );
     assert_eq!(
         decode(engine.output_bytes(), std::slice::from_ref(&rejected))[0].status,
@@ -1406,6 +1421,21 @@ fn e14_g3_process_does_not_allocate_on_rung0_fixtures() {
     );
 }
 
+/// An E16 corpus fixture (`e16_fill_remedy_tests::corpus`) as a test path.
+fn corpus_path(id: u32, name: &str) -> TestPath {
+    let fixture = crate::e16_fill_remedy_tests::corpus(name);
+    TestPath {
+        id,
+        rule: match fixture.rule {
+            LineFillRule::Nonzero => NONZERO,
+            LineFillRule::Evenodd => EVENODD,
+        },
+        exponent: fixture.exponent,
+        verbs: fixture.verbs,
+        points: fixture.points,
+    }
+}
+
 #[test]
 fn process_does_not_allocate_or_move_storage() {
     let paths = [
@@ -1462,6 +1492,11 @@ fn process_does_not_allocate_or_move_storage() {
             .rectangle(0.0, 0.0, 1.0, 1.0)
             .rectangle(1.25, 0.0, 2.25, 1.0),
         square(12, EVENODD, -3),
+        // E16-G3: E16-F1 (rung 0 over B1's source caps), E16-F2 (line-only exact caps) and
+        // E16-F5 (refinement retries).
+        corpus_path(13, "E16-F1"),
+        corpus_path(14, "E16-F2"),
+        corpus_path(15, "E16-F5"),
     ];
     let input = pack(&paths);
     let mut engine = FillEngine::new();
@@ -1532,6 +1567,9 @@ fn process_does_not_allocate_or_move_storage() {
         fallback(Reason::Closure),
         fallback(Reason::Clearance),
         fast,
+        fast,
+        fallback(Reason::Crossing),
+        fallback(Reason::Monotone),
     ];
     assert_eq!(reasons(&mut engine), expected);
     for (fault, reason) in [
@@ -1546,7 +1584,7 @@ fn process_does_not_allocate_or_move_storage() {
             assert_eq!(status, BATCH_OK);
             assert_eq!(allocations, 0, "process must not allocate");
             assert_eq!(engine.storage(), storage);
-            for index in [0, 7, 11] {
+            for index in [0, 7, 11, 12] {
                 expected[index] = fallback(reason);
             }
             assert_eq!(reasons(&mut engine), expected);
@@ -1648,9 +1686,10 @@ fn legacy_attempt(path: &TestPath) -> (Result<u32, CubicFillError>, CubicFillWor
 #[test]
 fn mapping_row_fixtures_reach_their_kernel_values() {
     // Each fixture names the kernel value it reaches, then the port status.
-    // Cap fixtures are current-cap fixtures that B1 may re-baseline.
+    // Cap fixtures are current-cap fixtures that B1 may re-baseline. E16-K1 item 2: a line-only
+    // path has 64 + 2 · 64 + 256 = 384 source verbs.
     let mut source_limit = TestPath::new(1, NONZERO, 0).move_to(0.0, 0.0);
-    for index in 0..72 {
+    for index in 0..384 {
         source_limit = source_limit.line_to(f64::from(index + 1), f64::from(index % 2));
     }
     let next = f64::from_bits(1.0f64.to_bits() + 1);
@@ -1674,7 +1713,7 @@ fn mapping_row_fixtures_reach_their_kernel_values() {
             FILL_PATH_WORK_LIMIT,
         ),
         (
-            "SourceLimit (72 source verbs + 1)",
+            "SourceLimit (384 line-only source verbs + 1)",
             source_limit,
             Err(CubicFillError::SourceLimit),
             FILL_PATH_WORK_LIMIT,

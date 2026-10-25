@@ -464,8 +464,10 @@ export const FILL_ENGINE_META = 'meta/fill-engine-sizes';
 /** The size records that the combined mode (E14-G1) records as changes, by exact name. */
 export const SIZE_RECORDS = ['meta/cubic-workspace-sizes', FILL_ENGINE_META];
 const PATH_OK_CODE = 'path_status=0';
-/** `FILL_PATH_WORK_LIMIT`, the one base status the combined mode lets change (to `ok`). */
+/** `FILL_PATH_WORK_LIMIT` and, since E16-G1, `FILL_PATH_UNSUPPORTED_GEOMETRY`: the base
+ * statuses the combined mode lets change, and only to `ok`. */
 const WORK_LIMIT_CODE = 'path_status=5';
+const UNSUPPORTED_CODE = 'path_status=6';
 
 /** The rung-record path of a native cascade or WASM case, or null for an entry or meta case. */
 export function rungPathOf(name) {
@@ -684,7 +686,8 @@ export function differingFields(base, branch) {
  * With `recordedChanges` (the combined mode, E14-G1) two rules tighten this: an entry or META
  * record not named there must be identical whatever its base code (AL-I1: the exact rung's entry
  * layer is bit-identical, so a base path failure there may not change), and a cascade or WASM
- * record may change only from `work-limit` to `ok`; any other change is a FAIL.
+ * record may change only from `work-limit` (E14-G1) or `unsupported-geometry` (E16-G1, the
+ * refinement retries) to `ok`; any other change is a FAIL.
  */
 export function classifyFailureToSuccessLayer(layer, base, branch, recordedChanges = []) {
   const result = {
@@ -718,11 +721,17 @@ export function classifyFailureToSuccessLayer(layer, base, branch, recordedChang
           name,
           `AL-I1: entry case differs in ${differing.join(', ')} (${old.code} -> ${current.code})`,
         );
-      else if (old.code === WORK_LIMIT_CODE && current.code === PATH_OK_CODE) {
+      else if (
+        (old.code === WORK_LIMIT_CODE || old.code === UNSUPPORTED_CODE) &&
+        current.code === PATH_OK_CODE
+      ) {
         result.counts.allowedChange += 1;
         result.allowed.push({ layer, case: name, baseCode: old.code, branchCode: current.code });
       } else
-        fail(name, `E14-G1: only work-limit -> ok may change (${old.code} -> ${current.code})`);
+        fail(
+          name,
+          `E14-G1/E16-G1: only work-limit or unsupported-geometry -> ok may change (${old.code} -> ${current.code})`,
+        );
       continue;
     }
     if (classifyOutcome(old.code) !== 'path-failure') {
@@ -1868,17 +1877,23 @@ function selfTestCombined() {
   const okChanged = resized();
   okChanged.set(A, record('a2'));
   const okFails = !classify(okChanged, SIZE_RECORDS).pass;
-  // E14-G1: an entry case that was a path failure (E14-D1 changes the exact rung's entries), a
-  // non-work-limit failure becoming ok, and work-limit becoming another failure all FAIL.
+  // E14-G1: an entry case that was a path failure (E14-D1 changes the exact rung's entries)
+  // and work-limit becoming another failure FAIL. E16-G1: unsupported-geometry becoming ok
+  // passes; unsupported-geometry becoming another failure FAILs.
   const entryChanged = resized();
   entryChanged.set(E, record('e2'));
   const unsupportedOk = resized();
   unsupportedOk.set(U, record('u-ok'));
   const workToUnsupported = resized();
   workToUnsupported.set(F, record('f6', 'path_status=6'));
+  const unsupportedToWork = resized();
+  unsupportedToWork.set(U, record('u5', 'path_status=5'));
+  const unsupportedOkResult = classify(unsupportedOk, SIZE_RECORDS);
   const g1Rules =
     !classify(entryChanged, SIZE_RECORDS).pass &&
-    !classify(unsupportedOk, SIZE_RECORDS).pass &&
+    unsupportedOkResult.pass &&
+    unsupportedOkResult.counts.allowedChange === 3 &&
+    !classify(unsupportedToWork, SIZE_RECORDS).pass &&
     !classify(workToUnsupported, SIZE_RECORDS).pass &&
     // failure-to-success alone allows it (it fails there only on the size records).
     !classify(entryChanged, []).failures.some((failure) => failure.includes(E));
@@ -1910,10 +1925,10 @@ function selfTestCombined() {
         path.join(directory, 'revisions.json'),
         `${JSON.stringify({ base, branch })}\n`,
       );
-    revisions(2, 3);
+    revisions(3, 4);
     const combined = compareOnly(directory, null, true, true);
     const alone = compareOnly(directory, null, false, true);
-    revisions(3, 3);
+    revisions(4, 4);
     const unrevised = compareOnly(directory, null, true, true);
     plumbing = combined && !alone && !unrevised;
   } finally {
@@ -1921,7 +1936,7 @@ function selfTestCombined() {
   }
   const pass = sizedOk && aloneFails && otherFails && okFails && g1Rules && tampers && plumbing;
   console.log(
-    `P3 B0R identity self-test (failure-to-success+revision-change): size records recorded ${sizedOk ? 'ok' : 'WRONG'}; failure-to-success alone ${aloneFails ? 'fails them' : 'NOT DETECTED'}; other META ${otherFails ? 'detected' : 'NOT DETECTED'}; ok record ${okFails ? 'detected' : 'NOT DETECTED'}; E14-G1 rules ${g1Rules ? 'detected' : 'NOT DETECTED'}; tamper checks ${tampers ? 'detected' : 'NOT DETECTED'}; compare-only ${plumbing ? 'ok' : 'WRONG'}; ${pass ? 'PASS' : 'FAIL'}`,
+    `P3 B0R identity self-test (failure-to-success+revision-change): size records recorded ${sizedOk ? 'ok' : 'WRONG'}; failure-to-success alone ${aloneFails ? 'fails them' : 'NOT DETECTED'}; other META ${otherFails ? 'detected' : 'NOT DETECTED'}; ok record ${okFails ? 'detected' : 'NOT DETECTED'}; E14-G1/E16-G1 rules ${g1Rules ? 'detected' : 'NOT DETECTED'}; tamper checks ${tampers ? 'detected' : 'NOT DETECTED'}; compare-only ${plumbing ? 'ok' : 'WRONG'}; ${pass ? 'PASS' : 'FAIL'}`,
   );
   return pass;
 }

@@ -34,7 +34,7 @@ const runRoot = path.resolve(
 
 /** The operation ids the expected literals were fixed with (V2-A1). */
 const OPERATION_IDS = {
-  fill: 'geometry-wasm/fill-v0+r3',
+  fill: 'geometry-wasm/fill-v0+r4',
   stroke: 'geometry-wasm/stroke-v0+r7',
 } as const;
 

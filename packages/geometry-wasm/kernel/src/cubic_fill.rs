@@ -32,8 +32,21 @@ pub(crate) const MAX_CONTOUR_POINTS: usize = MAX_EDGE_OWNERS + MAX_CONTOURS;
 // E0. Only the prefix run that feeds rung 0 enforces it; the exact rung keeps MAX_EDGE_OWNERS
 // and `FILL_V0_LIMITS`. The command and point caps follow from E0 as the B1 ones do from E.
 pub(crate) const MAX_FAST_EDGE_OWNERS: usize = 8_192;
-pub(crate) const MAX_FAST_FLAT_COMMANDS: usize = MAX_FAST_EDGE_OWNERS + 2 * MAX_CONTOURS;
-pub(crate) const MAX_FAST_CONTOUR_POINTS: usize = MAX_FAST_EDGE_OWNERS + MAX_CONTOURS;
+// E16-K1 (`docs/plans/d9-e16-fill-rejection-remedy-contract.md` section 3): rung 0's own source
+// caps, 512 contours (the stroke instance's `MAX_PIECES`) and E0 segments.
+pub(crate) const MAX_FAST_CONTOURS: usize = 512;
+pub(crate) const MAX_FAST_SOURCE_SEGMENTS: usize = MAX_FAST_EDGE_OWNERS;
+pub(crate) const MAX_FAST_FLAT_COMMANDS: usize = MAX_FAST_EDGE_OWNERS + 2 * MAX_FAST_CONTOURS;
+const MAX_FAST_SOURCE_VERBS: usize = MAX_FAST_SOURCE_SEGMENTS + 2 * MAX_FAST_CONTOURS;
+const MAX_FAST_SOURCE_SCALARS: usize = 6 * MAX_FAST_SOURCE_SEGMENTS + 2 * MAX_FAST_CONTOURS;
+pub(crate) const MAX_FAST_CONTOUR_POINTS: usize = MAX_FAST_EDGE_OWNERS + MAX_FAST_CONTOURS;
+// E16-K1 item 2: the exact rung's caps on a line-only path, which builds no topology
+// certificate: 64 contours and E segments. `MAX_EXACT_FLAT_COMMANDS` is the command capacity
+// the exact callers pass; `emit` bounds it by the path kind's caps, so a cubic path keeps
+// `MAX_FLAT_COMMANDS`.
+pub(crate) const MAX_LINE_CONTOURS: usize = 64;
+const MAX_LINE_SOURCE_SEGMENTS: usize = MAX_EDGE_OWNERS;
+pub(crate) const MAX_EXACT_FLAT_COMMANDS: usize = MAX_EDGE_OWNERS + 2 * MAX_LINE_CONTOURS;
 const MAX_COMBINED_HEAP_BYTES: usize = 16 * 1024 * 1024;
 
 /// The prefix caps one prefix run enforces. The prefix buffers are always sized for the fast
@@ -41,6 +54,7 @@ const MAX_COMBINED_HEAP_BYTES: usize = 16 * 1024 * 1024;
 /// `FAST_CAPS`, unless a `cfg(test)` constructor selects `PRE_B1_CAPS` for both.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct PrefixCaps {
+    contours: usize,
     source_verbs: usize,
     source_scalars: usize,
     source_segments: usize,
@@ -50,6 +64,7 @@ struct PrefixCaps {
 }
 
 const B1_CAPS: PrefixCaps = PrefixCaps {
+    contours: MAX_CONTOURS,
     source_verbs: MAX_SOURCE_VERBS,
     source_scalars: MAX_SOURCE_SCALARS,
     source_segments: MAX_SOURCE_SEGMENTS,
@@ -58,12 +73,49 @@ const B1_CAPS: PrefixCaps = PrefixCaps {
     edge_owners: MAX_EDGE_OWNERS,
 };
 
-/// E14-K1 item 2: the caps of the prefix run that feeds rung 0 in a production workspace.
+/// E16-K1 item 2: the exact rung's caps on a line-only path. The rounded line fill takes at
+/// most `limits.max_contours` contours and `limits.max_edges` edges, so the line-only contour
+/// and segment caps are those limits clamped between B1's cubic caps and 64 contours and E
+/// segments: `FILL_V0_LIMITS` gives 64 and E, and the frozen native test limits (4 contours,
+/// 64 edges) give exactly `B1_CAPS`.
+const fn line_caps(limits: RoundedFillLimits) -> PrefixCaps {
+    let contours = clamp(limits.max_contours, MAX_CONTOURS, MAX_LINE_CONTOURS);
+    let segments = clamp(
+        limits.max_edges,
+        MAX_SOURCE_SEGMENTS,
+        MAX_LINE_SOURCE_SEGMENTS,
+    );
+    PrefixCaps {
+        contours,
+        source_verbs: segments + 2 * contours,
+        source_scalars: 6 * segments + 2 * contours,
+        source_segments: segments,
+        flat_commands: MAX_EDGE_OWNERS + 2 * contours,
+        contour_points: MAX_EDGE_OWNERS + contours,
+        edge_owners: MAX_EDGE_OWNERS,
+    }
+}
+
+const fn clamp(value: usize, low: usize, high: usize) -> usize {
+    if value < low {
+        low
+    } else if value > high {
+        high
+    } else {
+        value
+    }
+}
+
+/// E14-K1 item 2 and E16-K1 item 1: the caps of the prefix run that feeds rung 0 in a
+/// production workspace.
 const FAST_CAPS: PrefixCaps = PrefixCaps {
+    contours: MAX_FAST_CONTOURS,
+    source_verbs: MAX_FAST_SOURCE_VERBS,
+    source_scalars: MAX_FAST_SOURCE_SCALARS,
+    source_segments: MAX_FAST_SOURCE_SEGMENTS,
     flat_commands: MAX_FAST_FLAT_COMMANDS,
     contour_points: MAX_FAST_CONTOUR_POINTS,
     edge_owners: MAX_FAST_EDGE_OWNERS,
-    ..B1_CAPS
 };
 
 /// B1's test-only pre-B1 cap mode (`docs/plans/p3-fill-stroke-meshes.md`, "B1 kernel caps"):
@@ -71,6 +123,7 @@ const FAST_CAPS: PrefixCaps = PrefixCaps {
 /// against the frozen spike) compare like with like. Unreachable outside `cfg(test)`.
 #[cfg(test)]
 const PRE_B1_CAPS: PrefixCaps = PrefixCaps {
+    contours: 4,
     source_verbs: 24,
     source_scalars: 104,
     source_segments: 16,
@@ -88,6 +141,16 @@ const PRE_B1_TOPOLOGY_LIMITS: TopologyLimits = TopologyLimits {
     max_pairs: 2_016,
     max_bytes: 1024 * 1024,
 };
+
+/// E16-K1 item 5, for the allocation tests: the bytes of the four source buffers, sized for
+/// the fast caps.
+#[cfg(test)]
+pub(crate) const fn source_buffer_bytes() -> usize {
+    MAX_FAST_SOURCE_VERBS * size_of::<SourceVerb>()
+        + MAX_FAST_SOURCE_SEGMENTS * size_of::<DecodedSource>()
+        + MAX_FAST_CONTOURS * size_of::<TopologyRange>()
+        + MAX_FAST_CONTOURS * size_of::<ContourRange>()
+}
 
 /// A heap buffer of `length` copies of `value`, reserved fallibly (E14-K1 item 4). A refusal
 /// reuses the workspaces' allocation error, which `construction_status` maps to
@@ -280,18 +343,20 @@ pub(crate) struct CubicFillWorkspace {
     topology: SimpleCubicTopologyWorkspace,
     rounded_topology: RoundedKnotCubicTopologyWorkspace,
     transverse_topology: TransverseArrangementWorkspace,
-    source_verbs: [SourceVerb; MAX_SOURCE_VERBS],
+    /// E16-K1 item 5: heap buffers sized for the fast source caps, reserved once at
+    /// construction.
+    source_verbs: Vec<SourceVerb>,
     source_verb_len: usize,
-    sources: [DecodedSource; MAX_SOURCE_SEGMENTS],
+    sources: Vec<DecodedSource>,
     source_len: usize,
-    source_ranges: [TopologyRange; MAX_CONTOURS],
+    source_ranges: Vec<TopologyRange>,
     source_range_len: usize,
     /// E14-K1 item 4: heap buffers of `MAX_FAST_*` elements, reserved once at construction.
     commands: Vec<FlatCommand>,
     command_len: usize,
     contour_points: Vec<Point>,
     point_len: usize,
-    contour_ranges: [ContourRange; MAX_CONTOURS],
+    contour_ranges: Vec<ContourRange>,
     range_len: usize,
     edge_owners: Vec<EdgeOwner>,
     owner_len: usize,
@@ -300,6 +365,10 @@ pub(crate) struct CubicFillWorkspace {
     published: bool,
     /// The exact rung's caps (`attempt*`, `certify_topology`).
     caps: PrefixCaps,
+    /// The exact rung's caps on a line-only path (E16-K1 item 2).
+    line_caps: PrefixCaps,
+    /// E16-K2 item 8: refinement retries, off in the pre-B1 mode.
+    refines: bool,
     /// The caps of the prefix run that feeds rung 0 (`prepare_prefix`, E14-K1 item 2).
     fast_caps: PrefixCaps,
     /// The caps of the current prefix run: `caps` or `fast_caps`.
@@ -308,19 +377,32 @@ pub(crate) struct CubicFillWorkspace {
 
 impl CubicFillWorkspace {
     pub(crate) fn new(limits: RoundedFillLimits) -> Result<Self, CubicFillError> {
-        Self::with_caps(limits, B1_CAPS, FAST_CAPS, TopologyLimits::default())
+        Self::with_caps(
+            limits,
+            B1_CAPS,
+            line_caps(limits),
+            FAST_CAPS,
+            TopologyLimits::default(),
+        )
     }
 
     /// B1's test-only pre-B1 cap mode: the prefix and topology caps before B1. The caller passes
     /// the matching rounded limits (`fill_export::PRE_B1_FILL_V0_LIMITS` or the native `LIMITS`).
     #[cfg(test)]
     pub(crate) fn new_pre_b1(limits: RoundedFillLimits) -> Result<Self, CubicFillError> {
-        Self::with_caps(limits, PRE_B1_CAPS, PRE_B1_CAPS, PRE_B1_TOPOLOGY_LIMITS)
+        Self::with_caps(
+            limits,
+            PRE_B1_CAPS,
+            PRE_B1_CAPS,
+            PRE_B1_CAPS,
+            PRE_B1_TOPOLOGY_LIMITS,
+        )
     }
 
     fn with_caps(
         limits: RoundedFillLimits,
         caps: PrefixCaps,
+        line_caps: PrefixCaps,
         fast_caps: PrefixCaps,
         topology_limits: TopologyLimits,
     ) -> Result<Self, CubicFillError> {
@@ -332,17 +414,17 @@ impl CubicFillWorkspace {
                 .map_err(CubicFillError::Topology)?,
             transverse_topology: TransverseArrangementWorkspace::new(topology_limits)
                 .map_err(CubicFillError::Topology)?,
-            source_verbs: [SourceVerb::Unused; MAX_SOURCE_VERBS],
+            source_verbs: filled(SourceVerb::Unused, MAX_FAST_SOURCE_VERBS)?,
             source_verb_len: 0,
-            sources: [DecodedSource::default(); MAX_SOURCE_SEGMENTS],
+            sources: filled(DecodedSource::default(), MAX_FAST_SOURCE_SEGMENTS)?,
             source_len: 0,
-            source_ranges: [TopologyRange::default(); MAX_CONTOURS],
+            source_ranges: filled(TopologyRange::default(), MAX_FAST_CONTOURS)?,
             source_range_len: 0,
             commands: filled(FlatCommand::default(), MAX_FAST_FLAT_COMMANDS)?,
             command_len: 0,
             contour_points: filled(Point::default(), MAX_FAST_CONTOUR_POINTS)?,
             point_len: 0,
-            contour_ranges: [ContourRange::default(); MAX_CONTOURS],
+            contour_ranges: filled(ContourRange::default(), MAX_FAST_CONTOURS)?,
             range_len: 0,
             edge_owners: filled(
                 EdgeOwner::ImplicitClosure { contour: 0 },
@@ -353,6 +435,8 @@ impl CubicFillWorkspace {
             topology_stats: TopologyStats::default(),
             published: false,
             caps,
+            line_caps,
+            refines: caps == B1_CAPS,
             fast_caps,
             prefix_caps: caps,
         };
@@ -366,7 +450,7 @@ impl CubicFillWorkspace {
     }
 
     /// The retained heap bytes: the four topology and rounded workspaces and, since E14-K1
-    /// item 4, the prefix buffers.
+    /// item 4 and E16-K1 item 5, the prefix and source buffers.
     fn combined_bytes(&self) -> Option<usize> {
         let prefix = self
             .commands
@@ -381,6 +465,26 @@ impl CubicFillWorkspace {
                 self.edge_owners
                     .capacity()
                     .checked_mul(size_of::<EdgeOwner>())?,
+            )?
+            .checked_add(
+                self.source_verbs
+                    .capacity()
+                    .checked_mul(size_of::<SourceVerb>())?,
+            )?
+            .checked_add(
+                self.sources
+                    .capacity()
+                    .checked_mul(size_of::<DecodedSource>())?,
+            )?
+            .checked_add(
+                self.source_ranges
+                    .capacity()
+                    .checked_mul(size_of::<TopologyRange>())?,
+            )?
+            .checked_add(
+                self.contour_ranges
+                    .capacity()
+                    .checked_mul(size_of::<ContourRange>())?,
             )?;
         self.rounded
             .allocated_bytes()
@@ -393,6 +497,30 @@ impl CubicFillWorkspace {
     pub(crate) fn allocated_bytes(&self) -> usize {
         self.combined_bytes()
             .expect("constructor validated combined retained capacities")
+    }
+
+    /// E16-K2 item 8: whether the exact rung retries at finer tolerances after a topology
+    /// failure; false in the test-only pre-B1 mode.
+    pub(crate) fn refines(&self) -> bool {
+        #[cfg(test)]
+        if E16_NO_REFINEMENT.with(core::cell::Cell::get) {
+            return false;
+        }
+        self.refines
+    }
+
+    /// The exact rung's caps for this path (E16-K1 item 2): the line-only caps when the path
+    /// has no CUBIC verb, otherwise the cubic caps of B1.
+    fn exact_caps(&self, input: PathInput<'_>) -> PrefixCaps {
+        #[cfg(test)]
+        if E16_CUBIC_LINE_CAPS.with(core::cell::Cell::get) {
+            return self.line_caps;
+        }
+        if input.verbs.iter().all(|verb| *verb != VERB_CUBIC) {
+            self.line_caps
+        } else {
+            self.caps
+        }
     }
 
     /// The edge cap of the prefix run that feeds rung 0 (E14-K1 item 2): E0 in a production
@@ -411,6 +539,12 @@ impl CubicFillWorkspace {
     /// `FillLadder::reserve` derives AL-FR9's boundary record count (E14-K1 item 5).
     pub(crate) fn fast_contour_points(&self) -> usize {
         self.fast_caps.contour_points
+    }
+
+    /// The contour cap of the prefix run that feeds rung 0 (E16-K1 item 1), the h of AL-FR9's
+    /// boundary record bound.
+    pub(crate) fn fast_contours(&self) -> usize {
+        self.fast_caps.contours
     }
 
     pub(crate) fn diagnostics(&self) -> CubicFillDiagnostics {
@@ -502,10 +636,10 @@ impl CubicFillWorkspace {
         let (caps, command_capacity) = if E14_EXACT_FAST_CAPS.with(core::cell::Cell::get) {
             (self.fast_caps, self.fast_caps.flat_commands)
         } else {
-            (self.caps, command_capacity)
+            (self.exact_caps(input), command_capacity)
         };
         #[cfg(not(test))]
-        let caps = self.caps;
+        let caps = self.exact_caps(input);
         let all_line_eligible = match self.run_prefix(input, command_capacity, true, caps) {
             Ok(all_line_eligible) => all_line_eligible,
             Err(PrefixFailure::Sizing(_)) => return Ok(self.diagnostics),
@@ -524,7 +658,11 @@ impl CubicFillWorkspace {
             return Ok(self.diagnostics);
         }
 
-        let mut references: [&[Point]; MAX_CONTOURS] = [&[]; MAX_CONTOURS];
+        // E16-K1 item 2, guard: the array holds the line-only contour cap.
+        if self.range_len > MAX_LINE_CONTOURS {
+            return Err(CubicFillError::SourceLimit);
+        }
+        let mut references: [&[Point]; MAX_LINE_CONTOURS] = [&[]; MAX_LINE_CONTOURS];
         for (index, range) in self.contour_ranges[..self.range_len]
             .iter()
             .copied()
@@ -656,7 +794,7 @@ impl CubicFillWorkspace {
                     if let Some(open) = active.take() {
                         self.finish_source(open, allow_empty_ranges)?;
                     }
-                    if self.source_range_len >= MAX_CONTOURS {
+                    if self.source_range_len >= self.prefix_caps.contours {
                         return Err(CubicFillError::SourceLimit);
                     }
                     let point = read_source_point(input, scalar)?;
@@ -761,7 +899,7 @@ impl CubicFillWorkspace {
     }
 
     fn push_source_range(&mut self, range: TopologyRange) -> Result<(), CubicFillError> {
-        if self.source_range_len >= MAX_CONTOURS {
+        if self.source_range_len >= self.prefix_caps.contours {
             return Err(CubicFillError::SourceLimit);
         }
         self.source_ranges[self.source_range_len] = range;
@@ -878,6 +1016,10 @@ impl CubicFillWorkspace {
     }
 
     fn certify_topology(&mut self, mode: TopologyMode) -> Result<(), CubicFillError> {
+        // E16-K1 item 2, guard: the arrays below hold the cubic caps.
+        if self.source_range_len > MAX_CONTOURS || self.source_len > MAX_SOURCE_SEGMENTS {
+            return Err(CubicFillError::SourceLimit);
+        }
         let mut contours = [TopologyRange::default(); MAX_CONTOURS];
         let mut cubics = [TopologyCubic::default(); MAX_SOURCE_SEGMENTS];
         let mut leaves = [TopologyLeaf::default(); MAX_EDGE_OWNERS];
@@ -1055,7 +1197,7 @@ impl CubicFillWorkspace {
                     if let Some(open) = active.take() {
                         self.finish_open_contour(open, allow_singletons)?;
                     }
-                    if self.range_len >= MAX_CONTOURS {
+                    if self.range_len >= self.prefix_caps.contours {
                         return Err(CubicFillError::ContourLimit);
                     }
                     let point = command.point.ok_or(CubicFillError::InvalidCommand)?;
@@ -1244,7 +1386,7 @@ impl CubicFillWorkspace {
     }
 
     fn push_range(&mut self, range: ContourRange) -> Result<(), CubicFillError> {
-        if self.range_len >= MAX_CONTOURS {
+        if self.range_len >= self.prefix_caps.contours {
             return Err(CubicFillError::ContourLimit);
         }
         self.contour_ranges[self.range_len] = range;
@@ -1494,6 +1636,28 @@ impl CubicFillWorkspace {
 thread_local! {
     static E8_COLLAPSE_FINAL_LEAF: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
     static E14_EXACT_FAST_CAPS: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+    static E16_NO_REFINEMENT: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+    static E16_CUBIC_LINE_CAPS: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
+}
+
+/// Runs `action` with E16-K2's refinement retries off, so a test can read the workspace state
+/// the cascade at e leaves (`docs/plans/d9-e16-fill-rejection-remedy-contract.md` section 4).
+#[cfg(test)]
+pub(crate) fn without_refinement<T>(action: impl FnOnce() -> T) -> T {
+    E16_NO_REFINEMENT.with(|switch| switch.set(true));
+    let result = action();
+    E16_NO_REFINEMENT.with(|switch| switch.set(false));
+    result
+}
+
+/// E16-D1 (contract section 7): runs `action` with the exact rung's line-only caps applied to
+/// every path, cubic paths included, then switches it off.
+#[cfg(test)]
+pub(crate) fn with_line_caps_on_cubic_paths<T>(action: impl FnOnce() -> T) -> T {
+    E16_CUBIC_LINE_CAPS.with(|switch| switch.set(true));
+    let result = action();
+    E16_CUBIC_LINE_CAPS.with(|switch| switch.set(false));
+    result
 }
 
 /// E14-D1 (`docs/plans/d9-e14-fill-rung0-edge-cap-contract.md` section 8): runs `action` with

@@ -188,7 +188,7 @@ fn pack(paths: &[Path]) -> Vec<u8> {
 fn engine(exact_only: bool) -> FillEngine {
     let mut engine = FillEngine::new();
     engine.hooks().exact_only = exact_only;
-    assert_eq!(engine.reserve(1 << 16, 1 << 20), BATCH_OK);
+    assert_eq!(engine.reserve(1 << 18, 1 << 20), BATCH_OK);
     engine
 }
 
@@ -438,8 +438,10 @@ fn fallback_fixtures() -> Vec<(Path, Reason)> {
             .close(),
         Reason::Prefix,
     ));
+    // E16-K1: rung 0's prefix enforces its own source caps, so the source-limit input has
+    // S0 + 2 · C0 + 1 = 9,217 verbs instead of B1's 73.
     let mut source_limit = Path::new("source-limit", NONZERO, 0).move_to(0.0, 0.0);
-    for index in 0..72 {
+    for index in 0..9_216 {
         source_limit = source_limit.line_to(f64::from(index + 1), f64::from(index % 2));
     }
     fixtures.push((source_limit, Reason::Prefix));
@@ -475,7 +477,7 @@ fn fallback_fixtures() -> Vec<(Path, Reason)> {
 
 #[test]
 fn al_u3_fallback_fixtures_take_the_exact_rung_and_equal_exact_only() {
-    assert_eq!(FILL_V0_REVISION, 3);
+    assert_eq!(FILL_V0_REVISION, 4);
     let fixtures = fallback_fixtures();
     for (path, expected) in &fixtures {
         let record = built(path, false);
@@ -678,12 +680,15 @@ fn al_u3_al_f9_b0_fixture_paths_are_fast_through_the_export() {
 fn transverse_invoked(path: &Path, defect: bool) -> bool {
     let mut engine = engine(false);
     engine.hooks().defect_cascade_inverted = defect;
-    assert_eq!(process(&mut engine, std::slice::from_ref(path)).0, BATCH_OK);
-    engine
-        .workspace()
-        .unwrap()
-        .diagnostics()
-        .transverse_topology_invoked
+    // E16-K2: the flag is the cascade at e's, read with the refinement retries off.
+    crate::cubic_fill::without_refinement(|| {
+        assert_eq!(process(&mut engine, std::slice::from_ref(path)).0, BATCH_OK);
+        engine
+            .workspace()
+            .unwrap()
+            .diagnostics()
+            .transverse_topology_invoked
+    })
 }
 
 #[test]
