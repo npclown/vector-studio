@@ -64,13 +64,18 @@ if (!smoke) {
 }
 
 // Section 4.2 and E3-R2: a measurement counts only on an oracle version whose full freeze check
-// the contract records ("Oracle `…a04-region.ts` SHA-256: `<sha>`" in a freeze or oracle record).
-// A strided sample may run on another version; its record names it as uncertified.
+// the contract records, as the oracle line of a freeze record: a line that is exactly
+// "- Oracle `packages/geometry-reference/src/a04-region.ts` SHA-256: `<sha>`" plus an optional
+// "(commit …)." A strided sample may run on another version; its record names it as uncertified.
 const oracleSha256 = sha256(read(oraclePath));
+const oracleLine = new RegExp(
+  `^- Oracle \`${oraclePath.replaceAll('.', '\\.')}\` SHA-256: \`${oracleSha256}\`( \\(commit \`[0-9a-f]+\`\\))?\\.?$`,
+  'u',
+);
 const oracleCertified = read(contractPath)
   .toString('utf8')
   .split('\n')
-  .some((line) => line.includes('a04-region.ts` SHA-256') && line.includes(oracleSha256));
+  .some((line) => oracleLine.test(line.trimEnd()));
 if (!smoke && stride === 1 && !oracleCertified)
   throw new Error(
     `refusing a full corpus run: oracle SHA-256 ${oracleSha256} has no freeze check record in ` +

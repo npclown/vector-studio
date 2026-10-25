@@ -155,6 +155,7 @@ test('E3-U4 GPU model check and E3-PC12', async ({ browser, page }, info) => {
     schema: 'e3-a04-gpu-check/v1',
     passed:
       failures.length === 0 &&
+      (skippedKinds.error ?? 0) === 0 &&
       pc12 !== null &&
       !pc12.passed &&
       pageErrors.length === 0 &&
@@ -196,6 +197,7 @@ test('E3-U4 GPU model check and E3-PC12', async ({ browser, page }, info) => {
     },
   );
   expect(pageErrors).toEqual([]);
+  expect(skipped.filter((s) => s.kind.startsWith('error'))).toEqual([]);
   expect(failures.slice(0, 20)).toEqual([]);
   expect(pc12?.passed).toBe(false);
 });

@@ -366,8 +366,11 @@ export function modelCheck(
     }
     if (draw.clip && !draw.measurable) clip.unmeasurable += 1;
     else if (draw.clip) {
-      if (result.coverage === undefined) {
-        failures.push(`${draw.id}: no clip coverage`);
+      const words = Math.ceil(stripPixels(width, height).length / 64);
+      if (result.coverage?.length !== words) {
+        failures.push(
+          `${draw.id}: clip coverage of ${result.coverage?.length} words, not ${words}`,
+        );
         return;
       }
       const c = clipCheck(draw, result.coverage);
