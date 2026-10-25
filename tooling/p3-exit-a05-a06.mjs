@@ -175,8 +175,12 @@ export function evaluate(map, results) {
                   entry.each === undefined ||
                   entry.each.some((prefix) => test.title.startsWith(prefix)),
               );
+      // A supplementary kernel module may hold manual `#[ignore]` runs (the E1 and E2
+      // differentials); they are not part of its evidence. A required entry fails on one.
+      const manual = (test) =>
+        entry.runner === 'cargo' && entry.kind === 'supplementary' && test.status === 'ignored';
       const failures = selected
-        .filter((test) => test.status !== 'passed')
+        .filter((test) => test.status !== 'passed' && !manual(test))
         .map((test) => `${test.name ?? test.fullName ?? test.title}: ${test.status}`);
       if (selected.length === 0) failures.push('no test selected');
       const label = (test) =>

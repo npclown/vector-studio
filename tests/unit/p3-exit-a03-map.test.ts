@@ -89,7 +89,7 @@ describe('p3-exit A03 map', () => {
     ]);
   });
 
-  it('selects cargo tests by the prefix after the module and fails an unmatched prefix', () => {
+  it('selects cargo tests by the prefix after the module, fails an unmatched prefix and skips manual runs only in supplementary entries', () => {
     const small: EvidenceMap = {
       version: 'p3-exit-a03-map/v1',
       contract: 'c',
@@ -119,6 +119,17 @@ describe('p3-exit A03 map', () => {
       ['h', 'HEADED', 0],
     ]);
     expect(pass.criteria).toEqual({ A03: 'PASS (CI part; headed part cited separately)' });
+    const ignored = [{ name: 'm_tests::st_f1_slow', status: 'ignored' }, ...tests];
+    expect(evaluate(small, { cargo: { ok: true, tests: ignored } }).rows[0]!.failures).toEqual([
+      'm_tests::st_f1_slow: ignored',
+    ]);
+    const supplementary: EvidenceMap = {
+      ...small,
+      criteria: { A03: [{ ...small.criteria.A03![0]!, kind: 'supplementary' }] },
+    };
+    expect(evaluate(supplementary, { cargo: { ok: true, tests: ignored } }).rows[0]!.verdict).toBe(
+      'PASS',
+    );
     const fail = evaluate(small, { cargo: { ok: true, tests: tests.slice(0, 1) } });
     expect(fail.rows[0]!.failures).toEqual(['no test titled "st_f2_..."']);
     expect(fail.criteria.A03).toBe('FAIL');
