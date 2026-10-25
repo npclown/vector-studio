@@ -11,7 +11,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | Item | Subject | Tier | Phase | State |
 | --- | --- | --- | --- | --- |
 | E1 | ST-U9 early abort when failure is certain | Full | R0 | Done: merged (#202), independent review ACCEPTED 2026-10-23 ([review](../evidence/r0-review-closeout-2026-10-23.md#e1)) |
-| E3 | B4: A04 corpus and measurement contract | Full | R1 | In progress: U1 (#206), U2 (#212), U2b (#214), U2c (#216) merged; freeze not met (5 `ORACLE-WORK`); U3 harness and U4 GPU model check in review (headed Chrome and Edge PASS on non-corpus cases), no corpus run ([U3 evidence](#e3-e3-u3-evidence-2026-10-24), [U4 evidence](#e3-e3-u4-evidence-2026-10-24)) |
+| E3 | B4: A04 corpus and measurement contract | Full | R1 | In progress: U1 to U4 merged; U2d and U2e (#227): **corpus frozen 2026-10-25** (27,459 `ok`, 3 `not-drawable`, [U2e evidence](#e3-e3-u2e-evidence-2026-10-25)); next U5, the corpus run |
 | E8 | Unsupported-geometry on simple smooth Q/T and C/S paths | Full | R1 | Done: U0 (#211), U0b (#213), U1 (#215), U2 (#221) merged; U3 records M1′ as known unsupported ([U3 record](#e8-u3-record-and-e8-close-2026-10-24)) |
 | E10 | A08 test hooks for V-4: forced sample count, fringe-off, frame readback, count pass | Full (shared surface) | R1 | Contract APPROVED 2026-10-24 ([contract](d9-e10-renderer-test-hooks-contract.md)); U1, U2 and U3 in review in one pull request (departure from contract section 7, which plans separate pull requests: the session has one branch, and U3 needs U1 and U2); E10-A7 headed run PASS 2026-10-24, 12/12 in Chrome and Edge ([record](../evidence/e10-test-hooks-2026-10-24/record.md)); E10-A9 evidence review READY 2026-10-24 (contract section 14); merge of #228 closes E10 |
 | E11 | P3 C03-C05 closure and exit snapshot | Full | R1 | Contract APPROVED 2026-10-24 (Q1-Q4 (a)); U2 sweep tool merged (#225), scene: 0 structure issues, fill 318 and stroke 121 of 1,000 meshed ([U2 evidence](#e11-e11-u2-evidence-2026-10-24)); U4 addendum APPROVED 2026-10-24 ([addendum](d9-e11-u4-failure-behavior-addendum.md)), implementation merged (#232), headed GPU check E11-U4-A4 PASS 2026-10-24 ([U4 evidence](#e11-e11-u4-evidence-2026-10-24)); next U3 after the E3 freeze and V-4 (E8-U2 merged, #221) ([contract](d9-e11-p3-c03-c05-closure-contract.md)) |
@@ -424,6 +424,37 @@ Dated append. Unit E3-U4 implements the GPU model check of the [E3 contract](d9-
 
 - **Software dry run.** Headless Chromium 153 on SwiftShader, which is not evidence: 8 draws and 77 points, no failures, largest error 0.076 of `β_vertex` and 0.118 of `β_feature`, and E3-PC12 rejected.
 - **Headed Chrome 155.0.8059.85 and Edge 156.0.4314.42** on the user's NVIDIA GTX 1660 SUPER (Windows 11, commit `f856b96`, WASM `8034d36b…1d6f`): **both PASS**. Each read back 8 draws and 77 points within `β`: the largest ratio was 0.109 on the vertex path and 0.118 on the feature path. E3-PC12 was rejected. This is E3-A6 for the non-corpus cases; the named subset follows after the freeze (E3-U5). Details are in [contract section 16.5](d9-e3-b4-precision-contract.md#165-runs).
+
+## E3 E3-U2d evidence, 2026-10-24
+
+Dated append. Unit E3-U2d speeds up the A04 oracle so that the five `ORACLE-WORK` cases of E3-U2c end within the freeze cap, the E3-Q6 (a) path of an oracle fix, with no corpus change. The changes and their soundness are in [contract section 17](d9-e3-b4-precision-contract.md#17-e3-u2d-oracle-speed-up-and-freeze-annex-2026-10-24). Each was decided under the user's standing instruction of 2026-10-22 (recommended option). Track: rendering. Packages: geometry-reference, tests and docs. Shared surface changed: no. **No kernel was run.** No A04 threshold, cap or work weight changed. Precision stays **UNVERIFIED**.
+
+**Files.** `packages/geometry-reference/src/a04-region.ts`, with source SHA-256 `3211486c2417f446f8187d3b26324f72b15378b83274a578317b0b35b65fc0fa` at commit `c4a9644`, and `tests/geometry/e3-a04-oracle-u2d.test.ts`. `pnpm test:e3-a04` passes 113 tests (107 before, 6 new).
+
+**Results.**
+
+| Run | Result |
+| --- | ------ |
+| The five cases of E3-U2c, cap 6·10^9 | All `ok`, from 0.19 to 1.39·10^9 units (cap 1.8·10^9). `C9/g0187` went from 1.82·10^9 units and 813 s to 0.58·10^9 and 225 s, with the same cover |
+| `pnpm e3-a04:freeze --shards 14 --stride 25` (c4a9644) | **1,099 `ok` of 1,099**, in 21.7 min wall and 3.4 CPU hours. The largest case used 77 % of the cap |
+| Full-run estimate | About 86 CPU hours, 6 to 7 h on 14 shards. Started 2026-10-24 04:38 UTC |
+
+**Validation.** The commands and their results are in the PR. Still pending: the full freeze run and the freeze record (contract section 5.5, step 4).
+
+## E3 E3-U2e evidence, 2026-10-25
+
+Dated append. The full freeze run of E3-U2d (oracle `c4a9644`) failed: 27,399 `ok`, 58 `ORACLE-WORK` and 2 `ORACLE-ERROR`. Unit E3-U2e fixes the oracle so that every failed case ends within the cap, then runs the full freeze again. It is the E3-Q6 (a) path of an oracle fix, with no corpus change. The changes, their soundness, the review and the freeze record are in [contract section 18](d9-e3-b4-precision-contract.md#18-e3-u2e-oracle-fixes-and-freeze-annex-2026-10-25). Track: rendering. Packages: geometry-reference, tests, tooling and docs. Shared surface changed: no. **No kernel was run.** No A04 threshold, cap or work weight changed. Precision stays **UNVERIFIED** until the corpus run (E3-U5).
+
+**Files.** `packages/geometry-reference/src/a04-region.ts`, with source SHA-256 `aad4b5829989b191250adca44c18d4658dc38fb21814c897578630a6dde1fb00` at commit `0d0bf50`; `tests/geometry/e3-a04-oracle-u2e.test.ts`; the `--ids` option of `pnpm e3-a04:freeze`. `pnpm test:e3-a04` passes 120 tests in 7 files.
+
+**Results.**
+
+| Run | Result |
+| --- | ------ |
+| The 51 ids still failing after the first fixes (`60dfb98`, 8 shards) | 50 `ok`; `C9/g0154/T6/z0.01-d3` at the cap, then `ok` at 1.62·10^9 on `0d0bf50` |
+| `pnpm e3-a04:freeze --shards 8` (`0d0bf50`) | **27,459 `ok` and 3 `not-drawable` (C10, expected) of 27,462**, no `ORACLE-*` case, in 6.93 h wall and 52.9 CPU hours. The largest case used 90 % of the cap |
+
+**Validation.** The commands and their results are in the PR. The corpus is frozen (contract section 18.6). Next: E3-U5, the corpus run.
 
 ## E11 E11-U4 evidence, 2026-10-24
 
