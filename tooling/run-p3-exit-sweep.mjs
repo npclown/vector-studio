@@ -132,6 +132,7 @@ for (const phase of phases) {
         requests: r.requests,
         fill: r.fill.outcomes,
         stroke: r.stroke.outcomes,
+        fillClassCounts: r.fillClassCounts,
         structureFailures: r.structureFailures.length,
         echoFailures: r.echoFailures.length,
         isolationFailures: r.isolationFailures.length,
