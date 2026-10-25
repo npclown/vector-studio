@@ -1,5 +1,5 @@
 import type { RenderCamera, RendererSceneSynchronization } from '@vector-studio/contracts';
-import { validateDocument, type DocumentV1 } from '@vector-studio/model';
+import { DOCUMENT_ERROR_CODES, validateDocument, type DocumentV1 } from '@vector-studio/model';
 import { applyEdit, deepFreeze } from './edits.js';
 import { ExtensionRegistry, extensionApi } from './extensions.js';
 import { createCounterIdSource } from './ids.js';
@@ -85,13 +85,39 @@ const DOCUMENT_COMMANDS = new Set([
 /** Extension commands may nest this deep through `runCommand` (P5-U5). */
 const MAX_EXTENSION_DEPTH = 16;
 
-function isCommandResult(value: unknown): value is CommandResult {
-  if (typeof value !== 'object' || value === null) return false;
+const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
+  ...DOCUMENT_ERROR_CODES,
+  'editor.invalid-command',
+  'editor.unknown-node',
+  'editor.unknown-tool',
+  'editor.duplicate-id',
+  'editor.nothing-to-undo',
+  'editor.nothing-to-redo',
+  'editor.invalid-camera',
+  'editor.unknown-command',
+  'editor.extension-failed',
+]);
+
+/**
+ * A frozen copy of an extension command's result, or null when it is not a `CommandResult`
+ * with a known code and, on success, IDs of nodes in `document`.
+ */
+function extensionResult(value: unknown, document: DocumentV1): CommandResult | null {
+  if (typeof value !== 'object' || value === null) return null;
   const record = value as Record<string, unknown>;
   if (record.ok === true) {
-    return Array.isArray(record.ids) && record.ids.every((id) => typeof id === 'string');
+    if (!Array.isArray(record.ids)) return null;
+    const ids = [...(record.ids as unknown[])];
+    const real = ids.every((id) => typeof id === 'string' && Object.hasOwn(document.nodes, id));
+    return real ? deepFreeze({ ok: true, ids: ids as string[] }) : null;
   }
-  return record.ok === false && typeof record.code === 'string';
+  if (record.ok !== false || typeof record.code !== 'string' || !ERROR_CODES.has(record.code)) {
+    return null;
+  }
+  const code = record.code as EditorErrorCode;
+  return deepFreeze(
+    typeof record.path === 'string' ? { ok: false, code, path: record.path } : { ok: false, code },
+  );
 }
 
 type CommandFailure = Extract<CommandResult, { ok: false }> & Readonly<{ path: string }>;
@@ -322,8 +348,8 @@ class EditorCore implements Editor {
         // and the error is rethrown asynchronously, as for listeners.
         this.extensionDepth += 1;
         try {
-          const result: unknown = extension.run(command.args, this.api);
-          return isCommandResult(result) ? result : failure('editor.extension-failed');
+          const result = extensionResult(extension.run(command.args, this.api), this.document);
+          return result ?? failure('editor.extension-failed');
         } catch (error) {
           void Promise.resolve().then(() => {
             throw error;

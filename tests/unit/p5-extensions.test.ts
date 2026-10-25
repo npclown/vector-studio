@@ -158,6 +158,15 @@ describe('P5-A10 ext.star through the public API', () => {
         throw new Error('boom');
       },
       () => undefined as never,
+      () =>
+        new Proxy(
+          {},
+          {
+            ownKeys() {
+              throw new Error('boom');
+            },
+          },
+        ),
     ]) {
       const type = { ...starExtension.nodeTypes![0]!, defaults };
       const broken = editor([{ id: 'ext.star', nodeTypes: [type] }]);
@@ -256,6 +265,25 @@ describe('P5-A10 ext.star through the public API', () => {
     expect(() => editor([{ id: 'ext', nodeTypes: [type] }])).not.toThrow();
   });
 
+  it('calls registered methods on their own object', () => {
+    class Bounded {
+      readonly customType = 'ext.star';
+      readonly max = 6;
+      validate(data: unknown) {
+        return (data as { points: number }).points <= this.max;
+      }
+      defaults() {
+        return { points: this.max, innerRatio: 0.5 };
+      }
+      toScene(data: never, frame: never) {
+        return starExtension.nodeTypes![0]!.toScene(data, frame);
+      }
+    }
+    const target = editor([{ id: 'ext.star', nodeTypes: [new Bounded()] }]);
+    const [id] = ok(target, { type: 'createCustomNode', customType: 'ext.star', frame });
+    expect(target.query({ type: 'node', id: id! })).toMatchObject({ data: { points: 6 } });
+  });
+
   it('keeps its own copy of a registration', () => {
     const type = { ...starExtension.nodeTypes![0]! };
     const target = editor([{ id: 'ext.star', nodeTypes: [type] }]);
@@ -286,6 +314,8 @@ describe('P5-A10 ext.star through the public API', () => {
             },
           },
           { id: 'ext.bad.undefined', run: () => undefined as never },
+          { id: 'ext.bad.code', run: () => ({ ok: false, code: 'made.up' }) as never },
+          { id: 'ext.bad.ids', run: () => ({ ok: true, ids: ['not-a-node'] }) },
           {
             id: 'ext.bad.loop',
             run: (_args, api) => api.execute({ type: 'runCommand', id: 'ext.bad.loop' }),
@@ -303,6 +333,12 @@ describe('P5-A10 ext.star through the public API', () => {
         ok: false,
         code: 'editor.extension-failed',
       });
+      for (const id of ['ext.bad.code', 'ext.bad.ids']) {
+        expect(target.execute({ type: 'runCommand', id })).toEqual({
+          ok: false,
+          code: 'editor.extension-failed',
+        });
+      }
       expect(target.execute({ type: 'runCommand', id: 'ext.bad.loop' })).toEqual({
         ok: false,
         code: 'editor.extension-failed',

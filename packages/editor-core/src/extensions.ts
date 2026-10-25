@@ -101,8 +101,17 @@ export class ExtensionRegistry {
         ) {
           reject(`${id} cannot register custom type ${String(entry?.customType)}`);
         }
-        const { customType, validate, defaults, toScene } = entry as CustomNodeType;
-        this.types.set(customType, Object.freeze({ customType, validate, defaults, toScene }));
+        // Methods stay bound to the host's object, so a class-based type keeps its `this`.
+        const own = entry as CustomNodeType;
+        this.types.set(
+          own.customType,
+          Object.freeze({
+            customType: own.customType,
+            validate: own.validate.bind(own),
+            defaults: own.defaults.bind(own),
+            toScene: own.toScene.bind(own),
+          }),
+        );
       }
       for (const command of commands as readonly unknown[]) {
         const entry = command as Partial<ExtensionCommand> | null;
@@ -115,8 +124,8 @@ export class ExtensionRegistry {
         ) {
           reject(`${id} cannot register command ${String(entry?.id)}`);
         }
-        const { id: commandId, run } = entry as ExtensionCommand;
-        this.commands.set(commandId, Object.freeze({ id: commandId, run }));
+        const own = entry as ExtensionCommand;
+        this.commands.set(own.id, Object.freeze({ id: own.id, run: own.run.bind(own) }));
       }
     }
   }

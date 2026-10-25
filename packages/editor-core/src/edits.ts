@@ -219,7 +219,13 @@ export function applyEdit(
           stroke: command.stroke === undefined ? DEFAULT_PATH_STROKE : command.stroke,
         };
       }
-      const result = validateNode(candidate);
+      let result: ReturnType<typeof validateNode>;
+      try {
+        result = validateNode(candidate);
+      } catch {
+        // Only extension `defaults()` can put an exotic value (a throwing getter or proxy) here.
+        return fail('document.invalid-custom-data', '/data');
+      }
       if (!result.ok) return fail(result.code, result.path);
       const rejected = custom.check(deepFreeze(result.node));
       if (rejected !== null) return fail(rejected.code, rejected.path);
