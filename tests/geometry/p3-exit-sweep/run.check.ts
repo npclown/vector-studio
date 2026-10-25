@@ -24,6 +24,7 @@ import {
 import { iterateA04Corpus } from '../e3-a04/corpus.js';
 import { decodeCase } from '../e3-a04/harness.js';
 import { fillRequest, STRESS_SCENE_VERSION, stressScene, strokeRequest } from './scene.js';
+import { classifyFillRejection } from './fill-class.js';
 import { runSeededControls, runSweep, type SweepItem } from './sweep.js';
 
 const phase = process.env.P3_EXIT_SWEEP_PHASE ?? 'scene';
@@ -164,6 +165,25 @@ it(
             };
           })
         : null;
+    // E14-Q1 (a): the class test on every rejected fill request, counted per stratum (the id's
+    // first segment; `scene` for the stress scene). Other closed-list classes are assigned by the
+    // evidence review (E11 section 7.2).
+    const byId = new Map(source.items.map((item) => [item.id, item]));
+    const fillRejections = result.rejected.flatMap(({ id, outcome }) => {
+      const item = byId.get(id)!;
+      return item.kind === 'fill' ? [{ id, ...classifyFillRejection(item.request, outcome) }] : [];
+    });
+    const fillClassCounts: Record<string, Record<string, number>> = {};
+    for (const r of fillRejections) {
+      const stratum = phase === 'scene' ? 'scene' : r.id.split('/')[0]!;
+      const label = r.e14SelfCrossingOverE
+        ? 'e14-self-crossing-over-E'
+        : r.outcome === 'failed:work-limit'
+          ? 'work-limit-outside-e14'
+          : r.outcome;
+      const counts = (fillClassCounts[stratum] ??= {});
+      counts[label] = (counts[label] ?? 0) + 1;
+    }
     const record = {
       schema: 'p3-exit-sweep/v1',
       phase,
@@ -173,6 +193,8 @@ it(
       requests: source.items.length,
       controls,
       sceneSizes,
+      fillClassCounts,
+      fillRejections,
       ...result,
     };
     writeFileSync(path.join(out, `${phase}.json`), `${JSON.stringify(record, null, 2)}\n`);
