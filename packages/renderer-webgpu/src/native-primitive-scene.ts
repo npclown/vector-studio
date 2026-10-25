@@ -344,21 +344,30 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       this.#target = copyTarget(target);
       return;
     }
-    // E17 contract, section 3: the stencil attachment follows the target at 1x and 4x.
-    if (this.#stencil) this.#replaceStencilAttachment(target);
+    // E17 contract, section 3: the stencil attachment follows the target at 1x and 4x. Both
+    // attachments are created and tracked before either replaces the current one, so a failure
+    // leaves the previous, consistent pair.
+    const stencil = this.#stencil ? this.#createStencilAttachment(target) : undefined;
     if (this.sampleCount === 1) {
       this.#releaseColorAttachment();
+      if (stencil !== undefined) this.#commitStencilAttachment(stencil);
       this.#target = copyTarget(target);
       return;
     }
     const id = `primitive/${this.#generation}/attachment-${target.surfaceRevision}`;
-    const attachment = this.#device.createTexture({
-      label: id,
-      size: { width: target.width, height: target.height },
-      sampleCount: this.sampleCount,
-      format: this.#format,
-      usage: RENDER_ATTACHMENT_USAGE,
-    });
+    let attachment: GPUTexture;
+    try {
+      attachment = this.#device.createTexture({
+        label: id,
+        size: { width: target.width, height: target.height },
+        sampleCount: this.sampleCount,
+        format: this.#format,
+        usage: RENDER_ATTACHMENT_USAGE,
+      });
+    } catch (error) {
+      if (stencil !== undefined) this.#discardStencilAttachment(stencil);
+      throw asError(error, 'Primitive attachment creation failed.');
+    }
     try {
       this.#resources.track(id, {
         category: 'texture',
@@ -372,8 +381,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       });
     } catch (error) {
       attachment.destroy();
+      if (stencil !== undefined) this.#discardStencilAttachment(stencil);
       throw asError(error, 'Primitive attachment accounting failed.');
     }
+    if (stencil !== undefined) this.#commitStencilAttachment(stencil);
     const previousAttachment = this.#attachment;
     const previousAttachmentId = this.#attachmentId;
     this.#attachment = attachment;
@@ -1382,8 +1393,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     if (firstError !== undefined) throw asError(firstError, 'Primitive attachment release failed.');
   }
 
-  /** E17 contract, section 3: creates and tracks the target's stencil attachment, replacing any. */
-  #replaceStencilAttachment(target: PrimitiveTarget): void {
+  /** E17 contract, section 3: creates and tracks the target's stencil attachment. */
+  #createStencilAttachment(target: PrimitiveTarget): Readonly<{ texture: GPUTexture; id: string }> {
     const id = `primitive/${this.#generation}/stencil-${target.surfaceRevision}`;
     const stencil = this.#device.createTexture({
       label: id,
@@ -1408,9 +1419,23 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       stencil.destroy();
       throw asError(error, 'Primitive stencil attachment accounting failed.');
     }
+    return { texture: stencil, id };
+  }
+
+  /** Replaces the current stencil attachment with a created one. */
+  #commitStencilAttachment(stencil: Readonly<{ texture: GPUTexture; id: string }>): void {
     this.#releaseStencil();
-    this.#stencilAttachment = stencil;
-    this.#stencilAttachmentId = id;
+    this.#stencilAttachment = stencil.texture;
+    this.#stencilAttachmentId = stencil.id;
+  }
+
+  /** Destroys and releases a created stencil attachment that was never committed. */
+  #discardStencilAttachment(stencil: Readonly<{ texture: GPUTexture; id: string }>): void {
+    try {
+      stencil.texture.destroy();
+    } finally {
+      this.#resources.release(stencil.id);
+    }
   }
 
   #releaseStencil(): void {
@@ -1739,7 +1764,6 @@ export function createNativePrimitiveSceneCreation(
           }
           mesh = null;
           count = null;
-          meshShaderModulesCreated = 0;
         }
       }
       if (meshFailure !== undefined && forced === 4) {

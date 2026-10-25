@@ -32,9 +32,10 @@ declare global {
 //    variants cover a pixel once per sample their red values agree within 2/255 (the fringe
 //    shades each covered sample with the pixel-centre value, so 4x equals 1x without double
 //    coverage; before E17, C4/n06/T2 dpr1.5 pixel (491,268) differed by 22).
-// 2. The reset path on the E10 page, at 1x and 4x: 300 stacked rectangles (300 mesh draws, two
-//    stencil resets) count exactly 300 inside, so draws that share a reference never block each
-//    other, and the frame has no page or console error.
+// 2. The reset path on the E10 page, at 1x and 4x: 511 mesh draws (two stencil resets) with one
+//    rectangle drawn at ordinals 0, 255 and 510, which share reference 1, counts exactly 3 inside,
+//    so a reset separates draws that share a reference, and the frame has no page or console
+//    error.
 // Each test writes .tools/e17-write-once/<stamp>/<project>/<name>.json. Functional evidence only.
 
 test.use({ trace: 'off' });
@@ -198,7 +199,7 @@ test('E17-A5 fixtures: count at most 1, covered pixels counted once, 4x equals 1
 });
 
 for (const samples of [1, 4] as const) {
-  test(`E17-A5 reset path: 300 stacked mesh draws at ${String(samples)}x`, async ({
+  test(`E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at ${String(samples)}x`, async ({
     browser,
     page,
   }, info) => {
@@ -207,10 +208,13 @@ for (const samples of [1, 4] as const) {
     await page.goto(`/e10-test-hooks.html?samples=${String(samples)}&fringe=on&dpr=1`);
     const ready = await page.evaluate(() => window.__vectorStudioE10.ready);
     expect(ready.supported, JSON.stringify(ready)).toBe(true);
-    const rect = [12, 6, 60, 6, 60, 42, 12, 42];
-    const polygons: E10Polygon[] = Array.from({ length: 300 }, (_, i) => ({
+    // Ordinals 0, 255 and 510 share reference 1. Without a working reset, the draw at 255 would
+    // meet reference 1 left by ordinal 0 on A and be rejected, so A would count 1, not 3.
+    const a = [12, 6, 60, 6, 60, 42, 12, 42];
+    const filler = [70, 10, 86, 10, 86, 26, 70, 26];
+    const polygons: E10Polygon[] = Array.from({ length: 511 }, (_, i) => ({
       id: `r${String(i)}`,
-      points: rect,
+      points: i % 255 === 0 ? a : filler,
     }));
     const result = await page.evaluate((input) => window.__vectorStudioE10.render(input), polygons);
     const capture = decode(result);
@@ -218,9 +222,10 @@ for (const samples of [1, 4] as const) {
     for (let pixel = 0; pixel < capture.red.length; pixel += 1) {
       const x = pixel % capture.width;
       const y = Math.floor(pixel / capture.width);
-      if (!(x >= 12 && x < 60 && y >= 6 && y < 42)) continue;
+      // A's interior, away from its fringe and from the filler's frame.
+      if (!(x >= 15 && x < 57 && y >= 9 && y < 39)) continue;
       const counts = countsAt(capture, pixel);
-      if (counts.some((count) => count !== 300) || capture.red[pixel] !== 255) {
+      if (counts.some((count) => count !== 3) || capture.red[pixel] !== 255) {
         if (failures.length < 8)
           failures.push(`(${x},${y}) red ${capture.red[pixel]} counts ${counts.join(',')}`);
       }
@@ -234,7 +239,7 @@ for (const samples of [1, 4] as const) {
       failures,
       errors,
     });
-    expect(draws).toBe(300);
+    expect(draws).toBe(511);
     expect(errors).toEqual([]);
     expect(failures).toEqual([]);
   });

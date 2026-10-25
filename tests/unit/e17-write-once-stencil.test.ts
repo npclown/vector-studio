@@ -30,7 +30,7 @@ type PassRecord = {
   calls: (readonly [string, ...unknown[]])[];
 };
 
-function fixture(options: Readonly<{ failLabel?: string }> = {}) {
+function fixture(options: Readonly<{ failLabel?: string; failTexture?: string }> = {}) {
   const passes: PassRecord[] = [];
   const descriptors: GPURenderPipelineDescriptor[] = [];
   const textures: { label: string; format: string; sampleCount: number; destroyed: boolean }[] = [];
@@ -67,6 +67,9 @@ function fixture(options: Readonly<{ failLabel?: string }> = {}) {
       return Promise.resolve({ label });
     }),
     createTexture: vi.fn((descriptor: GPUTextureDescriptor) => {
+      if (options.failTexture !== undefined && descriptor.label === options.failTexture) {
+        throw new Error('injected texture failure');
+      }
       const record = {
         label: descriptor.label ?? '',
         format: String(descriptor.format),
@@ -265,6 +268,7 @@ describe('E17-A2 encoding', () => {
       (count!.descriptor.depthStencilAttachment as unknown as { view: { texture: string } }).view
         .texture,
     ).toMatch(/count-stencil$/u);
+    expect(f.textures.find((t) => t.label.endsWith('count-stencil'))!.sampleCount).toBe(4);
 
     const sequence = (pass: PassRecord, reset: string) =>
       pass.calls.flatMap((call): (number | 'reset')[] => {
@@ -325,6 +329,17 @@ describe('E17-A3 attachment lifetime', () => {
       expect(accounting.snapshot().live).toBe(0);
     });
   }
+
+  it('E17-A3: a failed 4x resize keeps the previous stencil and colour attachments together', async () => {
+    const f = fixture({ failTexture: 'primitive/1/attachment-2' });
+    const { scene: s, creation, accounting, target } = await scene(f, { meshPipeline: true });
+    s.setTarget(target(1));
+    expect(() => s.setTarget(target(2, 128, 64))).toThrow();
+    expect(liveStencil(f)).toEqual(['primitive/1/stencil-1']);
+    expect(accounting.snapshot().byCategory.texture.live).toBe(2);
+    creation.dispose();
+    expect(accounting.snapshot().live).toBe(0);
+  });
 
   it('E17-A3: a failed reset pipeline leaves the mesh path unavailable with no mesh object tracked', async () => {
     const f = fixture({ failLabel: 'p3-mesh-stencil-reset' });
