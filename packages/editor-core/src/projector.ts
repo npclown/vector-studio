@@ -87,6 +87,7 @@ export class SceneProjector {
   /** Nodes left out after a rejection, until a document change touches them again. */
   private readonly excluded = new Set<string>();
   private disposed = false;
+  private resyncing = false;
 
   constructor(
     renderer: RendererSceneSynchronization,
@@ -103,8 +104,10 @@ export class SceneProjector {
   }
 
   /** Sends the whole projection: on attach, after a load and after `resync-required`. */
-  replace(document: DocumentV1): void {
+  replace(document: DocumentV1, retried = false): void {
     if (this.disposed) return;
+    // A renderer may already hold a scene from an earlier attach; start above its revision.
+    this.raiseRevision(this.renderer.getSynchronizationState().current?.revision);
     const { nodes, order } = this.project(document, document.pages[0].children);
     const identity = { documentId: document.id, pageId: document.pages[0].id };
     const result = this.renderer.replaceSnapshot({
@@ -122,6 +125,12 @@ export class SceneProjector {
     this.identity = null;
     this.base = null;
     if (result.status !== 'invalid-scene') return;
+    if (result.reason === 'stale-snapshot' || result.reason === 'revision-conflict') {
+      // Revision bookkeeping, not a node rejection: move above the renderer and send once more.
+      this.raiseRevision(result.current?.revision);
+      if (!retried) this.replace(document, true);
+      return;
+    }
     // Start from an empty scene and add the nodes one at a time, so only the nodes the renderer
     // rejects on their own are left out.
     const empty = this.renderer.replaceSnapshot({
@@ -158,26 +167,30 @@ export class SceneProjector {
     }
     const result = this.send(document, candidates, removed);
     if (result === null || this.accepted(result)) return;
-    if (result.status === 'resync-required') {
-      this.identity = null;
-      this.base = null;
-      this.replace(document);
-    } else if (result.status === 'invalid-scene') {
+    if (result.status !== 'invalid-scene') {
+      this.resync(document);
+    } else if (candidates.length === 0) {
+      // A rejected removal leaves nodes the document no longer has; a snapshot drops them.
+      this.exclude(result, removed);
+      this.resync(document);
+    } else {
       // Apply the removals alone, then each node on its own.
-      if (removed.length > 0 && candidates.length > 0) {
+      if (removed.length > 0) {
         const removal = this.send(document, [], removed);
-        if (removal !== null && !this.accepted(removal)) return;
+        if (removal !== null && !this.accepted(removal)) {
+          this.resync(document);
+          return;
+        }
       }
-      if (candidates.length === 0) this.exclude(result, removed);
-      else this.isolate(document, candidates, removed.length === 0 ? result : null);
+      this.isolate(document, candidates, removed.length === 0 ? result : null);
     }
   }
 
   /**
    * Sends each node in its own change set after they were rejected together; `first` is that
-   * result when it already was a single-node set. The ones the
-   * renderer rejects on their own are reported once per reason and left out; a stale copy of a
-   * rejected node is dropped from the renderer.
+   * result when it already was a single-node set. The nodes the renderer rejects on their own
+   * are reported once per reason and left out, and a stale copy of a rejected node is dropped
+   * from the renderer. Any other failure ends in a full snapshot.
    */
   private isolate(
     document: DocumentV1,
@@ -192,14 +205,38 @@ export class SceneProjector {
     };
     const single = first !== null && candidates.length === 1;
     if (single) remember(first, candidates[0]!.id);
+    let failed = false;
     for (const snapshot of single ? [] : candidates) {
       const result = this.send(document, [snapshot], []);
       if (result === null || this.accepted(result)) continue;
-      if (!remember(result, snapshot.id)) return;
+      if (!remember(result, snapshot.id)) {
+        failed = true;
+        break;
+      }
     }
     const stale = [...rejected.values()].flat().filter((id) => this.sent.has(id));
-    if (stale.length > 0) this.send(document, [], stale);
+    if (!failed && stale.length > 0) {
+      const result = this.send(document, [], stale);
+      failed = result !== null && !this.accepted(result);
+    }
     for (const [reason, ids] of rejected) this.exclude({ reason }, ids);
+    if (failed) this.resync(document);
+  }
+
+  /**
+   * Forgets the renderer's state and sends a full snapshot, once per call chain: a renderer
+   * that keeps failing is retried at the next document change, never in a loop.
+   */
+  private resync(document: DocumentV1): void {
+    this.identity = null;
+    this.base = null;
+    if (this.resyncing) return;
+    this.resyncing = true;
+    try {
+      this.replace(document);
+    } finally {
+      this.resyncing = false;
+    }
   }
 
   /**
@@ -272,6 +309,10 @@ export class SceneProjector {
       if (snapshot !== null) nodes.set(id, snapshot);
     }
     return { nodes, order: children.filter((id) => nodes.has(id)) };
+  }
+
+  private raiseRevision(revision: number | undefined): void {
+    if (revision !== undefined) this.sceneRevision = Math.max(this.sceneRevision, revision);
   }
 
   private nextRevision(): number {

@@ -337,6 +337,8 @@ class EditorCore implements Editor {
     this.renderer = renderer;
     const diagnostics: EditorEvent[] = [];
     this.withProjector((attached) => attached.replace(this.document), diagnostics);
+    // The editor's viewport is already valid; a renderer that rejects it keeps its own camera
+    // until the next `setViewport`.
     this.applyCamera(this.viewport);
     diagnostics.forEach((event) => this.emit(event));
     return () => {

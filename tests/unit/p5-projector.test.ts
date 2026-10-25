@@ -310,6 +310,89 @@ describe('P5-U4 scene projector', () => {
     ]);
   });
 
+  it('re-attaching a renderer that already holds the scene keeps it synchronized', () => {
+    const { target, renderer, events, detach } = attached();
+    for (let i = 0; i < 5; i += 1) rect(target, i * 50, 0);
+    detach();
+    target.attachRenderer(renderer);
+    rect(target, 0, 100);
+    expectSynchronized(target, renderer);
+    expect(diagnostics(events)).toEqual([]);
+  });
+
+  it('a renderer handed to a new editor with the same document ID shows the new document', () => {
+    const { target, renderer } = attached();
+    rect(target, 0, 0);
+    rect(target, 50, 0);
+    const next = editor();
+    expect(documentOf(next).id).toBe(documentOf(target).id);
+    const events: EditorEvent[] = [];
+    next.subscribe((event) => events.push(event));
+    next.attachRenderer(renderer);
+    expectSynchronized(next, renderer);
+    expect(diagnostics(events)).toEqual([]);
+  });
+
+  it('resyncs when an isolated retry gets resync-required, and still reports', () => {
+    const { target, renderer, events } = attached();
+    const a = rect(target, 0, 0);
+    const b = rect(target, 50, 0);
+    const results = [
+      {
+        status: 'invalid-scene' as const,
+        reason: 'invalid-value' as const,
+        current: renderer.getSynchronizationState().current,
+      },
+      { status: 'resync-required' as const, current: null },
+    ];
+    const apply = renderer.applyChanges.bind(renderer);
+    renderer.applyChanges = (changes) => results.shift() ?? apply(changes);
+    ok(target, {
+      type: 'setFrames',
+      frames: [
+        { id: a, frame: { x: 1, y: 1, width: 40, height: 30 } },
+        { id: b, frame: { x: 51, y: 1, width: 40, height: 30 } },
+      ],
+    });
+    expect(renderer.calls.at(-1)?.method).toBe('replaceSnapshot');
+    expectSynchronized(target, renderer);
+    expect(diagnostics(events)).toEqual([]);
+  });
+
+  it('resyncs after a rejected removal, so the renderer drops the removed node', () => {
+    const { target, renderer, events } = attached();
+    const a = rect(target, 0, 0);
+    rect(target, 50, 0);
+    renderer.overrides.applyChanges = {
+      status: 'invalid-scene',
+      reason: 'unknown-node',
+      current: renderer.getSynchronizationState().current,
+    };
+    ok(target, { type: 'deleteNodes', ids: [a] });
+    expectSynchronized(target, renderer);
+    expect(diagnostics(events)).toMatchObject([{ code: 'editor.scene-rejected', nodeIds: [a] }]);
+  });
+
+  it('follows a drag cancelled with Escape', () => {
+    const { target, renderer } = attached();
+    const a = rect(target, 0, 0);
+    ok(target, { type: 'setSelection', ids: [a] });
+    pointer(target, 'pointerdown', 20, 15);
+    pointer(target, 'pointermove', 60, 55);
+    ok(target, { type: 'input', event: { kind: 'keydown', key: 'Escape', modifiers: none } });
+    expect(documentOf(target).nodes[a]?.frame).toMatchObject({ x: 0, y: 0 });
+    expectSynchronized(target, renderer);
+  });
+
+  it('a renderer that keeps asking for resync is retried at the next change, not in a loop', () => {
+    const { target, renderer } = attached();
+    rect(target, 0, 0);
+    renderer.applyChanges = () => ({ status: 'resync-required', current: null });
+    renderer.replaceSnapshot = () => ({ status: 'resync-required', current: null });
+    rect(target, 50, 0);
+    expect(documentOf(target).pages[0].children).toHaveLength(2);
+  });
+
   it('sends a full snapshot after resync-required', () => {
     const { target, renderer } = attached();
     rect(target, 0, 0);
