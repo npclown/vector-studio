@@ -742,7 +742,12 @@ fn e1_corpus_reader_reads_the_input_format() {
 #[test]
 fn e1_k1_on_the_r5_merged_input() {
     let (path, request) = edges_1024();
-    let r5 = |limits| StrokeWorkspace::with_limits(limits).expect("the test workspace reserves");
+    // Family A only (E2-K3 would mesh `edges-1024` before the arrangement runs).
+    let r5 = |limits| {
+        let mut ws = StrokeWorkspace::with_limits(limits).expect("the test workspace reserves");
+        ws.defects_mut().no_family_b = true;
+        ws
+    };
     let mut ws = r5(STROKE_V0_LIMITS);
     let (full, _) = on_off(
         &mut ws,

@@ -1,0 +1,248 @@
+{
+  "version": "p3-exit-a05-a06-map/v1",
+  "contract": "docs/plans/d9-e11-p3-c03-c05-closure-contract.md#7-exit-evidence-per-criterion",
+  "note": "Each entry names the tests that realize one fixture set of the E11 section 7 rows A05 and A06. required entries are E11's list; supplementary entries cover words of the P3 table that E11's list does not name, and are reported but do not decide the verdict. headed entries are run on the PC and cited from that run.",
+  "criteria": {
+    "A05": [
+      {
+        "id": "V2-A3",
+        "source": "docs/plans/p3-v2-fill-mesh-transport-contract.md",
+        "kind": "required",
+        "runner": "cargo",
+        "filter": "fill_export_tests::"
+      },
+      {
+        "id": "V2-A5",
+        "source": "docs/plans/p3-v2-fill-mesh-transport-contract.md",
+        "kind": "required",
+        "runner": "geometry",
+        "file": "tests/geometry/fill-adapter.test.ts"
+      },
+      {
+        "id": "C01-C18 (release WASM)",
+        "source": "docs/plans/p3-v2-fill-mesh-transport-contract.md",
+        "kind": "required",
+        "runner": "geometry",
+        "file": "tests/geometry/fill-mesh-port.test.ts",
+        "each": [
+          "C01 ",
+          "C02 ",
+          "C03 ",
+          "C04 ",
+          "C05 ",
+          "C06 ",
+          "C07 ",
+          "C08 ",
+          "C09 ",
+          "C10 ",
+          "C11 ",
+          "C12 ",
+          "C13 ",
+          "C14 ",
+          "C15 ",
+          "C16 ",
+          "C17 ",
+          "C18 "
+        ]
+      },
+      {
+        "id": "C01-C18 (test double)",
+        "source": "docs/plans/p3-v2-fill-mesh-transport-contract.md",
+        "kind": "required",
+        "runner": "unit",
+        "file": "tests/unit/fill-mesh-port-double.test.ts",
+        "each": [
+          "C01 ",
+          "C02 ",
+          "C03 ",
+          "C04 ",
+          "C05 ",
+          "C06 ",
+          "C07 ",
+          "C08 ",
+          "C09 ",
+          "C10 ",
+          "C11 ",
+          "C12 ",
+          "C13 ",
+          "C14 ",
+          "C15 ",
+          "C16 ",
+          "C17 ",
+          "C18 "
+        ]
+      },
+      {
+        "id": "SC01-SC22 (release WASM)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "geometry",
+        "file": "tests/geometry/stroke-mesh-port.test.ts",
+        "each": [
+          "SC01 ",
+          "SC02 ",
+          "SC03 ",
+          "SC04 ",
+          "SC05 ",
+          "SC06 ",
+          "SC07 ",
+          "SC08 ",
+          "SC09 ",
+          "SC10 ",
+          "SC11 ",
+          "SC12 ",
+          "SC13 ",
+          "SC14 ",
+          "SC15 ",
+          "SC16 ",
+          "SC17 ",
+          "SC18 ",
+          "SC19 ",
+          "SC20 ",
+          "SC21 ",
+          "SC22 "
+        ]
+      },
+      {
+        "id": "SC01-SC22 (test double)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "unit",
+        "file": "tests/unit/stroke-mesh-port-double.test.ts",
+        "each": [
+          "SC01 ",
+          "SC02 ",
+          "SC03 ",
+          "SC04 ",
+          "SC05 ",
+          "SC06 ",
+          "SC07 ",
+          "SC08 ",
+          "SC09 ",
+          "SC10 ",
+          "SC11 ",
+          "SC12 ",
+          "SC13 ",
+          "SC14 ",
+          "SC15 ",
+          "SC16 ",
+          "SC17 ",
+          "SC18 ",
+          "SC19 ",
+          "SC20 ",
+          "SC21 ",
+          "SC22 "
+        ]
+      },
+      {
+        "id": "Stroke kernel transport (B2 section 7)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "supplementary",
+        "runner": "cargo",
+        "filter": "stroke_export_tests::"
+      },
+      {
+        "id": "Stroke adapter (B2 section 8)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "supplementary",
+        "runner": "geometry",
+        "file": "tests/geometry/stroke-adapter.test.ts"
+      },
+      {
+        "id": "Stale work: V3-A8 resumption",
+        "source": "docs/plans/p3-v3-renderer-mesh-pipeline-contract.md",
+        "kind": "supplementary",
+        "runner": "unit",
+        "file": "tests/unit/v3a-path-pipeline.test.ts",
+        "each": [
+          "V3-A8: resumption drops vanished, undrawable and changed keys and calls no new key until the stack is empty"
+        ]
+      }
+    ],
+    "A06": [
+      {
+        "id": "V3-A2",
+        "source": "docs/plans/p3-v3-renderer-mesh-pipeline-contract.md",
+        "kind": "required",
+        "runner": "unit",
+        "file": "tests/unit/v3a-path-scene.test.ts",
+        "each": ["V3-A2:"]
+      },
+      {
+        "id": "V3-A3",
+        "source": "docs/plans/p3-v3-renderer-mesh-pipeline-contract.md",
+        "kind": "required",
+        "runner": "unit",
+        "file": "tests/unit/v3a-path-pipeline.test.ts",
+        "each": ["V3-A3:"]
+      },
+      {
+        "id": "V3-A5 (pipeline)",
+        "source": "docs/plans/p3-v3-renderer-mesh-pipeline-contract.md",
+        "kind": "required",
+        "runner": "unit",
+        "file": "tests/unit/v3a-path-pipeline.test.ts",
+        "each": ["V3-A5:"]
+      },
+      {
+        "id": "V3-A5 (buckets)",
+        "source": "docs/plans/p3-v3-renderer-mesh-pipeline-contract.md",
+        "kind": "required",
+        "runner": "unit",
+        "file": "tests/unit/v3a-path-buckets.test.ts",
+        "each": ["V3-A5:"]
+      },
+      {
+        "id": "V3-A6",
+        "source": "docs/plans/p3-v3-renderer-mesh-pipeline-contract.md",
+        "kind": "required",
+        "runner": "unit",
+        "file": "tests/unit/v3a-path-pipeline.test.ts",
+        "each": ["V3-A6:"]
+      },
+      {
+        "id": "V3-A7",
+        "source": "docs/plans/p3-v3-renderer-mesh-pipeline-contract.md",
+        "kind": "required",
+        "runner": "unit",
+        "file": "tests/unit/v3a-path-pipeline.test.ts",
+        "each": ["V3-A7:"]
+      },
+      {
+        "id": "B2 section 9.3 (stroke key, shared cache and memo, reuse)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "unit",
+        "file": "tests/unit/st-u6-stroke-pipeline.test.ts",
+        "each": [
+          "ST-A10: stroke color, node opacity and fill changes build no stroke mesh",
+          "ST-A10: a change of any stroke key field makes that paint miss; the fill key is untouched",
+          "ST-A10: a stroke operationId change rebuilds every drawn stroke once and no fill",
+          "ST-A10: a stroke bucket e < -1020 is tolerance-range for the stroke paint, while the fill at e = -1021 passes the tolerance check",
+          "ST-A10: the reuse rule applies per node and paint: a stroke built at e serves e + 1 and e + 2",
+          "ST-A10: a stroke portVersion change hides each stroked path (fill too), notifies with paint null, and calls nothing",
+          "ST-A10 (ST-A0 S5): a failing stroke hides the path including its fill; other nodes draw; the fill mesh stays cached",
+          "ST-A10 (B1): a failed fill with an ok stroke makes no further call under budget pressure",
+          "ST-A10 (B1): a failed stroke with an ok fill makes no further call under budget pressure"
+        ]
+      },
+      {
+        "id": "Opacity with both paints (ST-U7)",
+        "source": "docs/plans/p3-b2-st-u7-joint-coverage-addendum.md",
+        "kind": "supplementary",
+        "runner": "unit",
+        "file": "tests/unit/st-u6-stroke-pipeline.test.ts",
+        "each": [
+          "ST-A15 (ST-U7): both paints at 0 < opacity < 1 draw a joint fill draw then the stroke draw; opacity changes call no port and reuse the cached meshes and overlay"
+        ]
+      },
+      {
+        "id": "V-3 port-call deltas (VZ3-A4, A5, A6, A10, A11, A12)",
+        "source": "docs/plans/viz-v3-a07-integration-contract.md",
+        "kind": "headed",
+        "runner": "headed",
+        "file": "tests/gpu/viz-v3-integration.spec.ts"
+      }
+    ]
+  }
+}

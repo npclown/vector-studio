@@ -1,0 +1,84 @@
+// E2-U3 one-off probe behind "Why the scene gains nothing" (docs/evidence/e2-u3-2026-10-25.md).
+// To reproduce: append to packages/geometry-wasm/kernel/src/stroke_merge_tests.rs at commit
+// c746f2d, then run
+//   E2_SCENE=<scene.txt> cargo test --release --lib zz_monotone_probe -- --ignored --nocapture
+// with the scene input of the E2-U1 and E2-U2 differentials. Binary64 only: a diagnosis, not a
+// certificate. For each scene stroke that E2-K3 refuses with MONOTONE it buckets the consecutive
+// pairs that fail FR4's chord test by turn angle and length ratio, and checks whether two
+// non-adjacent merged edges cross properly.
+
+#[test]
+#[ignore]
+fn zz_monotone_probe() {
+    let cases = scene_cases(&std::fs::read_to_string(env::var("E2_SCENE").unwrap()).unwrap());
+    let mut ws = workspace(Rev::R7);
+    let mut buckets: HashMap<String, usize> = HashMap::new();
+    let mut fail_frac = Vec::new();
+    for case in &cases {
+        let _ = observe(&mut ws, &case.verbs, &case.bytes, case.request);
+        if ws.family_b() != Some(Err(Reason::Monotone)) {
+            continue;
+        }
+        let (mut pairs, mut bad) = (0usize, 0usize);
+        let mut first: Option<String> = None;
+        for contour in ws.merge().contours() {
+            let n = contour.len();
+            for i in 0..n {
+                let (a, b, c) = (contour[i], contour[(i + 1) % n], contour[(i + 2) % n]);
+                let (ux, uy) = (b.x - a.x, b.y - a.y);
+                let (vx, vy) = (c.x - b.x, c.y - b.y);
+                let (wx, wy) = (c.x - a.x, c.y - a.y);
+                pairs += 1;
+                let ok = ux * wx + uy * wy > 0.0 && vx * wx + vy * wy > 0.0;
+                if !ok {
+                    bad += 1;
+                    let lu = ux.hypot(uy);
+                    let lv = vx.hypot(vy);
+                    let class = if lu == 0.0 || lv == 0.0 {
+                        "zero-length".to_string()
+                    } else {
+                        let cos = (ux * vx + uy * vy) / (lu * lv);
+                        let deg = cos.clamp(-1.0, 1.0).acos().to_degrees();
+                        let ratio = (lu.max(lv) / lu.min(lv)).log10().floor();
+                        format!("turn {:>3}-{:<3} len-ratio 1e{}", (deg / 30.0).floor() * 30.0, (deg / 30.0).floor() * 30.0 + 30.0, ratio)
+                    };
+                    if first.is_none() {
+                        first = Some(class.clone());
+                    }
+                    *buckets.entry(format!("all  {class}")).or_default() += 1;
+                }
+            }
+        }
+        *buckets.entry(format!("first {}", first.unwrap_or_else(|| "none (f64 says ok)".into()))).or_default() += 1;
+        let segs: Vec<(Point, Point, usize, usize, usize)> = ws.merge().contours().enumerate().flat_map(|(ci, c)| { let n = c.len(); (0..n).map(move |i| (c[i], c[(i + 1) % n], ci, i, n)) }).collect();
+        let cross = |a: Point, b: Point, c: Point| (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+        let mut crossing = false;
+        'o: for i in 0..segs.len() {
+            for j in i + 1..segs.len() {
+                let (p, q, ci, ii, n) = segs[i];
+                let (r, s2, cj, jj, _) = segs[j];
+                if ci == cj && (jj == ii + 1 || (ii == 0 && jj == n - 1)) { continue; }
+                let d1 = cross(p, q, r); let d2 = cross(p, q, s2); let d3 = cross(r, s2, p); let d4 = cross(r, s2, q);
+                if d1 * d2 < 0.0 && d3 * d4 < 0.0 { crossing = true; break 'o; }
+            }
+        }
+        *buckets.entry(format!("self-crossing {crossing}")).or_default() += 1;
+        fail_frac.push((bad, pairs));
+    }
+    let mut keys: Vec<_> = buckets.into_iter().collect();
+    keys.sort();
+    for (k, v) in keys {
+        println!("{k}: {v}");
+    }
+    let total_bad: usize = fail_frac.iter().map(|x| x.0).sum();
+    let total: usize = fail_frac.iter().map(|x| x.1).sum();
+    let one = fail_frac.iter().filter(|x| x.0 <= 2).count();
+    println!("strokes {} bad pairs {total_bad}/{total}, strokes with <=2 bad pairs {one}", fail_frac.len());
+}
+
+// Output at c746f2d (kernel source as at dbc8b13), scene of the E2-U2 differential:
+//   self-crossing true: 366
+//   strokes 366 bad pairs 6588/334610, strokes with <=2 bad pairs 42
+//   first-failing-pair buckets: turn 90-120 205, 120-150 34, 150-180 113, 180-210 14 (all len ratios)
+//   all failing pairs: turn 150-180 at len ratio 1e0 3152 (of 6588); turn 90-120 2769; 120-150 460;
+//   exactly 180 (reversals, bucketed as 180-210) 152; remaining 150-180 at larger ratios 55

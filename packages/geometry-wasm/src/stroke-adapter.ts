@@ -13,10 +13,10 @@ import type {
 // owned copies and the same fail-closed list. Results are functional evidence; precision is
 // UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence.
 
-export const STROKE_V0_OPERATION_ID = 'geometry-wasm/stroke-v0+r6';
+export const STROKE_V0_OPERATION_ID = 'geometry-wasm/stroke-v0+r7';
 export const STROKE_V0_VERSION = 0;
 /** The kernel revision this adapter was built for. */
-export const STROKE_V0_REVISION = 6;
+export const STROKE_V0_REVISION = 7;
 
 const INPUT_MAGIC = 0x3054_4756;
 const OUTPUT_MAGIC = 0x3055_4756;
@@ -91,7 +91,7 @@ const STROKE_EXPORT_NAMES = [
 
 export interface StrokeMeshAdapter extends StrokeMeshPort {
   readonly portVersion: 0;
-  readonly operationId: 'geometry-wasm/stroke-v0+r6';
+  readonly operationId: 'geometry-wasm/stroke-v0+r7';
   /** Terminal and idempotent. Later calls return batch-failed: disposed. */
   dispose(): void;
   /** Current byteLength of this adapter's own linear memory. */

@@ -25,7 +25,7 @@ import {
 
 // B2 stroke contract, unit ST-U8: the playground stroke page. This page is a host: it injects
 // the real fill-mesh port (`createFillMeshPort`, fill-v0 revision 2) and the real stroke-mesh
-// port (`createStrokeMeshPort`, stroke-v0 revision 6) from geometry-wasm into the renderer
+// port (`createStrokeMeshPort`, stroke-v0 revision 7) from geometry-wasm into the renderer
 // service. A path whose stroke or fill the kernel cannot mesh within its limits is not drawn and
 // reports the `work-limit` notice; this page lists those notices (the open ST-U9
 // decision) instead of hiding them.

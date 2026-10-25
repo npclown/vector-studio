@@ -33,7 +33,10 @@ pub const STROKE_V0_VERSION: u32 = 0;
 /// unit E2-U1, E2-K1), with `MAX_PIECES` capping the contours.
 /// Revision 6 (2026-10-25): full-cone cubic leaves may also meet the band leaf rule (D9 E2
 /// unit E2-U2, E2-K2), so curved strokes emit fewer, larger leaves.
-pub const STROKE_V0_REVISION: u32 = 6;
+/// Revision 7 (2026-10-25): the merged contours first try the family-B rung, Alt-A1 rung 0 on a
+/// separate stroke instance (D9 E2 unit E2-U3, E2-K3); a proved path is published with rung 0's
+/// mesh, and every other path takes family A as before.
+pub const STROKE_V0_REVISION: u32 = 7;
 /// Bytes `VGT0`.
 pub const STROKE_INPUT_MAGIC: u32 = 0x3054_4756;
 /// Bytes `VGU0`.
