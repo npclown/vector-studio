@@ -45,6 +45,8 @@ const [shard, shards] = (process.env.E3_A04_RUN_SHARD ?? '0/1').split('/').map(N
   number,
 ];
 const stride = Number(process.env.E3_A04_RUN_STRIDE ?? '1');
+/** The oracle's starting resolution 2^-K px (contract section 19); K = 10 is r_m of section 4.3. */
+const startResolution = Number(process.env.E3_A04_RUN_START_RESOLUTION ?? '10');
 
 /** JSON with non-finite numbers kept as strings ("Infinity"), since JSON has none. */
 export function toJson(value: unknown): string {
@@ -64,7 +66,10 @@ async function loadPorts() {
 
 function measureLogged(kase: A04Case, ports: HarnessPorts, partner?: A04Case): HarnessRow {
   try {
-    return measureCase(kase, ports, partner === undefined ? {} : { partner });
+    return measureCase(kase, ports, {
+      oracle: { resolution: 2 ** -startResolution },
+      ...(partner === undefined ? {} : { partner }),
+    });
   } catch (error) {
     // A harness exception is never a measurement: the case stays UNDECIDED (section 7.3).
     return {
@@ -142,7 +147,7 @@ it(`runs the A04 ${phase} phase`, async () => {
       carrier: 'K4',
       builderPlacement: 'renderer-core buildPathFringe via PathMeshPipeline ports',
     },
-    selection: { stride, shards, corpusCases: corpusIds.length },
+    selection: { stride, shards, corpusCases: corpusIds.length, startResolution },
     gpu,
     controls: runHarnessControls(),
     rows,

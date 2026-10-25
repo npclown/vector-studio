@@ -68,7 +68,7 @@ export type HarnessOptions = Readonly<{
   mutations?: HarnessMutations;
   /** Oracle work cap; the contract's measurement cap by default. */
   workCap?: number;
-  /** Test-only: oracle options for controls that check a value (separate terms, resolution). */
+  /** Oracle options: separate terms (test-only controls) and the starting resolution (section 19). */
   oracle?: Readonly<{ separateTerms?: boolean; resolution?: number }>;
   /** Test-only: receives the mapped points p* of a drawn mesh. */
   onMapped?: (mapped: Mapped) => void;

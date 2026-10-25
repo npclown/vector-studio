@@ -2,7 +2,8 @@
 // executable form in section 15.8). Manual, never CI.
 //
 //   pnpm e3-a04:run --smoke [--wasm <path>]
-//   pnpm e3-a04:run [--shards N] [--stride S] [--gpu <chrome.json>,<edge.json>] [--wasm <path>]
+//   pnpm e3-a04:run [--shards N] [--stride S] [--start-resolution K] [--gpu <chrome.json>,<edge.json>]
+//                   [--wasm <path>]
 //
 // Uses the release WASM that `pnpm test:geometry` builds (or --wasm <path>), then:
 //
@@ -34,6 +35,11 @@ const smoke = args.includes('--smoke');
 const shards = Number(value('--shards') ?? Math.max(1, Math.min(12, os.cpus().length - 2)));
 const stride = Number(value('--stride') ?? 1);
 const gpu = value('--gpu');
+// The oracle's starting resolution 2^-K px (default K = 10, r_m of contract section 4.3). It still
+// halves while E straddles a threshold, down to the floor 2^-20 (contract section 19).
+const startResolution = Number(value('--start-resolution') ?? 10);
+if (!Number.isInteger(startResolution) || startResolution < 0 || startResolution > 20)
+  throw new Error('--start-resolution takes an integer K from 0 to 20 (2^-K px)');
 if (!Number.isInteger(shards) || shards < 1 || !Number.isInteger(stride) || stride < 1)
   throw new Error('--shards and --stride take positive integers');
 
@@ -105,6 +111,7 @@ const runPhase = (env) =>
           E3_A04_RUN_OUT: out,
           E3_A04_RUN_SHARD: `0/${shards}`,
           E3_A04_RUN_STRIDE: String(stride),
+          E3_A04_RUN_START_RESOLUTION: String(startResolution),
           ...env,
         },
       },
