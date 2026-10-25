@@ -22,7 +22,13 @@ import {
 import { MESH_FILL_SHADER } from '../../../packages/renderer-webgpu/src/mesh-fill-shader.js';
 import { runHarnessControls } from './controls.js';
 import { iterateA04Corpus } from './corpus.js';
-import { measureCase, type HarnessPorts, type HarnessRow } from './harness.js';
+import {
+  jointPartners,
+  measureCase,
+  partnerOf,
+  type HarnessPorts,
+  type HarnessRow,
+} from './harness.js';
 import {
   buildRecord,
   combineGpuChecks,
@@ -54,22 +60,6 @@ async function loadPorts() {
   if (wasm === undefined) throw new Error('P2_WASM_PATH is required');
   const module = await WebAssembly.compile(new Uint8Array(readFileSync(wasm)));
   return { fill: await createFillMeshPort(module), stroke: await createStrokeMeshPort(module) };
-}
-
-/** The joint partner (SB-10, SB-11): the other role of the same group, transform and camera. */
-function jointKey(kase: A04Case, role: string): string {
-  const k = kase;
-  const joint = k.joint as Readonly<{ group: string }>;
-  return JSON.stringify([joint.group, role, k.transform, k.camera, k.placement, k.servedOffset]);
-}
-
-function jointPartners(): Map<string, A04Case> {
-  const partners = new Map<string, A04Case>();
-  for (const kase of iterateA04Corpus()) {
-    const joint = kase.joint as Readonly<{ role: string }> | null;
-    if (joint != null) partners.set(jointKey(kase, joint.role), kase);
-  }
-  return partners;
 }
 
 function measureLogged(kase: A04Case, ports: HarnessPorts, partner?: A04Case): HarnessRow {
@@ -111,12 +101,10 @@ it(`runs the A04 ${phase} phase`, async () => {
       const i = index;
       index += 1;
       if (i % stride !== 0 || (i / stride) % shards !== shard) continue;
-      const joint = kase.joint as Readonly<{ role: string }> | null;
-      const partner =
-        joint == null
-          ? undefined
-          : partners.get(jointKey(kase, joint.role === 'fill' ? 'stroke' : 'fill'));
-      appendFileSync(file, `${JSON.stringify(measureLogged(kase, ports, partner))}\n`);
+      appendFileSync(
+        file,
+        `${JSON.stringify(measureLogged(kase, ports, partnerOf(kase, partners)))}\n`,
+      );
     }
     return;
   }

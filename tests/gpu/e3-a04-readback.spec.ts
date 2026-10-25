@@ -7,11 +7,16 @@ import {
   createFillMeshPort,
   createStrokeMeshPort,
 } from '../../packages/geometry-wasm/src/index.js';
+import type { A04Case } from '../../packages/geometry-reference/src/a04-region.js';
+import { jointPartners } from '../geometry/e3-a04/harness.js';
 import {
   modelCheck,
+  namedReadbackCases,
   perturbedReadback,
   READBACK_CASES,
   readbackPayload,
+  type ModelCheck,
+  type ReadbackPayload,
 } from '../geometry/e3-a04/readback.js';
 
 declare global {
@@ -24,8 +29,10 @@ declare global {
 // (executable form in section 16), headed in Chrome and Edge. Node draws the readback cases
 // through the product path on the release WASM, the page evaluates the shader's own mapping for
 // every stored point, and every read-back position must lie within β(p) of p* (E3-A6). E3-PC12:
-// the same check must fail when one read-back position is replaced by p* + 2β(p). Before the
-// corpus freeze the cases are non-corpus cases only (section 16.2). Manual, never CI:
+// the same check must fail when one read-back position is replaced by p* + 2β(p). The cases are
+// the non-corpus cases of section 16.2 and, after the freeze, the named subset of section 7.1
+// (E3-U5, section 19), in chunks. Clipped draws also get the strip coverage readback of
+// E3-Q11 (a), and T-junction crack widths are reported (E3-Q10 (b)). Manual, never CI:
 //
 //   pnpm exec playwright test -c playwright.gpu.config.ts tests/gpu/e3-a04-readback.spec.ts
 //
@@ -43,15 +50,34 @@ const wasmPath = path.resolve(
     '.tools/geometry-build/wasm32-unknown-unknown/release/vector_studio_geometry_kernel.wasm',
 );
 
+/** Draws per page call: bounds the payload and the page's buffers. */
+const CHUNK = 64;
+
+function* chunks(cases: Iterable<A04Case>): Generator<A04Case[]> {
+  let chunk: A04Case[] = [];
+  for (const kase of cases) {
+    chunk.push(kase);
+    if (chunk.length === CHUNK) {
+      yield chunk;
+      chunk = [];
+    }
+  }
+  if (chunk.length > 0) yield chunk;
+}
+
+function* allCases(): Generator<A04Case> {
+  yield* READBACK_CASES;
+  if (process.env.E3_A04_READBACK_NON_CORPUS_ONLY !== '1') yield* namedReadbackCases();
+}
+
 test('E3-U4 GPU model check and E3-PC12', async ({ browser, page }, info) => {
-  test.setTimeout(300_000);
+  test.setTimeout(4 * 60 * 60_000);
   const module = await WebAssembly.compile(new Uint8Array(readFileSync(wasmPath)));
   const ports = {
     fill: await createFillMeshPort(module),
     stroke: await createStrokeMeshPort(module),
   };
-  const payload = readbackPayload(READBACK_CASES, ports);
-  expect(payload.draws.length, JSON.stringify(payload.skipped)).toBeGreaterThan(0);
+  const partners = jointPartners();
 
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
@@ -60,46 +86,103 @@ test('E3-U4 GPU model check and E3-PC12', async ({ browser, page }, info) => {
   );
   const status = await page.evaluate(() => window.__vectorStudioE3A04Readback.ready);
   expect(status.supported, JSON.stringify(status)).toBe(true);
-  const draws = payload.draws.map((d) => ({
-    id: d.id,
-    frame: d.frame,
-    linear: d.linear,
-    anchor: d.anchor,
-    offsets: d.offsets,
-  }));
-  const readback = await page.evaluate(
-    ({ shader, draws }) => window.__vectorStudioE3A04Readback.run(shader, draws),
-    { shader: payload.shader, draws },
-  );
-  const result = { ...readback, adapter: status.adapter };
-  const check = modelCheck(payload, result);
-  // E3-PC12 on the real readback: the middle point of the first draw moved to p* + 2β.
-  const pc12 = modelCheck(
-    payload,
-    perturbedReadback(payload, result, 0, Math.floor(payload.draws[0]!.expected.length / 2)),
-  );
+
+  const ids: string[] = [];
+  const skipped: { id: string; kind: string }[] = [];
+  const skippedKinds: Record<string, number> = {};
+  const failures: string[] = [];
+  let shaderSha256 = '';
+  let drawCount = 0;
+  let points = 0;
+  let maxVertexRatio = 0;
+  let maxFeatureRatio = 0;
+  let junctions = 0;
+  let maxCrackWidth = 0;
+  let maxCrackDraw: string | null = null;
+  const clip = { draws: 0, compared: 0, excluded: 0, mismatches: 0 };
+  let pc12: ModelCheck | null = null;
+  for (const chunk of chunks(allCases())) {
+    for (const kase of chunk) ids.push(String(kase.id));
+    const payload: ReadbackPayload = readbackPayload(chunk, ports, partners);
+    shaderSha256 = payload.shaderSha256;
+    for (const s of payload.skipped) {
+      const kind = s.kind.startsWith('error') ? 'error' : s.kind;
+      skippedKinds[kind] = (skippedKinds[kind] ?? 0) + 1;
+      if (skipped.length < 200) skipped.push(s);
+    }
+    if (payload.draws.length === 0) continue;
+    const draws = payload.draws.map((d) => ({
+      id: d.id,
+      frame: d.frame,
+      linear: d.linear,
+      anchor: d.anchor,
+      offsets: d.offsets,
+      ...(d.clip ? { indices: d.indices } : {}),
+    }));
+    const readback = await page.evaluate(
+      ({ shader, draws }) => window.__vectorStudioE3A04Readback.run(shader, draws),
+      { shader: payload.shader, draws },
+    );
+    const result = { ...readback, adapter: status.adapter };
+    const check = modelCheck(payload, result);
+    // E3-PC12 on the real readback: the middle point of the first draw moved to p* + 2β.
+    pc12 ??= modelCheck(
+      payload,
+      perturbedReadback(payload, result, 0, Math.floor(payload.draws[0]!.expected.length / 2)),
+    );
+    drawCount += payload.draws.length;
+    points += check.points;
+    maxVertexRatio = Math.max(maxVertexRatio, check.maxVertexRatio);
+    maxFeatureRatio = Math.max(maxFeatureRatio, check.maxFeatureRatio);
+    junctions += check.junctions;
+    if (check.maxCrackWidth > maxCrackWidth) {
+      maxCrackWidth = check.maxCrackWidth;
+      maxCrackDraw = check.maxCrackDraw;
+    }
+    clip.draws += check.clip.draws;
+    clip.compared += check.clip.compared;
+    clip.excluded += check.clip.excluded;
+    clip.mismatches += check.clip.mismatches;
+    for (const f of check.failures) if (failures.length < 200) failures.push(f);
+  }
+  expect(drawCount, JSON.stringify(skipped.slice(0, 20))).toBeGreaterThan(0);
 
   mkdirSync(runRoot, { recursive: true });
   const record = {
     schema: 'e3-a04-gpu-check/v1',
     passed:
-      check.passed && !pc12.passed && pageErrors.length === 0 && status.adapter.software !== true,
+      failures.length === 0 &&
+      pc12 !== null &&
+      !pc12.passed &&
+      pageErrors.length === 0 &&
+      status.adapter.software !== true,
     browser: {
       project: info.project.name,
       version: browser.version(),
       launchFlags: ['--enable-unsafe-webgpu'],
       adapter: status.adapter,
     },
-    shaderSha256: payload.shaderSha256,
+    shaderSha256,
     wasmSha256: createHash('sha256').update(readFileSync(wasmPath)).digest('hex'),
-    cases: READBACK_CASES.map((c) => c.id),
-    skipped: payload.skipped,
-    draws: payload.draws.length,
-    points: check.points,
-    maxVertexRatio: check.maxVertexRatio,
-    maxFeatureRatio: check.maxFeatureRatio,
-    failures: check.failures.slice(0, 200),
-    pc12: { rejected: !pc12.passed, failures: pc12.failures.slice(0, 5) },
+    subset: {
+      nonCorpus: READBACK_CASES.map((c) => c.id),
+      corpus:
+        process.env.E3_A04_READBACK_NON_CORPUS_ONLY === '1'
+          ? null
+          : 'named rows of C1, C3, C5, C6, C9 and C12 at every transform and pair',
+      cases: ids.length,
+      idsSha256: createHash('sha256').update(ids.join('\n'), 'utf8').digest('hex'),
+    },
+    skippedKinds,
+    skipped,
+    draws: drawCount,
+    points,
+    maxVertexRatio,
+    maxFeatureRatio,
+    crack: { junctions, maxWidth: maxCrackWidth, maxWidthDraw: maxCrackDraw },
+    clip,
+    failures,
+    pc12: { rejected: pc12 !== null && !pc12.passed, failures: pc12?.failures.slice(0, 5) ?? [] },
     pageErrors,
   };
   writeFileSync(
@@ -110,6 +193,6 @@ test('E3-U4 GPU model check and E3-PC12', async ({ browser, page }, info) => {
     },
   );
   expect(pageErrors).toEqual([]);
-  expect(check.failures.slice(0, 20)).toEqual([]);
-  expect(pc12.passed).toBe(false);
+  expect(failures.slice(0, 20)).toEqual([]);
+  expect(pc12?.passed).toBe(false);
 });

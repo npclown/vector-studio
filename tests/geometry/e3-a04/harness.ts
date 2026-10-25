@@ -35,7 +35,7 @@ import {
 import type { PrimitiveTarget } from '../../../packages/renderer-core/src/primitive-packet.js';
 import { PrimitiveSceneSource } from '../../../packages/renderer-core/src/primitive-scene-source.js';
 import { RetainedSceneMirror } from '../../../packages/renderer-core/src/scene-mirror.js';
-import { unhex } from './corpus.js';
+import { iterateA04Corpus, unhex } from './corpus.js';
 
 /** The unit roundoff of binary32. */
 export const F32_U = 2 ** -24;
@@ -671,24 +671,44 @@ export function withoutCollapsed(mapped: Mapped): number[] {
  * shared by exactly one triangle on each side (T-junction sub-edges and the edges of zero-area
  * triangles included), so the candidates are a superset of ∂M* (section 15.5).
  */
-export function boundaryMayMeetGuard(mapped: Mapped): boolean {
+export type BoundaryCandidate = Readonly<{
+  ia: number;
+  ib: number;
+  a: MappedPoint;
+  b: MappedPoint;
+}>;
+
+/**
+ * The boundary candidates of `M*` (section 15.5): every edge not shared by exactly one triangle
+ * on each side. That includes T-junction sub-edges and the edges of zero-area triangles, so the
+ * candidates are a superset of `∂M*`. Edges of zero length are left out.
+ */
+export function boundaryCandidates(mapped: Mapped): BoundaryCandidate[] {
   const key = (q: MappedPoint) => `${q.x.n}/${q.x.e},${q.y.n}/${q.y.e}`;
   const sides = new Map<
     string,
-    { a: MappedPoint; b: MappedPoint; plus: number; minus: number; other: number }
+    {
+      ia: number;
+      ib: number;
+      a: MappedPoint;
+      b: MappedPoint;
+      plus: number;
+      minus: number;
+      other: number;
+    }
   >();
   for (let t = 0; t + 2 < mapped.indices.length; t += 3) {
-    const p = [mapped.indices[t]!, mapped.indices[t + 1]!, mapped.indices[t + 2]!].map(
-      (i) => mapped.points[i]!,
-    );
+    const tri = [mapped.indices[t]!, mapped.indices[t + 1]!, mapped.indices[t + 2]!];
     for (let k = 0; k < 3; k += 1) {
-      let a = p[k]!;
-      let b = p[(k + 1) % 3]!;
-      const c = p[(k + 2) % 3]!;
+      let ia = tri[k]!;
+      let ib = tri[(k + 1) % 3]!;
+      let a = mapped.points[ia]!;
+      let b = mapped.points[ib]!;
+      const c = mapped.points[tri[(k + 2) % 3]!]!;
       if (key(a) === key(b)) continue;
-      if (key(a) > key(b)) [a, b] = [b, a];
+      if (key(a) > key(b)) [a, b, ia, ib] = [b, a, ib, ia];
       const id = `${key(a)}|${key(b)}`;
-      const entry = sides.get(id) ?? { a, b, plus: 0, minus: 0, other: 0 };
+      const entry = sides.get(id) ?? { ia, ib, a, b, plus: 0, minus: 0, other: 0 };
       const o = dsign(
         dsub(dmul(dsub(b.x, a.x), dsub(c.y, a.y)), dmul(dsub(b.y, a.y), dsub(c.x, a.x))),
       );
@@ -698,12 +718,19 @@ export function boundaryMayMeetGuard(mapped: Mapped): boolean {
       sides.set(id, entry);
     }
   }
+  const candidates: BoundaryCandidate[] = [];
+  for (const e of sides.values())
+    if (!(e.plus === 1 && e.minus === 1 && e.other === 0))
+      candidates.push({ ia: e.ia, ib: e.ib, a: e.a, b: e.b });
+  return candidates;
+}
+
+export function boundaryMayMeetGuard(mapped: Mapped): boolean {
   const x0 = -3;
   const y0 = -3;
   const x1 = mapped.width + 3;
   const y1 = mapped.height + 3;
-  for (const e of sides.values()) {
-    if (e.plus === 1 && e.minus === 1 && e.other === 0) continue;
+  for (const e of boundaryCandidates(mapped)) {
     const xs = [dNum(e.a.x), dNum(e.b.x)];
     const ys = [dNum(e.a.y), dNum(e.b.y)];
     if (
@@ -715,6 +742,92 @@ export function boundaryMayMeetGuard(mapped: Mapped): boolean {
       return true;
   }
   return false;
+}
+
+/**
+ * The T-junctions of `M*` as `[v, a, b]` point indices: a boundary-candidate end point `v` that
+ * lies strictly inside another candidate edge `ab`, exactly. The GPU readback measures the crack
+ * width at each (section 7.1, E3-C12; reported under E3-Q10 (b), never gated).
+ */
+export function tJunctionTriples(
+  mapped: Mapped,
+  candidates: readonly BoundaryCandidate[] = boundaryCandidates(mapped),
+): [number, number, number][] {
+  const ends = new Map<string, number>();
+  for (const e of candidates)
+    for (const i of [e.ia, e.ib]) {
+      const q = mapped.points[i]!;
+      ends.set(`${q.x.n}/${q.x.e},${q.y.n}/${q.y.e}`, i);
+    }
+  const sorted = [...ends.values()]
+    .map((i) => ({ i, x: dNum(mapped.points[i]!.x) }))
+    .sort((p, q) => p.x - q.x);
+  const xs = sorted.map((p) => p.x);
+  const lower = (x: number) => {
+    let lo = 0;
+    let hi = xs.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (xs[mid]! < x) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+  const triples: [number, number, number][] = [];
+  for (const e of candidates) {
+    const ax = dNum(e.a.x);
+    const bx = dNum(e.b.x);
+    const pad = 1e-9 * (1 + Math.abs(ax) + Math.abs(bx));
+    for (let k = lower(Math.min(ax, bx) - pad); k < sorted.length; k += 1) {
+      if (sorted[k]!.x > Math.max(ax, bx) + pad) break;
+      const v = mapped.points[sorted[k]!.i]!;
+      const abx = dsub(e.b.x, e.a.x);
+      const aby = dsub(e.b.y, e.a.y);
+      const avx = dsub(v.x, e.a.x);
+      const avy = dsub(v.y, e.a.y);
+      if (dsign(dsub(dmul(abx, avy), dmul(aby, avx))) !== 0) continue;
+      // Strictly between a and b: 0 < (v − a)·(b − a) < |b − a|².
+      const along = dadd(dmul(avx, abx), dmul(avy, aby));
+      const length = dadd(dmul(abx, abx), dmul(aby, aby));
+      if (dsign(along) > 0 && dsign(dsub(length, along)) > 0)
+        triples.push([sorted[k]!.i, e.ia, e.ib]);
+    }
+  }
+  return triples;
+}
+
+/** The joint partner key (SB-10, SB-11): the other role of the same group, transform and camera. */
+export function jointKey(kase: A04Case, role: string): string {
+  const joint = kase.joint as Readonly<{ group: string }>;
+  return JSON.stringify([
+    joint.group,
+    role,
+    kase.transform,
+    kase.camera,
+    kase.placement,
+    kase.servedOffset,
+  ]);
+}
+
+/** Every joint case of the corpus by its own key, so a case finds its partner by the other role. */
+export function jointPartners(cases: Iterable<A04Case> = iterateA04Corpus()): Map<string, A04Case> {
+  const partners = new Map<string, A04Case>();
+  for (const kase of cases) {
+    const joint = kase.joint as Readonly<{ role: string }> | null;
+    if (joint != null) partners.set(jointKey(kase, joint.role), kase);
+  }
+  return partners;
+}
+
+/** The partner of a joint case, or undefined for a case without one. */
+export function partnerOf(
+  kase: A04Case,
+  partners: ReadonlyMap<string, A04Case>,
+): A04Case | undefined {
+  const joint = kase.joint as Readonly<{ role: string }> | null;
+  return joint == null
+    ? undefined
+    : partners.get(jointKey(kase, joint.role === 'fill' ? 'stroke' : 'fill'));
 }
 
 // =============================================================================================
