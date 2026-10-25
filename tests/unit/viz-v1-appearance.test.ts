@@ -346,6 +346,28 @@ describe('V1-A5 edit flow', () => {
     expect(editor.applied['v1-zigzag']!.stroke.width).toBe(9);
   });
 
+  it('credits a notice to the applied key, not to a queued edit (page wiring)', () => {
+    const { editor, run } = fake({});
+    const tracker = new TargetStatusTracker(initialStates());
+    // As the page does: the tracker follows the applied states on every editor change.
+    editor.subscribe(() => {
+      for (const [id, state] of Object.entries(editor.applied)) tracker.setState(id, state);
+    });
+    editor.edit('v1-zigzag', edit('stroke-width-number', '9'));
+    // A notice built at the applied width 14 arrives before the flush.
+    tracker.addNotice({
+      sequence: 1,
+      nodeId: 'v1-zigzag',
+      paint: 'stroke',
+      failureCode: 'work-limit',
+      toleranceExponent: -3,
+    });
+    expect(tracker.status('v1-zigzag').stroke.outcome).toBe('not drawn');
+    run();
+    // Width 9 is a new key: it rebuilds and re-notifies, so the width-14 notice is not shown.
+    expect(tracker.status('v1-zigzag').stroke.outcome).toBe('drawn');
+  });
+
   it('drops an edit that changes nothing', () => {
     const { calls, queue, editor, run } = fake({});
     expect(editor.edit('v1-square', edit('fill-rule', 'nonzero'))).toBe(false);
