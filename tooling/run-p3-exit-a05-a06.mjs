@@ -1,14 +1,16 @@
-// X1 A05/A06 evidence run (docs/plans/d9-e11-p3-c03-c05-closure-contract.md, sections 3.2 and
-// 7.1). Manual, never CI.
+// X1 A03, A05 and A06 evidence run (docs/plans/d9-e11-p3-c03-c05-closure-contract.md, sections
+// 3.2 and 7.1). Manual, never CI.
 //
 //   pnpm p3-exit:a05-a06 [--label PRE-FREEZE|<snapshot short SHA>] [--wasm <path>]
 //                        [--rustup <path>] [--check]
+//   pnpm p3-exit:a03     (the same with --map tooling/p3-exit-a03-map.json)
 //
-// Runs only the tests that tooling/p3-exit-a05-a06-map.json names: the kernel test modules with
+// Runs only the tests that the map (--map, default tooling/p3-exit-a05-a06-map.json) names: the
+// kernel test modules with
 // the pinned Rust (cargo test), the unit files with vitest.config.ts and the geometry files with
 // vitest.geometry.config.ts against the release WASM that `pnpm test:geometry` builds (or
 // --wasm). Writes result.json and summary.md with provenance to
-// .tools/p3-exit-a05-a06/<stamp>-<run id>/; the dated record under docs/evidence/ is copied
+// .tools/<map name>/<stamp>-<run id>/; the dated record under docs/evidence/ is copied
 // from summary.md. Headed entries are listed and must be cited from their PC run.
 //
 // --check only validates the map. The label defaults to PRE-FREEZE: a run counts for the exit
@@ -22,6 +24,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  MAP_CRITERIA,
   checkMap,
   evaluate,
   findSnapshotRecord,
@@ -38,14 +41,17 @@ const value = (name) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 const read = (p) => readFileSync(path.join(root, p), 'utf8');
-const map = JSON.parse(read('tooling/p3-exit-a05-a06-map.json'));
+const mapFile = value('--map') ?? 'tooling/p3-exit-a05-a06-map.json';
+const map = JSON.parse(read(mapFile));
+// p3-exit-a03-map/v1 -> p3-exit-a03
+const mapName = String(map.version).replace(/-map\/v\d+$/u, '');
 const problems = checkMap(map, { exists: (p) => existsSync(path.join(root, p)), read });
 if (problems.length > 0) {
   console.error(problems.join('\n'));
   process.exit(1);
 }
 if (args.includes('--check')) {
-  console.log('p3-exit-a05-a06 map: OK');
+  console.log(`${mapName} map: OK`);
   process.exit(0);
 }
 
@@ -88,10 +94,10 @@ const toolchainEnv = value('--rustup')
 
 const stamp = new Date().toISOString().replace(/[:.]/gu, '-');
 const runId = randomBytes(4).toString('hex');
-const out = path.join(cache, 'p3-exit-a05-a06', `${stamp}-${runId}`);
+const out = path.join(cache, mapName, `${stamp}-${runId}`);
 mkdirSync(out, { recursive: true });
 
-const entries = [...map.criteria.A05, ...map.criteria.A06];
+const entries = MAP_CRITERIA[map.version].flatMap((criterion) => map.criteria[criterion]);
 const results = {};
 
 const rustc = spawnSync(rustup, ['run', '1.94.1', 'rustc', '--version', '--verbose'], {
@@ -123,7 +129,7 @@ const cargo = spawnSync(
     env: {
       ...process.env,
       ...toolchainEnv,
-      CARGO_TARGET_DIR: path.join(cache, 'p3-exit-a05-a06-build'),
+      CARGO_TARGET_DIR: path.join(cache, 'p3-exit-build'),
     },
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
@@ -184,7 +190,8 @@ const provenance = {
       'STROKE_V0_OPERATION_ID',
     ),
     'Release WASM SHA-256': sha256(readFileSync(wasm)),
-    'Map SHA-256': sha256(readFileSync(path.join(root, 'tooling/p3-exit-a05-a06-map.json'))),
+    Map: mapFile,
+    'Map SHA-256': sha256(readFileSync(path.join(root, mapFile))),
     'Rust host': host,
     Node: process.version,
     OS: `${os.type()} ${os.release()} ${os.arch()}`,

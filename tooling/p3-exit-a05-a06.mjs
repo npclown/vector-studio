@@ -1,15 +1,25 @@
-// X1 A05/A06 evidence helpers (docs/plans/d9-e11-p3-c03-c05-closure-contract.md, section 7).
-// Pure functions over tooling/p3-exit-a05-a06-map.json and parsed test results; the runner is
-// tooling/run-p3-exit-a05-a06.mjs.
+// X1 evidence helpers for the test-run criteria A03, A05 and A06
+// (docs/plans/d9-e11-p3-c03-c05-closure-contract.md, section 7). Pure functions over an evidence
+// map (tooling/p3-exit-a05-a06-map.json, tooling/p3-exit-a03-map.json) and parsed test results;
+// the runner is tooling/run-p3-exit-a05-a06.mjs.
 
 const RUNNERS = new Set(['cargo', 'unit', 'geometry', 'headed']);
 const KINDS = new Set(['required', 'supplementary', 'headed']);
+/** Each map version and the criteria it carries, in record order. */
+export const MAP_CRITERIA = {
+  'p3-exit-a05-a06-map/v1': ['A05', 'A06'],
+  'p3-exit-a03-map/v1': ['A03'],
+};
+const criteriaOf = (map) => MAP_CRITERIA[map.version] ?? [];
 
 /** Lists every map problem that can be seen without running a test. */
 export function checkMap(map, { exists, read }) {
   const problems = [];
-  if (map.version !== 'p3-exit-a05-a06-map/v1') problems.push(`unknown version ${map.version}`);
-  for (const criterion of ['A05', 'A06']) {
+  if (!(map.version in MAP_CRITERIA)) problems.push(`unknown version ${map.version}`);
+  for (const criterion of Object.keys(map.criteria ?? {}))
+    if (!criteriaOf(map).includes(criterion))
+      problems.push(`${criterion}: not a criterion of ${map.version}`);
+  for (const criterion of criteriaOf(map)) {
     const entries = map.criteria?.[criterion];
     if (!Array.isArray(entries) || entries.length === 0) {
       problems.push(`${criterion}: no entries`);
@@ -34,6 +44,13 @@ export function checkMap(map, { exists, read }) {
           )
         )
           problems.push(`${at}: kernel has no module ${entry.filter.slice(0, -2)}`);
+        else if (entry.each !== undefined) {
+          // A cargo prefix names the start of a test function in that module.
+          const module = read(`packages/geometry-wasm/kernel/src/${entry.filter.slice(0, -2)}.rs`);
+          for (const prefix of entry.each)
+            if (!module.includes(`fn ${prefix}`))
+              problems.push(`${at}: module has no test function ${prefix}...`);
+        }
         continue;
       }
       if (!exists(entry.file)) {
@@ -123,7 +140,7 @@ export function identityMismatches(block, identities) {
  */
 export function evaluate(map, results) {
   const rows = [];
-  for (const criterion of ['A05', 'A06']) {
+  for (const criterion of criteriaOf(map)) {
     for (const entry of map.criteria[criterion]) {
       if (entry.runner === 'headed') {
         rows.push({ criterion, entry, verdict: 'HEADED', selected: 0, failures: [] });
@@ -142,7 +159,15 @@ export function evaluate(map, results) {
       }
       const selected =
         entry.runner === 'cargo'
-          ? run.tests.filter((test) => test.name.startsWith(entry.filter))
+          ? run.tests
+              .filter((test) => test.name.startsWith(entry.filter))
+              .filter(
+                (test) =>
+                  entry.each === undefined ||
+                  entry.each.some((prefix) =>
+                    test.name.slice(entry.filter.length).startsWith(prefix),
+                  ),
+              )
           : run.tests
               .filter((test) => test.file === entry.file)
               .filter(
@@ -154,8 +179,10 @@ export function evaluate(map, results) {
         .filter((test) => test.status !== 'passed')
         .map((test) => `${test.name ?? test.fullName ?? test.title}: ${test.status}`);
       if (selected.length === 0) failures.push('no test selected');
+      const label = (test) =>
+        entry.runner === 'cargo' ? test.name.slice(entry.filter.length) : test.title;
       for (const prefix of entry.each ?? [])
-        if (!selected.some((test) => test.title.startsWith(prefix)))
+        if (!selected.some((test) => label(test).startsWith(prefix)))
           failures.push(`no test titled "${prefix.trim()}..."`);
       rows.push({
         criterion,
@@ -170,7 +197,7 @@ export function evaluate(map, results) {
   return {
     rows,
     criteria: Object.fromEntries(
-      ['A05', 'A06'].map((criterion) => {
+      criteriaOf(map).map((criterion) => {
         const mine = required.filter((row) => row.criterion === criterion);
         const headed = rows.some((row) => row.criterion === criterion && row.verdict === 'HEADED');
         const verdict = mine.every((row) => row.verdict === 'PASS')
