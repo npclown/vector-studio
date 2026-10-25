@@ -4774,8 +4774,9 @@ class StrokeTarget implements RegionTarget {
     const classified = this.classifyCell(box, parent === null ? undefined : this.arcsOf(parent));
     let cls = classified.cls;
     // The witness pair is searched on first use (E3-U2c): the freeze check reads it only at the
-    // freeze cell size and below, so larger cells on the way down never pay for the samples. It
-    // is a function of the box alone, so the cover is the same whenever it is computed. Its
+    // freeze cell size and below, so larger cells on the way down never pay for the samples.
+    // Whether it exists is a function of the box alone, so the cover is the same whenever it is
+    // computed; which samples form it can depend on the samples kept (E3-U2e). Its
     // samples start from the cell's own sub-arc frontiers (E3-U2d), a function of the box too:
     // kept, or recomputed from the parent's when they were evicted.
     const arcs = classified.arcs;
@@ -4819,8 +4820,11 @@ class StrokeTarget implements RegionTarget {
     if (this.samples.size > SAMPLE_CACHE) this.samples.delete(this.samples.keys().next().value!);
     return v;
   }
-  /** An exact inside and outside sample of an undecided cell, or null. */
-  /** The first inside and outside points among the nine samples of a cell. */
+  /**
+   * The first inside and outside points among the nine samples of a cell: the samples already
+   * kept first, then the corners and edge middles, which neighbouring cells share, then the
+   * center (E3-U2e: the samples were most of the work of C9/g0154/T6/z0.01-d3).
+   */
   private sampleSides(
     box: Box,
     arcs: ArcHint,
@@ -4829,8 +4833,7 @@ class StrokeTarget implements RegionTarget {
     const ym = (box.y0 + box.y1) / 2;
     let inside: [number, number] | null = null;
     let outside: [number, number] | null = null;
-    for (const [x, y] of [
-      [xm, ym],
+    const points = [
       [box.x0, box.y0],
       [box.x1, box.y0],
       [box.x1, box.y1],
@@ -4839,12 +4842,20 @@ class StrokeTarget implements RegionTarget {
       [box.x1, ym],
       [xm, box.y1],
       [box.x0, ym],
-    ] as const) {
-      const v = this.sampleClass(x, y, arcs);
+      [xm, ym],
+    ] as const;
+    const take = (x: number, y: number, v: number) => {
       if (v === 1 && inside === null) inside = [x, y];
       if (v === -1 && outside === null) outside = [x, y];
-      if (inside !== null && outside !== null) break;
+      return inside !== null && outside !== null;
+    };
+    const fresh: (readonly [number, number])[] = [];
+    for (const [x, y] of points) {
+      const v = this.samples.get(`${x},${y}`);
+      if (v === undefined) fresh.push([x, y]);
+      else if (take(x, y, v)) return { inside, outside };
     }
+    for (const [x, y] of fresh) if (take(x, y, this.sampleClass(x, y, arcs))) break;
     return { inside, outside };
   }
   private findWitness(box: Box, arcs: ArcHint): CoverNode['witness'] {
@@ -5765,14 +5776,25 @@ export function a04FreezeCheck(input: A04Case, options: A04FreezeOptions = {}): 
         for (const [x, y] of later) if (opposite(R.cellAt(x, y, w) ?? null)) return true;
         return undecided.some((m) => m.witness !== null);
       };
+      const unwitnessedKids = (c: CoverNode): CoverNode[] =>
+        R.children(c).filter((k) => boxMeetsW1(f, k.box) && k.witness === null);
+      // Below the last level, a cell without such children adds none to the next level, so
+      // whether it is suspicious changes nothing: it is dropped before the neighbour test, the
+      // costlier step (E3-U2e). The count against 4,096 is then taken on a superset, which is
+      // the same test when the superset is within it. The last level is filtered in full.
       const resolves = (n: CoverNode, levels: number): boolean => {
         let current = n.witness === null ? [n] : [];
         for (let level = 0; level < levels && current.length > 0; level += 1) {
           const next: CoverNode[] = [];
-          for (const c of current)
-            for (const k of R.children(c))
-              if (boxMeetsW1(f, k.box) && k.witness === null) next.push(k);
-          const suspicious = next.length > 8 ? next.filter((k) => !nearBoundary(k)) : next;
+          for (const c of current) next.push(...unwitnessedKids(c));
+          let suspicious = next;
+          if (next.length > 8) {
+            const pruned =
+              level < levels - 1 && next.length <= 4096
+                ? next.filter((k) => unwitnessedKids(k).length > 0)
+                : next;
+            suspicious = pruned.filter((k) => !nearBoundary(k));
+          }
           if (suspicious.length > 4096) return false;
           current = suspicious;
         }
