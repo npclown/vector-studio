@@ -417,11 +417,11 @@ fn lossless(ws: &StrokeWorkspace, seeded: usize, extra: &[Point]) -> Result<A4Co
 }
 
 /// E2-A5 on the last build of `ws`, which E2-K3 published: every triangle is strictly
-/// positive (AL-FR9 item 1, rechecked), and at the seeded points and every triangle centroid
-/// the mesh covers a point exactly once where the merged contours' nonzero winding is nonzero
+/// positive (AL-FR9 item 1, rechecked), and at the seeded points, every triangle centroid and
+/// `extra` (E2-A4's sample set: the `r4` mesh's centroids, where it has one) the mesh covers a point exactly once where the merged contours' nonzero winding is nonzero
 /// and not at all elsewhere (no overlap, no gap, the same region). Points on an edge of either
 /// side are skipped. Returns the number of points compared.
-fn family_b_region(ws: &StrokeWorkspace, seeded: usize) -> Result<usize, String> {
+fn family_b_region(ws: &StrokeWorkspace, seeded: usize, extra: &[Point]) -> Result<usize, String> {
     if ws.family_b() != Some(Ok(())) {
         return Err(format!("E2-K3 did not publish: {:?}", ws.family_b()));
     }
@@ -443,6 +443,7 @@ fn family_b_region(ws: &StrokeWorkspace, seeded: usize) -> Result<usize, String>
     }
     let mut points = seeded_points(ws, seeded);
     points.extend(centroids(ws));
+    points.extend_from_slice(extra);
     let mut compared = 0usize;
     for point in points {
         let Some(region) = winding(ws.merge().contours(), point) else {
@@ -744,8 +745,16 @@ fn e2_fixture_literals() {
 #[test]
 fn e2_a5_family_b_meshes_cover_the_contour_region() {
     let mut ws = workspace(Rev::R7);
+    let mut r4 = workspace(Rev::R4);
     let mut published = 0;
     for fixture in fixtures() {
+        let _ = observe(
+            &mut r4,
+            &fixture.path.verbs,
+            &fixture.path.bytes(),
+            fixture.request,
+        );
+        let extra = centroids(&r4);
         let _ = observe(
             &mut ws,
             &fixture.path.verbs,
@@ -756,7 +765,7 @@ fn e2_a5_family_b_meshes_cover_the_contour_region() {
             continue;
         }
         published += 1;
-        let compared = family_b_region(&ws, 4_096)
+        let compared = family_b_region(&ws, 4_096, &extra)
             .unwrap_or_else(|error| panic!("{}: E2-A5: {error}", fixture.name));
         let contour_points: Vec<Key> = ws.merge().contours().flatten().map(|p| key(*p)).collect();
         let (vertices, _, boundary) = ws.mesh().expect("mesh");
@@ -798,14 +807,19 @@ fn e2_d4_skipped_clearance_is_caught() {
     let caught = match ws.family_b() {
         Some(Err(reason)) => format!("refused by {}", reason.code()),
         Some(Ok(())) => {
-            let error = family_b_region(&ws, 4_096).expect_err("E2-A5 catches it");
+            let error = family_b_region(&ws, 4_096, &[]).expect_err("E2-A5 catches it");
             format!("published, E2-A5 fails: {error}")
         }
         None => panic!("E2-K3 was tried"),
     };
     println!("E2-D4 on E2-F8: {caught}; status {}", found.status);
+    // FR5 is the stage that refuses E2-F8 without the fault (`CROSSING`, below), so a refusal
+    // with FR5's reasons would mean the fault did nothing.
     assert!(
-        matches!(ws.family_b(), Some(Err(_))) || caught.contains("E2-A5"),
+        matches!(
+            ws.family_b(),
+            Some(Err(reason)) if !matches!(reason, Reason::Crossing | Reason::Clearance)
+        ) || caught.contains("E2-A5"),
         "{caught}"
     );
     // Without the fault, FR5 itself refuses it.
@@ -1100,7 +1114,7 @@ fn differential(unit: &str, old_rev: Rev, new_rev: Rev) {
             };
             *family_b.entry((case.family, label)).or_default() += 1;
             if outcome.is_ok() {
-                match family_b_region(&r5, 256) {
+                match family_b_region(&r5, 256, &extra) {
                     Ok(_) => tally.a5 += 1,
                     Err(error) => failures.push(format!("E2-A5 {}: {error}", case.name)),
                 }
