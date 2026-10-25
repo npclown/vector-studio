@@ -233,6 +233,11 @@ describe('p3-exit A05/A06 evaluation', () => {
     expect(identityMismatches(block!, identities)).toEqual([
       'Stroke operation geometry-wasm/stroke-v0+r6 is not in the snapshot record',
     ]);
+    expect(
+      identityMismatches('`geometry-wasm/fill-v0+r30`', {
+        'Fill operation': 'geometry-wasm/fill-v0+r3',
+      })[0],
+    ).toMatch(/^Fill operation/u);
   });
 
   it('strips a Windows root whose drive letter differs in case', () => {

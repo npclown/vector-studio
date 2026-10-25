@@ -105,8 +105,14 @@ export function findSnapshotRecord(contract, label) {
 
 /** Lists the run identities that the snapshot record block does not name. */
 export function identityMismatches(block, identities) {
+  // Whole tokens only, so `fill-v0+r3` does not match `fill-v0+r30`.
+  const named = (value) =>
+    new RegExp(
+      `(?<![\\w+.-])${String(value).replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}(?![\\w+.-])`,
+      'iu',
+    ).test(block);
   return ['Fill operation', 'Stroke operation', 'Release WASM SHA-256']
-    .filter((key) => !block.toLowerCase().includes(String(identities[key]).toLowerCase()))
+    .filter((key) => !named(identities[key]))
     .map((key) => `${key} ${identities[key]} is not in the snapshot record`);
 }
 
