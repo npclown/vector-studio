@@ -23,6 +23,7 @@ import { MESH_FILL_SHADER } from '../../../packages/renderer-webgpu/src/mesh-fil
 import { runHarnessControls } from './controls.js';
 import { iterateA04Corpus } from './corpus.js';
 import {
+  caseMeta,
   jointPartners,
   measureCase,
   partnerOf,
@@ -71,18 +72,41 @@ function measureLogged(kase: A04Case, ports: HarnessPorts, partner?: A04Case): H
       ...(partner === undefined ? {} : { partner }),
     });
   } catch (error) {
-    // A harness exception is never a measurement: the case stays UNDECIDED (section 7.3).
-    return {
+    return errorRow(kase, String(error));
+  }
+}
+
+/** A harness exception is never a measurement: the case stays UNDECIDED (section 7.3). */
+function errorRow(kase: A04Case, error: string): HarnessRow {
+  let meta: Partial<HarnessRow>;
+  try {
+    meta = caseMeta(kase);
+  } catch {
+    // The case does not decode: name it as far as its fields allow.
+    meta = {
       index: typeof kase.index === 'number' ? kase.index : null,
       id: String(kase.id),
       stratum: typeof kase.stratum === 'string' ? kase.stratum : null,
       transform: typeof kase.transform === 'string' ? kase.transform : null,
       pair: '-',
       paint: 'fill',
-      status: 'undecided',
-      reason: `harness-error: ${String(error)}`,
-    } as HarnessRow;
+    };
   }
+  return { ...meta, status: 'undecided', reason: `harness-error: ${error}` } as HarnessRow;
+}
+
+/** `E3_A04_RUN_RESUME` is "<corpus position>:<cause>", set by the tool after a worker died. */
+function splitResume(resume: string): [number, string] {
+  const at = resume.indexOf(':');
+  return [Number(resume.slice(0, at)), resume.slice(at + 1)];
+}
+
+/** Whether the shard file's last row is the case `id` (it was written before the worker died). */
+function lastRowIs(file: string, id: string): boolean {
+  if (!existsSync(file)) return false;
+  const lines = readFileSync(file, 'utf8').trimEnd().split('\n');
+  const last = lines[lines.length - 1];
+  return last !== undefined && last !== '' && (JSON.parse(last) as { id: string }).id === id;
 }
 
 it(`runs the A04 ${phase} phase`, async () => {
@@ -101,11 +125,22 @@ it(`runs the A04 ${phase} phase`, async () => {
     const ports = await loadPorts();
     const partners = jointPartners();
     const file = path.join(out, `shard-${shard}.ndjson`);
+    const current = path.join(out, `shard-${shard}.current`);
+    // After the worker died (a heap limit is not an exception), the tool restarts the shard after
+    // the case it was measuring, which stays UNDECIDED (section 7.3, contract section 19).
+    const resume = process.env.E3_A04_RUN_RESUME;
+    const [resumeAt, crash] = resume === undefined ? [-1, ''] : splitResume(resume);
     let index = 0;
     for (const kase of iterateA04Corpus()) {
       const i = index;
       index += 1;
-      if (i % stride !== 0 || (i / stride) % shards !== shard) continue;
+      if (i % stride !== 0 || (i / stride) % shards !== shard || i < resumeAt) continue;
+      if (i === resumeAt) {
+        if (!lastRowIs(file, String(kase.id)))
+          appendFileSync(file, `${JSON.stringify(errorRow(kase, crash))}\n`);
+        continue;
+      }
+      writeFileSync(current, `${i}\n`);
       appendFileSync(
         file,
         `${JSON.stringify(measureLogged(kase, ports, partnerOf(kase, partners)))}\n`,
