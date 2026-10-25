@@ -618,4 +618,13 @@ describe('P5-U3 review follow-ups', () => {
     expect(overlay?.kind === 'path' && overlay.anchors).toHaveLength(1);
     expect(Object.isFrozen(overlay)).toBe(true);
   });
+
+  it('a click on a resize handle records no step and no change', () => {
+    const target = editor();
+    const a = rect(target, 0, 0, 40, 40);
+    ok(target, { type: 'setSelection', ids: [a] });
+    const before = target.getSnapshot();
+    click(target, 40, 40);
+    expect(target.getSnapshot()).toBe(before);
+  });
 });

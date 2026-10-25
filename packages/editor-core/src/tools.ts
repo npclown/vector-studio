@@ -168,7 +168,14 @@ type Handle = (typeof HANDLES)[number];
 type SelectState =
   | { kind: 'idle' }
   | { kind: 'move'; start: PagePoint; frames: Map<string, Frame>; moved: boolean; hit: string }
-  | { kind: 'resize'; start: PagePoint; frames: Map<string, Frame>; box: Frame; handle: Handle }
+  | {
+      kind: 'resize';
+      start: PagePoint;
+      frames: Map<string, Frame>;
+      box: Frame;
+      handle: Handle;
+      moved: boolean;
+    }
   | { kind: 'marquee'; start: PagePoint; current: PagePoint; additive: boolean };
 
 /** Scales `value` about `origin` by `scale` along one axis. */
@@ -230,6 +237,7 @@ export function createSelectTool(custom: CustomGeometry): Tool {
           frames: framesOf(context, selection),
           box,
           handle,
+          moved: false,
         };
       }
       return;
@@ -281,6 +289,8 @@ export function createSelectTool(custom: CustomGeometry): Tool {
       context.gesture.update({ type: 'setFrames', frames });
       return;
     }
+    if (!state.moved && dx === 0 && dy === 0) return;
+    state.moved = true;
     // Resize: the box scales about the opposite handle; an axis of size 0 is not scaled, and
     // scales clamp at 0, so sizes do too.
     const { box, handle } = state;
