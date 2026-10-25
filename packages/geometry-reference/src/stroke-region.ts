@@ -1288,6 +1288,175 @@ function verifySide(
   return { bound, cells: stats.cells, finding: null };
 }
 
+/**
+ * Section 4.5's leaf certificate (ST-O1 for a cubic leaf up to `stroke-v0+r5`): the hull term
+ * `r sin(theta)` between the end normal samples, then each side against its chord at matched
+ * parameters within the rest of the curve share.
+ */
+function sectionFourLeaf(
+  pw: Power,
+  root: Q | null,
+  a: Q,
+  b: Q,
+  piece: Extract<StrokeDumpPiece, { kind: 'cubic-leaf' }>,
+  s0: QPoint,
+  s1: QPoint,
+  r: Q,
+  h1: Q,
+  stats: { cells: number },
+  label: string,
+): { bound: Q; finding: string | null } {
+  const sin2 = qdiv(qsq(pcross(s0, s1)), qmul(pdot(s0, s0), pdot(s1, s1)));
+  const hull = roundQ(qmul(r, sqrtQ(sin2).hi), true);
+  const budget = qsub(h1, hull);
+  if (qsgn(budget) <= 0)
+    return { bound: Z, finding: `${label}: hull term alone exceeds the curve share` };
+  let side = Z;
+  for (const [sigma, start, end] of [
+    [1, piece.start.plus, piece.end.plus],
+    [-1, piece.start.minus, piece.end.minus],
+  ] as const) {
+    const result = verifySide(pw, root, a, b, qp(start), qp(end), sigma, r, budget, stats);
+    if (result.finding !== null || result.bound === null) {
+      return {
+        bound: Z,
+        finding: `${label} ${sigma > 0 ? 'plus' : 'minus'} side: ${result.finding ?? 'uncertified'}`,
+      };
+    }
+    side = qmax(side, result.bound);
+  }
+  return { bound: qadd(side, hull), finding: null };
+}
+
+/**
+ * D9 E2-U2's band certificate for a cubic leaf (`docs/plans/d9-e2-stroke-fast-rung-contract.md`
+ * section 5, the E2-P1 argument in `docs/evidence/e2-u2-2026-10-25.md`), derived here from the
+ * source alone. It applies when `C'` has no zero on the closed leaf interval and the band quad
+ * `E-(a), E-(b), E+(b), E+(a)` is strictly convex and positive. On cells of `[a, b]` it
+ * certifies (1) no fold: `r |C' x C''| < |C'|^3`, so each offset `O = C + sigma r N` is regular
+ * with `O'` a positive multiple of `C'`; (2) monotone projection: `C'` has a positive component
+ * along each side's chord; (3) each side within the curve share of its chord segment: the line
+ * distance `g` from its cell endpoints plus `|O''| h^2 / 8`, plus the larger end-sample
+ * mismatch `|O(a) - E(a)|`, `|O(b) - E(b)|`. (2) makes each chord point the projection of a
+ * curve point, so the bound holds both ways between each side and its chord; the region step
+ * from the two sides and the shared end segments is E2-P1's.
+ */
+function certifyBandLeaf(
+  pw: Power,
+  root: Q | null,
+  a: Q,
+  b: Q,
+  piece: Extract<StrokeDumpPiece, { kind: 'cubic-leaf' }>,
+  r: Q,
+  h1: Q,
+  stats: { cells: number },
+): { bound: Q | null; finding: string } {
+  if (root !== null && qcmp(root, a) >= 0 && qcmp(root, b) <= 0)
+    return { bound: null, finding: 'stationary parameter on the leaf interval' };
+  const quad = [piece.start.minus, piece.end.minus, piece.end.plus, piece.start.plus].map(qp);
+  for (let index = 0; index < 4; index += 1) {
+    if (orient(quad[index]!, quad[(index + 1) % 4]!, quad[(index + 2) % 4]!) <= 0)
+      return { bound: null, finding: 'band quad not strictly convex and positive' };
+  }
+  const three = qi(3);
+  const six = qi(6);
+  const jerk = sqrtQ(pdot(pscale(pw.a, six), pscale(pw.a, six))).hi;
+  const offsetAt = (t: Q, sigma: 1 | -1): { x: I; y: I } | null => {
+    const center = evalPoint(pw, t);
+    const d = evalDerivative(pw, t);
+    if (pzero(d)) return null;
+    const length = sqrtQ(pdot(d, d));
+    const nx = idiv(ipt(qneg(d.y)), length);
+    const ny = idiv(ipt(d.x), length);
+    if (nx === null || ny === null) return null;
+    const scale = ipt(sigma > 0 ? r : qneg(r));
+    return { x: iadd(ipt(center.x), imul(nx, scale)), y: iadd(ipt(center.y), imul(ny, scale)) };
+  };
+  let bound = Z;
+  for (const [sigma, startSample, endSample] of [
+    [1, piece.start.plus, piece.end.plus],
+    [-1, piece.start.minus, piece.end.minus],
+  ] as const) {
+    const pa = qp(startSample);
+    const pb = qp(endSample);
+    const chord = psub(pb, pa);
+    const chordLength = sqrtQ(pdot(chord, chord));
+    if (qsgn(chordLength.lo) <= 0) return { bound: null, finding: 'zero-length side chord' };
+    const ends: Q[] = [];
+    for (const [t, sample] of [
+      [a, pa],
+      [b, pb],
+    ] as const) {
+      const o = offsetAt(t, sigma);
+      if (o === null) return { bound: null, finding: 'side normal undefined at a leaf end' };
+      ends.push(normUpper(isub(o.x, ipt(sample.x)), isub(o.y, ipt(sample.y))));
+    }
+    const mismatch = qmax(ends[0]!, ends[1]!);
+    const lineDistance = (t: Q): Q | null => {
+      const o = offsetAt(t, sigma);
+      if (o === null) return null;
+      const g = isub(
+        imul(ipt(chord.x), isub(o.y, ipt(pa.y))),
+        imul(ipt(chord.y), isub(o.x, ipt(pa.x))),
+      );
+      return roundQ(qdiv(maxAbs(g), chordLength.lo), true);
+    };
+    const budget = qsub(h1, mismatch);
+    if (qsgn(budget) <= 0)
+      return { bound: null, finding: 'end-sample mismatch exceeds the curve share' };
+    let side = Z;
+    const stack: { t0: Q; t1: Q; depth: number }[] = [{ t0: a, t1: b, depth: 0 }];
+    while (stack.length > 0) {
+      if (stats.cells >= VERIFIER_CELLS) return { bound: null, finding: 'verifier cell limit' };
+      const cell = stack.pop()!;
+      stats.cells += 1;
+      const left = lineDistance(cell.t0);
+      const right = lineDistance(cell.t1);
+      if (left === null || right === null)
+        return { bound: null, finding: 'side normal undefined at a cell endpoint' };
+      const t = iv(cell.t0, cell.t1);
+      const first = (k: 'x' | 'y'): I =>
+        iadd(
+          imul(iadd(imul(ipt(qmul(three, pw.a[k])), t), ipt(qmul(TWO, pw.b[k]))), t),
+          ipt(pw.c[k]),
+        );
+      const second = (k: 'x' | 'y'): I =>
+        iadd(imul(ipt(qmul(six, pw.a[k])), t), ipt(qmul(TWO, pw.b[k])));
+      const dx = first('x');
+      const dy = first('y');
+      const speed = normLower(dx, dy);
+      let accepted = false;
+      if (qsgn(speed) > 0) {
+        const curl = maxAbs(isub(imul(dx, second('y')), imul(dy, second('x'))));
+        const noFold = qcmp(qmul(r, curl), qmul(speed, qsq(speed))) < 0;
+        const along = iadd(imul(ipt(chord.x), dx), imul(ipt(chord.y), dy));
+        const monotone = qsgn(along.lo) > 0;
+        const acc = normUpper(second('x'), second('y'));
+        const normalSecond = qadd(
+          qdiv(qmul(TWO, jerk), speed),
+          qdiv(qmul(six, qsq(acc)), qsq(speed)),
+        );
+        const m = qadd(acc, qmul(r, normalSecond));
+        const h = qsub(cell.t1, cell.t0);
+        const error = roundQ(qadd(qmax(left, right), qdiv(qmul(m, qsq(h)), qi(8))), true);
+        if (noFold && monotone && qcmp(error, budget) <= 0) {
+          side = qmax(side, error);
+          accepted = true;
+        }
+      }
+      if (accepted) continue;
+      if (cell.depth >= VERIFIER_DEPTH) return { bound: null, finding: 'verifier depth limit' };
+      const mid = qdiv(qadd(cell.t0, cell.t1), TWO);
+      stack.push(
+        { t0: mid, t1: cell.t1, depth: cell.depth + 1 },
+        { t0: cell.t0, t1: mid, depth: cell.depth + 1 },
+      );
+    }
+    bound = qmax(bound, roundQ(qadd(side, mismatch), true));
+  }
+  return { bound, finding: '' };
+}
+
 function leafRange(
   piece: Extract<StrokeDumpPiece, { kind: 'cubic-leaf' }>,
 ): { t0: Q; t1: Q } | null {
@@ -1443,39 +1612,31 @@ export function checkStrokePieceBounds(
           findings.push(`${label}: collapsed normal sample`);
           return;
         }
-        const sin2 = qdiv(qsq(pcross(s0, s1)), qmul(pdot(s0, s0), pdot(s1, s1)));
-        const hull = roundQ(qmul(r, sqrtQ(sin2).hi), true);
-        const budget = qsub(h1, hull);
-        if (qsgn(budget) <= 0) {
-          findings.push(`${label}: hull term alone exceeds the curve share`);
+        // Section 4.5's certificate first; a leaf it does not certify may still meet the band
+        // certificate of D9 E2-U2 (E2-K2), which needs a strictly convex band quad.
+        const sectionFour = sectionFourLeaf(
+          info.pw,
+          root,
+          a,
+          b,
+          piece,
+          s0,
+          s1,
+          r,
+          h1,
+          stats,
+          label,
+        );
+        if (sectionFour.finding === null) {
+          maxLeaf = qmax(maxLeaf, sectionFour.bound);
           return;
         }
-        let side = Z;
-        for (const [sigma, start, end] of [
-          [1, piece.start.plus, piece.end.plus],
-          [-1, piece.start.minus, piece.end.minus],
-        ] as const) {
-          const result = verifySide(
-            info.pw,
-            root,
-            a,
-            b,
-            qp(start),
-            qp(end),
-            sigma,
-            r,
-            budget,
-            stats,
-          );
-          if (result.finding !== null || result.bound === null) {
-            findings.push(
-              `${label} ${sigma > 0 ? 'plus' : 'minus'} side: ${result.finding ?? 'uncertified'}`,
-            );
-            return;
-          }
-          side = qmax(side, result.bound);
+        const band = certifyBandLeaf(info.pw, root, a, b, piece, r, h1, stats);
+        if (band.bound !== null) {
+          maxLeaf = qmax(maxLeaf, band.bound);
+          return;
         }
-        maxLeaf = qmax(maxLeaf, qadd(side, hull));
+        findings.push(sectionFour.finding, `${label}: E2-K2 band certificate: ${band.finding}`);
         return;
       }
       case 'cusp-disk': {

@@ -834,10 +834,20 @@ describe('ST-O1 piece bounds and ST-O2 inventory', () => {
     }
   });
 
-  it('ST-O1 rejects a coarse R4 leaf set on the continuous side bound', () => {
+  it('ST-O1 on coarse R4 leaves: the band certificate (D9 E2-U2) bounds what section 4.5 cannot', () => {
+    // Up to stroke-v0+r5 ST-O1 had section 4.5's certificate only, whose hull term r sin(theta)
+    // (r = 32) rejects the depth-2 set. The offsets' true deviation from their chords is about
+    // 0.001, and E2-K2's band certificate accepts the set (2026-10-25, E2 contract section 5).
     const result = checkStrokePieceBounds(r4, syntheticDump(r4, 2));
-    expect(result.ok).toBe(false);
-    expect(result.findings.join('\n')).toMatch(/side: |hull term/);
+    expect(result.findings).toEqual([]);
+    expect(result.maxLeafBound).toBeLessThanOrEqual(2 ** -3);
+    // At e = -7 one leaf of R4 is too coarse: its inner offset deviates from its chord by about
+    // 0.0156 > 2^-7, and both certificates reject it.
+    const fine = sourceOf([0, 2], [0, 0, 1, 0, 2, 1 / 64, 3, 3 / 64], 64, 'butt', 'miter', 4, -7);
+    const rejected = checkStrokePieceBounds(fine, syntheticDump(fine, 0));
+    expect(rejected.ok).toBe(false);
+    expect(rejected.findings.join('\n')).toMatch(/hull term|side: /);
+    expect(rejected.findings.join('\n')).toMatch(/E2-K2 band certificate: /);
   });
 
   it('a cusp at the non-dyadic t* = 1/3 certifies through the clip at the Float64 split', () => {

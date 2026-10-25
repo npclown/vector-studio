@@ -99,6 +99,14 @@ fn wide() -> StrokeWorkspace {
     StrokeWorkspace::with_limits(WIDE_TEST_LIMITS).expect("the wide test workspace reserves")
 }
 
+/// The B2 section 4.5 leaf rule alone (the `stroke-v0+r5` path, A/B switch `no_band_rule`):
+/// the leaf-count literals below are that rule's, and D9 E2-U2's band rule E2-K2 accepts
+/// larger leaves (`stroke_band_tests`).
+fn section_4_5(mut ws: StrokeWorkspace) -> StrokeWorkspace {
+    ws.defects_mut().no_band_rule = true;
+    ws
+}
+
 fn status(outcome: StrokeOutcome) -> u32 {
     match outcome {
         StrokeOutcome::Mesh => 0,
@@ -577,7 +585,7 @@ fn st_g5_and_the_cubic_range_condition_are_numeric_range() {
 
 #[test]
 fn leaves_share_their_knot_triples_and_tile_their_range() {
-    let mut ws = workspace();
+    let mut ws = section_4_5(workspace());
     let outcome = run(&mut ws, &cubic(R3), request(2.0, BUTT, MITER, 4.0, -9));
     assert_eq!(outcome, StrokeOutcome::Mesh);
     let leaves: Vec<_> = ws.pieces().iter().collect();
@@ -655,7 +663,7 @@ fn seeded_cubic_defects_fail_their_named_checks() {
     let f16_request = request(0.125, BUTT, MITER, 4.0, -8);
     let r3_request = request(2.0, BUTT, MITER, 4.0, -5);
     let arc_request = request(9.94, BUTT, MITER, 4.0, 0);
-    let mut clean = wide();
+    let mut clean = section_4_5(wide());
     assert_eq!(run(&mut clean, &f16, f16_request), StrokeOutcome::Mesh);
     assert!(inside(&clean, point(0.5, 0.8)));
     assert_eq!(count(&clean, PieceKind::Bevel), 0);
@@ -670,7 +678,7 @@ fn seeded_cubic_defects_fail_their_named_checks() {
     assert!(clean.pieces().iter().all(|piece| piece.meta.depth == 1));
 
     // ST-D6: a user join at generated knots (ST-O2 rejects it in the hand-off).
-    let mut ws = with_defect(wide(), |defects| defects.knot_join = true);
+    let mut ws = with_defect(section_4_5(wide()), |defects| defects.knot_join = true);
     let _ = run(&mut ws, &f16, f16_request);
     assert!(count(&ws, PieceKind::Bevel) > 0);
     let _ = run(&mut ws, &cubic(R3), r3_request);
@@ -683,7 +691,9 @@ fn seeded_cubic_defects_fail_their_named_checks() {
     assert!(!inside(&ws, point(0.5, 0.8)));
 
     // ST-D8: factor 2 accepts the folded arc as one leaf, which ST-O1 rejects in the hand-off.
-    let mut ws = with_defect(workspace(), |defects| defects.leaf_factor_two = true);
+    let mut ws = with_defect(section_4_5(workspace()), |defects| {
+        defects.leaf_factor_two = true
+    });
     assert_eq!(
         run(&mut ws, &cubic(FOLDED_ARC), arc_request),
         StrokeOutcome::Mesh

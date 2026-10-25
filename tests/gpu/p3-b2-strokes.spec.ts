@@ -238,7 +238,7 @@ for (const dpr of [1, 2, 3]) {
         }
         if (state.ports?.fill.operationId !== 'geometry-wasm/fill-v0+r3')
           failures.push(`${key}: unexpected fill port ${JSON.stringify(state.ports)}`);
-        if (state.ports?.stroke.operationId !== 'geometry-wasm/stroke-v0+r5')
+        if (state.ports?.stroke.operationId !== 'geometry-wasm/stroke-v0+r6')
           failures.push(`${key}: unexpected stroke port ${JSON.stringify(state.ports)}`);
 
         // Probes, far from every edge, in the zoom 1 overview only (decoded in the page).
