@@ -45,7 +45,7 @@ import { MeshShadow, receiptOf, words } from '../support/v3b-mesh-harness.js';
 // P3 B2 ST-U7 addendum, unit ST-U7c, acceptance rows ST-A15 and ST-A17 (unit form): the joint
 // condition, the joint fill draw and its overlay variant in the path-mesh pipeline, the joint
 // record words in the packet (word 15 = stroke slot + 1, recomputed every prepare), the removal
-// of composition-unsupported, the D8-interim overlay-unsupported notice, the overlay cache,
+// of composition-unsupported, the overlay-unsupported notice, the overlay cache,
 // accounting and eviction, fixtures ST7-F11 and ST7-F12 at the overlay work cap, seeded defects
 // ST7-D7 to ST7-D9, and device-loss reconstruction of the joint writes from CPU state. Functional
 // evidence only: precision is UNVERIFIED against the 0.25 physical-pixel target until B4.
@@ -538,7 +538,6 @@ describe('ST-U7 overlay cache, accounting and failures (addendum section 4.6)', 
       expect(first.draws.map((draw) => draw.nodeId)).toEqual(['f']);
       expect(first.notices).toEqual([
         {
-          interim: 'd8',
           nodeId: 'a',
           failureScope: 'renderer',
           failureCode: 'overlay-unsupported',
@@ -562,7 +561,6 @@ describe('ST-U7 overlay cache, accounting and failures (addendum section 4.6)', 
     expect(
       pathMeshNoticeDiagnostic(
         {
-          interim: 'd8',
           nodeId: 'a',
           failureScope: 'renderer',
           failureCode: 'overlay-unsupported',
@@ -571,7 +569,7 @@ describe('ST-U7 overlay cache, accounting and failures (addendum section 4.6)', 
         },
         3,
       ).message,
-    ).toBe('D8-interim: path a is not drawn (renderer overlay-unsupported).');
+    ).toBe('Path a is not drawn (renderer overlay-unsupported).');
   });
 
   it('ST-A15: the pipeline overlay equals the builder output for the served variant pair', () => {

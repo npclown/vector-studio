@@ -1,6 +1,6 @@
 # P3 private mesh contract: preparation draft
 
-Status: PARTIAL, 2026-09-29. This is the technical owner for P3 C03-C05, not a completed implementation freeze. [Visible semantics](p3-visible-semantics-proposal.md) were approved on 2026-09-29. The independent [line-fill oracle slice](p3-line-oracle-contract.md), [triangle-mesh invariants](p3-mesh-oracle-contract.md) and [line-fill region equality](p3-fill-region-oracle-contract.md) have separate test-only contracts while remaining mesh/stroke/GPU obligations stay open. The [execution plan](p3-fill-stroke-meshes.md) owns task status, the user-directed deferral of further stroke-bound refinement and independent slice entry. No product code, private mesh ABI export or public GeometryPort is introduced here.
+Status: PARTIAL, 2026-09-29. This is the technical owner for P3 C03-C05, not a completed implementation freeze. [Visible semantics](p3-visible-semantics-proposal.md) were approved on 2026-09-29. The independent [line-fill oracle slice](p3-line-oracle-contract.md), [triangle-mesh invariants](p3-mesh-oracle-contract.md) and [line-fill region equality](p3-fill-region-oracle-contract.md) have separate test-only contracts while remaining mesh/stroke/GPU obligations stay open. The [execution plan](p3-fill-stroke-meshes.md) owns task status, the user-directed deferral of further stroke-bound refinement and independent slice entry. No product code, private mesh ABI export or public GeometryPort is introduced here. Completion of C03-C05 for the P3 exit is set by [D9 E11](d9-e11-p3-c03-c05-closure-contract.md) (approved 2026-10-24); complete once its exit snapshot record exists.
 
 ## Inherited boundaries and resolved technical constraints
 
@@ -109,6 +109,12 @@ After the integrated P3.1m [position certificate](p3-position-certificate-contra
 | U4  | Reuse of P1's existing `render.submission-failed` numeric-preparation outcome for meshes is allowed only as a last resort, after every U2 alternative fails. No new public result variant is added. | The requirements must state which meshes can reach this outcome before any implementation depends on it.                                                                                                                                                                                            |
 
 D8 interim pointer, 2026-10-08: for D8 checkpoints V2-V4 only, the user approved [V1-Q4](p3-v1-path-scene-port-proposal.md#h-decisions-for-the-user), under which a path the kernel cannot mesh is not drawn and is reported by an interim warning diagnostic. It does not answer U2 or U4, which stay as written above; the interim code is removed or replaced when the production failure behavior is decided.
+
+E11-U4 pointer (U2), 2026-10-24: set aside for the P3 exit by the user's E11-Q3 (a); the not-drawn outcome with a warning ships, and U2's alternatives continue in E12 ([E11-U4 addendum](d9-e11-u4-failure-behavior-addendum.md)).
+
+E11-U4 pointer (U4), 2026-10-24: not invoked: `render.submission-failed` is not reused and no result variant is added; the requirements name the codes per outcome ([requirements](../requirements.md#path-rendering-failures)); the classes of input are in the addendum.
+
+E11-U4 pointer (D8 interim pointer), 2026-10-24: replaced: the interim code is now the product code `render.path-mesh-failure`, P3 product behavior, not only V2-V4.
 
 U2 follow-up, 2026-10-06: after the reviewed [failure-path proposal](p3-u2-failure-path-proposal.md), the user chose the planning direction R3 (tighter mesh-origin window), then R0 (clearance-aware triangulation for generator-induced slivers), then R2 (bounded-extent tiling with the U1 domain). R5 is limited to documented residual inputs. R1 (bounded region deviation) and R4 (coverage-bounded acceptance) are not opened. Classes B and C may remain uncertified until one of them is decided.
 

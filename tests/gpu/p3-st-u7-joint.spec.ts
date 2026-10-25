@@ -217,7 +217,7 @@ for (const samples of [1, 4] as const) {
     const disposed = await page.evaluate(() => window.__vectorStudioP3V3Mesh.dispose());
     const sourceAtEnd = p1Source();
     const interim = state.diagnostics
-      .filter((event) => event.code === 'render.path-mesh-interim-failure')
+      .filter((event) => event.code === 'render.path-mesh-failure')
       .map((event) => event.context!);
     // Only the V4 work cap of the region-only paints is expected: ST7-F7's stroke and ST7-F8's
     // fill and stroke. No overlay-unsupported and no composition-unsupported.

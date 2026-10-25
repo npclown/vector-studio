@@ -4,8 +4,9 @@
 // four `CubicFillWorkspace` entries and the fill-v0 cascade (`emit_e8_corner_digests`), and
 // through the release WASM's `fill_v0` (`P2_WASM_PATH`); both cascade digests cover the batch
 // status, the result length and the published bytes, and must agree path by path (E8-K8). The
-// per-family status counts are printed and written beside the capture for the plan record (E8-K6
-// is gated after E8-U2, not here).
+// per-family status counts are printed and written beside the capture for the plan record. Since
+// E8-U2, the E8-K6 gate holds here for the lens families (no `unsupported-geometry` at either
+// exponent); the wave family's remaining failures are classified in the E8-U2 evidence.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
@@ -220,6 +221,9 @@ describe('E8 corpus e8-corner/v1', () => {
         row[name] = (row[name] ?? 0) + 1;
       });
       counts[family.id] = row;
+    }
+    for (const [family, row] of Object.entries(counts)) {
+      if (family.startsWith('lens')) expect(row['unsupported-geometry'] ?? 0, family).toBe(0);
     }
     const summary = JSON.stringify(counts, null, 2);
     writeFileSync(path.join(directory, 'rates.json'), `${summary}\n`, { flag: 'wx' });

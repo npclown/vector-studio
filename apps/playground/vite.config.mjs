@@ -57,6 +57,8 @@ export default defineConfig({
         vizV2PathData: `${import.meta.dirname}/viz-v2-path-data.html`,
         vizV3Integration: `${import.meta.dirname}/viz-v3-integration.html`,
         e3A04Readback: `${import.meta.dirname}/e3-a04-readback.html`,
+        e10TestHooks: `${import.meta.dirname}/e10-test-hooks.html`,
+        vizV4A08Corpus: `${import.meta.dirname}/viz-v4-a08-corpus.html`,
       },
     },
   },

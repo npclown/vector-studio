@@ -106,8 +106,13 @@ fn observe_path(
     observe(workspace, &path.verbs, &path.bytes(), request, off)
 }
 
+/// A workspace on the `stroke-v0+r4` arrangement input (no E2-K1 seam merge). The E1 fixtures
+/// and E1-C1 were fixed on that input, and E1-K1 is a property of the arrangement, so since D9
+/// E2 unit E2-U1 they run on it through the A/B switch `unmerged`.
 fn with_limits(limits: RoundedFillLimits) -> StrokeWorkspace {
-    StrokeWorkspace::with_limits(limits).expect("the test workspace reserves")
+    let mut workspace = StrokeWorkspace::with_limits(limits).expect("the test workspace reserves");
+    workspace.defects_mut().unmerged = true;
+    workspace
 }
 
 fn limits_with_work(max_work: u64) -> RoundedFillLimits {
@@ -219,6 +224,7 @@ fn e1_f1_edges_1024_aborts_at_k1() {
     assert_edges_1024_record(&on, "E1-F1");
     // The production workspace aborts the same way.
     let mut production = StrokeWorkspace::new().expect("the stroke workspace reserves");
+    production.defects_mut().unmerged = true;
     assert_eq!(observe_path(&mut production, &path, request, false), on);
     let off = observe_path(&mut ws, &path, request, true);
     assert_on_off_equal(&on, &off, STROKE_V0_LIMITS.max_work, "E1-F1");
@@ -510,11 +516,11 @@ fn e1_fill_workspace_has_no_checkpoint() {
 // ---- The ignored on-off differential and max_work sweep over E1-C1 (E1.4 item 2, E1.5) ----
 
 #[derive(Clone, Debug)]
-struct CorpusCase {
-    name: String,
-    request: StrokeRequest,
-    verbs: Vec<u8>,
-    bytes: Vec<u8>,
+pub(crate) struct CorpusCase {
+    pub(crate) name: String,
+    pub(crate) request: StrokeRequest,
+    pub(crate) verbs: Vec<u8>,
+    pub(crate) bytes: Vec<u8>,
 }
 
 fn parse_bits(text: &str) -> f64 {
@@ -522,7 +528,7 @@ fn parse_bits(text: &str) -> f64 {
 }
 
 /// The `P3STKIN1` input format of `stroke_dump_tests` (no flags).
-fn read_corpus(text: &str) -> Vec<CorpusCase> {
+pub(crate) fn read_corpus(text: &str) -> Vec<CorpusCase> {
     let mut lines = text.lines();
     assert_eq!(lines.next(), Some("P3STKIN1"), "input magic");
     lines
@@ -728,4 +734,39 @@ fn e1_corpus_reader_reads_the_input_format() {
     let on = observe(&mut ws, &case.verbs, &case.bytes, case.request, false);
     assert_eq!(on.status, Some(0));
     assert_eq!(on.probe.exact_checks, 1);
+}
+
+/// D9 E2-U1 review S3: E1-K1 on the seam-merged input (shipped since `stroke-v0+r5`),
+/// not only on the `r4` input. `edges-1024` is `ok` at r5; with `max_work` one below its
+/// `W + F_L` at the ledger the abort is certain, and on and off agree.
+#[test]
+fn e1_k1_on_the_r5_merged_input() {
+    let (path, request) = edges_1024();
+    let r5 = |limits| StrokeWorkspace::with_limits(limits).expect("the test workspace reserves");
+    let mut ws = r5(STROKE_V0_LIMITS);
+    let (full, _) = on_off(
+        &mut ws,
+        &path,
+        request,
+        STROKE_V0_LIMITS.max_work,
+        "r5 edges-1024",
+    );
+    assert_eq!(full.status, Some(0));
+    assert_eq!(full.probe.reached, 1, "the ledger is reached");
+    let total = full.probe.last.work + full.probe.last.forecast;
+    let max_work = total - 1;
+    let mut ws = r5(limits_with_work(max_work));
+    let (on, _) = on_off(
+        &mut ws,
+        &path,
+        request,
+        max_work,
+        "r5 edges-1024, W + F_L - 1",
+    );
+    println!(
+        "r5 edges-1024: total work {total}, probe at total - 1 {:?}",
+        on.probe
+    );
+    assert_eq!(on.status, Some(STROKE_PATH_WORK_LIMIT));
+    assert_eq!(on.probe.fired, 1, "E1-K1 fired");
 }

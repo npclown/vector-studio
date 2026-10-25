@@ -1,0 +1,30 @@
+// E2-U1 scene dump (diagnostic input, not committed as a test). Copy to tests/unit/, set OUT, and
+// run `pnpm exec vitest run tests/unit/dump_scene_lines.test.ts`. One line per stroke:
+// `index zoom dpr e width cap join miterLimit verbCount verbs... scalarCount scalars...`, with
+// cap and join as indices (butt round square; miter round bevel). JavaScript prints each
+// binary64 as its shortest round-trip decimal, so Rust parses the same bits.
+import { writeFileSync } from 'node:fs';
+import { test } from 'vitest';
+import { stressScene } from '../geometry/p3-exit-sweep/scene.js';
+
+const CAPS = ['butt', 'round', 'square'];
+const JOINS = ['miter', 'round', 'bevel'];
+test('dump', () => {
+  const lines = stressScene().map((p) =>
+    [
+      p.index,
+      p.zoom,
+      p.dpr,
+      p.toleranceExponent,
+      p.stroke.width,
+      CAPS.indexOf(p.stroke.cap),
+      JOINS.indexOf(p.stroke.join),
+      p.stroke.miterLimit,
+      p.verbs.length,
+      ...Array.from(p.verbs),
+      p.points.length,
+      ...Array.from(p.points),
+    ].join(' '),
+  );
+  writeFileSync(process.env.OUT ?? 'scene.txt', `${lines.join('\n')}\n`);
+});

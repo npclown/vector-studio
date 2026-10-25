@@ -512,3 +512,20 @@ mod p3_al_ob5_bench;
 // Declared at the end of the file so that no existing line moves.
 #[cfg(test)]
 mod e8_direction_hint_tests;
+#[cfg(test)]
+mod e8_final_knot_tests;
+
+// D9 E14, the fill cap diagnostic, test-only. Declared at the end of the file so that no
+// existing line moves.
+#[cfg(test)]
+mod e14_fill_limit_diag_tests;
+
+// D9 E2 unit E2-U1 (docs/plans/d9-e2-stroke-fast-rung-contract.md): the lossless seam merge of
+// the stroke pieces, and its tests. Declared at the end of the file so that no existing line
+// moves.
+#[cfg(test)]
+mod stroke_band_tests;
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+mod stroke_merge;
+#[cfg(test)]
+mod stroke_merge_tests;

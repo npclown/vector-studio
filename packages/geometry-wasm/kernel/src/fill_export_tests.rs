@@ -2204,7 +2204,8 @@ type E8Row<'a> = (&'a str, &'a str, f64, &'a [(i32, u32)]);
 
 #[test]
 fn e8_fixtures_reach_their_e8_u1_status_through_the_export() {
-    // E8-K2 and E8-C1/E8-C2 (E8 addendum E8.6, column "After E8-U1 alone").
+    // E8-K2 and E8-C1/E8-C2 (E8 addendum E8.6). Column "After E8-U1 + E8-U2" since E8-U2
+    // (2026-10-24): only E8-F5 changes, from `unsupported-geometry` to `ok`.
     let ok = FILL_PATH_OK;
     let limit = FILL_PATH_WORK_LIMIT;
     let unsupported = FILL_PATH_UNSUPPORTED_GEOMETRY;
@@ -2228,7 +2229,7 @@ fn e8_fixtures_reach_their_e8_u1_status_through_the_export() {
         ("E8-F2", E8_F2, 0.0, &[(-7, ok), (-3, ok), (0, ok)]),
         ("E8-F3", E8_F3, 0.0, &[(-3, ok), (0, ok)]),
         ("E8-F4", E8_F4, 0.1, &[(-3, ok), (0, ok)]),
-        ("E8-F5", E8_F5, 0.0, &[(0, unsupported)]),
+        ("E8-F5", E8_F5, 0.0, &[(0, ok)]),
         (
             "E8-F6",
             E8_F6,
@@ -2268,11 +2269,27 @@ fn e8_fixtures_reach_their_e8_u1_status_through_the_export() {
             }
         }
     }
-    // E8-F5 fails at the source-final knot (M2), which only E8-U2 addresses.
+    // E8-F5 failed at the source-final knot (M2) until E8-U2; the exact rung's first cascade
+    // step now certifies it with the snapped final knots.
     assert_eq!(
         legacy_value(&svg_path(1, NONZERO, 0, E8_F5, 0.0)),
-        Err(CubicFillError::Topology(TopologyError::KnotMismatch))
+        Ok(PATH_OK)
     );
+}
+
+#[test]
+fn e8_c6_zero_length_final_leaf_maps_to_unsupported_geometry() {
+    // E8-C6 (E8 addendum E8.6), through the `cfg(test)` command-list injection: the snap is
+    // skipped for a final leaf that already has the previous point, collection rejects it with
+    // `ZeroLengthLeaf`, and the export reports `unsupported-geometry`, never an internal error.
+    let path = || svg_path(1, NONZERO, 0, E8_F5, 0.0);
+    let mesh = crate::cubic_fill::with_e8_collapsed_final_leaf(|| run_one(path()));
+    assert_eq!(mesh.status, FILL_PATH_UNSUPPORTED_GEOMETRY);
+    assert_eq!(
+        crate::cubic_fill::with_e8_collapsed_final_leaf(|| legacy_value(&path())),
+        Err(CubicFillError::ZeroLengthLeaf)
+    );
+    assert_eq!(run_one(path()).status, FILL_PATH_OK);
 }
 
 /// FNV-1a 64 of a byte string, for pinned output digests.

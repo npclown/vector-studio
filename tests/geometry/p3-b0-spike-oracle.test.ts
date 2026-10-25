@@ -14,6 +14,7 @@ import {
   judgeRung,
   parseSpikeFixtures,
   sliverStatistics,
+  snapViewFinalKnots,
   verifyAgreement,
   verifyCertificate,
   verifyRegionMesh,
@@ -372,6 +373,60 @@ describe('P3 B0 spike SL-U2 independent oracles', () => {
       false,
     );
     expect(verifyAgreement(path, path.rule, exact, TAU).withinBand).toBe(true);
+  });
+
+  it('mirrors the E8-U2 snap of source-final knots on an S1 view (SL-O3 amendment)', () => {
+    // One contour: MOVE A, a cubic of two leaves ending near C, then LINE back to A with an
+    // explicit close. The cubic's represented p3 is C; its final leaf was emitted as C'.
+    const hex = (value: number) => bitsOf(value).toString(16).padStart(16, '0');
+    const point = (x: number, y: number): HexPoint => [hex(x), hex(y)];
+    const [a, b, c, cEmitted] = [
+      point(0, 0),
+      point(5, 7),
+      point(10, 0),
+      point(10.000000000000002, 0),
+    ];
+    const sources = [
+      {
+        kind: 'cubic' as const,
+        sourceVerb: 1,
+        contour: 0,
+        points: [a, point(3, 9), point(7, 9), c],
+      },
+      { kind: 'line' as const, sourceVerb: 2, contour: 0, points: [c, a] },
+    ];
+    const owners = [
+      { kind: 'cubicLeaf' as const, sourceVerb: 1, endNumerator: 1, depth: 1 },
+      { kind: 'cubicLeaf' as const, sourceVerb: 1, endNumerator: 2, depth: 1 },
+      { kind: 'line' as const, sourceVerb: 2 },
+    ];
+    const fast = { ranges: [[0, 3] as const], points: [a, b, cEmitted], owners, sources };
+    const exact = { ranges: [[0, 3] as const], points: [a, b, c], owners, sources };
+    expect(snapViewFinalKnots(fast)).toEqual(exact);
+    // A final knot equal in value keeps its emitted bits (+0 for a -0 endpoint).
+    const zeroEnd = point(-0, 0);
+    const signed = {
+      ...fast,
+      points: [a, b, point(0, 0)],
+      sources: [{ ...sources[0]!, points: [a, point(3, 9), point(7, 9), zeroEnd] }, sources[1]!],
+    };
+    expect(snapViewFinalKnots(signed)).toEqual(signed);
+    // An internal knot is never moved: the snap of a view that differs there stays different.
+    const internal = { ...fast, points: [a, point(5, 7.000000000000001), cEmitted] };
+    expect(snapViewFinalKnots(internal)?.points[1]).toEqual(internal.points[1]);
+    // A closing owner whose snapped start equals the first point is dropped with the point.
+    const closing = {
+      ranges: [[0, 3] as const],
+      points: [c, b, cEmitted],
+      owners: [owners[0]!, owners[1]!, { kind: 'explicitClose' as const, sourceVerb: 3 }],
+      sources: [{ ...sources[0]!, points: [c, point(3, 9), point(7, 9), c] }],
+    };
+    expect(snapViewFinalKnots(closing)).toEqual({
+      ranges: [[0, 2]],
+      points: [c, b],
+      owners: [owners[0], owners[1]],
+      sources: closing.sources,
+    });
   });
 
   it('classifies PREFIX and TRIANGLE fallbacks apart from conservative ones (section 4.1)', () => {

@@ -42,11 +42,11 @@ const runRoot = path.resolve(
 /** The operation ids the expected literals were fixed with (V1-A1, V1-A9). */
 const OPERATION_IDS = {
   fill: 'geometry-wasm/fill-v0+r2',
-  stroke: 'geometry-wasm/stroke-v0+r4',
+  stroke: 'geometry-wasm/stroke-v0+r6',
 } as const;
 
 /**
- * Sorted `nodeId paint failureCode` of every D8-interim notice, per `dpr/scenario`. Observed
+ * Sorted `nodeId paint failureCode` of every path notice, per `dpr/scenario`. Observed
  * literals, fixed at the first headed run of V-1 (2026-10-22) with the operation ids above and
  * identical in Chrome and Edge. They are current-kernel observations (production limits): a
  * limit raise, an operation-id bump or ST-U9's fast rung may re-baseline them, in the PR that
@@ -585,7 +585,7 @@ for (const dpr of [1, 2]) {
         const shown = await page.evaluate(
           () =>
             Array.from(document.querySelectorAll('#viz-v1-status dt')).find(
-              (term) => term.textContent === 'D8 notices',
+              (term) => term.textContent === 'Path notices',
             )?.nextElementSibling?.textContent,
         );
         if (shown !== String(state.notices.length))

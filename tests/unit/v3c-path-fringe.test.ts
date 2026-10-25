@@ -459,7 +459,6 @@ describe('V3c builder failures (V3-A11, V3-A8)', () => {
     expect(first.draws.map((draw) => draw.nodeId)).toEqual(['square']);
     expect(first.notices).toEqual([
       {
-        interim: 'd8',
         nodeId: 'fan',
         failureScope: 'renderer',
         failureCode: 'fringe-unsupported',
@@ -467,7 +466,6 @@ describe('V3c builder failures (V3-A11, V3-A8)', () => {
         paint: 'fill',
       },
       {
-        interim: 'd8',
         nodeId: 'huge',
         failureScope: 'renderer',
         failureCode: 'fringe-range',

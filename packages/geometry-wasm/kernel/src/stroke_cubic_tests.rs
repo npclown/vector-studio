@@ -99,6 +99,14 @@ fn wide() -> StrokeWorkspace {
     StrokeWorkspace::with_limits(WIDE_TEST_LIMITS).expect("the wide test workspace reserves")
 }
 
+/// The B2 section 4.5 leaf rule alone (the `stroke-v0+r5` path, A/B switch `no_band_rule`):
+/// the leaf-count literals below are that rule's, and D9 E2-U2's band rule E2-K2 accepts
+/// larger leaves (`stroke_band_tests`).
+fn section_4_5(mut ws: StrokeWorkspace) -> StrokeWorkspace {
+    ws.defects_mut().no_band_rule = true;
+    ws
+}
+
 fn status(outcome: StrokeOutcome) -> u32 {
     match outcome {
         StrokeOutcome::Mesh => 0,
@@ -180,15 +188,22 @@ fn stationary_classification_is_exact() {
 fn st_f16_cusp_disk_under_wide_limits_and_the_production_node_limit() {
     let path = cubic(F16);
     let request = request(0.125, BUTT, MITER, 4.0, -8);
-    // STROKE_V0_LIMITS: ST-F16's expected status is work-limit (user decision 2026-10-20, the
+    // STROKE_V0_LIMITS: ST-F16's expected status was work-limit (user decision 2026-10-20, the
     // contract's dated note): the front end completes and the arrangement's node cap stops it.
+    // That holds on the `r4` input (the A/B switch `unmerged`). Since D9 E2-U1 the seam merge
+    // gives the arrangement 9 contours instead of 91 pieces, and ST-F16 is `ok`.
     let mut ws = workspace();
+    ws.defects_mut().unmerged = true;
     assert_eq!(status(run(&mut ws, &path, request)), STROKE_PATH_WORK_LIMIT);
     assert_eq!(ws.pieces().len(), 91);
     assert_eq!(
         ws.last_error(),
         Some(StrokeError::Rounded(RoundedFillError::NodeLimit))
     );
+    let mut ws = workspace();
+    assert_eq!(run(&mut ws, &path, request), StrokeOutcome::Mesh);
+    assert_eq!(ws.pieces().len(), 91);
+    assert_eq!(ws.merge().contour_total(), 9);
     // Its literal expectation under the test-only wide limits.
     let mut ws = wide();
     assert_eq!(run(&mut ws, &path, request), StrokeOutcome::Mesh);
@@ -384,16 +399,26 @@ fn st_u4_reversal_near_a_segment_end_is_depth_limited() {
 
 /// #169 review M5: after an `InputLimit` overflow the piece records are kept but their points
 /// are not; `piece_points` reports that with `None` instead of panicking. ST-F15 R3 at
-/// `e = -11` is the listed `InputLimit` case.
+/// `e = -11` is the listed `InputLimit` case on the `r4` input (the A/B switch `unmerged`).
+/// Since D9 E2-U1 every emitted piece's points are stored (over `MAX_PIECE_POINTS` the path is
+/// `PieceLimit`), and the merged R3 is `ok`.
 #[test]
 fn piece_points_after_an_input_limit_overflow() {
     let mut ws = workspace();
+    ws.defects_mut().unmerged = true;
     let outcome = run(&mut ws, &cubic(R3), request(2.0, BUTT, MITER, 4.0, -11));
     assert_eq!(status(outcome), STROKE_PATH_WORK_LIMIT);
     assert!(ws
         .pieces()
         .iter()
         .any(|piece| ws.piece_points(piece).is_none()));
+    let mut ws = workspace();
+    let outcome = run(&mut ws, &cubic(R3), request(2.0, BUTT, MITER, 4.0, -11));
+    assert_eq!(outcome, StrokeOutcome::Mesh);
+    assert!(ws
+        .pieces()
+        .iter()
+        .all(|piece| ws.piece_points(piece).is_some()));
 }
 
 #[test]
@@ -560,7 +585,7 @@ fn st_g5_and_the_cubic_range_condition_are_numeric_range() {
 
 #[test]
 fn leaves_share_their_knot_triples_and_tile_their_range() {
-    let mut ws = workspace();
+    let mut ws = section_4_5(workspace());
     let outcome = run(&mut ws, &cubic(R3), request(2.0, BUTT, MITER, 4.0, -9));
     assert_eq!(outcome, StrokeOutcome::Mesh);
     let leaves: Vec<_> = ws.pieces().iter().collect();
@@ -638,7 +663,7 @@ fn seeded_cubic_defects_fail_their_named_checks() {
     let f16_request = request(0.125, BUTT, MITER, 4.0, -8);
     let r3_request = request(2.0, BUTT, MITER, 4.0, -5);
     let arc_request = request(9.94, BUTT, MITER, 4.0, 0);
-    let mut clean = wide();
+    let mut clean = section_4_5(wide());
     assert_eq!(run(&mut clean, &f16, f16_request), StrokeOutcome::Mesh);
     assert!(inside(&clean, point(0.5, 0.8)));
     assert_eq!(count(&clean, PieceKind::Bevel), 0);
@@ -653,7 +678,7 @@ fn seeded_cubic_defects_fail_their_named_checks() {
     assert!(clean.pieces().iter().all(|piece| piece.meta.depth == 1));
 
     // ST-D6: a user join at generated knots (ST-O2 rejects it in the hand-off).
-    let mut ws = with_defect(wide(), |defects| defects.knot_join = true);
+    let mut ws = with_defect(section_4_5(wide()), |defects| defects.knot_join = true);
     let _ = run(&mut ws, &f16, f16_request);
     assert!(count(&ws, PieceKind::Bevel) > 0);
     let _ = run(&mut ws, &cubic(R3), r3_request);
@@ -666,7 +691,9 @@ fn seeded_cubic_defects_fail_their_named_checks() {
     assert!(!inside(&ws, point(0.5, 0.8)));
 
     // ST-D8: factor 2 accepts the folded arc as one leaf, which ST-O1 rejects in the hand-off.
-    let mut ws = with_defect(workspace(), |defects| defects.leaf_factor_two = true);
+    let mut ws = with_defect(section_4_5(workspace()), |defects| {
+        defects.leaf_factor_two = true
+    });
     assert_eq!(
         run(&mut ws, &cubic(FOLDED_ARC), arc_request),
         StrokeOutcome::Mesh

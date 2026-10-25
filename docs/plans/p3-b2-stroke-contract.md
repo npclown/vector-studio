@@ -422,6 +422,10 @@ Amended 2026-10-21 (ST-U3c round-join shared vertex; see the header notes): the 
 
 Amended 2026-10-21 (ST-U3d/ST-U3e stroke sharing; see the header notes): the identity is now `'geometry-wasm/stroke-v0+r4'` with `stroke_v0_revision() == 4`, superseding revision 3 in the same three places.
 
+Amended 2026-10-24 (D9 E2 unit E2-U1, the seam merge E2-K1 of the [E2 contract](d9-e2-stroke-fast-rung-contract.md#4-e2-k1-seam-merge-lossless)): the pieces reach the arrangement as merged contours, which changes `ok` meshes, so the identity is now `'geometry-wasm/stroke-v0+r5'` with `stroke_v0_revision() == 5`, superseding revision 4 in the same three places.
+
+Amended 2026-10-25 (D9 E2 unit E2-U2, the band leaf rule E2-K2 of the [E2 contract](d9-e2-stroke-fast-rung-contract.md#5-e2-k2-the-band-leaf-rule)): full-cone cubic leaves may also be accepted by E2-K2, which changes `ok` meshes, so the identity is now `'geometry-wasm/stroke-v0+r6'` with `stroke_v0_revision() == 6`, superseding revision 5 in the same three places.
+
 ### 7.2 Exports
 
 All parameters and returns `u32`, as P2 and V2: `stroke_v0_version`, `stroke_v0_revision`, `stroke_v0_reserve(inputBytes, outputBytes)`, `stroke_v0_input_ptr`, `stroke_v0_input_capacity`, `stroke_v0_output_ptr`, `stroke_v0_output_capacity`, `stroke_v0_memory_epoch`, `stroke_v0_process(inputLength)`, `stroke_v0_result_len`, `stroke_v0_required_output_bytes`, `stroke_v0_dispose`. Each has the meaning of its [`fill_v0_` counterpart](p3-v2-fill-mesh-transport-contract.md#exports). A third module-level engine, `StrokeEngine`, owns this state and shares no field, epoch, arena or workspace with the P2 `Engine` or `FillEngine`. Batch statuses are P2's (`OK=0` to `INTERNAL_ERROR=6`). Path statuses: `OK=0`, `EMPTY=1`, `INVALID_PATH=2`, `INVALID_TOLERANCE=3`, `NUMERIC_RANGE=4`, `WORK_LIMIT=5`, `UNSUPPORTED_GEOMETRY=6`, `INVALID_STROKE=7`.
@@ -497,6 +501,8 @@ Amended 2026-10-20, ST-A0 amendment (S6):
 
 - **Piece store.** The 4,096-record piece store above is `MAX_PIECE_RECORDS: usize = 4_096` at `packages/geometry-wasm/kernel/src/stroke_outline.rs:55`; its overflow is `FrontEndError::PieceLimit` (`stroke_outline.rs:129`), mapped to `work-limit` in §7.8. The 512-piece cap (`MAX_PIECES`, `stroke_outline.rs:49`) is unchanged.
 - **Memory rows.** ST-U3's recorded rows are stale after ST-U4 (the front end grew to 1,255,120 B). ST-U5 re-measured them (and corrected ST-U3's native row, which does not reproduce at `ae91297`: front end 376,992 B, total 17,293,472 B) and recorded them in the [ST-U5 plan section](p3-fill-stroke-meshes.md#b2-st-u5-stroke-export): native heap total **18,171,600 B** (front end 1,255,120 B, `RoundedFillWorkspace` 14,262,272 B, `FillScratch` 2,654,208 B), and `wasm32` linear memory **13,828,096 B** after `stroke_v0_reserve(0, 0)` (1,114,112 B before). The native heap total (18,171,600 B) fits the 48 MiB heap cap; the `wasm32` figure is total linear memory, a different quantity from ST-U3's workspace-parts total (11,690,144 B), so it does not replace that figure but is the current `wasm32` row. The native total supersedes ST-U3's 17,117,344 B. The source limits' fit with P2 ABI v1's per-path limits is a separate check (the paragraph above §7.6's tables) and is unaffected. The table needs no change; the ST-U3 text is left as written.
+
+Amended 2026-10-24 (D9 E2 unit E2-U1, [E2 contract section 7](d9-e2-stroke-fast-rung-contract.md#7-caps-identity-and-performance-gate)): the row "Pieces (contours) per path" (512) now caps the contours after the seam merge; the emitted pieces are bounded by the 4,096 records and by 32,768 stored piece points (`MAX_PIECE_POINTS`, over it `work-limit` (`PieceLimit`)), and `InputLimit` is checked on the merged contours. `STROKE_V0_LIMITS` is unchanged.
 
 ### 7.7 Tolerance
 
@@ -618,6 +624,8 @@ V3's D8-interim notice context gains `paint: 'fill' | 'stroke' | null`: `'fill'`
 
 Amended 2026-10-21 by ST-U7: the failure-code table loses `composition-unsupported` and gains `overlay-unsupported` (renderer scope, `paint: null`, one notice per marked overlay variant). It is D8-interim and is removed with the TypeScript builder at the R2/K1 placement decision.
 
+E11-U4 pointer (section 9.8), 2026-10-24: the notices are now `render.path-mesh-failure` without the `interim` key; `overlay-unsupported` is O3 while its builder ships ([E11-U4 addendum](d9-e11-u4-failure-behavior-addendum.md)).
+
 ## 10. C04 items for the stroke transport and draw
 
 Under the carve-out extended by B2-Q9 (a), `stroke_v0` is a functional transport v0 and the stroke draw a functional packet extension, both disposable and UNVERIFIED. Nothing here is the C04 layout.
@@ -650,6 +658,8 @@ ST-U2 adds an independent oracle in `packages/geometry-reference/src/stroke-regi
 **Hand-off.** An ignored Rust test `emit_stroke_dump` writes framed JSON per case: the request, the classification, every piece with its kind, source segment, parameter interval and emitted points, and the export's mesh. `tests/geometry/stroke-oracle.test.ts` runs it with the pinned toolchain and the existing Rust runner environment, as `p3-fill-ladder-oracle.test.ts` does, and applies ST-O1 to ST-O5.
 
 **Positive controls,** each rejected by the named oracle before any fixture result counts: the s2 chord-normal R4 leaf and flipped R3 start normal (ST-O1); a removed and a duplicated leaf interval, a join piece at a generated knot, a missing cusp disk (ST-O2); a dropped, a flipped and a duplicated triangle and a dropped boundary pair (ST-O3).
+
+Amended 2026-10-25 (D9 E2 unit E2-U2): a cubic leaf that the hull-term certificate above rejects passes ST-O1 when E2-K2's band certificate holds (`certifyBandLeaf` in `stroke-region.ts`: no stationary parameter on the leaf, a strictly convex band quad, and on exact interval cells no fold, monotone projection and each side within the curve share of its chord segment). The positive controls are unchanged and still rejected. The argument is in the [E2-U2 record](../evidence/e2-u2-2026-10-25.md#departure-st-o1-gains-a-band-certificate-decided-2026-10-25-추천안-자동-채택).
 
 Amended 2026-10-21, ST-U2 oracle hardening (review of PR #169, S1; see [the plan section](p3-fill-stroke-meshes.md#b2-st-u2-oracle-hardening-review-follow-up)): ST-O3's `τ`-band is **stricter than the wording "area difference at most perimeter times `τ`"** in the table above. The oracle now also requires the **symmetric difference** of the mesh region and the exact union of the emitted pieces to be at most `perimeter·τ·(1 + 2^-40)`. An area difference alone passes a mesh translated far from the pieces. Under a one-sided displacement of at most `τ` the symmetric difference is at most `perimeter·τ`; the strict two-sided `τ`-tube allows about twice that plus a corner term per loop. The band is therefore a test band justified by the measured margin (the 72 band-mode instances of the corpus use at most 23% of it), not a consequence of section 3; an over-band result on a new fixture means re-checking the band first. The frozen text above is unchanged. The exact mode of ST-O3 also applies only where every ideal vertex round-trips through binary64 (review minor M1).
 
@@ -778,6 +788,8 @@ Each unit is its own PR from an updated `main`. ST-U3, ST-U4 and ST-U5 are high-
 | ST-U9  | Full  | Conditional: a certified direct-tessellation fast rung (family B), only if ST-U3b's report and the user ask for it; its own contract                                                                                                               | Fixed by its contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | ST-U4, probe |
 
 Amended 2026-10-21: ST-U7's files and units are fixed by the [ST-U7 addendum §6](p3-b2-st-u7-joint-coverage-addendum.md#6-units): ST-U7a (freeze and architecture note), ST-U7b (overlay and composite, CPU), ST-U7c (packet, shader, backend, renderer and the dated notes), ST-U7d (headed fixtures and evidence). The ST-U6 test edits that ST-U7 makes are listed in the addendum's allow-list.
+
+Amended 2026-10-24 (D9 item E2, promoted to R1 by the user): the ST-U9 row's own contract is the [E2 contract](d9-e2-stroke-fast-rung-contract.md), with units E2-U1 to E2-U3.
 
 #### ST-U9 addendum, 2026-10-22: E1 early abort (E1, unit ST-U10)
 

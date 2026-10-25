@@ -176,7 +176,7 @@ for (const samples of [1, 4] as const) {
     const unexpected = state.diagnostics.filter(
       (event) =>
         (event.severity === 'error' && event.code !== 'device-loss.detected') ||
-        event.code === 'render.path-mesh-interim-failure',
+        event.code === 'render.path-mesh-failure',
     );
     expect(unexpected).toEqual([]);
     expect(state.port.calls).toBeGreaterThan(0);

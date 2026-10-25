@@ -41,7 +41,7 @@ import type { PathDataError } from './viz-v2-path-data-parse.js';
 // stroke-mesh port (`createStrokeMeshPort`) from geometry-wasm into the renderer service, exactly
 // as the V-1 page does, and sends one scene path node through the existing `applyChanges` and
 // `replaceSnapshot` calls. It adds no draw work, no kernel work and no renderer code. The path text
-// is parsed on Apply only. D8-interim notices are listed, never hidden or cleared.
+// is parsed on Apply only. Path notices are listed, never hidden or cleared.
 //
 // Functional evidence only: precision is UNVERIFIED against the 0.25 physical-pixel target until
 // B4 has A04 evidence. No path text or appearance state is written to localStorage, IndexedDB or
@@ -531,7 +531,7 @@ function renderStatus(): void {
     ['fill port calls', String(pathMesh?.portCalls ?? 0)],
     ['stroke port calls', String(pathMesh?.strokePortCalls ?? 0)],
     ['mesh cache', `${pathMesh?.entries ?? 0} entries, ${pathMesh?.bytes ?? 0} B`],
-    ['D8 notices', String(allNotices.length)],
+    ['Path notices', String(allNotices.length)],
     ['notices queued', String(pathMesh?.noticesQueued ?? 0)],
     ['notices dropped', String(pathMesh?.noticesDropped ?? 0)],
   ];

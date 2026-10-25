@@ -420,19 +420,106 @@ export function cubicCases(): StrokeCase[] {
   }
   cases.push(cubicCase('ST-U4/folded-arc', FOLDED_ARC, FOLDED_ARC_WIDTH, 'butt', 0));
   // Seeded defects ST-D6 to ST-D8 (section 11.3) with their controls above.
-  const r3 = S2_FAMILIES[2]!;
+  const r4 = S2_FAMILIES[3]!;
   const r6 = S2_FAMILIES[5]!;
   cases.push(
     cubicCase('ST-D6/ST-F16', F16, 0.125, 'butt', -8, ['wide', 'knot-join']),
-    cubicCase('ST-D6/ST-F15/R3-zoom1-dpr3', cubicPath(r3[1]), r3[2], 'butt', -5, ['knot-join']),
+    // ST-D6 on R4 since D9 E2-U2 (r6): the band leaf rule meshes R3 at e = -5 as one leaf, so
+    // it has no generated knot for the defect to join; R4 there has two leaves.
+    cubicCase('ST-D6/ST-F15/R4-zoom1-dpr3', cubicPath(r4[1]), r4[2], 'butt', -5, ['knot-join']),
     cubicCase('ST-D7/ST-F16', F16, 0.125, 'butt', -8, ['wide', 'omit-cusp-disk']),
     cubicCase(`ST-D8/${D8_CASE}`, cubicPath(r6[1]), r6[2], 'butt', -3, ['leaf-factor-two']),
     cubicCase('ST-D8/ST-U4/folded-arc', FOLDED_ARC, FOLDED_ARC_WIDTH, 'butt', 0, [
       'leaf-factor-two',
     ]),
   );
+  cases.push(...e2Cases());
   return cases;
 }
+
+/** E2-F8: the thin figure-eight of the E2 contract, section 8. */
+const E2_F8 = {
+  verbs: [0, 2, 2, 3],
+  points: [0, 0, 60, 60, 60, -60, 0, 0, -60, 60, -60, -60, 0, 0],
+};
+
+/** `M R 0`, four quarter cubics with the cause record's constant 0.5522847498, `Z`. */
+function e2Circle(radius: number): { verbs: number[]; points: number[] } {
+  const r = radius;
+  const k = radius * 0.5522847498;
+  return {
+    verbs: [0, 2, 2, 2, 2, 3],
+    points: [
+      r,
+      0,
+      r,
+      k,
+      k,
+      r,
+      0,
+      r,
+      -k,
+      r,
+      -r,
+      k,
+      -r,
+      0,
+      -r,
+      -k,
+      -k,
+      -r,
+      0,
+      -r,
+      k,
+      -r,
+      r,
+      -k,
+      r,
+      0,
+    ],
+  };
+}
+
+/**
+ * D9 E2 unit E2-U1 (docs/plans/d9-e2-stroke-fast-rung-contract.md, section 8): the fixtures
+ * E2-F1 to E2-F8 at e = -3, miter joins, so that ST-O1 and ST-O2 run on their dumps (E2-A3).
+ * Their statuses are asserted natively (`stroke_merge_tests`).
+ */
+function e2Cases(): StrokeCase[] {
+  const sCurve = {
+    verbs: [0, 2, 2],
+    points: [0, 0, 30, 0, 50, 20, 50, 50, 50, 80, 70, 100, 100, 100],
+  };
+  return [
+    cubicCase('E2-F1', e2Circle(64), 1, 'butt', -3),
+    cubicCase('E2-F2', e2Circle(64), 4, 'butt', -3),
+    cubicCase('E2-F3', e2Circle(256), 16, 'butt', -3),
+    cubicCase('E2-F4', e2Circle(16), 16, 'butt', -3),
+    cubicCase('E2-F5', e2Circle(1024), 1, 'butt', -3),
+    cubicCase(
+      'E2-F6',
+      { verbs: [0, 1, 1, 1, 3], points: [0, 0, 100, 0, 100, 100, 0, 100] },
+      4,
+      'butt',
+      -3,
+    ),
+    cubicCase('E2-F7', sCurve, 4, 'butt', -3),
+    cubicCase('E2-F7r', sCurve, 4, 'round', -3),
+    cubicCase('E2-F8', E2_F8, 1, 'butt', -3),
+    // E2-U2: the fold control E2-F4f, and the seeded defects E2-D2 and E2-D3 with it.
+    cubicCase('E2-F4f', E2_F4F, 12, 'butt', -3),
+    cubicCase('E2-D2/E2-F4f', E2_F4F, 12, 'butt', -3, ['band-no-fold']),
+    cubicCase('E2-D3/E2-F3', e2Circle(256), 16, 'butt', -3, ['band-half-bound']),
+    cubicCase('E2-D3/E2-F8', E2_F8, 1, 'butt', -3, ['band-half-bound']),
+  ];
+}
+
+/**
+ * E2-F4f (D9 E2-U2, contract section 8): one cubic whose depth-0 band quad is strictly convex
+ * while `r kappa` at t = 0 is exactly 6 * 2016 / 468^(3/2), about 1.195, at width 12, so the fold test refuses
+ * the leaf; under E2-D2 it is accepted as one leaf.
+ */
+export const E2_F4F = { verbs: [0, 2], points: [0, 0, 6, 4, 34, 4, 40, 0] };
 
 type Exact = Readonly<{ x: bigint; y: bigint }>;
 const view = new DataView(new ArrayBuffer(8));

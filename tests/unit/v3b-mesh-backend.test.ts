@@ -530,7 +530,7 @@ const surface = {
 };
 
 const interim = (diagnostics: readonly RendererDiagnostic[]) =>
-  diagnostics.filter((diagnostic) => diagnostic.code === 'render.path-mesh-interim-failure');
+  diagnostics.filter((diagnostic) => diagnostic.code === 'render.path-mesh-failure');
 
 describe('V3b backend lifecycle (V3-A13)', () => {
   it('V3-A13: reads requiresMeshPipeline at attach, requests the mesh pipeline at initialization and recovery, and emits mesh-pipeline-unavailable once per generation', async () => {
@@ -555,7 +555,6 @@ describe('V3b backend lifecycle (V3-A13)', () => {
     expect(first.createPrimitiveScene.mock.calls[0]![4]).toEqual({ meshPipeline: true });
     expect(interim(diagnostics).map((diagnostic) => diagnostic.context)).toEqual([
       {
-        interim: 'd8',
         nodeId: null,
         failureScope: 'renderer',
         failureCode: 'mesh-pipeline-unavailable',
@@ -563,6 +562,9 @@ describe('V3b backend lifecycle (V3-A13)', () => {
         paint: null,
       },
     ]);
+    expect(interim(diagnostics)[0]!.message).toBe(
+      'Mesh paths are not drawn (renderer mesh-pipeline-unavailable).',
+    );
     service.replaceSnapshot({
       identity,
       revision: 1,
@@ -641,14 +643,13 @@ describe('V3b backend lifecycle (V3-A13)', () => {
       severity: 'warning',
       generation: 1,
       context: {
-        interim: 'd8',
         nodeId: 'p00',
         failureScope: 'path',
         failureCode: 'unsupported-geometry',
         toleranceExponent: -3,
       },
     });
-    expect(emitted[0]!.message.startsWith('D8-interim:')).toBe(true);
+    expect(emitted[0]!.message.startsWith('Path ')).toBe(true);
     backend.invalidate({ reason: 'interaction' });
     clock.flush();
     expect(interim(diagnostics)).toHaveLength(40);
@@ -660,7 +661,7 @@ describe('V3b backend lifecycle (V3-A13)', () => {
 // V4 removed the V3-A18 form of this test ("before V4") when the playground gained the real
 // port. The remaining hosts still request no mesh pipeline and inject no port.
 describe('V4 host injection', () => {
-  it('V4: no host other than the path page, the ST-U8 stroke page, the V-1 appearance page, the V-2 path-data page and the V-3 integration page requests the mesh pipeline or injects a port', () => {
+  it('V4: no host other than the path page, the ST-U8 stroke page, the V-1 appearance page, the V-2 path-data page, the V-3 integration page and the V-4 A08 corpus page requests the mesh pipeline or injects a port', () => {
     const root = join(__dirname, '../../apps');
     const files: string[] = [];
     const walk = (directory: string) => {
@@ -674,21 +675,22 @@ describe('V4 host injection', () => {
     walk(root);
     expect(files.length).toBeGreaterThan(0);
     // The V4 path page, the B2 ST-U8 stroke page (on V4's pattern), the visualization track's
-    // V-1 appearance page, V-2 path-data page and V-3 integration page (same pattern) and the
-    // manifest and project-reference edges inject the real ports.
+    // V-1 appearance page, V-2 path-data page, V-3 integration page and V-4 A08 corpus page (same
+    // pattern) and the manifest and project-reference edges inject the real ports.
     const host = files.filter(
       (file) =>
         /[\\/]src[\\/]p3-(v4-paths|b2-strokes)\.ts$/.test(file) ||
         /[\\/]src[\\/]viz-v1-appearance\.ts$/.test(file) ||
         /[\\/]src[\\/]viz-v2-path-data\.ts$/.test(file) ||
         /[\\/]src[\\/]viz-v3-integration\.ts$/.test(file) ||
+        /[\\/]src[\\/]viz-v4-a08-corpus\.ts$/.test(file) ||
         /[\\/]playground[\\/](package|tsconfig)\.json$/.test(file),
     );
-    expect(host).toHaveLength(7);
-    // The V3-A14 smoke fixture page is a test fixture with a static test-double port, not a
-    // host; it must not reach a real port (no geometry-wasm).
-    const fixture = files.filter((file) => /p3-v3-mesh\.(ts|html)$/.test(file));
-    expect(fixture).toHaveLength(2);
+    expect(host).toHaveLength(8);
+    // The V3-A14 smoke fixture page and the E10-U3 test-hooks check page are test fixtures with a
+    // static test-double port, not hosts; they must not reach a real port (no geometry-wasm).
+    const fixture = files.filter((file) => /(p3-v3-mesh|e10-test-hooks)\.(ts|html)$/.test(file));
+    expect(fixture).toHaveLength(4);
     for (const file of fixture)
       expect(readFileSync(file, 'utf8'), file).not.toMatch(/geometry-wasm/);
     const allowed = new Set([...host, ...fixture]);
