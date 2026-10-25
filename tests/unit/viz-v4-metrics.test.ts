@@ -35,6 +35,7 @@ import {
   decideVerdict,
   evaluateRun,
   groupPath,
+  recordResult,
   replayRecord,
   runMetrics,
   type ExpectedFile,
@@ -571,16 +572,19 @@ describe('contract section 17: count above 1, no-flip zone, σ, pairing, case re
     ).metrics;
     expect(over.judgment).toBe('FAIL');
     expect(over.reasons).toContain('G3-at-most');
-    // The border strip: centres within betaClip + 0.3953 px of the canvas border (one ring when
-    // that is in [0.5, 1.5)); at 1x the same clip bound reaches no centre.
-    const strip = evaluateCapture({ ...ref, betaClip: 0.2 }, base, 4).metrics;
-    expect(strip.zone.border).toBe(2 * 640 + 2 * 360 - 4);
-    const ref1 = { ...ref, betaClip: 0.2 };
-    expect(evaluateCapture(ref1, ruleRenderingForTesting(ref, 1), 1).metrics.zone.border).toBe(0);
+    // The border strip: centres within β_c + 0.3953 px of the canvas border (one ring when that
+    // is in [0.5, 1.5)), since a clip-plane vertex moves by betaClip and is snapped by σ, both in
+    // β_c. β_c = 0.11 is the review's control: betaClip + 0.3953 alone would miss the ring.
+    for (const betaC of [0.11, 0.2]) {
+      const strip = evaluateCapture({ ...ref, betaC }, base, 4).metrics;
+      expect(strip.zone.border).toBe(2 * 640 + 2 * 360 - 4);
+      const ref1 = { ...ref, betaC };
+      expect(evaluateCapture(ref1, ruleRenderingForTesting(ref, 1), 1).metrics.zone.border).toBe(0);
+    }
     // Without a clipped triangle there is no strip.
     const rect = reference(RECT_CASE, 'msaa-4x');
     expect(rect.clipped).toEqual([]);
-    const noStrip = { ...rect, betaClip: 0.2 };
+    const noStrip = { ...rect, betaC: 0.2 };
     expect(evaluateCapture(noStrip, ruleRenderingForTesting(rect, 4), 4).metrics.zone.border).toBe(
       0,
     );
@@ -1062,6 +1066,19 @@ describe('runner (sections 4.4, 5.3, VZ4-A3 to A7)', () => {
     expect(body.result).toBe('INCONCLUSIVE');
     expect(body.verdict.inconclusive).toEqual(['gated case UNDECIDED']);
     expect(body.criteria['VZ4-A6']!.result).toBe('UNDECIDED');
+  });
+
+  it('makes a passing record INCONCLUSIVE while VZ4-A5 is UNDECIDED, below any FAIL', () => {
+    const c = (a5: string, a3 = 'PASS') => ({
+      'VZ4-A3': { result: a3 },
+      'VZ4-A4': { result: 'PASS' },
+      'VZ4-A5': { result: a5 },
+    });
+    expect(recordResult(c('UNDECIDED'), 'PASS')).toBe('INCONCLUSIVE');
+    expect(recordResult(c('UNDECIDED'), 'FAIL')).toBe('FAIL');
+    expect(recordResult(c('UNDECIDED', 'FAIL'), 'PASS')).toBe('FAIL');
+    expect(recordResult(c('PASS'), 'PASS')).toBe('PASS');
+    expect(recordResult(c('FAIL'), 'PASS')).toBe('FAIL');
   });
 
   it('FAILS VZ4-A7 on a sample count above 1, and reports it per group', () => {

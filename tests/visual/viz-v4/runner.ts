@@ -202,6 +202,20 @@ export type VerdictEntry = Readonly<{
 
 export type VerdictResult = 'PASS' | 'FAIL' | 'INCONCLUSIVE';
 
+/**
+ * The record's `result`: a run that is incomplete, mismatched or not region-only in msaa-4x
+ * fails regardless of section 5.3; an open VZ4-A5 keeps a passing verdict INCONCLUSIVE, and a
+ * FAIL still outranks it (section 17).
+ */
+export function recordResult(
+  criteria: Record<string, { result: string }>,
+  verdict: VerdictResult,
+): VerdictResult {
+  if (['VZ4-A3', 'VZ4-A4', 'VZ4-A5'].some((id) => criteria[id]?.result === 'FAIL')) return 'FAIL';
+  if (verdict === 'PASS' && criteria['VZ4-A5']?.result === 'UNDECIDED') return 'INCONCLUSIVE';
+  return verdict;
+}
+
 export type Verdict = Readonly<{
   result: VerdictResult;
   /** The INCONCLUSIVE conditions that hold, in the contract's order. */
@@ -731,13 +745,7 @@ export function evaluateRun(input: RunInput): RecordBody {
     'VZ4-A6': criterionFrom(entries, 'g12'),
     'VZ4-A7': criterionFrom(entries, 'g3'),
   };
-  // A run that is incomplete, mismatched or not region-only in msaa-4x fails regardless of 5.3.
-  const result: VerdictResult =
-    criteria['VZ4-A3']!.result === 'FAIL' ||
-    criteria['VZ4-A4']!.result === 'FAIL' ||
-    criteria['VZ4-A5']!.result === 'FAIL'
-      ? 'FAIL'
-      : verdict.result;
+  const result = recordResult(criteria, verdict.result);
   const groups = [...tallies.entries()].map(([k, t]) => {
     const [project, variant, dpr, part] = k.split('|') as [string, string, string, string];
     return { project, variant, dpr: Number(dpr), part, ...tallyJson(t) };

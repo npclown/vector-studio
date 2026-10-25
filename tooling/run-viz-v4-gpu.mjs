@@ -44,7 +44,8 @@ const pnpmArgs = [
   '--config',
   'playwright.gpu.config.ts',
   'tests/gpu/viz-v4-a08-corpus.spec.ts',
-  ...process.argv.slice(2),
+  // pnpm passes a leading `--` through to the script; Playwright would read it as a file filter.
+  ...process.argv.slice(2).filter((arg, index) => !(index === 0 && arg === '--')),
 ];
 const execPath = process.env.npm_execpath;
 let command;
@@ -54,7 +55,7 @@ if (execPath !== undefined && execPath !== '' && /pnpm/u.test(path.basename(exec
   command = script ? process.execPath : execPath;
   commandArgs = script ? [execPath, ...pnpmArgs] : pnpmArgs;
 } else if (process.platform === 'win32') {
-  throw new Error('run this launcher through pnpm: pnpm test:gpu:viz-v4 [-- <playwright args>]');
+  throw new Error('run this launcher through pnpm: pnpm test:gpu:viz-v4 [<playwright args>]');
 } else {
   command = 'pnpm';
   commandArgs = pnpmArgs;

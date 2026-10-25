@@ -871,10 +871,11 @@ export function evaluateCapture(
   if (reference.betaClip >= CLIP_LIMIT) caseUndecided.push('clip bound ≥ 0.25 px');
   if (field.windingAnomalies > 0) caseUndecided.push('reference winding');
   // The uncertain zone: r = β_c (which includes σ), plus the 4x sample term, since a 4x sample
-  // lies up to 0.3953 px from its pixel centre; the border strip is betaClip plus that term.
+  // lies up to 0.3953 px from its pixel centre. The border strip has the same width: a clip-plane
+  // vertex moves by betaClip and is then snapped by σ, both within β_c.
   const sampleTerm = sampleCount === 4 ? CRACK_SAMPLE_TERM : rational(0n);
   const zoneRadius = add(q64(betaC), sampleTerm);
-  const built = uncertainZone(reference, zoneRadius, add(q64(reference.betaClip), sampleTerm));
+  const built = uncertainZone(reference, zoneRadius, zoneRadius);
   const noFlipZone = built.zone;
   // With a reference winding anomaly the interior at p* is not known: VZ4-A5 does not decide.
   const a5Open = field.windingAnomalies > 0;
