@@ -18,6 +18,7 @@
     { "path": "./packages/geometry-reference" },
     { "path": "./packages/geometry-wasm" },
     { "path": "./packages/model" },
+    { "path": "./packages/react" },
     { "path": "./packages/renderer-core" },
     { "path": "./packages/renderer-webgpu" },
     { "path": "./apps/playground" }

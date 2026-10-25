@@ -200,6 +200,8 @@ class EditorCore implements Editor {
   private reportTo: EditorEvent[] | null = null;
   private renderer: RendererSceneSynchronization | null = null;
   private holding = false;
+  private overlay: ToolOverlay | null = null;
+  private overlayKey = 'null';
   private extensionDepth = 0;
   private readonly ids: IdSource;
   private readonly extensions: ExtensionRegistry;
@@ -248,6 +250,7 @@ class EditorCore implements Editor {
     try {
       return this.run(command);
     } finally {
+      this.refreshOverlay();
       this.holding = false;
       this.flush();
     }
@@ -536,8 +539,19 @@ class EditorCore implements Editor {
     this.refresh({ type: 'session', field: 'selection' });
   }
 
+  /** Tool overlays change without a document change; hosts learn of it through the snapshot. */
+  private refreshOverlay(): void {
+    const overlay = this.tools.get(this.tool)?.overlay() ?? null;
+    const key = JSON.stringify(overlay);
+    if (key === this.overlayKey) return;
+    this.overlayKey = key;
+    this.overlay = overlay;
+    this.refresh({ type: 'session', field: 'overlay' });
+  }
+
   private buildSnapshot(): EditorSnapshot {
     return deepFreeze({
+      overlay: this.overlay,
       document: this.document,
       revision: this.revision,
       selection: this.selection,

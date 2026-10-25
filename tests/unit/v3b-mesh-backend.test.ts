@@ -670,7 +670,7 @@ describe('V4 host injection', () => {
     const files: string[] = [];
     const walk = (directory: string) => {
       for (const entry of readdirSync(directory)) {
-        if (entry === 'node_modules' || entry === 'dist') continue;
+        if (entry === 'node_modules' || entry === 'dist' || entry === '.next') continue;
         const path = join(directory, entry);
         if (statSync(path).isDirectory()) walk(path);
         else if (/\.(ts|tsx|js|mjs|html|json)$/.test(entry)) files.push(path);
@@ -688,9 +688,12 @@ describe('V4 host injection', () => {
         /[\\/]src[\\/]viz-v2-path-data\.ts$/.test(file) ||
         /[\\/]src[\\/]viz-v3-integration\.ts$/.test(file) ||
         /[\\/]src[\\/]viz-v4-a08-corpus\.ts$/.test(file) ||
-        /[\\/]playground[\\/](package|tsconfig)\.json$/.test(file),
+        /[\\/]playground[\\/](package|tsconfig)\.json$/.test(file) ||
+        // P5-U6: the Next.js host composes the V-1 renderer (P5 plan, P5-Q8).
+        /[\\/]next-host[\\/]src[\\/]webgpu-renderer\.ts$/.test(file) ||
+        /[\\/]next-host[\\/]package\.json$/.test(file),
     );
-    expect(host).toHaveLength(8);
+    expect(host).toHaveLength(10);
     // The V3-A14 smoke fixture page and the E10-U3 test-hooks check page are test fixtures with a
     // static test-double port, not hosts; they must not reach a real port (no geometry-wasm).
     const fixture = files.filter((file) => /(p3-v3-mesh|e10-test-hooks)\.(ts|html)$/.test(file));

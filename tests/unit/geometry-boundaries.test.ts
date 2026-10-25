@@ -37,12 +37,13 @@ describe('test-only geometry package boundary', () => {
     for (const [name, dependencies] of policy) {
       expect(dependencies.has('@vector-studio/geometry-reference'), name).toBe(false);
     }
-    // P3 V2 P-B1: among current packages only the playground host may use geometry-wasm.
+    // P3 V2 P-B1: among current packages only the host composition roots may use geometry-wasm:
+    // the playground and, from P5-U6, the Next.js host (ARCHITECTURE.md).
     expect(
       [...policy]
         .filter(([, dependencies]) => dependencies.has('@vector-studio/geometry-wasm'))
         .map(([name]) => name),
-    ).toEqual(['@vector-studio/playground']);
+    ).toEqual(['@vector-studio/playground', '@vector-studio/next-host']);
   });
 
   it('recognizes forbidden imports through relative paths and package subpaths', () => {

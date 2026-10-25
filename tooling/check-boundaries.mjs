@@ -1,4 +1,4 @@
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -31,12 +31,20 @@ async function collectTypeScriptFiles(directory) {
 
     if (entry.isDirectory()) {
       files.push(...(await collectTypeScriptFiles(entryPath)));
-    } else if (entry.isFile() && entry.name.endsWith('.ts')) {
+    } else if (entry.isFile() && /\.tsx?$/u.test(entry.name)) {
       files.push(entryPath);
     }
   }
 
   return files;
+}
+
+async function isDirectory(directory) {
+  try {
+    return (await stat(directory)).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 async function readSources(directory) {
@@ -58,7 +66,12 @@ for (const relativeDirectory of packageDirectories) {
     continue;
   }
 
-  const sources = await readSources(path.join(packageDirectory, 'src'));
+  // P5-U6: a Next.js app keeps its routes in app/ beside src/.
+  const sources = [];
+  for (const sourceDirectory of ['src', 'app']) {
+    const directory = path.join(packageDirectory, sourceDirectory);
+    if (await isDirectory(directory)) sources.push(...(await readSources(directory)));
+  }
   failures.push(...evaluatePackageBoundaries({ manifest, sources, packageRoots, displayPath }));
 
   const dependencyList = manifestInternalDependencies(manifest);

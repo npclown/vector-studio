@@ -7,6 +7,11 @@ export const boundaries = new Map([
   ['@vector-studio/model', new Set()],
   // P5-U2: the editor core reaches the renderer only through contracts (P5 plan, section 2).
   ['@vector-studio/editor-core', new Set(['@vector-studio/contracts', '@vector-studio/model'])],
+  // P5-U6: the React bindings reach the renderer only through contracts (P5 plan, section 2).
+  [
+    '@vector-studio/react',
+    new Set(['@vector-studio/contracts', '@vector-studio/editor-core', '@vector-studio/model']),
+  ],
   ['@vector-studio/geometry-reference', new Set(['@vector-studio/contracts'])],
   ['@vector-studio/geometry-wasm', new Set(['@vector-studio/contracts'])],
   ['@vector-studio/renderer-core', new Set(['@vector-studio/contracts'])],
@@ -25,6 +30,19 @@ export const boundaries = new Map([
       '@vector-studio/renderer-webgpu',
     ]),
   ],
+  [
+    // P5-U6: the Next.js host is a composition root, like the playground (ARCHITECTURE.md).
+    '@vector-studio/next-host',
+    new Set([
+      '@vector-studio/contracts',
+      '@vector-studio/editor-core',
+      '@vector-studio/geometry-wasm',
+      '@vector-studio/model',
+      '@vector-studio/react',
+      '@vector-studio/renderer-core',
+      '@vector-studio/renderer-webgpu',
+    ]),
+  ],
 ]);
 
 export const packageDirectories = [
@@ -33,8 +51,10 @@ export const packageDirectories = [
   'packages/geometry-reference',
   'packages/geometry-wasm',
   'packages/model',
+  'packages/react',
   'packages/renderer-core',
   'packages/renderer-webgpu',
+  'apps/next-host',
   'apps/playground',
 ];
 
