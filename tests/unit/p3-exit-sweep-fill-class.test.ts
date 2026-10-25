@@ -153,4 +153,30 @@ describe('E14-Q1 class test', () => {
       ],
     ]);
   });
+
+  it('refuses a path whose P2 flattening fails on its own caps', () => {
+    // A circle of radius 2^20 at e = -10 needs more than 8,192 lines per quarter.
+    const r = classifyFillRejection(circle(2 ** 20, -10), 'failed:work-limit');
+    expect(r.refused).toBe('lines per cubic limit');
+    expect(r.e14SelfCrossingOverE).toBe(false);
+  });
+
+  it('merges -0 and +0 as one point, as the kernel compares with ==', () => {
+    const contours = p2FillContours(
+      polygon([
+        [0, 1],
+        [-0, 1],
+        [1, 0],
+        [0, 0],
+      ]),
+    );
+    expect(contours[0]).toHaveLength(3);
+  });
+
+  it('decides subnormal orientations exactly', () => {
+    const t = 2 ** -1070;
+    expect(orient2dSign([0, 0], [4 * t, 0], [t, t])).toBe(1);
+    expect(orient2dSign([0, 0], [4 * t, 0], [t, -t])).toBe(-1);
+    expect(orient2dSign([0, 0], [4 * t, 0], [2 * t, 0])).toBe(0);
+  });
 });

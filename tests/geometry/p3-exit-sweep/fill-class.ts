@@ -6,9 +6,10 @@
 //
 // The polygon is the P2 flattening of the row, rebuilt here from the P2 rule (binary subdivision
 // of the cubic relative to its first point until the control points are within the tolerance of
-// the chord's third points, plus the P2 rounding guard; `geometry.rs` `visit`), not read from the
-// kernel. The crossing test uses its own exact predicate: a binary64 filter with Shewchuk's error
-// bound, then an exact BigInt determinant.
+// the chord's third points, plus the P2 rounding guard and work caps; `geometry.rs` `visit`), not
+// read from the kernel. Flatness uses a port of the musl/libm `hypot` that the release WASM links,
+// so the leaf test sees the same binary64 values. The crossing test uses its own exact predicate:
+// a binary64 filter with Shewchuk's error bound, then an exact BigInt determinant.
 
 import type { FillMeshRequest } from '../../../packages/contracts/src/geometry.js';
 
@@ -20,17 +21,22 @@ const LINE = 1;
 const CUBIC = 2;
 const CLOSE = 3;
 const P2_MAX_DEPTH = 20;
+const P2_MAX_LINES_PER_CUBIC = 8_192;
+const P2_MAX_VISITS_PER_PATH = 1_048_576;
+const P2_MAX_OUTPUT_VERBS_PER_PATH = 65_536;
 const EPSILON = Number.EPSILON;
 
 type Point = readonly [number, number];
 
-/** Why the mirror could not rebuild the polygon (the P2 sizing would fail the same way). */
+/** Why the mirror could not rebuild the polygon (P2's sizing fails the same way: no polygon). */
 export class FlattenRefused extends Error {}
 
 /**
  * The P2 flattening of a fill path at tolerance 2^e, as closed contours of points. Consecutive
- * bit-equal points are merged and a final point equal to the contour's first is dropped, so each
- * contour of n ≥ 2 points has n edges (its closing edge included); a single point has none.
+ * equal points (`==`, as the kernel's `same_point`) are merged and a final point equal to the
+ * contour's first is dropped, so each contour of n ≥ 2 points has n edges (its closing edge
+ * included); a single point has none. Merging is this test's reading: the kernel rejects a
+ * repeated cubic leaf (`ZeroLengthLeaf`) instead, and a zero-length edge cannot cross properly.
  */
 export function p2FillContours(
   request: Pick<FillMeshRequest, 'verbs' | 'points' | 'toleranceExponent'>,
@@ -41,6 +47,11 @@ export function p2FillContours(
   let contour: Point[] | null = null;
   let current: Point = [0, 0];
   let p = 0;
+  const work = { verbs: 0, visits: 0 };
+  const verb = () => {
+    if (work.verbs >= P2_MAX_OUTPUT_VERBS_PER_PATH) throw new FlattenRefused('output verb limit');
+    work.verbs += 1;
+  };
   const read = (): Point => {
     const q: Point = [points[p]!, points[p + 1]!];
     p += 2;
@@ -48,33 +59,35 @@ export function p2FillContours(
   };
   const push = (q: Point) => {
     const last = contour![contour!.length - 1]!;
-    if (!Object.is(last[0], q[0]) || !Object.is(last[1], q[1])) contour!.push(q);
+    if (last[0] !== q[0] || last[1] !== q[1]) contour!.push(q);
   };
   const finish = () => {
     if (contour === null) return;
     const first = contour[0]!;
     const last = contour[contour.length - 1]!;
-    if (contour.length > 1 && Object.is(first[0], last[0]) && Object.is(first[1], last[1]))
-      contour.pop();
+    if (contour.length > 1 && first[0] === last[0] && first[1] === last[1]) contour.pop();
     contours.push(contour);
     contour = null;
   };
-  for (const verb of verbs) {
-    if (verb === MOVE) {
+  for (const code of verbs) {
+    if (code === MOVE) {
       finish();
+      verb();
       current = read();
       contour = [current];
-    } else if (verb === LINE) {
+    } else if (code === LINE) {
+      verb();
       current = read();
       push(current);
-    } else if (verb === CUBIC) {
+    } else if (code === CUBIC) {
       const controls: [Point, Point, Point, Point] = [current, read(), read(), read()];
-      flattenCubic(controls, tolerance, push);
+      flattenCubic(controls, tolerance, work, verb, push);
       current = controls[3];
-    } else if (verb === CLOSE) {
+    } else if (code === CLOSE) {
+      verb();
       finish();
     } else {
-      throw new FlattenRefused(`unknown verb ${String(verb)}`);
+      throw new FlattenRefused(`unknown verb ${String(code)}`);
     }
   }
   finish();
@@ -84,8 +97,11 @@ export function p2FillContours(
 function flattenCubic(
   original: readonly [Point, Point, Point, Point],
   tolerance: number,
+  work: { visits: number },
+  verb: () => void,
   emit: (q: Point) => void,
 ): void {
+  let lines = 0;
   const [ox, oy] = original[0];
   const rel = original.map(([x, y]) => [x - ox, y - oy] as Point) as [Point, Point, Point, Point];
   const maxAbsOriginal = original.reduce((m, [x, y]) => Math.max(m, Math.abs(x), Math.abs(y)), 1);
@@ -94,6 +110,8 @@ function flattenCubic(
   if (!(guard(0) < tolerance)) throw new FlattenRefused('guard exceeds tolerance');
   const mid = (a: Point, b: Point): Point => [a[0] * 0.5 + b[0] * 0.5, a[1] * 0.5 + b[1] * 0.5];
   const visit = (q: readonly [Point, Point, Point, Point], depth: number): void => {
+    if (work.visits >= P2_MAX_VISITS_PER_PATH) throw new FlattenRefused('visit limit');
+    work.visits += 1;
     const g = guard(depth);
     if (!(g < tolerance)) throw new FlattenRefused('guard exceeds tolerance');
     const [p0, p1, p2, p3] = q;
@@ -102,11 +120,14 @@ function flattenCubic(
     const c2x = p0[0] + (2 * (p3[0] - p0[0])) / 3;
     const c2y = p0[1] + (2 * (p3[1] - p0[1])) / 3;
     const flatness = Math.max(
-      Math.hypot(p1[0] - c1x, p1[1] - c1y),
-      Math.hypot(p2[0] - c2x, p2[1] - c2y),
+      libmHypot(p1[0] - c1x, p1[1] - c1y),
+      libmHypot(p2[0] - c2x, p2[1] - c2y),
     );
     if (!Number.isFinite(flatness + g)) throw new FlattenRefused('non-finite flatness');
     if (flatness + g <= tolerance) {
+      if (lines >= P2_MAX_LINES_PER_CUBIC) throw new FlattenRefused('lines per cubic limit');
+      lines += 1;
+      verb();
       emit([ox + p3[0], oy + p3[1]]);
       return;
     }
@@ -123,9 +144,51 @@ function flattenCubic(
   visit(rel, 0);
 }
 
+/** musl's `hypot` (Rust's `libm` crate), which `f64::hypot` is on wasm32-unknown-unknown. */
+function libmHypot(a: number, b: number): number {
+  let x = Math.abs(a);
+  let y = Math.abs(b);
+  if (x < y || Number.isNaN(y)) [x, y] = [y, x];
+  if (y === Infinity) return y;
+  if (x === Infinity || Number.isNaN(x) || y === 0) return x;
+  if (exponentOf(x) - exponentOf(y) > 64) return x + y;
+  let z = 1;
+  if (exponentOf(x) > 0x3ff + 510) {
+    z = 2 ** 700;
+    x *= 2 ** -700;
+    y *= 2 ** -700;
+  } else if (exponentOf(y) < 0x3ff - 450) {
+    z = 2 ** -700;
+    x *= 2 ** 700;
+    y *= 2 ** 700;
+  }
+  const [hx, lx] = square(x);
+  const [hy, ly] = square(y);
+  return z * Math.sqrt(ly + lx + hy + hx);
+}
+
+const SPLIT = 2 ** 27 + 1;
+
+/** x² as an unevaluated sum hi + lo (Dekker's split), as musl's `sq`. */
+function square(x: number): [number, number] {
+  const xc = x * SPLIT;
+  const xh = x - xc + xc;
+  const xl = x - xh;
+  const hi = x * x;
+  return [hi, xh * xh - hi + 2 * xh * xl + xl * xl];
+}
+
+/** The biased binary64 exponent field of a non-negative finite number. */
+function exponentOf(x: number): number {
+  scratch.setFloat64(0, x);
+  return (scratch.getUint32(0) >>> 20) & 0x7ff;
+}
+
 // --- exact orient2d -------------------------------------------------------------------------------
 
 const ERR_BOUND_A = (3 + 16 * EPSILON) * EPSILON;
+/** Below this the filter's products may have underflowed and its bound no longer holds. */
+const FILTER_FLOOR = 2 ** -900;
 const scratch = new DataView(new ArrayBuffer(8));
 
 /** A finite binary64 as mantissa × 2^exponent, both exact. */
@@ -155,9 +218,12 @@ export function orient2dSign(a: Point, b: Point, c: Point): number {
   const left = (a[0] - c[0]) * (b[1] - c[1]);
   const right = (a[1] - c[1]) * (b[0] - c[0]);
   const det = left - right;
-  const bound = ERR_BOUND_A * (Math.abs(left) + Math.abs(right));
-  if (det > bound) return 1;
-  if (-det > bound) return -1;
+  const magnitude = Math.abs(left) + Math.abs(right);
+  if (magnitude >= FILTER_FLOOR && magnitude < Infinity) {
+    const bound = ERR_BOUND_A * magnitude;
+    if (det > bound) return 1;
+    if (-det > bound) return -1;
+  }
   return exactSign([a[0], a[1], b[0], b[1], c[0], c[1]]);
 }
 
