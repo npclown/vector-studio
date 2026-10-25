@@ -80,8 +80,48 @@ pub(crate) const MAX_BOUNDARY_RECORDS: usize = boundary_records(MAX_POINTS);
 pub(crate) const fn boundary_records(points: usize) -> usize {
     3 * (points + 2 * MAX_CONTOURS - 2)
 }
-/// Boundary half-edges plus both directions of every diagonal (FR7 face tracing).
-const MAX_HALF_EDGES: usize = MAX_POINTS + 2 * MAX_DIAGONALS;
+
+/// D9 E2 contract section 6 (E2-K3): the caps of one rung instance. The fill instance's are
+/// `FILL_CAPS`, section 3.4's values; the stroke instance has its own (`stroke_outline.rs`), so
+/// a fill-side cap change does not change stroke limits. Every array of the rung is sized from
+/// them, and a run on the fill instance is the run of the fixed-cap rung, value for value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct RungCaps {
+    pub(crate) points: usize,
+    pub(crate) edges: usize,
+    pub(crate) contours: usize,
+    pub(crate) sources: usize,
+}
+
+impl RungCaps {
+    /// `MAX_TRIANGLES` for these caps.
+    pub(crate) const fn triangles(self) -> usize {
+        self.points + 2 * self.contours - 2
+    }
+
+    /// `MAX_DIAGONALS` for these caps.
+    pub(crate) const fn diagonals(self) -> usize {
+        self.points + 3 * self.contours - 3
+    }
+
+    /// Boundary half-edges plus both directions of every diagonal (FR7 face tracing).
+    const fn half_edges(self) -> usize {
+        self.points + 2 * self.diagonals()
+    }
+
+    /// AL-FR9's boundary records: three per triangle.
+    pub(crate) const fn boundary_records(self) -> usize {
+        3 * self.triangles()
+    }
+}
+
+/// Section 3.4's caps, the fill instance's.
+pub(crate) const FILL_CAPS: RungCaps = RungCaps {
+    points: MAX_POINTS,
+    edges: MAX_EDGES,
+    contours: MAX_CONTOURS,
+    sources: MAX_SOURCES,
+};
 /// P2's deepest leaf (`geometry.rs` `MAX_DEPTH`, enforced by `validate_leaf_partitions`).
 const MAX_LEAF_DEPTH: u32 = 20;
 
@@ -220,6 +260,8 @@ pub(crate) enum LadderFault {
     /// E14-D4: the FR7 per-vertex diagonal index lists each vertex's half-edges in reverse
     /// order.
     DiagonalIndexReversed,
+    /// E2-D4: FR5 skipped (D9 E2 contract section 8).
+    ClearanceSkipped,
 }
 
 #[cfg(test)]
@@ -685,32 +727,34 @@ struct RungScratch {
 }
 
 impl RungScratch {
-    fn reserve() -> Result<Self, u32> {
+    fn reserve(caps: RungCaps) -> Result<Self, u32> {
+        let (points, diagonals, half_edges) = (caps.points, caps.diagonals(), caps.half_edges());
         Ok(Self {
-            boxes: reserved(EdgeBox::default(), MAX_EDGES)?,
-            edge_order: reserved((0, 0), MAX_EDGES)?,
-            edge_scratch: reserved((0, 0), MAX_EDGES)?,
+            boxes: reserved(EdgeBox::default(), caps.edges)?,
+            edge_order: reserved((0, 0), caps.edges)?,
+            edge_scratch: reserved((0, 0), caps.edges)?,
+            // Rows keep the fill instance's stride `EDGE_WORDS` (`caps.edges <= MAX_EDGES`).
             #[cfg(debug_assertions)]
-            marks: reserved(0, MAX_EDGES * EDGE_WORDS)?,
-            next: reserved(0, MAX_POINTS)?,
-            previous: reserved(0, MAX_POINTS)?,
-            order: reserved(0, MAX_POINTS)?,
-            order_scratch: reserved(0, MAX_POINTS)?,
-            rank: reserved(0, MAX_POINTS)?,
-            kind: reserved(VertexKind::RegularLeft, MAX_POINTS)?,
-            active: reserved(0, MAX_POINTS)?,
-            helper: reserved(0, MAX_POINTS)?,
-            diagonals: reserved((0, 0), MAX_DIAGONALS)?,
-            diagonal_start: reserved(0, MAX_POINTS + 1)?,
-            diagonal_halves: reserved(0, 2 * MAX_DIAGONALS)?,
-            visited: reserved(false, MAX_HALF_EDGES)?,
-            face: reserved(0, MAX_HALF_EDGES)?,
-            is_left: reserved(false, MAX_HALF_EDGES)?,
-            face_scratch: reserved(0, MAX_HALF_EDGES)?,
-            sorted: reserved(0, MAX_HALF_EDGES)?,
-            stack: reserved(0, MAX_HALF_EDGES)?,
-            check_next: reserved(0, MAX_POINTS)?,
-            seen: reserved(false, MAX_POINTS)?,
+            marks: reserved(0, caps.edges * EDGE_WORDS)?,
+            next: reserved(0, points)?,
+            previous: reserved(0, points)?,
+            order: reserved(0, points)?,
+            order_scratch: reserved(0, points)?,
+            rank: reserved(0, points)?,
+            kind: reserved(VertexKind::RegularLeft, points)?,
+            active: reserved(0, points)?,
+            helper: reserved(0, points)?,
+            diagonals: reserved((0, 0), diagonals)?,
+            diagonal_start: reserved(0, points + 1)?,
+            diagonal_halves: reserved(0, 2 * diagonals)?,
+            visited: reserved(false, half_edges)?,
+            face: reserved(0, half_edges)?,
+            is_left: reserved(false, half_edges)?,
+            face_scratch: reserved(0, half_edges)?,
+            sorted: reserved(0, half_edges)?,
+            stack: reserved(0, half_edges)?,
+            check_next: reserved(0, points)?,
+            seen: reserved(false, points)?,
         })
     }
 
@@ -742,25 +786,32 @@ impl RungScratch {
 
 /// The fast rung (contract section 3.1). Its arrays are fixed in size (section 3.4) and, since
 /// E14-K1 item 4, heap buffers reserved once by `FastRung::reserve`, inside `FillLadder`: at E0
-/// they no longer fit a WebAssembly stack frame.
+/// they no longer fit a WebAssembly stack frame. Since E2-K3 they are sized from the instance's
+/// `RungCaps`.
 pub(crate) struct FastRung {
+    caps: RungCaps,
     delta: f64,
     rule: LineFillRule,
     points: Vec<Point>,
     point_len: usize,
-    ranges: [ContourRange; MAX_CONTOURS],
+    ranges: Vec<ContourRange>,
     range_len: usize,
     owners: Vec<EdgeOwner>,
     owner_len: usize,
-    sources: [DecodedSource; MAX_SOURCES],
+    sources: Vec<DecodedSource>,
     source_len: usize,
-    contours: [ContourInfo; MAX_CONTOURS],
+    /// E2-K3: the FR1 source index of a ring load (`load_rings`): source `k` carries
+    /// `source_verb` k, and `last_source[c]` is contour c's last source. `false` for an S1
+    /// view, whose sources are searched as before.
+    indexed: bool,
+    last_source: Vec<usize>,
+    contours: Vec<ContourInfo>,
     pieces: Vec<Piece>,
     cert: Vec<CertEdge>,
     cert_len: usize,
-    orientation: [i32; MAX_CONTOURS],
-    boundary: [bool; MAX_CONTOURS],
-    reversed: [bool; MAX_CONTOURS],
+    orientation: Vec<i32>,
+    boundary: Vec<bool>,
+    reversed: Vec<bool>,
     vertices: Vec<Point>,
     vertex_len: usize,
     triangles: Vec<[u32; 3]>,
@@ -775,39 +826,67 @@ impl FastRung {
     /// Reserves the fast rung's storage and stage scratch on the heap, fallibly (E14-K1 item 4):
     /// the one constructor of production and tests. A refusal is `BATCH_ALLOCATION_FAILED`.
     pub(crate) fn reserve() -> Result<Self, u32> {
+        Self::reserve_with(FILL_CAPS)
+    }
+
+    /// E2-K3: a rung instance with its own caps. `caps.edges` may not exceed the fill
+    /// instance's (the debug FR5 bitset keeps its row stride); a larger value, or caps that
+    /// leave no polygon, is `BATCH_INTERNAL_ERROR`.
+    pub(crate) fn reserve_with(caps: RungCaps) -> Result<Self, u32> {
+        if caps.edges > MAX_EDGES
+            || caps.points < 3
+            || caps.contours == 0
+            || caps.points > u32::MAX as usize
+        {
+            return Err(BATCH_INTERNAL_ERROR);
+        }
         Ok(Self {
+            caps,
             delta: 0.0,
             rule: LineFillRule::Nonzero,
-            points: reserved(Point::default(), MAX_POINTS)?,
+            points: reserved(Point::default(), caps.points)?,
             point_len: 0,
-            ranges: [ContourRange::default(); MAX_CONTOURS],
+            ranges: reserved(ContourRange::default(), caps.contours)?,
             range_len: 0,
-            owners: reserved(EdgeOwner::ImplicitClosure { contour: 0 }, MAX_EDGES)?,
+            owners: reserved(EdgeOwner::ImplicitClosure { contour: 0 }, caps.edges)?,
             owner_len: 0,
-            sources: [DecodedSource::default(); MAX_SOURCES],
+            sources: reserved(DecodedSource::default(), caps.sources)?,
             source_len: 0,
-            contours: [ContourInfo::default(); MAX_CONTOURS],
-            pieces: reserved(Piece::Unset, MAX_EDGES)?,
-            cert: reserved(CertEdge::default(), MAX_EDGES)?,
+            indexed: false,
+            last_source: reserved(0, caps.contours)?,
+            contours: reserved(ContourInfo::default(), caps.contours)?,
+            pieces: reserved(Piece::Unset, caps.edges)?,
+            cert: reserved(CertEdge::default(), caps.edges)?,
             cert_len: 0,
-            orientation: [0; MAX_CONTOURS],
-            boundary: [false; MAX_CONTOURS],
-            reversed: [false; MAX_CONTOURS],
-            vertices: reserved(Point::default(), MAX_POINTS)?,
+            orientation: reserved(0, caps.contours)?,
+            boundary: reserved(false, caps.contours)?,
+            reversed: reserved(false, caps.contours)?,
+            vertices: reserved(Point::default(), caps.points)?,
             vertex_len: 0,
-            triangles: reserved([0; 3], MAX_TRIANGLES)?,
+            triangles: reserved([0; 3], caps.triangles())?,
             triangle_len: 0,
             published: false,
             stats: FastStats::default(),
             work: Work::new(),
-            scratch: RungScratch::reserve()?,
+            scratch: RungScratch::reserve(caps)?,
         })
+    }
+
+    pub(crate) fn caps(&self) -> RungCaps {
+        self.caps
     }
 
     /// The fast rung's bytes: the struct and every heap buffer (E14-G3).
     pub(crate) fn allocated_bytes(&self) -> usize {
         size_of::<Self>()
             + heap_bytes(&self.points)
+            + heap_bytes(&self.ranges)
+            + heap_bytes(&self.sources)
+            + heap_bytes(&self.last_source)
+            + heap_bytes(&self.contours)
+            + heap_bytes(&self.orientation)
+            + heap_bytes(&self.boundary)
+            + heap_bytes(&self.reversed)
             + heap_bytes(&self.owners)
             + heap_bytes(&self.pieces)
             + heap_bytes(&self.cert)
@@ -838,10 +917,10 @@ impl FastRung {
         self.reset();
         if view.points.is_empty()
             || view.ranges.is_empty()
-            || view.points.len() > MAX_POINTS
-            || view.ranges.len() > MAX_CONTOURS
-            || view.owners.len() > MAX_EDGES
-            || view.sources.len() > MAX_SOURCES
+            || view.points.len() > self.caps.points
+            || view.ranges.len() > self.caps.contours
+            || view.owners.len() > self.caps.edges
+            || view.sources.len() > self.caps.sources
         {
             self.point_len = 0;
             self.range_len = 0;
@@ -851,6 +930,7 @@ impl FastRung {
         }
         self.delta = delta;
         self.rule = rule;
+        self.indexed = false;
         self.point_len = view.points.len();
         self.points[..self.point_len].copy_from_slice(view.points);
         self.range_len = view.ranges.len();
@@ -860,6 +940,89 @@ impl FastRung {
         self.source_len = view.sources.len();
         self.sources[..self.source_len].copy_from_slice(view.sources);
         Ok(())
+    }
+
+    /// D9 E2 contract section 6 (E2-K3): loads closed rings as a line-only fill input, without
+    /// S1: ring `c` with points `p_0 .. p_(n-1)` is contour `c`, edge `i < n − 1` is owned by the
+    /// line source `[p_i, p_(i+1)]` and the last edge by the implicit closure `[p_(n-1), p_0]`,
+    /// as the S1 prefix gives a line-only subpath `M p_0 L p_1 .. L p_(n-1)` with an implicit
+    /// close. Every edge is its own source, so FR2 has nothing to bound. Sources carry their own
+    /// index as `source_verb`, which makes FR1's lookup indexed. Rings beyond the instance's caps
+    /// are `PREFIX`.
+    pub(crate) fn load_rings<'a, I>(
+        &mut self,
+        rings: I,
+        delta: f64,
+        rule: LineFillRule,
+    ) -> Result<(), Reason>
+    where
+        I: IntoIterator<Item = &'a [Point]>,
+    {
+        self.reset();
+        self.delta = delta;
+        self.rule = rule;
+        self.indexed = true;
+        self.point_len = 0;
+        self.range_len = 0;
+        self.owner_len = 0;
+        self.source_len = 0;
+        for ring in rings {
+            let contour = self.range_len;
+            if contour >= self.caps.contours
+                || ring.is_empty()
+                || self.point_len + ring.len() > self.caps.points
+                || self.owner_len + ring.len() > self.caps.edges
+                || self.source_len + ring.len() - 1 > self.caps.sources
+            {
+                self.point_len = 0;
+                self.range_len = 0;
+                self.owner_len = 0;
+                self.source_len = 0;
+                return Err(Reason::Prefix);
+            }
+            self.ranges[contour] = ContourRange {
+                start: self.point_len,
+                count: ring.len(),
+            };
+            self.points[self.point_len..self.point_len + ring.len()].copy_from_slice(ring);
+            self.point_len += ring.len();
+            for pair in ring.windows(2) {
+                let verb = u32::try_from(self.source_len).map_err(|_| Reason::Prefix)?;
+                self.sources[self.source_len] = DecodedSource::Line {
+                    points: [pair[0], pair[1]],
+                    source_verb: verb,
+                    contour,
+                };
+                self.owners[self.owner_len] = EdgeOwner::Line { source_verb: verb };
+                self.source_len += 1;
+                self.owner_len += 1;
+            }
+            if ring.len() >= 2 {
+                self.owners[self.owner_len] = EdgeOwner::ImplicitClosure { contour };
+                self.owner_len += 1;
+            }
+            // A one-point ring has no source; FR1 returns `STRUCTURE` for it.
+            self.last_source[contour] = self.source_len.wrapping_sub(1);
+            self.range_len += 1;
+        }
+        if self.range_len == 0 {
+            return Err(Reason::Prefix);
+        }
+        Ok(())
+    }
+
+    /// E2-K3: FR1 to FR8 and AL-FR9 on a ring load. FR2 runs only as the step that sets each
+    /// edge's controls: every edge is its own line source, so both of its deviations are zero
+    /// and it cannot fail (section 6's "FR2 is not run" bounds nothing more).
+    pub(crate) fn run_rings<S: BoundaryScan + ?Sized>(
+        &mut self,
+        scan: &mut S,
+    ) -> Result<(), Reason> {
+        if !self.indexed {
+            self.published = false;
+            return Err(Reason::Structure);
+        }
+        self.run(Stage::Fr9, scan)
     }
 
     /// Runs FR1 to `stop` in order, then AL-FR9 when `stop` is `Fr9`; the first unproved check
@@ -916,6 +1079,15 @@ impl FastRung {
     // FR1: structure (SL-C0; spike sections 3.3 and 3.6).
 
     fn source_end(&self, contour: usize) -> Option<Point> {
+        if self.indexed {
+            return self.sources[..self.source_len]
+                .get(self.last_source[contour])
+                .filter(|source| source.contour() == contour)
+                .map(|source| match *source {
+                    DecodedSource::Line { points, .. } => points[1],
+                    DecodedSource::Cubic { points, .. } => points[3],
+                });
+        }
         self.sources[..self.source_len]
             .iter()
             .rev()
@@ -936,6 +1108,21 @@ impl FastRung {
         m: Point,
     ) -> Result<Piece, Reason> {
         match owner {
+            // E2-K3: a ring load's source k carries source_verb k (`load_rings`).
+            EdgeOwner::Line { source_verb } if self.indexed => self.sources[..self.source_len]
+                .get(source_verb as usize)
+                .and_then(|source| match *source {
+                    DecodedSource::Line {
+                        points,
+                        source_verb: verb,
+                        contour: owner_contour,
+                    } if verb == source_verb && owner_contour == contour => Some(Piece::Segment {
+                        a: points[0],
+                        b: points[1],
+                    }),
+                    _ => None,
+                })
+                .ok_or(Reason::Structure),
             EdgeOwner::Line { source_verb } => self.sources[..self.source_len]
                 .iter()
                 .find_map(|source| match *source {
@@ -1285,9 +1472,12 @@ impl FastRung {
 
     /// FR5 (SL-C3): `clearance_edges` on the certified edges of P′.
     fn clearance(&mut self) -> Result<(), Reason> {
+        if fault(LadderFault::ClearanceSkipped) {
+            return Ok(());
+        }
         let result = clearance_edges(
             &self.cert[..self.cert_len],
-            &self.contours,
+            &self.contours[..self.range_len],
             self.delta,
             ClearanceScratch {
                 boxes: &mut self.scratch.boxes,
@@ -1525,10 +1715,11 @@ impl FastRung {
         let mut active_len = 0usize;
         helper[..count].fill(0);
         // At most n + 3h − 3k diagonals (section 3.4); a longer list overflows `MAX_DIAGONALS`.
-        diagonals[..(count + 3 * MAX_CONTOURS - 3).min(MAX_DIAGONALS)].fill((0, 0));
+        let caps = self.caps;
+        diagonals[..(count + 3 * caps.contours - 3).min(caps.diagonals())].fill((0, 0));
         let mut diagonal_len = 0usize;
         let mut add_diagonal = |a: usize, b: usize| -> Result<(), Reason> {
-            if diagonal_len >= MAX_DIAGONALS {
+            if diagonal_len >= caps.diagonals() {
                 return Err(Reason::Triangle);
             }
             diagonals[diagonal_len] = (a, b);
@@ -1633,7 +1824,7 @@ impl FastRung {
                     return Err(Reason::Triangle);
                 }
                 visited[half] = true;
-                if length >= MAX_HALF_EDGES {
+                if length >= caps.half_edges() {
                     return Err(Reason::Triangle);
                 }
                 face[length] = graph.origin(half);
@@ -1665,7 +1856,7 @@ impl FastRung {
             Reason::Triangle,
         )? != Ordering::Greater
             || fault(LadderFault::Fr7OrientationRejected)
-            || self.triangle_len >= MAX_TRIANGLES
+            || self.triangle_len >= self.caps.triangles()
         {
             return Err(Reason::Triangle);
         }

@@ -74,6 +74,12 @@ After E2-K1, a path runs the polygon stages of Alt-A1 rung 0 ([stages](p3-alt-a1
 - **What falls back.** Pieces that overlap make the contours non-simple or touching: the inner side of a corner join, round joins and round caps (the disk hull overlaps the band quad, and the seam is a chord of the disk), cusp disks, folded offsets, crossings of the path with itself, and seams whose `C` did not cancel. Those strokes stay on family A, as all strokes are today. In practice E2-K3 admits closed smooth rings and butt-capped open smooth subpaths; square caps cancel only when their seam polyline matches the band piece's (E2-K1 step 1).
 - **Instance.** A separate rung instance, so a fill-side cap change (E14) does not change stroke limits. `FastRung`'s storage is fixed at compile time from the fill caps (`fill_ladder.rs`: 4 contours, 256 edges, 64 sources), so E2-U3 makes the rung generic over its caps (const generics or a separate type) with the fill instance's outcomes and bytes unchanged (Alt-A1 §5.1, AL-I identity tests). The stroke instance's caps are 4,096 points and edges, 512 contours and 4,096 sources; its arrays live on the heap, reserved once by `stroke_v0_reserve` inside `STROKE_V0_HEAP_CAP`. The FR5 and FR7 stack locals sized by the caps (`boxes`, `order`, `scratch`, `next`, `previous`, `face` and the rest, and the debug FR5 mark array, about 2 MiB at 4,096 edges) move into workspace scratch; for the fill instance this is a storage change only, under Alt-A1 §5.1 outcome identity. FR1's source lookup, linear per edge today, must be indexed for the stroke instance so that E2-G2 can hold.
 
+Recorded 2026-10-25 (E2-U3, [record](../evidence/e2-u3-2026-10-25.md); recommended option, 추천안 자동 채택):
+
+- E2-K3 is implemented as written and loses no `ok`, but publishes no scene stroke. All 366 scene strokes it refuses with `MONOTONE` have self-crossing merged contours, so a segment-only FR4 would only move them to FR5's `CROSSING`; the section is not amended. Non-simple outlines (E2-R2 and "What falls back" above) need their own contract (rendering-track backlog item E15).
+- FR2 does run on the ring load, unlike the text above: on segments its control check is exactly zero, and AL-FR0 on `e − 2` keeps `δ²` normal, so it cannot refuse and only sets each edge's controls.
+- The fill caps quoted under "Instance" predate E14-U1: the fill instance has 8,192 points and edges, 4 contours and 64 sources (`FILL_CAPS`), unchanged by E2-U3.
+
 ## 7. Caps, identity and performance gate
 
 | Cap | Today | Under E2 |
