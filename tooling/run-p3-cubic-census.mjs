@@ -99,7 +99,12 @@ function environment() {
     CARGO_HOME: path.join(tools, 'rust/cargo'),
     RUSTUP_HOME: path.join(tools, 'rust/rustup'),
     CARGO_TARGET_DIR: path.join(tools, 'geometry-build'),
-    CARGO_ENCODED_RUSTFLAGS: ['--remap-path-prefix', `${root}=.`].join('\x1f'),
+    CARGO_ENCODED_RUSTFLAGS: [
+      '--remap-path-prefix',
+      `${root}=.`,
+      '--remap-path-prefix',
+      'src\\=src/',
+    ].join('\x1f'),
     TEMP: temporary,
     TMP: temporary,
     P2_NATIVE_RUSTUP: rustup,
