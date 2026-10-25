@@ -1,5 +1,5 @@
-import { validateNode, type DocumentV1, type JsonValue, type NodeV1 } from '@vector-studio/model';
-import type { CustomFailure } from './extensions.js';
+import { validateNode, type DocumentV1, type NodeV1 } from '@vector-studio/model';
+import type { CustomDefaults, CustomFailure } from './extensions.js';
 import type { CommandResult, DocumentCommand, EditorErrorCode, IdSource } from './types.js';
 
 // Pure document edits: each takes a valid document and returns a new valid document, or a
@@ -29,13 +29,13 @@ export const DEFAULT_PATH_STROKE = deepFreeze({
 /** The extension checks edits need (an `ExtensionRegistry`). */
 export type CustomRules = Readonly<{
   check(node: NodeV1): CustomFailure | null;
-  defaults(customType: string): JsonValue | undefined;
+  defaults(customType: string): CustomDefaults;
 }>;
 
 const NO_CUSTOM: CustomRules = {
   check: (node) =>
     node.type === 'custom' ? { code: 'document.unknown-custom-type', path: '/customType' } : null,
-  defaults: () => undefined,
+  defaults: () => ({ code: 'document.unknown-custom-type', path: '/customType' }),
 };
 
 const ID_ATTEMPTS = 1000;
@@ -61,8 +61,9 @@ function checked(
   custom: CustomRules,
 ): NodeV1 | Extract<CommandResult, { ok: false }> {
   const result = validateNode(value);
-  const failure = result.ok ? custom.check(result.node) : result;
-  if (failure === null && result.ok) return deepFreeze(result.node);
+  // Frozen before the extension sees it, so `validate` cannot change what is stored.
+  const failure = result.ok ? custom.check(deepFreeze(result.node)) : result;
+  if (failure === null && result.ok) return result.node;
   return fail(
     failure!.code,
     `/nodes/${id.replaceAll('~', '~0').replaceAll('/', '~1')}${failure!.path}`,
@@ -175,8 +176,12 @@ export function applyEdit(
           stroke: command.stroke ?? null,
         };
       } else if (command.type === 'createCustomNode') {
-        const data = command.data ?? custom.defaults(command.customType);
-        if (data === undefined) return fail('document.unknown-custom-type', '/customType');
+        let data = command.data;
+        if (data === undefined) {
+          const defaults = custom.defaults(command.customType);
+          if ('code' in defaults) return fail(defaults.code, defaults.path);
+          data = defaults.data;
+        }
         candidate = {
           id: PENDING_ID,
           name: command.name ?? command.customType,
@@ -216,7 +221,7 @@ export function applyEdit(
       }
       const result = validateNode(candidate);
       if (!result.ok) return fail(result.code, result.path);
-      const rejected = custom.check(result.node);
+      const rejected = custom.check(deepFreeze(result.node));
       if (rejected !== null) return fail(rejected.code, rejected.path);
       const id = freshId(document, ids);
       if (id === null) return fail('editor.duplicate-id');

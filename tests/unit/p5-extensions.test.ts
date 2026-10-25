@@ -111,6 +111,64 @@ describe('P5-A10 ext.star through the public API', () => {
     expect(target.query({ type: 'history' })).toEqual(history);
   });
 
+  it('a validate that mutates or freezes its data cannot change what is stored', () => {
+    const type = starExtension.nodeTypes![0]!;
+    const mutating = {
+      ...type,
+      validate: (data: unknown) => {
+        try {
+          (data as { points: number }).points = Infinity;
+        } catch {
+          // Frozen, as it should be.
+        }
+        return type.validate(data as never);
+      },
+    };
+    const target = editor([{ id: 'ext.star', nodeTypes: [mutating] }]);
+    const [id] = ok(target, { type: 'createCustomNode', customType: 'ext.star', frame });
+    expect(target.query({ type: 'node', id: id! })).toMatchObject({ data: { points: 5 } });
+
+    const loose: Extension = {
+      id: 'ext.list',
+      nodeTypes: [
+        {
+          customType: 'ext.list',
+          validate: (data) => {
+            Object.freeze(data);
+            return true;
+          },
+          defaults: () => ({ list: [1, 2] }),
+          toScene: () => ({ verbs: [], points: [], fillRule: 'nonzero' }),
+        },
+      ],
+    };
+    const other = editor([loose]);
+    const [listId] = ok(other, { type: 'createCustomNode', customType: 'ext.list', frame });
+    const node = other.query({ type: 'node', id: listId! });
+    expect(Object.isFrozen((node as unknown as { data: { list: number[] } }).data.list)).toBe(true);
+  });
+
+  it('createCustomNode treats data null as data, and contains a failing defaults()', () => {
+    const target = editor();
+    expect(
+      target.execute({ type: 'createCustomNode', customType: 'ext.star', frame, data: null }),
+    ).toEqual({ ok: false, code: 'document.invalid-custom-data', path: '/data' });
+    for (const defaults of [
+      () => {
+        throw new Error('boom');
+      },
+      () => undefined as never,
+    ]) {
+      const type = { ...starExtension.nodeTypes![0]!, defaults };
+      const broken = editor([{ id: 'ext.star', nodeTypes: [type] }]);
+      expect(broken.execute({ type: 'createCustomNode', customType: 'ext.star', frame })).toEqual({
+        ok: false,
+        code: 'document.invalid-custom-data',
+        path: '/data',
+      });
+    }
+  });
+
   it('createCustomNode uses the defaults, and rejects an unknown type', () => {
     const target = editor();
     const [id] = ok(target, { type: 'createCustomNode', customType: 'ext.star', frame });
@@ -186,10 +244,113 @@ describe('P5-A10 ext.star through the public API', () => {
       [{ id: 'ext.other', nodeTypes: [type] }],
       [{ id: 'ext', nodeTypes: [type, type] }],
       [{ id: 'ext.x', commands: [{ id: 'ext.y.run', run: () => ({ ok: true, ids: [] }) }] }],
+      [null as never],
+      [{ id: 'ext.x', nodeTypes: [{ ...type, customType: 'ext.x', toScene: undefined as never }] }],
+      [{ id: 'ext.x', commands: [{ id: 'ext.x.run' } as never] }],
+      // Nested extension IDs would give one ID two owners.
+      [starExtension, { id: 'ext' }],
+      [{ id: 'ext' }, starExtension],
     ];
     for (const extensions of cases) expect(() => editor(extensions)).toThrow(/createEditor/u);
     // An extension ID may own types and commands below it.
     expect(() => editor([{ id: 'ext', nodeTypes: [type] }])).not.toThrow();
+  });
+
+  it('keeps its own copy of a registration', () => {
+    const type = { ...starExtension.nodeTypes![0]! };
+    const target = editor([{ id: 'ext.star', nodeTypes: [type] }]);
+    type.validate = () => true;
+    expect(
+      target.execute({
+        type: 'createCustomNode',
+        customType: 'ext.star',
+        frame,
+        data: { points: 99, innerRatio: 0.5 },
+      }),
+    ).toMatchObject({ ok: false, code: 'document.invalid-custom-data' });
+  });
+
+  it('contains a throwing, malformed or runaway extension command', async () => {
+    const errors: unknown[] = [];
+    const onError = (error: unknown) => errors.push(error);
+    process.on('unhandledRejection', onError);
+    try {
+      const bad: Extension = {
+        id: 'ext.bad',
+        commands: [
+          {
+            id: 'ext.bad.throw',
+            run: (_args, api) => {
+              api.execute({ type: 'createRectangle', frame });
+              throw new Error('boom');
+            },
+          },
+          { id: 'ext.bad.undefined', run: () => undefined as never },
+          {
+            id: 'ext.bad.loop',
+            run: (_args, api) => api.execute({ type: 'runCommand', id: 'ext.bad.loop' }),
+          },
+        ],
+      };
+      const target = editor([bad]);
+      expect(target.execute({ type: 'runCommand', id: 'ext.bad.throw' })).toEqual({
+        ok: false,
+        code: 'editor.extension-failed',
+      });
+      // What it composed before the throw stays, and the editor keeps working.
+      expect(target.query({ type: 'document' }).pages[0].children).toHaveLength(1);
+      expect(target.execute({ type: 'runCommand', id: 'ext.bad.undefined' })).toEqual({
+        ok: false,
+        code: 'editor.extension-failed',
+      });
+      expect(target.execute({ type: 'runCommand', id: 'ext.bad.loop' })).toEqual({
+        ok: false,
+        code: 'editor.extension-failed',
+      });
+      ok(target, { type: 'createRectangle', frame });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(errors).toHaveLength(1);
+    } finally {
+      process.off('unhandledRejection', onError);
+    }
+  });
+
+  it('a custom node moves and resizes like any other, and runCommand ends a drag', () => {
+    const target = editor();
+    const id = star(target);
+    ok(target, { type: 'setNodeProps', id, props: { fill: { r: 1, g: 0.8, b: 0, a: 1 } } });
+    ok(target, {
+      type: 'setFrames',
+      frames: [{ id, frame: { x: 0, y: 0, width: 50, height: 80 } }],
+    });
+    expect(target.query({ type: 'node', id })?.frame).toEqual({
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 80,
+    });
+    // A drag through the star's middle moves it.
+    for (const [kind, x, y] of [
+      ['pointerdown', 25, 40],
+      ['pointermove', 35, 50],
+      ['pointerup', 45, 60],
+    ] as const) {
+      ok(target, { type: 'input', event: { kind, point: { x, y }, modifiers: none } });
+    }
+    expect(target.query({ type: 'node', id })?.frame).toMatchObject({ x: 20, y: 20 });
+    // A drag in progress is cancelled by an extension command, which is its own step.
+    const depth = target.query({ type: 'history' }).undoDepth;
+    ok(target, {
+      type: 'input',
+      event: { kind: 'pointerdown', point: { x: 45, y: 60 }, modifiers: none },
+    });
+    ok(target, {
+      type: 'input',
+      event: { kind: 'pointermove', point: { x: 90, y: 90 }, modifiers: none },
+    });
+    star(target);
+    expect(target.query({ type: 'node', id })?.frame).toMatchObject({ x: 20, y: 20 });
+    expect(target.query({ type: 'history' }).undoDepth).toBe(depth + 1);
   });
 });
 
@@ -269,13 +430,30 @@ describe('P5-U5 custom geometry', () => {
       },
       () => ({ verbs: ['move', 'line'], points: [0, 0], fillRule: 'nonzero' }) as never,
       () => ({ verbs: ['move'], points: [Number.NaN, 0], fillRule: 'nonzero' }) as never,
+      // The renderer's path grammar: a `move` opens every subpath.
+      () =>
+        ({
+          verbs: ['move', 'line', 'line', 'close', 'line'],
+          points: [0, 0, 100, 0, 100, 100, 50, 50],
+          fillRule: 'nonzero',
+        }) as never,
+      () =>
+        ({
+          verbs: ['line', 'line', 'line', 'close'],
+          points: [0, 0, 100, 0, 100, 100],
+          fillRule: 'nonzero',
+        }) as never,
+      () => ({ verbs: [], points: [], fillRule: 'nonzero' }) as never,
     ]) {
       const type = { ...starExtension.nodeTypes![0]!, toScene };
       const target = editor([{ id: 'ext.star', nodeTypes: [type] }]);
       const [id] = ok(target, { type: 'createCustomNode', customType: 'ext.star', frame });
       const renderer = new RecordingRenderer();
+      const events: EditorEvent[] = [];
+      target.subscribe((event) => events.push(event));
       target.attachRenderer(renderer);
       expect(renderer.mirror.readRetainedScene()!.getNode(id!)).toBeUndefined();
+      expect(events.filter((event) => event.type === 'diagnostic')).toEqual([]);
       click(target, 150, 150);
       expect(target.query({ type: 'selection' })).toEqual([]);
     }

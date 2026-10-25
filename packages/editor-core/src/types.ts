@@ -119,7 +119,8 @@ export type EditorErrorCode =
   | 'editor.nothing-to-undo'
   | 'editor.nothing-to-redo'
   | 'editor.invalid-camera'
-  | 'editor.unknown-command';
+  | 'editor.unknown-command'
+  | 'editor.extension-failed';
 
 export type CommandResult =
   | Readonly<{ ok: true; ids: readonly string[] }>

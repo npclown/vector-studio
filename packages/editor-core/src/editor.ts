@@ -82,6 +82,18 @@ const DOCUMENT_COMMANDS = new Set([
   'deleteNodes',
 ]);
 
+/** Extension commands may nest this deep through `runCommand` (P5-U5). */
+const MAX_EXTENSION_DEPTH = 16;
+
+function isCommandResult(value: unknown): value is CommandResult {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  if (record.ok === true) {
+    return Array.isArray(record.ids) && record.ids.every((id) => typeof id === 'string');
+  }
+  return record.ok === false && typeof record.code === 'string';
+}
+
 type CommandFailure = Extract<CommandResult, { ok: false }> & Readonly<{ path: string }>;
 
 function failure(code: EditorErrorCode, path?: string): CommandResult {
@@ -162,6 +174,7 @@ class EditorCore implements Editor {
   private reportTo: EditorEvent[] | null = null;
   private renderer: RendererSceneSynchronization | null = null;
   private holding = false;
+  private extensionDepth = 0;
   private readonly ids: IdSource;
   private readonly extensions: ExtensionRegistry;
   readonly tools = new Map<ToolName, Tool>();
@@ -303,8 +316,22 @@ class EditorCore implements Editor {
         const extension =
           typeof command.id === 'string' ? this.extensions.command(command.id) : undefined;
         if (extension === undefined) return failure('editor.unknown-command');
-        // The extension composes public commands; events stay held until it returns.
-        return extension.run(command.args, this.api);
+        if (this.extensionDepth >= MAX_EXTENSION_DEPTH) return failure('editor.extension-failed');
+        // The extension composes public commands; events stay held until it returns. A throw
+        // or a malformed result is the extension's defect: the commands it already ran stay,
+        // and the error is rethrown asynchronously, as for listeners.
+        this.extensionDepth += 1;
+        try {
+          const result: unknown = extension.run(command.args, this.api);
+          return isCommandResult(result) ? result : failure('editor.extension-failed');
+        } catch (error) {
+          void Promise.resolve().then(() => {
+            throw error;
+          });
+          return failure('editor.extension-failed');
+        } finally {
+          this.extensionDepth -= 1;
+        }
       }
       default:
         return failure('editor.invalid-command', '/type');
@@ -315,7 +342,8 @@ class EditorCore implements Editor {
   private validate(value: unknown): ReturnType<typeof validateDocument> | CommandFailure {
     const result = validateDocument(value);
     if (!result.ok) return result;
-    const rejected = this.extensions.checkDocument(result.document);
+    // Frozen before any extension sees it, so `validate` cannot change what is stored.
+    const rejected = this.extensions.checkDocument(deepFreeze(result.document));
     return rejected === null ? result : { ok: false, ...rejected };
   }
 

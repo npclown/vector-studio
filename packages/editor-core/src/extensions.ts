@@ -13,11 +13,30 @@ export type CustomFailure = Readonly<{
 const VERBS = new Set(['move', 'line', 'cubic', 'close']);
 const POINTS_PER_VERB: Readonly<Record<string, number>> = { move: 2, line: 2, cubic: 6, close: 0 };
 
+/** Data for a new custom node, or why there is none. */
+export type CustomDefaults = Readonly<{ data: JsonValue }> | CustomFailure;
+
+/** The P2 v1 path grammar of the renderer: `move` opens a subpath, `line` and `cubic` need one. */
+function hasPathGrammar(verbs: readonly string[]): boolean {
+  let open = false;
+  for (const verb of verbs) {
+    if (verb === 'move') open = true;
+    else if (verb === 'close') {
+      if (!open) return false;
+      open = false;
+    } else if (!open) return false;
+  }
+  return true;
+}
+
 function owned(extension: string, id: unknown): boolean {
   return typeof id === 'string' && (id === extension || id.startsWith(`${extension}.`));
 }
 
-/** Plain path data from an extension's `toScene` output, or null when it is not well formed. */
+/**
+ * Plain path data from an extension's `toScene` output, or null when it is empty or not well
+ * formed by the renderer's rules, so a node is either drawn and hittable or neither.
+ */
 function pathData(value: unknown): PathData | null {
   if (typeof value !== 'object' || value === null) return null;
   const { verbs, points, fillRule } = value as Record<string, unknown>;
@@ -28,7 +47,8 @@ function pathData(value: unknown): PathData | null {
     if (typeof verb !== 'string' || !VERBS.has(verb)) return null;
     expected += POINTS_PER_VERB[verb]!;
   }
-  if (points.length !== expected) return null;
+  if (points.length !== expected || verbs.length === 0) return null;
+  if (!hasPathGrammar(verbs as string[])) return null;
   const copy: number[] = [];
   for (let i = 0; i < points.length; i += 1) {
     const point: unknown = points[i];
@@ -46,33 +66,72 @@ export class ExtensionRegistry {
   private readonly types = new Map<string, CustomNodeType>();
   private readonly commands = new Map<string, ExtensionCommand>();
 
-  /** Throws on a malformed or conflicting registration: that is a host programming error. */
+  /**
+   * Throws on a malformed or conflicting registration: that is a host programming error. The
+   * registry keeps its own frozen copies, so later changes to the host's objects have no effect.
+   */
   constructor(extensions: readonly Extension[]) {
-    const ids = new Set<string>();
-    for (const extension of extensions) {
-      const { id } = extension;
-      if (typeof id !== 'string' || id.length === 0 || ids.has(id)) {
-        throw new Error(`createEditor: invalid or duplicate extension id ${String(id)}`);
+    const ids: string[] = [];
+    const reject = (what: string): never => {
+      throw new Error(`createEditor: ${what}`);
+    };
+    for (const extension of extensions as readonly unknown[]) {
+      if (typeof extension !== 'object' || extension === null)
+        reject('an extension is not an object');
+      const { id, nodeTypes = [], commands = [] } = extension as Extension;
+      if (typeof id !== 'string' || id.length === 0) reject(`invalid extension id ${String(id)}`);
+      // One extension may not own another's namespace, so every ID has exactly one owner.
+      if (ids.some((other) => owned(other, id) || owned(id, other))) {
+        reject(`extension id ${id} overlaps another extension`);
       }
-      ids.add(id);
-      for (const type of extension.nodeTypes ?? []) {
-        if (!owned(id, type.customType) || this.types.has(type.customType)) {
-          throw new Error(`createEditor: ${id} cannot register custom type ${type.customType}`);
-        }
-        this.types.set(type.customType, type);
+      ids.push(id);
+      if (!Array.isArray(nodeTypes) || !Array.isArray(commands)) {
+        reject(`${id} has malformed nodeTypes or commands`);
       }
-      for (const command of extension.commands ?? []) {
-        if (!owned(id, command.id) || this.commands.has(command.id)) {
-          throw new Error(`createEditor: ${id} cannot register command ${command.id}`);
+      for (const type of nodeTypes as readonly unknown[]) {
+        const entry = type as Partial<CustomNodeType> | null;
+        if (
+          typeof entry !== 'object' ||
+          entry === null ||
+          !owned(id, entry.customType) ||
+          this.types.has(entry.customType!) ||
+          typeof entry.validate !== 'function' ||
+          typeof entry.defaults !== 'function' ||
+          typeof entry.toScene !== 'function'
+        ) {
+          reject(`${id} cannot register custom type ${String(entry?.customType)}`);
         }
-        this.commands.set(command.id, command);
+        const { customType, validate, defaults, toScene } = entry as CustomNodeType;
+        this.types.set(customType, Object.freeze({ customType, validate, defaults, toScene }));
+      }
+      for (const command of commands as readonly unknown[]) {
+        const entry = command as Partial<ExtensionCommand> | null;
+        if (
+          typeof entry !== 'object' ||
+          entry === null ||
+          !owned(id, entry.id) ||
+          this.commands.has(entry.id!) ||
+          typeof entry.run !== 'function'
+        ) {
+          reject(`${id} cannot register command ${String(entry?.id)}`);
+        }
+        const { id: commandId, run } = entry as ExtensionCommand;
+        this.commands.set(commandId, Object.freeze({ id: commandId, run }));
       }
     }
   }
 
-  /** The default data of a registered custom type, or undefined for an unknown one. */
-  defaults(customType: string): JsonValue | undefined {
-    return this.types.get(customType)?.defaults();
+  /** The default data of a custom type; a throw or an `undefined` result is invalid data. */
+  defaults(customType: string): CustomDefaults {
+    const type = this.types.get(customType);
+    if (type === undefined) return { code: 'document.unknown-custom-type', path: '/customType' };
+    let data: JsonValue | undefined;
+    try {
+      data = type.defaults();
+    } catch {
+      data = undefined;
+    }
+    return data === undefined ? { code: 'document.invalid-custom-data', path: '/data' } : { data };
   }
 
   /** Checks a custom node against its extension; other nodes always pass. */
