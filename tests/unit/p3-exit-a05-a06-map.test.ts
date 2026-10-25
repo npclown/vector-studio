@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
 import {
   checkMap,
   evaluate,
+  findSnapshotRecord,
+  identityMismatches,
   parseCargoTests,
   renderMarkdown,
   vitestTests,
@@ -63,8 +65,8 @@ describe('p3-exit A05/A06 map', () => {
       'V3-A5 (buckets)',
       'V3-A6',
       'V3-A7',
-      'B2 section 9.3 (stroke key, memo, reuse)',
-      'V-3 port-call deltas (VZ3-A4, A5, A6, A10)',
+      'B2 section 9.3 (stroke key, shared cache and memo, reuse)',
+      'V-3 port-call deltas (VZ3-A4, A5, A6, A10, A11, A12)',
     ]);
   });
 
@@ -202,5 +204,50 @@ describe('p3-exit A05/A06 evaluation', () => {
     expect(text).toContain(
       '| A05 | u | required | unit | 0 | FAIL: no test selected; no test titled "C01..."; no test titled "C02..." |',
     );
+  });
+
+  it('finds no snapshot record in the current E11 contract, whose defining sentence does not count', () => {
+    const contract = read('docs/plans/d9-e11-p3-c03-c05-closure-contract.md');
+    expect(contract).toContain('**Exit snapshot record**');
+    expect(findSnapshotRecord(contract, 'abcdef1').error).toMatch(/no dated/u);
+  });
+
+  it('finds a dated record by its commit and checks the identities against its block', () => {
+    const contract = [
+      '## 3.2',
+      'A dated "**Exit snapshot record**" line is appended.',
+      '- **Exit snapshot record** 2026-11-01, commit `abcdef1234567890`:',
+      '  `geometry-wasm/fill-v0+r3`, `geometry-wasm/stroke-v0+r7`, WASM `AA11`',
+      '## 4',
+      'geometry-wasm/stroke-v0+r6',
+    ].join('\n');
+    expect(findSnapshotRecord(contract, 'abcdef2').error).toBeDefined();
+    const { block } = findSnapshotRecord(contract, 'abcdef1');
+    expect(block).toContain('stroke-v0+r7');
+    expect(block).not.toContain('## 4');
+    const identities = {
+      'Fill operation': 'geometry-wasm/fill-v0+r3',
+      'Stroke operation': 'geometry-wasm/stroke-v0+r6',
+      'Release WASM SHA-256': 'aa11',
+    };
+    expect(identityMismatches(block!, identities)).toEqual([
+      'Stroke operation geometry-wasm/stroke-v0+r6 is not in the snapshot record',
+    ]);
+  });
+
+  it('strips a Windows root whose drive letter differs in case', () => {
+    expect(
+      vitestTests(
+        {
+          testResults: [
+            {
+              name: 'd:/GIT/repo/tests/unit/f.test.ts',
+              assertionResults: [{ title: 't', fullName: 't', status: 'passed' }],
+            },
+          ],
+        },
+        'D:\\GIT\\repo',
+      )[0]!.file,
+    ).toBe('tests/unit/f.test.ts');
   });
 });

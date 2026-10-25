@@ -24,6 +24,8 @@ import { fileURLToPath } from 'node:url';
 import {
   checkMap,
   evaluate,
+  findSnapshotRecord,
+  identityMismatches,
   parseCargoTests,
   renderMarkdown,
   vitestTests,
@@ -55,11 +57,12 @@ const commit = git('rev-parse', 'HEAD');
 const dirty = git('status', '--porcelain') !== '';
 if (label !== 'PRE-FREEZE') {
   if (dirty) throw new Error('a snapshot-labelled run needs a clean tree (E11 section 3.2)');
-  if (
-    !read('docs/plans/d9-e11-p3-c03-c05-closure-contract.md').includes('**Exit snapshot record**')
-  )
-    throw new Error('refusing a snapshot label: E11 has no "**Exit snapshot record**" line yet');
 }
+const snapshot =
+  label === 'PRE-FREEZE'
+    ? undefined
+    : findSnapshotRecord(read('docs/plans/d9-e11-p3-c03-c05-closure-contract.md'), label);
+if (snapshot?.error) throw new Error(`refusing --label ${label}: ${snapshot.error}`);
 
 const wasm = path.resolve(
   value('--wasm') ??
@@ -187,6 +190,11 @@ const provenance = {
     OS: `${os.type()} ${os.release()} ${os.arch()}`,
   },
 };
+if (snapshot) {
+  const mismatches = identityMismatches(snapshot.block, provenance.identities);
+  if (mismatches.length > 0)
+    throw new Error(`refusing --label ${label}: ${mismatches.join('; ')} (E11 section 3.2)`);
+}
 const evaluation = evaluate(map, results);
 writeFileSync(
   path.join(out, 'result.json'),

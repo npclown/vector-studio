@@ -209,7 +209,7 @@
         "each": ["V3-A7:"]
       },
       {
-        "id": "B2 section 9.3 (stroke key, memo, reuse)",
+        "id": "B2 section 9.3 (stroke key, shared cache and memo, reuse)",
         "source": "docs/plans/p3-b2-stroke-contract.md",
         "kind": "required",
         "runner": "unit",
@@ -219,7 +219,11 @@
           "ST-A10: a change of any stroke key field makes that paint miss; the fill key is untouched",
           "ST-A10: a stroke operationId change rebuilds every drawn stroke once and no fill",
           "ST-A10: a stroke bucket e < -1020 is tolerance-range for the stroke paint, while the fill at e = -1021 passes the tolerance check",
-          "ST-A10: the reuse rule applies per node and paint: a stroke built at e serves e + 1 and e + 2"
+          "ST-A10: the reuse rule applies per node and paint: a stroke built at e serves e + 1 and e + 2",
+          "ST-A10: a stroke portVersion change hides each stroked path (fill too), notifies with paint null, and calls nothing",
+          "ST-A10 (ST-A0 S5): a failing stroke hides the path including its fill; other nodes draw; the fill mesh stays cached",
+          "ST-A10 (B1): a failed fill with an ok stroke makes no further call under budget pressure",
+          "ST-A10 (B1): a failed stroke with an ok fill makes no further call under budget pressure"
         ]
       },
       {
@@ -233,7 +237,7 @@
         ]
       },
       {
-        "id": "V-3 port-call deltas (VZ3-A4, A5, A6, A10)",
+        "id": "V-3 port-call deltas (VZ3-A4, A5, A6, A10, A11, A12)",
         "source": "docs/plans/viz-v3-a07-integration-contract.md",
         "kind": "headed",
         "runner": "headed",

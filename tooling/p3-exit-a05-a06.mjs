@@ -63,11 +63,14 @@ export function parseCargoTests(stdout) {
 
 /** Flattens a Vitest JSON report into { file, title, fullName, status } with repo-relative files. */
 export function vitestTests(report, root) {
-  const normalize = (file) =>
-    file
-      .replaceAll('\\', '/')
-      .replace(`${root.replaceAll('\\', '/')}/`, '')
-      .replace(/^\/+/u, '');
+  const base = `${root.replaceAll('\\', '/').replace(/\/+$/u, '')}/`;
+  // Windows drive letters and paths compare without case.
+  const normalize = (file) => {
+    const slashed = file.replaceAll('\\', '/');
+    return slashed.toLowerCase().startsWith(base.toLowerCase())
+      ? slashed.slice(base.length)
+      : slashed;
+  };
   return report.testResults.flatMap((fileResult) =>
     fileResult.assertionResults.map((test) => ({
       file: normalize(fileResult.name),
@@ -76,6 +79,35 @@ export function vitestTests(report, root) {
       status: test.status,
     })),
   );
+}
+
+/**
+ * Finds the E11 exit snapshot record whose commit starts with `label` (E11 section 3.2): a line
+ * with "**Exit snapshot record**", a date and that commit, together with the lines after it up to
+ * the next heading or record. The sentence that defines the record carries no date and no commit,
+ * so it never matches. Returns the record block, or the reason there is none.
+ */
+export function findSnapshotRecord(contract, label) {
+  const lines = contract.split(/\r?\n/u);
+  const marker = '**Exit snapshot record**';
+  const start = lines.findIndex(
+    (line) =>
+      line.includes(marker) &&
+      /\b20\d\d-\d\d-\d\d\b/u.test(line) &&
+      [...line.matchAll(/\b[0-9a-f]{7,40}\b/gu)].some((m) => m[0].startsWith(label)),
+  );
+  if (start < 0)
+    return { error: `E11 has no dated "${marker}" line naming commit ${label} (section 3.2)` };
+  let end = start + 1;
+  while (end < lines.length && !lines[end].startsWith('#') && !lines[end].includes(marker)) end++;
+  return { block: lines.slice(start, end).join('\n') };
+}
+
+/** Lists the run identities that the snapshot record block does not name. */
+export function identityMismatches(block, identities) {
+  return ['Fill operation', 'Stroke operation', 'Release WASM SHA-256']
+    .filter((key) => !block.toLowerCase().includes(String(identities[key]).toLowerCase()))
+    .map((key) => `${key} ${identities[key]} is not in the snapshot record`);
 }
 
 /**

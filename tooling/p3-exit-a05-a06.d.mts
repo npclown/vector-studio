@@ -57,3 +57,8 @@ export function renderMarkdown(
   evaluation: Evaluation,
   provenance: { label: string; identities: Record<string, string> },
 ): string;
+export function findSnapshotRecord(
+  contract: string,
+  label: string,
+): { block: string; error?: undefined } | { error: string; block?: undefined };
+export function identityMismatches(block: string, identities: Record<string, string>): string[];
