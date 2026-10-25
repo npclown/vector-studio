@@ -239,7 +239,7 @@ function captureProcessListing(output) {
 }
 
 function cargoEnvironment() {
-  const flags = ['--remap-path-prefix', `${root}=.`];
+  const flags = ['--remap-path-prefix', `${root}=.`, '--remap-path-prefix', 'src\\=src/'];
   return {
     flags,
     env: {

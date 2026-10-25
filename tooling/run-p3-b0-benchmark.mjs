@@ -123,7 +123,7 @@ export function sourceManifest() {
 }
 
 function cargoEnvironment(targetDirectory, diagnostic) {
-  const flags = ['--remap-path-prefix', `${root}=.`];
+  const flags = ['--remap-path-prefix', `${root}=.`, '--remap-path-prefix', 'src\\=src/'];
   if (diagnostic) flags.push('--cfg', 'p3_b0_diag');
   return {
     flags,
