@@ -516,7 +516,7 @@ function e2Cases(): StrokeCase[] {
 
 /**
  * E2-F4f (D9 E2-U2, contract section 8): one cubic whose depth-0 band quad is strictly convex
- * while the sampled maximum of `r kappa` is about 1.195 at width 12, so the fold test refuses
+ * while `r kappa` at t = 0 is exactly 6 * 2016 / 468^(3/2), about 1.195, at width 12, so the fold test refuses
  * the leaf; under E2-D2 it is accepted as one leaf.
  */
 export const E2_F4F = { verbs: [0, 2], points: [0, 0, 6, 4, 34, 4, 40, 0] };

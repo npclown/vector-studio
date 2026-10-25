@@ -601,12 +601,13 @@ describe('ST-U4 cubic strokes through the dump hand-off', () => {
     expect(entry('E2-F4f').status).toBe('ok');
     expect(bounds('E2-F4f').ok).toBe(true);
     expect(Math.min(...leaves('E2-F4f').map((piece) => piece.depth))).toBeGreaterThanOrEqual(3);
-    // E2-D2: without the fold test the whole cubic is one leaf, which ST-O1 rejects (the band
-    // certificate finds the fold, and section 4.5's hull term exceeds the share).
+    // E2-D2: without the fold test the whole cubic is one leaf, which ST-O1 rejects: section
+    // 4.5's hull term exceeds the share, and the fold leaves the band certificate's cells near
+    // t = 0 uncertified down to the depth limit.
     expect(leaves('E2-D2/E2-F4f').map((piece) => piece.depth)).toEqual([0]);
     const d2 = bounds('E2-D2/E2-F4f');
     expect(d2.ok).toBe(false);
-    expect(d2.findings.join('\n')).toMatch(/E2-K2 band certificate: /);
+    expect(d2.findings.join('\n')).toMatch(/E2-K2 band certificate: verifier depth limit/);
     // E2-D3: the halved bound does not change E2-F3's leaves (recorded; ST-O1 still passes) ...
     expect(leaves('E2-D3/E2-F3').length).toBe(leaves('E2-F3').length);
     expect(bounds('E2-D3/E2-F3').ok).toBe(true);

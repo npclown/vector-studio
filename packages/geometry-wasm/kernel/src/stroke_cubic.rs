@@ -561,10 +561,10 @@ const HALF_PI_LOW: f64 = core::f64::consts::FRAC_PI_2 * SLACK_DOWN;
 /// computed controls within `eps` of the exact subcurve's per coordinate (E2-P1 guards):
 ///
 /// ```text
-/// c2Up = (2 max(|D1 - D0|, |D2 - D1|) + 36 eps) (1 + 2^-40)   bound on |C''|
-/// vUp  = |V| (1 + 2^-40) + 3 eps + 2^-500                     bound on the exact |V|
+/// c2Up = (2 max(|D1 - D0|, |D2 - D1|) + 36 eps + 256 u M) (1 + 2^-40)   bound on |C''|
+/// vUp  = |V| (1 + 2^-40) + 2^-500 + 3 eps + 4 u M                       bound on the exact |V|
 /// Kup  = c2Up vUp^2 / aLow^2 (1 + 2^-40)                       bound on the curvature
-/// lUp  = ((|D0| + |D1| + |D2|) / 3 + 9 eps) (1 + 2^-40)        bound on the arc length
+/// lUp  = ((|D0| + |D1| + |D2|) / 3 + 9 eps + 64 u M) (1 + 2^-40)        bound on the arc length
 /// require  r Kup <= 1/2                                       no fold of a parallel curve
 /// KO = Kup / (1 - r Kup),  lO = lUp (1 + r Kup),  require KO lO <= pi/2
 /// accept iff KO lO^2 / 8 + gCtrl + gOff + kappa (|V| + 2r) <= 2^e (1 - 2^-40)
@@ -603,10 +603,16 @@ pub(crate) fn measure_band(
         return rejected;
     }
     let r = context.r;
-    let c2_up = (2.0 * norm(sub(d[1], d[0])).max(norm(sub(d[2], d[1]))) + 36.0 * eps) * SLACK_UP;
-    let v_up = length + 3.0 * eps;
+    // The absolute `u M` terms cover the binary64 evaluation of `D_i`, `D_i - D_(i-1)` and
+    // `V` (at most about 102, 51 and 3 `u M`), which the relative slack does not cover when the
+    // differences are small.
+    let c2_up =
+        (2.0 * norm(sub(d[1], d[0])).max(norm(sub(d[2], d[1]))) + 36.0 * eps + 256.0 * UNIT * m)
+            * SLACK_UP;
+    let v_up = length + 3.0 * eps + 4.0 * UNIT * m;
     let k_up = c2_up * (v_up * v_up) / (a_low * a_low) * SLACK_UP;
-    let l_up = ((norm(d[0]) + norm(d[1]) + norm(d[2])) / 3.0 + 9.0 * eps) * SLACK_UP;
+    let l_up =
+        ((norm(d[0]) + norm(d[1]) + norm(d[2])) / 3.0 + 9.0 * eps + 64.0 * UNIT * m) * SLACK_UP;
     let fold = r * k_up * SLACK_UP;
     if rule.fold_check
         && !matches!(

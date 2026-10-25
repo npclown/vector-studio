@@ -691,7 +691,7 @@ fn st_f25_miter_exactly_where_the_ratio_is_at_most_the_limit() {
     }
 }
 
-/// ST-F26 current-cap fixtures: `(name, path, request, expected status at stroke-v0+r5)`.
+/// ST-F26 current-cap fixtures: `(name, path, request, expected status at stroke-v0+r5, unchanged at r6)`.
 pub(crate) fn f26_cases() -> Vec<(&'static str, PathSpec, StrokeRequest, u32)> {
     let mut cases = Vec::new();
     // Pieces 512: a closed 256-gon with bevel joins (256 sweeps and 256 joins).

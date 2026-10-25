@@ -115,7 +115,7 @@ fn e2_d3_halved_chord_predicate() {
 
 /// E2-F4f (contract section 8): `M 0 0 C 6 4 34 4 40 0`, width 12, butt, `e = -3`. The
 /// depth-0 leaf's band quad is strictly convex (its end normal segments do not cross), while
-/// the sampled maximum of `r kappa` is about 1.195 (`docs/evidence/e2-u2-2026-10-25.md`).
+/// `r kappa` at `t = 0` is exactly `6 * 2016 / 468^(3/2)`, about 1.195 (`docs/evidence/e2-u2-2026-10-25.md`).
 pub(crate) fn f4f() -> PathSpec {
     PathSpec::new()
         .m(0.0, 0.0)
