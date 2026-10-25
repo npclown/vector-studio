@@ -533,3 +533,124 @@ pub(crate) fn measure_leaf(q: [Point; 4], depth: u32, context: LeafContext) -> L
         end_error,
     }
 }
+
+/// E2-K2 test variants: production checks the fold bound and uses the full chord bound; the
+/// seeded defects E2-D2 and E2-D3 remove the first or halve the second.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct BandRule {
+    pub(crate) fold_check: bool,
+    pub(crate) bound_scale: f64,
+}
+
+impl BandRule {
+    pub(crate) const PRODUCTION: Self = Self {
+        fold_check: true,
+        bound_scale: 1.0,
+    };
+}
+
+/// `pi/2` rounded to binary64 (`1.5707963267948966`, below `pi/2`), then lowered by the slack.
+const HALF_PI_LOW: f64 = core::f64::consts::FRAC_PI_2 * SLACK_DOWN;
+
+/// D9 E2, unit E2-U2: the band leaf rule E2-K2 (`docs/plans/d9-e2-stroke-fast-rung-contract.md`
+/// section 5), an alternative acceptance beside section 4.5's test, which is unchanged. It is
+/// defined only for a leaf with the full cone set: a leaf with a stationary end or in a split
+/// range is refused here (`C'` may vanish at its end), so `split_length` and `kappa` are 0 on
+/// every leaf it accepts; the `kappa` term stays in the sum as the contract writes it.
+/// `V`, `aLow` (with its perturbation), `eps`, `dN` and `gCtrl` are `measure_leaf`'s. With the
+/// computed controls within `eps` of the exact subcurve's per coordinate (E2-P1 guards):
+///
+/// ```text
+/// c2Up = (2 max(|D1 - D0|, |D2 - D1|) + 36 eps) (1 + 2^-40)   bound on |C''|
+/// vUp  = |V| (1 + 2^-40) + 3 eps + 2^-500                     bound on the exact |V|
+/// Kup  = c2Up vUp^2 / aLow^2 (1 + 2^-40)                       bound on the curvature
+/// lUp  = ((|D0| + |D1| + |D2|) / 3 + 9 eps) (1 + 2^-40)        bound on the arc length
+/// require  r Kup <= 1/2                                       no fold of a parallel curve
+/// KO = Kup / (1 - r Kup),  lO = lUp (1 + r Kup),  require KO lO <= pi/2
+/// accept iff KO lO^2 / 8 + gCtrl + gOff + kappa (|V| + 2r) <= 2^e (1 - 2^-40)
+/// ```
+///
+/// The caller also requires the emitted band quad to be strictly convex and positive. The
+/// proof (E2-P1) is in `docs/evidence/e2-u2-2026-10-25.md`.
+pub(crate) fn measure_band(
+    q: [Point; 4],
+    depth: u32,
+    context: LeafContext,
+    rule: BandRule,
+) -> LeafMeasure {
+    let rejected = LeafMeasure::default();
+    if context.stationary_start || context.stationary_end || context.split_range {
+        return rejected;
+    }
+    let v = sub(q[3], q[0]);
+    let d = [
+        scale3(sub(q[1], q[0])),
+        scale3(sub(q[2], q[1])),
+        scale3(sub(q[3], q[2])),
+    ];
+    let mut a = f64::INFINITY;
+    for direction in &d {
+        a = a.min(v.x * direction.x + v.y * direction.y);
+    }
+    let m = context.magnitude;
+    let level = f64::from(depth);
+    let eps = 4.0 * level * UNIT * m;
+    let length = norm(v) * SLACK_UP + LENGTH_FLOOR;
+    let absolute = 768.0 * UNIT * m * m;
+    let perturbation = 20.0 * eps * length;
+    let a_low = a * SLACK_DOWN - absolute - perturbation;
+    if a_low.partial_cmp(&0.0) != Some(Ordering::Greater) {
+        return rejected;
+    }
+    let r = context.r;
+    let c2_up = (2.0 * norm(sub(d[1], d[0])).max(norm(sub(d[2], d[1]))) + 36.0 * eps) * SLACK_UP;
+    let v_up = length + 3.0 * eps;
+    let k_up = c2_up * (v_up * v_up) / (a_low * a_low) * SLACK_UP;
+    let l_up = ((norm(d[0]) + norm(d[1]) + norm(d[2])) / 3.0 + 9.0 * eps) * SLACK_UP;
+    let fold = r * k_up * SLACK_UP;
+    if rule.fold_check
+        && !matches!(
+            fold.partial_cmp(&0.5),
+            Some(Ordering::Less | Ordering::Equal)
+        )
+    {
+        return rejected;
+    }
+    let k_o = k_up / ((1.0 - fold) * SLACK_DOWN) * SLACK_UP;
+    let l_o = l_up * (1.0 + fold) * SLACK_UP;
+    let turn = k_o * l_o * SLACK_UP;
+    if !matches!(
+        turn.partial_cmp(&HALF_PI_LOW),
+        Some(Ordering::Less | Ordering::Equal)
+    ) {
+        return rejected;
+    }
+    let end_error = if context.end_fixed {
+        0.0
+    } else {
+        (18.0 * eps * length) / a_low + 8.0 * UNIT
+    };
+    let start_error = context.start_error;
+    let g_ctrl = 4.0 * level * UNIT * m * (1.0 + 12.0 * r * length / a_low)
+        + 5.0 * eps
+        + 3.0 * r * start_error.max(end_error);
+    let kappa = if context.split_length > 0.0 {
+        UNIT * 2.0 / (context.split_length * SLACK_DOWN)
+    } else {
+        0.0
+    };
+    let chord = k_o * (l_o * l_o) / 8.0 * SLACK_UP * rule.bound_scale;
+    let total = chord + g_ctrl + context.g_off + kappa * (length + 2.0 * r);
+    if !matches!(
+        total.partial_cmp(&(context.full * SLACK_DOWN)),
+        Some(Ordering::Less | Ordering::Equal)
+    ) {
+        return rejected;
+    }
+    LeafMeasure {
+        accepted: true,
+        end_direction: d[2],
+        start_error,
+        end_error,
+    }
+}

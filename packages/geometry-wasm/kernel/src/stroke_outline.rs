@@ -23,10 +23,10 @@ use crate::geometry::{validate_path, Point, VERB_CLOSE, VERB_CUBIC, VERB_LINE, V
 use crate::line_fill::LineFillRule;
 use crate::rounded_line_fill::{RoundedFillError, RoundedFillLimits, RoundedFillWorkspace};
 use crate::stroke_cubic::{
-    classify_cubic, evaluate, measure_leaf, split_at, split_half, stationary_guard, CubicClass,
-    LeafContext, MAX_LEAF_DEPTH,
+    classify_cubic, evaluate, measure_band, measure_leaf, split_at, split_half, stationary_guard,
+    BandRule, CubicClass, LeafContext, LeafMeasure, MAX_LEAF_DEPTH,
 };
-use crate::stroke_merge::SeamMerge;
+use crate::stroke_merge::{is_band_quad, SeamMerge};
 
 /// Section 7.2 path statuses. ST-U5 publishes them through `stroke_v0_*`.
 pub(crate) const STROKE_PATH_OK: u32 = 0;
@@ -426,9 +426,19 @@ pub(crate) struct StrokeDefects {
     #[cfg(test)]
     pub(crate) drop_outside: bool,
     /// Not a defect: the `stroke-v0+r4` path for the E2-G1 and E2-G2 A/B runs (no seam merge,
-    /// 512 emitted pieces, `InputLimit` on the raw vertex total).
+    /// 512 emitted pieces, `InputLimit` on the raw vertex total, and no E2-K2, which `r4`
+    /// predates).
     #[cfg(test)]
     pub(crate) unmerged: bool,
+    /// E2-D2 (E2-U2): the E2-K2 fold test `r Kup <= 1/2` removed.
+    #[cfg(test)]
+    pub(crate) band_no_fold: bool,
+    /// E2-D3 (E2-U2): the E2-K2 chord bound halved.
+    #[cfg(test)]
+    pub(crate) band_half_bound: bool,
+    /// Not a defect: the `stroke-v0+r5` path (no E2-K2) for the E2-G1 and E2-G2 A/B runs.
+    #[cfg(test)]
+    pub(crate) no_band_rule: bool,
 }
 
 #[cfg(test)]
@@ -459,6 +469,19 @@ impl StrokeDefects {
     defect!(leaf_factor_two);
     defect!(drop_outside);
     defect!(unmerged);
+    defect!(band_no_fold);
+    defect!(band_half_bound);
+    defect!(no_band_rule);
+}
+
+impl StrokeDefects {
+    /// The E2-K2 variant in force: production, or a seeded defect under test.
+    pub(crate) fn band_rule(self) -> BandRule {
+        BandRule {
+            fold_check: !self.band_no_fold(),
+            bound_scale: if self.band_half_bound() { 0.5 } else { 1.0 },
+        }
+    }
 }
 
 #[cfg(not(test))]
@@ -525,6 +548,18 @@ impl StrokeDefects {
     }
     #[inline(always)]
     pub(crate) fn unmerged(self) -> bool {
+        false
+    }
+    #[inline(always)]
+    pub(crate) fn band_no_fold(self) -> bool {
+        false
+    }
+    #[inline(always)]
+    pub(crate) fn band_half_bound(self) -> bool {
+        false
+    }
+    #[inline(always)]
+    pub(crate) fn no_band_rule(self) -> bool {
         false
     }
 }
@@ -1436,23 +1471,36 @@ impl StrokeWorkspace {
             } else {
                 0.0
             };
-            let measure = measure_leaf(
-                q,
-                depth,
-                LeafContext {
-                    magnitude,
-                    r,
-                    full: tolerances.full,
-                    g_off: self.g_off,
-                    split_range: leaves.split,
-                    stationary_start,
-                    stationary_end,
-                    start_error: current.1,
-                    end_fixed: last && leaves.source_end.is_some(),
-                    split_length,
-                    factor,
-                },
-            );
+            let context = LeafContext {
+                magnitude,
+                r,
+                full: tolerances.full,
+                g_off: self.g_off,
+                split_range: leaves.split,
+                stationary_start,
+                stationary_end,
+                start_error: current.1,
+                end_fixed: last && leaves.source_end.is_some(),
+                split_length,
+                factor,
+            };
+            let measure = measure_leaf(q, depth, context);
+            let start = current.0;
+            let end_triple = |measure: LeafMeasure| match (last, leaves.source_end) {
+                (true, Some(end)) => Ok(end),
+                _ => Ok::<Triple, FrontEndError>(triple(
+                    q[3],
+                    offset(unit_vector(measure.end_direction)?, r),
+                )),
+            };
+            let mut measure = measure;
+            if !measure.accepted && !self.defects.no_band_rule() && !self.defects.unmerged() {
+                // E2-K2: the band leaf rule, kept only when the emitted quad is a band quad.
+                let band = measure_band(q, depth, context, self.defects.band_rule());
+                if band.accepted && is_band_quad(start, end_triple(band)?)? {
+                    measure = band;
+                }
+            }
             if !measure.accepted {
                 if depth >= MAX_LEAF_DEPTH {
                     return Err(FrontEndError::DepthLimit);
@@ -1465,11 +1513,7 @@ impl StrokeWorkspace {
                 self.leaf_stack.push((left, depth + 1, 2 * leaf));
                 continue;
             }
-            let start = current.0;
-            let end = match (last, leaves.source_end) {
-                (true, Some(end)) => end,
-                _ => triple(q[3], offset(unit_vector(measure.end_direction)?, r)),
-            };
+            let end = end_triple(measure)?;
             self.candidates.clear();
             for point in [
                 start.minus,

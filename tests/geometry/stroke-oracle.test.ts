@@ -406,7 +406,7 @@ const frontEndComplete = (found: DumpEntry): boolean =>
   found.status === 'empty' ||
   (found.failure?.stage === 'arrangement' && found.failure.error !== 'Rounded(InputLimit)');
 
-const seeded = (name: string): boolean => name.startsWith('ST-D');
+const seeded = (name: string): boolean => name.startsWith('ST-D') || name.startsWith('E2-D');
 
 /**
  * ST-O3's union-area band costs seconds per case beyond a few dozen pieces; it runs on the `ok`
@@ -478,8 +478,9 @@ describe('ST-U4 cubic strokes through the dump hand-off', () => {
         listed.push(`${source.name}: ${found.failure?.error ?? ''}`);
     }
     // The listed work-limit cases (ST-A3), recorded in the plan entry: 16 up to stroke-v0+r4;
-    // 15 since D9 E2-U1 (r5), where the seam merge makes one of them ok.
-    expect(listed).toHaveLength(15);
+    // 15 since D9 E2-U1 (r5), where the seam merge makes one of them ok; 12 since D9 E2-U2
+    // (r6), where the band leaf rule makes three more ok.
+    expect(listed).toHaveLength(12);
   });
 
   it('ST-F16: one reversal at t* = 1/2, cusp center (0.5, 0.75), n = 32, (0.5, 0.8) inside', () => {
@@ -566,7 +567,7 @@ describe('ST-U4 cubic strokes through the dump hand-off', () => {
     // ST-D6: the user join at generated knots, rejected by ST-O2 on ST-F15 and ST-F16.
     for (const [name, clean] of [
       ['ST-D6/ST-F16', 'ST-F16/wide'],
-      ['ST-D6/ST-F15/R3-zoom1-dpr3', 'ST-F15/R3-zoom1-dpr3'],
+      ['ST-D6/ST-F15/R4-zoom1-dpr3', 'ST-F15/R4-zoom1-dpr3'],
     ] as const) {
       expect(control(clean).inventory, clean).toBe(true);
       expect(check(name).inventory, name).toBe(false);
@@ -587,5 +588,31 @@ describe('ST-U4 cubic strokes through the dump hand-off', () => {
         .map((piece) => piece.depth);
     expect(depths('ST-U4/folded-arc')).toEqual([1, 1]);
     expect(depths('ST-D8/ST-U4/folded-arc')).toEqual([0]);
+  }, 900_000);
+
+  it('E2-U2: the fold control E2-F4f and the seeded defects E2-D2 and E2-D3', () => {
+    const bounds = (name: string) => {
+      const source = cubicSource(name);
+      return checkStrokePieceBounds(oracleSource(source), oraclePieces(entry(name), source));
+    };
+    const leaves = (name: string) =>
+      entry(name).pieces.filter((piece) => piece.kind === 'cubic-leaf');
+    // E2-F4f: production refuses the folded depth-0 leaf; ST-O1 passes on its deeper leaves.
+    expect(entry('E2-F4f').status).toBe('ok');
+    expect(bounds('E2-F4f').ok).toBe(true);
+    expect(Math.min(...leaves('E2-F4f').map((piece) => piece.depth))).toBeGreaterThanOrEqual(3);
+    // E2-D2: without the fold test the whole cubic is one leaf, which ST-O1 rejects (the band
+    // certificate finds the fold, and section 4.5's hull term exceeds the share).
+    expect(leaves('E2-D2/E2-F4f').map((piece) => piece.depth)).toEqual([0]);
+    const d2 = bounds('E2-D2/E2-F4f');
+    expect(d2.ok).toBe(false);
+    expect(d2.findings.join('\n')).toMatch(/E2-K2 band certificate: /);
+    // E2-D3: the halved bound does not change E2-F3's leaves (recorded; ST-O1 still passes) ...
+    expect(leaves('E2-D3/E2-F3').length).toBe(leaves('E2-F3').length);
+    expect(bounds('E2-D3/E2-F3').ok).toBe(true);
+    // ... so E2-F8 shows it: fewer, larger leaves, which ST-O1 rejects.
+    expect(leaves('E2-D3/E2-F8').length).toBeLessThan(leaves('E2-F8').length);
+    expect(bounds('E2-F8').ok).toBe(true);
+    expect(bounds('E2-D3/E2-F8').ok).toBe(false);
   }, 900_000);
 });

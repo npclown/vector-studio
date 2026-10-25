@@ -67,12 +67,22 @@ pub(crate) fn band_quad(piece: &Piece) -> Result<Option<[Point; 4]>, FrontEndErr
     }
     let [a, b] = piece.meta.samples;
     let quad = [a.minus, b.minus, b.plus, a.plus].map(normalized);
+    Ok(convex_positive(&quad)?.then_some(quad))
+}
+
+fn convex_positive(quad: &[Point; 4]) -> Result<bool, FrontEndError> {
     for index in 0..4 {
         if orient(quad[index], quad[(index + 1) % 4], quad[(index + 2) % 4])? != Ordering::Greater {
-            return Ok(None);
+            return Ok(false);
         }
     }
-    Ok(Some(quad))
+    Ok(true)
+}
+
+/// E2-K2's band condition on a leaf about to be emitted between the triples `a` and `b`: the
+/// same test as `band_quad`, so an E2-K2 leaf is always a band piece for E2-K1.
+pub(crate) fn is_band_quad(a: Triple, b: Triple) -> Result<bool, FrontEndError> {
+    convex_positive(&[a.minus, b.minus, b.plus, a.plus].map(normalized))
 }
 
 /// Exact position of `point` against a strictly convex positive quad: `Greater` strictly

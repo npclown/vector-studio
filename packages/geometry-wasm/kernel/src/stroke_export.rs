@@ -31,7 +31,9 @@ pub const STROKE_V0_VERSION: u32 = 0;
 /// shares one triple (plan: B2 ST-U3d/ST-U3e stroke sharing).
 /// Revision 5 (2026-10-24): the pieces reach the arrangement as seam-merged contours (D9 E2
 /// unit E2-U1, E2-K1), with `MAX_PIECES` capping the contours.
-pub const STROKE_V0_REVISION: u32 = 5;
+/// Revision 6 (2026-10-25): full-cone cubic leaves may also meet the band leaf rule (D9 E2
+/// unit E2-U2, E2-K2), so curved strokes emit fewer, larger leaves.
+pub const STROKE_V0_REVISION: u32 = 6;
 /// Bytes `VGT0`.
 pub const STROKE_INPUT_MAGIC: u32 = 0x3054_4756;
 /// Bytes `VGU0`.

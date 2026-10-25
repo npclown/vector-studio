@@ -9,7 +9,8 @@
 //! ST-U4 adds an optional ninth input field of comma-separated test flags: the seeded defects
 //! `knot-join` (ST-D6), `omit-cusp-disk` (ST-D7) and `leaf-factor-two` (ST-D8), and `wide`, which
 //! runs the case on a workspace with the test-only arrangement limits `WIDE_TEST_LIMITS` (never
-//! a production configuration).
+//! a production configuration). D9 E2-U2 adds the seeded defects `band-no-fold` (E2-D2) and
+//! `band-half-bound` (E2-D3).
 
 use std::env;
 use std::fmt::Write as _;
@@ -83,7 +84,12 @@ fn read_input(text: &str) -> Vec<Case> {
                 assert!(
                     matches!(
                         flag.as_str(),
-                        "wide" | "knot-join" | "omit-cusp-disk" | "leaf-factor-two"
+                        "wide"
+                            | "knot-join"
+                            | "omit-cusp-disk"
+                            | "leaf-factor-two"
+                            | "band-no-fold"
+                            | "band-half-bound"
                     ),
                     "flag {flag}"
                 );
@@ -200,6 +206,8 @@ fn dump_case(workspace: &mut StrokeWorkspace, case: &Case) -> String {
                 "knot-join" => defects.knot_join = true,
                 "omit-cusp-disk" => defects.omit_cusp_disk = true,
                 "leaf-factor-two" => defects.leaf_factor_two = true,
+                "band-no-fold" => defects.band_no_fold = true,
+                "band-half-bound" => defects.band_half_bound = true,
                 _ => {}
             }
         }
