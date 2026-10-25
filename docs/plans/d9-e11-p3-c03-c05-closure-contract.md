@@ -209,7 +209,7 @@ The E16-U1 plan (`fill-v0+r4`: F1 source caps and the F3 refinement retry) leave
 - Rows outside every class still fail A02. If E16-A6 shows such rows after `r4`, the exit waits for another remedy (`r5`) or for another user decision; the snapshot is recorded only on the final fill revision.
 - **Follow-up decided 2026-10-25 under the user's standing instruction of 2026-10-24 (recommended option).** The E16-U1 native run on `r4` leaves 22 `ZeroLengthLeaf` requests (C3 c22 and c23), which E16-K2 does not retry. Following the user's MVP direction above, they become the closed-list class "fill `ZeroLengthLeaf`" of section 7.2, and their fix becomes backlog item E16-U2. The alternative was E16-U2 before the snapshot (`r5`). The four C11 f04 requests that stop on the line-only `SourceLimit` belong to the cap-stop class.
 
-**Set aside, for this class only:**
+**Set aside, for these classes only:**
 
 - the [P3 private contract](p3-private-contract.md)'s "named ordinary fixtures must succeed" and "Do not … reduce the ordinary-success corpus";
 - the [P3 plan](p3-fill-stroke-meshes.md)'s "Ordinary frozen corpus must succeed" and "prevent blanket NUMERIC_RANGE/WORK_LIMIT from masking unsupported geometry". The class is bounded by the kernel's cap stop, not by a status, so it is narrower than a blanket over `work-limit`;
