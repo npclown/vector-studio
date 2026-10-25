@@ -48,7 +48,12 @@ function buildRelease(sourceRoot, targetDirectory) {
     CARGO_TARGET_DIR: targetDirectory,
     TEMP: temporary,
     TMP: temporary,
-    CARGO_ENCODED_RUSTFLAGS: ['--remap-path-prefix', `${sourceRoot}=.`].join('\x1f'),
+    CARGO_ENCODED_RUSTFLAGS: [
+      '--remap-path-prefix',
+      `${sourceRoot}=.`,
+      '--remap-path-prefix',
+      'src\\=src/',
+    ].join('\x1f'),
   };
   run(
     rustup,
