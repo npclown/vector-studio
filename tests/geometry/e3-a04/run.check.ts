@@ -22,7 +22,13 @@ import {
 import { MESH_FILL_SHADER } from '../../../packages/renderer-webgpu/src/mesh-fill-shader.js';
 import { runHarnessControls } from './controls.js';
 import { iterateA04Corpus } from './corpus.js';
-import { measureCase, type HarnessPorts, type HarnessRow } from './harness.js';
+import {
+  jointPartners,
+  measureCase,
+  partnerOf,
+  type HarnessPorts,
+  type HarnessRow,
+} from './harness.js';
 import {
   buildRecord,
   combineGpuChecks,
@@ -39,6 +45,8 @@ const [shard, shards] = (process.env.E3_A04_RUN_SHARD ?? '0/1').split('/').map(N
   number,
 ];
 const stride = Number(process.env.E3_A04_RUN_STRIDE ?? '1');
+/** The oracle's starting resolution 2^-K px (contract section 19); K = 10 is r_m of section 4.3. */
+const startResolution = Number(process.env.E3_A04_RUN_START_RESOLUTION ?? '10');
 
 /** JSON with non-finite numbers kept as strings ("Infinity"), since JSON has none. */
 export function toJson(value: unknown): string {
@@ -56,25 +64,12 @@ async function loadPorts() {
   return { fill: await createFillMeshPort(module), stroke: await createStrokeMeshPort(module) };
 }
 
-/** The joint partner (SB-10, SB-11): the other role of the same group, transform and camera. */
-function jointKey(kase: A04Case, role: string): string {
-  const k = kase;
-  const joint = k.joint as Readonly<{ group: string }>;
-  return JSON.stringify([joint.group, role, k.transform, k.camera, k.placement, k.servedOffset]);
-}
-
-function jointPartners(): Map<string, A04Case> {
-  const partners = new Map<string, A04Case>();
-  for (const kase of iterateA04Corpus()) {
-    const joint = kase.joint as Readonly<{ role: string }> | null;
-    if (joint != null) partners.set(jointKey(kase, joint.role), kase);
-  }
-  return partners;
-}
-
 function measureLogged(kase: A04Case, ports: HarnessPorts, partner?: A04Case): HarnessRow {
   try {
-    return measureCase(kase, ports, partner === undefined ? {} : { partner });
+    return measureCase(kase, ports, {
+      oracle: { resolution: 2 ** -startResolution },
+      ...(partner === undefined ? {} : { partner }),
+    });
   } catch (error) {
     // A harness exception is never a measurement: the case stays UNDECIDED (section 7.3).
     return {
@@ -111,12 +106,10 @@ it(`runs the A04 ${phase} phase`, async () => {
       const i = index;
       index += 1;
       if (i % stride !== 0 || (i / stride) % shards !== shard) continue;
-      const joint = kase.joint as Readonly<{ role: string }> | null;
-      const partner =
-        joint == null
-          ? undefined
-          : partners.get(jointKey(kase, joint.role === 'fill' ? 'stroke' : 'fill'));
-      appendFileSync(file, `${JSON.stringify(measureLogged(kase, ports, partner))}\n`);
+      appendFileSync(
+        file,
+        `${JSON.stringify(measureLogged(kase, ports, partnerOf(kase, partners)))}\n`,
+      );
     }
     return;
   }
@@ -154,7 +147,7 @@ it(`runs the A04 ${phase} phase`, async () => {
       carrier: 'K4',
       builderPlacement: 'renderer-core buildPathFringe via PathMeshPipeline ports',
     },
-    selection: { stride, shards, corpusCases: corpusIds.length },
+    selection: { stride, shards, corpusCases: corpusIds.length, startResolution },
     gpu,
     controls: runHarnessControls(),
     rows,

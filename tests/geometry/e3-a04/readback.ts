@@ -5,11 +5,33 @@
 // meshPositionNdc in the vertex stage and toPhysical in the fragment stage for every point and
 // returns the bits. modelCheck then requires every read-back position within β(p) of p*, the
 // same NDC bits from two invocations of each vertex, and equal mesh bytes on both sides.
+//
+// E3-U5 (contract section 19): after the freeze the spec reads back the named subset of
+// section 7.1 as well. For each draw that the GPU clips, the page also rasterizes the mesh and
+// returns the pixel-centre coverage of a strip along the viewport edge, which clipCheck compares
+// with exact coverage of M* away from its boundary (E3-Q11 (a)). At each T-junction of M*, the
+// crack width between the read-back positions is reported (E3-Q10 (b), never gated).
 import { createHash } from 'node:crypto';
 
-import type { A04Case } from '../../../packages/geometry-reference/src/a04-region.js';
+import {
+  A04_ORACLE_PARAMETERS,
+  type A04Case,
+} from '../../../packages/geometry-reference/src/a04-region.js';
 import { MESH_FILL_SHADER } from '../../../packages/renderer-webgpu/src/mesh-fill-shader.js';
-import { dNum, drawCase, mapPoint, shaderLanes, type Frame, type HarnessPorts } from './harness.js';
+import { iterateA04Corpus } from './corpus.js';
+import {
+  boundaryCandidates,
+  dNum,
+  drawCase,
+  guardBand,
+  mapPoint,
+  partnerOf,
+  shaderLanes,
+  tJunctionTriples,
+  type Frame,
+  type HarnessPorts,
+  type MappedPoint,
+} from './harness.js';
 import { fill, polygon, rect } from './oracle-cases.js';
 import { harnessCase, SMOKE_CASES } from './smoke.js';
 
@@ -42,6 +64,36 @@ export const READBACK_CASES: readonly A04Case[] = [
   }),
 ];
 
+/**
+ * The named readback subset of section 7.1: the named rows of E3-C1, E3-C3, E3-C5, E3-C9 and
+ * E3-C12 at every transform and pair. E3-C6 (partial placements) is added for the clip readback
+ * of E3-Q11 (a). Generated rows (`g` followed by digits) are left out.
+ */
+export const READBACK_STRATA: ReadonlySet<string> = new Set(['C1', 'C3', 'C5', 'C6', 'C9', 'C12']);
+
+export function isNamedReadbackCase(kase: A04Case): boolean {
+  const [stratum, row] = String(kase.id).split('/');
+  return READBACK_STRATA.has(stratum!) && !/^g\d/u.test(row ?? '');
+}
+
+/** The corpus cases of the named readback subset, in generation order. */
+export function* namedReadbackCases(): Generator<A04Case> {
+  for (const kase of iterateA04Corpus()) if (isNamedReadbackCase(kase)) yield kase;
+}
+
+/** Width in physical px of the strip along each viewport edge whose pixel centres are read. */
+export const CLIP_STRIP = 4;
+
+/** The strip's pixels in canonical order: rows top to bottom, each left to right. */
+export function stripPixels(width: number, height: number): Int32Array {
+  const out: number[] = [];
+  for (let y = 0; y < height; y += 1)
+    for (let x = 0; x < width; x += 1)
+      if (x < CLIP_STRIP || x >= width - CLIP_STRIP || y < CLIP_STRIP || y >= height - CLIP_STRIP)
+        out.push(x, y);
+  return Int32Array.from(out);
+}
+
 /** f64 slack on the comparison of a read-back value with p* (both are rounded to binary64). */
 const SLACK = 1 + 2 ** -20;
 
@@ -62,6 +114,21 @@ export type ReadbackDraw = Readonly<{
   }>[];
   /** SHA-256 of the offsets as little-endian binary32 bytes. */
   meshSha256: string;
+  /** The mesh's triangle indices, for the clip readback. */
+  indices: readonly number[];
+  /** True when the GPU clips a triangle (section 15.3): the page then reads the edge strip. */
+  clip: boolean;
+  /** β_c of the case (vertex path and clip bound), as in measureCase. */
+  betaC: number;
+  /**
+   * False when measureCase makes the case UNDECIDED for β (β_c ≥ 1 px or a clip bound ≥ 0.25
+   * px, section 7.3): the clip model is then not relied on, and the strip is not compared.
+   */
+  measurable: boolean;
+  /** Boundary candidates of M* as point index pairs (section 15.5). */
+  boundary: readonly number[];
+  /** T-junctions of M* as point index triples [v, a, b]. */
+  junctions: readonly number[];
 }>;
 
 export type ReadbackPayload = Readonly<{
@@ -80,6 +147,8 @@ export type ReadbackResult = Readonly<{
   /** One pass, four words per point: the feature-path vec2f bits, the position index, 1. */
   feature: readonly number[];
   meshSha256: string;
+  /** Clipped draws only: coverage of the strip's pixel centres, one bit each, packed in u32. */
+  coverage?: readonly number[];
 }>;
 
 export type ReadbackPage = Readonly<{
@@ -94,12 +163,26 @@ export function offsetsSha256(offsets: readonly number[]): string {
     .digest('hex');
 }
 
-/** The payload for the given (non-corpus, before the freeze) cases. */
-export function readbackPayload(cases: readonly A04Case[], ports: HarnessPorts): ReadbackPayload {
+/**
+ * The payload for the given cases. A joint case of the corpus (E3-C9) is drawn with its partner,
+ * as the measurement draws it, when `partners` is given.
+ */
+export function readbackPayload(
+  cases: Iterable<A04Case>,
+  ports: HarnessPorts,
+  partners?: ReadonlyMap<string, A04Case>,
+): ReadbackPayload {
   const draws: ReadbackDraw[] = [];
   const skipped: { id: string; kind: string }[] = [];
   for (const kase of cases) {
-    const outcome = drawCase(kase, ports);
+    const partner = partners === undefined ? undefined : partnerOf(kase, partners);
+    let outcome;
+    try {
+      outcome = drawCase(kase, ports, partner === undefined ? {} : { partner });
+    } catch (error) {
+      skipped.push({ id: String(kase.id), kind: `error: ${String(error)}` });
+      continue;
+    }
     if (outcome.kind !== 'drawn') {
       skipped.push({ id: String(kase.id), kind: outcome.kind });
       continue;
@@ -107,8 +190,10 @@ export function readbackPayload(cases: readonly A04Case[], ports: HarnessPorts):
     const lanes = shaderLanes(outcome.draw, outcome.frame);
     const offsets = Array.from(outcome.draw.offsets);
     const expected = [];
+    const points: MappedPoint[] = [];
     for (let i = 0; i + 1 < offsets.length; i += 2) {
       const p = mapPoint(offsets[i]!, offsets[i + 1]!, lanes);
+      points.push(p);
       expected.push({
         x: dNum(p.x),
         y: dNum(p.y),
@@ -125,6 +210,7 @@ export function readbackPayload(cases: readonly A04Case[], ports: HarnessPorts):
       offsets,
       expected,
       meshSha256: offsetsSha256(offsets),
+      ...meshExtras(points, outcome.draw.mesh.indices, outcome.frame),
     });
   }
   return {
@@ -132,6 +218,23 @@ export function readbackPayload(cases: readonly A04Case[], ports: HarnessPorts):
     shaderSha256: createHash('sha256').update(MESH_FILL_SHADER, 'utf8').digest('hex'),
     draws,
     skipped,
+  };
+}
+
+function meshExtras(points: readonly MappedPoint[], indices: ArrayLike<number>, frame: Frame) {
+  const mapped = { points, indices, width: frame.width, height: frame.height };
+  const guard = guardBand(mapped);
+  let betaVertex = 0;
+  for (const p of points) betaVertex = Math.max(betaVertex, p.betaVertex, p.betaFeature);
+  const candidates = boundaryCandidates(mapped);
+  return {
+    indices: Array.from(indices),
+    clip: guard.crossing > 0,
+    betaC: (betaVertex + guard.betaClip) * SLACK,
+    measurable:
+      (betaVertex + guard.betaClip) * SLACK < 1 && guard.betaClip < A04_ORACLE_PARAMETERS.target,
+    boundary: candidates.flatMap((e) => [e.ia, e.ib]),
+    junctions: tJunctionTriples(mapped, candidates).flat(),
   };
 }
 
@@ -152,6 +255,28 @@ export type ModelCheck = Readonly<{
   /** The largest read-back error divided by its β, per path. */
   maxVertexRatio: number;
   maxFeatureRatio: number;
+  /** T-junctions seen and the largest crack width between read-back positions, physical px. */
+  junctions: number;
+  maxCrackWidth: number;
+  maxCrackDraw: string | null;
+  /** The clip readback (E3-Q11 (a)): draws, strip pixels compared and left out, mismatches. */
+  clip: Readonly<{
+    draws: number;
+    unmeasurable: number;
+    compared: number;
+    excluded: number;
+    mismatches: number;
+  }>;
+  /** The clipped draws with a mismatch: compared and mismatched centres, β_c, largest |p*|. */
+  clipFailures: readonly ClipDrawSummary[];
+}>;
+
+export type ClipDrawSummary = Readonly<{
+  id: string;
+  compared: number;
+  mismatches: number;
+  betaC: number;
+  maxAbs: number;
 }>;
 
 /**
@@ -167,6 +292,11 @@ export function modelCheck(
   let points = 0;
   let maxVertexRatio = 0;
   let maxFeatureRatio = 0;
+  let junctions = 0;
+  let maxCrackWidth = 0;
+  let maxCrackDraw: string | null = null;
+  const clip = { draws: 0, unmeasurable: 0, compared: 0, excluded: 0, mismatches: 0 };
+  const clipFailures: ClipDrawSummary[] = [];
   if (page.shaderSha256 !== payload.shaderSha256)
     failures.push(`shader SHA-256 ${page.shaderSha256} ≠ ${payload.shaderSha256}`);
   if (page.results.length !== payload.draws.length)
@@ -213,8 +343,208 @@ export function modelCheck(
       if (result.feature[4 * i + 2] !== i)
         failures.push(`${draw.id}#${i}: feature word 2 is ${result.feature[4 * i + 2]}`);
     }
+    // E3-Q10 (b): the crack width at each T-junction, from the read-back vertex-path positions.
+    const gpu = (i: number): [number, number] => {
+      const nx = f32OfBits(result.ndc[4 * i]!);
+      const ny = f32OfBits(result.ndc[4 * i + 1]!);
+      return [((nx + 1) * width) / 2, ((1 - ny) * height) / 2];
+    };
+    for (let j = 0; j + 2 < draw.junctions.length; j += 3) {
+      const [vx, vy] = gpu(draw.junctions[j]!);
+      const [ax, ay] = gpu(draw.junctions[j + 1]!);
+      const [bx, by] = gpu(draw.junctions[j + 2]!);
+      const length = Math.hypot(bx - ax, by - ay);
+      const crack =
+        length === 0
+          ? Math.hypot(vx - ax, vy - ay)
+          : Math.abs((bx - ax) * (vy - ay) - (by - ay) * (vx - ax)) / length;
+      junctions += 1;
+      if (crack > maxCrackWidth) {
+        maxCrackWidth = crack;
+        maxCrackDraw = draw.id;
+      }
+    }
+    if (draw.clip && !draw.measurable) clip.unmeasurable += 1;
+    else if (draw.clip) {
+      const words = Math.ceil(stripPixels(width, height).length / 64);
+      if (result.coverage?.length !== words) {
+        failures.push(
+          `${draw.id}: clip coverage of ${result.coverage?.length} words, not ${words}`,
+        );
+        return;
+      }
+      const c = clipCheck(draw, result.coverage);
+      clip.draws += 1;
+      clip.compared += c.compared;
+      clip.excluded += c.excluded;
+      clip.mismatches += c.mismatches.length;
+      if (c.mismatches.length > 0) {
+        let maxAbs = 0;
+        for (const e of draw.expected) maxAbs = Math.max(maxAbs, Math.abs(e.x), Math.abs(e.y));
+        clipFailures.push({
+          id: draw.id,
+          compared: c.compared,
+          mismatches: c.mismatches.length,
+          betaC: draw.betaC,
+          maxAbs,
+        });
+      }
+      for (const m of c.mismatches.slice(0, 5)) failures.push(`${draw.id}: clip ${m}`);
+    }
   });
-  return { passed: failures.length === 0, points, failures, maxVertexRatio, maxFeatureRatio };
+  return {
+    passed: failures.length === 0,
+    points,
+    failures,
+    maxVertexRatio,
+    maxFeatureRatio,
+    junctions,
+    maxCrackWidth,
+    maxCrackDraw,
+    clip,
+    clipFailures,
+  };
+}
+
+/**
+ * Rasterizer snapping (E3-Q7 (a)): with Vulkan's minimum of 4 subpixel bits each vertex moves by
+ * up to 2^-5 px per axis, so an edge moves by up to √2·2^-5 px. Pixel-centre coverage is decided
+ * on the snapped positions, so the clip check leaves out centres within this residual too.
+ */
+export const RASTER_SNAP = Math.SQRT2 * 2 ** -5;
+
+/** Grid cell size, physical px, of the clip check's spatial index. */
+const CELL = 16;
+
+/**
+ * The clip readback of E3-Q11 (a). For each pixel centre q of the edge strip farther than
+ * β_c + RASTER_SNAP from every boundary candidate of M* and from every edge of a clipped
+ * triangle, the GPU covers q exactly when M* contains q. Nearer such an edge the GPU may differ,
+ * so those centres are left out: clipping makes new vertices in each triangle on its own, so an
+ * edge shared by two clipped triangles may open a hairline crack within the clip bound, which
+ * the crack-closed region of E3-Q10 (b) does not score. Pixel-centre coverage
+ * confirms the clip model only to pixel resolution near the edge: a mismatch falsifies it,
+ * agreement does not prove it (E3-Q11 (a), "the readback's limit").
+ */
+export function clipCheck(
+  draw: Pick<ReadbackDraw, 'frame' | 'expected' | 'indices' | 'boundary' | 'betaC'>,
+  coverage: readonly number[],
+): Readonly<{ compared: number; excluded: number; mismatches: string[] }> {
+  const { width, height } = draw.frame;
+  const pts = draw.expected;
+  let scale = width + height;
+  for (const p of pts) scale = Math.max(scale, Math.abs(p.x), Math.abs(p.y));
+  // f64 evaluation of distances from binary64 copies of p*: a margin far above its rounding.
+  const thr = (draw.betaC + RASTER_SNAP) * SLACK + 2 ** -30 * scale + 2 ** -20;
+  const cols = Math.ceil(width / CELL);
+  const rows = Math.ceil(height / CELL);
+  const strip = (cx: number, cy: number) =>
+    cx * CELL < CLIP_STRIP ||
+    (cx + 1) * CELL > width - CLIP_STRIP ||
+    cy * CELL < CLIP_STRIP ||
+    (cy + 1) * CELL > height - CLIP_STRIP;
+  const triCells = new Map<number, number[]>();
+  const edgeCells = new Map<number, number[]>();
+  const register = (
+    cells: Map<number, number[]>,
+    item: number,
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+  ) => {
+    const c0 = Math.max(0, Math.floor(x0 / CELL));
+    const c1 = Math.min(cols - 1, Math.floor(x1 / CELL));
+    const r0 = Math.max(0, Math.floor(y0 / CELL));
+    const r1 = Math.min(rows - 1, Math.floor(y1 / CELL));
+    for (let cy = r0; cy <= r1; cy += 1)
+      for (let cx = c0; cx <= c1; cx += 1) {
+        if (!strip(cx, cy)) continue;
+        const key = cy * cols + cx;
+        const list = cells.get(key);
+        if (list === undefined) cells.set(key, [item]);
+        else list.push(item);
+      }
+  };
+  for (let t = 0; t + 2 < draw.indices.length; t += 3) {
+    const [a, b, c] = [0, 1, 2].map((k) => pts[draw.indices[t + k]!]!);
+    register(
+      triCells,
+      t,
+      Math.min(a!.x, b!.x, c!.x) - thr,
+      Math.min(a!.y, b!.y, c!.y) - thr,
+      Math.max(a!.x, b!.x, c!.x) + thr,
+      Math.max(a!.y, b!.y, c!.y) + thr,
+    );
+  }
+  // The excluding edges: the boundary candidates, and every edge of a triangle with a vertex
+  // outside the viewport (within a margin, so a vertex on the edge counts as outside).
+  const edges = [...draw.boundary];
+  const out = (p: (typeof pts)[number]) =>
+    p.x < thr || p.y < thr || p.x > width - thr || p.y > height - thr;
+  for (let t = 0; t + 2 < draw.indices.length; t += 3) {
+    const tri = [draw.indices[t]!, draw.indices[t + 1]!, draw.indices[t + 2]!];
+    if (tri.some((i) => out(pts[i]!)))
+      for (let k = 0; k < 3; k += 1) edges.push(tri[k]!, tri[(k + 1) % 3]!);
+  }
+  for (let e = 0; e + 1 < edges.length; e += 2) {
+    const a = pts[edges[e]!]!;
+    const b = pts[edges[e + 1]!]!;
+    register(
+      edgeCells,
+      e,
+      Math.min(a.x, b.x) - thr,
+      Math.min(a.y, b.y) - thr,
+      Math.max(a.x, b.x) + thr,
+      Math.max(a.y, b.y) + thr,
+    );
+  }
+  const segmentDistance = (qx: number, qy: number, a: { x: number; y: number }, b: typeof a) => {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const l2 = dx * dx + dy * dy;
+    const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((qx - a.x) * dx + (qy - a.y) * dy) / l2));
+    return Math.hypot(qx - (a.x + t * dx), qy - (a.y + t * dy));
+  };
+  const contains = (qx: number, qy: number, t: number) => {
+    const [a, b, c] = [0, 1, 2].map((k) => pts[draw.indices[t + k]!]!) as [
+      (typeof pts)[number],
+      (typeof pts)[number],
+      (typeof pts)[number],
+    ];
+    const area = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    if (area === 0) return false;
+    const s = Math.sign(area);
+    const side = (p: typeof a, r: typeof a) =>
+      s * ((r.x - p.x) * (qy - p.y) - (r.y - p.y) * (qx - p.x)) >= 0;
+    return side(a, b) && side(b, c) && side(c, a);
+  };
+  const pixels = stripPixels(width, height);
+  let compared = 0;
+  let excluded = 0;
+  const mismatches: string[] = [];
+  for (let k = 0; 2 * k < pixels.length; k += 1) {
+    const px = pixels[2 * k]!;
+    const py = pixels[2 * k + 1]!;
+    const qx = px + 0.5;
+    const qy = py + 0.5;
+    const key = Math.floor(py / CELL) * cols + Math.floor(px / CELL);
+    const near = (edgeCells.get(key) ?? []).some(
+      (e) => segmentDistance(qx, qy, pts[edges[e]!]!, pts[edges[e + 1]!]!) <= thr,
+    );
+    if (near) {
+      excluded += 1;
+      continue;
+    }
+    compared += 1;
+    const inside = (triCells.get(key) ?? []).some((t) => contains(qx, qy, t));
+    const covered = ((coverage[k >>> 5]! >>> (k & 31)) & 1) === 1;
+    if (inside !== covered)
+      mismatches.push(
+        `pixel (${px}, ${py}): GPU ${covered ? 'covers' : 'misses'} it, M* ${inside ? 'contains' : 'does not contain'} it`,
+      );
+  }
+  return { compared, excluded, mismatches };
 }
 
 /**
@@ -240,9 +570,43 @@ export function emulatedReadback(payload: ReadbackPayload): ReadbackPage {
       ndc.push(bitsOfF32(nx), bitsOfF32(ny), bitsOfF32(0), bitsOfF32(1));
       feature.push(bitsOfF32(px), bitsOfF32(py), i / 2, 1);
     }
-    return { id: draw.id, ndc: [...ndc, ...ndc], feature, meshSha256: draw.meshSha256 };
+    return {
+      id: draw.id,
+      ndc: [...ndc, ...ndc],
+      feature,
+      meshSha256: draw.meshSha256,
+      ...(draw.clip ? { coverage: emulatedCoverage(draw) } : {}),
+    };
   });
   return { shaderSha256: payload.shaderSha256, adapter: { emulated: true }, results };
+}
+
+/** The stand-in's strip coverage: pixel centres inside a triangle of p*, in binary64. */
+export function emulatedCoverage(
+  draw: Pick<ReadbackDraw, 'frame' | 'expected' | 'indices'>,
+): number[] {
+  const pixels = stripPixels(draw.frame.width, draw.frame.height);
+  const words = new Array<number>(Math.ceil(pixels.length / 64)).fill(0);
+  const pts = draw.expected;
+  for (let k = 0; 2 * k < pixels.length; k += 1) {
+    const qx = pixels[2 * k]! + 0.5;
+    const qy = pixels[2 * k + 1]! + 0.5;
+    for (let t = 0; t + 2 < draw.indices.length; t += 3) {
+      const [a, b, c] = [0, 1, 2].map((j) => pts[draw.indices[t + j]!]!) as [
+        (typeof pts)[number],
+        (typeof pts)[number],
+        (typeof pts)[number],
+      ];
+      const area = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+      const side = (p: typeof a, r: typeof a) =>
+        Math.sign(area) * ((r.x - p.x) * (qy - p.y) - (r.y - p.y) * (qx - p.x)) >= 0;
+      if (area !== 0 && side(a, b) && side(b, c) && side(c, a)) {
+        words[k >>> 5] = (words[k >>> 5]! | (1 << (k & 31))) >>> 0;
+        break;
+      }
+    }
+  }
+  return words;
 }
 
 /**
