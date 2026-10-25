@@ -24,8 +24,13 @@ const option = (name, fallback) => {
 const shards = option('--shards', Math.max(1, Math.min(12, os.cpus().length - 2)));
 const stride = option('--stride', 1);
 const idsAt = args.indexOf('--ids');
-const idsFile = idsAt >= 0 ? path.resolve(args[idsAt + 1] ?? '') : null;
+const idsArg = idsAt >= 0 ? args[idsAt + 1] : null;
+if (idsArg === undefined || (idsArg !== null && idsArg.startsWith('--')))
+  throw new Error('--ids takes a file');
+const idsFile = idsArg === null ? null : path.resolve(idsArg);
 if (idsFile !== null && !existsSync(idsFile)) throw new Error(`--ids file ${idsFile} not found`);
+if (idsFile !== null && args.includes('--stride'))
+  throw new Error('--stride and --ids cannot be combined');
 if (!Number.isInteger(shards) || shards < 1 || !Number.isInteger(stride) || stride < 1)
   throw new Error('--shards and --stride take positive integers');
 

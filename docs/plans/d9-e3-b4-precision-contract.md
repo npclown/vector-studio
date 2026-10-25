@@ -1654,3 +1654,82 @@ A fresh-context review of the diff (`dbbaaeb..367450c`) found **no soundness, de
   - `a04CoverSelfTest` should also use the cover's own frontiers, inherited and recomputed after eviction (`arcsOf`), and compare the cover's classes with the cold class and exact membership. An injectable cache size would let a test force eviction.
   - Two code comments repeat the overstatements corrected above (the halves cost and the sample spacing).
   - `splitPoly` builds the merged frontier map twice.
+
+## 18. E3-U2e oracle fixes and freeze annex, 2026-10-25
+
+Dated append. The full freeze run of section 17 (oracle `c4a9644`) did not pass. E3-U2e fixes the oracle so that every failed case ends within the freeze cap, then runs the full freeze again. It is the E3-Q6 (a) path of an oracle fix, with no corpus change. No A04 threshold, criterion, cap, work weight or freeze parameter changes. Choices are **decided under the user's standing instruction of 2026-10-24 (recommended option)**. On 2026-10-25 the user chose the full re-run over a run of the heavy cases and a stride sample.
+
+### 18.1 The full run of section 17
+
+The run used oracle `c4a9644` (SHA-256 `3211486c…0fa`) on the machine of section 17.4, with 14 shards. It took 8.2 h wall and 107 CPU hours.
+
+- **27,399 `ok`, 58 `ORACLE-WORK`, 2 `ORACLE-ERROR`.** The 3 `not-drawable` cases are `C10` x01, x02 and x05, as section 6 expects. They are not failures.
+- **Where the time went.** The 1,064 cases at or above 10^8 units took 85 % of it.
+- **The failures.**
+  - The two `ORACLE-ERROR` cases (`C9/k03` and `C9/k04` at T7) were a pseudo-division defect.
+  - Seven `C5` cases had a cell left unresolved (`l18`, `l78`, `g0090`, `g0141`).
+  - The rest were `C9` strokes at the cap, mostly under T6 and T7 (`k19`, `k22`, `g0154`, `g0178`, `g0186`, `g0207`, `g0209`, `g0249`, `g0290`, `g0291`), plus `C7/k05/edge/z64-d3`.
+  - The ids are in [d9-e3-a04-freeze-failures-2026-10-24.txt](d9-e3-a04-freeze-failures-2026-10-24.txt) (60 ids).
+  - The 51 ids still failing after the first fixes are in [d9-e3-a04-freeze-failures-2026-10-24b.txt](d9-e3-a04-freeze-failures-2026-10-24b.txt).
+
+### 18.2 Changes, each a sound filter or an exact identity
+
+| Change | What it does | Why it is sound |
+| ------ | ------------ | --------------- |
+| Pseudo-division | `zpdivmod` pads the remainder before the subtraction loop | A remainder that dropped more than one degree had holes, and BigInt arithmetic on a hole threw. With the padding, `lc^(δ+1)·a = q·b + r` holds. `a04PseudoDivisionSelfTest` checks it on random pairs |
+| Pair split | An undecided polygon whose open pieces include two convex pieces, with crossing edges not within 8° of parallel, is split along the bisector of the two edges, through the point nearest the polygon's center. It is IN when both halves are | The halves cover the polygon for any line. The split uses the seam budget and depth of section 14.5 |
+| Outside samples (anisotropic) | An anisotropic cell with an inside sample and no outside one tries the midline candidates of section 17.2 for an outside point | A candidate is tested by exact membership |
+| IN by halves | The mirror of OUT by halves (section 17.2), for an undecided anisotropic cell at the freeze cell size or below | Two closed halves cover the cell. A half is IN when `classifyPoly` certifies it |
+| Halves before candidates | When the nine samples of such a cell are all on one side, that side's halves test runs before the candidate search for the other side | A cell certified by halves holds no point of the other side, so the search would fail. The outcome is the same |
+| Integer polygons | `insideUnion` builds its lines as integer cross products of homogeneous vertices, and reads zero area as fewer than three edges | Each line is a positive multiple of the rational one, so its orientation is kept |
+| Point stages | A point is refined in stages to `r·2^-8`, `2^-16` and `2^-24`, each from the last. The OUT and IN tests run after each stage | The last stage is the former single collection. "Decided whenever it was before" is observed, not proved: the budgets are spent differently |
+| Sample cache | Witness samples are kept by position, at most 2^16 | A sample's value is its membership in the closed region, whichever frontiers its test started from |
+| Footless sub-arcs | A sub-arc whose sweep equation keeps one sign over a polygon is recorded with that sign. Collections and tests for polygons inside it reuse the sign | The sign holds over an enclosure of the polygon, so over every polygon inside it. Known nodes skip the budget decrement, so a collection can differ from before, and it stays sound |
+| Approximate normals | Normal-segment candidates use float Horner on rounded coefficients and skip footless sub-arcs | Candidates only: each is tested by exact membership |
+| OUT by the local hull | The OUT test bounds the distance between a polygon and a sub-arc's box by the box distance, and also by the separations along the polygon's edge normals and the center direction (`hullBoxDistLo`) | A linear form's minimum over the hull is at a vertex, and its maximum over a box is at a corner. Each separation, divided by an upper bound of the direction's length, is a lower bound on the distance. Under T6 a cell's local image is a skewed parallelogram far smaller than its box. The box distance left outside cells beside a foot undecided, and the freeze check descended below them |
+| Coarse-only and deep-OUT cells | Cover cells above the freeze cell size skip the finer collection. Freeze-size cells refine the OUT test 16 times finer | Each changes only how far a test refines |
+| Sample order | Witness samples try the kept samples first, then the corners and edge middles, which neighbouring cells share, then the center | Whether a witness exists depends only on the box. Which samples form it can depend on the kept samples |
+| Neighbour test | `nearBoundary`, the "witnessed or opposite-class neighbour" of the freeze cell size rule (section 14), tests the neighbours already in the cover first, the uniform ones before the witness searches, and the center's class only for a uniform neighbour | An OR over the same eight neighbours. The outcome is the same |
+| Pruned descent | Below the last of the 12 levels, the point-like descent drops the cells without unwitnessed children before the neighbour test | Such a cell adds no children, so every next level is the same. The pruning runs only when the level has at most 4,096 cells, so the 4,096 test is the same. The last level is filtered in full, so the final 16-cell test is the same. The pruning can cost more: it builds the children of cells that the neighbour test would drop. The work is charged |
+
+### 18.3 Tests
+
+`tests/geometry/e3-a04-oracle-u2e.test.ts` adds seven tests through `a04CoverSelfTest` and `a04PseudoDivisionSelfTest`. They cover the pseudo-division, pair splits on `g0090` and `g0141`, outside samples on `l78` and `l18`, IN by halves on `k22`, and OUT by the local hull on a `C9/g0249/T6` cell. Without `hullBoxDistLo` that cell stays undecided. `pnpm test:e3-a04` passes 120 tests in 7 files.
+
+### 18.4 Results before the full run
+
+Work is in units, at the 1.8·10^9 cap unless stated.
+
+| Case | Before | After |
+| ---- | ------ | ----- |
+| `C9/g0249/T6/z1-d2` | 2.32·10^9 with no cap (oracle `249a4e6`) | 0.65·10^9 |
+| `C9/g0154/T6/z64-d3` | at the cap | 1.60·10^9 |
+| `C9/g0154/T6/z0.01-d3` | 1.99·10^9 with no cap (oracle `60dfb98`) | 1.62·10^9 |
+| `C9/k22/T7/z64-d3` | at the cap | 0.73·10^9 |
+| `C7/k05/edge/z64-d3` | at the cap | 0.70·10^9 |
+
+- **Profile of the T6 cases.** On `C9/g0249/T6/z1-d2`, 82 % of the work was the point-like descent below freeze cells without a witness. In a sample of 80 such cells, 79 were outside R by exact membership. Most were 0.02 to 0.05 local units outside, beside a foot.
+- **Rerun of the 51 ids** on the user's PC, oracle `60dfb98`, 8 shards: 50 `ok` and 1 at the cap (`C9/g0154/T6/z0.01-d3`, fixed above). It took 1.5 h wall.
+
+### 18.5 Independent review, 2026-10-25
+
+A fresh-context review of `9a72534..0d0bf50` found **no soundness defect** (verdict READY WITH FOLLOW-UPS). It checked the arguments above against the code. Disposition, decided under the user's standing instruction of 2026-10-24 (recommended option):
+
+- **Applied here.**
+  - The pruned descent can cost more than before, and its outcome is the same only below the cap.
+  - The point stages and the footless sub-arcs are observed, not proved, to decide whenever they did before.
+- **Applied in the freeze tool**, which is not part of the oracle SHA.
+  - A listed id that is not a corpus case is now an error.
+  - `--ids` without a file is an error.
+  - `--ids` with `--stride` is an error.
+- **Time per unit.** The integer lines of `zClip` no longer drop their gcd, and `hullBoxDistLo` adds float work per sub-arc unit. So the time per unit is checked against the 1.53 µs of section 14.8 on the slowest cases of the full run (section 18.6).
+- **Deferred to the first oracle change after the freeze.** The full run pins the oracle SHA, so its source does not change before the freeze record.
+  - Two comments overstate. Near the point stages, "decided whenever it was before" should say observed. In `collectNodes`, "the same outcome at no cost" should note the budget.
+  - The pruned descent's comment says "superset" where the pruned set is a subset of the level.
+  - The section 17.5 items: `a04CoverSelfTest` should use `arcsOf`, the two comments named there, and `splitPoly` building the merged frontier map twice.
+
+### 18.6 Full freeze run
+
+The oracle is commit `0d0bf50`. `a04-region.ts` has SHA-256 `aad4b5829989b191250adca44c18d4658dc38fb21814c897578630a6dde1fb00`. The run is `pnpm e3-a04:freeze --shards 8` on the machine of section 17.4 (31.9 GB RAM, so 8 shards). It started at 04:41:55 UTC on 2026-10-25, with output in `.tools/e3-a04-freeze/2026-10-25T04-41-55-181Z/`.
+
+Result: pending.

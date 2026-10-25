@@ -33,11 +33,13 @@ it(`freeze-checks shard ${shard} of ${shards} (stride ${stride})`, () => {
   const file = path.join(out, `shard-${shard}.ndjson`);
   let k = 0;
   let listed = 0;
+  const found = new Set<string>();
   for (const kase of iterateA04Corpus()) {
     const index = k;
     k += 1;
     if (ids !== null) {
       if (!ids.has(String(kase.id))) continue;
+      found.add(String(kase.id));
       listed += 1;
       if ((listed - 1) % shards !== shard) continue;
     } else if (index % stride !== 0 || (index / stride) % shards !== shard) continue;
@@ -58,4 +60,7 @@ it(`freeze-checks shard ${shard} of ${shards} (stride ${stride})`, () => {
     }
     appendFileSync(file, `${JSON.stringify(line)}\n`);
   }
+  // A listed id that is not a corpus case is an error, not a silent skip.
+  const missing = ids === null ? [] : [...ids].filter((id) => !found.has(id));
+  if (missing.length > 0) throw new Error(`ids not in the corpus: ${missing.join(', ')}`);
 });
