@@ -31,7 +31,8 @@ declare global {
 //    most 1, every pixel with nonzero red has all its counts equal to 1, and wherever both
 //    variants cover a pixel once per sample their red values agree within 2/255 (the fringe
 //    shades each covered sample with the pixel-centre value, so 4x equals 1x without double
-//    coverage; before E17, C4/n06/T2 dpr1.5 pixel (491,268) differed by 22).
+//    coverage; before E17, C4/n06/T2 dpr1.5 pixel (491,268) differed by 22). A fixture with no
+//    visible pixel in either variant has nothing to compare.
 // 2. The reset path on the E10 page, at 1x and 4x: 511 mesh draws (two stencil resets) with one
 //    rectangle drawn at ordinals 0, 255 and 510, which share reference 1, counts exactly 3 inside,
 //    so a reset separates draws that share a reference, and the frame has no page or console
@@ -97,7 +98,10 @@ function errorsOf(page: Page): string[] {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('console', (message) => {
-    if (message.type() === 'error') errors.push(message.text());
+    // A headed browser requests /favicon.ico, which the playground does not serve; that 404 is
+    // not an error of the frame.
+    if (message.type() === 'error' && !message.location().url.endsWith('/favicon.ico'))
+      errors.push(message.text());
   });
   return errors;
 }
@@ -157,15 +161,16 @@ test('E17-A5 fixtures: count at most 1, covered pixels counted once, 4x equals 1
     }
   }
   const named: Record<string, unknown> = {};
+  const compared: Record<string, number> = {};
   for (const key of FIXTURES) {
     const one = captures.get(`fringe-1x ${key}`)!;
     const four = captures.get(`fringe-4x ${key}`)!;
-    let compared = 0;
+    let pixels = 0;
     for (let pixel = 0; pixel < one.red.length; pixel += 1) {
       if (one.red[pixel] === 0 && four.red[pixel] === 0) continue;
       const once = (c: Capture) => countsAt(c, pixel).every((count) => count === 1);
       if (!once(one) || !once(four)) continue;
-      compared += 1;
+      pixels += 1;
       const difference = Math.abs(one.red[pixel]! - four.red[pixel]!);
       if (difference > 2)
         fail(
@@ -173,7 +178,12 @@ test('E17-A5 fixtures: count at most 1, covered pixels counted once, 4x equals 1
           `(${pixel % one.width},${Math.floor(pixel / one.width)}) 1x ${one.red[pixel]} 4x ${four.red[pixel]}`,
         );
     }
-    if (compared === 0) fail(`1x-4x ${key}`, 'no pixel compared');
+    compared[key] = pixels;
+    // A fixture with no visible pixel in either variant (C3/c02/T7 dpr2 draws none) has nothing
+    // to compare; one with visible pixels but none counted once in both is a failure.
+    const visible = (c: Capture) => c.red.some((red) => red > 0);
+    if (pixels === 0 && (visible(one) || visible(four)))
+      fail(`1x-4x ${key}`, 'visible pixels, none compared');
   }
   for (const [key, x, y] of NAMED_PIXELS) {
     const one = captures.get(`fringe-1x ${key}`)!;
@@ -190,6 +200,7 @@ test('E17-A5 fixtures: count at most 1, covered pixels counted once, 4x equals 1
     schema: 'e17-write-once/v1',
     browser: { name: info.project.name, version: browser.version() },
     fixtures: FIXTURES.length,
+    compared,
     named,
     failures,
     errors,
