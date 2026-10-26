@@ -1,0 +1,59 @@
+{
+  "schema": "p3-st-u7-joint-defects-v1",
+  "evidence": "UNVERIFIED: functional ST-U7 joint-coverage fixtures (ST-A11, ST-A16, ST-A17) only; precision is UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence, and no Q4 coverage threshold is claimed.",
+  "browser": "155.0.8059.85",
+  "results": [
+    {
+      "defect": "ST7-D1",
+      "caughtBy": "ST-A11",
+      "a11Failures": 20,
+      "separationFailures": 3,
+      "minimumSeparation": 0.25,
+      "a16OverTolerance": {
+        "o=0.5": 9188,
+        "o=0.25": 9186
+      },
+      "caught": true,
+      "pageErrors": []
+    },
+    {
+      "defect": "ST7-D2",
+      "caughtBy": "ST-A16",
+      "a11Failures": 0,
+      "separationFailures": 0,
+      "minimumSeparation": 47.8125,
+      "a16OverTolerance": {
+        "o=0.5": 2396,
+        "o=0.25": 58
+      },
+      "caught": true,
+      "pageErrors": []
+    },
+    {
+      "defect": "ST7-D8",
+      "caughtBy": "ST-A16",
+      "a11Failures": 0,
+      "separationFailures": 0,
+      "minimumSeparation": 47.8125,
+      "a16OverTolerance": {
+        "o=0.5": 2396,
+        "o=0.25": 68
+      },
+      "caught": true,
+      "pageErrors": []
+    },
+    {
+      "defect": "ST7-D10",
+      "caughtBy": "ST-A16 at o = 0.25",
+      "a11Failures": 16,
+      "separationFailures": 0,
+      "minimumSeparation": 47.8125,
+      "a16OverTolerance": {
+        "o=0.5": 0,
+        "o=0.25": 29584
+      },
+      "caught": true,
+      "pageErrors": []
+    }
+  ]
+}

@@ -1,0 +1,855 @@
+{
+  "config": {
+    "argv": [
+      "C:\\Users\\thseh\\.tools\\node-v24.15.0-win-x64\\node.exe",
+      "D:\\GIT\\vs-e11h\\node_modules\\@playwright\\test\\cli.js",
+      "test",
+      "--config",
+      "playwright.gpu.config.ts",
+      "tests/gpu/p3-st-u6-stroke.spec.ts",
+      "tests/gpu/p3-st-u7-joint.spec.ts",
+      "tests/gpu/p3-b2-strokes.spec.ts",
+      "tests/gpu/viz-v3-integration.spec.ts",
+      "--reporter=list,json"
+    ],
+    "configFile": "D:\\GIT\\vs-e11h\\playwright.gpu.config.ts",
+    "rootDir": "D:/GIT/vs-e11h/tests/gpu",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "D:/GIT/vs-e11h/test-results/gpu",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chrome",
+        "name": "chrome",
+        "testDir": "D:/GIT/vs-e11h/tests/gpu",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "D:/GIT/vs-e11h/test-results/gpu",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "edge",
+        "name": "edge",
+        "testDir": "D:/GIT/vs-e11h/tests/gpu",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list"
+      ],
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.62.1",
+    "workers": 1,
+    "webServer": {
+      "command": "pnpm --filter @vector-studio/playground exec vite --host 127.0.0.1 --port 4175 --strictPort",
+      "url": "http://127.0.0.1:4175",
+      "reuseExistingServer": false,
+      "timeout": 30000
+    }
+  },
+  "suites": [
+    {
+      "title": "p3-b2-strokes.spec.ts",
+      "file": "p3-b2-strokes.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "DPR 1",
+          "file": "p3-b2-strokes.spec.ts",
+          "line": 174,
+          "column": 8,
+          "specs": [
+            {
+              "title": "P3 B2 stroke page screenshots at DPR 1 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 600000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chrome",
+                  "projectName": "chrome",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 14745,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-26T10:13:44.375Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "26b50d5901dfd348bb8a-f0fc8e07934ac785e561",
+              "file": "p3-b2-strokes.spec.ts",
+              "line": 177,
+              "column": 5
+            },
+            {
+              "title": "P3 B2 stroke page screenshots at DPR 1 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 600000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "edge",
+                  "projectName": "edge",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 12548,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-26T10:16:41.529Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "26b50d5901dfd348bb8a-7d9652766cb33de9b643",
+              "file": "p3-b2-strokes.spec.ts",
+              "line": 177,
+              "column": 5
+            }
+          ]
+        },
+        {
+          "title": "DPR 2",
+          "file": "p3-b2-strokes.spec.ts",
+          "line": 174,
+          "column": 8,
+          "specs": [
+            {
+              "title": "P3 B2 stroke page screenshots at DPR 2 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 600000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chrome",
+                  "projectName": "chrome",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 5664,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-26T10:13:59.525Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "26b50d5901dfd348bb8a-494d8a3b71d673bbbf58",
+              "file": "p3-b2-strokes.spec.ts",
+              "line": 177,
+              "column": 5
+            },
+            {
+              "title": "P3 B2 stroke page screenshots at DPR 2 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 600000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "edge",
+                  "projectName": "edge",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 6038,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-26T10:16:54.571Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "26b50d5901dfd348bb8a-a1605914b2f9994dbedd",
+              "file": "p3-b2-strokes.spec.ts",
+              "line": 177,
+              "column": 5
+            }
+          ]
+        },
+        {
+          "title": "DPR 3",
+          "file": "p3-b2-strokes.spec.ts",
+          "line": 174,
+          "column": 8,
+          "specs": [
+            {
+              "title": "P3 B2 stroke page screenshots at DPR 3 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 600000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chrome",
+                  "projectName": "chrome",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4722,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-26T10:14:05.212Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "26b50d5901dfd348bb8a-f5634fa840e8725c01f3",
+              "file": "p3-b2-strokes.spec.ts",
+              "line": 177,
+              "column": 5
+            },
+            {
+              "title": "P3 B2 stroke page screenshots at DPR 3 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 600000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "edge",
+                  "projectName": "edge",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 5599,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-26T10:17:00.630Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "26b50d5901dfd348bb8a-91cbca2796ceee7731fa",
+              "file": "p3-b2-strokes.spec.ts",
+              "line": 177,
+              "column": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "p3-st-u6-stroke.spec.ts",
+      "file": "p3-st-u6-stroke.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "P3 ST-U6 stroke fixtures samples1 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5397,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-26T10:14:10.023Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6ce4e24a47701e8358db-aa2374a67861beda5635",
+          "file": "p3-st-u6-stroke.spec.ts",
+          "line": 38,
+          "column": 3
+        },
+        {
+          "title": "P3 ST-U6 stroke fixtures samples4 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 6258,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-26T10:14:15.439Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6ce4e24a47701e8358db-31cbb6e46593008cb454",
+          "file": "p3-st-u6-stroke.spec.ts",
+          "line": 38,
+          "column": 3
+        },
+        {
+          "title": "P3 ST-U6 stroke fixtures samples1 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 6061,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-26T10:17:06.278Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6ce4e24a47701e8358db-a3485b2ded10a74aa7d0",
+          "file": "p3-st-u6-stroke.spec.ts",
+          "line": 38,
+          "column": 3
+        },
+        {
+          "title": "P3 ST-U6 stroke fixtures samples4 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 6128,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-26T10:17:12.357Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6ce4e24a47701e8358db-4dbb2c7ca21635e3e20a",
+          "file": "p3-st-u6-stroke.spec.ts",
+          "line": 38,
+          "column": 3
+        }
+      ]
+    },
+    {
+      "title": "p3-st-u7-joint.spec.ts",
+      "file": "p3-st-u7-joint.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "P3 ST-U7 joint fixtures samples1 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 900000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 15826,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-26T10:14:22.024Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "efac16e388ed5d7f3cfd-d0fc3d6a872ef481c128",
+          "file": "p3-st-u7-joint.spec.ts",
+          "line": 76,
+          "column": 3
+        },
+        {
+          "title": "P3 ST-U7 joint fixtures samples4 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 900000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 15112,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-26T10:14:37.865Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "efac16e388ed5d7f3cfd-7039243b3f91416e0b4b",
+          "file": "p3-st-u7-joint.spec.ts",
+          "line": 76,
+          "column": 3
+        },
+        {
+          "title": "P3 ST-U7 seeded defects fail their checks (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 9031,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-26T10:14:53.012Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "efac16e388ed5d7f3cfd-ea5905230535a062e681",
+          "file": "p3-st-u7-joint.spec.ts",
+          "line": 296,
+          "column": 1
+        },
+        {
+          "title": "P3 ST-U7 joint fixtures samples1 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 900000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 17836,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-26T10:17:18.829Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "efac16e388ed5d7f3cfd-076989503d086fbb2f6e",
+          "file": "p3-st-u7-joint.spec.ts",
+          "line": 76,
+          "column": 3
+        },
+        {
+          "title": "P3 ST-U7 joint fixtures samples4 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 900000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 17076,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-26T10:17:36.686Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "efac16e388ed5d7f3cfd-f2b9ce9388764c554752",
+          "file": "p3-st-u7-joint.spec.ts",
+          "line": 76,
+          "column": 3
+        },
+        {
+          "title": "P3 ST-U7 seeded defects fail their checks (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 9272,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-26T10:17:53.794Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "efac16e388ed5d7f3cfd-ab8454f2403e6a408626",
+          "file": "p3-st-u7-joint.spec.ts",
+          "line": 296,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "viz-v3-integration.spec.ts",
+      "file": "viz-v3-integration.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "DPR 1",
+          "file": "viz-v3-integration.spec.ts",
+          "line": 93,
+          "column": 8,
+          "specs": [
+            {
+              "title": "V-3 A07 integration page at DPR 1 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 1800000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chrome",
+                  "projectName": "chrome",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 48633,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-26T10:15:02.164Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "3f9fa6fe8da72fa2af29-615c390bfd5192ed1984",
+              "file": "viz-v3-integration.spec.ts",
+              "line": 96,
+              "column": 5
+            },
+            {
+              "title": "V-3 A07 integration page at DPR 1 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 1800000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "edge",
+                  "projectName": "edge",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 48605,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-26T10:18:03.170Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "3f9fa6fe8da72fa2af29-15f54d585a614ef05502",
+              "file": "viz-v3-integration.spec.ts",
+              "line": 96,
+              "column": 5
+            }
+          ]
+        },
+        {
+          "title": "DPR 2",
+          "file": "viz-v3-integration.spec.ts",
+          "line": 93,
+          "column": 8,
+          "specs": [
+            {
+              "title": "V-3 A07 integration page at DPR 2 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 1800000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chrome",
+                  "projectName": "chrome",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 49414,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-26T10:15:50.816Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "3f9fa6fe8da72fa2af29-3598a836a0dfcc0f238b",
+              "file": "viz-v3-integration.spec.ts",
+              "line": 96,
+              "column": 5
+            },
+            {
+              "title": "V-3 A07 integration page at DPR 2 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 1800000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "edge",
+                  "projectName": "edge",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 49612,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-26T10:18:51.789Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "3f9fa6fe8da72fa2af29-e89254021a57bdb86357",
+              "file": "viz-v3-integration.spec.ts",
+              "line": 96,
+              "column": 5
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-26T10:13:39.376Z",
+    "duration": 362892.435,
+    "expected": 20,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}
