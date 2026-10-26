@@ -1,6 +1,7 @@
 {
   "schema": "e11-u3-headed-transfer-meta/1",
   "label": "E11-U3 headed PC run (A03, A06, A07) on the exit snapshot",
+  "labelNote": "A07 is cited by a later full test:gpu run; this run covers the A03 headed and A06 V-3 parts only",
   "commit": "00e49bf20b3dcb08c459de335fe25bb2f8a0d8df",
   "worktree": "D:\\GIT\\vs-e11h",
   "originMainAtRun": "3f8b870f56f98234242b1ed488e1ec295fdd38ad",
@@ -14,8 +15,14 @@
       "sourceAtEndMatches": true
     }
   },
+  "identities": {
+    "fill": "geometry-wasm/fill-v0+r4",
+    "stroke": "geometry-wasm/stroke-v0+r7",
+    "releaseWasmSha256": "58f26517603d0d599f187481c967832e3f6abea2eb53c738e5540b6200b4fd35",
+    "sources": "operation ids: viz-v3-integration observations.json; WASM SHA: p3-b2-strokes observations.json and e11h-geom.log; the ST-U6 and ST-U7 records name neither and are covered by the same build and clean-tree check"
+  },
   "toolchain": {
-    "node": "v24.15.0 (%USERPROFILE%\\.tools\\node-v24.15.0-win-x64)",
+    "node": "v24.15.0 (%USERPROFILE%\\.tools\\node-v24.15.0-win-x64) for test:geometry and test:gpu; pnpm build ran on v24.22.1 (engine warning, e11h-build.log line 8). The WASM SHA of the test:geometry build matches the record",
     "pnpm": "11.1.2 via the node 24.15.0 corepack; a pnpm.cmd shim on PATH routed the webServer pnpm call to the same node",
     "cargoHome": "D:\\GIT\\vector-studio\\.tools\\rust\\cargo",
     "rustupHome": "D:\\GIT\\vector-studio\\.tools\\rust\\rustup"
@@ -82,13 +89,16 @@
       "vendor": "nvidia",
       "architecture": "turing",
       "description": "",
+      "descriptionNote": "the adapter reports an empty description string",
       "selectedFeatures": ["core-features-and-limits"],
       "limits": "recorded in each observations.json"
     },
     "browsers": {
       "chrome": "155.0.8059.85",
       "edge": "156.0.4314.42",
-      "source": "spec records and executable VersionInfo agree"
+      "source": "spec records and executable VersionInfo agree",
+      "channels": { "chrome": "chrome", "edge": "edge" },
+      "channelSource": "Playwright project channel field in each observations.json"
     },
     "dprs": {
       "p3-b2-strokes": [1, 2, 3],
