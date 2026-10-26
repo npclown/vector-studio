@@ -15,12 +15,12 @@ This directory holds the P3 exit evidence for A01-A08 on the [E11 exit snapshot 
 
 ## Runs
 
-| Run                                 | Commit                                                                         | Where                                                                                | Parts                                                                                  |
-| ----------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| [Container run](container-00e49bf/) | `00e49bf` (clean; changes since 5ddec4e are documents, tests and harness only) | Cloud container, Linux x86_64, Node 24.15.0, Rust 1.94.1                             | `test:geometry`, A01 sweep, fill and stroke class diagnostics, A03 and A05/A06 runners |
-| Protected CI                        | `c8a765d`, the #271 head, whose tree equals `00e49bf`                          | [Run 40276647840](https://github.com/npclown/vector-studio/actions/runs/40276647840) | `Static, unit, boundaries, and build`: PASS                                            |
-| PC headed run                       | Pending                                                                        | User's PC                                                                            | A02 (V-4 fill rows), A03 (ST-U6, ST-U7, B2 page), A06 and A07 (V-3), A08 (V-4)         |
-| A04 reference run                   | Pending (E3-U5)                                                                | PC and hosts of E3 section 19.6                                                      | A04, and A01's crack report                                                            |
+| Run                                    | Commit                                                                         | Where                                                                                | Parts                                                                                  |
+| -------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| [Container run](container-00e49bf/)    | `00e49bf` (clean; changes since 5ddec4e are documents, tests and harness only) | Cloud container, Linux x86_64, Node 24.15.0, Rust 1.94.1                             | `test:geometry`, A01 sweep, fill and stroke class diagnostics, A03 and A05/A06 runners |
+| Protected CI                           | `c8a765d`, the #271 head, whose tree equals `00e49bf`                          | [Run 40276647840](https://github.com/npclown/vector-studio/actions/runs/40276647840) | `Static, unit, boundaries, and build`: PASS                                            |
+| [PC headed run](headed-pc-2026-10-26/) | `00e49bf`, clean                                                               | User's PC, Chrome 155 and Edge 156                                                   | ST-U6, ST-U7, p3-b2-strokes, viz-v3-integration: 20/20 (A03, A06)                      |
+| A04 reference run                      | Pending (E3-U5)                                                                | PC and hosts of E3 section 19.6                                                      | A04, and A01's crack report                                                            |
 
 ## Container run commands
 
@@ -40,9 +40,9 @@ The closed-list rule of E11 section 7.2 applies to rejected `a04-corpus/v1` rows
 | --- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A01 | Pending          | Sweep done in the container run, scene and corpus phases: 0 structure, echo, isolation and batch failures, all 18 controls caught. Waits for the E3 crack report from the A04 run |
 | A02 | Pending          | Corpus part done: all 797 corpus fill rejections are in a closed-list class (E14-Q1 312, exact-rung cap stop 463, `ZeroLengthLeaf` 22). Waits for V-4's headed fill-rule rows     |
-| A03 | Pending          | Runner CI part PASS (not yet recorded); all corpus stroke rejections in a closed-list class or at a B2 literal status. Waits for the headed stroke specs                          |
+| A03 | [A03.md](A03.md) | PASS: runner CI part, corpus classes and the headed ST-U6, ST-U7 and B2 specs in Chrome and Edge                                                                                  |
 | A04 | Pending          | E3-U5 reference run                                                                                                                                                               |
 | A05 | [A05.md](A05.md) | PASS (no headed part)                                                                                                                                                             |
-| A06 | Pending          | Runner CI part PASS (not yet recorded). Waits for the V-3 headed port-call deltas                                                                                                 |
+| A06 | [A06.md](A06.md) | PASS: runner CI part and the V-3 headed port-call deltas in Chrome and Edge                                                                                                       |
 | A07 | Pending          | PC headed V-3 run in Chrome and Edge                                                                                                                                              |
 | A08 | Pending          | V-4 counted run (V-4 thread)                                                                                                                                                      |
