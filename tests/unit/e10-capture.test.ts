@@ -528,10 +528,11 @@ describe('E10-A5 count pass', () => {
       .filter(([name]) => String(name).endsWith('.createShaderModule'))
       .map(([, descriptor]) => (descriptor as { code: string }).code);
     expect(modules).toContain(`sha256:${sha}`);
-    // P1, mesh, count and readout modules; P1 and mesh pipelines plus three count pipelines.
+    // P1, mesh, E17 reset, count and readout modules; P1, mesh and E17 reset pipelines plus
+    // three count pipelines and the E17 count reset pipeline.
     expect(h.result.supported && h.backend.getStatistics()).toMatchObject({
-      shaderModulesCreated: 4,
-      pipelinesCreated: 6,
+      shaderModulesCreated: 5,
+      pipelinesCreated: 8,
     });
     const capture = await h.pending;
     expect(capture.counts!.samples).toBe(4);
