@@ -136,6 +136,8 @@ export type EditorSnapshot = Readonly<{
   tool: ToolName;
   viewport: RenderCamera;
   history: HistoryState;
+  /** The active tool's overlay, as the `overlay` query returns it after the last command. */
+  overlay: ToolOverlay | null;
 }>;
 
 export type Query =
@@ -175,7 +177,7 @@ export type EditorEvent =
       /** IDs of the nodes the change created, changed or removed, sorted. */
       touched: readonly string[];
     }>
-  | Readonly<{ type: 'session'; field: 'selection' | 'tool' | 'viewport' }>
+  | Readonly<{ type: 'session'; field: 'selection' | 'tool' | 'viewport' | 'overlay' }>
   | DiagnosticEvent;
 
 /** A structured diagnostic from the scene projector (plan section 4.5). */

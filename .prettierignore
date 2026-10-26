@@ -67,3 +67,5 @@ docs/benchmarks/results/*_p3_p3-al-ob5-workload-v1_*.json
 
 # P5 model fixtures are canonical serializeDocument output, compared byte-for-byte.
 tests/fixtures/p5-model/**/*.json
+**/.next/**
+apps/next-host/next-env.d.ts
