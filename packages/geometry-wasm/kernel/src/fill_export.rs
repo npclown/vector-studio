@@ -994,8 +994,14 @@ pub(crate) fn exact_rung(
                 if topology_failure(&result) {
                     continue;
                 }
+                // An internal error fails the batch self-check; depth stays 0, since no
+                // retry succeeded (contract section 4 item 4).
                 if map_attempt_error(error) == Mapped::Internal {
-                    return retry;
+                    return ExactOutcome {
+                        depth: 0,
+                        stop: first.stop,
+                        ..retry
+                    };
                 }
             }
         }

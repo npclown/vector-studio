@@ -7,6 +7,7 @@ use crate::codec::{PathInput, Request};
 use crate::cubic_fill::{
     with_line_caps_on_cubic_paths, CubicFillError, CubicFillWorkspace, MAX_EXACT_FLAT_COMMANDS,
 };
+use crate::e14_fill_limit_diag_tests::retry_stop_field;
 use crate::engine::BATCH_OK;
 use crate::fill_export::{
     exact_rung, refinement_exponents, tolerances, with_e16_defect, BuiltPath, E16Defect,
@@ -16,6 +17,7 @@ use crate::fill_export::{
 use crate::fill_ladder::{ExactStep, Reason, Rung};
 use crate::geometry::{VERB_CLOSE, VERB_CUBIC, VERB_LINE, VERB_MOVE};
 use crate::line_fill::LineFillRule;
+use crate::rounded_line_fill::RoundedFillError;
 use crate::simple_cubic_topology::TopologyError;
 
 const FIXTURES: &str = include_str!("../../../../tests/fixtures/e16-fill-remedy-v1.txt");
@@ -363,18 +365,29 @@ fn e16_f5_to_f8_refinement_retries() {
             "{name}"
         );
     }
-    // E16-F8: the retries stop at `CommandLimit`; the outcome at e is kept, with depth 0.
+    // E16-F8: the retries stop at `CommandLimit` at k = 1; the outcome at e is kept, with
+    // depth 0.
     let path = corpus("E16-F8");
     let record = built(&path);
     assert_eq!(
-        (record.outcome, record.rung, record.step, record.depth),
+        (
+            record.outcome,
+            record.rung,
+            record.reason,
+            record.step,
+            record.depth
+        ),
         (
             UNSUPPORTED,
             Some(Rung::Exact),
+            Some(Reason::Monotone),
             Some(ExactStep::TriangleFree),
             0
         )
     );
+    let (outcome, _) = exact(&path);
+    assert_eq!(outcome.stop, Some((1, CubicFillError::CommandLimit)));
+    assert_eq!(retry_stop_field(outcome.stop), "1:CommandLimit");
     assert!(
         matches!(
             record.error,
@@ -460,5 +473,23 @@ fn e16_d4_exponent_bound_is_caught() {
     assert!(
         seeded.iter().any(|value| *value < MIN_TOLERANCE_EXPONENT),
         "E16-D4 not caught"
+    );
+}
+
+/// The diagnostic's `retryStop` format, which the A02 classifier reads (contract section 4
+/// item 4).
+#[test]
+fn e16_retry_stop_field_format() {
+    assert_eq!(retry_stop_field(None), "-");
+    assert_eq!(
+        retry_stop_field(Some((3, CubicFillError::CommandLimit))),
+        "3:CommandLimit"
+    );
+    assert_eq!(
+        retry_stop_field(Some((
+            1,
+            CubicFillError::Rounded(RoundedFillError::EventLimit)
+        ))),
+        "1:Rounded(EventLimit)"
     );
 }

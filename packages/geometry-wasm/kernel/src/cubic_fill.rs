@@ -1690,7 +1690,7 @@ impl CubicFillWorkspace {
         input: PathInput<'_>,
         command_capacity: usize,
     ) -> Result<S1View<'_>, PrefixFailure> {
-        self.run_prefix(input, command_capacity, true, self.caps)?;
+        self.run_prefix(input, command_capacity, true, self.exact_caps(input))?;
         Ok(S1View {
             commands: &self.commands[..self.command_len],
             ranges: &self.contour_ranges[..self.range_len],

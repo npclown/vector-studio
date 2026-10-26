@@ -33,6 +33,15 @@ fn outcome<T>(result: &Result<T, CubicFillError>) -> String {
     }
 }
 
+/// The `retryStop` field (E16 contract section 4 item 4): `-`, or `<k>:<error>` with the
+/// last retry's decimal depth and its unmapped error in `Debug` form.
+pub(crate) fn retry_stop_field(stop: Option<(u32, CubicFillError)>) -> String {
+    stop.map_or_else(
+        || "-".to_owned(),
+        |(depth, error)| format!("{depth}:{error:?}"),
+    )
+}
+
 fn run() {
     let text = String::from_utf8(read_file("E14_FILL_INPUT")).expect("UTF-8 input");
     let mut workspace = CubicFillWorkspace::new(FILL_V0_LIMITS).unwrap();
@@ -99,10 +108,7 @@ fn run() {
             None
         };
         let refined = exact_cascade(&mut workspace, request, &verbs, &point_bytes);
-        let retry_stop = refined.stop.map_or_else(
-            || "-".to_owned(),
-            |(depth, error)| format!("{depth}:{error:?}"),
-        );
+        let retry_stop = retry_stop_field(refined.stop);
         println!(
             "{{\"id\":\"{}\",\"exponent\":{exponent},\"flatStatus\":{},\"flatVerbs\":{},\"flatPoints\":{},\"fast\":\"{}\",\"legacy\":\"{}\",\"triangleFree\":\"{}\",\"exact\":\"{}\",\"depth\":{},\"retryStop\":\"{}\",\"fastUs\":{fast_us},\"legacyUs\":{legacy_us},\"topologyStats\":\"{:?}\"}}",
             fields[0],
