@@ -50,7 +50,7 @@ const runRoot = path.resolve(
 
 /** The operation ids the predicted literals were fixed with (VZ3-A1, section 4.1). */
 const OPERATION_IDS = {
-  fill: 'geometry-wasm/fill-v0+r3',
+  fill: 'geometry-wasm/fill-v0+r4',
   stroke: 'geometry-wasm/stroke-v0+r7',
 } as const;
 /** Section 4.1: no path notice is expected anywhere in the run (VZ3-A15). */
@@ -136,6 +136,9 @@ for (const dpr of [1, 2]) {
         before: Pick<Snapshot, 'pathMesh'>,
         after: Pick<Snapshot, 'pathMesh'>,
       ): readonly [number, number] => {
+        // A missing pathMesh would read as 0 calls and pass a [0, 0] prediction vacuously.
+        if (before.pathMesh === null || after.pathMesh === null)
+          throw new Error('pathMesh statistics are null');
         const [f0, s0] = calls(before);
         const [f1, s1] = calls(after);
         return [f1 - f0, s1 - s0];
@@ -573,6 +576,17 @@ for (const dpr of [1, 2]) {
         identical('r2', 'recovered E versus no-loss E', post, noLoss);
         const deltaWindow = delta(before, after);
         gateDelta('r2', 'X in the loss window', deltaWindow, PREDICTED.r2Window);
+        // portCalls counts batched calls, so a rebuild of an unchanged path inside the in-window
+        // batch would still read fill +1; the cache must hold what the no-loss E holds.
+        const meshCache = (state: Pick<Snapshot, 'pathMesh'>) => ({
+          entries: state.pathMesh?.entries,
+          bytes: state.pathMesh?.bytes,
+        });
+        if (JSON.stringify(meshCache(after)) !== JSON.stringify(meshCache(xState)))
+          fail(
+            'r2',
+            `path mesh cache ${JSON.stringify(meshCache(after))} after the window, ${JSON.stringify(meshCache(xState))} at the no-loss E`,
+          );
         if (
           after.statistics.resources.live !== before.statistics.resources.live ||
           after.statistics.resources.liveBytes !== before.statistics.resources.liveBytes
@@ -588,6 +602,7 @@ for (const dpr of [1, 2]) {
             live: xState.statistics.resources.live,
             liveBytes: xState.statistics.resources.liveBytes,
           },
+          meshCache: { noLossE: meshCache(xState), afterWindow: meshCache(after) },
           noLossReports: reports,
         };
         // Back to S5's content before the churn.

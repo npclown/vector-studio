@@ -173,7 +173,7 @@ Amended 2026-10-20 by the [Alt-A1 production contract](p3-alt-a1-fill-ladder-con
 **Decision: a fixed two-step cascade.**
 
 1. Call `attempt` (legacy mode: exact simple-topology certificate, then the rounded-knot certificate after `KnotMismatch`).
-2. Only if step 1 returns `Err(CubicFillError::Topology(e))` with `e` equal to `KnotMismatch` or `Unresolved`, call `attempt_triangle_free` on the same input. Other topology errors are not retried.
+2. Only if step 1 returns `Err(CubicFillError::Topology(e))` with `e` equal to `KnotMismatch` or `Unresolved`, call `attempt_triangle_free` on the same input. Other topology errors are not retried. Update 2026-10-25 (E16-U1, `fill-v0+r4`): when this two-step cascade ends in `KnotMismatch` or `Unresolved`, the exact rung reruns it unchanged at the exponents e − 1 to e − 16 (none below the minimum) and keeps the first success with flat status `PATH_OK`; any other failure stops the retries and the path keeps the cascade's outcome at e ([E16 §4](d9-e16-fill-rejection-remedy-contract.md#4-e16-k2-topology-refinement-in-the-exact-rung)).
 
 The final result is that of the last call made. No other retry exists.
 

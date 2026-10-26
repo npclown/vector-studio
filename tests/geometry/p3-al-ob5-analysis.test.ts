@@ -42,7 +42,7 @@ import {
 } from '../geometry-benchmark/p3-al-ob5/workload.js';
 
 /** The reference configuration hash, recorded in the plan with OB5-U2. */
-const REFERENCE_CONFIG_HASH = '87d6ac9e2650d13ffd7a56bfd2669403e2eee2368cd4104aa3a6f9787500057d';
+const REFERENCE_CONFIG_HASH = '60403d50c6f5c2b93345e0cfe3ad32f460837f4b2640a9dc0b482bb13e67dfaa';
 
 type Profile = 'functional' | 'reference';
 type Mutable<T> = { -readonly [K in keyof T]: Mutable<T[K]> };
@@ -150,7 +150,7 @@ function capture(profile: Profile, repetition: number, shape: Shape): Ob5Capture
     options: { ...pageOptions(config, WASM), repetition },
     wasmSha256: WASM,
     corpusSha256: OB5_CORPUS_SHA256,
-    adapter: { operationId: 'geometry-wasm/fill-v0+r3', portVersion: 0 },
+    adapter: { operationId: 'geometry-wasm/fill-v0+r4', portVersion: 0 },
     crossOriginIsolated: true,
     clockProbe: {
       attempts: 10,
@@ -187,7 +187,7 @@ function nativeOutput(profile: Profile, repetition: number): NativeOutput {
   return {
     kind: 'ob5-native',
     repetition,
-    revision: 3,
+    revision: 4,
     clockQuantumNs: 100,
     corpus: { bytes: CORPUS.bytes, fnv: CORPUS.fnv },
     setOrder: order,
@@ -237,7 +237,7 @@ function oracle(profile: Profile): MutableRecord['oracle'] {
   const passing = (checked: number) => ({ checked, failures: [] as string[] });
   const entries = oracleNames(profile).length;
   return {
-    dump: { sha256: 'cd'.repeat(32), bytes: 1, entries, revision: 3 },
+    dump: { sha256: 'cd'.repeat(32), bytes: 1, entries, revision: 4 },
     gates: {
       'SL-O1': passing(entries),
       'SL-O2': passing(entries),

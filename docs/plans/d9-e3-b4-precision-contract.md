@@ -1433,7 +1433,7 @@ For every mapped triangle whose box meets `Ω ⊕ 2`, with `e1` and `e2` the edg
 
 - The cross product is exact. The lengths are rounded up, and the area is rounded down.
 - A zero-area triangle fails, and the case is UNDECIDED, **unless it is collapsed**: two of its vertices have the same `p*`. They then have the same stored offset and lanes, so the GPU maps them to the same position bit for bit (the bit-identity assumption of section 7.1). The triangle has zero area on the GPU as well and covers no sample.
-- `M*` leaves collapsed triangles out (`withoutCollapsed`), because the oracle's mesh model takes triangles of positive area only. The storage-crack check still sees the full port mesh.
+- `M*` leaves collapsed triangles out, because the oracle's mesh model takes triangles of positive area only. Since section 21.4 it leaves out every zero-area triangle (`withPositiveArea`). The storage-crack check still sees the full port mesh.
 - See section 15.9, item 2.
 
 ### 15.5 `window-empty` on the drawn mesh
@@ -1505,7 +1505,7 @@ All 14 control outcomes are met (`pnpm test:e3-a04`).
 ### 15.9 Departures and extensions, for the evidence review
 
 1. **`fringe-unsupported` is rejected, not measured.** Section 6 measures `fringe-unsupported` because "the region still draws". In the product it does not: `PathMeshPipeline.servePaint` returns no draw, and the path is hidden. With no drawn mesh, the case is rejected with code `fringe-unsupported`, as for a renderer state failure. `fringe-range` is rejected the same way. A joint case whose partner paint fails is rejected as `joint-partner-<code>`, because the product hides the whole path. `fringe-work-cap` still draws and is measured.
-2. **Collapsed triangles** (section 15.4). Kernel meshes can hold triangles that become degenerate after f32 storage, for example at near-duplicate path end points (`smoke/blob/T2/z1-d2` has one). Other zero-area triangles stay UNDECIDED.
+2. **Collapsed triangles** (section 15.4). Kernel meshes can hold triangles that become degenerate after f32 storage, for example at near-duplicate path end points (`smoke/blob/T2/z1-d2` has one). Other zero-area triangles near the window fail the certificate and go to section 20; those off it are left out of `M*` (section 21.4).
 3. **E3-PC5 uses another shape.** The star's evenodd mesh has pinch vertices that the fringe builder rejects as `fringe-unsupported`. PC5 uses two nested squares of the same orientation instead: nonzero fills the inner square, and the evenodd mesh (an annulus) does not. It is FAIL through `G`, which is the control's intent.
 4. **An oracle test hook.** E3-D9 needs a narrower window. `A04Hooks` gains a test-only `window` hook, which `makeFrame` applies to `Ω`. It changes no default behaviour, but it changes the oracle source SHA-256. The freeze note records the SHA of the build it certifies.
 
@@ -1840,3 +1840,138 @@ The PC sample of section 19.4 reported `C1/s15-I/T3/z64-d2` as FAIL with `E = 38
 - **WASM.** Since E11 PR #242, a Linux build of the pinned toolchain gives the same release WASM as the PC. The merge compares WASM hashes, so a host whose build differs cannot take part.
 - **Checkouts.** Each host's run directory stays under `.tools/`. A copy inside the tracked tree makes the merging checkout dirty, and the merge then refuses.
 - **Memory.** A container has 15 GB and every shard gets a 6 GB heap, so a container runs two or three shards.
+
+### 19.7 Freeze check of the fixed oracle
+
+The oracle of section 19.3 got its full freeze check, split across two hosts as section 19.6 allows. It is commit `d7bd7ad`, where `a04-region.ts` has SHA-256 `5b2fafc3708a08ceb6ed5c5e0ce498ac6c23720f8a8d718425a94a7e17724e80`. The check ran as `pnpm e3-a04:freeze --shards 20` with `--only` on each host:
+
+- the PC of section 17.4 ran shards 0 to 7, from 21:54 UTC on 2026-10-25, in 2.36 h wall;
+- the user's laptop (Windows, 20 threads, 39.6 GB RAM) ran shards 8 to 19, from 21:57 UTC, in 2.25 h wall;
+- both used Node 24.15.0, and every shard exited with code 0, with no restart.
+
+The shard files came back through transfer branches, and `--merge` combined them in a cloud container checked out at `d7bd7ad`. The merge refuses hosts with a different oracle, commit or shard plan.
+
+- **All 27,462 cases were checked: 27,459 `ok` and 3 `not-drawable`.** No case was `ORACLE-WORK`, `ORACLE-UNSUPPORTED`, `ORACLE-INCONSISTENT` or `ORACLE-ERROR`. The 3 `not-drawable` cases are the `C10` inputs of section 18.6.
+  - The strata counts are those of section 18.6, and every case is `ok` outside C10.
+  - The run holds 27,462 shard lines with 27,462 distinct ids.
+- **Time.** Case times sum to 42.0 h. C9 took 32.9 h of them and C5 8.2 h.
+- **Work.**
+  - The largest was 1.62·10^9 units (`C9/g0154/T6/z0.01-d3`), 90 % of the cap, as in section 18.6.
+  - The next were `C9/g0154/T6/z64-d3` at 1.31·10^9 and `C9/g0154/T6/z1-d3` at 1.31·10^9.
+  - The new kept-by-dropped cut pass of section 19.3 did not raise the largest work.
+- **Time per unit.** Of the ten slowest cases, the highest was 1.07 µs per unit (`C9/g0240/T0/z1-d3`) and the lowest 0.84 µs. Both are within the 1.53 µs of section 14.8.
+- The merged directory is `.tools/e3-a04-freeze/2026-10-26T01-00-55-201Z/` in the merging container. It is machine-local and not committed.
+
+**Freeze record** (2026-10-26): the A04 corpus `a04-corpus/v1` with `corpusSha256` `7f4bb1c97b2358ef45d23fdcab31aadc35fe4e7d3d5de25ce1bea7a8203d721c` stays frozen. Its freeze check is repeated on the fixed oracle.
+
+- Generator `tests/geometry/e3-a04/corpus.ts` SHA-256: `3c4f12991f0554cad2dde1d96eb549cb343b6ecee3e24539e8083320e7e0d438`. Unchanged.
+- Oracle `packages/geometry-reference/src/a04-region.ts` SHA-256: `5b2fafc3708a08ceb6ed5c5e0ce498ac6c23720f8a8d718425a94a7e17724e80` (commit `d7bd7ad`).
+- 27,462 cases, with the strata counts of section 18.6.
+- Freeze check: passed. There were 27,459 `ok`, 3 `not-drawable` (C10, section 6) and no `ORACLE-*` case. The largest work was 1.62·10^9 units, against a cap of 1.8·10^9.
+- Kernel output on the corpus was inspected before this record, in the samples of section 19.4. The corpus did not change, so section 5.5 still holds: the corpus was frozen before any kernel output was seen. The oracle fix, unlike the corpus, is not blind: it was found from kernel output (section 19.3).
+
+**Oracle withdrawn** (2026-10-26, E3-R2): `aad4b5829989b191250adca44c18d4658dc38fb21814c897578630a6dde1fb00`, the oracle of section 18.6, has the soundness defect of section 19.3. `pnpm e3-a04:run` treats it as uncertified.
+
+
+## 20. E3-U6 flip-tolerant bound annex, 2026-10-26
+
+The samples of section 19.4 left 219 cases UNDECIDED on the no-flip certificate of section 15.4. Most are meshes with a triangle thinner than about `2β_c`. For example, `C1/g0046/T7/z64-d1` has a strip 1.5·10^-5 px high, against `β_c = 3.7·10^-4`. No certificate on the triangle alone can hold there, because a `β_c` move can flip it. This annex replaces "UNDECIDED on the certificate" by a bound that tolerates flips, under stated preconditions. It is harness code only (`flipTolerantBound` in `tests/geometry/e3-a04/harness.ts`). The oracle does not change, so the freeze record of section 19.7 stands.
+
+### 20.1 When it applies
+
+The harness tries the bound only when the no-flip certificate fails and no triangle crosses the guard band (section 15.3). Clipped triangles are outside its argument. It applies when all of these hold, all checked exactly on `M*` without its collapsed triangles:
+
+1. **One orientation.** Every triangle of positive area has the same orientation. A triangle of zero area (three distinct collinear points) covers nothing in `M*`, but it stays in the chain below: on the GPU it can open into a thin triangle. Each zero-area triangle whose box meets `Ω ⊕ 3` must have its segment covered by collinear edges of triangles of positive area, so that the segment is in `M*`. The kernel emits such triangles folded onto a boundary edge.
+2. **The chain near the window is `∂M*`.** The chain is every directed triangle edge, with `a → b` and `b → a` between the same two `p*` cancelling. `C*` is the union of the edges whose count does not cancel. Zero-area triangles count here. A zero-area triangle that closes a T-junction cancels both sides of it exactly. For every chain edge `ab` whose box meets `Ω ⊕ 3`:
+   - the collinear edges of positive-area triangles that overlap it cover it, and their triangles all lie on one side of it;
+   - no open triangle of `M*` meets the open edge.
+3. **The outside is reachable.** Every candidate edge whose box meets `Ω ⊕ 2` passes the offset certificate of section 20.3, with offsets at most 0.5 px.
+
+Otherwise the case stays UNDECIDED on the no-flip certificate. The row records why under `flipTolerant.reason`.
+
+### 20.2 The bound
+
+Let `f_t` move each vertex in a straight line from `p*` to its GPU position, `0 ≤ t ≤ 1`. Every point of an edge then stays within `β = β_c` of the edge at `p*`.
+
+- **Winding.** The oriented triangle boundaries sum, as a 1-chain, to the edges of `C*` alone. A pair `a → b`, `b → a` cancels at every `t`, because equal `p*` means equal stored offsets, and so bit-identical GPU positions (section 7.1). So the winding number `w_t(x)` of the moving mesh is constant in `t` for `dist(x, C*) > β`.
+- **Inside.** At `t = 0`, `w_0(x)` is the number of triangles of positive area that cover `x`, with the sign of precondition 1, so it is nonzero for `x ∈ M*` off `C*`. Then `w_1(x) ≠ 0`, and some GPU triangle contains `x`.
+- **Outside.** `M_gpu ⊂ M* ⊕ β` holds unconditionally: a point of a GPU triangle has a partner with the same barycentric coordinates in the `M*` triangle, at most `β` away. A zero-area triangle's image is within `β` of its segment, which is in `M*` by precondition 1. If `x ∈ M_gpu` and `x ∉ M*`, then either `x` is within `β` of `C*` or the nearest point of `M*` is on `∂M*`, within `β`. And `∂M* ⊂ C*`, because `w_0` is 1 or more on one side of a point of `∂M*` and 0 on the other, so it changes there, and `w_0` changes only across `C*`. So `dist(x, C*) ≤ β`.
+
+Hence `M_gpu △ M* ⊂ C* ⊕ β` and `∂M_gpu ⊂ C* ⊕ β`. By precondition 2, `C* = ∂M*` within `Ω ⊕ 3`, which covers every window the terms use. A point `p` of such an open edge is in `M*`, by the covering edges. A triangle that has points near `p` on the other side contains `p`. It cannot contain `p` in its interior, along a collinear edge (that triangle lies on the covered side), or on an edge that crosses the line (its interior would then meet the open edge). So it has `p` as a vertex, and its wedge there misses the directions along the edge, which leaves points off `M*` arbitrarily near `p`. So:
+
+- **`G` and `B_M` of `E(M_gpu, M*)`** are at most `β`.
+- **`B_R`.** A point `p ∈ ∂M*` is within `β` of `M_gpu`: its own triangle's image covers the partner point. It is also within `D(p)` of a point `x ∉ M*` with `dist(x, C*) > β`, and such an `x` is off `M_gpu`. The segment between the two crosses `∂M_gpu` inside the disk of radius `max(β, D(p))` around `p`.
+
+So `E_Ω(M_gpu, M*) ≤ ρ` with **`ρ = max(β_c, D_hi)`**. Here `D_hi` bounds `D` on `∂M* ∩ (Ω ⊕ 2)`. Since `ρ ≤ 0.5 < 1`, the windowed inequality of E3-K4 needs `M*` against `R` only on `Ω ⊕ ρ`, inside the oracle's window `Ω ⊕ 1`, and the case uses
+
+**`U = E_hi + ρ`** and **`L = max(0, E_lo − ρ)`**,
+
+with the oracle's early exits at `0.25 ∓ ρ`. Without flips the no-flip path of section 7.1 still applies with `β_c`, and `ρ ≥ β_c` is never smaller.
+
+### 20.3 The offset certificate for `D`
+
+For each candidate edge whose box meets `Ω ⊕ 2`, the harness looks for a translate of the edge away from its triangles. It tries 0°, ±30°, ±60° and ±75° from the outward normal, and offsets `s` from `1.0625·β` upward by factors of `√2`, up to 0.5 px.
+
+- **Accepting a translate.** A translate `S` is accepted when two things hold. First, it is more than `β` from every candidate edge. Then `S` lies in one component of the complement of `C*`, so it is wholly inside or wholly outside `M*`. Second, one exact point test finds its midpoint outside `M*`.
+- **The bound.** Each point of the piece then has its translate in `X_out`, at distance `s`. So `D ≤ s`, plus the allowance below.
+- **Splitting.** If no translate of a piece passes, the piece is halved, to depth 12 and no shorter than `β/4`. Splitting handles the ends of an edge at a reflex corner. A gap narrower than `2β` between two parts of the boundary has no point of `X_out`, so the certificate fails there.
+- **Exact and inexact parts.** The point test and the preconditions are exact over the dyadics. The distances and offset points are binary64, evaluated from coordinates of magnitude at most `k`. They carry an allowance of `2^-30·(1 + k)`, which is far above their few roundings. `ρ` is rounded up with the slack of section 15.2.
+- **Lookup.** Triangles and chain edges are found through a grid of 8 px cells over `Ω ⊕ 8`. A box off the grid is clamped into its border cells, so a lookup anywhere, also for a translate or a midpoint off the grid, sees every item whose box meets it. The independent review found that dropping such boxes instead let two long slabs 10^-5 px apart pass the certificate (a regression test keeps it).
+- **Work.** The certificate stops at 5·10^7 work units, and the case then stays UNDECIDED.
+
+### 20.4 Tests
+
+`tests/geometry/e3-a04-flip-tolerant.test.ts` covers these cases:
+
+- a square fanned around a vertex 10^-5 px above its bottom edge, which the no-flip certificate fails and the bound covers with `ρ` within 10 % of `β`;
+- an L shape with a reflex corner;
+- each precondition failing: a dangling zero-area triangle, mixed orientation, a triangle across a boundary edge, and an edge with triangles on both sides, whole or along part of it. A triangle that touches a boundary edge at one vertex is covered. There is also a 10^-4 px gap between two squares;
+- a zero-area triangle folded onto a boundary edge, in both orientations, which the bound covers;
+- a T-junction closed by a zero-area triangle, which the bound covers, and the same mesh without that triangle, which it refuses. Its long edge then has triangles on both sides;
+- a sampled check that random vertex moves of at most `β` change membership only within `ρ` of `∂M*`, with the sliver flipped in half of the trials.
+
+### 20.5 Effect on the samples
+
+The sample of section 19.4 is re-measured with the bound, on the cases it left UNDECIDED on the no-flip certificate with no clipped triangle. That is 168 of its 202 such cases; the other 34 clip, so the bound does not apply. The re-run was on 2026-10-26, in a cloud container, at K = 2, with the kernel at `d7bd7ad` and the code of this annex. These are samples, not evidence (section 19.4).
+
+- **Measured: 162 of the 168.** One C9 case was still in the oracle after 2 h, and 5 were queued behind it on the same worker.
+- **PASS: 132.** By stratum: C1 21, C2 11, C3 15, C4 9, C5 54, C8 6, C9 15 and C11 1. One of them, a C9 case, no longer fails the certificate on the current kernel, so it passes on `β_c`. The other 131 pass on `ρ`, with a median `ρ` of 1.6·10^-3 px and a largest of 0.248 px. The largest `U` is 0.2499 px.
+- **Still UNDECIDED: 30.**
+  - 15 have a zero-area triangle off `M*` (C1, C3, C5, C8, C9);
+  - 7 have a chain edge with triangles on both sides, a T-junction left open (C1, C5, C9);
+  - 5 fail the offset certificate (C3, three C4 collapse cases, C5);
+  - 3 straddle 0.25 px at the oracle's floor (C3, C5, C6).
+- No case turned FAIL.
+
+## 21. Known classes and `PASS with disclosure`, 2026-10-26
+
+**Decision (2026-10-26, 추천안 자동 채택).** The user's standing instruction of 2026-10-24 adopts the recommended option of the [A04 sample results and remedy options](https://claude.ai/artifact/KQi8C82HX3ovB2JDLbZbje) decision: the flip-tolerant bound of section 20 for the no-flip cases, and disclosure of three known classes for the rest. E3-R3 stands: the 0.25 px threshold does not change, and the oracle does not change, so the freeze record of section 19.7 stands.
+
+### 21.1 The classes
+
+A FAIL or UNDECIDED row is in a known class when one of these holds. Each test reads only the row (`knownClassOf` in `tests/geometry/e3-a04/record.ts`).
+
+| Class | Test | Why | Backlog |
+| --- | --- | --- | --- |
+| `collapsed-feature` | Stratum E3-C4, target gap `g < 2^-8` px (that is, `g = 2^-16`), FAIL or UNDECIDED, except the overlapping-rectangle rows n15 to n17, where `g` is an overlap and not a gap | The kernel closes a gap, slit or wall far below one pixel. The boundary metric scores the lost boundary at the feature's length, but no pixel sample can land in the gap. E3-R3 named this class before any run | None: a kernel that keeps such gaps is not planned |
+| `far-vertices` | UNDECIDED with reason `beta ≥ 1 px` or `clip bound ≥ 0.25 px` | Vertices far off screen: the K4 carrier's class A limit and the GPU's clipping of far triangles | E18 |
+| `degenerate-stroke-triangle` | Stroke paint, UNDECIDED, with `flipTolerant.reason` = `zero-area triangle off M*` | The stroke kernel emits zero-area triangles that no positive-area triangle covers | E19 |
+
+A FAIL outside the first class is never disclosed. A row in a known class does not cover its E3-A8 cell. Two limits are stated for the evidence review:
+
+- `collapsed-feature` does not bound the error's size: any FAIL on such a row is disclosed. Its rows are 18 named shapes of 16 by 16 document units, and the review reads each disclosed case.
+- `far-vertices` would also take a kernel defect that throws a vertex far off screen, and A04 does not catch it. The E11-U2 structure checker does: it requires the mesh's vertices to lie in the path's enclosing bounds, on every corpus request.
+
+A validator problem is reported for a row without `gapTarget` (a shard written before this section), so that old and new rows are not merged silently.
+
+### 21.2 The verdict
+
+Section 7.3 is applied to the rows outside the known classes. When it would give PASS and some row is in a known class, the verdict is **`PASS with disclosure`**: the record lists every disclosed case id per class under `disclosed`, and `record.md` prints them. The validator recomputes the list. Any FAIL outside the classes is still FAIL, and any UNDECIDED outside them still keeps A04 UNVERIFIED.
+
+### 21.3 E11
+
+The three classes join the [E11 section 7.2](d9-e11-p3-c03-c05-closure-contract.md#72-known-defects-at-the-exit) closed list for A04, with this section as their definition.
+
+### 21.4 Zero-area triangles off the certificate's region
+
+The oracle's mesh model takes triangles of positive area only, and before this section a zero-area triangle off the certificate's region of section 15.4 reached it and left the case UNDECIDED (`invalid mesh`). The oracle's `Ω` is the window with a 2 px margin, and the certificate checks the triangles whose box meets the window with a 4 px margin, that is `Ω ⊕ 2`. When the certificate holds, every zero-area triangle that is not collapsed lies off that region, more than 2 px from `Ω`. With `β_c < 1`, its β-moved image is off `Ω ⊕ 1`. It changes neither `G` on `Ω` nor `∂M ∩ Ω`, and it can only change a boundary distance of more than 2 px, which is a FAIL either way (`L > 2 − β > 0.25`). The T-junction count of `M*`, and so the reported crack bound, can drop with it; those cracks lie off the window, and the storage-crack check still runs on the full port mesh. So `M*` now leaves out every zero-area triangle (`withPositiveArea`) on both paths.

@@ -47,6 +47,7 @@
     "e14:fill-diag": "node tooling/run-e14-fill-diag.mjs",
     "e14:rung0-oracle": "vitest run --config vitest.e14-rung0-oracle.config.ts",
     "e16:fill-diag": "node tooling/run-e16-fill-diag.mjs",
+    "e17:snap-model": "node tooling/run-e17-snap-model.mjs",
     "a03:stroke-diag": "node tooling/run-a03-stroke-diag.mjs",
     "test:p2-identity": "node tooling/compare-p2-wasm.mjs",
     "test:p3-fill-identity": "node tooling/compare-p3-fill-identity.mjs",

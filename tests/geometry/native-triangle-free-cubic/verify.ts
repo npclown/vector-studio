@@ -169,8 +169,8 @@ export function assertTriangleFreeCompositionCarrier(
   assert.equal(row.topology_tolerance_bits, TOPOLOGY_BITS);
   assert.equal(row.flat_status, 0);
   assert.equal(row.allocations, 0);
-  assert.equal(row.allocated_bytes, 3_498_880);
-  assert.equal(row.inline_bytes, 24_304);
+  assert.equal(row.allocated_bytes, 4_514_304);
+  assert.equal(row.inline_bytes, 16_928);
   if (!row.emission_plan || !row.commands || !row.edge_owners || !row.rounded?.output)
     throw new Error('triangle-free cubic carrier incomplete');
   assert.deepEqual(row.sizing_plan, {
