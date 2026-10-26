@@ -84,6 +84,8 @@ export type HarnessRow = Readonly<{
   transform: string | null;
   pair: string;
   paint: 'fill' | 'stroke';
+  /** E3-C4 only: the target physical gap `g` in px (null for `g = 0` and other strata). */
+  gapTarget: number | null;
   status: CaseStatus;
   /** The rejection code (section 6), or null. */
   code: string | null;
@@ -1268,9 +1270,10 @@ const TARGET = A04_ORACLE_PARAMETERS.target;
 
 export function caseMeta(
   kase: A04Case,
-): Pick<HarnessRow, 'index' | 'id' | 'stratum' | 'transform' | 'pair' | 'paint'> {
+): Pick<HarnessRow, 'index' | 'id' | 'stratum' | 'transform' | 'pair' | 'paint' | 'gapTarget'> {
   const d = decodeCase(kase);
   const zoom = d.zoom === 0.01 ? '0.01' : String(d.zoom);
+  const gap = kase.gap as Readonly<{ target?: unknown }> | null | undefined;
   return {
     index: typeof kase.index === 'number' ? kase.index : null,
     id: d.id,
@@ -1278,6 +1281,7 @@ export function caseMeta(
     transform: typeof kase.transform === 'string' ? kase.transform : null,
     pair: `z${zoom}-d${String(d.dpr)}`,
     paint: d.paint,
+    gapTarget: typeof gap?.target === 'string' ? unhex(gap.target) : null,
   };
 }
 
@@ -1438,14 +1442,13 @@ export function measureCase(
   }
 
   const beta = mutations.omitBeta ? 0 : rho;
-  // A collapsed triangle (two vertices with the same p*) has bit-identical GPU positions at
-  // those vertices, so it has zero area on the GPU and covers no sample: M* leaves it out
-  // (section 15.4), as the oracle's mesh model takes triangles of positive area only.
+  // The oracle models triangles of positive area only. A collapsed triangle (two vertices with
+  // the same p*) has bit-identical GPU positions at those vertices and covers no sample
+  // (section 15.4). Any other zero-area triangle lies off the certificate's region when the
+  // certificate holds (section 21.4), or on M* under section 20.
   const mesh: A04Mesh = {
     positions: points.flatMap((p) => [dq(p.x), dq(p.y)]),
-    // The oracle models triangles of positive area only; under section 20 the zero-area
-    // triangles' segments lie in M* anyway.
-    indices: flipTolerant === null ? withoutCollapsed(mapped) : withPositiveArea(mapped),
+    indices: withPositiveArea(mapped),
   };
   const m = a04Measure(kase, mesh, {
     passBelow: a04NextDown(TARGET - beta),
