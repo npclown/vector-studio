@@ -1,0 +1,10 @@
+stratum	closed-list class	requests
+C11/named	exact-rung cap stop	4
+C12/named	E14-Q1	5
+C3/generated	E14-Q1	267
+C3/generated	exact-rung cap stop	374
+C3/named	E14-Q1	32
+C3/named	exact-rung cap stop	31
+C3/named	zero-length leaf	22
+C4/named	exact-rung cap stop	54
+C6/named	E14-Q1	8

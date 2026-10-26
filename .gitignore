@@ -32,3 +32,6 @@ artifacts/p3-st-u7-joint/
 artifacts/p3-st-u7-real-ports/
 artifacts/viz-v3-integration/
 artifacts/viz-v4-a08/
+.next/
+apps/next-host/next-env.d.ts
+apps/next-host/AGENTS.md

@@ -14,12 +14,14 @@ export default tseslint.config(
       'artifacts/p3-al-ob5/**',
       '**/.tools/**',
       '**/target/**',
+      '**/.next/**',
+      '**/next-env.d.ts',
     ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
-    files: ['**/*.ts', '**/*.mts'],
+    files: ['**/*.ts', '**/*.mts', '**/*.tsx'],
     languageOptions: {
       parserOptions: {
         projectService: true,

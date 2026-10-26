@@ -1,0 +1,25 @@
+{
+  "name": "@vector-studio/next-host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@vector-studio/editor-core": "workspace:*",
+    "@vector-studio/geometry-wasm": "workspace:*",
+    "@vector-studio/model": "workspace:*",
+    "@vector-studio/react": "workspace:*",
+    "@vector-studio/renderer-core": "workspace:*",
+    "@vector-studio/renderer-webgpu": "workspace:*",
+    "next": "16.4.3",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0"
+  }
+}

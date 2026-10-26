@@ -40,7 +40,8 @@ const read = (file: string) => readFileSync(path.join(root, file), 'utf8');
 function files(dir: string): string[] {
   const out: string[] = [];
   for (const name of readdirSync(path.join(root, dir))) {
-    if (name === 'node_modules' || name === 'dist') continue;
+    // `.next` is the Next.js host's build output (P5-U6), not source.
+    if (name === 'node_modules' || name === 'dist' || name === '.next') continue;
     const rel = path.join(dir, name);
     if (statSync(path.join(root, rel)).isDirectory()) out.push(...files(rel));
     else if (/\.(ts|mts|js|mjs|json|txt|html)$/u.test(name)) out.push(rel);
