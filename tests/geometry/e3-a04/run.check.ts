@@ -90,6 +90,7 @@ function errorRow(kase: A04Case, error: string): HarnessRow {
       transform: typeof kase.transform === 'string' ? kase.transform : null,
       pair: '-',
       paint: 'fill',
+      gapTarget: null,
     };
   }
   return { ...meta, status: 'undecided', reason: `harness-error: ${error}` } as HarnessRow;

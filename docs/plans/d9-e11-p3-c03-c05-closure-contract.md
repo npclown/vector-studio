@@ -156,6 +156,8 @@ The exit gate requires "no crashes, invalid indices, NaN vertices, or out-of-ran
   - **Literal expectations.** A named row that returns its literal expected status passes; it is not a rejection. Examples are C5 l24 (ST-F24, `numeric-range` under ST-G3) and l11 to l13 (empty, ST-F7 to ST-F9).
   - **Stroke `work-limit` backlog item.** E2 is done, so the backlog item of the stroke `work-limit` class is now E15.
 
+- **Update 2026-10-26 (A04 known classes, 추천안 자동 채택).** For A04 only, the closed list gains three classes, defined mechanically in [E3 section 21](d9-e3-b4-precision-contract.md#21-known-classes-and-pass-with-disclosure-2026-10-26): `collapsed-feature` (E3-C4 at `g = 2^-16` px except the overlap rows, FAIL or UNDECIDED), `far-vertices` (UNDECIDED on `β_c ≥ 1` px or on the clip bound) and `degenerate-stroke-triangle` (a stroke's zero-area triangle off `M*`). A04's record lists these cases by id, and its verdict is `PASS with disclosure` when everything else passes. Backlog items E18 (far-vertex carrier) and E19 (degenerate stroke triangles). The 0.25 px threshold does not change.
+
 **A04 cells.** E11 does not change E3-A8: a declared cell with no measured case keeps A04 UNVERIFIED, and A04 PASS needs the coverage condition. If stroke cells stay unmeasured until E2 (E3 section 6), the exit waits, and promoting E2 becomes a user decision then.
 
 ## 8. Units
