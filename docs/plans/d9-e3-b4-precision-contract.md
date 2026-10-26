@@ -1932,4 +1932,13 @@ For each candidate edge whose box meets `Ω ⊕ 2`, the harness looks for a tran
 
 ### 20.5 Effect on the samples
 
-The sample of section 19.4 is re-measured with the bound, on the cases it left UNDECIDED on the no-flip certificate with no clipped triangle. That is 168 of its 202 such cases; the other 34 clip, so the bound does not apply. The counts are filled in from a clean re-run before this annex is reviewed. These are samples, not evidence (section 19.4).
+The sample of section 19.4 is re-measured with the bound, on the cases it left UNDECIDED on the no-flip certificate with no clipped triangle. That is 168 of its 202 such cases; the other 34 clip, so the bound does not apply. The re-run was on 2026-10-26, in a cloud container, at K = 2, with the kernel at `d7bd7ad` and the code of this annex. These are samples, not evidence (section 19.4).
+
+- **Measured: 162 of the 168.** One C9 case was still in the oracle after 2 h, and 5 were queued behind it on the same worker.
+- **PASS: 132.** By stratum: C1 21, C2 11, C3 15, C4 9, C5 54, C8 6, C9 15 and C11 1. One of them, a C9 case, no longer fails the certificate on the current kernel, so it passes on `β_c`. The other 131 pass on `ρ`, with a median `ρ` of 1.6·10^-3 px and a largest of 0.248 px. The largest `U` is 0.2499 px.
+- **Still UNDECIDED: 30.**
+  - 15 have a zero-area triangle off `M*` (C1, C3, C5, C8, C9);
+  - 7 have a chain edge with triangles on both sides, a T-junction left open (C1, C5, C9);
+  - 5 fail the offset certificate (C3, three C4 collapse cases, C5);
+  - 3 straddle 0.25 px at the oracle's floor (C3, C5, C6).
+- No case turned FAIL.
