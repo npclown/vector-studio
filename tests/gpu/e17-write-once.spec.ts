@@ -74,10 +74,14 @@ const FIXTURES = [
   'C3/c29/T7/z1-d2/center/k0@dpr2',
 ] as const;
 
-/** Product-side pixels named by E17-A5: (key, x, y). */
+/**
+ * Product-side pixels named by E17-A5: (key, x, y, variant checked, rule value). T2's rule value
+ * is contract section 1's 143. Section 1 gives none for T0, whose 1x pixel counted 3 before E17;
+ * it is checked against its own 4x value, where every sample counts once.
+ */
 const NAMED_PIXELS = [
-  ['C4/n06/T2/z1-d1/center/k0@dpr1.5', 491, 268],
-  ['C4/n06/T0/z1-d1/center/k0@dpr1.5', 492, 257],
+  ['C4/n06/T2/z1-d1/center/k0@dpr1.5', 491, 268, 'fringe-4x', 143],
+  ['C4/n06/T0/z1-d1/center/k0@dpr1.5', 492, 257, 'fringe-1x', null],
 ] as const;
 
 type Capture = Readonly<{ red: Uint8Array; counts: Uint16Array; samples: number; width: number }>;
@@ -100,8 +104,9 @@ function errorsOf(page: Page): string[] {
   page.on('console', (message) => {
     // A headed browser requests /favicon.ico, which the playground does not serve; that 404 is
     // not an error of the frame.
-    if (message.type() === 'error' && !message.location().url.endsWith('/favicon.ico'))
-      errors.push(message.text());
+    const favicon =
+      message.location().url.endsWith('/favicon.ico') && message.text().includes('404');
+    if (message.type() === 'error' && !favicon) errors.push(message.text());
   });
   return errors;
 }
@@ -179,17 +184,25 @@ test('E17-A5 fixtures: count at most 1, covered pixels counted once, 4x equals 1
         );
     }
     compared[key] = pixels;
-    // A fixture with no visible pixel in either variant (C3/c02/T7 dpr2 draws none) has nothing
-    // to compare; one with visible pixels but none counted once in both is a failure.
+    // A fixture whose count pass shows coverage but no visible pixel in either variant (C3/c02/T7
+    // dpr2, c = 0, contract section 1) has nothing to compare; any other fixture with nothing
+    // compared is a failure.
     const visible = (c: Capture) => c.red.some((red) => red > 0);
-    if (pixels === 0 && (visible(one) || visible(four)))
-      fail(`1x-4x ${key}`, 'visible pixels, none compared');
+    const covered = (c: Capture) => c.counts.some((count) => count >= 1);
+    if (pixels === 0 && (visible(one) || visible(four) || !covered(one) || !covered(four)))
+      fail(`1x-4x ${key}`, 'nothing compared');
   }
-  for (const [key, x, y] of NAMED_PIXELS) {
+  for (const [key, x, y, variant, rule] of NAMED_PIXELS) {
     const one = captures.get(`fringe-1x ${key}`)!;
     const four = captures.get(`fringe-4x ${key}`)!;
     const pixel = y * one.width + x;
+    const observed = (variant === 'fringe-4x' ? four : one).red[pixel]!;
+    const expected = rule ?? four.red[pixel]!;
+    if (Math.abs(observed - expected) > 2)
+      fail(`named ${key}`, `(${x},${y}) ${variant} ${observed} against ${expected}`);
     named[`${key} (${x},${y})`] = {
+      variant,
+      rule: expected,
       red1x: one.red[pixel],
       red4x: four.red[pixel],
       counts1x: countsAt(one, pixel),
