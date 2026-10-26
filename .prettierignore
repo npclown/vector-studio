@@ -69,3 +69,7 @@ docs/benchmarks/results/*_p3_p3-al-ob5-workload-v1_*.json
 tests/fixtures/p5-model/**/*.json
 **/.next/**
 apps/next-host/next-env.d.ts
+
+# Preserve the E11-U3 PC run records at the P3 exit snapshot byte-for-byte.
+docs/evidence/p3-exit/*/headed-pc-*/**/*.json
+docs/evidence/p3-exit/*/gpu-full-pc-*/**/*.json
