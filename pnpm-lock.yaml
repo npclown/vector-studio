@@ -20,6 +20,12 @@ importers:
       '@vector-studio/contracts':
         specifier: workspace:*
         version: link:packages/contracts
+      '@vector-studio/editor-core':
+        specifier: workspace:*
+        version: link:packages/editor-core
+      '@vector-studio/model':
+        specifier: workspace:*
+        version: link:packages/model
       '@vector-studio/renderer-core':
         specifier: workspace:*
         version: link:packages/renderer-core
@@ -62,6 +68,15 @@ importers:
 
   packages/contracts: {}
 
+  packages/editor-core:
+    dependencies:
+      '@vector-studio/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@vector-studio/model':
+        specifier: workspace:*
+        version: link:../model
+
   packages/geometry-reference: {}
 
   packages/geometry-wasm:
@@ -69,6 +84,8 @@ importers:
       '@vector-studio/contracts':
         specifier: workspace:*
         version: link:../contracts
+
+  packages/model: {}
 
   packages/renderer-core:
     dependencies:

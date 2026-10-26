@@ -3,7 +3,9 @@
 //
 //   pnpm e3-a04:run --smoke [--wasm <path>]
 //   pnpm e3-a04:run [--shards N] [--stride S] [--start-resolution K] [--gpu <chrome.json>,<edge.json>]
-//                   [--wasm <path>]
+//                   [--wasm <path>] [--only i,j,…]
+//   pnpm e3-a04:run --merge <run dir>,<run dir>,… [--shards N] [--stride S] [--start-resolution K]
+//                   [--gpu …] [--wasm <path>]
 //
 // Uses the release WASM that `pnpm test:geometry` builds (or --wasm <path>), then:
 //
@@ -14,6 +16,11 @@
 //   the freeze note of section 5.5 for this corpus (a "**Freeze record**" line with its
 //   corpusSha256): no kernel output on the corpus is read before the freeze. A full (stride 1),
 //   clean run is copied to docs/evidence/e3-a04/<stamp>-<run id>/, never over an existing one.
+//
+// Several hosts can share one run (contract section 19): each runs `--only` its shards of the same
+// N, on the same commit, WASM and options, and one host merges their run directories with
+// `--merge`, which checks that their provenance agrees and that every shard is there exactly once,
+// then finalizes. A host that runs only some shards does not finalize.
 //
 // It exits non-zero when a shard fails, the validator finds a problem, or (smoke) a control or
 // an expected PASS is not met. The verdict is the measured disposition; A04 acceptance is the
@@ -38,10 +45,22 @@ const gpu = value('--gpu');
 // The oracle's starting resolution 2^-K px (default K = 10, r_m of contract section 4.3). It still
 // halves while E straddles a threshold, down to the floor 2^-20 (contract section 19).
 const startResolution = Number(value('--start-resolution') ?? 10);
+const mergeDirs = value('--merge')
+  ?.split(',')
+  .map((d) => path.resolve(d));
+const only = value('--only')
+  ?.split(',')
+  .map((v) => Number(v));
 if (!Number.isInteger(startResolution) || startResolution < 0 || startResolution > 20)
   throw new Error('--start-resolution takes an integer K from 0 to 20 (2^-K px)');
 if (!Number.isInteger(shards) || shards < 1 || !Number.isInteger(stride) || stride < 1)
   throw new Error('--shards and --stride take positive integers');
+if (only !== undefined && !only.every((i) => Number.isInteger(i) && i >= 0 && i < shards))
+  throw new Error(`--only takes shard indices from 0 to ${shards - 1}`);
+if (only !== undefined && (mergeDirs !== undefined || smoke))
+  throw new Error('--only cannot be combined with --merge or --smoke');
+const here = only === undefined ? Array.from({ length: shards }, (_, i) => i) : [...new Set(only)];
+const partial = here.length < shards;
 
 const contractPath = 'docs/plans/d9-e3-b4-precision-contract.md';
 const manifestPath = 'tests/geometry/e3-a04/corpus-v1.manifest.json';
@@ -99,23 +118,77 @@ const out = path.join(root, '.tools', 'e3-a04-run', `${stamp}-${runId}`);
 if (existsSync(out)) throw new Error(`output ${out} already exists`);
 mkdirSync(out, { recursive: true });
 const dirty = git('status', '--porcelain') !== '';
-const provenance = {
+// What every host of one run must share; `--merge` compares these field by field.
+const common = {
   commit: git('rev-parse', 'HEAD'),
   dirty,
-  runId,
   contractSha256: sha256(read(contractPath)),
   corpusSha256: manifest.corpusSha256,
   generatorSha256: manifest.generator.sha256,
   oracleSha256,
   oracleCertified,
   wasmSha256: sha256(readFileSync(wasm)),
+  shards,
+  stride,
+  startResolution,
+};
+const host = {
+  runId,
   node: process.version,
   os: `${os.type()} ${os.release()} ${os.arch()}`,
   cpus: os.cpus().length,
 };
+const provenance =
+  mergeDirs === undefined
+    ? { ...common, ...host, ...(partial ? { shardsHere: here } : {}) }
+    : { ...common, runId, hosts: mergeHosts(mergeDirs) };
 writeFileSync(path.join(out, 'provenance.json'), `${JSON.stringify(provenance, null, 2)}\n`);
 
+/**
+ * Checks the partial run directories of one multi-host run and copies their shard files into
+ * `out`: each must agree with this checkout on every `common` field, and together they must hold
+ * every shard exactly once.
+ */
+function mergeHosts(dirs) {
+  const seen = new Map();
+  const hosts = dirs.map((dir) => {
+    const p = JSON.parse(readFileSync(path.join(dir, 'provenance.json'), 'utf8'));
+    const h = JSON.parse(readFileSync(path.join(dir, 'host.json'), 'utf8'));
+    for (const [k, v] of Object.entries(common))
+      if (JSON.stringify(p[k]) !== JSON.stringify(v))
+        throw new Error(
+          `refusing the merge: ${dir} has ${k} ${JSON.stringify(p[k])}, here ${JSON.stringify(v)}`,
+        );
+    for (const i of h.shardsHere) {
+      if (seen.has(i))
+        throw new Error(`refusing the merge: shard ${i} is in ${seen.get(i)} and ${dir}`);
+      seen.set(i, dir);
+      copyFileSync(path.join(dir, `shard-${i}.ndjson`), path.join(out, `shard-${i}.ndjson`));
+    }
+    return {
+      runId: p.runId,
+      node: p.node,
+      os: p.os,
+      cpus: p.cpus,
+      shards: h.shardsHere,
+      exitCodes: h.exitCodes,
+      restarts: h.restarts,
+    };
+  });
+  const missing = Array.from({ length: shards }, (_, i) => i).filter((i) => !seen.has(i));
+  if (missing.length > 0)
+    throw new Error(`refusing the merge: shards ${missing.join(', ')} are missing`);
+  return hosts;
+}
+
+/** The corpus position in a shard's `.current` file, or null when it is not one. */
+function readCurrent(file) {
+  const at = Number(readFileSync(file, 'utf8').trim());
+  return Number.isInteger(at) && at >= 0 && readFileSync(file, 'utf8').trim() !== '' ? at : null;
+}
+
 const vitest = path.join(root, 'node_modules', 'vitest', 'vitest.mjs');
+const MAX_RESTARTS = 64;
 const runPhase = (env) =>
   new Promise((resolve) => {
     const child = spawn(
@@ -161,10 +234,62 @@ if (smoke) {
   console.log(`smoke: ${file} (${Date.now() - started} ms)`);
   process.exitCode = missed.length > 0 ? 1 : 0;
 } else {
-  const codes = await Promise.all(
-    Array.from({ length: shards }, (_, i) =>
-      runPhase({ E3_A04_RUN_PHASE: 'shard', E3_A04_RUN_SHARD: `${i}/${shards}` }),
-    ),
+  // A worker that dies (a heap limit is not an exception the harness can catch) is restarted
+  // after the case it was measuring, which is recorded UNDECIDED (contract section 19).
+  const restarts = Array.from({ length: shards }, () => []);
+  const runShard = async (i) => {
+    const current = path.join(out, `shard-${i}.current`);
+    let resume;
+    for (;;) {
+      const code = await runPhase({
+        E3_A04_RUN_PHASE: 'shard',
+        E3_A04_RUN_SHARD: `${i}/${shards}`,
+        ...(resume === undefined ? {} : { E3_A04_RUN_RESUME: resume }),
+      });
+      if (code === 0 || !existsSync(current) || restarts[i].length >= MAX_RESTARTS) return code;
+      const at = readCurrent(current);
+      if (at === null || (resume !== undefined && Number(resume.split(':')[0]) >= at)) return code;
+      restarts[i].push({ at, code });
+      resume = `${at}:worker exited (code ${code}) while measuring`;
+    }
+  };
+  const hereCodes =
+    mergeDirs === undefined ? await Promise.all(here.map((i) => runShard(i))) : null;
+  // Exit codes and restarts indexed by shard, whichever host ran it.
+  const shardCodes = Array.from({ length: shards }, () => null);
+  const shardRestarts = Array.from({ length: shards }, () => []);
+  if (hereCodes !== null)
+    here.forEach((i, k) => {
+      shardCodes[i] = hereCodes[k];
+      shardRestarts[i] = restarts[i];
+    });
+  else
+    for (const h of provenance.hosts)
+      h.shards.forEach((i, k) => {
+        shardCodes[i] = h.exitCodes[k];
+        shardRestarts[i] = h.restarts[k];
+      });
+  const codes = hereCodes ?? shardCodes;
+  const restarted = shardRestarts;
+  if (partial) {
+    writeFileSync(
+      path.join(out, 'host.json'),
+      `${JSON.stringify({ shardsHere: here, exitCodes: codes, restarts: here.map((i) => restarts[i]) }, null, 2)}\n`,
+    );
+    console.log(
+      JSON.stringify({
+        shardsHere: here,
+        shardExitCodes: codes,
+        wallMilliseconds: Date.now() - started,
+      }),
+    );
+    console.log(`partial run: ${out} (finalize with --merge on every host's run directory)`);
+    process.exit(codes.some((c) => c !== 0) ? 1 : 0);
+  }
+  // The record carries the shards' exit codes and restarts (contract section 19.5).
+  writeFileSync(
+    path.join(out, 'provenance.json'),
+    `${JSON.stringify({ ...provenance, shardExitCodes: shardCodes, shardRestarts }, null, 2)}\n`,
   );
   const finalize = await runPhase({
     E3_A04_RUN_PHASE: 'finalize',
@@ -186,6 +311,7 @@ if (smoke) {
         reasons: record.verdictReasons,
         validator: record.validator,
         shardExitCodes: codes,
+        shardRestarts: restarted,
         overall: record.aggregates.overall.all,
         wallMilliseconds: Date.now() - started,
       },

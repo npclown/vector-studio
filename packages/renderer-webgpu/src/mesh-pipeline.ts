@@ -7,7 +7,7 @@ import {
   MESH_JOINT_SHADER_KEY,
   MESH_JOINT_VERTEX_ENTRY_POINT,
 } from './mesh-fill-shader.js';
-import { PRIMITIVE_RENDER_STATE_KEY, type PrimitiveTargetFormat } from './primitive-pipeline.js';
+import { MESH_STENCIL_FORMAT, type PrimitiveTargetFormat } from './primitive-pipeline.js';
 
 // The second pipeline of the P3 V3 contract, section f: five read-only storage bindings and one
 // uniform, visible to the vertex and fragment stages, and no vertex or index buffer. ST-U7
@@ -63,6 +63,96 @@ export function createMeshBindGroupLayoutDescriptor(): GPUBindGroupLayoutDescrip
   };
 }
 
+/**
+ * E17 contract, section 3: the mesh draws' render state. P1's premultiplied source-over and no
+ * culling, plus the write-once stencil (E17-K1): a sample is written by the first surviving
+ * fragment of a draw, whose per-draw reference then blocks every later fragment of that draw.
+ */
+export const MESH_RENDER_STATE_KEY =
+  'premultiplied-source-over/stencil8-write-once/no-cull/triangle-list-v1';
+
+/** E17 contract, section 3: mesh draws get references 1..MESH_STENCIL_REFERENCES, then a reset. */
+export const MESH_STENCIL_REFERENCES = 255;
+
+/** E17-K2: test not-equal to the draw's reference, replace on pass. */
+export function meshWriteOnceStencilState(): GPUDepthStencilState {
+  const face = {
+    compare: 'not-equal',
+    failOp: 'keep',
+    depthFailOp: 'keep',
+    passOp: 'replace',
+  } as const;
+  return {
+    format: MESH_STENCIL_FORMAT,
+    depthWriteEnabled: false,
+    depthCompare: 'always',
+    stencilFront: face,
+    stencilBack: face,
+    stencilReadMask: 0xff,
+    stencilWriteMask: 0xff,
+  };
+}
+
+/** E17-K2: the reset draw sets every covered sample's stencil to 0. */
+export function meshStencilResetState(): GPUDepthStencilState {
+  const face = {
+    compare: 'always',
+    failOp: 'keep',
+    depthFailOp: 'keep',
+    passOp: 'zero',
+  } as const;
+  return {
+    format: MESH_STENCIL_FORMAT,
+    depthWriteEnabled: false,
+    depthCompare: 'always',
+    stencilFront: face,
+    stencilBack: face,
+    stencilReadMask: 0xff,
+    stencilWriteMask: 0xff,
+  };
+}
+
+export const MESH_STENCIL_RESET_SHADER_KEY = 'p3-mesh-stencil-reset-v0';
+
+/**
+ * E17 contract, section 3: the reset draw's module, a fullscreen triangle with no color output
+ * (the pipeline's color write mask is 0). Separate from MESH_FILL_SHADER, whose hash E3 records.
+ */
+export const MESH_STENCIL_RESET_SHADER = /* wgsl */ `
+@vertex
+fn meshStencilResetVertexMain(@builtin(vertex_index) index: u32) -> @builtin(position) vec4f {
+  let corner = vec2f(f32((index << 1u) & 2u), f32(index & 2u));
+  return vec4f(corner * 2.0 - 1.0, 0.0, 1.0);
+}
+
+@fragment
+fn meshStencilResetFragmentMain() -> @location(0) vec4f {
+  return vec4f(0.0);
+}
+`;
+
+/** E17 contract, section 3: the reset pipeline for a color target (main pass or count pass). */
+export function createMeshStencilResetPipelineDescriptor(
+  shaderModule: GPUShaderModule,
+  targetFormat: GPUTextureFormat,
+  sampleCount: 1 | 4,
+  label: string,
+): GPURenderPipelineDescriptor {
+  return {
+    label,
+    layout: 'auto',
+    vertex: { module: shaderModule, entryPoint: 'meshStencilResetVertexMain', buffers: [] },
+    fragment: {
+      module: shaderModule,
+      entryPoint: 'meshStencilResetFragmentMain',
+      targets: [{ format: targetFormat, writeMask: 0 }],
+    },
+    primitive: { topology: 'triangle-list', frontFace: 'ccw', cullMode: 'none' },
+    depthStencil: meshStencilResetState(),
+    multisample: { count: sampleCount, mask: 0xffffffff, alphaToCoverageEnabled: false },
+  };
+}
+
 /** The mesh pipelines: V3's fill pipeline and ST-U7's joint fill pipeline. */
 export type MeshPipelineKind = 'fill' | 'joint';
 
@@ -76,7 +166,7 @@ export function meshPipelineKey(
     layoutKey: MESH_PACKET_LAYOUT_KEY,
     vertexLayoutKey: MESH_VERTEX_LAYOUT_KEY,
     targetFormat,
-    renderStateKey: PRIMITIVE_RENDER_STATE_KEY,
+    renderStateKey: MESH_RENDER_STATE_KEY,
     sampleCount,
   });
 }
@@ -114,6 +204,20 @@ export function createMeshPipelineDescriptor(
     },
     // Cull mode none: winding never discards a triangle.
     primitive: { topology: 'triangle-list', frontFace: 'ccw', cullMode: 'none' },
+    // E17-K2: write-once per draw; the draw's reference is set before it is encoded.
+    depthStencil: meshWriteOnceStencilState(),
     multisample: { count: sampleCount, mask: 0xffffffff, alphaToCoverageEnabled: false },
+  };
+}
+
+/**
+ * E17-K2: the stencil reference of the frame's mesh draw with ordinal `ordinal` (0-based, in
+ * encoded order), and whether a reset draw precedes it. The main pass and E10's count pass both
+ * follow this sequence.
+ */
+export function meshStencilStep(ordinal: number): Readonly<{ reset: boolean; reference: number }> {
+  return {
+    reset: ordinal > 0 && ordinal % MESH_STENCIL_REFERENCES === 0,
+    reference: (ordinal % MESH_STENCIL_REFERENCES) + 1,
   };
 }
