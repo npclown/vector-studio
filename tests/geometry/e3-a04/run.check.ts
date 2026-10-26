@@ -46,6 +46,11 @@ const [shard, shards] = (process.env.E3_A04_RUN_SHARD ?? '0/1').split('/').map(N
   number,
 ];
 const stride = Number(process.env.E3_A04_RUN_STRIDE ?? '1');
+/** Corpus indices to re-measure instead of a shard (contract section 22), or null. */
+const retryCases =
+  process.env.E3_A04_RUN_CASES === undefined
+    ? null
+    : new Set(process.env.E3_A04_RUN_CASES.split(',').map(Number));
 /** The oracle's starting resolution 2^-K px (contract section 19); K = 10 is r_m of section 4.3. */
 const startResolution = Number(process.env.E3_A04_RUN_START_RESOLUTION ?? '10');
 
@@ -125,8 +130,9 @@ it(`runs the A04 ${phase} phase`, async () => {
   if (phase === 'shard') {
     const ports = await loadPorts();
     const partners = jointPartners();
-    const file = path.join(out, `shard-${shard}.ndjson`);
-    const current = path.join(out, `shard-${shard}.current`);
+    const name = retryCases === null ? `shard-${shard}` : 'retry';
+    const file = path.join(out, `${name}.ndjson`);
+    const current = path.join(out, `${name}.current`);
     // After the worker died (a heap limit is not an exception), the tool restarts the shard after
     // the case it was measuring, which stays UNDECIDED (section 7.3, contract section 19).
     const resume = process.env.E3_A04_RUN_RESUME;
@@ -135,7 +141,11 @@ it(`runs the A04 ${phase} phase`, async () => {
     for (const kase of iterateA04Corpus()) {
       const i = index;
       index += 1;
-      if (i % stride !== 0 || (i / stride) % shards !== shard || i < resumeAt) continue;
+      const mine =
+        retryCases === null
+          ? i % stride === 0 && (i / stride) % shards === shard
+          : retryCases.has(i);
+      if (!mine || i < resumeAt) continue;
       if (i === resumeAt) {
         if (!lastRowIs(file, String(kase.id)))
           appendFileSync(file, `${JSON.stringify(errorRow(kase, crash))}\n`);
