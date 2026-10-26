@@ -3,6 +3,10 @@ import ts from 'typescript';
 
 export const boundaries = new Map([
   ['@vector-studio/contracts', new Set()],
+  // P5-U1: the document model imports nothing (P5 plan, section 2).
+  ['@vector-studio/model', new Set()],
+  // P5-U2: the editor core reaches the renderer only through contracts (P5 plan, section 2).
+  ['@vector-studio/editor-core', new Set(['@vector-studio/contracts', '@vector-studio/model'])],
   ['@vector-studio/geometry-reference', new Set(['@vector-studio/contracts'])],
   ['@vector-studio/geometry-wasm', new Set(['@vector-studio/contracts'])],
   ['@vector-studio/renderer-core', new Set(['@vector-studio/contracts'])],
@@ -25,8 +29,10 @@ export const boundaries = new Map([
 
 export const packageDirectories = [
   'packages/contracts',
+  'packages/editor-core',
   'packages/geometry-reference',
   'packages/geometry-wasm',
+  'packages/model',
   'packages/renderer-core',
   'packages/renderer-webgpu',
   'apps/playground',

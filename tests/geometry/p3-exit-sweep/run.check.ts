@@ -25,6 +25,7 @@ import { iterateA04Corpus } from '../e3-a04/corpus.js';
 import { decodeCase } from '../e3-a04/harness.js';
 import { fillRequest, STRESS_SCENE_VERSION, stressScene, strokeRequest } from './scene.js';
 import { classifyFillRejection } from './fill-class.js';
+import { rowKey, strokeClassLabel } from './stroke-class.js';
 import { runSeededControls, runSweep, type SweepItem } from './sweep.js';
 
 const phase = process.env.P3_EXIT_SWEEP_PHASE ?? 'scene';
@@ -176,9 +177,7 @@ it(
     });
     const fillClassCounts: Record<string, Record<string, number>> = {};
     for (const r of fillRejections) {
-      const [stratum, row] = r.id.split('/') as [string, string];
-      const key =
-        phase === 'scene' ? 'scene' : `${stratum}/${/^g\d+$/u.test(row) ? 'generated' : 'named'}`;
+      const key = rowKey(phase, r.id);
       const label = r.e14SelfCrossingOverE
         ? 'e14-self-crossing-over-E'
         : r.outcome === 'failed:work-limit'
@@ -186,6 +185,15 @@ it(
           : r.outcome;
       const counts = (fillClassCounts[key] ??= {});
       counts[label] = (counts[label] ?? 0) + 1;
+    }
+    // A03: the stroke counterpart, counted the same way (stroke-class.ts).
+    const strokeRejections = result.rejected
+      .filter(({ id }) => byId.get(id)!.kind === 'stroke')
+      .map(({ id, outcome }) => ({ id, outcome, label: strokeClassLabel(outcome) }));
+    const strokeClassCounts: Record<string, Record<string, number>> = {};
+    for (const r of strokeRejections) {
+      const counts = (strokeClassCounts[rowKey(phase, r.id)] ??= {});
+      counts[r.label] = (counts[r.label] ?? 0) + 1;
     }
     const record = {
       schema: 'p3-exit-sweep/v1',
@@ -198,6 +206,8 @@ it(
       sceneSizes,
       fillClassCounts,
       fillRejections,
+      strokeClassCounts,
+      strokeRejections,
       ...result,
     };
     writeFileSync(path.join(out, `${phase}.json`), `${JSON.stringify(record, null, 2)}\n`);

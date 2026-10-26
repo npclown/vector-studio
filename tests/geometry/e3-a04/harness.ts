@@ -835,7 +835,7 @@ export function partnerOf(
 
 const TARGET = A04_ORACLE_PARAMETERS.target;
 
-function caseMeta(
+export function caseMeta(
   kase: A04Case,
 ): Pick<HarnessRow, 'index' | 'id' | 'stratum' | 'transform' | 'pair' | 'paint'> {
   const d = decodeCase(kase);
