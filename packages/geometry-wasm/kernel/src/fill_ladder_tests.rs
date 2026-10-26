@@ -20,7 +20,7 @@ use std::fmt::Write as _;
 use crate::codec::{PathInput, Request};
 use crate::cubic_fill::{
     ContourRange, CubicFillWorkspace, DecodedSource, EdgeOwner, PrefixFailure, S1View,
-    MAX_FAST_CONTOUR_POINTS, MAX_FLAT_COMMANDS,
+    MAX_FAST_CONTOURS, MAX_FAST_CONTOUR_POINTS, MAX_FLAT_COMMANDS,
 };
 use crate::engine::BATCH_INTERNAL_ERROR;
 use crate::fill_export::{
@@ -1649,8 +1649,9 @@ fn ladder_storage_is_reserved_once_and_checked_against_the_fill_scratch() {
         ladder.allocated_bytes(),
         core::mem::size_of::<FastRung>()
     );
-    // E14-K1 item 5: 3 · (E0 + 10) records, above V2 section a's 3 · (256 + 2 · 256).
-    const { assert!(MAX_BOUNDARY_RECORDS == 3 * (8_192 + 10)) };
+    // E14-K1 item 5 with E16-K1's C0 = 512: 3 · (E0 + C0 + 2 · C0 − 2) records, above V2
+    // section a's 3 · (256 + 2 · 256).
+    const { assert!(MAX_BOUNDARY_RECORDS == 3 * (8_192 + 512 + 2 * 512 - 2)) };
     let tiny = crate::rounded_line_fill::RoundedFillLimits {
         max_triangles: 1,
         max_vertices: 1,
@@ -1658,7 +1659,12 @@ fn ladder_storage_is_reserved_once_and_checked_against_the_fill_scratch() {
     };
     let (scratch, _) = FillScratch::reserve(tiny, 0).expect("scratch");
     assert_eq!(
-        FillLadder::reserve(scratch.records(), MAX_FAST_CONTOUR_POINTS).err(),
+        FillLadder::reserve(
+            scratch.records(),
+            MAX_FAST_CONTOUR_POINTS,
+            MAX_FAST_CONTOURS
+        )
+        .err(),
         Some(BATCH_INTERNAL_ERROR)
     );
 }
@@ -1671,18 +1677,29 @@ fn e14_d3_scratch_sized_from_the_exact_limits_only_is_refused() {
     let (exact_only, _) = FillScratch::reserve(FILL_V0_LIMITS, 0).expect("scratch");
     assert_eq!(exact_only.records(), 9_216);
     assert_eq!(
-        FillLadder::reserve(exact_only.records(), MAX_FAST_CONTOUR_POINTS).err(),
+        FillLadder::reserve(
+            exact_only.records(),
+            MAX_FAST_CONTOUR_POINTS,
+            MAX_FAST_CONTOURS
+        )
+        .err(),
         Some(BATCH_INTERNAL_ERROR)
     );
     let (grown, _) = FillScratch::reserve(FILL_V0_LIMITS, MAX_BOUNDARY_RECORDS).expect("scratch");
     assert_eq!(grown.records(), MAX_BOUNDARY_RECORDS);
-    assert!(FillLadder::reserve(grown.records(), MAX_FAST_CONTOUR_POINTS).is_ok());
+    assert!(
+        FillLadder::reserve(grown.records(), MAX_FAST_CONTOUR_POINTS, MAX_FAST_CONTOURS).is_ok()
+    );
     let (pre_b1, _) = FillScratch::reserve(PRE_B1_FILL_V0_LIMITS, 0).expect("scratch");
     assert_eq!(pre_b1.records(), 2_304);
-    let pre_b1_points = CubicFillWorkspace::new_pre_b1(PRE_B1_FILL_V0_LIMITS)
-        .expect("workspace")
-        .fast_contour_points();
-    assert!(FillLadder::reserve(pre_b1.records(), pre_b1_points).is_ok());
+    let pre_b1_workspace =
+        CubicFillWorkspace::new_pre_b1(PRE_B1_FILL_V0_LIMITS).expect("workspace");
+    assert!(FillLadder::reserve(
+        pre_b1.records(),
+        pre_b1_workspace.fast_contour_points(),
+        pre_b1_workspace.fast_contours()
+    )
+    .is_ok());
 }
 
 /// The debug sample of AL-I3 and AL-A6: the real paths at e = −3, plus generated generic-

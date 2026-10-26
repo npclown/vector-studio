@@ -37,7 +37,7 @@ describe('p3-exit A05/A06 map', () => {
 
   it('names a test title literally for every each prefix, so a renamed test fails here first', () => {
     const missing: string[] = [];
-    for (const entry of [...map.criteria.A05, ...map.criteria.A06]) {
+    for (const entry of [...map.criteria.A05!, ...map.criteria.A06!]) {
       if (!entry.each || !entry.file) continue;
       const text = sources(entry.file);
       for (const prefix of entry.each)
@@ -49,7 +49,7 @@ describe('p3-exit A05/A06 map', () => {
 
   it('names every fixture set of E11 section 7 rows A05 and A06', () => {
     const ids = (c: 'A05' | 'A06') =>
-      map.criteria[c].filter((e) => e.kind !== 'supplementary').map((e) => e.id);
+      map.criteria[c]!.filter((e) => e.kind !== 'supplementary').map((e) => e.id);
     expect(ids('A05')).toEqual([
       'V2-A3',
       'V2-A5',

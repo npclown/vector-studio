@@ -66,8 +66,8 @@ export const LADDER_SCENARIO_VERSION = 1;
 export const LADDER_RUNNER_VERSION = 'p3-fill-ladder-runner/1';
 export const LADDER_SCHEMA_VERSION = 1;
 /** The production operation AL-S1 times (contract sections 2.1 and 5.3). */
-export const OPERATION_ID = 'geometry-wasm/fill-v0+r3';
-export const OPERATION_REVISION = 3;
+export const OPERATION_ID = 'geometry-wasm/fill-v0+r4';
+export const OPERATION_REVISION = 4;
 /** The spike's reference configuration hash, recorded when SL-U3 merged; unchanged here. */
 export const SPIKE_REFERENCE_CONFIG_HASH =
   '0daa96c068504c33dcf17ca787c1995db4972a76a006cd6db79473243fe72267';
@@ -554,7 +554,7 @@ export function evaluateLadderOracle(
   };
   const fail = (gate: OracleGate, detail: string) => gates[gate].failures.push(detail);
   if (dump.revision !== OPERATION_REVISION || harness.revision !== OPERATION_REVISION)
-    fail('harness', `kernel revision ${dump.revision}/${harness.revision}, not 3`);
+    fail('harness', `kernel revision ${dump.revision}/${harness.revision}, not 4`);
 
   const records = new Map(harness.paths.map((path) => [path.name, path]));
   const meshCheck: string[] = [];

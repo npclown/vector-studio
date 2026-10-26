@@ -42,9 +42,9 @@ use core::mem::size_of;
 use crate::codec::{PathInput, Request};
 use crate::cubic_fill::{
     ContourRange, CubicFillDiagnostics, CubicFillError, CubicFillWorkspace, DecodedSource,
-    EdgeOwner, S1View, MAX_CONTOURS as PREFIX_MAX_CONTOURS,
+    EdgeOwner, S1View, MAX_FAST_CONTOURS as PREFIX_MAX_CONTOURS,
     MAX_FAST_CONTOUR_POINTS as PREFIX_MAX_POINTS, MAX_FAST_EDGE_OWNERS as PREFIX_MAX_EDGES,
-    MAX_FLAT_COMMANDS, MAX_SOURCE_SEGMENTS as PREFIX_MAX_SOURCES,
+    MAX_FAST_SOURCE_SEGMENTS as PREFIX_MAX_SOURCES,
 };
 use crate::engine::{BATCH_ALLOCATION_FAILED, BATCH_INTERNAL_ERROR};
 use crate::fill_export::{tolerances, FillRequest};
@@ -52,7 +52,6 @@ use crate::fill_filter::{compare_enclosures, Interval, UNDECIDED};
 use crate::fill_predicates::{orient2d, segment_relation, SegmentRelation};
 use crate::geometry::Point;
 use crate::line_fill::LineFillRule;
-use crate::simple_cubic_topology::TopologyError;
 
 /// Contract section 3.2, AL-FR0: the smallest tolerance exponent rung 0 accepts.
 pub(crate) const MIN_FAST_EXPONENT: i32 = -511;
@@ -60,7 +59,8 @@ pub(crate) const MIN_FAST_EXPONENT: i32 = -511;
 pub(crate) const MAX_FAST_EXPONENT: i32 = 510;
 
 /// Section 3.4: the caps the S1 prefix enforces for rung 0 (`cubic_fill.rs`). Since E14-K1 they
-/// are the fast caps (E0 = `MAX_FAST_EDGE_OWNERS`), not the exact rung's B1 caps.
+/// are the fast caps (E0 = `MAX_FAST_EDGE_OWNERS`), not the exact rung's B1 caps, and since
+/// E16-K1 the contour and source caps are the fast ones too.
 pub(crate) const MAX_POINTS: usize = PREFIX_MAX_POINTS;
 pub(crate) const MAX_EDGES: usize = PREFIX_MAX_EDGES;
 pub(crate) const MAX_CONTOURS: usize = PREFIX_MAX_CONTOURS;
@@ -74,11 +74,11 @@ pub(crate) const MAX_TRIANGLES: usize = MAX_POINTS + 2 * MAX_CONTOURS - 2;
 /// `TRIANGLE`.
 pub(crate) const MAX_DIAGONALS: usize = MAX_POINTS + 3 * MAX_CONTOURS - 3;
 /// Section 3.4, boundary scratch: AL-FR9 scans at most this many directed-edge records.
-pub(crate) const MAX_BOUNDARY_RECORDS: usize = boundary_records(MAX_POINTS);
-/// AL-FR9's boundary records for a prefix of at most `points` contour points: three per
-/// triangle of the bound n + 2h − 2k (E14-K1 item 5).
-pub(crate) const fn boundary_records(points: usize) -> usize {
-    3 * (points + 2 * MAX_CONTOURS - 2)
+pub(crate) const MAX_BOUNDARY_RECORDS: usize = boundary_records(MAX_POINTS, MAX_CONTOURS);
+/// AL-FR9's boundary records for a prefix of at most `points` contour points and `contours`
+/// contours: three per triangle of the bound n + 2h − 2k (E14-K1 item 5, E16-K1 item 4).
+pub(crate) const fn boundary_records(points: usize, contours: usize) -> usize {
+    3 * (points + 2 * contours - 2)
 }
 
 /// D9 E2 contract section 6 (E2-K3): the caps of one rung instance. The fill instance's are
@@ -3277,11 +3277,16 @@ impl Graph<'_> {
     }
 }
 
-/// The exact rung's result on a fallback path: its topology selection and its result.
+/// The exact rung's result on a fallback path: its topology selection, its result and its
+/// refinement depth (E16-K2 item 4: 0 unless a retry succeeded). When the retries ran and none
+/// succeeded, `stop` is the last retry's error and its depth (a diagnostic only: the result
+/// stays the cascade at e's).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ExactOutcome {
     pub(crate) step: ExactStep,
     pub(crate) result: Result<CubicFillDiagnostics, CubicFillError>,
+    pub(crate) depth: u32,
+    pub(crate) stop: Option<(u32, CubicFillError)>,
 }
 
 /// One ladder outcome: the rung taken, the fallback reason, and on fallback the exact rung's
@@ -3306,9 +3311,14 @@ impl FillLadder {
     /// the scratch's reserved record count, and E14-K1 item 5 derives the records rung 0 needs
     /// from the workspace's fast contour point cap (`boundary_records`), so a pre-B1 ladder
     /// checks the pre-B1 count.
-    pub(crate) fn reserve(scratch_records: usize, fast_contour_points: usize) -> Result<Self, u32> {
+    pub(crate) fn reserve(
+        scratch_records: usize,
+        fast_contour_points: usize,
+        fast_contours: usize,
+    ) -> Result<Self, u32> {
         if fast_contour_points > MAX_POINTS
-            || boundary_records(fast_contour_points) > scratch_records
+            || fast_contours > MAX_CONTOURS
+            || boundary_records(fast_contour_points, fast_contours) > scratch_records
         {
             return Err(BATCH_INTERNAL_ERROR);
         }
@@ -3328,7 +3338,7 @@ impl FillLadder {
     /// scratch passes by construction.
     #[cfg(test)]
     pub(crate) fn for_tests() -> Self {
-        Self::reserve(MAX_BOUNDARY_RECORDS, MAX_POINTS).expect("ladder")
+        Self::reserve(MAX_BOUNDARY_RECORDS, MAX_POINTS, MAX_CONTOURS).expect("ladder")
     }
 
     /// Bytes reserved by the ladder, for the reserve-time totals and `linearMemoryBytes()`.
@@ -3438,33 +3448,13 @@ fn path_input<'a>(
     )
 }
 
-/// Rung 1: V2's two-step cascade, unchanged (V2 section c).
+/// Rung 1: V2's two-step cascade (V2 section c) with E16-K2's refinement retries, the order
+/// `build_path` runs (`fill_export::exact_rung`).
 pub(crate) fn exact_cascade(
     workspace: &mut CubicFillWorkspace,
     request: FillRequest,
     verbs: &[u8],
     point_bytes: &[u8],
 ) -> ExactOutcome {
-    let (input, topology) = path_input(request, verbs, point_bytes);
-    let result = workspace.attempt(input, request.rule, topology, MAX_FLAT_COMMANDS);
-    if matches!(
-        result,
-        Err(CubicFillError::Topology(
-            TopologyError::KnotMismatch | TopologyError::Unresolved
-        ))
-    ) {
-        return ExactOutcome {
-            step: ExactStep::TriangleFree,
-            result: workspace.attempt_triangle_free(
-                input,
-                request.rule,
-                topology,
-                MAX_FLAT_COMMANDS,
-            ),
-        };
-    }
-    ExactOutcome {
-        step: ExactStep::Legacy,
-        result,
-    }
+    crate::fill_export::exact_rung(workspace, request, verbs, point_bytes, false)
 }
