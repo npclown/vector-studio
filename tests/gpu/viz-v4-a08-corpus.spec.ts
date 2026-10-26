@@ -34,7 +34,7 @@ declare global {
 // offline runner (VZ4-U2). It asserts completeness only (VZ4-A3); no gate is evaluated here.
 // It refuses before the E3 corpus freeze record (E3 section 5.5). Manual, never CI:
 //
-//   pnpm exec playwright test -c playwright.gpu.config.ts tests/gpu/viz-v4-a08-corpus.spec.ts
+//   pnpm test:gpu:viz-v4   (tooling/run-viz-v4-gpu.mjs: one run id, dist revision check)
 //
 // Each test writes artifacts/viz-v4-a08/<run>/<project>/<variant>/dpr<D>/ with meta.json,
 // observations.ndjson (one line per case: status, reason, identity fields, notices, mesh calls,
@@ -44,9 +44,12 @@ declare global {
 test.use({ trace: 'off' });
 
 const root = path.resolve(import.meta.dirname, '../..');
+// `pnpm test:gpu:viz-v4` (tooling/run-viz-v4-gpu.mjs) sets one VIZ_V4_RUN_ID for the whole run,
+// so both browsers write under one run directory even when Playwright restarts its worker.
 const runRoot = path.resolve(
   process.env.VIZ_V4_OUTPUT_DIR ?? 'artifacts/viz-v4-a08',
-  `${new Date().toISOString().replaceAll(/[:.]/gu, '-')}-${process.pid}`,
+  process.env.VIZ_V4_RUN_ID ??
+    `${new Date().toISOString().replaceAll(/[:.]/gu, '-')}-${process.pid}`,
 );
 const wasmPath = path.resolve(
   process.env.VECTOR_STUDIO_GEOMETRY_WASM ??

@@ -113,6 +113,8 @@ E14-U1 starts when the rendering track's WIP limit allows. It and E2-U3 both tou
 - (b) No class. E14-U2 becomes R1 and must merge before the exit: a new exact-rung algorithm with its own certificate, which puts the exit behind the largest change of the record.
 - (c) A class for every fill `work-limit` over E. It masks simple paths such as E14-F7, which the text quoted in (a) forbids.
 
+**Update 2026-10-25 (user decision, [E11 §9.2](d9-e11-p3-c03-c05-closure-contract.md#92-user-decision-2026-10-25)).** E11 §7.2 adds a second class, "fill stop in the exact rung's caps". It takes the rows that rung 0 refuses and whose exact rung stops at `CommandLimit`, `OwnerLimit`, `Rounded(_)` or `Topology(WorkLimit)`, and it covers E14-F6 and E14-F7 when they stop that way. Their "outside every class" outcome, E14-R2 and the scope sentence of (a) are set aside for that class. E14-U2 stays in the backlog.
+
 **E14-Q2. The value of E0.** (a) **Recommended.** 8,192. The E3 large class reaches 8,192 px of physical extent at tolerances down to 1/16 px ([E3 size classes](d9-e3-b4-precision-contract.md)), about 4,096 to 5,800 px of radius for a centered path, while the record's experiment at 4,096 already meshed every smooth scene path below 8,192 px of radius; edges grow as the square root of size, so 8,192 adds about a factor of four in size. It also equals P2's per-cubic line cap. (b) 4,096, the measured value: half the memory, no margin above the large class for noisier shapes than the scene's.
 
 **E14-Q3. Rung 0's work cap.** (a) **Recommended.** E14-K3 with W0 = 2^22, unreachable at E. (b) No cap: a comb of E0 edges costs about 33M orientation tests in FR5 before falling back.

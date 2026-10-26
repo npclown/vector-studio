@@ -1,0 +1,209 @@
+{
+  "version": "p3-exit-a03-map/v1",
+  "contract": "docs/plans/d9-e11-p3-c03-c05-closure-contract.md#7-exit-evidence-per-criterion",
+  "note": "Each entry names the tests that realize one fixture set of the E11 section 7 row A03 (B2 stroke contract section 11). required entries are E11's list; supplementary entries cover the stroke kernel tests that E11's list does not name (seeded defects, E2 rungs, transport), reported but not deciding the verdict. headed entries are run on the PC with pnpm test:gpu and cited from that run. Corpus stroke rejections are decided by the A01 sweep record (strokeClassCounts), not by this map.",
+  "criteria": {
+    "A03": [
+      {
+        "id": "ST-F1 to ST-F14, ST-F21 to ST-F26 (kernel, line strokes)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "cargo",
+        "filter": "stroke_outline_tests::",
+        "each": [
+          "st_f1_to_f3_",
+          "st_f4_",
+          "st_f5_",
+          "st_f6_",
+          "st_f7_f8_f9_",
+          "st_f10_",
+          "st_f11_",
+          "st_f12_",
+          "st_f13_",
+          "st_f14_",
+          "st_f21_to_f24_",
+          "st_f25_",
+          "st_f26_"
+        ]
+      },
+      {
+        "id": "ST-F15 to ST-F20 (kernel, cubic strokes)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "cargo",
+        "filter": "stroke_cubic_tests::",
+        "each": ["st_f15_", "st_f16_", "st_f16p_", "st_f17_", "st_f18_", "st_f19_", "st_f20_"]
+      },
+      {
+        "id": "ST-F1 to ST-F26 with ST-O1 to ST-O5 (dump hand-off)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "geometry",
+        "file": "tests/geometry/stroke-oracle.test.ts",
+        "each": [
+          "dumps every case",
+          "ST-O1 to ST-O4 of",
+          "ST-F1 to ST-F3:",
+          "ST-F4:",
+          "ST-F5:",
+          "ST-F6:",
+          "ST-F7 to ST-F10:",
+          "ST-F11:",
+          "ST-F12:",
+          "ST-F13:",
+          "ST-F14:",
+          "ST-F21 to ST-F24:",
+          "ST-F25:",
+          "ST-F26:",
+          "ST-O1 and ST-O2 on every cubic",
+          "ST-O3 (tau band)",
+          "ST-F15:",
+          "ST-F16:",
+          "ST-F16p:",
+          "ST-F17 to ST-F20:"
+        ]
+      },
+      {
+        "id": "ST-O1 to ST-O5 oracle, fixtures and positive controls",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "unit",
+        "file": "tests/unit/geometry-stroke-region.test.ts"
+      },
+      {
+        "id": "SC01-SC22 (release WASM)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "geometry",
+        "file": "tests/geometry/stroke-mesh-port.test.ts",
+        "each": [
+          "SC01 ",
+          "SC02 ",
+          "SC03 ",
+          "SC04 ",
+          "SC05 ",
+          "SC06 ",
+          "SC07 ",
+          "SC08 ",
+          "SC09 ",
+          "SC10 ",
+          "SC11 ",
+          "SC12 ",
+          "SC13 ",
+          "SC14 ",
+          "SC15 ",
+          "SC16 ",
+          "SC17 ",
+          "SC18 ",
+          "SC19 ",
+          "SC20 ",
+          "SC21 ",
+          "SC22 "
+        ]
+      },
+      {
+        "id": "SC01-SC22 (test double)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "unit",
+        "file": "tests/unit/stroke-mesh-port-double.test.ts",
+        "each": [
+          "SC01 ",
+          "SC02 ",
+          "SC03 ",
+          "SC04 ",
+          "SC05 ",
+          "SC06 ",
+          "SC07 ",
+          "SC08 ",
+          "SC09 ",
+          "SC10 ",
+          "SC11 ",
+          "SC12 ",
+          "SC13 ",
+          "SC14 ",
+          "SC15 ",
+          "SC16 ",
+          "SC17 ",
+          "SC18 ",
+          "SC19 ",
+          "SC20 ",
+          "SC21 ",
+          "SC22 "
+        ]
+      },
+      {
+        "id": "ST-A10 probes (scene validation)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "unit",
+        "file": "tests/unit/st-u6-stroke-scene.test.ts",
+        "each": ["ST-A10"]
+      },
+      {
+        "id": "ST-A10 probes (stroke pipeline)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "unit",
+        "file": "tests/unit/st-u6-stroke-pipeline.test.ts",
+        "each": ["ST-A10"]
+      },
+      {
+        "id": "Stroke kernel transport (B2 section 7)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "supplementary",
+        "runner": "cargo",
+        "filter": "stroke_export_tests::"
+      },
+      {
+        "id": "Early abort (B2 S7)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "supplementary",
+        "runner": "cargo",
+        "filter": "stroke_early_abort_tests::"
+      },
+      {
+        "id": "E2-K1 seam merge and E2-K3 family-B rung",
+        "source": "docs/plans/d9-e2-stroke-fast-rung-contract.md",
+        "kind": "supplementary",
+        "runner": "cargo",
+        "filter": "stroke_merge_tests::"
+      },
+      {
+        "id": "E2-K2 band leaf rule",
+        "source": "docs/plans/d9-e2-stroke-fast-rung-contract.md",
+        "kind": "supplementary",
+        "runner": "cargo",
+        "filter": "stroke_band_tests::"
+      },
+      {
+        "id": "Stroke adapter (B2 section 8)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "supplementary",
+        "runner": "geometry",
+        "file": "tests/geometry/stroke-adapter.test.ts"
+      },
+      {
+        "id": "ST-U6 headed stroke fixtures (ST-A10)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "headed",
+        "runner": "headed",
+        "file": "tests/gpu/p3-st-u6-stroke.spec.ts"
+      },
+      {
+        "id": "ST-U7 headed joint fixtures (ST-A11, ST-A16, ST-A17)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "headed",
+        "runner": "headed",
+        "file": "tests/gpu/p3-st-u7-joint.spec.ts"
+      },
+      {
+        "id": "B2 stroke page (p3-b2-strokes)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "headed",
+        "runner": "headed",
+        "file": "tests/gpu/p3-b2-strokes.spec.ts"
+      }
+    ]
+  }
+}

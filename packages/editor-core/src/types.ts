@@ -1,4 +1,8 @@
-import type { RenderCamera } from '@vector-studio/contracts';
+import type {
+  RenderCamera,
+  RendererSceneSynchronization,
+  SceneRejectionReason,
+} from '@vector-studio/contracts';
 import type {
   Color,
   DocumentV1,
@@ -27,6 +31,18 @@ export type InputEvent =
       modifiers: Modifiers;
     }>
   | Readonly<{ kind: 'keydown'; key: string; modifiers: Modifiers }>;
+
+/** A path-tool anchor; `in` and `out` are its handles, null for a corner. */
+export type PathAnchor = Readonly<{
+  point: PagePoint;
+  in: PagePoint | null;
+  out: PagePoint | null;
+}>;
+
+/** Tool state the host UI draws over the canvas; it is never document content. */
+export type ToolOverlay =
+  | Readonly<{ kind: 'marquee'; frame: Frame }>
+  | Readonly<{ kind: 'path'; anchors: readonly PathAnchor[] }>;
 
 export type NodeProps = Readonly<{
   name?: string;
@@ -109,7 +125,8 @@ export type Query =
   | Readonly<{ type: 'tool' }>
   | Readonly<{ type: 'viewport' }>
   | Readonly<{ type: 'history' }>
-  | Readonly<{ type: 'revision' }>;
+  | Readonly<{ type: 'revision' }>
+  | Readonly<{ type: 'overlay' }>;
 
 export type QueryResult<Q extends Query> = Q extends { type: 'document' }
   ? DocumentV1
@@ -123,7 +140,9 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' }
           ? RenderCamera
           : Q extends { type: 'history' }
             ? HistoryState
-            : number;
+            : Q extends { type: 'overlay' }
+              ? ToolOverlay | null
+              : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';
@@ -136,7 +155,17 @@ export type EditorEvent =
       /** IDs of the nodes the change created, changed or removed, sorted. */
       touched: readonly string[];
     }>
-  | Readonly<{ type: 'session'; field: 'selection' | 'tool' | 'viewport' }>;
+  | Readonly<{ type: 'session'; field: 'selection' | 'tool' | 'viewport' }>
+  | DiagnosticEvent;
+
+/** A structured diagnostic from the scene projector (plan section 4.5). */
+export type DiagnosticEvent = Readonly<{
+  type: 'diagnostic';
+  /** `renderer-unsupported` is a host capability fact; `scene-rejected` is any other rejection. */
+  code: 'editor.scene-rejected' | 'editor.renderer-unsupported';
+  reason: SceneRejectionReason;
+  nodeIds: readonly string[];
+}>;
 
 export interface Editor {
   execute(command: Command): CommandResult;
@@ -145,6 +174,11 @@ export interface Editor {
   subscribe(listener: (event: EditorEvent) => void): () => void;
   /** An immutable value, replaced on every change (for `useSyncExternalStore`). */
   getSnapshot(): EditorSnapshot;
+  /**
+   * Keeps `renderer` synchronized with the document and viewport, starting with a full snapshot;
+   * replaces any renderer attached before. The returned function detaches it.
+   */
+  attachRenderer(renderer: RendererSceneSynchronization): () => void;
 }
 
 /** Returns a fresh ID on each call; IDs it returns that already exist are skipped. */

@@ -79,6 +79,7 @@ function nativeFixture(options: Readonly<{ failPipeline?: string }> = {}) {
         setIndexBuffer: () => calls.push(['setIndexBuffer']),
         drawIndexed: (...args: number[]) => calls.push(['drawIndexed', ...args]),
         draw: (...args: number[]) => calls.push(['draw', ...args]),
+        setStencilReference: (reference: number) => calls.push(['setStencilReference', reference]),
         end: () => calls.push(['end']),
       })),
       finish: vi.fn(() => ({})),
@@ -168,13 +169,15 @@ describe('ST-U7 joint pipeline creation (addendum section 4.5)', () => {
     const { scene, creation, accounting } = await nativeScene(fixture);
     expect(scene).toMatchObject({
       meshPipelineAvailable: true,
-      pipelinesCreated: 3,
-      shaderModulesCreated: 2,
+      // E17 section 3: the stencil reset pipeline and its module.
+      pipelinesCreated: 4,
+      shaderModulesCreated: 3,
     });
     expect(fixture.pipelineLabels).toEqual([
-      'vector-studio/p1-analytic-primitive-4x',
+      'vector-studio/p1-analytic-primitive-stencil-4x',
       'vector-studio/p3-mesh-fill-4x',
       'vector-studio/p3-mesh-joint-4x',
+      'vector-studio/p3-mesh-stencil-reset-4x',
     ]);
     const joint = fixture.descriptors.find((descriptor) => descriptor.label?.includes('joint'))!;
     const fill = fixture.descriptors.find((descriptor) => descriptor.label?.includes('mesh-fill'))!;
@@ -195,7 +198,7 @@ describe('ST-U7 joint pipeline creation (addendum section 4.5)', () => {
       'p3-mesh-fill-v0',
       'p3-mesh-joint-v0',
     ]);
-    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(3);
+    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(4);
     creation.dispose();
     expect(accounting.snapshot().live).toBe(0);
   });
@@ -229,7 +232,8 @@ describe('ST-U7 joint draw encoding and validation (addendum section 4.5)', () =
       null,
     ]);
     submitted(scene.submitPrimitivePacket(packet));
-    const p1 = 'vector-studio/p1-analytic-primitive-4x';
+    // E17 section 3: a mesh generation's analytic pipeline declares the stencil format.
+    const p1 = 'vector-studio/p1-analytic-primitive-stencil-4x';
     const fill = 'vector-studio/p3-mesh-fill-4x';
     const joint = 'vector-studio/p3-mesh-joint-4x';
     const encoded = fixture.calls
