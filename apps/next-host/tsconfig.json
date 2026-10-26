@@ -1,0 +1,40 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "allowJs": false,
+    "jsx": "preserve",
+    "lib": ["DOM", "DOM.Iterable", "ES2024"],
+    "types": ["node"],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
+  },
+  "include": ["next-env.d.ts", "app/**/*.ts", "app/**/*.tsx", "src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules", ".next"],
+  "references": [
+    {
+      "path": "../../packages/model"
+    },
+    {
+      "path": "../../packages/editor-core"
+    },
+    {
+      "path": "../../packages/react"
+    },
+    {
+      "path": "../../packages/geometry-wasm"
+    },
+    {
+      "path": "../../packages/renderer-core"
+    },
+    {
+      "path": "../../packages/renderer-webgpu"
+    }
+  ]
+}
