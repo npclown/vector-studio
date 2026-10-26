@@ -13,13 +13,16 @@ use core::mem::size_of;
 
 use crate::codec::{align_up, read_u32, write_f64, write_u32, PathInput, Request};
 use crate::cubic_fill::{
-    CubicFillError, CubicFillWorkspace, MAX_CONTOURS, MAX_EDGE_OWNERS, MAX_FLAT_COMMANDS,
+    CubicFillDiagnostics, CubicFillError, CubicFillWorkspace, MAX_EDGE_OWNERS,
+    MAX_EXACT_FLAT_COMMANDS, MAX_LINE_CONTOURS,
 };
 use crate::engine::{
     BATCH_ALLOCATION_FAILED, BATCH_DISPOSED, BATCH_INTERNAL_ERROR, BATCH_INVALID_BATCH, BATCH_OK,
     BATCH_OUTPUT_CAPACITY, BATCH_RESOURCE_LIMIT,
 };
-use crate::fill_ladder::{boundary_records, BoundaryScan, ExactStep, FillLadder, Reason, Rung};
+use crate::fill_ladder::{
+    boundary_records, BoundaryScan, ExactOutcome, ExactStep, FillLadder, Reason, Rung,
+};
 use crate::fill_predicates::orient2d;
 use crate::geometry::{
     validate_path, Point, PATH_EMPTY, PATH_INVALID, PATH_INVALID_TOLERANCE, PATH_NUMERIC_RANGE,
@@ -30,7 +33,7 @@ use crate::rounded_line_fill::{RoundedFillError, RoundedFillLimits, RoundedFillO
 use crate::simple_cubic_topology::TopologyError;
 
 pub const FILL_V0_VERSION: u32 = 0;
-pub const FILL_V0_REVISION: u32 = 3;
+pub const FILL_V0_REVISION: u32 = 4;
 pub const FILL_INPUT_MAGIC: u32 = 0x3046_4756;
 pub const FILL_OUTPUT_MAGIC: u32 = 0x304D_4756;
 
@@ -62,7 +65,7 @@ pub(crate) const MAX_TOLERANCE_EXPONENT: i32 = 1023;
 /// budget scales with the pair count (×16), and 16 MiB still holds the
 /// workspace's reservation.
 pub(crate) const FILL_V0_LIMITS: RoundedFillLimits = RoundedFillLimits {
-    max_contours: MAX_CONTOURS,
+    max_contours: MAX_LINE_CONTOURS,
     max_input_vertices: MAX_EDGE_OWNERS,
     max_edges: MAX_EDGE_OWNERS,
     max_pairs: MAX_EDGE_OWNERS * (MAX_EDGE_OWNERS - 1) / 2,
@@ -775,6 +778,10 @@ pub(crate) struct BuiltPath {
     pub(crate) rung: Option<Rung>,
     pub(crate) reason: Option<Reason>,
     pub(crate) step: Option<ExactStep>,
+    /// E16-K2 item 4: the refinement depth k of the exact mesh, 0 without a successful retry.
+    pub(crate) depth: u32,
+    /// The exact rung's unmapped error, when it ended in one (E16-A2).
+    pub(crate) error: Option<CubicFillError>,
 }
 
 impl BuiltPath {
@@ -784,6 +791,8 @@ impl BuiltPath {
             rung: None,
             reason: None,
             step: None,
+            depth: 0,
+            error: None,
         }
     }
 }
@@ -839,8 +848,175 @@ impl PathSwitches {
     }
 }
 
+/// E16-K2 (`docs/plans/d9-e16-fill-rejection-remedy-contract.md` section 4): the most
+/// tolerance halvings the exact rung retries after a topology failure.
+pub(crate) const MAX_REFINEMENT_DEPTH: i32 = 16;
+
+/// E16-K2 item 2: the exponents of the refinement retries after a topology failure at
+/// `exponent`, finest last, none below `MIN_TOLERANCE_EXPONENT`.
+pub(crate) fn refinement_exponents(exponent: i32) -> impl Iterator<Item = i32> {
+    #[cfg(test)]
+    let floor = if e16_defect(E16Defect::NoExponentBound) {
+        i32::MIN
+    } else {
+        MIN_TOLERANCE_EXPONENT
+    };
+    #[cfg(not(test))]
+    let floor = MIN_TOLERANCE_EXPONENT;
+    (1..=MAX_REFINEMENT_DEPTH)
+        .map(move |k| exponent - k)
+        .take_while(move |value| *value >= floor)
+}
+
+/// E16-D2 to E16-D4 (contract section 7), test-only seeded defects of `exact_rung`.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum E16Defect {
+    /// D2: a stopped retry returns its own result instead of the cascade at e's.
+    RetryOwnResult,
+    /// D3: the retries also run after the cascade at e succeeds.
+    RetryAfterSuccess,
+    /// D4: the retry schedule ignores `MIN_TOLERANCE_EXPONENT`.
+    NoExponentBound,
+}
+
+#[cfg(test)]
+thread_local! {
+    static E16_DEFECT: core::cell::Cell<Option<E16Defect>> = const { core::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+fn e16_defect(defect: E16Defect) -> bool {
+    E16_DEFECT.with(core::cell::Cell::get) == Some(defect)
+}
+
+/// Runs `action` with the seeded defect `defect` on, then switches it off.
+#[cfg(test)]
+pub(crate) fn with_e16_defect<T>(defect: E16Defect, action: impl FnOnce() -> T) -> T {
+    E16_DEFECT.with(|switch| switch.set(Some(defect)));
+    let result = action();
+    E16_DEFECT.with(|switch| switch.set(None));
+    result
+}
+
+fn topology_failure(result: &Result<CubicFillDiagnostics, CubicFillError>) -> bool {
+    matches!(
+        result,
+        Err(CubicFillError::Topology(
+            TopologyError::KnotMismatch | TopologyError::Unresolved
+        ))
+    )
+}
+
+/// V2's two-step cascade (section c) at tolerance exponent `exponent`: `attempt`, then
+/// `attempt_triangle_free` after `KnotMismatch` or `Unresolved`, or the reverse order under
+/// the seeded defect (14).
+fn cascade_at(
+    workspace: &mut CubicFillWorkspace,
+    request: FillRequest,
+    exponent: i32,
+    verbs: &[u8],
+    point_bytes: &[u8],
+    inverted: bool,
+) -> (ExactStep, Result<CubicFillDiagnostics, CubicFillError>) {
+    let (flatten, topology) = tolerances(exponent);
+    let input = PathInput::from_parts(
+        Request {
+            request_id: request.request_id,
+            source_epoch: 0,
+            source_revision: 0,
+            tolerance: flatten,
+        },
+        verbs,
+        point_bytes,
+    );
+    let run = |workspace: &mut CubicFillWorkspace, triangle_free: bool| {
+        if triangle_free {
+            workspace.attempt_triangle_free(input, request.rule, topology, MAX_EXACT_FLAT_COMMANDS)
+        } else {
+            workspace.attempt(input, request.rule, topology, MAX_EXACT_FLAT_COMMANDS)
+        }
+    };
+    let result = run(workspace, inverted);
+    if topology_failure(&result) {
+        return (ExactStep::TriangleFree, run(workspace, !inverted));
+    }
+    (ExactStep::Legacy, result)
+}
+
+/// The exact rung (rung 1): the cascade at the request's exponent e and, when it ends in a
+/// topology failure, E16-K2's retries at e − 1 to e − 16. The first retry that succeeds with
+/// flat status `PATH_OK` is the result, with its depth. A retry that ends in another path
+/// failure stops the retries, and the result is the cascade at e's; an internal error is
+/// returned as it is, so the batch self-check fails. A pre-B1 workspace runs no retries.
+pub(crate) fn exact_rung(
+    workspace: &mut CubicFillWorkspace,
+    request: FillRequest,
+    verbs: &[u8],
+    point_bytes: &[u8],
+    inverted: bool,
+) -> ExactOutcome {
+    let (step, result) = cascade_at(
+        workspace,
+        request,
+        request.exponent,
+        verbs,
+        point_bytes,
+        inverted,
+    );
+    let mut first = ExactOutcome {
+        step,
+        result,
+        depth: 0,
+        stop: None,
+    };
+    #[cfg(test)]
+    let retry_after_success = e16_defect(E16Defect::RetryAfterSuccess);
+    #[cfg(not(test))]
+    let retry_after_success = false;
+    if !(topology_failure(&first.result) || retry_after_success) || !workspace.refines() {
+        return first;
+    }
+    for (depth, exponent) in (1..).zip(refinement_exponents(request.exponent)) {
+        let (step, result) = cascade_at(workspace, request, exponent, verbs, point_bytes, inverted);
+        let retry = ExactOutcome {
+            step,
+            result,
+            depth,
+            stop: None,
+        };
+        match result {
+            Ok(diagnostics) if diagnostics.flat_status == PATH_OK => return retry,
+            // A flat status other than `PATH_OK` stops the retries with no error to record.
+            Ok(_) => first.stop = None,
+            Err(error) => {
+                first.stop = Some((depth, error));
+                if topology_failure(&result) {
+                    continue;
+                }
+                // An internal error fails the batch self-check; depth stays 0, since no
+                // retry succeeded (contract section 4 item 4).
+                if map_attempt_error(error) == Mapped::Internal {
+                    return ExactOutcome {
+                        depth: 0,
+                        stop: first.stop,
+                        ..retry
+                    };
+                }
+            }
+        }
+        // A stop: the outcome is the cascade at e's.
+        #[cfg(test)]
+        if e16_defect(E16Defect::RetryOwnResult) {
+            return retry;
+        }
+        break;
+    }
+    first
+}
+
 /// Runs the per-path stage order of section e for one path. Stage 4 is the ladder of the
-/// Alt-A1 contract (section 3.1): rung 0, and on a fallback V2's exact cascade, unchanged.
+/// Alt-A1 contract (section 3.1): rung 0, and on a fallback the exact rung (`exact_rung`).
 pub(crate) fn build_path(
     workspace: &mut CubicFillWorkspace,
     scratch: &mut FillScratch,
@@ -869,18 +1045,6 @@ pub(crate) fn build_path(
     if verbs.is_empty() {
         return Ok(BuiltPath::decided(FILL_PATH_EMPTY));
     }
-    let (flatten, topology) = tolerances(request.exponent);
-    let input = PathInput::from_parts(
-        Request {
-            request_id: request.request_id,
-            source_epoch: 0,
-            source_revision: 0,
-            tolerance: flatten,
-        },
-        verbs,
-        point_bytes,
-    );
-
     // Step 0, rung 0 (Alt-A1 contract sections 1.2 and 3.1): AL-FR0, the S1 prefix, FR1-FR8
     // and AL-FR9 on the request's tolerance. A published fast mesh is the path's result: no
     // exact attempt, no cell-ladder refinement and no ledger cross-check run (section 3.8).
@@ -894,39 +1058,37 @@ pub(crate) fn build_path(
                     rung: Some(Rung::Fast),
                     reason: None,
                     step: None,
+                    depth: 0,
+                    error: None,
                 })
             }
             Err(reason) => Some(reason),
         }
     };
 
-    // Rung 1, the exact rung, on the same input: V2's two-step cascade, unchanged. Only the
-    // seeded defect (14), a test-only switch, inverts its step order.
-    let inverted = switches.cascade_inverted();
-    let mut step = ExactStep::Legacy;
-    let mut result = if inverted {
-        workspace.attempt_triangle_free(input, request.rule, topology, MAX_FLAT_COMMANDS)
-    } else {
-        workspace.attempt(input, request.rule, topology, MAX_FLAT_COMMANDS)
-    };
-    if matches!(
+    // Rung 1, the exact rung, on the same input: V2's two-step cascade, then E16-K2's
+    // refinement retries after a topology failure. Only the seeded defect (14), a test-only
+    // switch, inverts its step order.
+    let ExactOutcome {
+        step,
         result,
-        Err(CubicFillError::Topology(
-            TopologyError::KnotMismatch | TopologyError::Unresolved
-        ))
-    ) {
-        step = ExactStep::TriangleFree;
-        result = if inverted {
-            workspace.attempt(input, request.rule, topology, MAX_FLAT_COMMANDS)
-        } else {
-            workspace.attempt_triangle_free(input, request.rule, topology, MAX_FLAT_COMMANDS)
-        };
-    }
+        depth,
+        ..
+    } = exact_rung(
+        workspace,
+        request,
+        verbs,
+        point_bytes,
+        switches.cascade_inverted(),
+    );
+    let error = result.err();
     let exact = |outcome| BuiltPath {
         outcome,
         rung: Some(Rung::Exact),
         reason,
         step: Some(step),
+        depth,
+        error,
     };
     let diagnostics = match result {
         Ok(diagnostics) => diagnostics,
@@ -1301,10 +1463,12 @@ impl FillEngine {
         let workspace = workspace.map_err(construction_status)?;
         // E14-K1 item 5: the scratch also holds the AL-FR9 records of the workspace's fast caps.
         let fast_points = workspace.fast_contour_points();
-        let (scratch, scratch_bytes) = FillScratch::reserve(limits, boundary_records(fast_points))?;
+        let fast_contours = workspace.fast_contours();
+        let (scratch, scratch_bytes) =
+            FillScratch::reserve(limits, boundary_records(fast_points, fast_contours))?;
         // Alt-A1 contract section 3.4: rung 0's storage, reserved once and fallibly beside the
         // workspace and the scratch, after the check that the scratch holds AL-FR9's records.
-        let ladder = FillLadder::reserve(scratch.records(), fast_points)?;
+        let ladder = FillLadder::reserve(scratch.records(), fast_points, fast_contours)?;
         let total = workspace
             .allocated_bytes()
             .checked_add(scratch_bytes)

@@ -2,6 +2,8 @@
 // (`pnpm p3-exit:sweep --corpus`, `corpus.json`) as the native fill diagnostic's input
 // (packages/geometry-wasm/kernel/src/e14_fill_limit_diag_tests.rs), with a sidecar of each
 // request's sweep outcome and source sizes. Run through `pnpm e16:fill-diag`, never in CI.
+// With `E16_FILL_ALL=1` it writes every fill request of the corpus, the `ok` ones with the
+// sidecar outcome `ok` (the E16-G2 timing input of E16-U1).
 // The corpus is read only after its freeze record exists, as the sweep requires.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
@@ -38,19 +40,29 @@ test('E16 fill diagnostic input', () => {
   const wanted = new Map(
     sweep.fillRejections.filter((r) => r.outcome.startsWith('failed:')).map((r) => [r.id, r]),
   );
+  const all = process.env.E16_FILL_ALL === '1';
+  const seen = new Set<string>();
   const rows: string[] = [];
   const sidecar: Record<string, unknown> = {};
   for (const kase of iterateA04Corpus() as Iterable<A04Case>) {
     const d = decodeCase(kase);
     const rejection = wanted.get(d.id);
-    if (rejection === undefined || d.paint !== 'fill') continue;
+    if ((rejection === undefined && !all) || d.paint !== 'fill') continue;
     // The served request, as the sweep makes it (V3 section c).
     const [a, c, b, dd] = d.transform;
     const buckets = computePathBuckets([a, c, b, dd], d.zoom, d.dpr);
-    if (buckets.singular) throw new Error(`${d.id}: a rejected request cannot be singular`);
+    if (buckets.singular) {
+      if (rejection === undefined) continue;
+      throw new Error(`${d.id}: a rejected request cannot be singular`);
+    }
     const unclamped = buckets.e - d.servedOffset;
     expect(unclamped >= E_MIN, d.id).toBe(true);
     const e = Math.min(unclamped, E_MAX);
+    // The sweep serves each distinct request once (run.check.ts), so the all-requests mode
+    // writes each once too.
+    const key = JSON.stringify([d.verbs, d.points, d.fillRule, e]);
+    if (all && rejection === undefined && seen.has(key)) continue;
+    seen.add(key);
     rows.push(
       [
         d.id,
@@ -61,10 +73,11 @@ test('E16 fill diagnostic input', () => {
       ].join('\t'),
     );
     sidecar[d.id] = {
-      outcome: rejection.outcome,
-      e14: rejection.e14SelfCrossingOverE,
+      outcome: rejection?.outcome ?? 'ok',
+      e14: rejection?.e14SelfCrossingOverE ?? false,
       contours: d.verbs.filter((v) => v === 'move').length,
       segments: d.verbs.filter((v) => v === 'line' || v === 'cubic').length,
+      cubics: d.verbs.filter((v) => v === 'cubic').length,
     };
     wanted.delete(d.id);
   }

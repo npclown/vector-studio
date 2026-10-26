@@ -10,15 +10,18 @@
 //! a caller reads `attempt`'s result only after a rung-0 fallback. One JSON
 //! object per path is printed with the S1 sizing plan's flat verb count, rung 0's reason and
 //! each exact step's kernel error, unmapped, and the wall time of rung 0 and of the first exact
-//! step (a diagnostic, not performance evidence).
+//! step (a diagnostic, not performance evidence). Since E16-U1 (fill-v0+r4) it also prints the
+//! exact rung as `build_path` runs it, with E16-K2's retries (`exact_cascade`): the result,
+//! the refinement depth, and when the retries ran and none succeeded, the last retry's depth
+//! and error (`retryStop`), which the cascade at e's result does not show.
 use std::thread;
 use std::time::Instant;
 
 use crate::codec::{PathInput, Request};
-use crate::cubic_fill::{CubicFillError, CubicFillWorkspace, MAX_FLAT_COMMANDS};
+use crate::cubic_fill::{CubicFillError, CubicFillWorkspace, MAX_EXACT_FLAT_COMMANDS};
 use crate::fill_export::{tolerances, FillRequest, FillScratch, FILL_V0_LIMITS};
 use crate::fill_filter_tests::THREAD_STACK_BYTES;
-use crate::fill_ladder::FillLadder;
+use crate::fill_ladder::{exact_cascade, FillLadder};
 use crate::line_fill::LineFillRule;
 use crate::p3_b0r_identity::read_file;
 use crate::simple_cubic_topology::TopologyError;
@@ -28,6 +31,15 @@ fn outcome<T>(result: &Result<T, CubicFillError>) -> String {
         Ok(_) => "OK".to_owned(),
         Err(error) => format!("{error:?}"),
     }
+}
+
+/// The `retryStop` field (E16 contract section 4 item 4): `-`, or `<k>:<error>` with the
+/// last retry's decimal depth and its unmapped error in `Debug` form.
+pub(crate) fn retry_stop_field(stop: Option<(u32, CubicFillError)>) -> String {
+    stop.map_or_else(
+        || "-".to_owned(),
+        |(depth, error)| format!("{depth}:{error:?}"),
+    )
 }
 
 fn run() {
@@ -77,7 +89,7 @@ fn run() {
             &point_bytes,
         );
         let clock = Instant::now();
-        let legacy = workspace.attempt(input, rule, topology, MAX_FLAT_COMMANDS);
+        let legacy = workspace.attempt(input, rule, topology, MAX_EXACT_FLAT_COMMANDS);
         let legacy_us = clock.elapsed().as_micros();
         let stats = workspace.topology_stats();
         let triangle_free = if matches!(
@@ -90,13 +102,15 @@ fn run() {
                 input,
                 rule,
                 topology,
-                MAX_FLAT_COMMANDS,
+                MAX_EXACT_FLAT_COMMANDS,
             )))
         } else {
             None
         };
+        let refined = exact_cascade(&mut workspace, request, &verbs, &point_bytes);
+        let retry_stop = retry_stop_field(refined.stop);
         println!(
-            "{{\"id\":\"{}\",\"exponent\":{exponent},\"flatStatus\":{},\"flatVerbs\":{},\"flatPoints\":{},\"fast\":\"{}\",\"legacy\":\"{}\",\"triangleFree\":\"{}\",\"fastUs\":{fast_us},\"legacyUs\":{legacy_us},\"topologyStats\":\"{:?}\"}}",
+            "{{\"id\":\"{}\",\"exponent\":{exponent},\"flatStatus\":{},\"flatVerbs\":{},\"flatPoints\":{},\"fast\":\"{}\",\"legacy\":\"{}\",\"triangleFree\":\"{}\",\"exact\":\"{}\",\"depth\":{},\"retryStop\":\"{}\",\"fastUs\":{fast_us},\"legacyUs\":{legacy_us},\"topologyStats\":\"{:?}\"}}",
             fields[0],
             sizing.status,
             sizing.verb_count,
@@ -107,6 +121,9 @@ fn run() {
             },
             outcome(&legacy),
             triangle_free.unwrap_or_else(|| "-".to_owned()),
+            outcome(&refined.result),
+            refined.depth,
+            retry_stop,
             stats,
         );
     }

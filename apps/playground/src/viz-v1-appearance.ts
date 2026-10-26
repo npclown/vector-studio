@@ -362,6 +362,22 @@ function messageFor(field: HTMLInputElement): HTMLElement | null {
   return id === null ? null : document.getElementById(id);
 }
 
+/** The slider and number field that edit one value; a commit from one makes both valid. */
+const PAIRED_FIELDS = new Map<HTMLInputElement, HTMLInputElement>([
+  [widthSlider, widthNumber],
+  [widthNumber, widthSlider],
+  [miterSlider, miterNumber],
+  [miterNumber, miterSlider],
+  [opacitySlider, opacityNumber],
+  [opacityNumber, opacitySlider],
+]);
+
+function clearInvalid(field: HTMLInputElement): void {
+  field.removeAttribute('aria-invalid');
+  const message = messageFor(field);
+  if (message !== null) message.textContent = '';
+}
+
 function onControl(
   id: ControlId,
   event: ControlEvent,
@@ -378,14 +394,16 @@ function onControl(
   }
   if (!appliesOn(kind, event)) return;
   const result = interpretControl(id, raw);
-  const message = messageFor(field);
   if (!result.ok) {
     field.setAttribute('aria-invalid', 'true');
+    const message = messageFor(field);
     if (message !== null) message.textContent = result.message;
     return;
   }
-  field.removeAttribute('aria-invalid');
-  if (message !== null) message.textContent = '';
+  clearInvalid(field);
+  // The paired field shows the committed value next, so its rejected text no longer applies.
+  const paired = PAIRED_FIELDS.get(field);
+  if (paired !== undefined) clearInvalid(paired);
   if (editor.edit(selectedId, result.patch)) startLatency(id, startedAt);
   syncControls();
 }
@@ -441,7 +459,9 @@ resetAllButton.addEventListener('click', () => {
 
 function onEditorChange(): void {
   if (editor === null) return;
-  for (const [id, state] of Object.entries(editor.states)) tracker.setState(id, state);
+  // The tracker follows the applied states: notices are emitted synchronously after the prepare
+  // that built them, so a notice is filed under the key the renderer had, not a queued edit's.
+  for (const [id, state] of Object.entries(editor.applied)) tracker.setState(id, state);
   setControlsDisabled(editor.disabledReason !== null || editor.stopped);
   syncControls();
   renderAll();

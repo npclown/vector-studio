@@ -419,6 +419,8 @@ Amended 2026-10-21 by [ST-U6](p3-fill-stroke-meshes.md#b2-st-u6-renderer-stroke)
 
 Amended 2026-10-21 by [ST-U7](p3-fill-stroke-meshes.md#b2-st-u7-joint-coverage) under the [ST-U7 addendum](p3-b2-st-u7-joint-coverage-addendum.md): both paints at `0 < opacity < 1` are drawn by the joint fill draw and the stroke draw, exact by the addendum's section 3.2; each draw still covers each sample at most once. No offscreen isolation, stencil or extra pass is used.
 
+Amended 2026-10-25 by [E17](d9-e17-mesh-write-once-coverage-contract.md#3-the-rule): the rasterizer's subpixel snap can invert sliver triangles, so the shared-edge rule alone no longer gives at most one cover per sample (V-4's pre-freeze A08 run, count 3). Each mesh draw now writes a sample at most once through a `stencil8` attachment with a per-draw reference (E17-K1, E17-K2); composition and the shader are otherwise unchanged. The sentence "No offscreen isolation, stencil or extra pass is used" above is superseded for stencil only.
+
 ## h) D8-interim failure outcome
 
 Amended 2026-10-20 by [V4](p3-fill-stroke-meshes.md#v4-playground-path-page), the builder work cap: a path whose mesh has more than `fringeBoundaryVertexCap` (128) distinct boundary vertices is drawn region-only (no coverage fringe) instead of not drawn, and queues one `render.path-mesh-interim-failure` notice with code `fringe-work-cap` per cache entry. This is V3-Q2 option (c) scoped to that one cause; every other failure keeps this section's rule. It is removed with the TypeScript builder at the R2/K1 placement decision, or when B0's E3 result replaces it.

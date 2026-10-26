@@ -1878,8 +1878,8 @@ fn emit_composition_rows(
     let mut workspace = BridgeWorkspace::new(LIMITS).expect("construct mixed cubic workspace");
     let allocated_bytes = workspace.allocated_bytes();
     let inline_bytes = size_of::<BridgeWorkspace>();
-    assert_eq!(allocated_bytes, 3_498_880);
-    assert_eq!(inline_bytes, 24_304);
+    assert_eq!(allocated_bytes, 4_514_304);
+    assert_eq!(inline_bytes, 16_928);
     println!("{begin_marker}");
     for (row, expectation) in rows.iter().zip(expected) {
         assert_eq!(row.id, expectation.id);
@@ -3330,8 +3330,13 @@ mod tests {
         let prefix = MAX_FAST_FLAT_COMMANDS * size_of::<FlatCommand>()
             + MAX_FAST_CONTOUR_POINTS * size_of::<Point>()
             + MAX_FAST_EDGE_OWNERS * size_of::<EdgeOwner>();
-        assert_eq!(prefix, 590_208);
-        let expected = expected + prefix;
+        // E16-K1: E0 + 2 · C0 commands and E0 + C0 points, C0 = 512.
+        assert_eq!(prefix, 638_976);
+        // E16-K1 item 5: the source buffers, sized for the fast source caps, are heap buffers
+        // counted here too.
+        let sources = crate::cubic_fill::source_buffer_bytes();
+        assert_eq!(sources, 966_656);
+        let expected = expected + prefix + sources;
         assert_eq!(workspace.allocated_bytes(), expected);
         assert!(workspace.allocated_bytes() <= MAX_BRIDGE_HEAP_BYTES);
         assert!(size_of::<BridgeWorkspace>() < 64 * 1024);

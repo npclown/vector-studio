@@ -374,6 +374,10 @@ export class AppearanceEditor {
   public get states(): AppearanceStates {
     return this.#states;
   }
+  /** The states last sent to the renderer; queued edits are not in it until their flush. */
+  public get applied(): AppearanceStates {
+    return this.#applied;
+  }
   /** The reason the controls are disabled, or null. */
   public get disabledReason(): string | null {
     return this.#disabled;
@@ -650,9 +654,15 @@ export class TargetStatusTracker {
     this.#zoomChanged = true;
     for (const records of [this.#fill, this.#stroke]) {
       for (const record of records.values()) {
-        const latest = record.latest;
-        if (latest !== null && STATE_FAILURES.has(latest.failureCode)) {
-          record.byExponent.delete(latest.toleranceExponent);
+        // Every state failure is shown only until the next zoom change (section 3.4), not only
+        // the latest one.
+        let removed = false;
+        for (const [exponent, notice] of record.byExponent) {
+          if (!STATE_FAILURES.has(notice.failureCode)) continue;
+          record.byExponent.delete(exponent);
+          removed = true;
+        }
+        if (removed && record.latest !== null && STATE_FAILURES.has(record.latest.failureCode)) {
           // The newest remaining notice by sequence number, not by map insertion order.
           record.latest = [...record.byExponent.values()].reduce<ParsedNotice | null>(
             (newest, notice) =>

@@ -1,3 +1,5 @@
+export type Criterion = 'A03' | 'A05' | 'A06';
+export const MAP_CRITERIA: Record<string, Criterion[]>;
 export interface MapEntry {
   id: string;
   source: string;
@@ -11,7 +13,7 @@ export interface EvidenceMap {
   version: string;
   contract: string;
   note?: string;
-  criteria: { A05: MapEntry[]; A06: MapEntry[] };
+  criteria: Partial<Record<Criterion, MapEntry[]>>;
 }
 export interface TestResult {
   name?: string;
@@ -25,7 +27,7 @@ export interface RunnerResult {
   tests: TestResult[];
 }
 export interface Row {
-  criterion: 'A05' | 'A06';
+  criterion: Criterion;
   entry: MapEntry;
   verdict: 'PASS' | 'FAIL' | 'HEADED';
   selected: number;
@@ -33,7 +35,7 @@ export interface Row {
 }
 export interface Evaluation {
   rows: Row[];
-  criteria: Record<'A05' | 'A06', string>;
+  criteria: Partial<Record<Criterion, string>>;
 }
 export function checkMap(
   map: EvidenceMap,

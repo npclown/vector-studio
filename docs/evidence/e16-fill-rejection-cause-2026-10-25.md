@@ -49,8 +49,64 @@ Generated rows can appear in more than one line at different transforms (for exa
 
 The order and scope are a user decision (new kernel work, Full tier). Without F1 to F3, A02 cannot pass at the snapshot unless the closed list grows, which E11 section 7.2 and the private contract's "named ordinary fixtures must succeed" do not allow without a user decision.
 
+## Closed-list class count (update 2026-10-25)
+
+E11 section 7.2 (update 2026-10-25, the user decision of E11 section 9.2) adds two classes, decided on the native outcome:
+
+- **"Fill stop in the exact rung's caps".** Rung 0 did not mesh the row, and the row is not in E14-Q1. The exact rung's terminal error, at e or as the stop error of the last E16-K2 retry, is one of:
+  - `CommandLimit`, `OwnerLimit`, `Rounded(_)` or `Topology(WorkLimit)`;
+  - `SourceLimit` on a line-only path over the exact rung's line segment cap (E = 256, E16-U1's `B1_LINE_CAPS`).
+- **"Fill `ZeroLengthLeaf`".** The exact rung ends in `ZeroLengthLeaf`.
+
+The sweep cannot see native errors, so `pnpm e16:fill-diag` assigns these classes. It also writes `classes.tsv`, which gives each stratum's failed fill requests by class: `E14-Q1`, `exact-rung cap stop`, `zero-length leaf`, or `outside:` with the cause. The input sidecar now carries each path's cubic count, for the line-only test. The terminal error at e is the triangle-free retry's error when that retry ran, and otherwise the exact attempt's. The cap-stop test takes either that error or the last retry's stop error, which E16-U1 prints as `retryStop` (`depth:error`). The E4 and E8 classes are left to the evidence review, as before.
+
+The classes apply only once `fill-v0+r4` has merged, so the counts below on `fill-v0+r3` are a PRE-FREEZE preview. On the same input, with `summary.tsv` unchanged:
+
+| Stratum | E14-Q1 | Exact-rung cap stop | Zero-length leaf | Outside |
+| --- | --- | --- | --- | --- |
+| C3 generated | 267 | 159 | 0 | 972 (topology unresolved) |
+| C3 named | 32 | 31 | 22 | 21 (topology unresolved) |
+| C4 named | 0 | 54 | 0 | 0 |
+| C6 named | 8 | 0 | 0 | 0 |
+| C11 named | 0 | 14 (f04, 321 line segments) | 0 | 56 (source cap) |
+| C12 named | 5 | 0 | 0 | 14 (source cap) |
+
+The classes take causes 2 and 4 (244), f04's 14 requests of cause 1, and the 22 `ZeroLengthLeaf` requests of cause 3. The other 70 requests of cause 1 and the 993 `Topology(Unresolved)` requests of cause 3 stay outside until the E16 remedy.
+
 ## Coordination
 
 - E11 (exit snapshot): told on 2026-10-25 that A02 would fail on `fill-v0+r3` and that this record exists, so its snapshot plan accounts for it.
 - E14: cause 2 is E14-R2 and E14-R5 seen in the corpus; F2 names E14-U2.
 - E2 owns stroke. The 969 stroke `work-limit` and other stroke rejections of the same sweep are A03's and are not classified here.
+
+## F1 and F3 investigation, 2026-10-25
+
+Dated append, input to the [E16-U1 contract](../plans/d9-e16-fill-rejection-remedy-contract.md). Kernel `fill-v0+r3`, `main` `d85f634`, in the container (Node 22.22.0, Rust 1.94.1, native release). The A01 corpus sweep was re-run at `d85f634` (record `2026-10-25T18-22-22-282Z-fd6634f4`, WASM `5c9bcc2c…b879`; marked dirty only by an untracked local copy of the geometry test runner with the Linux host pin) and again has 1,655 rejected fill requests, which `pnpm e16:fill-diag` classifies as above. The probes below are scratch `cfg(test)` changes to `e14_fill_limit_diag` and `simple_cubic_topology.rs`, not committed, as in the E8 investigation. **PRE-FREEZE**; precision stays **UNVERIFIED**.
+
+**F1, source caps.** All six named rows are line-only polygons. With the cubic-fill source caps raised to 64 contours and 4,096 segments for both rungs (a scratch build), the 84 requests end as follows: f01 14 of 14 meshed by rung 0; f04 10 meshed by rung 0, 4 refused by rung 0 (`CLEARANCE`) and then `OwnerLimit` at 321 segments; j02 12 meshed by rung 0 and 2 refused (`CLEARANCE`) and meshed by the exact rung; f03, f06 and f08 refused by rung 0 at every transform (`CROSSING` 37, `CLEARANCE` 5) and meshed by the exact rung's line fill. Raising rung 0's caps alone would mesh 36 of 84; raising the exact rung's caps for line-only paths as well, 80.
+
+**F3, topology unresolved.** A probe recorded the source line of each `Unresolved` return. On all 993 requests the last exact step (`attempt_triangle_free`) fails at one of three checks:
+
+| Check that fails | Requests [named] | Rung 0 |
+| --- | ---: | --- |
+| Adjacent leaves have no common monotone direction (`rounded_adjacent_projection`, E8 addendum E8.3) | 800 [8] | `MONOTONE` |
+| Non-adjacent leaves whose hulls meet have no certified transverse crossing | 98 [13] | `MONOTONE` |
+| A contour has fewer than three leaves (`validate_minimum_leaves`) | 95 [0] | `STRUCTURE` |
+
+Every named request of this cause is at zoom 0.01, below a device pixel: c04 and c05 (loop), c10, c11, c12, c20, c21, c28 and c29. Generated rows fail at every zoom, since the corpus scales them to the same device size.
+
+A second probe re-ran the unchanged cascade (`attempt`, then `attempt_triangle_free`) at the exponents e − 1, e − 2, … down to e − 20, stopping at the first success with flat status `PATH_OK` or the first error that is not `KnotMismatch` or `Unresolved`:
+
+| Check | Kind | Meshed [rows] | Depth k min/median/max | Stopped at the edge cap [rows] |
+| --- | --- | ---: | --- | ---: |
+| Adjacent | generated | 613 [82] | 1/4/12 | 179 [25]: `CommandLimit` 150, `OwnerLimit` 29 |
+| Adjacent | named | 8 [2] | 1/3/4 | 0 |
+| Non-adjacent | generated | 53 [8] | 1/2/5 | 32 [6] `CommandLimit` |
+| Non-adjacent | named | 13 [7] | 1/3/6 | 0 |
+| Minimum leaves | generated | 91 [14] | 1/6/9 | 4 [1] `OwnerLimit` |
+
+778 of 993 requests mesh, every named one among them, none deeper than k = 12; the other 215 reach E = 256 flat edges first, and none stays unresolved below the cap. An earlier run of the probe, down to e − 8 only, tried both topology tolerances (from e − k, or kept at e − 1) and found the same 725 meshed requests for both; the final run above derives both tolerances from e − k. On the 22 `ZeroLengthLeaf` requests (c22, c23), a variant of the retry that also continues past `ZeroLengthLeaf` (which E16-K2's trigger and stop rule do not) ends at `CommandLimit` on every request, at k = 1 to 14. Running rung 0 at the same finer exponents meshes 107 of the 778 and none of the 215: the others stay `MONOTONE` or reach `PREFIX`.
+
+## Result at `fill-v0+r4` (E16-A6), 2026-10-26
+
+On the E16-U1 commit the corpus sweep counts 7,086 fill `ok` (was 6,228), 560 `work-limit`, 237 `unsupported-geometry` and 2 `empty`. Of the 797 failed requests, 312 are E14-Q1, 463 are in E11's class "fill stop in the exact rung's caps" and 22 in "fill `ZeroLengthLeaf`"; none is outside every class. Details in the [E16-U1 evidence](e16-u1-2026-10-25.md#e16-a3-and-e16-a6-corpus-and-scene-sweep).
