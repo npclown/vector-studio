@@ -851,7 +851,10 @@ const FLIP_TOLERANT_DEPTH = 12;
 const FLIP_TOLERANT_ANGLES = [0, 1, -1, 2, -2, 2.5, -2.5].map((k) => (k * Math.PI) / 6);
 const GRID_CELL = 8;
 
-/** Triangles, edges or points by grid cell over a box; whatever lies off the box is left out. */
+/**
+ * Triangles, edges or points by grid cell over a box. A box off the grid is clamped into its
+ * border cells, so a query anywhere finds every item whose box meets the query's box.
+ */
 class CellGrid {
   readonly cells = new Map<number, number[]>();
   private readonly nx: number;
@@ -865,18 +868,18 @@ class CellGrid {
     this.nx = Math.ceil((x1 - x0) / GRID_CELL) + 1;
     this.ny = Math.ceil((y1 - y0) / GRID_CELL) + 1;
   }
-  /** The cell range of a box, padded by one cell, or null off the grid. */
+  /** The cell range of a box, padded by one cell and clamped into the grid. */
   private range(bx0: number, by0: number, bx1: number, by1: number) {
-    const i0 = Math.max(0, Math.floor((bx0 - this.x0) / GRID_CELL) - 1);
-    const j0 = Math.max(0, Math.floor((by0 - this.y0) / GRID_CELL) - 1);
-    const i1 = Math.min(this.nx - 1, Math.floor((bx1 - this.x0) / GRID_CELL) + 1);
-    const j1 = Math.min(this.ny - 1, Math.floor((by1 - this.y0) / GRID_CELL) + 1);
-    return i0 > i1 || j0 > j1 ? null : { i0, j0, i1, j1 };
+    const clamp = (v: number, n: number) => Math.min(n - 1, Math.max(0, v));
+    const i0 = clamp(Math.floor((bx0 - this.x0) / GRID_CELL) - 1, this.nx);
+    const j0 = clamp(Math.floor((by0 - this.y0) / GRID_CELL) - 1, this.ny);
+    const i1 = clamp(Math.floor((bx1 - this.x0) / GRID_CELL) + 1, this.nx);
+    const j1 = clamp(Math.floor((by1 - this.y0) / GRID_CELL) + 1, this.ny);
+    return { i0, j0, i1, j1 };
   }
   /** Inserts `id` under its box; returns the cells written. */
   insert(id: number, bx0: number, by0: number, bx1: number, by1: number): number {
     const r = this.range(bx0, by0, bx1, by1);
-    if (r === null) return 0;
     for (let j = r.j0; j <= r.j1; j += 1)
       for (let i = r.i0; i <= r.i1; i += 1) {
         const key = j * this.nx + i;
@@ -889,7 +892,6 @@ class CellGrid {
   /** The ids whose cells meet a box, each once. */
   query(bx0: number, by0: number, bx1: number, by1: number): number[] {
     const r = this.range(bx0, by0, bx1, by1);
-    if (r === null) return [];
     const found = new Set<number>();
     for (let j = r.j0; j <= r.j1; j += 1)
       for (let i = r.i0; i <= r.i1; i += 1)
@@ -1441,13 +1443,14 @@ export function measureCase(
   // (section 15.4), as the oracle's mesh model takes triangles of positive area only.
   const mesh: A04Mesh = {
     positions: points.flatMap((p) => [dq(p.x), dq(p.y)]),
-    // Under section 20 the zero-area triangles' segments lie on edges of M*, so leaving them
-    // out does not change M*.
+    // The oracle models triangles of positive area only; under section 20 the zero-area
+    // triangles' segments lie in M* anyway.
     indices: flipTolerant === null ? withoutCollapsed(mapped) : withPositiveArea(mapped),
   };
   const m = a04Measure(kase, mesh, {
     passBelow: a04NextDown(TARGET - beta),
     failAbove: a04NextUp(TARGET + beta),
+    // β_c, not ρ: it only feeds the reported crack bound (2β_c per T-junction).
     betaC,
     portMesh: { positions: draw.mesh.positions, indices: draw.mesh.indices },
     workCap,

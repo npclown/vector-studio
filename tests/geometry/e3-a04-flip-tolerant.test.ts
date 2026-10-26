@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { controlPorts, meshFromTriangles } from './e3-a04/controls.js';
 import {
   FLIP_TOLERANT_RHO_MAX,
   flipTolerantBound,
   mapPoint,
+  measureCase,
   noFlip,
   type Mapped,
   type ShaderLanes,
 } from './e3-a04/harness.js';
+import { fill, polygon, rect } from './e3-a04/oracle-cases.js';
+import { harnessCase } from './e3-a04/smoke.js';
 
 // D9 E3 unit E3-U6 (docs/plans/d9-e3-b4-precision-contract.md, section 20): the flip-tolerant
 // bound on synthetic mapped meshes, its preconditions, and a sampled check that a perturbation
@@ -218,7 +222,93 @@ describe('flip-tolerant bound (section 20)', () => {
         if (inMesh(moved, x, y) !== inMesh(exact, x, y))
           expect(toBoundary(x, y)).toBeLessThanOrEqual(rho);
       }
+      // B_R: every point of the bottom edge has points in and out of M_gpu within ρ.
+      for (let k = 0; k < 50; k += 1) {
+        const x = 15 + random() * 4.5;
+        const ring = Array.from({ length: 16 }, (_, j) => {
+          const a = (j * Math.PI) / 8;
+          return inMesh(moved, x + rho * Math.cos(a), 10 + rho * Math.sin(a));
+        });
+        expect(ring.some((v) => v)).toBe(true);
+        expect(ring.some((v) => !v)).toBe(true);
+      }
     }
     expect(flipped).toBeGreaterThan(0);
+  });
+
+  it('checks edges that leave the grid', () => {
+    // Two slabs 1e-5 px apart across a 64 px viewport, reaching far past the grid's box. Their
+    // facing edges have no outside more than β from both, inside the window or outside it.
+    const small: ShaderLanes = { ...lanes, frame: { ...lanes.frame, width: 64, height: 64 } };
+    const pts = [
+      [20, -3000],
+      [32, -3000],
+      [32, 1000],
+      [20, 1000],
+      [32.00001, -500],
+      [44, -500],
+      [44, 1005],
+      [32.00001, 1005],
+    ] as const;
+    const r = flipTolerantBound(
+      {
+        points: pts.map(([x, y]) => mapPoint(x, y, small)),
+        indices: [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7],
+        width: 64,
+        height: 64,
+      },
+      BETA,
+    );
+    expect(r.rho).toBeNull();
+    expect(r.reason).toBe('boundary offset');
+  });
+
+  it('ignores a zero-area triangle far outside the window', () => {
+    const r = flipTolerantBound(
+      mapped([...SLIVER_POINTS, [1000, 10], [1010, 10], [1020, 10]], [...SLIVER_INDICES, 5, 6, 7]),
+      BETA,
+    );
+    expect(r.reason).toBeNull();
+  });
+});
+
+describe('the flip-tolerant path through measureCase (section 20)', () => {
+  // A 64 × 32 rectangle fanned around a vertex 1e-5 px above its bottom edge.
+  const sliverFan = (x0: number, y0: number, x1: number, y1: number) => {
+    const v: [number, number] = [(x0 + x1) / 2, y0 + 1e-5];
+    return meshFromTriangles([
+      [[x0, y0], [x1, y0], v],
+      [[x1, y0], [x1, y1], v],
+      [[x1, y1], [x0, y1], v],
+      [[x0, y1], [x0, y0], v],
+    ]);
+  };
+
+  it('measures with ρ in place of β_c in U and L', () => {
+    const kase = harnessCase({ id: 'U6-1', ...polygon(rect(0, 0, 64, 32)), paint: fill() });
+    const row = measureCase(kase, controlPorts({ status: 'ok', mesh: sliverFan(0, 0, 64, 32) }));
+    expect(row.noFlip!.failed).toBeGreaterThan(0);
+    expect(row.flipTolerant!.reason).toBeNull();
+    const rho = row.flipTolerant!.rho!;
+    expect(rho).toBeGreaterThan(row.betaC!);
+    expect(row.status).toBe('pass');
+    expect(row.u!).toBeGreaterThanOrEqual(row.eHi! + rho);
+    expect(row.u! - row.eHi!).toBeLessThan(rho * (1 + 1e-9));
+  });
+
+  it('stays UNDECIDED when a triangle is clipped', () => {
+    // The rectangle runs past the viewport's right side, so its triangles cross the guard band.
+    const kase = harnessCase({
+      id: 'U6-2',
+      ...polygon(rect(0, 0, 900, 32)),
+      paint: fill(),
+      c: [0, 0],
+    });
+    const row = measureCase(kase, controlPorts({ status: 'ok', mesh: sliverFan(0, 0, 900, 32) }));
+    expect(row.noFlip!.failed).toBeGreaterThan(0);
+    expect(row.guard!.crossing).toBeGreaterThan(0);
+    expect(row.flipTolerant).toBeNull();
+    expect(row.status).toBe('undecided');
+    expect(row.reason).toBe('no-flip certificate');
   });
 });

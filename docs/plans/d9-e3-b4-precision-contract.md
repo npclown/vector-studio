@@ -1902,7 +1902,7 @@ Hence `M_gpu △ M* ⊂ C* ⊕ β` and `∂M_gpu ⊂ C* ⊕ β`. By precondition
 - **`G` and `B_M` of `E(M_gpu, M*)`** are at most `β`.
 - **`B_R`.** A point `p ∈ ∂M*` is within `β` of `M_gpu`: its own triangle's image covers the partner point. It is also within `D(p)` of a point `x ∉ M*` with `dist(x, C*) > β`, and such an `x` is off `M_gpu`. The segment between the two crosses `∂M_gpu` inside the disk of radius `max(β, D(p))` around `p`.
 
-So `E_{Ω ⊕ 1}(M_gpu, M*) ≤ ρ` with **`ρ = max(β_c, D_hi)`**. Here `D_hi` bounds `D` on `∂M* ∩ (Ω ⊕ 2)`. Since `ρ ≤ 0.5 < 1`, the windowed inequality of E3-K4 holds on the oracle's window `Ω ⊕ 1`, and the case uses
+So `E_Ω(M_gpu, M*) ≤ ρ` with **`ρ = max(β_c, D_hi)`**. Here `D_hi` bounds `D` on `∂M* ∩ (Ω ⊕ 2)`. Since `ρ ≤ 0.5 < 1`, the windowed inequality of E3-K4 needs `M*` against `R` only on `Ω ⊕ ρ`, inside the oracle's window `Ω ⊕ 1`, and the case uses
 
 **`U = E_hi + ρ`** and **`L = max(0, E_lo − ρ)`**,
 
@@ -1916,6 +1916,7 @@ For each candidate edge whose box meets `Ω ⊕ 2`, the harness looks for a tran
 - **The bound.** Each point of the piece then has its translate in `X_out`, at distance `s`. So `D ≤ s`, plus the allowance below.
 - **Splitting.** If no translate of a piece passes, the piece is halved, to depth 12 and no shorter than `β/4`. Splitting handles the ends of an edge at a reflex corner. A gap narrower than `2β` between two parts of the boundary has no point of `X_out`, so the certificate fails there.
 - **Exact and inexact parts.** The point test and the preconditions are exact over the dyadics. The distances and offset points are binary64, evaluated from coordinates of magnitude at most `k`. They carry an allowance of `2^-30·(1 + k)`, which is far above their few roundings. `ρ` is rounded up with the slack of section 15.2.
+- **Lookup.** Triangles and chain edges are found through a grid of 8 px cells over `Ω ⊕ 8`. A box off the grid is clamped into its border cells, so a lookup anywhere, also for a translate or a midpoint off the grid, sees every item whose box meets it. The independent review found that dropping such boxes instead let two long slabs 10^-5 px apart pass the certificate (a regression test keeps it).
 - **Work.** The certificate stops at 5·10^7 work units, and the case then stays UNDECIDED.
 
 ### 20.4 Tests
