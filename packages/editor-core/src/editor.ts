@@ -1,6 +1,7 @@
 import type { RenderCamera, RendererSceneSynchronization } from '@vector-studio/contracts';
-import { validateDocument, type DocumentV1 } from '@vector-studio/model';
+import { DOCUMENT_ERROR_CODES, validateDocument, type DocumentV1 } from '@vector-studio/model';
 import { applyEdit, deepFreeze } from './edits.js';
+import { ExtensionRegistry, extensionApi } from './extensions.js';
 import { createCounterIdSource } from './ids.js';
 import { SceneProjector } from './projector.js';
 import { createPathTool, createRectangleTool, createSelectTool } from './tools.js';
@@ -13,6 +14,7 @@ import type {
   EditorErrorCode,
   EditorEvent,
   EditorSnapshot,
+  Extension,
   IdSource,
   InputEvent,
   Query,
@@ -28,6 +30,8 @@ export type EditorOptions = Readonly<{
   document?: unknown;
   /** Defaults to a counter, `node-1`, `node-2`, ... */
   ids?: IdSource;
+  /** Registered once; a malformed or conflicting registration throws (P5 plan, section 5). */
+  extensions?: readonly Extension[];
 }>;
 
 /** A tool receives input and acts only through the editor's commands and the gesture API. */
@@ -72,10 +76,51 @@ const DEFAULT_VIEWPORT: RenderCamera = deepFreeze({ position: { x: 0, y: 0 }, zo
 const DOCUMENT_COMMANDS = new Set([
   'createRectangle',
   'createPath',
+  'createCustomNode',
   'setFrames',
   'setNodeProps',
   'deleteNodes',
 ]);
+
+/** Extension commands may nest this deep through `runCommand` (P5-U5). */
+const MAX_EXTENSION_DEPTH = 16;
+
+const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
+  ...DOCUMENT_ERROR_CODES,
+  'editor.invalid-command',
+  'editor.unknown-node',
+  'editor.unknown-tool',
+  'editor.duplicate-id',
+  'editor.nothing-to-undo',
+  'editor.nothing-to-redo',
+  'editor.invalid-camera',
+  'editor.unknown-command',
+  'editor.extension-failed',
+]);
+
+/**
+ * A frozen copy of an extension command's result, or null when it is not a `CommandResult`
+ * with a known code and, on success, IDs of nodes in `document`.
+ */
+function extensionResult(value: unknown, document: DocumentV1): CommandResult | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const record = value as Record<string, unknown>;
+  if (record.ok === true) {
+    if (!Array.isArray(record.ids)) return null;
+    const ids = [...(record.ids as unknown[])];
+    const real = ids.every((id) => typeof id === 'string' && Object.hasOwn(document.nodes, id));
+    return real ? deepFreeze({ ok: true, ids: ids as string[] }) : null;
+  }
+  if (record.ok !== false || typeof record.code !== 'string' || !ERROR_CODES.has(record.code)) {
+    return null;
+  }
+  const code = record.code as EditorErrorCode;
+  return deepFreeze(
+    typeof record.path === 'string' ? { ok: false, code, path: record.path } : { ok: false, code },
+  );
+}
+
+type CommandFailure = Extract<CommandResult, { ok: false }> & Readonly<{ path: string }>;
 
 function failure(code: EditorErrorCode, path?: string): CommandResult {
   return path === undefined ? { ok: false, code } : { ok: false, code, path };
@@ -155,22 +200,29 @@ class EditorCore implements Editor {
   private reportTo: EditorEvent[] | null = null;
   private renderer: RendererSceneSynchronization | null = null;
   private holding = false;
+  private extensionDepth = 0;
   private readonly ids: IdSource;
+  private readonly extensions: ExtensionRegistry;
   readonly tools = new Map<ToolName, Tool>();
   readonly gesture: GestureControl;
+  /** What extension commands receive: `execute` and `query`, nothing else. */
+  private readonly api = extensionApi({
+    execute: (command) => this.execute(command),
+    query: (query) => this.query(query),
+  });
 
   constructor(options: EditorOptions) {
     this.ids = options.ids ?? createCounterIdSource('node-');
-    const result = validateDocument(
+    this.extensions = new ExtensionRegistry(options.extensions ?? []);
+    const result = this.validate(
       options.document === undefined ? emptyDocument(this.ids) : options.document,
     );
     if (!result.ok) throw new Error(`createEditor: ${result.code} at ${result.path}`);
     this.document = deepFreeze(result.document);
     this.snapshot = this.buildSnapshot();
-    // Custom nodes become hittable through their extension's geometry in P5-U5.
     this.tools.set(
       'select',
-      createSelectTool(() => null),
+      createSelectTool((node) => this.extensions.geometry(node)),
     );
     this.tools.set('rectangle', createRectangleTool());
     this.tools.set('path', createPathTool());
@@ -207,7 +259,7 @@ class EditorCore implements Editor {
       // A host command during a drag would leave the gesture's base stale, so it applies to the
       // pre-gesture document and, only if it succeeds, cancels the drag first.
       const base = this.gestureState?.base ?? this.document;
-      const result = applyEdit(base, command as DocumentCommand, this.ids);
+      const result = applyEdit(base, command as DocumentCommand, this.ids, this.extensions);
       if (!result.ok) return result;
       this.interrupt();
       const entry = { before: base, after: result.document, touched: result.touched };
@@ -235,7 +287,7 @@ class EditorCore implements Editor {
         return { ok: true, ids: [] };
       }
       case 'loadDocument': {
-        const result = validateDocument(command.document);
+        const result = this.validate(command.document);
         if (!result.ok) return failure(result.code, result.path);
         this.interrupt(true);
         const touched = [
@@ -286,9 +338,39 @@ class EditorCore implements Editor {
         });
         return { ok: true, ids: [] };
       }
+      case 'runCommand': {
+        const extension =
+          typeof command.id === 'string' ? this.extensions.command(command.id) : undefined;
+        if (extension === undefined) return failure('editor.unknown-command');
+        if (this.extensionDepth >= MAX_EXTENSION_DEPTH) return failure('editor.extension-failed');
+        // The extension composes public commands; events stay held until it returns. A throw
+        // or a malformed result is the extension's defect: the commands it already ran stay,
+        // and the error is rethrown asynchronously, as for listeners.
+        this.extensionDepth += 1;
+        try {
+          const result = extensionResult(extension.run(command.args, this.api), this.document);
+          return result ?? failure('editor.extension-failed');
+        } catch (error) {
+          void Promise.resolve().then(() => {
+            throw error;
+          });
+          return failure('editor.extension-failed');
+        } finally {
+          this.extensionDepth -= 1;
+        }
+      }
       default:
         return failure('editor.invalid-command', '/type');
     }
+  }
+
+  /** The model's rules, then each custom node against its extension (plan section 3.3). */
+  private validate(value: unknown): ReturnType<typeof validateDocument> | CommandFailure {
+    const result = validateDocument(value);
+    if (!result.ok) return result;
+    // Frozen before any extension sees it, so `validate` cannot change what is stored.
+    const rejected = this.extensions.checkDocument(deepFreeze(result.document));
+    return rejected === null ? result : { ok: false, ...rejected };
   }
 
   query<Q extends Query>(query: Q): QueryResult<Q> {
@@ -327,10 +409,9 @@ class EditorCore implements Editor {
   }
 
   attachRenderer(renderer: RendererSceneSynchronization): () => void {
-    // Custom nodes are projected through their extension's geometry in P5-U5.
     const projector = new SceneProjector(
       renderer,
-      () => null,
+      (node) => this.extensions.geometry(node),
       (event) => (this.reportTo ?? this.pending).push(event),
     );
     this.projector = projector;
@@ -370,7 +451,7 @@ class EditorCore implements Editor {
   private updateGesture(command: DocumentCommand): CommandResult {
     const gesture = this.gestureState;
     if (gesture === null) return failure('editor.invalid-command');
-    const result = applyEdit(this.document, command, this.ids);
+    const result = applyEdit(this.document, command, this.ids, this.extensions);
     if (!result.ok) return result;
     result.touched.forEach((id) => gesture.touched.add(id));
     gesture.updated = true;

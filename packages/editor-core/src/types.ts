@@ -1,10 +1,12 @@
 import type {
   RenderCamera,
   RendererSceneSynchronization,
+  ScenePathGeometry,
   SceneRejectionReason,
 } from '@vector-studio/contracts';
 import type {
   Color,
+  DocumentErrorCode,
   DocumentV1,
   FillRule,
   Frame,
@@ -73,6 +75,16 @@ export type DocumentCommand =
       fill?: Color | null;
       stroke?: PathStroke | null;
     }>
+  | Readonly<{
+      type: 'createCustomNode';
+      customType: string;
+      frame: Frame;
+      /** Defaults to the extension's `defaults()`. */
+      data?: JsonValue;
+      name?: string;
+      fill?: Color | null;
+      stroke?: PathStroke | null;
+    }>
   | Readonly<{ type: 'setFrames'; frames: readonly Readonly<{ id: string; frame: Frame }>[] }>
   | Readonly<{ type: 'setNodeProps'; id: string; props: NodeProps }>
   | Readonly<{ type: 'deleteNodes'; ids: readonly string[] }>;
@@ -89,18 +101,26 @@ export type Command =
   | SessionCommand
   | Readonly<{ type: 'loadDocument'; document: unknown }>
   | Readonly<{ type: 'undo' }>
-  | Readonly<{ type: 'redo' }>;
+  | Readonly<{ type: 'redo' }>
+  /** Runs a registered extension command (P5 plan, section 5). */
+  | Readonly<{ type: 'runCommand'; id: string; args?: JsonValue }>;
 
-/** Model codes come from `loadDocument` and from node validation in commands. */
+/**
+ * Model codes come from `loadDocument` and from node validation in commands; the two custom
+ * codes come from the extension checks of `editor-core`.
+ */
 export type EditorErrorCode =
   | ModelErrorCode
+  | Exclude<DocumentErrorCode, ModelErrorCode>
   | 'editor.invalid-command'
   | 'editor.unknown-node'
   | 'editor.unknown-tool'
   | 'editor.duplicate-id'
   | 'editor.nothing-to-undo'
   | 'editor.nothing-to-redo'
-  | 'editor.invalid-camera';
+  | 'editor.invalid-camera'
+  | 'editor.unknown-command'
+  | 'editor.extension-failed';
 
 export type CommandResult =
   | Readonly<{ ok: true; ids: readonly string[] }>
@@ -183,3 +203,34 @@ export interface Editor {
 
 /** Returns a fresh ID on each call; IDs it returns that already exist are skipped. */
 export type IdSource = () => string;
+
+/**
+ * The whole editor surface an extension receives (P5 plan, section 5): no store, renderer, GPU
+ * or WASM handle, and no other extension's internals.
+ */
+export type ExtensionApi = Readonly<{
+  execute(command: Command): CommandResult;
+  query<Q extends Query>(query: Q): QueryResult<Q>;
+}>;
+
+/** A custom node type; `customType` is the extension's ID or starts with it and a dot. */
+export type CustomNodeType = Readonly<{
+  customType: string;
+  /** Whether `data` is valid for this type; a throw counts as invalid. */
+  validate(data: JsonValue): boolean;
+  defaults(): JsonValue;
+  /** Path geometry in frame-local page units; the style is the node's own fill and stroke. */
+  toScene(data: JsonValue, frame: Frame): Omit<ScenePathGeometry, 'kind'>;
+}>;
+
+/** An extension command; its ID is the extension's ID or starts with it and a dot. */
+export type ExtensionCommand = Readonly<{
+  id: string;
+  run(args: JsonValue | undefined, api: ExtensionApi): CommandResult;
+}>;
+
+export type Extension = Readonly<{
+  id: string;
+  nodeTypes?: readonly CustomNodeType[];
+  commands?: readonly ExtensionCommand[];
+}>;
