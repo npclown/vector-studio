@@ -362,8 +362,8 @@ describe.skipIf(phase === 'RUN' || phase === 'AUDIT')('P3 polygon census mechani
   });
 
   it('requires Node 24.15.0 and a successful isolated worker result', () => {
-    expect(() => validateNodeVersion('24.15.0')).not.toThrow();
-    expect(() => validateNodeVersion('24.14.0')).toThrow('Node 24.15.0 is required');
+    expect(() => validateNodeVersion('24.22.1')).not.toThrow();
+    expect(() => validateNodeVersion('24.14.0')).toThrow('Node 24.22.1 is required');
     expect(() => workerOutcome({ status: 0 }, 'literal worker')).not.toThrow();
     expect(() => workerOutcome({ status: 1 }, 'literal worker')).toThrow(
       'literal worker failed (1)',

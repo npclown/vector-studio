@@ -252,7 +252,7 @@ describe.skipIf(phase === 'RUN' || phase === 'AUDIT')('P3 census schema mechanic
 
   it('requires the complete pinned toolchain identity and successful worker outcome', () => {
     const identity = {
-      nodeVersion: '24.15.0',
+      nodeVersion: '24.22.1',
       release: '1.94.1',
       commit: 'e408947bfd200af42db322daf0fadfe7e26d3bd1',
       host: 'x86_64-pc-windows-msvc',

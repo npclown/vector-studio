@@ -17,8 +17,8 @@ describe('repository foundation', () => {
     const nodeVersion = (await readFile(path.join(repositoryRoot, '.node-version'), 'utf8')).trim();
 
     expect(rootManifest.packageManager).toBe('pnpm@11.1.2');
-    expect(nodeVersion).toBe('24.15.0');
-    expect(rootManifest.engines).toEqual({ node: '24.15.0', pnpm: '11.1.2' });
+    expect(nodeVersion).toBe('24.22.1');
+    expect(rootManifest.engines).toEqual({ node: '24.22.1', pnpm: '11.1.2' });
   });
 
   it('exposes every planned root command', async () => {
