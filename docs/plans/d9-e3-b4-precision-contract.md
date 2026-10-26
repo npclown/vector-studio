@@ -1859,7 +1859,8 @@ The shard files came back through transfer branches, and `--merge` combined them
   - The largest was 1.62·10^9 units (`C9/g0154/T6/z0.01-d3`), 90 % of the cap, as in section 18.6.
   - The next were `C9/g0154/T6/z64-d3` at 1.31·10^9 and `C9/g0154/T6/z1-d3` at 1.31·10^9.
   - The new kept-by-dropped cut pass of section 19.3 did not raise the largest work.
-- **Time per unit.** Of the ten slowest cases, the highest was 1.07 µs per unit, within the 1.53 µs of section 14.8.
+- **Time per unit.** Of the ten slowest cases, the highest was 1.07 µs per unit (`C9/g0240/T0/z1-d3`) and the lowest 0.84 µs. Both are within the 1.53 µs of section 14.8.
+- The merged directory is `.tools/e3-a04-freeze/2026-10-26T01-00-55-201Z/` in the merging container. It is machine-local and not committed.
 
 **Freeze record** (2026-10-26): the A04 corpus `a04-corpus/v1` with `corpusSha256` `7f4bb1c97b2358ef45d23fdcab31aadc35fe4e7d3d5de25ce1bea7a8203d721c` stays frozen. Its freeze check is repeated on the fixed oracle.
 
@@ -1867,7 +1868,7 @@ The shard files came back through transfer branches, and `--merge` combined them
 - Oracle `packages/geometry-reference/src/a04-region.ts` SHA-256: `5b2fafc3708a08ceb6ed5c5e0ce498ac6c23720f8a8d718425a94a7e17724e80` (commit `d7bd7ad`).
 - 27,462 cases, with the strata counts of section 18.6.
 - Freeze check: passed. There were 27,459 `ok`, 3 `not-drawable` (C10, section 6) and no `ORACLE-*` case. The largest work was 1.62·10^9 units, against a cap of 1.8·10^9.
-- Kernel output on the corpus was inspected before this record, in the samples of section 19.4. The corpus did not change, so section 5.5 still holds: the corpus was frozen before any kernel output was seen.
+- Kernel output on the corpus was inspected before this record, in the samples of section 19.4. The corpus did not change, so section 5.5 still holds: the corpus was frozen before any kernel output was seen. The oracle fix, unlike the corpus, is not blind: it was found from kernel output (section 19.3).
 
 **Oracle withdrawn** (2026-10-26, E3-R2): `aad4b5829989b191250adca44c18d4658dc38fb21814c897578630a6dde1fb00`, the oracle of section 18.6, has the soundness defect of section 19.3. `pnpm e3-a04:run` treats it as uncertified.
 
