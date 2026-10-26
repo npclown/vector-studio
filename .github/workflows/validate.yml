@@ -9,9 +9,14 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request supersedes its running validation; main pushes always finish.
+concurrency:
+  group: validate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  validate:
-    name: Static, unit, boundaries, and build
+  static:
+    name: Static, unit and build
     runs-on: windows-latest
     steps:
       - name: Check out repository
@@ -34,14 +39,82 @@ jobs:
       - name: Build production artifacts
         run: pnpm build
 
+  geometry-native:
+    name: Geometry native Rust, WASM identity and census smoke
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build production artifacts
+        run: pnpm build
+
       - name: Install approved pinned Rust toolchain
         run: pwsh -NoProfile -File tooling/install-rust.ps1
 
       - name: Validate native Rust and independent WASM fixtures
-        run: pnpm test:geometry
+        run: node tooling/test-geometry.mjs --native-only
 
       - name: Validate bounded P3 cubic readiness tooling
         run: node tooling/run-p3-cubic-census.mjs --smoke
 
       - name: Validate historical polygon relation tooling
         run: node tooling/run-p3-polygon-census.mjs --smoke
+
+  geometry-vitest:
+    name: Geometry vitest shard ${{ matrix.shard }}/4
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build production artifacts
+        run: pnpm build
+
+      - name: Install approved pinned Rust toolchain
+        run: pwsh -NoProfile -File tooling/install-rust.ps1
+
+      - name: Validate geometry against native Rust and release WASM
+        run: node tooling/test-geometry.mjs --shard=${{ matrix.shard }}/4
+
+  # Keeps the required check name of the former single job; passes only when every job above did.
+  validate:
+    name: Static, unit, boundaries, and build
+    if: always()
+    needs: [static, geometry-native, geometry-vitest]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every validation job to succeed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Job results: $RESULTS"
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then exit 1; fi
+          done

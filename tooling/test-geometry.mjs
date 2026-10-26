@@ -29,6 +29,22 @@ const env = {
   ].join('\x1f'),
 };
 
+// CI splits this gate into a native job (`--native-only`) and vitest shards (`--shard=i/n`);
+// with no argument everything runs, as before.
+const argv = process.argv.slice(2);
+const nativeOnly = argv.includes('--native-only');
+const shardArgument = argv.find((argument) => argument.startsWith('--shard='));
+const shard = shardArgument?.slice('--shard='.length);
+if (
+  argv.some((argument) => argument !== '--native-only' && argument !== shardArgument) ||
+  (nativeOnly && shardArgument !== undefined) ||
+  (shard !== undefined && !/^[1-9]\d*\/[1-9]\d*$/u.test(shard))
+) {
+  throw new Error('Usage: test-geometry.mjs [--native-only | --shard=<index>/<count>]');
+}
+const runNative = shard === undefined;
+const runVitest = !nativeOnly;
+
 function run(binary, args, overrides = {}) {
   console.log(`> ${path.basename(binary)} ${args.join(' ')}`);
   const result = spawnSync(binary, args, {
@@ -46,23 +62,17 @@ if (!existsSync(rustup)) {
   );
 }
 const cargo = (...args) => run(rustup, ['run', '1.94.1', 'cargo', ...args]);
-run(process.execPath, [
-  path.join(root, 'tooling/generate-p3-fill-predicate-fixtures.mjs'),
-  '--check',
-]);
-run(process.execPath, [
-  path.join(root, 'tooling/generate-p3-fill-intersection-fixtures.mjs'),
-  '--check',
-]);
-run(process.execPath, [path.join(root, 'tooling/generate-p3-fill-event-fixtures.mjs'), '--check']);
-run(process.execPath, [
-  path.join(root, 'tooling/generate-p3-rounded-fill-fixtures.mjs'),
-  '--check',
-]);
-run(process.execPath, [
-  path.join(root, 'tooling/generate-p3-transverse-pair-fixtures.mjs'),
-  '--check',
-]);
+if (runNative) {
+  for (const generator of [
+    'generate-p3-fill-predicate-fixtures.mjs',
+    'generate-p3-fill-intersection-fixtures.mjs',
+    'generate-p3-fill-event-fixtures.mjs',
+    'generate-p3-rounded-fill-fixtures.mjs',
+    'generate-p3-transverse-pair-fixtures.mjs',
+  ]) {
+    run(process.execPath, [path.join(root, 'tooling', generator), '--check']);
+  }
+}
 const compiler = spawnSync(rustup, ['run', '1.94.1', 'rustc', '--version', '--verbose'], {
   cwd: root,
   env,
@@ -114,56 +124,60 @@ if (
     'P2.2 permits one std-only kernel crate with no external or reference dependency.',
   );
 }
-cargo('fmt', '--manifest-path', manifest, '--', '--check');
-cargo(
-  'clippy',
-  '--manifest-path',
-  manifest,
-  '--locked',
-  '--offline',
-  '--all-targets',
-  '--',
-  '-D',
-  'warnings',
-);
-cargo('test', '--manifest-path', manifest, '--locked', '--offline');
-const intersections = spawnSync(
-  rustup,
-  [
-    'run',
-    '1.94.1',
-    'cargo',
-    'test',
+if (runNative) {
+  cargo('fmt', '--manifest-path', manifest, '--', '--check');
+  cargo(
+    'clippy',
     '--manifest-path',
     manifest,
     '--locked',
     '--offline',
-    'fill_intersections_tests::emit_certified_intersections',
+    '--all-targets',
     '--',
-    '--ignored',
-    '--exact',
-    '--nocapture',
-  ],
-  { cwd: root, env, encoding: 'utf8', maxBuffer: 1024 * 1024 },
-);
-if (intersections.error) throw intersections.error;
-if (intersections.status !== 0)
-  throw new Error(intersections.stderr || 'Native intersection certificate capture failed.');
-const certificateCheck = spawnSync(
-  process.execPath,
-  [path.join(root, 'tooling/generate-p3-fill-intersection-fixtures.mjs'), '--verify-native'],
-  {
-    cwd: root,
-    env,
-    encoding: 'utf8',
-    input: intersections.stdout,
-    maxBuffer: 1024 * 1024,
-  },
-);
-if (certificateCheck.error) throw certificateCheck.error;
-if (certificateCheck.status !== 0)
-  throw new Error(certificateCheck.stderr || 'Exact intersection certificate verification failed.');
-console.log(certificateCheck.stdout.trim());
+    '-D',
+    'warnings',
+  );
+  cargo('test', '--manifest-path', manifest, '--locked', '--offline');
+  const intersections = spawnSync(
+    rustup,
+    [
+      'run',
+      '1.94.1',
+      'cargo',
+      'test',
+      '--manifest-path',
+      manifest,
+      '--locked',
+      '--offline',
+      'fill_intersections_tests::emit_certified_intersections',
+      '--',
+      '--ignored',
+      '--exact',
+      '--nocapture',
+    ],
+    { cwd: root, env, encoding: 'utf8', maxBuffer: 1024 * 1024 },
+  );
+  if (intersections.error) throw intersections.error;
+  if (intersections.status !== 0)
+    throw new Error(intersections.stderr || 'Native intersection certificate capture failed.');
+  const certificateCheck = spawnSync(
+    process.execPath,
+    [path.join(root, 'tooling/generate-p3-fill-intersection-fixtures.mjs'), '--verify-native'],
+    {
+      cwd: root,
+      env,
+      encoding: 'utf8',
+      input: intersections.stdout,
+      maxBuffer: 1024 * 1024,
+    },
+  );
+  if (certificateCheck.error) throw certificateCheck.error;
+  if (certificateCheck.status !== 0)
+    throw new Error(
+      certificateCheck.stderr || 'Exact intersection certificate verification failed.',
+    );
+  console.log(certificateCheck.stdout.trim());
+}
 const build = [
   'build',
   '--manifest-path',
@@ -175,32 +189,37 @@ const build = [
   'wasm32-unknown-unknown',
 ];
 cargo(...build);
-mkdirSync(cache, { recursive: true });
-const independentTarget = mkdtempSync(path.join(cache, 'geometry-repro-'));
-run(rustup, ['run', '1.94.1', 'cargo', ...build], { CARGO_TARGET_DIR: independentTarget });
 const wasmRelative = 'wasm32-unknown-unknown/release/vector_studio_geometry_kernel.wasm';
 const wasm = path.join(target, wasmRelative);
-const hash = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
-const firstHash = hash(wasm);
-if (firstHash !== hash(path.join(independentTarget, wasmRelative))) {
-  throw new Error('Independent release build differs from the first WASM artifact.');
+if (runNative) {
+  mkdirSync(cache, { recursive: true });
+  const independentTarget = mkdtempSync(path.join(cache, 'geometry-repro-'));
+  run(rustup, ['run', '1.94.1', 'cargo', ...build], { CARGO_TARGET_DIR: independentTarget });
+  const hash = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
+  const firstHash = hash(wasm);
+  if (firstHash !== hash(path.join(independentTarget, wasmRelative))) {
+    throw new Error('Independent release build differs from the first WASM artifact.');
+  }
+  if (readFileSync(wasm).includes('src\\')) {
+    throw new Error(
+      'Release WASM embeds a `src\\` source path; the host-identity remap did not apply.',
+    );
+  }
+  console.log(`WASM independent-build SHA-256: ${firstHash}`);
 }
-if (readFileSync(wasm).includes('src\\')) {
-  throw new Error(
-    'Release WASM embeds a `src\\` source path; the host-identity remap did not apply.',
+if (runVitest) {
+  run(
+    process.execPath,
+    [
+      path.join(root, 'node_modules/vitest/vitest.mjs'),
+      'run',
+      '--config',
+      'vitest.geometry.config.ts',
+      ...(shard === undefined ? [] : [`--shard=${shard}`]),
+    ],
+    {
+      P2_WASM_PATH: wasm,
+      P2_NATIVE_RUSTUP: rustup,
+    },
   );
 }
-console.log(`WASM independent-build SHA-256: ${firstHash}`);
-run(
-  process.execPath,
-  [
-    path.join(root, 'node_modules/vitest/vitest.mjs'),
-    'run',
-    '--config',
-    'vitest.geometry.config.ts',
-  ],
-  {
-    P2_WASM_PATH: wasm,
-    P2_NATIVE_RUSTUP: rustup,
-  },
-);
