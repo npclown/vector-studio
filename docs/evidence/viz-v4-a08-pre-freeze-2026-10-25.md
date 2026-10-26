@@ -76,7 +76,36 @@ These are Node estimates from the record's reasons and the zones; they are not a
 | PASS, non-empty zone, no violation       | 138     | 60 need the merge; only 6 of these have captures to check     |
 | Still UNDECIDED (β ≥ 1 px)               | 132     | C1/s20-I to s23-I                                             |
 
-Even with these changes the result stays FAIL until the renderer item lands. A re-score of this run with the new metrics needs the captures on the PC: NOT RUN here.
+Even with these changes the result stays FAIL until the renderer item lands.
+
+## Re-score with the v2 metrics (diagnostic, 2026-10-26)
+
+The run was re-scored on the PC with the merged v2 metrics (#261, `a52422b`). `a52422b` requires `stroke-v0+r7`, while the capture's WASM is r6. So `packages/geometry-wasm` was checked out from `3ee6c20` in a temporary worktree. A08 cases are fill-only, so this changes nothing they draw. The record is diagnostic only: label `PRE-FREEZE-hybrid`, `viz-v4-metrics/v2`, body SHA-256 `1bc79013fc86f76b348f7a76a11e5d5bffc38b7243d7fed6b3ffbd99e09e79fa`, Node 24.15.0, 4074 s. It is kept on the PC.
+
+| Criterion | Result    | Detail                                          |
+| --------- | --------- | ----------------------------------------------- |
+| VZ4-A3    | PASS      |                                                 |
+| VZ4-A4    | PASS      | 0 mismatches                                    |
+| VZ4-A5    | PASS      | 0 pixel failures, 0 undecided                   |
+| VZ4-A6    | UNDECIDED | 4128 gated case-variants, 0 FAIL, 372 UNDECIDED |
+| VZ4-A7    | FAIL      | 96 FAIL, 320 UNDECIDED                          |
+| Result    | FAIL      |                                                 |
+
+Gated FAIL: 96 entries, all `G3-at-most`, identical in both browsers.
+- **48 in C1/s22-I and s23-I, under T2 and T5.** These occur at every DPR and in both fringe variants, with β ≥ 1 px. Their mechanism is not verified.
+- **48 snap flips, all at fringe-4x except one key.**
+  - T2: C3/c11 and C4/n06, n07, n11, n12, n13. C4/n12 at z1-d2 @dpr2 also fails at fringe-1x.
+  - T7: C3/c14 and c17 @dpr1.5. At z1-d2 @dpr2: C1/s04-I and C3/c01, c02, c03, c04, c05, c13, c14, c17, c24, c26, c28, c29.
+
+The estimate was 88 FAIL. The difference is C3 T7 far-field cases that the whole-case veto had hidden.
+
+Gated UNDECIDED: 324 entries, in 35 keys.
+- **320 are in C1,** all with `clip bound ≥ 0.25 px`, 288 of them also with `beta ≥ 1 px`.
+- **4 are C4/n03/T2 z1-d2 @dpr2,** with `G2-undecided`.
+
+The estimate was 132 undecided. More C1 cases now carry the clip reason because the frame corners and exterior fans count toward the clip bound. That is inherent to C1's far-offscreen vertices.
+
+All other gated entries are decided: 3708 of 4128.
 
 ## Next
 
