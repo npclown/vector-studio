@@ -1,0 +1,54 @@
+
+// E16-G2 diagnostic A/B timing (temporary, appended to fill_ladder_tests.rs in both trees, not
+// committed). Inputs: the framed B0 corpus, `p3-b0r-random/v1` (P3_B0R_RANDOM_CORPUS) and the
+// TSV files of E16_G2_TSV (`prefix=path` pairs separated by `;`, rows as in
+// `e14_fill_limit_diag`). One JSON row per path: the per-path median of E16_REPS `build_one`
+// calls and the `BuiltPath` record of the last call.
+fn e16_tsv_corpus(prefix: &str, file: &str) -> Vec<(String, FillRequest, RealPath)> {
+    let text = std::fs::read_to_string(file).unwrap();
+    text.lines()
+        .filter(|row| !row.is_empty())
+        .map(|row| {
+            let fields: Vec<&str> = row.split('\t').collect();
+            let rule = if fields[2] == "evenodd" { LineFillRule::Evenodd } else { LineFillRule::Nonzero };
+            let verbs: Vec<u8> = fields[3].split(',').map(|v| v.parse().unwrap()).collect();
+            let point_bytes: Vec<u8> = fields[4]
+                .split(',')
+                .flat_map(|v| f64::from_bits(u64::from_str_radix(v, 16).unwrap()).to_le_bytes())
+                .collect();
+            let name = format!("{prefix}/{}", fields[0]);
+            (name.clone(), request(rule, fields[1].parse().unwrap()), RealPath { name, verbs, point_bytes })
+        })
+        .collect()
+}
+
+#[test]
+#[ignore = "E16-G2 timing"]
+fn e16_g2_timing() {
+    let reps: usize = env::var("E16_REPS").ok().and_then(|v| v.parse().ok()).unwrap_or(11);
+    let mut cases = b0_corpus();
+    cases.extend(random_corpus(&std::fs::read(env::var("P3_B0R_RANDOM_CORPUS").unwrap()).unwrap()));
+    for pair in env::var("E16_G2_TSV").unwrap().split(';') {
+        let (prefix, file) = pair.split_once('=').unwrap();
+        cases.extend(e16_tsv_corpus(prefix, file));
+    }
+    let mut engine = crate::fill_export::FillEngine::new();
+    assert_eq!(engine.reserve(1 << 18, 1 << 20), crate::engine::BATCH_OK);
+    println!("E16_G2_BEGIN");
+    for (name, request, path) in &cases {
+        let mut times = Vec::with_capacity(reps);
+        let mut record = String::new();
+        for _ in 0..reps {
+            let clock = std::time::Instant::now();
+            let built = engine.build_one(*request, &path.verbs, &path.point_bytes).unwrap();
+            times.push(clock.elapsed().as_nanos());
+            record = match built {
+                Ok(b) => format!("{b:?}"),
+                Err(_) => "selfcheck".to_owned(),
+            };
+        }
+        times.sort_unstable();
+        println!("{{\"name\":\"{name}\",\"ns\":{},\"record\":\"{}\"}}", times[reps / 2], record.replace('"', "'"));
+    }
+    println!("E16_G2_END");
+}

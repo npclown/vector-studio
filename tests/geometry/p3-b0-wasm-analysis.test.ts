@@ -39,7 +39,7 @@ import { parseArguments } from '../../tooling/run-p3-b0-wasm-benchmark.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 /** Recorded in the plan when AL-U6 merges; any configuration change shows up here. */
-const REFERENCE_CONFIG_HASH = '645199a8a96be4c3056d0f4c008ec210fbf8a4d7a35fe9f4bf322500415394d1';
+const REFERENCE_CONFIG_HASH = '62b05789c7021061195595aa8ea75be9fe3c53fa1616989af7cb550334210b1d';
 type Mutable<T> = { -readonly [K in keyof T]: Mutable<T[K]> };
 const clone = <T>(value: T): Mutable<T> => JSON.parse(JSON.stringify(value)) as Mutable<T>;
 const decision = corpusCells().filter((cell) => cell.role === 'decision');
@@ -64,9 +64,9 @@ describe('AL-S2 configuration', () => {
     expect(CORPUS_SHA256.startsWith('206cf6e9') && CORPUS_SHA256.endsWith('9796')).toBe(true);
     expect(config.native).toEqual(ratioModeConfig('reference'));
     expect(configHash(config.native)).toBe(
-      '4c0b7b0569e77a1f0d87c0cff733fafdbd9afe6328c59c54f254c2d0d4059157',
+      'ab08a512e1f627f18e05f4c72edafd9105a1ecf13401ad85f5796cf7c008db08',
     );
-    expect(config.operation.id).toBe('geometry-wasm/fill-v0+r3');
+    expect(config.operation.id).toBe('geometry-wasm/fill-v0+r4');
     expect(config.sampling).toMatchObject({ repetitions: 5, warmup: 3, timed: 20, calls: 100 });
     expect(config.sampling.onePath).toEqual({ cells: largestCells(), path: 0, calls: 1000 });
     expect(largestCells()).toEqual(['P2/s=16', 'P4/s=16', 'P8/s=8']);
@@ -210,7 +210,7 @@ function nativeOutputs(profile: 'functional' | 'reference'): RatioOutput[] {
     return {
       kind: 'ratio',
       repetition,
-      revision: 3,
+      revision: 4,
       clockQuantumNs: 100,
       calls: config.calls,
       onePathCalls: config.onePath.calls,
@@ -255,7 +255,7 @@ function captureFor(
     options: { ...pageOptions(config, wasmSha256), repetition },
     wasmSha256,
     corpusSha256: CORPUS_SHA256,
-    adapter: { operationId: 'geometry-wasm/fill-v0+r3', portVersion: 0 },
+    adapter: { operationId: 'geometry-wasm/fill-v0+r4', portVersion: 0 },
     crossOriginIsolated: true,
     clockProbe: {
       attempts: 10,

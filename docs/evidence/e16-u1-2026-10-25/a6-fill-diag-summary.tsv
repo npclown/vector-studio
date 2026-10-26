@@ -1,0 +1,41 @@
+stratum	sweep class	cause	rung 0	r4 exact rung	requests [rows]	flat verbs min/median/max	max contours/segments	rows
+C11/named	work-limit	source cap	rung0 CLEARANCE	SourceLimit	4 [1]	323/323/323	1/321	f04
+C12/named	E14-Q1	exact-rung edge cap	rung0 CLOSURE	CommandLimit	5 [1]	468/940/1868	2/8	j06
+C3/generated	E14-Q1	exact-rung edge cap	rung0 CROSSING	CommandLimit	21 [3]	346/355/514	2/10	g0071 g0250 g0258
+C3/generated	E14-Q1	exact-rung edge cap	rung0 MONOTONE	CommandLimit	233 [31]	278/480/2113	2/16	g0015 g0019 g0026 g0028 g0030 g0056 g0086 g0087 g0095 g0102 g0115 g0118 …
+C3/generated	E14-Q1	exact-rung edge cap	rung0 MONOTONE	OwnerLimit	13 [2]	258/258/258	1/1	g0040 g0046
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 10:CommandLimit)	5 [3]	14/16/18	2/14	g0119 g0154 g0239
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 11:CommandLimit)	35 [6]	8/16/20	2/16	g0073 g0119 g0154 g0203 g0270 g0282
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 11:OwnerLimit)	4 [1]	7/7/7	1/5	g0103
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 12:CommandLimit)	18 [4]	8/8/18	2/14	g0036 g0203 g0268 g0282
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 12:OwnerLimit)	4 [1]	7/7/7	1/5	g0103
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 13:CommandLimit)	13 [3]	6/8/8	1/6	g0036 g0268 g0283
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 14:CommandLimit)	2 [1]	8/8/8	1/6	g0283
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 14:OwnerLimit)	5 [1]	4/4/4	1/1	g0151
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 1:CommandLimit)	16 [3]	195/252/252	2/16	g0004 g0221 g0275
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 2:CommandLimit)	5 [1]	190/190/190	1/8	g0281
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 3:CommandLimit)	16 [3]	108/118/128	2/12	g0038 g0060 g0281
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 4:CommandLimit)	17 [3]	75/79/91	2/16	g0060 g0208 g0231
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 5:CommandLimit)	9 [2]	54/54/57	2/16	g0187 g0208
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 6:CommandLimit)	18 [4]	42/46/50	2/16	g0081 g0160 g0162 g0187
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 7:CommandLimit)	17 [4]	27/28/36	2/16	g0081 g0160 g0162 g0236
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 8:CommandLimit)	4 [1]	26/26/26	2/10	g0236
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 8:OwnerLimit)	12 [2]	19/19/22	2/16	g0127 g0287
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 9:CommandLimit)	7 [1]	19/19/19	2/6	g0239
+C3/generated	unsupported-geometry	topology unresolved	rung0 MONOTONE	Topology(Unresolved) (retry stop 9:OwnerLimit)	4 [1]	20/20/20	2/16	g0127
+C3/generated	unsupported-geometry	topology unresolved	rung0 STRUCTURE	Topology(Unresolved) (retry stop 15:OwnerLimit)	4 [1]	3/3/3	1/1	g0151
+C3/generated	work-limit	exact-rung edge cap	rung0 MONOTONE	CommandLimit	148 [21]	286/349/961	2/16	g0004 g0014 g0018 g0022 g0080 g0099 g0102 g0104 g0106 g0131 g0140 g0163 …
+C3/generated	work-limit	exact-rung edge cap	rung0 MONOTONE	OwnerLimit	3 [2]	258/258/258	1/1	g0163 g0205
+C3/generated	work-limit	exact-rung topology cap	rung0 MONOTONE	Rounded(NodeLimit)	8 [1]	256/256/256	1/8	g0111
+C3/named	E14-Q1	exact-rung edge cap	rung0 CROSSING	CommandLimit	10 [2]	516/1028/2052	2/8	c11 c12
+C3/named	E14-Q1	exact-rung edge cap	rung0 MONOTONE	CommandLimit	14 [4]	272/514/1052	2/7	c04 c05 c20 c21
+C3/named	E14-Q1	exact-rung edge cap	rung0 MONOTONE	OwnerLimit	2 [2]	258/258/258	1/1	c04 c05
+C3/named	E14-Q1	exact-rung edge cap	rung0 PREFIX	CommandLimit	6 [2]	327/441/651	2/6	c22 c23
+C3/named	unsupported-geometry	zero-length leaf	rung0 PREFIX	ZeroLengthLeaf	22 [2]	8/33/223	2/6	c22 c23
+C3/named	work-limit	exact-rung edge cap	rung0 MONOTONE	CommandLimit	21 [9]	292/423/1028	1/4	c03 c06 c07 c08 c09 c10 c25 c26 c30
+C3/named	work-limit	exact-rung edge cap	rung0 MONOTONE	OwnerLimit	6 [6]	258/258/260	1/4	c06 c07 c08 c09 c26 c30
+C3/named	work-limit	exact-rung edge cap	rung0 PREFIX	CommandLimit	2 [1]	16386/16386/16386	1/4	c27
+C3/named	work-limit	exact-rung topology cap	rung0 CROSSING	Rounded(EventLimit)	2 [2]	260/260/260	2/8	c11 c12
+C4/named	work-limit	exact-rung edge cap	rung0 CLEARANCE	CommandLimit	40 [6]	516/519/2052	2/8	n09 n10 n11 n12 n13 n14
+C4/named	work-limit	exact-rung edge cap	rung0 CLEARANCE	OwnerLimit	14 [3]	263/263/263	2/7	n09 n10 n11
+C6/named	E14-Q1	exact-rung edge cap	rung0 CROSSING	CommandLimit	8 [1]	1028/1028/1396	2/8	c11

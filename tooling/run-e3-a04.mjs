@@ -14,7 +14,8 @@
 // - otherwise measures the corpus in N vitest shards (each a separate process), then merges them
 //   into record.json and record.md (section 15.7). It refuses to start until the contract holds
 //   the freeze note of section 5.5 for this corpus (a "**Freeze record**" line with its
-//   corpusSha256): no kernel output on the corpus is read before the freeze. A full (stride 1),
+//   corpusSha256): no kernel output on the corpus is read before the freeze. A full run also needs
+//   the oracle's freeze check record and refuses an oracle the contract withdraws (section 19.7). A full (stride 1),
 //   clean run is copied to docs/evidence/e3-a04/<stamp>-<run id>/, never over an existing one.
 //
 // Several hosts can share one run (contract section 19): each runs `--only` its shards of the same
@@ -91,10 +92,15 @@ const oracleLine = new RegExp(
   `^- Oracle \`${oraclePath.replaceAll('.', '\\.')}\` SHA-256: \`${oracleSha256}\`( \\(commit \`[0-9a-f]+\`\\))?\\.?$`,
   'u',
 );
-const oracleCertified = read(contractPath)
-  .toString('utf8')
-  .split('\n')
-  .some((line) => oracleLine.test(line.trimEnd()));
+// A version later found unsound (E3-R2) is withdrawn by a line that starts
+// "**Oracle withdrawn**" and names that SHA-256 as its first backticked token.
+const contractLines = read(contractPath).toString('utf8').split('\n');
+const oracleWithdrawn = contractLines.some(
+  (line) =>
+    line.startsWith('**Oracle withdrawn**') && /`([0-9a-f]{64})`/u.exec(line)?.[1] === oracleSha256,
+);
+const oracleCertified =
+  !oracleWithdrawn && contractLines.some((line) => oracleLine.test(line.trimEnd()));
 if (!smoke && stride === 1 && !oracleCertified)
   throw new Error(
     `refusing a full corpus run: oracle SHA-256 ${oracleSha256} has no freeze check record in ` +
