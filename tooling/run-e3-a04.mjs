@@ -485,7 +485,14 @@ if (smoke) {
       2,
     ),
   );
-  if (stride === 1 && !dirty && codes.every((c) => c === 0) && record.validator.length === 0) {
+  const retriesOk = retried.every((r) => (r.exitCodes ?? []).every((c) => c === 0));
+  if (
+    stride === 1 &&
+    !dirty &&
+    codes.every((c) => c === 0) &&
+    retriesOk &&
+    record.validator.length === 0
+  ) {
     const evidence = path.join(root, 'docs', 'evidence', 'e3-a04', `${stamp}-${runId}`);
     if (existsSync(evidence)) throw new Error(`refusing to overwrite ${evidence}`);
     mkdirSync(evidence, { recursive: true });
