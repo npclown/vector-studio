@@ -1,0 +1,203 @@
+{
+  "schema": "p3-exit-sweep/v1",
+  "phase": "corpus",
+  "operationIds": {
+    "fill": "geometry-wasm/fill-v0+r4",
+    "stroke": "geometry-wasm/stroke-v0+r7"
+  },
+  "corpusCases": 27462,
+  "skippedByState": {
+    "singular": 2,
+    "w = 0": 1
+  },
+  "requests": 12058,
+  "controls": {
+    "fill": {
+      "base": "C1/s01-I/T0/z0.01-d1/center/k0",
+      "results": [
+        {
+          "id": "index-out-of-range",
+          "expected": "INDEX_RANGE",
+          "caught": true
+        },
+        {
+          "id": "nan-vertex",
+          "expected": "NON_FINITE_VERTEX",
+          "caught": true
+        },
+        {
+          "id": "bounds-underreported",
+          "expected": "BOUNDS_NOT_EXACT",
+          "caught": true
+        },
+        {
+          "id": "flipped-triangle",
+          "expected": "NONPOSITIVE_TRIANGLE",
+          "caught": true
+        },
+        {
+          "id": "missing-triangle",
+          "expected": "BOUNDARY_MISMATCH",
+          "caught": true
+        },
+        {
+          "id": "duplicated-triangle",
+          "expected": "DUPLICATE_DIRECTED_EDGE",
+          "caught": true
+        },
+        {
+          "id": "truncated-indices",
+          "expected": "INDEX_COUNT",
+          "caught": true
+        },
+        {
+          "id": "reversed-boundary-edge",
+          "expected": "BOUNDARY_MISMATCH",
+          "caught": true
+        },
+        {
+          "id": "unsplit-neighbor",
+          "expected": "T_JUNCTION",
+          "caught": true
+        }
+      ]
+    },
+    "stroke": {
+      "base": "C5/l01/T0/z0.01-d1/center/k0",
+      "results": [
+        {
+          "id": "index-out-of-range",
+          "expected": "INDEX_RANGE",
+          "caught": true
+        },
+        {
+          "id": "nan-vertex",
+          "expected": "NON_FINITE_VERTEX",
+          "caught": true
+        },
+        {
+          "id": "bounds-underreported",
+          "expected": "BOUNDS_NOT_EXACT",
+          "caught": true
+        },
+        {
+          "id": "flipped-triangle",
+          "expected": "NONPOSITIVE_TRIANGLE",
+          "caught": true
+        },
+        {
+          "id": "missing-triangle",
+          "expected": "BOUNDARY_MISMATCH",
+          "caught": true
+        },
+        {
+          "id": "duplicated-triangle",
+          "expected": "DUPLICATE_DIRECTED_EDGE",
+          "caught": true
+        },
+        {
+          "id": "truncated-indices",
+          "expected": "INDEX_COUNT",
+          "caught": true
+        },
+        {
+          "id": "reversed-boundary-edge",
+          "expected": "BOUNDARY_MISMATCH",
+          "caught": true
+        },
+        {
+          "id": "unsplit-neighbor",
+          "expected": "T_JUNCTION",
+          "caught": true
+        }
+      ]
+    }
+  },
+  "fillClassCounts": {
+    "C3/named": {
+      "work-limit-outside-e14": 31,
+      "e14-self-crossing-over-E": 32,
+      "failed:unsupported-geometry": 22
+    },
+    "C3/generated": {
+      "work-limit-outside-e14": 159,
+      "failed:unsupported-geometry": 215,
+      "e14-self-crossing-over-E": 267
+    },
+    "C4/named": {
+      "work-limit-outside-e14": 54
+    },
+    "C10/named": {
+      "empty": 2
+    },
+    "C11/named": {
+      "work-limit-outside-e14": 4
+    },
+    "C12/named": {
+      "e14-self-crossing-over-E": 5
+    },
+    "C6/named": {
+      "e14-self-crossing-over-E": 8
+    }
+  },
+  "strokeClassCounts": {
+    "C5/named": {
+      "stroke-work-limit": 57,
+      "empty": 42,
+      "failed:numeric-range": 14,
+      "failed:unsupported-geometry": 30
+    },
+    "C5/generated": {
+      "stroke-work-limit": 4,
+      "failed:unsupported-geometry": 6
+    },
+    "C9/named": {
+      "stroke-work-limit": 100
+    },
+    "C9/generated": {
+      "stroke-work-limit": 802
+    },
+    "C6/named": {
+      "stroke-work-limit": 3
+    }
+  },
+  "batchSize": 32,
+  "fill": {
+    "requests": 7885,
+    "outcomes": {
+      "ok": 7086,
+      "failed:work-limit": 560,
+      "failed:unsupported-geometry": 237,
+      "empty": 2
+    },
+    "issues": {},
+    "oracleChecked": 6327,
+    "duplicatePositions": 0,
+    "maxTriangles": 8190,
+    "maxVertices": 8192,
+    "triangles": 745003
+  },
+  "stroke": {
+    "requests": 4173,
+    "outcomes": {
+      "ok": 3115,
+      "failed:work-limit": 966,
+      "empty": 42,
+      "failed:numeric-range": 14,
+      "failed:unsupported-geometry": 36
+    },
+    "issues": {},
+    "oracleChecked": 2327,
+    "duplicatePositions": 0,
+    "maxTriangles": 6464,
+    "maxVertices": 6458,
+    "triangles": 1025862
+  },
+  "structureFailures": [],
+  "echoFailures": [],
+  "isolationFailures": [],
+  "batchFailures": [],
+  "outcomeDigest": "9e44e1c958e899d2a2a0a55e0ab482d52746d102c97a8d6117862fc8a6ad7ace",
+  "wallMilliseconds": 327613,
+  "rejectedCount": 1857
+}
