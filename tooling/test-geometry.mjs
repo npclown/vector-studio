@@ -38,7 +38,9 @@ const shard = shardArgument?.slice('--shard='.length);
 if (
   argv.some((argument) => argument !== '--native-only' && argument !== shardArgument) ||
   (nativeOnly && shardArgument !== undefined) ||
-  (shard !== undefined && !/^[1-9]\d*\/[1-9]\d*$/u.test(shard))
+  (shard !== undefined &&
+    (!/^[1-9]\d*\/[1-9]\d*$/u.test(shard) ||
+      Number(shard.split('/')[0]) > Number(shard.split('/')[1])))
 ) {
   throw new Error('Usage: test-geometry.mjs [--native-only | --shard=<index>/<count>]');
 }
@@ -177,6 +179,10 @@ if (runNative) {
       certificateCheck.stderr || 'Exact intersection certificate verification failed.',
     );
   console.log(certificateCheck.stdout.trim());
+} else {
+  // A shard skips the debug `cargo test` above, but line-fill.test.ts runs the debug lib test
+  // binary within a 120 s limit, so build it here first.
+  cargo('test', '--manifest-path', manifest, '--locked', '--offline', '--lib', '--no-run');
 }
 const build = [
   'build',

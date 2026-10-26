@@ -9,9 +9,9 @@ on:
 permissions:
   contents: read
 
-# A new push to a pull request supersedes its running validation; main pushes always finish.
+# A new push to a pull request supersedes its running validation; each main push is validated.
 concurrency:
-  group: validate-${{ github.event.pull_request.number || github.ref }}
+  group: validate-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
