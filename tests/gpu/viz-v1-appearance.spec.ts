@@ -795,7 +795,21 @@ for (const dpr of [1, 2]) {
         if (valid.revision !== before + 1)
           fail('a6', `valid width gave revision ${valid.revision}, expected ${before + 1}`);
         await expect(c.widthNumber).not.toHaveAttribute('aria-invalid', 'true');
-        noticeSet('a6', '', valid);
+        // V-6: a slider commit clears the rejected text of its paired number field.
+        await commit(c.widthNumber, '-1');
+        await expect(c.widthNumber).toHaveAttribute('aria-invalid', 'true');
+        await page.evaluate(() => {
+          const slider = document.querySelector<HTMLInputElement>('#viz-v1-width-slider')!;
+          slider.value = '20';
+          slider.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        const paired = await settle();
+        if (paired.revision !== before + 2)
+          fail('a6', `slider commit gave revision ${paired.revision}, expected ${before + 2}`);
+        await expect(c.widthNumber).not.toHaveAttribute('aria-invalid', 'true');
+        await expect(c.widthNumber).toHaveValue('20');
+        await expect(message).toBeEmpty();
+        noticeSet('a6', '', paired);
       });
 
       // V1-A5 on the page: a blur commits a number field, and the miter slider commits on change.
