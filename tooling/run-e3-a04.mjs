@@ -91,10 +91,13 @@ const oracleLine = new RegExp(
   `^- Oracle \`${oraclePath.replaceAll('.', '\\.')}\` SHA-256: \`${oracleSha256}\`( \\(commit \`[0-9a-f]+\`\\))?\\.?$`,
   'u',
 );
-const oracleCertified = read(contractPath)
-  .toString('utf8')
-  .split('\n')
-  .some((line) => oracleLine.test(line.trimEnd()));
+// A version later found unsound (E3-R2) is withdrawn by a line naming it after "**Oracle withdrawn**".
+const contractLines = read(contractPath).toString('utf8').split('\n');
+const oracleWithdrawn = contractLines.some(
+  (line) => line.includes('**Oracle withdrawn**') && line.includes(oracleSha256),
+);
+const oracleCertified =
+  !oracleWithdrawn && contractLines.some((line) => oracleLine.test(line.trimEnd()));
 if (!smoke && stride === 1 && !oracleCertified)
   throw new Error(
     `refusing a full corpus run: oracle SHA-256 ${oracleSha256} has no freeze check record in ` +

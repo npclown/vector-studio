@@ -1840,3 +1840,34 @@ The PC sample of section 19.4 reported `C1/s15-I/T3/z64-d2` as FAIL with `E = 38
 - **WASM.** Since E11 PR #242, a Linux build of the pinned toolchain gives the same release WASM as the PC. The merge compares WASM hashes, so a host whose build differs cannot take part.
 - **Checkouts.** Each host's run directory stays under `.tools/`. A copy inside the tracked tree makes the merging checkout dirty, and the merge then refuses.
 - **Memory.** A container has 15 GB and every shard gets a 6 GB heap, so a container runs two or three shards.
+
+### 19.7 Freeze check of the fixed oracle
+
+The oracle of section 19.3 got its full freeze check, split across two hosts as section 19.6 allows. It is commit `d7bd7ad`, where `a04-region.ts` has SHA-256 `5b2fafc3708a08ceb6ed5c5e0ce498ac6c23720f8a8d718425a94a7e17724e80`. The check ran as `pnpm e3-a04:freeze --shards 20` with `--only` on each host:
+
+- the PC of section 17.4 ran shards 0 to 7, from 21:54 UTC on 2026-10-25, in 2.36 h wall;
+- the user's laptop (Windows, 20 threads, 39.6 GB RAM) ran shards 8 to 19, from 21:57 UTC, in 2.25 h wall;
+- both used Node 24.15.0, and every shard exited with code 0, with no restart.
+
+The shard files came back through transfer branches, and `--merge` combined them in a cloud container checked out at `d7bd7ad`. The merge refuses hosts with a different oracle, commit or shard plan.
+
+- **All 27,462 cases were checked: 27,459 `ok` and 3 `not-drawable`.** No case was `ORACLE-WORK`, `ORACLE-UNSUPPORTED`, `ORACLE-INCONSISTENT` or `ORACLE-ERROR`. The 3 `not-drawable` cases are the `C10` inputs of section 18.6.
+  - The strata counts are those of section 18.6, and every case is `ok` outside C10.
+  - The run holds 27,462 shard lines with 27,462 distinct ids.
+- **Time.** Case times sum to 42.0 h. C9 took 32.9 h of them and C5 8.2 h.
+- **Work.**
+  - The largest was 1.62·10^9 units (`C9/g0154/T6/z0.01-d3`), 90 % of the cap, as in section 18.6.
+  - The next were `C9/g0154/T6/z64-d3` at 1.31·10^9 and `C9/g0154/T6/z1-d3` at 1.31·10^9.
+  - The new kept-by-dropped cut pass of section 19.3 did not raise the largest work.
+- **Time per unit.** Of the ten slowest cases, the highest was 1.07 µs per unit, within the 1.53 µs of section 14.8.
+
+**Freeze record** (2026-10-26): the A04 corpus `a04-corpus/v1` with `corpusSha256` `7f4bb1c97b2358ef45d23fdcab31aadc35fe4e7d3d5de25ce1bea7a8203d721c` stays frozen. Its freeze check is repeated on the fixed oracle.
+
+- Generator `tests/geometry/e3-a04/corpus.ts` SHA-256: `3c4f12991f0554cad2dde1d96eb549cb343b6ecee3e24539e8083320e7e0d438`. Unchanged.
+- Oracle `packages/geometry-reference/src/a04-region.ts` SHA-256: `5b2fafc3708a08ceb6ed5c5e0ce498ac6c23720f8a8d718425a94a7e17724e80` (commit `d7bd7ad`).
+- 27,462 cases, with the strata counts of section 18.6.
+- Freeze check: passed. There were 27,459 `ok`, 3 `not-drawable` (C10, section 6) and no `ORACLE-*` case. The largest work was 1.62·10^9 units, against a cap of 1.8·10^9.
+- Kernel output on the corpus was inspected before this record, in the samples of section 19.4. The corpus did not change, so section 5.5 still holds: the corpus was frozen before any kernel output was seen.
+
+**Oracle withdrawn** (2026-10-26, E3-R2): `aad4b5829989b191250adca44c18d4658dc38fb21814c897578630a6dde1fb00`, the oracle of section 18.6, has the soundness defect of section 19.3. `pnpm e3-a04:run` treats it as uncertified.
+
