@@ -526,7 +526,7 @@ function validateAnalysisMetadata(value: unknown, terminal: boolean): Record<str
     typeof analysis.head !== 'string' ||
     !/^[0-9a-f]{40}$/u.test(analysis.head) ||
     typeof analysis.dirty !== 'boolean' ||
-    analysis.nodeVersion !== 'v24.15.0' ||
+    analysis.nodeVersion !== 'v24.22.1' ||
     !Array.isArray(analysis.manifest) ||
     analysis.manifest.length === 0 ||
     typeof analysis.manifestStartSha256 !== 'string' ||
