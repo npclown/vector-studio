@@ -10,10 +10,10 @@ import type {
 // P3 D8 V2 fill-mesh transport v0 adapter
 // (docs/plans/p3-v2-fill-mesh-transport-contract.md, sections a, b, g and h).
 
-export const FILL_V0_OPERATION_ID = 'geometry-wasm/fill-v0+r3';
+export const FILL_V0_OPERATION_ID = 'geometry-wasm/fill-v0+r4';
 export const FILL_V0_VERSION = 0;
 /** The kernel revision this adapter was built for. */
-export const FILL_V0_REVISION = 3;
+export const FILL_V0_REVISION = 4;
 
 const INPUT_MAGIC = 0x3046_4756;
 const OUTPUT_MAGIC = 0x304d_4756;
@@ -83,7 +83,7 @@ const FILL_EXPORT_NAMES = [
 
 export interface FillMeshAdapter extends FillMeshPort {
   readonly portVersion: 0;
-  readonly operationId: 'geometry-wasm/fill-v0+r3';
+  readonly operationId: 'geometry-wasm/fill-v0+r4';
   /** Terminal and idempotent. Later calls return batch-failed: disposed. */
   dispose(): void;
   /** Current byteLength of this adapter's own linear memory. */

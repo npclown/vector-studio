@@ -106,3 +106,7 @@ A second probe re-ran the unchanged cascade (`attempt`, then `attempt_triangle_f
 | Minimum leaves | generated | 91 [14] | 1/6/9 | 4 [1] `OwnerLimit` |
 
 778 of 993 requests mesh, every named one among them, none deeper than k = 12; the other 215 reach E = 256 flat edges first, and none stays unresolved below the cap. An earlier run of the probe, down to e − 8 only, tried both topology tolerances (from e − k, or kept at e − 1) and found the same 725 meshed requests for both; the final run above derives both tolerances from e − k. On the 22 `ZeroLengthLeaf` requests (c22, c23), a variant of the retry that also continues past `ZeroLengthLeaf` (which E16-K2's trigger and stop rule do not) ends at `CommandLimit` on every request, at k = 1 to 14. Running rung 0 at the same finer exponents meshes 107 of the 778 and none of the 215: the others stay `MONOTONE` or reach `PREFIX`.
+
+## Result at `fill-v0+r4` (E16-A6), 2026-10-26
+
+On the E16-U1 commit the corpus sweep counts 7,086 fill `ok` (was 6,228), 560 `work-limit`, 237 `unsupported-geometry` and 2 `empty`. Of the 797 failed requests, 312 are E14-Q1, 463 are in E11's class "fill stop in the exact rung's caps" and 22 in "fill `ZeroLengthLeaf`"; none is outside every class. Details in the [E16-U1 evidence](e16-u1-2026-10-25.md#e16-a3-and-e16-a6-corpus-and-scene-sweep).

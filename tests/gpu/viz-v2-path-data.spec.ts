@@ -34,7 +34,7 @@ const runRoot = path.resolve(
 
 /** The operation ids the expected literals were fixed with (V2-A1). */
 const OPERATION_IDS = {
-  fill: 'geometry-wasm/fill-v0+r3',
+  fill: 'geometry-wasm/fill-v0+r4',
   stroke: 'geometry-wasm/stroke-v0+r7',
 } as const;
 
@@ -158,9 +158,19 @@ const P3Q_CONTRACT = 'M 0 0 L 0 -100 Q 100 -200 200 -100 T 400 -100 L 400 0 Z';
 const P3S_CONTRACT = 'M 0 0 C 0 -100 100 -100 100 -50 S 200 0 200 -50 L 200 50 L 0 50 Z';
 const P4 = 'M 0 0 H 200 V 200';
 
-/** Five disjoint 40 x 40 squares: five contours, one more than the fill kernel's cap of four. */
+/**
+ * Disjoint 40 x 40 squares on a 60-unit grid of 23 columns. W1 is 513 of them, one contour more
+ * than the fill kernel's rung-0 cap C0 = 512 (fill-v0+r4, E16-K1); W2 stays four, which draws with
+ * its fringe (512 would draw without one and add a fringe-work-cap notice). Before
+ * r4 the cap was four contours and W1 was five squares in one row (re-baselined 2026-10-26 by
+ * E16-U1, which raised the cap; the notice literals are unchanged).
+ */
 const squares = (count: number) =>
-  Array.from({ length: count }, (_, index) => `M ${index * 60} 0 h 40 v 40 h -40 z`).join(' ');
+  Array.from(
+    { length: count },
+    (_, index) => `M ${(index % 23) * 60} ${Math.floor(index / 23) * 60} h 40 v 40 h -40 z`,
+  ).join(' ');
+const W1_SQUARES = 513;
 
 function sortedNotices(
   notices: ReadonlyArray<{ nodeId: string | null; paint: string | null; failureCode: string }>,
@@ -622,7 +632,7 @@ for (const dpr of [1, 2]) {
       // V2-A11: a kernel limit is shown, not hidden.
       await scenario('w', async () => {
         const { controls: c } = await open('w');
-        let state = await applyText(c, squares(5));
+        let state = await applyText(c, squares(W1_SQUARES));
         const w1 = fitFor(state);
         sameCamera('w', 'W1 fit', state.camera, w1);
         await check('w', 'w1', state, [
@@ -923,7 +933,7 @@ for (const dpr of [1, 2]) {
           ['P3Q', P3Q],
           ['P3S', P3S],
           ['P4', P4],
-          ['W1', squares(5)],
+          ['W1', squares(W1_SQUARES)],
           ['65,536 characters', long],
         ];
         for (const [, text] of run) await applyText(c, text);
