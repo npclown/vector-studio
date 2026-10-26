@@ -80,7 +80,7 @@ A08 itself is re-run by V-4 on the E11 snapshot. E17 makes no performance claim;
 ## 7. Units
 
 - **E17-U1** (one pull request with this contract): sections 3 and 4 in `renderer-webgpu` (`primitive-pipeline.ts`, `mesh-pipeline.ts`, `native-primitive-scene.ts`, `frame-capture.ts`), unit tests E17-A1 to A3, the snap-model check and its record (E17-A4), the regenerated E10-A1 golden log, and dated notes in V3 section g, E10 section 5, and the Anti-aliasing and Clipping sections of `docs/graphics-engine-architecture.md`.
-- **E17-U2**: the headed run E17-A5 on the PC and its evidence record.
+- **E17-U2**: the headed run E17-A5 on the PC and its evidence record. Done 2026-10-26: PASS in Chrome and Edge after two spec-only fixes (favicon 404, a fixture with no visible pixel) ([record](../evidence/e17-u2-2026-10-26.md)). E17-U1 merged as `b173509` (#260).
 
 ## 8. Decisions
 
