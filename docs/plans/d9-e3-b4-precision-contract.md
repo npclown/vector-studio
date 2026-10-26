@@ -1872,3 +1872,73 @@ The shard files came back through transfer branches, and `--merge` combined them
 
 **Oracle withdrawn** (2026-10-26, E3-R2): `aad4b5829989b191250adca44c18d4658dc38fb21814c897578630a6dde1fb00`, the oracle of section 18.6, has the soundness defect of section 19.3. `pnpm e3-a04:run` treats it as uncertified.
 
+
+## 20. E3-U6 flip-tolerant bound annex, 2026-10-26
+
+The samples of section 19.4 left 219 cases UNDECIDED on the no-flip certificate of section 15.4. Most are meshes with a triangle thinner than about `2β_c`. For example, `C1/g0046/T7/z64-d1` has a strip 1.5·10^-5 px high, against `β_c = 3.7·10^-4`. No certificate on the triangle alone can hold there, because a `β_c` move can flip it. This annex replaces "UNDECIDED on the certificate" by a bound that tolerates flips, under stated preconditions. It is harness code only (`flipTolerantBound` in `tests/geometry/e3-a04/harness.ts`). The oracle does not change, so the freeze record of section 19.7 stands.
+
+### 20.1 When it applies
+
+The harness tries the bound only when the no-flip certificate fails and no triangle crosses the guard band (section 15.3). Clipped triangles are outside its argument. It applies when all of these hold, all checked exactly on `M*` without its collapsed triangles:
+
+1. **One orientation.** Every triangle of positive area has the same orientation. A triangle of zero area (three distinct collinear points) covers nothing in `M*`, but it stays in the chain below: on the GPU it can open into a thin triangle. Each zero-area triangle whose box meets `Ω ⊕ 3` must have its segment covered by collinear edges of triangles of positive area, so that the segment is in `M*`. The kernel emits such triangles folded onto a boundary edge.
+2. **The chain near the window is `∂M*`.** The chain is every directed triangle edge, with `a → b` and `b → a` between the same two `p*` cancelling. `C*` is the union of the edges whose count does not cancel. Zero-area triangles count here. A zero-area triangle that closes a T-junction cancels both sides of it exactly. For every chain edge `ab` whose box meets `Ω ⊕ 3`:
+   - the collinear edges of positive-area triangles that overlap it cover it, and their triangles all lie on one side of it;
+   - no open triangle of `M*` meets the open edge.
+3. **The outside is reachable.** Every candidate edge whose box meets `Ω ⊕ 2` passes the offset certificate of section 20.3, with offsets at most 0.5 px.
+
+Otherwise the case stays UNDECIDED on the no-flip certificate. The row records why under `flipTolerant.reason`.
+
+### 20.2 The bound
+
+Let `f_t` move each vertex in a straight line from `p*` to its GPU position, `0 ≤ t ≤ 1`. Every point of an edge then stays within `β = β_c` of the edge at `p*`.
+
+- **Winding.** The oriented triangle boundaries sum, as a 1-chain, to the edges of `C*` alone. A pair `a → b`, `b → a` cancels at every `t`, because equal `p*` means equal stored offsets, and so bit-identical GPU positions (section 7.1). So the winding number `w_t(x)` of the moving mesh is constant in `t` for `dist(x, C*) > β`.
+- **Inside.** At `t = 0`, `w_0(x)` is the number of triangles of positive area that cover `x`, with the sign of precondition 1, so it is nonzero for `x ∈ M*` off `C*`. Then `w_1(x) ≠ 0`, and some GPU triangle contains `x`.
+- **Outside.** `M_gpu ⊂ M* ⊕ β` holds unconditionally: a point of a GPU triangle has a partner with the same barycentric coordinates in the `M*` triangle, at most `β` away. A zero-area triangle's image is within `β` of its segment, which is in `M*` by precondition 1. If `x ∈ M_gpu` and `x ∉ M*`, then either `x` is within `β` of `C*` or the nearest point of `M*` is on `∂M*`, within `β`. And `∂M* ⊂ C*`, because `w_0` is 1 or more on one side of a point of `∂M*` and 0 on the other, so it changes there, and `w_0` changes only across `C*`. So `dist(x, C*) ≤ β`.
+
+Hence `M_gpu △ M* ⊂ C* ⊕ β` and `∂M_gpu ⊂ C* ⊕ β`. By precondition 2, `C* = ∂M*` within `Ω ⊕ 3`, which covers every window the terms use. A point `p` of such an open edge is in `M*`, by the covering edges. A triangle that has points near `p` on the other side contains `p`. It cannot contain `p` in its interior, along a collinear edge (that triangle lies on the covered side), or on an edge that crosses the line (its interior would then meet the open edge). So it has `p` as a vertex, and its wedge there misses the directions along the edge, which leaves points off `M*` arbitrarily near `p`. So:
+
+- **`G` and `B_M` of `E(M_gpu, M*)`** are at most `β`.
+- **`B_R`.** A point `p ∈ ∂M*` is within `β` of `M_gpu`: its own triangle's image covers the partner point. It is also within `D(p)` of a point `x ∉ M*` with `dist(x, C*) > β`, and such an `x` is off `M_gpu`. The segment between the two crosses `∂M_gpu` inside the disk of radius `max(β, D(p))` around `p`.
+
+So `E_Ω(M_gpu, M*) ≤ ρ` with **`ρ = max(β_c, D_hi)`**. Here `D_hi` bounds `D` on `∂M* ∩ (Ω ⊕ 2)`. Since `ρ ≤ 0.5 < 1`, the windowed inequality of E3-K4 needs `M*` against `R` only on `Ω ⊕ ρ`, inside the oracle's window `Ω ⊕ 1`, and the case uses
+
+**`U = E_hi + ρ`** and **`L = max(0, E_lo − ρ)`**,
+
+with the oracle's early exits at `0.25 ∓ ρ`. Without flips the no-flip path of section 7.1 still applies with `β_c`, and `ρ ≥ β_c` is never smaller.
+
+### 20.3 The offset certificate for `D`
+
+For each candidate edge whose box meets `Ω ⊕ 2`, the harness looks for a translate of the edge away from its triangles. It tries 0°, ±30°, ±60° and ±75° from the outward normal, and offsets `s` from `1.0625·β` upward by factors of `√2`, up to 0.5 px.
+
+- **Accepting a translate.** A translate `S` is accepted when two things hold. First, it is more than `β` from every candidate edge. Then `S` lies in one component of the complement of `C*`, so it is wholly inside or wholly outside `M*`. Second, one exact point test finds its midpoint outside `M*`.
+- **The bound.** Each point of the piece then has its translate in `X_out`, at distance `s`. So `D ≤ s`, plus the allowance below.
+- **Splitting.** If no translate of a piece passes, the piece is halved, to depth 12 and no shorter than `β/4`. Splitting handles the ends of an edge at a reflex corner. A gap narrower than `2β` between two parts of the boundary has no point of `X_out`, so the certificate fails there.
+- **Exact and inexact parts.** The point test and the preconditions are exact over the dyadics. The distances and offset points are binary64, evaluated from coordinates of magnitude at most `k`. They carry an allowance of `2^-30·(1 + k)`, which is far above their few roundings. `ρ` is rounded up with the slack of section 15.2.
+- **Lookup.** Triangles and chain edges are found through a grid of 8 px cells over `Ω ⊕ 8`. A box off the grid is clamped into its border cells, so a lookup anywhere, also for a translate or a midpoint off the grid, sees every item whose box meets it. The independent review found that dropping such boxes instead let two long slabs 10^-5 px apart pass the certificate (a regression test keeps it).
+- **Work.** The certificate stops at 5·10^7 work units, and the case then stays UNDECIDED.
+
+### 20.4 Tests
+
+`tests/geometry/e3-a04-flip-tolerant.test.ts` covers these cases:
+
+- a square fanned around a vertex 10^-5 px above its bottom edge, which the no-flip certificate fails and the bound covers with `ρ` within 10 % of `β`;
+- an L shape with a reflex corner;
+- each precondition failing: a dangling zero-area triangle, mixed orientation, a triangle across a boundary edge, and an edge with triangles on both sides, whole or along part of it. A triangle that touches a boundary edge at one vertex is covered. There is also a 10^-4 px gap between two squares;
+- a zero-area triangle folded onto a boundary edge, in both orientations, which the bound covers;
+- a T-junction closed by a zero-area triangle, which the bound covers, and the same mesh without that triangle, which it refuses. Its long edge then has triangles on both sides;
+- a sampled check that random vertex moves of at most `β` change membership only within `ρ` of `∂M*`, with the sliver flipped in half of the trials.
+
+### 20.5 Effect on the samples
+
+The sample of section 19.4 is re-measured with the bound, on the cases it left UNDECIDED on the no-flip certificate with no clipped triangle. That is 168 of its 202 such cases; the other 34 clip, so the bound does not apply. The re-run was on 2026-10-26, in a cloud container, at K = 2, with the kernel at `d7bd7ad` and the code of this annex. These are samples, not evidence (section 19.4).
+
+- **Measured: 162 of the 168.** One C9 case was still in the oracle after 2 h, and 5 were queued behind it on the same worker.
+- **PASS: 132.** By stratum: C1 21, C2 11, C3 15, C4 9, C5 54, C8 6, C9 15 and C11 1. One of them, a C9 case, no longer fails the certificate on the current kernel, so it passes on `β_c`. The other 131 pass on `ρ`, with a median `ρ` of 1.6·10^-3 px and a largest of 0.248 px. The largest `U` is 0.2499 px.
+- **Still UNDECIDED: 30.**
+  - 15 have a zero-area triangle off `M*` (C1, C3, C5, C8, C9);
+  - 7 have a chain edge with triangles on both sides, a T-junction left open (C1, C5, C9);
+  - 5 fail the offset certificate (C3, three C4 collapse cases, C5);
+  - 3 straddle 0.25 px at the oracle's floor (C3, C5, C6).
+- No case turned FAIL.
