@@ -160,7 +160,8 @@ const P4 = 'M 0 0 H 200 V 200';
 
 /**
  * Disjoint 40 x 40 squares on a 60-unit grid of 23 columns. W1 is 513 of them, one contour more
- * than the fill kernel's rung-0 cap C0 = 512 (fill-v0+r4, E16-K1); W2 is 512, which draws. Before
+ * than the fill kernel's rung-0 cap C0 = 512 (fill-v0+r4, E16-K1); W2 stays four, which draws with
+ * its fringe (512 would draw without one and add a fringe-work-cap notice). Before
  * r4 the cap was four contours and W1 was five squares in one row (re-baselined 2026-10-26 by
  * E16-U1, which raised the cap; the notice literals are unchanged).
  */
@@ -642,8 +643,8 @@ for (const dpr of [1, 2]) {
         if (!status.includes('fill: not drawn')) fail('w', `W1: status ${status}`);
         const logged = await page.locator('#viz-v2-notices li').count();
         if (logged < 1) fail('w', 'W1: the notice is not in the page log');
-        // W2: one square fewer: drawn, the W1 log entry remains, the status drops the failure.
-        state = await applyText(c, squares(W1_SQUARES - 1));
+        // W2: four of the squares: drawn, the W1 log entry remains, the status drops the failure.
+        state = await applyText(c, squares(4));
         sameCamera('w', 'W2 fit', state.camera, fitFor(state));
         await check('w', 'w2', state, [
           { name: 'W2 square interior (drawn)', world: [20, 20], expected: FILL },
