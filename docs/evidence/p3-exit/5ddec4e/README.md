@@ -22,15 +22,27 @@ This directory holds the P3 exit evidence for A01-A08 on the [E11 exit snapshot 
 | PC headed run                       | Pending                                                                        | User's PC                                                                            | A02 (V-4 fill rows), A03 (ST-U6, ST-U7, B2 page), A06 and A07 (V-3), A08 (V-4)         |
 | A04 reference run                   | Pending (E3-U5)                                                                | PC and hosts of E3 section 19.6                                                      | A04, and A01's crack report                                                            |
 
+## Container run commands
+
+Run in a clean worktree at `00e49bf` with Node 24.15.0 and `CARGO_HOME=~/.cargo RUSTUP_HOME=~/.rustup`, in this order:
+
+1. `pnpm install --frozen-lockfile`, `pnpm build`, then `test:geometry` from the host-adjusted copy described in [A05](A05.md).
+2. `pnpm p3-exit:sweep --scene --corpus` ([provenance](container-00e49bf/sweep-provenance.json), [scene](container-00e49bf/sweep-scene-summary.json), [corpus](container-00e49bf/sweep-corpus-summary.json)).
+3. `pnpm e16:fill-diag <corpus.json of step 2>` ([summary](container-00e49bf/fill-diag-summary.tsv), [classes](container-00e49bf/fill-diag-classes.tsv)). It reads that record, whose provenance names the commit and clean tree.
+4. `pnpm a03:stroke-diag <corpus.json of step 2>` ([provenance](container-00e49bf/stroke-diag-provenance.json), [summary](container-00e49bf/stroke-diag-summary.tsv), [named rows](container-00e49bf/stroke-named.tsv)).
+5. `pnpm p3-exit:a05-a06 --label 5ddec4e` and `pnpm p3-exit:a03 --label 5ddec4e` ([A05/A06](container-00e49bf/a05-a06-summary.md), [A03](container-00e49bf/a03-summary.md)).
+
+The closed-list rule of E11 section 7.2 applies to rejected `a04-corpus/v1` rows, so the class diagnostics cover the corpus phase. The stress scene (A01) has 252 fill and 746 stroke rejections; A01 needs every scene request to end within its cap with a valid structure, not a class.
+
 ## Status per criterion
 
-| ID  | Record           | State                                                                                                                                                                  |
-| --- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A01 | Pending          | Sweep part done in the container run: 0 structure, echo, isolation and batch failures, all 18 controls caught. Waits for the E3 crack report from the A04 run          |
-| A02 | Pending          | Corpus part done: all 797 fill rejections are in a closed-list class (E14-Q1 312, exact-rung cap stop 463, `ZeroLengthLeaf` 22). Waits for V-4's headed fill-rule rows |
-| A03 | Pending          | CI part PASS and all stroke rejections in a closed-list class or at a B2 literal status. Waits for the headed stroke specs                                             |
-| A04 | Pending          | E3-U5 reference run                                                                                                                                                    |
-| A05 | [A05.md](A05.md) | PASS (no headed part)                                                                                                                                                  |
-| A06 | Pending          | CI part PASS. Waits for the V-3 headed port-call deltas                                                                                                                |
-| A07 | Pending          | PC headed V-3 run in Chrome and Edge                                                                                                                                   |
-| A08 | Pending          | V-4 counted run (V-4 thread)                                                                                                                                           |
+| ID  | Record           | State                                                                                                                                                                             |
+| --- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A01 | Pending          | Sweep done in the container run, scene and corpus phases: 0 structure, echo, isolation and batch failures, all 18 controls caught. Waits for the E3 crack report from the A04 run |
+| A02 | Pending          | Corpus part done: all 797 corpus fill rejections are in a closed-list class (E14-Q1 312, exact-rung cap stop 463, `ZeroLengthLeaf` 22). Waits for V-4's headed fill-rule rows     |
+| A03 | Pending          | Runner CI part PASS (not yet recorded); all corpus stroke rejections in a closed-list class or at a B2 literal status. Waits for the headed stroke specs                          |
+| A04 | Pending          | E3-U5 reference run                                                                                                                                                               |
+| A05 | [A05.md](A05.md) | PASS (no headed part)                                                                                                                                                             |
+| A06 | Pending          | Runner CI part PASS (not yet recorded). Waits for the V-3 headed port-call deltas                                                                                                 |
+| A07 | Pending          | PC headed V-3 run in Chrome and Edge                                                                                                                                              |
+| A08 | Pending          | V-4 counted run (V-4 thread)                                                                                                                                                      |
