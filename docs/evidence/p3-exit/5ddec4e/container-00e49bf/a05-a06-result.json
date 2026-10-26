@@ -232,9 +232,7 @@
         "kind": "required",
         "runner": "unit",
         "file": "tests/unit/v3a-path-scene.test.ts",
-        "each": [
-          "V3-A2:"
-        ]
+        "each": ["V3-A2:"]
       },
       "verdict": "PASS",
       "selected": 4,
@@ -248,9 +246,7 @@
         "kind": "required",
         "runner": "unit",
         "file": "tests/unit/v3a-path-pipeline.test.ts",
-        "each": [
-          "V3-A3:"
-        ]
+        "each": ["V3-A3:"]
       },
       "verdict": "PASS",
       "selected": 4,
@@ -264,9 +260,7 @@
         "kind": "required",
         "runner": "unit",
         "file": "tests/unit/v3a-path-pipeline.test.ts",
-        "each": [
-          "V3-A5:"
-        ]
+        "each": ["V3-A5:"]
       },
       "verdict": "PASS",
       "selected": 6,
@@ -280,9 +274,7 @@
         "kind": "required",
         "runner": "unit",
         "file": "tests/unit/v3a-path-buckets.test.ts",
-        "each": [
-          "V3-A5:"
-        ]
+        "each": ["V3-A5:"]
       },
       "verdict": "PASS",
       "selected": 5,
@@ -296,9 +288,7 @@
         "kind": "required",
         "runner": "unit",
         "file": "tests/unit/v3a-path-pipeline.test.ts",
-        "each": [
-          "V3-A6:"
-        ]
+        "each": ["V3-A6:"]
       },
       "verdict": "PASS",
       "selected": 3,
@@ -312,9 +302,7 @@
         "kind": "required",
         "runner": "unit",
         "file": "tests/unit/v3a-path-pipeline.test.ts",
-        "each": [
-          "V3-A7:"
-        ]
+        "each": ["V3-A7:"]
       },
       "verdict": "PASS",
       "selected": 6,

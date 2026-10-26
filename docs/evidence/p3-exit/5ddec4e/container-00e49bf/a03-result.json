@@ -52,15 +52,7 @@
         "kind": "required",
         "runner": "cargo",
         "filter": "stroke_cubic_tests::",
-        "each": [
-          "st_f15_",
-          "st_f16_",
-          "st_f16p_",
-          "st_f17_",
-          "st_f18_",
-          "st_f19_",
-          "st_f20_"
-        ]
+        "each": ["st_f15_", "st_f16_", "st_f16p_", "st_f17_", "st_f18_", "st_f19_", "st_f20_"]
       },
       "verdict": "PASS",
       "selected": 7,
@@ -196,9 +188,7 @@
         "kind": "required",
         "runner": "unit",
         "file": "tests/unit/st-u6-stroke-scene.test.ts",
-        "each": [
-          "ST-A10"
-        ]
+        "each": ["ST-A10"]
       },
       "verdict": "PASS",
       "selected": 16,
@@ -212,9 +202,7 @@
         "kind": "required",
         "runner": "unit",
         "file": "tests/unit/st-u6-stroke-pipeline.test.ts",
-        "each": [
-          "ST-A10"
-        ]
+        "each": ["ST-A10"]
       },
       "verdict": "PASS",
       "selected": 33,
