@@ -49,6 +49,30 @@ Generated rows can appear in more than one line at different transforms (for exa
 
 The order and scope are a user decision (new kernel work, Full tier). Without F1 to F3, A02 cannot pass at the snapshot unless the closed list grows, which E11 section 7.2 and the private contract's "named ordinary fixtures must succeed" do not allow without a user decision.
 
+## Closed-list class count (update 2026-10-25)
+
+E11 section 7.2 (update 2026-10-25, the user decision of E11 section 9.2) adds two classes, decided on the native outcome:
+
+- **"Fill stop in the exact rung's caps".** Rung 0 did not mesh the row, and the row is not in E14-Q1. The exact rung's terminal error, at e or as the stop error of the last E16-K2 retry, is one of:
+  - `CommandLimit`, `OwnerLimit`, `Rounded(_)` or `Topology(WorkLimit)`;
+  - `SourceLimit` on a line-only path over the exact rung's line segment cap (E = 256, E16-U1's `B1_LINE_CAPS`).
+- **"Fill `ZeroLengthLeaf`".** The exact rung ends in `ZeroLengthLeaf`.
+
+The sweep cannot see native errors, so `pnpm e16:fill-diag` assigns these classes. It also writes `classes.tsv`, which gives each stratum's failed fill requests by class: `E14-Q1`, `exact-rung cap stop`, `zero-length leaf`, or `outside:` with the cause. The input sidecar now carries each path's cubic count, for the line-only test. The terminal error at e is the triangle-free retry's error when that retry ran, and otherwise the exact attempt's. The cap-stop test takes either that error or the last retry's stop error, which E16-U1 prints as `retryStop` (`depth:error`). The E4 and E8 classes are left to the evidence review, as before.
+
+The classes apply only once `fill-v0+r4` has merged, so the counts below on `fill-v0+r3` are a PRE-FREEZE preview. On the same input, with `summary.tsv` unchanged:
+
+| Stratum | E14-Q1 | Exact-rung cap stop | Zero-length leaf | Outside |
+| --- | --- | --- | --- | --- |
+| C3 generated | 267 | 159 | 0 | 972 (topology unresolved) |
+| C3 named | 32 | 31 | 22 | 21 (topology unresolved) |
+| C4 named | 0 | 54 | 0 | 0 |
+| C6 named | 8 | 0 | 0 | 0 |
+| C11 named | 0 | 14 (f04, 321 line segments) | 0 | 56 (source cap) |
+| C12 named | 5 | 0 | 0 | 14 (source cap) |
+
+The classes take causes 2 and 4 (244), f04's 14 requests of cause 1, and the 22 `ZeroLengthLeaf` requests of cause 3. The other 70 requests of cause 1 and the 993 `Topology(Unresolved)` requests of cause 3 stay outside until the E16 remedy.
+
 ## Coordination
 
 - E11 (exit snapshot): told on 2026-10-25 that A02 would fail on `fill-v0+r3` and that this record exists, so its snapshot plan accounts for it.

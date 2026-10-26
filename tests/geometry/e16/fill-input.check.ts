@@ -65,6 +65,7 @@ test('E16 fill diagnostic input', () => {
       e14: rejection.e14SelfCrossingOverE,
       contours: d.verbs.filter((v) => v === 'move').length,
       segments: d.verbs.filter((v) => v === 'line' || v === 'cubic').length,
+      cubics: d.verbs.filter((v) => v === 'cubic').length,
     };
     wanted.delete(d.id);
   }
