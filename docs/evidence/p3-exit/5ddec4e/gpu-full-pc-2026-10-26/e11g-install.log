@@ -1,0 +1,25 @@
+Scope: all 9 workspace projects
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +134
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 134, reused 134, downloaded 0, added 96
+Progress: resolved 134, reused 134, downloaded 0, added 134, done
+
+devDependencies:
++ @eslint/js 10.0.1
++ @playwright/test 1.62.1
++ @types/node 26.3.0
++ @vector-studio/contracts 0.0.0 <- packages\contracts
++ @vector-studio/editor-core 0.0.0 <- packages\editor-core
++ @vector-studio/model 0.0.0 <- packages\model
++ @vector-studio/renderer-core 0.0.0 <- packages\renderer-core
++ @vector-studio/renderer-webgpu 0.0.0 <- packages\renderer-webgpu
++ eslint 10.9.1
++ prettier 3.9.6
++ typescript 6.0.3
++ typescript-eslint 8.68.0
++ vite 8.2.2
++ vitest 4.1.11
+
+Done in 3s using pnpm v11.1.2

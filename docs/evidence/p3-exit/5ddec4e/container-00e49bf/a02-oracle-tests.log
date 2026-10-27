@@ -1,0 +1,69 @@
+> commit 00e49bf20b3dcb08c459de335fe25bb2f8a0d8df porcelain '' node v24.15.0
+58f26517603d0d599f187481c967832e3f6abea2eb53c738e5540b6200b4fd35  <worktree>/.tools/geometry-build/wasm32-unknown-unknown/release/vector_studio_geometry_kernel.wasm
+> P2_WASM_PATH=<release wasm> P2_NATIVE_RUSTUP=~/.cargo/bin/rustup vitest run --config vitest.geometry.config.ts <3 files> --reporter=verbose
+
+ RUN  v4.1.11 <worktree>
+
+ ✓ tests/geometry/line-fill.test.ts > P3.2d independent native line-fill mesh bridge > accepts all 32 frozen source/rule meshes with exact source echoes and analytic areas (L01) 94ms
+ ✓ tests/geometry/line-fill.test.ts > P3.2d independent native line-fill mesh bridge > rejects all seven frozen corruptions for their intended reason (L01) 5ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C01 keeps result length and order for 0, 1 and 5 requests 22ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C02 echoes requestId and toleranceExponent on ok, empty and failed 36ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C03 returns empty for empty verbs and for a MOVE-only path 37ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C04 reports invalid-path for grammar, odd point count, unknown verb and NaN 35ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C05 accepts exponents -1021..1023 and rejects -1022, 1024 and 1e10 37ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C06 lets invalid-path beat invalid-tolerance on one path 22ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C07 isolates a failing path between two good paths 6ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C08 publishes no mesh field on a failed or empty path 14ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C09 rejects each invalid-request row with no results 28ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C10 keeps owned results across a second batch, memory growth and dispose 430ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C11 returns disposed after dispose, also for an empty array 1ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C12 is deterministic across repeats and batch positions 16ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C13 every ok mesh passes the section f checks 24ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C14 region fixtures under nonzero equal the independent oracle 53ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C14 region fixtures under evenodd equal the independent oracle 25ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C15 hanging fixtures under nonzero: split edge interior, T-junction split 8ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C15 hanging fixtures under evenodd: split edge interior, T-junction split 8ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C16 reports work-limit for MOVE + 65,536 LINE (65,537 output verbs) 10ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C17 reports numeric-range for a cubic at e = -60 6ms
+ ✓ tests/geometry/fill-mesh-port.test.ts > fill-mesh port conformance: geometry-wasm fill-v0 > C18 ignores request buffers mutated after the call 6ms
+ ✓ tests/geometry/a02-fill-rules-port.test.ts > A02: line-fill sources through the release fill-v0 port > meshes all 32 source/rule cases to the independent oracle region 138ms
+
+ Test Files  3 passed (3)
+      Tests  23 passed (23)
+   Start at  02:21:39
+   Duration  7.73s (transform 784ms, setup 0ms, import 1.06s, tests 6.27s, environment 0ms)
+
+EXIT 0
+> vitest run tests/unit/geometry-line-fill.test.ts tests/unit/geometry-fill-region.test.ts --reporter=verbose
+
+ RUN  v4.1.11 <worktree>
+
+ ✓ tests/unit/geometry-line-fill.test.ts > P3.1a line fill: closed fixture regions (L01, L03) > classifies F01-F07, F09-F11 with literal regions for both fill rules 21ms
+ ✓ tests/unit/geometry-line-fill.test.ts > P3.1a line fill: closed fixture regions (L01, L03) > keeps a vertex where two outer contours only touch as a resolved boundary 1ms
+ ✓ tests/unit/geometry-line-fill.test.ts > P3.1a line fill: closure and degenerate regions (L02, L04) > implicitly closes F08 only for fill classification 4ms
+ ✓ tests/unit/geometry-line-fill.test.ts > P3.1a line fill: closure and degenerate regions (L02, L04) > does not manufacture a filled region or boundary from empty, isolated, or retraced contours 4ms
+ ✓ tests/unit/geometry-line-fill.test.ts > P3.1a line fill: closure and degenerate regions (L02, L04) > keeps a retraced spur outside while preserving the boundary of its attached filled region 2ms
+ ✓ tests/unit/geometry-line-fill.test.ts > P3.1a line fill: exact represented-number fixtures (L05) > classifies subnormal and huge finite squares without determinant overflow or epsilon merging 6ms
+ ✓ tests/unit/geometry-line-fill.test.ts > P3.1a line fill: exact represented-number fixtures (L05) > distinguishes the exact binary64 neighbors of a source edge near x=1 2ms
+ ✓ tests/unit/geometry-line-fill.test.ts > P3.1a line fill: literal dyadic metamorphisms (L06) > preserves literal classifications through translation, dyadic scaling, reflection, reversal, and permutation 5ms
+ ✓ tests/unit/geometry-line-fill.test.ts > P3.1a line fill: literal dyadic metamorphisms (L06) > does not mutate the caller-owned contour or point arrays 2ms
+ ✓ tests/unit/geometry-line-fill.test.ts > P3.1a line fill: validation limits and malformed input (L07) > accepts both inclusive limits and rejects each limit-plus-one case 6ms
+ ✓ tests/unit/geometry-line-fill.test.ts > P3.1a line fill: validation limits and malformed input (L07) > rejects malformed and nonfinite input, including a late contour after an earlier match 1ms
+ ✓ tests/unit/geometry-line-fill.test.ts > P3.1a line fill: fixed positive controls (L08) > rejects each known wrong classification against an independent literal expected region 2ms
+ ✓ tests/unit/geometry-fill-region.test.ts > P3.1c fill-region equality: fixed analytic regions (R01, R02) > accepts F01-F05 nesting and cancellation carriers for both fill rules 46ms
+ ✓ tests/unit/geometry-fill-region.test.ts > P3.1c fill-region equality: fixed analytic regions (R01, R02) > accepts F06-F11 crossing, adjacency, implicit closure, repetition, overlap, and shared-span regions 27ms
+ ✓ tests/unit/geometry-fill-region.test.ts > P3.1c fill-region equality: independent negative controls (R03) > rejects equal-area translations, wrong holes/rules, gaps, and invalid overlapping carriers 9ms
+ ✓ tests/unit/geometry-fill-region.test.ts > P3.1c fill-region equality: exact binary64 and zero-dimensional cases (R04) > uses exact events for non-dyadic intersections that cancel to empty 2ms
+ ✓ tests/unit/geometry-fill-region.test.ts > P3.1c fill-region equality: exact binary64 and zero-dimensional cases (R04) > keeps represented tiny, subnormal, huge, isolated, and retraced regions exact 3ms
+ ✓ tests/unit/geometry-fill-region.test.ts > P3.1c fill-region equality: literal metamorphisms and ownership (R05) > preserves translated, scaled, reflected, reversed, and permuted carriers without mutation or state 4ms
+ ✓ tests/unit/geometry-fill-region.test.ts > P3.1c fill-region equality: envelope, limits, and ordered failures (R06) > rejects malformed source envelopes and late malformed source or mesh data before geometry 1ms
+ ✓ tests/unit/geometry-fill-region.test.ts > P3.1c fill-region equality: envelope, limits, and ordered failures (R06) > uses the source and combined bounds inclusively, then reports mesh invariants before region mismatch 2ms
+
+ Test Files  2 passed (2)
+      Tests  20 passed (20)
+   Start at  02:21:47
+   Duration  938ms (transform 1.26s, setup 0ms, import 1.42s, tests 156ms, environment 0ms)
+
+EXIT 0
+58f26517603d0d599f187481c967832e3f6abea2eb53c738e5540b6200b4fd35  <worktree>/.tools/geometry-build/wasm32-unknown-unknown/release/vector_studio_geometry_kernel.wasm
+porcelain after ''
