@@ -159,6 +159,7 @@ describe('V3a port consumption and cache key', () => {
       visible: false,
       opacity: 1,
       kind: 'container',
+      clip: null,
       children: ['inGroup'],
     };
     const h = createPathHarness({

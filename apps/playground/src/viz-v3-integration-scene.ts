@@ -215,6 +215,7 @@ function initialNodes(): RenderNodeSnapshot[] {
       visible: true,
       opacity: 1,
       kind: 'container',
+      clip: null,
       children: ['e-dot', 'p-star'],
     },
     ellipseNode('e-dot', L.star[0], L.star[1], L.dot.width, L.dot.height, C.dot, 'g-group'),

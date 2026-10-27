@@ -6,6 +6,7 @@ import type {
   RenderChildOrder,
   RenderNodeSnapshot,
   SceneAffine,
+  SceneClip,
   SceneColor,
   SceneIdentity,
   ScenePathGeometry,
@@ -14,26 +15,30 @@ import type {
   SceneRejectionReason,
   SceneStroke,
 } from '@vector-studio/contracts';
+import { SCENE_MAX_CLIP_DEPTH } from '@vector-studio/contracts';
 import { hasFiniteSceneArithmetic } from './scene-numeric.js';
 
 /** Port presence, fixed when a mirror is constructed (P3 V3 contract, section a). */
 export type PathNodeSupport = 'supported' | 'unsupported';
 
 /**
- * The three port-presence facts of a mirror (V3 section a; B2 stroke contract, section 5 and
- * the section 9.1 amendment S4): path nodes at all, fills (`fill !== null`) and strokes with
- * `width > 0`.
+ * The port-presence facts of a mirror (V3 section a; B2 stroke contract, section 5 and the
+ * section 9.1 amendment S4): path nodes at all, fills (`fill !== null`) and strokes with
+ * `width > 0`. `clips` (P4 contract, unit U1) says whether the renderer draws a non-null
+ * container clip; until it does, such a container is reported as `unsupported-feature`.
  */
 export type PathSupport = Readonly<{
   pathNodes: PathNodeSupport;
   pathFills: PathNodeSupport;
   pathStrokes: PathNodeSupport;
+  clips: PathNodeSupport;
 }>;
 
 const NO_PATH_SUPPORT: PathSupport = Object.freeze({
   pathNodes: 'unsupported',
   pathFills: 'unsupported',
   pathStrokes: 'unsupported',
+  clips: 'unsupported',
 });
 
 export type ValidatedNode = Readonly<{
@@ -131,6 +136,7 @@ export function validateCandidateGraph(
   rootOrder: readonly string[],
   hasUnsupportedFeature: boolean,
   arithmeticAlreadyValidated = false,
+  support: PathSupport = NO_PATH_SUPPORT,
 ): SceneRejectionReason | null {
   // Arithmetic is an input-value property and therefore precedes graph categories.
   if (!arithmeticAlreadyValidated && !hasFiniteSceneArithmetic(nodes)) {
@@ -168,7 +174,39 @@ export function validateCandidateGraph(
   if (!hasConsistentOrders(nodes, rootOrder)) {
     return 'invalid-order';
   }
+  // P4 contract, P4-S2 and P4-S3: the mask-source and clip-depth rules are graph rules over the
+  // whole candidate, so a change set that only reorders or reparents is checked as well.
+  if (hasUnsupportedClipGraph(nodes, rootOrder, support)) {
+    return 'unsupported-feature';
+  }
   return hasUnsupportedFeature ? 'unsupported-feature' : null;
+}
+
+/**
+ * P4-S2: a mask source (`children[0]` of a mask container) must not be a container, and a path
+ * source needs a fill port whatever its style. Clip depth: no node may have more than
+ * SCENE_MAX_CLIP_DEPTH clipping proper ancestors. One walk from the roots, O(n).
+ */
+function hasUnsupportedClipGraph(
+  nodes: ReadonlyMap<string, RenderNodeSnapshot>,
+  rootOrder: readonly string[],
+  support: PathSupport,
+): boolean {
+  const pending: { id: string; depth: number }[] = rootOrder.map((id) => ({ id, depth: 0 }));
+  while (pending.length > 0) {
+    const { id, depth } = pending.pop()!;
+    if (depth > SCENE_MAX_CLIP_DEPTH) return true;
+    const node = nodes.get(id);
+    if (node === undefined || node.kind !== 'container') continue;
+    if (node.clip !== null && node.clip.kind === 'mask' && node.children.length > 0) {
+      const source = nodes.get(node.children[0]!);
+      if (source === undefined || source.kind === 'container') return true;
+      if (source.kind === 'path' && support.pathFills !== 'supported') return true;
+    }
+    const childDepth = node.clip === null ? depth : depth + 1;
+    for (const childId of node.children) pending.push({ id: childId, depth: childDepth });
+  }
+  return false;
 }
 
 export function snapshotsEqual(
@@ -198,7 +236,7 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
     kind === 'primitive' || kind === 'path'
       ? ['id', 'parentId', 'transform', 'visible', 'opacity', 'kind', 'geometry', 'style']
       : kind === 'container'
-        ? ['id', 'parentId', 'transform', 'visible', 'opacity', 'kind', 'children']
+        ? ['id', 'parentId', 'transform', 'visible', 'opacity', 'kind', 'children', 'clip']
         : null;
   if (fields === null || !hasExactFields(value, fields)) {
     return null;
@@ -221,7 +259,8 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
 
   if (kind === 'container') {
     const children = copyArray(value.children, copyId);
-    if (children === null) {
+    const clip = copyClip(value.clip);
+    if (children === null || clip === undefined) {
       return null;
     }
     const node = Object.freeze({
@@ -232,8 +271,12 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
       opacity,
       kind: 'container' as const,
       children,
+      clip,
     });
-    return Object.freeze({ node, unsupported: opacity !== 1 });
+    return Object.freeze({
+      node,
+      unsupported: opacity !== 1 || (clip !== null && pathNodes.clips !== 'supported'),
+    });
   }
 
   if (kind === 'path') {
@@ -283,6 +326,30 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
     node,
     unsupported: geometry.kind === 'line' && style.fill !== null,
   });
+}
+
+/** P4-S1 and P4-S3: `undefined` marks an invalid clip, since `null` is a valid one. */
+function copyClip(value: unknown): SceneClip | undefined {
+  if (value === null) return null;
+  if (!isRecord(value)) return undefined;
+  if (value.kind === 'mask') {
+    return hasExactFields(value, ['kind']) ? Object.freeze({ kind: 'mask' as const }) : undefined;
+  }
+  if (value.kind !== 'rect' || !hasExactFields(value, ['kind', 'x', 'y', 'width', 'height'])) {
+    return undefined;
+  }
+  const x = copyFiniteNumber(value.x);
+  const y = copyFiniteNumber(value.y);
+  const width = copyNonnegativeNumber(value.width);
+  const height = copyNonnegativeNumber(value.height);
+  return x === null ||
+    y === null ||
+    width === null ||
+    height === null ||
+    !Number.isFinite(x + width) ||
+    !Number.isFinite(y + height)
+    ? undefined
+    : Object.freeze({ kind: 'rect' as const, x, y, width, height });
 }
 
 function copyGeometry(value: unknown): PrimitiveGeometry | null {
@@ -573,6 +640,17 @@ function hasConsistentOrders(
   return [...nodes.keys()].every((id) => occurrences.get(id) === 1);
 }
 
+function clipEquals(left: SceneClip, right: SceneClip): boolean {
+  if (left === null || right === null) return left === right;
+  if (left.kind === 'mask' || right.kind === 'mask') return left.kind === right.kind;
+  return (
+    left.x === right.x &&
+    left.y === right.y &&
+    left.width === right.width &&
+    left.height === right.height
+  );
+}
+
 function nodeEquals(left: RenderNodeSnapshot, right: RenderNodeSnapshot): boolean {
   if (
     left.id !== right.id ||
@@ -584,7 +662,7 @@ function nodeEquals(left: RenderNodeSnapshot, right: RenderNodeSnapshot): boolea
   )
     return false;
   if (left.kind === 'container' && right.kind === 'container') {
-    return arraysEqual(left.children, right.children);
+    return arraysEqual(left.children, right.children) && clipEquals(left.clip, right.clip);
   }
   if (left.kind === 'path' && right.kind === 'path') {
     return (

@@ -55,6 +55,7 @@ const corpus: readonly RenderNodeSnapshot[] = [
     visible: true,
     opacity: 1,
     kind: 'container',
+    clip: null,
     children: ['r1', 'e1', 'hidden'],
   },
   rectangle('r1', 'group', 10, 10),

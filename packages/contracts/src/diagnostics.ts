@@ -26,6 +26,11 @@ export const DIAGNOSTIC_CODES = Object.freeze({
    * replaced the interim code of the P3 V3 contract, section h).
    */
   PATH_MESH_FAILURE: 'render.path-mesh-failure',
+  /**
+   * Mask levels beyond the mask-texture budget are not drawn (P4 contract, section 4,
+   * docs/plans/p4-clip-mask.md); reserved by unit U1, reported from unit U4.
+   */
+  CLIP_RESOURCE_LIMIT: 'render.clip-resource-limit',
   DISPOSAL_COMPLETED: 'disposal.completed',
   DISPOSAL_FAILED: 'disposal.failed',
 } as const);

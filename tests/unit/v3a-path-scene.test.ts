@@ -140,6 +140,7 @@ describe('V3a path node validation', () => {
       visible: true,
       opacity: 1,
       kind: 'container',
+      clip: null,
       children: ['p'],
     };
     const child = pathNode('p', 0, { parentId: 'g', transform: [1e300, 0, 0, 1e300, 0, 0] });

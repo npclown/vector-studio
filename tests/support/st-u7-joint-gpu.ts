@@ -443,6 +443,7 @@ export function jointSnapshot(request: SceneRequest, revision: number): RenderSc
         visible: true,
         opacity: 1,
         kind: 'container',
+        clip: null,
         children: children.map((node) => node.id),
       },
       ...children,

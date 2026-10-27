@@ -45,6 +45,8 @@ export type RetainedSceneMirrorOptions = Readonly<{
   pathNodes: PathNodeSupport;
   pathFills?: PathNodeSupport;
   pathStrokes?: PathNodeSupport;
+  /** P4 contract, unit U1: whether non-null container clips are drawn; default 'unsupported'. */
+  clips?: PathNodeSupport;
 }>;
 
 export type ScenePendingChangeState = Readonly<{
@@ -103,7 +105,8 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
           ? 'supported'
           : 'unsupported';
     const pathStrokes = options.pathStrokes === 'supported' ? 'supported' : 'unsupported';
-    this.#pathNodes = Object.freeze({ pathNodes, pathFills, pathStrokes });
+    const clips = options.clips === 'supported' ? 'supported' : 'unsupported';
+    this.#pathNodes = Object.freeze({ pathNodes, pathFills, pathStrokes, clips });
   }
 
   public replaceSnapshot(snapshot: RenderSceneSnapshot): SceneApplyResult {
@@ -148,6 +151,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       input.rootOrder,
       input.nodes.some((entry) => entry.unsupported),
       true,
+      this.#pathNodes,
     );
     if (graphReason !== null) return this.#invalidScene(graphReason);
 
@@ -205,6 +209,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       input.inserted.some((entry) => entry.unsupported) ||
         input.updated.some((entry) => entry.unsupported),
       true,
+      this.#pathNodes,
     );
     if (graphReason === 'unknown-node') return this.#invalidScene(graphReason);
     if (hasInvalidOrderParent) return this.#invalidScene('invalid-parent');

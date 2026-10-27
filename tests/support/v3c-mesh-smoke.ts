@@ -169,6 +169,7 @@ export function smokeSnapshot(variant: SmokeVariant, revision: number): RenderSc
       visible: true,
       opacity: 1,
       kind: 'container',
+      clip: null,
       children,
     },
   ];
