@@ -1988,7 +1988,7 @@ The full reference run of 2026-10-26 (96 shards on several hosts, section 19.6) 
 
 ## 23. E3-U5 reference run record, 2026-10-27
 
-Dated append. This section records the A04 reference run of section 9.1 on the E11 exit snapshot. The record is [`docs/evidence/e3-a04/@STAMP@/`](../evidence/e3-a04/@STAMP@/record.md). The measured disposition is **FAIL**. A04 acceptance stays with the Primary after the independent evidence review of section 7.4.
+Dated append. This section records the A04 reference run of section 9.1 on the E11 exit snapshot. The record is [`docs/evidence/e3-a04/2026-10-27T00-33-11-173Z-de2951d7/`](../evidence/e3-a04/2026-10-27T00-33-11-173Z-de2951d7/record.md). The measured disposition is **FAIL**. A04 acceptance stays with the Primary after the independent evidence review of section 7.4.
 
 **Decision (2026-10-27, user).** On the decision card "A04 전체 측정 결과(FAIL)를 어떻게 처리할까요?", the user chose the recommended option, "결과 그대로 기록" ("record the result as it is"):
 
@@ -2090,4 +2090,16 @@ A new reference run on a later snapshot would supersede this record. This record
 
 ### 23.6 GPU model check
 
-@GPU@
+The headed check of section 19.1 (E3-A6) ran on the user's PC on 2026-10-27, from 00:17 to 00:32Z, on `a83b7db` with the same WASM. Its two outputs are committed beside the record as [`chrome.json`](../evidence/e3-a04/2026-10-27T00-33-11-173Z-de2951d7/chrome.json) and [`edge.json`](../evidence/e3-a04/2026-10-27T00-33-11-173Z-de2951d7/edge.json). The record names them by the merging host's local paths.
+
+- **Browsers.** Chrome 155.0.8059.85 and Edge 156.0.4314.42, headed, with `--enable-unsafe-webgpu`, at DPR 1.
+- **Adapter.** NVIDIA, Turing architecture (GTX 1660 SUPER), not a fallback adapter. The user agent reports 151.0.7922.34 in both, which is user-agent reduction. The version field is the browser's own.
+- **Result.** Both browsers **PASS**, with identical numbers.
+  - 13,364 subset cases: 1,429 rejected and 216 empty are skipped. That leaves 11,719 draws and 1,236,334 points, with no failure.
+  - The largest error-to-`β` ratio is 0.267 on the vertex path and 0.368 on the feature path.
+  - 2,668 clipped draws were compared over 41,503,238 pixel centres, with no mismatch. 591 of them were not measurable for `β`.
+  - There are 151,848 T-junctions. The largest crack is 0.00108 px, on `C5/l40/T6/z64-d3`.
+  - E3-PC12 was rejected, as it should be.
+  - The shader hash `d306137c…31a3` and the WASM hash equal the record's.
+
+This completes E3-A6 on the named subset. It does not change the FAIL.

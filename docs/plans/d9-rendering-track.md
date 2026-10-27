@@ -76,7 +76,7 @@ By D9-Q2 (a) this plan carries the evidence index for the P3 exit gate. The visu
 | A01 | None yet                                                                                                                                   | TODO                                                                |
 | A02 | None yet                                                                                                                                   | TODO                                                                |
 | A03 | None yet                                                                                                                                   | TODO                                                                |
-| A04 | [E3-U5 reference run record](../evidence/e3-a04/@STAMP@/record.md) on the E11 snapshot ([E3 section 23](d9-e3-b4-precision-contract.md#23-e3-u5-reference-run-record-2026-10-27)) | Measured FAIL (5 rows outside the known classes) and 1,924 UNDECIDED; user decision 2026-10-27: recorded as a disclosed defect, remedies E20; evidence review pending |
+| A04 | [E3-U5 reference run record](../evidence/e3-a04/2026-10-27T00-33-11-173Z-de2951d7/record.md) on the E11 snapshot ([E3 section 23](d9-e3-b4-precision-contract.md#23-e3-u5-reference-run-record-2026-10-27)) | Measured FAIL (5 rows outside the known classes) and 1,924 UNDECIDED; user decision 2026-10-27: recorded as a disclosed defect, remedies E20; evidence review pending |
 | A05 | Runner `pnpm p3-exit:a05-a06` ready; [PRE-FREEZE dry run](../evidence/x1-a05-a06-prefreeze-2026-10-25.md), not evidence                    | TODO; record on the E11 exit snapshot                               |
 | A06 | Runner `pnpm p3-exit:a05-a06` ready; [PRE-FREEZE dry run](../evidence/x1-a05-a06-prefreeze-2026-10-25.md), not evidence                    | TODO; record on the E11 exit snapshot, headed part from the V-3 run |
 | A07 | Partial (V-3, review accepted 2026-10-23): [V-3 implementation evidence](d9-visualization-track.md#v-3-implementation-evidence-2026-10-23) | TODO; headed page from the visualization track                      |
@@ -471,9 +471,10 @@ Dated append. The full freeze run of E3-U2d (oracle `c4a9644`) failed: 27,399 `o
 
 Dated append. Unit E3-U5 is the A04 reference run of the [E3 contract](d9-e3-b4-precision-contract.md), section 9.1, on the E11 exit snapshot (run commit `7443c2b`, merged on `a83b7db`). The run and its record are in [contract section 23](d9-e3-b4-precision-contract.md#23-e3-u5-reference-run-record-2026-10-27). Track: rendering. Packages: docs and evidence only. Shared surface changed: no. No A04 threshold, oracle or corpus case changed.
 
-- **Record.** [`docs/evidence/e3-a04/@STAMP@/`](../evidence/e3-a04/@STAMP@/record.md): 27,462 cases, 22,819 measured, 19,548 PASS, 1,342 disclosed in the three known classes of section 21, 5 FAIL and 1,924 UNDECIDED outside them, 1,041 `window-empty` and 3,602 rejected. All 14 controls hold and the validator reports no problem.
+- **Record.** [`docs/evidence/e3-a04/2026-10-27T00-33-11-173Z-de2951d7/`](../evidence/e3-a04/2026-10-27T00-33-11-173Z-de2951d7/record.md): 27,462 cases, 22,819 measured, 19,548 PASS, 1,342 disclosed in the three known classes of section 21, 5 FAIL and 1,924 UNDECIDED outside them, 1,041 `window-empty` and 3,602 rejected. All 14 controls hold and the validator reports no problem.
 - **Verdict.** The measured disposition is **FAIL**. The five FAIL rows are one sub-pixel triangle (`C1/g0029/T2`) whose mesh collapses to zero area at five pairs (section 23.3).
 - **Decision (2026-10-27, user).** "결과 그대로 기록": the record stands as measured, the remedies go to backlog item E20 (E3-U7), and A04 enters the P3 exit as a disclosed defect.
+- **GPU model check (E3-A6).** PASS in headed Chrome 155.0.8059.85 and Edge 156.0.4314.42 on the user's GTX 1660 SUPER, over the 13,364-case named subset ([contract section 23.6](d9-e3-b4-precision-contract.md#236-gpu-model-check)).
 - **Pending.** The independent evidence review of section 7.4.
 
 ## E11 E11-U4 evidence, 2026-10-24

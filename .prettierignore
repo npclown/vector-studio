@@ -72,3 +72,6 @@ apps/next-host/next-env.d.ts
 
 # Preserve the E11-U3 PC run records at the P3 exit snapshot byte-for-byte.
 docs/evidence/p3-exit/*/headed-pc-*/**/*.json
+
+# Preserve the E3 A04 evidence records and their GPU readbacks byte-for-byte.
+docs/evidence/e3-a04/**/*.json
