@@ -1,0 +1,4292 @@
+{
+  "config": {
+    "argv": [
+      "C:\\Users\\thseh\\.tools\\node-v24.15.0-win-x64\\node.exe",
+      "D:\\GIT\\vs-e11r\\node_modules\\@playwright\\test\\cli.js",
+      "test",
+      "--config",
+      "playwright.gpu.config.ts",
+      "--reporter=list,json"
+    ],
+    "configFile": "D:\\GIT\\vs-e11r\\playwright.gpu.config.ts",
+    "rootDir": "D:/GIT/vs-e11r/tests/gpu",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "D:/GIT/vs-e11r/test-results/gpu",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chrome",
+        "name": "chrome",
+        "testDir": "D:/GIT/vs-e11r/tests/gpu",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "D:/GIT/vs-e11r/test-results/gpu",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "edge",
+        "name": "edge",
+        "testDir": "D:/GIT/vs-e11r/tests/gpu",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list"
+      ],
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.62.1",
+    "workers": 1,
+    "webServer": {
+      "command": "pnpm --filter @vector-studio/playground exec vite --host 127.0.0.1 --port 4175 --strictPort",
+      "url": "http://127.0.0.1:4175",
+      "reuseExistingServer": false,
+      "timeout": 30000
+    }
+  },
+  "suites": [
+    {
+      "title": "e10-test-hooks.spec.ts",
+      "file": "e10-test-hooks.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "E10-A7 controls at 1x, DPR 1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1964,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T02:58:11.762Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "55ad59095781f15e2a75-9ba95912a4e6cf9ea072",
+          "file": "e10-test-hooks.spec.ts",
+          "line": 104,
+          "column": 5
+        },
+        {
+          "title": "E10-A7 controls at 1x, DPR 1.5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1682,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T02:58:14.040Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "55ad59095781f15e2a75-2aebb8d9e32863743bd6",
+          "file": "e10-test-hooks.spec.ts",
+          "line": 104,
+          "column": 5
+        },
+        {
+          "title": "E10-A7 controls at 1x, DPR 2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1602,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T02:58:15.735Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "55ad59095781f15e2a75-46f795685a02c6caa49f",
+          "file": "e10-test-hooks.spec.ts",
+          "line": 104,
+          "column": 5
+        },
+        {
+          "title": "E10-A7 controls at 4x, DPR 1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1629,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T02:58:17.349Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "55ad59095781f15e2a75-97a0c67ee8cca5e98e9a",
+          "file": "e10-test-hooks.spec.ts",
+          "line": 104,
+          "column": 5
+        },
+        {
+          "title": "E10-A7 controls at 4x, DPR 1.5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1637,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T02:58:18.998Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "55ad59095781f15e2a75-20712065afeb521c00d1",
+          "file": "e10-test-hooks.spec.ts",
+          "line": 104,
+          "column": 5
+        },
+        {
+          "title": "E10-A7 controls at 4x, DPR 2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1635,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T02:58:20.656Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "55ad59095781f15e2a75-8c9cc5f9318b40f6c5b2",
+          "file": "e10-test-hooks.spec.ts",
+          "line": 104,
+          "column": 5
+        },
+        {
+          "title": "E10-A7 controls at 1x, DPR 1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2427,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:13:27.205Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "55ad59095781f15e2a75-c864c5d3ceae47f95bfa",
+          "file": "e10-test-hooks.spec.ts",
+          "line": 104,
+          "column": 5
+        },
+        {
+          "title": "E10-A7 controls at 1x, DPR 1.5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1873,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:13:30.020Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "55ad59095781f15e2a75-b3b18c96c51d4c7a9e61",
+          "file": "e10-test-hooks.spec.ts",
+          "line": 104,
+          "column": 5
+        },
+        {
+          "title": "E10-A7 controls at 1x, DPR 2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1976,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:13:31.906Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "55ad59095781f15e2a75-795819c6386afb6f1d0d",
+          "file": "e10-test-hooks.spec.ts",
+          "line": 104,
+          "column": 5
+        },
+        {
+          "title": "E10-A7 controls at 4x, DPR 1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1954,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:13:33.894Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "55ad59095781f15e2a75-9389194006e396d634c7",
+          "file": "e10-test-hooks.spec.ts",
+          "line": 104,
+          "column": 5
+        },
+        {
+          "title": "E10-A7 controls at 4x, DPR 1.5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1953,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:13:35.869Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "55ad59095781f15e2a75-642524a2ebf6bb867cb5",
+          "file": "e10-test-hooks.spec.ts",
+          "line": 104,
+          "column": 5
+        },
+        {
+          "title": "E10-A7 controls at 4x, DPR 2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 120000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1953,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:13:37.842Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "55ad59095781f15e2a75-44933030795f84298030",
+          "file": "e10-test-hooks.spec.ts",
+          "line": 104,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "e17-write-once.spec.ts",
+      "file": "e17-write-once.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "E17-A5 fixtures: count at most 1, covered pixels counted once, 4x equals 1x",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 1800000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 35981,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T02:58:22.404Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7493a4dc0e6b94aa0fbb-31c5ad563216aaf751b2",
+          "file": "e17-write-once.spec.ts",
+          "line": 120,
+          "column": 1
+        },
+        {
+          "title": "E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at 1x",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1148,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T02:58:58.396Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7493a4dc0e6b94aa0fbb-2c13a93f9d44df913130",
+          "file": "e17-write-once.spec.ts",
+          "line": 226,
+          "column": 3
+        },
+        {
+          "title": "E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at 4x",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1107,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T02:58:59.558Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7493a4dc0e6b94aa0fbb-7ccd230de30c32cedc46",
+          "file": "e17-write-once.spec.ts",
+          "line": 226,
+          "column": 3
+        },
+        {
+          "title": "E17-A5 fixtures: count at most 1, covered pixels counted once, 4x equals 1x",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 1800000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 39902,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:13:39.908Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7493a4dc0e6b94aa0fbb-b62abb2696aea10b26b6",
+          "file": "e17-write-once.spec.ts",
+          "line": 120,
+          "column": 1
+        },
+        {
+          "title": "E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at 1x",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1349,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:14:19.822Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7493a4dc0e6b94aa0fbb-c5d0bfe89daa6a0b459f",
+          "file": "e17-write-once.spec.ts",
+          "line": 226,
+          "column": 3
+        },
+        {
+          "title": "E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at 4x",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1225,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:14:21.187Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "7493a4dc0e6b94aa0fbb-a7b2aba4d7ef10996f0b",
+          "file": "e17-write-once.spec.ts",
+          "line": 226,
+          "column": 3
+        }
+      ]
+    },
+    {
+      "title": "e3-a04-readback.spec.ts",
+      "file": "e3-a04-readback.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "E3-U4 GPU model check and E3-PC12",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 14400000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 467651,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T02:59:00.719Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "693ed2771a014f903c32-325a30832ecd829febde",
+          "file": "e3-a04-readback.spec.ts",
+          "line": 73,
+          "column": 1
+        },
+        {
+          "title": "E3-U4 GPU model check and E3-PC12",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 14400000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 461178,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:14:22.476Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "693ed2771a014f903c32-9e211705ac439cc43d88",
+          "file": "e3-a04-readback.spec.ts",
+          "line": 73,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "foundation-experiments.spec.ts",
+      "file": "foundation-experiments.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "camera triangle at DPR 1",
+          "file": "foundation-experiments.spec.ts",
+          "line": 172,
+          "column": 8,
+          "specs": [
+            {
+              "title": "preserves camera, shared-buffer, and pipeline-cache evidence through recovery",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chrome",
+                  "projectName": "chrome",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1828,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T05:13:19.256Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "3bbab0c57447e6780e15-5befd570eba0356a9a95",
+              "file": "foundation-experiments.spec.ts",
+              "line": 175,
+              "column": 5
+            },
+            {
+              "title": "preserves camera, shared-buffer, and pipeline-cache evidence through recovery",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "edge",
+                  "projectName": "edge",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1677,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T07:31:00.380Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "3bbab0c57447e6780e15-9f84e89e8a5821d36bb6",
+              "file": "foundation-experiments.spec.ts",
+              "line": 175,
+              "column": 5
+            }
+          ]
+        },
+        {
+          "title": "camera triangle at DPR 1.5",
+          "file": "foundation-experiments.spec.ts",
+          "line": 172,
+          "column": 8,
+          "specs": [
+            {
+              "title": "preserves camera, shared-buffer, and pipeline-cache evidence through recovery",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chrome",
+                  "projectName": "chrome",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1251,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T05:13:21.432Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "3bbab0c57447e6780e15-f327be629936e6a33f50",
+              "file": "foundation-experiments.spec.ts",
+              "line": 175,
+              "column": 5
+            },
+            {
+              "title": "preserves camera, shared-buffer, and pipeline-cache evidence through recovery",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "edge",
+                  "projectName": "edge",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1259,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T07:31:02.427Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "3bbab0c57447e6780e15-30bc9fd1d1846b3a7595",
+              "file": "foundation-experiments.spec.ts",
+              "line": 175,
+              "column": 5
+            }
+          ]
+        },
+        {
+          "title": "camera triangle at DPR 2",
+          "file": "foundation-experiments.spec.ts",
+          "line": 172,
+          "column": 8,
+          "specs": [
+            {
+              "title": "preserves camera, shared-buffer, and pipeline-cache evidence through recovery",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chrome",
+                  "projectName": "chrome",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1279,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T05:13:22.696Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "3bbab0c57447e6780e15-08c59113563276e0bb9d",
+              "file": "foundation-experiments.spec.ts",
+              "line": 175,
+              "column": 5
+            },
+            {
+              "title": "preserves camera, shared-buffer, and pipeline-cache evidence through recovery",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "edge",
+                  "projectName": "edge",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1150,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T07:31:03.698Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "3bbab0c57447e6780e15-3e45969c7c70e0c83479",
+              "file": "foundation-experiments.spec.ts",
+              "line": 175,
+              "column": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "p1-primitives.spec.ts",
+      "file": "p1-primitives.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "P1 visual samples1 dpr1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 7497,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:06:48.418Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-f2c5e8799eb95d8effd7",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 precision samples1 dpr1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 41394,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:06:55.929Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-0618b380017eb34167d8",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 visual samples1 dpr1.5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5859,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:07:37.336Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-714079d08371e46d02b1",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 precision samples1 dpr1.5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 75700,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:07:43.209Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-f7640a14ed19c2f711cb",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 visual samples1 dpr2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 8617,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:08:58.924Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-d08f98247dd44914c68e",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 precision samples1 dpr2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 122120,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:09:07.557Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-e804c5b7f6c26380ad23",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 latest-scene recovery samples1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1868,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:11:09.692Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-b75de22cb53c253727ca",
+          "file": "p1-primitives.spec.ts",
+          "line": 149,
+          "column": 3
+        },
+        {
+          "title": "P1 visual samples4 dpr1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3676,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:11:11.579Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-9337c4ae28b02a55f696",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 precision samples4 dpr1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 41981,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:11:15.276Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-fb387255f81f335c0497",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 visual samples4 dpr1.5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 5962,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:11:57.271Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-9961cd081e07d220eb03",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 precision samples4 dpr1.5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 76840,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:12:03.247Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-08976e2484403f2e3fc3",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 visual samples4 dpr2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 8601,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:13:20.107Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-4bbd14400ec0c78dbd76",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 precision samples4 dpr2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 125929,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:13:28.733Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-ed1c8ad0fc35b4826666",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 latest-scene recovery samples4",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1938,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:15:34.679Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-f1ae3927b92c4a0a22b1",
+          "file": "p1-primitives.spec.ts",
+          "line": 149,
+          "column": 3
+        },
+        {
+          "title": "P1 visual samples1 dpr1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4129,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:22:03.693Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-7d3c3170188b4e0877de",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 precision samples1 dpr1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 44563,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:22:07.836Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-d14de492e3668b2fc994",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 visual samples1 dpr1.5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 6063,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:22:52.412Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-1e701747acc0b6c11897",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 precision samples1 dpr1.5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 81581,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:22:58.488Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-c91ffdb42e854e2c3a65",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 visual samples1 dpr2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 8642,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:24:20.082Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-ffd7d297578b4aaebfd5",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 precision samples1 dpr2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 134204,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:24:28.736Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-f629aaee5ad486fb5fda",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 latest-scene recovery samples1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1905,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:26:42.958Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-b3da196902deaa9b51d1",
+          "file": "p1-primitives.spec.ts",
+          "line": 149,
+          "column": 3
+        },
+        {
+          "title": "P1 visual samples4 dpr1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4245,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:26:44.877Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-0abd0651fa23835967ce",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 precision samples4 dpr1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 46582,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:26:49.133Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-00b1a9c14770ab255d7e",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 visual samples4 dpr1.5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 6160,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:27:35.726Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-bad22ddfd6db67caca11",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 precision samples4 dpr1.5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 82839,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:27:41.897Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-3fc1fd4a2d95379fe0e5",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 visual samples4 dpr2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 8809,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:29:04.751Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-587430608507c4253167",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 precision samples4 dpr2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 211558,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:29:13.572Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-d66811f73009e083b6d2",
+          "file": "p1-primitives.spec.ts",
+          "line": 56,
+          "column": 7
+        },
+        {
+          "title": "P1 latest-scene recovery samples4",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1775,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:32:45.145Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "603c7494e639c977f361-b9ff8dc1d86b284ad09d",
+          "file": "p1-primitives.spec.ts",
+          "line": 149,
+          "column": 3
+        }
+      ]
+    },
+    {
+      "title": "p3-b2-strokes.spec.ts",
+      "file": "p3-b2-strokes.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "DPR 1",
+          "file": "p3-b2-strokes.spec.ts",
+          "line": 174,
+          "column": 8,
+          "specs": [
+            {
+              "title": "P3 B2 stroke page screenshots at DPR 1 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 600000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chrome",
+                  "projectName": "chrome",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 8168,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T03:15:36.660Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "26b50d5901dfd348bb8a-f0fc8e07934ac785e561",
+              "file": "p3-b2-strokes.spec.ts",
+              "line": 177,
+              "column": 5
+            },
+            {
+              "title": "P3 B2 stroke page screenshots at DPR 1 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 600000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "edge",
+                  "projectName": "edge",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 8648,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T05:32:46.950Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "26b50d5901dfd348bb8a-7d9652766cb33de9b643",
+              "file": "p3-b2-strokes.spec.ts",
+              "line": 177,
+              "column": 5
+            }
+          ]
+        },
+        {
+          "title": "DPR 2",
+          "file": "p3-b2-strokes.spec.ts",
+          "line": 174,
+          "column": 8,
+          "specs": [
+            {
+              "title": "P3 B2 stroke page screenshots at DPR 2 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 600000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chrome",
+                  "projectName": "chrome",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4257,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T03:15:44.839Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "26b50d5901dfd348bb8a-494d8a3b71d673bbbf58",
+              "file": "p3-b2-strokes.spec.ts",
+              "line": 177,
+              "column": 5
+            },
+            {
+              "title": "P3 B2 stroke page screenshots at DPR 2 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 600000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "edge",
+                  "projectName": "edge",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4279,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T05:32:55.609Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "26b50d5901dfd348bb8a-a1605914b2f9994dbedd",
+              "file": "p3-b2-strokes.spec.ts",
+              "line": 177,
+              "column": 5
+            }
+          ]
+        },
+        {
+          "title": "DPR 3",
+          "file": "p3-b2-strokes.spec.ts",
+          "line": 174,
+          "column": 8,
+          "specs": [
+            {
+              "title": "P3 B2 stroke page screenshots at DPR 3 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 600000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chrome",
+                  "projectName": "chrome",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3838,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T03:15:49.107Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "26b50d5901dfd348bb8a-f5634fa840e8725c01f3",
+              "file": "p3-b2-strokes.spec.ts",
+              "line": 177,
+              "column": 5
+            },
+            {
+              "title": "P3 B2 stroke page screenshots at DPR 3 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 600000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "edge",
+                  "projectName": "edge",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3874,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T05:32:59.901Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "26b50d5901dfd348bb8a-91cbca2796ceee7731fa",
+              "file": "p3-b2-strokes.spec.ts",
+              "line": 177,
+              "column": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "p3-st-u6-stroke.spec.ts",
+      "file": "p3-st-u6-stroke.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "P3 ST-U6 stroke fixtures samples1 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3790,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:15:52.984Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6ce4e24a47701e8358db-aa2374a67861beda5635",
+          "file": "p3-st-u6-stroke.spec.ts",
+          "line": 38,
+          "column": 3
+        },
+        {
+          "title": "P3 ST-U6 stroke fixtures samples4 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3865,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:15:56.789Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6ce4e24a47701e8358db-31cbb6e46593008cb454",
+          "file": "p3-st-u6-stroke.spec.ts",
+          "line": 38,
+          "column": 3
+        },
+        {
+          "title": "P3 ST-U6 stroke fixtures samples1 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3752,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:33:03.808Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6ce4e24a47701e8358db-a3485b2ded10a74aa7d0",
+          "file": "p3-st-u6-stroke.spec.ts",
+          "line": 38,
+          "column": 3
+        },
+        {
+          "title": "P3 ST-U6 stroke fixtures samples4 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3868,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:33:07.570Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "6ce4e24a47701e8358db-4dbb2c7ca21635e3e20a",
+          "file": "p3-st-u6-stroke.spec.ts",
+          "line": 38,
+          "column": 3
+        }
+      ]
+    },
+    {
+      "title": "p3-st-u7-joint.spec.ts",
+      "file": "p3-st-u7-joint.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "P3 ST-U7 joint fixtures samples1 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 900000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 11744,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:16:00.854Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "efac16e388ed5d7f3cfd-d0fc3d6a872ef481c128",
+          "file": "p3-st-u7-joint.spec.ts",
+          "line": 76,
+          "column": 3
+        },
+        {
+          "title": "P3 ST-U7 joint fixtures samples4 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 900000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 11701,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:16:12.612Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "efac16e388ed5d7f3cfd-7039243b3f91416e0b4b",
+          "file": "p3-st-u7-joint.spec.ts",
+          "line": 76,
+          "column": 3
+        },
+        {
+          "title": "P3 ST-U7 seeded defects fail their checks (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 6783,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:16:24.338Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "efac16e388ed5d7f3cfd-ea5905230535a062e681",
+          "file": "p3-st-u7-joint.spec.ts",
+          "line": 296,
+          "column": 1
+        },
+        {
+          "title": "P3 ST-U7 joint fixtures samples1 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 900000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 12486,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:33:11.611Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "efac16e388ed5d7f3cfd-076989503d086fbb2f6e",
+          "file": "p3-st-u7-joint.spec.ts",
+          "line": 76,
+          "column": 3
+        },
+        {
+          "title": "P3 ST-U7 joint fixtures samples4 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 900000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 12675,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:33:24.107Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "efac16e388ed5d7f3cfd-f2b9ce9388764c554752",
+          "file": "p3-st-u7-joint.spec.ts",
+          "line": 76,
+          "column": 3
+        },
+        {
+          "title": "P3 ST-U7 seeded defects fail their checks (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 7631,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:33:36.796Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "efac16e388ed5d7f3cfd-ab8454f2403e6a408626",
+          "file": "p3-st-u7-joint.spec.ts",
+          "line": 296,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "p3-v3-mesh-smoke.spec.ts",
+      "file": "p3-v3-mesh-smoke.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "P3 V3c mesh smoke samples1 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 10310,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:16:31.151Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "83d21a730e4d0f8f7f0a-bc455a1ad966132bed9a",
+          "file": "p3-v3-mesh-smoke.spec.ts",
+          "line": 36,
+          "column": 3
+        },
+        {
+          "title": "P3 V3c mesh smoke samples4 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 9634,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:16:41.473Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "83d21a730e4d0f8f7f0a-a05d0b7124974883ba50",
+          "file": "p3-v3-mesh-smoke.spec.ts",
+          "line": 36,
+          "column": 3
+        },
+        {
+          "title": "P3 V3c mesh smoke samples1 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 10265,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:33:44.463Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "83d21a730e4d0f8f7f0a-17ef4b70ce50958a189d",
+          "file": "p3-v3-mesh-smoke.spec.ts",
+          "line": 36,
+          "column": 3
+        },
+        {
+          "title": "P3 V3c mesh smoke samples4 (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 10086,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:33:54.740Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "83d21a730e4d0f8f7f0a-999d7677e5240d67443d",
+          "file": "p3-v3-mesh-smoke.spec.ts",
+          "line": 36,
+          "column": 3
+        }
+      ]
+    },
+    {
+      "title": "p3-v4-paths.spec.ts",
+      "file": "p3-v4-paths.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "P3 V4 path page screenshots (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2183,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:16:51.145Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "a1638ca37c81120676d7-6f4b57966e97deb2eac7",
+          "file": "p3-v4-paths.spec.ts",
+          "line": 75,
+          "column": 1
+        },
+        {
+          "title": "P3 V4 path page screenshots (UNVERIFIED precision)",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 300000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2294,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:34:04.859Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "a1638ca37c81120676d7-d2a211cf735066930933",
+          "file": "p3-v4-paths.spec.ts",
+          "line": 75,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "playground-dashboard.spec.ts",
+      "file": "playground-dashboard.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "captures a functional dashboard smoke artifact",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1379,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:13:23.995Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "28dee1a7d91f235b189d-2b9506b5d59e0ec91067",
+          "file": "playground-dashboard.spec.ts",
+          "line": 12,
+          "column": 1
+        },
+        {
+          "title": "captures a functional dashboard smoke artifact",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 4,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1101,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T07:31:04.870Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "28dee1a7d91f235b189d-be55141b57058ed6c3be",
+          "file": "playground-dashboard.spec.ts",
+          "line": 12,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "viz-v1-appearance.spec.ts",
+      "file": "viz-v1-appearance.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "DPR 1",
+          "file": "viz-v1-appearance.spec.ts",
+          "line": 215,
+          "column": 8,
+          "specs": [
+            {
+              "title": "V-1 path appearance page at DPR 1 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 900000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chrome",
+                  "projectName": "chrome",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 23099,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T03:16:53.360Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f4379196f35ea7f13d71-0d593090b753b5a795c5",
+              "file": "viz-v1-appearance.spec.ts",
+              "line": 218,
+              "column": 5
+            },
+            {
+              "title": "V-1 path appearance page at DPR 1 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 900000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "edge",
+                  "projectName": "edge",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 23969,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T05:34:07.199Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f4379196f35ea7f13d71-53edcd6a77e7cf8dfb8d",
+              "file": "viz-v1-appearance.spec.ts",
+              "line": 218,
+              "column": 5
+            }
+          ]
+        },
+        {
+          "title": "DPR 2",
+          "file": "viz-v1-appearance.spec.ts",
+          "line": 215,
+          "column": 8,
+          "specs": [
+            {
+              "title": "V-1 path appearance page at DPR 2 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 900000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chrome",
+                  "projectName": "chrome",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 24084,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T03:17:16.472Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f4379196f35ea7f13d71-cfef4758d36990915c7f",
+              "file": "viz-v1-appearance.spec.ts",
+              "line": 218,
+              "column": 5
+            },
+            {
+              "title": "V-1 path appearance page at DPR 2 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 900000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "edge",
+                  "projectName": "edge",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 24636,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T05:34:31.177Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "f4379196f35ea7f13d71-fd3155a828f6b5d70d80",
+              "file": "viz-v1-appearance.spec.ts",
+              "line": 218,
+              "column": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "viz-v2-path-data.spec.ts",
+      "file": "viz-v2-path-data.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "DPR 1",
+          "file": "viz-v2-path-data.spec.ts",
+          "line": 209,
+          "column": 8,
+          "specs": [
+            {
+              "title": "V-2 path-data page at DPR 1 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 900000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chrome",
+                  "projectName": "chrome",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 27598,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T03:17:40.600Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "b60321444c0c618f22b7-2a14322b680699bc4eec",
+              "file": "viz-v2-path-data.spec.ts",
+              "line": 212,
+              "column": 5
+            },
+            {
+              "title": "V-2 path-data page at DPR 1 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 900000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "edge",
+                  "projectName": "edge",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 28607,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T05:34:55.867Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "b60321444c0c618f22b7-ce18e539fe2910f0e861",
+              "file": "viz-v2-path-data.spec.ts",
+              "line": 212,
+              "column": 5
+            }
+          ]
+        },
+        {
+          "title": "DPR 2",
+          "file": "viz-v2-path-data.spec.ts",
+          "line": 209,
+          "column": 8,
+          "specs": [
+            {
+              "title": "V-2 path-data page at DPR 2 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 900000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chrome",
+                  "projectName": "chrome",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 28710,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T03:18:08.209Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "b60321444c0c618f22b7-bb7ede90104925de345d",
+              "file": "viz-v2-path-data.spec.ts",
+              "line": 212,
+              "column": 5
+            },
+            {
+              "title": "V-2 path-data page at DPR 2 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 900000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "edge",
+                  "projectName": "edge",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 29084,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T05:35:24.487Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "b60321444c0c618f22b7-28455334d657c57a6bbf",
+              "file": "viz-v2-path-data.spec.ts",
+              "line": 212,
+              "column": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "viz-v3-integration.spec.ts",
+      "file": "viz-v3-integration.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "DPR 1",
+          "file": "viz-v3-integration.spec.ts",
+          "line": 93,
+          "column": 8,
+          "specs": [
+            {
+              "title": "V-3 A07 integration page at DPR 1 (UNVERIFIED precision)",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 1800000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chrome",
+                  "projectName": "chrome",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "timedOut",
+                      "duration": 1800038,
+                      "error": {
+                        "message": "\u001b[31mTest timeout of 1800000ms exceeded.\u001b[39m",
+                        "stack": "\u001b[31mTest timeout of 1800000ms exceeded.\u001b[39m"
+                      },
+                      "errors": [
+                        {
+                          "message": "\u001b[31mTest timeout of 1800000ms exceeded.\u001b[39m"
+                        },
+                        {
+                          "location": {
+                            "file": "D:\\GIT\\vs-e11r\\tests\\gpu\\viz-v3-integration.spec.ts",
+                            "column": 31,
+                            "line": 121
+                          },
+                          "message": "Error: page.evaluate: Target page, context or browser has been closed\n\n  119 |       const observed: Record<string, unknown> = {};\n  120 |\n> 121 |       const hook = () => page.evaluate(() => window.__vectorStudioVizV3Integration.snapshot());\n      |                               ^\n  122 |       type Snapshot = Awaited<ReturnType<typeof hook>>;\n  123 |       const settle = () => page.evaluate(() => window.__vectorStudioVizV3Integration.settle());\n  124 |       const applyState = (id: string) =>\n    at hook (D:\\GIT\\vs-e11r\\tests\\gpu\\viz-v3-integration.spec.ts:121:31)\n    at D:\\GIT\\vs-e11r\\tests\\gpu\\viz-v3-integration.spec.ts:807:27"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T03:18:36.986Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "D:\\GIT\\vs-e11r\\test-results\\gpu\\viz-v3-integration-DPR-1-V-dfe2d-DPR-1-UNVERIFIED-precision--chrome\\error-context.md"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "3f9fa6fe8da72fa2af29-615c390bfd5192ed1984",
+              "file": "viz-v3-integration.spec.ts",
+              "line": 96,
+              "column": 5
+            },
+            {
+              "title": "V-3 A07 integration page at DPR 1 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 1800000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "edge",
+                  "projectName": "edge",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1420174,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T05:35:53.649Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "3f9fa6fe8da72fa2af29-15f54d585a614ef05502",
+              "file": "viz-v3-integration.spec.ts",
+              "line": 96,
+              "column": 5
+            }
+          ]
+        },
+        {
+          "title": "DPR 2",
+          "file": "viz-v3-integration.spec.ts",
+          "line": 93,
+          "column": 8,
+          "specs": [
+            {
+              "title": "V-3 A07 integration page at DPR 2 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 1800000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chrome",
+                  "projectName": "chrome",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 49009,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T03:48:37.825Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "3f9fa6fe8da72fa2af29-3598a836a0dfcc0f238b",
+              "file": "viz-v3-integration.spec.ts",
+              "line": 96,
+              "column": 5
+            },
+            {
+              "title": "V-3 A07 integration page at DPR 2 (UNVERIFIED precision)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 1800000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "edge",
+                  "projectName": "edge",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 48651,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-10-27T05:59:33.841Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "3f9fa6fe8da72fa2af29-e89254021a57bdb86357",
+              "file": "viz-v3-integration.spec.ts",
+              "line": 96,
+              "column": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "viz-v4-a08-corpus.spec.ts",
+      "file": "viz-v4-a08-corpus.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "A08 corpus fringe-1x dpr 1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 65491,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:49:27.644Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-59ac2d44cc96a40d78b8",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus fringe-1x dpr 1.5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 120074,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:50:33.152Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-f0c8b7ab7adc8b9f9237",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus fringe-1x dpr 2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 188341,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:52:33.239Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-7f3af21020f818e553d3",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus fringe-1x dpr 3",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 384956,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T03:55:41.598Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-b43c95d0d4b5a1ebe6bb",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus fringe-4x dpr 1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 109227,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T04:02:06.571Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-8231ec8ba2f1b75a61ad",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus fringe-4x dpr 1.5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 207816,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T04:03:55.813Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-d1c33f994d10d57c8319",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus fringe-4x dpr 2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 356455,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T04:07:23.645Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-719896426cdd6f367e86",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus fringe-4x dpr 3",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 758590,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T04:13:20.116Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-8b91a91b381f815c7c52",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus msaa-4x dpr 1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 109966,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T04:25:58.722Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-e6f9da1a5089ad712fc4",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus msaa-4x dpr 1.5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 208639,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T04:27:48.706Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-21c814ad5acd2f0761e8",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus msaa-4x dpr 2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 364045,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T04:31:17.358Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-ff4d9858e0061f58baf2",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus msaa-4x dpr 3",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2156999,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T04:37:21.420Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-ac9872ab3efd20fbe20a",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus fringe-1x dpr 1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 69628,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T06:00:22.824Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-257a2c96043a0dfc0e46",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus fringe-1x dpr 1.5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 121210,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T06:01:32.461Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-71b9f089bf01345e12d2",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus fringe-1x dpr 2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 196462,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T06:03:33.684Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-3d93bf94511a030c5205",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus fringe-1x dpr 3",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 413083,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T06:06:50.158Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-89063723a2efe6838571",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus fringe-4x dpr 1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 115670,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T06:13:43.254Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-c2d87aee6c07603b1804",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus fringe-4x dpr 1.5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 225689,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T06:15:38.936Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-e406164c812318a1ebee",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus fringe-4x dpr 2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 384219,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T06:19:24.640Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-ed93b269e6d07eb6a8d2",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus fringe-4x dpr 3",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 821092,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T06:25:48.881Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-552b9e121de7844d0e12",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus msaa-4x dpr 1",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 117663,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T06:39:29.989Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-ba481ea28111458d5922",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus msaa-4x dpr 1.5",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 982830,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T06:41:27.664Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-6c982795a5adff3cb0e6",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus msaa-4x dpr 2",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 392357,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T06:57:50.512Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-9b8d11d91c74ad3665f8",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        },
+        {
+          "title": "A08 corpus msaa-4x dpr 3",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 3600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 3,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1596592,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T07:04:22.885Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "12bad6888e5ea0140e15-b4608209910901b213c1",
+          "file": "viz-v4-a08-corpus.spec.ts",
+          "line": 69,
+          "column": 5
+        }
+      ]
+    },
+    {
+      "title": "webgpu-recovery.spec.ts",
+      "file": "webgpu-recovery.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "surfaces validation error and recovers once after deliberate device destruction",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "chrome",
+              "projectName": "chrome",
+              "results": [
+                {
+                  "workerIndex": 2,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 961,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T05:13:25.403Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "fd22bc640659cc4b9dd3-42d3cf9255aa8ff3d2a4",
+          "file": "webgpu-recovery.spec.ts",
+          "line": 13,
+          "column": 1
+        },
+        {
+          "title": "surfaces validation error and recovers once after deliberate device destruction",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "edge",
+              "projectName": "edge",
+              "results": [
+                {
+                  "workerIndex": 4,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 847,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-27T07:31:05.994Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "fd22bc640659cc4b9dd3-1308c91f19ef18092e9e",
+          "file": "webgpu-recovery.spec.ts",
+          "line": 13,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-27T02:58:06.266Z",
+    "duration": 16381187.871,
+    "expected": 115,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "schema": "e11-u3-headed-transfer-meta/1",
+  "label": "E11-U3 A07 literal re-run 2: second full pnpm test:gpu PC run (VZ3-A17 / A07) on the exit snapshot plus the A08 expected-status list, with concurrent-load logging",
+  "commit": "dae5de944dd442ae297e9d0ef57260bc1e2d2978",
+  "commitNote": "dae5de9 = 00e49bf (exit snapshot record at 5ddec4e) + tests/visual/viz-v4/a08-expected-status.json; branch claude/eng-e11-u3-a07-rerun, do not merge",
+  "worktree": "D:\\GIT\\vs-e11r",
+  "worktreeHeadAtRun": "dae5de944dd442ae297e9d0ef57260bc1e2d2978",
+  "cleanTree": {
+    "beforeGpuRun": "git status --porcelain empty (2026-10-27T15:28:25Z, after git checkout --detach dae5de9)",
+    "afterGpuRun": "git status --porcelain empty (2026-10-27T18:16:34Z)",
+    "beforeTransferCommit": "git status --porcelain empty (checked 2026-10-27T20:38Z before creating the transfer branch)"
+  },
+  "toolchain": {
+    "node": "v24.15.0 (%USERPROFILE%\\.tools\\node-v24.15.0-win-x64, first on PATH)",
+    "pnpm": "11.1.2 via the node 24.15.0 corepack; a pnpm.cmd shim on PATH routed every pnpm call, including the Playwright webServer, to the same node"
+  },
+  "steps": {
+    "install": { "reusedFrom": "gpu-full-pc-2026-10-27 (run 1, exit 0)", "rerun": false },
+    "build": { "reusedFrom": "gpu-full-pc-2026-10-27 (run 1, exit 0)", "rerun": false },
+    "testGeometry": { "reusedFrom": "gpu-full-pc-2026-10-27 (run 1, exit 0)", "rerun": false },
+    "reuseCheck": "no file under packages/*/dist and no node_modules/.modules.yaml change after run 1's steps (2026-10-27 02:32-02:58Z); same worktree, same HEAD",
+    "gpu": {
+      "command": "pnpm test:gpu --reporter=list,json",
+      "specFilter": "none (every spec in playwright.gpu.config.ts, projects chrome and edge)",
+      "env": { "PLAYWRIGHT_JSON_OUTPUT_NAME": "D:\\GIT\\vs-e11r\\.tools\\e11-gpu-full2\\results.json" },
+      "exit": 0,
+      "playwrightProcesses": 1,
+      "workers": 1,
+      "retries": 0,
+      "timeoutsChanged": false,
+      "startUtc": "2026-10-27T15:28:28.028Z",
+      "endUtc": "2026-10-27T18:16:33.970Z",
+      "wall": "02:48:05.94",
+      "playwrightDurationMs": 10082806.168,
+      "stats": { "expected": 116, "unexpected": 0, "flaky": 0, "skipped": 0 },
+      "perSpec": {
+        "e10-test-hooks.spec.ts": { "chrome": [6, 0, 0], "edge": [6, 0, 0] },
+        "e17-write-once.spec.ts": { "chrome": [3, 0, 0], "edge": [3, 0, 0] },
+        "e3-a04-readback.spec.ts": { "chrome": [1, 0, 0], "edge": [1, 0, 0] },
+        "foundation-experiments.spec.ts": { "chrome": [3, 0, 0], "edge": [3, 0, 0] },
+        "p1-primitives.spec.ts": { "chrome": [14, 0, 0], "edge": [14, 0, 0] },
+        "p3-b2-strokes.spec.ts": { "chrome": [3, 0, 0], "edge": [3, 0, 0] },
+        "p3-st-u6-stroke.spec.ts": { "chrome": [2, 0, 0], "edge": [2, 0, 0] },
+        "p3-st-u7-joint.spec.ts": { "chrome": [3, 0, 0], "edge": [3, 0, 0] },
+        "p3-v3-mesh-smoke.spec.ts": { "chrome": [2, 0, 0], "edge": [2, 0, 0] },
+        "p3-v4-paths.spec.ts": { "chrome": [1, 0, 0], "edge": [1, 0, 0] },
+        "playground-dashboard.spec.ts": { "chrome": [1, 0, 0], "edge": [1, 0, 0] },
+        "viz-v1-appearance.spec.ts": { "chrome": [2, 0, 0], "edge": [2, 0, 0] },
+        "viz-v2-path-data.spec.ts": { "chrome": [2, 0, 0], "edge": [2, 0, 0] },
+        "viz-v3-integration.spec.ts": { "chrome": [2, 0, 0], "edge": [2, 0, 0] },
+        "viz-v4-a08-corpus.spec.ts": { "chrome": [12, 0, 0], "edge": [12, 0, 0] },
+        "webgpu-recovery.spec.ts": { "chrome": [1, 0, 0], "edge": [1, 0, 0] },
+        "format": "[passed, failed, skipped]"
+      },
+      "vizV3IntegrationDurations": {
+        "chrome": { "dpr1": "47.9 s", "dpr2": "48.6 s" },
+        "edge": { "dpr1": "47.9 s", "dpr2": "48.6 s" },
+        "run1Comparison": "run 1 (gpu-full-pc-2026-10-27): chrome dpr1 timed out at 30 min, chrome dpr2 49.0 s, edge dpr1 23.7 min, edge dpr2 48.7 s"
+      },
+      "failures": "none"
+    }
+  },
+  "environment": {
+    "os": "Windows 11 Pro 10.0.26200",
+    "timezone": "Korea Standard Time",
+    "cpu": "AMD Ryzen 7 3700X, 8 cores, 16 logical",
+    "ramGB": 31.9,
+    "gpu": "NVIDIA GeForce GTX 1660 SUPER",
+    "gpuDriver": "32.0.16.1088 (2026-07-22), from Win32_VideoController",
+    "webgpuAdapter": { "vendor": "nvidia", "architecture": "turing", "description": "" },
+    "browsers": { "chrome": "155.0.8059.85", "edge": "156.0.4314.42", "source": "spec records of this run" },
+    "dprs": "per spec as recorded: p1.5 1/1.5/2, p3-b2-strokes 1/2/3, viz-v1/v2/v3 1/2, viz-v4-a08-corpus 1/1.5/2/3",
+    "launchFlags": ["--enable-unsafe-webgpu"],
+    "headed": true,
+    "buildMode": "development (Vite dev server 127.0.0.1:4175)",
+    "viewportCss": "800x500 (config default)",
+    "overhead": "no DevTools or screen recording; trace retain-on-failure",
+    "idleCheckBeforeStart": "no node, cargo, rustc, vitest or Playwright-launched browser process was running; only the user's own Chrome profile and WebView2 hosts (TeamViewer, KakaoTalk, Windows Search)",
+    "concurrentLoad": "load.log, 34 samples every 5 min from 15:28Z to 18:16Z: total CPU mean 14.2 %, max 26.2 %; GPU utilization (nvidia-smi) mean 12.7 %, max 21 %; free RAM min 16,622 MB. Top processes were this run's own node, chrome and msedge plus dwm, system, explorer, TeamViewer and Defender (msmpeng); no other thread's test, build or cargo process appeared"
+  },
+  "contents": {
+    "results.json": "Playwright JSON reporter output",
+    "logs": ["e11r2-gpu.log", "e11r2-state.log (HEAD/status checks, reuse note, exit, UTC start/end)", "load.log (concurrent load every 5 min)"],
+    "artifacts": "artifacts/<spec>/<ISO timestamp>-<pid>/...; chrome pid 276, edge pid 2960; only this run's directories (run 1 directories in the same worktree are excluded)",
+    "p1.5": "not committed; p1.5-manifest.txt lists every file of this run under artifacts/p1.5 as '<git blob SHA-1> <size bytes> <path>'",
+    "testResults": "not committed: test-results/gpu (Playwright outputDir) matches .gitignore test-results/"
+  }
+}
