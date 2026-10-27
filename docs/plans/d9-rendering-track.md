@@ -87,6 +87,7 @@ By D9-Q2 (a) this plan carries the evidence index for the P3 exit gate. The visu
 - Baseline: per the [closure record baseline marking](p3-fill-stroke-meshes.md#mvp-1-closure-record-2026-10-22), AL-OB5 is the only accepted baseline, for fill and for its measured scope; no stroke baseline exists. Compatibility is stated per comparison ([D9, Baseline](d9-post-mvp1-tracks-proposal.md#baseline-and-performance-claims)). A performance claim needs a committed record following [`docs/benchmarks/README.md`](../benchmarks/README.md).
 - GPU specs that check kernel outcomes are updated in the same PR as the change that alters the outcome.
 - Every PR names its track, the packages touched and whether the shared surface changed, per the [PR gate in `AGENTS.md`](../../AGENTS.md#pull-request-gate).
+- Node pin (decided by the user 2026-10-26): the repo pins Node 24.22.1 (was 24.15.0) for CVE-2026-111497. Evidence recorded on 24.15.0 keeps that identity: the V-4 replay refuses a record from another Node, and committed census artifacts keep their recorded v24.15.0 metadata and are checked by SHA-256, not against the running Node. The change was held until the counted runs on the [P3 exit snapshot](../evidence/p3-exit/5ddec4e/) finished.
 - The weekly integration checkpoint is described in [D9, Operations](d9-post-mvp1-tracks-proposal.md#operations); this plan records its results by link only.
 
 ## E1 ST-U10 evidence, 2026-10-22

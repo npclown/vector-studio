@@ -25,7 +25,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tools = path.join(root, '.tools');
 const config = path.join(root, 'vitest.p3-polygon-census.config.ts');
 const vitest = path.join(root, 'node_modules/vitest/vitest.mjs');
-const EXPECTED_NODE = '24.15.0';
+const EXPECTED_NODE = '24.22.1';
 const REQUIRED_TRACKED = [
   'docs/plans/p3-polygon-relation-census-contract.md',
   'tests/p3-polygon-census/artifact.ts',

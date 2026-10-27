@@ -68,7 +68,7 @@ function exactObject(
 
 function validateMetadata(value: unknown, label: string, terminal: boolean): void {
   const metadata = exactObject(value, label, ['source', 'nodeVersion', 'rust', 'executionRole']);
-  if (metadata.nodeVersion !== 'v24.15.0' || metadata.executionRole !== 'NATIVE_ONLY')
+  if (metadata.nodeVersion !== 'v24.22.1' || metadata.executionRole !== 'NATIVE_ONLY')
     throw new Error(`${label} execution identity mismatch`);
   const rust = exactObject(metadata.rust, `${label}.rust`, ['release', 'commit', 'host']);
   if (
