@@ -214,14 +214,21 @@ export function packClipFrame(part: ClipPacketPart, devicePixelRatio: number): F
 /**
  * A state record: the rect count, then per rect the world-to-local linear part, the translation
  * rebased to the packet origin (`L·origin + t`, in binary64 before the one rounding, so the GPU
- * never cancels large terms) and the size. Null when a lane is not a finite binary32 or the
- * record has a mask level (U4) or too many rects.
+ * never cancels large terms) and the size. Null when a lane is not a finite binary32, a size is
+ * negative, or the record has a mask level (U4), no rect or too many rects.
  */
 export function packClipState(
   record: ClipPacketPart['states'][number],
   origin: ClipPacketPart['origin'],
 ): Uint8Array | null {
-  if (record.masks.length !== 0 || record.rects.length > CLIP_MAX_RECTS) return null;
+  if (
+    record.masks.length !== 0 ||
+    record.rects.length === 0 ||
+    record.rects.length > CLIP_MAX_RECTS ||
+    record.rects.some((rect) => !(rect.width >= 0 && rect.height >= 0))
+  ) {
+    return null;
+  }
   const bytes = new Uint8Array(CLIP_STATE_SIZE);
   const view = new DataView(bytes.buffer);
   view.setUint32(0, record.rects.length, true);

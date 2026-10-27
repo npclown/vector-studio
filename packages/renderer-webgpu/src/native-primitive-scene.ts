@@ -536,6 +536,9 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     }
     try {
       if (clip !== null) this.#writeClip(clip);
+      // P4 section 4, Resources: a frame with no clip part releases the clip buffer, so a scene
+      // whose clips are all gone returns to the unclipped accounting baseline.
+      else if (packet.clip === undefined) this.#releaseClipBuffer();
       for (const write of packet.writes) {
         const allocation = arena.allocations[write.resourceId];
         this.#device.queue.writeBuffer(
@@ -750,12 +753,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     this.#currentMeshArena = undefined;
     for (const arena of this.#retiredArenas) release(() => this.#releaseArena(arena));
     this.#retiredArenas = [];
-    if (this.#clipBuffer !== undefined) {
-      const clipBuffer = this.#clipBuffer;
-      release(() => clipBuffer.buffer.destroy());
-      release(() => this.#resources.release(clipBuffer.id));
-    }
-    this.#clipBuffer = undefined;
+    release(() => this.#releaseClipBuffer());
     release(() => this.#pipelineCache.dispose());
     release(() => this.#vertexBuffer.destroy());
     release(() => this.#indexBuffer.destroy());
@@ -835,6 +833,18 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     });
   }
 
+  /** Destroys the clip buffer and its accounting entry; a later clipped frame creates one. */
+  #releaseClipBuffer(): void {
+    const buffer = this.#clipBuffer;
+    if (buffer === undefined) return;
+    this.#clipBuffer = undefined;
+    try {
+      buffer.buffer.destroy();
+    } finally {
+      this.#resources.release(buffer.id);
+    }
+  }
+
   #clipStride(): number {
     const alignment = this.#device.limits.minUniformBufferOffsetAlignment;
     if (typeof alignment !== 'number' || !isPowerOfTwo(alignment)) throw new AllocationError();
@@ -895,8 +905,11 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       const previous = this.#clipBuffer;
       this.#clipBuffer = target;
       if (previous !== undefined) {
-        previous.buffer.destroy();
-        this.#resources.release(previous.id);
+        try {
+          previous.buffer.destroy();
+        } finally {
+          this.#resources.release(previous.id);
+        }
       }
     }
     if (target.frame === null || !bytesEqual(target.frame, clip.frame)) {

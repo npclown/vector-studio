@@ -230,6 +230,21 @@ describe('P4 U3 clip shader variants (section 4, Pipelines; P4-K1)', () => {
     // The joint fill runs its formula with o·k, so the following stroke draw (also × k)
     // composites as the clipped group.
     expect(MESH_FILL_CLIP_SHADER).toContain('let opacity = fill.opacity * clip;');
+    // The clipped joint entry is a copy of the base body with only o replaced by o·k, so a later
+    // change to the base formula fails here instead of diverging silently.
+    const body = (code: string, header: string) => {
+      const start = code.indexOf(header);
+      return code.slice(code.indexOf('{', start) + 1, code.indexOf('\n}\n', start));
+    };
+    const baseJoint = body(MESH_FILL_SHADER, 'fn meshJointFragmentMain(')
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('//'));
+    const clipJoint = body(MESH_FILL_CLIP_SHADER, '@fragment\nfn meshJointFragmentMain(').split(
+      '\n',
+    );
+    expect(clipJoint.filter((line) => !line.includes('clip'))).toEqual(
+      baseJoint.filter((line) => !line.includes('let opacity = fill.opacity;')),
+    );
     // Base text survives verbatim apart from the renamed entry headers.
     const strip = (code: string) =>
       code
@@ -261,8 +276,12 @@ describe('P4 U3 clip record packing', () => {
     expect(lanes).toEqual([2, 0, 0, 0.5, Math.fround(2e6 - 10), Math.fround(-1e6 + 4), 30, 40]);
   });
 
-  it('refuses mask levels, more than 32 rects and non-finite lanes', () => {
+  it('refuses mask levels, no or more than 32 rects, negative sizes and non-finite lanes', () => {
     expect(packClipState({ ...record, masks: ['m'] }, { x: 0, y: 0 })).toBeNull();
+    expect(packClipState({ ...record, rects: [] }, { x: 0, y: 0 })).toBeNull();
+    expect(
+      packClipState({ ...record, rects: [{ ...record.rects[0]!, width: -1 }] }, { x: 0, y: 0 }),
+    ).toBeNull();
     expect(
       packClipState(
         { ...record, rects: Array.from({ length: 33 }, () => record.rects[0]!) },
@@ -469,6 +488,81 @@ describe('P4 U3 draw encoding', () => {
     expect(scene.submitPrimitivePacket(withoutPart as unknown as PrimitivePacket)).toEqual({
       status: 'failed',
       reason: 'invalid-packet',
+    });
+    creation.dispose();
+  });
+
+  it('grows the buffer past its capacity and releases it once no clip is left', async () => {
+    const fixture = nativeFixture();
+    const { scene, creation, target, accounting } = await nativeScene(fixture);
+    const created = (fixture.device.createBuffer as unknown as ReturnType<typeof vi.fn>).mock
+      .results;
+    const clipBuffers = () =>
+      created
+        .map((result) => result.value as { label: string; destroy: ReturnType<typeof vi.fn> })
+        .filter(({ label }) => label.includes('clip-states'));
+    const live = () => clipBuffers().filter(({ destroy }) => destroy.mock.calls.length === 0);
+    const h = clippedScene();
+    submitted(scene.submitPrimitivePacket(h.source.prepare(target)!));
+    expect(live().map(({ label }) => label)).toEqual(['primitive/1/clip-states-1']);
+    // Three new clipped siblings take states 2..4 (state 1 is held until the frame ends), past
+    // the first buffer's capacity of 1.
+    const nodes = [0, 1, 2].flatMap((index) => [
+      group(`g${index}`, [`k${index}`], clipRect(index * 30, 0, 20, 100)),
+      box(`k${index}`, `g${index}`, index * 30 + 5),
+    ]);
+    expect(h.replace(nodes).status).toBe('applied');
+    const grown = h.source.prepare(target)!;
+    expect(grown.clip?.maxIndex).toBe(4);
+    submitted(scene.submitPrimitivePacket(grown));
+    expect(live().map(({ label }) => label)).toEqual(['primitive/1/clip-states-2']);
+    expect(h.replace([box('u', null, 0)]).status).toBe('applied');
+    submitted(scene.submitPrimitivePacket(h.source.prepare(target)!));
+    expect(live()).toEqual([]);
+    expect(clipBuffers()).toHaveLength(2);
+    creation.dispose();
+    expect(accounting.snapshot().live).toBe(0);
+  });
+
+  it('checks a clip part without clipped draws and writes nothing', async () => {
+    const fixture = nativeFixture();
+    const { scene, creation, target } = await nativeScene(fixture);
+    const packet = clippedScene().source.prepare(target)!;
+    const unclipped = <T extends { clipState?: number }>(draw: T) => {
+      const copy = { ...draw };
+      delete copy.clipState;
+      return copy;
+    };
+    const unclippedDraws = {
+      ...packet,
+      draws: packet.draws.map(unclipped),
+      mesh: { ...packet.mesh!, draws: packet.mesh!.draws.map(unclipped) },
+    } as unknown as PrimitivePacket;
+    submitted(scene.submitPrimitivePacket(unclippedDraws));
+    expect(fixture.writes.some(({ label }) => label.includes('clip-states'))).toBe(false);
+    const malformed = {
+      ...unclippedDraws,
+      clip: { ...packet.clip!, maxIndex: 2 },
+    } as unknown as PrimitivePacket;
+    expect(scene.submitPrimitivePacket(malformed)).toEqual({
+      status: 'failed',
+      reason: 'invalid-packet',
+    });
+    creation.dispose();
+  });
+
+  it('reports allocation-failed when the clip buffer cannot be created', async () => {
+    const fixture = nativeFixture();
+    const { scene, creation, target } = await nativeScene(fixture);
+    (fixture.device.createBuffer as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      (descriptor: GPUBufferDescriptor) => {
+        if (descriptor.label?.includes('clip-states') === true) throw new Error('out of memory');
+        return { label: descriptor.label, size: descriptor.size, destroy: vi.fn() };
+      },
+    );
+    expect(scene.submitPrimitivePacket(clippedScene().source.prepare(target)!)).toEqual({
+      status: 'failed',
+      reason: 'allocation-failed',
     });
     creation.dispose();
   });
