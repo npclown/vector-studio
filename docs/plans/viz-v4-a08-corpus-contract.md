@@ -242,3 +242,14 @@ The first headed run, PRE-FREEZE on `3ee6c20`, is recorded in [the evidence reco
 - **Open VZ4-A5.** An UNDECIDED VZ4-A5 turns a passing record result into INCONCLUSIVE; a FAIL still outranks it.
 - **A08 closure.** A counted run closes A08 only after the renderer item lands, or after the user accepts that item as a known defect.
 - **Rendering item E17** (PR #260, 2026-10-25) draws each mesh write-once through a stencil, and the E10 count pass replays that stencil. Every A08 case is one mesh draw, so under E17 "at most 1" checks only the count pass's replay, while "equal to 1" still catches holes. The product side of no double coverage then rests on E17-A2 and E17-A5, which the counted evidence record cites. The bullet above on G3 counting every drawn triangle applies to a renderer without E17, such as the PRE-FREEZE run. The metrics do not change. The counted run states which renderer it measured, by its mesh render-state key.
+
+## 18. Counted run and disclosed classes, 2026-10-27
+
+The counted run on the E11 exit snapshot `5ddec4e` is recorded in [docs/evidence/viz-v4-a08/5ddec4e/](../evidence/viz-v4-a08/5ddec4e/README.md): VZ4-A3, A4, A5 and A9 PASS, 0 gated FAIL, 372 gated UNDECIDED, result INCONCLUSIVE. It measured the E17 renderer (render-state key `premultiplied-source-over/stencil8-write-once/no-cull/triangle-list-v1`), so the renderer item of section 17 has landed.
+
+**Decision (2026-10-27, 추천안 자동 채택 under the user's standing instruction of 2026-10-24).** The record keeps its computed result, INCONCLUSIVE, and states that every gated UNDECIDED entry is in a known class of [E3 section 21](d9-e3-b4-precision-contract.md#21-known-classes-and-pass-with-disclosure-2026-10-26), by that section's own tests:
+
+- `far-vertices`, 368 entries: C1/s19-I to s26-I, every one with reason `clip bound ≥ 0.25 px`, most also `beta ≥ 1 px`. Backlog E18.
+- `collapsed-feature`, 4 entries: C4/n03 (`g = 2^-16`), `G2-undecided`.
+
+A FAIL, or an UNDECIDED outside these classes, would not be disclosed. V-4 proposes that A08 enter the P3 exit as INCONCLUSIVE with these two classes disclosed, as A04 discloses them. The exit decision stays E11's (section 1.2), and the X1 row of A08 is done only after an independent evidence review. The metrics, gates and runner do not change.
