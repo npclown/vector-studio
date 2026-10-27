@@ -1985,3 +1985,109 @@ The full reference run of 2026-10-26 (96 shards on several hosts, section 19.6) 
 - **Merge.** `--merge <dirs> --retried <retry dirs>` replaces exactly the rows whose worker died by the retry rows of the same index and id. It refuses a retry row that names any other row, a case retried twice, or a retry row that matches no row. The merged provenance lists every replaced row under `retried`, with its index, id, former reason, and the retry's run id, commit, `changedFromHead`, heap and exit codes. A record is copied to `docs/evidence/` only when every retry also exited 0.
 - **Commits.** A run directory may come from an earlier commit than the merging checkout, when that commit is an ancestor and the two differ only in `tooling/run-e3-a04.mjs`, `tests/geometry/e3-a04/run.check.ts` or `docs/`. The diff is taken without rename detection, so a moved file counts on both sides. Its contract SHA may then differ; every other identity field (corpus, generator, oracle and its certification, WASM, shards, stride, start resolution, clean tree) must still agree. Each host's and each retry's commit and the paths it differs in (`changedFromHead`) are recorded, and the evidence review reads those diffs, because `run.check.ts` also sets the measurement options. The run of 2026-10-26 at `7443c2b` is merged on this change's own commit, whose parent is `7443c2b`. A later `main`, which carries other packages' changes, would refuse it.
 - **A retry that dies again** is refused at the merge, with all of its directory's rows. Re-run the retry without that case, and leave the case UNDECIDED or retry it alone with a larger heap.
+
+## 23. E3-U5 reference run record, 2026-10-27
+
+Dated append. This section records the A04 reference run of section 9.1 on the E11 exit snapshot. The record is [`docs/evidence/e3-a04/@STAMP@/`](../evidence/e3-a04/@STAMP@/record.md). The measured disposition is **FAIL**. A04 acceptance stays with the Primary after the independent evidence review of section 7.4.
+
+**Decision (2026-10-27, user).** On the decision card "A04 전체 측정 결과(FAIL)를 어떻게 처리할까요?", the user chose the recommended option, "결과 그대로 기록" ("record the result as it is"):
+
+- The run is recorded as measured, with its FAIL and UNDECIDED breakdown.
+- The remedies go to the backlog as E3-U7 (section 23.5).
+- A04 enters the P3 exit as a disclosed defect.
+
+The 0.25 px threshold, the oracle and the corpus do not change, and the freeze record of section 19.7 stands.
+
+### 23.1 The run
+
+- **Commit.** All 96 shards ran on `7443c2b`, which is the E11 snapshot `5ddec4e` plus tests, docs and CI only (E11 §12).
+  - The merge and all retries ran on `a83b7db`: `7443c2b` plus the section 22 tooling (PR #277).
+  - Every host's `changedFromHead` is `tooling/run-e3-a04.mjs` and `tests/geometry/e3-a04/run.check.ts`, or empty.
+- **Identity.** All hosts and retries share these:
+  - The release WASM `58f26517…fd35`, with `geometry-wasm/fill-v0+r4` and `geometry-wasm/stroke-v0+r7`.
+  - The oracle `5b2fafc3…7e80`, certified in section 19.7.
+  - `corpusSha256` `7f4bb1c9…721c`.
+  - `--shards 96 --stride 1 --start-resolution 2`.
+- **Hosts.** There were 25 run directories:
+  - 20 cloud containers, Linux, 4 cores.
+  - The user's laptop, Windows, 20 threads, 12 shards twice.
+  - The user's PC, Windows, 16 threads, 16 shards.
+  - Each host's Node version is recorded. 22 directories ran on Node 24.15.0 (the repository's pin).
+  - The PC's three directories (shards 75 to 90) ran on the system Node 24.22.1.
+  - One container directory (shards 48 to 50) ran on Node 22.22.0.
+  - The measurement is deterministic JavaScript and WASM with no platform-dependent arithmetic, so the review reads this as a disclosure, not a defect.
+  - The merge ran on Node 24.15.0.
+- **Dead workers (section 22).** 61 cases hit the 6 GB worker heap: 59 `C5` strokes (33 at `z = 64`, 18 at `z = 1`, 8 at `z = 0.01`), one `C3` and one `C9`.
+  - Each was re-measured once with `--heap 13000` (24,500 MB for three cases on the PC), in 24 retry directories that all exited 0.
+  - One retry, `19871` at 13 GB, died again. Its directory was set aside unmerged, and its three cases were re-measured together on the PC.
+  - After the retries no row is a harness error. 59 of the 61 end UNDECIDED on the oracle's work cap and 2 PASS. The work-cap reasons are `gcd step`, `rational`, `distance query`, `seam split` and `membership`.
+- **Set-aside directories.** Several hosts' first launches were killed when an idle container was suspended. One duplicate launch was stopped within a minute. None of these was merged, and the merge checks that every shard appears exactly once.
+
+### 23.2 Result
+
+| Stratum | PASS | FAIL | UNDECIDED | Disclosed (section 21) | `window-empty` | Rejected |
+| --- | --- | --- | --- | --- | --- | --- |
+| C1 | 3,760 | 5 | 158 | 564 | 84 | 109 |
+| C2 | 1,584 | 0 | 157 | 0 | 5 | 54 |
+| C3 | 3,145 | 0 | 439 | 21 | 164 | 1,091 |
+| C4 | 1,283 | 0 | 136 | 143 | 39 | 127 |
+| C5 | 5,478 | 0 | 592 | 193 | 294 | 481 |
+| C6 | 209 | 0 | 21 | 6 | 61 | 27 |
+| C7 | 75 | 0 | 4 | 0 | 15 | 14 |
+| C8 | 2,056 | 0 | 64 | 158 | 188 | 216 |
+| C9 | 1,596 | 0 | 315 | 233 | 132 | 1,234 |
+| C10 | 7 | 0 | 0 | 0 | 2 | 3 |
+| C11 | 235 | 0 | 23 | 24 | 54 | 240 |
+| C12 | 120 | 0 | 15 | 0 | 3 | 6 |
+| All | 19,548 | 5 | 1,924 | 1,342 | 1,041 | 3,602 |
+
+FAIL and UNDECIDED count only rows outside the known classes. The disclosed rows break down as follows:
+
+- `collapsed-feature`: 143, of which 22 are FAIL.
+- `far-vertices`: 757.
+- `degenerate-stroke-triangle`: 442.
+
+Other results:
+
+- **Controls and validator.** All 14 positive controls hold, and the validator reports no problem.
+- **Bounds.** The maximum oracle interval width is 0.2497 px.
+- **`U` over the PASS and FAIL rows.** p50 is 0.150 px and p99 is 0.250 px. The max `U`, 0.517 px on `C2/g0161/T4/z0.01-d2`, is an UNDECIDED row: its `L` is below 0.25 px.
+- **E3-A8.** No declared cell is uncovered.
+
+### 23.3 The FAIL rows outside the known classes
+
+The five rows are `C1/g0029/T2` at `z0.01-d3`, `z1-d1`, `z1-d2`, `z64-d1` and `z64-d2`. The generated row is a sub-pixel triangle of the `sub` size class, about 0.06 px across at `z = 0.01`.
+
+- At these five pairs, every triangle of the kernel's mesh maps to coincident positions (`noFlip.collapsed` = 2 of 2). So `M*` is empty.
+- With `∂R` in `Ω` and `M = ∅`, the boundary distance `B_R` is infinite. The case is a FAIL by the `empty` rule of section 3.2 (E3-K2): with `∂R` in `Ω`, an empty drawn region never passes.
+- The other four pairs of the same row keep a positive-area mesh and PASS, with `U` between 0.12 and 0.24 px.
+- The true visual error is far below 0.25 px, because the whole shape is below a pixel. But A04 scores boundaries, not pixels, and a kernel that drops a sub-pixel shape's interior fails it. This is a kernel result, not an oracle defect.
+
+### 23.4 UNDECIDED outside the known classes
+
+| Reason | Rows | What it means |
+| --- | --- | --- |
+| No-flip certificate, clipped draw (`flipTolerant` not run) | 658 | Section 20's argument does not cover clipped triangles |
+| No-flip certificate, fill zero-area triangle off `M*` | 304 | The fill counterpart of the `degenerate-stroke-triangle` class |
+| No-flip certificate, edge with triangles on both sides | 217 | The flip-tolerant bound's open T-junction case |
+| No-flip certificate, boundary offset | 208 | The offset certificate of section 20.3 fails |
+| No-flip certificate, edge below binary64 | 24 | |
+| `window-empty` within the guard | 261 | Section 15.5 |
+| Straddles at the floor `2^-20` | 100 | `E` stays at 0.25 px within the oracle's resolution |
+| Oracle work cap | 152 | `gcd step` 41, `rational` 40, `distance query` 39, `seam split` 31, `membership` 1 |
+
+With these rows, A04 would be UNVERIFIED even without the FAIL rows.
+
+### 23.5 E3-U7 (backlog)
+
+E3-U7 collects the remedies. None was made for this record.
+
+- A fourth known class, or a kernel change, for sub-pixel shapes whose mesh collapses (section 23.3).
+- The flip-tolerant bound for clipped draws, and for fill zero-area triangles.
+- A cheaper oracle path for the work-cap stroke cases.
+
+A new reference run on a later snapshot would supersede this record. This record is immutable (section 7.4).
+
+### 23.6 GPU model check
+
+@GPU@
