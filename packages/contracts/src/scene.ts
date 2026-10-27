@@ -46,6 +46,17 @@ export type PathStroke = Readonly<{
 }>;
 /** `stroke` is required and explicitly null when absent. */
 export type PathStyle = Readonly<{ fill: SceneColor | null; stroke: PathStroke | null }>;
+/**
+ * P4 contract (docs/plans/p4-clip-mask.md), section 2. `rect` clips the container's descendants
+ * to a closed rectangle in its local space; `mask` uses `children[0]`'s fill area as the mask of
+ * the other children and never paints it.
+ */
+export type SceneClip =
+  | null
+  | Readonly<{ kind: 'rect'; x: number; y: number; width: number; height: number }>
+  | Readonly<{ kind: 'mask' }>;
+/** P4 contract, section 2: the deepest supported clip depth of a node. */
+export const SCENE_MAX_CLIP_DEPTH = 32;
 export type SceneNodeBase = Readonly<{
   id: string;
   parentId: string | null;
@@ -57,7 +68,7 @@ export type RenderNodeSnapshot = SceneNodeBase &
   (
     | Readonly<{ kind: 'primitive'; geometry: PrimitiveGeometry; style: PrimitiveStyle }>
     | Readonly<{ kind: 'path'; geometry: ScenePathGeometry; style: PathStyle }>
-    | Readonly<{ kind: 'container'; children: readonly string[] }>
+    | Readonly<{ kind: 'container'; children: readonly string[]; clip: SceneClip }>
   );
 export type RenderSceneSnapshot = SceneVersion &
   Readonly<{ nodes: readonly RenderNodeSnapshot[]; rootOrder: readonly string[] }>;

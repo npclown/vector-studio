@@ -17,6 +17,7 @@ function container(id: string, children: readonly string[]): RenderNodeSnapshot 
     visible: true,
     opacity: 1,
     kind: 'container',
+    clip: null,
     children,
   };
 }

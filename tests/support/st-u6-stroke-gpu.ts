@@ -85,6 +85,7 @@ export function strokeFixtureSnapshot(revision: number): RenderSceneSnapshot {
       visible: true,
       opacity: 1,
       kind: 'container',
+      clip: null,
       children: STROKE_FIXTURE_NODES.map((node) => node.id),
     },
   ];

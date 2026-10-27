@@ -404,6 +404,7 @@ export function b2Snapshot(revision: number): RenderSceneSnapshot {
       visible: true,
       opacity: 1,
       kind: 'container',
+      clip: null,
       children: [B2_BACKGROUND.id, ...B2_PATHS.map((path) => path.id)],
     },
     {

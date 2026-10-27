@@ -284,6 +284,7 @@ export function v4Snapshot(rotation: number, revision: number): RenderSceneSnaps
       visible: true,
       opacity: 1,
       kind: 'container',
+      clip: null,
       children: [V4_BACKGROUND.id, ...V4_PATHS.map((path) => path.id)],
     },
     {

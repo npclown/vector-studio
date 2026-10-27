@@ -106,6 +106,7 @@ describe('Primary packet publication review', () => {
       id: 'g',
       parentId: null,
       kind: 'container',
+      clip: null,
       transform: [1, 0, 0, 1, 10, 0],
       visible: true,
       opacity: 1,

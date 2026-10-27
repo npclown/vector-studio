@@ -203,6 +203,7 @@ export function pathSnapshot(
         visible: true,
         opacity: 1,
         kind: 'container',
+        clip: null,
         children: [NODE_ID],
       },
       nodeFor(geometry, state),

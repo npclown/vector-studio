@@ -294,6 +294,7 @@ export function appearanceSnapshot(
       visible: true,
       opacity: 1,
       kind: 'container',
+      clip: null,
       children: [VIZ_V1_BACKGROUND.id, ...VIZ_V1_TARGETS.map((target) => target.id)],
     },
     {

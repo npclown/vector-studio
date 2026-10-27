@@ -69,6 +69,7 @@ describe('retained scene independent Float64 bounds fixtures', () => {
         id: 'group',
         parentId: null,
         kind: 'container',
+        clip: null,
         children: [],
         transform: [1, 0, 0, 1, 0, 0],
         visible: true,

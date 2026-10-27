@@ -18,7 +18,16 @@ function container(
   children: readonly string[],
   parentId: string | null = null,
 ): RenderNodeSnapshot {
-  return { id, parentId, transform, visible: true, opacity: 1, kind: 'container', children };
+  return {
+    id,
+    parentId,
+    transform,
+    visible: true,
+    opacity: 1,
+    kind: 'container',
+    children,
+    clip: null,
+  };
 }
 
 function rectangle(
