@@ -2015,7 +2015,7 @@ The 0.25 px threshold, the oracle and the corpus do not change, and the freeze r
   - Each host's Node version is recorded. 21 directories ran on Node 24.15.0 (the repository's pin).
   - The PC's three directories (shards 75 to 90) ran on the system Node 24.22.1.
   - One container directory (shards 48 to 50) ran on Node 22.22.0.
-  - **Deviation from section 7.1**, which requires the pinned Node version: 19 shards (48 to 50 and 75 to 90) ran off the pin. The measurement is JavaScript and WASM arithmetic that the ECMAScript and WebAssembly specifications fix, and section 23.7 re-measures a sample of those shards' rows on Node 24.15.0. Acceptance of the deviation is the Primary's.
+  - **Deviation from section 7.1**, which requires the pinned Node version: 19 shards (48 to 50 and 75 to 90) ran off the pin. The measurement is JavaScript and WASM arithmetic that the ECMAScript and WebAssembly specifications fix, and section 23.7 re-measures a sample of those shards' rows on Node 24.15.0 with byte-identical results. Acceptance of the deviation is the Primary's.
   - The merge ran on Node 24.15.0, in the A04 thread's cloud container (not recorded in the record).
 - **Dead workers (section 22).** 61 cases hit the 6 GB worker heap: 59 `C5` strokes (33 at `z = 64`, 18 at `z = 1`, 8 at `z = 0.01`), one `C3` and one `C9`.
   - Each was re-measured once with `--heap 13000` (24,500 MB for three cases on the PC), in 24 retry directories that all exited 0.
@@ -2105,3 +2105,19 @@ The headed check of section 19.1 (E3-A6) ran on the user's PC on 2026-10-27, fro
   - The shader hash `d306137c…31a3` and the WASM hash equal the record's.
 
 This completes E3-A6 on the named subset. It does not change the FAIL.
+
+The committed files' SHA-256 values bind them to this section, because the record names the merging host's local paths:
+
+- `chrome.json`: `b504ac0d6caa51cf884be24b2ffa6a06fced7dc86f20606b449391cd10ac2c5c`
+- `edge.json`: `fed1ec6f1bc9e5262e074f6e869fffa1dafb9d761a4eecbbbed38c348b74f26c`
+- `record.json`: `5df0c5a633de733ae964a560cbedd9838d5c2929360dfa98705dce88dd0e6b2e`
+
+### 23.7 Node version sample
+
+This sample checks the deviation of section 23.1. On 2026-10-27, 41 rows of the off-pin shards were re-measured on Node 24.15.0 on `a83b7db`, with `--retry-cases` into a separate directory that was not merged (run id `a61cd8b0`, exit 0).
+
+- 20 rows came from shards 48 to 50, which ran on Node 22.22.0. 21 came from shards 75 to 90, which ran on Node 24.22.1.
+- The rows were taken in corpus order, up to three per host group, status and paint. They are 12 PASS, 12 UNDECIDED, 11 `window-empty` and 6 rejected, each measured in under 15 s.
+- Every re-measured row is byte-identical to the record's row once its wall time `ms` is set aside.
+
+This is a sample, not a proof. It found no Node-version effect.
