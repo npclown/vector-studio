@@ -1,0 +1,1 @@
+UNVERIFIED: functional V3-A14 smoke only; precision is UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence, and no Q4 coverage threshold is claimed.

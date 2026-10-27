@@ -1,0 +1,3143 @@
+{
+  "label": "UNVERIFIED: functional V-1 path appearance page evidence only; precision is UNVERIFIED against the 0.25 physical-pixel target until B4 has A04 evidence, and no Q4 coverage threshold is claimed. work-limit paths are not drawn (product outcome O1); fringe-work-cap paints draw without a fringe while the TypeScript builder ships (O2).",
+  "latencyLabel": "FUNCTIONAL observation; no performance claim; no threshold (V1-A13). Milliseconds from the control event to the first frame submitted after the change, and to the last frame before the page settled.",
+  "browser": {
+    "project": "edge",
+    "version": "156.0.4314.42"
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpus": "AMD Ryzen 7 3700X 8-Core Processor             "
+  },
+  "source": {
+    "baseCommit": "00e49bf20b3dcb08c459de335fe25bb2f8a0d8df",
+    "worktree": "",
+    "files": [
+      {
+        "path": "apps/playground/e10-test-hooks.html",
+        "sha256": "8c3c5433355f92b33a65dc1a14f1f2021d8708fbcf56841e38cddd2f9ee17014"
+      },
+      {
+        "path": "apps/playground/e3-a04-readback.html",
+        "sha256": "2f393946d15396435f68b60772b9627924c46df113f7d73df5ca44ebf2d2690e"
+      },
+      {
+        "path": "apps/playground/index.html",
+        "sha256": "c98956871dda28f0cef668ea7d304a7b03495db28f2b1e12b3f9d9dac8ca7fb8"
+      },
+      {
+        "path": "apps/playground/p1-fixture.html",
+        "sha256": "181dca70a9c08b95b60e9a95c171f35724ba78fa20f99346937f67db8338ade8"
+      },
+      {
+        "path": "apps/playground/p1-runner.html",
+        "sha256": "5c41002f117ad1b90a6f7f79db8513626a180590d625502ffd4448a2dd797b6b"
+      },
+      {
+        "path": "apps/playground/p3-b2-strokes.html",
+        "sha256": "2ad20d5b5afb6a264edc847fbc420caf1d9abd7717a5c1e3582df2b8f1ec20a2"
+      },
+      {
+        "path": "apps/playground/p3-coverage.html",
+        "sha256": "7571405c8c5bd4aa0b35b5b65821870da06459d3b5be56f86b05e788dad5992a"
+      },
+      {
+        "path": "apps/playground/p3-native-projection.html",
+        "sha256": "81fbd045164243bde2659912ed1acfb1d3339b88404a9507f6df05d5e143df42"
+      },
+      {
+        "path": "apps/playground/p3-o02.html",
+        "sha256": "fe73dc840328fc6d35e202365aaaa49a017bf1b99172d9d9fdf6b094bc7b7cc6"
+      },
+      {
+        "path": "apps/playground/p3-v3-mesh.html",
+        "sha256": "7cca0678e352c1d6fa4f67b95bd403405c871c1061332c54efa75bcb98b38d5b"
+      },
+      {
+        "path": "apps/playground/p3-v4-paths.html",
+        "sha256": "dd1a48edbf184828e86358af5a22c783356aef9c6d59439459b68170cd090702"
+      },
+      {
+        "path": "apps/playground/package.json",
+        "sha256": "1c10d3362cc9169749479e79da2efc81535d23dab5a6a17f6e78aa6d23f21aed"
+      },
+      {
+        "path": "apps/playground/src/e10-test-hooks.ts",
+        "sha256": "9e29beb7493eeeb1f346960dcb5a6dc6dab1ccdeae67f34a4a59e0379dd5756a"
+      },
+      {
+        "path": "apps/playground/src/e3-a04-readback.ts",
+        "sha256": "7b3a2e9336a97fc5be751eb8d96819ebeda22f3d64f3ba54001c2040faa41099"
+      },
+      {
+        "path": "apps/playground/src/main.ts",
+        "sha256": "5db89dbf7fc097eea71cabb30dd73947a66642f9195148305d9392235c0a4345"
+      },
+      {
+        "path": "apps/playground/src/p1-fixture.ts",
+        "sha256": "97e64bef1bf67e79c4d5b8e44557e261cd1a648faadce5486b0b2f79d1ebae98"
+      },
+      {
+        "path": "apps/playground/src/p1-position-probe.ts",
+        "sha256": "16393eb07d43e1570e4230ff793f91923543f54312e71e23a721b34b0f0ba11e"
+      },
+      {
+        "path": "apps/playground/src/p1-run-metrics.ts",
+        "sha256": "a094a8745e3355f14ca94951170bdec782b7a44b81fc082e9c130ea4db243929"
+      },
+      {
+        "path": "apps/playground/src/p1-run-profiles.ts",
+        "sha256": "d70c34bf6337545c3671c48372204570b1d3aa045249c2fd6284667f9e4ced41"
+      },
+      {
+        "path": "apps/playground/src/p1-runner.ts",
+        "sha256": "53ead9da741b850e855c3a6d41e40f4fc064e64343ed9b68947cd56fd320a328"
+      },
+      {
+        "path": "apps/playground/src/p1-workloads.ts",
+        "sha256": "367c62a71edcc3560ad1e1cd649dce8b6042803121cfb1e290468cad0a7ffb2d"
+      },
+      {
+        "path": "apps/playground/src/p3-b2-strokes-scene.ts",
+        "sha256": "5a1e09f7bb52d9b62ac0abc022b80cf9fc603e1673dd1575340a48c45957cf89"
+      },
+      {
+        "path": "apps/playground/src/p3-b2-strokes.ts",
+        "sha256": "6a8fd3ff372804280be8b219397c9e7c62fccf4ce033381060f2336345c8e6dd"
+      },
+      {
+        "path": "apps/playground/src/p3-coverage-shaders.ts",
+        "sha256": "fe64ff8a1b59fd6b4bf858b522346b398f10c25592064c8281b7dbfad4bd3d23"
+      },
+      {
+        "path": "apps/playground/src/p3-coverage.ts",
+        "sha256": "b9c8d3f9e82e251c69537a7d6eae70e72916e07f71d878d6e7035a3a740f3914"
+      },
+      {
+        "path": "apps/playground/src/p3-native-projection-shader.ts",
+        "sha256": "d18e968ece21ffcf07dce36d7de9dee9fa61dbba38b8cff860e83297e3e66854"
+      },
+      {
+        "path": "apps/playground/src/p3-native-projection.ts",
+        "sha256": "641e10c077a5c2abccc94ed7638bfed4db3b551f913028f2ffa47cc2cbf90e51"
+      },
+      {
+        "path": "apps/playground/src/p3-o02-shaders.ts",
+        "sha256": "9263d61bf191aa6687a47857e7145eb1208759c772daf7ae99b33d5c5a32db3c"
+      },
+      {
+        "path": "apps/playground/src/p3-o02.ts",
+        "sha256": "d90f627010693f2e448995c3dbe7c56516f626cb4140dcd94cd63e7416913b8b"
+      },
+      {
+        "path": "apps/playground/src/p3-v3-mesh.ts",
+        "sha256": "9587d1924d0b5a9e7a5cc0e75fabf6d331635a2e1692aeff6fe93d77e8ce711e"
+      },
+      {
+        "path": "apps/playground/src/p3-v4-paths-scene.ts",
+        "sha256": "1be0990880cfa8f9300fe4752fc29b0109ce875d31e6d9d10ade416798182d4a"
+      },
+      {
+        "path": "apps/playground/src/p3-v4-paths.ts",
+        "sha256": "a8325da6898689d5389d20e8c66f921cac27608d95dc602ef0262f0417116845"
+      },
+      {
+        "path": "apps/playground/src/path-notices.ts",
+        "sha256": "51cc4a316644dd6eba9ac01e071219b0d77ef162b5146273b115f22479eeb708"
+      },
+      {
+        "path": "apps/playground/src/viz-v1-appearance-scene.ts",
+        "sha256": "c2eff674c9217b7d035263779986e501e9bfd1372884555311392e801d533ada"
+      },
+      {
+        "path": "apps/playground/src/viz-v1-appearance-state.ts",
+        "sha256": "c8d0441ef78b7ef21c65b1ed85f63a85cacb734413368a1e258b9fc6d43646d4"
+      },
+      {
+        "path": "apps/playground/src/viz-v1-appearance.ts",
+        "sha256": "b3ba7f6dcbbc849593918f55ad3394019b3ca3d56eb6e94345a48c89c62ca0fb"
+      },
+      {
+        "path": "apps/playground/src/viz-v2-path-data-parse.ts",
+        "sha256": "959e3fc62159dafac965bc020f314318a4c37ebcbb197ff0ba72a0ce8449f683"
+      },
+      {
+        "path": "apps/playground/src/viz-v2-path-data-state.ts",
+        "sha256": "8b237ecfd3d556f11e690c1e902d3dd1470afd6b8d250fd539ffe9a1ed289533"
+      },
+      {
+        "path": "apps/playground/src/viz-v2-path-data.ts",
+        "sha256": "97f7e61c3860ebfd651275f1581efe96e44f3c84cd4bb62c2ee49207a829c9a4"
+      },
+      {
+        "path": "apps/playground/src/viz-v3-integration-scene.ts",
+        "sha256": "26311fe86a53178a015036efb78462ef06a59c7e3a075ddf74db0f67368ee607"
+      },
+      {
+        "path": "apps/playground/src/viz-v3-integration.ts",
+        "sha256": "bb55a02106ba4de2374ea2406c705922e442f999c34f59435a9c2de33c7e7199"
+      },
+      {
+        "path": "apps/playground/src/viz-v4-a08-cases.ts",
+        "sha256": "f9f9dc01b716f1db738cc0010ef1057f87d8fa63c97b4f9ad4c643d215743c83"
+      },
+      {
+        "path": "apps/playground/src/viz-v4-a08-corpus.ts",
+        "sha256": "2e92cee2fc0fdcdcdf3015cc87d66fe8a549d70832d029e57d540451a482fb55"
+      },
+      {
+        "path": "apps/playground/tsconfig.json",
+        "sha256": "ab3b3a8d1478a33baa3565a55959bcc109819a1debeac11badaac6170eeb9c0f"
+      },
+      {
+        "path": "apps/playground/vite.config.mjs",
+        "sha256": "08e3bd45bb7efb988c4e7b00d35b19530609029d13449c027eec22a9061eb42b"
+      },
+      {
+        "path": "apps/playground/viz-v1-appearance.html",
+        "sha256": "2e2f64fbb72bb9791ca965c314664287baa4b595030cffd77b10f03d29f87305"
+      },
+      {
+        "path": "apps/playground/viz-v2-path-data.html",
+        "sha256": "bcbb53fa6e2ea1e75b98cc58a3558d087b17f17bce60ea47d4cce0dcadec7c47"
+      },
+      {
+        "path": "apps/playground/viz-v3-integration.html",
+        "sha256": "e447e1bb8690d81e3006a9628207243a934e80241383541d6709ba74619b3ca4"
+      },
+      {
+        "path": "apps/playground/viz-v4-a08-corpus.html",
+        "sha256": "01dea7470683b2de29033c0df7764da4da77c2815d71abf76479f54c46f54774"
+      },
+      {
+        "path": "docs/benchmarks/results/20260926-p2-batch-v1-reference-01/phase-diagnostic-config.txt",
+        "sha256": "571769d7e066f2952bf90e1653c8e884db60e3ef1c9df4de2fba31f43fc3434a"
+      },
+      {
+        "path": "docs/evidence/p2.5/20260926-functional-01/launch-config-source.txt",
+        "sha256": "4a2071ab965b94ea5580575e99e151181ea623a5b67fba9fa49f7f31f8fba9a8"
+      },
+      {
+        "path": "docs/evidence/p2.6d/diagnostic-config-source.txt",
+        "sha256": "95c44513d009de802c21380c9ac13419bb04b2a3dcf05b0147f2bef747318cfb"
+      },
+      {
+        "path": "docs/evidence/p3.1k-projection/carrier-eligibility-config.ts.txt",
+        "sha256": "6f3a61092689ca6d41497ea4000c0ad5a9470e44840b19b5af7188f138cebda5"
+      },
+      {
+        "path": "docs/evidence/p3.1k-projection/carrier-eligibility-exact-config.ts.txt",
+        "sha256": "0e895302415a3baa60407d721e0b49792a979d57f2866eaa2cf77bbdfb02979e"
+      },
+      {
+        "path": "docs/evidence/p3.1k-projection/carrier-reference-completeness-config.ts.txt",
+        "sha256": "43093b4ea6be422e82e0fba29ba2182d481186008bb944145d0fc40810893ecc"
+      },
+      {
+        "path": "eslint.config.mjs",
+        "sha256": "c80099007596be5b2a51040b4c269b8c77ddcfe657bc2bd9e7bf97b88f6ceb44"
+      },
+      {
+        "path": "package.json",
+        "sha256": "1a2c73ddc290a285b56f4fdd66c6262d6f628fdf3a34122f18269611875263ce"
+      },
+      {
+        "path": "packages/contracts/package.json",
+        "sha256": "102e6ff2ae21c325ee266e3e71fe5fa5a0e847dff3845227cb954aa7eac92c96"
+      },
+      {
+        "path": "packages/contracts/src/diagnostics.ts",
+        "sha256": "9a2b0a8c68c1a91aeeb274181a04bffbb6b996caba01a7e521d92b60e3775a98"
+      },
+      {
+        "path": "packages/contracts/src/geometry.ts",
+        "sha256": "2316bdad5acc52218d35f4c9d9c6104ad269a4fe13eb04c18e6066e9c214451e"
+      },
+      {
+        "path": "packages/contracts/src/index.ts",
+        "sha256": "337e7d25dbaca31546a267d478b2b8a30e959812f8f3662a166d94666e9d3c18"
+      },
+      {
+        "path": "packages/contracts/src/renderer.ts",
+        "sha256": "1d4469b999e4b55fdf28d200aed879ccf46bb6c710efcccee96572f65742486a"
+      },
+      {
+        "path": "packages/contracts/src/resources.ts",
+        "sha256": "2c6b168035f2fc93cb39348e6989c43d0f8fcc8e89a3bb570b1859c2f0bbfd3b"
+      },
+      {
+        "path": "packages/contracts/src/scene.ts",
+        "sha256": "8517966920db8ee9d0cbb37d431b96c53fc2d22a7bd720f96dbc223b4c6e41da"
+      },
+      {
+        "path": "packages/contracts/tsconfig.json",
+        "sha256": "08adf68cc66f50c3dc21ec0b360fb2dc3dafe285d20b07bc4dc97158483f8786"
+      },
+      {
+        "path": "packages/editor-core/package.json",
+        "sha256": "b764bece843fb34014e970c8e9331b72e5e73edc85c02264d36fbc58e29a9177"
+      },
+      {
+        "path": "packages/editor-core/src/editor.ts",
+        "sha256": "e26716aa13affde9b64eac2f60c0d8e8ba5d7d8f08147f4abebcbd299d5b0596"
+      },
+      {
+        "path": "packages/editor-core/src/edits.ts",
+        "sha256": "ce05f2fdf7b07f7e8fa345067107da6d86b8cc9d15af46e670a176502cd05dfa"
+      },
+      {
+        "path": "packages/editor-core/src/hit-test.ts",
+        "sha256": "e305ec63b2ef231ac2a6787e7277d20bd021c3475e4f52ec3d51e25fbe8c9834"
+      },
+      {
+        "path": "packages/editor-core/src/ids.ts",
+        "sha256": "6cdd153ab7c8cc1e93d9cd9c3aa22ca8195a55a77d3277f6cda745aae8023bb9"
+      },
+      {
+        "path": "packages/editor-core/src/index.ts",
+        "sha256": "49d8ca97c4fa2ef5313be3717a40ff153b22152f8caa9acfba529f3b7723e4f3"
+      },
+      {
+        "path": "packages/editor-core/src/projector.ts",
+        "sha256": "93c96dbf2a86e7ace1972f0c16e93bfabc8ef771ce5cef971459cf1afb45b6eb"
+      },
+      {
+        "path": "packages/editor-core/src/tools.ts",
+        "sha256": "cd6159d17d279206a7b3ffaff9e848fdd8f1c6c691bfb95ff8cb1ae3c84826d0"
+      },
+      {
+        "path": "packages/editor-core/src/types.ts",
+        "sha256": "70eb217b13def2c10ca939ea3f2224b95b1d57dd2b941c13d74055826460fb89"
+      },
+      {
+        "path": "packages/editor-core/tsconfig.json",
+        "sha256": "1116aeb92b35a19066f6bcd0d47a0ad39b8de15b506f52a89f8d008a219d6d5d"
+      },
+      {
+        "path": "packages/geometry-reference/package.json",
+        "sha256": "00d6d5695c947d0f9b104bcdcd668b0d9e946443d2a506bb22870269989e302f"
+      },
+      {
+        "path": "packages/geometry-reference/src/a04-region.ts",
+        "sha256": "5b2fafc3708a08ceb6ed5c5e0ce498ac6c23720f8a8d718425a94a7e17724e80"
+      },
+      {
+        "path": "packages/geometry-reference/src/continuous-error.ts",
+        "sha256": "6b1cba877303766d51eccea934587b9eff4fd21268a87310532325a645964ee8"
+      },
+      {
+        "path": "packages/geometry-reference/src/corpus.ts",
+        "sha256": "0fd960275e38d14bd300cd1a0e8f296814539f3659e556a373251951f7999111"
+      },
+      {
+        "path": "packages/geometry-reference/src/cubic.ts",
+        "sha256": "3199788d9f6e8da7ee071f3415257da1a50a5ca255018bf6cd551c78f6cce583"
+      },
+      {
+        "path": "packages/geometry-reference/src/fill-region.ts",
+        "sha256": "756985406e3220a7f4875d79693d57861e9670bb3fa017d8f32ee1af473f6fc9"
+      },
+      {
+        "path": "packages/geometry-reference/src/index.ts",
+        "sha256": "13c19aa2f9f42a2ab199c20ea72457b964cdccf3964655a8a7be32b0ab293eaa"
+      },
+      {
+        "path": "packages/geometry-reference/src/line-fill.ts",
+        "sha256": "96dd8a6df84f22feb399d3ca70196ba2956b79c45e22111454aab75ccf763d8b"
+      },
+      {
+        "path": "packages/geometry-reference/src/packed-reference.ts",
+        "sha256": "ddf36dca699ad4ce349143f4e276789f4625cf5cdec0b2dba722f922f8532f0b"
+      },
+      {
+        "path": "packages/geometry-reference/src/stroke-region.ts",
+        "sha256": "47aa5436a2cdf07b09420cb0597b296965ab1c91b065334964c58391b91ac048"
+      },
+      {
+        "path": "packages/geometry-reference/src/tolerance.ts",
+        "sha256": "46abb165e7e23775e0dc3f233ee06fdc763520b57e77755566191c2525a36b15"
+      },
+      {
+        "path": "packages/geometry-reference/src/triangle-mesh.ts",
+        "sha256": "c49bb1d2a9cedbbe5e9da887a65cabb3b68c2bdb91d45f52f6a8956192cd6fb3"
+      },
+      {
+        "path": "packages/geometry-reference/src/types.ts",
+        "sha256": "eb6b9f2fa16b59c3f7db2738233efee4331751023845ebcc0c00868d13d9019c"
+      },
+      {
+        "path": "packages/geometry-reference/tsconfig.json",
+        "sha256": "b916ea223ab8f6ac4bcdbd588ea74e6eb4ca5f5135eb727beaf3fcc78367fa2e"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/Cargo.lock",
+        "sha256": "9fe57a4ac37015b8d04d17d59400314156ca748d16a6a1892582887dc2f64a8d"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/Cargo.toml",
+        "sha256": "93d64406a5902a5d4751d62c79b21e1ca3c714a6264be74b6533e301a8ca6a6a"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/codec.rs",
+        "sha256": "a61b3a64ee341076e51d3d108652a8f4aba537c871baf6ab3dda351d809a5944"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/cubic_fill.rs",
+        "sha256": "ddde8a898bbea280e3242a9e4d43d44f3fbe9aa55edccde9761ba1a45a9c7805"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/e14_fill_limit_diag_tests.rs",
+        "sha256": "a610d2c3758ba5118f79519c48d7b6640689da69a498cb85e5fd9f50a5571a99"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/e14_fill_rung0_tests.rs",
+        "sha256": "98cfc27f7f330fe6091bc74e78c72897a5dc694b2d564ff86aee1becef1d8a11"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/e16_fill_remedy_tests.rs",
+        "sha256": "4e91d5e17aaea42db483216e69c9e4e6e03e4cf7d5423e038a362397512dd73c"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/e8_direction_hint_tests.rs",
+        "sha256": "f89735964ce4665d50cb1e46263c05a43703f3b1e9df3c4db33d8ba773169a46"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/e8_final_knot_tests.rs",
+        "sha256": "9edb393cbaae649c291e10abaafce04b1b10bbb9e482a932d28c717e7d805c5e"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/engine.rs",
+        "sha256": "2b32e31b095764dbe707434f0d0faa393376a4dc4b0e4fa6a642d309cc0f30c9"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_event_order.rs",
+        "sha256": "993cdfe5de070a828f10ca738d654ec2d56b1293eef90b600488b4636059fafe"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_event_order_filter_tests.rs",
+        "sha256": "9ae5789d8cdc7607ee2c258e1d3117ccc4d5b387e4610c4aaf7971da7054110a"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_event_order_tests.rs",
+        "sha256": "4ac42dc7b361c8690822c8a45bb69966b3e52ab99968d38e27877253ea7fa8d0"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_exact.rs",
+        "sha256": "446a217cba1f94ad5b85904fc92b2c3d680dca878223d3cd55f2d9b689366b6c"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_exact_tests.rs",
+        "sha256": "1306a1bfa9bb82f84e363b14da7a22d8fb6fe8b26c95062514f78c588dee83ed"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_export.rs",
+        "sha256": "d88976afbe748d61aa6c85cb643ef56c9b564f9aa5f5ea51866b7b739fd811e2"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_export_ladder_tests.rs",
+        "sha256": "dfaab51f936ce540984fe25dc57ec81fd0c409527e4eba0d0292af8c99e46fbd"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_export_tests.rs",
+        "sha256": "e6a96c91d2bcc33b935f101ed3ae0ac51340f4d953d7c72d023eb609ba207656"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_filter.rs",
+        "sha256": "54b9fe63bbe88612eaeb7919cac50d94de713a9c7bdcd7a137a92b78d3c4b753"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_filter_tests.rs",
+        "sha256": "48d45b156b44cfd69c50226db8ef507ffd3fc56374fbe4673aad86ea0d0c3ba0"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_intersections.rs",
+        "sha256": "cb5ce6b3168018094b86d7ab00fec9416f7159c2e50436eb3035683f62ebab05"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_intersections_tests.rs",
+        "sha256": "95812bf43d786a47447cf77599366150d4573f661b52f4963d9c49a61d9adf85"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_ladder.rs",
+        "sha256": "c02fb3362ffbaa1f5c0ab22200633d5365fc5b83cdf1d9edd51417aa6c8f5eae"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_ladder_diag_tests.rs",
+        "sha256": "e4d53dd2a48614747ccd91fbb5846f95ea6bcb6fe64cdd77d5adcd7d9719d60e"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_ladder_dump_tests.rs",
+        "sha256": "ec39c4ba30212f272f42f27201e4a42a20f0ae9844b432cb75e14d38a643b74d"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_ladder_identity.rs",
+        "sha256": "f7a9593240c27df52fd420c547fde06dae1f72687aa7c75e13379d414ef0998d"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_ladder_tests.rs",
+        "sha256": "4a9d9cada7d5b1a54f211453f3a675c511b7811ff11ce1856b65e921a4802fc5"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_predicates.rs",
+        "sha256": "55d5f491cab6ab9b2a11a4420b3e9fd32eafa0f34b96be1d2e76a2c330cd8b67"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_predicates_filter_tests.rs",
+        "sha256": "407482089077f0caa64ef491e6a771ea46d1474f245d29acb8c43ca5b5758ad1"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_predicates_tests.rs",
+        "sha256": "c4fb8fb703d7d8c7ff49a98bef2e0f56ebdfb20a6b1071baeb78a1b691a652e6"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_sections.rs",
+        "sha256": "6427b38924efc1fdec2439e9a719f047adeac1a5ee3587770e84c6929993b33a"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_sections_filter_tests.rs",
+        "sha256": "463d347628ce67463be4acc9404d9d43e42d06f1c09482c6d8e30e25a660a801"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/fill_sections_slab_tests.rs",
+        "sha256": "0f4733fee9b85ec9535e9fc2bd2a81bc92e5ed29756bd5f4d328461b81df49ed"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/geometry.rs",
+        "sha256": "71fde81dd4bd53b15d4317e5c8989607377a979958cf0464ac2a81c41971572c"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/lib.rs",
+        "sha256": "c0fe3ebccc896bd9f042d2d6fab9f472f1696a0b378eb3f0f6656ab0a8252454"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/line_fill.rs",
+        "sha256": "9ed0d914b970a09c51fbc204d480adaeab3c208f1059b02f8d8135688f6f911c"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/line_fill_tests.rs",
+        "sha256": "8bb612d38f0de863800f22d57a4dea4ef29431cb8a67a51062f9bf70fc1fad40"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/mixed_line_arrangement_tests.rs",
+        "sha256": "7d951a8e5d0e3e54a1750219430c349a343be70a6eec703ca2c76b3e089c3a33"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/native_cubic_fill_tests.rs",
+        "sha256": "2d8e681e0dcd351c469306a0567050aa164f589e446d66b4d3c1a0685508615a"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/native_differential.rs",
+        "sha256": "c99fdb350a665b5c174ffac7ed9869b272df258d6662d3703fdf2df051d27808"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/p3_al_ob5_bench.rs",
+        "sha256": "0c2c062dab77a3d5d77de11b2afbe90363958e1f54cfbf62299ba5958b35934b"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/p3_al_ob5_tests.rs",
+        "sha256": "3e49561029ea153380c5dbdc9fb62997357b8c36401819c9819588ef23638881"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/p3_b0_bench.rs",
+        "sha256": "c97efdacf6585ed77a5b841a31128e04f993143ead4b04c680522708ae31f2f3"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/p3_b0_diag.rs",
+        "sha256": "bbe491669db5ae6a1c0a492a4107f4d3b86e6e181b666aa2d8185fe8caa4f33e"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/p3_b0_spike.rs",
+        "sha256": "1346576f01a0531c4a82ca761d4e17f7514e14adfa153e75e017de92a21b6a28"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/p3_b0_spike_bench.rs",
+        "sha256": "afb8953e8625190d72196278f68b674c8839aaf096b3b00eccf2ecdef544cb58"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/p3_b0_spike_tests.rs",
+        "sha256": "61c8155974c6e7574c6cf6e1611f805c86ca5e0ecc60e772f82ff5d75e72cc1a"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/p3_b0r_identity.rs",
+        "sha256": "abc6c8afc34969358b28b7f8013acd780a8b1bb1e6852c05564e158eb6ba88db"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/p3_fill_ladder_bench.rs",
+        "sha256": "2e178319366da85200811d9f0d1458ea771ebf17fa532332173ae6cbdfe936f9"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/rounded_cubic_topology_tests.rs",
+        "sha256": "3e1a5cdd70c8ea0b78ea9c9caf68a0587eb3c9b00e58e73b635e41753968d2e6"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/rounded_line_fill.rs",
+        "sha256": "54cf4eba82368ca482a14ea03f3962a2dfbcfc9334af509d6c7865b1b1f5bf9f"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/rounded_line_fill_loop_tests.rs",
+        "sha256": "08057d7c16109134efd23f78c2cca90152fadb746bffe5e800a654e36407ce1c"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/rounded_line_fill_scan_tests.rs",
+        "sha256": "a4ad0164023bbb30a3fda67ca5b767fb450843ae948a7b7dbb435a298fff1f4b"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/rounded_line_fill_tests.rs",
+        "sha256": "70a18df0a8fb7fbe255c4e41f67835759698a5493b82d75f658a4cf6fae61f49"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/simple_cubic_topology.rs",
+        "sha256": "32ded5d440a7c78f24ee38b4927ad3ae0c9aba6eb69a984f26ddc7ee29c04b1b"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/simple_cubic_topology_filter_tests.rs",
+        "sha256": "cd97f9600504c6ba543248005d1086f8208c315616e8ecc73e135119144880f6"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/simple_cubic_topology_sweep_tests.rs",
+        "sha256": "60f497b519ed4af830dc7a8b355f6921f2faa02050568a83cbf44239b1d1acc7"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/simple_cubic_topology_tests.rs",
+        "sha256": "b2edd39d140aacc2931693b57c16d0cb70b73ed0a27e02fd57fd3936df61b0c5"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/stroke_band_tests.rs",
+        "sha256": "8846ce09d8dc5a61f6241cb3394781c28a767f92ea52c9310f7acf2918c46171"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/stroke_cubic.rs",
+        "sha256": "721f3194562072ad12276c96fe1f4e01552f7e447a2a0c88f8cd1480dd05a069"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/stroke_cubic_tests.rs",
+        "sha256": "0984189575772f4c410324dff7ba4c37be2a212098fdad3ebe57351527390cd8"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/stroke_dump_tests.rs",
+        "sha256": "483c42e1675db5dbb9f3dc253dbf6c1393edeefd26c32f8f721ee0c97c4cca04"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/stroke_early_abort_tests.rs",
+        "sha256": "b3cc0dad86f52934582fd71333dca44d17d6319b4d69c46e30906e5a4add24f2"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/stroke_export.rs",
+        "sha256": "a88cb47d1f8e25ce4806fd37eb49a214c4d16a85f2954c4a24ded1071149cd33"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/stroke_export_tests.rs",
+        "sha256": "c481f84aa43c76bf90087f212986db2e20d8fe0539aebfbce7111bf0a4c9cf6e"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/stroke_merge.rs",
+        "sha256": "818791e23cd1fb4ff3bd1f164ab1e1bd843064e59af40f5e5e452110148a1879"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/stroke_merge_tests.rs",
+        "sha256": "f1bafbd25ae8f0030ecb1879d5c601fb8016aaf11db9f1c7df79a101bb2a8cd6"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/stroke_outline.rs",
+        "sha256": "15ca0f58669a82d65b16c3c33ba4396d87a1de3afc4abd529f7cc4e37a99e66a"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/stroke_outline_tests.rs",
+        "sha256": "72f264ed7a74f7d04611721038699396fb4c8691507f486bf22817a82014f685"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/stroke_probe_tests.rs",
+        "sha256": "8b5f9ed51e14cad61ea9f938c2758a960e5371dd39aae48bacdd59335a70fa9e"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/transverse_arrangement_tests.rs",
+        "sha256": "1b538d543cda9a33509caf83a4f0b4890626c41854bf51b4c409855c24650878"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/transverse_pair_tests.rs",
+        "sha256": "4e5da35f51cf42b5bea179f04ba66f497a306eaabc599cf072ed9c5385dbfbe5"
+      },
+      {
+        "path": "packages/geometry-wasm/kernel/src/triangle_free_arrangement_tests.rs",
+        "sha256": "49ddf2e94f52a075b963434a76b086a0059dd18d08c09844cd89b69084239484"
+      },
+      {
+        "path": "packages/geometry-wasm/package.json",
+        "sha256": "f61080ab40d8cf1ed84f6235d249a29ad4464e322d9e51cecbfee5f64ae0dcaa"
+      },
+      {
+        "path": "packages/geometry-wasm/src/abi.ts",
+        "sha256": "6803ed38c3806d6f003e32378705661e707c8707e6698cc7a220a627244c1fa3"
+      },
+      {
+        "path": "packages/geometry-wasm/src/adapter.ts",
+        "sha256": "4d5333e2dc95797beb3d467e188423d2302e051fbc939db518b3570c28b17a22"
+      },
+      {
+        "path": "packages/geometry-wasm/src/fill-adapter.ts",
+        "sha256": "129241ce468539cb9809c28a69febacd91a5be9ee6f6d38d9a02b2236f8a9e2b"
+      },
+      {
+        "path": "packages/geometry-wasm/src/index.ts",
+        "sha256": "114ec064ffa04fc1bca3ce2b7cbbc85c7654b54852c18bc0428ec0e25fb71393"
+      },
+      {
+        "path": "packages/geometry-wasm/src/stroke-adapter.ts",
+        "sha256": "176083cfc4a2cfb08a46f92f646409aa5bdea6a5337006caefd015445f4b2bcf"
+      },
+      {
+        "path": "packages/geometry-wasm/src/types.ts",
+        "sha256": "17df9b9c58fe84b8dcdecd1991fd5dfe6fb89a3406703ee7ffa7d3cac31ce506"
+      },
+      {
+        "path": "packages/geometry-wasm/tsconfig.json",
+        "sha256": "e87c5c427d6360ab273e99b50d6fbd543c0203dd13a47c9061c20a3ec90d1efc"
+      },
+      {
+        "path": "packages/model/package.json",
+        "sha256": "1fec4c80122282679f1dd340056ebdddbcf62e0362c728603a04a6cb1f0663e2"
+      },
+      {
+        "path": "packages/model/src/index.ts",
+        "sha256": "47485534783dc642fa0f93f5932024d7338d6432529c6c5f87fbd472a3ab50ee"
+      },
+      {
+        "path": "packages/model/src/json-scan.ts",
+        "sha256": "a1c8bb3287839e2d6816f9430198a32a98756d1c42313e370e556e48c27b2050"
+      },
+      {
+        "path": "packages/model/src/parse.ts",
+        "sha256": "7960f78a84f00740c4dfb0e58284a18e312ee9155a985e8b959f707f88ce378a"
+      },
+      {
+        "path": "packages/model/src/serialize.ts",
+        "sha256": "c52b0288f8bc77dda6b8edb4105c6fbf54be67fb37eba20ec86260014fb2cac1"
+      },
+      {
+        "path": "packages/model/src/types.ts",
+        "sha256": "d8b05078ba28c8d55e0a174ee695882c200cbcfe119f68ad8c7d2fad1c2b2257"
+      },
+      {
+        "path": "packages/model/tsconfig.json",
+        "sha256": "c741c3dcb678b599e54892b126e140e1c6f010ce87da1f35c0128144eb9fa126"
+      },
+      {
+        "path": "packages/renderer-core/package.json",
+        "sha256": "6399ddb96f15ebf44b36c63199939ed6d8a49e238bc418c7f692a2a96db11b91"
+      },
+      {
+        "path": "packages/renderer-core/src/camera.ts",
+        "sha256": "7a84b6251d82b6d51458b4bcc009fd168f455c7484bd6d10b3f0625772378c26"
+      },
+      {
+        "path": "packages/renderer-core/src/diagnostic-channel.ts",
+        "sha256": "cce3d6fbce0fff5e0eefde17727680f107d10879806e1df8d0f50ffffd426238"
+      },
+      {
+        "path": "packages/renderer-core/src/frame-scheduler.ts",
+        "sha256": "20232504c372276f9d587153dce4912bd7152426b2bbccd4856f89be31f05129"
+      },
+      {
+        "path": "packages/renderer-core/src/index.ts",
+        "sha256": "1edab3fdc1fd07fbfa036139e8ee856c0a2c24f56e3fd64a66495665ad031b5e"
+      },
+      {
+        "path": "packages/renderer-core/src/path-buckets.ts",
+        "sha256": "1376329f29f78a28c41d31e6a470bccb7fd984002c6adce816c4034f66d0291f"
+      },
+      {
+        "path": "packages/renderer-core/src/path-fringe.ts",
+        "sha256": "09ba5fa15ae3638668a64b82dded1e8ebc6eb55182dee3fa0a6f010c91ee611a"
+      },
+      {
+        "path": "packages/renderer-core/src/path-joint-overlay.ts",
+        "sha256": "d4003f5e3921bcb251802438082cafd05ff013f97f3bfea3f96fba0d4edac5e9"
+      },
+      {
+        "path": "packages/renderer-core/src/path-mesh-packet.ts",
+        "sha256": "159f6384e58b63d2cf284e9931d2ee8082c411d02f1231dfe97f375d8aaf577b"
+      },
+      {
+        "path": "packages/renderer-core/src/path-mesh-pipeline.ts",
+        "sha256": "4180bbea5aecf37e0ee92c10e7bf6893afe0556ed38b30f114ccc1a6774e04cb"
+      },
+      {
+        "path": "packages/renderer-core/src/primitive-packet.ts",
+        "sha256": "f7df94a9e7fcb34269b6c5ccfdf34435811febce6435798f0766c3485faf38c5"
+      },
+      {
+        "path": "packages/renderer-core/src/primitive-packing.ts",
+        "sha256": "45ca089f8298932c4e05cb8f8aa0f20f13c1b5a04b1d57e4c9b8062d51b68aff"
+      },
+      {
+        "path": "packages/renderer-core/src/primitive-renderer-service.ts",
+        "sha256": "da2af2475d3d253476bd36dd5bfd28fb5a90cb81c51c39bd08fe315a163dbba9"
+      },
+      {
+        "path": "packages/renderer-core/src/primitive-scene-source.ts",
+        "sha256": "4448bfdcecbca1d30715c066bb0df198b63b4d224f163ab5fc776525d5140910"
+      },
+      {
+        "path": "packages/renderer-core/src/resource-accounting.ts",
+        "sha256": "fa6f9c255e5c3cd63f3eb65a3fd2b860a278a8c6238a8f101b6bcc81c0dcaaa4"
+      },
+      {
+        "path": "packages/renderer-core/src/scene-mirror.ts",
+        "sha256": "185814f2b577d31b59784714293cf3f3903f827a77f368ad6549337c67a93211"
+      },
+      {
+        "path": "packages/renderer-core/src/scene-numeric.ts",
+        "sha256": "15ed26f4aa20b005e9a266447582be4210fd199f3249eb09ba103ea5f3409849"
+      },
+      {
+        "path": "packages/renderer-core/src/scene-validation.ts",
+        "sha256": "5328fdca3e5fa629bc28ac6a448172f8e77e139ac697c693e145a864f01bf2ae"
+      },
+      {
+        "path": "packages/renderer-core/tsconfig.json",
+        "sha256": "099425f45e1bdb6c40a04f71541dee73c77acd29f335dbee248e58f8bedf16b5"
+      },
+      {
+        "path": "packages/renderer-webgpu/package.json",
+        "sha256": "c9fb4d3a3d70505ac6fcd94116cf335f2d1abddf76232140e70e3428b8cf1a80"
+      },
+      {
+        "path": "packages/renderer-webgpu/src/foundation-experiment.ts",
+        "sha256": "317f37f954facd2e45d430c3c5d84f62666cdfae10f59db9f343b60b00cf66c3"
+      },
+      {
+        "path": "packages/renderer-webgpu/src/frame-capture.ts",
+        "sha256": "fc20e969723edef3bbfb7099ded93cc642322188649b1dfb73cf96877f8b1129"
+      },
+      {
+        "path": "packages/renderer-webgpu/src/index.ts",
+        "sha256": "1bc846391320a1ce4dd672d984742cd5e1d09f57985d77c1b3be08f716ea63da"
+      },
+      {
+        "path": "packages/renderer-webgpu/src/mesh-count-shader.ts",
+        "sha256": "24d33febcb3667e3d97afd83b502dde2fffce975e09de8ef98ae7a8e07eb439a"
+      },
+      {
+        "path": "packages/renderer-webgpu/src/mesh-fill-shader.ts",
+        "sha256": "6edc605e2151405bebd5e08c7fb7d3661ce49c26e55b2accfdb492f4a2dad19e"
+      },
+      {
+        "path": "packages/renderer-webgpu/src/mesh-pipeline.ts",
+        "sha256": "891740fb585612718535688972ff5f1d89dc10200f836f283fbb1fc8c544990b"
+      },
+      {
+        "path": "packages/renderer-webgpu/src/native-foundation-scene.ts",
+        "sha256": "af38a40c5a607471492a96468002dab80e155fe885cea2e44d9582b4e8456463"
+      },
+      {
+        "path": "packages/renderer-webgpu/src/native-primitive-scene.ts",
+        "sha256": "2cb9f069827bafa5c9723885276eeccef17abc8e79c860cb59918b8922edca7f"
+      },
+      {
+        "path": "packages/renderer-webgpu/src/pipeline-cache.ts",
+        "sha256": "9d055afe9a66c14b81123e627a1e37549aed6131816ffa733934ffbe91b8a403"
+      },
+      {
+        "path": "packages/renderer-webgpu/src/primitive-analytic-shader.ts",
+        "sha256": "c835cbc7410737ccc7bf7099804face8dd0dc6ce88a6e67fe5659ce2e930f398"
+      },
+      {
+        "path": "packages/renderer-webgpu/src/primitive-packet-layout.ts",
+        "sha256": "fca6dba741ebe49c872a0185243e6f664c4a9acb6ccd8520e9abd817f799cbec"
+      },
+      {
+        "path": "packages/renderer-webgpu/src/primitive-pipeline.ts",
+        "sha256": "e4d73785c43c356eb8eaf56c93c2492414a4c24b3f404ea360eb102c8e496935"
+      },
+      {
+        "path": "packages/renderer-webgpu/src/primitive-unit-geometry.ts",
+        "sha256": "f595253ed6091123b7f10bd7c2a49644b560d67e3603360871aab8e11333b241"
+      },
+      {
+        "path": "packages/renderer-webgpu/src/shared-buffer-allocator.ts",
+        "sha256": "a00060aa5bab9eca0274ca3b7d7e1aa393d0eb2b4aae959ce61a4fdafcf48076"
+      },
+      {
+        "path": "packages/renderer-webgpu/src/surface-size.ts",
+        "sha256": "10a253fdd06124395c600f2becf58b18bc89a7c2ca8dea8761f54a7f7b88665b"
+      },
+      {
+        "path": "packages/renderer-webgpu/src/webgpu-backend.ts",
+        "sha256": "16468afa0b92aee18b7652572d463a5928c7452f1f169280e7eb8de9c388f470"
+      },
+      {
+        "path": "packages/renderer-webgpu/src/webgpu-platform.ts",
+        "sha256": "e1be8208ff41e1ecf70dddb0b5ab8aedd7c0f4c6b8516c72f4634a0b9ef7287f"
+      },
+      {
+        "path": "packages/renderer-webgpu/tsconfig.json",
+        "sha256": "db686cab10d220678d45d6bd9b2384e88639c321605597c3da9117426fe38c81"
+      },
+      {
+        "path": "playwright.config.ts",
+        "sha256": "45466031c25b7c73ea6b0fc39ad88a9d9530bd21efe876e7933762f467f71ccf"
+      },
+      {
+        "path": "playwright.geometry.config.ts",
+        "sha256": "d8756ffdcc2a74add45e80ac1a6b1e8771ea7fefab94f31472d74ce51fa99757"
+      },
+      {
+        "path": "playwright.gpu.config.ts",
+        "sha256": "4fb730d11bbf1c62b7d3eed6e7de36ff2f9177f4a06f2de8ae06e1cf28180868"
+      },
+      {
+        "path": "playwright.p0-3-benchmark.config.ts",
+        "sha256": "b7dd7bfa705709c224395e306d5abc8f74b80910999082cb63c5db58aac20705"
+      },
+      {
+        "path": "playwright.p0-benchmark.config.ts",
+        "sha256": "2625cf0af064cae1f8dc555dca3e38aec68f8bb3d19f97842a7845def4807667"
+      },
+      {
+        "path": "playwright.p1-runner.config.ts",
+        "sha256": "2e88907cf19795d6c7403b1e8dbab4b8257a2c0476598ee9a70578ce33894419"
+      },
+      {
+        "path": "playwright.p2-benchmark.config.ts",
+        "sha256": "833279acec054e3dd11d244937b28af4d45e8744ff14a9924350ea4fcab6d2b3"
+      },
+      {
+        "path": "playwright.p3-al-ob5.config.ts",
+        "sha256": "7a1dfa78010e7f46775a9b5350b3a8e5725340a4a51a33fe38315f4ef5028529"
+      },
+      {
+        "path": "playwright.p3-b0-wasm.config.ts",
+        "sha256": "5510bc99ec266bf3b61009276a1b61e22c4809375738236f7517bdf89195b198"
+      },
+      {
+        "path": "playwright.p3-coverage.config.ts",
+        "sha256": "56071cad22246f5dd1cf2bc8286b02eb5029079cfc5a22670e5669084161081c"
+      },
+      {
+        "path": "playwright.p3-native-projection.config.ts",
+        "sha256": "b260a333bf76cb16a425809d197f3100598b4f06759791b021ee66711f670c11"
+      },
+      {
+        "path": "playwright.p3-o02.config.ts",
+        "sha256": "045aa52865846447ba652bae8b6a5f7e6f941f2396dcbb87abe0d325e14b4f80"
+      },
+      {
+        "path": "pnpm-lock.yaml",
+        "sha256": "516761e5021c867c9653562ace938732817600db2a93eeb375e95541f75547e2"
+      },
+      {
+        "path": "tests/benchmark/p0-3-foundation.spec.ts",
+        "sha256": "efd43849e4cbc0f4a7145cff6942073791c2bd31f81d3b6f85b65d611faaaa14"
+      },
+      {
+        "path": "tests/benchmark/p0-foundation.spec.ts",
+        "sha256": "fa02a7e61c7e4d94c33fc5984c56f38c7783751b282ad88b9fb4fb28ae914170"
+      },
+      {
+        "path": "tests/browser/p1-runner.spec.ts",
+        "sha256": "288878816f5a14cd753cb63504e78e4ce7f2bbc5ad5836d946a930f96a82a452"
+      },
+      {
+        "path": "tests/browser/webgpu-initialization.spec.ts",
+        "sha256": "e5ff1ff63d336955b25697cdd0a35e8302c213166ca955f9bfaabdf0337be516"
+      },
+      {
+        "path": "tests/fixtures/e16-fill-remedy-v1.txt",
+        "sha256": "85121bcb324528baeabdc03626e7952ef10fe77daf9847c3f7fa5fbe55d77a3a"
+      },
+      {
+        "path": "tests/fixtures/p3-fill-event-order-v1.txt",
+        "sha256": "50155f959bbfc107705447d087ba5f3102a677acc3e2c66dd667814147a727e5"
+      },
+      {
+        "path": "tests/fixtures/p3-fill-intersections-v1.txt",
+        "sha256": "c8ca4f3570efafe4c614e297c677027dea160c025e6fac35b9f5955df107e93f"
+      },
+      {
+        "path": "tests/fixtures/p3-fill-orientation-v1.txt",
+        "sha256": "ed46fc8c09e92e9dbca89564eecf8d8dc5981922b1786e2de9d04b38b05faaf7"
+      },
+      {
+        "path": "tests/fixtures/p3-rounded-fill-v1.txt",
+        "sha256": "a5f1f85d1014c39595985a68ef14709d754b41763ad0d27440d7a4409983c88c"
+      },
+      {
+        "path": "tests/fixtures/p3-transverse-pairs-v1.txt",
+        "sha256": "a10288efb224f91acf497881e0fc28cfcc08bf9b24c47738f385b2ded51dc48c"
+      },
+      {
+        "path": "tests/fixtures/p5-model/empty.json",
+        "sha256": "5935aafb5604fd7847dfe5c1a6e843f021aaa523bfb26ff50fdf3c4d13b5dc7f"
+      },
+      {
+        "path": "tests/fixtures/p5-model/ext-star.json",
+        "sha256": "942ad8c439902aaf1c30bce6b0e8cf0690eeff2613c899372ab250a9f43b9246"
+      },
+      {
+        "path": "tests/fixtures/p5-model/malformed/dangling-reference.json",
+        "sha256": "597b3bcbebb5606c0e80e4aeadb9a72da53334ce1547fcf06b72dd0365b73a58"
+      },
+      {
+        "path": "tests/fixtures/p5-model/malformed/duplicate-id.json",
+        "sha256": "0f23642dc16ee4f598e05f90525442070ee5697e28fb2202e4cc4fb973877407"
+      },
+      {
+        "path": "tests/fixtures/p5-model/malformed/invalid-field.json",
+        "sha256": "f00d15dce4708d847313b221410473f3a2667ea2121f17de734119c9b585dbb8"
+      },
+      {
+        "path": "tests/fixtures/p5-model/malformed/malformed-json.json",
+        "sha256": "9677e620c8f60b085efd1cab642a751c49565d8d86fb8fa99f662f5efd158ee9"
+      },
+      {
+        "path": "tests/fixtures/p5-model/malformed/unsupported-version.json",
+        "sha256": "df8580fa2d18d9fa65027cf4318f0889e1f9200637cc587bf700945d6158d89c"
+      },
+      {
+        "path": "tests/fixtures/p5-model/shapes.json",
+        "sha256": "82f2172b30188618e5e925cba612bc72ac439eeed189bdd0eae2eba63a9f0474"
+      },
+      {
+        "path": "tests/geometry-benchmark/benchmark.spec.ts",
+        "sha256": "da913ab6384c35353078d891dbd7bb10dc80ab16430c41cb1b3adbf08bd53fa6"
+      },
+      {
+        "path": "tests/geometry-benchmark/index.html",
+        "sha256": "f93eefe033af58c8cd22b491f4032379a086557c8cf343b13df486cbf626d7f1"
+      },
+      {
+        "path": "tests/geometry-benchmark/main.ts",
+        "sha256": "1f4a3b766d5cc4081813838db44c843335b40f634defdacf0566cb42c2cfa354"
+      },
+      {
+        "path": "tests/geometry-benchmark/measure.ts",
+        "sha256": "447c1b3f273a79db77147bcd3fa0f09412dc87d7d0fc90c3aedcdd7a1904be21"
+      },
+      {
+        "path": "tests/geometry-benchmark/p3-al-ob5/benchmark.spec.ts",
+        "sha256": "35f977ff1b1e49ac016735afb0b837c7a9a90b2ce4167aa853b948695c39113f"
+      },
+      {
+        "path": "tests/geometry-benchmark/p3-al-ob5/index.html",
+        "sha256": "2caf6a45e31b14384fc152ddc4af8d78a2a235730a086d86366bb4f79f5c7278"
+      },
+      {
+        "path": "tests/geometry-benchmark/p3-al-ob5/main.ts",
+        "sha256": "efd86573a0237baad7aee4ec0f74c6b9b2f5e3af16628a80838b1dbaad2cf4ba"
+      },
+      {
+        "path": "tests/geometry-benchmark/p3-al-ob5/vite.config.ts",
+        "sha256": "1b9e0ebcb7cb98e1716cf59da0293a191cd6382bfdf3feda201ff8da233a9dc6"
+      },
+      {
+        "path": "tests/geometry-benchmark/p3-al-ob5/workload.ts",
+        "sha256": "1fc38e7b481bd6a578fec6e4a2efc36386c3414c0cc07beceb9aacb05af59fbe"
+      },
+      {
+        "path": "tests/geometry-benchmark/p3-b0-wasm/benchmark.spec.ts",
+        "sha256": "9b2b9350f45515ae858b0130632c9a4ee778212589cdf14028a3857b5416bc4e"
+      },
+      {
+        "path": "tests/geometry-benchmark/p3-b0-wasm/index.html",
+        "sha256": "6e1b08436751c3a97430db0da982cb494d6d7ee047e115ba6150d51fb0f2b830"
+      },
+      {
+        "path": "tests/geometry-benchmark/p3-b0-wasm/main.ts",
+        "sha256": "54740eecfee4020613db813e35dea486ffbd94ec5a0b8239f92f7c562461d9e4"
+      },
+      {
+        "path": "tests/geometry-benchmark/p3-b0-wasm/vite.config.ts",
+        "sha256": "13d8b833465c7a06189bdb094c8a97379f6ceb48536eec7ea86185c0b180eb46"
+      },
+      {
+        "path": "tests/geometry-benchmark/p3-b0-wasm/workload.ts",
+        "sha256": "c0a95435b60b72a6a95b5476bb1ee30137d0788d8a7711fed3f42c603d5f1d15"
+      },
+      {
+        "path": "tests/geometry-benchmark/records.test.ts",
+        "sha256": "b94492be90c250becab4a691584ef59a7a7af6272044b73fdae0eb2300a38dcb"
+      },
+      {
+        "path": "tests/geometry-benchmark/types.ts",
+        "sha256": "5c581bc97f731529dd37317828101442e4726f2cefa915bfa7ca74ab1217c5fd"
+      },
+      {
+        "path": "tests/geometry-benchmark/vite.config.ts",
+        "sha256": "9f62c67029c7e1edf105ebf76cb907b561975ff524ffcbc6db97e0e7b0861ed9"
+      },
+      {
+        "path": "tests/geometry-benchmark/workload.ts",
+        "sha256": "4b7c69f0ab513a28e778416a85c7bcd36a84bb7900071e5fb31c21e7d27bc1bc"
+      },
+      {
+        "path": "tests/geometry-browser/geometry-differential.spec.ts",
+        "sha256": "e67ed751382f73587968c3fbb5276be2a4fe7d9b24089330fb38d639453ab31d"
+      },
+      {
+        "path": "tests/geometry-browser/index.html",
+        "sha256": "f2603e28be27f0dcb2ea07b820c5893ee7bec1117ffa6e8c4f801aecc4d46d52"
+      },
+      {
+        "path": "tests/geometry-browser/main.ts",
+        "sha256": "80578af0e9d4e7dfa14463a265ce0c16440801b9ea9f0f374297200d6afdcb31"
+      },
+      {
+        "path": "tests/geometry-browser/vite.config.ts",
+        "sha256": "310700f66bd4e9f2982e2851e1fad2a03d9cc3f06cbd21230c50d68c26be1eb6"
+      },
+      {
+        "path": "tests/geometry/a02-fill-rules-port.test.ts",
+        "sha256": "633a91ae241b04afcf473639bd4571cc380f4f04934f5101099c2a09796a3e28"
+      },
+      {
+        "path": "tests/geometry/a03/stroke-input.check.ts",
+        "sha256": "756564affeea28539d55f7524de6ca22c7386836ce32fc238632522bdb2ba69d"
+      },
+      {
+        "path": "tests/geometry/adapter.test.ts",
+        "sha256": "d35215841459d05b2a7be8d5f18d6a818da57713a9e357bec9d700c1758f3120"
+      },
+      {
+        "path": "tests/geometry/conforming-mesh.test.ts",
+        "sha256": "bf04526dbbd8235024dacece431c817e54337fda084d20fafd57dff0016b9a53"
+      },
+      {
+        "path": "tests/geometry/conforming-mesh/fixtures.ts",
+        "sha256": "811668cac66e191434cf6cdb22bbd0e8656746770874dbb03a8e26f7b19fd6c1"
+      },
+      {
+        "path": "tests/geometry/conforming-mesh/oracle.ts",
+        "sha256": "c18ba84c190af8949626952173db89db577001ef9c5763fa7c25b36403981b0b"
+      },
+      {
+        "path": "tests/geometry/coverage-o02-shader-emulation.test.ts",
+        "sha256": "99120db9c076519cb5d350f55c077c9f5386cdfdc345450c0a6d722c0da4cf76"
+      },
+      {
+        "path": "tests/geometry/coverage-o02.test.ts",
+        "sha256": "5e98ffa8b1e18553c50af221bab137e7deae008a0c3ac693a1f0968376525f3b"
+      },
+      {
+        "path": "tests/geometry/coverage-oracle.test.ts",
+        "sha256": "b63cc76d74f8066ed96b32e37c77de4b933c38ca44dced756c382d24bba013b0"
+      },
+      {
+        "path": "tests/geometry/coverage-oracle/capture-schema-o02.ts",
+        "sha256": "8cf5dded5f58c0a17f867abaff2323e6f2f9381b6fa3ad89df118b4e9400fbc0"
+      },
+      {
+        "path": "tests/geometry/coverage-oracle/capture-schema.ts",
+        "sha256": "894f1b7147db69fce35246550aab76e3ff7acd7b834b2527bae77f36338dbfb3"
+      },
+      {
+        "path": "tests/geometry/coverage-oracle/coverage-metrics.test.ts",
+        "sha256": "4bb8fe9f69d3db0c5f9ef244b74c9ae4307bdedbdbbbc7e53e6767d15e6a5991"
+      },
+      {
+        "path": "tests/geometry/coverage-oracle/coverage-o02-document.test.ts",
+        "sha256": "2d8b8a29a71e168075809b85e7f64de96da983dce9b3abf8b249c8858d452d88"
+      },
+      {
+        "path": "tests/geometry/coverage-oracle/coverage-o02-metrics.test.ts",
+        "sha256": "4eb3fe469cb1208d2aba7a468ba48707b814d07146210f72d4405c801dec6f80"
+      },
+      {
+        "path": "tests/geometry/coverage-oracle/crop.ts",
+        "sha256": "888ebac8d80de216bc43c4d436aa19437a8d35fe85d1f099405020468823838d"
+      },
+      {
+        "path": "tests/geometry/coverage-oracle/exterior.ts",
+        "sha256": "36fc7739ce149de8016714bbcd0601dab84e70f9fb0e6d4e502b5211904da0f7"
+      },
+      {
+        "path": "tests/geometry/coverage-oracle/metrics-o02.ts",
+        "sha256": "3484434153a763db5968782d216b01245baf1c0af016751f7b241f56cf3df998"
+      },
+      {
+        "path": "tests/geometry/coverage-oracle/metrics.ts",
+        "sha256": "d268246d040e0b0a2390d6b840d1ade6086d870f8741565e393172b480b4bd66"
+      },
+      {
+        "path": "tests/geometry/coverage-oracle/numeric.ts",
+        "sha256": "e52db99cf72f397fd61e76916825592c8c293f4a3a82a3239b1a6b0bd5bbfb98"
+      },
+      {
+        "path": "tests/geometry/coverage-oracle/oracle.ts",
+        "sha256": "376c49c7b3ab7132792e57cb7038b61149c54aaf8069df0031694b110cf86f16"
+      },
+      {
+        "path": "tests/geometry/coverage-oracle/positions.ts",
+        "sha256": "bd5e83e005302bdfd491c7ae8f828babe33484f06cc526f77aab8db384ecab4e"
+      },
+      {
+        "path": "tests/geometry/coverage-oracle/rle.ts",
+        "sha256": "df8c2c3a8fb22afc859f18cb6ac21a0ab09a7e5ecb3973e15536785066837cbc"
+      },
+      {
+        "path": "tests/geometry/coverage-oracle/rule.ts",
+        "sha256": "12c8680edc5336aaa182f7afd8745a6d2aef8cf552da5ae506f7c22c6e0a62de"
+      },
+      {
+        "path": "tests/geometry/coverage-oracle/variants.ts",
+        "sha256": "c1a2bdc1806814f663407d7d270f6f58a1a001857fe1a6e401267cfd0bdcea64"
+      },
+      {
+        "path": "tests/geometry/cubic-boundary/fixtures.ts",
+        "sha256": "41141ea2cbe7f0fe041271b6cb19704019c45310e5ef70f180974f50541890fc"
+      },
+      {
+        "path": "tests/geometry/cubic-boundary/oracle.ts",
+        "sha256": "4d6f5c9cdd917030e085dd8df2c419847b4c04b247f6e25720e1b9cc8be5c690"
+      },
+      {
+        "path": "tests/geometry/cubic-preparation.test.ts",
+        "sha256": "5c423526aff4c8b2d30a819d2371e4f7f8276bf36798dc6926d2d4efdd882295"
+      },
+      {
+        "path": "tests/geometry/differential/endpoint-hull.ts",
+        "sha256": "55c945b3c528245206c60d52077a24368a800e7c050626ffa0083506517d6e07"
+      },
+      {
+        "path": "tests/geometry/differential/index.ts",
+        "sha256": "664986be98e764347b5bcde0c1a98c494cc6c5ea8e4db4f0f21867ca8eba11f6"
+      },
+      {
+        "path": "tests/geometry/e14-fill-rung0.test.ts",
+        "sha256": "1837a6538e8f16e0731226ae701db412874a64c1c27e7bae5b32334e8acc2775"
+      },
+      {
+        "path": "tests/geometry/e14/fill-input.check.ts",
+        "sha256": "6ef168780d22f77adfaefa584bc71c5f5dada14947fedc627847291b125de51c"
+      },
+      {
+        "path": "tests/geometry/e14/rung0-oracle.check.ts",
+        "sha256": "4d2789b45a04d1962acf3b3c116454583f9aa8db7c0c0fe0656a35a8f0d9f97e"
+      },
+      {
+        "path": "tests/geometry/e16-fill-remedy.test.ts",
+        "sha256": "039c1e43d9775a722d2bb67e5f47f88377a96d186f13a13fce91aa8ab0992f08"
+      },
+      {
+        "path": "tests/geometry/e16/fill-input.check.ts",
+        "sha256": "c9028eb44cb9f377478ff06f09ae41037ce30691d124b1b541c0d4abde724c5e"
+      },
+      {
+        "path": "tests/geometry/e17/snap-model.check.ts",
+        "sha256": "0de833825dea15e227b2313211a7ddd3c6dd2937335dd0cc7d6601b07018c75c"
+      },
+      {
+        "path": "tests/geometry/e3-a04-corpus.test.ts",
+        "sha256": "5b31acfbc50ed9ec18ce73c396ee5d90e29cefaefed912213f239f3ed5396b60"
+      },
+      {
+        "path": "tests/geometry/e3-a04-flip-tolerant.test.ts",
+        "sha256": "37724f44da02cc784e7910fb28cf7d44a17bbb37ce4d8537c99a65c4fd0c8a40"
+      },
+      {
+        "path": "tests/geometry/e3-a04-harness-wasm.test.ts",
+        "sha256": "895f47ebd553ecc9345e64f6c3c4762cefec7a8ff084be1b611247347cd6ff8a"
+      },
+      {
+        "path": "tests/geometry/e3-a04-harness.test.ts",
+        "sha256": "f43b735d2c09c8b8842932227de280a651f725a4387216d1f29151e948152091"
+      },
+      {
+        "path": "tests/geometry/e3-a04-oracle-u2c.test.ts",
+        "sha256": "bd13c36ddec6668900d0ada15463f20a735bcc5ee169153c33d407c3a81bee15"
+      },
+      {
+        "path": "tests/geometry/e3-a04-oracle-u2d.test.ts",
+        "sha256": "7d301431b175b642175da80b98478a62290ebbded9ee01c8ff6cc94b06959205"
+      },
+      {
+        "path": "tests/geometry/e3-a04-oracle-u2e.test.ts",
+        "sha256": "e40909f55ab41d4b987c37288f6726fddb808a485f2420610ea901399a5bbf27"
+      },
+      {
+        "path": "tests/geometry/e3-a04-oracle-u5.test.ts",
+        "sha256": "fd90e74b289cd2a2f60360342660238d8a6ab6b0656f2646ba300fc2a2db166b"
+      },
+      {
+        "path": "tests/geometry/e3-a04-oracle.test.ts",
+        "sha256": "43a14dd6dc3512a14e5a729c14626f5f853dfbd815e621b7de023dfcce312a11"
+      },
+      {
+        "path": "tests/geometry/e3-a04-readback.test.ts",
+        "sha256": "4a41e55e716f398d1804f992611ef0bb3976a1d37ed967f6112b80c71d202a27"
+      },
+      {
+        "path": "tests/geometry/e3-a04/controls.ts",
+        "sha256": "b43ff9e4ad6794c55c60d932a2f8eb2afe317a60b006ca696a86aedd8601e712"
+      },
+      {
+        "path": "tests/geometry/e3-a04/corpus-v1.manifest.json",
+        "sha256": "3c8866a226f9a029d60b9e69e582fb302f898f502863a362661ea179b36fa0ee"
+      },
+      {
+        "path": "tests/geometry/e3-a04/corpus.ts",
+        "sha256": "3c4f12991f0554cad2dde1d96eb549cb343b6ecee3e24539e8083320e7e0d438"
+      },
+      {
+        "path": "tests/geometry/e3-a04/freeze.check.ts",
+        "sha256": "824d1c2a882e32979eea2faccc7f464d72049d195315dadeb092b08da33cdd21"
+      },
+      {
+        "path": "tests/geometry/e3-a04/harness.ts",
+        "sha256": "f30b1c31e0325219996fde1d004e7e17267adf7803d344855752be0d6d61d541"
+      },
+      {
+        "path": "tests/geometry/e3-a04/oracle-cases.ts",
+        "sha256": "2ed643c12de5994cf9672dc1a8a2bf3107a526cf02698a0cbd4dc4e8ba624a70"
+      },
+      {
+        "path": "tests/geometry/e3-a04/readback.ts",
+        "sha256": "ea5f54cfce862e4af34be5542e28f7656f86899e09c2923695eccfffa9ac5f81"
+      },
+      {
+        "path": "tests/geometry/e3-a04/record.ts",
+        "sha256": "8e25a8d7233f78719dc4af284988a71902a8a31dec8ba7286eb1c70fe2eda411"
+      },
+      {
+        "path": "tests/geometry/e3-a04/run.check.ts",
+        "sha256": "70e2ddb10544966bd6952916b9e262b620ca766277fcf9a43789024cb32f1837"
+      },
+      {
+        "path": "tests/geometry/e3-a04/smoke.ts",
+        "sha256": "a312a06f2ba156952547503a3961f2b033ca4cb763c07f026dcb902eadaf4115"
+      },
+      {
+        "path": "tests/geometry/e8-corner-corpus.test.ts",
+        "sha256": "bbc964e7260a694c95927953ee374f4e7ad60bbd3fb14ab6cbfc962985027f44"
+      },
+      {
+        "path": "tests/geometry/e8-corner/corpus-v1.manifest.json",
+        "sha256": "4d23e9836e536d0daf29c71e0abe07ed4ac56aba1e97244bf3e9de2dfca0bc63"
+      },
+      {
+        "path": "tests/geometry/e8-corner/corpus.ts",
+        "sha256": "55ae5f191b334bdad0c894f7edee0a72492e53fa81195d2c719efc8569b1865e"
+      },
+      {
+        "path": "tests/geometry/e8-corner/fixtures.ts",
+        "sha256": "704f28a6888b19efb8dfa580fe00b70f9e92da65a564d30efdb11861462f4afd"
+      },
+      {
+        "path": "tests/geometry/extent-t01-clip.test.ts",
+        "sha256": "27ac377c93f976cd6d58894316c29aa4f972d39cdca274276e0f247e0150c2aa"
+      },
+      {
+        "path": "tests/geometry/extent-t01-core.test.ts",
+        "sha256": "a62c3d2fbd633db4f181d7b156a51240823efec7dde0c85216e7ab6a86454bbc"
+      },
+      {
+        "path": "tests/geometry/extent-t01-synthetic.test.ts",
+        "sha256": "9a01cc131b9bf0f9e0b664766221e02b73c98d9f59a58cdea65abc2ad2d000ba"
+      },
+      {
+        "path": "tests/geometry/extent-t01-tile-certificate.test.ts",
+        "sha256": "44c1f3dd77e761ffbbc43dbe9ea9aaa1544e4dda6acd1b0f025c0780bfb26752"
+      },
+      {
+        "path": "tests/geometry/extent-t01/clip.ts",
+        "sha256": "5de7ff418799025a7cd663cb3c9ffede9d3fb27c314715d2fb52c6fbc7a8e2e0"
+      },
+      {
+        "path": "tests/geometry/extent-t01/core.ts",
+        "sha256": "694582903d9be6606f66c36769cdddb9a0be3c28417ff1d9a488f9e9753b81a9"
+      },
+      {
+        "path": "tests/geometry/extent-t01/k5.ts",
+        "sha256": "3b837e12bb6407df612fc29b1c40254c160ba5ebeeadd50d8058e5e428fad46f"
+      },
+      {
+        "path": "tests/geometry/extent-t01/report.ts",
+        "sha256": "a51bcbdcd469dc85f6125141c710fbb1e101c9ef446d063ea5a47a4587d17114"
+      },
+      {
+        "path": "tests/geometry/extent-t01/sources.ts",
+        "sha256": "88088dcc977538ded0be059d9b66e873eb79d9bae44bf52720d3b6c83d50b281"
+      },
+      {
+        "path": "tests/geometry/extent-t01/synthetic.ts",
+        "sha256": "eba290baf63264ac1f519f98ebc403df734327d2c16a00dd33327263614f387d"
+      },
+      {
+        "path": "tests/geometry/extent-t01/tile-certificate.ts",
+        "sha256": "de1449529ca6068e9106385ca50a49ef6057915d428f6da82f673c31b9686bc9"
+      },
+      {
+        "path": "tests/geometry/extent-t01/tile.ts",
+        "sha256": "6fa438a80db797df838dc9f39881092d20ca1e918f0085c8865c8f08a57a66db"
+      },
+      {
+        "path": "tests/geometry/extent-t02-clearance.test.ts",
+        "sha256": "e4776195b1549651686e8f70cceb310afd0b11116d323fd6f9731d692a6a104e"
+      },
+      {
+        "path": "tests/geometry/extent-t02-epoch.test.ts",
+        "sha256": "94f600b3008de4c9b772942a508d9138615eb042ab371b72e7e7b749657943d3"
+      },
+      {
+        "path": "tests/geometry/extent-t02-lists.test.ts",
+        "sha256": "defee7aa8c94894ca3b8879272463ac34ee82c652a0cdb25c4fda1f14fc94e6d"
+      },
+      {
+        "path": "tests/geometry/extent-t02-merged.test.ts",
+        "sha256": "887faa083b863e605354c922fd38a875350c5a7e1bd76a9a5ef33f51fd589800"
+      },
+      {
+        "path": "tests/geometry/extent-t02-pinned.test.ts",
+        "sha256": "0077ccfe4a1c20b740cebf2cb3835f65d6bb4b3c0ff2ead2b81f49c49445c189"
+      },
+      {
+        "path": "tests/geometry/extent-t02/cells.ts",
+        "sha256": "97232115f2b750d9bd5ed8e7f2440aedd0c394a882ebd74dbf4fe2ecb924437d"
+      },
+      {
+        "path": "tests/geometry/extent-t02/clearance.ts",
+        "sha256": "4155a88784a1376059b43cf8d2174c3c65f3390e2553466246bd87d0b915acaa"
+      },
+      {
+        "path": "tests/geometry/extent-t02/epoch.ts",
+        "sha256": "bf933d39978d2e0a81407f4b69d0ce5baccf31a53537bbec0f92dec98d1c6214"
+      },
+      {
+        "path": "tests/geometry/extent-t02/fringe.ts",
+        "sha256": "79055b4de3368ad7c92acf3f32dc39e89d3b35fb69681a625636fbf929bcfa80"
+      },
+      {
+        "path": "tests/geometry/extent-t02/lists.ts",
+        "sha256": "7373242b7d0ba1f5dc75e4756ca29e5526ffa805e7be07369a72a993f248f2b7"
+      },
+      {
+        "path": "tests/geometry/extent-t02/merged.ts",
+        "sha256": "4f14d2e8024e896778651a1a72a5b2e055389868a6eab33110675027e65a72cb"
+      },
+      {
+        "path": "tests/geometry/extent-t02/partition.ts",
+        "sha256": "ea5c8da047bdd9243a346b7d09ac14ddafa135bcaeab0d77f171870ac56fc720"
+      },
+      {
+        "path": "tests/geometry/extent-t02/report.ts",
+        "sha256": "feef1d695bac6e8ea265c9cd8df4078c209bb5e9e6e82ade7417b9f2d078a784"
+      },
+      {
+        "path": "tests/geometry/extent-t02/variants.ts",
+        "sha256": "1dba98af1987e63abe382c80827773e89acfebf92335017cdf6343d922970d68"
+      },
+      {
+        "path": "tests/geometry/extent-t03-cdc.test.ts",
+        "sha256": "a2c8c580517266170c22fa0a75458d6b207671f5dff2b1461866160e70605873"
+      },
+      {
+        "path": "tests/geometry/extent-t03-local.test.ts",
+        "sha256": "12f70e2669bc0a720cfa359ec76355c01601ea932dfcd82345544c1441d14061"
+      },
+      {
+        "path": "tests/geometry/extent-t03-pinned.test.ts",
+        "sha256": "ad223bd57ef44ef7791851f74341ce233aa7d49b23859f947f016b4970560ed4"
+      },
+      {
+        "path": "tests/geometry/extent-t03-summary.test.ts",
+        "sha256": "904c2fef37497e9fcf546ff7d216445ee6549af1f36e20eb3b431dc0cd03a770"
+      },
+      {
+        "path": "tests/geometry/extent-t03/delaunay.ts",
+        "sha256": "a1deb0cf1bc29235c04d990df64674d6989706f021d88a6cbdf92c4a72915d9e"
+      },
+      {
+        "path": "tests/geometry/extent-t03/local.ts",
+        "sha256": "317fd852ea39b1f2e2588215f8a4bc60236d55a28252e67e30b2ce08efe0670f"
+      },
+      {
+        "path": "tests/geometry/extent-t03/owner.ts",
+        "sha256": "6bc26618423f1678b817f4a8e96f23009ed7e28230b4b6584e31e13b7694076f"
+      },
+      {
+        "path": "tests/geometry/extent-t03/report.ts",
+        "sha256": "1a79438bd9bb9dd4978d12491a5ba99945e67b4e0e90c9546cd4f273730e8964"
+      },
+      {
+        "path": "tests/geometry/fill-adapter.test.ts",
+        "sha256": "d626cf9ca7c36c8901dcfa960945fd4fec15ccabdb564029e09cd8781e570659"
+      },
+      {
+        "path": "tests/geometry/fill-mesh-port.test.ts",
+        "sha256": "599b3558133ff8b9d6d00402aa516bd7cadafdb4a8df2035dda2a0967ad828c3"
+      },
+      {
+        "path": "tests/geometry/kernel.test.ts",
+        "sha256": "84fdc1101cbb19bf734632bba27d0f7af09e8926f59a09f7335349f8d08dccdc"
+      },
+      {
+        "path": "tests/geometry/line-fill.test.ts",
+        "sha256": "a9faa333ad45415eead9fa7d5bd40c4f3f8f8f7c454d0597819c26785e0ee536"
+      },
+      {
+        "path": "tests/geometry/mesh-projection.test.ts",
+        "sha256": "ef647f247c4f47e37523e11257a99f5f5ae70555a3293a001859b2c5ebfa6128"
+      },
+      {
+        "path": "tests/geometry/mesh-projection/audit.ts",
+        "sha256": "98f7e55f1850c0dd65818229309804d49829063aa5fdb582861993c6f54fc481"
+      },
+      {
+        "path": "tests/geometry/mesh-projection/fixtures.ts",
+        "sha256": "4e27f5b348be41780825e508a22a7a644fa9de71538a66dd64e6e9c9273dc1d1"
+      },
+      {
+        "path": "tests/geometry/mesh-projection/model.ts",
+        "sha256": "ad0a0c12640a7c1b988cd1e7435152141aff55c45ecf3453e0dd3cf53e831f88"
+      },
+      {
+        "path": "tests/geometry/mixed-line-arrangement/fixtures.ts",
+        "sha256": "e59cbda59061d35288ae08bcd8511183f40375e5c3cc8f01d65de627f5982938"
+      },
+      {
+        "path": "tests/geometry/native-cubic-fill.test.ts",
+        "sha256": "d1b9ea16aedbba72df99174853ba3985b87a29332f41778af0ea4a37a1d6d181"
+      },
+      {
+        "path": "tests/geometry/native-cubic-topology.test.ts",
+        "sha256": "e28b4b2648db2878383c4f1c67f1ae20d1295466a220bdf1b788061ebc7b6c35"
+      },
+      {
+        "path": "tests/geometry/native-cubic/fixtures.ts",
+        "sha256": "7ea6d39dc1df298a7256ba110c070a1e6503fd23ffc619fe89ac54e946b711cd"
+      },
+      {
+        "path": "tests/geometry/native-cubic/native.ts",
+        "sha256": "26fe0b4188e50a408270854382c6553065cb11cf048e91a3ae53b892942b254d"
+      },
+      {
+        "path": "tests/geometry/native-cubic/verify.ts",
+        "sha256": "0b8dc6b96ad8789f7dc1c39ee1fcb2cba1c565f41d5c1ede022900097265d217"
+      },
+      {
+        "path": "tests/geometry/native-depth-positive-cubic.test.ts",
+        "sha256": "5323001b386e14353ecdc652f60f06681893a0695af039956fe8a3bba306119c"
+      },
+      {
+        "path": "tests/geometry/native-depth-positive-cubic/fixtures.ts",
+        "sha256": "5a4aff4dac19d1fefcaea4843ef2180a5e022fe17d5e82a3226d6354dc1273d5"
+      },
+      {
+        "path": "tests/geometry/native-depth-positive-cubic/verify.ts",
+        "sha256": "b8e94da53401ddbbdc9486f0654ac561c863a433b37362cb8a9dfa563e0c78cf"
+      },
+      {
+        "path": "tests/geometry/native-e8-corner.test.ts",
+        "sha256": "9fb8475014b7fb3c857ecfadf600052ffcd9611e9723a9dd450447d249848cc1"
+      },
+      {
+        "path": "tests/geometry/native-mixed-cubic.test.ts",
+        "sha256": "8ce3555af1c3962b5cb8ace156769ce7a1f2004b0657c4774f567f3bc6a065e3"
+      },
+      {
+        "path": "tests/geometry/native-mixed-cubic/fixtures.ts",
+        "sha256": "e59ffc1f44f8c8acab08cdc961f252dc6795f7c4a753b20a5fe9ed45003ab55a"
+      },
+      {
+        "path": "tests/geometry/native-mixed-cubic/native.ts",
+        "sha256": "3b66b1ba0334bb948d8b41e989ebf9a5491e7ed20bb7cf0f7c59862db5bf07c5"
+      },
+      {
+        "path": "tests/geometry/native-mixed-cubic/verify.ts",
+        "sha256": "1417be5cf53d8e3da38efebed6c555676ae068499cb6b9660546047bfe51e5ef"
+      },
+      {
+        "path": "tests/geometry/native-mixed-line-arrangement.test.ts",
+        "sha256": "00fbf0916c35097fad9027c817c3319b4a5b9f2e9fad583ca8af12d0c9aadc3a"
+      },
+      {
+        "path": "tests/geometry/native-mixed-line-arrangement/fixtures.ts",
+        "sha256": "5a6755992772ab09fe4cc0c9548af2bedd7ce3e592aba99973e8f40bd352b63b"
+      },
+      {
+        "path": "tests/geometry/native-nonlinear-transverse-cubic-fill.test.ts",
+        "sha256": "058e31c501e3ebfc55d59922b3d30e9aef519f8f343e8641fbb8819e40d193e6"
+      },
+      {
+        "path": "tests/geometry/native-nonlinear-transverse-cubic/fixtures.ts",
+        "sha256": "483428e0a66b2fe1e048e59a406d88c6ffbda08c214b32833717a7cb645ed091"
+      },
+      {
+        "path": "tests/geometry/native-nonlinear-transverse-cubic/native.ts",
+        "sha256": "c6991a4ef2eb9fe0b964ea276934d959da0049005c6d97e9e95b24df49028dbb"
+      },
+      {
+        "path": "tests/geometry/native-projection-replay.test.ts",
+        "sha256": "ad6aa956e135cd3958c6399abea9281150038a2473df1c0682ce210deab1520c"
+      },
+      {
+        "path": "tests/geometry/native-projection-shader.test.ts",
+        "sha256": "83d0c18fbb7350bbf6460500762782946ec5814f3081854a3b4350016785dcd8"
+      },
+      {
+        "path": "tests/geometry/native-projection.test.ts",
+        "sha256": "892a97bf501bb9af9b8cc18c8ea139db970cd9c80926b468863f9b758595a320"
+      },
+      {
+        "path": "tests/geometry/native-projection/byte-audit.ts",
+        "sha256": "98de6bfbc2d22f2cfa2c939ec4afc731cb73211bf51da60e07e19fcad7143d78"
+      },
+      {
+        "path": "tests/geometry/native-projection/classify.ts",
+        "sha256": "0ce5d69dca0eeea5496ebf1786e4e3fd2fb558241322dbb96612aa4281f2b654"
+      },
+      {
+        "path": "tests/geometry/native-projection/decode.ts",
+        "sha256": "dcc8043b5eccad88435b3b037b5b1d69b6bc81c690490040d210951dae75b998"
+      },
+      {
+        "path": "tests/geometry/native-projection/pack.ts",
+        "sha256": "b5e01385410d547008bb7ff51169c39e2f0fff17020d50a5795f4236446ff290"
+      },
+      {
+        "path": "tests/geometry/native-rounded-cubic-fill.test.ts",
+        "sha256": "1b48446a6708d75189f2fee1b7e316fbc14057954eb70f6bbc570c68a08f1b2f"
+      },
+      {
+        "path": "tests/geometry/native-rounded-cubic-topology.test.ts",
+        "sha256": "8e08148802a08c5fb14c6856f4a08d48380e14c0c7f9fab23e0d4281ae805c10"
+      },
+      {
+        "path": "tests/geometry/native-rounded-cubic/fixtures.ts",
+        "sha256": "ce3dc789e22b441226de2674ff0efba0e90feb6bb21ecdc023c34faf58b002ff"
+      },
+      {
+        "path": "tests/geometry/native-rounded-topology/fixtures.ts",
+        "sha256": "67fb4ffa91508cdf7ee142370536e16bedc68665b4baf4c028e4fe55ef6bb039"
+      },
+      {
+        "path": "tests/geometry/native-topology/fixtures.ts",
+        "sha256": "84538ad3ecee6dafa34f1e63ebd265c326a09528cde716a02ac3d99c2f210cd4"
+      },
+      {
+        "path": "tests/geometry/native-topology/native.ts",
+        "sha256": "62b12dcbf2ed4628c62fefe2abfd65fc0c1705c5bb1ec434137a7796c5d4ee8f"
+      },
+      {
+        "path": "tests/geometry/native-transverse-arrangement.test.ts",
+        "sha256": "0fadecbd63749b288243cf4acd0ee90a01c387c7d04272f7d1fbb6e0ecba6190"
+      },
+      {
+        "path": "tests/geometry/native-transverse-arrangement/fixtures.ts",
+        "sha256": "ecd89479380be33d16488930ee31e5ff713aaefb97edcdf534b0db5bed0d08ba"
+      },
+      {
+        "path": "tests/geometry/native-transverse-arrangement/native.ts",
+        "sha256": "e77f25823cda6353c1098deafe6850f57dc50a117c82734f68455b716c97db21"
+      },
+      {
+        "path": "tests/geometry/native-transverse-cubic-fill.test.ts",
+        "sha256": "6b0c5e583764631cfe070c8caeca2c76abc58cd1b7a92ebec8f6a51c05f49863"
+      },
+      {
+        "path": "tests/geometry/native-transverse-cubic/fixtures.ts",
+        "sha256": "44d80b3e4decabe5080b95d511eb2270fb688069223b185d30265f0393961a31"
+      },
+      {
+        "path": "tests/geometry/native-transverse-cubic/native.ts",
+        "sha256": "6712c77837e042d123feeb78752a741e4671c814a82ed2bc46633b32ad21ee45"
+      },
+      {
+        "path": "tests/geometry/native-transverse-cubic/verify.ts",
+        "sha256": "c410c795c29392bc169c1e416bfacb715530850851ccb950446e468d71bc00d2"
+      },
+      {
+        "path": "tests/geometry/native-triangle-free-arrangement.test.ts",
+        "sha256": "a9726d3d2ac7b1fffdb74379c8d9ddc0fe9845b2e5f6a7875e5540d9411a192d"
+      },
+      {
+        "path": "tests/geometry/native-triangle-free-arrangement/fixtures.ts",
+        "sha256": "a3533332391ed1d618b542d87b0e70ec680028d273d8e89d4cda12f1d6e608a7"
+      },
+      {
+        "path": "tests/geometry/native-triangle-free-cubic.test.ts",
+        "sha256": "41d8ce9e1c527eba33938bc64183ee09917c12406e1a648d87aaf6bf4e8aba40"
+      },
+      {
+        "path": "tests/geometry/native-triangle-free-cubic/fixtures.ts",
+        "sha256": "d34c1570dc86c23f79ccf914a7908b494f10028e25cc6d49b04681261c1aa827"
+      },
+      {
+        "path": "tests/geometry/native-triangle-free-cubic/verify.ts",
+        "sha256": "ea150362bf526dcdd7d14039b449e2e11c1b10d965d106ed423db0f91dfc8b0a"
+      },
+      {
+        "path": "tests/geometry/native.test.ts",
+        "sha256": "e378067c5e9e2e678b0cedaf21ab7167a30765fbcb8446ec99dbb3308bfe0c99"
+      },
+      {
+        "path": "tests/geometry/p3-al-ob5-analysis.test.ts",
+        "sha256": "d4efdab8f1d786b5f2688d7a3a2afb77c4f279b010ec75ca06c2bb77f085b05b"
+      },
+      {
+        "path": "tests/geometry/p3-al-ob5-corpus.test.ts",
+        "sha256": "c938c09b3dad5ede214362efa194613fae7b048d260c8c12be69106cf8fdabb0"
+      },
+      {
+        "path": "tests/geometry/p3-al-ob5/analysis.ts",
+        "sha256": "7dc245492e8d3eae462db08f5269ea92fef0d4d9bdea3c2509e85f7825392cc3"
+      },
+      {
+        "path": "tests/geometry/p3-al-ob5/corpus.ts",
+        "sha256": "f26c4519bae08b121b3d34f4d446e28327260c2c97fe87e4cefa93a3fb4a6bb9"
+      },
+      {
+        "path": "tests/geometry/p3-al-ob5/fixture.json",
+        "sha256": "063e4e0a0cc52d51a7257d1e46e0484fa4c246b4e59058501c357d848c3d61e4"
+      },
+      {
+        "path": "tests/geometry/p3-b0-spike-analysis.test.ts",
+        "sha256": "0388851962b5483fe7f274db91ed835bd78d17bfdeb56a02ada8b9be1bdb0432"
+      },
+      {
+        "path": "tests/geometry/p3-b0-spike-oracle.test.ts",
+        "sha256": "3b18c1ac0138c9d51ef0ee03cec3cac330ac2b5401f48e7bf4a0caae46d15950"
+      },
+      {
+        "path": "tests/geometry/p3-b0-spike/analysis.ts",
+        "sha256": "0668fb5b08ac9c72ab937b120dc3ccfb4e2cc6b1692dffdd03f24e03441de433"
+      },
+      {
+        "path": "tests/geometry/p3-b0-spike/oracle.ts",
+        "sha256": "875e107087092782583512cbedecd0f168c5f7ab7aa5cc3e861aebd05d4d0d19"
+      },
+      {
+        "path": "tests/geometry/p3-b0-wasm-analysis.test.ts",
+        "sha256": "d03614f09db9385690c140fec56ba11a3f4699ccbc1d93c3c293ad550149f558"
+      },
+      {
+        "path": "tests/geometry/p3-b0-wasm/analysis.ts",
+        "sha256": "14cf51128db66985f233acff126096583013863cd6c9cb1d552922c1510dc011"
+      },
+      {
+        "path": "tests/geometry/p3-b0/analysis.ts",
+        "sha256": "eae2134d464402697261ccca3af2cc9bcd1bc73696fca956b6d97ac6955bde76"
+      },
+      {
+        "path": "tests/geometry/p3-b0/corpus.ts",
+        "sha256": "d4c9b26c43d17c985748f4df80d7df28ba271c1c0bc724ef94b51fa67706cab0"
+      },
+      {
+        "path": "tests/geometry/p3-b0/fixtures.json",
+        "sha256": "62436996552794fdb1e242dae0757e382a6a0a48b3c57092dacae9ec7b70f08c"
+      },
+      {
+        "path": "tests/geometry/p3-b0r/corpus.ts",
+        "sha256": "fbcb351b0dbceea571e84af77a14cc58ef370555930191d0a047b1b83891d6a9"
+      },
+      {
+        "path": "tests/geometry/p3-exit-sweep/fill-class.ts",
+        "sha256": "782406fc90be7d2d3994d40c25f54db27db6a02f7097f86c2382f8be81fbb27d"
+      },
+      {
+        "path": "tests/geometry/p3-exit-sweep/run.check.ts",
+        "sha256": "7e9aee61cf62be164f30817e4a0c94369c58cc8623dfe03c56bf1b0cc6df13d0"
+      },
+      {
+        "path": "tests/geometry/p3-exit-sweep/scene.ts",
+        "sha256": "516855ad38c9e0fcfdc97449c5be11d3e70afb87eaedc98bb076da1ead1e6e0e"
+      },
+      {
+        "path": "tests/geometry/p3-exit-sweep/stroke-class.ts",
+        "sha256": "7710f5b329a92bd73889c25bebb79a2b7e0f8ab75722b49681e7727ffe020ebe"
+      },
+      {
+        "path": "tests/geometry/p3-exit-sweep/structure.ts",
+        "sha256": "9065aca79827f1028ff00764053368b61cb15638fa8a005df0e42acf80f58ffb"
+      },
+      {
+        "path": "tests/geometry/p3-exit-sweep/sweep.ts",
+        "sha256": "4b718362b5040084d8b560c8014e666dca5a0241c0017a8da94b8a6e8105df62"
+      },
+      {
+        "path": "tests/geometry/p3-fill-ladder-analysis.test.ts",
+        "sha256": "ba4a5378d650664d614a06f9fc28b343e328b22e1ed19f5ac7d94a1beee00ae4"
+      },
+      {
+        "path": "tests/geometry/p3-fill-ladder-oracle.test.ts",
+        "sha256": "66a7d76b16b4ef714f5b3ecbfe5ee24a3e7b526380a4718fd04378f51d4aa54a"
+      },
+      {
+        "path": "tests/geometry/p3-fill-ladder/analysis.ts",
+        "sha256": "711db3cf5f9b157c2fefa8fb5ee3217c61c6d3ed4d484be11af5f3db2961b4ad"
+      },
+      {
+        "path": "tests/geometry/p3-fill-ladder/corpus.ts",
+        "sha256": "d1508b265e18000d2753d8f92c1f2fa16e22d5731af13cc37a15413b9647733d"
+      },
+      {
+        "path": "tests/geometry/p3-fill-ladder/dump.ts",
+        "sha256": "2c29796a532ed60362a81fcc3d11cbb15157d75e8773bcc41ba698b7b2207dd2"
+      },
+      {
+        "path": "tests/geometry/p3-fill-ladder/oracle.ts",
+        "sha256": "6b94de5c43354ba56f0ee8967722e545201e408193f5fb3aab9bafc1aae0e4d4"
+      },
+      {
+        "path": "tests/geometry/position-certificate-r0a.test.ts",
+        "sha256": "71c98250921474ebdf8b5c16a0ce7897016a310055e69f01696b9ac5e7290604"
+      },
+      {
+        "path": "tests/geometry/position-certificate-r3.test.ts",
+        "sha256": "ecbbadc2b240ff1899da1fa9cc244984e3995d800309edcbabd4721d2b5e51d6"
+      },
+      {
+        "path": "tests/geometry/position-certificate.test.ts",
+        "sha256": "bef68408b9e924ebf244d537df0191dbf12256adb252ac7283012973b1ef1cf6"
+      },
+      {
+        "path": "tests/geometry/position-certificate/adversarial.ts",
+        "sha256": "1c4f3b1b95784759b475d83c66b3fc9432f8d77921bf9ec57da313048cdf7851"
+      },
+      {
+        "path": "tests/geometry/position-certificate/certificate.ts",
+        "sha256": "dea97bcda4c9fc1380a0f5895ef5eeee9ffffdfd2de7c8415ea05c16e8cc3767"
+      },
+      {
+        "path": "tests/geometry/position-certificate/corpus.ts",
+        "sha256": "3b1ee5d2add5bbae7f0ff427285c06db6fb773d26d47707d5c01bb5b3834b311"
+      },
+      {
+        "path": "tests/geometry/position-certificate/r3-window.ts",
+        "sha256": "463a4af1db59a1cbd6d73aeee436690c99d73218caa30b88467fdbc9d664a894"
+      },
+      {
+        "path": "tests/geometry/position-certificate/wedge-independent.ts",
+        "sha256": "bbad952ae2f664eabf50694a7ccfc8dd083c4c18b0f928175a40c6a01d8def2a"
+      },
+      {
+        "path": "tests/geometry/position-certificate/wedge.ts",
+        "sha256": "d6d2e6b72c5c146627b61a769612b25a94a2887989db7dec6cc3d7ab513eb9cf"
+      },
+      {
+        "path": "tests/geometry/rounded-fill/exact.ts",
+        "sha256": "108d98e7af78435738d943fe9473cfc26f5d2d662a5b6484ecc6f91bb3885c90"
+      },
+      {
+        "path": "tests/geometry/rounded-fill/fixture.ts",
+        "sha256": "2536460e7565b1dda9eb2ef60ea97daa787f11aa42b58ccff6b7564ebfe58aaa"
+      },
+      {
+        "path": "tests/geometry/rounded-fill/native.ts",
+        "sha256": "b87262a14c067d12ed24855c24ae6c6770b2d9a2ab160168a023e4e19992d501"
+      },
+      {
+        "path": "tests/geometry/rounded-fill/oracle.ts",
+        "sha256": "619db76baa049e4b0e83994af1ffba19233fa910a9d5a1b01f540e69ec5117ce"
+      },
+      {
+        "path": "tests/geometry/rounded-fill/types.ts",
+        "sha256": "710bc92c89b927305adac19078252bd2715deb944594729de82b982a4905c1d7"
+      },
+      {
+        "path": "tests/geometry/rounded-knot-topology/fixtures.ts",
+        "sha256": "f4f48e8ddc17ea0dcdd8506449b540cec5067ca7f88d3a29d1a1b400b58d5db2"
+      },
+      {
+        "path": "tests/geometry/rounded-line-fill.test.ts",
+        "sha256": "09da0ef90fa220d842402caec60935cf53f2b5413ecece8ae02fceea8c8911fc"
+      },
+      {
+        "path": "tests/geometry/simple-cubic-topology/fixtures.ts",
+        "sha256": "14ca28984bb115c982ca9a8e5d9147be62784c4a35fb839ffd5846aa3520a5f1"
+      },
+      {
+        "path": "tests/geometry/simple-cubic-topology/oracle.ts",
+        "sha256": "860d6a4a33ef0e97f5f4628695c9cd4954935ec6c4a5fd144c50aa1c5a5db0a5"
+      },
+      {
+        "path": "tests/geometry/st-u7-joint-real-ports.test.ts",
+        "sha256": "de6cbd78ded85f5ed115aae3e896ba996ac18aa596ec700b470ec150230d5bd5"
+      },
+      {
+        "path": "tests/geometry/stroke-adapter.test.ts",
+        "sha256": "c03b366f16c7fe2e8dce70855fe9da80ebfe6d0280f805075158fe21e0cbe0ad"
+      },
+      {
+        "path": "tests/geometry/stroke-mesh-port.test.ts",
+        "sha256": "72cadadaeaf9d18f3fb77f5b0e9b813ecbfc624c89bdbef4e96b2a1c64146cfd"
+      },
+      {
+        "path": "tests/geometry/stroke-oracle.test.ts",
+        "sha256": "661aebfaf61d08a60043abd3d7c1f176718428012b666f75aaa9a40245586901"
+      },
+      {
+        "path": "tests/geometry/stroke-oracle/dump.ts",
+        "sha256": "4bf498c5de6a4ab7419b70551c4aa152e13d1331ce931835dc74d70ad688b134"
+      },
+      {
+        "path": "tests/geometry/stroke-oracle/fixtures.ts",
+        "sha256": "395da807e10207c6b82c486d64f8133d41f9a3b514f28ed56a3259297ed1dd84"
+      },
+      {
+        "path": "tests/geometry/transverse-arrangement/fixtures.ts",
+        "sha256": "2a570534c4ea3e4265cff5039608f92e7cd6b0c3fd09be4e5ae5779094f26738"
+      },
+      {
+        "path": "tests/geometry/triangle-free-arrangement/fixtures.ts",
+        "sha256": "ceabffdd98da3b2c2905914c6c613cb831b3f48c88be75c3e98260e3f2db1ec5"
+      },
+      {
+        "path": "tests/geometry/viz-v3-packer-churn.test.ts",
+        "sha256": "40c820fe87907cbae6b3b933baeadfabbf283ea784e90469acc47c13011b4c62"
+      },
+      {
+        "path": "tests/gpu-p3-coverage/coverage.spec.ts",
+        "sha256": "a9534a268722e0f0c856e59d5509812a09ef9f8040b2a34730085d012478ceed"
+      },
+      {
+        "path": "tests/gpu-p3-o02/o02.spec.ts",
+        "sha256": "92af707ff9dbf6177522fd97f95cb1d008d16bac39a6a5cbd530a32e7a29a984"
+      },
+      {
+        "path": "tests/gpu-p3-projection/native-projection.spec.ts",
+        "sha256": "cabbac7378b044d71b6d4ea13e90f4f4dd7a72839e7fe333d0f9b97112a48c89"
+      },
+      {
+        "path": "tests/gpu/e10-test-hooks.spec.ts",
+        "sha256": "160b9a259e31eb32f08eab5af3118dc716aa1756868f74132e8dc2347dd60d70"
+      },
+      {
+        "path": "tests/gpu/e17-write-once.spec.ts",
+        "sha256": "6e491619fd29972ab2f182fb674d113e584ff38e22955d07474777ecf7b0ddb4"
+      },
+      {
+        "path": "tests/gpu/e3-a04-readback.spec.ts",
+        "sha256": "b2d7e97cfdecb0933a88f24d458d2e9088108ffabfe0e3785e3d712dca13ea7d"
+      },
+      {
+        "path": "tests/gpu/foundation-experiments.spec.ts",
+        "sha256": "71ba485ec46ece98ad7a899e7368777fec2ecae352afa22b63e5c58585f86afb"
+      },
+      {
+        "path": "tests/gpu/p1-diagnostics.ts",
+        "sha256": "0e5ff7f1fd6187e57c7210d0593a30cb837ef28da1ad5315ae8e586c8a4cf577"
+      },
+      {
+        "path": "tests/gpu/p1-primitives.spec.ts",
+        "sha256": "1b702c993bf7481fbf1c83d79f0db226d5d2bc641fe582ba8bc7ef2e8ee9f525"
+      },
+      {
+        "path": "tests/gpu/p3-b2-strokes.spec.ts",
+        "sha256": "ddb581e2be0549f2aabb485a6122678146d48262a792993b0eac006a2abb062d"
+      },
+      {
+        "path": "tests/gpu/p3-st-u6-stroke.spec.ts",
+        "sha256": "85f4fd0bcdcdb32cca22ec48e87befee03706da9d0cb6367de15a41f26f9d81c"
+      },
+      {
+        "path": "tests/gpu/p3-st-u7-joint.spec.ts",
+        "sha256": "b652d97d7e3ca23983817840c1ec187cc146fd6f929fb40d8fd17e32a695592f"
+      },
+      {
+        "path": "tests/gpu/p3-v3-mesh-smoke.spec.ts",
+        "sha256": "5bc93cb09e72dd587a49f98b4926390c122724b306fca57ff7b1dda5777d3286"
+      },
+      {
+        "path": "tests/gpu/p3-v4-paths.spec.ts",
+        "sha256": "325223da9ca0217d3aed6dfd30583c543fc5fb4c22ed4a618650ac73c7620141"
+      },
+      {
+        "path": "tests/gpu/playground-dashboard.spec.ts",
+        "sha256": "942b04de7c4617e13035753167a567928c84e6aa452cf982339722678a2e43af"
+      },
+      {
+        "path": "tests/gpu/viz-v1-appearance.spec.ts",
+        "sha256": "a8f1b62904313e4a8853dea15a9d17f0db4d05e61eff21414bb8ea7fbed9eea3"
+      },
+      {
+        "path": "tests/gpu/viz-v2-path-data.spec.ts",
+        "sha256": "ab705a97b3d71500d6121b24498a7d6f5a82586bf78e69a474a8915be792996a"
+      },
+      {
+        "path": "tests/gpu/viz-v3-integration.spec.ts",
+        "sha256": "73cf2ab4760b3f86994ba8bcb9b106de494cdb69e064870e97321738b2d9c799"
+      },
+      {
+        "path": "tests/gpu/viz-v4-a08-corpus.spec.ts",
+        "sha256": "16081678b61a044906332174a64413e04c994ffb996770b7bb9a13613ec744ec"
+      },
+      {
+        "path": "tests/gpu/webgpu-recovery.spec.ts",
+        "sha256": "0be85f88e68f1561784f83e814d9da888d03f27de99909b6652eac7435acf92a"
+      },
+      {
+        "path": "tests/p2-identity/output-bytes.test.ts",
+        "sha256": "aa1d92c317d7b241f15a586c3e3fd5edff0c473196d6341df5c916230daa584f"
+      },
+      {
+        "path": "tests/p3-census/artifact.d.mts",
+        "sha256": "6b8785e0f58c80575304ff519f7c5667ed517b61dd7d877bbec170789953c62b"
+      },
+      {
+        "path": "tests/p3-census/artifact.mjs",
+        "sha256": "9c2b6474f38242b4f8c9a790c58a9368ad6f50b93eef8eb06c8179effd59a636"
+      },
+      {
+        "path": "tests/p3-census/census.test.ts",
+        "sha256": "389e1fe911b68c82fa5d485c14c6580f50c4ce4b511117d7484c5660d9ede3bf"
+      },
+      {
+        "path": "tests/p3-census/fixtures.ts",
+        "sha256": "23e89455662a5b30db2ec15d95b72650c30357de32a74773894cd0631cb1c005"
+      },
+      {
+        "path": "tests/p3-census/mechanics.test.ts",
+        "sha256": "a352e4d38672200d07bf1bb96475cffb49c9f6228e5471f07dd425d1be07a201"
+      },
+      {
+        "path": "tests/p3-census/schema.ts",
+        "sha256": "098f7669fefb34bc09a60c78498edc7de66b9c6ae624dfc842b833e5fe397794"
+      },
+      {
+        "path": "tests/p3-polygon-census/artifact.ts",
+        "sha256": "c7d965a0ca870253e75ed9e3f21b981765b8137e25922fc73f5bb2eb44881f01"
+      },
+      {
+        "path": "tests/p3-polygon-census/audit.test.ts",
+        "sha256": "faf04a3339f2c5aed1e443bf8acc4a60665124cb4c9fc30da6bb384b86dbb378"
+      },
+      {
+        "path": "tests/p3-polygon-census/audit.ts",
+        "sha256": "c319e0921733be669dafa372ec6afc0edb9e275c7f47bda4defcafea1fd45114"
+      },
+      {
+        "path": "tests/p3-polygon-census/census.test.ts",
+        "sha256": "f86aea2b26888292c2ab982ba4b390017890faa5df4b92aa607fccf335f32581"
+      },
+      {
+        "path": "tests/p3-polygon-census/classifier.test.ts",
+        "sha256": "3334ecdc5d37ac412fe02f126343c8afe0d815d7c0f1c11033d496bc3db7a095"
+      },
+      {
+        "path": "tests/p3-polygon-census/classifier.ts",
+        "sha256": "0ef644a2cb99b174ea9e5133e16c647020c724e09621edab1510123075fa1d7e"
+      },
+      {
+        "path": "tests/p3-polygon-census/fixtures.ts",
+        "sha256": "c840198cc139e0ed69084b6f81a3b7cb39762ffcd90985bd5976ee2f17cae69d"
+      },
+      {
+        "path": "tests/p3-polygon-census/mechanics.test.ts",
+        "sha256": "07a144a10f18a068c4e66435ff4192dbc0da20e805795f874914fd9874557452"
+      },
+      {
+        "path": "tests/p3-polygon-census/transport.ts",
+        "sha256": "ec345f28b33d86a4ef730254726be6a3744933c3414e7d5605a5019495523942"
+      },
+      {
+        "path": "tests/p3-polygon-census/types.test.ts",
+        "sha256": "5b01eddeab99907fe0eedb8dbb0403f3ad635a7603f5046a063c90f37513fe06"
+      },
+      {
+        "path": "tests/p3-polygon-census/types.ts",
+        "sha256": "f8e9e346fd5f2030ca4ae8f90ebb4fddf62c34d8db3a50d9d26c09f4c69e32a6"
+      },
+      {
+        "path": "tests/p3-t01/report.test.ts",
+        "sha256": "e69a0ef914d50d1fff8ad4189dac079757b9af7fb365b97581be4266ee358596"
+      },
+      {
+        "path": "tests/p3-t02/report.test.ts",
+        "sha256": "1ca3bf41cda6d67c74ac8ae615949c9ad81216aa4cbcd183bd41a39d3fc51948"
+      },
+      {
+        "path": "tests/p3-t03/report.test.ts",
+        "sha256": "335fb4255e0d9f5c032791f9c218a6cd58b07da19e39673de9c12ddb5785b735"
+      },
+      {
+        "path": "tests/support/e10-gpu-recorder.ts",
+        "sha256": "744cad6e7c6c64c6ebb8a370322f07e2e2cd8f4495256f65cbe3e65f1283f53e"
+      },
+      {
+        "path": "tests/support/evidence-output.ts",
+        "sha256": "ea99b2de5775ee97b98099f3ff42ba75ebaf2d390065e40609b66703aeae11d4"
+      },
+      {
+        "path": "tests/support/fill-mesh-check.ts",
+        "sha256": "64a5511a401a105150c10a7690c07a0bfec1b4db691340d1864a2b493c8a3df3"
+      },
+      {
+        "path": "tests/support/fill-mesh-port-conformance.ts",
+        "sha256": "269a908023d3d7e3f65ef6045635bf8c78b468ee4077504abdd8d2207f4e1a13"
+      },
+      {
+        "path": "tests/support/fill-mesh-port-double.ts",
+        "sha256": "dac8b92d746d03df5e37e5964b74adc686c936033e52778e21a95d1ba972eb15"
+      },
+      {
+        "path": "tests/support/foundation-image.ts",
+        "sha256": "777689f94884fcf190f216ae11981c2978b952fe4bca9659e4632f05933450ca"
+      },
+      {
+        "path": "tests/support/line-fill-sources.ts",
+        "sha256": "d523cbaa383f0e9fe427401f0006b3fca2d1b56b4b7041a3816d146e505348c6"
+      },
+      {
+        "path": "tests/support/p0-benchmark-record.ts",
+        "sha256": "19976e31bbb34016209accff4b86e765d72361d27246e9be6672e8f18630b4c3"
+      },
+      {
+        "path": "tests/support/p1-evidence.ts",
+        "sha256": "240296449ca639ea0e5eabeeb3084b4ce2fe14421780721cdaf2f93ce01a232b"
+      },
+      {
+        "path": "tests/support/p1-position-oracle.ts",
+        "sha256": "dd223f34954f909edf57cd764511498314c400bd549eabf8201a326695064d12"
+      },
+      {
+        "path": "tests/support/p1-runner-aggregate.ts",
+        "sha256": "173a2e63b0c601395e28b367ceccd26a2a032459c15dca266699a8885acb4e1e"
+      },
+      {
+        "path": "tests/support/p1-runner-record.ts",
+        "sha256": "2ae243e7c421f5907bb4a54046558f8754534b6d139e9b228e059bb6896c238f"
+      },
+      {
+        "path": "tests/support/p1-runner-setup.ts",
+        "sha256": "bb5157fc5595bee90e2a551591cc0a6849a2ba5e6a4c1a0fce94db72bb0999fb"
+      },
+      {
+        "path": "tests/support/p1-runner-teardown.ts",
+        "sha256": "a44e44007806ae397a5fa448f972ed409955847019ea6bd4a562a64e8085fc2f"
+      },
+      {
+        "path": "tests/support/p1-visual-corpus.ts",
+        "sha256": "e9cd21f362a25c6d2ac5c127e47276d73b7fa7bc4a3de7191354aab4cf83177e"
+      },
+      {
+        "path": "tests/support/p1-visual-oracle.ts",
+        "sha256": "ca228294fa441762dac0792ca1e72ad395303c5714fc5389bbc6bf6bc6d3950d"
+      },
+      {
+        "path": "tests/support/p2-benchmark-record.ts",
+        "sha256": "0fb0e422ab0d5a41b71f64d4e23d3ac9556911c4565cc93bb902e61fa6464966"
+      },
+      {
+        "path": "tests/support/p3-coverage-build.ts",
+        "sha256": "4fce1751a1e23b36b9dbe423f642d0930f02899e1642daa01544bec4e09b72aa"
+      },
+      {
+        "path": "tests/support/p3-coverage-evidence.ts",
+        "sha256": "57a83a3be4f305784f63bcb48984ce28663f3beee4b78b78c8fdea884c15bc8a"
+      },
+      {
+        "path": "tests/support/p3-native-projection-evidence.ts",
+        "sha256": "165d52cf5b7ab47f166deed1a588b4a22278beba51de4341a34303f0eda583b8"
+      },
+      {
+        "path": "tests/support/p3-o02-build.ts",
+        "sha256": "aed08025a6440cfca5cf9cb7203e152f3f95ba910a36d2533d005f7321a929d5"
+      },
+      {
+        "path": "tests/support/p3-o02-evidence.ts",
+        "sha256": "72d41bb14283583ada8cec583dc6969f869b56f491c22ec21461af34d8801043"
+      },
+      {
+        "path": "tests/support/p5-recording-renderer.ts",
+        "sha256": "8309e30616f3048459f8f87ee1236ac86dfc0c2e1994f58a43caf2c0c9665cca"
+      },
+      {
+        "path": "tests/support/playground-api.ts",
+        "sha256": "b2fc42a298ac1e16cc2d6e59b9f29573970ec803438a1ac4eea566f70c96fe40"
+      },
+      {
+        "path": "tests/support/st-u6-stroke-gpu.ts",
+        "sha256": "acd42e7757590252d9fc7b9e795aa0cd42f5dca010f1bc4ac5150359174f0beb"
+      },
+      {
+        "path": "tests/support/st-u6-stroke-harness.ts",
+        "sha256": "3c866c016197628d58fad4f730e224d92aa1fa9cd7027f25fcdf301db1553075"
+      },
+      {
+        "path": "tests/support/st-u7-joint-gpu.ts",
+        "sha256": "2cf4490b5d61d43622f9ac7a889fd5f7e72676a6bc6fd55d0872f076352cb2cf"
+      },
+      {
+        "path": "tests/support/stroke-mesh-port-conformance.ts",
+        "sha256": "03d0988621b9d467cb2297ff19b2ae49775275d1da26607607cefa036c30680a"
+      },
+      {
+        "path": "tests/support/stroke-mesh-port-double.ts",
+        "sha256": "08ede68bdfc1abace274cc5a0af35fcca43f0d72293e5a4b0d1a17fc000be97a"
+      },
+      {
+        "path": "tests/support/v3a-path-harness.ts",
+        "sha256": "e62eb7e4a0e13503ce537a2fc7dcb953af00cf14ad9450f190de9c2f644aa1ca"
+      },
+      {
+        "path": "tests/support/v3b-mesh-harness.ts",
+        "sha256": "07a413438e00bfdbbbd2971f9e71a9e2865acec88dd8df1511a6e8e020f29e45"
+      },
+      {
+        "path": "tests/support/v3c-mesh-smoke.ts",
+        "sha256": "04e3e1e8e9409a1ee3d14a08e4582ed19ac092caf9f8c68814be3fe9ba5c1083"
+      },
+      {
+        "path": "tests/support/viz-v3-oracle.ts",
+        "sha256": "82331352f6a958aa542b4e6cb914a02c0185eb6940a8f7fba26d18a56d907315"
+      },
+      {
+        "path": "tests/unit/camera.test.ts",
+        "sha256": "587bdb3dd08569b11567020b9dbafdf967e3dd954a87004f1446152b2aaa7825"
+      },
+      {
+        "path": "tests/unit/contracts-boundary.test.ts",
+        "sha256": "716da2578691b950ea540f898a751e2e6d4685345371992fe4b8fc5860a39fc0"
+      },
+      {
+        "path": "tests/unit/contracts.test.ts",
+        "sha256": "64089f2bc801b411e01f2ea6696c12f68ead0aa2a5305c1263be90e85749ed15"
+      },
+      {
+        "path": "tests/unit/diagnostic-channel.test.ts",
+        "sha256": "1a7be18333a1e636da8cb66fc237df709c2eafd089dca1f12d14f78c19071db3"
+      },
+      {
+        "path": "tests/unit/e10-capture.test.ts",
+        "sha256": "5c8a652dba5fcf056a3c86eaaedc137c078799304b864b4f64d2dd6cdf0a7766"
+      },
+      {
+        "path": "tests/unit/e10-default-invariance.test.ts",
+        "sha256": "bf79e8068eae2ea3008ea705fad057f90dd407a75513f92785ff2c50a781a2d7"
+      },
+      {
+        "path": "tests/unit/e10-fringe-off.test.ts",
+        "sha256": "e2c7114bb512745030387e8980880424a4c160c57ad441f6d7a05ba07a755ef5"
+      },
+      {
+        "path": "tests/unit/e10-golden/default-gpu-log.json",
+        "sha256": "f04896b4023b02fb7c3932298af522d2a2f862a42a309799227cc3fe5c1776bc"
+      },
+      {
+        "path": "tests/unit/e11-u4-failure-behavior.test.ts",
+        "sha256": "c9e92f7cf1067ba6df3b8ecb6c2c65ac46a45d670d270c07295e100b311cfc89"
+      },
+      {
+        "path": "tests/unit/e17-write-once-stencil.test.ts",
+        "sha256": "6dc2ca47e231b44d7dd85fa7a0d39aa8a2ec5ebe9c9b013ba5d597c9ba62648f"
+      },
+      {
+        "path": "tests/unit/fill-mesh-check.test.ts",
+        "sha256": "2f21906f69096a4a446054c49fefe94de42a9409690bfba0452248bb77636646"
+      },
+      {
+        "path": "tests/unit/fill-mesh-port-double.test.ts",
+        "sha256": "9877ff33f3eef43367e112ea723766d99e8a247de0014d06c859f4ba5f691142"
+      },
+      {
+        "path": "tests/unit/fill-port-boundaries.test.ts",
+        "sha256": "8e26e6b34c71c7382247e709787847ac2d82afec84ac714771c5d2ee4f3fc341"
+      },
+      {
+        "path": "tests/unit/frame-scheduler.test.ts",
+        "sha256": "8b891a719569eb6f4563ecce3fffef30656f4504aacc3d2919f72c0351a629d1"
+      },
+      {
+        "path": "tests/unit/geometry-adapter.test.ts",
+        "sha256": "712ee45b181c9150dd0ea098f737bd339733954cef6801076d5c2514761a1cbc"
+      },
+      {
+        "path": "tests/unit/geometry-boundaries.test.ts",
+        "sha256": "66870fdf2af5e470096b2cbdfb7bcd24b694854f9c9443cc86c5067b021d418d"
+      },
+      {
+        "path": "tests/unit/geometry-cubic-boundary.test.ts",
+        "sha256": "6d1d54efbb77a65a0da3df32d1c76149cce7b1c67006bc4f1df491b60461f44c"
+      },
+      {
+        "path": "tests/unit/geometry-differential.test.ts",
+        "sha256": "e3b17a7db75e54954a1b7372fddd2c4f52b95d154f5d7b7c6aa6b9234f4d345c"
+      },
+      {
+        "path": "tests/unit/geometry-e8-cyclic-only.test.ts",
+        "sha256": "9a7a60bf0a140ade016fdb935931f4ce799c473cd0ef4760e0167f1fbfbee521"
+      },
+      {
+        "path": "tests/unit/geometry-fill-region.test.ts",
+        "sha256": "4cb39cbe621bd604e39da7f8aa5011a7670565f01aa7edfe264f362093b298e0"
+      },
+      {
+        "path": "tests/unit/geometry-line-fill.test.ts",
+        "sha256": "83569b499798d73cf9af3af506585fcdee370f84fdcab30568dbab8a782186f6"
+      },
+      {
+        "path": "tests/unit/geometry-mixed-line-arrangement.test.ts",
+        "sha256": "ca4c9609c91990597c339c46c4701a850f65a8bd84d637d47710ecbc920dd42e"
+      },
+      {
+        "path": "tests/unit/geometry-output-points.test.ts",
+        "sha256": "b8733661860f45782fbb1e24a1ba26570ab2d770ee63798b7d08331abca0ae2b"
+      },
+      {
+        "path": "tests/unit/geometry-provenance.test.ts",
+        "sha256": "db3dc6f1e5b574f1ed1e74349402d9f0e36c188dcc82cb59f19780893a0e6c83"
+      },
+      {
+        "path": "tests/unit/geometry-reference-review.test.ts",
+        "sha256": "7c4007f8f3f3e3aec0c259c59864cc77dc83f23a74d4ac790a35d17818e37859"
+      },
+      {
+        "path": "tests/unit/geometry-reference.test.ts",
+        "sha256": "84c8b1f24c1d6b4b7fc0ca4af6470336d37926bc353958140bbb7d18372b2f09"
+      },
+      {
+        "path": "tests/unit/geometry-rounded-fill-oracle.test.ts",
+        "sha256": "f77e907e78e5ed72f2b53af8d4eebaebade2589b5e60734259bd7040840bcb82"
+      },
+      {
+        "path": "tests/unit/geometry-rounded-knot-topology.test.ts",
+        "sha256": "a83437a62655db577c0c80a6eaf326e8657e3f6b51d548328e2e8b6be8dab393"
+      },
+      {
+        "path": "tests/unit/geometry-simple-cubic-topology.test.ts",
+        "sha256": "9cf96ef8707d838de0723976ed6a6348875a227f2dd201ce13435ee202ca6bd5"
+      },
+      {
+        "path": "tests/unit/geometry-stroke-region.test.ts",
+        "sha256": "16b6d0e152726f44d55212ea4e8c43d51a91ec5aa8c73feb1ab7bc2a15679908"
+      },
+      {
+        "path": "tests/unit/geometry-transverse-arrangement.test.ts",
+        "sha256": "dc18d9df913de89f26c990c2d0b933bde421aa3a8d28b97879457edb754a67e4"
+      },
+      {
+        "path": "tests/unit/geometry-triangle-free-arrangement.test.ts",
+        "sha256": "0a3145b42cdff7358de80d5fb820e83f89b334909d2c71e39ddb080a13b51506"
+      },
+      {
+        "path": "tests/unit/geometry-triangle-mesh.test.ts",
+        "sha256": "ed219e027b941fc3a786256024e1976d50f6b12817193f52fd267ff54cd93287"
+      },
+      {
+        "path": "tests/unit/native-foundation-integration.test.ts",
+        "sha256": "7dce992ebe9917ac2ce154d061404fd73b8d0b7fa359371b29e6d8369cd47138"
+      },
+      {
+        "path": "tests/unit/p0-benchmark-record.test.ts",
+        "sha256": "98d2c1644347a8feec25bfc021b96d11db0404ecc578e0eecf78502a254fb39d"
+      },
+      {
+        "path": "tests/unit/p1-native-review.test.ts",
+        "sha256": "985e38a29f39149d75efba72d36948755f66cd77f26f1d949df1c2f6977bb30c"
+      },
+      {
+        "path": "tests/unit/p1-packets-layout.test.ts",
+        "sha256": "63ce5d631f38cfe757f88acbddcceb0da59109feae9de7ac6ac2cfe42dd0eff0"
+      },
+      {
+        "path": "tests/unit/p1-packets-numeric.test.ts",
+        "sha256": "3c1394cf8a0a63670dffe32b16954496efced87c39880fdb29738b10998533be"
+      },
+      {
+        "path": "tests/unit/p1-position-oracle.test.ts",
+        "sha256": "bb70c207edf112995ac4cda0d4ad8f14424556cf988efc6429c94daa3eeecd53"
+      },
+      {
+        "path": "tests/unit/p1-run-metrics.test.ts",
+        "sha256": "66df8d2c0852d345710c24d2f0fc9a5c213f0d714bb0bd02cb5617b447321b81"
+      },
+      {
+        "path": "tests/unit/p1-run-profiles.test.ts",
+        "sha256": "f50dd3c2b36f60c5aad584c59261173288ebb940fa4b12a0ea90e81c48ecd058"
+      },
+      {
+        "path": "tests/unit/p1-runner-aggregate.test.ts",
+        "sha256": "a8cc647847bc8a43ed38fc2c27687c97cd4b6ed3fdb25ab33c375a888472fb29"
+      },
+      {
+        "path": "tests/unit/p1-runner-cli.test.ts",
+        "sha256": "4671157c543d40ec8746f7e9dd9d06c3680f3e667b44f79b5db233673e2aafba"
+      },
+      {
+        "path": "tests/unit/p1-runner-record.test.ts",
+        "sha256": "00b3332217dc1a40a47ff52852ecc2fd6e2747efcbacc649aae86df5cae47539"
+      },
+      {
+        "path": "tests/unit/p1-visual-oracle.test.ts",
+        "sha256": "6aadb600b77e4e8940d2cc8d5536bd1df09c8f9b877351dad7713d17f57aadf3"
+      },
+      {
+        "path": "tests/unit/p1-workloads.test.ts",
+        "sha256": "d4a8cb7116b7cee16dcc705ed79382c0ba7500849d45c80950e725c394d71ab3"
+      },
+      {
+        "path": "tests/unit/p2-benchmark-cli.test.ts",
+        "sha256": "8e863c527814ffd6638f4973c9e58c3d8eef7b070a42299bbe57629b2560649a"
+      },
+      {
+        "path": "tests/unit/p2-benchmark-page.test.ts",
+        "sha256": "6d196a3145d46bc5aa5e8708291ca4a378b75e78d6ee97a1c28c1b4b07982e9d"
+      },
+      {
+        "path": "tests/unit/p2-benchmark-record.test.ts",
+        "sha256": "6d5f0689a83ca1ea29cd7e8fe205f1e9008b548ac5fd3cda855d7e4f560b3852"
+      },
+      {
+        "path": "tests/unit/p3-b0-record-comparison.test.ts",
+        "sha256": "e8ea8c67a8e98a1fac6e11b915274ea7e975f8137a524b04a8371178c8c6b659"
+      },
+      {
+        "path": "tests/unit/p3-b0.test.ts",
+        "sha256": "31a399d1e6d6ba69d1f5c358f438ae56b6e5c4989f032961e6b31138de0d4927"
+      },
+      {
+        "path": "tests/unit/p3-b0r-identity.test.ts",
+        "sha256": "90b71c9e50ccd705c3942cbde788130b988bb6bc8d5b6236193dd6ccaa6de0db"
+      },
+      {
+        "path": "tests/unit/p3-exit-a03-map.test.ts",
+        "sha256": "a5fd7a7960d84daeb135497db46847f3450075a8914e19c6a2f9da108cbbbae5"
+      },
+      {
+        "path": "tests/unit/p3-exit-a05-a06-map.test.ts",
+        "sha256": "d082cf46d0b5f8be3d89ec877728fc2fb4f0630d3a44f7b6256c3bb85e11aa7a"
+      },
+      {
+        "path": "tests/unit/p3-exit-sweep-fill-class.test.ts",
+        "sha256": "3cc94fcf63ed82f544e2dc7ce4a2e313ecc0d7e8391fbbebf83118c30535a548"
+      },
+      {
+        "path": "tests/unit/p3-exit-sweep-stroke-class.test.ts",
+        "sha256": "195ee27fa0335a1dde2c4ce6269947ec4f69b6e25b490154a0191aab2cabee75"
+      },
+      {
+        "path": "tests/unit/p3-exit-sweep-structure.test.ts",
+        "sha256": "e2e4f7ccb0076f6bdeea698be15355c742902969d89d1d2150b0a2abfba6eece"
+      },
+      {
+        "path": "tests/unit/p3-fill-identity-failure-to-success.test.ts",
+        "sha256": "da9918ce696e9a142deee468934744c54bacdc208e51ddd5781e84c12af9a04a"
+      },
+      {
+        "path": "tests/unit/p5-editor-core.test.ts",
+        "sha256": "6728bb9674091cd55600d5194c5417565d9c4b02cce75de367adc42bd4dda578"
+      },
+      {
+        "path": "tests/unit/p5-model.test.ts",
+        "sha256": "16cfcab65e8e281d15fc458645471622099df9fc1948f1b1878d2a5a0042820d"
+      },
+      {
+        "path": "tests/unit/p5-projector.test.ts",
+        "sha256": "27ff2c4fa02f23c3ef5809b48f138c2c54a00edcdb05d78111dee1bdd77a68d7"
+      },
+      {
+        "path": "tests/unit/p5-tools.test.ts",
+        "sha256": "f6d8266fb7c3532d867212937287b2b3e59ff101a4b16e44f8a040b3fc7e2a09"
+      },
+      {
+        "path": "tests/unit/path-joint-composite.test.ts",
+        "sha256": "535d966fbdef34959d4461f5019a0eea5fcf085d3f2ceb1cd77390ed3bd9a79b"
+      },
+      {
+        "path": "tests/unit/path-joint-overlay.test.ts",
+        "sha256": "195b856ab226d837c38998229180c4403493cb5aed84e77d07177d32c4023997"
+      },
+      {
+        "path": "tests/unit/pipeline-cache.test.ts",
+        "sha256": "afa92d91fe134c8320c172dcf992cba38f96b894488966e75afaeae42d90f43b"
+      },
+      {
+        "path": "tests/unit/primitive-analytic.test.ts",
+        "sha256": "51a4f61672f91b608e40aa554c6d8b60101c58d480f03bf9196fc6255b780b6d"
+      },
+      {
+        "path": "tests/unit/primitive-backend-integration.test.ts",
+        "sha256": "355211cabefbe9f6482895920047e5c09265d886c316d0cba395f02ef1f0a146"
+      },
+      {
+        "path": "tests/unit/primitive-native-integration.test.ts",
+        "sha256": "12f8bc856f4ac6a94af6115736971da91a7d66c46a399a591bf2ac77abefd261"
+      },
+      {
+        "path": "tests/unit/primitive-packet-review.test.ts",
+        "sha256": "dfe0aec7424b67976f1bda8fc6ab89abe580268bd6e585c41e3ae2989d3a74d4"
+      },
+      {
+        "path": "tests/unit/primitive-preparation-statistics.test.ts",
+        "sha256": "842e2f47343b39067e1039bcc1effc10307781e8443abdf0914bca2c9e805ca6"
+      },
+      {
+        "path": "tests/unit/repository-foundation.test.ts",
+        "sha256": "62c438627a0bc8b7305e75350ea50d04563b36fe4ead44d694e17882fb32d6bc"
+      },
+      {
+        "path": "tests/unit/resource-accounting.test.ts",
+        "sha256": "cf6c71477f42730a196956f05b9e930715b4a37d5c7fbdc2cd11d9e5a0526ce9"
+      },
+      {
+        "path": "tests/unit/retained-scene-numeric.test.ts",
+        "sha256": "103ccb3eaaf76cc0d3324a4507e34ea24313616656ec635bb988621d5418b7e3"
+      },
+      {
+        "path": "tests/unit/retained-scene-transactions.test.ts",
+        "sha256": "7082b054ea066b226da595c8731f0e6e58dfdaa524f3e2d10f66ac7d388fe006"
+      },
+      {
+        "path": "tests/unit/scene-epoch.test.ts",
+        "sha256": "8474ea26c6edf00e363fe7d76611c16259bc5008a1b71d9dbbbbdb82ef9015dc"
+      },
+      {
+        "path": "tests/unit/scene-protocol.test.ts",
+        "sha256": "35893a2d7bd4a34dfb9b668f195314d335238fd13ecda695ae81f6b01cff7d83"
+      },
+      {
+        "path": "tests/unit/shared-buffer-allocator.test.ts",
+        "sha256": "61c56095095af9d50813c3c64e2b3421a429a8315e62c7c51d432aefbf11261f"
+      },
+      {
+        "path": "tests/unit/st-u6-stroke-pipeline.test.ts",
+        "sha256": "565eb906db64d55f6bf7c7ab203dc4c195998118d53d1f1e1767ace7600797c5"
+      },
+      {
+        "path": "tests/unit/st-u6-stroke-scene.test.ts",
+        "sha256": "a71fb71e4192ad40a912d8540d70aa7066dfb3ba7dc0b921d2c7784375abc355"
+      },
+      {
+        "path": "tests/unit/st-u7-joint-backend.test.ts",
+        "sha256": "925e75df7a87019df106e1976ce726832712dc3abbdbed231cc33e9d3949e374"
+      },
+      {
+        "path": "tests/unit/st-u7-joint-pipeline.test.ts",
+        "sha256": "3f13ed661d93848d9be1704bec8eae34b41995dffd4f7b048b53fee347a9e04b"
+      },
+      {
+        "path": "tests/unit/stroke-mesh-port-double.test.ts",
+        "sha256": "b25237342045d7e1c62bb4568ce897576e36157fb15c6482e35e81845c30975e"
+      },
+      {
+        "path": "tests/unit/surface-size.test.ts",
+        "sha256": "0b16b92f8721b23a40f7e693666250e484a1093b2af3349bd231a9ac5e168e8d"
+      },
+      {
+        "path": "tests/unit/v3a-path-buckets.test.ts",
+        "sha256": "1dfa22a535024e13fefa47d6f4e3fea99a4c6701f58c5bffa012104eaeaf0f35"
+      },
+      {
+        "path": "tests/unit/v3a-path-pipeline.test.ts",
+        "sha256": "424b17542e690ac58755ff85b54bfce96bc2e60be028c7d28bfb645bc18c7c69"
+      },
+      {
+        "path": "tests/unit/v3a-path-scene.test.ts",
+        "sha256": "2d290daf55f827fbb26562d7ccfa2ba39c7e7607b1f83e3743d1bda8dd19e9f9"
+      },
+      {
+        "path": "tests/unit/v3a-primitive-packet-golden.test.ts",
+        "sha256": "7e52f75268c5d419a52e515bf7024fddd56703fa5c2814e00f42b929c2053a1c"
+      },
+      {
+        "path": "tests/unit/v3b-mesh-backend.test.ts",
+        "sha256": "20c7f1a5dc9938dc7252068d249a3d8ad65c3a2ebcc0d4471605913115ccbe27"
+      },
+      {
+        "path": "tests/unit/v3b-mesh-packet.test.ts",
+        "sha256": "30f18dc57ab120e4fa41ae9e0732f8b2df77c0c7c984bb7f6dd137473b8bd6cd"
+      },
+      {
+        "path": "tests/unit/v3c-path-fringe.test.ts",
+        "sha256": "bbe01bb5cdef1b10ab0feddd408abef2b7d72cfda0806583f4c39e002cd94d3c"
+      },
+      {
+        "path": "tests/unit/v4-fringe-cap.test.ts",
+        "sha256": "da424cff8bbfc65a7d88ed666c1c848496e23115e6c39b30ae500d65b0904d7d"
+      },
+      {
+        "path": "tests/unit/viz-v1-appearance.test.ts",
+        "sha256": "c3af2ae846fdcbfd8c45547d47a60cfc5dfbfa3d9e0c73c7c6baa49bf732daf9"
+      },
+      {
+        "path": "tests/unit/viz-v2-path-data-parse.test.ts",
+        "sha256": "1043539873360530a7ab3461db7fa45a49f90f130a47da79e9b9a1db9533c29c"
+      },
+      {
+        "path": "tests/unit/viz-v2-path-data-state.test.ts",
+        "sha256": "5e9aa12c8a0465d4b5bad3037c28886d16fba0aeb1c597eac1cf3902fd93e0b9"
+      },
+      {
+        "path": "tests/unit/viz-v3-integration-scene.test.ts",
+        "sha256": "f904d16d28d86f9a78831dd35948d5ac7258da6ef1d37bac0f7c81e162e8a77c"
+      },
+      {
+        "path": "tests/unit/viz-v4-a08-corpus.test.ts",
+        "sha256": "c0053605995089fbd3b28ad422bee67aecae41c910a509a4462ac39d5240e812"
+      },
+      {
+        "path": "tests/unit/viz-v4-metrics.test.ts",
+        "sha256": "69ff67542d48cfd871bee8ca7d9f29d316f8c6730ecf645fc34ab6d095f57563"
+      },
+      {
+        "path": "tests/unit/webgpu-backend.test.ts",
+        "sha256": "90adf209e7eaed19f95bb4b69aec8c443b5b2803c17ed3f6ef4f20c57dca0d2c"
+      },
+      {
+        "path": "tests/visual/viz-v4/a08-subset.manifest.json",
+        "sha256": "ce12861da42fe0829f291c992d4f048d9de9e72f5f07741e6850a1115d46bce4"
+      },
+      {
+        "path": "tests/visual/viz-v4/cases.ts",
+        "sha256": "af439bc084ed8105350f461832588721e71207375ff61e5a36d4d4ca69f40525"
+      },
+      {
+        "path": "tests/visual/viz-v4/expected.check.ts",
+        "sha256": "0088401e585cd679553efad5a628a806e5b76ef0b5e7365e539b0d834d76a0d6"
+      },
+      {
+        "path": "tests/visual/viz-v4/metrics.check.ts",
+        "sha256": "e1fc354e7ff818f1d290af6820875a5e31b816e2483ac1b45824781ab237039a"
+      },
+      {
+        "path": "tests/visual/viz-v4/metrics.ts",
+        "sha256": "e505424b3c4a8deea06786246ff657a4fee4a8c949d8f58ec62825cb50114ecb"
+      },
+      {
+        "path": "tests/visual/viz-v4/runner.ts",
+        "sha256": "7a148a62687b137aba49e012cd1f066cef48867df37d894eb9d56c620ed4c4dc"
+      },
+      {
+        "path": "tests/visual/viz-v4/subset.ts",
+        "sha256": "e4ac0cf8cf2019e5fbfe5dba0b52ab37b3aec6faa783dc047898392bf2eea385"
+      },
+      {
+        "path": "tooling/boundary-policy.mjs",
+        "sha256": "63336d739e5fe584036e03b24882543f27f1131b2f9b143595e7616b80db3404"
+      },
+      {
+        "path": "tooling/check-boundaries.mjs",
+        "sha256": "32bafa68999953ddcd5a942b3cac7c2d6e010c28270b080fd81e4258d4484018"
+      },
+      {
+        "path": "tooling/classify-p3-fill-identity-statuses.mjs",
+        "sha256": "254147971ab0cf2846af1eebcb962950e9b2aaa253690709b1cdb08c65e78985"
+      },
+      {
+        "path": "tooling/compare-p2-wasm.mjs",
+        "sha256": "1c90dc64da86e881289ec0cfdd842cb2818e5907b1ac071ebacd3f29ab9c97dc"
+      },
+      {
+        "path": "tooling/compare-p3-b0-records.d.mts",
+        "sha256": "65db5a8943fac81df09e8e0573bcc91e178755fb1de36a9ff29c522e758cade3"
+      },
+      {
+        "path": "tooling/compare-p3-b0-records.mjs",
+        "sha256": "484c8ab1665422b3bdca44bdbc8a1b94301de4a2c5c5528bf1824d1bc7d1c209"
+      },
+      {
+        "path": "tooling/compare-p3-fill-identity.d.mts",
+        "sha256": "388a005fb34018ef8921a504b12263ceb6515e6dfbfca22fbc2681891e05e610"
+      },
+      {
+        "path": "tooling/compare-p3-fill-identity.mjs",
+        "sha256": "efc34f4facd4189d3dbb9161a8dae4ae5055c74aebdac1e00b43f3649fa3b212"
+      },
+      {
+        "path": "tooling/generate-p3-fill-event-fixtures.mjs",
+        "sha256": "dc429045b33edb9533bcb1107b6267ef5b7613da259963930a1d47ec615f74af"
+      },
+      {
+        "path": "tooling/generate-p3-fill-intersection-fixtures.mjs",
+        "sha256": "7321dfe88c0ce13b9ea4e6ddc9e13ab3c1e8a6d0e31ac40372c67796ce316491"
+      },
+      {
+        "path": "tooling/generate-p3-fill-predicate-fixtures.mjs",
+        "sha256": "0dc5035f1590f48ffd4effaa56715899b6e82bedd6298eb32372f49888efc9e8"
+      },
+      {
+        "path": "tooling/generate-p3-rounded-fill-fixtures.mjs",
+        "sha256": "c6df95c40027074b46dff7b97bb8c5f3c3faf2fca5e81e3034bded4bde36f6b3"
+      },
+      {
+        "path": "tooling/generate-p3-transverse-pair-fixtures.mjs",
+        "sha256": "a557ec28f52a75877bb2ed841d628a8b4c0c089567f21885b4c05b9473109b2f"
+      },
+      {
+        "path": "tooling/install-rust.ps1",
+        "sha256": "3be5d4d26960c42ad5a47e267b70a6ff0c0a7087cb424a57427b6ae6b921602c"
+      },
+      {
+        "path": "tooling/p1-presentmon-elevated.ps1",
+        "sha256": "606d873c21341232cf7d2d5cfb8eb2663ba418a035aabd670915932ef9f0e3e9"
+      },
+      {
+        "path": "tooling/p1-presentmon-feasibility.mjs",
+        "sha256": "07275d78c9ee17e9ca150ff666e571f2ee0e359d8fd2d596afa87a4a55c9bd6d"
+      },
+      {
+        "path": "tooling/p1-presentmon-preflight.ps1",
+        "sha256": "f70efad7b326a69e0cd7b78c134d0e7322ab61474ce3b094ec3db225caee6e3f"
+      },
+      {
+        "path": "tooling/p3-exit-a03-map.json",
+        "sha256": "d5c595ecfc1ae457d59a0d5380f9c1c3ca013c8ad7608dbc225841bd39e7c863"
+      },
+      {
+        "path": "tooling/p3-exit-a05-a06-map.json",
+        "sha256": "e3ebd44cc2430e3403a9b7b57a64eada4ac14e6c12b594aed01632e8383d526a"
+      },
+      {
+        "path": "tooling/p3-exit-a05-a06.d.mts",
+        "sha256": "099922f4eded25ab1da0114f127e9121327d235cbf387851e1deadbdaf2a670e"
+      },
+      {
+        "path": "tooling/p3-exit-a05-a06.mjs",
+        "sha256": "0ada30f30b6f4e13ff18066adc9d5e0c5ff2ec76ca2e60747da15b1859f00865"
+      },
+      {
+        "path": "tooling/p3-stroke-dump-diff.mjs",
+        "sha256": "9c1d648942cef193ba9063b01e38f90e93f60ab2f9f1860f5b4a5b04e4253d22"
+      },
+      {
+        "path": "tooling/p3-stroke-e1-corpus.mjs",
+        "sha256": "bca7c6a98807f301ca77290295b543ca70cd7436e008eeebb5f2320fcf6ca467"
+      },
+      {
+        "path": "tooling/p3-stroke-reversal-corpus.mjs",
+        "sha256": "688c029114f4e6071521a7c57b46ed76f8ce28e7be533c4b916be287d4a8aeb1"
+      },
+      {
+        "path": "tooling/pending-command.mjs",
+        "sha256": "10d8c35de945ad2c9c2e94bd0418a45e18f1d96a5c5671c6461a2cd982deec33"
+      },
+      {
+        "path": "tooling/run-a03-stroke-diag.mjs",
+        "sha256": "4b05c51ce111226ef07e59aab0991071bb0084dc6baf2eab20c57ddaa6141d37"
+      },
+      {
+        "path": "tooling/run-e14-fill-diag.mjs",
+        "sha256": "83c2fd5ce65299b196e13b36203d781fd8b52ce26c16f9237ced3898840977ee"
+      },
+      {
+        "path": "tooling/run-e16-fill-diag.mjs",
+        "sha256": "8fcab0efe5abaebb709c6eab327f9d90f5346207eaba151938c218aeb4c80d38"
+      },
+      {
+        "path": "tooling/run-e17-snap-model.mjs",
+        "sha256": "4c59811d8a8427d38448b7cca6bd51c8e26278c5b31bf382ea6213a1a7016327"
+      },
+      {
+        "path": "tooling/run-e3-a04-freeze.mjs",
+        "sha256": "2a466d6e4470e82f6d4d3e73684b85a8a9c0d5f57bedadffbe7d2858a8177d55"
+      },
+      {
+        "path": "tooling/run-e3-a04.mjs",
+        "sha256": "bdfca3436cc9a79b8f1e9bc04781d6d2c5d238d746a911fbf1e5737b8079eef6"
+      },
+      {
+        "path": "tooling/run-p0-benchmark.mjs",
+        "sha256": "ec4f41dc4573d83e4b28c0682b405c536b8141626d56a780a7e0ef62bcea0de9"
+      },
+      {
+        "path": "tooling/run-p1-benchmark.mjs",
+        "sha256": "ea42855762716605d3acecacfcb2e37c668323a9f30f2ed2b6ceea757cb19582"
+      },
+      {
+        "path": "tooling/run-p2-benchmark.mjs",
+        "sha256": "e095318bfd18596a5df8affbca2f192a6eacd2fc57bbcdcd9570f5c5c2059bf9"
+      },
+      {
+        "path": "tooling/run-p3-al-ob5-benchmark.d.mts",
+        "sha256": "f483139e24b7a4f2f0174e37d3bf52c2d5cc9de696f302c6fac6ae102d07ae33"
+      },
+      {
+        "path": "tooling/run-p3-al-ob5-benchmark.mjs",
+        "sha256": "3339aadb0bacb0f5f1059c6ebb04453bfee977837783fd74a8733bfd8914dd1d"
+      },
+      {
+        "path": "tooling/run-p3-b0-benchmark.d.mts",
+        "sha256": "2b38bd994426d222d06109246afa84583e93c6c3e1637d96cd3224c2f54802d1"
+      },
+      {
+        "path": "tooling/run-p3-b0-benchmark.mjs",
+        "sha256": "dd7cbd76f56901717d2406168f98e17192d45d5029ea2a45316e83ed3653e254"
+      },
+      {
+        "path": "tooling/run-p3-b0-spike-benchmark.d.mts",
+        "sha256": "86ead694d3b2a252f8e9e915b1a6bc29eb379f41cbb4e2ea937d77cba361185d"
+      },
+      {
+        "path": "tooling/run-p3-b0-spike-benchmark.mjs",
+        "sha256": "bfb918e20186a90fff005808e2d3d7b934b395841a3dbf2ceb29d0e9c11daddd"
+      },
+      {
+        "path": "tooling/run-p3-b0-wasm-benchmark.d.mts",
+        "sha256": "807948862bd91a31efe511acd5a2e7bd15dd4d7f9bcda3113fbb2a0a8382e3fa"
+      },
+      {
+        "path": "tooling/run-p3-b0-wasm-benchmark.mjs",
+        "sha256": "288d5eea26a2d43b7f134f5fddfdbafb3021f45c0e8135570359d38af61e7479"
+      },
+      {
+        "path": "tooling/run-p3-coverage-metrics.mjs",
+        "sha256": "75dad505bbac4aedada552811ca2389d17653e46f150431bfb6e683838e88153"
+      },
+      {
+        "path": "tooling/run-p3-cubic-census.d.mts",
+        "sha256": "46f1b33bcae3a3f1db167fe1b4d954b5740042e83afc442d0216feddace00232"
+      },
+      {
+        "path": "tooling/run-p3-cubic-census.mjs",
+        "sha256": "9dda25da2822507f61b241460f7b48ba9b09b3b7e51ff0e58cb4ace177da6cd6"
+      },
+      {
+        "path": "tooling/run-p3-exit-a05-a06.mjs",
+        "sha256": "b1f0971a87936fdee5ab327009abf46b971ef61392374c43d5de475d9f70dc55"
+      },
+      {
+        "path": "tooling/run-p3-exit-sweep.mjs",
+        "sha256": "dc2faed775dd9a342cf8e5b27a0432f6e7ebee12d263c0b0c176107d96bdff30"
+      },
+      {
+        "path": "tooling/run-p3-fill-ladder-benchmark.d.mts",
+        "sha256": "d8716b1f720304cc31164c0bcd15f23f9cbd3e842a5c587c1b84ccd85bd89b58"
+      },
+      {
+        "path": "tooling/run-p3-fill-ladder-benchmark.mjs",
+        "sha256": "bbb6bb1836b1f786a0469273d1f101c593f9f3b89e9bbe570723f134243ab1f9"
+      },
+      {
+        "path": "tooling/run-p3-o02-metrics.mjs",
+        "sha256": "b32b06e0ee8c9edd496acb020d868d8a1eef4e3131ecbbf12f24ad444248b033"
+      },
+      {
+        "path": "tooling/run-p3-polygon-census.d.mts",
+        "sha256": "68175024443603269415f5f69c0f0970eedf182de2a7ca554ddfccd4e6a11f8c"
+      },
+      {
+        "path": "tooling/run-p3-polygon-census.mjs",
+        "sha256": "3856a2c4bbbc6044dd9423b5e4b7e6686df79f7fd7a95eb99011350bf04ddf44"
+      },
+      {
+        "path": "tooling/run-viz-v4-expected.mjs",
+        "sha256": "ebf3d1cab5f58a36ee519815d9452553d99d6fbc620d2f822d97bfb747beab59"
+      },
+      {
+        "path": "tooling/run-viz-v4-gpu.mjs",
+        "sha256": "d03149fcc5c4aa7913727b0e640f00f5d52c65e441352a8af872a0ef60cb0568"
+      },
+      {
+        "path": "tooling/run-viz-v4-metrics.mjs",
+        "sha256": "9ffcce0c2aaae0fe0dec47309695743f865650361310fffc2ca493e14cae3005"
+      },
+      {
+        "path": "tooling/test-geometry-browser.mjs",
+        "sha256": "542ab8b0553c376846582f941450ed9cae49a046bb65e46d729ef15bb22700b1"
+      },
+      {
+        "path": "tooling/test-geometry.mjs",
+        "sha256": "8fc0cdfddec2964d96e349318c64c7468351890e8d6e6b9cd8f9544cf4463dbb"
+      },
+      {
+        "path": "tsconfig.base.json",
+        "sha256": "54a4732d04c541cd21b6dff7f677691da27c66d8b71d182baa5b6f76f5184b15"
+      },
+      {
+        "path": "tsconfig.json",
+        "sha256": "74d1f1c9403dc57e935105120ec4599f2f975c69c81de9875755673a8c1f684d"
+      },
+      {
+        "path": "vitest.a03-stroke-diag.config.ts",
+        "sha256": "5969ec2a1195a981233a4a13da18aebfbb326206da30f6dfae16508229909068"
+      },
+      {
+        "path": "vitest.config.ts",
+        "sha256": "1290b3e218127f12e325464af77665ee61029b2b00e7770cc8555c48e4c0e1e6"
+      },
+      {
+        "path": "vitest.e14-fill-diag.config.ts",
+        "sha256": "efe6816af4da1ec8ad99073b1903f70befe253ea800a51ce5e1efdf4742410a4"
+      },
+      {
+        "path": "vitest.e14-rung0-oracle.config.ts",
+        "sha256": "edfc688224a5e87739253ea1560767aee9779d08b937cead984db1d4ca193e3f"
+      },
+      {
+        "path": "vitest.e16-fill-diag.config.ts",
+        "sha256": "5b11aa38bfb5c420502577a874cceb4b6f569736adb309eb7cf7764c8a00f7e1"
+      },
+      {
+        "path": "vitest.e17-snap-model.config.ts",
+        "sha256": "8f37f26fa335a17b2a15e266b25d969de4d11d69e94a2f76aad77ff3bb94bc68"
+      },
+      {
+        "path": "vitest.e3-a04-freeze.config.ts",
+        "sha256": "205984dbec52328e93b372c4339c0be9ef45332dfd91759e3f8e223b8901d5d8"
+      },
+      {
+        "path": "vitest.e3-a04-run.config.ts",
+        "sha256": "f5f5a7930c22db31c7b10e89ea82c225f1f65a8e854ac602b355fd763172c295"
+      },
+      {
+        "path": "vitest.e3-a04.config.ts",
+        "sha256": "16e926ccaf7e80854c880de409487ab8d1b8ff0a3d758910bd2d23c5cf20356a"
+      },
+      {
+        "path": "vitest.geometry.config.ts",
+        "sha256": "5618d41c149004b672114a33d6f2ed8176dba6ef81d4d0dc15370018ae8299de"
+      },
+      {
+        "path": "vitest.p2-identity.config.ts",
+        "sha256": "c524d15b3390061a0edf8a4ce3929eaaf6ac67261c718a1c888261bfc1f5daa9"
+      },
+      {
+        "path": "vitest.p2-records.config.ts",
+        "sha256": "b22e19bd0ce96d1ce795f0598152aec966930ee54e8d8ac3641bb7b4562c376a"
+      },
+      {
+        "path": "vitest.p3-coverage.config.ts",
+        "sha256": "5bed004df63dbe58d591c0c08f54cb08ea1aa56411d95a044fe4e0d08cb1d52e"
+      },
+      {
+        "path": "vitest.p3-cubic-census.config.ts",
+        "sha256": "bee68a8d82bb6218b86184e74f8b27a158fd26c6ee41639220bee2bb1aef3ee1"
+      },
+      {
+        "path": "vitest.p3-exit-sweep.config.ts",
+        "sha256": "aed1ba3480c3b3c42b1a1b7c12395cc7775e3a6f1af8bbbbcbfba202573c6cb8"
+      },
+      {
+        "path": "vitest.p3-o02.config.ts",
+        "sha256": "ec1abd81712a26d9f833da90632f280e47246dc2600b06a491bcb4236a81a882"
+      },
+      {
+        "path": "vitest.p3-polygon-census.config.ts",
+        "sha256": "69621fe3c07e498482af380147e030537c370242be9e57801c506f8da553cbbc"
+      },
+      {
+        "path": "vitest.p3-t01.config.ts",
+        "sha256": "ebcf77a8a229cc9e3cdf76138dc5b982569035743f30444b86609a32fb963716"
+      },
+      {
+        "path": "vitest.p3-t02.config.ts",
+        "sha256": "36a75efa558adc576ff62525055d2f95b6292d4e94cdde1939b23f9d956570a8"
+      },
+      {
+        "path": "vitest.p3-t03.config.ts",
+        "sha256": "6425d2d78a03e21c2908b0ec6c24033272dd4e9ebbdf2c4118492205acd8522e"
+      },
+      {
+        "path": "vitest.viz-v4-expected.config.ts",
+        "sha256": "030e8a0b625ea728ae929e7b3967132d2cc7b62d8853907468797f6360bdf1e1"
+      },
+      {
+        "path": "vitest.viz-v4-metrics.config.ts",
+        "sha256": "af9cfbc9f41e8e0655ca276b77df87ac9b77db9c17d63cf1357c533716afbb74"
+      }
+    ],
+    "manifestSha256": "befc210a1f56ce30da2811c0597fc8b37d6f91020002c608c2a6a7de9428c25a"
+  },
+  "wasmSha256": "58f26517603d0d599f187481c967832e3f6abea2eb53c738e5540b6200b4fd35",
+  "operationIds": {
+    "fill": "geometry-wasm/fill-v0+r4",
+    "stroke": "geometry-wasm/stroke-v0+r7"
+  },
+  "deviceScaleFactor": 1,
+  "probeTolerance": 12,
+  "noticeSets": {
+    "n0": [],
+    "s1": [],
+    "s2": [],
+    "s3": [],
+    "s4": [
+      "v1-zigzag stroke fringe-work-cap"
+    ],
+    "s5": [],
+    "n1.a-fill-only": [],
+    "n1.b-stroke-on": [
+      "v1-circle stroke work-limit"
+    ],
+    "n1.c-stroke-off": [
+      "v1-circle stroke work-limit"
+    ],
+    "n1.d-stroke-on-again": [
+      "v1-circle stroke work-limit",
+      "v1-circle stroke work-limit"
+    ],
+    "n2.a-butt": [],
+    "n2.b-round": [
+      "v1-zigzag stroke fringe-work-cap"
+    ],
+    "a10": [],
+    "a7": [],
+    "a6": [],
+    "blur": [],
+    "a11": [],
+    "a12": []
+  },
+  "scenarios": {
+    "n0": {
+      "revision": 1,
+      "draws": {
+        "meshDraws": 6,
+        "analyticDraws": 1,
+        "meshTriangles": 300
+      }
+    },
+    "a7": [
+      {
+        "step": "fill color",
+        "fillPortCalls": 0,
+        "strokePortCalls": 0,
+        "revision": 2
+      },
+      {
+        "step": "stroke color",
+        "fillPortCalls": 0,
+        "strokePortCalls": 0,
+        "revision": 3
+      },
+      {
+        "step": "opacity 0.5",
+        "fillPortCalls": 0,
+        "strokePortCalls": 0,
+        "revision": 4
+      },
+      {
+        "step": "fill off",
+        "fillPortCalls": 0,
+        "strokePortCalls": 0,
+        "revision": 5
+      },
+      {
+        "step": "fill on",
+        "fillPortCalls": 0,
+        "strokePortCalls": 0,
+        "revision": 6
+      },
+      {
+        "step": "fill rule evenodd",
+        "fillPortCalls": 1,
+        "strokePortCalls": 0,
+        "revision": 7
+      },
+      {
+        "step": "width 12",
+        "fillPortCalls": 0,
+        "strokePortCalls": 1,
+        "revision": 8
+      },
+      {
+        "step": "miter limit 3",
+        "fillPortCalls": 0,
+        "strokePortCalls": 1,
+        "revision": 9
+      },
+      {
+        "step": "cap square",
+        "fillPortCalls": 0,
+        "strokePortCalls": 1,
+        "revision": 10
+      },
+      {
+        "step": "join bevel",
+        "fillPortCalls": 0,
+        "strokePortCalls": 1,
+        "revision": 11
+      },
+      {
+        "step": "width 0",
+        "fillPortCalls": 0,
+        "strokePortCalls": 0,
+        "revision": 12
+      },
+      {
+        "step": "width 5 (from 0)",
+        "fillPortCalls": 0,
+        "strokePortCalls": 1,
+        "revision": 13
+      }
+    ]
+  },
+  "latencies": [
+    {
+      "control": "fill-color",
+      "startedAt": 807.7000000029802,
+      "revisionAtStart": 1,
+      "toFrameMs": 33.29999999701977,
+      "toSettleMs": 33.29999999701977
+    },
+    {
+      "control": "stroke-color",
+      "startedAt": 1039.7000000029802,
+      "revisionAtStart": 2,
+      "toFrameMs": 34.59999999701972,
+      "toSettleMs": 34.59999999701972
+    },
+    {
+      "control": "opacity-number",
+      "startedAt": 1285.1000000089407,
+      "revisionAtStart": 3,
+      "toFrameMs": 39.19999999105926,
+      "toSettleMs": 39.19999999105926
+    },
+    {
+      "control": "fill-on",
+      "startedAt": 1546.2000000029802,
+      "revisionAtStart": 4,
+      "toFrameMs": 44.79999999701977,
+      "toSettleMs": 44.79999999701977
+    },
+    {
+      "control": "fill-on",
+      "startedAt": 1812.2999999970198,
+      "revisionAtStart": 5,
+      "toFrameMs": 45.30000000298014,
+      "toSettleMs": 45.30000000298014
+    },
+    {
+      "control": "fill-rule",
+      "startedAt": 2078.2999999970198,
+      "revisionAtStart": 6,
+      "toFrameMs": 46.000000002980414,
+      "toSettleMs": 46.000000002980414
+    },
+    {
+      "control": "stroke-width-number",
+      "startedAt": 2333.4000000059605,
+      "revisionAtStart": 7,
+      "toFrameMs": 40.89999999403972,
+      "toSettleMs": 40.89999999403972
+    },
+    {
+      "control": "miter-number",
+      "startedAt": 2580.1000000089407,
+      "revisionAtStart": 8,
+      "toFrameMs": 44.199999991059485,
+      "toSettleMs": 44.199999991059485
+    },
+    {
+      "control": "cap",
+      "startedAt": 2845.9000000059605,
+      "revisionAtStart": 9,
+      "toFrameMs": 45.099999994039536,
+      "toSettleMs": 45.099999994039536
+    },
+    {
+      "control": "join",
+      "startedAt": 3129,
+      "revisionAtStart": 10,
+      "toFrameMs": 45.30000000000018,
+      "toSettleMs": 45.30000000000018
+    },
+    {
+      "control": "stroke-width-number",
+      "startedAt": 3380.7000000029802,
+      "revisionAtStart": 11,
+      "toFrameMs": 43.59999999701995,
+      "toSettleMs": 43.59999999701995
+    },
+    {
+      "control": "stroke-width-number",
+      "startedAt": 3631.6000000089407,
+      "revisionAtStart": 12,
+      "toFrameMs": 42.699999991059485,
+      "toSettleMs": null
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": [],
+  "failures": []
+}

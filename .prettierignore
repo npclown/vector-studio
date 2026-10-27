@@ -75,3 +75,7 @@ docs/evidence/p3-exit/*/headed-pc-*/**/*.json
 
 # Preserve the E3 A04 evidence records and their GPU readbacks byte-for-byte.
 docs/evidence/e3-a04/**/*.json
+
+# Preserve the E11-U3 full GPU run and the VZ3-A19 report at the P3 exit snapshot byte-for-byte.
+docs/evidence/p3-exit/*/gpu-full-pc-*/**/*.json
+docs/evidence/p3-exit/*/container-*/viz-v3-packer-churn.json
