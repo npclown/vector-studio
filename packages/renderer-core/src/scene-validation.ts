@@ -20,6 +20,11 @@ import { hasFiniteSceneArithmetic } from './scene-numeric.js';
 
 /** Port presence, fixed when a mirror is constructed (P3 V3 contract, section a). */
 export type PathNodeSupport = 'supported' | 'unsupported';
+/**
+ * P4 contract, units U1 and U3: which non-null container clips the renderer draws. `rect` draws
+ * rect clips (U3) and still reports a mask container as `unsupported-feature` until U4.
+ */
+export type ClipSupport = 'supported' | 'rect' | 'unsupported';
 
 /**
  * The port-presence facts of a mirror (V3 section a; B2 stroke contract, section 5 and the
@@ -31,7 +36,7 @@ export type PathSupport = Readonly<{
   pathNodes: PathNodeSupport;
   pathFills: PathNodeSupport;
   pathStrokes: PathNodeSupport;
-  clips: PathNodeSupport;
+  clips: ClipSupport;
 }>;
 
 const NO_PATH_SUPPORT: PathSupport = Object.freeze({
@@ -209,6 +214,11 @@ function hasUnsupportedClipGraph(
   return false;
 }
 
+function clipSupported(clip: SceneClip, support: ClipSupport): boolean {
+  if (clip === null || support === 'supported') return true;
+  return support === 'rect' && clip.kind === 'rect';
+}
+
 export function snapshotsEqual(
   leftNodes: ReadonlyMap<string, RenderNodeSnapshot>,
   leftRootOrder: readonly string[],
@@ -275,7 +285,7 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
     });
     return Object.freeze({
       node,
-      unsupported: opacity !== 1 || (clip !== null && pathNodes.clips !== 'supported'),
+      unsupported: opacity !== 1 || !clipSupported(clip, pathNodes.clips),
     });
   }
 

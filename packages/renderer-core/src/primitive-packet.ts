@@ -41,6 +41,13 @@ export type ClipPacketPart = Readonly<{
   /** In index order; indices may have gaps, so a GPU table is sized by `maxIndex`. */
   states: readonly ClipStateRecord[];
   maxIndex: number;
+  /**
+   * U3: the packet's primitive origin, which rect records are rebased to on the GPU so a camera
+   * move rewrites no record, and the camera, which maps a physical pixel to the world:
+   * `world = camera + pixel / (zoom * devicePixelRatio)`.
+   */
+  origin: Readonly<{ x: number; y: number }>;
+  camera: Readonly<{ x: number; y: number; zoom: number }>;
 }>;
 /** P3 V3 contract, section f: the optional mesh packet part, version 0. */
 export type MeshResourceId =
@@ -154,6 +161,11 @@ export interface PrimitiveFrameSource {
    * (P3 V3 contract, section f). Optional; absent means false.
    */
   readonly requiresMeshPipeline?: boolean;
+  /**
+   * P4 contract, U3: true when the backend must create the clip pipeline variants at
+   * initialization and recovery. Optional; absent means false.
+   */
+  readonly requiresClipPipeline?: boolean;
   prepare(target: PrimitiveTarget): PrimitivePacket | null;
   acknowledge(receipt: PrimitiveReceipt): void;
 }

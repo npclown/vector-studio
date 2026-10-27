@@ -1,5 +1,6 @@
 import type { ResourceDescriptor } from '@vector-studio/contracts';
 import type {
+  ClipPacketPart,
   MeshFillDraw,
   MeshPacketPart,
   MeshReceiptPart,
@@ -13,6 +14,19 @@ import type {
   PrimitiveTarget,
 } from '@vector-studio/renderer-core';
 
+import {
+  CLIP_BINDINGS,
+  CLIP_BIND_GROUP_INDEX,
+  CLIP_FRAME_SIZE,
+  CLIP_STATE_SIZE,
+  MESH_FILL_CLIP_SHADER,
+  PRIMITIVE_ANALYTIC_CLIP_SHADER,
+  clipStateStride,
+  clipVariantKey,
+  createClipBindGroupLayoutDescriptor,
+  packClipFrame,
+  packClipState,
+} from './clip-pipeline.js';
 import { CaptureError, PendingCapture, type CountPipelineState } from './frame-capture.js';
 import {
   MESH_COUNT_FRAGMENT_ENTRY_POINT,
@@ -146,6 +160,36 @@ interface MeshPipelineState {
   readonly bindGroupLayout: GPUBindGroupLayout;
 }
 
+/** P4 contract, U3: the rect-clip pipeline variants created at initialization or recovery. */
+interface ClipPipelineState {
+  readonly bindGroupLayout: GPUBindGroupLayout;
+  readonly analytic: GPURenderPipeline;
+  /** Null without the mesh path. */
+  readonly mesh: GPURenderPipeline | null;
+  readonly meshJoint: GPURenderPipeline | null;
+}
+
+/** P4 contract, U3: the clip buffer, frame lanes at offset 0 and state i at i * stride. */
+interface ClipBufferState {
+  readonly id: string;
+  readonly buffer: GPUBuffer;
+  readonly bindGroup: GPUBindGroup;
+  /** States the buffer holds: indices 1..capacity. */
+  readonly capacity: number;
+  /** The bytes last written per state index, and the frame lanes; for change-only writes. */
+  readonly written: Map<number, Uint8Array>;
+  frame: Uint8Array | null;
+}
+
+/** The clip writes of a validated packet; null when it draws no clipped draw. */
+type ValidatedClip = Readonly<{
+  buffer: ClipBufferState;
+  createdBuffer: boolean;
+  stride: number;
+  frame: Uint8Array;
+  states: ReadonlyMap<number, Uint8Array>;
+}> | null;
+
 type ValidatedMesh =
   | Readonly<{ skipped: true }>
   | Readonly<{
@@ -232,6 +276,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   readonly shaderModulesCreated: number;
   readonly pipelinesCreated: number;
   readonly meshPipelineAvailable: boolean;
+  readonly clipPipelineAvailable: boolean;
   readonly sampleCount: 1 | 4;
   readonly #device: GPUDevice;
   readonly #context: NativeCanvasContextPort;
@@ -264,6 +309,11 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   /** The capture of a captured submission until it settles; failed on dispose. */
   #inFlight: PendingCapture | null = null;
   #currentMeshArena: MeshArenaState | undefined;
+  readonly #clip: ClipPipelineState | null;
+  #clipBuffer: ClipBufferState | undefined;
+  #nextClipBuffer = 1;
+  /** @internal Tests only (P4-A06): state records written to the clip buffer so far. */
+  public clipStateWritesForTesting = 0;
   #retiredArenas: ArenaBase[] = [];
   #nextArenaId = 1;
   #nextSubmissionSerial = 1;
@@ -288,8 +338,11 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     meshShaderModulesCreated = 0,
     count: CountPipelineState | null = null,
     stencil = false,
+    clip: ClipPipelineState | null = null,
   ) {
     this.#mesh = mesh;
+    this.#clip = clip;
+    this.clipPipelineAvailable = clip !== null;
     this.#count = count;
     this.#stencil = stencil;
     this.meshPipelineAvailable = mesh !== null;
@@ -297,8 +350,14 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     // pipelines (three at 4x); none without the countPass option. E17 section 3: the mesh path
     // adds the reset pipeline, and the count pass its own reset pipeline over the same module.
     const countModules = count === null ? 0 : count.readout === null ? 1 : 2;
-    this.shaderModulesCreated = 1 + meshShaderModulesCreated + countModules;
-    this.pipelinesCreated = (mesh === null ? 1 : 4) + (count === null ? 0 : countModules + 2);
+    // P4 contract, U3: one clip module and pipeline, two modules and three pipelines with the
+    // mesh path; none without the clipPipeline option.
+    const clipModules = clip === null ? 0 : clip.mesh === null ? 1 : 2;
+    this.shaderModulesCreated = 1 + meshShaderModulesCreated + countModules + clipModules;
+    this.pipelinesCreated =
+      (mesh === null ? 1 : 4) +
+      (count === null ? 0 : countModules + 2) +
+      (clip === null ? 0 : clip.mesh === null ? 1 : 3);
     this.#device = device;
     this.#context = context;
     this.#format = format;
@@ -463,7 +522,20 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     }
     const meshArena = mesh !== null && !mesh.skipped ? mesh.arena : null;
     const meshDraws = mesh !== null && !mesh.skipped ? mesh.draws : [];
+    let clip: ValidatedClip;
     try {
+      clip = this.#preflightClip(packet, meshDraws);
+    } catch (error) {
+      if (validated.createdArena) this.#releaseArena(arena);
+      if (mesh !== null && !mesh.skipped && mesh.createdArena && mesh.arena !== null) {
+        this.#releaseArena(mesh.arena);
+      }
+      return frozenResult(
+        error instanceof AllocationError ? 'allocation-failed' : 'invalid-packet',
+      );
+    }
+    try {
+      if (clip !== null) this.#writeClip(clip);
       for (const write of packet.writes) {
         const allocation = arena.allocations[write.resourceId];
         this.#device.queue.writeBuffer(
@@ -518,53 +590,81 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
               },
             }),
       });
-      const bindAnalytic = () => {
-        pass.setPipeline(this.#pipeline);
+      // P4 contract, U3: a clipped draw uses its pipeline's clip variant, with the clip bind
+      // group at its state's dynamic offset; a draw without a clip state is encoded exactly as
+      // before. Without the clip variants a clipped draw is not drawn (fail closed).
+      const clipPipelines = clip === null ? null : this.#clip;
+      let clipBoundState = 0;
+      const bindClip = (state: number) => {
+        if (state === clipBoundState) return;
+        pass.setBindGroup(CLIP_BIND_GROUP_INDEX, clip!.buffer.bindGroup, [state * clip!.stride]);
+        clipBoundState = state;
+      };
+      const bindAnalytic = (clipped: boolean) => {
+        pass.setPipeline(clipped ? clipPipelines!.analytic : this.#pipeline);
         pass.setBindGroup(0, arena.bindGroup);
         pass.setVertexBuffer(0, this.#vertexBuffer, 0, 32);
         pass.setIndexBuffer(this.#indexBuffer, 'uint16', 0, 12);
+        clipBoundState = 0;
       };
-      bindAnalytic();
+      bindAnalytic(false);
       // P3 V3 section g: draws are encoded in merged paint order; the pipeline and bind group
       // switch only at a variant change.
       // ST-U7 addendum, section 4.5: a joint fill draw switches to the joint pipeline and the
       // next plain mesh draw back; the mesh bind group is shared.
       // E17 contract, section 3: every mesh draw sets its write-once reference; a reset draw
       // clears the stencil before the references repeat.
-      let analyticBound = true;
-      let jointBound = false;
+      // The bound pipeline: an analytic or mesh kind, or null after a reset draw, whose
+      // pipeline has no bind group, so the next mesh draw binds its pipeline and group 0.
+      let bound: string | null = 'analytic';
       let nextMeshDraw = 0;
       const drawMeshesAt = (position: number) => {
         while (meshDraws[nextMeshDraw]?.position === position) {
           const draw = meshDraws[nextMeshDraw]!;
           const joint = draw.composite === 'joint-fill';
+          const state = draw.clipState ?? 0;
           const step = meshStencilStep(nextMeshDraw);
+          nextMeshDraw += 1;
           if (step.reset) {
-            // The reset pipeline has no bind group; the next mesh draw rebinds its pipeline.
             pass.setPipeline(this.#mesh!.resetPipeline);
             pass.draw(3);
-            analyticBound = true;
+            bound = null;
           }
-          if (analyticBound) {
-            pass.setPipeline(joint ? this.#mesh!.jointPipeline : this.#mesh!.pipeline);
+          if (state !== 0 && (clipPipelines?.mesh ?? null) === null) continue;
+          const kind = `${joint ? 'joint' : 'fill'}${state !== 0 ? '+clip' : ''}`;
+          const pipeline =
+            state === 0
+              ? joint
+                ? this.#mesh!.jointPipeline
+                : this.#mesh!.pipeline
+              : joint
+                ? clipPipelines!.meshJoint!
+                : clipPipelines!.mesh!;
+          if (bound === null || bound.startsWith('analytic')) {
+            pass.setPipeline(pipeline);
             pass.setBindGroup(0, meshArena!.bindGroup);
-            analyticBound = false;
-            jointBound = joint;
-          } else if (joint !== jointBound) {
-            pass.setPipeline(joint ? this.#mesh!.jointPipeline : this.#mesh!.pipeline);
-            jointBound = joint;
+            clipBoundState = 0;
+          } else if (bound !== kind) {
+            pass.setPipeline(pipeline);
           }
+          bound = kind;
+          if (state !== 0) bindClip(state);
           pass.setStencilReference(step.reference);
           pass.draw(3 * draw.triangleCount, 1, 3 * draw.firstTriangle, draw.instance);
-          nextMeshDraw += 1;
         }
       };
       packet.draws.forEach((draw, index) => {
         drawMeshesAt(index);
-        if (!analyticBound) {
-          bindAnalytic();
-          analyticBound = true;
+        const state = draw.clipState ?? 0;
+        if (state !== 0 && clipPipelines === null) return;
+        const kind = state === 0 ? 'analytic' : 'analytic+clip';
+        if (bound === null || !bound.startsWith('analytic')) {
+          bindAnalytic(state !== 0);
+        } else if (bound !== kind) {
+          pass.setPipeline(state === 0 ? this.#pipeline : clipPipelines!.analytic);
         }
+        bound = kind;
+        if (state !== 0) bindClip(state);
         pass.drawIndexed(6, draw.count, 0, 0, draw.first);
       });
       drawMeshesAt(packet.draws.length);
@@ -650,11 +750,172 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     this.#currentMeshArena = undefined;
     for (const arena of this.#retiredArenas) release(() => this.#releaseArena(arena));
     this.#retiredArenas = [];
+    if (this.#clipBuffer !== undefined) {
+      const clipBuffer = this.#clipBuffer;
+      release(() => clipBuffer.buffer.destroy());
+      release(() => this.#resources.release(clipBuffer.id));
+    }
+    this.#clipBuffer = undefined;
     release(() => this.#pipelineCache.dispose());
     release(() => this.#vertexBuffer.destroy());
     release(() => this.#indexBuffer.destroy());
     for (const id of this.#staticResourceIds) release(() => this.#resources.release(id));
     if (firstError !== undefined) throw asError(firstError, 'Primitive scene disposal failed.');
+  }
+
+  /**
+   * P4 contract, U3: checks the clip part against the draws that will be encoded and packs the
+   * records. A draw's clip state must name a record of the part; a part without a clipped draw
+   * is checked and writes nothing. Mask levels are refused until U4.
+   */
+  #preflightClip(packet: PrimitivePacket, meshDraws: readonly MeshFillDraw[]): ValidatedClip {
+    const used = new Set<number>();
+    for (const draw of [...packet.draws, ...meshDraws]) {
+      const state: unknown = draw.clipState;
+      if (state === undefined) continue;
+      if (typeof state !== 'number' || !isPositiveSafeInteger(state)) {
+        throw new Error('Invalid clip state.');
+      }
+      used.add(state);
+    }
+    const part = packet.clip;
+    if (part === undefined) {
+      if (used.size > 0) throw new Error('A clipped draw without a clip part.');
+      return null;
+    }
+    if (
+      part.layoutVersion !== 0 ||
+      !isArrayValue(part.states) ||
+      !isPositiveSafeInteger(part.maxIndex) ||
+      typeof part.origin !== 'object' ||
+      part.origin === null ||
+      typeof part.camera !== 'object' ||
+      part.camera === null ||
+      ![part.origin.x, part.origin.y, part.camera.x, part.camera.y, part.camera.zoom].every(
+        (value) => typeof value === 'number' && Number.isFinite(value),
+      ) ||
+      !(part.camera.zoom > 0)
+    ) {
+      throw new Error('Invalid clip part.');
+    }
+    const records = new Map<number, ClipPacketPart['states'][number]>();
+    let previous = 0;
+    for (const record of part.states) {
+      if (!isPositiveSafeInteger(record.index) || record.index <= previous) {
+        throw new Error('Clip states must be in increasing index order.');
+      }
+      previous = record.index;
+      records.set(record.index, record);
+    }
+    if (previous !== part.maxIndex) throw new Error('Clip maxIndex mismatch.');
+    for (const state of used) {
+      if (!records.has(state)) throw new Error('A draw names a missing clip state.');
+    }
+    const frame = packClipFrame(part, packet.frame.devicePixelRatio);
+    if (frame === null) throw new Error('Clip frame lanes are not finite.');
+    const states = new Map<number, Uint8Array>();
+    for (const record of records.values()) {
+      const bytes = packClipState(record, part.origin);
+      if (bytes === null) throw new Error('Unsupported clip state record.');
+      states.set(record.index, bytes);
+    }
+    if (this.#clip === null || used.size === 0) return null;
+    const stride = this.#clipStride();
+    const current = this.#clipBuffer;
+    const createdBuffer = current === undefined || current.capacity < part.maxIndex;
+    const buffer = createdBuffer
+      ? this.#createClipBuffer(nextPowerOfTwo(part.maxIndex), stride)
+      : current;
+    return Object.freeze({
+      buffer,
+      createdBuffer,
+      stride,
+      frame: new Uint8Array(frame.buffer),
+      states,
+    });
+  }
+
+  #clipStride(): number {
+    const alignment = this.#device.limits.minUniformBufferOffsetAlignment;
+    if (typeof alignment !== 'number' || !isPowerOfTwo(alignment)) throw new AllocationError();
+    return clipStateStride(alignment);
+  }
+
+  #createClipBuffer(capacity: number, stride: number): ClipBufferState {
+    const size = (capacity + 1) * stride;
+    if (size > safeLimit(this.#device.limits.maxBufferSize, 0)) throw new AllocationError();
+    const id = `primitive/${this.#generation}/clip-states-${this.#nextClipBuffer++}`;
+    let buffer: GPUBuffer;
+    try {
+      buffer = this.#device.createBuffer({
+        label: id,
+        size,
+        usage: UNIFORM_BUFFER_USAGE | COPY_DESTINATION_USAGE,
+      });
+    } catch (error) {
+      throw new AllocationError(error);
+    }
+    try {
+      this.#resources.track(id, { category: 'buffer', size });
+    } catch (error) {
+      buffer.destroy();
+      throw new AllocationError(error);
+    }
+    let bindGroup: GPUBindGroup;
+    try {
+      bindGroup = this.#device.createBindGroup({
+        label: `${id}/bind-group`,
+        layout: this.#clip!.bindGroupLayout,
+        entries: [
+          {
+            binding: CLIP_BINDINGS.frame,
+            resource: { buffer, offset: 0, size: CLIP_FRAME_SIZE },
+          },
+          {
+            binding: CLIP_BINDINGS.state,
+            resource: { buffer, offset: 0, size: CLIP_STATE_SIZE },
+          },
+        ],
+      });
+    } catch (error) {
+      buffer.destroy();
+      this.#resources.release(id);
+      throw new AllocationError(error);
+    }
+    return { id, buffer, bindGroup, capacity, written: new Map(), frame: null };
+  }
+
+  /**
+   * Writes the frame lanes and the state records whose bytes changed (P4-A06), and adopts a
+   * new buffer, releasing the previous one; queue order keeps earlier submissions' contents.
+   */
+  #writeClip(clip: NonNullable<ValidatedClip>): void {
+    const target = clip.buffer;
+    if (clip.createdBuffer) {
+      const previous = this.#clipBuffer;
+      this.#clipBuffer = target;
+      if (previous !== undefined) {
+        previous.buffer.destroy();
+        this.#resources.release(previous.id);
+      }
+    }
+    if (target.frame === null || !bytesEqual(target.frame, clip.frame)) {
+      this.#device.queue.writeBuffer(target.buffer, 0, clip.frame, 0, clip.frame.byteLength);
+      target.frame = clip.frame;
+    }
+    for (const [index, bytes] of clip.states) {
+      const written = target.written.get(index);
+      if (written !== undefined && bytesEqual(written, bytes)) continue;
+      this.#device.queue.writeBuffer(
+        target.buffer,
+        index * clip.stride,
+        bytes,
+        0,
+        bytes.byteLength,
+      );
+      target.written.set(index, bytes);
+      this.clipStateWritesForTesting += 1;
+    }
   }
 
   #preflight(packet: PrimitivePacket): ValidatedPacket {
@@ -1481,6 +1742,12 @@ class AllocationError extends Error {
   }
 }
 
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  return (
+    left.byteLength === right.byteLength && left.every((value, index) => value === right[index])
+  );
+}
+
 function sameSet(...sets: readonly ReadonlySet<number>[]): boolean {
   const first = sets[0];
   if (first === undefined) return true;
@@ -1777,6 +2044,99 @@ export function createNativePrimitiveSceneCreation(
         });
       }
     }
+    // P4 contract, U3: the clip variants, created here like the mesh path and never on the
+    // frame path. A failure leaves them unavailable: unclipped draws are unaffected, and a
+    // clipped draw is not drawn.
+    let clip: ClipPipelineState | null = null;
+    if (options.clipPipeline === true && !disposed) {
+      const clipTracked: string[] = [];
+      const trackClip = (id: string, descriptor: ResourceDescriptor) => {
+        track(id, descriptor);
+        clipTracked.push(id);
+      };
+      try {
+        const clipBindGroupLayout = device.createBindGroupLayout(
+          createClipBindGroupLayoutDescriptor(),
+        );
+        trackClip(`${prefix}/clip-bind-group-layout`, { category: 'bind-group-layout' });
+        const clipPipelineLayout = device.createPipelineLayout({
+          label: `${prefix}/clip-pipeline-layout`,
+          bindGroupLayouts: [bindGroupLayout, clipBindGroupLayout],
+        });
+        trackClip(`${prefix}/clip-pipeline-layout`, { category: 'pipeline-layout' });
+        const clipShader = device.createShaderModule({
+          label: `${prefix}/clip-shader`,
+          code: PRIMITIVE_ANALYTIC_CLIP_SHADER,
+        });
+        trackClip(`${prefix}/clip-shader`, { category: 'shader-module' });
+        const analytic = await pipelineCache.getOrCreate(
+          clipVariantKey(primitivePipelineKey(format, sampleCount, stencil)),
+          () =>
+            device.createRenderPipelineAsync(
+              clipDescriptor(
+                createPrimitivePipelineDescriptor(
+                  clipShader,
+                  clipPipelineLayout,
+                  format,
+                  sampleCount,
+                  stencil,
+                ),
+              ),
+            ),
+        );
+        trackClip(`${prefix}/clip-pipeline`, { category: 'render-pipeline' });
+        let meshClip: GPURenderPipeline | null = null;
+        let meshJointClip: GPURenderPipeline | null = null;
+        if (mesh !== null) {
+          const meshClipLayout = device.createPipelineLayout({
+            label: `${prefix}/mesh-clip-pipeline-layout`,
+            bindGroupLayouts: [mesh.bindGroupLayout, clipBindGroupLayout],
+          });
+          trackClip(`${prefix}/mesh-clip-pipeline-layout`, { category: 'pipeline-layout' });
+          const meshClipShader = device.createShaderModule({
+            label: `${prefix}/mesh-clip-shader`,
+            code: MESH_FILL_CLIP_SHADER,
+          });
+          trackClip(`${prefix}/mesh-clip-shader`, { category: 'shader-module' });
+          const meshVariant = (kind: 'fill' | 'joint') =>
+            pipelineCache!.getOrCreate(
+              clipVariantKey(meshPipelineKey(format, sampleCount, kind)),
+              () =>
+                device.createRenderPipelineAsync(
+                  clipDescriptor(
+                    createMeshPipelineDescriptor(
+                      meshClipShader,
+                      meshClipLayout,
+                      format,
+                      sampleCount,
+                      kind,
+                    ),
+                  ),
+                ),
+            );
+          meshClip = await meshVariant('fill');
+          trackClip(`${prefix}/mesh-clip-pipeline`, { category: 'render-pipeline' });
+          meshJointClip = await meshVariant('joint');
+          trackClip(`${prefix}/mesh-joint-clip-pipeline`, { category: 'render-pipeline' });
+        }
+        clip = Object.freeze({
+          bindGroupLayout: clipBindGroupLayout,
+          analytic,
+          mesh: meshClip,
+          meshJoint: meshJointClip,
+        });
+      } catch {
+        for (const id of clipTracked) {
+          tracked.delete(id);
+          try {
+            resources.release(id);
+          } catch {
+            // Accounting cleanup is best effort.
+          }
+        }
+        clip = null;
+      }
+    }
     if (disposed || vertexBuffer === undefined || indexBuffer === undefined) {
       throw new Error('Primitive scene creation completed after disposal.');
     }
@@ -1798,6 +2158,7 @@ export function createNativePrimitiveSceneCreation(
       meshShaderModulesCreated,
       count,
       stencil,
+      clip,
     );
     vertexBuffer = undefined;
     indexBuffer = undefined;
@@ -1812,6 +2173,11 @@ export function createNativePrimitiveSceneCreation(
   });
 
   return Object.freeze({ result, dispose });
+}
+
+/** P4 contract, U3: a clip variant's descriptor, labelled apart from its base pipeline. */
+function clipDescriptor(base: GPURenderPipelineDescriptor): GPURenderPipelineDescriptor {
+  return { ...base, label: `${base.label ?? 'vector-studio/pipeline'}+clip-v0` };
 }
 
 /**

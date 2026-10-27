@@ -307,6 +307,12 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
               layoutVersion: 0 as const,
               states: clip.records,
               maxIndex: clip.records[clip.records.length - 1]!.index,
+              origin: Object.freeze({ x: origin.x, y: origin.y }),
+              camera: Object.freeze({
+                x: cameraState.camera.position.x,
+                y: cameraState.camera.position.y,
+                zoom: cameraState.camera.zoom,
+              }),
             }),
           }),
       ...(mesh === undefined
