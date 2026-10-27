@@ -38,17 +38,17 @@ The closed-list rule of E11 section 7.2 applies to rejected `a04-corpus/v1` rows
 
 ## Exit decision
 
-Decided 2026-10-27 by the user: P3 exits on this snapshot with the defects of A01, A02, A04 and A08 disclosed and their remedies (E7, E18, E20) in the backlog ([E11 section 13](../../../plans/d9-e11-p3-c03-c05-closure-contract.md#13-p3-exit-decision-2026-10-27)).
+Decided 2026-10-27 by the user: P3 exits on this snapshot with the defects of A01, A02, A04 and A08 disclosed and their remedies (E7, E18, E19, E20) in the backlog; `collapsed-feature` has no planned remedy ([E11 section 13](../../../plans/d9-e11-p3-c03-c05-closure-contract.md#13-p3-exit-decision-2026-10-27)).
 
 ## Status per criterion
 
 | ID  | Record                                                                   | State                                                                                                                                                                         |
 | --- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A01 | [A01.md](A01.md)                                                         | FAIL on crack width only, pending the independent review: GPU T-junction cracks up to 0.00108 physical px against "crack width 0". Structure, isolation and bounded work PASS                                   |
-| A02 | [A02.md](A02.md) | INCONCLUSIVE, pending review: analytic and corpus parts PASS; image part 0 FAIL, 184 C1 UNDECIDED in the `far-vertices` class (E3 section 21) |
+| A01 | [A01.md](A01.md)                                                         | FAIL on crack width only, review accepted (#279): GPU T-junction cracks up to 0.00108 physical px against "crack width 0". Structure, isolation and bounded work PASS                                   |
+| A02 | [A02.md](A02.md) | INCONCLUSIVE, review accepted (#281): analytic and corpus parts PASS; image part 0 FAIL, 184 C1 UNDECIDED in the `far-vertices` class (E3 section 21) |
 | A03 | [A03.md](A03.md)                                                         | PASS: runner CI part, corpus classes and the headed ST-U6, ST-U7 and B2 specs in Chrome and Edge                                                                              |
 | A04 | [E3-U5 record](../../e3-a04/2026-10-27T00-33-11-173Z-de2951d7/record.md) | FAIL, recorded as is by the user's decision of 2026-10-27; disclosed, remedies in backlog E20                                                                                 |
 | A05 | [A05.md](A05.md)                                                         | PASS (no headed part)                                                                                                                                                         |
 | A06 | [A06.md](A06.md)                                                         | PASS: runner CI part and the V-3 headed port-call deltas in Chrome and Edge                                                                                                   |
-| A07 | [A07.md](A07.md) | PASS, pending review: V-3 spec in Chrome and Edge; full `pnpm test:gpu` 92 passed, `viz-v4-a08-corpus` cited from the V-4 counted run (24/24) |
-| A08 | [V-4 record](../../viz-v4-a08/5ddec4e/README.md) | INCONCLUSIVE: 0 gated FAIL, 372 UNDECIDED in two disclosed E3 section 21 classes (V-4 section 18); exit decision open |
+| A07 | [A07.md](A07.md) | PASS with VZ3-A17 composite, review accepted (#281); literal re-run pending: V-3 spec in Chrome and Edge; full `pnpm test:gpu` 92 passed, `viz-v4-a08-corpus` cited from the V-4 counted run (24/24) |
+| A08 | [V-4 record](../../viz-v4-a08/5ddec4e/README.md) | INCONCLUSIVE: 0 gated FAIL, 372 UNDECIDED in two disclosed E3 section 21 classes (V-4 section 18); disclosed at the exit (E11 section 13); evidence review pending |
