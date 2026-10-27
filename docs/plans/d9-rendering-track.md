@@ -80,7 +80,7 @@ By D9-Q2 (a) this plan carries the evidence index for the P3 exit gate. The visu
 | A05 | Runner `pnpm p3-exit:a05-a06` ready; [PRE-FREEZE dry run](../evidence/x1-a05-a06-prefreeze-2026-10-25.md), not evidence                    | TODO; record on the E11 exit snapshot                               |
 | A06 | Runner `pnpm p3-exit:a05-a06` ready; [PRE-FREEZE dry run](../evidence/x1-a05-a06-prefreeze-2026-10-25.md), not evidence                    | TODO; record on the E11 exit snapshot, headed part from the V-3 run |
 | A07 | Partial (V-3, review accepted 2026-10-23): [V-3 implementation evidence](d9-visualization-track.md#v-3-implementation-evidence-2026-10-23) | TODO; headed page from the visualization track                      |
-| A08 | None yet                                                                                                                                   | TODO; headed page from the visualization track                      |
+| A08 | [V-4 counted run record](../evidence/viz-v4-a08/5ddec4e/README.md) on the E11 snapshot ([V-4 section 18](viz-v4-a08-corpus-contract.md#18-counted-run-and-disclosed-classes-2026-10-27)) | INCONCLUSIVE: 0 gated FAIL, 372 UNDECIDED, all in E3 section 21 classes (`far-vertices` 368, `collapsed-feature` 4); exit decision by the Primary with user approval; evidence review pending |
 
 ## Evidence rules
 
