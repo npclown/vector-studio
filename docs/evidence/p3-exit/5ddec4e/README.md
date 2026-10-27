@@ -36,6 +36,10 @@ Run in a clean worktree at `00e49bf` with Node 24.15.0 and `CARGO_HOME=~/.cargo 
 
 The closed-list rule of E11 section 7.2 applies to rejected `a04-corpus/v1` rows, so the class diagnostics cover the corpus phase. The stress scene (A01) has 252 fill and 746 stroke rejections; A01 needs every scene request to end within its cap with a valid structure, not a class.
 
+## Exit decision
+
+Decided 2026-10-27 by the user: P3 exits on this snapshot with the defects of A01, A02, A04 and A08 disclosed and their remedies (E7, E18, E20) in the backlog ([E11 section 13](../../../plans/d9-e11-p3-c03-c05-closure-contract.md#13-p3-exit-decision-2026-10-27)).
+
 ## Status per criterion
 
 | ID  | Record                                                                   | State                                                                                                                                                                         |
