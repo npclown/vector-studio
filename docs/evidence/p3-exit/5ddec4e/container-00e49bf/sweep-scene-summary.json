@@ -1,0 +1,160 @@
+{
+  "schema": "p3-exit-sweep/v1",
+  "phase": "scene",
+  "operationIds": {
+    "fill": "geometry-wasm/fill-v0+r4",
+    "stroke": "geometry-wasm/stroke-v0+r7"
+  },
+  "corpusCases": null,
+  "skippedByState": {},
+  "requests": 2000,
+  "controls": {
+    "fill": {
+      "base": "p3-exit-stress/v1/fill/0",
+      "results": [
+        {
+          "id": "index-out-of-range",
+          "expected": "INDEX_RANGE",
+          "caught": true
+        },
+        {
+          "id": "nan-vertex",
+          "expected": "NON_FINITE_VERTEX",
+          "caught": true
+        },
+        {
+          "id": "bounds-underreported",
+          "expected": "BOUNDS_NOT_EXACT",
+          "caught": true
+        },
+        {
+          "id": "flipped-triangle",
+          "expected": "NONPOSITIVE_TRIANGLE",
+          "caught": true
+        },
+        {
+          "id": "missing-triangle",
+          "expected": "BOUNDARY_MISMATCH",
+          "caught": true
+        },
+        {
+          "id": "duplicated-triangle",
+          "expected": "DUPLICATE_DIRECTED_EDGE",
+          "caught": true
+        },
+        {
+          "id": "truncated-indices",
+          "expected": "INDEX_COUNT",
+          "caught": true
+        },
+        {
+          "id": "reversed-boundary-edge",
+          "expected": "BOUNDARY_MISMATCH",
+          "caught": true
+        },
+        {
+          "id": "unsplit-neighbor",
+          "expected": "T_JUNCTION",
+          "caught": true
+        }
+      ]
+    },
+    "stroke": {
+      "base": "p3-exit-stress/v1/stroke/0",
+      "results": [
+        {
+          "id": "index-out-of-range",
+          "expected": "INDEX_RANGE",
+          "caught": true
+        },
+        {
+          "id": "nan-vertex",
+          "expected": "NON_FINITE_VERTEX",
+          "caught": true
+        },
+        {
+          "id": "bounds-underreported",
+          "expected": "BOUNDS_NOT_EXACT",
+          "caught": true
+        },
+        {
+          "id": "flipped-triangle",
+          "expected": "NONPOSITIVE_TRIANGLE",
+          "caught": true
+        },
+        {
+          "id": "missing-triangle",
+          "expected": "BOUNDARY_MISMATCH",
+          "caught": true
+        },
+        {
+          "id": "duplicated-triangle",
+          "expected": "DUPLICATE_DIRECTED_EDGE",
+          "caught": true
+        },
+        {
+          "id": "truncated-indices",
+          "expected": "INDEX_COUNT",
+          "caught": true
+        },
+        {
+          "id": "reversed-boundary-edge",
+          "expected": "BOUNDARY_MISMATCH",
+          "caught": true
+        },
+        {
+          "id": "unsplit-neighbor",
+          "expected": "T_JUNCTION",
+          "caught": true
+        }
+      ]
+    }
+  },
+  "fillClassCounts": {
+    "scene": {
+      "e14-self-crossing-over-E": 209,
+      "failed:unsupported-geometry": 41,
+      "work-limit-outside-e14": 2
+    }
+  },
+  "strokeClassCounts": {
+    "scene": {
+      "stroke-work-limit": 746
+    }
+  },
+  "batchSize": 32,
+  "fill": {
+    "requests": 1000,
+    "outcomes": {
+      "ok": 748,
+      "failed:work-limit": 211,
+      "failed:unsupported-geometry": 41
+    },
+    "issues": {},
+    "oracleChecked": 230,
+    "duplicatePositions": 0,
+    "maxTriangles": 6555,
+    "maxVertices": 6557,
+    "triangles": 626647
+  },
+  "stroke": {
+    "requests": 1000,
+    "outcomes": {
+      "ok": 254,
+      "failed:work-limit": 746
+    },
+    "issues": {},
+    "oracleChecked": 0,
+    "duplicatePositions": 0,
+    "maxTriangles": 7578,
+    "maxVertices": 7578,
+    "triangles": 725772
+  },
+  "structureFailures": [],
+  "echoFailures": [],
+  "isolationFailures": [],
+  "batchFailures": [],
+  "outcomeDigest": "7df0739243c8bfa982429f599c0c41ef0551e1b795390b6e58f9dcc28b1abeb6",
+  "wallMilliseconds": 104709,
+  "rejectedCount": 998
+}

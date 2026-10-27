@@ -1,0 +1,871 @@
+{
+  "schema": "e3-a04-gpu-check/v1",
+  "passed": true,
+  "browser": {
+    "project": "edge",
+    "version": "156.0.4314.42",
+    "launchFlags": [
+      "--enable-unsafe-webgpu"
+    ],
+    "adapter": {
+      "vendor": "nvidia",
+      "architecture": "turing",
+      "device": "",
+      "description": "",
+      "isFallbackAdapter": false,
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36 Edg/151.0.7922.34",
+      "devicePixelRatio": 1,
+      "software": false
+    }
+  },
+  "shaderSha256": "d306137cf0770f6bf7f9237f1c98b9ecd0a165cfdbfda916196d299e36b831a3",
+  "wasmSha256": "58f26517603d0d599f187481c967832e3f6abea2eb53c738e5540b6200b4fd35",
+  "subset": {
+    "nonCorpus": [
+      "smoke/rect/T0/z1-d1",
+      "smoke/rect/T0/z64-d3",
+      "smoke/blob/T2/z1-d2",
+      "smoke/segment-butt/T0/z1-d1",
+      "smoke/polyline-miter/T0/z1-d1",
+      "readback/rect-far/T0/z1-d2",
+      "readback/rect/T0/z0.01-d3",
+      "readback/rect-edge/T0/z1-d1"
+    ],
+    "corpus": "named rows of C1, C3, C5, C6, C9 and C12 at every transform and pair",
+    "cases": 13364,
+    "idsSha256": "f220b37dfd9ba9480c605e65afdbc70349a4ea07f45dfef8d0d1a7a8d1226ae5"
+  },
+  "skippedKinds": {
+    "rejected": 1429,
+    "empty": 216
+  },
+  "skipped": [
+    {
+      "id": "C1/s05-I/T0/z1-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T0/z1-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T0/z1-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T0/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T0/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T0/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T1/z1-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T1/z1-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T1/z1-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T1/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T1/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T1/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T2/z1-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T2/z1-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T2/z1-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T2/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T2/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T2/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T3/z0.01-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T3/z1-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T3/z1-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T3/z1-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T3/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T3/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T3/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T4/z1-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T4/z1-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T4/z1-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T4/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T4/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T4/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T5/z1-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T5/z1-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T5/z1-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T5/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T5/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T5/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T6/z0.01-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T6/z1-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T6/z1-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T6/z1-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T6/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T6/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T6/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T7/z1-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T7/z1-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T7/z1-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T7/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T7/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-I/T7/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T0/z1-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T0/z1-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T0/z1-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T0/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T0/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T0/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T1/z1-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T1/z1-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T1/z1-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T1/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T1/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T1/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T2/z1-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T2/z1-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T2/z1-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T2/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T2/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T2/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T3/z0.01-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T3/z1-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T3/z1-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T3/z1-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T3/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T3/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T3/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T4/z1-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T4/z1-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T4/z1-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T4/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T4/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T4/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T5/z1-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T5/z1-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T5/z1-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T5/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T5/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T5/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T6/z0.01-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T6/z1-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T6/z1-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T6/z1-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T6/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T6/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T6/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T7/z1-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T7/z1-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T7/z1-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T7/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T7/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C1/s05-Q/T7/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T0/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T0/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T1/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T1/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T1/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T2/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T2/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T3/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T3/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T3/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T4/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T4/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T4/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T5/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T5/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T6/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T6/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T6/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T7/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c03/T7/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c04/T0/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c04/T1/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c04/T1/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c04/T2/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c04/T3/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c04/T3/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c04/T3/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c04/T4/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c04/T4/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c04/T5/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c04/T6/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c04/T6/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c04/T6/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c04/T7/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c05/T0/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c05/T1/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c05/T1/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c05/T2/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c05/T3/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c05/T3/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c05/T3/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c05/T4/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c05/T4/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c05/T5/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c05/T6/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c05/T6/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c05/T6/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c05/T7/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c06/T0/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c06/T1/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c06/T1/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c06/T2/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c06/T3/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c06/T3/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c06/T3/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c06/T4/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c06/T4/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c06/T5/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c06/T6/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c06/T6/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c06/T6/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c06/T7/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c07/T0/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c07/T1/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c07/T1/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c07/T2/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c07/T3/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c07/T3/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c07/T3/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c07/T4/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c07/T4/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c07/T5/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c07/T6/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c07/T6/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c07/T6/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c07/T7/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c08/T0/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c08/T1/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c08/T1/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c08/T2/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c08/T3/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c08/T3/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c08/T3/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c08/T4/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c08/T4/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c08/T5/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c08/T6/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c08/T6/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c08/T6/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c08/T7/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c09/T0/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c09/T1/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c09/T1/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c09/T2/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c09/T3/z64-d1/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c09/T3/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c09/T3/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c09/T4/z64-d2/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c09/T4/z64-d3/center/k0",
+      "kind": "rejected"
+    },
+    {
+      "id": "C3/c09/T5/z64-d3/center/k0",
+      "kind": "rejected"
+    }
+  ],
+  "draws": 11719,
+  "points": 1236334,
+  "maxVertexRatio": 0.2666660927674124,
+  "maxFeatureRatio": 0.36793414823002,
+  "crack": {
+    "junctions": 151848,
+    "maxWidth": 0.0010801821852767846,
+    "maxWidthDraw": "C5/l40/T6/z64-d3/center/k0"
+  },
+  "clip": {
+    "draws": 2668,
+    "unmeasurable": 591,
+    "compared": 41503238,
+    "excluded": 230010,
+    "mismatches": 0,
+    "failedDraws": 0,
+    "failures": []
+  },
+  "failures": [],
+  "pc12": {
+    "rejected": true,
+    "failures": [
+      "smoke/rect/T0/z1-d1#2: vertex path 0.0009174358076457582 > β 0.0004596541880059921",
+      "smoke/rect/T0/z1-d1#2: feature path 0.000518798828125 > β 0.0002563177408268194"
+    ]
+  },
+  "pageErrors": []
+}

@@ -53,7 +53,11 @@ export type Aggregate = {
   p50U: number | null;
 };
 
-export type Verdict = 'PASS' | 'FAIL' | 'UNVERIFIED';
+/** `PASS with disclosure`: PASS but for cases in the known classes of section 21. */
+export type Verdict = 'PASS' | 'PASS with disclosure' | 'FAIL' | 'UNVERIFIED';
+
+/** Section 21: the known classes A04 discloses instead of counting (E11 section 7.2). */
+export type KnownClass = 'collapsed-feature' | 'far-vertices' | 'degenerate-stroke-triangle';
 
 export type A04Record = Readonly<{
   schema: typeof A04_RECORD_SCHEMA;
@@ -68,6 +72,8 @@ export type A04Record = Readonly<{
   maxIntervalWidth: number | null;
   verdict: Verdict;
   verdictReasons: readonly string[];
+  /** Section 21: the FAIL and UNDECIDED case ids in each known class. */
+  disclosed: Readonly<Record<KnownClass, readonly string[]>>;
 }>;
 
 /** One browser's output of tests/gpu/e3-a04-readback.spec.ts (`e3-a04-gpu-check/v1`). */
@@ -172,11 +178,15 @@ export function aggregates(rows: readonly HarnessRow[]): A04Record['aggregates']
   };
 }
 
-/** E3-A8: paint × declared transform × pair cells with no measured case. */
+/**
+ * E3-A8: paint × declared transform × pair cells with no measured case. A case in a known
+ * class (section 21) does not cover its cell.
+ */
 export function uncoveredCells(rows: readonly HarnessRow[]): string[] {
   const covered = new Set<string>();
   for (const r of rows)
-    if (MEASURED.has(r.status)) covered.add(`${r.paint}/${r.transform}/${r.pair}`);
+    if (MEASURED.has(r.status) && knownClassOf(r) === null)
+      covered.add(`${r.paint}/${r.transform}/${r.pair}`);
   const missing: string[] = [];
   for (const paint of ['fill', 'stroke'])
     for (const t of DECLARED_TRANSFORMS)
@@ -185,14 +195,59 @@ export function uncoveredCells(rows: readonly HarnessRow[]): string[] {
   return missing;
 }
 
-/** Section 7.3's A04 verdict, with the reasons that keep it from PASS. */
+/** The E3-C4 rows of two overlapping rectangles: `g` is an overlap there, not a gap or slit. */
+const C4_OVERLAP_ROWS: ReadonlySet<string> = new Set(['n15', 'n16', 'n17']);
+
+const FAR_VERTEX_REASONS: ReadonlySet<string> = new Set(['beta ≥ 1 px', 'clip bound ≥ 0.25 px']);
+
+/**
+ * Section 21: the known class of a FAIL or UNDECIDED row, or null. Each test is mechanical on
+ * the row: no judgment of the case's geometry enters.
+ */
+export function knownClassOf(row: HarnessRow): KnownClass | null {
+  if (row.status !== 'fail' && row.status !== 'undecided') return null;
+  // A C4 gap, slit or wall at g = 2^-16 px: no pixel sample can land in it (E3-R3).
+  if (
+    row.stratum === 'C4' &&
+    row.gapTarget !== null &&
+    row.gapTarget < 2 ** -8 &&
+    !C4_OVERLAP_ROWS.has(row.id.split('/')[1] ?? '')
+  )
+    return 'collapsed-feature';
+  if (row.status !== 'undecided') return null;
+  if (row.reason !== null && FAR_VERTEX_REASONS.has(row.reason)) return 'far-vertices';
+  if (row.paint === 'stroke' && row.flipTolerant?.reason === 'zero-area triangle off M*')
+    return 'degenerate-stroke-triangle';
+  return null;
+}
+
+/** Section 21: the FAIL and UNDECIDED case ids per known class, in row order. */
+export function disclosedCases(rows: readonly HarnessRow[]): Record<KnownClass, string[]> {
+  const out: Record<KnownClass, string[]> = {
+    'collapsed-feature': [],
+    'far-vertices': [],
+    'degenerate-stroke-triangle': [],
+  };
+  for (const r of rows) {
+    const k = knownClassOf(r);
+    if (k !== null) out[k].push(r.id);
+  }
+  return out;
+}
+
+/**
+ * Section 7.3's A04 verdict, with the reasons that keep it from PASS. Rows in a known class
+ * (section 21) count neither as FAIL nor as UNDECIDED; a verdict that would be PASS without
+ * them is `PASS with disclosure`.
+ */
 export function verdictOf(
   input: Pick<A04Record, 'rows' | 'controls' | 'gpu' | 'selection' | 'provenance'>,
 ): Readonly<{ verdict: Verdict; reasons: string[] }> {
   const reasons: string[] = [];
-  if (input.rows.some((r) => r.status === 'fail'))
+  const counted = input.rows.filter((r) => knownClassOf(r) === null);
+  if (counted.some((r) => r.status === 'fail'))
     return { verdict: 'FAIL', reasons: ['a measured case is FAIL'] };
-  const undecided = input.rows.filter((r) => r.status === 'undecided').length;
+  const undecided = counted.filter((r) => r.status === 'undecided').length;
   if (undecided > 0) reasons.push(`${undecided} UNDECIDED case(s)`);
   const badControls = input.controls.filter((c) => !c.ok).map((c) => c.id);
   if (badControls.length > 0) reasons.push(`controls not met: ${badControls.join(', ')}`);
@@ -208,7 +263,11 @@ export function verdictOf(
   if (input.provenance.dirty) reasons.push('a dirty worktree');
   if (input.provenance.oracleCertified === false)
     reasons.push('an oracle version without a freeze check record (E3-R2)');
-  return { verdict: reasons.length === 0 ? 'PASS' : 'UNVERIFIED', reasons };
+  if (reasons.length > 0) return { verdict: 'UNVERIFIED', reasons };
+  const disclosed = input.rows.length - counted.length;
+  return disclosed === 0
+    ? { verdict: 'PASS', reasons }
+    : { verdict: 'PASS with disclosure', reasons: [`${disclosed} case(s) in known classes`] };
 }
 
 function rejectionCounts(rows: readonly HarnessRow[]): Record<string, number> {
@@ -240,6 +299,7 @@ export function buildRecord(
     maxIntervalWidth: width,
     verdict,
     verdictReasons: reasons,
+    disclosed: disclosedCases(rows),
   };
 }
 
@@ -278,6 +338,9 @@ export function validateRecord(record: A04Record, corpusIds: readonly string[]):
       problems.push(`${r.id}: FAIL without L > 0.25`);
     if (r.status === 'rejected' && r.code === null)
       problems.push(`${r.id}: rejected without a code`);
+    // Rows written before section 21 lack gapTarget and would be classified silently.
+    if ((r as Partial<HarnessRow>).gapTarget === undefined)
+      problems.push(`${r.id}: no gapTarget (a row from before section 21)`);
     if (r.status === 'undecided' && r.reason === null)
       problems.push(`${r.id}: UNDECIDED without a reason`);
   }
@@ -295,6 +358,8 @@ export function validateRecord(record: A04Record, corpusIds: readonly string[]):
     problems.push('coverage differs from the rows');
   const v = verdictOf(record);
   if (v.verdict !== record.verdict) problems.push(`verdict ${record.verdict} ≠ ${v.verdict}`);
+  if (JSON.stringify(disclosedCases(record.rows)) !== JSON.stringify(record.disclosed))
+    problems.push('disclosed cases differ from the rows');
   return problems;
 }
 
@@ -359,6 +424,11 @@ export function renderRecordMarkdown(record: A04Record, problems: readonly strin
   lines.push(
     ...(rejections.length === 0 ? ['None.'] : rejections.map(([k, v]) => `- \`${k}\`: ${v}`)),
   );
+  lines.push('', '## Known classes (section 21)', '');
+  for (const [k, ids] of Object.entries(record.disclosed))
+    lines.push(
+      `- \`${k}\` (${ids.length}): ${ids.length === 0 ? 'none' : ids.map((id) => `\`${id}\``).join(', ')}`,
+    );
   lines.push(
     '',
     `## Coverage (E3-A8)`,

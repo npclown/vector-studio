@@ -211,6 +211,23 @@ describe('P5-A02 marquee selection', () => {
     expect(serializeDocument(target.query({ type: 'document' }))).toBe(before);
   });
 
+  it('publishes overlay changes in the snapshot with a session event (P5-U6)', () => {
+    const target = editor();
+    const fields: string[] = [];
+    target.subscribe((event) => {
+      if (event.type === 'session') fields.push(event.field);
+    });
+    pointer(target, 'pointerdown', 10, 10);
+    expect(target.getSnapshot().overlay).toMatchObject({ kind: 'marquee' });
+    pointer(target, 'pointermove', 4, 30);
+    expect(target.getSnapshot().overlay).toEqual(target.query({ type: 'overlay' }));
+    // An unchanged overlay raises no event.
+    pointer(target, 'pointermove', 4, 30);
+    pointer(target, 'pointerup', 4, 30);
+    expect(target.getSnapshot().overlay).toBeNull();
+    expect(fields.filter((field) => field === 'overlay')).toHaveLength(3);
+  });
+
   it('can select a path through its control points (accepted in P5)', () => {
     const target = editor();
     const [id] = ok(target, {
