@@ -151,6 +151,8 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   #primitiveFrameSource: PrimitiveFrameSource | undefined;
   /** P3 V3 section f: read once when the source is attached, before any device exists. */
   #meshPipelineRequired = false;
+  /** P4 contract, U3: read once at attach, like the mesh flag. */
+  #clipPipelineRequired = false;
   #primitiveMode = false;
   #primitiveCreation: WebGpuPrimitiveSceneCreationPort | undefined;
   #primitiveScene: WebGpuPrimitiveScenePort | undefined;
@@ -263,6 +265,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     }
     this.#primitiveFrameSource = source;
     this.#meshPipelineRequired = source.requiresMeshPipeline === true;
+    this.#clipPipelineRequired = source.requiresClipPipeline === true;
     let disposed = false;
     return {
       get disposed() {
@@ -274,6 +277,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         if (this.#primitiveFrameSource === source) {
           this.#primitiveFrameSource = undefined;
           this.#meshPipelineRequired = false;
+          this.#clipPipelineRequired = false;
         }
       },
     };
@@ -734,9 +738,10 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
           ...(this.#countPass && this.#meshPipelineRequired ? { countPass: true } : {}),
         };
         primitiveCreation =
-          this.#meshPipelineRequired || Object.keys(hooks).length > 0
+          this.#meshPipelineRequired || this.#clipPipelineRequired || Object.keys(hooks).length > 0
             ? device.createPrimitiveScene(context, format, generation, tracker, {
                 ...(this.#meshPipelineRequired ? { meshPipeline: true } : {}),
+                ...(this.#clipPipelineRequired ? { clipPipeline: true } : {}),
                 ...hooks,
               })
             : device.createPrimitiveScene(context, format, generation, tracker);
@@ -750,6 +755,16 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         ) {
           throw new TestHookCreationError('The mesh pipeline is unavailable.', {
             meshPipeline: 'unavailable',
+          });
+        }
+        // P4 contract, U3: likewise for the clip variants; otherwise clipped draws fail closed.
+        if (
+          this.#hooksSet() &&
+          this.#clipPipelineRequired &&
+          primitive.scene.clipPipelineAvailable !== true
+        ) {
+          throw new TestHookCreationError('The clip pipeline is unavailable.', {
+            clipPipeline: 'unavailable',
           });
         }
       }

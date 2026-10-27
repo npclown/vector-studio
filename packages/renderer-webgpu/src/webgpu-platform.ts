@@ -65,6 +65,11 @@ export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
    * the mesh path is unavailable: mesh draws and writes are skipped with a skipped mesh receipt.
    */
   readonly meshPipelineAvailable?: boolean;
+  /**
+   * P4 contract, U3: true when this generation created the rect-clip pipeline variants. Absent
+   * or false: a draw with a clip state is not drawn.
+   */
+  readonly clipPipelineAvailable?: boolean;
   setTarget(target: PrimitiveTarget): void;
   submitPrimitivePacket: PrimitivePacketConsumer['submitPrimitivePacket'];
   /**
@@ -119,6 +124,11 @@ export interface WebGpuPrimitiveSceneCreationPort {
 /** Creation options; the mesh pipeline is created with the P1 pipeline, never on the frame path. */
 export interface WebGpuPrimitiveSceneOptions {
   readonly meshPipeline?: boolean;
+  /**
+   * P4 contract, U3: creates the rect-clip pipeline variants (the analytic one, and the mesh
+   * ones with the mesh pipeline). Without them a clipped draw is not drawn (fail closed).
+   */
+  readonly clipPipeline?: boolean;
   /**
    * @internal Tests only (E10 contract, section 3.2): a forced sample count. 4 fails creation
    * when a 4x pipeline is unavailable; 1 creates 1x only. Absent: try 4x, then fall back.

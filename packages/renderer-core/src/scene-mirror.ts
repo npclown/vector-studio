@@ -20,6 +20,7 @@ import {
   validateChangesShape,
   validateSnapshotShape,
   pathDataEquals,
+  type ClipSupport,
   type PathNodeSupport,
   type PathSupport,
   type ValidatedChangesInput,
@@ -45,8 +46,8 @@ export type RetainedSceneMirrorOptions = Readonly<{
   pathNodes: PathNodeSupport;
   pathFills?: PathNodeSupport;
   pathStrokes?: PathNodeSupport;
-  /** P4 contract, unit U1: whether non-null container clips are drawn; default 'unsupported'. */
-  clips?: PathNodeSupport;
+  /** P4 contract, units U1 and U3: which non-null container clips are drawn; default none. */
+  clips?: ClipSupport;
 }>;
 
 export type ScenePendingChangeState = Readonly<{
@@ -105,7 +106,8 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
           ? 'supported'
           : 'unsupported';
     const pathStrokes = options.pathStrokes === 'supported' ? 'supported' : 'unsupported';
-    const clips = options.clips === 'supported' ? 'supported' : 'unsupported';
+    const clips: ClipSupport =
+      options.clips === 'supported' || options.clips === 'rect' ? options.clips : 'unsupported';
     this.#pathNodes = Object.freeze({ pathNodes, pathFills, pathStrokes, clips });
   }
 

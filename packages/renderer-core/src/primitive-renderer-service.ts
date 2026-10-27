@@ -40,6 +40,12 @@ export type PrimitiveRendererServiceOptions = Readonly<{
    * (c = 1, no exterior triangles) and never calls the fringe builder. Default 'on'.
    */
   fringeForTesting?: 'on' | 'off';
+  /**
+   * P4 contract, U3: 'rect' draws rect clips through the clip pipeline variants, which the
+   * backend then creates; a mask container stays `unsupported-feature` until U4. Default 'none':
+   * every non-null clip is reported as `unsupported-feature`, and nothing else changes.
+   */
+  clips?: 'none' | 'rect';
 }>;
 
 /** Owns the CPU scene mirror and packet source while the backend owns scheduling and native state. */
@@ -55,6 +61,8 @@ export class PrimitiveRendererService
    * backend at attach.
    */
   public readonly requiresMeshPipeline: boolean;
+  /** P4 contract, U3: true exactly when the `clips` option draws clips; read at attach. */
+  public readonly requiresClipPipeline: boolean;
 
   public constructor(
     invalidationTarget: RendererInvalidationTarget,
@@ -76,7 +84,12 @@ export class PrimitiveRendererService
     if (fringe !== 'on' && fringe !== 'off') {
       throw new TypeError("fringeForTesting must be 'on' or 'off'.");
     }
+    const clips = options.clips ?? 'none';
+    if (clips !== 'none' && clips !== 'rect') {
+      throw new TypeError("clips must be 'none' or 'rect'.");
+    }
     this.#invalidationTarget = invalidationTarget;
+    this.requiresClipPipeline = clips === 'rect';
     const anyPort = port !== undefined || strokePort !== undefined;
     this.requiresMeshPipeline = anyPort;
     // P3 V3 section a with the B2 section 9.1 amendment (S4): path nodes are supported when a
@@ -86,6 +99,7 @@ export class PrimitiveRendererService
       pathNodes: anyPort ? 'supported' : 'unsupported',
       pathFills: port === undefined ? 'unsupported' : 'supported',
       pathStrokes: strokePort === undefined ? 'unsupported' : 'supported',
+      clips: clips === 'rect' ? 'rect' : 'unsupported',
     });
     this.#source = new PrimitiveSceneSource(
       this.#mirror,

@@ -18,6 +18,7 @@ import {
 } from '../../packages/renderer-core/src/path-mesh-pipeline.js';
 import { PrimitiveSceneSource } from '../../packages/renderer-core/src/primitive-scene-source.js';
 import { RetainedSceneMirror } from '../../packages/renderer-core/src/scene-mirror.js';
+import type { ClipSupport } from '../../packages/renderer-core/src/scene-validation.js';
 import {
   identity,
   pathNode,
@@ -206,12 +207,15 @@ export function createStrokeHarness(
     fringeBuilder?: PathFringeBuilder;
     memoryBytes?: () => number;
     strokeMemoryBytes?: () => number;
+    /** P4 contract, U3: the mirror's clip support; default none. */
+    clips?: ClipSupport;
   }>,
 ) {
   const mirror = new RetainedSceneMirror(undefined, {
     pathNodes: 'supported',
     pathFills: options.fillPort === undefined ? 'unsupported' : 'supported',
     pathStrokes: options.strokePort === undefined ? 'unsupported' : 'supported',
+    ...(options.clips === undefined ? {} : { clips: options.clips }),
   });
   const pipeline = new PathMeshPipeline({
     ...(options.fillPort === undefined ? {} : { port: options.fillPort }),
