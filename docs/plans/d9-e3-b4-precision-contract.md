@@ -2000,9 +2000,9 @@ The 0.25 px threshold, the oracle and the corpus do not change, and the freeze r
 
 ### 23.1 The run
 
-- **Commit.** All 96 shards ran on `7443c2b`, which is the E11 snapshot `5ddec4e` plus tests, docs and CI only (E11 §12).
-  - The merge and all retries ran on `a83b7db`: `7443c2b` plus the section 22 tooling (PR #277).
-  - Every host's `changedFromHead` is `tooling/run-e3-a04.mjs` and `tests/geometry/e3-a04/run.check.ts`, or empty.
+- **Commit.** All 96 shards ran on `7443c2b`, which is the E11 snapshot `5ddec4e` plus tests, tooling, docs and CI only, with no file under `packages/` changed (E11 §12).
+  - The merge and all retries ran on `a83b7db`: `7443c2b` plus the section 22 tooling (PR #277). `a83b7db` is the head of PR #277 before its squash, reachable as `refs/pull/277/head`, and not an ancestor of `main`. Its squash on `main`, `68888f6`, has the same E3 tooling, tests, oracle and contract.
+  - Every host's `changedFromHead` is `tooling/run-e3-a04.mjs`, `tests/geometry/e3-a04/run.check.ts` and this contract, and every retry's is empty. The `run.check.ts` change only adds the retry case selection, so the measurement options are the same.
 - **Identity.** All hosts and retries share these:
   - The release WASM `58f26517…fd35`, with `geometry-wasm/fill-v0+r4` and `geometry-wasm/stroke-v0+r7`.
   - The oracle `5b2fafc3…7e80`, certified in section 19.7.
@@ -2012,16 +2012,16 @@ The 0.25 px threshold, the oracle and the corpus do not change, and the freeze r
   - 20 cloud containers, Linux, 4 cores.
   - The user's laptop, Windows, 20 threads, 12 shards twice.
   - The user's PC, Windows, 16 threads, 16 shards.
-  - Each host's Node version is recorded. 22 directories ran on Node 24.15.0 (the repository's pin).
+  - Each host's Node version is recorded. 21 directories ran on Node 24.15.0 (the repository's pin).
   - The PC's three directories (shards 75 to 90) ran on the system Node 24.22.1.
   - One container directory (shards 48 to 50) ran on Node 22.22.0.
-  - The measurement is deterministic JavaScript and WASM with no platform-dependent arithmetic, so the review reads this as a disclosure, not a defect.
-  - The merge ran on Node 24.15.0.
+  - **Deviation from section 7.1**, which requires the pinned Node version: 19 shards (48 to 50 and 75 to 90) ran off the pin. The measurement is JavaScript and WASM arithmetic that the ECMAScript and WebAssembly specifications fix, and section 23.7 re-measures a sample of those shards' rows on Node 24.15.0. Acceptance of the deviation is the Primary's.
+  - The merge ran on Node 24.15.0, in the A04 thread's cloud container (not recorded in the record).
 - **Dead workers (section 22).** 61 cases hit the 6 GB worker heap: 59 `C5` strokes (33 at `z = 64`, 18 at `z = 1`, 8 at `z = 0.01`), one `C3` and one `C9`.
   - Each was re-measured once with `--heap 13000` (24,500 MB for three cases on the PC), in 24 retry directories that all exited 0.
   - One retry, `19871` at 13 GB, died again. Its directory was set aside unmerged, and its three cases were re-measured together on the PC.
   - After the retries no row is a harness error. 59 of the 61 end UNDECIDED on the oracle's work cap and 2 PASS. The work-cap reasons are `gcd step`, `rational`, `distance query`, `seam split` and `membership`.
-- **Set-aside directories.** Several hosts' first launches were killed when an idle container was suspended. One duplicate launch was stopped within a minute. None of these was merged, and the merge checks that every shard appears exactly once.
+- **Set-aside directories.** Several hosts' first launches were killed when an idle container was suspended, and one duplicate launch was stopped within a minute. None of these was merged, and the merge checks that every shard appears exactly once. Their run ids, for the record: `97982af7`, `74317c46`, `d25eff4e`, `71bc2ebe`, `a35b1a62`, `4ed60db5`, `8a9f29bf`, `4445cac5`, `56cabf9c`, `b3fafa28`, `fa0ecc05`, the container's two aborted runs of shards 48 to 50, and the died-again retry `79f3ca69`. These directories are not committed, so this list cannot be checked from the record.
 
 ### 23.2 Result
 
@@ -2041,7 +2041,7 @@ The 0.25 px threshold, the oracle and the corpus do not change, and the freeze r
 | C12 | 120 | 0 | 15 | 0 | 3 | 6 |
 | All | 19,548 | 5 | 1,924 | 1,342 | 1,041 | 3,602 |
 
-FAIL and UNDECIDED count only rows outside the known classes. The disclosed rows break down as follows:
+FAIL and UNDECIDED count only rows outside the known classes. The record's raw totals, which `record.md` prints, are 27 FAIL and 3,244 UNDECIDED: the 22 FAIL and 1,320 UNDECIDED rows in the known classes are in the Disclosed column. The disclosed rows break down as follows:
 
 - `collapsed-feature`: 143, of which 22 are FAIL.
 - `far-vertices`: 757.
@@ -2051,17 +2051,18 @@ Other results:
 
 - **Controls and validator.** All 14 positive controls hold, and the validator reports no problem.
 - **Bounds.** The maximum oracle interval width is 0.2497 px.
-- **`U` over the PASS and FAIL rows.** p50 is 0.150 px and p99 is 0.250 px. The max `U`, 0.517 px on `C2/g0161/T4/z0.01-d2`, is an UNDECIDED row: its `L` is below 0.25 px.
+- **`U` statistics.** Over every measured row with a finite `U`, UNDECIDED rows included (section 7.3's `aggregate`), p50 is 0.150 px and p99 is 0.250 px. The max `U`, 0.517 px on `C2/g0161/T4/z0.01-d2`, is an UNDECIDED row: its `L` is below 0.25 px.
 - **E3-A8.** No declared cell is uncovered.
 
 ### 23.3 The FAIL rows outside the known classes
 
-The five rows are `C1/g0029/T2` at `z0.01-d3`, `z1-d1`, `z1-d2`, `z64-d1` and `z64-d2`. The generated row is a sub-pixel triangle of the `sub` size class, about 0.06 px across at `z = 0.01`.
+The five rows are `C1/g0029/T2` at `z0.01-d3`, `z1-d1`, `z1-d2`, `z64-d1` and `z64-d2`. The generated row is a triangle of the `sub` size class (size exponent −4 to 0, section 13.5), which the generator scales with each pair so that it stays below a pixel. Its path coordinates halve from `d2` to `d3`, for example.
 
-- At these five pairs, every triangle of the kernel's mesh maps to coincident positions (`noFlip.collapsed` = 2 of 2). So `M*` is empty.
-- With `∂R` in `Ω` and `M = ∅`, the boundary distance `B_R` is infinite. The case is a FAIL by the `empty` rule of section 3.2 (E3-K2): with `∂R` in `Ω`, an empty drawn region never passes.
+- At these five pairs the port returns a mesh (`drawn: mesh`), but every triangle of it maps to coincident positions (`noFlip.collapsed` = 2 of 2). Section 15.4 leaves collapsed triangles out of `M*`, so `M*` is empty while `β_c` is not zero.
+- With `∂R` in `Ω` and `∂M*` empty, the boundary distance `B_R` is infinite and `E = [∞, ∞]` (E3-K4 on the `M*` of section 15.4), so `L > 0.25` and the row is FAIL. The `empty` rule of section 3.2 gives the same outcome for an `empty` port result.
+- **Serialization.** `record.json` writes these infinities as `null` (`eLo`, `eHi` and `u`) and `l` as `1.7976931348623157e308`, the largest double below `∞` after the downward rounding. A `null` there means `+∞`, not "not measured". The `eHi` of the `collapsed-feature` FAIL rows is written the same way.
 - The other four pairs of the same row keep a positive-area mesh and PASS, with `U` between 0.12 and 0.24 px.
-- The true visual error is far below 0.25 px, because the whole shape is below a pixel. But A04 scores boundaries, not pixels, and a kernel that drops a sub-pixel shape's interior fails it. This is a kernel result, not an oracle defect.
+- The true visual error is far below 0.25 px, because the whole shape is below a pixel. But A04 scores boundaries, not pixels, and a kernel whose mesh `M` loses a sub-pixel shape fails it. The fringe still draws its anti-aliasing band, which A08's coverage measures and A04 does not. This is a kernel result, not an oracle defect.
 
 ### 23.4 UNDECIDED outside the known classes
 
@@ -2085,6 +2086,7 @@ E3-U7 collects the remedies. None was made for this record.
 - A fourth known class, or a kernel change, for sub-pixel shapes whose mesh collapses (section 23.3).
 - The flip-tolerant bound for clipped draws, and for fill zero-area triangles.
 - A cheaper oracle path for the work-cap stroke cases.
+- The record writer: `+∞` written as a string, as the run tool's `toJson` already does, instead of `null`.
 
 A new reference run on a later snapshot would supersede this record. This record is immutable (section 7.4).
 
@@ -2093,7 +2095,7 @@ A new reference run on a later snapshot would supersede this record. This record
 The headed check of section 19.1 (E3-A6) ran on the user's PC on 2026-10-27, from 00:17 to 00:32Z, on `a83b7db` with the same WASM. Its two outputs are committed beside the record as [`chrome.json`](../evidence/e3-a04/2026-10-27T00-33-11-173Z-de2951d7/chrome.json) and [`edge.json`](../evidence/e3-a04/2026-10-27T00-33-11-173Z-de2951d7/edge.json). The record names them by the merging host's local paths.
 
 - **Browsers.** Chrome 155.0.8059.85 and Edge 156.0.4314.42, headed, with `--enable-unsafe-webgpu`, at DPR 1.
-- **Adapter.** NVIDIA, Turing architecture (GTX 1660 SUPER), not a fallback adapter. The user agent reports 151.0.7922.34 in both, which is user-agent reduction. The version field is the browser's own.
+- **Adapter.** NVIDIA, Turing architecture, not a fallback adapter. The adapter's `device` and `description` are empty, so the model is taken from the machine record of section 16.5 (GTX 1660 SUPER), not from this run. The driver version and the browser channel are not recorded, against section 7.4. The user agent, 151.0.7922.34 in both, is Playwright's fixed `Desktop Chrome` and `Desktop Edge` device descriptor (`playwright.gpu.config.ts`), so the version field, which is the browser's own, is the one to read.
 - **Result.** Both browsers **PASS**, with identical numbers.
   - 13,364 subset cases: 1,429 rejected and 216 empty are skipped. That leaves 11,719 draws and 1,236,334 points, with no failure.
   - The largest error-to-`β` ratio is 0.267 on the vertex path and 0.368 on the feature path.
