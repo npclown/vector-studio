@@ -1,0 +1,164 @@
+$ playwright test --config playwright.gpu.config.ts "--reporter=list,json"
+[WebServer] (node:10308) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:11688) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 116 tests using 1 worker
+
+(node:8336) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok   1 [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 1x, DPR 1 (2.0s)
+  ok   2 [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 1x, DPR 1.5 (1.7s)
+  ok   3 [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 1x, DPR 2 (1.6s)
+  ok   4 [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 4x, DPR 1 (1.6s)
+  ok   5 [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 4x, DPR 1.5 (1.6s)
+  ok   6 [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 4x, DPR 2 (1.6s)
+  ok   7 [chrome] › tests\gpu\e17-write-once.spec.ts:120:1 › E17-A5 fixtures: count at most 1, covered pixels counted once, 4x equals 1x (36.0s)
+  ok   8 [chrome] › tests\gpu\e17-write-once.spec.ts:226:3 › E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at 1x (1.1s)
+  ok   9 [chrome] › tests\gpu\e17-write-once.spec.ts:226:3 › E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at 4x (1.1s)
+  ok  10 [chrome] › tests\gpu\e3-a04-readback.spec.ts:73:1 › E3-U4 GPU model check and E3-PC12 (7.8m)
+  ok  11 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples1 dpr1 (7.5s)
+  ok  12 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples1 dpr1 (41.4s)
+  ok  13 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples1 dpr1.5 (5.9s)
+  ok  14 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples1 dpr1.5 (1.3m)
+  ok  15 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples1 dpr2 (8.6s)
+  ok  16 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples1 dpr2 (2.0m)
+  ok  17 [chrome] › tests\gpu\p1-primitives.spec.ts:149:3 › P1 latest-scene recovery samples1 (1.9s)
+  ok  18 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples4 dpr1 (3.7s)
+  ok  19 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples4 dpr1 (42.0s)
+  ok  20 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples4 dpr1.5 (6.0s)
+  ok  21 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples4 dpr1.5 (1.3m)
+  ok  22 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples4 dpr2 (8.6s)
+  ok  23 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples4 dpr2 (2.1m)
+  ok  24 [chrome] › tests\gpu\p1-primitives.spec.ts:149:3 › P1 latest-scene recovery samples4 (1.9s)
+  ok  25 [chrome] › tests\gpu\p3-b2-strokes.spec.ts:177:5 › DPR 1 › P3 B2 stroke page screenshots at DPR 1 (UNVERIFIED precision) (8.2s)
+  ok  26 [chrome] › tests\gpu\p3-b2-strokes.spec.ts:177:5 › DPR 2 › P3 B2 stroke page screenshots at DPR 2 (UNVERIFIED precision) (4.3s)
+  ok  27 [chrome] › tests\gpu\p3-b2-strokes.spec.ts:177:5 › DPR 3 › P3 B2 stroke page screenshots at DPR 3 (UNVERIFIED precision) (3.8s)
+  ok  28 [chrome] › tests\gpu\p3-st-u6-stroke.spec.ts:38:3 › P3 ST-U6 stroke fixtures samples1 (UNVERIFIED precision) (3.8s)
+  ok  29 [chrome] › tests\gpu\p3-st-u6-stroke.spec.ts:38:3 › P3 ST-U6 stroke fixtures samples4 (UNVERIFIED precision) (3.9s)
+  ok  30 [chrome] › tests\gpu\p3-st-u7-joint.spec.ts:76:3 › P3 ST-U7 joint fixtures samples1 (UNVERIFIED precision) (11.7s)
+  ok  31 [chrome] › tests\gpu\p3-st-u7-joint.spec.ts:76:3 › P3 ST-U7 joint fixtures samples4 (UNVERIFIED precision) (11.7s)
+  ok  32 [chrome] › tests\gpu\p3-st-u7-joint.spec.ts:296:1 › P3 ST-U7 seeded defects fail their checks (UNVERIFIED precision) (6.8s)
+  ok  33 [chrome] › tests\gpu\p3-v3-mesh-smoke.spec.ts:36:3 › P3 V3c mesh smoke samples1 (UNVERIFIED precision) (10.3s)
+  ok  34 [chrome] › tests\gpu\p3-v3-mesh-smoke.spec.ts:36:3 › P3 V3c mesh smoke samples4 (UNVERIFIED precision) (9.6s)
+  ok  35 [chrome] › tests\gpu\p3-v4-paths.spec.ts:75:1 › P3 V4 path page screenshots (UNVERIFIED precision) (2.2s)
+  ok  36 [chrome] › tests\gpu\viz-v1-appearance.spec.ts:218:5 › DPR 1 › V-1 path appearance page at DPR 1 (UNVERIFIED precision) (23.1s)
+  ok  37 [chrome] › tests\gpu\viz-v1-appearance.spec.ts:218:5 › DPR 2 › V-1 path appearance page at DPR 2 (UNVERIFIED precision) (24.1s)
+  ok  38 [chrome] › tests\gpu\viz-v2-path-data.spec.ts:212:5 › DPR 1 › V-2 path-data page at DPR 1 (UNVERIFIED precision) (27.6s)
+  ok  39 [chrome] › tests\gpu\viz-v2-path-data.spec.ts:212:5 › DPR 2 › V-2 path-data page at DPR 2 (UNVERIFIED precision) (28.7s)
+  x   40 [chrome] › tests\gpu\viz-v3-integration.spec.ts:96:5 › DPR 1 › V-3 A07 integration page at DPR 1 (UNVERIFIED precision) (30.0m)
+(node:7340) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  41 [chrome] › tests\gpu\viz-v3-integration.spec.ts:96:5 › DPR 2 › V-3 A07 integration page at DPR 2 (UNVERIFIED precision) (49.0s)
+  ok  42 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 1 (1.1m)
+  ok  43 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 1.5 (2.0m)
+  ok  44 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 2 (3.1m)
+  ok  45 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 3 (6.4m)
+  ok  46 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 1 (1.8m)
+  ok  47 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 1.5 (3.5m)
+  ok  48 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 2 (5.9m)
+  ok  49 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 3 (12.6m)
+  ok  50 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 1 (1.8m)
+  ok  51 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 1.5 (3.5m)
+  ok  52 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 2 (6.1m)
+  ok  53 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 3 (35.9m)
+(node:23508) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  54 [chrome] › tests\gpu\foundation-experiments.spec.ts:175:5 › camera triangle at DPR 1 › preserves camera, shared-buffer, and pipeline-cache evidence through recovery (1.8s)
+  ok  55 [chrome] › tests\gpu\foundation-experiments.spec.ts:175:5 › camera triangle at DPR 1.5 › preserves camera, shared-buffer, and pipeline-cache evidence through recovery (1.3s)
+  ok  56 [chrome] › tests\gpu\foundation-experiments.spec.ts:175:5 › camera triangle at DPR 2 › preserves camera, shared-buffer, and pipeline-cache evidence through recovery (1.3s)
+  ok  57 [chrome] › tests\gpu\playground-dashboard.spec.ts:12:1 › captures a functional dashboard smoke artifact (1.4s)
+  ok  58 [chrome] › tests\gpu\webgpu-recovery.spec.ts:13:1 › surfaces validation error and recovers once after deliberate device destruction (961ms)
+(node:15700) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  59 [edge] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 1x, DPR 1 (2.4s)
+  ok  60 [edge] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 1x, DPR 1.5 (1.9s)
+  ok  61 [edge] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 1x, DPR 2 (2.0s)
+  ok  62 [edge] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 4x, DPR 1 (2.0s)
+  ok  63 [edge] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 4x, DPR 1.5 (2.0s)
+  ok  64 [edge] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 4x, DPR 2 (2.0s)
+  ok  65 [edge] › tests\gpu\e17-write-once.spec.ts:120:1 › E17-A5 fixtures: count at most 1, covered pixels counted once, 4x equals 1x (39.9s)
+  ok  66 [edge] › tests\gpu\e17-write-once.spec.ts:226:3 › E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at 1x (1.3s)
+  ok  67 [edge] › tests\gpu\e17-write-once.spec.ts:226:3 › E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at 4x (1.2s)
+  ok  68 [edge] › tests\gpu\e3-a04-readback.spec.ts:73:1 › E3-U4 GPU model check and E3-PC12 (7.7m)
+  ok  69 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples1 dpr1 (4.1s)
+  ok  70 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples1 dpr1 (44.6s)
+  ok  71 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples1 dpr1.5 (6.1s)
+  ok  72 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples1 dpr1.5 (1.4m)
+  ok  73 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples1 dpr2 (8.6s)
+  ok  74 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples1 dpr2 (2.2m)
+  ok  75 [edge] › tests\gpu\p1-primitives.spec.ts:149:3 › P1 latest-scene recovery samples1 (1.9s)
+  ok  76 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples4 dpr1 (4.2s)
+  ok  77 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples4 dpr1 (46.6s)
+  ok  78 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples4 dpr1.5 (6.2s)
+  ok  79 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples4 dpr1.5 (1.4m)
+  ok  80 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples4 dpr2 (8.8s)
+  ok  81 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples4 dpr2 (3.5m)
+  ok  82 [edge] › tests\gpu\p1-primitives.spec.ts:149:3 › P1 latest-scene recovery samples4 (1.8s)
+  ok  83 [edge] › tests\gpu\p3-b2-strokes.spec.ts:177:5 › DPR 1 › P3 B2 stroke page screenshots at DPR 1 (UNVERIFIED precision) (8.6s)
+  ok  84 [edge] › tests\gpu\p3-b2-strokes.spec.ts:177:5 › DPR 2 › P3 B2 stroke page screenshots at DPR 2 (UNVERIFIED precision) (4.3s)
+  ok  85 [edge] › tests\gpu\p3-b2-strokes.spec.ts:177:5 › DPR 3 › P3 B2 stroke page screenshots at DPR 3 (UNVERIFIED precision) (3.9s)
+  ok  86 [edge] › tests\gpu\p3-st-u6-stroke.spec.ts:38:3 › P3 ST-U6 stroke fixtures samples1 (UNVERIFIED precision) (3.8s)
+  ok  87 [edge] › tests\gpu\p3-st-u6-stroke.spec.ts:38:3 › P3 ST-U6 stroke fixtures samples4 (UNVERIFIED precision) (3.9s)
+  ok  88 [edge] › tests\gpu\p3-st-u7-joint.spec.ts:76:3 › P3 ST-U7 joint fixtures samples1 (UNVERIFIED precision) (12.5s)
+  ok  89 [edge] › tests\gpu\p3-st-u7-joint.spec.ts:76:3 › P3 ST-U7 joint fixtures samples4 (UNVERIFIED precision) (12.7s)
+  ok  90 [edge] › tests\gpu\p3-st-u7-joint.spec.ts:296:1 › P3 ST-U7 seeded defects fail their checks (UNVERIFIED precision) (7.6s)
+  ok  91 [edge] › tests\gpu\p3-v3-mesh-smoke.spec.ts:36:3 › P3 V3c mesh smoke samples1 (UNVERIFIED precision) (10.3s)
+  ok  92 [edge] › tests\gpu\p3-v3-mesh-smoke.spec.ts:36:3 › P3 V3c mesh smoke samples4 (UNVERIFIED precision) (10.1s)
+  ok  93 [edge] › tests\gpu\p3-v4-paths.spec.ts:75:1 › P3 V4 path page screenshots (UNVERIFIED precision) (2.3s)
+  ok  94 [edge] › tests\gpu\viz-v1-appearance.spec.ts:218:5 › DPR 1 › V-1 path appearance page at DPR 1 (UNVERIFIED precision) (24.0s)
+  ok  95 [edge] › tests\gpu\viz-v1-appearance.spec.ts:218:5 › DPR 2 › V-1 path appearance page at DPR 2 (UNVERIFIED precision) (24.6s)
+  ok  96 [edge] › tests\gpu\viz-v2-path-data.spec.ts:212:5 › DPR 1 › V-2 path-data page at DPR 1 (UNVERIFIED precision) (28.6s)
+  ok  97 [edge] › tests\gpu\viz-v2-path-data.spec.ts:212:5 › DPR 2 › V-2 path-data page at DPR 2 (UNVERIFIED precision) (29.1s)
+  ok  98 [edge] › tests\gpu\viz-v3-integration.spec.ts:96:5 › DPR 1 › V-3 A07 integration page at DPR 1 (UNVERIFIED precision) (23.7m)
+  ok  99 [edge] › tests\gpu\viz-v3-integration.spec.ts:96:5 › DPR 2 › V-3 A07 integration page at DPR 2 (UNVERIFIED precision) (48.7s)
+  ok 100 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 1 (1.2m)
+  ok 101 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 1.5 (2.0m)
+  ok 102 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 2 (3.3m)
+  ok 103 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 3 (6.9m)
+  ok 104 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 1 (1.9m)
+  ok 105 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 1.5 (3.8m)
+  ok 106 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 2 (6.4m)
+  ok 107 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 3 (13.7m)
+  ok 108 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 1 (2.0m)
+  ok 109 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 1.5 (16.4m)
+  ok 110 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 2 (6.5m)
+  ok 111 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 3 (26.6m)
+(node:2076) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 112 [edge] › tests\gpu\foundation-experiments.spec.ts:175:5 › camera triangle at DPR 1 › preserves camera, shared-buffer, and pipeline-cache evidence through recovery (1.7s)
+  ok 113 [edge] › tests\gpu\foundation-experiments.spec.ts:175:5 › camera triangle at DPR 1.5 › preserves camera, shared-buffer, and pipeline-cache evidence through recovery (1.3s)
+  ok 114 [edge] › tests\gpu\foundation-experiments.spec.ts:175:5 › camera triangle at DPR 2 › preserves camera, shared-buffer, and pipeline-cache evidence through recovery (1.1s)
+  ok 115 [edge] › tests\gpu\playground-dashboard.spec.ts:12:1 › captures a functional dashboard smoke artifact (1.1s)
+  ok 116 [edge] › tests\gpu\webgpu-recovery.spec.ts:13:1 › surfaces validation error and recovers once after deliberate device destruction (847ms)
+
+
+  1) [chrome] › tests\gpu\viz-v3-integration.spec.ts:96:5 › DPR 1 › V-3 A07 integration page at DPR 1 (UNVERIFIED precision) 
+
+    Test timeout of 1800000ms exceeded.
+
+    Error: page.evaluate: Target page, context or browser has been closed
+
+      119 |       const observed: Record<string, unknown> = {};
+      120 |
+    > 121 |       const hook = () => page.evaluate(() => window.__vectorStudioVizV3Integration.snapshot());
+          |                               ^
+      122 |       type Snapshot = Awaited<ReturnType<typeof hook>>;
+      123 |       const settle = () => page.evaluate(() => window.__vectorStudioVizV3Integration.settle());
+      124 |       const applyState = (id: string) =>
+        at hook (D:\GIT\vs-e11r\tests\gpu\viz-v3-integration.spec.ts:121:31)
+        at D:\GIT\vs-e11r\tests\gpu\viz-v3-integration.spec.ts:807:27
+
+    Error Context: test-results\gpu\viz-v3-integration-DPR-1-V-dfe2d-DPR-1-UNVERIFIED-precision--chrome\error-context.md
+
+  Slow test file: [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts (1.5h)
+  Slow test file: [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts (1.4h)
+  Slow test file: [edge] › tests\gpu\viz-v3-integration.spec.ts (24.5m)
+  Slow test file: [edge] › tests\gpu\p1-primitives.spec.ts (10.7m)
+  Slow test file: [chrome] › tests\gpu\p1-primitives.spec.ts (8.8m)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  1 failed
+    [chrome] › tests\gpu\viz-v3-integration.spec.ts:96:5 › DPR 1 › V-3 A07 integration page at DPR 1 (UNVERIFIED precision) 
+  115 passed (4.6h)
+[ELIFECYCLE] Command failed with exit code 1.

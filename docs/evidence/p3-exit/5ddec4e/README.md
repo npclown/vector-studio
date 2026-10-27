@@ -22,6 +22,8 @@ This directory holds the P3 exit evidence for A01-A08 on the [E11 exit snapshot 
 | [PC headed run](headed-pc-2026-10-26/)                               | `00e49bf`, clean                                                               | User's PC, Chrome 155 and Edge 156                                                   | ST-U6, ST-U7, p3-b2-strokes, viz-v3-integration: 20/20 (A03, A06)                                                                             |
 | [A04 reference run](../../e3-a04/2026-10-27T00-33-11-173Z-de2951d7/) | `a83b7db` (shards at `7443c2b`), E3-U5, #278                                   | PC and hosts of E3 section 19.6                                                      | A04, and A01's crack report (GPU readback in Chrome 155 and Edge 156)                                                                         |
 | [Full GPU run](gpu-full-pc-2026-10-26/) | `00e49bf`, clean | User's PC, Chrome 155 and Edge 156 | Full `pnpm test:gpu`: 92 passed, 24 `viz-v4-a08-corpus` precondition failures (A07) |
+| [A07 re-run 1](gpu-full-pc-2026-10-27/) | `dae5de9` (`00e49bf` plus the A08 expected list), clean | User's PC, Chrome 155 and Edge 156 | Full `pnpm test:gpu`: 115 passed, 1 timeout (`viz-v3-integration` DPR 1 in Chrome, load not recorded) |
+| [A07 re-run 2](gpu-full-pc-2026-10-27b/) | `dae5de9`, clean | User's PC, Chrome 155 and Edge 156 | Full `pnpm test:gpu`: 116 of 116 passed (VZ3-A17), load logged |
 | [V-4 counted run](../../viz-v4-a08/5ddec4e/README.md) | `00e49bf`, clean | User's PC, Chrome and Edge | A08, and A02's image part |
 
 ## Container run commands
@@ -50,5 +52,5 @@ Decided 2026-10-27 by the user: P3 exits on this snapshot with the defects of A0
 | A04 | [E3-U5 record](../../e3-a04/2026-10-27T00-33-11-173Z-de2951d7/record.md) | FAIL, recorded as is by the user's decision of 2026-10-27; disclosed, remedies in backlog E20                                                                                 |
 | A05 | [A05.md](A05.md)                                                         | PASS (no headed part)                                                                                                                                                         |
 | A06 | [A06.md](A06.md)                                                         | PASS: runner CI part and the V-3 headed port-call deltas in Chrome and Edge                                                                                                   |
-| A07 | [A07.md](A07.md) | PASS with VZ3-A17 composite, review accepted (#281); literal re-run pending: V-3 spec in Chrome and Edge; full `pnpm test:gpu` 92 passed, `viz-v4-a08-corpus` cited from the V-4 counted run (24/24) |
+| A07 | [A07.md](A07.md) | PASS, review accepted (#281): V-3 spec in Chrome and Edge; VZ3-A17 literal: full `pnpm test:gpu` re-run 116 of 116 ([addendum](A07.md#literal-re-run-addendum-2026-10-27)) |
 | A08 | [V-4 record](../../viz-v4-a08/5ddec4e/README.md) | INCONCLUSIVE: 0 gated FAIL, 372 UNDECIDED in two disclosed E3 section 21 classes (V-4 section 18); disclosed at the exit (E11 section 13); evidence review pending |
