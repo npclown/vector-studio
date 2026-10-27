@@ -76,8 +76,6 @@ docs/evidence/p3-exit/*/headed-pc-*/**/*.json
 # Preserve the E3 A04 evidence records and their GPU readbacks byte-for-byte.
 docs/evidence/e3-a04/**/*.json
 
-# Preserve the V-4 A08 counted-run records and the expected-status list byte-for-byte.
+# Preserve the V-4 A08 counted-run record and the expected-status list byte-for-byte.
 docs/evidence/viz-v4-a08/**/*.json
-docs/evidence/viz-v4-a08/*/record.md
-docs/evidence/viz-v4-a08/*/summary.md
 tests/visual/viz-v4/a08-expected-status.json
