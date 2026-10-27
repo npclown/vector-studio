@@ -1,4 +1,5 @@
 import type { SceneVersion } from '@vector-studio/contracts';
+import type { ClipStateRecord } from './clip-resolution.js';
 import type { PathMeshNotice } from './path-mesh-pipeline.js';
 
 export type PrimitiveResourceId = 'transforms' | 'geometry' | 'styles' | 'order' | 'frame';
@@ -28,6 +29,18 @@ export type PrimitiveDraw = Readonly<{
   first: number;
   count: number;
   variant: 'analytic-v1';
+  /** P4 contract, U2: the 1-based clip state of a clipped run; absent when unclipped. */
+  clipState?: number;
+}>;
+/**
+ * P4 contract, U2: the frame's clip states, present only when a drawn draw is clipped. Plain
+ * records; U3 and U4 own their GPU layout.
+ */
+export type ClipPacketPart = Readonly<{
+  layoutVersion: 0;
+  /** In index order; indices may have gaps, so a GPU table is sized by `maxIndex`. */
+  states: readonly ClipStateRecord[];
+  maxIndex: number;
 }>;
 /** P3 V3 contract, section f: the optional mesh packet part, version 0. */
 export type MeshResourceId =
@@ -52,6 +65,8 @@ export type MeshFillDraw = Readonly<{
    * of its instance record (stroke slot + 1). Absent on every other draw; layoutVersion stays 0.
    */
   composite?: 'joint-fill';
+  /** P4 contract, U2: the 1-based clip state of a clipped draw; absent when unclipped. */
+  clipState?: number;
 }>;
 export type MeshResource = Readonly<{
   id: MeshResourceId;
@@ -103,6 +118,8 @@ export type PrimitivePacket = Readonly<{
   frame: PrimitiveTarget;
   /** Absent for every primitive-only scene (P3 V3 contract, section f). */
   mesh?: MeshPacketPart;
+  /** Absent for every unclipped frame (P4 contract, U2). */
+  clip?: ClipPacketPart;
 }>;
 export type PrimitiveReceipt = Readonly<{
   scene: SceneVersion;
