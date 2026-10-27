@@ -1,3 +1,4 @@
+import { meetsClipChain, type ClipChain } from './clip-resolution.js';
 import {
   DIAGNOSTIC_CODES,
   PATH_VERB_CODES,
@@ -75,6 +76,8 @@ export type DerivedPath = Readonly<{
   node: PathNode;
   world: SceneAffine;
   hidden: boolean;
+  /** P4 contract, U2: the clipping ancestors; a paint is drawable only if it meets their bound. */
+  clip?: ClipChain;
 }>;
 
 export type PathMeshFailureScope = 'path' | 'batch' | 'renderer';
@@ -466,6 +469,8 @@ export class PathMeshPipeline {
     const { zoom } = input.camera;
     const { devicePixelRatio } = input.target;
     const viewport = viewportBounds(input.camera, input.target);
+    // P4-K5: the primitive cull's guard, 2 physical px in world units.
+    const clipGuard = 2 / (zoom * devicePixelRatio);
     const evaluated: EvaluatedPath[] = [];
     const missing: Record<PathPaint, PendingRequest[]> = { fill: [], stroke: [] };
     const frameStates = new Map<string, StateFailure | null>();
@@ -479,7 +484,11 @@ export class PathMeshPipeline {
       const drawable = PAINTS.filter((paint) => {
         if (this.#channels[paint] === undefined || paintKeyOf(node, paint) === null) return false;
         const worldBounds = this.#worldBounds(path, revision, paint);
-        return worldBounds !== null && meetsViewport(worldBounds, viewport);
+        return (
+          worldBounds !== null &&
+          meetsViewport(worldBounds, viewport) &&
+          meetsClipChain(worldBounds, path.clip ?? null, clipGuard)
+        );
       });
       if (drawable.length === 0) continue;
       const buckets = this.#bucketsFor(path, zoom, devicePixelRatio);

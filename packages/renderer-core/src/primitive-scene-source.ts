@@ -36,6 +36,13 @@ import {
 } from './path-mesh-packet.js';
 import type { RetainedSceneMirror, RetainedSceneView } from './scene-mirror.js';
 import {
+  ClipStateTable,
+  extendClipChain,
+  meetsClipChain,
+  type ClipChain,
+  type ClipStateRecord,
+} from './clip-resolution.js';
+import {
   composeSceneAffine,
   getPrimitiveLocalStrokeBounds,
   transformSceneBounds,
@@ -63,6 +70,8 @@ type DerivedPrimitive = Readonly<{
   worldBounds: SceneBounds;
   hidden: boolean;
   omitted: boolean;
+  /** P4 contract, U2: the clipping ancestors, or null when unclipped. */
+  clip: ClipChain | null;
   /** Position in the authoritative depth-first order of primitive and path leaves. */
   sequence: number;
 }>;
@@ -142,6 +151,9 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   /** E10 contract, section 3.1: non-null prepares so far and the last one's draw record. */
   #prepareSerial = 0;
   #drawRecord: PathDrawRecordForTesting | null = null;
+  /** P4 contract, U2: the frame's clip states and their change count. */
+  readonly #clipStates = new ClipStateTable();
+  #clipStatesUsed = false;
   /** P3 V3 section f: true exactly when this source consumes a fill-mesh or stroke-mesh port. */
   public readonly requiresMeshPipeline: boolean;
 
@@ -164,9 +176,17 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
 
     const paths: DerivedPath[] = [];
     const pathSequences = new Map<string, number>();
-    const derived = derivePrimitives(scene, this.#slots, this.#derivedCache, paths, pathSequences);
+    const clipSeen = { value: false };
+    const derived = derivePrimitives(
+      scene,
+      this.#slots,
+      this.#derivedCache,
+      paths,
+      pathSequences,
+      clipSeen,
+    );
     const visible = cullPrimitives(
-      derived.filter((entry) => !entry.hidden && !entry.omitted),
+      derived.filter((entry) => !entry.hidden && !entry.omitted && entry.clip?.empty !== true),
       cameraState.camera,
       target,
     );
@@ -243,7 +263,28 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       this.#reconstructedIncarnation !== this.#incarnations.transforms;
     const writes = this.#makeWrites(reconstruct);
     const mesh = this.#prepareMeshPart(target.generation, pathDraws, meshFrame, pathSequences);
-    const draws = interleaveDraws(visible, mesh?.draws.map((draw) => draw.sequence) ?? []);
+    // P4 contract, U2: clip states are numbered in drawn paint order; a state change splits an
+    // analytic run. An unclipped frame has no states and the P3 draws, unchanged.
+    let clip: ClipStates = NO_CLIP_STATES;
+    if (clipSeen.value) {
+      const pathClips = new Map(paths.map((path) => [path.id, path.clip ?? null] as const));
+      // The mesh part's draws are pathDraws, in the same order.
+      const meshStates = (mesh?.draws ?? []).map((draw, index) => ({
+        sequence: draw.sequence,
+        clip: pathClips.get(pathDraws[index]!.nodeId) ?? null,
+      }));
+      clip = this.#assignClipStates(visible, meshStates);
+    } else if (this.#clipStatesUsed) {
+      // Releases the previous frame's states once the scene has no clip left.
+      this.#clipStates.begin();
+      this.#clipStates.end();
+    }
+    this.#clipStatesUsed = clipSeen.value;
+    const draws = interleaveDraws(
+      visible,
+      mesh?.draws.map((draw) => draw.sequence) ?? [],
+      clip.primitiveStates,
+    );
     const packetId = Symbol('primitive-packet');
     const packet: PrimitivePacket = Object.freeze({
       layoutVersion: 1,
@@ -259,6 +300,15 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       writes: Object.freeze(writes),
       draws: Object.freeze(draws.analytic),
       frame: Object.freeze({ ...target }),
+      ...(clip.records.length === 0
+        ? {}
+        : {
+            clip: Object.freeze({
+              layoutVersion: 0 as const,
+              states: clip.records,
+              maxIndex: clip.records[clip.records.length - 1]!.index,
+            }),
+          }),
       ...(mesh === undefined
         ? {}
         : {
@@ -269,7 +319,13 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
               writes: mesh.part.writes,
               draws: Object.freeze(
                 mesh.draws.map((draw, index) =>
-                  Object.freeze({ position: draws.positions[index]!, ...draw.draw }),
+                  Object.freeze({
+                    position: draws.positions[index]!,
+                    ...draw.draw,
+                    ...((clip.meshStates[index] ?? 0) === 0
+                      ? {}
+                      : { clipState: clip.meshStates[index]! }),
+                  }),
                 ),
               ),
               notices: mesh.part.notices,
@@ -291,6 +347,36 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       );
     }
     return packet;
+  }
+
+  /** P4 contract, U2 (P4-A06): clip-state records written so far. */
+  public getClipStateWrites(): number {
+    return this.#clipStates.writes;
+  }
+
+  /**
+   * P4 contract, U2: numbers the clip states of the drawn draws in paint order (primitives and
+   * mesh draws merged by sequence; a mesh draw at a sequence follows the primitives before it).
+   */
+  #assignClipStates(
+    visible: readonly DerivedPrimitive[],
+    meshDraws: readonly Readonly<{ sequence: number; clip: ClipChain | null }>[],
+  ): ClipStates {
+    this.#clipStates.begin();
+    const primitiveStates: number[] = [];
+    const meshStates: number[] = [];
+    let next = 0;
+    for (const draw of meshDraws) {
+      while (next < visible.length && visible[next]!.sequence < draw.sequence) {
+        primitiveStates.push(this.#clipStates.stateOf(visible[next]!.clip));
+        next += 1;
+      }
+      meshStates.push(this.#clipStates.stateOf(draw.clip));
+    }
+    for (; next < visible.length; next += 1) {
+      primitiveStates.push(this.#clipStates.stateOf(visible[next]!.clip));
+    }
+    return { primitiveStates, meshStates, records: this.#clipStates.end() };
   }
 
   /** @internal Tests only (E10 contract, section 3.1): null before a prepare or without a port. */
@@ -747,16 +833,26 @@ function derivePrimitives(
   cache: Map<string, DerivedCacheEntry>,
   paths: DerivedPath[],
   pathSequences: Map<string, number>,
+  clipSeen: { value: boolean },
 ): DerivedPrimitive[] {
   const result: DerivedPrimitive[] = [];
   const present = new Set<string>();
   let sequence = 0;
   const rootWorldVersion = Symbol.for('vector-studio.primitive-root-world');
-  const stack = [...scene.rootOrder].reverse().map((id) => ({
+  const stack: {
+    id: string;
+    parentWorld: SceneAffine;
+    parentWorldVersion: symbol;
+    parentHidden: boolean;
+    chain: ClipChain | null;
+    maskSource: boolean;
+  }[] = [...scene.rootOrder].reverse().map((id) => ({
     id,
     parentWorld: IDENTITY,
     parentWorldVersion: rootWorldVersion,
     parentHidden: false,
+    chain: null,
+    maskSource: false,
   }));
   while (stack.length > 0) {
     const item = stack.pop()!;
@@ -771,8 +867,19 @@ function derivePrimitives(
       ? composeSceneAffine(item.parentWorld, node.transform)!
       : previous.world;
     const worldVersion = worldChanged ? Symbol(`world-${node.id}`) : previous.worldVersion;
-    const hidden = item.parentHidden || !node.visible;
+    // P4-S2: a mask source never paints, whatever its visibility.
+    const hidden = item.parentHidden || !node.visible || item.maskSource;
     if (node.kind === 'container') {
+      if (node.clip !== null) clipSeen.value = true;
+      const isMask = node.clip?.kind === 'mask';
+      const source = isMask ? scene.getNode(node.children[0] ?? '') : undefined;
+      const chain = extendClipChain(
+        item.chain,
+        node,
+        world,
+        source,
+        source === undefined ? null : composeSceneAffine(world, source.transform),
+      );
       cache.set(
         node.id,
         Object.freeze({
@@ -793,6 +900,8 @@ function derivePrimitives(
           parentWorld: world,
           parentWorldVersion: worldVersion,
           parentHidden: hidden,
+          chain,
+          maskSource: isMask && index === 0,
         });
       }
       continue;
@@ -812,7 +921,15 @@ function derivePrimitives(
           omitted: false,
         }),
       );
-      paths.push(Object.freeze({ id: node.id, node, world, hidden }));
+      paths.push(
+        Object.freeze({
+          id: node.id,
+          node,
+          world,
+          hidden: hidden || item.chain?.empty === true,
+          ...(item.chain === null ? {} : { clip: item.chain }),
+        }),
+      );
       pathSequences.set(node.id, sequence);
       sequence += 1;
       continue;
@@ -851,6 +968,7 @@ function derivePrimitives(
         worldBounds,
         hidden,
         omitted,
+        clip: item.chain,
         sequence,
       }),
     );
@@ -866,9 +984,21 @@ function derivePrimitives(
  * so far. Paths without a draw split nothing, so a scene without drawn paths emits P1's single
  * analytic draw over the whole visible order stream.
  */
+type ClipStates = Readonly<{
+  primitiveStates: readonly number[];
+  meshStates: readonly number[];
+  records: readonly ClipStateRecord[];
+}>;
+const NO_CLIP_STATES: ClipStates = Object.freeze({
+  primitiveStates: Object.freeze([]),
+  meshStates: Object.freeze([]),
+  records: Object.freeze([]),
+});
+
 function interleaveDraws(
   visible: readonly DerivedPrimitive[],
   meshSequences: readonly number[],
+  states: readonly number[],
 ): Readonly<{ analytic: PrimitiveDraw[]; positions: number[] }> {
   const analytic: PrimitiveDraw[] = [];
   const positions: number[] = [];
@@ -876,18 +1006,39 @@ function interleaveDraws(
   let next = 0;
   const close = () => {
     if (next > runStart) {
+      const state = states[runStart] ?? 0;
       analytic.push(
-        Object.freeze({ first: runStart, count: next - runStart, variant: 'analytic-v1' as const }),
+        Object.freeze({
+          first: runStart,
+          count: next - runStart,
+          variant: 'analytic-v1' as const,
+          // P4 contract, U2: present only on a clipped run, so P3 draws stay unchanged.
+          ...(state === 0 ? {} : { clipState: state }),
+        }),
       );
       runStart = next;
     }
   };
+  // P4 contract, U2: a clip-state change closes the run; the order is never changed.
+  const advanceTo = (end: number) => {
+    // An unclipped frame has no states: the P3 jump, without a per-primitive walk.
+    if (states.length === 0) {
+      next = Math.max(next, end);
+      return;
+    }
+    while (next < end) {
+      if (next > runStart && states[next] !== states[runStart]) close();
+      next += 1;
+    }
+  };
   for (const sequence of meshSequences) {
-    while (next < visible.length && visible[next]!.sequence < sequence) next += 1;
+    let end = next;
+    while (end < visible.length && visible[end]!.sequence < sequence) end += 1;
+    advanceTo(end);
     close();
     positions.push(analytic.length);
   }
-  next = visible.length;
+  advanceTo(visible.length);
   close();
   return { analytic, positions };
 }
@@ -1025,6 +1176,7 @@ function cullPrimitives(
   camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>,
   target: PrimitiveTarget,
 ): DerivedPrimitive[] {
+  // P4-K5: also drop a primitive that misses its clip chain's bound (same 2 px guard).
   const guard = 2 / (camera.zoom * target.devicePixelRatio);
   const viewport = {
     minX: camera.position.x - guard,
@@ -1033,11 +1185,12 @@ function cullPrimitives(
     maxY: camera.position.y + target.height / target.devicePixelRatio / camera.zoom + guard,
   };
   return primitives.filter(
-    ({ worldBounds }) =>
+    ({ worldBounds, clip }) =>
       worldBounds.maxX >= viewport.minX &&
       worldBounds.minX <= viewport.maxX &&
       worldBounds.maxY >= viewport.minY &&
-      worldBounds.minY <= viewport.maxY,
+      worldBounds.minY <= viewport.maxY &&
+      meetsClipChain(worldBounds, clip, guard),
   );
 }
 
