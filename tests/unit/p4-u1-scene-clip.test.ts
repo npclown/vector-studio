@@ -315,9 +315,7 @@ describe('P4-A01 scene clip validation', () => {
       'invalid-order',
     );
     // cycle: c1's parent is c33.
-    const cyclic = deep.map((node) =>
-      node.id === 'c1' ? ({ ...node, parentId: 'c33' } as RenderNodeSnapshot) : node,
-    );
+    const cyclic = deep.map((node) => (node.id === 'c1' ? { ...node, parentId: 'c33' } : node));
     expect(reason(mirror().replaceSnapshot({ ...snapshot(cyclic), rootOrder: [] }))).toBe('cycle');
   });
 
