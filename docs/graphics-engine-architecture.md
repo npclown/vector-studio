@@ -256,11 +256,12 @@ For P2 flattening, the geometric target is 0.25 **physical display pixel**, acco
 
 ## Clipping
 
-- Axis-aligned screen-space frame clips may use scissor rectangles.
-- Transformed rectangular clips and arbitrary masks use stencil operations.
+- Rect clips (frame clips, axis-aligned or transformed) are evaluated analytically in the clipped draw's fragment shader with P1's rectangle coverage rule, so their edges antialias at every sample count. Scissor rectangles may be used only as a culling optimization that changes no pixel.
+- Arbitrary path masks render to `r8unorm` coverage textures before the main pass; a content draw multiplies its contribution by its innermost mask level's coverage.
+- The stencil stays reserved for mesh write-once coverage ([E17-K2](plans/d9-e17-mesh-write-once-coverage-contract.md#3-the-rule)).
 - Nested clip behavior must preserve document paint order.
-- The prototype supports a documented maximum clip nesting depth of 32.
-- Note 2026-10-25 ([E17-K3](plans/d9-e17-mesh-write-once-coverage-contract.md#4-identity-the-e11-snapshot-and-the-stencil-budget)): mesh draws already use all eight stencil bits for write-once coverage. The P4 clip contract must allocate the bits between clips and write-once, or move write-once to a per-draw depth value.
+- The prototype supports a documented maximum clip nesting depth of 32; deeper scenes are rejected.
+- Decided 2026-10-27 ([P4 contract, P4-Q1 (a)](plans/p4-clip-mask.md#10-decisions), recommended option auto-adopted under the user's standing instruction of 2026-10-24); before it, transformed and arbitrary clips were to use stencil operations, which E17-K3 left without free bits.
 - Offscreen textures are reserved for future filters, blend isolation, and cases stencil cannot represent.
 
 ## Text reservation
