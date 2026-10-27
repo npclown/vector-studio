@@ -1,5 +1,6 @@
 import type { RenderNodeSnapshot, SceneAffine, SceneVersion } from '@vector-studio/contracts';
 import type {
+  ClipMaskPacketLevel,
   MeshFillDraw,
   MeshPacketPart,
   MeshResourceId,
@@ -37,10 +38,14 @@ import {
 import type { RetainedSceneMirror, RetainedSceneView } from './scene-mirror.js';
 import {
   ClipStateTable,
+  MaskPlan,
   extendClipChain,
   meetsClipChain,
   type ClipChain,
+  type ClipMaskLevel,
   type ClipStateRecord,
+  type MaskBudgetNotice,
+  type MaskSourceRecord,
 } from './clip-resolution.js';
 import {
   composeSceneAffine,
@@ -105,6 +110,9 @@ type DerivedCacheEntry = Readonly<{
 }>;
 
 const RESOURCE_ORDER = ['transforms', 'geometry', 'styles', 'order', 'frame'] as const;
+/** P4 contract, section 5: the queue limits of `render.clip-resource-limit`, as for path-mesh failures. */
+const MASK_NOTICES_QUEUED = 4096;
+const MASK_NOTICES_PER_PACKET = 32;
 const IDENTITY: SceneAffine = [1, 0, 0, 1, 0, 0];
 
 export class PrimitiveSceneSource implements PrimitiveFrameSource {
@@ -154,6 +162,13 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   /** P4 contract, U2: the frame's clip states and their change count. */
   readonly #clipStates = new ClipStateTable();
   #clipStatesUsed = false;
+  /**
+   * P4 contract, section 5: budget notices are queued on a level's transition to over budget,
+   * at most 4,096 queued and 32 per packet; overflow is counted.
+   */
+  #overBudget = new Set<string>();
+  #maskNotices: MaskBudgetNotice[] = [];
+  #maskNoticesDropped = 0;
   /** P3 V3 section f: true exactly when this source consumes a fill-mesh or stroke-mesh port. */
   public readonly requiresMeshPipeline: boolean;
 
@@ -185,7 +200,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       pathSequences,
       clipSeen,
     );
-    const visible = cullPrimitives(
+    let visible = cullPrimitives(
       derived.filter((entry) => !entry.hidden && !entry.omitted && entry.clip?.empty !== true),
       cameraState.camera,
       target,
@@ -212,7 +227,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     }
     // P3 V3 section b: port results are published before any packing, so a later packing
     // error never repeats a port call.
-    const pathDraws: readonly PathMeshDraw[] =
+    let pathDraws: readonly PathMeshDraw[] =
       this.#pathMeshes?.prepare({
         paths,
         geometryRevision: (id) => scene.getGeometryRevision(id),
@@ -223,6 +238,35 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
           frameFinite: meshFrame !== null,
         },
       }) ?? [];
+    // P4 contract, U4: mask levels are planned over the drawn content in paint order; content
+    // under an undrawable level (empty bound, a source covering nothing, over the budget) is
+    // not drawn, and mask source draws never paint.
+    let masks: MaskPlan | null = null;
+    const pathClips = new Map(paths.map((path) => [path.id, path.clip ?? null] as const));
+    if (clipSeen.value) {
+      masks = this.#planMasks(scene, derived, pathDraws, cameraState.camera, target);
+      const plan = masks;
+      const content = [
+        ...visible.map((primitive) => ({ sequence: primitive.sequence, chain: primitive.clip })),
+        ...pathDraws
+          .filter((draw) => draw.maskSource !== true)
+          .map((draw) => ({
+            sequence: pathSequences.get(draw.nodeId)!,
+            chain: pathClips.get(draw.nodeId) ?? null,
+          })),
+      ].sort((left, right) => left.sequence - right.sequence);
+      for (const entry of content) plan.admit(entry.chain);
+      visible = visible.filter((primitive) => plan.admit(primitive.clip));
+      const used = new Set(
+        plan.levels.flatMap((level) => (level.source.kind === 'mesh' ? [level.source.nodeId] : [])),
+      );
+      this.#queueMaskNotices(plan.notices);
+      pathDraws = pathDraws.filter((draw) =>
+        draw.maskSource === true
+          ? used.has(draw.nodeId)
+          : plan.admit(pathClips.get(draw.nodeId) ?? null),
+      );
+    }
     let origin = this.#selectOrigin(cameraState.camera, visible, target);
     let rebased =
       this.#origin === null || origin.x !== this.#origin.x || origin.y !== this.#origin.y;
@@ -262,16 +306,34 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       this.#reconstructedEpoch !== scene.sceneEpoch ||
       this.#reconstructedIncarnation !== this.#incarnations.transforms;
     const writes = this.#makeWrites(reconstruct);
-    const mesh = this.#prepareMeshPart(target.generation, pathDraws, meshFrame, pathSequences);
+    const packedMesh = this.#prepareMeshPart(
+      target.generation,
+      pathDraws,
+      meshFrame,
+      pathSequences,
+    );
+    // P4 contract, U4: mask source draws leave the paint-order draws for the clip part.
+    const maskDrawIndices = new Map<string, number>();
+    pathDraws.forEach((draw, index) => {
+      if (draw.maskSource === true) maskDrawIndices.set(draw.nodeId, index);
+    });
+    const contentPathDraws =
+      maskDrawIndices.size === 0 ? pathDraws : pathDraws.filter((draw) => draw.maskSource !== true);
+    const mesh =
+      packedMesh === undefined || maskDrawIndices.size === 0
+        ? packedMesh
+        : Object.freeze({
+            ...packedMesh,
+            draws: packedMesh.draws.filter((_, index) => pathDraws[index]!.maskSource !== true),
+          });
     // P4 contract, U2: clip states are numbered in drawn paint order; a state change splits an
     // analytic run. An unclipped frame has no states and the P3 draws, unchanged.
     let clip: ClipStates = NO_CLIP_STATES;
     if (clipSeen.value) {
-      const pathClips = new Map(paths.map((path) => [path.id, path.clip ?? null] as const));
-      // The mesh part's draws are pathDraws, in the same order.
+      // The mesh part's draws are the content path draws, in the same order.
       const meshStates = (mesh?.draws ?? []).map((draw, index) => ({
         sequence: draw.sequence,
-        clip: pathClips.get(pathDraws[index]!.nodeId) ?? null,
+        clip: pathClips.get(contentPathDraws[index]!.nodeId) ?? null,
       }));
       clip = this.#assignClipStates(visible, meshStates);
     } else if (this.#clipStatesUsed) {
@@ -300,6 +362,9 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       writes: Object.freeze(writes),
       draws: Object.freeze(draws.analytic),
       frame: Object.freeze({ ...target }),
+      ...(this.#maskNotices.length === 0
+        ? {}
+        : { clipNotices: Object.freeze(this.#maskNotices.splice(0, MASK_NOTICES_PER_PACKET)) }),
       ...(clip.records.length === 0
         ? {}
         : {
@@ -307,6 +372,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
               layoutVersion: 0 as const,
               states: clip.records,
               maxIndex: clip.records[clip.records.length - 1]!.index,
+              masks: maskLevels(masks, packedMesh?.draws ?? [], maskDrawIndices),
               origin: Object.freeze({ x: origin.x, y: origin.y }),
               camera: Object.freeze({
                 x: cameraState.camera.position.x,
@@ -347,12 +413,77 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     if (this.#pathMeshes !== undefined) {
       this.#drawRecord = drawRecord(
         this.#prepareSerial,
-        pathDraws,
+        contentPathDraws,
         packet.mesh?.draws ?? [],
         this.#pathMeshes.hasFringeBuilder,
       );
     }
     return packet;
+  }
+
+  /**
+   * P4 contract, U4: the frame's mask plan. A primitive source draws its fill area from its
+   * instance records, a path source the fill draw the path pipeline served for it (P4-K2); a
+   * degenerate primitive, a line, or a path without a served draw covers nothing.
+   */
+  #planMasks(
+    scene: RetainedSceneView,
+    derived: readonly DerivedPrimitive[],
+    pathDraws: readonly PathMeshDraw[],
+    camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>,
+    target: PrimitiveTarget,
+  ): MaskPlan {
+    const primitives = new Map(derived.map((primitive) => [primitive.id, primitive] as const));
+    const sources = new Map(
+      pathDraws.flatMap((draw) => (draw.maskSource === true ? [[draw.nodeId, draw] as const] : [])),
+    );
+    const sourceOf = (
+      level: ClipMaskLevel,
+    ): Readonly<{ source: MaskSourceRecord; key: string }> | null => {
+      if (level.sourceId === null) return null;
+      const primitive = primitives.get(level.sourceId);
+      if (primitive !== undefined) {
+        if (primitive.omitted || primitive.node.geometry.kind === 'line') return null;
+        return {
+          source: Object.freeze({ kind: 'primitive', slot: primitive.slot }),
+          key: JSON.stringify(['primitive', primitive.node.geometry, primitive.world]),
+        };
+      }
+      const draw = sources.get(level.sourceId);
+      const node = scene.getNode(level.sourceId);
+      if (draw === undefined || node?.kind !== 'path') return null;
+      return {
+        source: Object.freeze({ kind: 'mesh', nodeId: level.sourceId }),
+        key: JSON.stringify([
+          'mesh',
+          scene.getGeometryRevision(level.sourceId) ?? 0,
+          node.geometry.fillRule,
+          composeSceneAffine(level.world, node.transform),
+          draw.toleranceExponent,
+          draw.fringeBucket,
+        ]),
+      };
+    };
+    return new MaskPlan({
+      sourceOf,
+      camera: { x: camera.position.x, y: camera.position.y, zoom: camera.zoom },
+      target,
+    });
+  }
+
+  #queueMaskNotices(notices: readonly MaskBudgetNotice[]): void {
+    const current = new Set(notices.map((notice) => notice.nodeId));
+    for (const notice of notices) {
+      if (this.#overBudget.has(notice.nodeId)) continue;
+      if (this.#maskNotices.length < MASK_NOTICES_QUEUED) this.#maskNotices.push(notice);
+      else this.#maskNoticesDropped += 1;
+    }
+    this.#overBudget = current;
+  }
+
+  /** P4 contract, section 5: budget notices dropped because the queue was full. */
+  public getMaskNoticesDropped(): number {
+    return this.#maskNoticesDropped;
   }
 
   /** P4 contract, U2 (P4-A06): clip-state records written so far. */
@@ -852,6 +983,8 @@ function derivePrimitives(
     parentHidden: boolean;
     chain: ClipChain | null;
     maskSource: boolean;
+    /** For a mask source: the mask container's own chain, which its fill draw is clipped by. */
+    sourceChain: ClipChain | null;
   }[] = [...scene.rootOrder].reverse().map((id) => ({
     id,
     parentWorld: IDENTITY,
@@ -859,6 +992,7 @@ function derivePrimitives(
     parentHidden: false,
     chain: null,
     maskSource: false,
+    sourceChain: null,
   }));
   while (stack.length > 0) {
     const item = stack.pop()!;
@@ -908,6 +1042,7 @@ function derivePrimitives(
           parentHidden: hidden,
           chain,
           maskSource: isMask && index === 0,
+          sourceChain: item.chain,
         });
       }
       continue;
@@ -927,14 +1062,27 @@ function derivePrimitives(
           omitted: false,
         }),
       );
+      // P4-S2 and P4-Q3: a mask source is meshed as a fill whatever its style and visibility,
+      // clipped by its container's own chain, and never paints.
       paths.push(
-        Object.freeze({
-          id: node.id,
-          node,
-          world,
-          hidden: hidden || item.chain?.empty === true,
-          ...(item.chain === null ? {} : { clip: item.chain }),
-        }),
+        Object.freeze(
+          item.maskSource
+            ? {
+                id: node.id,
+                node,
+                world,
+                hidden: item.parentHidden || item.chain?.empty === true,
+                maskSource: true as const,
+                ...(item.sourceChain === null ? {} : { clip: item.sourceChain }),
+              }
+            : {
+                id: node.id,
+                node,
+                world,
+                hidden: hidden || item.chain?.empty === true,
+                ...(item.chain === null ? {} : { clip: item.chain }),
+              },
+        ),
       );
       pathSequences.set(node.id, sequence);
       sequence += 1;
@@ -1000,6 +1148,39 @@ const NO_CLIP_STATES: ClipStates = Object.freeze({
   meshStates: Object.freeze([]),
   records: Object.freeze([]),
 });
+
+/**
+ * P4 contract, U4: the clip part's mask levels with each mesh source's packed draw; a mesh
+ * source whose draw did not reach the packet (the mesh path stopped) covers nothing.
+ */
+function maskLevels(
+  plan: MaskPlan | null,
+  packed: ReadonlyArray<Readonly<{ draw: Omit<MeshFillDraw, 'position'> }>>,
+  indices: ReadonlyMap<string, number>,
+): readonly ClipMaskPacketLevel[] {
+  if (plan === null) return Object.freeze([]);
+  return Object.freeze(
+    plan.levels.map((level): ClipMaskPacketLevel => {
+      if (level.source.kind !== 'mesh') return { ...level, source: level.source };
+      const index = indices.get(level.source.nodeId);
+      const draw = index === undefined ? undefined : packed[index]?.draw;
+      return Object.freeze({
+        ...level,
+        source: Object.freeze({
+          ...level.source,
+          draw:
+            draw === undefined
+              ? null
+              : Object.freeze({
+                  instance: draw.instance,
+                  firstTriangle: draw.firstTriangle,
+                  triangleCount: draw.triangleCount,
+                }),
+        }),
+      });
+    }),
+  );
+}
 
 function interleaveDraws(
   visible: readonly DerivedPrimitive[],

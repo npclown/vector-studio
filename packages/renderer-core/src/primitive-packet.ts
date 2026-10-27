@@ -1,5 +1,5 @@
 import type { SceneVersion } from '@vector-studio/contracts';
-import type { ClipStateRecord } from './clip-resolution.js';
+import type { ClipStateRecord, MaskBudgetNotice, MaskLevelRecord } from './clip-resolution.js';
 import type { PathMeshNotice } from './path-mesh-pipeline.js';
 
 export type PrimitiveResourceId = 'transforms' | 'geometry' | 'styles' | 'order' | 'frame';
@@ -33,6 +33,20 @@ export type PrimitiveDraw = Readonly<{
   clipState?: number;
 }>;
 /**
+ * P4 contract, U4: a mask level of the clip part. A mesh source carries its packed fill draw in
+ * the mesh part's resources, or null when it did not reach the packet (it then covers nothing).
+ */
+export type ClipMaskPacketLevel = Omit<MaskLevelRecord, 'source'> &
+  Readonly<{
+    source:
+      | Readonly<{ kind: 'primitive'; slot: number }>
+      | Readonly<{
+          kind: 'mesh';
+          nodeId: string;
+          draw: Readonly<{ instance: number; firstTriangle: number; triangleCount: number }> | null;
+        }>;
+  }>;
+/**
  * P4 contract, U2: the frame's clip states, present only when a drawn draw is clipped. Plain
  * records; U3 and U4 own their GPU layout.
  */
@@ -41,6 +55,11 @@ export type ClipPacketPart = Readonly<{
   /** In index order; indices may have gaps, so a GPU table is sized by `maxIndex`. */
   states: readonly ClipStateRecord[];
   maxIndex: number;
+  /**
+   * U4: the frame's drawable mask levels, each after its parent level; empty without a mask
+   * level. A content state reads the level named last in its `masks`.
+   */
+  masks: readonly ClipMaskPacketLevel[];
   /**
    * U3: the packet's primitive origin, which rect records are rebased to on the GPU so a camera
    * move rewrites no record, and the camera, which maps a physical pixel to the world:
@@ -127,6 +146,11 @@ export type PrimitivePacket = Readonly<{
   mesh?: MeshPacketPart;
   /** Absent for every unclipped frame (P4 contract, U2). */
   clip?: ClipPacketPart;
+  /**
+   * P4 contract, U4 and section 5: mask levels newly over the mask texture budget, at most 32;
+   * absent when none. Emitted as `render.clip-resource-limit`.
+   */
+  clipNotices?: readonly MaskBudgetNotice[];
 }>;
 export type PrimitiveReceipt = Readonly<{
   scene: SceneVersion;

@@ -78,6 +78,12 @@ export type DerivedPath = Readonly<{
   hidden: boolean;
   /** P4 contract, U2: the clipping ancestors; a paint is drawable only if it meets their bound. */
   clip?: ClipChain;
+  /**
+   * P4 contract, U4 (P4-S2, P4-K2): the path is the source of a mask container. Only its fill
+   * area is meshed, whatever its style, visibility and opacity, and drawn as an opaque white
+   * shape into the mask level; it never paints. `clip` is then the container's own chain.
+   */
+  maskSource?: true;
 }>;
 
 export type PathMeshFailureScope = 'path' | 'batch' | 'renderer';
@@ -150,6 +156,8 @@ export type PathMeshDraw = Readonly<{
   composite?: 'joint-fill';
   /** The served overlay variant of a joint fill draw (addendum section 4.2); absent otherwise. */
   overlay?: Readonly<{ id: symbol; data: JointOverlay }>;
+  /** P4 contract, U4: present only on a mask source's fill draw, which never paints. */
+  maskSource?: true;
 }>;
 
 export type PathMeshStatistics = Readonly<{
@@ -482,7 +490,7 @@ export class PathMeshPipeline {
       // width > 0 and stroke world bounds meeting the viewport. A path is culled only when
       // neither paint's bounds meet it.
       const drawable = PAINTS.filter((paint) => {
-        if (this.#channels[paint] === undefined || paintKeyOf(node, paint) === null) return false;
+        if (this.#channels[paint] === undefined || pathPaintKey(path, paint) === null) return false;
         const worldBounds = this.#worldBounds(path, revision, paint);
         return (
           worldBounds !== null &&
@@ -537,7 +545,7 @@ export class PathMeshPipeline {
         }
 
         const e = Math.min(buckets.e, E_MAX);
-        const key = paintKeyOf(node, paint)!;
+        const key = pathPaintKey(path, paint)!;
         this.#currentE[paint].set(path.id, e);
         items.push(
           Object.freeze({
@@ -546,7 +554,12 @@ export class PathMeshPipeline {
             e,
             f: buckets.f,
             orientation: buckets.orientation,
-            color: paint === 'fill' ? node.style.fill! : node.style.stroke!.color,
+            color:
+              path.maskSource === true
+                ? MASK_SOURCE_COLOR
+                : paint === 'fill'
+                  ? node.style.fill!
+                  : node.style.stroke!.color,
           }),
         );
         if (this.#lookup(paint, path.id, e) !== undefined) continue;
@@ -602,7 +615,7 @@ export class PathMeshPipeline {
       // nor empty) and 0 < o < 1. The joint fill draw takes the fill draw's place, before the
       // unchanged stroke draw; at o = 0, o = 1 and for one paint the draws are ST-U6's.
       const opacity = path.node.opacity;
-      if (pathDraws.length === 2 && opacity > 0 && opacity < 1) {
+      if (path.maskSource !== true && pathDraws.length === 2 && opacity > 0 && opacity < 1) {
         const fillEntry = entries[0]!;
         const overlay = this.#serveOverlay(path.id, fillEntry, entries[1]!, pathDraws, now);
         if (overlay === null) continue;
@@ -1112,8 +1125,9 @@ export class PathMeshPipeline {
       offsets: lanes.offsets,
       linear: lanes.linear,
       anchor: lanes.anchor,
-      opacity: item.path.node.opacity,
+      opacity: item.path.maskSource === true ? 1 : item.path.node.opacity,
       fill: item.color,
+      ...(item.path.maskSource === true ? { maskSource: true as const } : {}),
     });
   }
 
@@ -1471,6 +1485,20 @@ function strokeRequest(request: PendingRequest, requestId: number): StrokeMeshRe
     miterLimit: key.miterLimit,
     toleranceExponent: request.e,
   });
+}
+
+/** P4-K2: a mask source draws an opaque white shape. */
+const MASK_SOURCE_COLOR: SceneColor = Object.freeze({ r: 1, g: 1, b: 1, a: 1 });
+
+/**
+ * P4-S2: a mask source has the fill key whatever its style and no stroke; any other path has
+ * its style's keys.
+ */
+function pathPaintKey(path: DerivedPath, paint: PathPaint): PaintKey | null {
+  if (path.maskSource !== true) return paintKeyOf(path.node, paint);
+  return paint === 'fill'
+    ? Object.freeze({ paint: 'fill', fillRule: path.node.geometry.fillRule })
+    : null;
 }
 
 /** The paint's key fields, or null when the node has no such paint to draw. */
