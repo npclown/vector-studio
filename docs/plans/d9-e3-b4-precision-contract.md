@@ -1985,3 +1985,139 @@ The full reference run of 2026-10-26 (96 shards on several hosts, section 19.6) 
 - **Merge.** `--merge <dirs> --retried <retry dirs>` replaces exactly the rows whose worker died by the retry rows of the same index and id. It refuses a retry row that names any other row, a case retried twice, or a retry row that matches no row. The merged provenance lists every replaced row under `retried`, with its index, id, former reason, and the retry's run id, commit, `changedFromHead`, heap and exit codes. A record is copied to `docs/evidence/` only when every retry also exited 0.
 - **Commits.** A run directory may come from an earlier commit than the merging checkout, when that commit is an ancestor and the two differ only in `tooling/run-e3-a04.mjs`, `tests/geometry/e3-a04/run.check.ts` or `docs/`. The diff is taken without rename detection, so a moved file counts on both sides. Its contract SHA may then differ; every other identity field (corpus, generator, oracle and its certification, WASM, shards, stride, start resolution, clean tree) must still agree. Each host's and each retry's commit and the paths it differs in (`changedFromHead`) are recorded, and the evidence review reads those diffs, because `run.check.ts` also sets the measurement options. The run of 2026-10-26 at `7443c2b` is merged on this change's own commit, whose parent is `7443c2b`. A later `main`, which carries other packages' changes, would refuse it.
 - **A retry that dies again** is refused at the merge, with all of its directory's rows. Re-run the retry without that case, and leave the case UNDECIDED or retry it alone with a larger heap.
+
+## 23. E3-U5 reference run record, 2026-10-27
+
+Dated append. This section records the A04 reference run of section 9.1 on the E11 exit snapshot. The record is [`docs/evidence/e3-a04/2026-10-27T00-33-11-173Z-de2951d7/`](../evidence/e3-a04/2026-10-27T00-33-11-173Z-de2951d7/record.md). The measured disposition is **FAIL**. A04 acceptance stays with the Primary after the independent evidence review of section 7.4.
+
+**Decision (2026-10-27, user).** On the decision card "A04 전체 측정 결과(FAIL)를 어떻게 처리할까요?", the user chose the recommended option, "결과 그대로 기록" ("record the result as it is"):
+
+- The run is recorded as measured, with its FAIL and UNDECIDED breakdown.
+- The remedies go to the backlog as E3-U7 (section 23.5).
+- A04 enters the P3 exit as a disclosed defect.
+
+The 0.25 px threshold, the oracle and the corpus do not change, and the freeze record of section 19.7 stands.
+
+### 23.1 The run
+
+- **Commit.** All 96 shards ran on `7443c2b`, which is the E11 snapshot `5ddec4e` plus tests, tooling, docs and CI only, with no file under `packages/` changed (E11 §12).
+  - The merge and all retries ran on `a83b7db`: `7443c2b` plus the section 22 tooling (PR #277). `a83b7db` is the head of PR #277 before its squash, reachable as `refs/pull/277/head`, and not an ancestor of `main`. Its squash on `main`, `68888f6`, has the same E3 tooling, tests, oracle and contract.
+  - Every host's `changedFromHead` is `tooling/run-e3-a04.mjs`, `tests/geometry/e3-a04/run.check.ts` and this contract, and every retry's is empty. The `run.check.ts` change only adds the retry case selection, so the measurement options are the same.
+- **Identity.** All hosts and retries share these:
+  - The release WASM `58f26517…fd35`, with `geometry-wasm/fill-v0+r4` and `geometry-wasm/stroke-v0+r7`.
+  - The oracle `5b2fafc3…7e80`, certified in section 19.7.
+  - `corpusSha256` `7f4bb1c9…721c`.
+  - `--shards 96 --stride 1 --start-resolution 2`.
+- **Hosts.** There were 25 run directories:
+  - 20 cloud containers, Linux, 4 cores.
+  - The user's laptop, Windows, 20 threads, 12 shards twice.
+  - The user's PC, Windows, 16 threads, 16 shards.
+  - Each host's Node version is recorded. 21 directories ran on Node 24.15.0 (the repository's pin).
+  - The PC's three directories (shards 75 to 90) ran on the system Node 24.22.1.
+  - One container directory (shards 48 to 50) ran on Node 22.22.0.
+  - **Deviation from section 7.1**, which requires the pinned Node version: 19 shards (48 to 50 and 75 to 90) ran off the pin. The measurement is JavaScript and WASM arithmetic that the ECMAScript and WebAssembly specifications fix, and section 23.7 re-measures a sample of those shards' rows on Node 24.15.0 with byte-identical results. Acceptance of the deviation is the Primary's.
+  - The merge ran on Node 24.15.0, in the A04 thread's cloud container (not recorded in the record).
+- **Dead workers (section 22).** 61 cases hit the 6 GB worker heap: 59 `C5` strokes (33 at `z = 64`, 18 at `z = 1`, 8 at `z = 0.01`), one `C3` and one `C9`.
+  - Each was re-measured once with `--heap 13000` (24,500 MB for three cases on the PC), in 24 retry directories that all exited 0.
+  - One retry, `19871` at 13 GB, died again. Its directory was set aside unmerged, and its three cases were re-measured together on the PC.
+  - After the retries no row is a harness error. 59 of the 61 end UNDECIDED on the oracle's work cap and 2 PASS. The work-cap reasons are `gcd step`, `rational`, `distance query`, `seam split` and `membership`.
+- **Set-aside directories.** Several hosts' first launches were killed when an idle container was suspended, and one duplicate launch was stopped within a minute. None of these was merged, and the merge checks that every shard appears exactly once. Their run ids, for the record: `97982af7`, `74317c46`, `d25eff4e`, `71bc2ebe`, `a35b1a62`, `4ed60db5`, `8a9f29bf`, `4445cac5`, `56cabf9c`, `b3fafa28`, `fa0ecc05`, the container's two aborted runs of shards 48 to 50, and the died-again retry `79f3ca69`. These directories are not committed, so this list cannot be checked from the record.
+
+### 23.2 Result
+
+| Stratum | PASS | FAIL | UNDECIDED | Disclosed (section 21) | `window-empty` | Rejected |
+| --- | --- | --- | --- | --- | --- | --- |
+| C1 | 3,760 | 5 | 158 | 564 | 84 | 109 |
+| C2 | 1,584 | 0 | 157 | 0 | 5 | 54 |
+| C3 | 3,145 | 0 | 439 | 21 | 164 | 1,091 |
+| C4 | 1,283 | 0 | 136 | 143 | 39 | 127 |
+| C5 | 5,478 | 0 | 592 | 193 | 294 | 481 |
+| C6 | 209 | 0 | 21 | 6 | 61 | 27 |
+| C7 | 75 | 0 | 4 | 0 | 15 | 14 |
+| C8 | 2,056 | 0 | 64 | 158 | 188 | 216 |
+| C9 | 1,596 | 0 | 315 | 233 | 132 | 1,234 |
+| C10 | 7 | 0 | 0 | 0 | 2 | 3 |
+| C11 | 235 | 0 | 23 | 24 | 54 | 240 |
+| C12 | 120 | 0 | 15 | 0 | 3 | 6 |
+| All | 19,548 | 5 | 1,924 | 1,342 | 1,041 | 3,602 |
+
+FAIL and UNDECIDED count only rows outside the known classes. The record's raw totals, which `record.md` prints, are 27 FAIL and 3,244 UNDECIDED: the 22 FAIL and 1,320 UNDECIDED rows in the known classes are in the Disclosed column. The disclosed rows break down as follows:
+
+- `collapsed-feature`: 143, of which 22 are FAIL.
+- `far-vertices`: 757.
+- `degenerate-stroke-triangle`: 442.
+
+Other results:
+
+- **Controls and validator.** All 14 positive controls hold, and the validator reports no problem.
+- **Bounds.** The maximum oracle interval width is 0.2497 px.
+- **`U` statistics.** Over every measured row with a finite `U`, UNDECIDED rows included (section 7.3's `aggregate`), p50 is 0.150 px and p99 is 0.250 px. The max `U`, 0.517 px on `C2/g0161/T4/z0.01-d2`, is an UNDECIDED row: its `L` is below 0.25 px.
+- **E3-A8.** No declared cell is uncovered.
+
+### 23.3 The FAIL rows outside the known classes
+
+The five rows are `C1/g0029/T2` at `z0.01-d3`, `z1-d1`, `z1-d2`, `z64-d1` and `z64-d2`. The generated row is a triangle of the `sub` size class (size exponent −4 to 0, section 13.5), which the generator scales with each pair so that it stays below a pixel. Its path coordinates halve from `d2` to `d3`, for example.
+
+- At these five pairs the port returns a mesh (`drawn: mesh`), but every triangle of it maps to coincident positions (`noFlip.collapsed` = 2 of 2). Section 15.4 leaves collapsed triangles out of `M*`, so `M*` is empty while `β_c` is not zero.
+- With `∂R` in `Ω` and `∂M*` empty, the boundary distance `B_R` is infinite and `E = [∞, ∞]` (E3-K4 on the `M*` of section 15.4), so `L > 0.25` and the row is FAIL. The `empty` rule of section 3.2 gives the same outcome for an `empty` port result.
+- **Serialization.** `record.json` writes these infinities as `null` (`eLo`, `eHi` and `u`) and `l` as `1.7976931348623157e308`, the largest double below `∞` after the downward rounding. A `null` there means `+∞`, not "not measured". The `eHi` of the `collapsed-feature` FAIL rows is written the same way.
+- The other four pairs of the same row keep a positive-area mesh and PASS, with `U` between 0.12 and 0.24 px.
+- The true visual error is far below 0.25 px, because the whole shape is below a pixel. But A04 scores boundaries, not pixels, and a kernel whose mesh `M` loses a sub-pixel shape fails it. The fringe still draws its anti-aliasing band, which A08's coverage measures and A04 does not. This is a kernel result, not an oracle defect.
+
+### 23.4 UNDECIDED outside the known classes
+
+| Reason | Rows | What it means |
+| --- | --- | --- |
+| No-flip certificate, clipped draw (`flipTolerant` not run) | 658 | Section 20's argument does not cover clipped triangles |
+| No-flip certificate, fill zero-area triangle off `M*` | 304 | The fill counterpart of the `degenerate-stroke-triangle` class |
+| No-flip certificate, edge with triangles on both sides | 217 | The flip-tolerant bound's open T-junction case |
+| No-flip certificate, boundary offset | 208 | The offset certificate of section 20.3 fails |
+| No-flip certificate, edge below binary64 | 24 | |
+| `window-empty` within the guard | 261 | Section 15.5 |
+| Straddles at the floor `2^-20` | 100 | `E` stays at 0.25 px within the oracle's resolution |
+| Oracle work cap | 152 | `gcd step` 41, `rational` 40, `distance query` 39, `seam split` 31, `membership` 1 |
+
+With these rows, A04 would be UNVERIFIED even without the FAIL rows.
+
+### 23.5 E3-U7 (backlog)
+
+E3-U7 collects the remedies. None was made for this record.
+
+- A fourth known class, or a kernel change, for sub-pixel shapes whose mesh collapses (section 23.3).
+- The flip-tolerant bound for clipped draws, and for fill zero-area triangles.
+- A cheaper oracle path for the work-cap stroke cases.
+- The record writer: `+∞` written as a string, as the run tool's `toJson` already does, instead of `null`.
+
+A new reference run on a later snapshot would supersede this record. This record is immutable (section 7.4).
+
+### 23.6 GPU model check
+
+The headed check of section 19.1 (E3-A6) ran on the user's PC on 2026-10-27, from 00:17 to 00:32Z, on `a83b7db` with the same WASM. Its two outputs are committed beside the record as [`chrome.json`](../evidence/e3-a04/2026-10-27T00-33-11-173Z-de2951d7/chrome.json) and [`edge.json`](../evidence/e3-a04/2026-10-27T00-33-11-173Z-de2951d7/edge.json). The record names them by the merging host's local paths.
+
+- **Browsers.** Chrome 155.0.8059.85 and Edge 156.0.4314.42, headed, with `--enable-unsafe-webgpu`, at DPR 1.
+- **Adapter.** NVIDIA, Turing architecture, not a fallback adapter. The adapter's `device` and `description` are empty, so the model is taken from the machine record of section 16.5 (GTX 1660 SUPER), not from this run. The driver version and the browser channel are not recorded, against section 7.4. The user agent, 151.0.7922.34 in both, is Playwright's fixed `Desktop Chrome` and `Desktop Edge` device descriptor (`playwright.gpu.config.ts`), so the version field, which is the browser's own, is the one to read.
+- **Result.** Both browsers **PASS**, with identical numbers.
+  - 13,364 subset cases: 1,429 rejected and 216 empty are skipped. That leaves 11,719 draws and 1,236,334 points, with no failure.
+  - The largest error-to-`β` ratio is 0.267 on the vertex path and 0.368 on the feature path.
+  - 2,668 clipped draws were compared over 41,503,238 pixel centres, with no mismatch. 591 of them were not measurable for `β`.
+  - There are 151,848 T-junctions. The largest crack is 0.00108 px, on `C5/l40/T6/z64-d3`.
+  - E3-PC12 was rejected, as it should be.
+  - The shader hash `d306137c…31a3` and the WASM hash equal the record's.
+
+This completes E3-A6 on the named subset. It does not change the FAIL.
+
+The committed files' SHA-256 values bind them to this section, because the record names the merging host's local paths:
+
+- `chrome.json`: `b504ac0d6caa51cf884be24b2ffa6a06fced7dc86f20606b449391cd10ac2c5c`
+- `edge.json`: `fed1ec6f1bc9e5262e074f6e869fffa1dafb9d761a4eecbbbed38c348b74f26c`
+- `record.json`: `5df0c5a633de733ae964a560cbedd9838d5c2929360dfa98705dce88dd0e6b2e`
+
+### 23.7 Node version sample
+
+This sample checks the deviation of section 23.1. On 2026-10-27, 41 rows of the off-pin shards were re-measured on Node 24.15.0 on `a83b7db`, with `--retry-cases` into a separate directory that was not merged (run id `a61cd8b0`, exit 0).
+
+- 20 rows came from shards 48 to 50, which ran on Node 22.22.0. 21 came from shards 75 to 90, which ran on Node 24.22.1.
+- The rows were taken in corpus order, up to three per host group, status and paint. They are 12 PASS, 12 UNDECIDED, 11 `window-empty` and 6 rejected, each measured in under 15 s.
+- Every re-measured row is byte-identical to the record's row once its wall time `ms` is set aside.
+
+This is a sample, not a proof. It found no Node-version effect.
