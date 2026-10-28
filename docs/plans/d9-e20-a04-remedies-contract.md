@@ -126,3 +126,93 @@ U1 and U2 are independent. U3 needs both.
 - 2026-10-28, independent review r1: NOT READY. B1: K1 assumed shared clip points, which E3 does not; K1 now keeps `M*` unclipped and states the bound on the crack-closed region. B2: K6 contradicted E3-Q10 (b); it is now a remedy (split at T-vertices), not a class. B3: carry-over could not work; added the gating rule, K3 runs the old search first, and K10 measures on the snapshot's packages. S1 to S8 applied (K5 amendment and cost, counts, A5 size 976, K2 pieces and chain, K4 wording, K7 row field, the evidence review covered by A7).
 - 2026-10-28, independent review r2: READY WITH FOLLOW-UPS; S1 to S7 applied (measurement branch paths, tag and merge base, `splitTVertices`, `oracle-work-cap` limits, clip cracks as Q4, row field and `+∞` forms, wording).
 - 2026-10-28, 추천안 자동 채택 under the user's standing instruction of 2026-10-24: E20-Q1 (a), Q2 (a), Q3 (a), Q4 (a). Q1 was also put to the user on a decision card; a different answer from the user replaces (a) before U2 lands.
+- 2026-10-28, E20-U1 independent review r1 (code, annex, gating): READY WITH FOLLOW-UPS, no blocker; gating confirmed byte-identical for decided rows. S1 to S8 applied: partners defined by edge parameter and barycentrics, clip points shared along K6-split lines, the `Ω ∖ V` model convention made explicit, the clip-line strip, the K2 sliver as extra coverage, the work cap inside the K6 split, a K4 `measureCase` test, and the checks left to U3.
+
+## 8. E20-U1 annex: the remedies in the harness, 2026-10-28
+
+The code is `flipTolerantBound` (option `e20`), `boundaryDistanceFromWindow` and `measureCase` in `tests/geometry/e3-a04/harness.ts`. The oracle does not change. Notation follows E3 section 20: `β = β_c`, `C*` the chain, `w_s` the winding number of the moving mesh at time `s`.
+
+### 8.1 Gating
+
+The new code runs at three places, each the predicate that ended a row UNDECIDED on 2026-10-27:
+
+- **No-flip certificate.** `noFlip.failed > 0`, and the section-20 bound was not run (a crossing triangle) or returned no `ρ`. Here `flipTolerantBound(…, { e20: true })` runs: K1, K2, K3 and K6.
+- **`window-empty` within the guard.** `boundaryMayMeetGuard` is true. Here K4 runs.
+- **Straddle on the bound.** `U > 0.25 ≥ L` with a flip-tolerant `ρ` (old or new). Here the refined search runs on every edge (`refineAll`), and the row keeps the smaller `ρ`, with `U` and `L` from the same oracle interval.
+
+A row decided by the old code meets none of them, so its values do not change. Its `flipTolerant` keeps the five old fields, and it has no `e20` field. Two additions to the gated paths:
+
+- A new row with `ρ ≥ 0.25` gets the refined search before the oracle runs, since `U > 0.25` already holds.
+- A row that a remedy leaves UNDECIDED keeps its old `flipTolerant` and reason. So the class of E3 section 21.3 still reads the old reason.
+
+Each row that reached new code lists it under `e20`: the rule, the former section-20 result, the failed attempt when there is one, and K4's distance. A result from the new code also carries `splitTVertices`, `refinedEdges`, `exactEdges` and, for K1, `clipped`.
+
+### 8.2 K6: splitting the chain at T-vertices
+
+The rule splits each directed edge `a → b` whose box meets `Ω ⊕ 4` at every `p*` exactly inside it. The test is exact collinearity and `0 < (t − a)·(b − a) < |b − a|²`.
+
+- **The chain is unchanged.** The split is a 1-chain identity, `a → b = a → t + t → b`, so the sum of the triangle boundaries is unchanged. The cancellation of pieces is exact, and `∂M* ⊂ C*_s`, the uncancelled pieces, because `w_0` changes only across them.
+- **Edges split alike.** An edge and its reverse have one box, so they split alike. An edge kept whole, with a box off `Ω ⊕ 4`, can leave pieces of a split edge uncancelled. They lie outside `Ω ⊕ 4`, beyond every window that section 20.2 uses. There the offset test only meets them as extra obstacles.
+- **On the GPU.** Under E3-Q10 (b), each T-vertex `t` is drawn at `t'' = (1 − λ)·a' + λ·b'`, on its mapped edge, with `|t'' − t*| ≤ β`. Along the straight-line homotopy `f_s`, `t_s = (1 − λ)·a_s + λ·b_s` for every `s`, because the map is affine in the end points. So the pieces `a_s → t_s → b_s` make up `a_s → b_s` at every `s`, and the cancellation at `s = 0` holds for all `s`.
+- **Conclusion.** Section 20.2 then applies word for word with `C*_t`: precondition 2 is checked on `C*_t`, and the crack itself is A01's under E3-Q10 (b).
+- **Cost.** The split tests every point in an edge's box, so the work cap of section 20.3 is checked inside the split, and the bound stops at `work cap` there too.
+
+### 8.3 K2: zero-area triangles inside `M*`
+
+A zero-area triangle near the window is admitted when its segment `uv` lies in the closed `M*`.
+
+- **The test.** Let `C+` be the chain of the positive-area triangles alone, so `∂M* ⊂ C+`. The harness splits `uv` where it meets `C+`: at proper crossings, at `C+` vertices on `uv` (they bound every collinear overlap), and at the ends. Each open piece misses `∂M*` and is wholly in or out of `M*`, or it lies along an edge of `C+`, which is in `M*`.
+- **One exact test decides each piece.** The middle of the piece is `u + τ(v − u)` with a rational `τ = N/M`. Its orientation against a triangle edge `ab` is `(M − N)·o(a, b, u) + N·o(a, b, v)`, an exact dyadic.
+- **Why the bound still holds.** The GPU image of the triangle has vertices within `β` of `u`, `v` and the third point. By barycentric partners it lies in `uv ⊕ β ⊂ M* ⊕ β`, so the "Outside" step of section 20.2 holds. Its edges are in the chain, and precondition 2 binds them, so they must cancel or be boundary. With K6, an interior triangle's edges cancel at its middle vertex.
+- **The sliver on the GPU.** Because K6 splits the long edge at the middle vertex, the closed model places that vertex back on its edge and the triangle stays degenerate there. The real image may open into a sliver: extra coverage, not a crack. The bound holds for the real image too, since the sliver lies in `uv ⊕ β ⊂ M* ⊕ β`, and the outside point `x ∉ M*` that `B_R` uses is more than `β` from `C* ⊃ ∂M*`, so more than `β` from `uv ⊂ M*` (any path from `x` to `uv` crosses `∂M*`), and so off the sliver.
+
+### 8.4 K1: clipped draws
+
+**Model.** This is E3-Q11 (a) as section 15.3 uses it. `T'` is a triangle with its vertices moved by at most `β_vertex`. The GPU draws `T' ∩ V` (`V` is the viewport) for each crossing triangle. Every new vertex is within `β_clip` of the exact clip point on `T'`. A triangle wholly beyond one plane is not drawn.
+
+**Crack-closed convention (E20-K1, E20-Q4 (a)).**
+
+- Clip points on one chain line are shared: two clipped edges with the same two `p*` (shared edges, and the two coincident edges of a collapsed triangle) get one clip point, and so do collinear pieces of a line that K6 splits (an edge `ab` and its neighbour's `at`, on the line `a't''b'`). A clip point that lands on an existing `p*` is that vertex.
+- Each crossing triangle keeps its pieces beyond the clip lines, joined at the same displaced points. Those pieces are never drawn: they close the seam along the clip line, as E3-Q10 (b) closes a T-junction crack.
+- The margin `Ω ∖ V` is scored on this model. The no-flip path has relied on this since E3-U3 (beyond `V` the drawn image is empty, so `E ≤ β_c` there holds only for the model), but E3 sections 7.1, 15.3 and 19.1 never wrote it down. This annex makes it explicit for E20-Q4 and the evidence review.
+
+Call the result `M_gpu,closed`.
+
+**Claim.** If the preconditions of section 20.1 hold on the unclipped `M*`, then `E_Ω(M_gpu,closed, M*) ≤ max(β_c, D_hi)`.
+
+- **Partners.** A clip point `c` on the edge `a'b'` at parameter `μ` has the partner `c* = (1 − μ)·a* + μ·b*`. A viewport corner `c` inside `T'` with barycentric coordinates `λ` in `T'` has the partner with the same `λ` in `T*`. Neither needs `T*` or `T'` to have area, so zero-area triangles (K2) and flipped ones are covered. By convexity `|c − c*| ≤ β_vertex`, and the drawn position is within `β_vertex + β_clip ≤ β_c` of `c*`.
+- **Refinement.** The pre-images of the clip lines cut each crossing `T*` into convex pieces with vertices at `T*`'s vertices and the points `c*`. The pieces tile `T*`, so the refined mesh `M*_r` has `M*`'s region, orientation and chain geometry.
+  - Internal piece edges cancel exactly.
+  - On a shared edge `ab`, both triangles see the same moved edge `a'b'`, because the vertices are bit-identical. So they share the crossing parameter `μ` and the point `c*`. By the convention they also share `c`'s drawn position, and the pieces cancel as in 8.2.
+  - A culled neighbour stays whole. A neighbour's point on their shared edge is a T-vertex beyond a plane, so it is outside `V`, and E3-Q10 (b) places it.
+- **Motion.** `M_gpu,closed` is `M*_r` with every vertex moved by at most `β_c`. Section 20.2 applies to `M*_r`, and its preconditions are those of `M*`. The no-flip path's rule, that `β_c` includes `β_clip`, carries over.
+- **What the model leaves out.** Inside `V`, `M_gpu,closed` differs from the drawn image only along shared clipped edges and the clip line, by hairlines within `β_clip`. They are reported, not scored (E20-Q4 (a)). The clip readback of E3 section 19.1 already leaves clipped edges out. A clip point moved into `V` leaves an uncovered strip at most `β_clip` wide along the viewport edge, and since `β_clip < 0.25` and pixel centres lie 0.5 px inside the edge, no centre falls in it.
+
+### 8.5 K3 and K4
+
+- **K3, refined search.** It uses the old code with directions every 15° within ±75°, factor `2^(1/4)`, depth 16 and pieces down to `β/8`. Each edge keeps the smaller `D`, and every `D` is a valid bound.
+- **K3, edge below binary64.** The harness translates the edge by a binary64 vector `w`, so the translate's end points are dyadic, and tests exactly:
+  - for each candidate `cd` near it, that the two segments are disjoint and every end point is more than `β` from the other segment (squared distances);
+  - that the translate's midpoint is outside `M*`.
+
+  Then `D ≤ |w|`, rounded up with the slack of section 15.2.
+- **K4.** The harness computes the distance from each boundary candidate to `Ω` in binary64, as the least of end point to box and box corner to segment (disjoint convex sets meet at a vertex), less `f64Margin`. A segment that meets the box gives 0. The case is `window-empty` when the least distance exceeds `β_c`: no point of a candidate can then move into `Ω`.
+
+### 8.6 Tests
+
+`tests/geometry/e3-a04-flip-tolerant.test.ts`, block "E20 remedies":
+
+- **K2.** An interior zero-area triangle is admitted. One that pokes `2^-20` px out of the square, or dangles off it, is refused. The sampled moves of section 20.4 stay within `ρ`.
+- **K6.** E3-PC13's T-junction shape with a sliver is decided. Triangles on both sides of an edge with no vertex on it stay refused.
+- **K3.**
+  - The refined `ρ` is at most the old one on the sliver and the L.
+  - A chamfer `2^-60` px long is decided by the exact test.
+  - A hole `2^-60` px across is refused.
+  - The seeded defect `no-exact-fallback` accepts the hole, so the test catches it.
+- **K4.** Squares `1.5β_c` and `0.5β_c` beyond `Ω` are decided and refused by `boundaryDistanceFromWindow`, and through `measureCase` a triangle whose edge passes `Ω`'s corner at about `1.5β_c` is `window-empty`, at about `0.5β_c` UNDECIDED.
+- **K1.**
+  - The sampled check moves vertices by `β/2` and puts each shared clip point anywhere within `β/2` of the exact one, with the far pieces kept. Membership changes only within `ρ` of `∂M*`.
+  - Clipped strips in fill and stroke are decided through `measureCase`.
+  - Two clipped slabs `10^-5` px apart stay UNDECIDED.
+  - A row that the old bound decides has no `e20` field.
+- **Left to U3.** A3's claim on the 99 floor-straddle rows (new `D_hi` at most the old) is checked on the U3 sample, since the unit test holds by construction. The two `measureCase` refine paths (`refined-offset` after the oracle, and the refine before it when `ρ ≥ 0.25`) have no synthetic fixture: no small mesh gives a flip-tolerant `ρ` near 0.25. The U3 sample reaches both, and the record lists them under `e20`.
