@@ -17,15 +17,18 @@ Out of scope: limitation 3 (unused mask sources still mesh; accepted cost, no ch
 
 ## 2. Rules
 
-**E22-K1 (one tile set per frame).** Every mask pass of a frame renders through one shared set of transient attachments, the *tile set*, of size `tw × th` with `tw = min(T, max width)` and `th = min(T, max height)` over the frame's re-rendered levels, `T = 1024` (`P4_MASK_TILE_SIZE`). The set holds:
+**E22-K1 (one tile set per frame).** Every mask pass of a frame renders through one shared set of transient attachments, the *tile set*, of size `tw × th` with `tw = min(T, max width)` and `th = min(T, max height)` over all mask levels of the frame's clip part (the same levels the plan counts), `T = 1024` (`P4_MASK_TILE_SIZE`). The set holds:
 
 - a colour tile, `r8unorm`, at the scene's sample count;
 - at 4x, a resolve tile, `r8unorm`, 1 sample;
 - a `stencil8` tile at the scene's sample count, only when a re-rendered level has a mesh source.
 
-The set is created once, before the first mask pass, and released after the frame's submission, as P4 section 4 already requires for transients.
+The set is created once, before the first mask pass, only when a level is re-rendered, and released after the frame's submission or a failed one, as P4 section 4 already requires for transients. The 1-sample tile (colour at 1x, resolve at 4x) adds `COPY_SRC`; mask textures add `COPY_DST`.
 
-**E22-K2 (tiled mask pass).** A level's texture is covered by tiles at offsets `(i·tw, j·th)` from its device rect's origin. Each tile is one render pass over the tile set (clear, draw the source as P4 section 4, the same viewport rule offset by the tile's origin), followed by `copyTextureToTexture` from the 1-sample tile (the colour tile at 1x, the resolve tile at 4x) into the level's texture at the tile's offset, clipped to the texture. Tile offsets are multiples of `tw` and `th` from the device origin; the fragment position of every texel stays what it is in an untiled pass, so the texture content is unchanged (E22-A4).
+**E22-K2 (tiled mask pass).** A level's texture is covered by tiles at offsets `(i·tw, j·th)` from its device rect's origin. Each tile is one render pass over the tile set (clear, draw the source as P4 section 4, the same viewport rule offset by the tile's origin), followed by `copyTextureToTexture` from the 1-sample tile (the colour tile at 1x, the resolve tile at 4x) into the level's texture at the tile's offset, clipped to the texture.
+
+- **Per-tile pass records.** `@builtin(position)` is relative to the attachment, so each tile has its own pass record: `pixelShift = device + offset` and, under a parent level, `maskOffset = device + offset − parent.device`. The scene derives these records from the packet's levels (they are not packet records), at state indices after `maxIndex`, in level and then tile order; the clip buffer holds `maxIndex` plus the frame's tile count. P4-A06's count of written content records is unchanged.
+- **Content.** Tile offsets are multiples of `tw` and `th`, which are even or cover the level in one tile, so the 2 × 2 quads keep their parity and each texel is shaded at the same target pixel as untiled. The viewport origin moves by whole pixels; byte identity is checked on SwiftShader (E22-A4), and on hardware the seams are probed (E22-A5), since WebGPU does not guarantee identical rasterization under a moved viewport.
 
 **E22-K3 (budget).** `MaskPlan` admits a level when
 
@@ -33,27 +36,27 @@ The set is created once, before the first mask pass, and released after the fram
 
 where `resident` is the sum of `width × height` and `tileBytes = tw × th × (sampleCount = 4 ? 9 : 2)` (colour, resolve and stencil tiles at 4x; colour and stencil at 1x; the stencil counted whether or not a source is a mesh, so the plan is an upper bound). The renderer holds at most this many mask bytes at any point of a frame:
 
-- a cached entry whose level the frame does not use, or whose size changes, is released before the frame creates any mask texture (its content would be replaced anyway; a failed packet then re-renders the level next frame);
+- a cached entry whose level the frame does not use, or whose size changes, is released and leaves the cache after every level of the packet has been validated and before the frame creates any mask texture (its content would be replaced anyway; a failed packet then re-renders the level next frame, and an invalid packet releases nothing);
 - only the tile set is transient.
 
 Figures at `T = 1024`: a 3840 × 2160 full-screen level is 8,294,400 resident bytes; the tile set is 9,437,184 bytes at 4x and 2,097,152 at 1x. Six such levels fit at 4x (59,203,584) and the seventh is reported; seven fit at 1x (60,157,952) and the eighth is reported (P4 also fitted seven at 1x).
 
 **E22-K4 (diagnostic without clip variants).** When a primitive frame source requires the clip pipeline (`clips` other than `'none'`) and the primitive scene comes up without the clip variants, the backend emits `render.clip-unavailable` (severity `warning`, new code) once per generation, when the scene becomes ready. Under a backend test hook the generation still fails as P4 U3 fixes. The fail-closed rule (clipped draws not drawn) is unchanged.
 
-**E22-K5 (no cached variant on failure).** If any clip or mask variant fails to build, the clip variants this attempt put into the pipeline cache are evicted and released before the scene is created without variants. `PipelineCache` gains `evict(key)`, which removes an entry and releases a ready value.
+**E22-K5 (no cached variant on failure).** If any clip or mask variant fails to build, the clip variants this attempt put into the pipeline cache are evicted before the scene is created without variants: the analytic variant when a mesh variant fails, the mesh variants when the mesh mask pipeline fails. `PipelineCache` gains `evict(key)`, which removes an entry (and calls the cache's `release` for a ready value when one is configured; the scene's cache has none, and its tracked ids are already released).
 
 ## 3. Acceptance criteria
 
 | ID      | Criterion                                                                                                                                                                                                                       | Method                                           |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | E22-A1  | A frame that re-renders N mask levels creates exactly one tile set (or none when N = 0), sized per E22-K1; its textures are released after the submission and after a failed submission                                       | Unit, fake device (`p4-native-fixture.ts`)       |
-| E22-A2  | During a frame, live mask texture bytes (resident plus transient, from resource accounting at every texture creation) never exceed the plan's bytes for that frame, including a frame where every level changes size and one where a level is replaced by another | Unit, fake device                                |
+| E22-A2  | During a frame, live mask texture bytes (resident plus transient, from resource accounting at every texture creation) never exceed the plan's bytes for that frame, including a frame where every level changes size, one where a level is replaced by another, and the frame after a failed submission (no destroyed texture is bound) | Unit, fake device                                |
 | E22-A3  | The plan figures of E22-K3 at 3840 × 2160: six full-screen 4x levels drawn and the seventh reported; seven at 1x and the eighth reported; levels smaller than a tile give `tileBytes` from their own size                         | Unit (`MaskPlan`)                                |
-| E22-A4  | Tiled mask textures are byte-identical to untiled ones: a level larger than one tile in both axes, analytic and mesh sources, nested under a parent mask, at 1x and 4x, read back from the mask texture and compared with the P4 rendering at `9ef77b5` | SwiftShader in the cloud container, recorded in the U1 PR |
-| E22-A5  | A 3840 × 2160 surface at 4x with one full-screen mask draws it with no `render.clip-resource-limit`, and its interior and edge probes match the P4 oracle as P4-A02 and A03 require                                              | Headed GPU spec on the reference PC, Chrome and Edge |
-| E22-A6  | The P4 headed spec (`tests/gpu/p4-clip-mask.spec.ts`) passes unchanged in both browsers, and the full `pnpm test:gpu` passes on the reference PC                                                                                | Headed, reference PC                             |
+| E22-A4  | Tiled mask textures are byte-identical to untiled ones: a level larger than one tile in both axes, analytic and mesh sources, nested under a parent mask, at 1x and 4x, rendered as white content under the mask, captured from the presented frame and compared with the same scene at `9ef77b5` (mask textures there have no `COPY_SRC`) | SwiftShader in the cloud container, recorded in the U1 PR |
+| E22-A5  | A 3840 × 2160 surface at 4x with one full-screen mask, and a nested mask with a mesh source whose texture spans tile seams, draws with no `render.clip-resource-limit`; interior and edge probes match the P4 oracle as P4-A02 and A03 require, and every pixel on the seam lines (`x` or `y` a multiple of 1024 from the level's origin, inside the level) matches the oracle within the interior tolerance | Headed GPU spec on the reference PC, Chrome and Edge |
+| E22-A6  | The P4 headed spec (`tests/gpu/p4-clip-mask.spec.ts`) passes unchanged in both browsers, and the full `pnpm test:gpu` passes on the reference PC. The P4 unit expectations that pin transient ids, pass sequences and over-budget sizes (`p4-u4b-mask-passes`, `p4-u4-mask-plan`) change with K1 to K3, each change named in the U1 PR | Headed, reference PC                             |
 | E22-A7  | `render.clip-unavailable` is emitted once per generation when clips are required and the variants are unavailable, and not when they are available or not required; a test-hook backend still fails the generation            | Unit                                             |
-| E22-A8  | A mesh clip variant failure leaves no clip variant in the pipeline cache (ready entries back to the count without clips) and released accounting entries                                                                        | Unit                                             |
+| E22-A8  | A failure at each variant step (analytic, mesh, mesh mask) leaves no clip variant in the pipeline cache (`snapshot().readyEntries` back to the count without clips) and no clip accounting entry | Unit                                             |
 
 ## 4. Units
 
@@ -67,7 +70,7 @@ U1 goes first: the MVP editor's frame clipping needs the budget. U2 is independe
 
 ## 5. Risks
 
-- **E22-R1 viewport range.** Tiles move the negative viewport origin further from zero (down to `-(device.x + tile offset)`). WebGPU allows viewports outside the attachment within `±2 × maxTextureDimension2D`; P4 U5 already relied on a negative origin in both browsers. E22-A5 checks it at 4K.
+- **E22-R1 viewport range.** Tiles move the negative viewport origin to `-(device.x + tile offset)`, still no further than `-target.width`, which P4 U5 already reached in both browsers. E22-A5 checks it at 4K.
 - **E22-R2 more passes.** A level of `w × h` takes `⌈w/tw⌉ × ⌈h/th⌉` passes, each drawing the whole source (12 at 4K). The source draw is one instanced quad or one mesh draw; `maskPasses` keeps counting levels, not tiles, so P4-A06 is unchanged.
 - **E22-R3 lost cache on a failed packet.** Releasing replaced entries before creation means a failed packet loses them. They are re-rendered on the next frame, which their changed key or size requires anyway.
 
@@ -79,3 +82,4 @@ U1 goes first: the MVP editor's frame clipping needs the budget. U2 is independe
 ## 7. Decisions
 
 - 2026-10-28, recommended options auto-adopted under the user's standing instruction of 2026-10-24: E22-Q1 (a), E22-Q2 (a).
+- 2026-10-28, independent review r1: NOT READY (B1: per-tile pass records missing from K2); B1 and S1 to S6 applied (per-tile records, seam probes in A5, A4 readback through the presented frame, usage flags, release after validation, named unit changes, eviction per step).
