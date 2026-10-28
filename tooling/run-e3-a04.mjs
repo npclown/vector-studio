@@ -392,8 +392,12 @@ function identityForm(row) {
   return JSON.stringify(out);
 }
 
-/** The rows of retry directories, by corpus index, each with its directory's provenance. */
-function retryRows(dirs, kind, rows = new Map()) {
+/**
+ * The rows of retry directories, by corpus index, each with its directory's provenance. A row
+ * whose worker failed (`harness-error`) is left out and its index added to `failed`: another
+ * directory must measure it, with a larger --heap.
+ */
+function retryRows(dirs, kind, rows, failed) {
   const runs = [];
   for (const dir of dirs) {
     const p = JSON.parse(readFileSync(path.join(dir, 'provenance.json'), 'utf8'));
@@ -401,13 +405,17 @@ function retryRows(dirs, kind, rows = new Map()) {
     if (p.retryCases === undefined) throw new Error(`refusing the merge: ${dir} is not a retry`);
     const h = JSON.parse(readFileSync(path.join(dir, 'host.json'), 'utf8'));
     let count = 0;
+    const failedHere = [];
     for (const line of readFileSync(path.join(dir, 'retry.ndjson'), 'utf8').split('\n')) {
       if (line === '') continue;
       const row = JSON.parse(line);
+      if (String(row.reason ?? '').startsWith('harness-error')) {
+        failed.add(row.index);
+        failedHere.push(row.index);
+        continue;
+      }
       if (rows.has(row.index))
         throw new Error(`refusing the merge: case ${row.index} is measured twice`);
-      if (String(row.reason ?? '').startsWith('harness-error'))
-        throw new Error(`refusing the merge: the ${kind} row of case ${row.index} failed`);
       rows.set(row.index, { row, kind });
       count += 1;
     }
@@ -420,6 +428,7 @@ function retryRows(dirs, kind, rows = new Map()) {
       os: p.os,
       cpus: p.cpus,
       cases: count,
+      failedCases: failedHere,
       exitCodes: h.exitCodes,
       restarts: h.restarts,
     });
@@ -455,8 +464,13 @@ function supersedeRecord(file) {
   if (other.length > 0)
     throw new Error(`refusing to supersede: HEAD differs from ${MEASUREMENT_BASE} in ${other}`);
 
-  const { rows: measured, runs: remeasured } = retryRows(remeasuredDirs, 'remeasured');
-  const { runs: identity } = retryRows(identityDirs, 'identity', measured);
+  const measured = new Map();
+  const failed = new Set();
+  const { runs: remeasured } = retryRows(remeasuredDirs, 'remeasured', measured, failed);
+  const { runs: identity } = retryRows(identityDirs, 'identity', measured, failed);
+  const unmeasured = [...failed].filter((i) => !measured.has(i));
+  if (unmeasured.length > 0)
+    throw new Error(`refusing to supersede: the workers of cases ${unmeasured} failed`);
   // The rows E20-R3 names: every UNDECIDED row but the work-cap rows outside section 21's classes,
   // and every FAIL row outside them. The sample of E20-A5: every 25th corpus index among the
   // decided rows.
