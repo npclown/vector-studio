@@ -40,7 +40,7 @@ The headed comparison (a container scene with `clip: null` captured at `1eb65be`
 
 ## Disclosed limitations (accepted for the exit, backlog)
 
-These were owed to U6 by the unit records. None affects an acceptance criterion as run. Items 1, 2, 4 and 5 are backlog item [E22](../../plans/d9-rendering-track.md); item 3 is an accepted cost with no planned remedy.
+These were owed to U6 by the unit records. Since 2026-10-28, [E22](../../plans/d9-e22-clip-follow-ups-contract.md) answers items 4 and 5 (U1, #295) and items 1 and 2 (U2); this record stays as accepted. None affects an acceptance criterion as run. Items 1, 2, 4 and 5 are backlog item [E22](../../plans/d9-rendering-track.md); item 3 is an accepted cost with no planned remedy.
 
 1. **Silent clip loss without variants.** When the clip pipeline variants are unavailable (the service option `clips` left at `'none'`, or variant creation failing), clipped draws are not drawn and no renderer-wide diagnostic is emitted outside the test hooks (U3). Remedy: a `render.*` diagnostic when a clipped packet meets a backend without variants.
 2. **Untracked analytic variant on partial failure.** If a mesh variant fails to build, the analytic variant already built stays in the pipeline cache, untracked by resource accounting until dispose (U3). Remedy: build all variants before caching any.
