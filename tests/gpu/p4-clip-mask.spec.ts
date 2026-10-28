@@ -1153,7 +1153,11 @@ function star(cx: number, cy: number, inner: number, outer: number): number[] {
   return points;
 }
 
-/** World units at DPR 2: the surface is 1920 x 1080 units; tile seams every 512 units. */
+/**
+ * World units at DPR 2: the surface is 1920 x 1080 units (3840 x 2160 device pixels).
+ * Tile seams fall every 1024 device pixels from each level's own device origin, not
+ * from the surface origin; the nested star level spans about 2 x 2 tiles.
+ */
 const E22_CASES: readonly ImageCase[] = [
   {
     id: 'e22-full-screen-mask',
