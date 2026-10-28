@@ -25,10 +25,10 @@
 
 ## Environment
 
-- Commit `7c799c5` (branch `m1-u6-wip` on `e072247`), clean worktree.
+- Commit `c0b7512` (branch `m1-u6-wip` on `1b3340d`, which includes M1-U1 to U5), clean worktree.
 - Node v22.22.0. The repository pins 24.22.1, so pnpm warns about the engine.
 - Linux 6.18.44-fc-v180. CPU from `/proc/cpuinfo`: Intel(R) Xeon(R) Processor @ 2.30GHz, 4 logical CPUs. This is a shared cloud container.
-- Command: `pnpm observe:m1-a13`, after `tsc --build` (the `@vector-studio/model` and `contracts` imports resolve to their built `dist`). There were five runs and three isolations, the defaults of `M1_A13_RUNS` and `M1_A13_ISOLATION_RUNS`. The total run time was 968 s.
+- Command: `pnpm observe:m1-a13`, after `tsc --build` (the `@vector-studio/model` and `contracts` imports resolve to their built `dist`). There were five runs and three isolations, the defaults of `M1_A13_RUNS` and `M1_A13_ISOLATION_RUNS`. Vitest reported a total duration of 911 s.
 - Raw record: [`m1-a13-observation-2026-10-28/record.json`](m1-a13-observation-2026-10-28/record.json), a copy of `.tools/m1-a13/record.json` formatted by Prettier.
 
 ## Numbers
@@ -37,30 +37,30 @@ All values are in milliseconds. Steps marked "renderer" are the part of the step
 
 | Step | Median | Min | Max | Runs |
 | --- | ---: | ---: | ---: | --- |
-| parse | 132.2 | 112.4 | 151.8 | 148.9, 151.8, 132.2, 119.0, 112.4 |
-| construct | 55.5 | 54.4 | 92.4 | 86.8, 92.4, 55.5, 54.4, 55.0 |
-| project (page 1, no renderer) | 15.8 | 12.6 | 29.5 | 29.5, 18.3, 15.8, 12.6, 13.0 |
-| attach | 125.4 | 119.0 | 178.3 | 178.3, 134.9, 119.0, 125.4, 124.3 |
-| renderer (`replaceSnapshot`) | 101.2 | 96.7 | 140.9 | |
-| move: pointer down | 12.7 | 10.3 | 23.8 | |
-| move: five pointer moves | 430.1 | 406.1 | 521.1 | |
-| renderer | 317.5 | 304.3 | 406.2 | |
-| move: pointer up (commit) | 173.0 | 158.9 | 192.7 | 167.0, 174.2, 192.7, 173.0, 158.9 |
-| renderer | 123.7 | 120.5 | 147.0 | |
-| forced isolation (9,250 sets) | 322,725 | 309,753 | 327,048 | 309,753, 327,048, 322,725 |
-| renderer | 322,471 | 309,424 | 326,776 | |
+| parse | 131.0 | 100.8 | 139.6 | 134.5, 139.6, 123.4, 131.0, 100.8 |
+| construct | 55.6 | 49.6 | 75.4 | 75.4, 60.8, 51.0, 55.6, 49.6 |
+| project (page 1, no renderer) | 13.1 | 11.7 | 28.6 | 28.6, 14.6, 12.1, 13.1, 11.7 |
+| attach | 118.6 | 102.9 | 152.9 | 152.9, 119.8, 110.7, 118.6, 102.9 |
+| renderer (`replaceSnapshot`) | 94.5 | 87.5 | 129.2 | |
+| move: pointer down | 12.9 | 8.9 | 22.2 | |
+| move: five pointer moves | 383.4 | 367.3 | 406.8 | |
+| renderer | 288.7 | 277.1 | 310.7 | |
+| move: pointer up (commit) | 154.5 | 146.3 | 159.1 | 146.3, 155.5, 154.5, 159.1, 150.2 |
+| renderer | 116.0 | 110.4 | 121.2 | |
+| forced isolation (9,250 sets) | 298,167 | 291,079 | 314,191 | 291,079, 298,167, 314,191 |
+| renderer | 297,943 | 290,793 | 313,948 | |
 
-Generating the document took 32 ms. The first run is the slowest in most steps, because the JIT is still warming up.
+Generating the document took 33 ms. The first run is the slowest in construct, project, attach and pointer down, because the JIT is still warming up.
 
 ## Observations
 
-- **Forced isolation takes about 5.4 minutes** on this page. That is about 35 ms per one-unit set, and 99.9% of it is spent inside the renderer (the mirror's per-set validation), not in the projector. The contract already expects this: each one-node set re-validates the scene, so isolating a 10,000-node page costs on the order of n² work (section 5). But the size is far beyond an interactive budget. For a user, one rejected multi-unit set on a page this large would freeze the editor for minutes. Before M9, the scene surface needs either a cheaper path for isolation (validation that grows with the set, or batched units with bisection) or a limit that falls back to a full snapshot minus the culprits.
-- **Gesture updates take about 86 ms each** (430 ms for five moves), and about 74% of that is renderer time. The editor side is about 22 ms per update. This includes the projector's whole-page diff from the M1-U3 notes: each change diffs the whole active page, which is O(n). Both shares grow with page size and are well above a 16.7 ms frame here. The commit takes 173 ms, of which 124 ms is renderer time and about 49 ms is the editor (refit, history, diff).
-- **Load is fast compared with isolation.** Parse, construct and attach add up to about 313 ms. The pure projection takes 16 ms. Most of attach (101 of 125 ms) is the mirror validating the 10,634-node snapshot.
+- **Forced isolation takes about 5.0 minutes** on this page. That is about 32 ms per one-unit set, and 99.9% of it is spent inside the renderer (the mirror's per-set validation), not in the projector. The contract already expects this: each one-node set re-validates the scene, so isolating a 10,000-node page costs on the order of n² work (section 5). But the size is far beyond an interactive budget. For a user, one rejected multi-unit set on a page this large would freeze the editor for minutes. Before M9, the scene surface needs either a cheaper path for isolation (validation that grows with the set, or batched units with bisection) or a limit that falls back to a full snapshot minus the culprits.
+- **Gesture updates take about 77 ms each** (383 ms for five moves), and about 75% of that is renderer time. The editor side is about 19 ms per update. This includes the projector's whole-page diff from the M1-U3 notes: each change diffs the whole active page, which is O(n). Both shares grow with page size and are well above a 16.7 ms frame here. The commit takes 155 ms, of which 116 ms is renderer time and about 39 ms is the editor (refit, history, diff).
+- **Load is fast compared with isolation.** Parse, construct and attach add up to about 305 ms. The pure projection takes 13 ms. Most of attach (95 of 119 ms) is the mirror validating the 10,634-node snapshot.
 - The renderer share here is the renderer-core mirror on the CPU. The WebGPU host adds GPU upload and drawing, which this observation does not measure.
 
 ## Known limits
 
-- One shared, 4-vCPU cloud container. No pinned frequency or isolation, and the Node version is not the pinned one. Medians come from five runs, or three for isolation. Spread across runs is up to 1.7x, from JIT warm-up and a noisy host.
+- One shared, 4-vCPU cloud container. No pinned frequency or isolation, and the Node version is not the pinned one. Medians come from five runs, or three for isolation. Spread across runs is up to 1.5x, and up to 2.5x for the two smallest steps (project, pointer down), from JIT warm-up and a noisy host.
 - No browser, no GPU, and no pixels.
 - The document is synthetic. Every leaf is small and the layout has no overlap between clusters, so hit testing during pointer down is not a worst case.

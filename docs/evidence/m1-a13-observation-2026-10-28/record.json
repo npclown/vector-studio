@@ -1,7 +1,7 @@
 {
   "acceptance": "M1-A13",
   "kind": "observation (no claim)",
-  "revision": "7c799c569661f0defc5f0a131503ebbbc7e83c8d",
+  "revision": "c0b751279257f2b8fe5f31f3f9da487b4925e16c",
   "worktree": "clean",
   "environment": {
     "node": "v22.22.0",
@@ -20,79 +20,79 @@
   },
   "runs": 5,
   "isolationRuns": 3,
-  "generateMs": 36.14,
+  "generateMs": 33.48,
   "steps": {
     "parse": {
-      "medianMs": 132.22,
-      "minMs": 112.4,
-      "maxMs": 151.82,
-      "runsMs": [148.94, 151.82, 132.22, 118.97, 112.4]
+      "medianMs": 131.04,
+      "minMs": 100.76,
+      "maxMs": 139.58,
+      "runsMs": [134.45, 139.58, 123.37, 131.04, 100.76]
     },
     "construct": {
-      "medianMs": 55.5,
-      "minMs": 54.39,
-      "maxMs": 92.39,
-      "runsMs": [86.79, 92.39, 55.5, 54.39, 54.95]
+      "medianMs": 55.64,
+      "minMs": 49.55,
+      "maxMs": 75.38,
+      "runsMs": [75.38, 60.79, 50.98, 55.64, 49.55]
     },
     "project": {
-      "medianMs": 15.78,
-      "minMs": 12.62,
-      "maxMs": 29.54,
-      "runsMs": [29.54, 18.28, 15.78, 12.62, 13.01]
+      "medianMs": 13.07,
+      "minMs": 11.67,
+      "maxMs": 28.59,
+      "runsMs": [28.59, 14.55, 12.05, 13.07, 11.67]
     },
     "attach": {
-      "medianMs": 125.39,
-      "minMs": 119,
-      "maxMs": 178.32,
-      "runsMs": [178.32, 134.92, 119, 125.39, 124.31]
+      "medianMs": 118.59,
+      "minMs": 102.88,
+      "maxMs": 152.93,
+      "runsMs": [152.93, 119.81, 110.69, 118.59, 102.88]
     },
     "movePointerDown": {
-      "medianMs": 12.71,
-      "minMs": 10.26,
-      "maxMs": 23.75,
-      "runsMs": [23.75, 19.7, 12.71, 10.26, 11.48]
+      "medianMs": 12.91,
+      "minMs": 8.86,
+      "maxMs": 22.15,
+      "runsMs": [22.15, 12.91, 13.47, 9.31, 8.86]
     },
     "movePointerMoves": {
-      "medianMs": 430.1,
-      "minMs": 406.14,
-      "maxMs": 521.1,
-      "runsMs": [430.1, 505.46, 417.91, 521.1, 406.14]
+      "medianMs": 383.37,
+      "minMs": 367.26,
+      "maxMs": 406.81,
+      "runsMs": [383.37, 387.2, 378.27, 406.81, 367.26]
     },
     "moveCommit": {
-      "medianMs": 172.98,
-      "minMs": 158.89,
-      "maxMs": 192.68,
-      "runsMs": [167.01, 174.15, 192.68, 172.98, 158.89]
+      "medianMs": 154.52,
+      "minMs": 146.28,
+      "maxMs": 159.07,
+      "runsMs": [146.28, 155.47, 154.52, 159.07, 150.16]
     },
     "isolation": {
-      "medianMs": 322724.96,
-      "minMs": 309752.93,
-      "maxMs": 327048.11,
-      "runsMs": [309752.93, 327048.11, 322724.96]
+      "medianMs": 298166.6,
+      "minMs": 291078.89,
+      "maxMs": 314191.45,
+      "runsMs": [291078.89, 298166.6, 314191.45]
     },
     "attachRenderer": {
-      "medianMs": 101.22,
-      "minMs": 96.73,
-      "maxMs": 140.87,
-      "runsMs": [140.87, 110.91, 98.15, 101.22, 96.73]
+      "medianMs": 94.53,
+      "minMs": 87.49,
+      "maxMs": 129.17,
+      "runsMs": [129.17, 94.53, 91.12, 99.58, 87.49]
     },
     "movePointerMovesRenderer": {
-      "medianMs": 317.52,
-      "minMs": 304.28,
-      "maxMs": 406.22,
-      "runsMs": [317.52, 354.07, 312.23, 406.22, 304.28]
+      "medianMs": 288.72,
+      "minMs": 277.06,
+      "maxMs": 310.72,
+      "runsMs": [288.72, 292.75, 285.23, 310.72, 277.06]
     },
     "moveCommitRenderer": {
-      "medianMs": 123.74,
-      "minMs": 120.45,
-      "maxMs": 146.99,
-      "runsMs": [122.28, 128.79, 146.99, 123.74, 120.45]
+      "medianMs": 115.96,
+      "minMs": 110.4,
+      "maxMs": 121.2,
+      "runsMs": [111.37, 119.35, 115.96, 121.2, 110.4]
     },
     "isolationRenderer": {
-      "medianMs": 322470.93,
-      "minMs": 309423.67,
-      "maxMs": 326775.6,
-      "runsMs": [309423.67, 326775.6, 322470.93]
+      "medianMs": 297942.61,
+      "minMs": 290793.13,
+      "maxMs": 313948.45,
+      "runsMs": [290793.13, 297942.61, 313948.45]
     }
   }
 }
