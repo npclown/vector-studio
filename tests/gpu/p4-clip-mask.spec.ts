@@ -218,6 +218,7 @@ async function checkEdges(
   contentId: string,
   frame: Frame,
   allowance: number,
+  options: Readonly<{ tolerance?: number; everyPixel?: boolean }> = {},
 ): Promise<Check & { p1Rectangle: { probes: number; maxDeviation: number } }> {
   const check = { ...newCheck(), p1Rectangle: { probes: 0, maxDeviation: 0 } };
   const content = leaves.find((drawn) => drawn.leaf.id === contentId);
@@ -228,7 +229,7 @@ async function checkEdges(
   const others = leaves.filter((drawn) => drawn !== content);
   const fill = content.leaf.fill!;
   const colour = [fill.r * 255, fill.g * 255, fill.b * 255];
-  const tolerance = EDGE_TOLERANCE + allowance;
+  const tolerance = (options.tolerance ?? EDGE_TOLERANCE) + allowance;
   for (let y = 0; y < frame.height; y += 1) {
     for (let x = 0; x < frame.width; x += 1) {
       const offset = (y * frame.width + x) * 4;
@@ -251,7 +252,8 @@ async function checkEdges(
         products.fine *= fine;
         products.p1 *= reference;
       });
-      if (!ramp) continue;
+      // E22-A5: `everyPixel` checks the product off the ramps too, where it is exact.
+      if (!ramp && options.everyPixel !== true) continue;
       if (classify(view, content.leaf.shape, content.leaf.world, x, y) !== 'in') continue;
       if (
         others.some((other) => classify(view, other.leaf.shape, other.leaf.world, x, y) !== 'out')
@@ -310,7 +312,12 @@ async function runImageCase(
   item: ImageCase,
   dpr: number,
   failures: string[],
-  options: Readonly<{ view?: View; interiorStride?: number }> = {},
+  options: Readonly<{
+    view?: View;
+    interiorStride?: number;
+    /** E22-A5: the edge check over every pixel at this tolerance. */
+    everyPixelTolerance?: number;
+  }> = {},
 ) {
   const view = options.view ?? viewOf(item.zoom, dpr, item.centre);
   const before = await diagnosticCount(page);
@@ -345,14 +352,16 @@ async function runImageCase(
   if (item.edgeContent !== undefined) {
     const content = leaves.find((drawn) => drawn.leaf.id === item.edgeContent);
     const allowance = (content?.levels.length ?? 0) >= 32 ? maskLevels(content!.levels) : 0;
-    const edges = await checkEdges(references, view, leaves, item.edgeContent, frame, allowance);
-    report.edges = { ...edges, tolerance: EDGE_TOLERANCE + allowance };
+    const tolerance = options.everyPixelTolerance ?? EDGE_TOLERANCE;
+    const edges = await checkEdges(references, view, leaves, item.edgeContent, frame, allowance, {
+      tolerance,
+      everyPixel: options.everyPixelTolerance !== undefined,
+    });
+    report.edges = { ...edges, tolerance: tolerance + allowance };
     if ((content?.levels.length ?? 0) > 0 && edges.probes === 0 && !item.id.includes('line'))
       failures.push(`${item.id}: no edge probe`);
     if (edges.failures > 0)
-      failures.push(
-        `${item.id}: ${edges.failures} edge probes over ${EDGE_TOLERANCE + allowance}/255`,
-      );
+      failures.push(`${item.id}: ${edges.failures} edge probes over ${tolerance + allowance}/255`);
   }
   if (item.grey === true) {
     const grey = checkGrey(frame);
@@ -1165,9 +1174,9 @@ const E22_CASES: readonly ImageCase[] = [
     zoom: 1,
     items: [
       container('outer', IDENTITY, { kind: 'mask' }, [
-        leaf('outer-source', polygon([star(960, 540, 260, 520)]), IDENTITY, SOURCE),
+        leaf('outer-source', ellipse(1100, 700), translate(410, 190), SOURCE),
         container('inner', IDENTITY, { kind: 'mask' }, [
-          leaf('inner-source', ellipse(1100, 700), translate(410, 190), SOURCE),
+          leaf('inner-source', polygon([star(960, 540, 260, 520)]), IDENTITY, SOURCE),
           leaf('inner-content', rect(1920, 1080), IDENTITY),
         ]),
       ]),
@@ -1196,15 +1205,23 @@ test('E22 U3 tiled mask passes at 3840 x 2160 (E22-A5), 4x, DPR 2', async ({
   };
   if (view.width !== 3840 || view.height !== 2160)
     failures.push(`surface ${view.width} x ${view.height}`);
+  if (resized.frame.sampleCount !== 4) failures.push(`sample count ${resized.frame.sampleCount}`);
   const references = new References(page);
   const cases: unknown[] = [];
   for (const item of E22_CASES) {
-    // Every pixel is probed: stride 1 interior, and the edge check walks the whole frame, so
-    // every pixel on a tile seam is checked against the oracle.
+    // Every pixel is probed at the interior tolerance: the stride-1 interior against the oracle,
+    // and every pixel the content covers against the product of the levels' references, so
+    // every pixel on a tile seam is checked.
     const { report } = await runImageCase(page, references, item, 2, failures, {
       view,
       interiorStride: 1,
+      everyPixelTolerance: INTERIOR_TOLERANCE,
     });
+    const levels = (report.packet as { maskLevels?: number } | undefined)?.maskLevels;
+    report.maskLevels = levels;
+    const expected = item.id === 'e22-full-screen-mask' ? 1 : 2;
+    if (levels !== expected)
+      failures.push(`${item.id}: ${levels} mask levels, expected ${expected}`);
     cases.push(report);
   }
   if (pageErrors.length > 0) failures.push(`page errors: ${pageErrors.join('; ')}`);
@@ -1217,8 +1234,8 @@ test('E22 U3 tiled mask passes at 3840 x 2160 (E22-A5), 4x, DPR 2', async ({
         host: { platform: os.platform(), release: os.release(), cpus: os.cpus()[0]?.model },
         source: p1Source(),
         ready,
-        surface: { width: view.width, height: view.height },
-        tolerances: { interior: INTERIOR_TOLERANCE, edge: EDGE_TOLERANCE },
+        surface: { width: view.width, height: view.height, sampleCount: resized.frame.sampleCount },
+        tolerances: { interior: INTERIOR_TOLERANCE, everyPixel: INTERIOR_TOLERANCE },
         referenceRenders: references.renders,
         cases,
         failures,
