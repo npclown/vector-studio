@@ -639,6 +639,9 @@ describe('M2-A03 rotate gesture', () => {
 
   function selected(ids: string[], zoom = 1, document: unknown = FIXTURE): Editor {
     const target = editor(document);
+    // These cases assert unsnapped rotations and moves; snapping (on by default, M2-U3) and
+    // rotation-angle snapping are covered in m2-snap.test.ts.
+    ok(target, { type: 'setSnapping', enabled: false });
     ok(target, { type: 'setSelection', ids });
     if (zoom !== 1) ok(target, { type: 'setViewport', camera: { position: at(0, 0), zoom } });
     return target;
