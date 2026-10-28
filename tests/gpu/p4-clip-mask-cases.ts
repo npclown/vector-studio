@@ -36,6 +36,11 @@ export type ImageCase = Readonly<{
    * checked where it covers and every other drawn leaf does not.
    */
   edgeContent?: string;
+  /**
+   * No edge check: the case's edges are not one opaque content leaf's (P4-A05, A10). Any other
+   * case with a clip level must name `edgeContent`.
+   */
+  interiorOnly?: true;
   /** Mask sources are coloured, content is white: any coloured pixel means a source painted. */
   grey?: boolean;
   /** Named world probes for P4-A05, with their roles. */
@@ -109,6 +114,10 @@ function centredRect(
     children,
   );
 }
+
+/** A02: a parent rotating 30° about CENTRE, and its child's placement in the parent's space. */
+const PARENT = multiply(rotate(30, CENTRE.x, CENTRE.y), translate(-CENTRE.x, -CENTRE.y));
+const CHILD_OF_PARENT = multiply(translate(CENTRE.x, CENTRE.y), scale(1.2));
 
 const SOURCE_BLUE: Rgba = { r: 0.1, g: 0.2, b: 1, a: 0.6 };
 
@@ -199,25 +208,22 @@ export const RECT_CASES: readonly ImageCase[] = [
     id: 'a02-under-transformed-parent',
     criterion: 'P4-A02',
     zoom: 1,
+    // The clip is placed in the parent's space: the parent rotates by 30° about CENTRE and the
+    // clip container scales by 1.2 inside it, so a wrong composition moves every edge.
     items: [
-      container(
-        'p',
-        multiply(rotate(30, CENTRE.x, CENTRE.y), translate(-CENTRE.x, -CENTRE.y)),
-        null,
-        [centredRect('g', 0, CENTRE.x, CENTRE.y, 150, 90, [cover('c', 1)], scale(1))],
-      ),
+      container('p', PARENT, null, [
+        centredRect('g', 0, 0, 0, 150, 90, [cover('c', 1)], multiply(PARENT, CHILD_OF_PARENT)),
+      ]),
     ],
     edgeContent: 'c',
   },
-  {
-    id: 'a02-narrower-than-1px',
+  ...[0, 30].map((degrees): ImageCase => ({
+    id: `a02-narrower-than-1px-${degrees}`,
     criterion: 'P4-A02',
     zoom: 1,
-    items: [
-      centredRect('g', 0, CENTRE.x, CENTRE.y, 0.45, 100, [cover('c', 1)]),
-      centredRect('h', 30, CENTRE.x + 40, CENTRE.y, 0.45, 100, [cover('d', 1)]),
-    ],
-  },
+    items: [centredRect('g', degrees, CENTRE.x, CENTRE.y, 0.45, 100, [cover('c', 1)])],
+    edgeContent: 'c',
+  })),
   {
     id: 'a02-coloured-content',
     criterion: 'P4-A02',
@@ -395,13 +401,23 @@ export function alternatingChain(depth: number, content: P4Leaf): P4Item {
   return inner;
 }
 
-/** A sibling drawn after a deep subtree (P4-A05, P4-K4). */
+/**
+ * Siblings drawn after a deep subtree (P4-A05, P4-K4): one inside the chain's region and one
+ * where the chain's coverage is 0 (some level is out at every point of it, at DPR 1 and 2), so
+ * a clip leaking onto the sibling would erase the second.
+ */
 const SIBLING = leaf('sibling', rect(40, 30), translate(CENTRE.x - 20, CENTRE.y - 15), {
   r: 0.9,
   g: 0.5,
   b: 0.1,
   a: 1,
 });
+const SIBLING_OUTSIDE = leaf(
+  'sibling-outside',
+  rect(30, 20),
+  translate(CENTRE.x + 90, CENTRE.y + 52),
+  { r: 0.1, g: 0.9, b: 0.6, a: 1 },
+);
 
 export const NESTING_CASES: readonly ImageCase[] = [
   { id: 'a04-depth-0', criterion: 'P4-A04', zoom: 1, items: [cover('c', 1)], edgeContent: 'c' },
@@ -417,9 +433,12 @@ export const NESTING_CASES: readonly ImageCase[] = [
     id: 'a04-depth-32-with-sibling',
     criterion: 'P4-A04',
     zoom: 1,
-    items: [alternatingChain(32, cover('c', 1)), SIBLING],
+    items: [alternatingChain(32, cover('c', 1)), SIBLING, SIBLING_OUTSIDE],
     edgeContent: 'c',
-    named: [{ name: 'sibling-after-depth-32', x: CENTRE.x, y: CENTRE.y }],
+    named: [
+      { name: 'sibling-inside-depth-32-region', x: CENTRE.x, y: CENTRE.y },
+      { name: 'sibling-outside-depth-32-region', x: CENTRE.x + 105, y: CENTRE.y + 62 },
+    ],
   },
 ];
 
@@ -430,6 +449,7 @@ const HALF_BLUE: Rgba = { r: 0.1, g: 0.2, b: 1, a: 1 };
 export const OPACITY_CASE: ImageCase = {
   id: 'a05-overlap-in-nested-masks',
   criterion: 'P4-A05',
+  interiorOnly: true,
   zoom: 1,
   items: [
     container('m1', IDENTITY, { kind: 'mask' }, [
@@ -474,6 +494,7 @@ export const FAILURE_CASES: readonly ImageCase[] = [
   {
     id: 'a10-mask-source-fails-to-mesh',
     criterion: 'P4-A10',
+    interiorOnly: true,
     zoom: 1,
     items: [
       maskOver('m', leaf('s', polygon([failingOutline(200_000)]), sourceAt(0), SOURCE_BLUE)),
@@ -486,6 +507,7 @@ export const FAILURE_CASES: readonly ImageCase[] = [
   {
     id: 'a10-singular-container',
     criterion: 'P4-A10',
+    interiorOnly: true,
     zoom: 1,
     items: [
       container(
@@ -501,6 +523,7 @@ export const FAILURE_CASES: readonly ImageCase[] = [
   {
     id: 'a10-hidden-clip-container',
     criterion: 'P4-A10',
+    interiorOnly: true,
     zoom: 1,
     items: [
       container(

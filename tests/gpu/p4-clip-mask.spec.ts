@@ -54,9 +54,11 @@ declare global {
 // P4 contract, unit U5 (docs/plans/p4-clip-mask.md, section 6): the headed GPU spec of clips and
 // masks on the P4 check page, which injects the real geometry-wasm ports. Image checks compare
 // the readback to the section 3 CPU oracle at interior probes (at least 2 physical px from every
-// edge, within 2/255) and, on the edge ramps, to the product of the per-level references that
-// P4-K1 and P4-K2 define: a P1 rectangle of the rect clip's placement, or the mask source's own
-// fill draw as an opaque white shape (within 4/255, plus 1/255 per mask level at depth 32).
+// edge, within 2/255) and, on the edge ramps, to the product of the levels' coverages: a rect
+// level is P4-K1 evaluated on the CPU, a mask level is its source's own fill draw rendered as an
+// opaque white shape (P4-K2), within 4/255 plus 1/255 per mask level at depth 32. A P1
+// rectangle of each rect level's placement is also rendered, for the `p1Rectangle` observation
+// only (U5 record in the contract).
 // Counter checks cover invalidation (A06), culling and batching (A07) and resources (A08);
 // A11 is an observation with no threshold. Each test writes its report under
 // artifacts/p4-clip-mask (or P4_CLIP_MASK_OUTPUT_DIR).
@@ -326,6 +328,13 @@ async function runImageCase(
     failures.push(
       `${item.id}: ${interior.failures} interior probes over ${INTERIOR_TOLERANCE}/255`,
     );
+  if (
+    item.edgeContent === undefined &&
+    item.interiorOnly !== true &&
+    leaves.some((drawn) => drawn.levels.length > 0)
+  )
+    failures.push(`${item.id}: clipped content without an edge check`);
+  report.edgeCheck = item.edgeContent === undefined ? 'interior only' : item.edgeContent;
   if (item.edgeContent !== undefined) {
     const content = leaves.find((drawn) => drawn.leaf.id === item.edgeContent);
     const allowance = (content?.levels.length ?? 0) >= 32 ? maskLevels(content!.levels) : 0;
@@ -437,16 +446,18 @@ for (const config of CONFIGS) {
     // P4-A04: depth 33 is rejected with unsupported-feature; the previous revision keeps drawing.
     const view = viewOf(1, config.dpr);
     const depth33 = await render(page, [alternatingChain(33, cover('c', 1))], view);
-    const rejected =
-      depth33.result.status === 'invalid-scene' &&
-      (depth33.result.result as { reason?: string }).reason === 'unsupported-feature';
+    const isRejected = (attempt: typeof depth33) =>
+      attempt.result.status === 'invalid-scene' &&
+      (attempt.result.result as { reason?: string }).reason === 'unsupported-feature';
     const previous = await render(page, NESTING_CASES.at(-1)!.items, view);
     const again = await render(page, [alternatingChain(33, cover('c', 1))], view);
+    const rejected = isRejected(depth33) && isRejected(again);
     const keptDrawing =
       Buffer.compare(Buffer.from(again.frame.rgba), Buffer.from(previous.frame.rgba)) === 0 &&
       cases32.frame !== undefined &&
       Buffer.compare(Buffer.from(previous.frame.rgba), Buffer.from(cases32.frame.rgba)) === 0;
-    if (!rejected) failures.push(`depth 33: ${JSON.stringify(depth33.result.result)}`);
+    if (!rejected)
+      failures.push(`depth 33: ${JSON.stringify([depth33.result.result, again.result.result])}`);
     if (!keptDrawing) failures.push('depth 33: the previous revision did not keep drawing');
     if (pageErrors.length > 0) failures.push(`page errors: ${pageErrors.join('; ')}`);
     write(
@@ -704,12 +715,23 @@ test('P4 U5 invalidation, culling, batching and resources (P4-A06 to A08), 4x, D
   };
   const withoutClips = await scaleCost({ ...moved, clip: null });
   const withClips = await scaleCost(moved);
+  // 1.5x crosses a tolerance bucket, so the comparison is not vacuous at 0 port calls.
+  if (withoutClips.fillPortCalls === 0)
+    failures.push('scale: the unclipped sequence made no port call');
   if (withClips.fillPortCalls !== withoutClips.fillPortCalls)
     failures.push(
       `scale: ${withClips.fillPortCalls} port calls clipped, ${withoutClips.fillPortCalls} without`,
     );
   // DPR change and resize re-render the visible mask at the new size and match the oracle. The
-  // camera is set first (centred for the new surface), so the resize alone changes the key.
+  // camera is set first (centred for the new surface), so the resize alone changes the key. At
+  // each size, removing the clips returns the resources to that size's unclipped baseline, and
+  // back at 512 x 320 to the baseline taken before the first resize.
+  const flat = (items: readonly P4Item[]): P4Item[] =>
+    drawnLeaves(items).map((drawn) => drawn.leaf);
+  const sizeBaseline = resources(
+    (await render(page, flat(invalidationScene(moved, sourceEdited)), view)).result.counters
+      .statistics,
+  );
   const resized: unknown[] = [];
   for (const [cssWidth, cssHeight, dpr] of [
     [256, 160, 2],
@@ -743,6 +765,17 @@ test('P4 U5 invalidation, culling, batching and resources (P4-A06 to A08), 4x, D
     };
     const interior = checkInterior(at, drawnLeaves(scene), frame);
     const passes = out.counters.maskPasses - before.maskPasses;
+    const unclipped = resources((await render(page, flat(scene), at)).result.counters.statistics);
+    const clippedAgain = resources((await render(page, scene, at)).result.counters.statistics);
+    const removed = resources((await render(page, flat(scene), at)).result.counters.statistics);
+    if (JSON.stringify(removed) !== JSON.stringify(unclipped))
+      failures.push(
+        `resize ${cssWidth}x${cssHeight}@${dpr}: resources ${JSON.stringify({ unclipped, removed })}`,
+      );
+    if (clippedAgain.textures.bytes <= unclipped.textures.bytes)
+      failures.push(`resize ${cssWidth}x${cssHeight}@${dpr}: no mask texture in accounting`);
+    if (cssWidth === 512 && dpr === 1 && JSON.stringify(removed) !== JSON.stringify(sizeBaseline))
+      failures.push(`resize back: resources ${JSON.stringify({ sizeBaseline, removed })}`);
     resized.push({
       cssWidth,
       cssHeight,
@@ -750,6 +783,7 @@ test('P4 U5 invalidation, culling, batching and resources (P4-A06 to A08), 4x, D
       physical: [frame.width, frame.height],
       maskPasses: passes,
       interior,
+      resources: { unclipped, clipped: clippedAgain, removed },
     });
     if (frame.width !== width || frame.height !== height)
       failures.push(`resize ${cssWidth}x${cssHeight}@${dpr}: frame ${frame.width}x${frame.height}`);
@@ -844,8 +878,6 @@ test('P4 U5 invalidation, culling, batching and resources (P4-A06 to A08), 4x, D
   if (batching.interior.failures > 0) failures.push(`batching: paint order probes off`);
 
   // P4-A08: resources return to the unclipped baseline; recovery; pan residency.
-  const flat = (items: readonly P4Item[]): P4Item[] =>
-    drawnLeaves(items).map((drawn) => drawn.leaf);
   const clipped = invalidationScene(moved, sourceEdited);
   const baseline = await render(page, flat(clipped), view);
   const withMasks = await render(page, clipped, view);
@@ -855,6 +887,14 @@ test('P4 U5 invalidation, culling, batching and resources (P4-A06 to A08), 4x, D
     clipped: resources(withMasks.result.counters.statistics),
     afterRemoval: resources(afterRemoval.result.counters.statistics),
   };
+  // The clipped scene's mask texture and clip buffers must be in accounting, or the return to
+  // the baseline below would hold trivially.
+  if (
+    lifecycle.clipped.textures.live <= lifecycle.baseline.textures.live ||
+    lifecycle.clipped.textures.bytes <= lifecycle.baseline.textures.bytes ||
+    lifecycle.clipped.buffers.bytes <= lifecycle.baseline.buffers.bytes
+  )
+    failures.push(`clip resources not in accounting: ${JSON.stringify(lifecycle)}`);
   if (JSON.stringify(lifecycle.afterRemoval) !== JSON.stringify(lifecycle.baseline))
     failures.push(`resources after removal: ${JSON.stringify(lifecycle)}`);
   const preLoss = await render(page, clipped, view);

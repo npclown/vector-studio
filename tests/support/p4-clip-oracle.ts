@@ -11,8 +11,9 @@ import type {
 // where things are rather than how the chain composes. The oracle evaluates section 3 at pixel
 // centres: a probe is "interior" when it is at least 2 physical px from every shape and clip
 // edge that affects it, and then the expected colour is the source-over composite of the drawn
-// leaves in paint order over the opaque black clear. Edge pixels are checked against the
-// references of P4-K1 and P4-K2 (see `levelReference`), which the spec renders on the GPU.
+// leaves in paint order over the opaque black clear. Edge pixels are checked against P4-K1
+// computed here (`rectCoverage`) for rect levels and against P4-K2 for mask levels, the
+// source's own fill draw that the spec renders on the GPU (`levelReference`).
 
 /** `[a, b, c, d, e, f]`: x' = a x + c y + e, y' = b x + d y + f (the scene's convention). */
 export type Affine = readonly [number, number, number, number, number, number];
@@ -231,7 +232,7 @@ export type View = Readonly<{
   height: number;
 }>;
 
-/** World point at the centre of physical pixel (x, y): `camera + pixel / (zoom * dpr)`. */
+/** World point at the centre of physical pixel (x, y): `camera + (pixel + 0.5) / (zoom * dpr)`. */
 export function pixelToWorld(view: View, x: number, y: number): readonly [number, number] {
   const scaleFactor = view.camera.zoom * view.devicePixelRatio;
   return [
@@ -397,19 +398,14 @@ export function oracle(
   let b = 0;
   const order = options.reversed === true ? [...leaves].reverse() : leaves;
   for (const { leaf: item, levels } of order) {
-    let covered = true;
-    for (const level of levels) {
-      const state = classify(view, level.shape, level.world, x, y);
-      if (state === 'edge') return null;
-      if (state === 'out') {
-        covered = false;
-        break;
-      }
-    }
-    if (!covered) continue;
-    const state = classify(view, item.shape, item.world, x, y);
-    if (state === 'edge') return null;
-    if (state === 'out') continue;
+    // Any shape or level fully out removes the leaf whatever the others' edges; otherwise an
+    // edge anywhere makes the probe not interior.
+    const states = [
+      classify(view, item.shape, item.world, x, y),
+      ...levels.map((level) => classify(view, level.shape, level.world, x, y)),
+    ];
+    if (states.includes('out')) continue;
+    if (states.includes('edge')) return null;
     const opacity = item.opacity ?? 1;
     const alpha = item.fill!.a * opacity * (options.doubleOpacity === true ? opacity : 1);
     r = item.fill!.r * alpha + r * (1 - alpha);
@@ -428,9 +424,12 @@ function rectangleDistance(x: number, y: number, width: number, height: number):
 
 /**
  * P4-K1 at physical pixel (x, y) for a rect level: `clamp(0.5 - d / max(fwidth(d), 1e-6), 0, 1)`
- * with `d` the level's signed rectangle distance at the pixel centre. `fwidth` is evaluated as
- * WGSL allows, over the pixel's 2x2 quad: `coarse` takes both differences at the quad's first
- * pixel, `fine` takes them in the pixel's own row and column.
+ * with `d` the level's signed rectangle distance at the pixel centre. `fwidth` is evaluated over
+ * the pixel's 2x2 quad in two of the ways WGSL allows: `coarse` takes both differences at the
+ * quad's first (top-left) pixel, `fine` takes them in the pixel's own row and column. A driver
+ * whose coarse derivative uses another row or column of the quad is also conformant and is not
+ * modelled, so a corner-pixel failure on such a driver needs that variant before it is read as
+ * a clip defect.
  */
 export function rectCoverage(
   view: View,
@@ -459,10 +458,10 @@ export function rectCoverage(
 }
 
 /**
- * The reference scene of a clip level: its region alone, drawn as an opaque
- * white shape over the black clear. A rect level is a P1 rectangle of the same placement
- * (P4-K1); a mask level is its source's fill draw (P4-K2), so a path source is meshed by the
- * same port into the same mesh.
+ * The reference scene of a clip level: its region alone, drawn as an opaque white shape over
+ * the black clear. For a mask level it is P4-K2, its source's fill draw, so a path source is
+ * meshed by the same port into the same mesh. For a rect level it is a P1 rectangle of the same
+ * placement, which the spec records as an observation only; P4-K1 is `rectCoverage`.
  */
 export function levelReference(level: ClipLevel): P4Item[] | null {
   // A line's fill area is empty (P4-S2); a filled line is not a valid scene, so its reference
