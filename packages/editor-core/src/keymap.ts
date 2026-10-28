@@ -16,9 +16,9 @@ export const TOOL_NAMES: readonly ToolName[] = [
 ];
 
 /**
- * The built-in actions this editor runs. M2-U1 implements the actions of existing commands and
- * M2-U4 the arrange actions; later M2 units add `enterScope`, `exitScope`, `copy`, `cut` and
- * `paste` with their commands.
+ * The built-in actions this editor runs. M2-U1 implements the actions of existing commands,
+ * M2-U4 the arrange actions and M2-U5 `enterScope` and `exitScope`; later M2 units add `copy`,
+ * `cut` and `paste` with their commands.
  */
 export const BUILTIN_ACTIONS: ReadonlySet<string> = new Set([
   'setTool',
@@ -39,6 +39,8 @@ export const BUILTIN_ACTIONS: ReadonlySet<string> = new Set([
   'zoomToFit',
   'zoomToSelection',
   'zoomTo100',
+  'enterScope',
+  'exitScope',
 ]);
 
 /**
@@ -79,6 +81,8 @@ export const DEFAULT_KEYMAP: readonly KeyBinding[] = deepFreeze([
   { chord: 'Shift+!', action: 'zoomToFit' },
   { chord: 'Shift+@', action: 'zoomToSelection' },
   { chord: 'Shift+)', action: 'zoomTo100' },
+  { chord: 'Enter', action: 'enterScope' },
+  { chord: 'Escape', action: 'exitScope' },
 ]);
 
 const MODIFIER_ORDER = ['Ctrl', 'Meta', 'Alt', 'Shift'] as const;

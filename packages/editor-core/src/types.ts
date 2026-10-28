@@ -255,7 +255,12 @@ export type SessionCommand =
   /** Replaces the host keymap layer. */
   | Readonly<{ type: 'setKeymap'; bindings: readonly KeyBinding[] }>
   /** Turns snapping on or off (M2 contract, section 4.2); Ctrl or Meta held also disables it. */
-  | Readonly<{ type: 'setSnapping'; enabled: boolean }>;
+  | Readonly<{ type: 'setSnapping'; enabled: boolean }>
+  /**
+   * Enters a container (group, mask group or frame) of the active page, or leaves every scope
+   * with null (M2 contract, section 5).
+   */
+  | Readonly<{ type: 'setScope'; id: string | null }>;
 
 export type Command =
   | DocumentCommand
@@ -294,6 +299,7 @@ export type EditorErrorCode =
   // MVP M2 contract, section 4.4.
   | 'editor.no-viewport-size'
   | 'editor.too-few-nodes'
+  | 'editor.invalid-scope'
   | 'editor.invalid-keymap';
 
 /**
@@ -326,6 +332,8 @@ export type EditorSnapshot = Readonly<{
   snap: SnapOverlay | null;
   /** Whether snapping is on; true by default. */
   snapping: boolean;
+  /** The entered container of the active page (M2 contract, section 5), or null. */
+  scope: string | null;
 }>;
 
 export type Query =
@@ -346,7 +354,9 @@ export type Query =
   | Readonly<{ type: 'keymap' }>
   /** The snap overlay of the active gesture, or null. */
   | Readonly<{ type: 'snap' }>
-  | Readonly<{ type: 'snapping' }>;
+  | Readonly<{ type: 'snapping' }>
+  /** The entered container, or null. */
+  | Readonly<{ type: 'scope' }>;
 
 /**
  * The select tool's resize handle box for the selection, in page space (M1 contract, section
@@ -396,7 +406,9 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' }
                           ? SnapOverlay | null
                           : Q extends { type: 'snapping' }
                             ? boolean
-                            : number;
+                            : Q extends { type: 'scope' }
+                              ? string | null
+                              : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';
@@ -420,7 +432,8 @@ export type EditorEvent =
         | 'viewportSize'
         | 'keymap'
         | 'snap'
-        | 'snapping';
+        | 'snapping'
+        | 'scope';
     }>
   | DiagnosticEvent;
 

@@ -9,7 +9,7 @@ import {
   rotatedBounds,
 } from './geometry.js';
 import { clampedRadii } from './projector.js';
-import { ancestors, documentTree, isContainer, isGroup, spaceOf } from './tree.js';
+import { ancestors, childrenOf, documentTree, isContainer, isGroup, spaceOf } from './tree.js';
 import type { PagePoint } from './types.js';
 
 // Hit testing (P5 plan, section 4.4; MVP M1 contract, section 6): fill regions and outlines,
@@ -330,35 +330,37 @@ function memo(test: () => boolean): Clip {
 }
 
 /**
- * The deepest node of `page` hit at `point` in reverse paint order, at any depth (M1 contract,
- * section 6): a leaf, or a frame on its background or border; never a group, a mask group or a
- * mask source. Null when nothing is hit.
+ * Visits the nodes of `page` hit at `point` in reverse paint order, at any depth (M1 contract,
+ * section 6): leaves, and frames on their background or border; never a group, a mask group or a
+ * mask source. `take` returns true to stop. A frame hit on both its border and its background is
+ * visited twice.
  */
-export function deepestHit(
+function visitHits(
   document: DocumentV2,
   page: string,
   point: PagePoint,
   zoom: number,
   custom: CustomGeometry,
-): string | null {
+  take: (id: string) => boolean,
+): void {
   const tree = documentTree(document);
-  // The tree depth is bounded by 256 (M1-S3), so the recursion is too.
-  const visit = (id: string, parentPoint: PagePoint, clip: Clip): string | null => {
+  // The tree depth is bounded by 256 (M1-S3), so the recursion is too. Each call returns true
+  // when `take` stopped the walk.
+  const visit = (id: string, parentPoint: PagePoint, clip: Clip): boolean => {
     const node = tree.node(id);
-    if (node === undefined || !node.visible) return null;
-    if (!isContainer(node)) return hitsNode(node, parentPoint, zoom, custom) && clip() ? id : null;
+    if (node === undefined || !node.visible) return false;
+    if (!isContainer(node)) return hitsNode(node, parentPoint, zoom, custom) && clip() && take(id);
     const local = apply(
       invertRigid(localTransform(node.frame, node.rotation)),
       parentPoint.x,
       parentPoint.y,
     );
     const box = { x: 0, y: 0, width: node.frame.width, height: node.frame.height };
-    const children = (inner: Clip, from: number): string | null => {
+    const children = (inner: Clip, from: number): boolean => {
       for (let i = node.children.length - 1; i >= from; i -= 1) {
-        const found = visit(node.children[i]!, local, inner);
-        if (found !== null) return found;
+        if (visit(node.children[i]!, local, inner)) return true;
       }
-      return null;
+      return false;
     };
     if (isGroup(node)) {
       if (node.type === 'group') return children(clip, 0);
@@ -371,40 +373,93 @@ export function deepestHit(
     // A frame paints its background, its children inside its rect, then its border.
     if (node.stroke !== null) {
       const radius = Math.max(node.stroke.width / 2, 4 / zoom);
-      if (nearOutline(local, [rectangleOutline(box)], radius) && clip()) return id;
+      if (nearOutline(local, [rectangleOutline(box)], radius) && clip() && take(id)) return true;
     }
     const inside = insideBox(local, box);
-    const found = children(
-      memo(() => inside && clip()),
-      0,
-    );
-    if (found !== null) return found;
-    return node.fill !== null && inside && clip() ? id : null;
+    if (
+      children(
+        memo(() => inside && clip()),
+        0,
+      )
+    ) {
+      return true;
+    }
+    return node.fill !== null && inside && clip() && take(id);
   };
   const roots = tree.page(page)?.children ?? [];
   for (let i = roots.length - 1; i >= 0; i -= 1) {
-    const found = visit(roots[i]!, point, () => true);
-    if (found !== null) return found;
+    if (visit(roots[i]!, point, () => true)) return;
   }
-  return null;
 }
 
 /**
- * The selection target of a hit node (section 6): its outermost ancestor below the scope, which
- * is the page, or a frame whose parent is the page (a top-level frame acts as an artboard). A hit
- * on a top-level frame itself targets the frame.
+ * The deepest node of `page` hit at `point` in reverse paint order, at any depth (M1 contract,
+ * section 6): a leaf, or a frame on its background or border; never a group, a mask group or a
+ * mask source. Null when nothing is hit.
  */
-export function selectionTarget(document: DocumentV2, id: string): string {
+export function deepestHit(
+  document: DocumentV2,
+  page: string,
+  point: PagePoint,
+  zoom: number,
+  custom: CustomGeometry,
+): string | null {
+  let found: string | null = null;
+  visitHits(document, page, point, zoom, custom, (id) => {
+    found = id;
+    return true;
+  });
+  return found;
+}
+
+/**
+ * Every node of `page` hit at `point`, in reverse paint order without repeats (the overlap
+ * stack of M2 contract, section 5, before its selection targets are taken).
+ */
+export function hitsAt(
+  document: DocumentV2,
+  page: string,
+  point: PagePoint,
+  zoom: number,
+  custom: CustomGeometry,
+): string[] {
+  const found = new Set<string>();
+  visitHits(document, page, point, zoom, custom, (id) => {
+    found.add(id);
+    return false;
+  });
+  return [...found];
+}
+
+/**
+ * The selection target of a hit node (M1 contract, section 6; M2 contract, section 5): its
+ * outermost ancestor below the scope. With `scope` null the scope is the page, and a frame whose
+ * parent is the page acts as an artboard: a hit inside it targets the frame's child on the chain,
+ * and a hit on the frame itself targets the frame. With a scope container, the target is the
+ * chain's node whose parent is the scope; inside a scope no frame acts as an artboard. The caller
+ * passes a scope only for a hit strictly inside its subtree; otherwise the page rule applies.
+ */
+export function selectionTarget(
+  document: DocumentV2,
+  id: string,
+  scope: string | null = null,
+): string {
   const tree = documentTree(document);
   const chain = [id, ...ancestors(tree, id).map((node) => node.id)];
+  const index = scope === null ? -1 : chain.indexOf(scope);
+  if (index > 0) return chain[index - 1]!;
   const top = tree.node(chain[chain.length - 1]!)!;
   if (top.type === 'frame' && chain.length >= 2) return chain[chain.length - 2]!;
   return top.id;
 }
 
 /** The chain from a hit node up to its selection target, innermost first. */
-export function targetChain(document: DocumentV2, id: string): string[] {
-  const target = selectionTarget(document, id);
+export function targetChain(
+  document: DocumentV2,
+  id: string,
+  scope: string | null = null,
+): string[] {
+  const target = selectionTarget(document, id, scope);
   const tree = documentTree(document);
   const chain = [id];
   for (const node of ancestors(tree, id)) {
@@ -433,17 +488,29 @@ function contains(box: Frame, frame: Frame): boolean {
 }
 
 /**
- * The marquee candidates of section 6, in paint order: the visible page children whose rotated
- * frame's bounds intersect the rectangle (P5-Q5), except that a top-level frame is selected only
- * when the rectangle contains those bounds entirely. Children of containers are not candidates.
+ * The marquee candidates of section 6, in paint order: the visible children of the scope owner
+ * (`scope`, or the page when null; M2 contract, section 5) whose rotated frame's page-aligned
+ * bounds intersect the rectangle (P5-Q5), except that a frame child is selected only when the
+ * rectangle contains those bounds entirely. Children of other containers are not candidates.
  */
-export function marqueeHits(document: DocumentV2, page: string, box: Frame): string[] {
+export function marqueeHits(
+  document: DocumentV2,
+  page: string,
+  box: Frame,
+  scope: string | null = null,
+): string[] {
   const tree = documentTree(document);
-  return (tree.page(page)?.children ?? []).filter((id) => {
+  return childrenOf(tree, scope ?? page).filter((id) => {
     const node = tree.node(id);
     if (node === undefined || !node.visible) return false;
-    // Rotation 0 uses the frame itself, bit-identical with P5.
-    const frame = node.rotation === 0 ? node.frame : rotatedBounds(node);
+    // A page child with rotation 0 uses the frame itself, bit-identical with P5; a scope's
+    // child is in its parent's space, so it uses its page-space bounds.
+    const frame =
+      scope === null
+        ? node.rotation === 0
+          ? node.frame
+          : rotatedBounds(node)
+        : boundsOf(document, [id])!;
     return node.type === 'frame' ? contains(box, frame) : intersects(frame, box);
   });
 }
