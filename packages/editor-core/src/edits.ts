@@ -39,7 +39,14 @@ import {
   rotate,
   rotatedBounds,
 } from './geometry.js';
-import { movePathAnchors, setPathHandle } from './paths.js';
+import {
+  closePathSubpath,
+  insertPathAnchor,
+  movePathAnchors,
+  openPathSubpath,
+  removePathAnchors,
+  setPathHandle,
+} from './paths.js';
 import { mapNodeInPageSpace, resizeContainer, type ScaleMap } from './resize.js';
 import { handleBoxOf, handleCentre } from './handles.js';
 import {
@@ -276,6 +283,14 @@ export function applyEdit(
       return movePathAnchors(document, command, context, finish);
     case 'setPathHandle':
       return setPathHandle(document, command, context, finish);
+    case 'insertPathAnchor':
+      return insertPathAnchor(document, command, context, finish);
+    case 'removePathAnchors':
+      return removePathAnchors(document, command, context, finish);
+    case 'closePathSubpath':
+      return closePathSubpath(document, command, context, finish);
+    case 'openPathSubpath':
+      return openPathSubpath(document, command, context, finish);
     case 'addPage': {
       if (command.name !== undefined && typeof command.name !== 'string') {
         return fail('editor.invalid-command', '/name');

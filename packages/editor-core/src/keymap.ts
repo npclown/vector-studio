@@ -18,7 +18,8 @@ export const TOOL_NAMES: readonly ToolName[] = [
 /**
  * The built-in actions this editor runs (section 7): M2-U1 the actions of existing commands,
  * M2-U4 the arrange actions, M2-U5 `enterScope` and `exitScope`, and M2-U6 `copy`, `cut` and
- * `paste` on the in-memory clipboard (unbound by default, M2-Q4).
+ * `paste` on the in-memory clipboard (unbound by default, M2-Q4), and M3-U3 `togglePathClosed`
+ * (unbound by default, M3-Q11).
  */
 export const BUILTIN_ACTIONS: ReadonlySet<string> = new Set([
   'setTool',
@@ -44,6 +45,7 @@ export const BUILTIN_ACTIONS: ReadonlySet<string> = new Set([
   'copy',
   'cut',
   'paste',
+  'togglePathClosed',
 ]);
 
 /**

@@ -7,9 +7,10 @@ import type { DocumentCommand, PagePoint, PathAnchorRef } from './types.js';
 
 // Path editing (MVP M3 contract, sections 2 and 3): the anchor model of stored path data
 // (M3-P1), its serializer (M3-P2), the re-normalization of section 3.1 with value provenance,
-// and the commands `movePathAnchors` and `setPathHandle`. The commands act on one `path` node of
-// the active page at any depth; groups above it refit through the draft (M1 section 4.2), frames
-// do not. Failures follow the order of section 3.5.
+// and the commands `movePathAnchors`, `setPathHandle` (section 3.2), `insertPathAnchor`,
+// `removePathAnchors` (section 3.3), `closePathSubpath` and `openPathSubpath` (section 3.4). The
+// commands act on one `path` node of the active page at any depth; groups above it refit through
+// the draft (M1 section 4.2), frames do not. Failures follow the order of section 3.5.
 
 /**
  * A coordinate of an edit with its provenance (sections 2 and 3.1): `stored` is a unit value
@@ -251,17 +252,44 @@ export function refShape(value: unknown, path: string): Failure | null {
   return null;
 }
 
+/**
+ * The shape of an anchor list at `/anchors` (`editor.invalid-command`): an array of well-shaped
+ * refs without repeats (`-0` and `0` are one index), non-empty unless `empty` allows it.
+ */
+export function refListShape(refs: unknown, empty = false): Failure | null {
+  if (!Array.isArray(refs) || (!empty && refs.length === 0)) {
+    return fail('editor.invalid-command', '/anchors');
+  }
+  const seen = new Set<string>();
+  for (const [i, ref] of (refs as unknown[]).entries()) {
+    const shape = refShape(ref, `/anchors/${i}`);
+    if (shape !== null) return shape;
+    const { subpath, anchor } = ref as PathAnchorRef;
+    const key = `${subpath},${anchor}`;
+    if (seen.has(key)) return fail('editor.invalid-command', '/anchors');
+    seen.add(key);
+  }
+  return null;
+}
+
+/** The first ref of a well-shaped list that names no anchor of the model, as its failure. */
+export function badRef(
+  model: readonly ModelSubpath[],
+  refs: readonly PathAnchorRef[],
+): Failure | null {
+  const bad = refs.findIndex((ref) => !inRange(model, ref));
+  return bad < 0 ? null : fail('editor.invalid-path-ref', `/anchors/${bad}`);
+}
+
+/** Whether `value` is an integer index below `count`. */
+function isIndex(value: number, count: number): boolean {
+  return Number.isInteger(value) && value >= 0 && value < count;
+}
+
 /** Whether a well-shaped ref names an anchor of the model (`editor.invalid-path-ref`). */
 export function inRange(model: readonly ModelSubpath[], ref: PathAnchorRef): boolean {
   const { subpath, anchor } = ref;
-  return (
-    Number.isInteger(subpath) &&
-    subpath >= 0 &&
-    subpath < model.length &&
-    Number.isInteger(anchor) &&
-    anchor >= 0 &&
-    anchor < model[subpath]!.anchors.length
-  );
+  return isIndex(subpath, model.length) && isIndex(anchor, model[subpath]!.anchors.length);
 }
 
 /**
@@ -292,6 +320,11 @@ function pathTarget(
   };
 }
 
+/** A no-op: the document itself, no step, no event, no IDs (section 3). */
+function unchanged(document: DocumentV2): EditResult {
+  return { ok: true, document, touched: [], created: [] };
+}
+
 /**
  * Writes the edited model back into the node (M3-P2, section 3.1); a success returns `[id]`
  * (section 3). A result equal to the stored node returns the document itself with nothing
@@ -314,7 +347,7 @@ function written(
     verbs.every((verb, i) => verb === node.path.verbs[i]) &&
     unit.length === node.path.points.length &&
     unit.every((value, i) => value === node.path.points[i]);
-  if (same) return { ok: true, document, touched: [], created: [] };
+  if (same) return unchanged(document);
   const draft = new Draft(document);
   draft.set({ ...node, frame, path: { ...node.path, verbs, points: unit } });
   const result = success(finish(draft), draft, []);
@@ -343,24 +376,16 @@ export function movePathAnchors(
 ): EditResult {
   const { id, anchors: refs, dx, dy } = command as Record<string, unknown>;
   if (typeof id !== 'string') return fail('editor.invalid-command', '/id');
-  if (!Array.isArray(refs) || refs.length === 0) return fail('editor.invalid-command', '/anchors');
-  const seen = new Set<string>();
-  for (const [i, ref] of (refs as unknown[]).entries()) {
-    const shape = refShape(ref, `/anchors/${i}`);
-    if (shape !== null) return shape;
-    const { subpath, anchor } = ref as PathAnchorRef;
-    const key = `${subpath},${anchor}`;
-    if (seen.has(key)) return fail('editor.invalid-command', '/anchors');
-    seen.add(key);
-  }
+  const shape = refListShape(refs);
+  if (shape !== null) return shape;
   if (!isNumber(dx)) return fail('editor.invalid-command', '/dx');
   if (!isNumber(dy)) return fail('editor.invalid-command', '/dy');
   const target = pathTarget(document, id, context);
   if ('ok' in target) return target;
   const { node, model } = target;
   const list = refs as readonly PathAnchorRef[];
-  const bad = list.findIndex((ref) => !inRange(model, ref));
-  if (bad >= 0) return fail('editor.invalid-path-ref', `/anchors/${bad}`);
+  const bad = badRef(model, list);
+  if (bad !== null) return bad;
   const { width, height } = node.frame;
   const delta = target.toLocalVector(dx, dy);
   for (const ref of list) {
@@ -469,6 +494,219 @@ export function setPathHandle(
         subpath.segments[k] = { kind: 'line' };
       }
     }
+  }
+  return written(document, node, model, finish);
+}
+
+/** `lerp(a, b, t) = a + t·(b − a)` per coordinate (section 3). */
+function lerp(a: PagePoint, b: PagePoint, t: number): PagePoint {
+  return { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
+}
+
+const computed = (p: PagePoint): EditPoint => localPoint(p.x, p.y);
+
+/**
+ * `insertPathAnchor` (section 3.3): splits segment `segment` of subpath `subpath` at `t`, so the
+ * new anchor is anchor `segment + 1`. A line becomes two lines through `lerp(P0, P3, t)`, a cubic
+ * two cubics by de Casteljau; `P0` and `P3` stay copied. A relative command (S1).
+ */
+export function insertPathAnchor(
+  document: DocumentV2,
+  command: Extract<DocumentCommand, { type: 'insertPathAnchor' }>,
+  context: EditContext,
+  finish: Finish,
+): EditResult {
+  const { id, subpath: s, segment: k, t } = command as Record<string, unknown>;
+  if (typeof id !== 'string') return fail('editor.invalid-command', '/id');
+  if (!isNumber(s)) return fail('editor.invalid-command', '/subpath');
+  if (!isNumber(k)) return fail('editor.invalid-command', '/segment');
+  if (!isNumber(t) || !(t > 0 && t < 1)) return fail('editor.invalid-command', '/t');
+  const target = pathTarget(document, id, context);
+  if ('ok' in target) return target;
+  const { node, model } = target;
+  if (!isIndex(s, model.length)) return fail('editor.invalid-path-ref', '/subpath');
+  const subpath = model[s]!;
+  if (!isIndex(k, subpath.segments.length)) return fail('editor.invalid-path-ref', '/segment');
+  const { width, height } = node.frame;
+  const local = (point: EditPoint) => localOf(point, width, height);
+  const n = subpath.anchors.length;
+  const p0 = local(subpath.anchors[k]!);
+  const p3 = local(subpath.anchors[(k + 1) % n]!);
+  const segment = subpath.segments[k]!;
+  let split: ModelSegment[];
+  let anchor: PagePoint;
+  if (segment.kind === 'line') {
+    // An implicit closing segment gains one line to the new anchor before `close`.
+    anchor = lerp(p0, p3, t);
+    split = [segment, segment];
+  } else {
+    const p1 = local(segment.c1);
+    const p2 = local(segment.c2);
+    const q0 = lerp(p0, p1, t);
+    const q1 = lerp(p1, p2, t);
+    const q2 = lerp(p2, p3, t);
+    const r0 = lerp(q0, q1, t);
+    const r1 = lerp(q1, q2, t);
+    anchor = lerp(r0, r1, t);
+    split = [
+      { kind: 'cubic', c1: computed(q0), c2: computed(r0) },
+      { kind: 'cubic', c1: computed(r1), c2: computed(q2) },
+    ];
+  }
+  subpath.anchors.splice(k + 1, 0, computed(anchor));
+  subpath.segments.splice(k, 1, ...split);
+  return written(document, node, model, finish);
+}
+
+/**
+ * The segment joining remaining anchors `p` and `q` across removed ones (section 3.3): `c1` is
+ * `p`'s `out` handle when the segment leaving `p` was a cubic, else `p`; `c2` is `q`'s `in` handle
+ * when the segment entering `q` was a cubic, else `q`; a line when both were lines. The outer
+ * handles stay copied (no curve fitting, M3-Q3).
+ */
+function joined(subpath: ModelSubpath, p: number, q: number): ModelSegment {
+  const n = subpath.anchors.length;
+  const leaving = subpath.segments[p]!;
+  const entering = subpath.segments[(q - 1 + n) % n]!;
+  if (leaving.kind === 'line' && entering.kind === 'line') return leaving;
+  return {
+    kind: 'cubic',
+    c1: leaving.kind === 'cubic' ? leaving.c1 : subpath.anchors[p]!,
+    c2: entering.kind === 'cubic' ? entering.c2 : subpath.anchors[q]!,
+  };
+}
+
+/**
+ * A subpath without the anchors `removed` (section 3.3), or null when fewer than 2 remain: the
+ * rest keep their order from the lowest remaining index (a closed subpath's start rotates) and
+ * its form; a segment between neighbours is kept, any other pair is joined.
+ */
+function withoutAnchors(subpath: ModelSubpath, removed: ReadonlySet<number>): ModelSubpath | null {
+  const n = subpath.anchors.length;
+  const rest = subpath.anchors.flatMap((_, a) => (removed.has(a) ? [] : [a]));
+  if (rest.length < 2) return null;
+  const count = subpath.closed ? rest.length : rest.length - 1;
+  const segments: ModelSegment[] = [];
+  for (let j = 0; j < count; j += 1) {
+    const p = rest[j]!;
+    const q = rest[(j + 1) % rest.length]!;
+    segments.push((p + 1) % n === q ? subpath.segments[p]! : joined(subpath, p, q));
+  }
+  return {
+    closed: subpath.closed,
+    explicit: subpath.explicit,
+    anchors: rest.map((a) => subpath.anchors[a]!),
+    segments,
+  };
+}
+
+/**
+ * `removePathAnchors` (section 3.3): removes the listed anchors, joining their neighbours; a
+ * subpath that lost an anchor and has fewer than 2 left is dropped, untouched subpaths stay, and
+ * a result without subpaths fails with `editor.empty-path` (M3-Q4).
+ */
+export function removePathAnchors(
+  document: DocumentV2,
+  command: Extract<DocumentCommand, { type: 'removePathAnchors' }>,
+  context: EditContext,
+  finish: Finish,
+): EditResult {
+  const { id, anchors: refs } = command as Record<string, unknown>;
+  if (typeof id !== 'string') return fail('editor.invalid-command', '/id');
+  const shape = refListShape(refs);
+  if (shape !== null) return shape;
+  const target = pathTarget(document, id, context);
+  if ('ok' in target) return target;
+  const { node, model } = target;
+  const list = refs as readonly PathAnchorRef[];
+  const bad = badRef(model, list);
+  if (bad !== null) return bad;
+  const removed = model.map(() => new Set<number>());
+  for (const { subpath, anchor } of list) removed[subpath]!.add(anchor);
+  const next = model.flatMap((subpath, s) => {
+    if (removed[s]!.size === 0) return [subpath];
+    const kept = withoutAnchors(subpath, removed[s]!);
+    return kept === null ? [] : [kept];
+  });
+  if (next.length === 0) return fail('editor.empty-path');
+  return written(document, node, next, finish);
+}
+
+/** The subpath index of a close or open command, after its shape and node checks. */
+function subpathOf(model: readonly ModelSubpath[], s: number): ModelSubpath | Failure {
+  return isIndex(s, model.length) ? model[s]! : fail('editor.invalid-path-ref', '/subpath');
+}
+
+/**
+ * `closePathSubpath` (section 3.4): an open subpath of at least 2 anchors gets `close` in the
+ * implicit form, or in the explicit form when its last anchor's stored point equals anchor 0's,
+ * which that anchor then merges into. Closing a closed subpath is a no-op.
+ */
+export function closePathSubpath(
+  document: DocumentV2,
+  command: Extract<DocumentCommand, { type: 'closePathSubpath' }>,
+  context: EditContext,
+  finish: Finish,
+): EditResult {
+  const { id, subpath: s } = command as Record<string, unknown>;
+  if (typeof id !== 'string') return fail('editor.invalid-command', '/id');
+  if (!isNumber(s)) return fail('editor.invalid-command', '/subpath');
+  const target = pathTarget(document, id, context);
+  if ('ok' in target) return target;
+  const { node, model } = target;
+  const subpath = subpathOf(model, s);
+  if ('ok' in subpath) return subpath;
+  if (subpath.closed) return unchanged(document);
+  const { anchors } = subpath;
+  if (anchors.length < 2) return fail('editor.too-few-anchors');
+  subpath.closed = true;
+  if (sameStored(anchors[anchors.length - 1]!, anchors[0]!)) {
+    // The last anchor merges into anchor 0: its `in` handle becomes anchor 0's.
+    subpath.explicit = true;
+    anchors.pop();
+  } else {
+    subpath.segments.push({ kind: 'line' });
+  }
+  return written(document, node, model, finish);
+}
+
+/**
+ * `openPathSubpath` (section 3.4): removes segment `segment` (default the closing segment) of a
+ * closed subpath, which then runs open from the anchor after it; on `move, close` it removes
+ * `close` only. Opening an open subpath is a no-op.
+ */
+export function openPathSubpath(
+  document: DocumentV2,
+  command: Extract<DocumentCommand, { type: 'openPathSubpath' }>,
+  context: EditContext,
+  finish: Finish,
+): EditResult {
+  const { id, subpath: s, segment: k } = command as Record<string, unknown>;
+  if (typeof id !== 'string') return fail('editor.invalid-command', '/id');
+  if (!isNumber(s)) return fail('editor.invalid-command', '/subpath');
+  if (k !== undefined && !isNumber(k)) return fail('editor.invalid-command', '/segment');
+  const target = pathTarget(document, id, context);
+  if ('ok' in target) return target;
+  const { node, model } = target;
+  const subpath = subpathOf(model, s);
+  if ('ok' in subpath) return subpath;
+  if (k !== undefined && !isIndex(k, subpath.segments.length)) {
+    return fail('editor.invalid-path-ref', '/segment');
+  }
+  if (!subpath.closed) return unchanged(document);
+  const n = subpath.anchors.length;
+  if (subpath.segments.length === 0) {
+    model[s] = { ...subpath, closed: false, explicit: false };
+  } else {
+    // Anchors A(k+1), …, A(n−1), A0, …, Ak; the segment leaving each but the last is kept.
+    const cut = k ?? n - 1;
+    const order = subpath.anchors.map((_, i) => (cut + 1 + i) % n);
+    model[s] = {
+      closed: false,
+      explicit: false,
+      anchors: order.map((a) => subpath.anchors[a]!),
+      segments: order.slice(0, n - 1).map((a) => subpath.segments[a]!),
+    };
   }
   return written(document, node, model, finish);
 }

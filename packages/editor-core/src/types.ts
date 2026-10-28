@@ -298,6 +298,23 @@ export type DocumentCommand =
       to: PagePoint | null;
       mirror?: boolean;
     }>
+  /**
+   * Splits segment `segment` of subpath `subpath` at `0 < t < 1`; the new anchor is anchor
+   * `segment + 1` (a line into two lines, a cubic by de Casteljau).
+   */
+  | Readonly<{ type: 'insertPathAnchor'; id: string; subpath: number; segment: number; t: number }>
+  /**
+   * Removes the listed anchors, joining their neighbours with the outer handles kept; a subpath
+   * left with fewer than 2 anchors is dropped, and removing every subpath fails.
+   */
+  | Readonly<{ type: 'removePathAnchors'; id: string; anchors: readonly PathAnchorRef[] }>
+  /** Closes an open subpath of at least 2 anchors with a straight closing segment. */
+  | Readonly<{ type: 'closePathSubpath'; id: string; subpath: number }>
+  /**
+   * Opens a closed subpath by removing segment `segment` (default the closing segment); the
+   * open subpath starts at the anchor after it.
+   */
+  | Readonly<{ type: 'openPathSubpath'; id: string; subpath: number; segment?: number }>
   | Readonly<{ type: 'addPage'; name?: string; index?: number }>
   | Readonly<{ type: 'removePage'; id: string }>
   | Readonly<{ type: 'renamePage'; id: string; name: string }>
@@ -396,6 +413,8 @@ export type EditorErrorCode =
   // MVP M3 contract, section 3.5.
   | 'editor.not-a-path'
   | 'editor.invalid-path-ref'
+  | 'editor.too-few-anchors'
+  | 'editor.empty-path'
   | 'editor.no-path-edit';
 
 /**

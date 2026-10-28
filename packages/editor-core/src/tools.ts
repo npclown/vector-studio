@@ -25,7 +25,7 @@ import {
   targetChain,
   type CustomGeometry,
 } from './hit-test.js';
-import { canonicalRefs, hasRef, pathTargetAt } from './path-edit.js';
+import { canonicalRefs, hasRef, pathTargetAt, segmentParameter } from './path-edit.js';
 import { inSegment, outSegment, readAnchorModel } from './paths.js';
 import { resizeInOwnAxes, scaleAbout } from './resize.js';
 import {
@@ -1285,6 +1285,27 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     context.execute({ type: 'setPathSelection', anchors: canonicalRefs([...before, ...hits]) });
   }
 
+  /**
+   * The segment double-click (M3 contract, section 5): inserts an anchor at the `t` of the
+   * nearest flattened chord point when `0 < t < 1`, and selects the new anchor.
+   */
+  function insertAt(
+    target: Readonly<{ subpath: number; segment: number }>,
+    point: PagePoint,
+    context: ToolContext,
+  ): void {
+    const edit = context.query({ type: 'pathEdit' })!;
+    const document = context.query({ type: 'document' });
+    const node = document.nodes[edit.id] as PathNodeV2;
+    const { subpath, segment } = target;
+    const t = segmentParameter(document, node, subpath, segment, point, zoomOf(context));
+    if (!(t > 0 && t < 1)) return;
+    const result = context.execute({ type: 'insertPathAnchor', id: edit.id, subpath, segment, t });
+    if (result.ok) {
+      context.execute({ type: 'setPathSelection', anchors: [{ subpath, anchor: segment + 1 }] });
+    }
+  }
+
   /** States with no gesture of their own. */
   const passive = (kind: SelectState['kind']) =>
     kind === 'marquee' || kind === 'anchorMarquee' || kind === 'held';
@@ -1310,13 +1331,13 @@ export function createSelectTool(custom: CustomGeometry): Tool {
         if (state.kind !== 'idle') return false;
         const edit = context.query({ type: 'pathEdit' });
         if (edit !== null) {
-          // On an anchor, a handle, a segment or the fill a double-click is consumed and does
-          // nothing; insertion on a segment is M3-U3's.
+          // A double-click on a segment inserts an anchor there; on an anchor, a handle or the
+          // fill it is consumed and does nothing (M3 contract, section 5).
           const zoom = zoomOf(context);
           const document = context.query({ type: 'document' });
-          if (pathTargetAt(document, edit, event.point, zoom, HANDLE_RADIUS / zoom) !== null) {
-            return true;
-          }
+          const target = pathTargetAt(document, edit, event.point, zoom, HANDLE_RADIUS / zoom);
+          if (target?.kind === 'segment') insertAt(target, event.point, context);
+          if (target !== null) return true;
         }
         return doubleClick(event.point, context);
       }
