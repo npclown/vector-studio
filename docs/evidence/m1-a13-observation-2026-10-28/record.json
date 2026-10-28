@@ -1,0 +1,98 @@
+{
+  "acceptance": "M1-A13",
+  "kind": "observation (no claim)",
+  "revision": "c0b751279257f2b8fe5f31f3f9da487b4925e16c",
+  "worktree": "clean",
+  "environment": {
+    "node": "v22.22.0",
+    "platform": "linux 6.18.44-fc-v180",
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.30GHz",
+    "logicalCpus": 4
+  },
+  "document": {
+    "seed": 114498067,
+    "nodes": 10000,
+    "jsonBytes": 3747670,
+    "pageRoots": [702, 100],
+    "activePageSceneNodes": 10634,
+    "moveSelection": ["r4", "e5"],
+    "isolationUnitSets": 9250
+  },
+  "runs": 5,
+  "isolationRuns": 3,
+  "generateMs": 33.48,
+  "steps": {
+    "parse": {
+      "medianMs": 131.04,
+      "minMs": 100.76,
+      "maxMs": 139.58,
+      "runsMs": [134.45, 139.58, 123.37, 131.04, 100.76]
+    },
+    "construct": {
+      "medianMs": 55.64,
+      "minMs": 49.55,
+      "maxMs": 75.38,
+      "runsMs": [75.38, 60.79, 50.98, 55.64, 49.55]
+    },
+    "project": {
+      "medianMs": 13.07,
+      "minMs": 11.67,
+      "maxMs": 28.59,
+      "runsMs": [28.59, 14.55, 12.05, 13.07, 11.67]
+    },
+    "attach": {
+      "medianMs": 118.59,
+      "minMs": 102.88,
+      "maxMs": 152.93,
+      "runsMs": [152.93, 119.81, 110.69, 118.59, 102.88]
+    },
+    "movePointerDown": {
+      "medianMs": 12.91,
+      "minMs": 8.86,
+      "maxMs": 22.15,
+      "runsMs": [22.15, 12.91, 13.47, 9.31, 8.86]
+    },
+    "movePointerMoves": {
+      "medianMs": 383.37,
+      "minMs": 367.26,
+      "maxMs": 406.81,
+      "runsMs": [383.37, 387.2, 378.27, 406.81, 367.26]
+    },
+    "moveCommit": {
+      "medianMs": 154.52,
+      "minMs": 146.28,
+      "maxMs": 159.07,
+      "runsMs": [146.28, 155.47, 154.52, 159.07, 150.16]
+    },
+    "isolation": {
+      "medianMs": 298166.6,
+      "minMs": 291078.89,
+      "maxMs": 314191.45,
+      "runsMs": [291078.89, 298166.6, 314191.45]
+    },
+    "attachRenderer": {
+      "medianMs": 94.53,
+      "minMs": 87.49,
+      "maxMs": 129.17,
+      "runsMs": [129.17, 94.53, 91.12, 99.58, 87.49]
+    },
+    "movePointerMovesRenderer": {
+      "medianMs": 288.72,
+      "minMs": 277.06,
+      "maxMs": 310.72,
+      "runsMs": [288.72, 292.75, 285.23, 310.72, 277.06]
+    },
+    "moveCommitRenderer": {
+      "medianMs": 115.96,
+      "minMs": 110.4,
+      "maxMs": 121.2,
+      "runsMs": [111.37, 119.35, 115.96, 121.2, 110.4]
+    },
+    "isolationRenderer": {
+      "medianMs": 297942.61,
+      "minMs": 290793.13,
+      "maxMs": 313948.45,
+      "runsMs": [290793.13, 297942.61, 313948.45]
+    }
+  }
+}
