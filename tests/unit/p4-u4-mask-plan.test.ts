@@ -273,4 +273,79 @@ describe('P4 U4a mask plan', () => {
     expect(source.prepare({ ...big, sampleCount: 1 })!.clip!.masks).toHaveLength(1);
     expect(source.getMaskNoticesDropped()).toBe(0);
   });
+
+  it('a path source draw between stroked content draws leaves the paint order intact', () => {
+    const { source } = setup([
+      group('m', null, ['s', 'p', 'q'], MASK),
+      pathNode('s', 0, { parentId: 'm', points: sourcePoints }),
+      strokedNode('p', 10, { parentId: 'm' }),
+      pathNode('q', 20, { parentId: 'm', fill: red }),
+      pathNode('after', 30),
+    ]);
+    const packet = source.prepare(target)!;
+    expect(source.getLastDrawRecordForTesting()!.draws.map((d) => [d.nodeId, d.paint])).toEqual([
+      ['p', 'fill'],
+      ['p', 'stroke'],
+      ['q', 'fill'],
+      ['after', 'fill'],
+    ]);
+    expect(packet.mesh!.draws.map((draw) => draw.clipState ?? 0)).toEqual([1, 1, 1, 0]);
+    const level = packet.clip!.masks[0]!;
+    if (level.source.kind !== 'mesh') throw new Error('expected a mesh source');
+    expect(level.source.draw).not.toBeNull();
+    expect(packet.mesh!.draws.map((draw) => draw.instance)).not.toContain(
+      level.source.draw!.instance,
+    );
+  });
+
+  it('a mesh source key follows its geometry and fill rule, not its paint', () => {
+    const nodes = (overrides: Parameters<typeof pathNode>[2]) => [
+      group('m', null, ['s', 'a'], MASK),
+      pathNode('s', 0, { parentId: 'm', points: sourcePoints, ...overrides }),
+      box('a', 'm', 10),
+    ];
+    const { source, replace } = setup(nodes({}));
+    const key = () => source.prepare(target)!.clip!.masks[0]!.key;
+    const first = key();
+    replace(nodes({ fill: { r: 0, g: 1, b: 0, a: 0.5 }, opacity: 0.4 }));
+    expect(key()).toBe(first);
+    replace(nodes({ fillRule: 'evenodd' }));
+    const evenOdd = key();
+    expect(evenOdd).not.toBe(first);
+    replace(nodes({ fillRule: 'evenodd', points: [0, 0, 180, 0, 0, 200] }));
+    expect(key()).not.toBe(evenOdd);
+  });
+
+  it('section 5: under an over-budget parent the child level is neither drawn nor reported', () => {
+    const { source } = setup([
+      group('outer', null, ['os', 'a', 'inner'], MASK),
+      box('os', 'outer', 0, 0, 5000),
+      box('a', 'outer', 10),
+      group('inner', 'outer', ['is', 'b'], MASK),
+      box('is', 'inner', 0, 0, 100),
+      box('b', 'inner', 20),
+      box('after', null, 300),
+    ]);
+    const packet = source.prepare({ ...target, width: 4096, height: 4096, sampleCount: 4 })!;
+    expect(packet.draws.reduce((sum, draw) => sum + draw.count, 0)).toBe(1);
+    expect(packet.clipNotices!.map((notice) => notice.nodeId)).toEqual(['outer']);
+  });
+
+  it('section 5: at most 32 notices per packet; a mask is reported again after clips leave', () => {
+    const masks = Array.from({ length: 40 }, (_, index) => [
+      group(`m${index}`, null, [`s${index}`, `a${index}`], MASK),
+      box(`s${index}`, `m${index}`, 0, 0, 5000),
+      box(`a${index}`, `m${index}`, 10),
+    ]).flat();
+    const { source, replace } = setup(masks);
+    const big: PrimitiveTarget = { ...target, width: 4096, height: 4096, sampleCount: 4 };
+    expect(source.prepare(big)!.clipNotices).toHaveLength(32);
+    expect(source.prepare(big)!.clipNotices).toHaveLength(8);
+    expect(source.prepare(big)!.clipNotices).toBeUndefined();
+    replace([box('after', null, 300)]);
+    expect(source.prepare(big)!.clipNotices).toBeUndefined();
+    replace(masks.slice(0, 3));
+    expect(source.prepare(big)!.clipNotices!.map((notice) => notice.nodeId)).toEqual(['m0']);
+    expect(source.getMaskNoticesDropped()).toBe(0);
+  });
 });

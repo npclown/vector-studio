@@ -337,9 +337,11 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       }));
       clip = this.#assignClipStates(visible, meshStates);
     } else if (this.#clipStatesUsed) {
-      // Releases the previous frame's states once the scene has no clip left.
+      // Releases the previous frame's states once the scene has no clip left; a mask that
+      // returns over budget is reported again.
       this.#clipStates.begin();
       this.#clipStates.end();
+      this.#overBudget = new Set();
     }
     this.#clipStatesUsed = clipSeen.value;
     const draws = interleaveDraws(
@@ -364,7 +366,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       frame: Object.freeze({ ...target }),
       ...(this.#maskNotices.length === 0
         ? {}
-        : { clipNotices: Object.freeze(this.#maskNotices.splice(0, MASK_NOTICES_PER_PACKET)) }),
+        : { clipNotices: Object.freeze(this.#maskNotices.slice(0, MASK_NOTICES_PER_PACKET)) }),
       ...(clip.records.length === 0
         ? {}
         : {
@@ -404,6 +406,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
             }),
           }),
     });
+    // Notices leave the queue only once the packet exists, so a throwing prepare keeps them.
+    this.#maskNotices.splice(0, packet.clipNotices?.length ?? 0);
     this.#pending = Object.freeze({
       packet,
       expected: expectedRecords(writes),
