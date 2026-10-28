@@ -57,6 +57,17 @@ async function open(page: Page) {
   await page.evaluate(() =>
     window.__p5Host!.editor.execute({ type: 'setSnapping', enabled: false }),
   );
+  // Pointer events land on whole CSS pixels; the exact drag checks below assume the canvas
+  // content box starts on one (as the M1 spec checks).
+  const origin = await page.evaluate(() => {
+    const canvas = document.querySelector('canvas')!;
+    const rect = canvas.getBoundingClientRect();
+    return { x: rect.left + canvas.clientLeft, y: rect.top + canvas.clientTop };
+  });
+  expect(
+    Number.isInteger(origin.x) && Number.isInteger(origin.y),
+    `canvas content-box origin ${JSON.stringify(origin)} is not a whole CSS pixel`,
+  ).toBe(true);
   /** A page point on screen with the current camera and canvas content box, read at call time. */
   const screen = async (p: Point): Promise<Point> => {
     const { origin, position, zoom } = await page.evaluate(() => {
@@ -228,7 +239,10 @@ async function step(
   verify: (before: string, after: string) => void | Promise<void>,
 ) {
   const before = await documentText(page);
-  const depth = (await session(page)).undoDepth;
+  const { undoDepth: depth, pathEdit } = await session(page);
+  // Every step runs in edit mode, which undo and redo keep (contract section 4).
+  const editing = pathEdit?.id;
+  expect(editing, `${label}: in edit mode`).toBeDefined();
   await run();
   const after = await documentText(page);
   expect(after, `${label}: the document changed`).not.toBe(before);
@@ -240,10 +254,12 @@ async function step(
   await expectClean(page, errors, label);
   await press(page, 'Mod+Z');
   expect(await documentText(page), `${label}: undo`).toBe(before);
+  expect((await session(page)).pathEdit?.id, `${label}: undo keeps edit mode`).toBe(editing);
   await expectMarkers(page);
   await expectClean(page, errors, `${label} undo`);
   await press(page, 'Mod+Shift+Z');
   expect(await documentText(page), `${label}: redo`).toBe(after);
+  expect((await session(page)).pathEdit?.id, `${label}: redo keeps edit mode`).toBe(editing);
   await expectMarkers(page);
   await expectClean(page, errors, `${label} redo`);
   await settle(page);
@@ -527,8 +543,8 @@ test('M3-A12: edits a closed cubic path and an open path in a rotated group', as
       expect(pathNode(after, 'open').path.verbs).toEqual(['move', 'line', 'line', 'line', 'line']);
       const anchors = await anchorsOf(page);
       expect(anchors).toHaveLength(5);
-      // On a line t = σ exactly, so the new anchor lies on the old line; the browser delivers
-      // the pointer in whole CSS pixels, so it is within a pixel diagonal of the middle.
+      // On a line t = σ exactly, so the new anchor lies on the old line; the rotated group puts
+      // the middle at a fractional screen point, so the click is within a pixel diagonal of it.
       const [p, q, r] = [nudged[1]!, anchors[2]!.point, nudged[2]!];
       const cross = (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
       expect(Math.abs(cross) / Math.hypot(r.x - p.x, r.y - p.y)).toBeLessThanOrEqual(NEAR);
