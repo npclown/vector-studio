@@ -391,6 +391,67 @@ describe('M1-A10 selection targets', () => {
     expect(deepest(target, 50, 50)).toBe(null);
   });
 
+  it('clips to a rotated frame in its own space', () => {
+    // F turns by π/4 about (50, 50); x covers all of F's rect.
+    const target = editor(
+      doc(
+        [['p', ['F']]],
+        [
+          { ...container('frame', 'F', 'p', ['x'], f(0, 0, 100, 100)), rotation: Math.PI / 4 },
+          rect('x', 'F', f(-100, -100, 300, 300)),
+        ],
+      ),
+    );
+    expect(deepest(target, 50, 50)).toBe('x');
+    // (2, 2) is F-local (-17.9, 50): outside the rect, inside its page bounds.
+    expect(deepest(target, 2, 2)).toBe(null);
+    // (50, -15) is F-local (4.0, 4.0): above F's page-aligned top edge, inside the clip.
+    expect(deepest(target, 50, -15)).toBe('x');
+  });
+
+  it('masks by a source inside a rotated mask group', () => {
+    // M turns by π/2 about (50, 50); its source covers M-local x 0..50.
+    const target = editor(
+      doc(
+        [['p', ['F']]],
+        [
+          // Unfilled, so a miss inside the mask does not land on F's background.
+          container('frame', 'F', 'p', ['M'], f(0, 0, 100, 100), { fill: null }),
+          {
+            ...container('maskGroup', 'M', 'F', ['src', 'm'], f(0, 0, 100, 100)),
+            rotation: Math.PI / 2,
+          },
+          path('src', 'M', f(0, 0, 50, 100), [0, 0, 1, 0, 1, 1, 0, 1]),
+          rect('m', 'M', f(-50, -50, 200, 200)),
+        ],
+      ),
+    );
+    // (50, 25) is M-local (25, 50), inside the source; (50, 75) is M-local (75, 50).
+    expect(deepest(target, 50, 25)).toBe('m');
+    expect(deepest(target, 50, 75)).toBe(null);
+    expect(clickAt(target, 50, 25)).toEqual(['M']);
+  });
+
+  it('hits a line and its triangle head inside a rotated group', () => {
+    // G turns by π about (50, 5): L runs page (100, 5) to (0, 5) with its tip at (0, 5), base
+    // centre (20, 5) and base corners (20, -5) and (20, 15); radius max(5 / 2, 4 / 10).
+    const stroke = { ...DEFAULT_PATH_STROKE, width: 5 };
+    const target = editor(
+      doc(
+        [['p', ['G']]],
+        [
+          { ...container('group', 'G', 'p', ['L'], f(0, 0, 100, 10)), rotation: Math.PI },
+          line('L', 'G', f(0, 5, 100, 0), { points: [0, 0, 1, 0], stroke, endArrow: 'triangle' }),
+        ],
+      ),
+    );
+    // 1.8 from the head's edge (20, 15) to (0, 5), outside the triangle.
+    expect(deepest(target, 10, 12)).toBe('L');
+    expect(deepest(target, 50, 5)).toBe('L');
+    expect(deepest(target, 10, 18)).toBe(null);
+    expect(clickAt(target, 10, 12)).toEqual(['G']);
+  });
+
   it('a node is hittable only if it and every ancestor are visible', () => {
     const target = editor(scene());
     ok(target, { type: 'setNodeProps', id: 'G2', props: { visible: false } });
