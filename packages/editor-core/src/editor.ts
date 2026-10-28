@@ -58,6 +58,7 @@ import type {
   Platform,
   Query,
   QueryResult,
+  SnapOverlay,
   ToolName,
   ToolOverlay,
   ViewportSize,
@@ -95,6 +96,11 @@ export interface ToolContext {
   execute(command: Command): CommandResult;
   query<Q extends Query>(query: Q): QueryResult<Q>;
   gesture: GestureControl;
+  /**
+   * Sets the snap overlay of the active gesture (M2 contract, section 4.2); ignored without one.
+   * The editor clears it when the gesture commits or cancels.
+   */
+  snap(overlay: SnapOverlay | null): void;
 }
 
 /**
@@ -345,6 +351,19 @@ function copyInput(event: InputEvent): InputEvent {
   return deepFreeze(copy);
 }
 
+/** A copy of a snap overlay with plain points, never the tool's objects. */
+function structuredCopy(overlay: SnapOverlay): SnapOverlay {
+  const segment = (s: SnapOverlay['guides'][number]) => ({
+    a: { x: s.a.x + 0, y: s.a.y + 0 },
+    b: { x: s.b.x + 0, y: s.b.y + 0 },
+  });
+  return {
+    guides: overlay.guides.map(segment),
+    gaps: overlay.gaps.map(segment),
+    angle: overlay.angle,
+  };
+}
+
 const clampZoom = (zoom: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom));
 
 function nodeIn(document: DocumentV2, id: string) {
@@ -357,6 +376,11 @@ function nodeDiffers(a: DocumentV2, b: DocumentV2, id: string): boolean {
   const y = nodeIn(b, id);
   if (x === y) return false;
   return x === undefined || y === undefined || JSON.stringify(x) !== JSON.stringify(y);
+}
+
+/** Whether two documents have the same pages, children orders included. */
+function samePages(a: DocumentV2, b: DocumentV2): boolean {
+  return a.pages === b.pages || JSON.stringify(a.pages) === JSON.stringify(b.pages);
 }
 
 function sorted(ids: Iterable<string>): string[] {
@@ -420,6 +444,10 @@ class EditorCore implements Editor {
   private holding = false;
   private overlay: ToolOverlay | null = null;
   private overlayKey = 'null';
+  /** The snap overlay (M2 contract, section 4.2) and whether snapping is on. */
+  private snap: SnapOverlay | null = null;
+  private snapKey = 'null';
+  private snapping = true;
   private extensionDepth = 0;
   private readonly ids: IdSource;
   private readonly extensions: ExtensionRegistry;
@@ -684,6 +712,18 @@ class EditorCore implements Editor {
         if (this.updateKeymap()) this.refresh({ type: 'session', field: 'keymap' });
         return { ok: true, ids: [] };
       }
+      case 'setSnapping': {
+        if (typeof command.enabled !== 'boolean') {
+          return failure('editor.invalid-command', '/enabled');
+        }
+        if (command.enabled !== this.snapping) {
+          this.snapping = command.enabled;
+          this.refresh({ type: 'session', field: 'snapping' });
+          // Snapping turned off mid-gesture: the overlay clears at once (M2-U3).
+          if (!command.enabled) this.setSnap(null);
+        }
+        return { ok: true, ids: [] };
+      }
       case 'runCommand': {
         const extension =
           typeof command.id === 'string' ? this.extensions.command(command.id) : undefined;
@@ -761,6 +801,10 @@ class EditorCore implements Editor {
           return this.viewportSize;
         case 'keymap':
           return this.keymap;
+        case 'snap':
+          return this.snap;
+        case 'snapping':
+          return this.snapping;
       }
     })();
     return value as QueryResult<Q>;
@@ -866,12 +910,25 @@ class EditorCore implements Editor {
       default:
         break;
     }
+    // Ctrl or Meta pressed during a gesture disables snapping, so the overlay clears at once;
+    // the document follows on the next update (M2-U3).
+    if (
+      event.kind === 'keydown' &&
+      this.gestureState !== null &&
+      (event.modifiers.ctrl ||
+        event.modifiers.meta ||
+        event.key === 'Control' ||
+        event.key === 'Meta')
+    ) {
+      this.setSnap(null);
+    }
     const tool = this.tools.get(this.tool);
     const consumed =
       tool?.input(event, {
         execute: (next) => this.execute(next),
         query: (query) => this.query(query),
         gesture: this.gesture,
+        snap: (overlay) => this.setSnap(overlay),
       }) ?? false;
     // (3) During a gesture only the tool sees events; (4) an unconsumed key-down goes to the
     // keymap; (5) a key-up, double-click and pointer events go to the tool only.
@@ -1096,7 +1153,29 @@ class EditorCore implements Editor {
     return { ok: true, ids: result.created };
   }
 
+  /**
+   * The snap overlay of the active gesture; a value equal to the current one raises no event.
+   * Outside a gesture only clearing is accepted.
+   */
+  private setSnap(overlay: SnapOverlay | null): void {
+    if (overlay !== null && this.gestureState === null) return;
+    const key = JSON.stringify(overlay);
+    if (key === this.snapKey) return;
+    this.snapKey = key;
+    this.snap = overlay === null ? null : deepFreeze(structuredCopy(overlay));
+    this.refresh({ type: 'session', field: 'snap' });
+  }
+
   private commitGesture(): void {
+    try {
+      this.commitGestureState();
+    } finally {
+      // The overlay ends with the gesture (M2 contract, section 4.2).
+      this.setSnap(null);
+    }
+  }
+
+  private commitGestureState(): void {
     const gesture = this.gestureState;
     if (gesture === null) return;
     this.gestureState = null;
@@ -1118,6 +1197,15 @@ class EditorCore implements Editor {
         (id) => nodeDiffers(gesture.base, after, id) || nodeDiffers(live, after, id),
       ),
     );
+    // A commit byte-identical to the pre-gesture document (a move or resize snapped back to its
+    // origin) records no step; the live document returns to the pre-gesture one, and the commit
+    // event, listing every node the gesture touched, lets the renderer resync (M2-U3).
+    if (touched.length === 0 && samePages(gesture.base, after)) {
+      if (live !== gesture.base) {
+        this.changeDocument(gesture.base, 'gesture-commit', sorted(gesture.touched));
+      }
+      return;
+    }
     this.undoStack.push({ before: gesture.base, after, touched });
     this.redoStack = [];
     this.changeDocument(after, 'gesture-commit', changed);
@@ -1148,6 +1236,7 @@ class EditorCore implements Editor {
     const tree = documentTree(this.document);
     const kept = gesture.selection.filter((id) => pageOf(tree, id) === this.activePage);
     this.setSelectionState(normalizeSelection(this.document, this.activePage, kept) ?? []);
+    this.setSnap(null);
   }
 
   private changeDocument(
@@ -1250,6 +1339,8 @@ class EditorCore implements Editor {
       viewport: this.viewport,
       viewportSize: this.viewportSize,
       keymap: this.keymap,
+      snap: this.snap,
+      snapping: this.snapping,
       history: { undoDepth: this.undoStack.length, redoDepth: this.redoStack.length },
     });
   }

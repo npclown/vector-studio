@@ -12,6 +12,7 @@ import {
   type HandleBox,
 } from './handles.js';
 import {
+  boundsOf,
   deepestHit,
   marqueeHits,
   selectionTarget,
@@ -19,8 +20,28 @@ import {
   type CustomGeometry,
 } from './hit-test.js';
 import { resizeInOwnAxes, scaleAbout } from './resize.js';
+import {
+  SNAP_PX,
+  boxOfFrame,
+  snapAngle,
+  snapBox,
+  snapPoint,
+  snapSet,
+  translateBox,
+  type Box,
+  type SnapSet,
+  type ValueIndex,
+} from './snap.js';
 import { documentTree, spaceOf } from './tree.js';
-import type { InputEvent, PagePoint, PathAnchor, SelectionHandles, ToolOverlay } from './types.js';
+import type {
+  InputEvent,
+  Modifiers,
+  PagePoint,
+  PathAnchor,
+  SelectionHandles,
+  SnapOverlay,
+  ToolOverlay,
+} from './types.js';
 
 export {
   HANDLES,
@@ -63,6 +84,41 @@ function zoomOf(context: ToolContext): number {
   return context.query({ type: 'viewport' }).zoom;
 }
 
+/** Whether snapping applies to an event (M2 contract, section 4.2): on, without Ctrl or Meta. */
+function snapsOn(context: ToolContext, modifiers: Modifiers): boolean {
+  return context.query({ type: 'snapping' }) && !modifiers.ctrl && !modifiers.meta;
+}
+
+/** The snap threshold `SNAP_PX / zoom` in page units, at the current zoom. */
+function thresholdOf(context: ToolContext): number {
+  return SNAP_PX / zoomOf(context);
+}
+
+/**
+ * A gesture's candidate set (section 4.2) over the document current at the call, which is the
+ * pre-gesture document when called at press; computed on first use, so a click costs nothing.
+ * The scope owner is the active page until a scope exists (M2-U5).
+ */
+function lazySnapSet(context: ToolContext, moving: readonly string[]): () => SnapSet {
+  const document = context.query({ type: 'document' });
+  const page = context.query({ type: 'activePage' });
+  let set: SnapSet | null = null;
+  return () => (set ??= snapSet(document, page, null, moving));
+}
+
+/** A dragged point (box corner, line end) after snapping, and the overlay to show. */
+function snappedPoint(
+  context: ToolContext,
+  point: PagePoint,
+  modifiers: Modifiers,
+  candidates: () => SnapSet,
+): { point: PagePoint; overlay: SnapOverlay | null } {
+  if (!snapsOn(context, modifiers)) return { point, overlay: null };
+  const result = snapPoint(candidates(), point, thresholdOf(context));
+  if (result.overlay === null) return { point, overlay: null };
+  return { point: { x: point.x + result.ox, y: point.y + result.oy }, overlay: result.overlay };
+}
+
 function boxOf(a: PagePoint, b: PagePoint): Frame {
   return {
     x: Math.min(a.x, b.x),
@@ -76,7 +132,7 @@ function boxOf(a: PagePoint, b: PagePoint): Frame {
 export function createBoxTool(
   type: 'createRectangle' | 'createEllipse' | 'createFrame' = 'createRectangle',
 ): Tool {
-  let drag: { start: PagePoint; id: string | null } | null = null;
+  let drag: { start: PagePoint; id: string | null; candidates: () => SnapSet } | null = null;
   return {
     input(event, context) {
       if (event.kind === 'keydown') {
@@ -89,19 +145,22 @@ export function createBoxTool(
       }
       if (event.kind === 'pointerdown') {
         if (drag !== null || !context.gesture.begin()) return false;
-        drag = { start: event.point, id: null };
+        drag = { start: event.point, id: null, candidates: lazySnapSet(context, []) };
         return true;
       }
       if (!isMoveOrUp(event) || drag === null) return false;
-      // The up point is the drag's end point b, so it updates like a move first.
-      if (drag.id !== null || distance(event.point, drag.start) > 0) {
-        const frame = boxOf(drag.start, event.point);
+      // The up point is the drag's end point b, so it updates like a move first. The dragged
+      // corner snaps (section 4.2).
+      const end = snappedPoint(context, event.point, event.modifiers, drag.candidates);
+      if (drag.id !== null || distance(end.point, drag.start) > 0) {
+        const frame = boxOf(drag.start, end.point);
         if (drag.id === null) {
           const result = context.gesture.update({ type, frame });
           if (result.ok) drag.id = result.ids[0] ?? null;
         } else {
           context.gesture.update({ type: 'setFrames', frames: [{ id: drag.id, frame }] });
         }
+        context.snap(end.overlay);
       }
       if (event.kind === 'pointerup') {
         // A click without movement made no update, so the commit creates nothing.
@@ -145,7 +204,7 @@ function lineEnd(start: PagePoint, point: PagePoint, shift: boolean): PagePoint 
 
 /** The line tool: a drag from start to end creates the line; Shift constrains it to 45° steps. */
 export function createLineTool(): Tool {
-  let drag: { start: PagePoint; id: string | null } | null = null;
+  let drag: { start: PagePoint; id: string | null; candidates: () => SnapSet } | null = null;
   return {
     input(event, context) {
       if (event.kind === 'keydown') {
@@ -158,12 +217,16 @@ export function createLineTool(): Tool {
       }
       if (event.kind === 'pointerdown') {
         if (drag !== null || !context.gesture.begin()) return false;
-        drag = { start: event.point, id: null };
+        drag = { start: event.point, id: null, candidates: lazySnapSet(context, []) };
         return true;
       }
       if (!isMoveOrUp(event) || drag === null) return false;
-      // The up point is the drag's end, so it updates like a move first.
-      const end = lineEnd(drag.start, event.point, event.modifiers.shift);
+      // The up point is the drag's end, so it updates like a move first. Without Shift the end
+      // snaps (section 4.2); the Shift constraint keeps the 45° step instead.
+      const snapped = event.modifiers.shift
+        ? { point: lineEnd(drag.start, event.point, true), overlay: null }
+        : snappedPoint(context, event.point, event.modifiers, drag.candidates);
+      const end = snapped.point;
       if (drag.id !== null || distance(end, drag.start) > 0) {
         if (drag.id === null) {
           const result = context.gesture.update({ type: 'createLine', start: drag.start, end });
@@ -171,6 +234,7 @@ export function createLineTool(): Tool {
         } else {
           context.gesture.edit({ kind: 'line', id: drag.id, start: drag.start, end });
         }
+        context.snap(snapped.overlay);
       }
       if (event.kind === 'pointerup') {
         // A click without movement made no update, so the commit creates nothing.
@@ -328,6 +392,9 @@ type SelectState =
       turns: Map<string, number>;
       moved: boolean;
       hit: string;
+      /** The moving nodes' page-aligned bounds before the gesture, and the snap candidates. */
+      bounds: Box | null;
+      candidates: () => SnapSet;
     }
   | {
       kind: 'resize';
@@ -336,6 +403,9 @@ type SelectState =
       handles: HandleBox;
       handle: Handle;
       moved: boolean;
+      /** The pre-gesture page-aligned bounds when the handle box is page-aligned, else null. */
+      bounds: Box | null;
+      candidates: () => SnapSet;
     }
   | {
       kind: 'rotate';
@@ -349,6 +419,7 @@ type SelectState =
        */
       single: { turn: number; chain: number; frame: Frame; rotation: number } | null;
       moved: boolean;
+      candidates: () => SnapSet;
     }
   | { kind: 'marquee'; start: PagePoint; current: PagePoint; additive: boolean };
 
@@ -455,6 +526,10 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     const handle = handles === null || movesSmall ? null : handleAt(handles, event.point, zoom);
     if (handles !== null && handle !== null) {
       if (context.gesture.begin()) {
+        // Resize snaps when the handle box is page-aligned (section 4.2): modes `p5` and `map`,
+        // and a `single` box whose page rotation normalizes to 0.
+        const aligned = handles.mode !== 'single' || normalizeRotation(handles.turn) === 0;
+        const bounds = aligned ? boundsOf(document, selection) : null;
         state = {
           kind: 'resize',
           start: event.point,
@@ -462,6 +537,8 @@ export function createSelectTool(custom: CustomGeometry): Tool {
           handles,
           handle,
           moved: false,
+          bounds: bounds === null ? null : boxOfFrame(bounds),
+          candidates: lazySnapSet(context, selection),
         };
       }
       return;
@@ -476,6 +553,7 @@ export function createSelectTool(custom: CustomGeometry): Tool {
           pivot: handleCentre(handles),
           single: selection.length === 1 ? singleOf(document, selection[0]!) : null,
           moved: false,
+          candidates: lazySnapSet(context, selection),
         };
       }
       return;
@@ -499,7 +577,9 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     if (!selection.includes(hit)) context.execute({ type: 'setSelection', ids: [hit] });
     if (context.gesture.begin()) {
       const ids = context.query({ type: 'selection' });
-      const tree = documentTree(context.query({ type: 'document' }));
+      const current = context.query({ type: 'document' });
+      const tree = documentTree(current);
+      const bounds = boundsOf(current, ids);
       state = {
         kind: 'move',
         start: event.point,
@@ -507,8 +587,50 @@ export function createSelectTool(custom: CustomGeometry): Tool {
         turns: new Map(ids.map((id) => [id, spaceOf(tree, tree.node(id)!.parent).rotation])),
         moved: false,
         hit: target,
+        bounds: bounds === null ? null : boxOfFrame(bounds),
+        candidates: lazySnapSet(context, ids),
       };
     }
+  }
+
+  /**
+   * Snaps a page-aligned resize (section 4.2): only the edges the handle moves are offered, and
+   * the snapped box `B′` is the pre-gesture box with those edges moved.
+   */
+  function snapResize(
+    current: Extract<SelectState, { kind: 'resize' }>,
+    dx: number,
+    dy: number,
+    modifiers: Modifiers,
+    context: ToolContext,
+  ): { dx: number; dy: number; overlay: SnapOverlay | null } {
+    const { bounds, handle, handles } = current;
+    if (bounds === null || !snapsOn(context, modifiers)) return { dx, dy, overlay: null };
+    const edges = (fraction: number, size: number): ValueIndex[] =>
+      fraction === 0.5 || size === 0 ? [] : [fraction === 0 ? 0 : 2];
+    const x = edges(handle[0], handles.box.width);
+    const y = edges(handle[1], handles.box.height);
+    const moved = (low: number, high: number, index: readonly ValueIndex[], delta: number) => {
+      const a = index[0] === 0 ? low + delta : low;
+      const b = index[0] === 2 ? high + delta : high;
+      return [Math.min(a, b), Math.max(a, b)] as const;
+    };
+    const result = snapBox(
+      current.candidates(),
+      {
+        box: translateBox(bounds, dx, dy),
+        x,
+        y,
+        spacing: false,
+        snapped: (ox, oy) => {
+          const [left, right] = moved(bounds.left, bounds.right, x, dx + ox);
+          const [top, bottom] = moved(bounds.top, bounds.bottom, y, dy + oy);
+          return { left, top, right, bottom };
+        },
+      },
+      thresholdOf(context),
+    );
+    return { dx: dx + result.ox, dy: dy + result.oy, overlay: result.overlay };
   }
 
   function resize(
@@ -577,32 +699,46 @@ export function createSelectTool(custom: CustomGeometry): Tool {
         angle = normalizeRotation(Math.round(angle / ROTATE_STEP) * ROTATE_STEP);
       }
       context.gesture.replace([{ type: 'rotateNodes', ids, angle, pivot }]);
+      // The overlay shows the stepped angle of a several-node Shift rotation (section 4.2).
+      context.snap(event.modifiers.shift ? { guides: [], gaps: [], angle } : null);
       return;
     }
     // One node: the pivot is its own centre, so it is omitted and the node keeps its stored x
     // and y (section 4.1, one-node rule); the default pivot equals the one fixed at press.
-    if (!event.modifiers.shift) {
+    const result = normalizeRotation(single.turn + angle);
+    let target: number | null;
+    if (event.modifiers.shift) {
+      // Shift: the resulting page rotation steps to `normalize(k · π/12)`.
+      target = normalizeRotation(Math.round(result / ROTATE_STEP) * ROTATE_STEP);
+    } else if (snapsOn(context, event.modifiers)) {
+      // Rotation-angle snapping (section 4.2): within the 6 px arc at the pointer.
+      const r = distance(q, pivot);
+      target = snapAngle(current.candidates(), result, r, thresholdOf(context));
+    } else {
+      target = null;
+    }
+    if (target === null) {
       context.gesture.replace([{ type: 'rotateNodes', ids, angle }]);
+      context.snap(null);
       return;
     }
-    // Shift: the resulting page rotation steps to `normalize(k · π/12)`. The adjustment
-    // `wrap(target − turn)` reaches it only up to binary64 rounding, so an absolute set after it
-    // stores exactly `normalize(target − chain)` (exactly the target for a page-root node).
-    const result = normalizeRotation(single.turn + angle);
-    const target = normalizeRotation(Math.round(result / ROTATE_STEP) * ROTATE_STEP);
+    // The adjustment `wrap(target − turn)` reaches the target only up to binary64 rounding, so
+    // an absolute set after it stores exactly `normalize(target − chain)` (exactly the target
+    // for a page-root node).
     const rotation = normalizeRotation(target - single.chain);
-    // Stepped back to the stored rotation: the pre-gesture document, so no step at commit.
+    // Back at the stored rotation: the pre-gesture document, so no step at commit.
     if (rotation === single.rotation) {
       context.gesture.replace([]);
-      return;
+    } else {
+      context.gesture.replace([
+        { type: 'rotateNodes', ids, angle: normalizeRotation(target - single.turn) },
+        {
+          type: 'setFrames',
+          frames: [{ id: ids[0]!, frame: single.frame, rotation }],
+        },
+      ]);
     }
-    context.gesture.replace([
-      { type: 'rotateNodes', ids, angle: normalizeRotation(target - single.turn) },
-      {
-        type: 'setFrames',
-        frames: [{ id: ids[0]!, frame: single.frame, rotation }],
-      },
-    ]);
+    context.snap({ guides: [], gaps: [], angle: target });
   }
 
   function pointerMove(event: Pointer, context: ToolContext): void {
@@ -616,19 +752,37 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     if (!state.moved && dx === 0 && dy === 0) return;
     state.moved = true;
     if (state.kind === 'resize') {
-      resize(state, dx, dy, context);
+      const snapped = snapResize(state, dx, dy, event.modifiers, context);
+      resize(state, snapped.dx, snapped.dy, context);
+      context.snap(snapped.overlay);
       return;
     }
     if (state.kind === 'rotate') {
       rotateTo(state, event, context);
       return;
     }
+    // The move snaps the moving nodes' joint box (section 4.2), then each node moves by the
+    // snapped page delta turned into its parent space.
+    let mx = dx;
+    let my = dy;
+    let overlay: SnapOverlay | null = null;
+    if (state.bounds !== null && snapsOn(context, event.modifiers)) {
+      const result = snapBox(
+        state.candidates(),
+        { box: translateBox(state.bounds, dx, dy), x: [0, 1, 2], y: [0, 1, 2], spacing: true },
+        thresholdOf(context),
+      );
+      mx = dx + result.ox;
+      my = dy + result.oy;
+      overlay = result.overlay;
+    }
     const { turns } = state;
     const frames = [...state.frames].map(([id, frame]) => {
-      const delta = rotate(-turns.get(id)!, dx, dy);
+      const delta = rotate(-turns.get(id)!, mx, my);
       return { id, frame: { ...frame, x: frame.x + delta.x, y: frame.y + delta.y } };
     });
     context.gesture.update({ type: 'setFrames', frames });
+    context.snap(overlay);
   }
 
   function pointerUp(event: Pointer, context: ToolContext): void {

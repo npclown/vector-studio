@@ -90,6 +90,24 @@ export type ToolOverlay =
   | Readonly<{ kind: 'marquee'; frame: Frame }>
   | Readonly<{ kind: 'path'; anchors: readonly PathAnchor[] }>;
 
+/** A page-space segment of the snap overlay. */
+export type Segment = Readonly<{ a: PagePoint; b: PagePoint }>;
+
+/**
+ * The snap overlay (M2 contract, section 4.2), in page space: alignment guides, equal-spacing
+ * gaps and the snapped rotation angle of the current gesture update. Null when nothing snapped;
+ * cleared when the gesture commits or cancels.
+ */
+export type SnapOverlay = Readonly<{
+  guides: readonly Segment[];
+  gaps: readonly Segment[];
+  /**
+   * The resulting page rotation of a one-node rotation that snapped (angle snap or Shift step),
+   * the stepped angle of a several-node Shift rotation, else null.
+   */
+  angle: number | null;
+}>;
+
 /** A prop that the node's type does not have is `editor.invalid-command`. */
 export type NodeProps = Readonly<{
   name?: string;
@@ -214,7 +232,9 @@ export type SessionCommand =
   | Readonly<{ type: 'zoomBy'; factor: number; about?: PagePoint }>
   | Readonly<{ type: 'zoomTo'; target: 'fit' | 'selection' | 'actual' }>
   /** Replaces the host keymap layer. */
-  | Readonly<{ type: 'setKeymap'; bindings: readonly KeyBinding[] }>;
+  | Readonly<{ type: 'setKeymap'; bindings: readonly KeyBinding[] }>
+  /** Turns snapping on or off (M2 contract, section 4.2); Ctrl or Meta held also disables it. */
+  | Readonly<{ type: 'setSnapping'; enabled: boolean }>;
 
 export type Command =
   | DocumentCommand
@@ -280,6 +300,10 @@ export type EditorSnapshot = Readonly<{
   history: HistoryState;
   /** The active tool's overlay, as the `overlay` query returns it after the last command. */
   overlay: ToolOverlay | null;
+  /** The snap overlay of the active gesture (M2 contract, section 4.2), or null. */
+  snap: SnapOverlay | null;
+  /** Whether snapping is on; true by default. */
+  snapping: boolean;
 }>;
 
 export type Query =
@@ -297,7 +321,10 @@ export type Query =
   | Readonly<{ type: 'handles' }>
   | Readonly<{ type: 'viewportSize' }>
   /** The effective key bindings in canonical form, sorted by chord. */
-  | Readonly<{ type: 'keymap' }>;
+  | Readonly<{ type: 'keymap' }>
+  /** The snap overlay of the active gesture, or null. */
+  | Readonly<{ type: 'snap' }>
+  | Readonly<{ type: 'snapping' }>;
 
 /**
  * The select tool's resize handle box for the selection, in page space (M1 contract, section
@@ -343,7 +370,11 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' }
                       ? ViewportSize | null
                       : Q extends { type: 'keymap' }
                         ? readonly KeyBinding[]
-                        : number;
+                        : Q extends { type: 'snap' }
+                          ? SnapOverlay | null
+                          : Q extends { type: 'snapping' }
+                            ? boolean
+                            : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';
@@ -359,7 +390,15 @@ export type EditorEvent =
   | Readonly<{
       type: 'session';
       field:
-        'selection' | 'tool' | 'viewport' | 'overlay' | 'activePage' | 'viewportSize' | 'keymap';
+        | 'selection'
+        | 'tool'
+        | 'viewport'
+        | 'overlay'
+        | 'activePage'
+        | 'viewportSize'
+        | 'keymap'
+        | 'snap'
+        | 'snapping';
     }>
   | DiagnosticEvent;
 
