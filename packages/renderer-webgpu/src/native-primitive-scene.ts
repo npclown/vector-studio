@@ -1,5 +1,6 @@
 import type { ResourceDescriptor } from '@vector-studio/contracts';
 import type {
+  ClipMaskPacketLevel,
   ClipPacketPart,
   MeshFillDraw,
   MeshPacketPart,
@@ -18,9 +19,12 @@ import {
   CLIP_BINDINGS,
   CLIP_BIND_GROUP_INDEX,
   CLIP_FRAME_SIZE,
+  CLIP_MASK_FORMAT,
   CLIP_STATE_SIZE,
   MESH_FILL_CLIP_SHADER,
+  MESH_FILL_MASK_SHADER,
   PRIMITIVE_ANALYTIC_CLIP_SHADER,
+  PRIMITIVE_ANALYTIC_MASK_SHADER,
   clipStateStride,
   clipVariantKey,
   createClipBindGroupLayoutDescriptor,
@@ -108,6 +112,7 @@ const COPY_DESTINATION_USAGE = 0x08;
 const VERTEX_BUFFER_USAGE = 0x20;
 const INDEX_BUFFER_USAGE = 0x10;
 const RENDER_ATTACHMENT_USAGE = 0x10;
+const TEXTURE_BINDING_USAGE = 0x04;
 const FRAGMENT_STAGE = 0x2;
 
 interface NativeCanvasContextPort extends WebGpuCanvasContextPort {
@@ -167,7 +172,38 @@ interface ClipPipelineState {
   /** Null without the mesh path. */
   readonly mesh: GPURenderPipeline | null;
   readonly meshJoint: GPURenderPipeline | null;
+  /** U4: the mask pass pipelines, drawing a source's coverage into an `r8unorm` texture. */
+  readonly maskAnalytic: GPURenderPipeline;
+  /** Null without the mesh path; a mesh source then covers nothing. */
+  readonly maskMesh: GPURenderPipeline | null;
+  /** U4: the 1 × 1 texture bound for states without a mask level, never read. */
+  readonly defaultMask: GPUTexture;
 }
+
+/** U4: a mask level's coverage texture, kept across frames under the level's key. */
+interface MaskEntry {
+  readonly id: string;
+  readonly levelId: string;
+  readonly texture: GPUTexture;
+  readonly width: number;
+  readonly height: number;
+  key: string;
+  /** The bind group over the clip buffer named by `bindGroupBuffer` and this texture. */
+  bindGroup: GPUBindGroup | null;
+  bindGroupBuffer: string | null;
+}
+
+/** U4: a mask level of a validated packet. */
+type PlannedMask = Readonly<{
+  level: ClipMaskPacketLevel;
+  entry: MaskEntry;
+  /** True when the entry was created for this packet and is not yet in the cache. */
+  created: boolean;
+  /** True when the texture is rendered this frame (a new entry or a changed key). */
+  render: boolean;
+  /** The state index of the level's mask pass. */
+  passState: number;
+}>;
 
 /** P4 contract, U3: the clip buffer, frame lanes at offset 0 and state i at i * stride. */
 interface ClipBufferState {
@@ -188,7 +224,52 @@ type ValidatedClip = Readonly<{
   stride: number;
   frame: Uint8Array;
   states: ReadonlyMap<number, Uint8Array>;
+  /** U4: the frame's mask levels in pass order, and each content state's innermost level. */
+  masks: readonly PlannedMask[];
+  stateMasks: ReadonlyMap<number, string>;
 }> | null;
+
+/** U4: a mask pass's transient attachment, released after the frame's submission. */
+type Transient = Readonly<{ id: string; texture: GPUTexture }>;
+
+type MaskSourceDraw = Readonly<{ instance: number; firstTriangle: number; triangleCount: number }>;
+
+/** U4: the mesh source draws of the clip part's mask levels, for the mesh part's checks. */
+function maskSourceDraws(packet: PrimitivePacket): MaskSourceDraw[] {
+  const masks: unknown = packet.clip?.masks;
+  if (!Array.isArray(masks)) return [];
+  const draws: MaskSourceDraw[] = [];
+  for (const level of masks as readonly ClipMaskPacketLevel[]) {
+    const source: unknown = level?.source;
+    if (typeof source !== 'object' || source === null) continue;
+    const mesh = source as Partial<Extract<ClipMaskPacketLevel['source'], { kind: 'mesh' }>>;
+    if (mesh.kind === 'mesh' && typeof mesh.draw === 'object' && mesh.draw !== null) {
+      draws.push(mesh.draw);
+    }
+  }
+  return draws;
+}
+
+/** U4: a primitive source names a written slot; a mesh source names a node and a checked draw. */
+function validMaskSource(source: unknown, validated: ValidatedPacket): boolean {
+  if (typeof source !== 'object' || source === null) return false;
+  const value = source as Partial<{ kind: unknown; slot: unknown; nodeId: unknown; draw: unknown }>;
+  if (value.kind === 'primitive') {
+    const slot = value.slot;
+    return (
+      typeof slot === 'number' &&
+      Number.isSafeInteger(slot) &&
+      validated.initialized.transforms.has(slot) &&
+      validated.initialized.geometry.has(slot) &&
+      validated.initialized.styles.has(slot)
+    );
+  }
+  return (
+    value.kind === 'mesh' &&
+    typeof value.nodeId === 'string' &&
+    (value.draw === null || (typeof value.draw === 'object' && value.draw !== undefined))
+  );
+}
 
 type ValidatedMesh =
   | Readonly<{ skipped: true }>
@@ -314,6 +395,11 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   #nextClipBuffer = 1;
   /** @internal Tests only (P4-A06): state records written to the clip buffer so far. */
   public clipStateWritesForTesting = 0;
+  /** U4 (Mask cache): the mask textures, by mask container id. */
+  readonly #masks = new Map<string, MaskEntry>();
+  #nextMask = 1;
+  #nextMaskPass = 1;
+  #maskPasses = 0;
   #retiredArenas: ArenaBase[] = [];
   #nextArenaId = 1;
   #nextSubmissionSerial = 1;
@@ -350,14 +436,14 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     // pipelines (three at 4x); none without the countPass option. E17 section 3: the mesh path
     // adds the reset pipeline, and the count pass its own reset pipeline over the same module.
     const countModules = count === null ? 0 : count.readout === null ? 1 : 2;
-    // P4 contract, U3: one clip module and pipeline, two modules and three pipelines with the
-    // mesh path; none without the clipPipeline option.
-    const clipModules = clip === null ? 0 : clip.mesh === null ? 1 : 2;
+    // P4 contract, U3 and U4: the clip and mask modules (two, four with the mesh path) and
+    // pipelines (two, five with the mesh path); none without the clipPipeline option.
+    const clipModules = clip === null ? 0 : clip.mesh === null ? 2 : 4;
     this.shaderModulesCreated = 1 + meshShaderModulesCreated + countModules + clipModules;
     this.pipelinesCreated =
       (mesh === null ? 1 : 4) +
       (count === null ? 0 : countModules + 2) +
-      (clip === null ? 0 : clip.mesh === null ? 1 : 3);
+      (clip === null ? 0 : clip.mesh === null ? 2 : 5);
     this.#device = device;
     this.#context = context;
     this.#format = format;
@@ -398,6 +484,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       this.#target = copyTarget(target);
       return;
     }
+    // P4 section 4, Resources: a resize releases the mask textures.
+    this.#releaseMasks();
     if (target.width === 0 || target.height === 0) {
       this.#releaseAttachment();
       this.#target = copyTarget(target);
@@ -512,7 +600,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     let mesh: ValidatedMesh | null = null;
     if (packet.mesh !== undefined) {
       try {
-        mesh = this.#preflightMesh(packet.mesh, packet.draws.length);
+        mesh = this.#preflightMesh(packet.mesh, packet.draws.length, maskSourceDraws(packet));
       } catch (error) {
         if (validated.createdArena) this.#releaseArena(arena);
         return frozenResult(
@@ -524,7 +612,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     const meshDraws = mesh !== null && !mesh.skipped ? mesh.draws : [];
     let clip: ValidatedClip;
     try {
-      clip = this.#preflightClip(packet, meshDraws);
+      clip = this.#preflightClip(packet, meshDraws, validated);
     } catch (error) {
       if (validated.createdArena) this.#releaseArena(arena);
       if (mesh !== null && !mesh.skipped && mesh.createdArena && mesh.arena !== null) {
@@ -534,6 +622,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         error instanceof AllocationError ? 'allocation-failed' : 'invalid-packet',
       );
     }
+    // U4: the mask passes' transient attachments, released after the submission.
+    const transients: Transient[] = [];
     try {
       if (clip !== null) this.#writeClip(clip);
       // P4 section 4, Resources: a frame with no clip part releases the clip buffer, so a scene
@@ -569,6 +659,9 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       const presentationView = presentation.createView();
       const multisampleView = this.#attachment?.createView();
       const encoder = this.#device.createCommandEncoder({ label: 'vector-studio/primitive-frame' });
+      if (clip !== null) {
+        this.#encodeMaskPasses(encoder, clip, arena, meshArena, transients);
+      }
       const stencilView = this.#stencilAttachment?.createView();
       const pass = encoder.beginRenderPass({
         label: 'vector-studio/primitive-pass',
@@ -596,11 +689,14 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       // P4 contract, U3: a clipped draw uses its pipeline's clip variant, with the clip bind
       // group at its state's dynamic offset; a draw without a clip state is encoded exactly as
       // before. Without the clip variants a clipped draw is not drawn (fail closed).
+      // U4: a state under a mask level binds that level's bind group, which holds its texture.
       const clipPipelines = clip === null ? null : this.#clip;
       let clipBoundState = 0;
       const bindClip = (state: number) => {
         if (state === clipBoundState) return;
-        pass.setBindGroup(CLIP_BIND_GROUP_INDEX, clip!.buffer.bindGroup, [state * clip!.stride]);
+        pass.setBindGroup(CLIP_BIND_GROUP_INDEX, this.#clipBindGroup(clip!, state), [
+          state * clip!.stride,
+        ]);
         clipBoundState = state;
       };
       const bindAnalytic = (clipped: boolean) => {
@@ -709,6 +805,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       this.#latestSubmittedSerial = serial;
       this.#commitPacket(packet, validated);
       if (mesh !== null && !mesh.skipped) this.#commitMesh(mesh);
+      this.#releaseTransients(transients);
+      this.#commitMasks(clip);
       this.#observeCompletion();
       return Object.freeze({
         status: 'submitted',
@@ -724,6 +822,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       if (mesh !== null && !mesh.skipped && mesh.createdArena && mesh.arena !== null) {
         this.#releaseArena(mesh.arena);
       }
+      if (clip !== null) this.#discardCreatedMasks(clip.masks);
+      this.#releaseTransients(transients);
       return frozenResult('submission-failed');
     }
   }
@@ -754,6 +854,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     for (const arena of this.#retiredArenas) release(() => this.#releaseArena(arena));
     this.#retiredArenas = [];
     release(() => this.#releaseClipBuffer());
+    release(() => this.#releaseMasks());
+    if (this.#clip !== null) release(() => this.#clip!.defaultMask.destroy());
     release(() => this.#pipelineCache.dispose());
     release(() => this.#vertexBuffer.destroy());
     release(() => this.#indexBuffer.destroy());
@@ -762,11 +864,18 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   }
 
   /**
-   * P4 contract, U3: checks the clip part against the draws that will be encoded and packs the
-   * records. A draw's clip state must name a record of the part; a part without a clipped draw
-   * is checked and writes nothing. Mask levels are refused until U4.
+   * P4 contract, U3 and U4: checks the clip part against the draws that will be encoded and
+   * packs the records. A draw's clip state must name a record of the part; a part without a
+   * clipped draw is checked and writes nothing. Each mask level must follow its parent, lie in
+   * the target and name a written primitive slot or a checked mesh draw; a content state under a
+   * mask level must name a level of the part. Each level's mask pass takes the state index after
+   * `maxIndex` in level order; a level whose key or size changed gets a new texture.
    */
-  #preflightClip(packet: PrimitivePacket, meshDraws: readonly MeshFillDraw[]): ValidatedClip {
+  #preflightClip(
+    packet: PrimitivePacket,
+    meshDraws: readonly MeshFillDraw[],
+    validated: ValidatedPacket,
+  ): ValidatedClip {
     const used = new Set<number>();
     for (const draw of [...packet.draws, ...meshDraws]) {
       const state: unknown = draw.clipState;
@@ -784,6 +893,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     if (
       part.layoutVersion !== 0 ||
       !isArrayValue(part.states) ||
+      !isArrayValue(part.masks) ||
       !isPositiveSafeInteger(part.maxIndex) ||
       typeof part.origin !== 'object' ||
       part.origin === null ||
@@ -811,26 +921,346 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     }
     const frame = packClipFrame(part, packet.frame.devicePixelRatio);
     if (frame === null) throw new Error('Clip frame lanes are not finite.');
+    const target = packet.frame;
+    const levels = new Map<string, ClipMaskPacketLevel>();
+    const passStates = new Map<number, Uint8Array>();
+    for (const [index, level] of part.masks.entries()) {
+      const device = level.device;
+      if (
+        typeof level.id !== 'string' ||
+        levels.has(level.id) ||
+        (level.parent !== null && !levels.has(level.parent)) ||
+        typeof level.key !== 'string' ||
+        !isArrayValue(level.rects) ||
+        ![device.x, device.y].every((value) => Number.isSafeInteger(value) && value >= 0) ||
+        !isPositiveSafeInteger(device.width) ||
+        !isPositiveSafeInteger(device.height) ||
+        device.x + device.width > target.width ||
+        device.y + device.height > target.height ||
+        !validMaskSource(level.source, validated)
+      ) {
+        throw new Error('Invalid mask level.');
+      }
+      levels.set(level.id, level);
+      const parent = level.parent === null ? null : levels.get(level.parent)!;
+      const bytes = packClipState(
+        { rects: level.rects, masks: parent === null ? [] : [parent.id] },
+        part.origin,
+        {
+          maskOffset:
+            parent === null ? null : [device.x - parent.device.x, device.y - parent.device.y],
+          pixelShift: [device.x, device.y],
+        },
+      );
+      if (bytes === null) throw new Error('Unsupported mask pass record.');
+      passStates.set(part.maxIndex + 1 + index, bytes);
+    }
     const states = new Map<number, Uint8Array>();
+    const stateMasks = new Map<number, string>();
     for (const record of records.values()) {
-      const bytes = packClipState(record, part.origin);
+      const innermost = record.masks.at(-1);
+      let bytes: Uint8Array | null;
+      if (innermost === undefined) {
+        bytes = packClipState(record, part.origin);
+      } else {
+        const level = levels.get(innermost);
+        if (level === undefined) throw new Error('A clip state names a missing mask level.');
+        stateMasks.set(record.index, innermost);
+        bytes = packClipState(record, part.origin, {
+          maskOffset: [-level.device.x, -level.device.y],
+          pixelShift: [0, 0],
+        });
+      }
       if (bytes === null) throw new Error('Unsupported clip state record.');
       states.set(record.index, bytes);
     }
     if (this.#clip === null || used.size === 0) return null;
+    for (const [index, bytes] of passStates) states.set(index, bytes);
+    const capacity = part.maxIndex + part.masks.length;
     const stride = this.#clipStride();
     const current = this.#clipBuffer;
-    const createdBuffer = current === undefined || current.capacity < part.maxIndex;
-    const buffer = createdBuffer
-      ? this.#createClipBuffer(nextPowerOfTwo(part.maxIndex), stride)
-      : current;
-    return Object.freeze({
-      buffer,
-      createdBuffer,
-      stride,
-      frame: new Uint8Array(frame.buffer),
-      states,
-    });
+    const createdBuffer = current === undefined || current.capacity < capacity;
+    const planned: PlannedMask[] = [];
+    try {
+      for (const [index, level] of part.masks.entries()) {
+        const cached = this.#masks.get(level.id);
+        const reuse =
+          cached !== undefined &&
+          cached.width === level.device.width &&
+          cached.height === level.device.height;
+        const entry = reuse ? cached : this.#createMaskEntry(level);
+        planned.push(
+          Object.freeze({
+            level,
+            entry,
+            created: !reuse,
+            render: !reuse || cached.key !== level.key,
+            passState: part.maxIndex + 1 + index,
+          }),
+        );
+      }
+      const buffer = createdBuffer
+        ? this.#createClipBuffer(nextPowerOfTwo(capacity), stride)
+        : current;
+      return Object.freeze({
+        buffer,
+        createdBuffer,
+        stride,
+        frame: new Uint8Array(frame.buffer),
+        states,
+        masks: Object.freeze(planned),
+        stateMasks,
+      });
+    } catch (error) {
+      this.#discardCreatedMasks(planned);
+      throw error;
+    }
+  }
+
+  /** U4: creates and tracks a mask level's texture; its key is set once it is rendered. */
+  #createMaskEntry(level: ClipMaskPacketLevel): MaskEntry {
+    const id = `primitive/${this.#generation}/mask-${this.#nextMask++}`;
+    const { width, height } = level.device;
+    const texture = this.#createTrackedTexture(id, width, height, CLIP_MASK_FORMAT, 1, 1, true);
+    return {
+      id,
+      levelId: level.id,
+      texture,
+      width,
+      height,
+      key: '',
+      bindGroup: null,
+      bindGroupBuffer: null,
+    };
+  }
+
+  /**
+   * Creates a 2D texture and its accounting entry; an `AllocationError` leaves neither. A
+   * sampled texture can also be bound; any texture is a render attachment.
+   */
+  #createTrackedTexture(
+    id: string,
+    width: number,
+    height: number,
+    format: GPUTextureFormat,
+    sampleCount: number,
+    bytesPerTexel: number,
+    sampled: boolean,
+  ): GPUTexture {
+    const maximum = safeLimit(this.#device.limits.maxTextureDimension2D, 0);
+    if (width > maximum || height > maximum) {
+      throw new AllocationError();
+    }
+    let texture: GPUTexture;
+    try {
+      texture = this.#device.createTexture({
+        label: id,
+        size: { width, height },
+        sampleCount,
+        format,
+        usage: RENDER_ATTACHMENT_USAGE | (sampled ? TEXTURE_BINDING_USAGE : 0),
+      });
+    } catch (error) {
+      throw new AllocationError(error);
+    }
+    try {
+      this.#resources.track(id, {
+        category: 'texture',
+        dimension: '2d',
+        width,
+        height,
+        depthOrArrayLayers: 1,
+        mipLevelCount: 1,
+        sampleCount,
+        bytesPerTexel,
+      });
+    } catch (error) {
+      texture.destroy();
+      throw new AllocationError(error);
+    }
+    return texture;
+  }
+
+  /** Destroys a tracked texture and releases its accounting entry. */
+  #destroyTrackedTexture(id: string, texture: GPUTexture): void {
+    try {
+      texture.destroy();
+    } finally {
+      this.#resources.release(id);
+    }
+  }
+
+  /** U4: releases the entries a failed packet created; cached entries keep their content. */
+  #discardCreatedMasks(planned: readonly PlannedMask[]): void {
+    for (const mask of planned) {
+      if (mask.created) this.#destroyTrackedTexture(mask.entry.id, mask.entry.texture);
+    }
+  }
+
+  /**
+   * U4 (Mask cache): after a submission, the rendered entries take their level's key, created
+   * entries replace the cached ones, and every entry the frame did not use is released.
+   */
+  #commitMasks(clip: ValidatedClip): void {
+    const used = new Set<string>();
+    for (const mask of clip?.masks ?? []) {
+      if (mask.render) this.#maskPasses += 1;
+      mask.entry.key = mask.level.key;
+      used.add(mask.entry.id);
+      const previous = this.#masks.get(mask.level.id);
+      if (previous !== undefined && previous !== mask.entry) {
+        this.#destroyTrackedTexture(previous.id, previous.texture);
+      }
+      this.#masks.set(mask.level.id, mask.entry);
+    }
+    for (const [levelId, entry] of this.#masks) {
+      if (used.has(entry.id)) continue;
+      this.#masks.delete(levelId);
+      this.#destroyTrackedTexture(entry.id, entry.texture);
+    }
+  }
+
+  /** U4: releases every mask texture (resize, dispose). */
+  #releaseMasks(): void {
+    const entries = [...this.#masks.values()];
+    this.#masks.clear();
+    let firstError: unknown;
+    for (const entry of entries) {
+      try {
+        this.#destroyTrackedTexture(entry.id, entry.texture);
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    if (firstError !== undefined) throw asError(firstError, 'Mask release failed.');
+  }
+
+  /** U4 (P4-A08): mask passes run so far; a pass runs only for a level whose key changed. */
+  public get maskPasses(): number {
+    return this.#maskPasses;
+  }
+
+  /** The bind group of a state: its innermost mask level's, or the buffer's default. */
+  #clipBindGroup(clip: NonNullable<ValidatedClip>, state: number): GPUBindGroup {
+    const levelId = clip.stateMasks.get(state);
+    if (levelId === undefined) return clip.buffer.bindGroup;
+    return clip.masks.find((mask) => mask.level.id === levelId)!.entry.bindGroup!;
+  }
+
+  /**
+   * U4: encodes the mask pass of each level whose texture is rendered this frame, parents
+   * first, before the main pass. The pass's attachment covers the level's device rect; the
+   * viewport keeps the target's pixel grid, offset by the rect's origin. A primitive source is
+   * drawn by its slot; a mesh source with its draw, under the E17-K2 write-once stencil at
+   * reference 1. At 4x the pass renders into a transient multisample target resolved into the
+   * texture.
+   */
+  #encodeMaskPasses(
+    encoder: GPUCommandEncoder,
+    clip: NonNullable<ValidatedClip>,
+    arena: ArenaState,
+    meshArena: MeshArenaState | null,
+    transients: Transient[],
+  ): void {
+    const pipelines = this.#clip!;
+    const target = this.#target!;
+    for (const mask of clip.masks) {
+      if (!mask.render) continue;
+      const { level, entry } = mask;
+      const source = level.source;
+      const meshDraw =
+        source.kind === 'mesh' && meshArena !== null && pipelines.maskMesh !== null
+          ? source.draw
+          : null;
+      const prefix = `primitive/${this.#generation}/mask-pass-${this.#nextMaskPass++}`;
+      let colorView = entry.texture.createView();
+      let resolveTarget: GPUTextureView | undefined;
+      if (this.sampleCount === 4) {
+        const id = `${prefix}/color`;
+        const texture = this.#createTrackedTexture(
+          id,
+          entry.width,
+          entry.height,
+          CLIP_MASK_FORMAT,
+          4,
+          1,
+          false,
+        );
+        transients.push({ id, texture });
+        resolveTarget = colorView;
+        colorView = texture.createView();
+      }
+      let stencilView: GPUTextureView | undefined;
+      if (meshDraw !== null) {
+        const id = `${prefix}/stencil`;
+        const texture = this.#createTrackedTexture(
+          id,
+          entry.width,
+          entry.height,
+          MESH_STENCIL_FORMAT,
+          this.sampleCount,
+          1,
+          false,
+        );
+        transients.push({ id, texture });
+        stencilView = texture.createView();
+      }
+      // A mesh source without the mesh path, or whose draw did not reach the packet, covers
+      // nothing: the pass clears the texture and draws no source.
+      const pass = encoder.beginRenderPass({
+        label: `vector-studio/mask-pass/${level.id}`,
+        colorAttachments: [
+          {
+            view: colorView,
+            ...(resolveTarget === undefined ? {} : { resolveTarget }),
+            clearValue: { r: 0, g: 0, b: 0, a: 0 },
+            loadOp: 'clear',
+            storeOp: resolveTarget === undefined ? 'store' : 'discard',
+          },
+        ],
+        ...(stencilView === undefined
+          ? {}
+          : {
+              depthStencilAttachment: {
+                view: stencilView,
+                stencilClearValue: 0,
+                stencilLoadOp: 'clear',
+                stencilStoreOp: 'discard',
+              },
+            }),
+      });
+      pass.setViewport(-level.device.x, -level.device.y, target.width, target.height, 0, 1);
+      const parentGroup =
+        level.parent === null
+          ? clip.buffer.bindGroup
+          : clip.masks.find((other) => other.level.id === level.parent)!.entry.bindGroup!;
+      if (source.kind === 'primitive') {
+        pass.setPipeline(pipelines.maskAnalytic);
+        pass.setBindGroup(0, arena.bindGroup);
+        pass.setBindGroup(CLIP_BIND_GROUP_INDEX, parentGroup, [mask.passState * clip.stride]);
+        pass.setVertexBuffer(0, this.#vertexBuffer, 0, 32);
+        pass.setIndexBuffer(this.#indexBuffer, 'uint16', 0, 12);
+        pass.drawIndexed(6, 1, 0, 0, source.slot);
+      } else if (meshDraw !== null) {
+        pass.setPipeline(pipelines.maskMesh!);
+        pass.setBindGroup(0, meshArena!.bindGroup);
+        pass.setBindGroup(CLIP_BIND_GROUP_INDEX, parentGroup, [mask.passState * clip.stride]);
+        pass.setStencilReference(1);
+        pass.draw(3 * meshDraw.triangleCount, 1, 3 * meshDraw.firstTriangle, meshDraw.instance);
+      }
+      pass.end();
+    }
+  }
+
+  /** Destroys the frame's transient attachments and releases their accounting entries. */
+  #releaseTransients(transients: Transient[]): void {
+    for (const transient of transients.splice(0)) {
+      try {
+        this.#destroyTrackedTexture(transient.id, transient.texture);
+      } catch {
+        // Accounting cleanup is best effort.
+      }
+    }
   }
 
   /** Destroys the clip buffer and its accounting entry; a later clipped frame creates one. */
@@ -885,6 +1315,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
             binding: CLIP_BINDINGS.state,
             resource: { buffer, offset: 0, size: CLIP_STATE_SIZE },
           },
+          { binding: CLIP_BINDINGS.mask, resource: this.#clip!.defaultMask.createView() },
         ],
       });
     } catch (error) {
@@ -893,6 +1324,25 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       throw new AllocationError(error);
     }
     return { id, buffer, bindGroup, capacity, written: new Map(), frame: null };
+  }
+
+  /** U4: a mask level's bind group, over the clip buffer and the level's texture. */
+  #maskBindGroup(buffer: ClipBufferState, entry: MaskEntry): GPUBindGroup {
+    return this.#device.createBindGroup({
+      label: `${entry.id}/bind-group`,
+      layout: this.#clip!.bindGroupLayout,
+      entries: [
+        {
+          binding: CLIP_BINDINGS.frame,
+          resource: { buffer: buffer.buffer, offset: 0, size: CLIP_FRAME_SIZE },
+        },
+        {
+          binding: CLIP_BINDINGS.state,
+          resource: { buffer: buffer.buffer, offset: 0, size: CLIP_STATE_SIZE },
+        },
+        { binding: CLIP_BINDINGS.mask, resource: entry.texture.createView() },
+      ],
+    });
   }
 
   /**
@@ -911,6 +1361,11 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           this.#resources.release(previous.id);
         }
       }
+    }
+    for (const mask of clip.masks) {
+      if (mask.entry.bindGroupBuffer === target.id) continue;
+      mask.entry.bindGroup = this.#maskBindGroup(target, mask.entry);
+      mask.entry.bindGroupBuffer = target.id;
     }
     if (target.frame === null || !bytesEqual(target.frame, clip.frame)) {
       this.#device.queue.writeBuffer(target.buffer, 0, clip.frame, 0, clip.frame.byteLength);
@@ -1159,7 +1614,11 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
    * come in fixed order; writes follow P1's write rules; every draw has a valid position, an
    * initialized instance and a nonempty triangle range inside the meshTriangles capacity.
    */
-  #preflightMesh(part: MeshPacketPart, analyticDraws: number): ValidatedMesh {
+  #preflightMesh(
+    part: MeshPacketPart,
+    analyticDraws: number,
+    maskDraws: readonly MaskSourceDraw[] = [],
+  ): ValidatedMesh {
     if (
       typeof part !== 'object' ||
       part === null ||
@@ -1317,7 +1776,23 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       }
       previousPosition = draw.position;
     }
-    if (part.draws.length > 0 && !frameInitialized) {
+    // P4 contract, U4: a mask level's mesh source draw is checked like a plain mesh draw.
+    for (const draw of maskDraws) {
+      if (
+        !Number.isSafeInteger(draw.instance) ||
+        draw.instance < 0 ||
+        draw.instance >= instanceCapacity ||
+        !instances.has(draw.instance) ||
+        !Number.isSafeInteger(draw.firstTriangle) ||
+        draw.firstTriangle < 0 ||
+        !Number.isSafeInteger(draw.triangleCount) ||
+        draw.triangleCount <= 0 ||
+        draw.firstTriangle + draw.triangleCount > triangleCapacity
+      ) {
+        throw new TypeError('Invalid mask source draw.');
+      }
+    }
+    if (part.draws.length + maskDraws.length > 0 && !frameInitialized) {
       throw new TypeError('Mesh frame data is uninitialized.');
     }
 
@@ -2061,6 +2536,7 @@ export function createNativePrimitiveSceneCreation(
     // frame path. A failure leaves them unavailable: unclipped draws are unaffected, and a
     // clipped draw is not drawn.
     let clip: ClipPipelineState | null = null;
+    let defaultMask: GPUTexture | undefined;
     if (options.clipPipeline === true && !disposed) {
       const clipTracked: string[] = [];
       const trackClip = (id: string, descriptor: ResourceDescriptor) => {
@@ -2098,8 +2574,37 @@ export function createNativePrimitiveSceneCreation(
             ),
         );
         trackClip(`${prefix}/clip-pipeline`, { category: 'render-pipeline' });
+        // U4: the mask passes' pipelines and the default mask texture.
+        const maskShader = device.createShaderModule({
+          label: `${prefix}/mask-shader`,
+          code: PRIMITIVE_ANALYTIC_MASK_SHADER,
+        });
+        trackClip(`${prefix}/mask-shader`, { category: 'shader-module' });
+        const maskAnalytic = await device.createRenderPipelineAsync(
+          maskDescriptor(
+            createPrimitivePipelineDescriptor(maskShader, clipPipelineLayout, format, sampleCount),
+          ),
+        );
+        trackClip(`${prefix}/mask-pipeline`, { category: 'render-pipeline' });
+        defaultMask = device.createTexture({
+          label: `${prefix}/clip-default-mask`,
+          size: { width: 1, height: 1 },
+          format: CLIP_MASK_FORMAT,
+          usage: TEXTURE_BINDING_USAGE,
+        });
+        trackClip(`${prefix}/clip-default-mask`, {
+          category: 'texture',
+          dimension: '2d',
+          width: 1,
+          height: 1,
+          depthOrArrayLayers: 1,
+          mipLevelCount: 1,
+          sampleCount: 1,
+          bytesPerTexel: 1,
+        });
         let meshClip: GPURenderPipeline | null = null;
         let meshJointClip: GPURenderPipeline | null = null;
+        let maskMesh: GPURenderPipeline | null = null;
         if (mesh !== null) {
           const meshClipLayout = device.createPipelineLayout({
             label: `${prefix}/mesh-clip-pipeline-layout`,
@@ -2131,14 +2636,35 @@ export function createNativePrimitiveSceneCreation(
           trackClip(`${prefix}/mesh-clip-pipeline`, { category: 'render-pipeline' });
           meshJointClip = await meshVariant('joint');
           trackClip(`${prefix}/mesh-joint-clip-pipeline`, { category: 'render-pipeline' });
+          const maskMeshShader = device.createShaderModule({
+            label: `${prefix}/mask-mesh-shader`,
+            code: MESH_FILL_MASK_SHADER,
+          });
+          trackClip(`${prefix}/mask-mesh-shader`, { category: 'shader-module' });
+          maskMesh = await device.createRenderPipelineAsync(
+            maskDescriptor(
+              createMeshPipelineDescriptor(
+                maskMeshShader,
+                meshClipLayout,
+                format,
+                sampleCount,
+                'fill',
+              ),
+            ),
+          );
+          trackClip(`${prefix}/mask-mesh-pipeline`, { category: 'render-pipeline' });
         }
         clip = Object.freeze({
           bindGroupLayout: clipBindGroupLayout,
           analytic,
           mesh: meshClip,
           meshJoint: meshJointClip,
+          maskAnalytic,
+          maskMesh,
+          defaultMask,
         });
       } catch {
+        defaultMask?.destroy();
         for (const id of clipTracked) {
           tracked.delete(id);
           try {
@@ -2186,6 +2712,22 @@ export function createNativePrimitiveSceneCreation(
   });
 
   return Object.freeze({ result, dispose });
+}
+
+/**
+ * P4 contract, U4: a mask pass pipeline, its base descriptor drawing into the `r8unorm` mask
+ * texture under the same blend and sample count.
+ */
+function maskDescriptor(base: GPURenderPipelineDescriptor): GPURenderPipelineDescriptor {
+  const fragment = base.fragment!;
+  return {
+    ...base,
+    label: `${base.label ?? 'vector-studio/pipeline'}+mask-v0`,
+    fragment: {
+      ...fragment,
+      targets: [...fragment.targets].map((target) => ({ ...target!, format: CLIP_MASK_FORMAT })),
+    },
+  };
 }
 
 /** P4 contract, U3: a clip variant's descriptor, labelled apart from its base pipeline. */

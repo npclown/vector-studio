@@ -70,6 +70,8 @@ export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
    * or false: a draw with a clip state is not drawn.
    */
   readonly clipPipelineAvailable?: boolean;
+  /** P4 contract, U4 (Mask cache): the mask passes this generation has run. */
+  readonly maskPasses?: number;
   setTarget(target: PrimitiveTarget): void;
   submitPrimitivePacket: PrimitivePacketConsumer['submitPrimitivePacket'];
   /**

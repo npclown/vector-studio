@@ -1,20 +1,21 @@
 import type { RenderNodeSnapshot, SceneAffine, SceneClip } from '@vector-studio/contracts';
 import {
   PrimitiveRendererService,
-  ResourceAccounting,
   type PrimitivePacket,
-  type PrimitiveSubmitResult,
   type PrimitiveTarget,
 } from '@vector-studio/renderer-core';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  CLIP_STATE_HEADER_SIZE,
   CLIP_STATE_SIZE,
   MESH_FILL_CLIP_SHADER,
+  MESH_FILL_MASK_SHADER,
   MESH_FILL_CLIP_SHADER_KEY,
   MESH_JOINT_CLIP_SHADER_KEY,
   PRIMITIVE_ANALYTIC_CLIP_SHADER,
   PRIMITIVE_ANALYTIC_CLIP_SHADER_KEY,
+  PRIMITIVE_ANALYTIC_MASK_SHADER,
   clipStateStride,
   clipVariantKey,
   packClipFrame,
@@ -22,10 +23,9 @@ import {
 } from '../../packages/renderer-webgpu/src/clip-pipeline.js';
 import { MESH_FILL_SHADER } from '../../packages/renderer-webgpu/src/mesh-fill-shader.js';
 import { meshPipelineKey } from '../../packages/renderer-webgpu/src/mesh-pipeline.js';
-import { createNativePrimitiveSceneCreation } from '../../packages/renderer-webgpu/src/native-primitive-scene.js';
 import { PRIMITIVE_ANALYTIC_SHADER } from '../../packages/renderer-webgpu/src/primitive-analytic-shader.js';
 import { primitivePipelineKey } from '../../packages/renderer-webgpu/src/primitive-pipeline.js';
-import type { WebGpuCanvasContextPort } from '../../packages/renderer-webgpu/src/webgpu-platform.js';
+import { nativeFixture, nativeScene, submitted } from '../support/p4-native-fixture.js';
 import {
   ScriptedStrokeMeshPort,
   createStrokeHarness,
@@ -39,118 +39,7 @@ import { createCountingPort, pathNode } from '../support/v3a-path-harness.js';
 // variants, the `clips: 'rect'` service option, and the stroked path under a clip owed by U2.
 // Fake device seams only; the rendered evidence (P4-A02, A09) is U5's headed run.
 
-type Call = readonly [string, ...unknown[]];
 const IDENTITY: SceneAffine = [1, 0, 0, 1, 0, 0];
-
-function nativeFixture(options: Readonly<{ failPipeline?: string }> = {}) {
-  const calls: Call[] = [];
-  const pipelineLabels: string[] = [];
-  const descriptors: GPURenderPipelineDescriptor[] = [];
-  const modules: string[] = [];
-  const writes: { label: string; offset: number; bytes: number }[] = [];
-  const device = {
-    limits: {
-      minStorageBufferOffsetAlignment: 256,
-      minUniformBufferOffsetAlignment: 256,
-      maxStorageBufferBindingSize: 128 * 1024 * 1024,
-      maxUniformBufferBindingSize: 65536,
-      maxBufferSize: 256 * 1024 * 1024,
-      maxStorageBuffersPerShaderStage: 8,
-      maxUniformBuffersPerShaderStage: 12,
-      maxBindingsPerBindGroup: 1000,
-      maxBindGroups: 4,
-    },
-    createBuffer: vi.fn((descriptor: GPUBufferDescriptor) => ({
-      label: descriptor.label,
-      size: descriptor.size,
-      destroy: vi.fn(),
-    })),
-    createBindGroupLayout: vi.fn((descriptor: GPUBindGroupLayoutDescriptor) => ({
-      label: descriptor.label,
-    })),
-    createPipelineLayout: vi.fn((descriptor: GPUPipelineLayoutDescriptor) => ({
-      label: descriptor.label,
-      groups: [...descriptor.bindGroupLayouts],
-    })),
-    createBindGroup: vi.fn((descriptor: GPUBindGroupDescriptor) => ({ label: descriptor.label })),
-    createShaderModule: vi.fn((descriptor: GPUShaderModuleDescriptor) => {
-      modules.push(descriptor.code);
-      return { label: descriptor.label };
-    }),
-    createRenderPipelineAsync: vi.fn((descriptor: GPURenderPipelineDescriptor) => {
-      const label = descriptor.label ?? '';
-      if (options.failPipeline !== undefined && label.includes(options.failPipeline)) {
-        return Promise.reject(new Error('injected pipeline failure'));
-      }
-      pipelineLabels.push(label);
-      descriptors.push(descriptor);
-      return Promise.resolve({ label });
-    }),
-    createTexture: vi.fn(() => ({ createView: vi.fn(() => ({})), destroy: vi.fn() })),
-    createCommandEncoder: vi.fn(() => ({
-      beginRenderPass: vi.fn(() => ({
-        setPipeline: (pipeline: { label: string }) => calls.push(['setPipeline', pipeline.label]),
-        setBindGroup: (index: number, group: { label: string }, offsets?: number[]) =>
-          calls.push(['setBindGroup', index, group.label, ...(offsets ?? [])]),
-        setVertexBuffer: () => calls.push(['setVertexBuffer']),
-        setIndexBuffer: () => calls.push(['setIndexBuffer']),
-        drawIndexed: (...args: number[]) => calls.push(['drawIndexed', ...args]),
-        draw: (...args: number[]) => calls.push(['draw', ...args]),
-        setStencilReference: (reference: number) => calls.push(['setStencilReference', reference]),
-        end: () => calls.push(['end']),
-      })),
-      finish: vi.fn(() => ({})),
-    })),
-    queue: {
-      writeBuffer: vi.fn((buffer: { label: string }, offset: number, bytes: Uint8Array) =>
-        writes.push({ label: buffer.label, offset, bytes: bytes.byteLength }),
-      ),
-      submit: vi.fn(),
-      onSubmittedWorkDone: vi.fn(() => new Promise<void>(() => {})),
-    },
-  } as unknown as GPUDevice;
-  const context = {
-    native: { getCurrentTexture: () => ({ createView: () => ({}) }) },
-    configure: vi.fn(),
-    unconfigure: vi.fn(),
-  } as unknown as WebGpuCanvasContextPort;
-  return { device, context, calls, pipelineLabels, descriptors, modules, writes };
-}
-
-async function nativeScene(
-  fixture: ReturnType<typeof nativeFixture>,
-  options: Readonly<{ meshPipeline?: boolean; clipPipeline?: boolean }> = {
-    meshPipeline: true,
-    clipPipeline: true,
-  },
-) {
-  const accounting = new ResourceAccounting();
-  const creation = createNativePrimitiveSceneCreation(
-    fixture.device,
-    fixture.context,
-    'bgra8unorm',
-    1,
-    accounting,
-    options,
-  );
-  const { scene } = await creation.result;
-  const target: PrimitiveTarget = {
-    generation: 1,
-    surfaceRevision: 1,
-    width: 640,
-    height: 360,
-    devicePixelRatio: 1,
-    sampleCount: scene.sampleCount,
-    targetFormat: 'bgra8unorm',
-  };
-  scene.setTarget(target);
-  return { scene, creation, accounting, target };
-}
-
-function submitted(result: PrimitiveSubmitResult) {
-  if (result.status !== 'submitted') throw new Error(`not submitted: ${JSON.stringify(result)}`);
-  return result.receipt;
-}
 
 function group(
   id: string,
@@ -272,7 +161,9 @@ describe('P4 U3 clip record packing', () => {
     expect(bytes.byteLength).toBe(CLIP_STATE_SIZE);
     const view = new DataView(bytes.buffer);
     expect(view.getUint32(0, true)).toBe(1);
-    const lanes = Array.from({ length: 8 }, (_, lane) => view.getFloat32(16 + lane * 4, true));
+    const lanes = Array.from({ length: 8 }, (_, lane) =>
+      view.getFloat32(CLIP_STATE_HEADER_SIZE + lane * 4, true),
+    );
     expect(lanes).toEqual([2, 0, 0, 0.5, Math.fround(2e6 - 10), Math.fround(-1e6 + 4), 30, 40]);
   });
 
@@ -322,8 +213,8 @@ describe('P4 U3 pipeline creation', () => {
     expect(scene).toMatchObject({
       clipPipelineAvailable: true,
       meshPipelineAvailable: true,
-      pipelinesCreated: 7,
-      shaderModulesCreated: 5,
+      pipelinesCreated: 9,
+      shaderModulesCreated: 7,
     });
     expect(fixture.pipelineLabels).toEqual([
       'vector-studio/p1-analytic-primitive-stencil-4x',
@@ -331,8 +222,10 @@ describe('P4 U3 pipeline creation', () => {
       'vector-studio/p3-mesh-joint-4x',
       'vector-studio/p3-mesh-stencil-reset-4x',
       'vector-studio/p1-analytic-primitive-stencil-4x+clip-v0',
+      'vector-studio/p1-analytic-primitive-4x+mask-v0',
       'vector-studio/p3-mesh-fill-4x+clip-v0',
       'vector-studio/p3-mesh-joint-4x+clip-v0',
+      'vector-studio/p3-mesh-fill-4x+mask-v0',
     ]);
     const byLabel = (label: string) =>
       fixture.descriptors.find((descriptor) => descriptor.label === label)!;
@@ -361,9 +254,11 @@ describe('P4 U3 pipeline creation', () => {
     ]);
     expect(fixture.modules.filter((code) => code.includes('clipCoverage'))).toEqual([
       PRIMITIVE_ANALYTIC_CLIP_SHADER,
+      PRIMITIVE_ANALYTIC_MASK_SHADER,
       MESH_FILL_CLIP_SHADER,
+      MESH_FILL_MASK_SHADER,
     ]);
-    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(7);
+    expect(accounting.snapshot().byCategory['render-pipeline'].live).toBe(9);
     creation.dispose();
     expect(accounting.snapshot().live).toBe(0);
   });
@@ -385,12 +280,13 @@ describe('P4 U3 pipeline creation', () => {
     const { scene, creation } = await nativeScene(fixture, { clipPipeline: true });
     expect(scene).toMatchObject({
       clipPipelineAvailable: true,
-      pipelinesCreated: 2,
-      shaderModulesCreated: 2,
+      pipelinesCreated: 3,
+      shaderModulesCreated: 3,
     });
     expect(fixture.pipelineLabels).toEqual([
       'vector-studio/p1-analytic-primitive-4x',
       'vector-studio/p1-analytic-primitive-4x+clip-v0',
+      'vector-studio/p1-analytic-primitive-4x+mask-v0',
     ]);
     creation.dispose();
   });

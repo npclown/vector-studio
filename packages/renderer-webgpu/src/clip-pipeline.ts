@@ -23,19 +23,24 @@ export const CLIP_BIND_GROUP_INDEX = 1;
 export const CLIP_MAX_RECTS = 32;
 export const CLIP_FRAME_SIZE = 16;
 export const CLIP_RECT_SIZE = 32;
-/** The state record: a 16-byte header and the fixed rect array. */
-export const CLIP_STATE_SIZE = 16 + CLIP_MAX_RECTS * CLIP_RECT_SIZE;
+/** U4: the state header, rect count, mask flag, mask texel offset and pixel shift. */
+export const CLIP_STATE_HEADER_SIZE = 32;
+/** The state record: the header and the fixed rect array. */
+export const CLIP_STATE_SIZE = CLIP_STATE_HEADER_SIZE + CLIP_MAX_RECTS * CLIP_RECT_SIZE;
 
-export const CLIP_BINDINGS = Object.freeze({ frame: 0, state: 1 });
+export const CLIP_BINDINGS = Object.freeze({ frame: 0, state: 1, mask: 2 });
 
 const FRAGMENT_VISIBILITY = 0x2;
 
 /**
  * The clip block. `clipCoverage` is P4-K1 for every rect level of the draw's state, multiplied:
  * P1's signed rectangle distance at radius 0 (the radius-0 terms of `roundedRectangleDistance`,
- * in the same order) and P1's `analyticCoverage` rule. The pixel is mapped to the world through
- * the camera rebased to the packet origin, then into each rect's frame; the loop bound is read
- * from a uniform, so `fwidth` stays in uniform control flow.
+ * in the same order) and P1's `analyticCoverage` rule. The pixel, shifted by the state's pixel
+ * shift into target pixels (non-zero only in a mask pass, whose attachment covers the level's
+ * device rect), is mapped to the world through the camera rebased to the packet origin, then
+ * into each rect's frame; the loop bound is read from a uniform, so `fwidth` stays in uniform
+ * control flow. U4: a state with a mask multiplies by its mask texture's texel at the pixel
+ * plus the state's texel offset, and by 0 outside the texture.
  */
 const CLIP_BLOCK = /* wgsl */ `
 struct ClipFrame {
@@ -52,14 +57,16 @@ struct ClipRect {
 
 struct ClipState {
   rectCount: u32,
-  padding0: u32,
-  padding1: u32,
-  padding2: u32,
+  hasMask: u32,
+  maskOffset: vec2i,
+  pixelShift: vec2f,
+  padding: vec2f,
   rects: array<ClipRect, ${CLIP_MAX_RECTS}>,
 };
 
 @group(${CLIP_BIND_GROUP_INDEX}) @binding(${CLIP_BINDINGS.frame}) var<uniform> clipFrame: ClipFrame;
 @group(${CLIP_BIND_GROUP_INDEX}) @binding(${CLIP_BINDINGS.state}) var<uniform> clipState: ClipState;
+@group(${CLIP_BIND_GROUP_INDEX}) @binding(${CLIP_BINDINGS.mask}) var clipMask: texture_2d<f32>;
 
 fn clipSegmentDistance(point: vec2f, start: vec2f, end: vec2f) -> f32 {
   let delta = end - start;
@@ -82,7 +89,7 @@ fn clipRectangleDistance(point: vec2f, size: vec2f) -> f32 {
 }
 
 fn clipCoverage(pixel: vec2f) -> f32 {
-  let world = clipFrame.cameraMinusOrigin + pixel * clipFrame.pixelSize;
+  let world = clipFrame.cameraMinusOrigin + (pixel + clipState.pixelShift) * clipFrame.pixelSize;
   let count = min(clipState.rectCount, ${CLIP_MAX_RECTS}u);
   var coverage = 1.0;
   for (var index = 0u; index < count; index += 1u) {
@@ -91,6 +98,15 @@ fn clipCoverage(pixel: vec2f) -> f32 {
     let contourDistance = clipRectangleDistance(local, rect.size);
     let filterWidth = max(fwidth(contourDistance), 1e-6);
     coverage *= clamp(0.5 - contourDistance / filterWidth, 0.0, 1.0);
+  }
+  if (clipState.hasMask != 0u) {
+    let texel = vec2i(floor(pixel)) + clipState.maskOffset;
+    let size = vec2i(textureDimensions(clipMask));
+    if (all(texel >= vec2i(0)) && all(texel < size)) {
+      coverage *= textureLoad(clipMask, texel, 0).r;
+    } else {
+      coverage = 0.0;
+    }
   }
   return coverage;
 }
@@ -163,6 +179,68 @@ fn meshJointFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {
 }
 `;
 
+export const PRIMITIVE_ANALYTIC_MASK_SHADER_KEY = `${PRIMITIVE_ANALYTIC_SHADER_KEY}+mask-v0`;
+
+/**
+ * U4 (P4-K2): the mask pass's primitive source module. The vertex stage reads the source slot
+ * from the instance index instead of the order buffer; the fragment stage writes the fill
+ * area's P1 coverage times the pass's clip coverage to every channel, whatever the source's
+ * style, so the `r8unorm` mask texture holds opaque-white coverage.
+ */
+export const PRIMITIVE_ANALYTIC_MASK_SHADER = `${replaceOnce(
+  replaceOnce(
+    PRIMITIVE_ANALYTIC_SHADER,
+    'let slot = order[instanceIndex];',
+    'let slot = instanceIndex;',
+  ),
+  '@fragment\nfn fragmentMain(input: VertexOutput) -> @location(0) vec4f {',
+  'fn shadePrimitive(input: VertexOutput) -> vec4f {',
+)}${CLIP_BLOCK}
+@fragment
+fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
+  let geometry = geometries[input.slot];
+  var contourDistance = LARGE_DISTANCE;
+  if (geometry.kind == RECTANGLE_KIND) {
+    contourDistance = roundedRectangleDistance(input.localPosition, geometry.size, geometry.radii);
+  } else if (geometry.kind == ELLIPSE_KIND) {
+    contourDistance = ellipseDistance(input.localPosition - geometry.size * 0.5, geometry.size * 0.5);
+  }
+  let coverage = analyticCoverage(contourDistance);
+  let clip = clipCoverage(input.position.xy);
+  return vec4f(coverage * clip);
+}
+`;
+
+export const MESH_FILL_MASK_SHADER_KEY = `${MESH_FILL_SHADER_KEY}+mask-v0`;
+
+/**
+ * U4 (P4-K2): the mask pass's mesh source module. The P3 coverage is evaluated at the target
+ * pixel (the pass pixel plus the pass's pixel shift), since the fringe coverage reads the pixel
+ * position; the fill area's coverage times the pass's clip coverage goes to every channel,
+ * whatever the source's style. A zero-coverage fragment is discarded, so the E17-K2 write-once
+ * stencil stays free for the overlapping triangle that covers the sample.
+ */
+export const MESH_FILL_MASK_SHADER = `${replaceOnce(
+  MESH_FILL_SHADER,
+  '@fragment\nfn meshFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {',
+  'fn meshShade(input: MeshVertexOutput) -> vec4f {',
+)}${CLIP_BLOCK}
+@fragment
+fn meshFragmentMain(input: MeshVertexOutput) -> @location(0) vec4f {
+  let clip = clipCoverage(input.position.xy);
+  let triangle = triangles[input.triangle];
+  let instance = instances[input.instance];
+  let coverage = meshCoverage(input.position.xy + clipState.pixelShift, triangle, instance);
+  if (coverage == 0.0) {
+    discard;
+  }
+  return vec4f(coverage * clip);
+}
+`;
+
+/** U4: the mask texture format. */
+export const CLIP_MASK_FORMAT = 'r8unorm';
+
 export function createClipBindGroupLayoutDescriptor(): GPUBindGroupLayoutDescriptor {
   return {
     label: 'vector-studio/p4-clip-layout',
@@ -176,6 +254,11 @@ export function createClipBindGroupLayoutDescriptor(): GPUBindGroupLayoutDescrip
         binding: CLIP_BINDINGS.state,
         visibility: FRAGMENT_VISIBILITY,
         buffer: { type: 'uniform', hasDynamicOffset: true, minBindingSize: CLIP_STATE_SIZE },
+      },
+      {
+        binding: CLIP_BINDINGS.mask,
+        visibility: FRAGMENT_VISIBILITY,
+        texture: { sampleType: 'float', viewDimension: '2d', multisampled: false },
       },
     ],
   };
@@ -212,29 +295,63 @@ export function packClipFrame(part: ClipPacketPart, devicePixelRatio: number): F
 }
 
 /**
- * A state record: the rect count, then per rect the world-to-local linear part, the translation
+ * U4: the mask lanes of a state. `maskOffset` maps a pass pixel to a texel of the state's mask
+ * texture (null without a mask); `pixelShift` maps a pass pixel to a target pixel.
+ */
+export type ClipMaskLanes = Readonly<{
+  maskOffset: readonly [number, number] | null;
+  pixelShift: readonly [number, number];
+}>;
+
+/** A record's lanes: the rect levels it multiplies, and the mask levels it lies under. */
+export type ClipStateInput = Readonly<{
+  rects: ClipPacketPart['states'][number]['rects'];
+  masks: readonly string[];
+}>;
+
+/**
+ * A state record: the header, then per rect the world-to-local linear part, the translation
  * rebased to the packet origin (`L·origin + t`, in binary64 before the one rounding, so the GPU
- * never cancels large terms) and the size. Null when a lane is not a finite binary32, a size is
- * negative, or the record has a mask level (U4), no rect or too many rects.
+ * never cancels large terms) and the size. Without `lanes` (U3) the record must have no mask
+ * level and at least one rect; with them (U4) a record under a mask level needs a mask offset,
+ * and a record may have no rect. Null when a lane is not a finite binary32, a size is negative,
+ * a shift or offset is not an integer, or those rules fail.
  */
 export function packClipState(
-  record: ClipPacketPart['states'][number],
+  record: ClipStateInput,
   origin: ClipPacketPart['origin'],
+  lanes?: ClipMaskLanes,
 ): Uint8Array | null {
   if (
-    record.masks.length !== 0 ||
-    record.rects.length === 0 ||
     record.rects.length > CLIP_MAX_RECTS ||
     record.rects.some((rect) => !(rect.width >= 0 && rect.height >= 0))
   ) {
     return null;
   }
+  if (lanes === undefined) {
+    if (record.masks.length !== 0 || record.rects.length === 0) return null;
+  } else {
+    if ((record.masks.length !== 0) !== (lanes.maskOffset !== null)) return null;
+    const integers = [...(lanes.maskOffset ?? []), ...lanes.pixelShift];
+    if (!integers.every((value) => Number.isSafeInteger(value) && Math.abs(value) <= 0x7fffffff)) {
+      return null;
+    }
+  }
   const bytes = new Uint8Array(CLIP_STATE_SIZE);
   const view = new DataView(bytes.buffer);
   view.setUint32(0, record.rects.length, true);
+  if (lanes !== undefined) {
+    if (lanes.maskOffset !== null) {
+      view.setUint32(4, 1, true);
+      view.setInt32(8, lanes.maskOffset[0], true);
+      view.setInt32(12, lanes.maskOffset[1], true);
+    }
+    view.setFloat32(16, lanes.pixelShift[0], true);
+    view.setFloat32(20, lanes.pixelShift[1], true);
+  }
   for (const [index, rect] of record.rects.entries()) {
     const [a, b, c, d, e, f] = rect.toLocal;
-    const lanes = [
+    const values = [
       a,
       b,
       c,
@@ -244,8 +361,8 @@ export function packClipState(
       rect.width,
       rect.height,
     ];
-    const base = 16 + index * CLIP_RECT_SIZE;
-    for (const [lane, value] of lanes.entries()) {
+    const base = CLIP_STATE_HEADER_SIZE + index * CLIP_RECT_SIZE;
+    for (const [lane, value] of values.entries()) {
       const rounded = Math.fround(value);
       if (!Number.isFinite(rounded)) return null;
       view.setFloat32(base + lane * 4, rounded, true);

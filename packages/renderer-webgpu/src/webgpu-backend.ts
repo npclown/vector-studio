@@ -360,6 +360,14 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     this.#device.triggerValidationErrorForTesting();
   }
 
+  /**
+   * @internal Tests only (P4 contract, U4 Mask cache): the current generation's mask passes so
+   * far; 0 without a primitive scene or the clip pipeline.
+   */
+  getMaskPassesForTesting(): number {
+    return this.#primitiveScene?.maskPasses ?? 0;
+  }
+
   destroyDeviceForTesting(): void {
     if (this.#state !== 'ready' || !this.#device) {
       throw new Error('The backend must be ready before destroying the device.');
