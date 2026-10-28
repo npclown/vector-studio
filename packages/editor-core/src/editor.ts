@@ -21,6 +21,7 @@ import {
   TOOL_NAMES,
   effectiveKeymap,
   eventChord,
+  isSpaceKey,
   validateLayer,
   type CanonicalBinding,
 } from './keymap.js';
@@ -32,7 +33,14 @@ import {
   createSelectTool,
   selectionHandles,
 } from './tools.js';
-import { ancestors, documentClipViolation, documentTree, nodePath, pageOf } from './tree.js';
+import {
+  ancestors,
+  documentClipViolation,
+  documentTree,
+  isGroup,
+  nodePath,
+  pageOf,
+} from './tree.js';
 import type {
   Command,
   CommandResult,
@@ -775,7 +783,7 @@ class EditorCore implements Editor {
         return { ...this.wheel(event), consumed: true };
       case 'keydown':
       case 'keyup':
-        if (event.key === ' ') {
+        if (isSpaceKey(event)) {
           this.spaceHeld = event.kind === 'keydown';
           return done(true);
         }
@@ -860,19 +868,26 @@ class EditorCore implements Editor {
         return this.run({ type: 'setSelection', ids: page.children });
       }
       case 'group':
-      case 'maskGroup':
-        return selection.length === 0
-          ? nothing
-          : this.run({
-              type: 'groupNodes',
-              ids: selection,
-              kind: binding.action === 'group' ? 'group' : 'maskGroup',
-            });
-      case 'ungroup':
-        // `ungroupNodes` takes one node, so the action needs a selection of one.
-        return selection.length === 1
-          ? this.run({ type: 'ungroupNodes', id: selection[0]! })
-          : nothing;
+      case 'maskGroup': {
+        if (selection.length === 0) return nothing;
+        // As the next-host toolbar does, the new group becomes the selection.
+        const result = this.run({
+          type: 'groupNodes',
+          ids: selection,
+          kind: binding.action === 'group' ? 'group' : 'maskGroup',
+        });
+        if (result.ok) this.run({ type: 'setSelection', ids: result.ids });
+        return result;
+      }
+      case 'ungroup': {
+        // `ungroupNodes` takes one group; any other selection does nothing (still consumed).
+        const node = selection.length === 1 ? this.document.nodes[selection[0]!] : undefined;
+        if (!isGroup(node)) return nothing;
+        const released = node.children;
+        const result = this.run({ type: 'ungroupNodes', id: node.id });
+        if (result.ok) this.run({ type: 'setSelection', ids: released });
+        return result;
+      }
       case 'zoomIn':
         return this.run({ type: 'zoomBy', factor: 2 });
       case 'zoomOut':

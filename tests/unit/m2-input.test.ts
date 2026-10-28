@@ -11,7 +11,14 @@ import {
 } from '../../packages/editor-core/src/index.js';
 // Source imports: the gesture API and the canvas input mapping are package-internal.
 import { internalsOf } from '../../packages/editor-core/src/editor.js';
-import { CanvasInput, WHEEL_LINE_PX, type KeyLike } from '../../packages/react/src/canvas-input.js';
+import {
+  CanvasInput,
+  WHEEL_LINE_PX,
+  attachCanvasListeners,
+  syncViewportSize,
+  type KeyLike,
+  type ListenerTarget,
+} from '../../packages/react/src/canvas-input.js';
 
 // MVP M2-U1, M2-A01 (M2 contract, section 2): the M2-I1 input kinds, the M2-I2 dispatch order,
 // the M2-I3 `consumed` flag, cancel restoring the selection, and the M2-I4 EditorCanvas input
@@ -173,8 +180,8 @@ describe('M2-A01 dispatch order and consumed', () => {
     expect(received).toEqual(['keyup', 'doubleclick']);
   });
 
-  it('Space never reaches the tool or the keymap, even when bound', () => {
-    const target = editor({ keymap: [{ chord: 'Space', action: 'selectAll' }] });
+  it('Space never reaches the tool or the keymap', () => {
+    const target = editor();
     ok(target, { type: 'createRectangle', frame: { x: 0, y: 0, width: 10, height: 10 } });
     const received: string[] = [];
     internalsOf(target).tools.set('select', {
@@ -191,7 +198,47 @@ describe('M2-A01 dispatch order and consumed', () => {
       input(target, { kind: 'keyup', key: ' ', code: 'Space', modifiers: none }).consumed,
     ).toBe(true);
     expect(received).toEqual([]);
-    expect(target.query({ type: 'selection' })).toEqual([]);
+  });
+
+  it.each<[string, { key: string; code: string; composing?: boolean }]>([
+    ['a composing Space', { key: 'Process', code: 'Space', composing: true }],
+    ['a Process Space', { key: 'Process', code: 'Space' }],
+    ['an Unidentified Space', { key: 'Unidentified', code: 'Space' }],
+  ])('%s under an IME is Space: it holds for a pan and never reaches the keymap', (_label, key) => {
+    const target = editor();
+    const [a] = ok(target, {
+      type: 'createRectangle',
+      frame: { x: 0, y: 0, width: 10, height: 10 },
+    });
+    ok(target, { type: 'setSelection', ids: [a!] });
+    const received: string[] = [];
+    const tools = internalsOf(target).tools;
+    const select = tools.get('select')!;
+    tools.set('select', {
+      input: (event, context) => {
+        received.push(event.kind);
+        return select.input(event, context);
+      },
+      reset: () => select.reset(),
+      overlay: () => select.overlay(),
+    });
+    expect(input(target, { kind: 'keydown', ...key, modifiers: none })).toEqual({
+      ok: true,
+      ids: [],
+      consumed: true,
+    });
+    expect(children(target)).toEqual([a]);
+    expect(received).toEqual([]);
+    input(target, { kind: 'pointerdown', point: at(50, 50), modifiers: none });
+    input(target, { kind: 'pointermove', point: at(40, 50), modifiers: none });
+    expect(target.query({ type: 'viewport' }).position).toEqual({ x: 10, y: 0 });
+    input(target, { kind: 'pointerup', point: at(50, 50), modifiers: none });
+    // The IME key-up of Space releases the hold.
+    expect(
+      input(target, { kind: 'keyup', key: 'Process', code: 'Space', modifiers: none }).consumed,
+    ).toBe(true);
+    input(target, { kind: 'pointerdown', point: at(50, 50), modifiers: none });
+    expect(received).toEqual(['pointerdown']);
   });
 });
 
@@ -490,5 +537,112 @@ describe('M2-A01 EditorCanvas input (M2-I4)', () => {
     canvasInput.pointerMove(mouse(41, 41));
     expect(target.query({ type: 'viewport' }).position).toEqual({ x: -10, y: 0 });
     expect(target.query({ type: 'overlay' })?.kind).toBe('marquee');
+  });
+});
+
+/** A fake element or window that records its listeners and dispatches to them. */
+function fakeTarget() {
+  const listeners: { type: string; listener: (event: Event) => void; options?: unknown }[] = [];
+  const target: ListenerTarget = {
+    addEventListener: (type, listener, options) =>
+      listeners.push(options === undefined ? { type, listener } : { type, listener, options }),
+    removeEventListener: (type, listener) => {
+      const index = listeners.findIndex(
+        (entry) => entry.type === type && entry.listener === listener,
+      );
+      if (index >= 0) listeners.splice(index, 1);
+    },
+  };
+  const fire = (type: string, event: object) =>
+    listeners
+      .filter((entry) => entry.type === type)
+      .forEach((entry) => entry.listener(event as Event));
+  return { target, listeners, fire };
+}
+
+describe('M2-A01 EditorCanvas wiring (M2-I4)', () => {
+  function wired() {
+    const harness = host();
+    const canvas = fakeTarget();
+    const view = fakeTarget();
+    const self = { canvas: true };
+    const cleanup = attachCanvasListeners(
+      canvas.target,
+      view.target,
+      harness.canvasInput,
+      (node) => node === self,
+    );
+    return { ...harness, canvas, view, self, cleanup };
+  }
+
+  it('sends setViewportSize on mount and on resize', () => {
+    const target = editor();
+    const seen: string[] = [];
+    target.subscribe((event) => seen.push(event.type === 'session' ? event.field : event.type));
+    syncViewportSize(target, 960, 640);
+    expect(target.query({ type: 'viewportSize' })).toEqual({ width: 960, height: 640 });
+    syncViewportSize(target, 960, 640);
+    syncViewportSize(target, 480, 320);
+    expect(target.query({ type: 'viewportSize' })).toEqual({ width: 480, height: 320 });
+    expect(seen).toEqual(['viewportSize', 'viewportSize']);
+  });
+
+  it('registers a non-passive wheel listener, a canvas blur and a window blur listener', () => {
+    const { canvas, view, target, sent } = wired();
+    expect(canvas.listeners.map(({ type, options }) => [type, options])).toEqual([
+      ['wheel', { passive: false }],
+      ['blur', undefined],
+    ]);
+    expect(view.listeners.map(({ type }) => type)).toEqual(['blur']);
+    let prevented = false;
+    canvas.fire('wheel', {
+      ...keys,
+      ctrlKey: true,
+      clientX: 11,
+      clientY: 21,
+      deltaX: 0,
+      deltaY: -100,
+      deltaMode: 0,
+      preventDefault: () => {
+        prevented = true;
+      },
+    });
+    expect(prevented).toBe(true);
+    expect(target.query({ type: 'viewport' }).zoom).toBe(2);
+    expect(sent).toHaveLength(1);
+  });
+
+  it('a canvas blur leaving the focus target resets input; focus within it does not', () => {
+    const { canvas, canvasInput, key, sent, self } = wired();
+    canvasInput.keyDown(key({ key: ' ', code: 'Space' }).event);
+    canvas.fire('blur', { relatedTarget: self });
+    expect(sent).toHaveLength(1);
+    canvas.fire('blur', { relatedTarget: null });
+    expect(sent.slice(1)).toEqual([
+      { kind: 'pointercancel', modifiers: none },
+      { kind: 'keyup', key: ' ', code: 'Space', modifiers: none },
+    ]);
+  });
+
+  it('a window blur resets input once, also when the canvas blur fires with it', () => {
+    const { canvas, view, canvasInput, key, sent } = wired();
+    // Nothing forwarded yet: nothing to release.
+    view.fire('blur', {});
+    expect(sent).toEqual([]);
+    canvasInput.keyDown(key({ key: ' ', code: 'Space' }).event);
+    view.fire('blur', {});
+    canvas.fire('blur', { relatedTarget: null });
+    expect(sent.map((event) => event.kind)).toEqual(['keydown', 'pointercancel', 'keyup']);
+  });
+
+  it('cleanup on unmount removes every listener', () => {
+    const { canvas, view, cleanup, sent, canvasInput, key } = wired();
+    cleanup();
+    expect(canvas.listeners).toEqual([]);
+    expect(view.listeners).toEqual([]);
+    canvasInput.keyDown(key({ key: ' ', code: 'Space' }).event);
+    view.fire('blur', {});
+    canvas.fire('wheel', { ...keys, clientX: 0, clientY: 0, deltaX: 0, deltaY: 1, deltaMode: 0 });
+    expect(sent.map((event) => event.kind)).toEqual(['keydown']);
   });
 });

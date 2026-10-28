@@ -79,6 +79,23 @@ export function canonicalToken(token: string): string {
  * (also after `Mod` resolves), or an empty key token. A key token `+` is written last, as in
  * `Shift++`.
  */
+/**
+ * A token spelled like `KeyX`, `DigitN` or `Space` in another case (`Keyz`, `digit1`, `space`)
+ * is malformed rather than a different key.
+ */
+function miscased(token: string): boolean {
+  return (
+    (/^key[a-z]$/iu.test(token) && !/^Key[A-Z]$/u.test(token)) ||
+    (/^digit[0-9]$/iu.test(token) && !/^Digit[0-9]$/u.test(token)) ||
+    (/^space$/iu.test(token) && token !== 'Space')
+  );
+}
+
+/**
+ * Note that validity depends on the platform: `Mod` with `Ctrl` is two modifiers on `mac`
+ * (`Ctrl+Meta`) but a repeated one elsewhere, so `Mod+Ctrl+X` is valid on `mac` only. A layer is
+ * validated for the editor's own platform, which is fixed at creation.
+ */
 export function canonicalChord(chord: string, platform: Platform): string | null {
   if (typeof chord !== 'string' || chord.length === 0) return null;
   let parts: string[];
@@ -86,7 +103,7 @@ export function canonicalChord(chord: string, platform: Platform): string | null
   else if (chord.endsWith('++')) parts = [...chord.slice(0, -2).split('+'), '+'];
   else parts = chord.split('+');
   const key = parts.pop()!;
-  if (key.length === 0) return null;
+  if (key.length === 0 || miscased(key)) return null;
   const modifiers = new Set<ModifierName>();
   const names = new Set<string>();
   for (const part of parts) {
@@ -114,19 +131,35 @@ export function eventChord(
   event: Extract<InputEvent, { kind: 'keydown' }>,
   modifiers: Modifiers,
 ): string | null {
-  const fromCode =
-    event.composing === true ||
-    event.key === 'Process' ||
-    event.key === 'Unidentified' ||
-    isNonAsciiCharacter(event.key);
-  const token = fromCode ? event.code : event.key;
-  if (token === undefined || token.length === 0) return null;
+  const token = eventToken(event);
+  if (token === null) return null;
   const names: string[] = [];
   if (modifiers.ctrl) names.push('Ctrl');
   if (modifiers.meta) names.push('Meta');
   if (modifiers.alt) names.push('Alt');
   if (modifiers.shift) names.push('Shift');
-  return [...names, canonicalToken(token)].join('+');
+  return [...names, token].join('+');
+}
+
+/**
+ * The canonical key token of a key event: `key`, or `code` for `Process`, `Unidentified`, a single
+ * non-ASCII character or a composing key; null when that token is missing.
+ */
+export function eventToken(
+  event: Extract<InputEvent, { kind: 'keydown' | 'keyup' }>,
+): string | null {
+  const fromCode =
+    (event.kind === 'keydown' && event.composing === true) ||
+    event.key === 'Process' ||
+    event.key === 'Unidentified' ||
+    isNonAsciiCharacter(event.key);
+  const token = fromCode ? event.code : event.key;
+  return token === undefined || token.length === 0 ? null : canonicalToken(token);
+}
+
+/** Space belongs to navigation (M2 contract, section 3), also under an IME (`code` Space). */
+export function isSpaceKey(event: Extract<InputEvent, { kind: 'keydown' | 'keyup' }>): boolean {
+  return event.key === ' ' || eventToken(event) === 'Space';
 }
 
 /** A frozen JSON copy, or undefined when the value is not JSON (bounded depth). */
@@ -183,7 +216,10 @@ export function validateLayer(
       return { ok: false, path: `/${i}` };
     }
     const chord = typeof entry.chord === 'string' ? canonicalChord(entry.chord, platform) : null;
-    if (chord === null) return { ok: false, path: `/${i}/chord` };
+    // A Space chord could never fire: navigation takes every Space event first.
+    if (chord === null || chord === 'Space' || chord.endsWith('+Space')) {
+      return { ok: false, path: `/${i}/chord` };
+    }
     if (seen.has(chord)) return { ok: false, path: `/${i}/chord` };
     seen.add(chord);
     const { action } = entry;

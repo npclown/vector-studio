@@ -1,3 +1,4 @@
+import { serializeDocument } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_KEYMAP,
@@ -78,12 +79,24 @@ describe('M2-A11 canonical chords', () => {
     expect(canonicalChord(chord, platform)).toBe(canonical);
   });
 
-  it.each(['', 'Hyper+X', 'ctrl+X', 'Ctrl+Ctrl+X', 'Ctrl+', 'Ctrl++X', 'Mod+Ctrl+X'])(
-    'rejects %j on other',
-    (chord) => {
-      expect(canonicalChord(chord, 'other')).toBeNull();
-    },
-  );
+  it.each([
+    '',
+    'Hyper+X',
+    'ctrl+X',
+    'Ctrl+Ctrl+X',
+    'Ctrl+',
+    'Ctrl++X',
+    'Mod+Ctrl+X',
+    'Keyz',
+    'KEYZ',
+    'Mod+keyZ',
+    'digit1',
+    'DIGIT1',
+    'space',
+    'Shift+SPACE',
+  ])('rejects %j on other', (chord) => {
+    expect(canonicalChord(chord, 'other')).toBeNull();
+  });
 });
 
 describe('M2-A11 default bindings run their actions through input', () => {
@@ -492,6 +505,23 @@ describe('M2-A11 layers and setKeymap', () => {
       '/bindings/0/args',
     ],
     ['a binding that is not an object', [null], '/bindings/0'],
+    ['a miscased KeyX token', [{ chord: 'Mod+Keyz', action: 'undo' }], '/bindings/0/chord'],
+    ['a miscased DigitN token', [{ chord: 'digit1', action: 'undo' }], '/bindings/0/chord'],
+    ['a miscased Space token', [{ chord: 'space', action: 'undo' }], '/bindings/0/chord'],
+    [
+      'a Space chord (navigation owns it)',
+      [{ chord: 'Space', action: 'delete' }],
+      '/bindings/0/chord',
+    ],
+    ['a literal space chord', [{ chord: ' ', action: 'delete' }], '/bindings/0/chord'],
+    [
+      'a Space chord with modifiers',
+      [
+        { chord: 'X', action: 'undo' },
+        { chord: 'Shift+Space', action: 'delete' },
+      ],
+      '/bindings/1/chord',
+    ],
   ])(
     'setKeymap rejects %s as editor.invalid-keymap, changing nothing',
     (_label, bindings, path) => {
@@ -588,5 +618,65 @@ describe('M2-A11 layers and setKeymap', () => {
     expect(() =>
       editor({ extensions: [{ id: 'ext.d', bindings: [{ chord: 'Q', action: 'undo' }] }] }),
     ).not.toThrow();
+  });
+
+  it('rejects a Space chord in the host layer and in an extension layer at createEditor', () => {
+    expect(() => editor({ keymap: [{ chord: 'Space', action: 'delete' }] })).toThrow(
+      /editor\.invalid-keymap at \/keymap\/0\/chord/u,
+    );
+    expect(() =>
+      editor({ extensions: [{ id: 'ext.s', bindings: [{ chord: 'Mod+Space', action: 'undo' }] }] }),
+    ).toThrow(/editor\.invalid-keymap at \/extensions\/0\/bindings\/0\/chord/u);
+  });
+
+  it('pins the platform dependence of layer validity: Mod+Ctrl+X is valid on mac only', () => {
+    const mac = editor({ platform: 'mac' });
+    ok(mac, { type: 'setKeymap', bindings: [{ chord: 'Mod+Ctrl+X', action: 'undo' }] });
+    expect(mac.query({ type: 'keymap' }).some((b) => b.chord === 'Ctrl+Meta+KeyX')).toBe(true);
+    const other = editor();
+    expect(
+      other.execute({ type: 'setKeymap', bindings: [{ chord: 'Mod+Ctrl+X', action: 'undo' }] }),
+    ).toEqual({ ok: false, code: 'editor.invalid-keymap', path: '/bindings/0/chord' });
+  });
+});
+
+describe('M2-A11 group and ungroup actions leave the toolbar selection', () => {
+  it('Mod+G selects the new group; Mod+Shift+G selects the released children and round-trips', () => {
+    const target = editor();
+    const a = rect(target);
+    const b = rect(target, 20, 5);
+    const c = rect(target, 50, 50);
+    const before = serializeDocument(target.query({ type: 'document' }));
+    ok(target, { type: 'setSelection', ids: [a, b] });
+    const grouped = press(target, 'g', mods('ctrl'));
+    if (!grouped.ok) throw new Error(grouped.code);
+    expect(grouped.consumed).toBe(true);
+    expect(target.query({ type: 'selection' })).toEqual(grouped.ids);
+    expect(children(target)).toEqual([grouped.ids[0], c]);
+    expect(press(target, 'G', mods('ctrl', 'shift'))).toEqual({
+      ok: true,
+      ids: [],
+      consumed: true,
+    });
+    expect(target.query({ type: 'selection' })).toEqual([a, b]);
+    expect(serializeDocument(target.query({ type: 'document' }))).toBe(before);
+    expect(target.query({ type: 'history' }).undoDepth).toBe(5);
+  });
+
+  it('ungroup with a selection that is not one group does nothing, still consumed', () => {
+    const target = editor();
+    const a = rect(target);
+    const b = rect(target, 20);
+    const before = serializeDocument(target.query({ type: 'document' }));
+    for (const ids of [[a], [a, b]]) {
+      ok(target, { type: 'setSelection', ids });
+      expect(press(target, 'G', mods('ctrl', 'shift'))).toEqual({
+        ok: true,
+        ids: [],
+        consumed: true,
+      });
+      expect(target.query({ type: 'selection' })).toEqual(ids);
+    }
+    expect(serializeDocument(target.query({ type: 'document' }))).toBe(before);
   });
 });

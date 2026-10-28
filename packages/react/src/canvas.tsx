@@ -1,13 +1,6 @@
 import type { RendererSceneSynchronization } from '@vector-studio/contracts';
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  type CSSProperties,
-  type FocusEvent,
-  type ReactNode,
-} from 'react';
-import { CanvasInput } from './canvas-input.js';
+import { useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
+import { CanvasInput, attachCanvasListeners, syncViewportSize } from './canvas-input.js';
 import { useEditor } from './context.js';
 
 // P5-U6 (P5 plan, section 6): a headless canvas. It renders a <canvas> and turns pointer and key
@@ -79,24 +72,14 @@ export function EditorCanvas({
   const onReady = useRef(onRendererReady);
   onReady.current = onRendererReady;
 
-  // The viewport size, on mount and on every resize (M2 contract, section 3).
-  useEffect(() => {
-    editor.execute({ type: 'setViewportSize', width, height });
-  }, [editor, width, height]);
+  useEffect(() => syncViewportSize(editor, width, height), [editor, width, height]);
 
-  // Wheel needs a non-passive listener so that a consumed Ctrl+wheel or pinch can be prevented;
-  // a window blur releases a drag and Space, whose key-up may never arrive.
+  // Wheel, the canvas blur and the window blur (canvas-input.ts). The canvas is the focus
+  // target; focus moving within it is not a blur.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas === null) return;
-    const onWheel = (event: WheelEvent) => input.wheel(event);
-    const onWindowBlur = () => input.reset();
-    canvas.addEventListener('wheel', onWheel, { passive: false });
-    window.addEventListener('blur', onWindowBlur);
-    return () => {
-      canvas.removeEventListener('wheel', onWheel);
-      window.removeEventListener('blur', onWindowBlur);
-    };
+    return attachCanvasListeners(canvas, window, input, (node) => node === canvas);
   }, [input]);
 
   useEffect(() => {
@@ -135,12 +118,6 @@ export function EditorCanvas({
       release = null;
     };
   }, [editor, createRenderer, width, height]);
-
-  /** The canvas is the focus target; focus moving within it is not a blur (M2-I4). */
-  const onBlur = (event: FocusEvent<HTMLCanvasElement>) => {
-    if (event.relatedTarget !== null && event.relatedTarget === canvasRef.current) return;
-    input.reset();
-  };
 
   return (
     <div style={{ position: 'relative', width, height }}>
@@ -182,7 +159,6 @@ export function EditorCanvas({
             preventDefault: () => event.preventDefault(),
           })
         }
-        onBlur={onBlur}
       />
       {children === undefined ? null : (
         <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>{children}</div>

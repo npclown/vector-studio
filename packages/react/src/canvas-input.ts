@@ -68,6 +68,11 @@ const NO_MODIFIERS: Modifiers = { shift: false, alt: false, meta: false, ctrl: f
 export class CanvasInput {
   /** Whether a press was forwarded and its release has not come yet. */
   private dragging = false;
+  /**
+   * Whether input was forwarded since the last reset. A window blur also blurs the canvas, so
+   * the reset runs once for both; with nothing forwarded, nothing can be held.
+   */
+  private armed = false;
 
   /**
    * `height` is the canvas height in CSS px, the size of a wheel page; `canvas` returns the
@@ -94,6 +99,7 @@ export class CanvasInput {
   }
 
   private send(event: InputEvent): CommandResult {
+    this.armed = true;
     return this.editor.execute({ type: 'input', event });
   }
 
@@ -189,8 +195,54 @@ export class CanvasInput {
    * no longer leave a drag running or Space held.
    */
   reset(): void {
+    if (!this.armed) return;
     this.dragging = false;
     this.send({ kind: 'pointercancel', modifiers: NO_MODIFIERS });
     this.send({ kind: 'keyup', key: ' ', code: 'Space', modifiers: NO_MODIFIERS });
+    this.armed = false;
   }
+}
+
+/** The part of an element or window the canvas listeners need. */
+export type ListenerTarget = Readonly<{
+  addEventListener(
+    type: string,
+    listener: (event: Event) => void,
+    options?: AddEventListenerOptions,
+  ): void;
+  removeEventListener(type: string, listener: (event: Event) => void): void;
+}>;
+
+/** The viewport size effect: on mount and on every resize (M2 contract, section 3). */
+export function syncViewportSize(editor: Editor, width: number, height: number): void {
+  editor.execute({ type: 'setViewportSize', width, height });
+}
+
+/**
+ * The canvas's native listeners (M2-I4), returning their cleanup. Wheel needs a non-passive
+ * listener so that a consumed Ctrl+wheel or pinch can be prevented. A window blur, or focus
+ * leaving the canvas's focus target (`isFocusTarget` says whether a node belongs to it), resets
+ * input, since a key-up or release may never arrive.
+ */
+export function attachCanvasListeners(
+  canvas: ListenerTarget,
+  view: ListenerTarget,
+  input: CanvasInput,
+  isFocusTarget: (node: unknown) => boolean,
+): () => void {
+  const onWheel = (event: Event) => input.wheel(event as WheelEvent);
+  const onBlur = (event: Event) => {
+    const next = (event as FocusEvent).relatedTarget;
+    if (next !== null && next !== undefined && isFocusTarget(next)) return;
+    input.reset();
+  };
+  const onWindowBlur = () => input.reset();
+  canvas.addEventListener('wheel', onWheel, { passive: false });
+  canvas.addEventListener('blur', onBlur);
+  view.addEventListener('blur', onWindowBlur);
+  return () => {
+    canvas.removeEventListener('wheel', onWheel);
+    canvas.removeEventListener('blur', onBlur);
+    view.removeEventListener('blur', onWindowBlur);
+  };
 }
