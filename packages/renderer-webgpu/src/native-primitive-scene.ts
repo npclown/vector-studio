@@ -54,7 +54,7 @@ import {
   meshStencilStep,
   meshWriteOnceStencilState,
 } from './mesh-pipeline.js';
-import { PipelineCache } from './pipeline-cache.js';
+import { PipelineCache, type PipelineCacheSnapshot } from './pipeline-cache.js';
 import { PRIMITIVE_ANALYTIC_SHADER } from './primitive-analytic-shader.js';
 import {
   PRIMITIVE_FRAME_SIZE,
@@ -1217,6 +1217,11 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       }
     }
     if (firstError !== undefined) throw asError(firstError, 'Mask release failed.');
+  }
+
+  /** E22-A8: the pipeline cache's entry counts. */
+  public pipelineCacheSnapshotForTesting(): PipelineCacheSnapshot {
+    return this.#pipelineCache.snapshot();
   }
 
   /** U4 (P4-A08): mask passes run so far; a pass runs only for a level whose key changed. */
@@ -2757,6 +2762,11 @@ export function createNativePrimitiveSceneCreation(
         });
       } catch {
         defaultMask?.destroy();
+        // E22-K5: no clip variant this attempt cached outlives the failure.
+        pipelineCache.evict(clipVariantKey(primitivePipelineKey(format, sampleCount, stencil)));
+        for (const kind of ['fill', 'joint'] as const) {
+          pipelineCache.evict(clipVariantKey(meshPipelineKey(format, sampleCount, kind)));
+        }
         for (const id of clipTracked) {
           tracked.delete(id);
           try {
