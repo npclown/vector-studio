@@ -20,7 +20,14 @@ export function nativeFixture(options: Readonly<{ failPipeline?: string }> = {})
   const descriptors: GPURenderPipelineDescriptor[] = [];
   const modules: string[] = [];
   const writes: { label: string; offset: number; bytes: number }[] = [];
-  const textures: { label: string; format: GPUTextureFormat; sampleCount: number }[] = [];
+  const textures: {
+    label: string;
+    format: GPUTextureFormat;
+    sampleCount: number;
+    width: number;
+    height: number;
+    usage: number;
+  }[] = [];
   const destroyed: string[] = [];
   const device = {
     limits: {
@@ -63,7 +70,15 @@ export function nativeFixture(options: Readonly<{ failPipeline?: string }> = {})
     }),
     createTexture: vi.fn((descriptor: GPUTextureDescriptor) => {
       const label = descriptor.label ?? '';
-      textures.push({ label, format: descriptor.format, sampleCount: descriptor.sampleCount ?? 1 });
+      const { width, height } = descriptor.size as GPUExtent3DDict;
+      textures.push({
+        label,
+        format: descriptor.format,
+        sampleCount: descriptor.sampleCount ?? 1,
+        width,
+        height: height ?? 1,
+        usage: descriptor.usage,
+      });
       return {
         label,
         createView: vi.fn(() => ({ texture: label })),
@@ -96,6 +111,22 @@ export function nativeFixture(options: Readonly<{ failPipeline?: string }> = {})
           end: () => calls.push(['end']),
         };
       }),
+      copyTextureToTexture: vi.fn(
+        (
+          source: { texture: { label: string } },
+          destination: { texture: { label: string }; origin: { x: number; y: number } },
+          size: { width: number; height: number },
+        ) =>
+          calls.push([
+            'copyTextureToTexture',
+            source.texture.label,
+            destination.texture.label,
+            destination.origin.x,
+            destination.origin.y,
+            size.width,
+            size.height,
+          ]),
+      ),
       finish: vi.fn(() => ({})),
     })),
     queue: {

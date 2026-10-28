@@ -68,6 +68,8 @@ Figures at `T = 1024`: a 3840 × 2160 full-screen level is 8,294,400 resident by
 
 U1 goes first: the MVP editor's frame clipping needs the budget. U2 is independent of U1.
 
+**Unit records.** U1 (2026-10-28): `maskTileSet` and the K3 budget in `MaskPlan`; per-tile pass records, one tile set per rendering frame and early release in `native-primitive-scene.ts`; `tests/unit/e22-u1-tiled-mask.test.ts` (A1 to A3, with the failure paths). Changed P4 unit expectations (A6): `p4-u4b-mask-passes` now sees the tile set ids (`mask-tiles-n/color`, `/resolve`, `/stencil`) in the passes and the destroyed list, and a `copyTextureToTexture` after each pass; `p4-u4-mask-plan` uses an 8192² surface and 9000-unit sources for its over-budget cases (notice bytes `8192² + 1024² × 9`), since a 4096² level now fits at 4x. E22-A4 on SwiftShader (Chrome for Testing 153.0.8010.12, headless, container build of the WASM kernel): a 2100 × 1300 surface at DPR 2 with an analytic-source mask holding a nested mesh-source mask, and an even-odd mesh-source mask under a rotated rect clip, all levels larger than one tile; the presented frames at 1x and 4x are byte-identical to the same scene at `9ef77b5` (SHA-256 `c6137718…` for all four), 3 mask passes, no diagnostics.
+
 ## 5. Risks
 
 - **E22-R1 viewport range.** Tiles move the negative viewport origin to `-(device.x + tile offset)`, still no further than `-target.width`, which P4 U5 already reached in both browsers. E22-A5 checks it at 4K.

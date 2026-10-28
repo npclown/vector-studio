@@ -75,6 +75,7 @@ const primitiveMask = () => [
 
 const passCalls = [
   'beginRenderPass',
+  'copyTextureToTexture',
   'setViewport',
   'setPipeline',
   'setBindGroup',
@@ -163,11 +164,12 @@ describe('P4 U4b mask passes', () => {
     submitted(scene.submitPrimitivePacket(packet));
     const p1 = 'vector-studio/p1-analytic-primitive-stencil-4x';
     expect(encoded(fixture.calls)).toEqual([
+      // E22-K1 and K2: the pass renders into the tile set and copies the resolve tile.
       [
         'beginRenderPass',
         'vector-studio/mask-pass/m',
-        'primitive/1/mask-pass-1/color',
-        'primitive/1/mask-1',
+        'primitive/1/mask-tiles-1/color',
+        'primitive/1/mask-tiles-1/resolve',
         null,
       ],
       ['setViewport', -8, -18, 640, 360, 0, 1],
@@ -176,6 +178,15 @@ describe('P4 U4b mask passes', () => {
       ['setBindGroup', 1, 'primitive/1/clip-states-1/bind-group', 2 * 1280],
       ['drawIndexed', 6, 1, 0, 0, 0],
       ['end'],
+      [
+        'copyTextureToTexture',
+        'primitive/1/mask-tiles-1/resolve',
+        'primitive/1/mask-1',
+        0,
+        0,
+        104,
+        104,
+      ],
       [
         'beginRenderPass',
         'vector-studio/primitive-pass',
@@ -211,10 +222,16 @@ describe('P4 U4b mask passes', () => {
     submit();
     expect(scene.maskPasses).toBe(2);
     expect(
-      fixture.textures.filter(({ label }) => label.includes('/mask-') && !label.includes('pass')),
+      fixture.textures.filter(({ label }) => label.includes('/mask-') && !label.includes('tiles')),
     ).toHaveLength(1);
-    // The transient 4x targets are released after each submission.
-    expect(fixture.destroyed.filter((label) => label.includes('mask-pass'))).toHaveLength(2);
+    // E22-A1: one tile set (colour and resolve, no stencil for a primitive source) per rendering
+    // frame, released after each submission.
+    expect(fixture.destroyed.filter((label) => label.includes('mask-tiles'))).toEqual([
+      'primitive/1/mask-tiles-1/color',
+      'primitive/1/mask-tiles-1/resolve',
+      'primitive/1/mask-tiles-2/color',
+      'primitive/1/mask-tiles-2/resolve',
+    ]);
     const live = accounting.snapshot().byCategory.texture.live;
     // Once no clip is left, the mask texture goes and accounting is back at its baseline.
     h.replace([box('x', null, 0)]);
@@ -243,9 +260,9 @@ describe('P4 U4b mask passes', () => {
       [
         'beginRenderPass',
         'vector-studio/mask-pass/m',
-        'primitive/1/mask-pass-1/color',
-        'primitive/1/mask-1',
-        'primitive/1/mask-pass-1/stencil',
+        'primitive/1/mask-tiles-1/color',
+        'primitive/1/mask-tiles-1/resolve',
+        'primitive/1/mask-tiles-1/stencil',
       ],
       ['setViewport', -level.device.x, -level.device.y, 640, 360, 0, 1],
       ['setPipeline', 'vector-studio/p3-mesh-fill-4x+mask-v0'],
@@ -256,7 +273,7 @@ describe('P4 U4b mask passes', () => {
     ]);
     expect(
       fixture.textures.find(
-        ({ label }) => label.endsWith('/stencil') && label.includes('mask-pass'),
+        ({ label }) => label.endsWith('/stencil') && label.includes('mask-tiles'),
       ),
     ).toMatchObject({ format: 'stencil8', sampleCount: 4 });
     creation.dispose();
@@ -389,8 +406,8 @@ describe('P4 U4b mask failures and buffer growth', () => {
       [
         'beginRenderPass',
         'vector-studio/mask-pass/m',
-        'primitive/1/mask-pass-1/color',
-        'primitive/1/mask-1',
+        'primitive/1/mask-tiles-1/color',
+        'primitive/1/mask-tiles-1/resolve',
         null,
       ],
       [
