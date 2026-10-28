@@ -89,6 +89,11 @@ async function open(page: Page) {
   await expect(status).toHaveAttribute('data-renderer', 'ready', { timeout: 30_000 });
   await expect(status).toHaveAttribute('data-fixture', 'loaded');
   await expect(page.getByTestId('error')).toHaveCount(0);
+  // Snapping is on by default since M2-U3 (M2 contract, section 4.2); the exact M1 values below
+  // are raw drag deltas, so it is turned off through the session command (M2-U3 note 10).
+  await page.evaluate(() =>
+    window.__p5Host!.editor.execute({ type: 'setSnapping', enabled: false }),
+  );
   // The canvas content box, inside its border, is where page points are measured.
   const origin = await page.evaluate(() => {
     const canvas = document.querySelector('canvas')!;
