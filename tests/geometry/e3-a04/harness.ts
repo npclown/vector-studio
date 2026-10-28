@@ -1916,16 +1916,21 @@ export function measureCase(
 export function collapseOf(d: Decoded, mapped: Mapped): Pick<HarnessRow, 'collapse'> {
   const triangles = mapped.indices.length / 3;
   if (d.paint !== 'fill' || triangles === 0 || withoutCollapsed(mapped).length > 0) return {};
-  const [a, c, b, dd] = d.transform;
+  const [a, c, b, dd] = d.transform; // x' = a·x + b·y, y' = c·x + dd·y
   const xs: number[] = [];
   const ys: number[] = [];
+  // The binary64 sums carry an absolute error of a few ulps of |a·x| + |b·y|, which the
+  // extent's cancellation does not shrink: it is bounded by GAMMA·mag below.
+  let mag = 0;
   for (let i = 0; i + 1 < d.points.length; i += 2) {
     const [x, y] = [d.points[i]!, d.points[i + 1]!];
     xs.push(a * x + b * y);
     ys.push(c * x + dd * y);
+    mag = Math.max(mag, Math.abs(a * x) + Math.abs(b * y), Math.abs(c * x) + Math.abs(dd * y));
   }
+  const GAMMA = 2 ** -48;
   const scale = d.zoom * d.dpr;
   const extent = (v: number[]) =>
-    a04NextUp((Math.max(...v) - Math.min(...v)) * scale * (1 + 2 ** -40) + 2 ** -60);
+    a04NextUp((Math.max(...v) - Math.min(...v) + 2 * GAMMA * mag) * scale * (1 + GAMMA) + 2 ** -60);
   return { collapse: { triangles, regionWidth: extent(xs), regionHeight: extent(ys) } };
 }

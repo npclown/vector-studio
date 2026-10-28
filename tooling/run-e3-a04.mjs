@@ -8,6 +8,7 @@
 //                   [--gpu …] [--wasm <path>] [--retried <retry dir>,…]
 //   pnpm e3-a04:run --retry-cases i,j,… [--shards N] [--stride S] [--start-resolution K] [--heap MB]
 //   pnpm e3-a04:run --supersede <record.json> --remeasured <retry dir>,… --identity <retry dir>,…
+//                   --e20-commit <sha>
 //                   [--shards N] [--stride S] [--start-resolution K] [--gpu …]
 //
 // Uses the release WASM that `pnpm test:geometry` builds (or --wasm <path>), then:
@@ -102,17 +103,20 @@ const remeasuredDirs = value('--remeasured')
 const identityDirs = value('--identity')
   ?.split(',')
   .map((d) => path.resolve(d));
+// The E20 commit on main whose harness, tool and documents the measurement branch carries.
+const e20Commit = value('--e20-commit');
 if (
   supersede !== undefined &&
   (remeasuredDirs === undefined ||
     identityDirs === undefined ||
+    e20Commit === undefined ||
     mergeDirs !== undefined ||
     retryCases !== undefined ||
     only !== undefined ||
     smoke)
 )
   throw new Error(
-    '--supersede needs --remeasured and --identity, and no --merge, --retry-cases, --only or --smoke',
+    '--supersede needs --remeasured, --identity and --e20-commit, and no --merge, --retry-cases, --only or --smoke',
   );
 if (supersede === undefined && (remeasuredDirs !== undefined || identityDirs !== undefined))
   throw new Error('--remeasured and --identity need --supersede');
@@ -218,7 +222,9 @@ function checkProvenance(dir, p) {
     checkCommon(dir, p, true);
     return { changedFromHead: [] };
   }
-  if (spawnSync('git', ['merge-base', '--is-ancestor', p.commit, 'HEAD'], { cwd: root }).status)
+  if (
+    spawnSync('git', ['merge-base', '--is-ancestor', p.commit, 'HEAD'], { cwd: root }).status !== 0
+  )
     throw new Error(`refusing the merge: ${dir} commit ${p.commit} is not an ancestor of HEAD`);
   const changed = git('diff', '--name-only', '--no-renames', p.commit, 'HEAD')
     .split('\n')
@@ -387,8 +393,7 @@ function applyRetries(dirs) {
 function identityForm(row) {
   const out = { ...row };
   delete out.ms;
-  for (const k of BOUND_FIELDS)
-    if (out[k] === 'Infinity' || out[k] === '-Infinity' || out[k] === null) out[k] = null;
+  for (const k of BOUND_FIELDS) if (out[k] === 'Infinity') out[k] = null;
   return JSON.stringify(out);
 }
 
@@ -454,7 +459,7 @@ function supersedeRecord(file) {
       );
   if (
     spawnSync('git', ['merge-base', '--is-ancestor', MEASUREMENT_BASE, 'HEAD'], { cwd: root })
-      .status
+      .status !== 0
   )
     throw new Error(`refusing to supersede: ${MEASUREMENT_BASE} is not an ancestor of HEAD`);
   const changed = git('diff', '--name-only', '--no-renames', MEASUREMENT_BASE, 'HEAD')
@@ -463,6 +468,22 @@ function supersedeRecord(file) {
   const other = changed.filter((f) => !E20_PATHS(f));
   if (other.length > 0)
     throw new Error(`refusing to supersede: HEAD differs from ${MEASUREMENT_BASE} in ${other}`);
+  const e20 = git('rev-parse', '--verify', `${e20Commit}^{commit}`);
+  if (!/^[0-9a-f]{40}$/u.test(e20))
+    throw new Error(`refusing to supersede: no commit ${e20Commit}`);
+  const fromE20 = git(
+    'diff',
+    '--name-only',
+    '--no-renames',
+    e20,
+    'HEAD',
+    '--',
+    'tests/geometry/e3-a04',
+    'tooling/run-e3-a04.mjs',
+    'docs',
+  );
+  if (fromE20 !== '')
+    throw new Error(`refusing to supersede: HEAD differs from E20 commit ${e20} in ${fromE20}`);
 
   const measured = new Map();
   const failed = new Set();
@@ -506,7 +527,10 @@ function supersedeRecord(file) {
     rows.map((r) => `${JSON.stringify(r, nonFinite)}\n`).join(''),
   );
   // E20 changes no shader, WASM or product path, so the old GPU check stands (contract section 1).
-  writeFileSync(path.join(out, 'gpu-carried.json'), `${JSON.stringify(old.gpu, null, 2)}\n`);
+  writeFileSync(
+    path.join(out, 'gpu-carried.json'),
+    `${JSON.stringify({ shaderSha256: old.provenance.shaderSha256, gpu: old.gpu }, null, 2)}\n`,
+  );
   return {
     supersedes: {
       runId: old.provenance.runId,
@@ -514,6 +538,7 @@ function supersedeRecord(file) {
       commit: old.provenance.commit,
     },
     measurementBase: MEASUREMENT_BASE,
+    e20Commit: e20,
     changedFromBase: changed,
     hosts: old.provenance.hosts,
     retried: old.provenance.retried,

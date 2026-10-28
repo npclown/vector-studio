@@ -70,6 +70,17 @@ function toLine(row: HarnessRow): string {
   return `${JSON.stringify(row, nonFinite)}\n`;
 }
 
+/** E20-K9: the old record's GPU check, which stands only for the same shader. */
+function carriedGpu(file: string, shaderSha256: string): A04Record['gpu'] {
+  const c = JSON.parse(readFileSync(file, 'utf8')) as {
+    shaderSha256: string;
+    gpu: A04Record['gpu'];
+  };
+  if (c.shaderSha256 !== shaderSha256)
+    throw new Error(`the carried GPU check is for shader ${c.shaderSha256}, not ${shaderSha256}`);
+  return c.gpu;
+}
+
 async function loadPorts() {
   const wasm = process.env.P2_WASM_PATH;
   if (wasm === undefined) throw new Error('P2_WASM_PATH is required');
@@ -183,7 +194,7 @@ it(`runs the A04 ${phase} phase`, async () => {
   const carried = process.env.E3_A04_RUN_GPU_CARRIED;
   const gpu =
     gpuPaths.length === 0 && carried !== undefined
-      ? (JSON.parse(readFileSync(carried, 'utf8')) as A04Record['gpu'])
+      ? carriedGpu(carried, shaderSha256)
       : gpuPaths.length === 0
         ? null
         : combineGpuChecks(
