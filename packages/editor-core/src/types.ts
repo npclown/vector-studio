@@ -30,14 +30,53 @@ export type ToolName = 'select' | 'rectangle' | 'ellipse' | 'line' | 'frame' | '
 export type PagePoint = Readonly<{ x: number; y: number }>;
 export type Modifiers = Readonly<{ shift: boolean; alt: boolean; meta: boolean; ctrl: boolean }>;
 
-/** Pointer and key input for the active tool, with page-space points. */
+/**
+ * Pointer, key and wheel input with page-space points (P5; MVP M2 contract, M2-I1). Navigation,
+ * the active tool and the keymap receive it in the M2-I2 order.
+ */
 export type InputEvent =
   | Readonly<{
-      kind: 'pointerdown' | 'pointermove' | 'pointerup';
+      kind: 'pointerdown';
       point: PagePoint;
       modifiers: Modifiers;
+      /** 0 primary (default), 1 middle; other buttons are ignored and not consumed. */
+      button?: number;
     }>
-  | Readonly<{ kind: 'keydown'; key: string; modifiers: Modifiers }>;
+  | Readonly<{ kind: 'pointermove' | 'pointerup'; point: PagePoint; modifiers: Modifiers }>
+  | Readonly<{
+      kind: 'keydown';
+      key: string;
+      /** `KeyboardEvent.code`. */
+      code?: string;
+      repeat?: boolean;
+      /** `KeyboardEvent.isComposing`. */
+      composing?: boolean;
+      modifiers: Modifiers;
+    }>
+  | Readonly<{ kind: 'keyup'; key: string; code?: string; modifiers: Modifiers }>
+  /** CSS pixels; the host converts line and page delta modes. */
+  | Readonly<{
+      kind: 'wheel';
+      point: PagePoint;
+      deltaX: number;
+      deltaY: number;
+      modifiers: Modifiers;
+    }>
+  | Readonly<{ kind: 'doubleclick'; point: PagePoint; modifiers: Modifiers }>
+  | Readonly<{ kind: 'pointercancel'; modifiers: Modifiers }>;
+
+/** Which `EditorOptions.platform` `Mod` resolves for: `Meta` on `mac`, else `Ctrl`. */
+export type Platform = 'mac' | 'other';
+
+/**
+ * A key binding (M2 contract, section 7): a chord of `+`-separated modifiers (`Mod`, `Ctrl`,
+ * `Meta`, `Alt`, `Shift`) and one key token, and a built-in action name or an extension command
+ * ID; `action: null` unbinds the chord in a later layer.
+ */
+export type KeyBinding = Readonly<{ chord: string; action: string | null; args?: JsonValue }>;
+
+/** The CSS pixel size of the canvas the viewport shows. */
+export type ViewportSize = Readonly<{ width: number; height: number }>;
 
 /** A path-tool anchor; `in` and `out` are its handles, null for a corner. */
 export type PathAnchor = Readonly<{
@@ -162,7 +201,14 @@ export type SessionCommand =
   | Readonly<{ type: 'setActivePage'; id: string }>
   | Readonly<{ type: 'setTool'; tool: ToolName }>
   | Readonly<{ type: 'setViewport'; camera: RenderCamera }>
-  | Readonly<{ type: 'input'; event: InputEvent }>;
+  | Readonly<{ type: 'input'; event: InputEvent }>
+  // MVP M2 contract, sections 3 and 7.
+  | Readonly<{ type: 'setViewportSize'; width: number; height: number }>
+  /** `about` is a page point; it defaults to the viewport centre. */
+  | Readonly<{ type: 'zoomBy'; factor: number; about?: PagePoint }>
+  | Readonly<{ type: 'zoomTo'; target: 'fit' | 'selection' | 'actual' }>
+  /** Replaces the host keymap layer. */
+  | Readonly<{ type: 'setKeymap'; bindings: readonly KeyBinding[] }>;
 
 export type Command =
   | DocumentCommand
@@ -197,11 +243,18 @@ export type EditorErrorCode =
   | 'editor.not-siblings'
   | 'editor.not-a-group'
   | 'editor.invalid-mask-source'
-  | 'editor.clip-depth';
+  | 'editor.clip-depth'
+  // MVP M2 contract, section 4.4.
+  | 'editor.no-viewport-size'
+  | 'editor.invalid-keymap';
 
+/**
+ * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key
+ * binding acted on the event, so a host calls `preventDefault` only then.
+ */
 export type CommandResult =
-  | Readonly<{ ok: true; ids: readonly string[] }>
-  | Readonly<{ ok: false; code: EditorErrorCode; path?: string }>;
+  | Readonly<{ ok: true; ids: readonly string[]; consumed?: boolean }>
+  | Readonly<{ ok: false; code: EditorErrorCode; path?: string; consumed?: boolean }>;
 
 export type HistoryState = Readonly<{ undoDepth: number; redoDepth: number }>;
 
@@ -214,6 +267,10 @@ export type EditorSnapshot = Readonly<{
   selection: readonly string[];
   tool: ToolName;
   viewport: RenderCamera;
+  /** Null until the host sends `setViewportSize`. */
+  viewportSize: ViewportSize | null;
+  /** The effective key bindings in canonical form, sorted by chord. */
+  keymap: readonly KeyBinding[];
   history: HistoryState;
   /** The active tool's overlay, as the `overlay` query returns it after the last command. */
   overlay: ToolOverlay | null;
@@ -231,7 +288,10 @@ export type Query =
   | Readonly<{ type: 'activePage' }>
   | Readonly<{ type: 'pages' }>
   /** The select tool's resize handle box for the selection (M1-U5). */
-  | Readonly<{ type: 'handles' }>;
+  | Readonly<{ type: 'handles' }>
+  | Readonly<{ type: 'viewportSize' }>
+  /** The effective key bindings in canonical form, sorted by chord. */
+  | Readonly<{ type: 'keymap' }>;
 
 /**
  * The select tool's resize handle box for the selection, in page space (M1 contract, section
@@ -273,7 +333,11 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' }
                   ? readonly PageV2[]
                   : Q extends { type: 'handles' }
                     ? SelectionHandles | null
-                    : number;
+                    : Q extends { type: 'viewportSize' }
+                      ? ViewportSize | null
+                      : Q extends { type: 'keymap' }
+                        ? readonly KeyBinding[]
+                        : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';
@@ -288,7 +352,8 @@ export type EditorEvent =
     }>
   | Readonly<{
       type: 'session';
-      field: 'selection' | 'tool' | 'viewport' | 'overlay' | 'activePage';
+      field:
+        'selection' | 'tool' | 'viewport' | 'overlay' | 'activePage' | 'viewportSize' | 'keymap';
     }>
   | DiagnosticEvent;
 
@@ -347,4 +412,9 @@ export type Extension = Readonly<{
   id: string;
   nodeTypes?: readonly CustomNodeType[];
   commands?: readonly ExtensionCommand[];
+  /**
+   * The extension's keymap layer (M2 contract, section 7): built-in actions and the extension's
+   * own commands only.
+   */
+  bindings?: readonly KeyBinding[];
 }>;
