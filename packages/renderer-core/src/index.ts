@@ -13,7 +13,12 @@ export { PrimitiveSceneSource } from './primitive-scene-source.js';
 export { PrimitiveRendererService } from './primitive-renderer-service.js';
 export type { PrimitiveRendererServiceOptions } from './primitive-renderer-service.js';
 export { pathMeshNoticeDiagnostic } from './path-mesh-pipeline.js';
-export { P4_MASK_TEXTURE_BYTES_MAX, clipResourceLimitDiagnostic } from './clip-resolution.js';
+export {
+  P4_MASK_TEXTURE_BYTES_MAX,
+  P4_MASK_TILE_SIZE,
+  clipResourceLimitDiagnostic,
+  maskTileSet,
+} from './clip-resolution.js';
 export type {
   ClipRectRecord,
   ClipStateRecord,

@@ -217,6 +217,24 @@ function rectRecords(levels: readonly ClipLevel[], start: number, end: number) {
 /** P4 section 4, Resources (P4-Q5): the resident mask texture budget. */
 export const P4_MASK_TEXTURE_BYTES_MAX = 64 * 1024 * 1024;
 
+/** E22-K1: the mask pass tile edge; a frame's tile set is at most this square. */
+export const P4_MASK_TILE_SIZE = 1024;
+
+/**
+ * E22-K1 and K3: the tile set's extent over mask levels of at most `maxWidth × maxHeight`, and
+ * its bytes: colour, resolve and stencil tiles at 4x (4 + 1 + 4 bytes per pixel), colour and
+ * stencil at 1x (1 + 1).
+ */
+export function maskTileSet(
+  maxWidth: number,
+  maxHeight: number,
+  sampleCount: 1 | 4,
+): Readonly<{ width: number; height: number; bytes: number }> {
+  const width = Math.min(P4_MASK_TILE_SIZE, maxWidth);
+  const height = Math.min(P4_MASK_TILE_SIZE, maxHeight);
+  return Object.freeze({ width, height, bytes: width * height * (sampleCount === 4 ? 9 : 2) });
+}
+
 /** A mask level's source, as the GPU draws it into the level's texture (P4-K2). */
 export type MaskSourceRecord =
   Readonly<{ kind: 'primitive'; slot: number }> | Readonly<{ kind: 'mesh'; nodeId: string }>;
@@ -263,7 +281,8 @@ export type MaskPlanInput = Readonly<{
 /**
  * Plans the frame's mask levels over the drawn content chains, in paint order. A level is
  * drawable when its parent is, its culled device bound is not empty, its source covers
- * something, and the resident textures plus the largest transient pass stay within the budget;
+ * something, and the resident textures plus one tile set over the drawable levels (E22-K3) stay
+ * within the budget;
  * a level over the budget is reported once per frame. A chain is drawable exactly when each of
  * its mask levels is.
  */
@@ -273,7 +292,8 @@ export class MaskPlan {
   readonly #order: MaskLevelRecord[] = [];
   readonly #notices: MaskBudgetNotice[] = [];
   #resident = 0;
-  #transient = 0;
+  #maxWidth = 0;
+  #maxHeight = 0;
 
   public constructor(input: MaskPlanInput) {
     this.#input = input;
@@ -336,17 +356,19 @@ export class MaskPlan {
     const width = maxX - minX;
     const height = maxY - minY;
     const limit = this.#input.budget ?? P4_MASK_TEXTURE_BYTES_MAX;
-    // The resident r8unorm texture, and the pass's transient attachments: a stencil8 target at
-    // the sample count, plus the multisample r8unorm target at 4x.
-    const resident = width * height;
-    const transient = width * height * (target.sampleCount === 4 ? 8 : 1);
-    const bytes = this.#resident + resident + Math.max(this.#transient, transient);
+    // E22-K3: the resident r8unorm textures, and the frame's one tile set of transient
+    // attachments, sized over every drawable level.
+    const resident = this.#resident + width * height;
+    const maxWidth = Math.max(this.#maxWidth, width);
+    const maxHeight = Math.max(this.#maxHeight, height);
+    const bytes = resident + maskTileSet(maxWidth, maxHeight, target.sampleCount).bytes;
     if (bytes > limit) {
       this.#notices.push(Object.freeze({ nodeId: level.containerId, bytes, limit }));
       return null;
     }
-    this.#resident += resident;
-    this.#transient = Math.max(this.#transient, transient);
+    this.#resident = resident;
+    this.#maxWidth = maxWidth;
+    this.#maxHeight = maxHeight;
     const rects = rectRecords(chain.levels, parentIndex + 1, index);
     const device = Object.freeze({ x: minX, y: minY, width, height });
     return Object.freeze({

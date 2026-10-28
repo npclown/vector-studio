@@ -246,22 +246,22 @@ describe('P4 U4a mask plan', () => {
   it('section 5: a level over the budget is not drawn and is reported once per transition', () => {
     const { source } = setup([
       group('m', null, ['s', 'a'], MASK),
-      box('s', 'm', 0, 0, 5000),
+      box('s', 'm', 0, 0, 9000),
       box('a', 'm', 10),
       box('after', null, 300),
     ]);
-    const big: PrimitiveTarget = { ...target, width: 4096, height: 4096, sampleCount: 4 };
+    const big: PrimitiveTarget = { ...target, width: 8192, height: 8192, sampleCount: 4 };
     const over = source.prepare(big)!;
     expect(over.draws.reduce((sum, draw) => sum + draw.count, 0)).toBe(1);
     expect(over.clip).toBeUndefined();
     expect(over.clipNotices).toEqual([
-      { nodeId: 'm', bytes: 4096 * 4096 * 9, limit: P4_MASK_TEXTURE_BYTES_MAX },
+      { nodeId: 'm', bytes: 8192 * 8192 + 1024 * 1024 * 9, limit: P4_MASK_TEXTURE_BYTES_MAX },
     ]);
     const diagnostic = clipResourceLimitDiagnostic(over.clipNotices![0]!, 1);
     expect(diagnostic.code).toBe(DIAGNOSTIC_CODES.CLIP_RESOURCE_LIMIT);
     expect(diagnostic.context).toEqual({
       nodeId: 'm',
-      bytes: 4096 * 4096 * 9,
+      bytes: 8192 * 8192 + 1024 * 1024 * 9,
       limit: P4_MASK_TEXTURE_BYTES_MAX,
     });
     expect(source.prepare(big)!.clipNotices).toBeUndefined();
@@ -269,8 +269,10 @@ describe('P4 U4a mask plan', () => {
     expect(fits.clipNotices).toBeUndefined();
     expect(fits.clip!.masks).toHaveLength(1);
     expect(source.prepare(big)!.clipNotices).toHaveLength(1);
-    // At 1x the transient pass is one stencil target: 4096² × 2 fits.
-    expect(source.prepare({ ...big, sampleCount: 1 })!.clip!.masks).toHaveLength(1);
+    // E22-K3: a 4096² level fits at 4x and 1x with one tile set (16 MiB + 9 or 2 MiB).
+    const half: PrimitiveTarget = { ...big, width: 4096, height: 4096 };
+    expect(source.prepare(half)!.clip!.masks).toHaveLength(1);
+    expect(source.prepare({ ...half, sampleCount: 1 })!.clip!.masks).toHaveLength(1);
     expect(source.getMaskNoticesDropped()).toBe(0);
   });
 
@@ -319,14 +321,14 @@ describe('P4 U4a mask plan', () => {
   it('section 5: under an over-budget parent the child level is neither drawn nor reported', () => {
     const { source } = setup([
       group('outer', null, ['os', 'a', 'inner'], MASK),
-      box('os', 'outer', 0, 0, 5000),
+      box('os', 'outer', 0, 0, 9000),
       box('a', 'outer', 10),
       group('inner', 'outer', ['is', 'b'], MASK),
       box('is', 'inner', 0, 0, 100),
       box('b', 'inner', 20),
       box('after', null, 300),
     ]);
-    const packet = source.prepare({ ...target, width: 4096, height: 4096, sampleCount: 4 })!;
+    const packet = source.prepare({ ...target, width: 8192, height: 8192, sampleCount: 4 })!;
     expect(packet.draws.reduce((sum, draw) => sum + draw.count, 0)).toBe(1);
     expect(packet.clipNotices!.map((notice) => notice.nodeId)).toEqual(['outer']);
   });
@@ -334,11 +336,11 @@ describe('P4 U4a mask plan', () => {
   it('section 5: at most 32 notices per packet; a mask is reported again after clips leave', () => {
     const masks = Array.from({ length: 40 }, (_, index) => [
       group(`m${index}`, null, [`s${index}`, `a${index}`], MASK),
-      box(`s${index}`, `m${index}`, 0, 0, 5000),
+      box(`s${index}`, `m${index}`, 0, 0, 9000),
       box(`a${index}`, `m${index}`, 10),
     ]).flat();
     const { source, replace } = setup(masks);
-    const big: PrimitiveTarget = { ...target, width: 4096, height: 4096, sampleCount: 4 };
+    const big: PrimitiveTarget = { ...target, width: 8192, height: 8192, sampleCount: 4 };
     expect(source.prepare(big)!.clipNotices).toHaveLength(32);
     expect(source.prepare(big)!.clipNotices).toHaveLength(8);
     expect(source.prepare(big)!.clipNotices).toBeUndefined();
