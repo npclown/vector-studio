@@ -74,8 +74,11 @@ export type ClipboardEventLike = Readonly<{
 /** `navigator.clipboard` as the bound clipboard actions use it; absent outside a secure page. */
 export type ClipboardWriter = Readonly<{ writeText?: unknown }>;
 
-/** The built-in actions whose in-memory text is also written to the system clipboard. */
-const CLIPBOARD_ACTIONS: ReadonlySet<string> = new Set(['copy', 'cut', 'paste']);
+/**
+ * The built-in actions whose in-memory text is also written to the system clipboard. A paste
+ * writes nothing: that would overwrite what the user copied in another app.
+ */
+const CLIPBOARD_ACTIONS: ReadonlySet<string> = new Set(['copy', 'cut']);
 
 function modifiersOf(event: ModifierKeys): Modifiers {
   return { shift: event.shiftKey, alt: event.altKey, meta: event.metaKey, ctrl: event.ctrlKey };
@@ -204,10 +207,12 @@ export class CanvasInput {
       .keymap.find((binding) => binding.chord === chord)?.action;
     const result = this.send(keydown);
     if (result.consumed === true) event.preventDefault();
-    // A bound copy, cut or paste works on the in-memory clipboard; its text also goes to the
-    // system clipboard when the page has one (M2 contract, section 6). The consumed keydown is
-    // prevented, so no DOM clipboard event follows.
-    if (result.ok && result.consumed === true && action != null && CLIPBOARD_ACTIONS.has(action)) {
+    // A bound copy or cut works on the in-memory clipboard; its text also goes to the system
+    // clipboard when the page has one (M2 contract, section 6). The consumed keydown is
+    // prevented, so no DOM clipboard event follows. Only the command's own result counts: it
+    // copied something when it returns the copied roots, while a key the tool consumed (or an
+    // empty copy) returns none, so stale text is never written.
+    if (action != null && CLIPBOARD_ACTIONS.has(action) && result.ok && result.ids.length > 0) {
       this.writeSystemClipboard();
     }
   }

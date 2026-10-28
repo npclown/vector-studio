@@ -838,8 +838,18 @@ describe('M2-A10 paste failures', () => {
       { ok: false, code: 'editor.invalid-clipboard', path: '/roots' },
     ],
     [
-      'schemaVersion 3 with a root that is not a node: the version first',
+      'schemaVersion 3 with a root that is not a node: the roots first',
       { type: 'paste', text: marked({ ...body({ a: leaf('a') }, ['b']), schemaVersion: 3 }) },
+      { ok: false, code: 'editor.invalid-clipboard', path: '/roots/0' },
+    ],
+    [
+      'schemaVersion 3 with a repeated root: the roots first',
+      { type: 'paste', text: marked({ ...body({ a: leaf('a') }, ['a', 'a']), schemaVersion: 3 }) },
+      { ok: false, code: 'editor.invalid-clipboard', path: '/roots/1' },
+    ],
+    [
+      'schemaVersion 3 with valid roots: the version',
+      { type: 'paste', text: marked({ ...body({ a: leaf('a') }), schemaVersion: 3 }) },
       { ok: false, code: 'document.unsupported-version', path: '/schemaVersion' },
     ],
     [
@@ -1379,12 +1389,33 @@ describe('M2-A10 EditorCanvas clipboard events (section 6)', () => {
     expect(key('c')).toBe(true);
     expect(written).toEqual([clipboard(target)]);
     expect(key('x')).toBe(true);
+    expect(written).toEqual([clipboard(target), clipboard(target)]);
+    // A successful bound paste writes nothing: the system clipboard may hold another app's copy.
     expect(key('v')).toBe(true);
-    expect(written).toHaveLength(3);
-    expect(new Set(written)).toEqual(new Set([clipboard(target)]));
+    expect(selection(target)).toEqual(['n1']);
+    expect(written).toHaveLength(2);
     // Another bound key writes nothing.
     expect(key('z')).toBe(true);
-    expect(written).toHaveLength(3);
+    expect(written).toHaveLength(2);
+  });
+
+  it('a bound copy key the tool consumes writes no stale text', () => {
+    const { writer, written } = systemClipboard();
+    const { target, key } = canvasHost(writer);
+    ok(target, { type: 'copy', ids: ['el'] });
+    const stale = clipboard(target);
+    select(target, ['a']);
+    // A tool that consumes every key (as an extension tool may consume Mod+C).
+    internalsOf(target).tools.set('select', {
+      input: () => true,
+      reset: () => undefined,
+      overlay: () => null,
+    });
+    expect(key('c')).toBe(true);
+    expect(key('x')).toBe(true);
+    expect(clipboard(target)).toBe(stale);
+    expect(nodeOf(target, 'a')).not.toBeNull();
+    expect(written).toEqual([]);
   });
 
   it('writeText is guarded: missing, not a function, throwing or rejecting', async () => {

@@ -124,8 +124,8 @@ function holderId(nodes: Record<string, unknown>): string {
  * Parses fragment text in this order: the marker line (text without it is
  * `editor.unsupported-clipboard`; a marker not followed by a line feed is
  * `editor.invalid-clipboard`), the model's JSON rules, the fragment's top-level keys,
- * `fragmentVersion`, the shape of `roots` (a non-empty list of IDs) and `nodes` (an object),
- * `schemaVersion`, the roots' references (distinct, each a node), each node's model field
+ * `fragmentVersion`, `roots` (a non-empty array of distinct IDs) and `nodes` (an object),
+ * each root a key of `nodes`, then `schemaVersion`, each node's model field
  * rules, the fragment's reference rules (every root written with parent `""`, every other node
  * claimed by exactly one container's `children` and naming it as its parent, every node
  * reachable from a root), the model's tree rules (non-empty groups, a mask group's path source,
@@ -159,25 +159,23 @@ export function parseFragment(text: string, custom: CustomRules): Fragment | Fai
   for (const key of Object.keys(value)) {
     if (!FRAGMENT_KEYS.includes(key)) return fail('editor.invalid-clipboard', pointer([key]));
   }
-  // The fragment's own shape first, then the schema version, then the roots' references.
+  // The fragment's own shape first, roots' references included, then the schema version.
   if (value.fragmentVersion !== 1) return fail('editor.invalid-clipboard', '/fragmentVersion');
   const { roots, nodes } = value;
   if (!Array.isArray(roots) || roots.length === 0) {
     return fail('editor.invalid-clipboard', '/roots');
   }
-  for (let i = 0; i < roots.length; i += 1) {
-    if (!isValidId(roots[i])) return fail('editor.invalid-clipboard', `/roots/${i}`);
-  }
   if (!isRecord(nodes)) return fail('editor.invalid-clipboard', '/nodes');
-  if (value.schemaVersion !== 2) return fail('document.unsupported-version', '/schemaVersion');
   const rootSet = new Set<string>();
   for (let i = 0; i < roots.length; i += 1) {
-    const root = roots[i] as string;
-    if (rootSet.has(root) || !Object.hasOwn(nodes, root)) {
+    const root: unknown = roots[i];
+    if (!isValidId(root) || rootSet.has(root) || !Object.hasOwn(nodes, root)) {
       return fail('editor.invalid-clipboard', `/roots/${i}`);
     }
     rootSet.add(root);
   }
+  // Every fragment-shape failure comes before every model code.
+  if (value.schemaVersion !== 2) return fail('document.unsupported-version', '/schemaVersion');
 
   // The model's field rules; the empty parent of a fragment root stands for the holder page.
   const holder = holderId(nodes);
