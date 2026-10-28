@@ -1,6 +1,6 @@
 # MVP M3 contract: path editing
 
-Status: APPROVED 2026-10-28 after independent review rounds 1 (NOT READY: B1 gate wording, B2 value provenance; applied) and 2 (APPROVED WITH FOLLOW-UPS, applied); implementation waits for the user's acceptance of the M2 exit (section 11); Full tier (public commands, session state, product behavior). Visualization-track item [V-10](d9-visualization-track.md#status-index), milestone M3 of the [MVP editor plan](mvp-editor-plan.md#m3-path-editing), after M2 ([V-9](d9-visualization-track.md#status-index), [contract](mvp-m2-interaction-contract.md), [exit record](../evidence/m2-exit-2026-10-28.md), user acceptance pending). Open questions M3-Q1 to M3-Q13 (section 10) are adopted as recommended under the user's standing rule of 2026-10-24 ("추천안 자동 채택", 2026-10-28); none narrows a requirement.
+Status: APPROVED 2026-10-28 after independent review rounds 1 (NOT READY: B1 gate wording, B2 value provenance; applied) and 2 (APPROVED WITH FOLLOW-UPS, applied); the user accepted the M2 exit on 2026-10-28, so implementation starts at M3-U1 (section 11); Full tier (public commands, session state, product behavior). Visualization-track item [V-10](d9-visualization-track.md#status-index), milestone M3 of the [MVP editor plan](mvp-editor-plan.md#m3-path-editing), after M2 ([V-9](d9-visualization-track.md#status-index), [contract](mvp-m2-interaction-contract.md), [exit record](../evidence/m2-exit-2026-10-28.md), accepted by the user 2026-10-28). Open questions M3-Q1 to M3-Q13 (section 10) are adopted as recommended under the user's standing rule of 2026-10-24 ("추천안 자동 채택", 2026-10-28); none narrows a requirement.
 
 Owners: this file owns M3 scope, the path anchor model, the path commands and their failure codes, the re-normalization rule, path edit mode and its session state, the edit-mode gestures, the `pathOverlay` query, acceptance criteria M3-A01 to M3-A13 and the units. Product behavior stays in [`requirements.md`](../requirements.md) (Path editing), which this contract does not change; the milestone order in the MVP plan; the P5 rules ([P5 plan](p5-editor-slice.md): transactions, gestures, history, events, the section 3.1 unit-box rule), the M1 rules ([M1 contract](mvp-m1-document-v2-contract.md): schema v2, parent-local frames, rotation, group refit, hit testing) and the M2 rules ([M2 contract](mvp-m2-interaction-contract.md): input dispatch M2-I2, `consumed`, gesture `replace` (S1), scope, snapping, keymap) stay in force except as section 1.2 lists.
 
@@ -177,13 +177,13 @@ Documentation only: Markdown formatting and local links. No product, browser, GP
 
 ## 11. Gate
 
-This contract is drafted while the M2 exit record (M2-U9, #318) awaits the user's acceptance. Independent review: round 1 NOT READY (B1, B2), applied; round 2 APPROVED WITH FOLLOW-UPS, applied; the contract is APPROVED 2026-10-28. Under MVP plan section 7 (M2 then M3), implementation starts at M3-U1 only after both this contract's approval and the user's acceptance of the M2 exit; approval alone does not start implementation. The M3 exit is the user's acceptance of the M3-U5 record.
+This contract was drafted while the M2 exit record (M2-U9, #318) awaited the user's acceptance; the user accepted it on 2026-10-28 at 21:31Z. Independent review: round 1 NOT READY (B1, B2), applied; round 2 APPROVED WITH FOLLOW-UPS, applied; the contract is APPROVED 2026-10-28. Under MVP plan section 7 (M2 then M3), implementation starts at M3-U1 only after both this contract's approval and the user's acceptance of the M2 exit; approval alone does not start implementation. The M3 exit is the user's acceptance of the M3-U5 record.
 
 ## 12. Progress
 
 | Unit | State |
 | --- | --- |
-| M3-U1 | Not started |
+| M3-U1 | In progress (started 2026-10-28 after the M2 exit acceptance) |
 | M3-U2 | Not started |
 | M3-U3 | Not started |
 | M3-U4 | Not started |
