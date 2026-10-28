@@ -1,4 +1,9 @@
-import { serializeDocument, type DocumentV2, type Frame } from '@vector-studio/model';
+import {
+  normalizeRotation,
+  serializeDocument,
+  type DocumentV2,
+  type Frame,
+} from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_FRAME_FILL,
@@ -523,7 +528,7 @@ describe('M2-A04 snapping: candidates', () => {
     expect(snapOf(target)).toBeNull();
   });
 
-  it('excludes a moving node’s mask-group ancestor and its source', () => {
+  it('excludes a moving node’s mask-group ancestor (the source rule is in the snap-module scope test)', () => {
     const target = selected(
       page([
         container('maskGroup', 'mg', 'p1', ['mp', 'mr'], f(0, 0, 60, 60)),
@@ -846,11 +851,18 @@ describe('M2-A04 snapping: rotation angles', () => {
     const plain = unsnapped(DOC, ['r', 'k']);
     press(plain, start, at(start.x - 40, start.y + 300));
     expect(text(several)).toBe(text(plain));
-    input(several, 'pointermove', at(start.x - 40, start.y + 300), shift);
-    const angle = snapOf(several)!.angle!;
-    expect(snapOf(several)).toEqual(overlay([], [], angle));
-    expect(Math.round(angle / (Math.PI / 12)) * (Math.PI / 12)).toBe(angle);
+    const q = at(start.x - 40, start.y + 300);
+    input(several, 'pointermove', q, shift);
+    // The pivot is the handle-box centre fixed at press; `a` is the sweep from the press to q.
+    const box = boundsOf(DOC as unknown as DocumentV2, ['r', 'k'])!;
+    const pivot = at(box.x + box.width / 2, box.y + box.height / 2);
+    const a = normalizeRotation(
+      Math.atan2(q.y - pivot.y, q.x - pivot.x) - Math.atan2(start.y - pivot.y, start.x - pivot.x),
+    );
+    const step = Math.PI / 12;
+    const angle = normalizeRotation(Math.round(a / step) * step);
     expect(angle).not.toBe(0);
+    expect(snapOf(several)).toEqual(overlay([], [], angle));
   });
 
   it('ties (snap module): a multiple of π/2, then the lesser target', () => {
@@ -873,5 +885,158 @@ describe('M2-A04 snapping: rotation angles', () => {
     expect(snapAngle(set, 0.5, 0, 1)).toBeNull();
     // The distance wraps: −π + 0.01 is 0.01 from π.
     expect(snapAngle(set, -Math.PI + 0.01, 1, 0.02)).toBe(Math.PI);
+  });
+});
+
+describe('M2-A04 snapping: review follow-ups', () => {
+  it('ties: a spacing offer wins over a centring offer of equal |o|', () => {
+    // G = {20, 40}; B = [22.5, 32.5]: the right offer 50 − 20 − 32.5 = −2.5 and the centring
+    // offer (10 + 50) / 2 − 27.5 = 2.5; spacing wins.
+    const target = editor(
+      page([
+        tall('p', -30, 10),
+        tall('a', 0, 10),
+        tall('e', 50, 10),
+        rect('m', 'p1', f(12.5, 30, 10, 11)),
+      ]),
+    );
+    press(target, at(17, 35), at(27, 35));
+    expect(frameOf(target, 'm')).toEqual(f(20, 30, 10, 11));
+    expect(snapOf(target)).toEqual(overlay([], [seg(-20, 50, 0, 50), seg(30, 35.5, 50, 35.5)]));
+  });
+
+  it('ties: an align offer wins over a centring offer of equal |o|', () => {
+    // B = [22, 32]: k.right = 19 gives −3 for the left edge, centring (10 + 50) / 2 − 27 gives +3.
+    const target = editor(
+      page([
+        tall('a', 0, 10),
+        tall('e', 50, 10),
+        rect('k', 'p1', f(14, 300, 5, 5)),
+        rect('m', 'p1', f(12, 30, 10, 11)),
+      ]),
+    );
+    press(target, at(17, 35), at(27, 35));
+    expect(frameOf(target, 'm')).toEqual(f(19, 30, 10, 11));
+    expect(snapOf(target)).toEqual(overlay([seg(19, 30, 19, 305)]));
+  });
+
+  // Rows for x spacing (y [0, 200]) and columns for y spacing (x [0, 200]); `m` at [30, 40]².
+  const row = (id: string, x: number, width: number) => rect(id, 'p1', f(x, 0, width, 200));
+  const column = (id: string, y: number, height: number) => rect(id, 'p1', f(0, y, 200, height));
+  const columns = [column('ca', 0, 10), column('cb', 20, 10), column('cc', 25, 10)];
+
+  it('orders x gaps before y gaps when both axes snap by spacing', () => {
+    const target = editor(
+      page([
+        row('ra', 0, 10),
+        row('rb', 20, 10),
+        row('rc', 25, 10),
+        ...columns,
+        rect('m', 'p1', f(30, 30, 10, 10)),
+      ]),
+    );
+    press(target, at(36, 36), at(47, 47));
+    expect(frameOf(target, 'm')).toEqual(f(45, 45, 10, 10));
+    expect(snapOf(target)).toEqual(
+      overlay(
+        [],
+        [seg(10, 100, 20, 100), seg(35, 50, 45, 50), seg(100, 10, 100, 20), seg(50, 35, 50, 45)],
+      ),
+    );
+  });
+
+  it('mixes an x align guide with y spacing gaps', () => {
+    // B = [41, 51]²: x.right = 38.5 gives −2.5 on x; the columns' gap 10 gives +4 on y.
+    const target = editor(
+      page([...columns, rect('x', 'p1', f(0, 300, 38.5, 10)), rect('m', 'p1', f(30, 30, 10, 10))]),
+    );
+    press(target, at(36, 36), at(47, 47));
+    expect(frameOf(target, 'm')).toEqual(f(38.5, 45, 10, 10));
+    expect(snapOf(target)).toEqual(
+      overlay([seg(38.5, 45, 38.5, 310)], [seg(100, 10, 100, 20), seg(43.5, 35, 43.5, 45)]),
+    );
+  });
+
+  it('a move snapped back to its origin records no step, with a commit event to resync', () => {
+    const target = editor(EXAMPLE);
+    const before = text(target);
+    const seen: EditorEvent[] = [];
+    target.subscribe((event) => seen.push(event));
+    // B = [31, 41]: b.right = 30 gives o = −1, so the snapped delta is 0.
+    drag(target, at(36, 35), at(37, 35));
+    expect(text(target)).toBe(before);
+    expect(undoDepth(target)).toBe(0);
+    const commits = seen.filter((e) => e.type === 'document' && e.cause === 'gesture-commit');
+    expect(commits).toEqual([
+      expect.objectContaining({ type: 'document', cause: 'gesture-commit', touched: ['m'] }),
+    ]);
+    expect(target.execute({ type: 'undo' })).toEqual({ ok: false, code: 'editor.nothing-to-undo' });
+  });
+
+  it('a resize snapped back to its origin records no step', () => {
+    const target = selected(
+      page([rect('r', 'p1', f(0, 0, 100, 50)), rect('k', 'p1', f(100, 200, 10, 10))]),
+      ['r'],
+    );
+    const before = text(target);
+    drag(target, at(100, 25), at(101, 25));
+    expect(text(target)).toBe(before);
+    expect(undoDepth(target)).toBe(0);
+  });
+
+  it('a one-node angle snap back to the stored rotation replaces with nothing', () => {
+    const document = page([rect('r', 'p1', f(0, 0, 100, 50), Math.PI / 2)]);
+    const target = selected(document, ['r']);
+    const before = text(target);
+    const pivot = at(50, 25);
+    const [, tr] = target.query({ type: 'handles' })!.corners;
+    const length = Math.hypot(tr.x - pivot.x, tr.y - pivot.y);
+    const out = (length + 10) / length;
+    const start = at(pivot.x + (tr.x - pivot.x) * out, pivot.y + (tr.y - pivot.y) * out);
+    const q = at(
+      pivot.x + (start.x - pivot.x) * Math.cos(0.02) - (start.y - pivot.y) * Math.sin(0.02),
+      pivot.y + (start.x - pivot.x) * Math.sin(0.02) + (start.y - pivot.y) * Math.cos(0.02),
+    );
+    const seen: EditorEvent[] = [];
+    target.subscribe((event) => seen.push(event));
+    press(target, start, q);
+    expect(snapOf(target)).toEqual(overlay([], [], Math.PI / 2));
+    input(target, 'pointerup', q);
+    expect(text(target)).toBe(before);
+    expect(undoDepth(target)).toBe(0);
+    expect(seen.filter((e) => e.type === 'document')).toEqual([]);
+  });
+
+  it('setSnapping off during a gesture clears the overlay at once, with one event', () => {
+    const target = editor(EXAMPLE);
+    press(target, at(36, 35), at(47, 35));
+    const seen: EditorEvent[] = [];
+    target.subscribe((event) => seen.push(event));
+    ok(target, { type: 'setSnapping', enabled: false });
+    expect(snapOf(target)).toBeNull();
+    expect(seen).toEqual([
+      { type: 'session', field: 'snapping' },
+      { type: 'session', field: 'snap' },
+    ]);
+    expect(internalsOf(target).gesture.active).toBe(true);
+    input(target, 'pointermove', at(47, 35));
+    expect(frameOf(target, 'm')).toEqual(f(41, 30, 10, 11));
+  });
+
+  it.each([
+    ['Control', ctrl],
+    ['Meta', meta],
+  ] as const)('a %s key-down during a gesture clears the overlay at once', (name, modifiers) => {
+    const target = editor(EXAMPLE);
+    press(target, at(36, 35), at(47, 35));
+    const seen: EditorEvent[] = [];
+    target.subscribe((event) => seen.push(event));
+    target.execute({ type: 'input', event: { kind: 'keydown', key: name, modifiers } });
+    expect(snapOf(target)).toBeNull();
+    expect(seen).toEqual([{ type: 'session', field: 'snap' }]);
+    expect(internalsOf(target).gesture.active).toBe(true);
+    input(target, 'pointermove', at(47, 35), modifiers);
+    expect(frameOf(target, 'm')).toEqual(f(41, 30, 10, 11));
+    expect(snapOf(target)).toBeNull();
   });
 });

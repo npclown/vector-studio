@@ -378,6 +378,11 @@ function nodeDiffers(a: DocumentV2, b: DocumentV2, id: string): boolean {
   return x === undefined || y === undefined || JSON.stringify(x) !== JSON.stringify(y);
 }
 
+/** Whether two documents have the same pages, children orders included. */
+function samePages(a: DocumentV2, b: DocumentV2): boolean {
+  return a.pages === b.pages || JSON.stringify(a.pages) === JSON.stringify(b.pages);
+}
+
 function sorted(ids: Iterable<string>): string[] {
   return [...new Set(ids)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
@@ -714,6 +719,8 @@ class EditorCore implements Editor {
         if (command.enabled !== this.snapping) {
           this.snapping = command.enabled;
           this.refresh({ type: 'session', field: 'snapping' });
+          // Snapping turned off mid-gesture: the overlay clears at once (M2-U3).
+          if (!command.enabled) this.setSnap(null);
         }
         return { ok: true, ids: [] };
       }
@@ -902,6 +909,18 @@ class EditorCore implements Editor {
       }
       default:
         break;
+    }
+    // Ctrl or Meta pressed during a gesture disables snapping, so the overlay clears at once;
+    // the document follows on the next update (M2-U3).
+    if (
+      event.kind === 'keydown' &&
+      this.gestureState !== null &&
+      (event.modifiers.ctrl ||
+        event.modifiers.meta ||
+        event.key === 'Control' ||
+        event.key === 'Meta')
+    ) {
+      this.setSnap(null);
     }
     const tool = this.tools.get(this.tool);
     const consumed =
@@ -1178,6 +1197,15 @@ class EditorCore implements Editor {
         (id) => nodeDiffers(gesture.base, after, id) || nodeDiffers(live, after, id),
       ),
     );
+    // A commit byte-identical to the pre-gesture document (a move or resize snapped back to its
+    // origin) records no step; the live document returns to the pre-gesture one, and the commit
+    // event, listing every node the gesture touched, lets the renderer resync (M2-U3).
+    if (touched.length === 0 && samePages(gesture.base, after)) {
+      if (live !== gesture.base) {
+        this.changeDocument(gesture.base, 'gesture-commit', sorted(gesture.touched));
+      }
+      return;
+    }
     this.undoStack.push({ before: gesture.base, after, touched });
     this.redoStack = [];
     this.changeDocument(after, 'gesture-commit', changed);
