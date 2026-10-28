@@ -1,7 +1,5 @@
 {
-  "criteria": [
-    "P4-A08"
-  ],
+  "criteria": ["P4-A08"],
   "browser": {
     "project": "edge",
     "version": "156.0.4314.42"

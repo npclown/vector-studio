@@ -1,9 +1,5 @@
 {
-  "criteria": [
-    "P4-A06",
-    "P4-A07",
-    "P4-A08"
-  ],
+  "criteria": ["P4-A06", "P4-A07", "P4-A08"],
   "browser": {
     "project": "chrome",
     "version": "156.0.8078.48"
@@ -3671,10 +3667,7 @@
       "cssWidth": 256,
       "cssHeight": 160,
       "dpr": 2,
-      "physical": [
-        512,
-        320
-      ],
+      "physical": [512, 320],
       "maskPasses": 1,
       "interior": {
         "probes": 17440,
@@ -3722,10 +3715,7 @@
       "cssWidth": 400,
       "cssHeight": 250,
       "dpr": 1,
-      "physical": [
-        400,
-        250
-      ],
+      "physical": [400, 250],
       "maskPasses": 1,
       "interior": {
         "probes": 10539,
@@ -3773,10 +3763,7 @@
       "cssWidth": 512,
       "cssHeight": 320,
       "dpr": 1,
-      "physical": [
-        512,
-        320
-      ],
+      "physical": [512, 320],
       "maskPasses": 1,
       "interior": {
         "probes": 17803,
