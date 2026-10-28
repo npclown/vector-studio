@@ -243,7 +243,7 @@ function isNumber(value: unknown): value is number {
 }
 
 /** The shape of a ref (`editor.invalid-command`): an object with finite `subpath` and `anchor`. */
-function refShape(value: unknown, path: string): Failure | null {
+export function refShape(value: unknown, path: string): Failure | null {
   if (typeof value !== 'object' || value === null) return fail('editor.invalid-command', path);
   const ref = value as Record<string, unknown>;
   if (!isNumber(ref.subpath)) return fail('editor.invalid-command', `${path}/subpath`);
@@ -252,7 +252,7 @@ function refShape(value: unknown, path: string): Failure | null {
 }
 
 /** Whether a well-shaped ref names an anchor of the model (`editor.invalid-path-ref`). */
-function inRange(model: readonly ModelSubpath[], ref: PathAnchorRef): boolean {
+export function inRange(model: readonly ModelSubpath[], ref: PathAnchorRef): boolean {
   const { subpath, anchor } = ref;
   return (
     Number.isInteger(subpath) &&

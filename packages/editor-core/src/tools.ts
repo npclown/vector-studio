@@ -1,4 +1,9 @@
-import { normalizeRotation, type DocumentV2, type Frame } from '@vector-studio/model';
+import {
+  normalizeRotation,
+  type DocumentV2,
+  type Frame,
+  type PathNodeV2,
+} from '@vector-studio/model';
 import type { Tool, ToolContext } from './editor.js';
 import { deepFreeze } from './freeze.js';
 import { apply, invertRigid, rotate } from './geometry.js';
@@ -20,6 +25,8 @@ import {
   targetChain,
   type CustomGeometry,
 } from './hit-test.js';
+import { canonicalRefs, hasRef, pathTargetAt } from './path-edit.js';
+import { inSegment, outSegment, readAnchorModel } from './paths.js';
 import { resizeInOwnAxes, scaleAbout } from './resize.js';
 import {
   SNAP_PX,
@@ -39,6 +46,8 @@ import type {
   Modifiers,
   PagePoint,
   PathAnchor,
+  PathAnchorRef,
+  PathEditState,
   SelectionHandles,
   SnapOverlay,
   ToolOverlay,
@@ -59,7 +68,9 @@ export {
 // also over a top-level frame. Move drags convert the page delta into each node's parent space;
 // resize follows section 4.4: the P5 box resize for page-root selections with rotation 0, the
 // node's own axes for any other single node, and the page-space box mapped node by node (as a
-// group resize, from the pre-gesture state) for any other multi-selection.
+// group resize, from the pre-gesture state) for any other multi-selection. In path edit mode
+// (MVP M3 contract, section 5) the select tool picks anchors, handles, segments and the fill of
+// the edited path instead, and drags them through the path commands in `replace`.
 
 type Pointer = Extract<InputEvent, { kind: 'pointerdown' | 'pointermove' | 'pointerup' }>;
 
@@ -456,7 +467,56 @@ type SelectState =
         candidates: () => SnapSet;
       } | null;
     }
-  | { kind: 'marquee'; start: PagePoint; current: PagePoint; additive: boolean };
+  | { kind: 'marquee'; start: PagePoint; current: PagePoint; additive: boolean }
+  // Path edit mode (M3 contract, section 5).
+  | {
+      /** An anchor or segment drag: `movePathAnchors` on `anchors`, the anchor selection. */
+      kind: 'anchors';
+      start: PagePoint;
+      moved: boolean;
+      id: string;
+      anchors: readonly PathAnchorRef[];
+      /** The pressed anchor's page point, which snaps; null for a segment drag. */
+      snapFrom: PagePoint | null;
+      /** The anchor selection a click without movement leaves. */
+      click: readonly PathAnchorRef[];
+      candidates: () => SnapSet;
+    }
+  | {
+      /** A handle drag from the handle's page point `from`; `mirror` as inferred at press. */
+      kind: 'handle';
+      start: PagePoint;
+      moved: boolean;
+      id: string;
+      ref: PathAnchorRef;
+      side: 'in' | 'out';
+      from: PagePoint;
+      mirror: boolean;
+    }
+  | {
+      /** An Alt-drag on an anchor pulling new mirrored handles; an Alt-click retracts them. */
+      kind: 'pull';
+      start: PagePoint;
+      moved: boolean;
+      id: string;
+      ref: PathAnchorRef;
+      side: 'in' | 'out';
+      anchor: PagePoint;
+    }
+  /** A press that starts no drag (a Shift press on an anchor): later moves are ignored. */
+  | { kind: 'held' }
+  | {
+      /**
+       * An anchor marquee from the fill (`canvas` false) or empty canvas; `leaves` when the press
+       * was on the page's empty canvas outside the session scope.
+       */
+      kind: 'anchorMarquee';
+      start: PagePoint;
+      current: PagePoint;
+      additive: boolean;
+      canvas: boolean;
+      leaves: boolean;
+    };
 
 /** Scales `value` about `origin` by `scale` along one axis. */
 function scaled(origin: number, value: number, scale: number): number {
@@ -601,6 +661,11 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     const document = context.query({ type: 'document' });
     const chain = targetChain(document, deepest, scope);
     const target = chain[chain.length - 1]!;
+    // A path target enters path edit mode (M3 contract, section 4).
+    if (document.nodes[target]?.type === 'path') {
+      context.execute({ type: 'enterPathEdit', id: target });
+      return true;
+    }
     if (!isContainer(document.nodes[target])) return false;
     context.execute({ type: 'setScope', id: target });
     const next = chain.length >= 2 ? [chain[chain.length - 2]!] : [];
@@ -608,12 +673,133 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     return true;
   }
 
-  function pointerDown(event: Pointer, context: ToolContext): void {
+  /**
+   * A press in path edit mode (M3 contract, section 5): an anchor, a visible handle, a segment
+   * or the fill of the edited path; else a press on another node ends edit mode and runs the M2
+   * rules, and empty canvas (the scope node's included) starts an anchor marquee.
+   */
+  function editDown(event: Pointer, context: ToolContext, edit: PathEditState): void {
+    const document = context.query({ type: 'document' });
+    const zoom = zoomOf(context);
+    const { point, modifiers } = event;
+    const { id } = edit;
+    const target = pathTargetAt(document, edit, point, zoom, HANDLE_RADIUS / zoom);
+    const marquee = (canvas: boolean, leaves: boolean) => {
+      state = {
+        kind: 'anchorMarquee',
+        start: point,
+        current: point,
+        additive: modifiers.shift,
+        canvas,
+        leaves,
+      };
+    };
+    if (target === null) {
+      const { deepest, leaves } = resolveHit(context, point);
+      if (deepest !== null && deepest !== id) {
+        // Resize, rotate and their handles stay off for this press: it hit the node.
+        context.execute({ type: 'exitPathEdit' });
+        pointerDown(event, context, true);
+        return;
+      }
+      // The edited path hit only by the M2 rules acts as its fill.
+      marquee(deepest === null, deepest === null && leaves);
+      return;
+    }
+    if (target.kind === 'fill') {
+      marquee(false, false);
+      return;
+    }
+    const overlay = context.query({ type: 'pathOverlay' })!;
+    if (target.kind === 'handle') {
+      const { ref, side } = target;
+      if (!context.gesture.begin()) return;
+      state = {
+        kind: 'handle',
+        start: point,
+        moved: false,
+        id,
+        ref,
+        side,
+        from: target.point,
+        mirror: overlay.subpaths[ref.subpath]!.anchors[ref.anchor]!.mirrored,
+      };
+      return;
+    }
+    // An anchor, or both ends of a segment (one for a one-anchor loop).
+    let refs: PathAnchorRef[];
+    if (target.kind === 'anchor') {
+      refs = [target.ref];
+    } else {
+      const n = overlay.subpaths[target.subpath]!.anchors.length;
+      refs = canonicalRefs([
+        { subpath: target.subpath, anchor: target.segment },
+        { subpath: target.subpath, anchor: (target.segment + 1) % n },
+      ]);
+    }
+    const all = refs.every((ref) => hasRef(edit.anchors, ref));
+    if (modifiers.shift) {
+      // Shift toggles an anchor and adds a segment's ends; it starts no drag.
+      const anchors =
+        target.kind === 'anchor' && all
+          ? edit.anchors.filter((ref) => !hasRef(refs, ref))
+          : canonicalRefs([...edit.anchors, ...refs]);
+      context.execute({ type: 'setPathSelection', anchors });
+      state = { kind: 'held' };
+      return;
+    }
+    if (!all) context.execute({ type: 'setPathSelection', anchors: refs });
+    if (target.kind === 'anchor' && modifiers.alt) {
+      // Alt pulls mirrored handles on the `out` side, or `in` at the end of an open subpath;
+      // an anchor without segments does nothing.
+      const { ref } = target;
+      const model = readAnchorModel((document.nodes[id] as PathNodeV2).path)[ref.subpath]!;
+      const side =
+        outSegment(model, ref.anchor) !== null
+          ? 'out'
+          : inSegment(model, ref.anchor) !== null
+            ? 'in'
+            : null;
+      if (side === null) {
+        state = { kind: 'held' };
+        return;
+      }
+      if (!context.gesture.begin()) return;
+      state = {
+        kind: 'pull',
+        start: point,
+        moved: false,
+        id,
+        ref,
+        side,
+        anchor: overlay.subpaths[ref.subpath]!.anchors[ref.anchor]!.point,
+      };
+      return;
+    }
+    if (!context.gesture.begin()) return;
+    state = {
+      kind: 'anchors',
+      start: point,
+      moved: false,
+      id,
+      anchors: context.query({ type: 'pathEdit' })?.anchors ?? refs,
+      snapFrom:
+        target.kind === 'anchor'
+          ? overlay.subpaths[target.ref.subpath]!.anchors[target.ref.anchor]!.point
+          : null,
+      click: refs,
+      // The edited path is the moving node (section 5).
+      candidates: lazySnapSet(context, [id]),
+    };
+  }
+
+  /** `handlesOff`: a press that just ended path edit mode on another node gets no handles. */
+  function pointerDown(event: Pointer, context: ToolContext, handlesOff = false): void {
     if (state.kind !== 'idle') return;
     const document = context.query({ type: 'document' });
     const selection = context.query({ type: 'selection' });
     const zoom = zoomOf(context);
-    const handles = handlesOf(context, selection);
+    const handles = handlesOff ? null : handlesOf(context, selection);
     // The node hit and its selection target (section 6), with the scope in place of the page
     // (M2 contract, section 5): a hit on the scope node itself is empty canvas inside the scope,
     // and a hit outside the scope's subtree, or none, leaves the scope for the page rule. A
@@ -874,15 +1060,64 @@ export function createSelectTool(custom: CustomGeometry): Tool {
   }
 
   function pointerMove(event: Pointer, context: ToolContext): void {
-    if (state.kind === 'marquee') {
+    if (state.kind === 'marquee' || state.kind === 'anchorMarquee') {
       state.current = event.point;
       return;
     }
-    if (state.kind === 'idle') return;
+    if (state.kind === 'idle' || state.kind === 'held') return;
     const dx = event.point.x - state.start.x;
     const dy = event.point.y - state.start.y;
     if (!state.moved && dx === 0 && dy === 0) return;
     state.moved = true;
+    if (state.kind === 'anchors') {
+      // The raw page delta plus the pressed anchor's snap offset; a delta of exactly (0, 0)
+      // gives back the pre-gesture document (M3 contract, section 5).
+      let mx = dx;
+      let my = dy;
+      let overlay: SnapOverlay | null = null;
+      const from = state.snapFrom;
+      if (from !== null && snapsOn(context, event.modifiers)) {
+        const result = snapPoint(
+          state.candidates(),
+          { x: from.x + dx, y: from.y + dy },
+          thresholdOf(context),
+        );
+        mx = dx + result.ox;
+        my = dy + result.oy;
+        overlay = result.overlay;
+      }
+      const { id, anchors } = state;
+      context.gesture.replace([{ type: 'movePathAnchors', id, anchors, dx: mx, dy: my }]);
+      context.snap(overlay);
+      return;
+    }
+    if (state.kind === 'handle') {
+      // Back at the press point the handle is where it was: the pre-gesture document.
+      const { id, ref, side, from } = state;
+      const mirror = state.mirror && !event.modifiers.alt;
+      context.gesture.replace(
+        dx === 0 && dy === 0
+          ? []
+          : [
+              {
+                type: 'setPathHandle',
+                id,
+                anchor: ref,
+                side,
+                to: { x: from.x + dx, y: from.y + dy },
+                mirror,
+              },
+            ],
+      );
+      return;
+    }
+    if (state.kind === 'pull') {
+      const { id, ref, side, anchor } = state;
+      const q = event.point;
+      const to = side === 'out' ? q : { x: 2 * anchor.x - q.x, y: 2 * anchor.y - q.y };
+      context.gesture.replace([{ type: 'setPathHandle', id, anchor: ref, side, to, mirror: true }]);
+      return;
+    }
     if (state.kind === 'resize') {
       const snapped = snapResize(state, dx, dy, event.modifiers, context);
       resize(state, snapped.dx, snapped.dy, context);
@@ -956,7 +1191,13 @@ export function createSelectTool(custom: CustomGeometry): Tool {
   function pointerUp(event: Pointer, context: ToolContext): void {
     // The up point ends the drag, so it updates like a move first.
     const gesture = (kind: SelectState['kind']) =>
-      kind === 'move' || kind === 'resize' || kind === 'rotate' || kind === 'duplicate';
+      kind === 'move' ||
+      kind === 'resize' ||
+      kind === 'rotate' ||
+      kind === 'duplicate' ||
+      kind === 'anchors' ||
+      kind === 'handle' ||
+      kind === 'pull';
     if (gesture(state.kind)) pointerMove(event, context);
     const current = state;
     state = { kind: 'idle' };
@@ -972,6 +1213,17 @@ export function createSelectTool(custom: CustomGeometry): Tool {
         if (current.leaves) context.execute({ type: 'setScope', id: null });
         if (!current.moved) cycle(current, context);
       }
+      // A click on an anchor or segment selects only it (M3 contract, section 5).
+      if (current.kind === 'anchors' && !current.moved) {
+        context.execute({ type: 'setPathSelection', anchors: current.click });
+      }
+      // An Alt-click retracts both handles, so the anchor becomes a corner.
+      if (current.kind === 'pull' && !current.moved) {
+        const { id, ref, side } = current;
+        context.execute({ type: 'setPathHandle', id, anchor: ref, side, to: null, mirror: true });
+      }
+    } else if (current.kind === 'anchorMarquee') {
+      editMarquee(current, event.point, context);
     } else if (current.kind === 'marquee') {
       current.current = event.point;
       if (distance(current.start, current.current) === 0) {
@@ -993,11 +1245,51 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     }
   }
 
+  /**
+   * The release of an anchor marquee (M3 contract, section 5): the anchors whose page point lies
+   * in the closed box become the anchor selection, Shift adds. A click without movement on the
+   * fill clears the anchor selection; on empty canvas it ends edit mode, as the M2 click there
+   * does (the selection clears, Shift keeps it, and a press outside the scope leaves it).
+   */
+  function editMarquee(
+    current: Extract<SelectState, { kind: 'anchorMarquee' }>,
+    end: PagePoint,
+    context: ToolContext,
+  ): void {
+    current.current = end;
+    if (distance(current.start, end) === 0) {
+      if (current.canvas) {
+        if (current.additive) context.execute({ type: 'exitPathEdit' });
+        else context.execute({ type: 'setSelection', ids: [] });
+        if (current.leaves) context.execute({ type: 'setScope', id: null });
+      } else if (!current.additive) {
+        context.execute({ type: 'setPathSelection', anchors: [] });
+      }
+      return;
+    }
+    const overlay = context.query({ type: 'pathOverlay' });
+    if (overlay === null) return;
+    const box = boxOf(current.start, end);
+    const inside = ({ x, y }: PagePoint) =>
+      x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height;
+    const hits = overlay.subpaths.flatMap((subpath, s) =>
+      subpath.anchors.flatMap((anchor, a) =>
+        inside(anchor.point) ? [{ subpath: s, anchor: a }] : [],
+      ),
+    );
+    const before = current.additive ? (context.query({ type: 'pathEdit' })?.anchors ?? []) : [];
+    context.execute({ type: 'setPathSelection', anchors: canonicalRefs([...before, ...hits]) });
+  }
+
+  /** States with no gesture of their own. */
+  const passive = (kind: SelectState['kind']) =>
+    kind === 'marquee' || kind === 'anchorMarquee' || kind === 'held';
+
   return {
     input(event, context) {
       if (event.kind === 'keydown') {
         if (event.key === 'Escape' && state.kind !== 'idle') {
-          if (state.kind !== 'marquee') context.gesture.cancel();
+          if (!passive(state.kind)) context.gesture.cancel();
           state = { kind: 'idle' };
           return true;
         }
@@ -1005,11 +1297,24 @@ export function createSelectTool(custom: CustomGeometry): Tool {
       }
       if (event.kind === 'pointerdown') {
         if (state.kind !== 'idle') return false;
-        pointerDown(event, context);
+        const edit = context.query({ type: 'pathEdit' });
+        if (edit === null) pointerDown(event, context);
+        else editDown(event, context, edit);
         return true;
       }
       if (event.kind === 'doubleclick') {
-        return state.kind === 'idle' && doubleClick(event.point, context);
+        if (state.kind !== 'idle') return false;
+        const edit = context.query({ type: 'pathEdit' });
+        if (edit !== null) {
+          // On an anchor, a handle, a segment or the fill a double-click is consumed and does
+          // nothing; insertion on a segment is M3-U3's.
+          const zoom = zoomOf(context);
+          const document = context.query({ type: 'document' });
+          if (pathTargetAt(document, edit, event.point, zoom, HANDLE_RADIUS / zoom) !== null) {
+            return true;
+          }
+        }
+        return doubleClick(event.point, context);
       }
       if (!isMoveOrUp(event) || state.kind === 'idle') return false;
       if (event.kind === 'pointermove') pointerMove(event, context);
@@ -1020,7 +1325,7 @@ export function createSelectTool(custom: CustomGeometry): Tool {
       state = { kind: 'idle' };
     },
     overlay(): ToolOverlay | null {
-      return state.kind === 'marquee'
+      return state.kind === 'marquee' || state.kind === 'anchorMarquee'
         ? deepFreeze({ kind: 'marquee', frame: boxOf(state.start, state.current) })
         : null;
     },

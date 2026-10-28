@@ -24,6 +24,14 @@ import {
 import { boundsOf } from './hit-test.js';
 import { createCounterIdSource } from './ids.js';
 import {
+  allAnchors,
+  canonicalRefs,
+  editablePath,
+  pathEditOverlay,
+  sameStructure,
+} from './path-edit.js';
+import { inRange, readAnchorModel, refShape } from './paths.js';
+import {
   DEFAULT_KEYMAP,
   effectiveKeymap,
   eventChord,
@@ -65,6 +73,8 @@ import type {
   InputEvent,
   KeyBinding,
   PagePoint,
+  PathAnchorRef,
+  PathEditState,
   Platform,
   Query,
   QueryResult,
@@ -158,6 +168,8 @@ type Gesture = {
   updated: boolean;
   /** The selection when the gesture began, restored on cancel (M2 contract, section 2). */
   selection: readonly string[];
+  /** Path edit mode when the gesture began; its anchor selection is restored on cancel. */
+  pathEdit: PathEditState | null;
 };
 
 /** The zoom range (M2-Q2). */
@@ -240,6 +252,7 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.unsupported-clipboard',
   'editor.not-a-path',
   'editor.invalid-path-ref',
+  'editor.no-path-edit',
 ]);
 
 /**
@@ -485,6 +498,11 @@ class EditorCore implements Editor {
    * no snapshot field or event; it survives loads and page switches.
    */
   private clipboard: string | null = null;
+  /**
+   * Path edit mode (M3 contract, section 4): while set, the selection is exactly `[id]` and the
+   * tool is `select`; every change that breaks either ends it.
+   */
+  private pathEdit: PathEditState | null = null;
   private extensionDepth = 0;
   private readonly ids: IdSource;
   private readonly extensions: ExtensionRegistry;
@@ -779,6 +797,8 @@ class EditorCore implements Editor {
           if (hadSelection) this.emit({ type: 'session', field: 'selection' });
           if (hadScope) this.emit({ type: 'session', field: 'scope' });
           diagnostics.forEach((event) => this.emit(event));
+          // The cleared selection ends path edit mode.
+          this.syncPathEdit();
         }
         return { ok: true, ids: [] };
       }
@@ -791,6 +811,8 @@ class EditorCore implements Editor {
         if (command.tool !== this.tool) {
           this.tool = command.tool;
           this.refresh({ type: 'session', field: 'tool' });
+          // Another tool ends path edit mode (M3 contract, section 4).
+          this.syncPathEdit();
         }
         return { ok: true, ids: [] };
       }
@@ -904,6 +926,50 @@ class EditorCore implements Editor {
         // The copied roots in paint order, so a host can tell a copy from an empty one.
         return { ok: true, ids: copied.roots };
       }
+      case 'enterPathEdit': {
+        const { id } = command;
+        if (typeof id !== 'string') return failure('editor.invalid-command', '/id');
+        // Checked on the pre-gesture document, which the gesture's cancel restores.
+        const base = this.gestureState?.base ?? this.document;
+        const node = Object.hasOwn(base.nodes, id) ? base.nodes[id] : undefined;
+        if (node === undefined || pageOf(documentTree(base), id) !== this.activePage) {
+          return failure('editor.unknown-node');
+        }
+        if (node.type !== 'path') return failure('editor.not-a-path');
+        if (this.pathEdit?.id === id) return { ok: true, ids: [] };
+        this.interrupt();
+        if (this.tool !== 'select') this.run({ type: 'setTool', tool: 'select' });
+        // Set first, so the selection change to `[id]` keeps it; the event follows the
+        // selection's (section 4).
+        this.pathEdit = deepFreeze({ id, anchors: [] });
+        this.setSelectionState([id]);
+        this.refresh({ type: 'session', field: 'pathEdit' });
+        return { ok: true, ids: [] };
+      }
+      case 'exitPathEdit':
+        this.setPathEditState(null);
+        return { ok: true, ids: [] };
+      case 'setPathSelection': {
+        const refs: unknown = command.anchors;
+        if (!Array.isArray(refs)) return failure('editor.invalid-command', '/anchors');
+        const seen = new Set<string>();
+        for (const [i, ref] of (refs as unknown[]).entries()) {
+          const shape = refShape(ref, `/anchors/${i}`);
+          if (shape !== null) return shape;
+          const { subpath, anchor } = ref as PathAnchorRef;
+          const key = `${subpath},${anchor}`;
+          if (seen.has(key)) return failure('editor.invalid-command', '/anchors');
+          seen.add(key);
+        }
+        const edit = this.pathEdit;
+        if (edit === null) return failure('editor.no-path-edit');
+        const model = readAnchorModel(editablePath(this.document, this.activePage, edit.id)!.path);
+        const list = refs as readonly PathAnchorRef[];
+        const bad = list.findIndex((ref) => !inRange(model, ref));
+        if (bad >= 0) return failure('editor.invalid-path-ref', `/anchors/${bad}`);
+        this.setPathEditState({ id: edit.id, anchors: canonicalRefs(list) });
+        return { ok: true, ids: [] };
+      }
       case 'runCommand': {
         const extension =
           typeof command.id === 'string' ? this.extensions.command(command.id) : undefined;
@@ -984,7 +1050,10 @@ class EditorCore implements Editor {
         case 'pages':
           return this.document.pages;
         case 'handles':
-          return selectionHandles(this.document, this.activePage, this.selection);
+          // Null in path edit mode (M3 contract, section 4).
+          return this.pathEdit === null
+            ? selectionHandles(this.document, this.activePage, this.selection)
+            : null;
         case 'viewportSize':
           return this.viewportSize;
         case 'keymap':
@@ -997,6 +1066,10 @@ class EditorCore implements Editor {
           return this.scope;
         case 'clipboard':
           return this.clipboard;
+        case 'pathEdit':
+          return this.pathEdit;
+        case 'pathOverlay':
+          return this.pathEdit === null ? null : pathEditOverlay(this.document, this.pathEdit);
       }
     })();
     return value as QueryResult<Q>;
@@ -1142,6 +1215,11 @@ class EditorCore implements Editor {
   private runAction(binding: CanonicalBinding): CommandResult {
     const nothing: CommandResult = { ok: true, ids: [] };
     const selection = this.selection;
+    const edit = this.pathEdit;
+    if (edit !== null) {
+      const result = this.runPathEditAction(binding, edit);
+      if (result !== null) return result;
+    }
     switch (binding.action) {
       case 'setTool':
         return this.run({
@@ -1160,9 +1238,11 @@ class EditorCore implements Editor {
         return this.run({ type: 'setSelection', ids });
       }
       case 'enterScope': {
-        // A single selected container is entered and its children selected (section 5); any
-        // other selection does nothing (still consumed).
+        // A single selected container is entered and its children selected (section 5), and a
+        // single selected path enters edit mode (M3 contract, section 4); any other selection
+        // does nothing (still consumed).
         const node = selection.length === 1 ? this.document.nodes[selection[0]!] : undefined;
+        if (node?.type === 'path') return this.run({ type: 'enterPathEdit', id: node.id });
         if (!isContainer(node)) return nothing;
         this.run({ type: 'setScope', id: node.id });
         return this.run({ type: 'setSelection', ids: node.children });
@@ -1258,6 +1338,36 @@ class EditorCore implements Editor {
     }
   }
 
+  /**
+   * The built-in actions that act on anchors in path edit mode (M3 contract, section 4), or null
+   * for an action that keeps its M2 meaning. `nudge` moves the anchor selection, `selectAll`
+   * selects every anchor, and `enterScope` and `exitScope` end edit mode with the path still
+   * selected. `delete` is a consumed no-op here: anchor removal comes with `removePathAnchors`
+   * (M3-U3), and in edit mode it never deletes the node itself.
+   */
+  private runPathEditAction(binding: CanonicalBinding, edit: PathEditState): CommandResult | null {
+    const nothing: CommandResult = { ok: true, ids: [] };
+    switch (binding.action) {
+      case 'delete':
+        return nothing;
+      case 'nudge': {
+        if (edit.anchors.length === 0) return nothing;
+        const { dx, dy } = binding.args as { dx: number; dy: number };
+        return this.run({ type: 'movePathAnchors', id: edit.id, anchors: edit.anchors, dx, dy });
+      }
+      case 'selectAll': {
+        const node = editablePath(this.document, this.activePage, edit.id)!;
+        return this.run({ type: 'setPathSelection', anchors: allAnchors(node.path) });
+      }
+      case 'enterScope':
+      case 'exitScope':
+        this.setPathEditState(null);
+        return nothing;
+      default:
+        return null;
+    }
+  }
+
   /** A wheel event (M2 contract, section 3): Ctrl or Meta zooms about the point, else it pans. */
   private wheel(event: Extract<InputEvent, { kind: 'wheel' }>): CommandResult {
     const { position, zoom } = this.viewport;
@@ -1338,6 +1448,7 @@ class EditorCore implements Editor {
       touched: new Set(),
       updated: false,
       selection: this.selection,
+      pathEdit: this.pathEdit,
     };
     return true;
   }
@@ -1494,6 +1605,11 @@ class EditorCore implements Editor {
     const tree = documentTree(this.document);
     const kept = gesture.selection.filter((id) => pageOf(tree, id) === this.activePage);
     this.setSelectionState(normalizeSelection(this.document, this.activePage, kept) ?? []);
+    // The anchor selection recorded at `begin` comes back while the same path is in edit mode
+    // (M3 contract, section 4).
+    if (gesture.pathEdit !== null && this.pathEdit?.id === gesture.pathEdit.id) {
+      this.setPathEditState(gesture.pathEdit);
+    }
     this.setSnap(null);
   }
 
@@ -1548,6 +1664,7 @@ class EditorCore implements Editor {
     if (pageChanged) this.emit({ type: 'session', field: 'activePage' });
     if (scopeChanged) this.emit({ type: 'session', field: 'scope' });
     diagnostics.forEach((event) => this.emit(event));
+    this.syncPathEdit(cause === 'load' ? null : previous);
   }
 
   /**
@@ -1583,13 +1700,64 @@ class EditorCore implements Editor {
     if (same) return;
     this.selection = Object.freeze([...ids]);
     this.refresh({ type: 'session', field: 'selection' });
+    // A selection other than `[id]` ends path edit mode.
+    this.syncPathEdit();
   }
 
-  /** A scope equal to the current one raises no event (section 2). */
+  /** A scope equal to the current one raises no event (section 2); another one ends edit mode. */
   private setScopeState(scope: string | null): void {
     if (scope === this.scope) return;
     this.scope = scope;
     this.refresh({ type: 'session', field: 'scope' });
+    this.setPathEditState(null);
+  }
+
+  /** A path edit state equal to the current one raises no event (M3 contract, section 4). */
+  private setPathEditState(next: PathEditState | null): void {
+    const current = this.pathEdit;
+    const same =
+      next === null || current === null
+        ? next === current
+        : next.id === current.id &&
+          next.anchors.length === current.anchors.length &&
+          next.anchors.every(
+            (ref, i) =>
+              ref.subpath === current.anchors[i]!.subpath &&
+              ref.anchor === current.anchors[i]!.anchor,
+          );
+    if (same) return;
+    this.pathEdit =
+      next === null
+        ? null
+        : deepFreeze({ id: next.id, anchors: next.anchors.map((r) => ({ ...r })) });
+    this.refresh({ type: 'session', field: 'pathEdit' });
+  }
+
+  /**
+   * Ends path edit mode when its rules no longer hold (M3 contract, section 4): the tool is not
+   * `select`, the selection is not `[id]`, or the node is no longer a `path` of the active page.
+   * After a document change from `previous` (null for a load, which always ends it), the anchor
+   * selection is kept when the path's structure is unchanged, else cleared.
+   */
+  private syncPathEdit(previous?: DocumentV2 | null): void {
+    const edit = this.pathEdit;
+    if (edit === null) return;
+    const node = editablePath(this.document, this.activePage, edit.id);
+    const kept =
+      previous !== null &&
+      node !== undefined &&
+      this.tool === 'select' &&
+      this.selection.length === 1 &&
+      this.selection[0] === edit.id;
+    if (!kept) {
+      this.setPathEditState(null);
+      return;
+    }
+    if (previous === undefined || edit.anchors.length === 0) return;
+    const before = nodeIn(previous, edit.id);
+    if (before?.type !== 'path' || !sameStructure(before.path, node.path)) {
+      this.setPathEditState({ id: edit.id, anchors: [] });
+    }
   }
 
   /** Tool overlays change without a document change; hosts learn of it through the snapshot. */
@@ -1616,6 +1784,7 @@ class EditorCore implements Editor {
       snap: this.snap,
       snapping: this.snapping,
       scope: this.scope,
+      pathEdit: this.pathEdit,
       history: { undoDepth: this.undoStack.length, redoDepth: this.redoStack.length },
     });
   }

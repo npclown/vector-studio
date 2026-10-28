@@ -97,6 +97,29 @@ export type PathAnchor = Readonly<{
  */
 export type PathAnchorRef = Readonly<{ subpath: number; anchor: number }>;
 
+/**
+ * Path edit mode (MVP M3 contract, section 4): the edited `path` node and its anchor selection,
+ * canonical (sorted by `(subpath, anchor)` without repeats). Session state, never history.
+ */
+export type PathEditState = Readonly<{ id: string; anchors: readonly PathAnchorRef[] }>;
+
+/**
+ * An anchor of the path overlay in page space (section 5.1): `in` and `out` are its visible
+ * handles only (its anchor or the other end of that side's segment is selected), else null;
+ * `mirrored` is the section 2 test on both handles, visible or not.
+ */
+export type PathEditAnchor = PathAnchor & Readonly<{ selected: boolean; mirrored: boolean }>;
+
+/**
+ * The `pathOverlay` query (section 5.1): the edited path's anchor model in page space, one entry
+ * per anchor (anchor 0 of an explicitly closed subpath once), from which the select tool picks
+ * its edit-mode targets.
+ */
+export type PathEditOverlay = Readonly<{
+  id: string;
+  subpaths: readonly Readonly<{ closed: boolean; anchors: readonly PathEditAnchor[] }>[];
+}>;
+
 /** Tool state the host UI draws over the canvas; it is never document content. */
 export type ToolOverlay =
   | Readonly<{ kind: 'marquee'; frame: Frame }>
@@ -310,7 +333,18 @@ export type SessionCommand =
    * clipboard (M2 contract, section 6); an empty selection changes nothing. Returns the copied
    * roots in paint order (none for an empty selection).
    */
-  | Readonly<{ type: 'copy'; ids?: readonly string[] }>;
+  | Readonly<{ type: 'copy'; ids?: readonly string[] }>
+  // Path edit mode (MVP M3 contract, section 4).
+  /**
+   * Enters edit mode on a `path` of the active page at any depth: cancels an active gesture,
+   * activates the select tool, selects `[id]` with an empty anchor selection. A no-op on the
+   * path already in edit mode.
+   */
+  | Readonly<{ type: 'enterPathEdit'; id: string }>
+  /** Ends edit mode and keeps the selection; a no-op outside edit mode. */
+  | Readonly<{ type: 'exitPathEdit' }>
+  /** Sets the anchor selection of the edited path, stored canonical. */
+  | Readonly<{ type: 'setPathSelection'; anchors: readonly PathAnchorRef[] }>;
 
 export type Command =
   | DocumentCommand
@@ -361,7 +395,8 @@ export type EditorErrorCode =
   | 'editor.unsupported-clipboard'
   // MVP M3 contract, section 3.5.
   | 'editor.not-a-path'
-  | 'editor.invalid-path-ref';
+  | 'editor.invalid-path-ref'
+  | 'editor.no-path-edit';
 
 /**
  * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key
@@ -395,6 +430,8 @@ export type EditorSnapshot = Readonly<{
   snapping: boolean;
   /** The entered container of the active page (M2 contract, section 5), or null. */
   scope: string | null;
+  /** Path edit mode (M3 contract, section 4), or null. */
+  pathEdit: PathEditState | null;
 }>;
 
 export type Query =
@@ -419,7 +456,11 @@ export type Query =
   /** The entered container, or null. */
   | Readonly<{ type: 'scope' }>
   /** The in-memory clipboard's fragment text, or null (M2 contract, section 6). */
-  | Readonly<{ type: 'clipboard' }>;
+  | Readonly<{ type: 'clipboard' }>
+  /** Path edit mode, or null (M3 contract, section 4). */
+  | Readonly<{ type: 'pathEdit' }>
+  /** The edited path's anchors and visible handles in page space, or null (section 5.1). */
+  | Readonly<{ type: 'pathOverlay' }>;
 
 /**
  * The select tool's resize handle box for the selection, in page space (M1 contract, section
@@ -473,7 +514,11 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' }
                               ? string | null
                               : Q extends { type: 'clipboard' }
                                 ? string | null
-                                : number;
+                                : Q extends { type: 'pathEdit' }
+                                  ? PathEditState | null
+                                  : Q extends { type: 'pathOverlay' }
+                                    ? PathEditOverlay | null
+                                    : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';
@@ -498,7 +543,8 @@ export type EditorEvent =
         | 'keymap'
         | 'snap'
         | 'snapping'
-        | 'scope';
+        | 'scope'
+        | 'pathEdit';
     }>
   | DiagnosticEvent;
 
