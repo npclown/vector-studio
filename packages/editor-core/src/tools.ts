@@ -1,9 +1,17 @@
 import { normalizeRotation, type DocumentV2, type Frame } from '@vector-studio/model';
 import type { Tool, ToolContext } from './editor.js';
 import { deepFreeze } from './freeze.js';
-import { apply, invertRigid, localTransform, multiply, rotate, type Matrix } from './geometry.js';
+import { apply, invertRigid, rotate } from './geometry.js';
 import {
-  boundsOf,
+  HANDLES,
+  activeHandles,
+  handleBoxOf,
+  handleCentre,
+  handlePoint,
+  type Handle,
+  type HandleBox,
+} from './handles.js';
+import {
   deepestHit,
   marqueeHits,
   selectionTarget,
@@ -13,6 +21,16 @@ import {
 import { resizeInOwnAxes, scaleAbout } from './resize.js';
 import { documentTree, spaceOf } from './tree.js';
 import type { InputEvent, PagePoint, PathAnchor, SelectionHandles, ToolOverlay } from './types.js';
+
+export {
+  HANDLES,
+  activeHandles,
+  handleBoxOf,
+  handleCentre,
+  handlePoint,
+  type Handle,
+  type HandleBox,
+} from './handles.js';
 
 // P5 tools (plan section 4.4) and the M1 tools (M1 contract, section 7). Tools act only through
 // commands and the gesture API. They work on the active page; drawing tools create at its root,
@@ -31,6 +49,10 @@ function isMoveOrUp(
 
 /** Pick radius for resize handles and the path tool's first anchor, in screen pixels. */
 const HANDLE_RADIUS = 6;
+/** Reach of the rotate zone around each handle-box corner, in screen pixels (M2 section 4.1). */
+const ROTATE_RADIUS = 18;
+/** The Shift step of the rotate gesture: 15° (M2 contract, section 4.1). */
+const ROTATE_STEP = Math.PI / 12;
 const CLOSE_RADIUS = 4;
 
 function distance(a: PagePoint, b: PagePoint): number {
@@ -258,70 +280,17 @@ export function createPathTool(): Tool {
   };
 }
 
-/** Handle positions on the box, as fractions of its width and height. */
-export const HANDLES = [
-  [0, 0],
-  [0.5, 0],
-  [1, 0],
-  [1, 0.5],
-  [1, 1],
-  [0.5, 1],
-  [0, 1],
-  [0, 0.5],
-] as const;
-
-export type Handle = (typeof HANDLES)[number];
-
-/** The handles that can scale at least one axis of `box`, in `HANDLES` order. */
-export function activeHandles(box: Frame): Handle[] {
-  return HANDLES.filter(
-    (handle) => (handle[0] !== 0.5 && box.width > 0) || (handle[1] !== 0.5 && box.height > 0),
-  );
-}
+/** The four corners of the handle box: top-left, top-right, bottom-right, bottom-left. */
+const CORNERS: readonly Handle[] = [HANDLES[0], HANDLES[2], HANDLES[4], HANDLES[6]];
 
 /**
- * The box the handles sit on. `p5`: the page-aligned bounds of a page-root selection with
- * rotation 0, resized as in P5. `single`: one other node, its own rotated box (`matrix` maps
- * its local space to the page). `map`: the page-aligned bounds of any other multi-selection.
+ * A node's page rotation `turn` (its parent chain's rotation `chain` plus its own, not
+ * normalized), its stored frame and rotation, as the rotate gesture records them at press.
  */
-export type HandleBox =
-  | { mode: 'p5' | 'map'; box: Frame }
-  | { mode: 'single'; box: Frame; id: string; matrix: Matrix; turn: number };
-
-/** The handle box of `selection` on `page` (section 4.4), or null for an empty selection. */
-export function handleBoxOf(
-  document: DocumentV2,
-  page: string,
-  selection: readonly string[],
-): HandleBox | null {
-  const box = boundsOf(document, selection);
-  if (box === null) return null;
-  const p5 = selection.every((id) => {
-    const node = document.nodes[id];
-    return node !== undefined && node.parent === page && node.rotation === 0;
-  });
-  if (p5) return { mode: 'p5', box };
-  if (selection.length > 1) return { mode: 'map', box };
-  // A single node: the handles follow its rotation (section 4.4).
-  const id = selection[0]!;
+function singleOf(document: DocumentV2, id: string) {
   const node = document.nodes[id]!;
-  const space = spaceOf(documentTree(document), node.parent);
-  return {
-    mode: 'single',
-    box: { x: 0, y: 0, width: node.frame.width, height: node.frame.height },
-    id,
-    matrix: multiply(space.matrix, localTransform(node.frame, node.rotation)),
-    turn: space.rotation + node.rotation,
-  };
-}
-
-/** A handle's page-space point on the handle box. */
-export function handlePoint(handles: HandleBox, handle: Handle): PagePoint {
-  const { box } = handles;
-  if (handles.mode !== 'single') {
-    return { x: box.x + handle[0] * box.width, y: box.y + handle[1] * box.height };
-  }
-  return apply(handles.matrix, handle[0] * box.width, handle[1] * box.height);
+  const chain = spaceOf(documentTree(document), node.parent).rotation;
+  return { turn: chain + node.rotation, chain, frame: node.frame, rotation: node.rotation };
 }
 
 /**
@@ -366,6 +335,19 @@ type SelectState =
       frames: Map<string, Frame>;
       handles: HandleBox;
       handle: Handle;
+      moved: boolean;
+    }
+  | {
+      kind: 'rotate';
+      start: PagePoint;
+      ids: readonly string[];
+      /** The handle-box centre at press. */
+      pivot: PagePoint;
+      /**
+       * For one node: its page rotation at press (the Shift step's base), its parent chain's
+       * rotation and its frame; else null.
+       */
+      single: { turn: number; chain: number; frame: Frame; rotation: number } | null;
       moved: boolean;
     }
   | { kind: 'marquee'; start: PagePoint; current: PagePoint; additive: boolean };
@@ -415,6 +397,24 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     );
   }
 
+  /**
+   * Whether `point` is in a rotate zone (M2 contract, section 4.1): strictly outside the handle
+   * box in the box's own axes, and within `18 / zoom` page units of one of its four corners.
+   */
+  function inRotateZone(handles: HandleBox, point: PagePoint, zoom: number): boolean {
+    const local =
+      handles.mode === 'single' ? apply(invertRigid(handles.matrix), point.x, point.y) : point;
+    const { box } = handles;
+    const outside =
+      local.x < box.x ||
+      local.x > box.x + box.width ||
+      local.y < box.y ||
+      local.y > box.y + box.height;
+    if (!outside) return false;
+    const reach = ROTATE_RADIUS / zoom;
+    return CORNERS.some((corner) => distance(point, handlePoint(handles, corner)) <= reach);
+  }
+
   /** The nearest handle within reach that can scale at least one axis of the box. */
   function handleAt(handles: HandleBox, point: PagePoint, zoom: number): Handle | null {
     const { box } = handles;
@@ -461,6 +461,20 @@ export function createSelectTool(custom: CustomGeometry): Tool {
           frames: framesOf(context, selection),
           handles,
           handle,
+          moved: false,
+        };
+      }
+      return;
+    }
+    // Then the rotate zone, outside the box near a corner, over any node under it.
+    if (handles !== null && inRotateZone(handles, event.point, zoom)) {
+      if (context.gesture.begin()) {
+        state = {
+          kind: 'rotate',
+          start: event.point,
+          ids: selection,
+          pivot: handleCentre(handles),
+          single: selection.length === 1 ? singleOf(document, selection[0]!) : null,
           moved: false,
         };
       }
@@ -542,6 +556,55 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     context.gesture.update({ type: 'setFrames', frames });
   }
 
+  /**
+   * One rotate-gesture update (M2 contract, section 4.1): the angle swept about the pivot from
+   * the press to `event.point`, wrapped into (−π, π]; with Shift, one node's resulting page
+   * rotation, or the angle itself for several nodes, steps to a multiple of 15°. Each update
+   * replaces the last, so a drag never compounds.
+   */
+  function rotateTo(
+    current: Extract<SelectState, { kind: 'rotate' }>,
+    event: Pointer,
+    context: ToolContext,
+  ): void {
+    const { pivot, start, single, ids } = current;
+    const q = event.point;
+    let angle = normalizeRotation(
+      Math.atan2(q.y - pivot.y, q.x - pivot.x) - Math.atan2(start.y - pivot.y, start.x - pivot.x),
+    );
+    if (single === null) {
+      if (event.modifiers.shift) {
+        angle = normalizeRotation(Math.round(angle / ROTATE_STEP) * ROTATE_STEP);
+      }
+      context.gesture.replace([{ type: 'rotateNodes', ids, angle, pivot }]);
+      return;
+    }
+    // One node: the pivot is its own centre, so it is omitted and the node keeps its stored x
+    // and y (section 4.1, one-node rule); the default pivot equals the one fixed at press.
+    if (!event.modifiers.shift) {
+      context.gesture.replace([{ type: 'rotateNodes', ids, angle }]);
+      return;
+    }
+    // Shift: the resulting page rotation steps to `normalize(k · π/12)`. The adjustment
+    // `wrap(target − turn)` reaches it only up to binary64 rounding, so an absolute set after it
+    // stores exactly `normalize(target − chain)` (exactly the target for a page-root node).
+    const result = normalizeRotation(single.turn + angle);
+    const target = normalizeRotation(Math.round(result / ROTATE_STEP) * ROTATE_STEP);
+    const rotation = normalizeRotation(target - single.chain);
+    // Stepped back to the stored rotation: the pre-gesture document, so no step at commit.
+    if (rotation === single.rotation) {
+      context.gesture.replace([]);
+      return;
+    }
+    context.gesture.replace([
+      { type: 'rotateNodes', ids, angle: normalizeRotation(target - single.turn) },
+      {
+        type: 'setFrames',
+        frames: [{ id: ids[0]!, frame: single.frame, rotation }],
+      },
+    ]);
+  }
+
   function pointerMove(event: Pointer, context: ToolContext): void {
     if (state.kind === 'marquee') {
       state.current = event.point;
@@ -556,6 +619,10 @@ export function createSelectTool(custom: CustomGeometry): Tool {
       resize(state, dx, dy, context);
       return;
     }
+    if (state.kind === 'rotate') {
+      rotateTo(state, event, context);
+      return;
+    }
     const { turns } = state;
     const frames = [...state.frames].map(([id, frame]) => {
       const delta = rotate(-turns.get(id)!, dx, dy);
@@ -566,10 +633,12 @@ export function createSelectTool(custom: CustomGeometry): Tool {
 
   function pointerUp(event: Pointer, context: ToolContext): void {
     // The up point ends the drag, so it updates like a move first.
-    if (state.kind === 'move' || state.kind === 'resize') pointerMove(event, context);
+    if (state.kind === 'move' || state.kind === 'resize' || state.kind === 'rotate') {
+      pointerMove(event, context);
+    }
     const current = state;
     state = { kind: 'idle' };
-    if (current.kind === 'move' || current.kind === 'resize') {
+    if (current.kind === 'move' || current.kind === 'resize' || current.kind === 'rotate') {
       context.gesture.commit();
       // A click without movement selects the target hit, even inside a larger selection.
       if (current.kind === 'move' && !current.moved) {

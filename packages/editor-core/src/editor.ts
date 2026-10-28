@@ -107,7 +107,17 @@ export interface GestureControl {
   readonly active: boolean;
   /** Returns false while another gesture is active. */
   begin(): boolean;
+  /**
+   * Applies an absolute command to the live document, so updates accumulate. A relative command
+   * (`rotateNodes`, M2 section 4) fails with `editor.invalid-command`: it goes through `replace`.
+   */
   update(command: DocumentCommand): CommandResult;
+  /**
+   * Restores the pre-gesture document, applies `commands` in order and makes the result the live
+   * document, discarding every earlier update and replace of this gesture (M2 contract, S1). A
+   * failing command leaves the live document as it was.
+   */
+  replace(commands: readonly DocumentCommand[]): CommandResult;
   /**
    * Package-internal: an update no public command expresses (a multi-selection resize from the
    * pre-gesture state, a line drag), applied like `update`.
@@ -155,6 +165,19 @@ const DOCUMENT_COMMANDS = new Set([
   'removePage',
   'renamePage',
   'movePage',
+  'rotateNodes',
+]);
+
+/**
+ * Relative commands (M2 contract, section 4, S1): inside a gesture they go through `replace`,
+ * and `update` rejects them so a drag never compounds. Later M2 units add their commands here.
+ */
+const RELATIVE_COMMANDS: ReadonlySet<string> = new Set([
+  'rotateNodes',
+  'nudgeNodes',
+  'alignNodes',
+  'distributeNodes',
+  'reorderNodes',
 ]);
 
 /** Extension commands may nest this deep through `runCommand` (P5-U5). */
@@ -324,6 +347,18 @@ function copyInput(event: InputEvent): InputEvent {
 
 const clampZoom = (zoom: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom));
 
+function nodeIn(document: DocumentV2, id: string) {
+  return Object.hasOwn(document.nodes, id) ? document.nodes[id] : undefined;
+}
+
+/** Whether node `id` differs between two documents; a node in only one of them differs. */
+function nodeDiffers(a: DocumentV2, b: DocumentV2, id: string): boolean {
+  const x = nodeIn(a, id);
+  const y = nodeIn(b, id);
+  if (x === y) return false;
+  return x === undefined || y === undefined || JSON.stringify(x) !== JSON.stringify(y);
+}
+
 function sorted(ids: Iterable<string>): string[] {
   return [...new Set(ids)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
@@ -432,6 +467,7 @@ class EditorCore implements Editor {
       },
       begin: () => this.beginGesture(),
       update: (command) => this.updateGesture(command),
+      replace: (commands) => this.replaceGesture(commands),
       edit: (edit) => this.editGesture(edit),
       commit: () => this.commitGesture(),
       cancel: () => this.cancelGesture(),
@@ -511,6 +547,8 @@ class EditorCore implements Editor {
       const base = this.gestureState?.base ?? this.document;
       const result = applyEdit(base, command as DocumentCommand, this.context(true));
       if (!result.ok) return result;
+      // A relative command that changes nothing records no step and no event (M2 section 4).
+      if (result.document === base) return { ok: true, ids: [] };
       this.interrupt();
       const entry = { before: base, after: result.document, touched: result.touched };
       this.undoStack.push(entry);
@@ -992,12 +1030,55 @@ class EditorCore implements Editor {
   private updateGesture(command: DocumentCommand): CommandResult {
     const gesture = this.gestureState;
     if (gesture === null) return failure('editor.invalid-command');
+    if (typeof command !== 'object' || command === null) return failure('editor.invalid-command');
+    const type = (command as { type?: unknown }).type;
+    if (typeof type === 'string' && RELATIVE_COMMANDS.has(type)) {
+      return failure('editor.invalid-command', '/type');
+    }
     // Groups refit only at commit (M1 contract, section 4.2).
     const result = applyEdit(this.document, command, {
       ...this.context(false),
       resizeBase: gesture.base,
     });
     return this.applyGestureResult(gesture, result);
+  }
+
+  /**
+   * `replace` (M2 contract, S1): the commands apply in order to the pre-gesture document, with
+   * the same rules as `update` (groups refit at commit; a resized container restores its
+   * subtree from the pre-gesture state); the result replaces the live document as a whole.
+   */
+  private replaceGesture(commands: readonly DocumentCommand[]): CommandResult {
+    const gesture = this.gestureState;
+    if (gesture === null) return failure('editor.invalid-command');
+    if (!Array.isArray(commands)) return failure('editor.invalid-command', '/commands');
+    let document = gesture.base;
+    const touched = new Set<string>();
+    const created: string[] = [];
+    for (const [index, command] of (commands as readonly DocumentCommand[]).entries()) {
+      if (typeof command !== 'object' || command === null) {
+        return failure('editor.invalid-command', `/commands/${index}`);
+      }
+      const result = applyEdit(document, command, {
+        ...this.context(false),
+        resizeBase: gesture.base,
+      });
+      if (!result.ok) return result;
+      document = result.document;
+      result.touched.forEach((id) => touched.add(id));
+      created.push(...result.created);
+    }
+    // Nodes an earlier update or replace changed return to their pre-gesture state, so they are
+    // part of this change too; the event lists the nodes that differ from the live document.
+    gesture.touched.forEach((id) => touched.add(id));
+    touched.forEach((id) => gesture.touched.add(id));
+    gesture.updated = true;
+    const previous = this.document;
+    if (document !== previous) {
+      const changed = [...touched].filter((id) => nodeIn(previous, id) !== nodeIn(document, id));
+      this.changeDocument(document, 'gesture-update', changed);
+    }
+    return { ok: true, ids: created };
   }
 
   private editGesture(edit: GestureEdit): CommandResult {
@@ -1019,15 +1100,27 @@ class EditorCore implements Editor {
     const gesture = this.gestureState;
     if (gesture === null) return;
     this.gestureState = null;
-    // A gesture with no update (a click) creates no step and no change.
-    if (!gesture.updated) return;
+    // A gesture with no update (a click), or one replaced back to the pre-gesture document,
+    // creates no step and no change.
+    if (!gesture.updated || this.document === gesture.base) return;
     const refit = refitGesture(gesture.base, this.document, gesture.touched, this.extensions);
     // A refit that fails the model's rules (binary64 overflow) leaves the live document as is.
     const after = refit.ok ? refit.document : this.document;
-    const touched = sorted(refit.ok ? refit.touched : gesture.touched);
+    // The step lists only nodes that differ between the pre-gesture and committed documents,
+    // added or removed ones included, so an ID an earlier update touched and a later replace
+    // discarded is not listed. The commit event adds the nodes the refit changed from the live
+    // document, so the renderer follows every change.
+    const live = this.document;
+    const candidates = [...gesture.touched, ...(refit.ok ? refit.touched : [])];
+    const touched = sorted(candidates.filter((id) => nodeDiffers(gesture.base, after, id)));
+    const changed = sorted(
+      candidates.filter(
+        (id) => nodeDiffers(gesture.base, after, id) || nodeDiffers(live, after, id),
+      ),
+    );
     this.undoStack.push({ before: gesture.base, after, touched });
     this.redoStack = [];
-    this.changeDocument(after, 'gesture-commit', touched);
+    this.changeDocument(after, 'gesture-commit', changed);
   }
 
   /**
@@ -1049,7 +1142,9 @@ class EditorCore implements Editor {
     const gesture = this.gestureState;
     if (gesture === null) return;
     this.gestureState = null;
-    if (gesture.updated) this.changeDocument(gesture.base, 'gesture-cancel', gesture.touched);
+    if (gesture.updated && this.document !== gesture.base) {
+      this.changeDocument(gesture.base, 'gesture-cancel', gesture.touched);
+    }
     const tree = documentTree(this.document);
     const kept = gesture.selection.filter((id) => pageOf(tree, id) === this.activePage);
     this.setSelectionState(normalizeSelection(this.document, this.activePage, kept) ?? []);
