@@ -16,6 +16,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | V-4 | A08 headed corpus page | Full (P3 exit evidence) | R1 | Contract APPROVED 2026-10-24 ([contract](viz-v4-a08-corpus-contract.md)); U1 page and U2 metrics landed; PRE-FREEZE headed run 2026-10-25 FAIL on a renderer sliver-flip defect ([record](../evidence/viz-v4-a08-pre-freeze-2026-10-25.md)); counted run at snapshot 5ddec4e 2026-10-26 INCONCLUSIVE, 0 gated FAIL, 372 UNDECIDED in disclosed E3 classes ([record](../evidence/viz-v4-a08/5ddec4e/README.md)) |
 | V-5 | P5 editor slice | Full | Parallel with the P3 exit (user approval 2026-10-25) | Plan APPROVED 2026-10-24; implementation approved 2026-10-25; P5-U1 to U7 merged; exit record [p5-exit-2026-10-26](../evidence/p5-exit-2026-10-26.md) accepted by the user 2026-10-26 ([plan, section 14](p5-editor-slice.md#14-implementation-decision-and-progress-2026-10-25)) |
 | V-6 | V-1 and V-3 review follow-ups (status crediting, zoom clear, field validity, R2 mesh gate) | Light | Backlog | Done: review READY WITH FOLLOW-UPS (applied), headed V-1/V-3 8 of 8 PASS 2026-10-25 ([record](../evidence/viz-v6-review-followups-2026-10-25.md)) |
+| V-7 | MVP editor plan (milestones M1 to M9 after P5 and P4) | Full | R5 | Draft in review ([plan](mvp-editor-plan.md)) |
 
 ## V-1: path appearance editing
 
