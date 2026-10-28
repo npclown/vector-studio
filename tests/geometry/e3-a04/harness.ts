@@ -117,7 +117,24 @@ export type HarnessRow = Readonly<{
   jointIdentity: boolean | null;
   resolution: number | null;
   work: number | null;
+  /** E20: the remedies that ran on this row, absent on a row the 2026-10-27 harness decided. */
+  e20?: readonly E20Trace[];
   ms: number;
+}>;
+
+/** One E20 remedy on a row (d9-e20-a04-remedies-contract.md, section 2). */
+export type E20Trace = Readonly<{
+  /**
+   * `flip-tolerant`: K1, K2, K3 and K6 after section 20 failed or could not run (clipped);
+   * `refined-offset`: K3 on a row whose bound straddles 0.25 px; `window-empty-guard`: K4.
+   */
+  rule: 'flip-tolerant' | 'refined-offset' | 'window-empty-guard';
+  /** The section-20 result before the remedy (null when it did not run). */
+  former?: FlipTolerantResult | null;
+  /** The remedy's own result when it did not decide the row, which keeps the old one. */
+  attempt?: FlipTolerantResult;
+  /** K4: a lower bound of the boundary candidates' distance from Ω, physical px. */
+  distance?: number;
 }>;
 
 // =============================================================================================
@@ -767,6 +784,60 @@ export function boundaryMayMeetGuard(mapped: Mapped): boolean {
 }
 
 /**
+ * E20-K4: a lower bound of the distance from the boundary candidates of `M*` to `Ω`, the viewport
+ * plus 2 px. A candidate more than `β_c` from `Ω` cannot be moved into it. Evaluated in binary64
+ * on coordinates within `2^-52` of `p*`.
+ * Two disjoint convex sets are nearest at a vertex of one of them, so the distance is the
+ * smallest of the end points to the box and the box corners to the segment, less `f64Margin`.
+ */
+export function boundaryDistanceFromWindow(mapped: Mapped): number {
+  const x0 = -2;
+  const y0 = -2;
+  const x1 = mapped.width + 2;
+  const y1 = mapped.height + 2;
+  const corners = [
+    [x0, y0],
+    [x1, y0],
+    [x1, y1],
+    [x0, y1],
+  ] as const;
+  const toBox = (x: number, y: number) =>
+    Math.hypot(Math.max(x0 - x, 0, x - x1), Math.max(y0 - y, 0, y - y1));
+  // Liang-Barsky: whether the segment meets the closed box.
+  const meetsBox = (ax: number, ay: number, bx: number, by: number) => {
+    let lo = 0;
+    let hi = 1;
+    for (const [p, q] of [
+      [ax - bx, ax - x0],
+      [bx - ax, x1 - ax],
+      [ay - by, ay - y0],
+      [by - ay, y1 - ay],
+    ] as const) {
+      if (p === 0) {
+        if (q < 0) return false;
+      } else if (p < 0) lo = Math.max(lo, q / p);
+      else hi = Math.min(hi, q / p);
+    }
+    return lo <= hi;
+  };
+  let distance = Infinity;
+  for (const e of boundaryCandidates(mapped)) {
+    const [ax, ay, bx, by] = [dNum(e.a.x), dNum(e.a.y), dNum(e.b.x), dNum(e.b.y)];
+    if (meetsBox(ax, ay, bx, by)) return 0;
+    const scale = mapped.width + mapped.height + 4 + Math.max(...[ax, ay, bx, by].map(Math.abs));
+    distance = Math.min(
+      distance,
+      Math.min(
+        toBox(ax, ay),
+        toBox(bx, by),
+        ...corners.map(([x, y]) => pointSegment(x, y, ax, ay, bx, by)),
+      ) - f64Margin(scale),
+    );
+  }
+  return distance;
+}
+
+/**
  * The T-junctions of `M*` as `[v, a, b]` point indices: a boundary-candidate end point `v` that
  * lies strictly inside another candidate edge `ab`, exactly. The GPU readback measures the crack
  * width at each (section 7.1, E3-C12; reported under E3-Q10 (b), never gated).
@@ -830,7 +901,26 @@ export type FlipTolerantResult = Readonly<{
   edges: number;
   pieces: number;
   work: number;
+  /** E20 only: the T-vertices that chain edges were split at (K6). */
+  splitTVertices?: number;
+  /** E20 only: edges whose D came from the refined search, and edges tested exactly (K3). */
+  refinedEdges?: number;
+  exactEdges?: number;
+  /** E20-K1 only, set by measureCase: the bound ran on a draw with clipped triangles. */
+  clipped?: boolean;
 }>;
+
+export type FlipTolerantOptions = Readonly<{
+  /** The E20 remedies K2, K3 and K6 (measureCase sets it only where section 20 failed). */
+  e20?: boolean;
+  /** E20-K3: the refined search on every edge, for a row that straddles 0.25 px. */
+  refineAll?: boolean;
+  /** Test-only seeded defect (E20-A3): an edge below binary64 reports D without the exact test. */
+  defect?: 'no-exact-fallback';
+}>;
+
+/** A point with dyadic coordinates. */
+type Pt = Readonly<{ x: D; y: D }>;
 
 /** An edge of the chain between two p*, `a` before `b` by key. */
 type ChainEdge = {
@@ -851,6 +941,26 @@ const FLIP_TOLERANT_WORK_CAP = 5e7;
 const FLIP_TOLERANT_DEPTH = 12;
 /** Offset directions, as angles from the outward normal towards the edge direction. */
 const FLIP_TOLERANT_ANGLES = [0, 1, -1, 2, -2, 2.5, -2.5].map((k) => (k * Math.PI) / 6);
+/** An offset search: directions, growth factor, split depth and shortest piece (in β). */
+type OffsetSearch = Readonly<{
+  angles: readonly number[];
+  factor: number;
+  depth: number;
+  minimum: number;
+}>;
+const OLD_SEARCH: OffsetSearch = {
+  angles: FLIP_TOLERANT_ANGLES,
+  factor: Math.SQRT2,
+  depth: FLIP_TOLERANT_DEPTH,
+  minimum: 1 / 4,
+};
+/** E20-K3: every 15° within ±75°, factor 2^(1/4), depth 16, pieces down to β/8. */
+const REFINED_SEARCH: OffsetSearch = {
+  angles: [0, 1, -1, 2, -2, 3, -3, 4, -4, 5, -5].map((k) => (k * Math.PI) / 12),
+  factor: 2 ** 0.25,
+  depth: 16,
+  minimum: 1 / 8,
+};
 const GRID_CELL = 8;
 
 /**
@@ -996,16 +1106,43 @@ function segmentMeetsTriangle(
  * point `x ∉ M*` more than `β` from `C*`, which is off `M_gpu`. So `E_Ω(M_gpu, M*) ≤ max(β, D_hi)`.
  * `D_hi` is certified by translating pieces of each chain edge outward: a translate more than `β`
  * from the chain lies wholly inside or outside `M*`, and one exact point test decides.
+ *
+ * With `e20` (E20 contract, section 2) three remedies also apply. K6 splits every chain edge
+ * near the window at each `p*` exactly inside it, as E3-Q10 (b)'s crack-closed region places a
+ * T-vertex on its mapped edge at `λ`. K2 admits a zero-area triangle whose segment lies in `M*`
+ * (exact membership on its pieces between meetings with the positive-area chain). K3 retries an
+ * edge whose offset search fails with a finer search, and tests an edge below binary64 exactly.
  */
-export function flipTolerantBound(mapped: Mapped, beta: number): FlipTolerantResult {
+export function flipTolerantBound(
+  mapped: Mapped,
+  beta: number,
+  options: FlipTolerantOptions = {},
+): FlipTolerantResult {
   const W = mapped.width;
   const H = mapped.height;
   const P = mapped.points;
+  const e20 = options.e20 === true;
   let work = 0;
   let edges = 0;
   let pieces = 0;
-  const no = (reason: string): FlipTolerantResult => ({ rho: null, reason, edges, pieces, work });
-  const cross = (a: MappedPoint, b: MappedPoint, c: MappedPoint) =>
+  let refinedEdges = 0;
+  let exactEdges = 0;
+  const splitAt = new Set<string>();
+  const result = (rho: number | null, reason: string | null): FlipTolerantResult =>
+    e20
+      ? {
+          rho,
+          reason,
+          edges,
+          pieces,
+          work,
+          splitTVertices: splitAt.size,
+          refinedEdges,
+          exactEdges,
+        }
+      : { rho, reason, edges, pieces, work };
+  const no = (reason: string): FlipTolerantResult => result(null, reason);
+  const cross = (a: Pt, b: Pt, c: Pt) =>
     dsub(dmul(dsub(b.x, a.x), dsub(c.y, a.y)), dmul(dsub(b.y, a.y), dsub(c.x, a.x)));
 
   // 1. The triangles of positive area all of one orientation. Zero-area ones stay in the chain.
@@ -1023,32 +1160,85 @@ export function flipTolerantBound(mapped: Mapped, beta: number): FlipTolerantRes
     tris.push(tri);
   }
   if (tris.length === 0) return no('no triangle');
-  // The chain: every directed edge, with a → b and b → a between the same two p* cancelling.
   const key = (q: MappedPoint) => `${q.x.n}/${q.x.e},${q.y.n}/${q.y.e}`;
+  const xs = P.map((p) => dNum(p.x));
+  const ys = P.map((p) => dNum(p.y));
+  const grid = () => new CellGrid(-10, -10, W + 10, H + 10);
+  const meets = (b: readonly number[], pad: number) =>
+    b[2]! + 1e-9 >= -2 - pad &&
+    b[0]! - 1e-9 <= W + 2 + pad &&
+    b[3]! + 1e-9 >= -2 - pad &&
+    b[1]! - 1e-9 <= H + 2 + pad;
+  const boxOf = (ia: number, ib: number) =>
+    [
+      Math.min(xs[ia]!, xs[ib]!),
+      Math.min(ys[ia]!, ys[ib]!),
+      Math.max(xs[ia]!, xs[ib]!),
+      Math.max(ys[ia]!, ys[ib]!),
+    ] as const;
+  // E20-K6: the p* exactly inside a directed edge whose box meets Ω ⊕ 4, in order from its start.
+  // An edge and its reverse have one box, so both are split alike and their pieces cancel.
+  let between: (ia: number, ib: number) => number[] = () => [];
+  if (e20) {
+    const pointGrid = grid();
+    const seen = new Set<string>();
+    for (const tri of all)
+      for (const i of tri) {
+        const k = key(P[i]!);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        work += pointGrid.insert(i, xs[i]!, ys[i]!, xs[i]!, ys[i]!);
+      }
+    between = (ia, ib) => {
+      const b = boxOf(ia, ib);
+      if (!meets(b, 4)) return [];
+      const a = P[ia]!;
+      const abx = dsub(P[ib]!.x, a.x);
+      const aby = dsub(P[ib]!.y, a.y);
+      const length = dadd(dmul(abx, abx), dmul(aby, aby));
+      const found: { i: number; along: D }[] = [];
+      for (const i of pointGrid.query(...b)) {
+        work += 1;
+        if (work > FLIP_TOLERANT_WORK_CAP) return [];
+        const avx = dsub(P[i]!.x, a.x);
+        const avy = dsub(P[i]!.y, a.y);
+        if (dsign(dsub(dmul(abx, avy), dmul(aby, avx))) !== 0) continue;
+        const along = dadd(dmul(avx, abx), dmul(avy, aby));
+        if (dsign(along) > 0 && dcmp(along, length) < 0) found.push({ i, along });
+      }
+      found.sort((p, q) => dcmp(p.along, q.along));
+      for (const f of found) splitAt.add(key(P[f.i]!));
+      return found.map((f) => f.i);
+    };
+  }
+  // The chain: every directed edge, with a → b and b → a between the same two p* cancelling.
+  const addEdge = (chain: Map<string, ChainEdge>, from: number, to: number, o: number) => {
+    let ia = from;
+    let ib = to;
+    let forward = 1;
+    if (key(P[ia]!) > key(P[ib]!)) [ia, ib, forward] = [ib, ia, -1];
+    const id = `${key(P[ia]!)}|${key(P[ib]!)}`;
+    const e = chain.get(id) ?? { ia, ib, a: P[ia]!, b: P[ib]!, net: 0, plus: 0, minus: 0 };
+    e.net += forward;
+    // A positive-area triangle lies left of a → b when its orientation and direction agree.
+    if (o !== 0) {
+      if (o * forward > 0) e.plus += 1;
+      else e.minus += 1;
+    }
+    chain.set(id, e);
+  };
   const chain = new Map<string, ChainEdge>();
   for (const tri of all) {
     const o = dsign(cross(P[tri[0]]!, P[tri[1]]!, P[tri[2]]!));
     for (let k = 0; k < 3; k += 1) {
-      let ia = tri[k]!;
-      let ib = tri[(k + 1) % 3]!;
-      let forward = 1;
-      if (key(P[ia]!) > key(P[ib]!)) [ia, ib, forward] = [ib, ia, -1];
-      const id = `${key(P[ia]!)}|${key(P[ib]!)}`;
-      const e = chain.get(id) ?? { ia, ib, a: P[ia]!, b: P[ib]!, net: 0, plus: 0, minus: 0 };
-      e.net += forward;
-      // A positive-area triangle lies left of a → b when its orientation and direction agree.
-      if (o !== 0) {
-        if (o * forward > 0) e.plus += 1;
-        else e.minus += 1;
-      }
-      chain.set(id, e);
+      const path = [tri[k]!, ...between(tri[k]!, tri[(k + 1) % 3]!), tri[(k + 1) % 3]!];
+      for (let j = 0; j + 1 < path.length; j += 1) addEdge(chain, path[j]!, path[j + 1]!, o);
     }
+    // A split cut short by the cap leaves the chain incomplete, so stop here.
+    if (work > FLIP_TOLERANT_WORK_CAP) return no('work cap');
   }
   const candidates = [...chain.values()].filter((e) => e.net !== 0);
 
-  const xs = P.map((p) => dNum(p.x));
-  const ys = P.map((p) => dNum(p.y));
-  const grid = () => new CellGrid(-10, -10, W + 10, H + 10);
   const triGrid = grid();
   const edgeGrid = grid();
   tris.forEach((tri, k) => {
@@ -1056,22 +1246,11 @@ export function flipTolerantBound(mapped: Mapped, beta: number): FlipTolerantRes
     const ty = tri.map((i) => ys[i]!);
     work += triGrid.insert(k, Math.min(...tx), Math.min(...ty), Math.max(...tx), Math.max(...ty));
   });
-  const box = (e: ChainEdge) =>
-    [
-      Math.min(xs[e.ia]!, xs[e.ib]!),
-      Math.min(ys[e.ia]!, ys[e.ib]!),
-      Math.max(xs[e.ia]!, xs[e.ib]!),
-      Math.max(ys[e.ia]!, ys[e.ib]!),
-    ] as const;
+  const box = (e: ChainEdge) => boxOf(e.ia, e.ib);
   candidates.forEach((e, k) => {
     work += edgeGrid.insert(k, ...box(e));
   });
   if (work > FLIP_TOLERANT_WORK_CAP) return no('work cap');
-  const meets = (b: readonly number[], pad: number) =>
-    b[2]! + 1e-9 >= -2 - pad &&
-    b[0]! - 1e-9 <= W + 2 + pad &&
-    b[3]! + 1e-9 >= -2 - pad &&
-    b[1]! - 1e-9 <= H + 2 + pad;
   // How the collinear edges of positive-area triangles cover the segment ab: whether they cover
   // all of it, the side of their triangles (2 for both), and whether an open triangle meets it.
   const coverage = (a: MappedPoint, b: MappedPoint) => {
@@ -1117,6 +1296,92 @@ export function flipTolerantBound(mapped: Mapped, beta: number): FlipTolerantRes
     }
     return { covered: dcmp(reached, lengthSquared) >= 0, side, across };
   };
+  // E20-K2: whether the segment uv lies in the closed M*, exactly. `C+` is the chain of the
+  // positive-area triangles alone, so ∂M* ⊂ C+ (w_0 changes only across it). An open piece of uv
+  // between consecutive meetings with C+ (proper crossings, C+ vertices on uv, which also bound
+  // every collinear overlap) misses ∂M* unless it lies along an edge of C+, and an edge of C+ is
+  // a positive-area triangle's edge, in M*. Either way one exact test at an inner point of the
+  // piece decides it. The point u + τ(v − u) is rational: its orientation against ab is affine in
+  // τ, so the test needs only the two end points' orientations.
+  let plusEdges: ChainEdge[] = [];
+  let plusGrid: CellGrid | null = null;
+  const segmentInside = (u: MappedPoint, v: MappedPoint): boolean => {
+    if (plusGrid === null) {
+      const plus = new Map<string, ChainEdge>();
+      for (const tri of tris)
+        for (let k = 0; k < 3; k += 1) addEdge(plus, tri[k]!, tri[(k + 1) % 3]!, sign);
+      plusEdges = [...plus.values()].filter((e) => e.net !== 0);
+      const g = grid();
+      plusEdges.forEach((e, k) => {
+        work += g.insert(k, ...box(e));
+      });
+      plusGrid = g;
+    }
+    const one: D = { n: 1n, e: 0 };
+    const two: D = { n: 2n, e: 0 };
+    const neg = (a: D): D => ({ n: -a.n, e: a.e });
+    const vx = dsub(v.x, u.x);
+    const vy = dsub(v.y, u.y);
+    const length = dadd(dmul(vx, vx), dmul(vy, vy));
+    const params: [D, D][] = [
+      [DZERO, one],
+      [one, one],
+    ];
+    const onSegment = (q: MappedPoint) => {
+      const along = dadd(dmul(dsub(q.x, u.x), vx), dmul(dsub(q.y, u.y), vy));
+      if (dsign(along) > 0 && dcmp(along, length) < 0) params.push([along, length]);
+    };
+    const [ux, uy, wx, wy] = [dNum(u.x), dNum(u.y), dNum(v.x), dNum(v.y)];
+    for (const k of plusGrid.query(
+      Math.min(ux, wx),
+      Math.min(uy, wy),
+      Math.max(ux, wx),
+      Math.max(uy, wy),
+    )) {
+      work += 1;
+      const e = plusEdges[k]!;
+      const sa = dsign(cross(u, v, e.a));
+      const sb = dsign(cross(u, v, e.b));
+      if (sa === 0) onSegment(e.a);
+      if (sb === 0) onSegment(e.b);
+      if (sa * sb < 0) {
+        const cu = cross(e.a, e.b, u);
+        const cv = cross(e.a, e.b, v);
+        if (dsign(cu) * dsign(cv) < 0) {
+          // (1 − τ)·cu + τ·cv = 0.
+          const den = dsub(cu, cv);
+          params.push(dsign(den) > 0 ? [cu, den] : [neg(cu), neg(den)]);
+        }
+      }
+    }
+    params.sort((p, q) =>
+      fracLess(p[0], p[1], q[0], q[1]) ? -1 : fracLess(q[0], q[1], p[0], p[1]) ? 1 : 0,
+    );
+    for (let j = 0; j + 1 < params.length; j += 1) {
+      const [p, q] = params[j]!;
+      const [r, s] = params[j + 1]!;
+      if (!fracLess(p, q, r, s)) continue;
+      // τ = N/M, the middle of the piece, with M > 0.
+      const N = dadd(dmul(p, s), dmul(r, q));
+      const M = dmul(two, dmul(q, s));
+      const side = (a: MappedPoint, b: MappedPoint) =>
+        dsign(dadd(dmul(dsub(M, N), cross(a, b, u)), dmul(N, cross(a, b, v))));
+      const t = dNum(N) / dNum(M);
+      const x = ux + t * (wx - ux);
+      const y = uy + t * (wy - uy);
+      let covered = false;
+      for (const k of triGrid.query(x, y, x, y)) {
+        work += 1;
+        const [a, b, c] = tris[k]!.map((i) => P[i]!) as [MappedPoint, MappedPoint, MappedPoint];
+        if (side(a, b) * sign >= 0 && side(b, c) * sign >= 0 && side(c, a) * sign >= 0) {
+          covered = true;
+          break;
+        }
+      }
+      if (!covered) return false;
+    }
+    return true;
+  };
   // A zero-area triangle near the window lies on edges of positive-area triangles, so that its
   // image on the GPU stays within β of M*.
   for (const tri of all) {
@@ -1134,12 +1399,14 @@ export function flipTolerantBound(mapped: Mapped, beta: number): FlipTolerantRes
       [q[2]!, q[0]!],
     ] as const)
       if (dcmp(d2(s0, s1), d2(u, v)) > 0) [u, v] = [s0, s1];
-    if (!coverage(u, v).covered) return no('zero-area triangle off M*');
+    if (!coverage(u, v).covered && !(e20 && segmentInside(u, v)))
+      return no('zero-area triangle off M*');
   }
 
-  // A point (binary64, so exact) in the closed M*.
-  const inside = (x: number, y: number) => {
-    const q: MappedPoint = { x: dy(x), y: dy(y), betaVertex: 0, betaFeature: 0 };
+  // A dyadic point in the closed M*.
+  const insideExact = (q: Pt) => {
+    const x = dNum(q.x);
+    const y = dNum(q.y);
     for (const k of triGrid.query(x, y, x, y)) {
       work += 1;
       const [a, b, c] = tris[k]!.map((i) => P[i]!) as [MappedPoint, MappedPoint, MappedPoint];
@@ -1152,6 +1419,8 @@ export function flipTolerantBound(mapped: Mapped, beta: number): FlipTolerantRes
     }
     return false;
   };
+  // A point (binary64, so exact) in the closed M*.
+  const inside = (x: number, y: number) => insideExact({ x: dy(x), y: dy(y) });
   // A translate `S` more than β from every candidate and outside M*.
   const clear = (s: readonly number[]) => {
     const r = beta + f64Margin(W + H + 20);
@@ -1169,6 +1438,80 @@ export function flipTolerantBound(mapped: Mapped, beta: number): FlipTolerantRes
       if (!(segmentSegment(s, c) > beta + f64Margin(scale))) return false;
     }
     return !inside((s[0]! + s[2]!) / 2, (s[1]! + s[3]!) / 2);
+  };
+
+  // E20-K3: the exact test for an edge below binary64. The translate is the edge moved by a
+  // binary64 vector w, so its end points stay dyadic, and it is accepted when it is more than β
+  // from every candidate (exact squared distances) and its midpoint is outside M*. D ≤ |w|.
+  const r2 = dmul(dy(beta), dy(beta));
+  const half: D = { n: 1n, e: -1 };
+  const squared = (p: Pt, q: Pt) => {
+    const dx = dsub(p.x, q.x);
+    const dyy = dsub(p.y, q.y);
+    return dadd(dmul(dx, dx), dmul(dyy, dyy));
+  };
+  /** Whether point p is more than β from segment cd. */
+  const fartherThanBeta = (p: Pt, c: Pt, d: Pt) => {
+    const cdx = dsub(d.x, c.x);
+    const cdy = dsub(d.y, c.y);
+    const length = dadd(dmul(cdx, cdx), dmul(cdy, cdy));
+    const along = dadd(dmul(dsub(p.x, c.x), cdx), dmul(dsub(p.y, c.y), cdy));
+    if (dsign(along) <= 0) return dcmp(squared(p, c), r2) > 0;
+    if (dcmp(along, length) >= 0) return dcmp(squared(p, d), r2) > 0;
+    const k = cross(c, d, p);
+    return dcmp(dmul(k, k), dmul(r2, length)) > 0;
+  };
+  /** Whether segments pq and cd are more than β apart: disjoint, and then nearest at an end. */
+  const segmentsApart = (p: Pt, q: Pt, c: Pt, d: Pt) => {
+    const o = [cross(p, q, c), cross(p, q, d), cross(c, d, p), cross(c, d, q)].map(dsign);
+    const collinear = o.every((s) => s === 0);
+    if (!collinear && o[0]! * o[1]! <= 0 && o[2]! * o[3]! <= 0) return false;
+    return (
+      fartherThanBeta(p, c, d) &&
+      fartherThanBeta(q, c, d) &&
+      fartherThanBeta(c, p, q) &&
+      fartherThanBeta(d, p, q)
+    );
+  };
+  const clearExact = (p: Pt, q: Pt) => {
+    const s = [dNum(p.x), dNum(p.y), dNum(q.x), dNum(q.y)];
+    const r = beta + f64Margin(W + H + 20 + Math.max(...s.map(Math.abs)));
+    for (const k of edgeGrid.query(
+      Math.min(s[0]!, s[2]!) - r,
+      Math.min(s[1]!, s[3]!) - r,
+      Math.max(s[0]!, s[2]!) + r,
+      Math.max(s[1]!, s[3]!) + r,
+    )) {
+      work += 1;
+      const e = candidates[k]!;
+      if (!segmentsApart(p, q, e.a, e.b)) return false;
+    }
+    return !insideExact({ x: dmul(dadd(p.x, q.x), half), y: dmul(dadd(p.y, q.y), half) });
+  };
+  const exactOffset = (e: ChainEdge, out: number, s0: number): number | null => {
+    const ex = dNum(dsub(e.b.x, e.a.x));
+    const ey = dNum(dsub(e.b.y, e.a.y));
+    const length = Math.hypot(ex, ey);
+    if (!(length > 0 && length < Infinity)) return null;
+    const tx = ex / length;
+    const ty = ey / length;
+    const nx = out * ty;
+    const ny = -out * tx;
+    for (let s = s0; s <= FLIP_TOLERANT_RHO_MAX; s *= REFINED_SEARCH.factor)
+      for (const angle of REFINED_SEARCH.angles) {
+        const wx = s * (Math.cos(angle) * nx + Math.sin(angle) * tx);
+        const wy = s * (Math.cos(angle) * ny + Math.sin(angle) * ty);
+        const bound = a04NextUp(Math.hypot(wx, wy) * SLACK);
+        // Seeded defect (E20-A3): D without the exact test.
+        if (options.defect === 'no-exact-fallback') return bound;
+        const shift = (q: Pt): Pt => ({ x: dadd(q.x, dy(wx)), y: dadd(q.y, dy(wy)) });
+        if (clearExact(shift(e.a), shift(e.b))) {
+          pieces += 1;
+          return bound;
+        }
+        if (work > FLIP_TOLERANT_WORK_CAP) return null;
+      }
+    return null;
   };
 
   let dHi = 0;
@@ -1191,22 +1534,29 @@ export function flipTolerantBound(mapped: Mapped, beta: number): FlipTolerantRes
     const dx = xs[e.ib]! - ax;
     const dyy = ys[e.ib]! - ay;
     const length = Math.hypot(dx, dyy);
-    if (!(length > 0)) return no('edge below binary64');
-    const tx = dx / length;
-    const ty = dyy / length;
     // The triangles lie left of a → b when side > 0; outward is then the right normal.
     const out = side > 0 ? 1 : -1;
-    const nx = out * ty;
-    const ny = -out * tx;
     const margin = f64Margin(W + H + 20 + Math.max(...b.map(Math.abs)));
     const s0 = beta * (1 + 2 ** -4) + 2 * margin;
-    const piece = (l0: number, l1: number, depth: number): number | null => {
+    if (!(length > 0)) {
+      if (!e20) return no('edge below binary64');
+      const d = exactOffset(e, out, s0);
+      if (d === null) return no(work > FLIP_TOLERANT_WORK_CAP ? 'work cap' : 'edge below binary64');
+      exactEdges += 1;
+      dHi = Math.max(dHi, d);
+      continue;
+    }
+    const tx = dx / length;
+    const ty = dyy / length;
+    const nx = out * ty;
+    const ny = -out * tx;
+    const piece = (l0: number, l1: number, depth: number, search: OffsetSearch): number | null => {
       const p0x = ax + l0 * dx;
       const p0y = ay + l0 * dyy;
       const p1x = ax + l1 * dx;
       const p1y = ay + l1 * dyy;
-      for (let s = s0; s <= FLIP_TOLERANT_RHO_MAX; s *= Math.SQRT2)
-        for (const angle of FLIP_TOLERANT_ANGLES) {
+      for (let s = s0; s <= FLIP_TOLERANT_RHO_MAX; s *= search.factor)
+        for (const angle of search.angles) {
           const wx = s * (Math.cos(angle) * nx + Math.sin(angle) * tx);
           const wy = s * (Math.cos(angle) * ny + Math.sin(angle) * ty);
           if (clear([p0x + wx, p0y + wy, p1x + wx, p1y + wy])) {
@@ -1215,18 +1565,27 @@ export function flipTolerantBound(mapped: Mapped, beta: number): FlipTolerantRes
           }
           if (work > FLIP_TOLERANT_WORK_CAP) return null;
         }
-      if (depth >= FLIP_TOLERANT_DEPTH || (l1 - l0) * length < beta / 4) return null;
+      if (depth >= search.depth || (l1 - l0) * length < beta * search.minimum) return null;
       const mid = (l0 + l1) / 2;
-      const left = piece(l0, mid, depth + 1);
+      const left = piece(l0, mid, depth + 1, search);
       if (left === null) return null;
-      const right = piece(mid, l1, depth + 1);
+      const right = piece(mid, l1, depth + 1, search);
       return right === null ? null : Math.max(left, right);
     };
-    const d = piece(0, 1, 0);
+    let d = piece(0, 1, 0, OLD_SEARCH);
+    // E20-K3: the refined search where the old one fails, or on every edge for a row that
+    // straddles 0.25 px; the edge keeps the smaller D.
+    if (e20 && (d === null || options.refineAll === true) && !(work > FLIP_TOLERANT_WORK_CAP)) {
+      const refined = piece(0, 1, 0, REFINED_SEARCH);
+      if (refined !== null && (d === null || refined < d)) {
+        d = refined;
+        refinedEdges += 1;
+      }
+    }
     if (d === null) return no(work > FLIP_TOLERANT_WORK_CAP ? 'work cap' : 'boundary offset');
     dHi = Math.max(dHi, d);
   }
-  return { rho: a04NextUp(Math.max(beta, dHi) * SLACK), reason: null, edges, pieces, work };
+  return result(a04NextUp(Math.max(beta, dHi) * SLACK), null);
 }
 
 /** The joint partner key (SB-10, SB-11): the other role of the same group, transform and camera. */
@@ -1434,11 +1793,36 @@ export function measureCase(
   // and L. Clipped triangles are not covered by its argument.
   let rho = betaC;
   let flipTolerant: FlipTolerantResult | null = null;
+  // E20: each remedy runs only behind the predicate that ended a row UNDECIDED on 2026-10-27,
+  // so a row decided then never reaches it (E20 contract, section 2, gating).
+  const remedies: E20Trace[] = [];
+  const traced = () => (remedies.length === 0 ? {} : { e20: [...remedies] });
+  const clippedIf = (r: FlipTolerantResult) => (guard.crossing > 0 ? { ...r, clipped: true } : r);
   if (flip.failed > 0) {
     if (guard.crossing === 0) flipTolerant = flipTolerantBound(mapped, betaC);
-    if (flipTolerant?.rho == null)
-      return done({ ...common, flipTolerant, status: 'undecided', reason: 'no-flip certificate' });
-    rho = flipTolerant.rho;
+    if (flipTolerant?.rho != null) rho = flipTolerant.rho;
+    else {
+      // E20-K1 (clipped draws, M* unclipped), K2, K3 and K6. With ρ ≥ 0.25, U > 0.25 already,
+      // so K3's refined search runs on every edge before the oracle.
+      let remedy = clippedIf(flipTolerantBound(mapped, betaC, { e20: true }));
+      if (remedy.rho !== null && remedy.rho >= TARGET) {
+        const refined = clippedIf(flipTolerantBound(mapped, betaC, { e20: true, refineAll: true }));
+        if (refined.rho !== null && refined.rho < remedy.rho) remedy = refined;
+      }
+      if (remedy.rho == null) {
+        remedies.push({ rule: 'flip-tolerant', former: flipTolerant, attempt: remedy });
+        return done({
+          ...common,
+          flipTolerant,
+          ...traced(),
+          status: 'undecided',
+          reason: 'no-flip certificate',
+        });
+      }
+      remedies.push({ rule: 'flip-tolerant', former: flipTolerant });
+      flipTolerant = remedy;
+      rho = remedy.rho;
+    }
   }
 
   const beta = mutations.omitBeta ? 0 : rho;
@@ -1471,16 +1855,42 @@ export function measureCase(
   };
   if (m.status === 'window-empty') {
     // E3-K3 on M_gpu: ∂M* must also stay off Ω ⊕ 1, so that a β-move cannot bring it into Ω.
-    if (boundaryMayMeetGuard(mapped))
-      return done({ ...measured, status: 'undecided', reason: 'window-empty within the guard' });
-    return done({ ...measured, status: 'window-empty' });
+    if (boundaryMayMeetGuard(mapped)) {
+      // E20-K4: a candidate more than β_c from Ω cannot be moved into it.
+      const distance = boundaryDistanceFromWindow(mapped);
+      remedies.push({ rule: 'window-empty-guard', distance });
+      if (!(distance > betaC))
+        return done({
+          ...measured,
+          ...traced(),
+          status: 'undecided',
+          reason: 'window-empty within the guard',
+        });
+    }
+    return done({ ...measured, ...traced(), status: 'window-empty' });
   }
-  if (m.e === null) return done({ ...measured, status: 'undecided', reason: m.reason });
-  const u = a04NextUp(m.e.hi + beta);
-  const l = Math.max(0, a04NextDown(m.e.lo - beta));
-  const status = caseStatus(u, l);
+  if (m.e === null)
+    return done({ ...measured, ...traced(), status: 'undecided', reason: m.reason });
+  let u = a04NextUp(m.e.hi + beta);
+  let l = Math.max(0, a04NextDown(m.e.lo - beta));
+  let status = caseStatus(u, l);
+  let rowFlip = flipTolerant;
+  if (status === 'undecided' && flipTolerant !== null && !mutations.omitBeta) {
+    // E20-K3: U > 0.25 ≥ L on the flip-tolerant bound. A smaller ρ from the refined search
+    // tightens U and L from the same oracle interval (it covers Ω ⊕ 1 ⊇ Ω ⊕ ρ).
+    const refined = clippedIf(flipTolerantBound(mapped, betaC, { e20: true, refineAll: true }));
+    if (refined.rho !== null && refined.rho < rho) {
+      remedies.push({ rule: 'refined-offset', former: flipTolerant });
+      rowFlip = refined;
+      u = a04NextUp(m.e.hi + refined.rho);
+      l = Math.max(0, a04NextDown(m.e.lo - refined.rho));
+      status = caseStatus(u, l);
+    } else remedies.push({ rule: 'refined-offset', former: flipTolerant, attempt: refined });
+  }
   return done({
     ...measured,
+    flipTolerant: rowFlip,
+    ...traced(),
     status,
     reason: status === 'undecided' ? (m.reason ?? 'straddles 0.25 px') : null,
     eLo: m.e.lo,
