@@ -35,8 +35,10 @@ import {
 } from './tools.js';
 import {
   ancestors,
+  childrenOf,
   documentClipViolation,
   documentTree,
+  isContainer,
   isGroup,
   nodePath,
   pageOf,
@@ -218,6 +220,7 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.clip-depth',
   'editor.no-viewport-size',
   'editor.too-few-nodes',
+  'editor.invalid-scope',
   'editor.invalid-keymap',
 ]);
 
@@ -457,6 +460,8 @@ class EditorCore implements Editor {
   private snap: SnapOverlay | null = null;
   private snapKey = 'null';
   private snapping = true;
+  /** The entered container of the active page (M2 contract, section 5), or null. */
+  private scope: string | null = null;
   private extensionDepth = 0;
   private readonly ids: IdSource;
   private readonly extensions: ExtensionRegistry;
@@ -641,6 +646,7 @@ class EditorCore implements Editor {
         this.interrupt();
         if (command.id !== this.activePage) {
           const hadSelection = this.selection.length > 0;
+          const hadScope = this.scope !== null;
           this.switchPage(command.id);
           // A new page is a new scene identity: the renderer gets a full snapshot.
           const diagnostics: EditorEvent[] = [];
@@ -650,6 +656,7 @@ class EditorCore implements Editor {
           );
           this.refresh({ type: 'session', field: 'activePage' });
           if (hadSelection) this.emit({ type: 'session', field: 'selection' });
+          if (hadScope) this.emit({ type: 'session', field: 'scope' });
           diagnostics.forEach((event) => this.emit(event));
         }
         return { ok: true, ids: [] };
@@ -733,6 +740,19 @@ class EditorCore implements Editor {
         }
         return { ok: true, ids: [] };
       }
+      case 'setScope': {
+        const { id } = command;
+        if (id !== null && typeof id !== 'string') return failure('editor.invalid-command', '/id');
+        if (id !== null) {
+          // A node of the active page at any depth (section 4.4: unknown-node before
+          // invalid-scope).
+          const tree = documentTree(this.document);
+          if (pageOf(tree, id) !== this.activePage) return failure('editor.unknown-node');
+          if (!isContainer(tree.node(id))) return failure('editor.invalid-scope');
+        }
+        this.setScopeState(id);
+        return { ok: true, ids: [] };
+      }
       case 'runCommand': {
         const extension =
           typeof command.id === 'string' ? this.extensions.command(command.id) : undefined;
@@ -814,6 +834,8 @@ class EditorCore implements Editor {
           return this.snap;
         case 'snapping':
           return this.snapping;
+        case 'scope':
+          return this.scope;
       }
     })();
     return value as QueryResult<Q>;
@@ -968,8 +990,30 @@ class EditorCore implements Editor {
       case 'delete':
         return selection.length === 0 ? nothing : this.run({ type: 'deleteNodes', ids: selection });
       case 'selectAll': {
-        const page = this.document.pages.find((entry) => entry.id === this.activePage)!;
-        return this.run({ type: 'setSelection', ids: page.children });
+        // The scope's children, or the page's (section 7).
+        const ids = childrenOf(documentTree(this.document), this.scope ?? this.activePage);
+        return this.run({ type: 'setSelection', ids });
+      }
+      case 'enterScope': {
+        // A single selected container is entered and its children selected (section 5); any
+        // other selection does nothing (still consumed).
+        const node = selection.length === 1 ? this.document.nodes[selection[0]!] : undefined;
+        if (!isContainer(node)) return nothing;
+        this.run({ type: 'setScope', id: node.id });
+        return this.run({ type: 'setSelection', ids: node.children });
+      }
+      case 'exitScope': {
+        // Without a scope, Escape clears the selection. With one, the scope node is selected and
+        // the scope moves to its nearest container ancestor that is not a top-level frame (a
+        // top-level frame's children are targets at the page already), or the page.
+        const scope = this.scope;
+        if (scope === null) return this.run({ type: 'setSelection', ids: [] });
+        const tree = documentTree(this.document);
+        const up = ancestors(tree, scope).find(
+          (node) => !(node.type === 'frame' && tree.page(node.parent) !== undefined),
+        );
+        this.run({ type: 'setSelection', ids: [scope] });
+        return this.run({ type: 'setScope', id: up?.id ?? null });
       }
       case 'group':
       case 'maskGroup': {
@@ -1300,6 +1344,12 @@ class EditorCore implements Editor {
           : document.pages[Math.min(index, document.pages.length - 1)]!.id;
     const pageChanged = page !== this.activePage;
     let selectionChanged: boolean;
+    // A load clears the scope; so does deleting or undoing away the scoped node (section 5).
+    const scope = this.scope;
+    const scopeChanged =
+      scope !== null &&
+      (cause === 'load' || pageChanged || pageOf(documentTree(document), scope) !== page);
+    if (scopeChanged) this.scope = null;
     if (pageChanged) {
       selectionChanged = this.selection.length > 0;
       this.switchPage(page);
@@ -1322,16 +1372,18 @@ class EditorCore implements Editor {
     this.refresh({ type: 'document', cause, revision: this.revision, touched: ids });
     if (selectionChanged) this.emit({ type: 'session', field: 'selection' });
     if (pageChanged) this.emit({ type: 'session', field: 'activePage' });
+    if (scopeChanged) this.emit({ type: 'session', field: 'scope' });
     diagnostics.forEach((event) => this.emit(event));
   }
 
   /**
-   * Activates `page`: the selection is cleared and the active tool reset (it stays selected).
-   * The caller raises the events and updates the renderer.
+   * Activates `page`: the selection and the scope are cleared and the active tool reset (it
+   * stays selected). The caller raises the events and updates the renderer.
    */
   private switchPage(page: string): void {
     this.activePage = page;
     this.selection = Object.freeze([]);
+    this.scope = null;
     this.tools.get(this.tool)?.reset();
   }
 
@@ -1359,6 +1411,13 @@ class EditorCore implements Editor {
     this.refresh({ type: 'session', field: 'selection' });
   }
 
+  /** A scope equal to the current one raises no event (section 2). */
+  private setScopeState(scope: string | null): void {
+    if (scope === this.scope) return;
+    this.scope = scope;
+    this.refresh({ type: 'session', field: 'scope' });
+  }
+
   /** Tool overlays change without a document change; hosts learn of it through the snapshot. */
   private refreshOverlay(): void {
     const overlay = this.tools.get(this.tool)?.overlay() ?? null;
@@ -1382,6 +1441,7 @@ class EditorCore implements Editor {
       keymap: this.keymap,
       snap: this.snap,
       snapping: this.snapping,
+      scope: this.scope,
       history: { undoDepth: this.undoStack.length, redoDepth: this.redoStack.length },
     });
   }

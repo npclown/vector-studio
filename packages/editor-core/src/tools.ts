@@ -14,6 +14,7 @@ import {
 import {
   boundsOf,
   deepestHit,
+  hitsAt,
   marqueeHits,
   selectionTarget,
   targetChain,
@@ -32,7 +33,7 @@ import {
   type SnapSet,
   type ValueIndex,
 } from './snap.js';
-import { documentTree, spaceOf } from './tree.js';
+import { documentTree, isAncestor, isContainer, spaceOf } from './tree.js';
 import type {
   InputEvent,
   Modifiers,
@@ -97,13 +98,18 @@ function thresholdOf(context: ToolContext): number {
 /**
  * A gesture's candidate set (section 4.2) over the document current at the call, which is the
  * pre-gesture document when called at press; computed on first use, so a click costs nothing.
- * The scope owner is the active page until a scope exists (M2-U5).
+ * The scope owner is `scope`, by default the session scope at the call (section 5), else the
+ * active page.
  */
-function lazySnapSet(context: ToolContext, moving: readonly string[]): () => SnapSet {
+function lazySnapSet(
+  context: ToolContext,
+  moving: readonly string[],
+  scope: string | null = context.query({ type: 'scope' }),
+): () => SnapSet {
   const document = context.query({ type: 'document' });
   const page = context.query({ type: 'activePage' });
   let set: SnapSet | null = null;
-  return () => (set ??= snapSet(document, page, null, moving));
+  return () => (set ??= snapSet(document, page, scope, moving));
 }
 
 /** A dragged point (box corner, line end) after snapping, and the overlay to show. */
@@ -429,10 +435,17 @@ type SelectState =
       kind: 'duplicate';
       start: PagePoint;
       moveSet: readonly string[];
-      /** The pressed node's selection target, for a release without movement. */
-      hit: string;
       moved: boolean;
       bounds: Box | null;
+      /**
+       * The scope the press resolved to (section 5): the session scope when the hit is inside
+       * it, else null; `leaves` when the press left the session scope, applied at release, since
+       * an Alt press changes nothing.
+       */
+      scope: string | null;
+      leaves: boolean;
+      /** The selection before the press, where overlap cycling starts. */
+      selection: readonly string[];
       /**
        * The copies' duplicated frames, parent-chain rotations and snap candidates; null before
        * the first movement.
@@ -523,22 +536,96 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     return best;
   }
 
+  /**
+   * The deepest node hit at `point` and the scope a press there resolves to (section 5):
+   * `deepest` is null on empty canvas and on the scope node itself (empty canvas inside the
+   * scope); `scope` is the session scope when the hit is inside its subtree, else null; `leaves`
+   * says the press leaves a session scope (a hit outside it, or the page's empty canvas).
+   */
+  function resolveHit(
+    context: ToolContext,
+    point: PagePoint,
+  ): { deepest: string | null; scope: string | null; leaves: boolean } {
+    const document = context.query({ type: 'document' });
+    const session = context.query({ type: 'scope' });
+    const deepest = deepestHit(
+      document,
+      context.query({ type: 'activePage' }),
+      point,
+      zoomOf(context),
+      custom,
+    );
+    if (session === null) return { deepest, scope: null, leaves: false };
+    if (deepest === session) return { deepest: null, scope: session, leaves: false };
+    if (deepest !== null && isAncestor(documentTree(document), session, deepest)) {
+      return { deepest, scope: session, leaves: false };
+    }
+    return { deepest, scope: null, leaves: true };
+  }
+
+  /**
+   * Overlap cycling (section 5): the stack is the selection targets of every node hit at the
+   * press point, in reverse paint order without repeats, under the scope the press resolved to
+   * (inside a scope only its subtree's nodes, the scope node itself excluded); with the
+   * pre-press selection one node at index `i`, the selection becomes item `(i + 1) mod n`,
+   * else item 0.
+   */
+  function cycle(current: Extract<SelectState, { kind: 'duplicate' }>, context: ToolContext): void {
+    const document = context.query({ type: 'document' });
+    const tree = documentTree(document);
+    const { scope } = current;
+    const hits = hitsAt(
+      document,
+      context.query({ type: 'activePage' }),
+      current.start,
+      zoomOf(context),
+      custom,
+    ).filter((id) => scope === null || isAncestor(tree, scope, id));
+    const stack = [...new Set(hits.map((id) => selectionTarget(document, id, scope)))];
+    if (stack.length === 0) return;
+    const before = current.selection;
+    const index = before.length === 1 ? stack.indexOf(before[0]!) : -1;
+    const next = stack[(index + 1) % stack.length]!;
+    context.execute({ type: 'setSelection', ids: [next] });
+  }
+
+  /**
+   * Frame entry (section 5): a double-click enters the hit target when it is a group, mask
+   * group or frame; the selection becomes the target's child on the hit chain, or empty for a
+   * hit on the frame's own background or border. A leaf target, the scope node itself and
+   * empty canvas do nothing.
+   */
+  function doubleClick(point: PagePoint, context: ToolContext): boolean {
+    const { deepest, scope } = resolveHit(context, point);
+    if (deepest === null) return false;
+    const document = context.query({ type: 'document' });
+    const chain = targetChain(document, deepest, scope);
+    const target = chain[chain.length - 1]!;
+    if (!isContainer(document.nodes[target])) return false;
+    context.execute({ type: 'setScope', id: target });
+    const next = chain.length >= 2 ? [chain[chain.length - 2]!] : [];
+    context.execute({ type: 'setSelection', ids: next });
+    return true;
+  }
+
   function pointerDown(event: Pointer, context: ToolContext): void {
     if (state.kind !== 'idle') return;
     const document = context.query({ type: 'document' });
     const selection = context.query({ type: 'selection' });
     const zoom = zoomOf(context);
-    const page = context.query({ type: 'activePage' });
     const handles = handlesOf(context, selection);
-    // The node hit and its selection target (section 6). A press on an already selected node
-    // between them (one selected below the target, for example from a layers panel) keeps the
-    // selection and acts on that node.
-    const deepest = deepestHit(document, page, event.point, zoom, custom);
-    const target = deepest === null ? null : selectionTarget(document, deepest);
+    // The node hit and its selection target (section 6), with the scope in place of the page
+    // (M2 contract, section 5): a hit on the scope node itself is empty canvas inside the scope,
+    // and a hit outside the scope's subtree, or none, leaves the scope for the page rule. A
+    // press on an already selected node between them (one selected below the target, for
+    // example from a layers panel) keeps the selection and acts on that node.
+    const pressed = resolveHit(context, event.point);
+    const { deepest, scope, leaves } = pressed;
+    const target = deepest === null ? null : selectionTarget(document, deepest, scope);
     const hit =
       deepest === null
         ? null
-        : (targetChain(document, deepest).find((id) => selection.includes(id)) ?? target);
+        : (targetChain(document, deepest, scope).find((id) => selection.includes(id)) ?? target);
     // On a box too small for its handles to stay apart, a press on a selected node inside it
     // moves; otherwise a handle wins over the node under it.
     const reach = (4 * HANDLE_RADIUS) / zoom;
@@ -581,6 +668,8 @@ export function createSelectTool(custom: CustomGeometry): Tool {
       return;
     }
     if (hit === null || target === null) {
+      // Empty canvas: the page's (leaving any scope), or the scope's own (keeping it).
+      if (leaves) context.execute({ type: 'setScope', id: null });
       state = {
         kind: 'marquee',
         start: event.point,
@@ -590,7 +679,8 @@ export function createSelectTool(custom: CustomGeometry): Tool {
       return;
     }
     if (event.modifiers.alt) {
-      // Alt-drag: the selection change waits for the first movement (section 4.3).
+      // Alt-drag: the selection and scope changes wait for the first movement or the release
+      // (sections 4.3 and 5).
       if (context.gesture.begin()) {
         const moveSet = selection.includes(hit) ? selection : [hit];
         const bounds = boundsOf(document, moveSet);
@@ -598,14 +688,17 @@ export function createSelectTool(custom: CustomGeometry): Tool {
           kind: 'duplicate',
           start: event.point,
           moveSet,
-          hit: target,
           moved: false,
           bounds: bounds === null ? null : boxOfFrame(bounds),
+          scope,
+          leaves,
+          selection,
           copies: null,
         };
       }
       return;
     }
+    if (leaves) context.execute({ type: 'setScope', id: null });
     if (event.modifiers.shift) {
       const ids = selection.includes(hit)
         ? selection.filter((id) => id !== hit)
@@ -813,8 +906,9 @@ export function createSelectTool(custom: CustomGeometry): Tool {
           frames: new Map(ids.map((id) => [id, live.nodes[id]!.frame])),
           turns: new Map(ids.map((id) => [id, spaceOf(tree, live.nodes[id]!.parent).rotation])),
           // The copies move; the originals stay and are candidates. Every other box is as in
-          // the pre-gesture document, since the copies are the only change.
-          candidates: lazySnapSet(context, ids),
+          // the pre-gesture document, since the copies are the only change. The scope owner is
+          // the one the press resolved to.
+          candidates: lazySnapSet(context, ids, state.scope),
         };
       }
       const { frames, turns, candidates } = state.copies;
@@ -869,10 +963,14 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     if (gesture(current.kind)) {
       // An Alt-drag commits the duplicate and the move as one step.
       context.gesture.commit();
-      // A click without movement selects the target hit, even inside a larger selection. An
-      // Alt-click does the same until overlap cycling (M2-U5) replaces it.
-      if ((current.kind === 'move' || current.kind === 'duplicate') && !current.moved) {
+      // A click without movement selects the target hit, even inside a larger selection.
+      if (current.kind === 'move' && !current.moved) {
         context.execute({ type: 'setSelection', ids: [current.hit] });
+      }
+      if (current.kind === 'duplicate') {
+        // The Alt press's deferred scope change, then an Alt-click cycles (section 5).
+        if (current.leaves) context.execute({ type: 'setScope', id: null });
+        if (!current.moved) cycle(current, context);
       }
     } else if (current.kind === 'marquee') {
       current.current = event.point;
@@ -881,10 +979,12 @@ export function createSelectTool(custom: CustomGeometry): Tool {
         if (!current.additive) context.execute({ type: 'setSelection', ids: [] });
         return;
       }
+      // The scope's children inside a scope, else the page's (section 5).
       const hits = marqueeHits(
         context.query({ type: 'document' }),
         context.query({ type: 'activePage' }),
         boxOf(current.start, current.current),
+        context.query({ type: 'scope' }),
       );
       const ids = current.additive
         ? [...new Set([...context.query({ type: 'selection' }), ...hits])]
@@ -907,6 +1007,9 @@ export function createSelectTool(custom: CustomGeometry): Tool {
         if (state.kind !== 'idle') return false;
         pointerDown(event, context);
         return true;
+      }
+      if (event.kind === 'doubleclick') {
+        return state.kind === 'idle' && doubleClick(event.point, context);
       }
       if (!isMoveOrUp(event) || state.kind === 'idle') return false;
       if (event.kind === 'pointermove') pointerMove(event, context);
