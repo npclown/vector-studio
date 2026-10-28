@@ -654,11 +654,19 @@ function group(
   }
   // Every check runs with a placeholder ID first, so a failed command draws no ID; the result
   // does not depend on the ID, so the build with the drawn one passes too.
-  const trial = buildGroup(document, command.kind, ids, owner, placeholderId(document), finish);
-  if (!trial.ok) return trial;
+  const placeholder = placeholderId(document);
+  const trial = buildGroup(document, command.kind, ids, owner, placeholder, finish);
+  if (!trial.ok) return relativeToNew(trial, nodePath(placeholder));
   const id = freshId(document, context.ids);
   if (id === null) return fail('editor.duplicate-id');
   return buildGroup(document, command.kind, ids, owner, id, finish);
+}
+
+/** A failure inside the new container is reported relative to it, as for creation commands. */
+function relativeToNew(failure: Failure, prefix: string): Failure {
+  const path = failure.path;
+  if (path === undefined || (path !== prefix && !path.startsWith(`${prefix}/`))) return failure;
+  return fail(failure.code, path.slice(prefix.length) || undefined);
 }
 
 /** An ID that no page or node of `document` has, for checks that run before the ID is drawn. */

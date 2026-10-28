@@ -1801,6 +1801,7 @@ describe('M1-U2 review fixes', () => {
       target,
       { type: 'groupNodes', ids: ['R'], kind: 'maskGroup' },
       'editor.invalid-mask-source',
+      '/children/0',
     );
     expectFailure(
       target,
