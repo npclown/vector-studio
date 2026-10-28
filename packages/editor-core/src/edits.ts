@@ -1,5 +1,4 @@
 import {
-  isValidId,
   MAX_TREE_DEPTH,
   normalizeRotation,
   validateNode,
@@ -8,8 +7,26 @@ import {
   type NodeV2,
   type PageV2,
 } from '@vector-studio/model';
+import {
+  alignNodes,
+  distributeNodes,
+  duplicateNodes,
+  nudgeNodes,
+  reorderNodes,
+} from './arrange.js';
 import { Draft, fail, type Failure } from './draft.js';
-import type { CustomDefaults, CustomFailure } from './extensions.js';
+import {
+  freshId,
+  inserted,
+  isPoint,
+  nodeOf,
+  PENDING_ID,
+  success,
+  uniqueIds,
+  type CustomRules,
+  type EditContext,
+  type EditResult,
+} from './edit-support.js';
 import { deepFreeze } from './freeze.js';
 import {
   apply,
@@ -27,7 +44,6 @@ import {
   ancestors,
   childrenOf,
   clipDepth,
-  clipDepthViolation,
   documentTree,
   isAncestor,
   isContainer,
@@ -40,7 +56,7 @@ import {
   treeDepthViolation,
   type TreeView,
 } from './tree.js';
-import type { DocumentCommand, IdSource, PagePoint } from './types.js';
+import type { DocumentCommand, PagePoint } from './types.js';
 
 // Pure document edits: each takes a valid document and returns a new valid document, or a
 // failure that leaves nothing changed. Nodes are validated with the model's own field rules.
@@ -49,17 +65,7 @@ import type { DocumentCommand, IdSource, PagePoint } from './types.js';
 // Failures follow the precedence of section 4.3.1.
 
 export { deepFreeze };
-
-export type EditResult =
-  | Readonly<{
-      ok: true;
-      document: DocumentV2;
-      /** Nodes created, changed or removed. */
-      touched: readonly string[];
-      /** Nodes or pages the command created. */
-      created: readonly string[];
-    }>
-  | Failure;
+export type { CustomRules, EditContext, EditResult };
 
 /** Defaults for creation when the command gives no style (P5 plan section 14, M1 section 4.1). */
 export const DEFAULT_RECTANGLE_FILL = deepFreeze({ r: 0.8, g: 0.8, b: 0.8, a: 1 } as const);
@@ -73,34 +79,12 @@ export const DEFAULT_PATH_STROKE = deepFreeze({
 export const DEFAULT_FRAME_FILL = deepFreeze({ r: 1, g: 1, b: 1, a: 1 } as const);
 const START = deepFreeze({ horizontal: 'start', vertical: 'start' } as const);
 
-/** The extension checks edits need (an `ExtensionRegistry`). */
-export type CustomRules = Readonly<{
-  check(node: NodeV2): CustomFailure | null;
-  defaults(customType: string): CustomDefaults;
-}>;
-
 const NO_CUSTOM: CustomRules = {
   check: (node) =>
     node.type === 'custom' ? { code: 'document.unknown-custom-type', path: '/customType' } : null,
   defaults: () => ({ code: 'document.unknown-custom-type', path: '/customType' }),
 };
 
-export type EditContext = Readonly<{
-  ids: IdSource;
-  custom?: CustomRules;
-  /** Creation without `parent` uses this page's root. */
-  activePage: string;
-  /** False during a gesture update: groups refit only at commit (section 4.2). */
-  refit?: boolean;
-  /**
-   * A gesture's pre-gesture document. A container resized during the gesture applies the resize
-   * rules from its state there, so each update is independent of the ones before it.
-   */
-  resizeBase?: DocumentV2;
-}>;
-
-const ID_ATTEMPTS = 1000;
-const PENDING_ID = 'pending';
 /** Clip levels a frame or mask group, and any node, may sit at (section 4.3). */
 const MAX_CLIP_CONTAINER_DEPTH = 31;
 const MAX_CLIP_DEPTH = 32;
@@ -118,42 +102,8 @@ const PROPS: Readonly<Record<NodeV2['type'], readonly string[]>> = {
   frame: [...COMMON_PROPS, 'fill', 'stroke'],
 };
 
-function freshId(document: DocumentV2, ids: IdSource): string | null {
-  for (let attempt = 0; attempt < ID_ATTEMPTS; attempt += 1) {
-    const id = ids();
-    if (
-      isValidId(id) &&
-      !document.pages.some((page) => page.id === id) &&
-      !Object.hasOwn(document.nodes, id)
-    ) {
-      return id;
-    }
-  }
-  return null;
-}
-
-function uniqueIds(ids: unknown): readonly string[] | null {
-  if (!Array.isArray(ids)) return null;
-  const seen = new Set<string>();
-  for (const id of ids as unknown[]) {
-    if (typeof id !== 'string' || seen.has(id)) return null;
-    seen.add(id);
-  }
-  return [...seen];
-}
-
-function nodeOf(document: DocumentV2, id: unknown): NodeV2 | undefined {
-  return typeof id === 'string' && Object.hasOwn(document.nodes, id)
-    ? document.nodes[id]
-    : undefined;
-}
-
 function isIndex(value: unknown, max: number): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= max;
-}
-
-function inserted<T>(list: readonly T[], index: number, items: readonly T[]): T[] {
-  return [...list.slice(0, index), ...items, ...list.slice(index)];
 }
 
 /** Clip levels a new child of `owner` sits at. */
@@ -161,39 +111,6 @@ function childClipDepth(tree: TreeView, owner: string): number {
   const node = tree.node(owner);
   if (!isContainer(node)) return 0;
   return clipDepth(tree, owner) + (node.type === 'frame' || node.type === 'maskGroup' ? 1 : 0);
-}
-
-/**
- * The structural rules checked after a command's document is built, in the section 4.3.1 table
- * order: every touched mask group keeps a path as its first child, then the clip depth of the
- * subtrees whose ancestry changed.
- */
-function structural(
-  document: DocumentV2,
-  touched: Iterable<string>,
-  clipRoots: readonly string[],
-): Failure | null {
-  for (const id of touched) {
-    const node = nodeOf(document, id);
-    if (node?.type !== 'maskGroup') continue;
-    if (document.nodes[node.children[0]!]?.type !== 'path') {
-      return fail('editor.invalid-mask-source', nodePath(id, '/children/0'));
-    }
-  }
-  const deep = clipDepthViolation(documentTree(document), clipRoots);
-  return deep === null ? null : fail('editor.clip-depth', nodePath(deep, '/parent'));
-}
-
-function success(
-  document: DocumentV2 | Failure,
-  draft: Draft,
-  created: readonly string[],
-  clipRoots: readonly string[] = [],
-): EditResult {
-  if ('ok' in document) return document;
-  const rejected = structural(document, draft.touched, clipRoots);
-  if (rejected !== null) return rejected;
-  return { ok: true, document, touched: [...draft.touched], created };
 }
 
 /**
@@ -341,6 +258,16 @@ export function applyEdit(
       return move(document, command, finish);
     case 'rotateNodes':
       return rotateNodes(document, command, context, finish);
+    case 'alignNodes':
+      return alignNodes(document, command, context, finish);
+    case 'distributeNodes':
+      return distributeNodes(document, command, context, finish);
+    case 'reorderNodes':
+      return reorderNodes(document, command, context, finish);
+    case 'nudgeNodes':
+      return nudgeNodes(document, command, context, finish);
+    case 'duplicateNodes':
+      return duplicateNodes(document, command, context, finish);
     case 'addPage': {
       if (command.name !== undefined && typeof command.name !== 'string') {
         return fail('editor.invalid-command', '/name');
@@ -469,18 +396,6 @@ export function applyGestureEdit(
     draft.finish((node) => custom.check(node), { refit: false }),
     draft,
     [],
-  );
-}
-
-function isPoint(value: unknown): value is PagePoint {
-  const point = value as PagePoint | null;
-  return (
-    typeof point === 'object' &&
-    point !== null &&
-    typeof point.x === 'number' &&
-    Number.isFinite(point.x) &&
-    typeof point.y === 'number' &&
-    Number.isFinite(point.y)
   );
 }
 

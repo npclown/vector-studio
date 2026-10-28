@@ -421,6 +421,28 @@ type SelectState =
       moved: boolean;
       candidates: () => SnapSet;
     }
+  | {
+      /**
+       * An Alt-drag (M2 contract, section 4.3): the press changed nothing; the first movement
+       * duplicates `moveSet` and moves the copies, which become the selection.
+       */
+      kind: 'duplicate';
+      start: PagePoint;
+      moveSet: readonly string[];
+      /** The pressed node's selection target, for a release without movement. */
+      hit: string;
+      moved: boolean;
+      bounds: Box | null;
+      /**
+       * The copies' duplicated frames, parent-chain rotations and snap candidates; null before
+       * the first movement.
+       */
+      copies: {
+        frames: Map<string, Frame>;
+        turns: Map<string, number>;
+        candidates: () => SnapSet;
+      } | null;
+    }
   | { kind: 'marquee'; start: PagePoint; current: PagePoint; additive: boolean };
 
 /** Scales `value` about `origin` by `scale` along one axis. */
@@ -565,6 +587,23 @@ export function createSelectTool(custom: CustomGeometry): Tool {
         current: event.point,
         additive: event.modifiers.shift,
       };
+      return;
+    }
+    if (event.modifiers.alt) {
+      // Alt-drag: the selection change waits for the first movement (section 4.3).
+      if (context.gesture.begin()) {
+        const moveSet = selection.includes(hit) ? selection : [hit];
+        const bounds = boundsOf(document, moveSet);
+        state = {
+          kind: 'duplicate',
+          start: event.point,
+          moveSet,
+          hit: target,
+          moved: false,
+          bounds: bounds === null ? null : boxOfFrame(bounds),
+          copies: null,
+        };
+      }
       return;
     }
     if (event.modifiers.shift) {
@@ -761,23 +800,58 @@ export function createSelectTool(custom: CustomGeometry): Tool {
       rotateTo(state, event, context);
       return;
     }
-    // The move snaps the moving nodes' joint box (section 4.2), then each node moves by the
-    // snapped page delta turned into its parent space.
+    if (state.kind === 'duplicate') {
+      if (state.copies === null) {
+        // The first movement duplicates the move set once (a creating command draws IDs on
+        // every application, S1) and selects the copies; later moves set their frames.
+        const result = context.gesture.update({ type: 'duplicateNodes', ids: state.moveSet });
+        const ids = result.ok ? result.ids : [];
+        if (ids.length > 0) context.execute({ type: 'setSelection', ids });
+        const live = context.query({ type: 'document' });
+        const tree = documentTree(live);
+        state.copies = {
+          frames: new Map(ids.map((id) => [id, live.nodes[id]!.frame])),
+          turns: new Map(ids.map((id) => [id, spaceOf(tree, live.nodes[id]!.parent).rotation])),
+          // The copies move; the originals stay and are candidates. Every other box is as in
+          // the pre-gesture document, since the copies are the only change.
+          candidates: lazySnapSet(context, ids),
+        };
+      }
+      const { frames, turns, candidates } = state.copies;
+      if (frames.size > 0) moveBy(frames, turns, state.bounds, candidates, dx, dy, event, context);
+      return;
+    }
+    moveBy(state.frames, state.turns, state.bounds, state.candidates, dx, dy, event, context);
+  }
+
+  /**
+   * A move (section 4.2): the moving nodes' joint box `bounds` snaps, then each node moves from
+   * its frame in `from` by the snapped page delta turned into its parent space.
+   */
+  function moveBy(
+    from: Map<string, Frame>,
+    turns: Map<string, number>,
+    bounds: Box | null,
+    candidates: () => SnapSet,
+    dx: number,
+    dy: number,
+    event: Pointer,
+    context: ToolContext,
+  ): void {
     let mx = dx;
     let my = dy;
     let overlay: SnapOverlay | null = null;
-    if (state.bounds !== null && snapsOn(context, event.modifiers)) {
+    if (bounds !== null && snapsOn(context, event.modifiers)) {
       const result = snapBox(
-        state.candidates(),
-        { box: translateBox(state.bounds, dx, dy), x: [0, 1, 2], y: [0, 1, 2], spacing: true },
+        candidates(),
+        { box: translateBox(bounds, dx, dy), x: [0, 1, 2], y: [0, 1, 2], spacing: true },
         thresholdOf(context),
       );
       mx = dx + result.ox;
       my = dy + result.oy;
       overlay = result.overlay;
     }
-    const { turns } = state;
-    const frames = [...state.frames].map(([id, frame]) => {
+    const frames = [...from].map(([id, frame]) => {
       const delta = rotate(-turns.get(id)!, mx, my);
       return { id, frame: { ...frame, x: frame.x + delta.x, y: frame.y + delta.y } };
     });
@@ -787,15 +861,17 @@ export function createSelectTool(custom: CustomGeometry): Tool {
 
   function pointerUp(event: Pointer, context: ToolContext): void {
     // The up point ends the drag, so it updates like a move first.
-    if (state.kind === 'move' || state.kind === 'resize' || state.kind === 'rotate') {
-      pointerMove(event, context);
-    }
+    const gesture = (kind: SelectState['kind']) =>
+      kind === 'move' || kind === 'resize' || kind === 'rotate' || kind === 'duplicate';
+    if (gesture(state.kind)) pointerMove(event, context);
     const current = state;
     state = { kind: 'idle' };
-    if (current.kind === 'move' || current.kind === 'resize' || current.kind === 'rotate') {
+    if (gesture(current.kind)) {
+      // An Alt-drag commits the duplicate and the move as one step.
       context.gesture.commit();
-      // A click without movement selects the target hit, even inside a larger selection.
-      if (current.kind === 'move' && !current.moved) {
+      // A click without movement selects the target hit, even inside a larger selection. An
+      // Alt-click does the same until overlap cycling (M2-U5) replaces it.
+      if ((current.kind === 'move' || current.kind === 'duplicate') && !current.moved) {
         context.execute({ type: 'setSelection', ids: [current.hit] });
       }
     } else if (current.kind === 'marquee') {

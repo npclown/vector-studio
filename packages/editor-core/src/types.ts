@@ -214,10 +214,31 @@ export type DocumentCommand =
    * goes through `replace`, never `update`.
    */
   | Readonly<{ type: 'rotateNodes'; ids: readonly string[]; angle: number; pivot?: PagePoint }>
+  // Arrange commands (MVP M2 contract, section 4.3), in page space: a node's box is the
+  // page-aligned bounds of its rotated frame, and its move is a page vector turned into its
+  // parent space. `alignNodes`, `distributeNodes`, `reorderNodes` and `nudgeNodes` are relative
+  // commands: inside a gesture they go through `replace`, never `update`.
+  /** Aligns the boxes to the edge or centre of their union, or one node to its frame ancestor. */
+  | Readonly<{ type: 'alignNodes'; ids: readonly string[]; edge: AlignEdge }>
+  /** Spaces at least 3 boxes evenly between the outer two, which stay. */
+  | Readonly<{ type: 'distributeNodes'; ids: readonly string[]; axis: DistributeAxis }>
+  /** Moves the nodes within their own parents; the last child is on top. */
+  | Readonly<{ type: 'reorderNodes'; ids: readonly string[]; op: ReorderOp }>
+  /** Moves the nodes by the page vector `(dx, dy)`. */
+  | Readonly<{ type: 'nudgeNodes'; ids: readonly string[]; dx: number; dy: number }>
+  /**
+   * Copies each subtree with fresh IDs directly above its original, moved by the page `offset`
+   * (default `{ x: 0, y: 0 }`); returns the copies' root IDs in paint order.
+   */
+  | Readonly<{ type: 'duplicateNodes'; ids: readonly string[]; offset?: PagePoint }>
   | Readonly<{ type: 'addPage'; name?: string; index?: number }>
   | Readonly<{ type: 'removePage'; id: string }>
   | Readonly<{ type: 'renamePage'; id: string; name: string }>
   | Readonly<{ type: 'movePage'; id: string; index: number }>;
+
+export type AlignEdge = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom';
+export type DistributeAxis = 'horizontal' | 'vertical';
+export type ReorderOp = 'forward' | 'backward' | 'front' | 'back';
 
 /** Commands that are never recorded in history. */
 export type SessionCommand =
@@ -272,6 +293,7 @@ export type EditorErrorCode =
   | 'editor.clip-depth'
   // MVP M2 contract, section 4.4.
   | 'editor.no-viewport-size'
+  | 'editor.too-few-nodes'
   | 'editor.invalid-keymap';
 
 /**
