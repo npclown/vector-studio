@@ -21,7 +21,13 @@ import type { InputEvent, PagePoint, PathAnchor, SelectionHandles, ToolOverlay }
 // node's own axes for any other single node, and the page-space box mapped node by node (as a
 // group resize, from the pre-gesture state) for any other multi-selection.
 
-type Pointer = Extract<InputEvent, { point: PagePoint }>;
+type Pointer = Extract<InputEvent, { kind: 'pointerdown' | 'pointermove' | 'pointerup' }>;
+
+function isMoveOrUp(
+  event: InputEvent,
+): event is Extract<Pointer, { kind: 'pointermove' | 'pointerup' }> {
+  return event.kind === 'pointermove' || event.kind === 'pointerup';
+}
 
 /** Pick radius for resize handles and the path tool's first anchor, in screen pixels. */
 const HANDLE_RADIUS = 6;
@@ -55,14 +61,16 @@ export function createBoxTool(
         if (event.key === 'Escape' && drag !== null) {
           context.gesture.cancel();
           drag = null;
+          return true;
         }
-        return;
+        return false;
       }
       if (event.kind === 'pointerdown') {
-        if (drag === null && context.gesture.begin()) drag = { start: event.point, id: null };
-        return;
+        if (drag !== null || !context.gesture.begin()) return false;
+        drag = { start: event.point, id: null };
+        return true;
       }
-      if (drag === null) return;
+      if (!isMoveOrUp(event) || drag === null) return false;
       // The up point is the drag's end point b, so it updates like a move first.
       if (drag.id !== null || distance(event.point, drag.start) > 0) {
         const frame = boxOf(drag.start, event.point);
@@ -80,6 +88,7 @@ export function createBoxTool(
         context.gesture.commit();
         if (id !== null) context.execute({ type: 'setSelection', ids: [id] });
       }
+      return true;
     },
     reset() {
       drag = null;
@@ -121,14 +130,16 @@ export function createLineTool(): Tool {
         if (event.key === 'Escape' && drag !== null) {
           context.gesture.cancel();
           drag = null;
+          return true;
         }
-        return;
+        return false;
       }
       if (event.kind === 'pointerdown') {
-        if (drag === null && context.gesture.begin()) drag = { start: event.point, id: null };
-        return;
+        if (drag !== null || !context.gesture.begin()) return false;
+        drag = { start: event.point, id: null };
+        return true;
       }
-      if (drag === null) return;
+      if (!isMoveOrUp(event) || drag === null) return false;
       // The up point is the drag's end, so it updates like a move first.
       const end = lineEnd(drag.start, event.point, event.modifiers.shift);
       if (drag.id !== null || distance(end, drag.start) > 0) {
@@ -146,6 +157,7 @@ export function createLineTool(): Tool {
         context.gesture.commit();
         if (id !== null) context.execute({ type: 'setSelection', ids: [id] });
       }
+      return true;
     },
     reset() {
       drag = null;
@@ -191,27 +203,34 @@ export function createPathTool(): Tool {
   return {
     input(event, context) {
       if (event.kind === 'keydown') {
+        // Escape and Enter act on pending anchors only, so they are consumed only then (M2-I2).
+        if (anchors.length === 0) return false;
         if (event.key === 'Escape') {
           anchors = [];
           pressed = null;
-        } else if (event.key === 'Enter' && anchors.length >= 2) {
-          finish(context, false);
+          return true;
         }
-        return;
+        if (event.key === 'Enter') {
+          if (anchors.length >= 2) finish(context, false);
+          return true;
+        }
+        return false;
       }
       if (event.kind === 'pointerdown') {
-        if (pressed !== null) return;
+        if (pressed !== null) return false;
         const radius = CLOSE_RADIUS / zoomOf(context);
         if (anchors.length >= 2 && distance(event.point, anchors[0]!.point) <= radius) {
           finish(context, true);
-          return;
+          return true;
         }
         // A second press on the last anchor (a double click) adds no anchor.
         const last = anchors[anchors.length - 1];
-        if (last !== undefined && distance(event.point, last.point) === 0) return;
+        if (last !== undefined && distance(event.point, last.point) === 0) return false;
         pressed = { point: event.point, in: null, out: null };
         anchors.push(pressed);
-      } else if (event.kind === 'pointermove' && pressed !== null) {
+        return true;
+      }
+      if (event.kind === 'pointermove' && pressed !== null) {
         // Press-and-drag makes a cubic anchor with symmetric handles.
         const { point } = pressed;
         const moved = distance(event.point, point) > 0;
@@ -219,9 +238,13 @@ export function createPathTool(): Tool {
         pressed.in = moved
           ? { x: 2 * point.x - event.point.x, y: 2 * point.y - event.point.y }
           : null;
-      } else if (event.kind === 'pointerup') {
-        pressed = null;
+        return true;
       }
+      if (event.kind === 'pointerup' && pressed !== null) {
+        pressed = null;
+        return true;
+      }
+      return false;
     },
     reset() {
       anchors = [];
@@ -577,12 +600,19 @@ export function createSelectTool(custom: CustomGeometry): Tool {
         if (event.key === 'Escape' && state.kind !== 'idle') {
           if (state.kind !== 'marquee') context.gesture.cancel();
           state = { kind: 'idle' };
+          return true;
         }
-        return;
+        return false;
       }
-      if (event.kind === 'pointerdown') pointerDown(event, context);
-      else if (event.kind === 'pointermove') pointerMove(event, context);
+      if (event.kind === 'pointerdown') {
+        if (state.kind !== 'idle') return false;
+        pointerDown(event, context);
+        return true;
+      }
+      if (!isMoveOrUp(event) || state.kind === 'idle') return false;
+      if (event.kind === 'pointermove') pointerMove(event, context);
       else pointerUp(event, context);
+      return true;
     },
     reset() {
       state = { kind: 'idle' };

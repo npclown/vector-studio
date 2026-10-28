@@ -14,7 +14,16 @@ import {
   type GestureEdit,
 } from './edits.js';
 import { ExtensionRegistry, extensionApi } from './extensions.js';
+import { boundsOf } from './hit-test.js';
 import { createCounterIdSource } from './ids.js';
+import {
+  DEFAULT_KEYMAP,
+  TOOL_NAMES,
+  effectiveKeymap,
+  eventChord,
+  validateLayer,
+  type CanonicalBinding,
+} from './keymap.js';
 import { SceneProjector } from './projector.js';
 import {
   createBoxTool,
@@ -36,10 +45,14 @@ import type {
   Extension,
   IdSource,
   InputEvent,
+  KeyBinding,
+  PagePoint,
+  Platform,
   Query,
   QueryResult,
   ToolName,
   ToolOverlay,
+  ViewportSize,
 } from './types.js';
 
 // Editor core (P5 plan, section 4): commands, transactions, history, gestures and session; the
@@ -52,11 +65,19 @@ export type EditorOptions = Readonly<{
   ids?: IdSource;
   /** Registered once; a malformed or conflicting registration throws (P5 plan, section 5). */
   extensions?: readonly Extension[];
+  /** The host keymap layer (M2 contract, section 7); an invalid layer throws. Defaults to empty. */
+  keymap?: readonly KeyBinding[];
+  /** What `Mod` resolves to: `Meta` on `'mac'`, else `Ctrl`. Defaults to `'other'`. */
+  platform?: Platform;
 }>;
 
 /** A tool receives input and acts only through the editor's commands and the gesture API. */
 export interface Tool {
-  input(event: InputEvent, context: ToolContext): void;
+  /**
+   * Returns whether the tool consumed the event (M2-I2, M2-I3): a key it has state for, or a
+   * pointer event it acted on. Tools receive no wheel or `pointercancel` event.
+   */
+  input(event: InputEvent, context: ToolContext): boolean;
   /** Drops drag and overlay state, for example when the tool is switched away. Must issue no command. */
   reset(): void;
   overlay(): ToolOverlay | null;
@@ -94,9 +115,20 @@ type HistoryEntry = Readonly<{
   touched: readonly string[];
 }>;
 
-type Gesture = { base: DocumentV2; touched: Set<string>; updated: boolean };
+type Gesture = {
+  base: DocumentV2;
+  touched: Set<string>;
+  updated: boolean;
+  /** The selection when the gesture began, restored on cancel (M2 contract, section 2). */
+  selection: readonly string[];
+};
 
-const TOOLS: readonly ToolName[] = ['select', 'rectangle', 'ellipse', 'line', 'frame', 'path'];
+const TOOLS: readonly ToolName[] = TOOL_NAMES;
+/** The zoom range (M2-Q2). */
+export const ZOOM_MIN = 1 / 64;
+export const ZOOM_MAX = 256;
+/** The zoom-to-fit padding: 32 CSS px on each side (M2-Q2). */
+const FIT_PADDING = 64;
 const DEFAULT_VIEWPORT: RenderCamera = deepFreeze({ position: { x: 0, y: 0 }, zoom: 1 });
 const DOCUMENT_COMMANDS = new Set([
   'createRectangle',
@@ -139,6 +171,8 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.not-a-group',
   'editor.invalid-mask-source',
   'editor.clip-depth',
+  'editor.no-viewport-size',
+  'editor.invalid-keymap',
 ]);
 
 /**
@@ -183,8 +217,22 @@ function isCamera(value: unknown): value is RenderCamera {
   );
 }
 
+function isPoint(value: unknown): value is PagePoint {
+  const point = value as PagePoint | null;
+  return (
+    typeof point === 'object' &&
+    point !== null &&
+    Number.isFinite(point.x) &&
+    Number.isFinite(point.y)
+  );
+}
+
+const optional = (value: unknown, type: 'string' | 'boolean') =>
+  value === undefined || typeof value === type;
+
+/** The M2-I1 input kinds; any other shape is malformed (`editor.invalid-command` at `/event`). */
 function isInputEvent(value: unknown): value is InputEvent {
-  const event = value as InputEvent | null;
+  const event = value as Record<string, unknown> | null;
   if (typeof event !== 'object' || event === null) return false;
   const modifiers = event.modifiers as Record<string, unknown> | null;
   if (
@@ -194,23 +242,79 @@ function isInputEvent(value: unknown): value is InputEvent {
   ) {
     return false;
   }
-  if (event.kind === 'keydown') return typeof event.key === 'string';
-  return (
-    (event.kind === 'pointerdown' || event.kind === 'pointermove' || event.kind === 'pointerup') &&
-    Number.isFinite(event.point?.x) &&
-    Number.isFinite(event.point?.y)
-  );
+  switch (event.kind) {
+    case 'keydown':
+      return (
+        typeof event.key === 'string' &&
+        optional(event.code, 'string') &&
+        optional(event.repeat, 'boolean') &&
+        optional(event.composing, 'boolean')
+      );
+    case 'keyup':
+      return typeof event.key === 'string' && optional(event.code, 'string');
+    case 'pointerdown':
+      return isPoint(event.point) && (event.button === undefined || Number.isInteger(event.button));
+    case 'pointermove':
+    case 'pointerup':
+    case 'doubleclick':
+      return isPoint(event.point);
+    case 'wheel':
+      return isPoint(event.point) && Number.isFinite(event.deltaX) && Number.isFinite(event.deltaY);
+    case 'pointercancel':
+      return true;
+    default:
+      return false;
+  }
 }
 
+/** A frozen copy with only the fields of its kind, never the host's objects. */
 function copyInput(event: InputEvent): InputEvent {
   const { shift, alt, meta, ctrl } = event.modifiers;
   const modifiers = { shift, alt, meta, ctrl };
-  return deepFreeze(
-    event.kind === 'keydown'
-      ? { kind: event.kind, key: event.key, modifiers }
-      : { kind: event.kind, point: { x: event.point.x, y: event.point.y }, modifiers },
-  );
+  const point = (at: PagePoint) => ({ x: at.x + 0, y: at.y + 0 });
+  const copy = ((): InputEvent => {
+    switch (event.kind) {
+      case 'keydown':
+        return {
+          kind: event.kind,
+          key: event.key,
+          ...(event.code === undefined ? {} : { code: event.code }),
+          repeat: event.repeat ?? false,
+          composing: event.composing ?? false,
+          modifiers,
+        };
+      case 'keyup':
+        return {
+          kind: event.kind,
+          key: event.key,
+          ...(event.code === undefined ? {} : { code: event.code }),
+          modifiers,
+        };
+      case 'pointerdown':
+        return {
+          kind: event.kind,
+          point: point(event.point),
+          button: event.button ?? 0,
+          modifiers,
+        };
+      case 'wheel':
+        return {
+          kind: event.kind,
+          point: point(event.point),
+          deltaX: event.deltaX + 0,
+          deltaY: event.deltaY + 0,
+          modifiers,
+        };
+      case 'pointercancel':
+        return { kind: event.kind, modifiers };
+      default:
+        return { kind: event.kind, point: point(event.point), modifiers };
+    }
+  })();
+  return deepFreeze(copy);
 }
+
+const clampZoom = (zoom: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom));
 
 function sorted(ids: Iterable<string>): string[] {
   return [...new Set(ids)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
@@ -249,6 +353,17 @@ class EditorCore implements Editor {
   private selection: readonly string[] = Object.freeze([]);
   private tool: ToolName = 'select';
   private viewport: RenderCamera = DEFAULT_VIEWPORT;
+  private viewportSize: ViewportSize | null = null;
+  /** Navigation state (M2 contract, section 3): Space held, and the grabbed page point of a pan. */
+  private spaceHeld = false;
+  private pan: { grab: PagePoint } | null = null;
+  private readonly platform: Platform;
+  /** The defaults and extension layers, fixed at creation, and the host layer. */
+  private readonly fixedLayers: readonly (readonly CanonicalBinding[])[];
+  private hostLayer: readonly CanonicalBinding[];
+  private keymap: readonly CanonicalBinding[] = Object.freeze([]);
+  private keymapKey = '[]';
+  private bindings = new Map<string, CanonicalBinding>();
   private undoStack: HistoryEntry[] = [];
   private redoStack: HistoryEntry[] = [];
   private gestureState: Gesture | null = null;
@@ -276,6 +391,16 @@ class EditorCore implements Editor {
   constructor(options: EditorOptions) {
     this.ids = options.ids ?? createCounterIdSource('node-');
     this.extensions = new ExtensionRegistry(options.extensions ?? []);
+    const platform: unknown = options.platform ?? 'other';
+    if (platform !== 'mac' && platform !== 'other') {
+      throw new Error(`createEditor: invalid platform ${String(platform)}`);
+    }
+    this.platform = platform;
+    this.fixedLayers = this.extensionLayers(options.extensions ?? []);
+    const host = validateLayer(options.keymap ?? [], platform, (id) => this.isCommand(id));
+    if (!host.ok) throw new Error(`createEditor: editor.invalid-keymap at /keymap${host.path}`);
+    this.hostLayer = host.bindings;
+    this.updateKeymap();
     const result = this.validate(
       options.document === undefined ? emptyDocument(this.ids) : options.document,
     );
@@ -303,6 +428,55 @@ class EditorCore implements Editor {
       commit: () => this.commitGesture(),
       cancel: () => this.cancelGesture(),
     };
+  }
+
+  /**
+   * The defaults, then each extension's bindings in registration order (M2 contract, section 7).
+   * An extension may bind built-in actions and its own commands only, and two extensions may not
+   * bind one canonical chord; either is a host programming error that throws.
+   */
+  private extensionLayers(extensions: readonly Extension[]): (readonly CanonicalBinding[])[] {
+    const defaults = validateLayer(DEFAULT_KEYMAP, this.platform, () => false);
+    if (!defaults.ok) throw new Error(`createEditor: editor.invalid-keymap in the defaults`);
+    const layers = [defaults.bindings];
+    const owners = new Map<string, string>();
+    extensions.forEach((extension, index) => {
+      const { id, bindings = [] } = extension;
+      const own = (command: string) =>
+        (command === id || command.startsWith(`${id}.`)) && this.isCommand(command);
+      const layer = validateLayer(bindings, this.platform, own);
+      if (!layer.ok) {
+        throw new Error(
+          `createEditor: editor.invalid-keymap at /extensions/${index}/bindings${layer.path}`,
+        );
+      }
+      for (const binding of layer.bindings) {
+        const other = owners.get(binding.chord);
+        if (other !== undefined) {
+          throw new Error(
+            `createEditor: editor.invalid-keymap: ${id} and ${other} both bind ${binding.chord}`,
+          );
+        }
+        owners.set(binding.chord, id);
+      }
+      layers.push(layer.bindings);
+    });
+    return layers;
+  }
+
+  private isCommand(id: string): boolean {
+    return this.extensions.command(id) !== undefined;
+  }
+
+  /** Recomputes the effective keymap; true when it changed. */
+  private updateKeymap(): boolean {
+    const keymap = effectiveKeymap([...this.fixedLayers, this.hostLayer]);
+    const key = JSON.stringify(keymap);
+    if (key === this.keymapKey) return false;
+    this.keymap = keymap;
+    this.keymapKey = key;
+    this.bindings = new Map(keymap.map((binding) => [binding.chord, binding]));
+    return true;
   }
 
   /**
@@ -419,12 +593,49 @@ class EditorCore implements Editor {
       case 'input': {
         if (!isInputEvent(command.event)) return failure('editor.invalid-command', '/event');
         // Tools keep points, so they get a frozen copy, never the host's objects.
-        const event = copyInput(command.event);
-        this.tools.get(this.tool)?.input(event, {
-          execute: (next) => this.execute(next),
-          query: (query) => this.query(query),
-          gesture: this.gesture,
-        });
+        return this.dispatch(copyInput(command.event));
+      }
+      case 'setViewportSize': {
+        const { width, height } = command;
+        if (!(Number.isFinite(width) && width > 0))
+          return failure('editor.invalid-command', '/width');
+        if (!(Number.isFinite(height) && height > 0)) {
+          return failure('editor.invalid-command', '/height');
+        }
+        const size = this.viewportSize;
+        if (size === null || size.width !== width || size.height !== height) {
+          this.viewportSize = deepFreeze({ width: width + 0, height: height + 0 });
+          this.refresh({ type: 'session', field: 'viewportSize' });
+        }
+        return { ok: true, ids: [] };
+      }
+      case 'zoomBy': {
+        const { factor, about } = command;
+        if (!(Number.isFinite(factor) && factor > 0)) {
+          return failure('editor.invalid-command', '/factor');
+        }
+        if (about !== undefined && !isPoint(about))
+          return failure('editor.invalid-command', '/about');
+        const point = about ?? this.viewportCentre();
+        if (point === null) return failure('editor.no-viewport-size');
+        return this.zoomAbout(point, clampZoom(this.viewport.zoom * factor));
+      }
+      case 'zoomTo': {
+        const { target } = command;
+        if (target !== 'fit' && target !== 'selection' && target !== 'actual') {
+          return failure('editor.invalid-command', '/target');
+        }
+        const centre = this.viewportCentre();
+        if (centre === null) return failure('editor.no-viewport-size');
+        if (target === 'actual') return this.zoomAbout(centre, 1);
+        return this.zoomToBounds(target);
+      }
+      case 'setKeymap': {
+        if (!Array.isArray(command.bindings)) return failure('editor.invalid-command', '/bindings');
+        const layer = validateLayer(command.bindings, this.platform, (id) => this.isCommand(id));
+        if (!layer.ok) return failure('editor.invalid-keymap', `/bindings${layer.path}`);
+        this.hostLayer = layer.bindings;
+        if (this.updateKeymap()) this.refresh({ type: 'session', field: 'keymap' });
         return { ok: true, ids: [] };
       }
       case 'runCommand': {
@@ -500,6 +711,10 @@ class EditorCore implements Editor {
           return this.document.pages;
         case 'handles':
           return selectionHandles(this.document, this.activePage, this.selection);
+        case 'viewportSize':
+          return this.viewportSize;
+        case 'keymap':
+          return this.keymap;
       }
     })();
     return value as QueryResult<Q>;
@@ -548,9 +763,214 @@ class EditorCore implements Editor {
     return result.status !== 'invalid-camera';
   }
 
+  /**
+   * One `input` event in the M2-I2 order: navigation, `pointercancel`, the active tool during a
+   * gesture, then the tool and the keymap for a key-down. The result carries `consumed` (M2-I3).
+   */
+  private dispatch(event: InputEvent): CommandResult {
+    const done = (consumed: boolean): CommandResult => ({ ok: true, ids: [], consumed });
+    // (1) Navigation: wheel, Space, middle-button drags and drags begun while Space is held.
+    switch (event.kind) {
+      case 'wheel':
+        return { ...this.wheel(event), consumed: true };
+      case 'keydown':
+      case 'keyup':
+        if (event.key === ' ') {
+          this.spaceHeld = event.kind === 'keydown';
+          return done(true);
+        }
+        break;
+      case 'pointerdown': {
+        if (this.pan !== null) return done(true);
+        const button = event.button ?? 0;
+        // Space pressed during a tool gesture starts no pan until that gesture ends.
+        if (this.gestureState === null && (button === 1 || (button === 0 && this.spaceHeld))) {
+          this.pan = { grab: event.point };
+          return done(true);
+        }
+        // Other buttons are ignored (M2-I1).
+        if (button !== 0) return done(false);
+        break;
+      }
+      case 'pointermove':
+      case 'pointerup':
+        if (this.pan !== null) {
+          const { grab } = this.pan;
+          if (event.kind === 'pointerup') this.pan = null;
+          const { position, zoom } = this.viewport;
+          const result = this.setCamera(
+            { x: position.x + (grab.x - event.point.x), y: position.y + (grab.y - event.point.y) },
+            zoom,
+          );
+          return { ...result, consumed: true };
+        }
+        break;
+      case 'pointercancel': {
+        // (2) It ends a pan, releases Space, cancels a gesture and resets the tool; never keymap.
+        const consumed =
+          this.pan !== null ||
+          this.spaceHeld ||
+          this.gestureState !== null ||
+          (this.tools.get(this.tool)?.overlay() ?? null) !== null;
+        this.pan = null;
+        this.spaceHeld = false;
+        this.interrupt(true);
+        return done(consumed);
+      }
+      default:
+        break;
+    }
+    const tool = this.tools.get(this.tool);
+    const consumed =
+      tool?.input(event, {
+        execute: (next) => this.execute(next),
+        query: (query) => this.query(query),
+        gesture: this.gesture,
+      }) ?? false;
+    // (3) During a gesture only the tool sees events; (4) an unconsumed key-down goes to the
+    // keymap; (5) a key-up, double-click and pointer events go to the tool only.
+    if (consumed || this.gestureState !== null || event.kind !== 'keydown') return done(consumed);
+    const chord = eventChord(event, event.modifiers);
+    const binding = chord === null ? undefined : this.bindings.get(chord);
+    if (binding === undefined) return done(false);
+    return { ...this.runAction(binding), consumed: true };
+  }
+
+  /**
+   * A bound action (M2 contract, section 7). Selection actions run their command on the current
+   * selection and do nothing on an empty one; any other action is an extension command.
+   */
+  private runAction(binding: CanonicalBinding): CommandResult {
+    const nothing: CommandResult = { ok: true, ids: [] };
+    const selection = this.selection;
+    switch (binding.action) {
+      case 'setTool':
+        return this.run({
+          type: 'setTool',
+          tool: (binding.args as { tool: ToolName }).tool,
+        });
+      case 'undo':
+        return this.run({ type: 'undo' });
+      case 'redo':
+        return this.run({ type: 'redo' });
+      case 'delete':
+        return selection.length === 0 ? nothing : this.run({ type: 'deleteNodes', ids: selection });
+      case 'selectAll': {
+        const page = this.document.pages.find((entry) => entry.id === this.activePage)!;
+        return this.run({ type: 'setSelection', ids: page.children });
+      }
+      case 'group':
+      case 'maskGroup':
+        return selection.length === 0
+          ? nothing
+          : this.run({
+              type: 'groupNodes',
+              ids: selection,
+              kind: binding.action === 'group' ? 'group' : 'maskGroup',
+            });
+      case 'ungroup':
+        // `ungroupNodes` takes one node, so the action needs a selection of one.
+        return selection.length === 1
+          ? this.run({ type: 'ungroupNodes', id: selection[0]! })
+          : nothing;
+      case 'zoomIn':
+        return this.run({ type: 'zoomBy', factor: 2 });
+      case 'zoomOut':
+        return this.run({ type: 'zoomBy', factor: 0.5 });
+      case 'zoomToFit':
+        return this.run({ type: 'zoomTo', target: 'fit' });
+      case 'zoomToSelection':
+        return this.run({ type: 'zoomTo', target: 'selection' });
+      case 'zoomTo100':
+        return this.run({ type: 'zoomTo', target: 'actual' });
+      default: {
+        const command = { type: 'runCommand', id: binding.action! } as const;
+        return this.run(binding.args === undefined ? command : { ...command, args: binding.args });
+      }
+    }
+  }
+
+  /** A wheel event (M2 contract, section 3): Ctrl or Meta zooms about the point, else it pans. */
+  private wheel(event: Extract<InputEvent, { kind: 'wheel' }>): CommandResult {
+    const { position, zoom } = this.viewport;
+    const { modifiers, deltaX, deltaY } = event;
+    if (modifiers.ctrl || modifiers.meta) {
+      return this.zoomAbout(event.point, clampZoom(zoom * 2 ** (-deltaY / 100)));
+    }
+    // Shift with no horizontal delta turns a vertical scroll into a horizontal pan.
+    const [dx, dy] = modifiers.shift && deltaX === 0 ? [deltaY, 0] : [deltaX, deltaY];
+    return this.setCamera({ x: position.x + dx / zoom, y: position.y + dy / zoom }, zoom);
+  }
+
+  /** The viewport centre in page space, or null before `setViewportSize`. */
+  private viewportCentre(): PagePoint | null {
+    const size = this.viewportSize;
+    if (size === null) return null;
+    const { position, zoom } = this.viewport;
+    return { x: position.x + size.width / (2 * zoom), y: position.y + size.height / (2 * zoom) };
+  }
+
+  /** Zooms to `z1` keeping the page point `p` under the same screen pixel. */
+  private zoomAbout(p: PagePoint, z1: number): CommandResult {
+    const { position, zoom: z0 } = this.viewport;
+    // An unchanged zoom keeps the camera as is (p − (p − position) need not round back).
+    if (z1 === z0) return { ok: true, ids: [] };
+    return this.setCamera(
+      { x: p.x - (p.x - position.x) * (z0 / z1), y: p.y - (p.y - position.y) * (z0 / z1) },
+      z1,
+    );
+  }
+
+  /** `zoomTo` `fit` or `selection` (M2 contract, section 3); no bounds changes nothing. */
+  private zoomToBounds(target: 'fit' | 'selection'): CommandResult {
+    const { width: W, height: H } = this.viewportSize!;
+    let ids: readonly string[] = this.selection;
+    if (target === 'fit') {
+      const page = this.document.pages.find((entry) => entry.id === this.activePage)!;
+      ids = page.children.filter((id) => this.document.nodes[id]?.visible !== false);
+    }
+    const b = boundsOf(this.document, ids);
+    if (b === null) return { ok: true, ids: [] };
+    const scales: number[] = [];
+    if (b.width > 0) scales.push((W > FIT_PADDING ? W - FIT_PADDING : W) / b.width);
+    if (b.height > 0) scales.push((H > FIT_PADDING ? H - FIT_PADDING : H) / b.height);
+    const z = scales.length === 0 ? this.viewport.zoom : clampZoom(Math.min(...scales));
+    return this.setCamera(
+      { x: b.x + b.width / 2 - W / (2 * z), y: b.y + b.height / 2 - H / (2 * z) },
+      z,
+    );
+  }
+
+  /**
+   * Every computed viewport change (M2 contract, section 3): a camera equal to the current one
+   * sends nothing and raises no event; otherwise it takes the `setViewport` path.
+   */
+  private setCamera(position: PagePoint, zoom: number): CommandResult {
+    const current = this.viewport;
+    const camera = { position: { x: position.x + 0, y: position.y + 0 }, zoom };
+    if (!isCamera(camera)) return failure('editor.invalid-camera');
+    if (
+      camera.zoom === current.zoom &&
+      camera.position.x === current.position.x &&
+      camera.position.y === current.position.y
+    ) {
+      return { ok: true, ids: [] };
+    }
+    const frozen = deepFreeze(camera);
+    if (!this.applyCamera(frozen)) return failure('editor.invalid-camera');
+    this.viewport = frozen;
+    this.refresh({ type: 'session', field: 'viewport' });
+    return { ok: true, ids: [] };
+  }
+
   private beginGesture(): boolean {
     if (this.gestureState !== null) return false;
-    this.gestureState = { base: this.document, touched: new Set(), updated: false };
+    this.gestureState = {
+      base: this.document,
+      touched: new Set(),
+      updated: false,
+      selection: this.selection,
+    };
     return true;
   }
 
@@ -606,11 +1026,18 @@ class EditorCore implements Editor {
     if (active || always) this.tools.get(this.tool)?.reset();
   }
 
+  /**
+   * Restores the pre-gesture document and the selection recorded at `begin`, filtered to nodes
+   * of the active page (M2 contract, section 2).
+   */
   private cancelGesture(): void {
     const gesture = this.gestureState;
     if (gesture === null) return;
     this.gestureState = null;
     if (gesture.updated) this.changeDocument(gesture.base, 'gesture-cancel', gesture.touched);
+    const tree = documentTree(this.document);
+    const kept = gesture.selection.filter((id) => pageOf(tree, id) === this.activePage);
+    this.setSelectionState(normalizeSelection(this.document, this.activePage, kept) ?? []);
   }
 
   private changeDocument(
@@ -711,6 +1138,8 @@ class EditorCore implements Editor {
       selection: this.selection,
       tool: this.tool,
       viewport: this.viewport,
+      viewportSize: this.viewportSize,
+      keymap: this.keymap,
       history: { undoDepth: this.undoStack.length, redoDepth: this.redoStack.length },
     });
   }

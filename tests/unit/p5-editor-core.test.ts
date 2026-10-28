@@ -280,7 +280,7 @@ describe('P5-A04 gestures and history', () => {
     const { target, a, gesture } = withTwoRectangles();
     const resets: string[] = [];
     internalsOf(target).tools.set('select', {
-      input: () => {},
+      input: () => false,
       reset: () => resets.push('reset'),
       overlay: () => null,
     });
@@ -554,7 +554,7 @@ describe('P5-A05 failed commands and session state', () => {
     const target = editor();
     const received: string[] = [];
     internalsOf(target).tools.set('select', {
-      input: (event) => received.push(event.kind),
+      input: (event) => received.push(event.kind) > 0,
       reset: () => received.push('reset'),
       overlay: () => null,
     });

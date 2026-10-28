@@ -1,12 +1,21 @@
 import type { RendererSceneSynchronization } from '@vector-studio/contracts';
-import type { Modifiers, PagePoint } from '@vector-studio/editor-core';
-import { useEffect, useRef, type CSSProperties, type PointerEvent, type ReactNode } from 'react';
-import { useEditor, useEditorCommands, useEditorSelector } from './context.js';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  type CSSProperties,
+  type FocusEvent,
+  type ReactNode,
+} from 'react';
+import { CanvasInput } from './canvas-input.js';
+import { useEditor } from './context.js';
 
 // P5-U6 (P5 plan, section 6): a headless canvas. It renders a <canvas> and turns pointer and key
 // input into editor `input` commands in page space. The renderer is created only inside an
 // effect, through a host-supplied factory, so this module and its importers never touch browser
-// globals at import time, and the WebGPU backend stays a host choice.
+// globals at import time, and the WebGPU backend stays a host choice. M2-U1 (MVP M2 contract,
+// M2-I4): wheel, middle button, key-up, double-click and pointercancel input, the viewport
+// size, event-time camera mapping and the blur reset; the mapping lives in canvas-input.ts.
 
 /** What a host factory returns: the renderer to attach, and how to release it. */
 export type RendererHandle = Readonly<{
@@ -42,15 +51,6 @@ export type EditorCanvasProps = Readonly<{
  */
 const creations = new WeakMap<HTMLCanvasElement, Promise<void>>();
 
-function modifiersOf(event: {
-  shiftKey: boolean;
-  altKey: boolean;
-  metaKey: boolean;
-  ctrlKey: boolean;
-}): Modifiers {
-  return { shift: event.shiftKey, alt: event.altKey, meta: event.metaKey, ctrl: event.ctrlKey };
-}
-
 export function EditorCanvas({
   width,
   height,
@@ -62,14 +62,42 @@ export function EditorCanvas({
   children,
 }: EditorCanvasProps) {
   const editor = useEditor();
-  const execute = useEditorCommands();
-  const viewport = useEditorSelector((snapshot) => snapshot.viewport);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const heightRef = useRef(height);
+  heightRef.current = height;
+  const input = useMemo(
+    () =>
+      new CanvasInput(
+        editor,
+        () => heightRef.current,
+        () => canvasRef.current,
+      ),
+    [editor],
+  );
   const onError = useRef(onRendererError);
   onError.current = onRendererError;
   const onReady = useRef(onRendererReady);
   onReady.current = onRendererReady;
-  const dragging = useRef(false);
+
+  // The viewport size, on mount and on every resize (M2 contract, section 3).
+  useEffect(() => {
+    editor.execute({ type: 'setViewportSize', width, height });
+  }, [editor, width, height]);
+
+  // Wheel needs a non-passive listener so that a consumed Ctrl+wheel or pinch can be prevented;
+  // a window blur releases a drag and Space, whose key-up may never arrive.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas === null) return;
+    const onWheel = (event: WheelEvent) => input.wheel(event);
+    const onWindowBlur = () => input.reset();
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('blur', onWindowBlur);
+    return () => {
+      canvas.removeEventListener('wheel', onWheel);
+      window.removeEventListener('blur', onWindowBlur);
+    };
+  }, [input]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -108,34 +136,11 @@ export function EditorCanvas({
     };
   }, [editor, createRenderer, width, height]);
 
-  const toPage = (event: PointerEvent<HTMLCanvasElement>): PagePoint => {
-    // The renderer draws in the content box, inside any border the host styles on the canvas.
-    const canvas = event.currentTarget;
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: viewport.position.x + (event.clientX - rect.left - canvas.clientLeft) / viewport.zoom,
-      y: viewport.position.y + (event.clientY - rect.top - canvas.clientTop) / viewport.zoom,
-    };
+  /** The canvas is the focus target; focus moving within it is not a blur (M2-I4). */
+  const onBlur = (event: FocusEvent<HTMLCanvasElement>) => {
+    if (event.relatedTarget !== null && event.relatedTarget === canvasRef.current) return;
+    input.reset();
   };
-  const pointer =
-    (kind: 'pointerdown' | 'pointermove' | 'pointerup') =>
-    (event: PointerEvent<HTMLCanvasElement>) => {
-      if (kind === 'pointerdown') {
-        // P5 tools use the primary button only.
-        if (event.button !== 0) return;
-        event.currentTarget.setPointerCapture(event.pointerId);
-        event.currentTarget.focus();
-        dragging.current = true;
-      } else if (!dragging.current) {
-        // Moves without a press are hover, and a release without one is not ours.
-        return;
-      }
-      if (kind === 'pointerup') dragging.current = false;
-      execute({
-        type: 'input',
-        event: { kind, point: toPage(event), modifiers: modifiersOf(event) },
-      });
-    };
 
   return (
     <div style={{ position: 'relative', width, height }}>
@@ -146,29 +151,38 @@ export function EditorCanvas({
         tabIndex={0}
         className={className}
         style={{ display: 'block', width, height, touchAction: 'none', ...style }}
-        onPointerDown={pointer('pointerdown')}
-        onPointerMove={pointer('pointermove')}
-        onPointerUp={pointer('pointerup')}
-        onPointerCancel={() => {
-          // A cancelled pointer (pen or touch, lost capture) cancels the drag, as Escape does.
-          if (!dragging.current) return;
-          dragging.current = false;
-          execute({
-            type: 'input',
-            event: {
-              kind: 'keydown',
-              key: 'Escape',
-              modifiers: { shift: false, alt: false, meta: false, ctrl: false },
-            },
-          });
-        }}
-        onKeyDown={(event) => {
-          const result = execute({
-            type: 'input',
-            event: { kind: 'keydown', key: event.key, modifiers: modifiersOf(event) },
-          });
-          if (result.ok && event.key === 'Escape') event.preventDefault();
-        }}
+        onPointerDown={(event) => input.pointerDown(event)}
+        onPointerMove={(event) => input.pointerMove(event)}
+        onPointerUp={(event) => input.pointerUp(event)}
+        onPointerCancel={(event) => input.pointerCancel(event)}
+        onDoubleClick={(event) => input.doubleClick(event)}
+        onKeyDown={(event) =>
+          input.keyDown({
+            key: event.key,
+            code: event.code,
+            repeat: event.repeat,
+            isComposing: event.nativeEvent.isComposing,
+            shiftKey: event.shiftKey,
+            altKey: event.altKey,
+            metaKey: event.metaKey,
+            ctrlKey: event.ctrlKey,
+            preventDefault: () => event.preventDefault(),
+          })
+        }
+        onKeyUp={(event) =>
+          input.keyUp({
+            key: event.key,
+            code: event.code,
+            repeat: event.repeat,
+            isComposing: event.nativeEvent.isComposing,
+            shiftKey: event.shiftKey,
+            altKey: event.altKey,
+            metaKey: event.metaKey,
+            ctrlKey: event.ctrlKey,
+            preventDefault: () => event.preventDefault(),
+          })
+        }
+        onBlur={onBlur}
       />
       {children === undefined ? null : (
         <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>{children}</div>
