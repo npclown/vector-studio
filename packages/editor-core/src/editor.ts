@@ -943,7 +943,11 @@ class EditorCore implements Editor {
           return failure('editor.unknown-node');
         }
         if (node.type !== 'path') return failure('editor.not-a-path');
-        if (this.pathEdit?.id === id) return { ok: true, ids: [] };
+        if (this.pathEdit?.id === id) {
+          // Entering the edited path again cancels an exit a scope change deferred.
+          if (this.scopeExit === id) this.scopeExit = null;
+          return { ok: true, ids: [] };
+        }
         this.interrupt();
         if (this.tool !== 'select') this.run({ type: 'setTool', tool: 'select' });
         // Set first, so the selection change to `[id]` keeps it; the event follows the

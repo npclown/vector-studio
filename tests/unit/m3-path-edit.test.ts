@@ -583,6 +583,32 @@ describe('M3-A08 edit mode exit', () => {
     expect(selection(target)).toEqual(['gp']);
   });
 
+  it('enterPathEdit on the edited path after setScope in one call keeps edit mode', () => {
+    const target = createEditor({
+      ids: createCounterIdSource('n'),
+      document: FIXTURE,
+      extensions: [
+        {
+          id: 'x',
+          commands: [
+            {
+              id: 'x.reenter',
+              run: (_args, api) => {
+                api.execute({ type: 'setScope', id: 'g' });
+                api.execute({ type: 'enterPathEdit', id: 'gp' });
+                return { ok: true, ids: [] };
+              },
+            },
+          ],
+        },
+      ],
+    });
+    ok(target, { type: 'enterPathEdit', id: 'gp' });
+    ok(target, { type: 'runCommand', id: 'x.reenter' });
+    expect(editOf(target)).toEqual({ id: 'gp', anchors: [] });
+    expect(target.query({ type: 'scope' })).toBe('g');
+  });
+
   it('ends when undo or redo takes the node away; events in order', () => {
     const target = editor();
     const [id] = ok(target, { type: 'createPath', verbs: ['move', 'line'], points: [0, 0, 9, 9] });
