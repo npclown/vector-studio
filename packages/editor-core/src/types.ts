@@ -231,6 +231,14 @@ export type DocumentCommand =
    * (default `{ x: 0, y: 0 }`); returns the copies' root IDs in paint order.
    */
   | Readonly<{ type: 'duplicateNodes'; ids: readonly string[]; offset?: PagePoint }>
+  /**
+   * Pastes a fragment (MVP M2 contract, section 6): `text` when given, else the in-memory
+   * clipboard. The roots go on top of the scope, else a single selected frame, else the active
+   * page, at their page placement, or with their joint page bounds centred on `at`; fresh IDs.
+   * Returns the pasted roots in paint order and selects them. A creating command: inside a
+   * gesture it goes through `update` once.
+   */
+  | Readonly<{ type: 'paste'; text?: string; at?: PagePoint }>
   | Readonly<{ type: 'addPage'; name?: string; index?: number }>
   | Readonly<{ type: 'removePage'; id: string }>
   | Readonly<{ type: 'renamePage'; id: string; name: string }>
@@ -260,7 +268,12 @@ export type SessionCommand =
    * Enters a container (group, mask group or frame) of the active page, or leaves every scope
    * with null (M2 contract, section 5).
    */
-  | Readonly<{ type: 'setScope'; id: string | null }>;
+  | Readonly<{ type: 'setScope'; id: string | null }>
+  /**
+   * Serializes the subtrees of `ids` (default the selection) as a fragment into the in-memory
+   * clipboard (M2 contract, section 6); an empty selection changes nothing.
+   */
+  | Readonly<{ type: 'copy'; ids?: readonly string[] }>;
 
 export type Command =
   | DocumentCommand
@@ -268,6 +281,11 @@ export type Command =
   | Readonly<{ type: 'loadDocument'; document: unknown }>
   | Readonly<{ type: 'undo' }>
   | Readonly<{ type: 'redo' }>
+  /**
+   * `copy` and `deleteNodes` as one transaction (M2 contract, section 6); a failed cut changes
+   * neither the document nor the clipboard.
+   */
+  | Readonly<{ type: 'cut'; ids?: readonly string[] }>
   /** Runs a registered extension command (P5 plan, section 5). */
   | Readonly<{ type: 'runCommand'; id: string; args?: JsonValue }>;
 
@@ -300,7 +318,10 @@ export type EditorErrorCode =
   | 'editor.no-viewport-size'
   | 'editor.too-few-nodes'
   | 'editor.invalid-scope'
-  | 'editor.invalid-keymap';
+  | 'editor.invalid-keymap'
+  | 'editor.empty-clipboard'
+  | 'editor.invalid-clipboard'
+  | 'editor.unsupported-clipboard';
 
 /**
  * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key
@@ -356,7 +377,9 @@ export type Query =
   | Readonly<{ type: 'snap' }>
   | Readonly<{ type: 'snapping' }>
   /** The entered container, or null. */
-  | Readonly<{ type: 'scope' }>;
+  | Readonly<{ type: 'scope' }>
+  /** The in-memory clipboard's fragment text, or null (M2 contract, section 6). */
+  | Readonly<{ type: 'clipboard' }>;
 
 /**
  * The select tool's resize handle box for the selection, in page space (M1 contract, section
@@ -408,7 +431,9 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' }
                             ? boolean
                             : Q extends { type: 'scope' }
                               ? string | null
-                              : number;
+                              : Q extends { type: 'clipboard' }
+                                ? string | null
+                                : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';

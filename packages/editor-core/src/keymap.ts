@@ -16,9 +16,9 @@ export const TOOL_NAMES: readonly ToolName[] = [
 ];
 
 /**
- * The built-in actions this editor runs. M2-U1 implements the actions of existing commands,
- * M2-U4 the arrange actions and M2-U5 `enterScope` and `exitScope`; later M2 units add `copy`,
- * `cut` and `paste` with their commands.
+ * The built-in actions this editor runs (section 7): M2-U1 the actions of existing commands,
+ * M2-U4 the arrange actions, M2-U5 `enterScope` and `exitScope`, and M2-U6 `copy`, `cut` and
+ * `paste` on the in-memory clipboard (unbound by default, M2-Q4).
  */
 export const BUILTIN_ACTIONS: ReadonlySet<string> = new Set([
   'setTool',
@@ -41,11 +41,14 @@ export const BUILTIN_ACTIONS: ReadonlySet<string> = new Set([
   'zoomTo100',
   'enterScope',
   'exitScope',
+  'copy',
+  'cut',
+  'paste',
 ]);
 
 /**
- * The default layer, with chords as written in the contract (section 7). Bindings whose actions
- * later units add are not listed yet.
+ * The default layer, with chords as written in the contract (section 7). `align`, `distribute`
+ * and the clipboard actions have no default chord.
  */
 export const DEFAULT_KEYMAP: readonly KeyBinding[] = deepFreeze([
   { chord: 'V', action: 'setTool', args: { tool: 'select' } },
