@@ -31,6 +31,11 @@ export const DIAGNOSTIC_CODES = Object.freeze({
    * docs/plans/p4-clip-mask.md); reserved by unit U1, reported from unit U4.
    */
   CLIP_RESOURCE_LIMIT: 'render.clip-resource-limit',
+  /**
+   * The source draws clips but the renderer came up without its clip pipelines, so clipped and
+   * masked content is not drawn (E22 contract, E22-K4, docs/plans/d9-e22-clip-follow-ups-contract.md).
+   */
+  CLIP_UNAVAILABLE: 'render.clip-unavailable',
   DISPOSAL_COMPLETED: 'disposal.completed',
   DISPOSAL_FAILED: 'disposal.failed',
 } as const);

@@ -148,10 +148,16 @@ function record(check: Check, value: number, tolerance: number, example: () => u
 }
 
 /** Interior probes on a grid: the section 3 oracle within 2/255. */
-function checkInterior(view: View, leaves: readonly DrawnLeaf[], frame: Frame): Check {
+function checkInterior(
+  view: View,
+  leaves: readonly DrawnLeaf[],
+  frame: Frame,
+  stride = INTERIOR_STRIDE,
+): Check {
   const check = newCheck();
-  for (let y = 1; y < frame.height; y += INTERIOR_STRIDE) {
-    for (let x = 1; x < frame.width; x += INTERIOR_STRIDE) {
+  const start = stride === 1 ? 0 : 1;
+  for (let y = start; y < frame.height; y += stride) {
+    for (let x = start; x < frame.width; x += stride) {
       const expected = oracle(view, leaves, x, y);
       if (expected === null) continue;
       const observed = pixel(frame, x, y);
@@ -212,6 +218,7 @@ async function checkEdges(
   contentId: string,
   frame: Frame,
   allowance: number,
+  options: Readonly<{ tolerance?: number; everyPixel?: boolean }> = {},
 ): Promise<Check & { p1Rectangle: { probes: number; maxDeviation: number } }> {
   const check = { ...newCheck(), p1Rectangle: { probes: 0, maxDeviation: 0 } };
   const content = leaves.find((drawn) => drawn.leaf.id === contentId);
@@ -222,7 +229,7 @@ async function checkEdges(
   const others = leaves.filter((drawn) => drawn !== content);
   const fill = content.leaf.fill!;
   const colour = [fill.r * 255, fill.g * 255, fill.b * 255];
-  const tolerance = EDGE_TOLERANCE + allowance;
+  const tolerance = (options.tolerance ?? EDGE_TOLERANCE) + allowance;
   for (let y = 0; y < frame.height; y += 1) {
     for (let x = 0; x < frame.width; x += 1) {
       const offset = (y * frame.width + x) * 4;
@@ -245,7 +252,8 @@ async function checkEdges(
         products.fine *= fine;
         products.p1 *= reference;
       });
-      if (!ramp) continue;
+      // E22-A5: `everyPixel` checks the product off the ramps too, where it is exact.
+      if (!ramp && options.everyPixel !== true) continue;
       if (classify(view, content.leaf.shape, content.leaf.world, x, y) !== 'in') continue;
       if (
         others.some((other) => classify(view, other.leaf.shape, other.leaf.world, x, y) !== 'out')
@@ -304,8 +312,14 @@ async function runImageCase(
   item: ImageCase,
   dpr: number,
   failures: string[],
+  options: Readonly<{
+    view?: View;
+    interiorStride?: number;
+    /** E22-A5: the edge check over every pixel at this tolerance. */
+    everyPixelTolerance?: number;
+  }> = {},
 ) {
-  const view = viewOf(item.zoom, dpr, item.centre);
+  const view = options.view ?? viewOf(item.zoom, dpr, item.centre);
   const before = await diagnosticCount(page);
   const { result, frame } = await render(page, item.items, view);
   const added = await diagnosticsSince(page, before);
@@ -321,7 +335,7 @@ async function runImageCase(
     return { report, frame };
   }
   const leaves = drawnLeaves(item.expectedItems ?? item.items);
-  const interior = checkInterior(view, leaves, frame);
+  const interior = checkInterior(view, leaves, frame, options.interiorStride);
   report.interior = interior;
   if (interior.probes === 0) failures.push(`${item.id}: no interior probe`);
   if (interior.failures > 0)
@@ -338,14 +352,16 @@ async function runImageCase(
   if (item.edgeContent !== undefined) {
     const content = leaves.find((drawn) => drawn.leaf.id === item.edgeContent);
     const allowance = (content?.levels.length ?? 0) >= 32 ? maskLevels(content!.levels) : 0;
-    const edges = await checkEdges(references, view, leaves, item.edgeContent, frame, allowance);
-    report.edges = { ...edges, tolerance: EDGE_TOLERANCE + allowance };
+    const tolerance = options.everyPixelTolerance ?? EDGE_TOLERANCE;
+    const edges = await checkEdges(references, view, leaves, item.edgeContent, frame, allowance, {
+      tolerance,
+      everyPixel: options.everyPixelTolerance !== undefined,
+    });
+    report.edges = { ...edges, tolerance: tolerance + allowance };
     if ((content?.levels.length ?? 0) > 0 && edges.probes === 0 && !item.id.includes('line'))
       failures.push(`${item.id}: no edge probe`);
     if (edges.failures > 0)
-      failures.push(
-        `${item.id}: ${edges.failures} edge probes over ${EDGE_TOLERANCE + allowance}/255`,
-      );
+      failures.push(`${item.id}: ${edges.failures} edge probes over ${tolerance + allowance}/255`);
   }
   if (item.grey === true) {
     const grey = checkGrey(frame);
@@ -1122,3 +1138,116 @@ for (const samples of [4, 1] as const) {
     expect(result.framesSubmitted).toBeGreaterThanOrEqual(100);
   });
 }
+
+// --- E22-A5: tiled mask passes at 3840 x 2160 (E22 contract, unit U3) ---
+
+const SOURCE = { r: 0.9, g: 0.3, b: 0.2, a: 1 };
+
+function star(cx: number, cy: number, inner: number, outer: number): number[] {
+  const points: number[] = [];
+  for (let index = 0; index < 14; index += 1) {
+    const radius = index % 2 === 0 ? outer : inner;
+    const angle = (index * Math.PI) / 7 + 0.13;
+    points.push(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle));
+  }
+  return points;
+}
+
+/**
+ * World units at DPR 2: the surface is 1920 x 1080 units (3840 x 2160 device pixels).
+ * Tile seams fall every 1024 device pixels from each level's own device origin, not
+ * from the surface origin; the nested star level spans about 2 x 2 tiles.
+ */
+const E22_CASES: readonly ImageCase[] = [
+  {
+    id: 'e22-full-screen-mask',
+    criterion: 'P4-A03',
+    zoom: 1,
+    items: [
+      container('full', IDENTITY, { kind: 'mask' }, [
+        leaf('full-source', ellipse(1880, 1040), translate(20, 20), SOURCE),
+        leaf('full-content', rect(1920, 1080), IDENTITY),
+      ]),
+    ],
+    edgeContent: 'full-content',
+    grey: true,
+  },
+  {
+    id: 'e22-nested-mesh-mask-over-seams',
+    criterion: 'P4-A03',
+    zoom: 1,
+    items: [
+      container('outer', IDENTITY, { kind: 'mask' }, [
+        leaf('outer-source', ellipse(1100, 700), translate(410, 190), SOURCE),
+        container('inner', IDENTITY, { kind: 'mask' }, [
+          leaf('inner-source', polygon([star(960, 540, 260, 520)]), IDENTITY, SOURCE),
+          leaf('inner-content', rect(1920, 1080), IDENTITY),
+        ]),
+      ]),
+    ],
+    edgeContent: 'inner-content',
+    grey: true,
+  },
+];
+
+test('E22 U3 tiled mask passes at 3840 x 2160 (E22-A5), 4x, DPR 2', async ({
+  browser,
+  page,
+}, info) => {
+  test.setTimeout(1_800_000);
+  const write = reporter('e22-uhd-4x-dpr2', info);
+  const { ready, pageErrors } = await open(page, 4, 2);
+  const failures: string[] = [];
+  // A capture needs a scene, so the empty scene comes first.
+  await render(page, [], viewOf(1, 2));
+  const resized = await page.evaluate(() => window.__vectorStudioP4.resize(1920, 1080, 2));
+  const view: View = {
+    camera: { position: { x: 0, y: 0 }, zoom: 1 },
+    devicePixelRatio: 2,
+    width: resized.frame.width,
+    height: resized.frame.height,
+  };
+  if (view.width !== 3840 || view.height !== 2160)
+    failures.push(`surface ${view.width} x ${view.height}`);
+  if (resized.frame.sampleCount !== 4) failures.push(`sample count ${resized.frame.sampleCount}`);
+  const references = new References(page);
+  const cases: unknown[] = [];
+  for (const item of E22_CASES) {
+    // Every pixel is probed at the interior tolerance: the stride-1 interior against the oracle,
+    // and every pixel the content covers against the product of the levels' references, so
+    // every pixel on a tile seam is checked.
+    const { report } = await runImageCase(page, references, item, 2, failures, {
+      view,
+      interiorStride: 1,
+      everyPixelTolerance: INTERIOR_TOLERANCE,
+    });
+    const levels = (report.packet as { maskLevels?: number } | undefined)?.maskLevels;
+    report.maskLevels = levels;
+    const expected = item.id === 'e22-full-screen-mask' ? 1 : 2;
+    if (levels !== expected)
+      failures.push(`${item.id}: ${levels} mask levels, expected ${expected}`);
+    cases.push(report);
+  }
+  if (pageErrors.length > 0) failures.push(`page errors: ${pageErrors.join('; ')}`);
+  write(
+    'report.json',
+    `${JSON.stringify(
+      {
+        criteria: ['E22-A5'],
+        browser: { project: info.project.name, version: browser.version() },
+        host: { platform: os.platform(), release: os.release(), cpus: os.cpus()[0]?.model },
+        source: p1Source(),
+        ready,
+        surface: { width: view.width, height: view.height, sampleCount: resized.frame.sampleCount },
+        tolerances: { interior: INTERIOR_TOLERANCE, everyPixel: INTERIOR_TOLERANCE },
+        referenceRenders: references.renders,
+        cases,
+        failures,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await page.evaluate(() => window.__vectorStudioP4.dispose());
+  expect(failures).toEqual([]);
+});
