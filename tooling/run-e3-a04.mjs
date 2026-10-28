@@ -400,7 +400,10 @@ function identityForm(row) {
 /**
  * The rows of retry directories, by corpus index, each with its directory's provenance. A row
  * whose worker failed (`harness-error`) is left out and its index added to `failed`: another
- * directory must measure it, with a larger --heap.
+ * directory must measure it, with a larger --heap. A directory whose run was stopped before it
+ * wrote host.json (a container restart) counts as `interrupted`: its complete rows stand, a cut
+ * last line is dropped, and the case it was measuring (`retry.current`) must come from another
+ * directory, which the completeness check enforces.
  */
 function retryRows(dirs, kind, rows, failed) {
   const runs = [];
@@ -408,12 +411,25 @@ function retryRows(dirs, kind, rows, failed) {
     const p = JSON.parse(readFileSync(path.join(dir, 'provenance.json'), 'utf8'));
     const { changedFromHead } = checkProvenance(dir, p);
     if (p.retryCases === undefined) throw new Error(`refusing the merge: ${dir} is not a retry`);
-    const h = JSON.parse(readFileSync(path.join(dir, 'host.json'), 'utf8'));
+    const hostFile = path.join(dir, 'host.json');
+    const interrupted = !existsSync(hostFile);
+    const h = interrupted ? null : JSON.parse(readFileSync(hostFile, 'utf8'));
+    const current = path.join(dir, 'retry.current');
+    const cases = new Set(p.retryCases);
     let count = 0;
     const failedHere = [];
-    for (const line of readFileSync(path.join(dir, 'retry.ndjson'), 'utf8').split('\n')) {
+    const lines = readFileSync(path.join(dir, 'retry.ndjson'), 'utf8').split('\n');
+    for (const [k, line] of lines.entries()) {
       if (line === '') continue;
-      const row = JSON.parse(line);
+      let row;
+      try {
+        row = JSON.parse(line);
+      } catch (error) {
+        if (interrupted && lines.slice(k + 1).every((l) => l === '')) break;
+        throw error;
+      }
+      if (!cases.has(row.index))
+        throw new Error(`refusing the merge: ${dir} holds case ${row.index}, not one it ran`);
       if (String(row.reason ?? '').startsWith('harness-error')) {
         failed.add(row.index);
         failedHere.push(row.index);
@@ -434,8 +450,9 @@ function retryRows(dirs, kind, rows, failed) {
       cpus: p.cpus,
       cases: count,
       failedCases: failedHere,
-      exitCodes: h.exitCodes,
-      restarts: h.restarts,
+      ...(interrupted
+        ? { interrupted: true, interruptedAt: existsSync(current) ? readCurrent(current) : null }
+        : { exitCodes: h.exitCodes, restarts: h.restarts }),
     });
   }
   return { rows, runs };
