@@ -721,6 +721,11 @@ describe('M2-A11 rest (M2-U7): every default binding through input, and host-bou
     ok(s.target, { type: 'setSelection', ids: [group!] });
     return group!;
   };
+  const fiveNodes = (s: Scene) => {
+    rect(s.target, 70, 70);
+    rect(s.target, 90, 90);
+    ok(s.target, { type: 'setSelection', ids: [s.c] });
+  };
   const tool = (name: ToolName) => (s: Scene) => {
     expect(s.target.query({ type: 'tool' })).toBe(name);
   };
@@ -831,19 +836,34 @@ describe('M2-A11 rest (M2-U7): every default binding through input, and host-bou
     },
     { chord: 'Shift+ArrowUp', key: 'ArrowUp', modifiers: mods('shift'), check: nudged(0, -10) },
     { chord: 'Shift+ArrowDown', key: 'ArrowDown', modifiers: mods('shift'), check: nudged(0, 10) },
-    { chord: 'Mod+]', key: ']', modifiers: mods('ctrl'), check: order(['a', 'c', 'b']) },
-    { chord: 'Mod+[', key: '[', modifiers: mods('ctrl'), check: order(['b', 'a', 'c']) },
+    // Five nodes [a, b, c, d, e] with c selected, so the four ops give four different orders.
+    {
+      chord: 'Mod+]',
+      key: ']',
+      modifiers: mods('ctrl'),
+      before: fiveNodes,
+      check: (s) => expect(children(s.target)).toEqual([s.a, s.b, 'n6', s.c, 'n7']),
+    },
+    {
+      chord: 'Mod+[',
+      key: '[',
+      modifiers: mods('ctrl'),
+      before: fiveNodes,
+      check: (s) => expect(children(s.target)).toEqual([s.a, s.c, s.b, 'n6', 'n7']),
+    },
     {
       chord: 'Mod+Shift+}',
       key: '}',
       modifiers: mods('ctrl', 'shift'),
-      check: order(['a', 'c', 'b']),
+      before: fiveNodes,
+      check: (s) => expect(children(s.target)).toEqual([s.a, s.b, 'n6', 'n7', s.c]),
     },
     {
       chord: 'Mod+Shift+{',
       key: '{',
       modifiers: mods('ctrl', 'shift'),
-      check: order(['b', 'a', 'c']),
+      before: fiveNodes,
+      check: (s) => expect(children(s.target)).toEqual([s.c, s.a, s.b, 'n6', 'n7']),
     },
     { chord: '=', key: '=', check: (s) => expect(zoom(s.target)).toBe(2) },
     { chord: '-', key: '-', check: (s) => expect(zoom(s.target)).toBe(0.5) },

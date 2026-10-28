@@ -633,7 +633,15 @@ describe('M2-A12 overlay and input safety', () => {
       expect(target.query({ type: 'tool' })).toBe('rectangle');
       expect(children(target)).toEqual([a]);
       await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(errors.map((error) => (error as Error).message)).toEqual(['input', 'input', 'reset']);
+      // Each throw from input is followed by the editor's reset of the tool; the switch to the
+      // rectangle tool resets it once more.
+      expect(errors.map((error) => (error as Error).message)).toEqual([
+        'input',
+        'reset',
+        'input',
+        'reset',
+        'reset',
+      ]);
     } finally {
       process.off('unhandledRejection', onError);
     }
@@ -857,5 +865,209 @@ describe('M2-A12 extension binding conflicts throw editor.invalid-keymap at crea
     expect(press(target, 'd', mods('ctrl'))).toEqual(consumed);
     expect(target.query({ type: 'selection' })).toEqual([a]);
     expect(children(target)).toEqual([a]);
+  });
+});
+
+/**
+ * `ext.p.tool`: a drag opens a gesture and creates one rectangle through `update`; its `reset`
+ * tries every `ToolApi` call and records the results (a reset must issue no command).
+ */
+function probe() {
+  const state = { resets: 0, attempts: [] as unknown[], api: null as ToolApi | null };
+  let created = false;
+  const tool: ExtensionTool = {
+    id: 'ext.p.tool',
+    input(event, api) {
+      state.api = api;
+      if (event.kind === 'pointerdown') return api.gesture.begin();
+      if (event.kind === 'pointermove' && api.gesture.active && !created) {
+        created = true;
+        api.gesture.update({
+          type: 'createRectangle',
+          frame: { x: 0, y: 0, width: 5, height: 5 },
+        });
+        return true;
+      }
+      return false;
+    },
+    reset() {
+      state.resets += 1;
+      created = false;
+      const api = state.api;
+      if (api === null) return;
+      const frame = { x: 50, y: 50, width: 5, height: 5 };
+      state.attempts.push(
+        api.gesture.begin(),
+        api.gesture.update({ type: 'createRectangle', frame }),
+        api.gesture.replace([]),
+        api.execute({ type: 'createRectangle', frame }),
+        api.gesture.active,
+      );
+      api.gesture.commit();
+      api.gesture.cancel();
+    },
+  };
+  return { extension: { id: 'ext.p', tools: [tool] } as Extension, state };
+}
+
+const inert = [
+  false,
+  { ok: false, code: 'editor.invalid-command' },
+  { ok: false, code: 'editor.invalid-command' },
+  { ok: false, code: 'editor.invalid-command' },
+  false,
+];
+
+function dragOpen(target: Editor) {
+  ok(target, { type: 'setTool', tool: 'ext.p.tool' });
+  pointer(target, 'pointerdown', 0, 0);
+  pointer(target, 'pointermove', 5, 5);
+}
+
+describe('M2-U7 review: the ToolApi is inert while reset runs', () => {
+  it('on a tool switch: no gesture opens under select and nothing is created', () => {
+    const { extension, state } = probe();
+    const target = editor([extension]);
+    const before = text(target);
+    dragOpen(target);
+    expect(children(target)).toHaveLength(1);
+    ok(target, { type: 'setTool', tool: 'select' });
+    expect(state.resets).toBe(1);
+    expect(state.attempts).toEqual(inert);
+    expect(text(target)).toBe(before);
+    // No gesture is open under select: a command applies and stays.
+    const a = rect(target, 100, 100);
+    expect(children(target)).toEqual([a]);
+    expect(target.query({ type: 'history' })).toEqual({ undoDepth: 1, redoDepth: 0 });
+  });
+
+  it('on a page switch: the open gesture is cancelled, the tool reset once, the new page empty', () => {
+    const { extension, state } = probe();
+    const target = editor([extension]);
+    const [page] = ok(target, { type: 'addPage', name: 'Two' });
+    const before = text(target);
+    dragOpen(target);
+    ok(target, { type: 'setActivePage', id: page! });
+    expect(state.resets).toBe(1);
+    expect(state.attempts).toEqual(inert);
+    expect(text(target)).toBe(before);
+    expect(target.query({ type: 'document' }).pages[1]!.children).toEqual([]);
+    expect(target.query({ type: 'tool' })).toBe('ext.p.tool');
+    expect(state.api!.gesture.active).toBe(false);
+  });
+
+  it('on a load: the open gesture is cancelled, the tool reset once, and nothing brings back the old document', () => {
+    const { extension, state } = probe();
+    const target = editor([extension]);
+    const loaded = {
+      schemaVersion: 2,
+      id: 'doc',
+      pages: [{ id: 'page', name: 'Loaded', children: [] }],
+      nodes: {},
+    };
+    rect(target, 100, 100);
+    dragOpen(target);
+    ok(target, { type: 'loadDocument', document: loaded });
+    expect(state.resets).toBe(1);
+    expect(state.attempts).toEqual(inert);
+    expect(state.api!.gesture.active).toBe(false);
+    const after = text(target);
+    // A later command applies to the loaded document, not to a stale pre-load gesture base.
+    const a = rect(target, 0, 0);
+    expect(target.query({ type: 'document' }).pages.map((p) => p.id)).toEqual(['page']);
+    expect(children(target)).toEqual([a]);
+    ok(target, { type: 'undo' });
+    expect(text(target)).toBe(after);
+    expect(target.query({ type: 'history' })).toEqual({ undoDepth: 0, redoDepth: 1 });
+  });
+});
+
+describe('M2-U7 review: a throw from input mid-drag', () => {
+  it('cancels the gesture and resets the tool; Escape and V work again', async () => {
+    const errors: unknown[] = [];
+    const onError = (error: unknown) => errors.push(error);
+    process.on('unhandledRejection', onError);
+    try {
+      let resets = 0;
+      let created = false;
+      const target = editor([
+        {
+          id: 'ext.k',
+          tools: [
+            {
+              id: 'ext.k.tool',
+              input(event, api) {
+                if (event.kind === 'keydown' && event.key === 'k') throw new Error('k');
+                if (event.kind === 'pointerdown') return api.gesture.begin();
+                if (event.kind === 'pointermove' && !created) {
+                  created = true;
+                  api.gesture.update({
+                    type: 'createRectangle',
+                    frame: { x: 0, y: 0, width: 5, height: 5 },
+                  });
+                }
+                // Every other key is swallowed while the drag is open.
+                return api.gesture.active;
+              },
+              reset: () => {
+                resets += 1;
+              },
+            },
+          ],
+        },
+      ]);
+      const a = rect(target, 100, 100);
+      ok(target, { type: 'setSelection', ids: [a] });
+      ok(target, { type: 'setTool', tool: 'ext.k.tool' });
+      const before = text(target);
+      pointer(target, 'pointerdown', 0, 0);
+      pointer(target, 'pointermove', 5, 5);
+      expect(children(target)).toHaveLength(2);
+      expect(press(target, 'Escape')).toEqual(consumed);
+      expect(press(target, 'k')).toEqual(unconsumed);
+      expect(resets).toBe(1);
+      expect(text(target)).toBe(before);
+      expect(target.query({ type: 'selection' })).toEqual([a]);
+      expect(target.query({ type: 'history' })).toEqual({ undoDepth: 1, redoDepth: 0 });
+      // The keyboard works again: Escape clears the selection, V selects the select tool.
+      expect(press(target, 'Escape')).toEqual(consumed);
+      expect(target.query({ type: 'selection' })).toEqual([]);
+      expect(press(target, 'v')).toEqual(consumed);
+      expect(target.query({ type: 'tool' })).toBe('select');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(errors.map((error) => (error as Error).message)).toEqual(['k']);
+    } finally {
+      process.off('unhandledRejection', onError);
+    }
+  });
+});
+
+describe('M2-U7 review: re-entering input', () => {
+  it('a tool that re-enters input through execute stops at the depth limit', () => {
+    let calls = 0;
+    const target = editor([
+      {
+        id: 'ext.r',
+        tools: [
+          {
+            id: 'ext.r.tool',
+            input(event, api) {
+              calls += 1;
+              const nested = api.execute({ type: 'input', event });
+              return nested.ok && nested.consumed === true;
+            },
+            reset: () => undefined,
+          },
+        ],
+      },
+    ]);
+    ok(target, { type: 'setTool', tool: 'ext.r.tool' });
+    expect(press(target, 'q')).toEqual(unconsumed);
+    expect(calls).toBe(16);
+    // The editor keeps working.
+    calls = 0;
+    expect(press(target, 'v')).toEqual(consumed);
+    expect(calls).toBe(16);
+    expect(target.query({ type: 'tool' })).toBe('select');
   });
 });

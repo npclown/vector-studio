@@ -542,14 +542,20 @@ class EditorCore implements Editor {
   /**
    * An extension tool as the editor drives it (M2 contract, section 7): it receives a frozen
    * `ToolApi` (execute, query and the gesture API without `edit`), and only `true` from `input`
-   * consumes the event. Its gesture API acts only while it is the active tool. A throw from
-   * `input` or `reset` is the extension's defect: it is rethrown asynchronously, as for an
-   * extension command, and `input` then counts as not consumed. A throwing or malformed
-   * `overlay` gives no overlay.
+   * consumes the event. Its gesture API acts only while it is the active tool, and the whole
+   * `ToolApi` except `query` is inert while its `reset` runs (a reset must issue no command), so
+   * a reset during a tool switch, page switch or load cannot open a gesture or change the
+   * document. A throw from `input` or `reset` is the extension's defect: it is rethrown
+   * asynchronously, as for an extension command; after a throw from `input` the event counts as
+   * not consumed and the editor cancels any open gesture and resets the tool, so a broken tool
+   * cannot hold a gesture (and the keyboard) open. `input` re-entered through
+   * `execute({ type: 'input' })` shares the extension command depth limit. A throwing or
+   * malformed `overlay` gives no overlay.
    */
   private extensionTool(registered: RegisteredTool): Tool {
     const control = this.gesture;
-    const own = () => this.tool === registered.id;
+    let resetting = false;
+    const own = () => !resetting && this.tool === registered.id;
     const gesture: ToolGesture = Object.freeze({
       get active() {
         return control.active;
@@ -566,7 +572,12 @@ class EditorCore implements Editor {
         if (own()) control.cancel();
       },
     });
-    const api: ToolApi = Object.freeze({ ...extensionApi(this.api), gesture });
+    const api: ToolApi = Object.freeze({
+      execute: (command: Command) =>
+        resetting ? failure('editor.invalid-command') : this.execute(command),
+      query: <Q extends Query>(query: Q) => this.query(query),
+      gesture,
+    });
     const rethrow = (error: unknown) => {
       void Promise.resolve().then(() => {
         throw error;
@@ -574,18 +585,33 @@ class EditorCore implements Editor {
     };
     return {
       input: (event) => {
+        // Re-entry through `execute({ type: 'input' })` stops at the extension depth limit.
+        if (this.extensionDepth >= MAX_EXTENSION_DEPTH) return false;
+        this.extensionDepth += 1;
         try {
           return registered.input(event, api) === true;
         } catch (error) {
           rethrow(error);
+          try {
+            this.interrupt(true);
+          } catch (inner) {
+            rethrow(inner);
+          }
           return false;
+        } finally {
+          this.extensionDepth -= 1;
         }
       },
       reset: () => {
+        // Nested resets (a reset that triggers another) keep the outer flag.
+        const outer = resetting;
+        resetting = true;
         try {
           registered.reset();
         } catch (error) {
           rethrow(error);
+        } finally {
+          resetting = outer;
         }
       },
       overlay: () => {
@@ -728,8 +754,10 @@ class EditorCore implements Editor {
         if (!this.document.pages.some((page) => page.id === command.id)) {
           return failure('editor.unknown-page');
         }
-        // Like setTool, it first cancels an active gesture (M1 contract, section 3).
-        this.interrupt();
+        // Like setTool, it first cancels an active gesture (M1 contract, section 3). A real
+        // switch resets the tool once, in switchPage.
+        if (command.id === this.activePage) this.interrupt();
+        else this.cancelGesture();
         if (command.id !== this.activePage) {
           const hadSelection = this.selection.length > 0;
           const hadScope = this.scope !== null;
@@ -1490,7 +1518,8 @@ class EditorCore implements Editor {
     if (scopeChanged) this.scope = null;
     if (pageChanged) {
       selectionChanged = this.selection.length > 0;
-      this.switchPage(page);
+      // A load has already reset the tool (interrupt), so it is reset once.
+      this.switchPage(page, cause !== 'load');
     } else {
       // Deleting or undoing away a selected node removes it from the selection, and a node
       // whose ancestor is selected too gives way to it.
@@ -1518,11 +1547,11 @@ class EditorCore implements Editor {
    * Activates `page`: the selection and the scope are cleared and the active tool reset (it
    * stays selected). The caller raises the events and updates the renderer.
    */
-  private switchPage(page: string): void {
+  private switchPage(page: string, reset = true): void {
     this.activePage = page;
     this.selection = Object.freeze([]);
     this.scope = null;
-    this.tools.get(this.tool)?.reset();
+    if (reset) this.tools.get(this.tool)?.reset();
   }
 
   /** Runs `action` on the attached projector, collecting its diagnostics into `into`. */
