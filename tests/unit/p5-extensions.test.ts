@@ -328,7 +328,7 @@ describe('P5-A10 ext.star through the public API', () => {
         code: 'editor.extension-failed',
       });
       // What it composed before the throw stays, and the editor keeps working.
-      expect(target.query({ type: 'document' }).pages[0].children).toHaveLength(1);
+      expect(target.query({ type: 'document' }).pages[0]!.children).toHaveLength(1);
       expect(target.execute({ type: 'runCommand', id: 'ext.bad.undefined' })).toEqual({
         ok: false,
         code: 'editor.extension-failed',
@@ -412,8 +412,9 @@ describe('P5-A07 custom-node codes', () => {
   it('needs the extension to load a custom node', async () => {
     const document = await fixture('ext-star');
     expect(() => editor([], document)).toThrow('document.unknown-custom-type');
+    // The v1 fixture loads migrated to schema v2 (MVP M1 contract, section 2.1).
     expect(text(editor([starExtension], document))).toBe(
-      await readFile(path.join(fixtures, 'ext-star.json'), 'utf8'),
+      await readFile(path.join(root, 'tests/fixtures/m1-model/ext-star.v2.json'), 'utf8'),
     );
   });
 

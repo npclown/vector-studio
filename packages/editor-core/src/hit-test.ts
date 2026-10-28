@@ -1,11 +1,17 @@
-import type { DocumentV1, Frame, NodeV1, PathData } from '@vector-studio/model';
+import type { DocumentV2, Frame, NodeV2, PathData } from '@vector-studio/model';
+import { apply, boundsOfPoints, corners, rotate } from './geometry.js';
+import { documentTree, spaceOf } from './tree.js';
 import type { PagePoint } from './types.js';
 
 // P5 hit testing (plan section 4.4): fill regions and outlines, with outlines flattened by
 // editor-core itself at 0.25 / zoom page units. Exact geometry-port hit testing is deferred.
+//
+// M1-U2 scope: the active page's root rectangles, paths and custom nodes hit as in P5, through
+// their rotation. Ellipses, lines, containers and their subtrees, clips and masks are not hit
+// tested yet: that is M1-U4 (section 6).
 
 /** Frame-local path geometry for a custom node (its extension's `toScene`), or null. */
-export type CustomGeometry = (node: NodeV1) => PathData | null;
+export type CustomGeometry = (node: NodeV2) => PathData | null;
 
 type Polyline = { points: PagePoint[]; closed: boolean };
 
@@ -130,14 +136,20 @@ function rectangleOutline(frame: Frame): Polyline {
   };
 }
 
-/** Whether `point` hits `node` at `zoom` (plan section 4.4). */
+/** Whether `point`, in the node's parent space, hits `node` at `zoom` (plan section 4.4). */
 export function hitsNode(
-  node: NodeV1,
-  point: PagePoint,
+  node: NodeV2,
+  parentPoint: PagePoint,
   zoom: number,
   custom: CustomGeometry,
 ): boolean {
   if (!node.visible) return false;
+  if (node.type !== 'rectangle' && node.type !== 'path' && node.type !== 'custom') return false;
+  // Into the unrotated frame: a rigid map, so distances are unchanged (M1 contract, section 6).
+  const cx = node.frame.x + node.frame.width / 2;
+  const cy = node.frame.y + node.frame.height / 2;
+  const turned = rotate(-node.rotation, parentPoint.x - cx, parentPoint.y - cy);
+  const point = node.rotation === 0 ? parentPoint : { x: cx + turned.x, y: cy + turned.y };
   const radius = Math.max((node.stroke?.width ?? 0) / 2, 4 / zoom);
   if (node.type === 'rectangle') {
     const { x, y, width, height } = node.frame;
@@ -159,14 +171,19 @@ export function hitsNode(
   return nearOutline(point, lines, radius);
 }
 
-/** The topmost visible node hit at `point`, in reverse paint order, or null. */
+function pageChildren(document: DocumentV2, page: string): readonly string[] {
+  return document.pages.find((entry) => entry.id === page)?.children ?? [];
+}
+
+/** The topmost visible root node of `page` hit at `point`, in reverse paint order, or null. */
 export function topmostHit(
-  document: DocumentV1,
+  document: DocumentV2,
+  page: string,
   point: PagePoint,
   zoom: number,
   custom: CustomGeometry,
 ): string | null {
-  const children = document.pages[0].children;
+  const children = pageChildren(document, page);
   for (let i = children.length - 1; i >= 0; i -= 1) {
     const node = document.nodes[children[i]!];
     if (node !== undefined && hitsNode(node, point, zoom, custom)) return node.id;
@@ -174,12 +191,16 @@ export function topmostHit(
   return null;
 }
 
-/** Visible nodes, in paint order, whose frame intersects the rectangle (P5-Q5). */
-export function marqueeHits(document: DocumentV1, box: Frame): string[] {
-  return document.pages[0].children.filter((id) => {
+/**
+ * Visible root rectangles, paths and custom nodes of `page`, in paint order, whose rotated
+ * frame's bounds intersect the rectangle (P5-Q5); the M1 candidates of section 6 are M1-U4.
+ */
+export function marqueeHits(document: DocumentV2, page: string, box: Frame): string[] {
+  return pageChildren(document, page).filter((id) => {
     const node = document.nodes[id];
     if (node === undefined || !node.visible) return false;
-    const { frame } = node;
+    if (node.type !== 'rectangle' && node.type !== 'path' && node.type !== 'custom') return false;
+    const frame = boundsOfPoints(corners(node.frame, node.rotation))!;
     return (
       frame.x <= box.x + box.width &&
       box.x <= frame.x + frame.width &&
@@ -189,19 +210,20 @@ export function marqueeHits(document: DocumentV1, box: Frame): string[] {
   });
 }
 
-/** The bounding box of the frames of `ids`, or null when there are none. */
-export function boundsOf(document: DocumentV1, ids: readonly string[]): Frame | null {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
+/**
+ * The page-aligned bounds of the rotated frames of `ids` in page space, at any depth (M1
+ * contract, section 6), or null when there are none.
+ */
+export function boundsOf(document: DocumentV2, ids: readonly string[]): Frame | null {
+  const tree = documentTree(document);
+  const points: PagePoint[] = [];
   for (const id of ids) {
-    const frame = document.nodes[id]?.frame;
-    if (frame === undefined) continue;
-    minX = Math.min(minX, frame.x);
-    minY = Math.min(minY, frame.y);
-    maxX = Math.max(maxX, frame.x + frame.width);
-    maxY = Math.max(maxY, frame.y + frame.height);
+    const node = tree.node(id);
+    if (node === undefined) continue;
+    const { matrix } = spaceOf(tree, node.parent);
+    for (const corner of corners(node.frame, node.rotation)) {
+      points.push(apply(matrix, corner.x, corner.y));
+    }
   }
-  return minX === Infinity ? null : { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  return boundsOfPoints(points);
 }

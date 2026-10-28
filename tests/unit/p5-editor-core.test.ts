@@ -9,7 +9,7 @@ import {
   type EditorEvent,
 } from '../../packages/editor-core/src/index.js';
 import { createEditor as createPackagedEditor } from '@vector-studio/editor-core';
-import { serializeDocument, type DocumentV1 } from '@vector-studio/model';
+import { serializeDocument, type DocumentV2 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 // Source imports: the gesture API is package-internal, so the test shares the source module.
 import { internalsOf } from '../../packages/editor-core/src/editor.js';
@@ -63,8 +63,8 @@ describe('P5-A01 creation through execute', () => {
       stroke: { color: black, width: 2 },
     });
     expect(ids).toEqual(['n3']);
-    const expected: DocumentV1 = {
-      schemaVersion: 1,
+    const expected: DocumentV2 = {
+      schemaVersion: 2,
       id: 'n1',
       pages: [{ id: 'n2', name: 'Page 1', children: ['n3'] }],
       nodes: {
@@ -73,9 +73,12 @@ describe('P5-A01 creation through execute', () => {
           name: 'Rectangle',
           parent: 'n2',
           frame: { x: 10, y: 20, width: 30, height: 40 },
+          rotation: 0,
+          constraints: { horizontal: 'start', vertical: 'start' },
           opacity: 1,
           visible: true,
           type: 'rectangle',
+          cornerRadii: [0, 0, 0, 0],
           fill: { r: 1, g: 0, b: 0, a: 1 },
           stroke: { color: black, width: 2 },
         },
@@ -107,7 +110,7 @@ describe('P5-A01 creation through execute', () => {
       fill: null,
       stroke: { color: black, width: 1, cap: 'butt', join: 'miter', miterLimit: 4 },
     });
-    expect(document.pages[0].children).toEqual([rect, line]);
+    expect(document.pages[0]!.children).toEqual([rect, line]);
   });
 
   it('creates a path whose frame is the bounding box of all points, control points included', () => {
@@ -127,6 +130,8 @@ describe('P5-A01 creation through execute', () => {
       name: 'Curve',
       parent: 'n2',
       frame: { x: 0, y: -10, width: 40, height: 40 },
+      rotation: 0,
+      constraints: { horizontal: 'start', vertical: 'start' },
       opacity: 1,
       visible: true,
       type: 'path',
@@ -177,7 +182,7 @@ describe('P5-A01 creation through execute', () => {
       fill: null,
     });
     ok(target, { type: 'deleteNodes', ids: [a!] });
-    expect(target.query({ type: 'document' }).pages[0].children).toEqual([b]);
+    expect(target.query({ type: 'document' }).pages[0]!.children).toEqual([b]);
     expect(target.query({ type: 'node', id: a! })).toBeNull();
   });
 });
@@ -475,7 +480,7 @@ describe('P5-A05 failed commands and session state', () => {
     ['deleting nothing', () => ({ type: 'deleteNodes', ids: [] }), 'editor.invalid-command'],
     [
       'an invalid document',
-      () => ({ type: 'loadDocument', document: { schemaVersion: 2 } }),
+      () => ({ type: 'loadDocument', document: { schemaVersion: 3 } }),
       'document.unsupported-version',
     ],
     ['an unknown command', () => ({ type: 'rotate' }) as never, 'editor.invalid-command'],
@@ -541,7 +546,7 @@ describe('P5-A05 failed commands and session state', () => {
     target.execute({ type: 'undo' });
     const second = target.getSnapshot();
     expect(second).not.toBe(first);
-    expect(second.document.pages[0].children).toEqual([]);
+    expect(second.document.pages[0]!.children).toEqual([]);
     expect(second.history).toEqual({ undoDepth: 0, redoDepth: 1 });
   });
 
@@ -609,7 +614,7 @@ describe('P5-U2 review round 1 cases', () => {
       frames: [{ id: a!, frame: { x: 2, y: 0, width: 1, height: 1 } }],
     });
     ok(target, { type: 'setNodeProps', id: a!, props: { name: 'X' } });
-    expect(target.query({ type: 'document' }).pages[0].children).toEqual([a, ...created]);
+    expect(target.query({ type: 'document' }).pages[0]!.children).toEqual([a, ...created]);
     expect(target.query({ type: 'node', id: a! })?.name).toBe('X');
     ok(target, { type: 'undo' });
     expect(target.query({ type: 'node', id: created[0]! })).toBeNull();
@@ -680,9 +685,9 @@ describe('P5-U2 review round 1 cases', () => {
     const [a] = ok(target, { type: 'createRectangle', frame: { x: 0, y: 0, width: 1, height: 1 } });
     const document = target.query({ type: 'document' });
     expect(Object.isFrozen(document)).toBe(true);
-    expect(Object.isFrozen(document.pages[0].children)).toBe(true);
+    expect(Object.isFrozen(document.pages[0]!.children)).toBe(true);
     expect(Object.isFrozen(document.nodes[a!]?.frame)).toBe(true);
-    expect(() => (document.pages[0].children as string[]).push('zz')).toThrow(TypeError);
+    expect(() => (document.pages[0]!.children as string[]).push('zz')).toThrow(TypeError);
     const loaded = createEditor({ document: JSON.parse(JSON.stringify(document)) as unknown });
     expect(Object.isFrozen(loaded.query({ type: 'document' }).nodes[a!])).toBe(true);
   });

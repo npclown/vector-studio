@@ -1,5 +1,7 @@
-// Document schema v1 (P5 editor-slice plan, section 3). The model imports nothing, so these
-// types mirror the matching `contracts` scene fields instead of importing them.
+// Document schemas (P5 editor-slice plan, section 3; MVP M1 contract, section 2). The model imports
+// nothing, so these types mirror the matching `contracts` scene fields instead of importing them.
+// Schema v2 is the document the model returns and writes; the v1 types describe the input of
+// `migrateV1toV2` only.
 
 export type JsonValue =
   null | boolean | number | string | readonly JsonValue[] | { readonly [key: string]: JsonValue };
@@ -7,7 +9,7 @@ export type JsonValue =
 /** `[0, 1]` per channel. */
 export type Color = Readonly<{ r: number; g: number; b: number; a: number }>;
 
-/** Page units, axis-aligned; `width` and `height` are at least 0. */
+/** In the parent's local space (page units under a page); `width` and `height` are at least 0. */
 export type Frame = Readonly<{ x: number; y: number; width: number; height: number }>;
 
 /** The fields of the primitive `SceneStroke`; `width` is in page units. */

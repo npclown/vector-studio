@@ -63,7 +63,7 @@ describe('P5-U6 React bindings', () => {
     ok(target);
     function Revision() {
       const revision = useEditorSelector((snapshot) => snapshot.revision);
-      const nodes = useEditorSelector((snapshot) => snapshot.document.pages[0].children.length);
+      const nodes = useEditorSelector((snapshot) => snapshot.document.pages[0]!.children.length);
       return createElement('span', null, `${revision}:${nodes}`);
     }
     const html = renderToString(

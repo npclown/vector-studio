@@ -1,10 +1,15 @@
 import type { Frame } from '@vector-studio/model';
 import type { Tool, ToolContext } from './editor.js';
-import { deepFreeze } from './edits.js';
+import { deepFreeze } from './freeze.js';
+import { rotate } from './geometry.js';
 import { boundsOf, marqueeHits, topmostHit, type CustomGeometry } from './hit-test.js';
+import { documentTree, spaceOf } from './tree.js';
 import type { InputEvent, PagePoint, PathAnchor, ToolOverlay } from './types.js';
 
-// P5 tools (plan section 4.4). Tools act only through commands and the gesture API.
+// P5 tools (plan section 4.4). Tools act only through commands and the gesture API. They work on
+// the active page; drawing tools create at its root (M1 contract, section 7). Move drags convert
+// the page delta into each node's parent space. The rotated-handle and multi-selection resize of
+// section 4.4, and the ellipse, line and frame tools, are M1-U4 (see `resize.ts`).
 
 type Pointer = Extract<InputEvent, { point: PagePoint }>;
 
@@ -167,7 +172,15 @@ type Handle = (typeof HANDLES)[number];
 
 type SelectState =
   | { kind: 'idle' }
-  | { kind: 'move'; start: PagePoint; frames: Map<string, Frame>; moved: boolean; hit: string }
+  | {
+      kind: 'move';
+      start: PagePoint;
+      frames: Map<string, Frame>;
+      /** Each node's parent-chain rotation, to turn the page delta into its parent space. */
+      turns: Map<string, number>;
+      moved: boolean;
+      hit: string;
+    }
   | {
       kind: 'resize';
       start: PagePoint;
@@ -214,8 +227,9 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     const document = context.query({ type: 'document' });
     const selection = context.query({ type: 'selection' });
     const zoom = zoomOf(context);
+    const page = context.query({ type: 'activePage' });
     const box = boundsOf(document, selection);
-    const hit = topmostHit(document, event.point, zoom, custom);
+    const hit = topmostHit(document, page, event.point, zoom, custom);
     // On a box too small for its handles to stay apart, a press on a selected node inside it
     // moves; otherwise a handle wins over the node under it.
     const reach = (4 * HANDLE_RADIUS) / zoom;
@@ -261,10 +275,12 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     if (!selection.includes(hit)) context.execute({ type: 'setSelection', ids: [hit] });
     if (context.gesture.begin()) {
       const ids = context.query({ type: 'selection' });
+      const tree = documentTree(context.query({ type: 'document' }));
       state = {
         kind: 'move',
         start: event.point,
         frames: framesOf(context, ids),
+        turns: new Map(ids.map((id) => [id, spaceOf(tree, tree.node(id)!.parent).rotation])),
         moved: false,
         hit,
       };
@@ -282,10 +298,11 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     if (state.kind === 'move') {
       if (!state.moved && dx === 0 && dy === 0) return;
       state.moved = true;
-      const frames = [...state.frames].map(([id, frame]) => ({
-        id,
-        frame: { ...frame, x: frame.x + dx, y: frame.y + dy },
-      }));
+      const { turns } = state;
+      const frames = [...state.frames].map(([id, frame]) => {
+        const delta = rotate(-turns.get(id)!, dx, dy);
+        return { id, frame: { ...frame, x: frame.x + delta.x, y: frame.y + delta.y } };
+      });
       context.gesture.update({ type: 'setFrames', frames });
       return;
     }
@@ -334,6 +351,7 @@ export function createSelectTool(custom: CustomGeometry): Tool {
       }
       const hits = marqueeHits(
         context.query({ type: 'document' }),
+        context.query({ type: 'activePage' }),
         boxOf(current.start, current.current),
       );
       const ids = current.additive

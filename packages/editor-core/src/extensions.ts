@@ -1,4 +1,4 @@
-import type { DocumentV1, JsonValue, NodeV1, PathData } from '@vector-studio/model';
+import type { DocumentV2, JsonValue, NodeV2, PathData } from '@vector-studio/model';
 import type { CustomNodeType, Extension, ExtensionApi, ExtensionCommand, Query } from './types.js';
 
 // The extension registry (P5 plan, section 5): custom node types and extension commands,
@@ -144,7 +144,7 @@ export class ExtensionRegistry {
   }
 
   /** Checks a custom node against its extension; other nodes always pass. */
-  check(node: NodeV1): CustomFailure | null {
+  check(node: NodeV2): CustomFailure | null {
     if (node.type !== 'custom') return null;
     const type = this.types.get(node.customType);
     if (type === undefined) return { code: 'document.unknown-custom-type', path: '/customType' };
@@ -157,8 +157,11 @@ export class ExtensionRegistry {
     return valid ? null : { code: 'document.invalid-custom-data', path: '/data' };
   }
 
-  /** The first custom node of the document that fails its check, with a document path. */
-  checkDocument(document: DocumentV1): CustomFailure | null {
+  /**
+   * The first custom node of the document that fails its check, with a document path. Every node
+   * is checked wherever it is nested (M1 contract, section 2.1), in sorted ID order.
+   */
+  checkDocument(document: DocumentV2): CustomFailure | null {
     for (const id of Object.keys(document.nodes).sort()) {
       const failure = this.check(document.nodes[id]!);
       if (failure !== null) {
@@ -170,7 +173,7 @@ export class ExtensionRegistry {
   }
 
   /** Frame-local geometry of a custom node through its extension's `toScene`, or null. */
-  geometry(node: NodeV1): PathData | null {
+  geometry(node: NodeV2): PathData | null {
     if (node.type !== 'custom') return null;
     const type = this.types.get(node.customType);
     if (type === undefined) return null;
