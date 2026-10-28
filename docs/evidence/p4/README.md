@@ -50,4 +50,4 @@ These were owed to U6 by the unit records. None affects an acceptance criterion 
 
 ## Exit decision
 
-Pending: the user's acceptance of this record.
+Decided 2026-10-28 by the user: P4 exits on this record as written, with the A09 byte-identity departure disclosed and the limitations in backlog E22.
