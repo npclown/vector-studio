@@ -69,6 +69,12 @@ const SAMPLES = {
   outsideMask: inMask(6, 15),
   // l1 runs from (150, 230) to (270, 200) with width 2; its end has a triangle head.
   lineMiddle: { x: 210, y: 215 },
+  // Inside the triangle head off the line's axis, and just beyond its tip T = (270, 200).
+  arrowInterior: { x: 264.66, y: 203.4 },
+  beyondTip: { x: 272.91, y: 199.27 },
+  // Inside f1 just above its bottom edge (local y = 150), and outside just below it.
+  insideBorder: inFrame(100, 146),
+  outsideBorder: inFrame(100, 154),
   emptyCanvas: { x: 440, y: 280 },
 } as const;
 
@@ -88,6 +94,12 @@ async function open(page: Page) {
     const rect = canvas.getBoundingClientRect();
     return { x: rect.left + canvas.clientLeft, y: rect.top + canvas.clientTop };
   });
+  // Pointer events land on whole CSS pixels; the exact frame assertions below assume the
+  // content box starts on one, so page points map to whole or half page units at zoom 2.
+  expect(
+    Number.isInteger(origin.x) && Number.isInteger(origin.y),
+    `canvas content-box origin ${JSON.stringify(origin)} is not a whole CSS pixel`,
+  ).toBe(true);
   const screen = (p: Point): Point => ({
     x: origin.x + (p.x - CAMERA.x) * CAMERA.zoom,
     y: origin.y + (p.y - CAMERA.y) * CAMERA.zoom,
@@ -172,10 +184,20 @@ async function expectFixturePixels(page: Page) {
     insideMask: 'red',
     outsideMask: 'white',
     lineMiddle: 'black',
+    arrowInterior: 'black',
+    beyondTip: 'canvas',
+    insideBorder: 'white',
+    outsideBorder: 'canvas',
     emptyCanvas: 'canvas',
   });
   // The frame's white fill is a paint, not the clear colour.
   expect(distance(sample.frameBackground, sample.emptyCanvas)).toBeGreaterThan(32);
+  // The border: a scan of about 5 CSS px (2.5 page units at zoom 2) across f1's bottom edge at
+  // local x = 100 meets the black stroke; its darkest pixel is nearest black.
+  const scan = Array.from({ length: 11 }, (_, i) => inFrame(100, 147.5 + i * 0.5));
+  const across = await pixels(page, scan);
+  const darkest = across.reduce((a, b) => (a[0] + a[1] + a[2] <= b[0] + b[1] + b[2] ? a : b));
+  expect(nearest(darkest, references), JSON.stringify(across)).toBe('black');
   return sample;
 }
 
@@ -228,8 +250,14 @@ test('M1-A12: the next-host page renders the M1 fixture and edits it', async ({ 
   await expect(status).toHaveAttribute('data-nodes', '1');
   // Page 2 holds only r2 at the origin, so the fixture's blue child is gone from the canvas.
   if (rendering) {
-    const [blank, empty] = await pixels(page, [SAMPLES.visibleChild, SAMPLES.emptyCanvas]);
+    const [blank, empty, r2] = await pixels(page, [
+      SAMPLES.visibleChild,
+      SAMPLES.emptyCanvas,
+      { x: 5, y: 5 },
+    ]);
     expect(nearest(blank!, { blue: [51, 102, 204], canvas: empty! })).toBe('canvas');
+    // Page 2's own content: r2, black, at (0, 0) with size 10.
+    expect(nearest(r2!, { black: [0, 0, 0], canvas: empty! })).toBe('black');
   }
   await page.getByTestId('page-page-1').click();
   await expect(status).toHaveAttribute('data-page', 'page-1');
@@ -275,10 +303,10 @@ test('M1-A12: the next-host page renders the M1 fixture and edits it', async ({ 
     children: [],
   });
   await expect(status).toHaveAttribute('data-nodes', '8');
-  // The new rectangle is drawn: its centre is no longer the clear colour.
   if (rendering) {
+    // The new rectangle has the default fill (0.8 grey).
     const [clear, filled] = await pixels(page, [SAMPLES.emptyCanvas, { x: 400, y: 50 }]);
-    expect(filled).not.toEqual(clear);
+    expect(nearest(filled!, { fill: [204, 204, 204], canvas: clear! })).toBe('fill');
   }
 
   // Group: the rectangle and the ellipse, selected by click and shift-click.

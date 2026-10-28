@@ -234,16 +234,23 @@ export type Query =
   | Readonly<{ type: 'handles' }>;
 
 /**
- * The resize handle box of the selection in page space (M1 contract, section 4.4), as the select
- * tool picks it: the eight handles sit on its corners and edge midpoints. A single node other
- * than a page-root node with rotation 0 has its own rotated box; any other selection has the
- * page-aligned bounds of its rotated frames. Null for an empty selection.
+ * The select tool's resize handle box for the selection, in page space (M1 contract, section
+ * 4.4), as the tool picks its handles. The box is the node's own rotated frame for a single node
+ * that is not a page-root node with rotation 0; for any other selection it is the page-aligned
+ * bounds of the selected nodes' rotated frames. Null for an empty selection. The result is a
+ * frozen value computed from the current document, page and selection.
  */
 export type SelectionHandles = Readonly<{
-  /** The box's top-left, top-right, bottom-right and bottom-left corners in its own axes. */
+  /** Top-left, top-right, bottom-right and bottom-left, in the box's own axes. */
   corners: readonly [PagePoint, PagePoint, PagePoint, PagePoint];
-  /** The box's page rotation in radians (M1-S1 range); 0 for a page-aligned box. */
+  /** The box's page rotation in radians, normalized to (−π, π]; 0 for a page-aligned box. */
   rotation: number;
+  /**
+   * The active handles, clockwise from the top-left corner (corners and edge midpoints): a
+   * handle is active when it scales an axis of nonzero size, so a box of height 0 (a horizontal
+   * line) has no top or bottom edge handle and keeps only its left and right ones and corners.
+   */
+  handles: readonly PagePoint[];
 }>;
 
 export type QueryResult<Q extends Query> = Q extends { type: 'document' }

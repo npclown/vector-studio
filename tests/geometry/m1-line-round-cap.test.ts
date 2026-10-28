@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { PATH_VERB_CODES } from '../../packages/contracts/src/index.js';
+import { PATH_VERB_CODES } from '@vector-studio/contracts';
 import type { LineNode } from '../../packages/model/src/index.js';
 import { lineContent } from '../../packages/editor-core/src/projector.js';
 import { createFillMeshPort } from '../../packages/geometry-wasm/src/index.js';

@@ -16,6 +16,6 @@ export async function GET(): Promise<Response> {
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
     });
   } catch {
-    return new Response(`M1 fixture not found at ${fixturePath}`, { status: 404 });
+    return new Response('Not found', { status: 404 });
   }
 }

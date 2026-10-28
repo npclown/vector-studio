@@ -236,7 +236,7 @@ export function createPathTool(): Tool {
 }
 
 /** Handle positions on the box, as fractions of its width and height. */
-const HANDLES = [
+export const HANDLES = [
   [0, 0],
   [0.5, 0],
   [1, 0],
@@ -247,19 +247,26 @@ const HANDLES = [
   [0, 0.5],
 ] as const;
 
-type Handle = (typeof HANDLES)[number];
+export type Handle = (typeof HANDLES)[number];
+
+/** The handles that can scale at least one axis of `box`, in `HANDLES` order. */
+export function activeHandles(box: Frame): Handle[] {
+  return HANDLES.filter(
+    (handle) => (handle[0] !== 0.5 && box.width > 0) || (handle[1] !== 0.5 && box.height > 0),
+  );
+}
 
 /**
  * The box the handles sit on. `p5`: the page-aligned bounds of a page-root selection with
  * rotation 0, resized as in P5. `single`: one other node, its own rotated box (`matrix` maps
  * its local space to the page). `map`: the page-aligned bounds of any other multi-selection.
  */
-type HandleBox =
+export type HandleBox =
   | { mode: 'p5' | 'map'; box: Frame }
   | { mode: 'single'; box: Frame; id: string; matrix: Matrix; turn: number };
 
 /** The handle box of `selection` on `page` (section 4.4), or null for an empty selection. */
-function handleBoxOf(
+export function handleBoxOf(
   document: DocumentV2,
   page: string,
   selection: readonly string[],
@@ -285,6 +292,15 @@ function handleBoxOf(
   };
 }
 
+/** A handle's page-space point on the handle box. */
+export function handlePoint(handles: HandleBox, handle: Handle): PagePoint {
+  const { box } = handles;
+  if (handles.mode !== 'single') {
+    return { x: box.x + handle[0] * box.width, y: box.y + handle[1] * box.height };
+  }
+  return apply(handles.matrix, handle[0] * box.width, handle[1] * box.height);
+}
+
 /**
  * The `handles` query (M1-U5): the select tool's handle box in page space, so a host draws the
  * handles where the tool picks them, also for nested and rotated nodes.
@@ -294,29 +310,19 @@ export function selectionHandles(
   page: string,
   selection: readonly string[],
 ): SelectionHandles | null {
-  const handles = handleBoxOf(document, page, selection);
-  if (handles === null) return null;
-  const { x, y, width, height } = handles.box;
-  if (handles.mode !== 'single') {
-    return deepFreeze({
-      corners: [
-        { x, y },
-        { x: x + width, y },
-        { x: x + width, y: y + height },
-        { x, y: y + height },
-      ],
-      rotation: 0,
-    });
-  }
-  const { matrix } = handles;
+  const box = handleBoxOf(document, page, selection);
+  if (box === null) return null;
+  // The corner handles: top-left, top-right, bottom-right and bottom-left.
+  const [tl, , tr, , br, , bl] = HANDLES;
   return deepFreeze({
     corners: [
-      apply(matrix, 0, 0),
-      apply(matrix, width, 0),
-      apply(matrix, width, height),
-      apply(matrix, 0, height),
+      handlePoint(box, tl),
+      handlePoint(box, tr),
+      handlePoint(box, br),
+      handlePoint(box, bl),
     ],
-    rotation: normalizeRotation(handles.turn),
+    rotation: box.mode === 'single' ? normalizeRotation(box.turn) : 0,
+    handles: activeHandles(box.box).map((handle) => handlePoint(box, handle)),
   });
 }
 
@@ -373,14 +379,6 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     );
   }
 
-  function handlePoint(handles: HandleBox, handle: Handle): PagePoint {
-    const { box } = handles;
-    if (handles.mode !== 'single') {
-      return { x: box.x + handle[0] * box.width, y: box.y + handle[1] * box.height };
-    }
-    return apply(handles.matrix, handle[0] * box.width, handle[1] * box.height);
-  }
-
   /** Whether `point` is strictly inside the handle box. */
   function insideHandles(handles: HandleBox, point: PagePoint): boolean {
     const local =
@@ -399,10 +397,7 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     const { box } = handles;
     let best: Handle | null = null;
     let bestDistance = HANDLE_RADIUS / zoom;
-    for (const handle of HANDLES) {
-      const scalesX = handle[0] !== 0.5 && box.width > 0;
-      const scalesY = handle[1] !== 0.5 && box.height > 0;
-      if (!scalesX && !scalesY) continue;
+    for (const handle of activeHandles(box)) {
       const d = distance(point, handlePoint(handles, handle));
       if (d <= bestDistance) {
         best = handle;

@@ -1,7 +1,7 @@
 import type { EditorSnapshot, SelectionHandles, ToolOverlay } from '@vector-studio/editor-core';
 
 // P5-U6: the host's selection and tool overlay (P5 plan, section 4.5). It is drawn in CSS pixels
-// over the canvas and is never document content. M1-U5: the selection box and its eight handles
+// over the canvas and is never document content. M1-U5: the selection box and its active handles
 // come from the editor's `handles` query in page space, so a nested or rotated selection is drawn
 // where the select tool picks its handles (M1 contract, section 4.4).
 
@@ -60,11 +60,8 @@ export function SelectionOverlay({ snapshot, handles, width, height }: Props) {
     (y - position.y) * zoom,
   ];
   const corners = handles === null ? [] : handles.corners.map((p) => toScreen(p.x, p.y));
-  // Corners and edge midpoints, clockwise from the box's own top-left corner.
-  const points = corners.flatMap((corner, index) => {
-    const next = corners[(index + 1) % corners.length]!;
-    return [corner, [(corner[0] + next[0]) / 2, (corner[1] + next[1]) / 2] as [number, number]];
-  });
+  // Only the handles the select tool can pick (a zero-size axis has no edge handles on it).
+  const points = handles === null ? [] : handles.handles.map((p) => toScreen(p.x, p.y));
   return (
     <svg width={width} height={height} style={{ position: 'absolute', inset: 0 }}>
       {handles === null ? null : (
