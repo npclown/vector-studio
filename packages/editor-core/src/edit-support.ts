@@ -16,6 +16,8 @@ export type EditResult =
       touched: readonly string[];
       /** Nodes or pages the command created. */
       created: readonly string[];
+      /** The IDs the command returns when they are not `created` (the path commands, M3). */
+      ids?: readonly string[];
     }>
   | Failure;
 

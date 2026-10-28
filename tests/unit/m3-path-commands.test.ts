@@ -29,9 +29,12 @@ import {
   handlesOf,
   inSegment,
   isMirrored,
+  localOf,
+  localPoint,
   outSegment,
   readAnchorModel,
   renormalize,
+  storedPoint,
   writeAnchorModel,
   type EditPoint,
 } from '../../packages/editor-core/src/paths.js';
@@ -47,7 +50,7 @@ const START = { horizontal: 'start', vertical: 'start' } as const;
 const black = { r: 0, g: 0, b: 0, a: 1 };
 const f = (x: number, y: number, width: number, height: number): Frame => ({ x, y, width, height });
 const at = (x: number, y: number): PagePoint => ({ x, y });
-const s = (u: number, v: number): EditPoint => ({ kind: 'stored', u, v });
+const s = (u: number, v: number): EditPoint => storedPoint(u, v);
 
 type Loose = Record<string, unknown> & { id: string };
 type Verb = 'move' | 'line' | 'cubic' | 'close';
@@ -143,6 +146,8 @@ const FIXTURE = doc(
         'clip',
         'r',
         'big',
+        'tern',
+        'hz',
       ],
     ],
     ['p2', ['op']],
@@ -198,6 +203,14 @@ const FIXTURE = doc(
     rect('r', 'p1', f(0, 900, 10, 10)),
     path('big', 'p1', f(1.7e308, 0, 100, 100), ...TRIANGLE),
     path('op', 'p2', f(0, 0, 10, 10), ...TRIANGLE),
+    path('tern', 'p1', f(0, 1100, 3, 3), ['move', 'line', 'line', 'close'], [0, 0, 1, 0.1, 0.7, 1]),
+    path(
+      'hz',
+      'p1',
+      f(0, 1000, 3, 3),
+      ['move', 'cubic', 'cubic', 'line'],
+      [0, 0.1, 0.2, 0.7, 0.4, 0.1, 0.5, 0.7, 0.6, 0.7, 1, 1, 1, 1, 0.3, 0],
+    ),
   ],
 );
 
@@ -411,7 +424,7 @@ describe('M3-A01 anchor model and serializer', () => {
     // The path-tool anchor of `closed`: in (25, 0), out (75, 0) about (50, 0) in a 100 box.
     const [sub] = model('closed');
     const { in: i, out: o } = handlesOf(sub!, 1);
-    const local = (p: EditPoint) => (p.kind === 'stored' ? at(p.u * 100, p.v * 100) : p);
+    const local = (p: EditPoint) => localOf(p, 100, 100);
     expect(isMirrored(local(sub!.anchors[1]!), local(i!), local(o!))).toBe(true);
     // |in + out − 2·A| against 1e-9·max(1, |in|, |out|, |A|).
     expect(isMirrored(at(0, 0), at(-1, 0), at(1 + 0.9e-9, 0))).toBe(true);
@@ -611,17 +624,111 @@ describe('M3-A02 re-normalization', () => {
     const points = pathOf(target, 'tri').path.points;
     expect(points).toEqual([0, 0, 0, 0.5, 1, 0, 1, 0, 1, 1]);
     expect(Object.is(points[2], 0)).toBe(true);
-    const { unit, frame } = renormalize(
-      [{ kind: 'local', x: -0, y: -0 }, s(1, 1)],
-      f(0, 0, 10, 10),
-      0,
-    );
+    const { unit, frame } = renormalize([localPoint(-0, -0), s(1, 1)], f(0, 0, 10, 10), 0);
     expect(unit.every((value) => !Object.is(value, -0))).toBe(true);
     expect(frame).toEqual(f(0, 0, 10, 10));
+  });
+
+  it('turns a negative-zero frame origin into 0 when the box changes', () => {
+    // θ = 0: x + minX = −0 + −0 = −0, and likewise y.
+    const changed = renormalize([localPoint(-0, -0), localPoint(5, 5)], f(-0, -0, 10, 10), 0);
+    expect(changed.frame).toEqual(f(0, 0, 5, 5));
+    expect(Object.is(changed.frame.x, 0)).toBe(true);
+    expect(Object.is(changed.frame.y, 0)).toBe(true);
+    expect(changed.unit).toEqual([0, 0, 1, 1]);
+  });
+
+  it('a mask source refits its mask group at a gesture commit, as the command does', () => {
+    const direct = editor();
+    ok(direct, move('mp', [[0, 2]], 50, 50));
+    const target = editor();
+    const before = documentOf(target);
+    const { gesture } = internalsOf(target);
+    expect(gesture.begin()).toBe(true);
+    expect(gesture.replace([move('mp', [[0, 2]], 20, 0)]).ok).toBe(true);
+    expect(gesture.replace([move('mp', [[0, 2]], 50, 50)]).ok).toBe(true);
+    // No refit during the gesture: the mask group keeps its frame.
+    expect(documentOf(target).nodes.mg).toBe(before.nodes.mg);
+    expect(pathOf(target, 'mp').path.points).toEqual(pathOf(direct, 'mp').path.points);
+    gesture.commit();
+    expect(documentOf(target).nodes.mg!.frame).toEqual(f(600, 600, 150, 150));
+    expect(text(target)).toBe(text(direct));
+    expect(undoDepth(target)).toBe(1);
+    ok(target, { type: 'undo' });
+    expect(text(target)).toBe(serializeDocument(before));
   });
 });
 
 describe('M3-A03 movePathAnchors and setPathHandle', () => {
+  it('a success returns the path ID', () => {
+    const target = editor();
+    expect(target.execute(move('np', [[0, 1]], 3, 4))).toEqual({ ok: true, ids: ['np'] });
+    expect(target.execute(handle('tri', [0, 1], 'out', at(50, 250)))).toEqual({
+      ok: true,
+      ids: ['tri'],
+    });
+    expect(undoDepth(target)).toBe(2);
+  });
+
+  it('a zero δ component copies: a move by (0, 0) of non-dyadic values is a no-op', () => {
+    const target = editor();
+    const events: EditorEvent[] = [];
+    target.subscribe((event) => events.push(event));
+    const before = documentOf(target);
+    // Recomputing these through W = H = 3 would change them.
+    for (const value of [0.1, 0.7]) expect((value * 3) / 3).not.toBe(value);
+    for (const [dx, dy] of [
+      [0, 0],
+      [-0, 0],
+      [0, -0],
+    ] as const) {
+      expect(
+        target.execute(
+          move(
+            'tern',
+            [
+              [0, 1],
+              [0, 2],
+            ],
+            dx,
+            dy,
+          ),
+        ),
+      ).toEqual({ ok: true, ids: [] });
+    }
+    expect(documentOf(target)).toBe(before);
+    expect(undoDepth(target)).toBe(0);
+    expect(events.filter((event) => event.type === 'document')).toEqual([]);
+  });
+
+  it('a horizontal move under φ = 0 keeps the stored y of the anchor and its handles', () => {
+    const target = editor();
+    const before = stored(documentOf(target), 'hz');
+    ok(target, move('hz', [[0, 1]], 0.3, 0));
+    const node = pathOf(target, 'hz');
+    expect(node.frame).toEqual(before.frame);
+    const p = before.path.points;
+    // Anchor 1 at points 3, its in handle at 2 and its out handle at 4: x computed, y copied.
+    expect(node.path.points).toEqual([
+      p[0],
+      p[1],
+      p[2],
+      p[3],
+      (0.4 * 3 + 0.3) / 3,
+      0.1,
+      (0.5 * 3 + 0.3) / 3,
+      0.7,
+      (0.6 * 3 + 0.3) / 3,
+      0.7,
+      p[10],
+      p[11],
+      p[12],
+      p[13],
+      p[14],
+      p[15],
+    ]);
+  });
+
   it('handles follow their anchor', () => {
     const target = editor();
     ok(target, move('closed', [[0, 1]], 5, 0));

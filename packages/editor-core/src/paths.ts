@@ -12,13 +12,22 @@ import type { DocumentCommand, PagePoint, PathAnchorRef } from './types.js';
 // do not. Failures follow the order of section 3.5.
 
 /**
- * A point of an edit with its provenance (section 3.1): `stored` is a unit point copied or left
- * from the stored data, kept bit for bit while the box is unchanged; `local` is a node-local
- * point the edit computed.
+ * A coordinate of an edit with its provenance (sections 2 and 3.1): `stored` is a unit value
+ * copied or left from the stored data, kept bit for bit while the box is unchanged; `local` is a
+ * node-local value the edit computed.
  */
-export type EditPoint =
-  | Readonly<{ kind: 'stored'; u: number; v: number }>
-  | Readonly<{ kind: 'local'; x: number; y: number }>;
+export type EditCoordinate = Readonly<{ stored: number }> | Readonly<{ local: number }>;
+
+/** A point of an edit; each axis has its own provenance (a zero `δ` component copies). */
+export type EditPoint = Readonly<{ x: EditCoordinate; y: EditCoordinate }>;
+
+export function storedPoint(u: number, v: number): EditPoint {
+  return { x: { stored: u }, y: { stored: v } };
+}
+
+export function localPoint(x: number, y: number): EditPoint {
+  return { x: { local: x }, y: { local: y } };
+}
 
 export type ModelSegment =
   Readonly<{ kind: 'line' }> | Readonly<{ kind: 'cubic'; c1: EditPoint; c2: EditPoint }>;
@@ -40,11 +49,16 @@ export type ModelSubpath = {
 const MIRROR_TOLERANCE = 1e-9;
 
 function storedAt(points: readonly number[], index: number): EditPoint {
-  return { kind: 'stored', u: points[2 * index]!, v: points[2 * index + 1]! };
+  return storedPoint(points[2 * index]!, points[2 * index + 1]!);
 }
 
+function sameCoordinate(a: EditCoordinate, b: EditCoordinate): boolean {
+  return 'stored' in a && 'stored' in b && a.stored === b.stored;
+}
+
+/** Whether both points are stored and have equal stored values (the "equals exactly" test). */
 function sameStored(a: EditPoint, b: EditPoint): boolean {
-  return a.kind === 'stored' && b.kind === 'stored' && a.u === b.u && a.v === b.v;
+  return sameCoordinate(a.x, b.x) && sameCoordinate(a.y, b.y);
 }
 
 /** The anchor model of stored path data (M3-P1); `path` is in the path grammar. */
@@ -150,9 +164,14 @@ export function handlesOf(
   };
 }
 
+/** A coordinate in node-local units: a stored unit value `u` is `u·size`. */
+function localValue(coordinate: EditCoordinate, size: number): number {
+  return 'stored' in coordinate ? coordinate.stored * size : coordinate.local;
+}
+
 /** A point in node-local units: a stored unit point is `(u·W, v·H)`. */
 export function localOf(point: EditPoint, width: number, height: number): PagePoint {
-  return point.kind === 'stored' ? { x: point.u * width, y: point.v * height } : point;
+  return { x: localValue(point.x, width), y: localValue(point.y, height) };
 }
 
 /** The mirrored test of section 2, on node-local points, per axis. */
@@ -191,10 +210,9 @@ export function renormalize(
   const unit: number[] = [];
   const push = (u: number, v: number) => unit.push(u === 0 ? 0 : u, v === 0 ? 0 : v);
   if (minX === 0 && minY === 0 && w === width && h === height) {
-    points.forEach((point, i) => {
-      if (point.kind === 'stored') push(point.u, point.v);
-      else push(width === 0 ? 0 : local[i]!.x / width, height === 0 ? 0 : local[i]!.y / height);
-    });
+    const kept = (coordinate: EditCoordinate, size: number) =>
+      'stored' in coordinate ? coordinate.stored : size === 0 ? 0 : coordinate.local / size;
+    for (const point of points) push(kept(point.x, width), kept(point.y, height));
     return { frame, unit };
   }
   for (const { x, y } of local) push(w === 0 ? 0 : (x - minX) / w, h === 0 ? 0 : (y - minY) / h);
@@ -275,8 +293,9 @@ function pathTarget(
 }
 
 /**
- * Writes the edited model back into the node (M3-P2, section 3.1). A result equal to the stored
- * node returns the document itself with nothing touched (no step, no event).
+ * Writes the edited model back into the node (M3-P2, section 3.1); a success returns `[id]`
+ * (section 3). A result equal to the stored node returns the document itself with nothing
+ * touched (no step, no event, no IDs).
  */
 function written(
   document: DocumentV2,
@@ -298,14 +317,19 @@ function written(
   if (same) return { ok: true, document, touched: [], created: [] };
   const draft = new Draft(document);
   draft.set({ ...node, frame, path: { ...node.path, verbs, points: unit } });
-  return success(finish(draft), draft, []);
+  const result = success(finish(draft), draft, []);
+  return result.ok ? { ...result, ids: [node.id] } : result;
 }
 
-const plus = (p: PagePoint, d: PagePoint): EditPoint => ({
-  kind: 'local',
-  x: p.x + d.x,
-  y: p.y + d.y,
-});
+/**
+ * A point moved by the node-local vector `d`; an axis whose component is exactly zero (±0) keeps
+ * its coordinate as is, copied (section 2, value provenance).
+ */
+function plus(point: EditPoint, d: PagePoint, width: number, height: number): EditPoint {
+  const axis = (coordinate: EditCoordinate, delta: number, size: number): EditCoordinate =>
+    delta === 0 ? coordinate : { local: localValue(coordinate, size) + delta };
+  return { x: axis(point.x, d.x, width), y: axis(point.y, d.y, height) };
+}
 
 /**
  * `movePathAnchors` (section 3.2): each listed anchor and the handles it has move by the page
@@ -345,19 +369,19 @@ export function movePathAnchors(
     // The handles are read from the unmoved model: each control belongs to one anchor.
     const outIndex = outSegment(subpath, a);
     const inIndex = inSegment(subpath, a);
-    subpath.anchors[a] = plus(localOf(subpath.anchors[a]!, width, height), delta);
+    subpath.anchors[a] = plus(subpath.anchors[a]!, delta, width, height);
     const leaving = outIndex === null ? undefined : subpath.segments[outIndex];
     if (leaving?.kind === 'cubic') {
       subpath.segments[outIndex!] = {
         ...leaving,
-        c1: plus(localOf(leaving.c1, width, height), delta),
+        c1: plus(leaving.c1, delta, width, height),
       };
     }
     const entering = inIndex === null ? undefined : subpath.segments[inIndex];
     if (entering?.kind === 'cubic') {
       subpath.segments[inIndex!] = {
         ...entering,
-        c2: plus(localOf(entering.c2, width, height), delta),
+        c2: plus(entering.c2, delta, width, height),
       };
     }
   }
@@ -419,14 +443,10 @@ export function setPathHandle(
   if (to !== null) {
     const { width, height } = node.frame;
     const t = target.toLocal(to);
-    setControl(subpath, own, ownStart, { kind: 'local', x: t.x, y: t.y });
+    setControl(subpath, own, ownStart, localPoint(t.x, t.y));
     if (opposite !== null) {
       const p = localOf(anchor, width, height);
-      setControl(subpath, opposite, !ownStart, {
-        kind: 'local',
-        x: 2 * p.x - t.x,
-        y: 2 * p.y - t.y,
-      });
+      setControl(subpath, opposite, !ownStart, localPoint(2 * p.x - t.x, 2 * p.y - t.y));
     }
   } else {
     const affected: number[] = [];

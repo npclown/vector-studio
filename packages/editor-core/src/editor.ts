@@ -715,7 +715,7 @@ class EditorCore implements Editor {
       this.changeDocument(result.document, 'command', result.touched);
       // The pasted roots become the selection (section 6).
       if (command.type === 'paste') this.setSelectionState(result.created);
-      return { ok: true, ids: result.created };
+      return { ok: true, ids: result.ids ?? result.created };
     }
     switch (command.type) {
       case 'undo':
