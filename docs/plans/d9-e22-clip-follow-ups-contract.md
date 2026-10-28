@@ -72,6 +72,8 @@ U1 goes first: the MVP editor's frame clipping needs the budget. U2 is independe
 
 U2 (2026-10-28): `DIAGNOSTIC_CODES.CLIP_UNAVAILABLE` (`render.clip-unavailable`, warning) emitted by `WebGpuBackend` once per generation after the scene comes up without the clip variants it was asked for; `PipelineCache.evict` (a pending creation is invalidated, a late value released); the clip creation catch evicts the analytic and mesh clip variants. `tests/unit/e22-u2-clip-unavailable.test.ts` (A7, A8): five of the six failure steps fail without the eviction (checked by removing it); the analytic step holds either way, since nothing is cached before it.
 
+U3 (2026-10-28): test `E22 U3 tiled mask passes at 3840 x 2160 (E22-A5), 4x, DPR 2` in `tests/gpu/p4-clip-mask.spec.ts` (a full-screen mask; a nested mask whose mesh source spans 2 × 2 tiles of its level); every pixel is checked at the interior tolerance 2/255, stricter than A5, kept on purpose. Reference PC ([evidence](../evidence/e22/README.md)): A5 PASS in Chrome 156 and Edge 156 (interior max 0, edge max 1/255, no diagnostics); A6 full `pnpm test:gpu` 134 passed at `f27919b`.
+
 ## 5. Risks
 
 - **E22-R1 viewport range.** Tiles move the negative viewport origin to `-(device.x + tile offset)`, still no further than `-target.width`, which P4 U5 already reached in both browsers. E22-A5 checks it at 4K.
