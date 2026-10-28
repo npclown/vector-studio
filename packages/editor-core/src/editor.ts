@@ -774,7 +774,9 @@ class EditorCore implements Editor {
         // any host command does; a copy reads the live document and leaves the drag alone.
         const source =
           command.type === 'cut' ? (this.gestureState?.base ?? this.document) : this.document;
-        const copied = copyFragment(source, ids ?? this.selection, this.activePage);
+        // Only an omitted `ids` means the selection; any other value is checked (`null` fails).
+        const listed = ids === undefined ? this.selection : ids;
+        const copied = copyFragment(source, listed, this.activePage);
         if ('ok' in copied) return copied;
         if (command.type === 'cut') {
           // One transaction; a failed delete leaves the clipboard as it was.

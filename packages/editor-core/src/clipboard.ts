@@ -123,12 +123,14 @@ function holderId(nodes: Record<string, unknown>): string {
 /**
  * Parses fragment text in this order: the marker line (text without it is
  * `editor.unsupported-clipboard`; a marker not followed by a line feed is
- * `editor.invalid-clipboard`), the model's JSON rules, the fragment's top-level fields, each
- * node's model field rules, the fragment's reference rules (every root listed once with parent
- * `""`, every other node claimed by exactly one container's `children` and naming it as its
- * parent, every node reachable from a root), the model's tree rules (non-empty groups, a mask
- * group's path source, tree depth), then each custom node's extension check in ID order. Paths
- * are into the fragment JSON.
+ * `editor.invalid-clipboard`), the model's JSON rules, the fragment's top-level keys,
+ * `fragmentVersion`, the shape of `roots` (a non-empty list of IDs) and `nodes` (an object),
+ * `schemaVersion`, the roots' references (distinct, each a node), each node's model field
+ * rules, the fragment's reference rules (every root written with parent `""`, every other node
+ * claimed by exactly one container's `children` and naming it as its parent, every node
+ * reachable from a root), the model's tree rules (non-empty groups, a mask group's path source,
+ * tree depth), then each custom node's extension check in ID order. Paths are into the fragment
+ * JSON.
  */
 export function parseFragment(text: string, custom: CustomRules): Fragment | Failure {
   if (!text.startsWith(FRAGMENT_MARKER)) return fail('editor.unsupported-clipboard');
@@ -157,16 +159,21 @@ export function parseFragment(text: string, custom: CustomRules): Fragment | Fai
   for (const key of Object.keys(value)) {
     if (!FRAGMENT_KEYS.includes(key)) return fail('editor.invalid-clipboard', pointer([key]));
   }
+  // The fragment's own shape first, then the schema version, then the roots' references.
   if (value.fragmentVersion !== 1) return fail('editor.invalid-clipboard', '/fragmentVersion');
-  if (value.schemaVersion !== 2) return fail('document.unsupported-version', '/schemaVersion');
   const { roots, nodes } = value;
-  if (!Array.isArray(roots) || roots.length === 0)
+  if (!Array.isArray(roots) || roots.length === 0) {
     return fail('editor.invalid-clipboard', '/roots');
+  }
+  for (let i = 0; i < roots.length; i += 1) {
+    if (!isValidId(roots[i])) return fail('editor.invalid-clipboard', `/roots/${i}`);
+  }
   if (!isRecord(nodes)) return fail('editor.invalid-clipboard', '/nodes');
+  if (value.schemaVersion !== 2) return fail('document.unsupported-version', '/schemaVersion');
   const rootSet = new Set<string>();
   for (let i = 0; i < roots.length; i += 1) {
-    const root: unknown = roots[i];
-    if (!isValidId(root) || rootSet.has(root) || !Object.hasOwn(nodes, root)) {
+    const root = roots[i] as string;
+    if (rootSet.has(root) || !Object.hasOwn(nodes, root)) {
       return fail('editor.invalid-clipboard', `/roots/${i}`);
     }
     rootSet.add(root);
@@ -175,8 +182,12 @@ export function parseFragment(text: string, custom: CustomRules): Fragment | Fai
   // The model's field rules; the empty parent of a fragment root stands for the holder page.
   const holder = holderId(nodes);
   const read: [string, NodeV2][] = [];
+  // Nodes whose parent is written as `""`: only these may be roots, whatever the holder is.
+  const unparented = new Set<string>();
   for (const [key, raw] of Object.entries(nodes)) {
-    const candidate = isRecord(raw) && raw.parent === '' ? { ...raw, parent: holder } : raw;
+    const empty = isRecord(raw) && raw.parent === '';
+    if (empty) unparented.add(key);
+    const candidate = empty ? { ...raw, parent: holder } : raw;
     const result = validateNode(candidate);
     if (!result.ok) return fail(result.code, nodePath(key, result.path));
     if (result.node.id !== key) return fail('document.invalid-field', nodePath(key, '/id'));
@@ -196,8 +207,10 @@ export function parseFragment(text: string, custom: CustomRules): Fragment | Fai
     }
   }
   for (const [key, node] of read) {
-    const parent = rootSet.has(key) ? holder : owner.get(key);
-    if (node.parent !== parent) return fail('editor.invalid-clipboard', nodePath(key, '/parent'));
+    const consistent = rootSet.has(key)
+      ? unparented.has(key)
+      : !unparented.has(key) && node.parent === owner.get(key);
+    if (!consistent) return fail('editor.invalid-clipboard', nodePath(key, '/parent'));
   }
   const byId = new Map(read);
   const reached = new Set<string>();

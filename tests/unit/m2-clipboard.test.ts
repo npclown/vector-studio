@@ -806,6 +806,51 @@ describe('M2-A10 paste failures', () => {
       { ok: false, code: 'editor.invalid-clipboard', path: '/nodes/a/parent' },
     ],
     [
+      'a root whose parent is the holder ID',
+      { type: 'paste', text: marked(body({ a: leaf('a', 'fragment') })) },
+      { ok: false, code: 'editor.invalid-clipboard', path: '/nodes/a/parent' },
+    ],
+    [
+      'a root whose parent is the holder ID next to a node named fragment',
+      {
+        type: 'paste',
+        text: marked(
+          body({
+            a: container('group', 'a', 'fragment-1', ['fragment'], f(0, 0, 10, 10)),
+            fragment: leaf('fragment', 'a'),
+          }),
+        ),
+      },
+      { ok: false, code: 'editor.invalid-clipboard', path: '/nodes/a/parent' },
+    ],
+    // Two failures at once: the first in the parse order wins.
+    [
+      'schemaVersion 3 with no roots: the roots shape first',
+      { type: 'paste', text: marked({ ...body({ a: leaf('a') }, []), schemaVersion: 3 }) },
+      { ok: false, code: 'editor.invalid-clipboard', path: '/roots' },
+    ],
+    [
+      'schemaVersion 3 with a root that is not a node: the version first',
+      { type: 'paste', text: marked({ ...body({ a: leaf('a') }, ['b']), schemaVersion: 3 }) },
+      { ok: false, code: 'document.unsupported-version', path: '/schemaVersion' },
+    ],
+    [
+      'fragmentVersion 2 with a repeated node key: the JSON rules first',
+      {
+        type: 'paste',
+        text: `${MARKER}{"fragmentVersion":2,"schemaVersion":2,"roots":["a"],"nodes":{"a":${JSON.stringify(leaf('a'))},"a":${JSON.stringify(leaf('a'))}}}`,
+      },
+      { ok: false, code: 'document.duplicate-id', path: '/nodes/a' },
+    ],
+    [
+      'a bad frame width on a node with a dangling parent: the node fields first',
+      {
+        type: 'paste',
+        text: marked(body({ a: leaf('a'), b: rect('b', 'missing', f(0, 0, -1, 10)) })),
+      },
+      { ok: false, code: 'document.invalid-field', path: '/nodes/b/frame/width' },
+    ],
+    [
       'a node no root reaches',
       { type: 'paste', text: marked(body({ a: leaf('a'), b: leaf('b', 'a') })) },
       { ok: false, code: 'editor.invalid-clipboard', path: '/nodes/b/parent' },
@@ -946,6 +991,106 @@ describe('M2-A10 paste failures', () => {
       code: 'editor.unsupported-clipboard',
     });
     expect(documentOf(target)).toBe(before);
+  });
+});
+
+describe('M2-A10 copy and cut details', () => {
+  it('ids null is checked, not the selection', () => {
+    const { target } = setup();
+    select(target, ['a']);
+    for (const type of ['copy', 'cut'] as const) {
+      expect(target.execute({ type, ids: null } as unknown as Command)).toEqual({
+        ok: false,
+        code: 'editor.invalid-command',
+        path: '/ids',
+      });
+    }
+    expect(clipboard(target)).toBeNull();
+    expect(undoDepth(target)).toBe(0);
+  });
+
+  it('writes a rotated root inside a rotated frame and sorts custom data keys, byte-exact', () => {
+    // rc is centred in rf, so turning about rf's centre keeps its frame: page rotation
+    // 0.25 + 0.5 = 0.75, frame (40, 40, 20, 20).
+    const { target } = setup(
+      doc(
+        [['p1', ['rf']]],
+        [
+          container('frame', 'rf', 'p1', ['rc'], f(0, 0, 100, 100), 0.5),
+          {
+            ...base('rc', 'rf', f(40, 40, 20, 20), 0.25),
+            type: 'custom',
+            customType: 'ext.tally',
+            data: { zeta: 1, level: 1, alpha: { b: 2, a: 1 } },
+            fill: null,
+            stroke: null,
+          },
+        ],
+      ),
+    );
+    ok(target, { type: 'copy', ids: ['rc'] });
+    expect(clipboard(target)).toBe(
+      MARKER +
+        '{"fragmentVersion":1,"schemaVersion":2,"roots":["rc"],"nodes":{' +
+        '"rc":{"id":"rc","name":"rc","parent":"","frame":{"x":40,"y":40,"width":20,"height":20},' +
+        `"rotation":0.75,${TAIL},"type":"custom","customType":"ext.tally",` +
+        '"data":{"alpha":{"a":1,"b":2},"level":1,"zeta":1},"fill":null,"stroke":null}}}',
+    );
+  });
+
+  /** A select-tool drag with snapping off, so frames move by the raw delta. */
+  function dragging(modifiers = none) {
+    const harness = setup();
+    ok(harness.target, { type: 'setSnapping', enabled: false });
+    const pointer = (kind: 'pointerdown' | 'pointermove' | 'pointerup', point: PagePoint) =>
+      harness.target.execute({ type: 'input', event: { kind, point, modifiers } });
+    select(harness.target, ['a']);
+    pointer('pointerdown', at(5, 5));
+    pointer('pointermove', at(25, 15));
+    return { ...harness, pointer, gesture: internalsOf(harness.target).gesture };
+  }
+
+  const frameIn = (fragment: string | null, id: string) =>
+    (JSON.parse(fragment!.slice(MARKER.length)) as { nodes: Record<string, NodeV2> }).nodes[id]!
+      .frame;
+
+  it('copy during a move drag copies the live position and leaves the drag running', () => {
+    const { target, pointer, gesture } = dragging();
+    expect(nodeOf(target, 'a').frame).toEqual(f(20, 10, 10, 10));
+    expect(target.execute({ type: 'copy' })).toEqual({ ok: true, ids: [] });
+    expect(frameIn(clipboard(target), 'a')).toEqual(f(20, 10, 10, 10));
+    expect(gesture.active).toBe(true);
+    pointer('pointermove', at(35, 15));
+    pointer('pointerup', at(35, 15));
+    expect(nodeOf(target, 'a').frame).toEqual(f(30, 10, 10, 10));
+    expect(undoDepth(target)).toBe(1);
+  });
+
+  it('cut during a move drag copies the pre-drag frame, deletes and interrupts the drag', () => {
+    const { target, pointer, gesture } = dragging();
+    expect(target.execute({ type: 'cut' })).toEqual({ ok: true, ids: [] });
+    expect(frameIn(clipboard(target), 'a')).toEqual(f(0, 0, 10, 10));
+    expect(nodeOf(target, 'a')).toBeNull();
+    expect(gesture.active).toBe(false);
+    pointer('pointermove', at(45, 15));
+    pointer('pointerup', at(45, 15));
+    expect(nodeOf(target, 'a')).toBeNull();
+    expect(undoDepth(target)).toBe(1);
+    ok(target, { type: 'undo' });
+    expect(nodeOf(target, 'a').frame).toEqual(f(0, 0, 10, 10));
+  });
+
+  it('cut during an Alt-drag fails on the copies, which the pre-drag document lacks', () => {
+    const { target, pointer, gesture } = dragging({ ...none, alt: true });
+    expect(selection(target)).toEqual(['n1']);
+    const live = documentOf(target);
+    expect(target.execute({ type: 'cut' })).toEqual({ ok: false, code: 'editor.unknown-node' });
+    expect(clipboard(target)).toBeNull();
+    expect(documentOf(target)).toBe(live);
+    expect(gesture.active).toBe(true);
+    pointer('pointerup', at(25, 15));
+    expect(nodeOf(target, 'n1').frame).toEqual(f(20, 10, 10, 10));
+    expect(undoDepth(target)).toBe(1);
   });
 });
 
