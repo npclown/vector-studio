@@ -176,8 +176,8 @@ This contract is the M2 execution plan (approved 2026-10-28). The user accepted 
 | M2-U5 | Done (#314): scope, frame entry, Escape and Enter actions, overlap cycling (A09); independent review round 1 READY WITH FOLLOW-UPS, applied |
 | M2-U6 | Done (#315): clipboard commands, fragment, `EditorCanvas` clipboard events and the headed event probe (A10); independent review round 1 and round 2 READY WITH FOLLOW-UPS, applied |
 | M2-U7 | Done (#316): extension tools and bindings, A11 rest (A11, A12); independent review round 1 READY WITH FOLLOW-UPS, applied; round 2 READY |
-| M2-U8 | In review: next-host page (zoom controls, snap overlay, scope outline, rotate cursor, toolbar ungroup) and headed spec (A13); headed Chrome and Edge PASS 2026-10-28; light review READY WITH FOLLOW-UPS, applied |
-| M2-U9 | Not started |
+| M2-U8 | Done (#317): next-host page (zoom controls, snap overlay, scope outline, rotate cursor, toolbar ungroup) and headed spec (A13); headed Chrome and Edge PASS 2026-10-28; light review READY WITH FOLLOW-UPS, applied |
+| M2-U9 | In review: exit record (A14) |
 
 M2-U1 notes (2026-10-28, recorded from its review): (1) Space is navigation's: an event is Space when `key` is `' '` or, under the `code` rule of section 7, its `code` token is `Space`; a chord whose key is `Space` is rejected in every layer with `editor.invalid-keymap`. (2) Token case is exact: `Keyz`, `digit1` or `space` are malformed chords. Whether a layer is valid can depend on `platform` (`Mod+Ctrl+X` is valid on `mac`, a repeated modifier on `other`). (3) The `group` and `maskGroup` actions select the new container; `ungroup` acts only when exactly one group or mask group is selected and selects the released children; any other selection is a consumed no-op. M2-U8 aligns the next-host toolbar's ungroup with this. (4) `setViewport` keeps the P5 rule and emits on every call; the no-event rule for an unchanged value applies to computed camera changes and the new session fields. (5) During a gesture a bound key is not consumed (M2-I2 step 3). (6) Cancelling any gesture restores the selection recorded when it began, filtered to existing nodes on the active page.
 
