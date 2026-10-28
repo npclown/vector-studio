@@ -738,17 +738,21 @@ export function createSelectTool(custom: CustomGeometry): Tool {
       ]);
     }
     const all = refs.every((ref) => hasRef(edit.anchors, ref));
-    if (modifiers.shift) {
-      // Shift toggles an anchor and adds a segment's ends; it starts no drag.
-      const anchors =
-        target.kind === 'anchor' && all
-          ? edit.anchors.filter((ref) => !hasRef(refs, ref))
-          : canonicalRefs([...edit.anchors, ...refs]);
+    if (target.kind === 'anchor' && modifiers.shift) {
+      // Shift toggles an anchor and starts no drag.
+      const anchors = all
+        ? edit.anchors.filter((ref) => !hasRef(refs, ref))
+        : canonicalRefs([...edit.anchors, ...refs]);
       context.execute({ type: 'setPathSelection', anchors });
       state = { kind: 'held' };
       return;
     }
-    if (!all) context.execute({ type: 'setPathSelection', anchors: refs });
+    // Shift on a segment adds both ends, then drags the selection like any segment press.
+    const selected =
+      target.kind === 'segment' && modifiers.shift
+        ? canonicalRefs([...edit.anchors, ...refs])
+        : refs;
+    if (!all) context.execute({ type: 'setPathSelection', anchors: selected });
     if (target.kind === 'anchor' && modifiers.alt) {
       // Alt pulls mirrored handles on the `out` side, or `in` at the end of an open subpath;
       // an anchor without segments does nothing.
@@ -787,7 +791,7 @@ export function createSelectTool(custom: CustomGeometry): Tool {
         target.kind === 'anchor'
           ? overlay.subpaths[target.ref.subpath]!.anchors[target.ref.anchor]!.point
           : null,
-      click: refs,
+      click: selected,
       // The edited path is the moving node (section 5).
       candidates: lazySnapSet(context, [id]),
     };

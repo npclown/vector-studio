@@ -503,6 +503,12 @@ class EditorCore implements Editor {
    * tool is `select`; every change that breaks either ends it.
    */
   private pathEdit: PathEditState | null = null;
+  /**
+   * The edited path whose edit mode a scope change ended; the exit is raised at the next
+   * selection change or when the top-level command ends, so a frame entry keeps its scope and
+   * selection events together before `pathEdit` (M2-U5 note 7).
+   */
+  private scopeExit: string | null = null;
   private extensionDepth = 0;
   private readonly ids: IdSource;
   private readonly extensions: ExtensionRegistry;
@@ -710,6 +716,7 @@ class EditorCore implements Editor {
     try {
       return this.run(command);
     } finally {
+      if (this.scopeExit !== null) this.syncPathEdit();
       this.refreshOverlay();
       this.holding = false;
       this.flush();
@@ -942,6 +949,7 @@ class EditorCore implements Editor {
         // Set first, so the selection change to `[id]` keeps it; the event follows the
         // selection's (section 4).
         this.pathEdit = deepFreeze({ id, anchors: [] });
+        this.scopeExit = null;
         this.setSelectionState([id]);
         this.refresh({ type: 'session', field: 'pathEdit' });
         return { ok: true, ids: [] };
@@ -1709,7 +1717,10 @@ class EditorCore implements Editor {
     if (scope === this.scope) return;
     this.scope = scope;
     this.refresh({ type: 'session', field: 'scope' });
-    this.setPathEditState(null);
+    if (this.pathEdit !== null) {
+      this.scopeExit = this.pathEdit.id;
+      if (!this.holding) this.syncPathEdit();
+    }
   }
 
   /** A path edit state equal to the current one raises no event (M3 contract, section 4). */
@@ -1725,6 +1736,7 @@ class EditorCore implements Editor {
               ref.subpath === current.anchors[i]!.subpath &&
               ref.anchor === current.anchors[i]!.anchor,
           );
+    if (next === null) this.scopeExit = null;
     if (same) return;
     this.pathEdit =
       next === null
@@ -1735,7 +1747,8 @@ class EditorCore implements Editor {
 
   /**
    * Ends path edit mode when its rules no longer hold (M3 contract, section 4): the tool is not
-   * `select`, the selection is not `[id]`, or the node is no longer a `path` of the active page.
+   * `select`, the selection is not `[id]`, the scope changed, or the node is no longer a `path`
+   * of the active page.
    * After a document change from `previous` (null for a load, which always ends it), the anchor
    * selection is kept when the path's structure is unchanged, else cleared.
    */
@@ -1745,6 +1758,7 @@ class EditorCore implements Editor {
     const node = editablePath(this.document, this.activePage, edit.id);
     const kept =
       previous !== null &&
+      this.scopeExit !== edit.id &&
       node !== undefined &&
       this.tool === 'select' &&
       this.selection.length === 1 &&

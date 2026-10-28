@@ -2,6 +2,7 @@ import { serializeDocument, type DocumentV2, type Frame } from '@vector-studio/m
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_FRAME_FILL,
+  DEFAULT_PATH_STROKE,
   createCounterIdSource,
   createEditor,
   type Command,
@@ -560,7 +561,26 @@ describe('M3-A08 edit mode exit', () => {
       ids: [],
       consumed: false,
     });
+    // An M2-I4 blur: pointercancel, then the Space key-up.
+    input(target, { kind: 'pointercancel', modifiers: none });
+    input(target, { kind: 'keyup', key: ' ', code: 'Space', modifiers: none });
     expect(editOf(target)).toEqual({ id: 'tri', anchors: [ref(0, 1)] });
+  });
+
+  it('a double-click on a container in edit mode raises scope, selection, then pathEdit', () => {
+    const target = editing('tri', [ref(0, 1)]);
+    const events = record(target);
+    expect(doubleclick(target, at(350, 350))).toEqual(consumed);
+    expect(events).toEqual(['scope', 'selection', 'pathEdit']);
+    expect(editOf(target)).toBeNull();
+    expect(target.query({ type: 'scope' })).toBe('g');
+    expect(selection(target)).toEqual(['gp']);
+    // setScope alone: scope, then pathEdit.
+    ok(target, { type: 'enterPathEdit', id: 'gp' });
+    events.length = 0;
+    ok(target, { type: 'setScope', id: null });
+    expect(events).toEqual(['scope', 'pathEdit']);
+    expect(selection(target)).toEqual(['gp']);
   });
 
   it('ends when undo or redo takes the node away; events in order', () => {
@@ -722,6 +742,78 @@ describe('M3-A09 targets and anchor selection through input', () => {
     expect(anchorsOf(target)).toEqual([ref(0, 0), ref(0, 1), ref(0, 2)]);
   });
 
+  it('a Shift-drag on a segment adds both ends and drags the union in one step', () => {
+    const target = editing('tri', [ref(0, 0)]);
+    const before = text(target);
+    // Segment 1 runs from T1 to T2.
+    drag(target, at(200, 150), at(210, 150), shift);
+    expect(anchorsOf(target)).toEqual([ref(0, 0), ref(0, 1), ref(0, 2)]);
+    expect(text(target)).toBe(
+      twin(FIXTURE, [
+        {
+          type: 'movePathAnchors',
+          id: 'tri',
+          anchors: [ref(0, 0), ref(0, 1), ref(0, 2)],
+          dx: 10,
+          dy: 0,
+        },
+      ]),
+    );
+    expectOneStep(target, before);
+  });
+
+  it('ties: in before out at one anchor, the lower segment between two', () => {
+    // A1 (50, 0) with handles in (45, 100) and out (55, 100); (50, 100) is 5 from both.
+    const handles = editor(
+      doc(
+        [['p1', ['h']]],
+        [
+          path(
+            'h',
+            'p1',
+            f(0, 0, 100, 100),
+            [
+              ['move', 'cubic', 'cubic'],
+              [0, 0, 0, 0, 0.45, 1, 0.5, 0, 0.55, 1, 1, 0, 1, 0],
+            ],
+            { fill: false },
+          ),
+        ],
+      ),
+    );
+    ok(handles, { type: 'enterPathEdit', id: 'h' });
+    ok(handles, { type: 'setPathSelection', anchors: [ref(0, 1)] });
+    const start = handles.query({ type: 'document' });
+    drag(handles, at(50, 100), at(50, 110));
+    expect(text(handles)).toBe(
+      twin(start, [
+        { type: 'setPathHandle', id: 'h', anchor: ref(0, 1), side: 'in', to: at(45, 110) },
+      ]),
+    );
+    // A stroke of width 20: (192, 108) is 8 from segments 0 and 1 and 11.3 from T1.
+    const wide = editor(
+      doc(
+        [['p1', ['w']]],
+        [
+          {
+            ...path('w', 'p1', f(100, 100, 100, 100), TRIANGLE),
+            stroke: { ...DEFAULT_PATH_STROKE, width: 20 },
+          },
+        ],
+      ),
+    );
+    ok(wide, { type: 'enterPathEdit', id: 'w' });
+    click(wide, at(192, 108));
+    expect(anchorsOf(wide)).toEqual([ref(0, 0), ref(0, 1)]);
+  });
+
+  it('on a filled path, a press on the edge within the segment radius is the segment', () => {
+    const target = editing('tri');
+    // 3 below the top edge and inside the fill.
+    click(target, at(150, 103));
+    expect(anchorsOf(target)).toEqual([ref(0, 0), ref(0, 1)]);
+  });
+
   it('a click on an anchor of a larger selection selects only it', () => {
     const target = editing('tri', [ref(0, 0), ref(0, 1), ref(0, 2)]);
     click(target, T1);
@@ -876,6 +968,25 @@ describe('M3-A09 anchor and handle drags through input', () => {
       // The anchor selection recorded when the gesture began (the press selected T1).
       expect(editOf(target)).toEqual({ id: 'tri', anchors: [ref(0, 1)] });
       expect(undoDepth(target)).toBe(0);
+      // A handle drag and an Alt-drag on an anchor likewise.
+      const gestures: [string, PathAnchorRef[], PagePoint, Modifiers][] = [
+        ['curve', [ref(0, 1)], C1_OUT, none],
+        ['tri', [ref(0, 0)], T1, alt],
+      ];
+      for (const [id, anchors, from, modifiers] of gestures) {
+        const other = editing(id, anchors);
+        const start = text(other);
+        const expected = editOf(other);
+        pointer(other, 'pointerdown', from, modifiers);
+        pointer(other, 'pointermove', at(from.x + 12, from.y + 7), modifiers);
+        expect(text(other)).not.toBe(start);
+        cancel(other);
+        expect(text(other), id).toBe(start);
+        expect(selection(other)).toEqual([id]);
+        // The Alt press selected T1 before the gesture began.
+        expect(editOf(other), id).toEqual(modifiers.alt ? { id, anchors: [ref(0, 1)] } : expected);
+        expect(undoDepth(other)).toBe(0);
+      }
     }
   });
 
@@ -1104,6 +1215,34 @@ describe('M3-A11 pathOverlay', () => {
       anchor(C0, { out: at(310, 150) }, true),
       anchor(C1, { in: C1_IN }, false, true),
       anchor(C2),
+    ]);
+  });
+
+  it('maps a non-dyadic page-root path as x + u·W, y + v·H', () => {
+    const target = editor(
+      doc(
+        [['p1', ['nd']]],
+        [
+          path(
+            'nd',
+            'p1',
+            f(10.1, 20.3, 30.7, 40.9),
+            [
+              ['move', 'line', 'line'],
+              [0, 0, 0.3, 0.7, 1, 1],
+            ],
+            {
+              fill: false,
+            },
+          ),
+        ],
+      ),
+    );
+    ok(target, { type: 'enterPathEdit', id: 'nd' });
+    expect(overlayOf(target)!.subpaths[0]!.anchors.map((entry) => entry.point)).toEqual([
+      at(10.1 + 0 * 30.7, 20.3 + 0 * 40.9),
+      at(10.1 + 0.3 * 30.7, 20.3 + 0.7 * 40.9),
+      at(10.1 + 1 * 30.7, 20.3 + 1 * 40.9),
     ]);
   });
 
