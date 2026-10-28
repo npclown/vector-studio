@@ -171,3 +171,11 @@ Order: U1, U2, then U3 and U4 in any order, then U5, then U6. Every unit runs `p
 ## 11. Gate
 
 On approval this contract is the M1 execution plan; implementation starts at M1-U1 under the user's decision of 2026-10-28. The M1 exit is the user's acceptance of the M1-U6 record.
+
+## 12. Progress
+
+| Unit | State |
+| --- | --- |
+| M1-U1 | In review: schema v2 in `packages/model` (`parseDocumentV2`, `validateAnyDocument`, `migrateV1toV2`, `validateNodeV2`, `serializeDocumentV2`), fixtures `tests/fixtures/m1-model/`, `tests/unit/m1-model.test.ts` (M1-A01 model half, M1-A02); independent review READY WITH FOLLOW-UPS, follow-ups applied |
+
+M1-U1 notes. The v2 functions sit beside the unchanged v1 functions, so `editor-core` keeps compiling on v1 until M1-U2 moves it to v2; M1-U2 then gives `parseDocument`, `validateDocument` and `serializeDocument` the section 2.1 meaning and removes the v1-only entry points. The nested `validate` re-run of M1-A01 lands with M1-U2.

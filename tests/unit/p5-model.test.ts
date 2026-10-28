@@ -224,7 +224,7 @@ describe('P5-A06 JSON round trip', () => {
 });
 
 describe('P5-A07 validation codes', () => {
-  it('lists the section 3.3 codes', () => {
+  it('lists the section 3.3 codes, then the two schema v2 codes of MVP M1', () => {
     expect(DOCUMENT_ERROR_CODES).toEqual([
       'document.malformed-json',
       'document.unsupported-version',
@@ -233,6 +233,8 @@ describe('P5-A07 validation codes', () => {
       'document.dangling-reference',
       'document.unknown-custom-type',
       'document.invalid-custom-data',
+      'document.cyclic-parent',
+      'document.invalid-mask-source',
     ]);
   });
 
