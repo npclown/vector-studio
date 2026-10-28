@@ -190,6 +190,8 @@ const DOCUMENT_COMMANDS = new Set([
   'nudgeNodes',
   'duplicateNodes',
   'paste',
+  'movePathAnchors',
+  'setPathHandle',
 ]);
 
 /**
@@ -202,6 +204,9 @@ const RELATIVE_COMMANDS: ReadonlySet<string> = new Set([
   'alignNodes',
   'distributeNodes',
   'reorderNodes',
+  // MVP M3 contract, section 3 (M3-Q10).
+  'movePathAnchors',
+  'setPathHandle',
 ]);
 
 /** Extension commands may nest this deep through `runCommand` (P5-U5). */
@@ -233,6 +238,8 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.empty-clipboard',
   'editor.invalid-clipboard',
   'editor.unsupported-clipboard',
+  'editor.not-a-path',
+  'editor.invalid-path-ref',
 ]);
 
 /**

@@ -39,6 +39,7 @@ import {
   rotate,
   rotatedBounds,
 } from './geometry.js';
+import { movePathAnchors, setPathHandle } from './paths.js';
 import { mapNodeInPageSpace, resizeContainer, type ScaleMap } from './resize.js';
 import { handleBoxOf, handleCentre } from './handles.js';
 import {
@@ -271,6 +272,10 @@ export function applyEdit(
       return duplicateNodes(document, command, context, finish);
     case 'paste':
       return paste(document, command, context, custom, finish);
+    case 'movePathAnchors':
+      return movePathAnchors(document, command, context, finish);
+    case 'setPathHandle':
+      return setPathHandle(document, command, context, finish);
     case 'addPage': {
       if (command.name !== undefined && typeof command.name !== 'string') {
         return fail('editor.invalid-command', '/name');
