@@ -86,6 +86,22 @@ function expectSynchronized(target: Editor, renderer: RecordingRenderer): number
   return projection.nodes.size;
 }
 
+/**
+ * The isolation units of a page, counted from the document: one per node in its subtrees, a
+ * frame and its synthetic scene nodes being one unit (projector, section 5).
+ */
+function pageUnitCount(document: DocumentV2, pageId: string): number {
+  const page = document.pages.find((candidate) => candidate.id === pageId)!;
+  let count = 0;
+  const visit = (id: string) => {
+    count += 1;
+    const node = document.nodes[id]!;
+    if ('children' in node) for (const child of node.children) visit(child);
+  };
+  for (const id of page.children) visit(id);
+  return count;
+}
+
 function summary(values: readonly number[]) {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
@@ -223,6 +239,8 @@ it('M1-A13 observation: load, projection, one move commit and one forced isolati
         expect(call.result.status).toBe('applied');
       }
       isolationSets = calls.length - 2;
+      const document = target.query({ type: 'document' });
+      expect(isolationSets).toBe(pageUnitCount(document, target.query({ type: 'activePage' })));
       expectSynchronized(target, renderer);
       steps.isolation!.push(isolationMs);
       steps.isolationRenderer!.push(renderer.sceneMs - beforeIsolation);

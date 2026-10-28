@@ -5,14 +5,14 @@
 ## What was run
 
 - **Document.** `tests/m1-a13/document.ts` builds the document from a seed (`0x6d31a13`), so no JSON fixture is committed. It has exactly 10,000 nodes on two pages and is 3.75 MB as JSON.
-  - Page 1 (active after load): 650 clusters, a chain of 40 nested groups, a chain of 10 nested frames, and 50 loose leaves. That is 9,200 nodes, 702 roots and 10,634 scene nodes once frame synthetic nodes are added.
-  - Page 2: 50 clusters and 50 loose leaves.
+  - Page 1 (active after load): 650 clusters (9,100 nodes), a chain of 40 nested groups, each with a rectangle (80 nodes), a chain of 10 nested frames, each with a rectangle (20 nodes), and 50 loose leaves. That is 9,250 nodes, 702 roots and 10,634 scene nodes once frame synthetic nodes are added.
+  - Page 2: 50 clusters and 50 loose leaves, 750 nodes. With page 1 that is 10,000.
   - A cluster is a frame of 14 nodes, some of them rotated or stroked. It holds a rectangle with per-corner radii, a group and a mask group.
     - The group (sometimes rotated) holds a rectangle, an ellipse, a path (a triangle or a cubic shape) and a rotated inner group with a line with arrows and an ellipse.
     - The mask group's source is a cubic path, and it also holds a rectangle and a rotated ellipse.
   - Leaves vary their opacity and visibility. Group frames are the bounds of their children, as the editor's refit keeps them.
 - **Harness.** `tests/m1-a13/observation.check.ts` runs through `vitest.m1-a13.config.ts`. It is manual and never part of `pnpm test:unit` or CI. Each run uses a fresh editor and a fresh recording renderer (`tests/support/p5-recording-renderer.ts`, wrapped to time its scene calls). The recording renderer is the renderer-core `RetainedSceneMirror`, which validates every snapshot and change set.
-- **Correctness.** After attach, after the move and after isolation, the check asserts that the mirror's identity, root order and every scene node equal `projectPage` of the active page, with nothing excluded. After the move it also asserts the 10/15 page shift of the selection bounds and one undo step. After isolation it asserts one rejected set, one empty snapshot and then only accepted one-unit sets.
+- **Correctness.** After attach, after the move and after isolation, the check asserts that the mirror's identity, root order and every scene node equal `projectPage` of the active page, with nothing excluded. After the move it also asserts the 10/15 page shift of the selection bounds and one undo step. After isolation it asserts one rejected set, one empty snapshot and then only accepted one-unit sets, as many as page 1 has units counted from the document (a frame is one unit): 9,250.
 
 | Step | What is timed |
 | --- | --- |
