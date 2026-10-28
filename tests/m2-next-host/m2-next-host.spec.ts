@@ -370,8 +370,9 @@ test('M2-A13 section 7: every default chord reaches the editor', async ({ page }
   await step('Mod+Shift+{');
   expect(await index()).toBe(0);
 
-  // Mask group: the triangle `p` (now above `a`) masks `a`; `a` went to the back, so `a` is first.
-  // Bring `a` above `p` again so the path is the mask source, then mask, then undo.
+  // Mask group: the bottom child of a mask group is its mask source and must be a path. `a` is at
+  // the back now, below the triangle `p`, so bring `a` to the front first; then select `p` and
+  // `a`, mask (`p` masks `a`) and undo.
   await press(page, 'Mod+Shift+}');
   await click(page, await screen({ x: 50, y: 30 }));
   await click(page, await screen(AT.a), ['Shift']);
@@ -385,11 +386,15 @@ test('M2-A13 section 7: every default chord reaches the editor', async ({ page }
   await press(page, 'Mod+Z');
 
   // Zoom: in and out about the viewport centre, to the selection, to fit and to 100%.
+  // About the viewport centre c = (480, 320) of the 960 x 640 canvas (M2 contract, section 3):
+  // position1 = c - (c - position0) * (z0 / z1), so (0, 0) at zoom 1 becomes (240, 160) at
+  // zoom 2 and returns to (0, 0) at zoom 1, all exact in binary64.
   await click(page, await screen(AT.a));
+  expect(await snapshotOf(page)).toMatchObject({ zoom: 1, position: { x: 0, y: 0 } });
   await step('=');
-  expect((await snapshotOf(page)).zoom).toBe(2);
+  expect(await snapshotOf(page)).toMatchObject({ zoom: 2, position: { x: 240, y: 160 } });
   await step('-');
-  expect((await snapshotOf(page)).zoom).toBe(1);
+  expect(await snapshotOf(page)).toMatchObject({ zoom: 1, position: { x: 0, y: 0 } });
   await step('Shift+@');
   // The selection `a` (80 x 60) in a 960 x 640 viewport: min((960 - 64) / 80, (640 - 64) / 60).
   expect((await snapshotOf(page)).zoom).toBe(Math.min((960 - 64) / 80, (640 - 64) / 60));
@@ -527,9 +532,10 @@ test('M2-A13: copy, cut and paste through the system clipboard, also in a second
   await click(page, await screen(AT.a));
   const copyKey = await press(page, 'Mod+C');
   expect(copyKey).toMatchObject({ target: 'CANVAS', prevented: false });
-  const copied = await systemClipboard(page);
+  // Polled: the Windows clipboard can be briefly locked by another reader.
+  const copied = (await snapshotOf(page)).clipboard!;
   expect(copied.startsWith(MARKER)).toBe(true);
-  expect(copied).toBe((await snapshotOf(page)).clipboard);
+  await expect.poll(() => systemClipboard(page)).toBe(copied);
   expect(JSON.parse(copied.slice(MARKER.length))).toMatchObject({ roots: [ids.a] });
 
   // Ctrl+V pastes it with a fresh ID at the same page placement and selects it.
@@ -551,7 +557,8 @@ test('M2-A13: copy, cut and paste through the system clipboard, also in a second
   await press(page, 'Mod+X');
   expect(await frameOf(page, ids.b)).toBeNull();
   expect((await snapshotOf(page)).history.undoDepth).toBe(depth + 1);
-  const cut = await systemClipboard(page);
+  const cut = (await snapshotOf(page)).clipboard!;
+  await expect.poll(() => systemClipboard(page)).toBe(cut);
   expect(JSON.parse(cut.slice(MARKER.length))).toMatchObject({ roots: [ids.b] });
 
   // A second tab of the same context pastes it from the system clipboard: its own editor's
@@ -570,8 +577,19 @@ test('M2-A13: copy, cut and paste through the system clipboard, also in a second
     fill: BLUE,
   });
   expect((await snapshotOf(other)).clipboard).toBeNull();
-  // And a copy in the second tab pastes back in the first.
-  await press(other, 'Mod+C');
+  // And back: the second tab moves its node to a new frame and copies it, which replaces the
+  // first tab's cut in the system clipboard, and the first tab pastes that frame.
+  const moved = otherChildren[0]!;
+  expect((await snapshotOf(other)).selection).toEqual([moved]);
+  await pressConsumed(other, 'Shift+ArrowRight');
+  await pressConsumed(other, 'Shift+ArrowDown');
+  expect(await frameOf(other, moved)).toEqual({ x: 250, y: 110, width: 80, height: 60 });
+  const otherCopyKey = await press(other, 'Mod+C');
+  expect(otherCopyKey).toMatchObject({ target: 'CANVAS', prevented: false });
+  const otherCopied = (await snapshotOf(other)).clipboard!;
+  await expect.poll(() => systemClipboard(other)).toBe(otherCopied);
+  expect(otherCopied).not.toBe(cut);
+  expect(JSON.parse(otherCopied.slice(MARKER.length))).toMatchObject({ roots: [moved] });
   await expectClean(other, second.errors);
   await other.close();
   await page.bringToFront();
@@ -580,7 +598,7 @@ test('M2-A13: copy, cut and paste through the system clipboard, also in a second
   await press(page, 'Mod+V');
   const back = (await pageChildren(page)).filter((id) => !beforeBack.includes(id));
   expect(back).toHaveLength(1);
-  expect(await frameOf(page, back[0]!)).toEqual({ x: 240, y: 100, width: 80, height: 60 });
+  expect(await frameOf(page, back[0]!)).toEqual({ x: 250, y: 110, width: 80, height: 60 });
   await expectClean(page, errors);
 });
 
@@ -624,6 +642,21 @@ test('M2-A13 host: zoom controls, snap overlay and the rotate cursor', async ({ 
   await expect(page.getByTestId('snap')).toHaveCount(0);
   expect(await frameOf(page, ids.a)).toEqual({ x: 100, y: 100, width: 80, height: 60 });
 
+  // Equal spacing: `a` and `b` are 60 apart (x 180 -> 240). Dragging `s1` (x 520..640) by -137
+  // puts its left at 383, 3 from the same gap after `b` (320 + 60 = 380): the spacing offer wins
+  // (no align offer is within 6), and the gaps are drawn while the drag lasts.
+  const s1 = { x: 530, y: 110 };
+  await drag(page, await screen(s1), await screen({ x: s1.x - 137, y: s1.y }), false);
+  const spacing = await page.evaluate(() => window.__p5Host!.editor.query({ type: 'snap' }));
+  expect(spacing!.gaps).toEqual([
+    { a: { x: 180, y: 130 }, b: { x: 240, y: 130 } },
+    { a: { x: 320, y: 130 }, b: { x: 380, y: 130 } },
+  ]);
+  await expect(page.getByTestId('snap-gap')).toHaveCount(2);
+  await page.mouse.up();
+  await expect(page.getByTestId('snap')).toHaveCount(0);
+  expect(await frameOf(page, ids.s1)).toEqual({ x: 380, y: 100, width: 120, height: 120 });
+
   // Rotate cursor: outside the selected box near a corner, but not over its handle.
   await click(page, await screen(AT.b));
   const host = page.getByTestId('canvas-host');
@@ -637,22 +670,30 @@ test('M2-A13 host: zoom controls, snap overlay and the rotate cursor', async ({ 
   await page.mouse.move(handle.x, handle.y);
   await expect(host).toHaveAttribute('data-cursor', 'default');
 
-  // A Shift rotation from the zone steps by 15 degrees and shows the snapped angle.
-  await page.mouse.move(zone.x, zone.y);
-  await page.mouse.down();
-  await page.keyboard.down('Shift');
-  const target = await screen({ x: 330, y: 190 });
-  await page.mouse.move(target.x, target.y, { steps: 6 });
-  const label = page.getByTestId('snap-angle');
-  await expect(label).toHaveCount(1);
-  const angle = Number(await label.getAttribute('data-angle'));
-  await page.mouse.up();
-  await page.keyboard.up('Shift');
-  const rotation = (await readDocument(page)).nodes[ids.b]!.rotation;
-  expect(rotation).not.toBe(0);
-  expect(rotation).toBeCloseTo(angle, 12);
-  const steps = rotation / (Math.PI / 12);
-  expect(Math.abs(steps - Math.round(steps))).toBeLessThan(1e-9);
-  await expect(page.getByTestId('snap')).toHaveCount(0);
+  // A Shift rotation from the zone steps by 15 degrees and shows the snapped angle, with
+  // snapping on and, after an undo, with it off (the Shift step is section 4.1's, M2-U3 note 5).
+  const shiftRotate = async () => {
+    await page.mouse.move(zone.x, zone.y);
+    await page.mouse.down();
+    await page.keyboard.down('Shift');
+    const target = await screen({ x: 330, y: 190 });
+    await page.mouse.move(target.x, target.y, { steps: 6 });
+    const label = page.getByTestId('snap-angle');
+    await expect(label).toHaveCount(1);
+    const angle = Number(await label.getAttribute('data-angle'));
+    await page.mouse.up();
+    await page.keyboard.up('Shift');
+    const rotation = (await readDocument(page)).nodes[ids.b]!.rotation;
+    expect(rotation).not.toBe(0);
+    expect(rotation).toBeCloseTo(angle, 12);
+    const steps = rotation / (Math.PI / 12);
+    expect(Math.abs(steps - Math.round(steps))).toBeLessThan(1e-9);
+    await expect(page.getByTestId('snap')).toHaveCount(0);
+  };
+  await shiftRotate();
+  await page.getByTestId('undo').click();
+  expect((await readDocument(page)).nodes[ids.b]!.rotation).toBe(0);
+  await setSnapping(page, false);
+  await shiftRotate();
   await expectClean(page, errors);
 });
