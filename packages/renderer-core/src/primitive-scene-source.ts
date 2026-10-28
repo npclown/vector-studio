@@ -242,6 +242,9 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     // under an undrawable level (empty bound, a source covering nothing, over the budget) is
     // not drawn, and mask source draws never paint.
     let masks: MaskPlan | null = null;
+    // U4: the primitive mask sources are packed and drawn by their slots, so they join the
+    // visible primitives in the origin choice and the packing budget.
+    let assessed = visible;
     const pathClips = new Map(paths.map((path) => [path.id, path.clip ?? null] as const));
     if (clipSeen.value) {
       masks = this.#planMasks(scene, derived, pathDraws, cameraState.camera, target);
@@ -261,13 +264,21 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
         plan.levels.flatMap((level) => (level.source.kind === 'mesh' ? [level.source.nodeId] : [])),
       );
       this.#queueMaskNotices(plan.notices);
+      const sourceSlots = new Set(
+        plan.levels.flatMap((level) =>
+          level.source.kind === 'primitive' ? [level.source.slot] : [],
+        ),
+      );
+      if (sourceSlots.size > 0) {
+        assessed = [...visible, ...derived.filter((primitive) => sourceSlots.has(primitive.slot))];
+      }
       pathDraws = pathDraws.filter((draw) =>
         draw.maskSource === true
           ? used.has(draw.nodeId)
           : plan.admit(pathClips.get(draw.nodeId) ?? null),
       );
     }
-    let origin = this.#selectOrigin(cameraState.camera, visible, target);
+    let origin = this.#selectOrigin(cameraState.camera, assessed, target);
     let rebased =
       this.#origin === null || origin.x !== this.#origin.x || origin.y !== this.#origin.y;
     if (rebased) {
@@ -276,11 +287,11 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     }
 
     try {
-      this.#assertPackingBudget(visible, cameraState.camera, target, origin);
+      this.#assertPackingBudget(assessed, cameraState.camera, target, origin);
     } catch (error) {
       const snapped = snapOrigin(cameraState.camera.position);
       if (snapped.x === origin.x && snapped.y === origin.y) throw error;
-      this.#assertPackingBudget(visible, cameraState.camera, target, snapped);
+      this.#assertPackingBudget(assessed, cameraState.camera, target, snapped);
       origin = snapped;
       rebased = true;
       this.#origin = snapped;

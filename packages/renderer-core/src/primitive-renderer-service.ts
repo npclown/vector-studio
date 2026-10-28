@@ -41,11 +41,12 @@ export type PrimitiveRendererServiceOptions = Readonly<{
    */
   fringeForTesting?: 'on' | 'off';
   /**
-   * P4 contract, U3: 'rect' draws rect clips through the clip pipeline variants, which the
-   * backend then creates; a mask container stays `unsupported-feature` until U4. Default 'none':
-   * every non-null clip is reported as `unsupported-feature`, and nothing else changes.
+   * P4 contract, U3 and U4: 'rect' draws rect clips through the clip pipeline variants, which
+   * the backend then creates, and reports a mask container as `unsupported-feature`; 'all'
+   * also draws mask containers through mask textures. Default 'none': every non-null clip is
+   * reported as `unsupported-feature`, and nothing else changes.
    */
-  clips?: 'none' | 'rect';
+  clips?: 'none' | 'rect' | 'all';
 }>;
 
 /** Owns the CPU scene mirror and packet source while the backend owns scheduling and native state. */
@@ -85,11 +86,11 @@ export class PrimitiveRendererService
       throw new TypeError("fringeForTesting must be 'on' or 'off'.");
     }
     const clips = options.clips ?? 'none';
-    if (clips !== 'none' && clips !== 'rect') {
-      throw new TypeError("clips must be 'none' or 'rect'.");
+    if (clips !== 'none' && clips !== 'rect' && clips !== 'all') {
+      throw new TypeError("clips must be 'none', 'rect' or 'all'.");
     }
     this.#invalidationTarget = invalidationTarget;
-    this.requiresClipPipeline = clips === 'rect';
+    this.requiresClipPipeline = clips !== 'none';
     const anyPort = port !== undefined || strokePort !== undefined;
     this.requiresMeshPipeline = anyPort;
     // P3 V3 section a with the B2 section 9.1 amendment (S4): path nodes are supported when a
@@ -99,7 +100,7 @@ export class PrimitiveRendererService
       pathNodes: anyPort ? 'supported' : 'unsupported',
       pathFills: port === undefined ? 'unsupported' : 'supported',
       pathStrokes: strokePort === undefined ? 'unsupported' : 'supported',
-      clips: clips === 'rect' ? 'rect' : 'unsupported',
+      clips: clips === 'all' ? 'supported' : clips === 'rect' ? 'rect' : 'unsupported',
     });
     this.#source = new PrimitiveSceneSource(
       this.#mirror,
