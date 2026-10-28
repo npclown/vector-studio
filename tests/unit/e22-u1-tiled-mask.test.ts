@@ -367,6 +367,11 @@ describe('E22-K3 live mask bytes within the plan (E22-A2)', () => {
       status: 'failed',
       reason: 'submission-failed',
     });
+    // E22-A1: the failed frame's tile set is released too.
+    expect(fixture.destroyed.filter((label) => label.includes('mask-tiles-2'))).toEqual([
+      'primitive/1/mask-tiles-2/color',
+      'primitive/1/mask-tiles-2/resolve',
+    ]);
     takePeak();
     fixture.calls.length = 0;
     const passes = scene.maskPasses!;
@@ -378,6 +383,50 @@ describe('E22-K3 live mask bytes within the plan (E22-A2)', () => {
       .map((call) => (call[2] as string).replace('/bind-group', ''))
       .filter((label) => /mask-\d+$/.test(label));
     for (const label of boundMasks) expect(fixture.destroyed).not.toContain(label);
+    creation.dispose();
+  });
+
+  it('a tile that cannot be created mid-encode is an allocation failure that leaks nothing', async () => {
+    const { scene, creation, fixture, target, accounting } = await sceneAt(1024, 512);
+    const h = harness(fullMasks(2));
+    submitted(scene.submitPrimitivePacket(h.source.prepare(target)!));
+    const live = accounting.snapshot().byCategory.texture.live;
+    // A pan resizes both levels: their old textures go early, then the resolve tile fails.
+    h.mirror.setCamera({ position: { x: -110, y: 0 }, zoom: 1 });
+    const device = fixture.device as unknown as {
+      createTexture: ReturnType<typeof vi.fn<(descriptor: GPUTextureDescriptor) => unknown>>;
+    };
+    const create = device.createTexture.getMockImplementation()!;
+    device.createTexture.mockImplementation((descriptor) => {
+      if (descriptor.label?.endsWith('mask-tiles-2/resolve')) throw new Error('injected');
+      return create(descriptor);
+    });
+    expect(scene.submitPrimitivePacket(h.source.prepare(target)!)).toEqual({
+      status: 'failed',
+      reason: 'allocation-failed',
+    });
+    device.createTexture.mockImplementation(create);
+    expect(fixture.destroyed).toEqual(
+      expect.arrayContaining([
+        'primitive/1/mask-1',
+        'primitive/1/mask-2',
+        'primitive/1/mask-3',
+        'primitive/1/mask-4',
+        'primitive/1/mask-tiles-2/color',
+      ]),
+    );
+    // Neither the released nor the discarded textures, nor the colour tile, stay in accounting.
+    expect(accounting.snapshot().byCategory.texture.live).toBe(live - 2);
+    fixture.calls.length = 0;
+    const passes = scene.maskPasses!;
+    submitted(scene.submitPrimitivePacket(h.source.prepare(target)!));
+    expect(scene.maskPasses).toBe(passes + 2);
+    const bound = fixture.calls
+      .filter((call) => call[0] === 'setBindGroup' && call[1] === 1)
+      .map((call) => (call[2] as string).replace('/bind-group', ''))
+      .filter((label) => /mask-\d+$/.test(label));
+    expect(bound.length).toBeGreaterThan(0);
+    for (const label of bound) expect(fixture.destroyed).not.toContain(label);
     creation.dispose();
   });
 });

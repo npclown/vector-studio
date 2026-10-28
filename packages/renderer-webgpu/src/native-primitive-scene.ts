@@ -404,7 +404,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   /** U4 (Mask cache): the mask textures, by mask container id. */
   readonly #masks = new Map<string, MaskEntry>();
   #nextMask = 1;
-  #nextMaskPass = 1;
+  #nextTileSet = 1;
   #maskPasses = 0;
   #retiredArenas: ArenaBase[] = [];
   #nextArenaId = 1;
@@ -887,8 +887,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
    * packs the records. A draw's clip state must name a record of the part; a part without a
    * clipped draw is checked and writes nothing. Each mask level must follow its parent, lie in
    * the target and name a written primitive slot or a checked mesh draw; a content state under a
-   * mask level must name a level of the part. Each level's mask pass takes the state index after
-   * `maxIndex` in level order; a level whose key or size changed gets a new texture.
+   * mask level must name a level of the part. E22-K2: each tile of each level's mask pass takes
+   * a state index after `maxIndex`, in level and then tile order; a level whose key or size
+   * changed gets a new texture. E22-K3: once the part is validated, cached entries the frame does
+   * not reuse are released before any mask texture is created.
    */
   #preflightClip(
     packet: PrimitivePacket,
@@ -1252,7 +1254,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         : null;
     const rendered = clip.masks.filter((mask) => mask.render);
     if (rendered.length === 0) return;
-    const prefix = `primitive/${this.#generation}/mask-tiles-${this.#nextMaskPass++}`;
+    const prefix = `primitive/${this.#generation}/mask-tiles-${this.#nextTileSet++}`;
     const { width, height } = clip.tileSet;
     const tile = (name: string, format: GPUTextureFormat, sampleCount: number, usage: number) => {
       const id = `${prefix}/${name}`;
