@@ -15,16 +15,17 @@ import {
   type PathAnchorRef,
   type PathEditOverlay,
 } from '../../packages/editor-core/src/index.js';
-// Source imports: the tree geometry is package-internal.
+// Source imports: the tree geometry and the flattening are package-internal.
 import { apply, localTransform, multiply } from '../../packages/editor-core/src/geometry.js';
+import { cubicAt, cubicSegments } from '../../packages/editor-core/src/hit-test.js';
 import { documentTree, spaceOf } from '../../packages/editor-core/src/tree.js';
 
 // MVP M3-U2, M3-A08 to M3-A11 (M3 contract, sections 4, 5 and 5.1): path edit mode and its
 // session commands, entry and exit, anchor retention, the `pathOverlay` query, the select
 // tool's edit-mode targets, anchor and handle drags, Alt, marquee and snapping, and the keymap
 // routing of `nudge`, `selectAll`, `delete`, `enterScope` and `exitScope`; the U1 review
-// follow-up F2 (a drag ending at its press point records no step). Insertion, removal, close
-// and open, the segment double-click and `togglePathClosed` are M3-U3's. A drag is compared
+// follow-up F2 (a drag ending at its press point records no step); M3-U3, the rest of M3-A09:
+// the segment double-click, `delete` and `togglePathClosed` in edit mode. A drag is compared
 // with its stated command run on a twin editor, so the values are the binary64 evaluation of
 // the contract's formulas (M3-Q13); literal where the arithmetic is exact.
 
@@ -665,12 +666,11 @@ describe('M3-A08 retention, handles off and consumed double-clicks', () => {
     expect(undoDepth(target)).toBe(0);
   });
 
-  it('consumes a double-click on an anchor, a visible handle, a segment and the fill', () => {
+  it('consumes a double-click on an anchor, a visible handle and the fill', () => {
     const target = editing('curve', [ref(0, 1)]);
     const fill = editing('tri');
     const before = text(target);
-    // Segment 0 at t = 0.5 is (319.375, 131.25).
-    for (const point of [C1, C1_OUT, at(319.375, 131.25)]) {
+    for (const point of [C1, C1_OUT]) {
       expect(doubleclick(target, point)).toEqual(consumed);
     }
     expect(doubleclick(fill, at(180, 120))).toEqual(consumed);
@@ -1083,16 +1083,15 @@ describe('M3-A09 keymap routing in edit mode', () => {
     ]);
   });
 
-  it('with no anchor selected, nudge and delete are consumed no-ops; delete never deletes', () => {
+  it('with no anchor selected, nudge and delete are consumed no-ops', () => {
     const target = editing('tri');
     const before = text(target);
     for (const name of ['ArrowLeft', 'Delete', 'Backspace']) {
       expect(key(target, name)).toEqual(consumed);
     }
-    ok(target, { type: 'setPathSelection', anchors: [ref(0, 1)] });
-    expect(key(target, 'Delete')).toEqual(consumed);
     expect(text(target)).toBe(before);
-    expect(editOf(target)).toEqual({ id: 'tri', anchors: [ref(0, 1)] });
+    expect(editOf(target)).toEqual({ id: 'tri', anchors: [] });
+    expect(undoDepth(target)).toBe(0);
   });
 
   it('Mod+A selects every anchor; copy acts on the whole node', () => {
@@ -1101,6 +1100,162 @@ describe('M3-A09 keymap routing in edit mode', () => {
     expect(anchorsOf(target)).toEqual([ref(0, 0), ref(0, 1), ref(0, 2)]);
     expect(target.execute({ type: 'copy' })).toEqual({ ok: true, ids: ['curve'] });
     expect(editOf(target)?.id).toBe('curve');
+  });
+});
+
+/**
+ * `two`: an implicitly closed subpath of 2 anchors (0, 0), (100, 0); an open one (0, 100) to
+ * (100, 100); a lone `move` at (50, 50).
+ */
+const TWO = doc(
+  [['p1', ['two']]],
+  [
+    path('two', 'p1', f(0, 0, 100, 100), [
+      ['move', 'line', 'close', 'move', 'line', 'move'],
+      [0, 0, 1, 0, 0, 1, 1, 1, 0.5, 0.5],
+    ]),
+  ],
+);
+
+const insert = (id: string, subpath: number, segment: number, t: number): DocumentCommand => ({
+  type: 'insertPathAnchor',
+  id,
+  subpath,
+  segment,
+  t,
+});
+
+/** An editor in edit mode with `togglePathClosed` bound to T by the host layer. */
+function toggling(id: string, anchors: PathAnchorRef[], document: unknown = FIXTURE): Editor {
+  const target = editing(id, anchors, document);
+  ok(target, { type: 'setKeymap', bindings: [{ chord: 'T', action: 'togglePathClosed' }] });
+  return target;
+}
+
+describe('M3-A09 segment double-click, Delete and togglePathClosed', () => {
+  it('a double-click on a line inserts at t = σ and selects the new anchor, one step', () => {
+    const target = editing('tri');
+    const before = text(target);
+    // σ = 30 / 100 on segment 0 from T0 to T1.
+    expect(doubleclick(target, at(130, 101))).toEqual(consumed);
+    expect(text(target)).toBe(twin(FIXTURE, [insert('tri', 0, 0, 0.3)]));
+    expect(editOf(target)).toEqual({ id: 'tri', anchors: [ref(0, 1)] });
+    expectOneStep(target, before);
+    // The implicit closing segment from T2 to T0: the new anchor is anchor 3.
+    const closing = editing('tri');
+    expect(doubleclick(closing, at(150, 150))).toEqual(consumed);
+    expect(text(closing)).toBe(twin(FIXTURE, [insert('tri', 0, 2, 0.5)]));
+    expect(editOf(closing)).toEqual({ id: 'tri', anchors: [ref(0, 3)] });
+  });
+
+  it('a double-click on a cubic inserts at t = (j + σ) / N, page-root and rotated', () => {
+    for (const id of ['curve', 'rot']) {
+      const target = editing(id);
+      const document = target.query({ type: 'document' });
+      const { width: W, height: H } = document.nodes[id]!.frame;
+      const local = id === 'curve' ? CURVE[1] : ARC[1];
+      const [p0, p1, p2, p3] = [0, 2, 4, 6].map((i) =>
+        pagePoint(document, id, local[i]! * W, local[i + 1]! * H),
+      ) as [PagePoint, PagePoint, PagePoint, PagePoint];
+      // At a chord end i / N the nearest chord gives t = i / N exactly.
+      const count = cubicSegments(p0, p1, p2, p3, 0.25);
+      const i = Math.floor(count / 2);
+      const before = text(target);
+      expect(doubleclick(target, cubicAt(p0, p1, p2, p3, i / count))).toEqual(consumed);
+      expect(text(target), id).toBe(twin(FIXTURE, [insert(id, 0, 0, i / count)]));
+      expect(editOf(target)).toEqual({ id, anchors: [ref(0, 1)] });
+      expectOneStep(target, before);
+    }
+  });
+
+  it('Delete and Backspace remove the anchor selection in one step', () => {
+    const target = editing('curve', [ref(0, 1)]);
+    const before = text(target);
+    expect(key(target, 'Delete')).toEqual({ ok: true, ids: ['curve'], consumed: true });
+    expect(text(target)).toBe(
+      twin(FIXTURE, [{ type: 'removePathAnchors', id: 'curve', anchors: [ref(0, 1)] }]),
+    );
+    // The structure changed, so the anchor selection is cleared; edit mode stays.
+    expect(editOf(target)).toEqual({ id: 'curve', anchors: [] });
+    expectOneStep(target, before);
+    const back = editing('tri', [ref(0, 2)]);
+    expect(key(back, 'Backspace')).toEqual({ ok: true, ids: ['tri'], consumed: true });
+    expect(text(back)).toBe(
+      twin(FIXTURE, [{ type: 'removePathAnchors', id: 'tri', anchors: [ref(0, 2)] }]),
+    );
+  });
+
+  it('a Delete that would leave no subpath deletes the node in one step', () => {
+    for (const [id, anchors] of [
+      ['tri', [ref(0, 0), ref(0, 2)]],
+      ['dot', [ref(0, 0)]],
+    ] as const) {
+      const target = editing(id, [...anchors]);
+      const before = text(target);
+      expect(key(target, 'Delete')).toMatchObject({ ok: true, consumed: true });
+      expect(target.query({ type: 'node', id })).toBeNull();
+      expect(text(target)).toBe(twin(FIXTURE, [{ type: 'deleteNodes', ids: [id] }]));
+      expect(editOf(target)).toBeNull();
+      expect(selection(target)).toEqual([]);
+      expectOneStep(target, before);
+    }
+  });
+
+  it('togglePathClosed closes an open subpath and opens a closed one, one step each', () => {
+    const target = toggling('curve', [ref(0, 1)]);
+    const before = text(target);
+    expect(key(target, 't')).toEqual({ ok: true, ids: ['curve'], consumed: true });
+    expect(text(target)).toBe(
+      twin(FIXTURE, [{ type: 'closePathSubpath', id: 'curve', subpath: 0 }]),
+    );
+    expect(editOf(target)).toEqual({ id: 'curve', anchors: [] });
+    expectOneStep(target, before);
+    // Exactly the two ends of segment k selected: open there; else at n − 1.
+    const cases: [PathAnchorRef[], number | undefined][] = [
+      [[ref(0, 1), ref(0, 2)], 1],
+      [[ref(0, 0), ref(0, 2)], 2],
+      [[ref(0, 2)], undefined],
+      [[ref(0, 0), ref(0, 1), ref(0, 2)], undefined],
+    ];
+    for (const [anchors, segment] of cases) {
+      const tri = toggling('tri', anchors);
+      const start = text(tri);
+      expect(key(tri, 't').ok).toBe(true);
+      expect(text(tri), JSON.stringify(anchors)).toBe(
+        twin(FIXTURE, [
+          {
+            type: 'openPathSubpath',
+            id: 'tri',
+            subpath: 0,
+            ...(segment === undefined ? {} : { segment }),
+          },
+        ]),
+      );
+      expectOneStep(tri, start);
+    }
+    // Both segments of a 2-anchor subpath have the selected ends: the lowest, k = 0.
+    const two = toggling('two', [ref(0, 0), ref(0, 1)], TWO);
+    expect(key(two, 't').ok).toBe(true);
+    expect(text(two)).toBe(
+      twin(TWO, [{ type: 'openPathSubpath', id: 'two', subpath: 0, segment: 0 }]),
+    );
+  });
+
+  it('togglePathClosed is a consumed no-op across subpaths, with none and outside edit mode', () => {
+    const across = toggling('two', [ref(0, 0), ref(1, 0)], TWO);
+    const empty = toggling('tri', []);
+    const outside = toggling('tri', []);
+    ok(outside, { type: 'exitPathEdit' });
+    for (const target of [across, empty, outside]) {
+      const before = text(target);
+      expect(key(target, 't')).toEqual(consumed);
+      expect(text(target)).toBe(before);
+      expect(undoDepth(target)).toBe(0);
+    }
+    expect(selection(outside)).toEqual(['tri']);
+    // A lone `move` cannot close: the command's failure, consumed.
+    const lone = toggling('two', [ref(2, 0)], TWO);
+    expect(key(lone, 't')).toEqual({ ok: false, code: 'editor.too-few-anchors', consumed: true });
   });
 });
 

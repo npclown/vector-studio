@@ -1,7 +1,14 @@
 import type { DocumentV2, PathData, PathNodeV2 } from '@vector-studio/model';
 import { deepFreeze } from './freeze.js';
 import { apply, invertRigid, localTransform, multiply, type Matrix } from './geometry.js';
-import { cubicAt, cubicSegments, distanceToSegment, flatten, insideFill } from './hit-test.js';
+import {
+  cubicAt,
+  cubicSegments,
+  distanceToSegment,
+  flatten,
+  insideFill,
+  projectToSegment,
+} from './hit-test.js';
 import {
   handlesOf,
   inSegment,
@@ -220,6 +227,29 @@ export function segmentPolyline(subpath: PageSubpath, k: number, tolerance: numb
   const points = [p0];
   for (let i = 1; i <= count; i += 1) points.push(cubicAt(p0, c1, c2, p3, i / count));
   return points;
+}
+
+/**
+ * The insertion parameter of a segment double-click (section 5, M3-Q12): with segment `k` of
+ * subpath `s` flattened at `0.25 / zoom` into `N` chords (`N = 1` for a line) and the nearest
+ * chord `j` (ties to the lower `j`) with clamped projection parameter `σ`, `t = (j + σ) / N`.
+ */
+export function segmentParameter(
+  document: DocumentV2,
+  node: PathNodeV2,
+  s: number,
+  k: number,
+  point: PagePoint,
+  zoom: number,
+): number {
+  const points = segmentPolyline(pathGeometry(document, node).subpaths[s]!, k, 0.25 / zoom);
+  const count = points.length - 1;
+  let best = { j: 0, t: 0, distance: Infinity };
+  for (let j = 0; j < count; j += 1) {
+    const { t, distance } = projectToSegment(point, points[j]!, points[j + 1]!);
+    if (distance < best.distance) best = { j, t, distance };
+  }
+  return (best.j + best.t) / count;
 }
 
 /** Whether `point` is inside the edited path's fill region, through every ancestor. */

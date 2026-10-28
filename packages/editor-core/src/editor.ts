@@ -30,7 +30,7 @@ import {
   pathEditOverlay,
   sameStructure,
 } from './path-edit.js';
-import { inRange, readAnchorModel, refShape } from './paths.js';
+import { badRef, readAnchorModel, refListShape } from './paths.js';
 import {
   DEFAULT_KEYMAP,
   effectiveKeymap,
@@ -204,6 +204,10 @@ const DOCUMENT_COMMANDS = new Set([
   'paste',
   'movePathAnchors',
   'setPathHandle',
+  'insertPathAnchor',
+  'removePathAnchors',
+  'closePathSubpath',
+  'openPathSubpath',
 ]);
 
 /**
@@ -219,6 +223,10 @@ const RELATIVE_COMMANDS: ReadonlySet<string> = new Set([
   // MVP M3 contract, section 3 (M3-Q10).
   'movePathAnchors',
   'setPathHandle',
+  'insertPathAnchor',
+  'removePathAnchors',
+  'closePathSubpath',
+  'openPathSubpath',
 ]);
 
 /** Extension commands may nest this deep through `runCommand` (P5-U5). */
@@ -252,6 +260,8 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.unsupported-clipboard',
   'editor.not-a-path',
   'editor.invalid-path-ref',
+  'editor.too-few-anchors',
+  'editor.empty-path',
   'editor.no-path-edit',
 ]);
 
@@ -963,22 +973,14 @@ class EditorCore implements Editor {
         return { ok: true, ids: [] };
       case 'setPathSelection': {
         const refs: unknown = command.anchors;
-        if (!Array.isArray(refs)) return failure('editor.invalid-command', '/anchors');
-        const seen = new Set<string>();
-        for (const [i, ref] of (refs as unknown[]).entries()) {
-          const shape = refShape(ref, `/anchors/${i}`);
-          if (shape !== null) return shape;
-          const { subpath, anchor } = ref as PathAnchorRef;
-          const key = `${subpath},${anchor}`;
-          if (seen.has(key)) return failure('editor.invalid-command', '/anchors');
-          seen.add(key);
-        }
+        const shape = refListShape(refs, true);
+        if (shape !== null) return shape;
         const edit = this.pathEdit;
         if (edit === null) return failure('editor.no-path-edit');
         const model = readAnchorModel(editablePath(this.document, this.activePage, edit.id)!.path);
         const list = refs as readonly PathAnchorRef[];
-        const bad = list.findIndex((ref) => !inRange(model, ref));
-        if (bad >= 0) return failure('editor.invalid-path-ref', `/anchors/${bad}`);
+        const bad = badRef(model, list);
+        if (bad !== null) return bad;
         this.setPathEditState({ id: edit.id, anchors: canonicalRefs(list) });
         return { ok: true, ids: [] };
       }
@@ -1343,6 +1345,9 @@ class EditorCore implements Editor {
         return this.run({ type: 'cut', ids: selection });
       case 'paste':
         return this.run({ type: 'paste' });
+      // Outside path edit mode (M3 contract, section 4).
+      case 'togglePathClosed':
+        return nothing;
       default: {
         const command = { type: 'runCommand', id: binding.action! } as const;
         return this.run(binding.args === undefined ? command : { ...command, args: binding.args });
@@ -1353,15 +1358,23 @@ class EditorCore implements Editor {
   /**
    * The built-in actions that act on anchors in path edit mode (M3 contract, section 4), or null
    * for an action that keeps its M2 meaning. `nudge` moves the anchor selection, `selectAll`
-   * selects every anchor, and `enterScope` and `exitScope` end edit mode with the path still
-   * selected. `delete` is a consumed no-op here: anchor removal comes with `removePathAnchors`
-   * (M3-U3), and in edit mode it never deletes the node itself.
+   * selects every anchor, `enterScope` and `exitScope` end edit mode with the path still
+   * selected, and `togglePathClosed` closes or opens the subpath of the anchor selection.
+   * `delete` removes the anchor selection, or deletes the node when no subpath would remain.
+   * With an empty anchor selection `delete`, `nudge` and `togglePathClosed` are consumed no-ops.
    */
   private runPathEditAction(binding: CanonicalBinding, edit: PathEditState): CommandResult | null {
     const nothing: CommandResult = { ok: true, ids: [] };
     switch (binding.action) {
-      case 'delete':
-        return nothing;
+      case 'delete': {
+        if (edit.anchors.length === 0) return nothing;
+        const result = this.run({ type: 'removePathAnchors', id: edit.id, anchors: edit.anchors });
+        if (result.ok || result.code !== 'editor.empty-path') return result;
+        // Removing every anchor deletes the node instead, in one step (M3-Q4); edit mode ends.
+        return this.run({ type: 'deleteNodes', ids: [edit.id] });
+      }
+      case 'togglePathClosed':
+        return this.togglePathClosed(edit);
       case 'nudge': {
         if (edit.anchors.length === 0) return nothing;
         const { dx, dy } = binding.args as { dx: number; dy: number };
@@ -1378,6 +1391,34 @@ class EditorCore implements Editor {
       default:
         return null;
     }
+  }
+
+  /**
+   * `togglePathClosed` in edit mode (M3 contract, section 4): when the selected anchors lie in
+   * one subpath it closes an open one, and opens a closed one at segment `k` when exactly the two
+   * ends of segment `k` are selected (the lowest such `k`), else at its closing segment; any
+   * other anchor selection is a consumed no-op.
+   */
+  private togglePathClosed(edit: PathEditState): CommandResult {
+    const { id, anchors } = edit;
+    const subpath = anchors[0]?.subpath;
+    if (subpath === undefined || anchors.some((ref) => ref.subpath !== subpath)) {
+      return { ok: true, ids: [] };
+    }
+    const model = readAnchorModel(editablePath(this.document, this.activePage, id)!.path)[subpath]!;
+    if (!model.closed) return this.run({ type: 'closePathSubpath', id, subpath });
+    const n = model.anchors.length;
+    const selected = new Set(anchors.map((ref) => ref.anchor));
+    const segment = model.segments.findIndex((_, k) => {
+      const ends = new Set([k, (k + 1) % n]);
+      return ends.size === selected.size && [...ends].every((a) => selected.has(a));
+    });
+    return this.run({
+      type: 'openPathSubpath',
+      id,
+      subpath,
+      ...(segment < 0 ? {} : { segment }),
+    });
   }
 
   /** A wheel event (M2 contract, section 3): Ctrl or Meta zooms about the point, else it pans. */

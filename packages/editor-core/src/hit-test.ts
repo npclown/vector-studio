@@ -98,13 +98,22 @@ export function flatten(
   return lines;
 }
 
-export function distanceToSegment(p: PagePoint, a: PagePoint, b: PagePoint): number {
+/** The clamped projection parameter of `p` on the chord `a`–`b`, and its distance there. */
+export function projectToSegment(
+  p: PagePoint,
+  a: PagePoint,
+  b: PagePoint,
+): { t: number; distance: number } {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const length2 = dx * dx + dy * dy;
   const t =
     length2 === 0 ? 0 : Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / length2));
-  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+  return { t, distance: Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy)) };
+}
+
+export function distanceToSegment(p: PagePoint, a: PagePoint, b: PagePoint): number {
+  return projectToSegment(p, a, b).distance;
 }
 
 function nearOutline(p: PagePoint, lines: readonly Polyline[], radius: number): boolean {
