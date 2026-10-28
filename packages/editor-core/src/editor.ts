@@ -14,12 +14,17 @@ import {
   type EditResult,
   type GestureEdit,
 } from './edits.js';
-import { ExtensionRegistry, extensionApi } from './extensions.js';
+import {
+  ExtensionRegistry,
+  extensionApi,
+  owned,
+  toolOverlay,
+  type RegisteredTool,
+} from './extensions.js';
 import { boundsOf } from './hit-test.js';
 import { createCounterIdSource } from './ids.js';
 import {
   DEFAULT_KEYMAP,
-  TOOL_NAMES,
   effectiveKeymap,
   eventChord,
   isSpaceKey,
@@ -65,7 +70,9 @@ import type {
   QueryResult,
   ReorderOp,
   SnapOverlay,
-  ToolName,
+  ToolApi,
+  ToolGesture,
+  ToolId,
   ToolOverlay,
   ViewportSize,
 } from './types.js';
@@ -153,7 +160,6 @@ type Gesture = {
   selection: readonly string[];
 };
 
-const TOOLS: readonly ToolName[] = TOOL_NAMES;
 /** The zoom range (M2-Q2). */
 export const ZOOM_MIN = 1 / 64;
 export const ZOOM_MAX = 256;
@@ -435,7 +441,7 @@ class EditorCore implements Editor {
   private activePage: string;
   private revision = 0;
   private selection: readonly string[] = Object.freeze([]);
-  private tool: ToolName = 'select';
+  private tool: ToolId = 'select';
   private viewport: RenderCamera = DEFAULT_VIEWPORT;
   private viewportSize: ViewportSize | null = null;
   /** Navigation state (M2 contract, section 3): Space held, and the grabbed page point of a pan. */
@@ -475,7 +481,8 @@ class EditorCore implements Editor {
   private extensionDepth = 0;
   private readonly ids: IdSource;
   private readonly extensions: ExtensionRegistry;
-  readonly tools = new Map<ToolName, Tool>();
+  /** The built-in tools by name, then the extension tools by ID in registration order. */
+  readonly tools = new Map<string, Tool>();
   readonly gesture: GestureControl;
   /** What extension commands receive: `execute` and `query`, nothing else. */
   private readonly api = extensionApi({
@@ -492,7 +499,12 @@ class EditorCore implements Editor {
     }
     this.platform = platform;
     this.fixedLayers = this.extensionLayers(options.extensions ?? []);
-    const host = validateLayer(options.keymap ?? [], platform, (id) => this.isCommand(id));
+    const host = validateLayer(
+      options.keymap ?? [],
+      platform,
+      (id) => this.isCommand(id),
+      (id) => this.extensions.tool(id) !== undefined,
+    );
     if (!host.ok) throw new Error(`createEditor: editor.invalid-keymap at /keymap${host.path}`);
     this.hostLayer = host.bindings;
     this.updateKeymap();
@@ -524,6 +536,93 @@ class EditorCore implements Editor {
       commit: () => this.commitGesture(),
       cancel: () => this.cancelGesture(),
     };
+    for (const tool of this.extensions.tools) this.tools.set(tool.id, this.extensionTool(tool));
+  }
+
+  /**
+   * An extension tool as the editor drives it (M2 contract, section 7): it receives a frozen
+   * `ToolApi` (execute, query and the gesture API without `edit`), and only `true` from `input`
+   * consumes the event. Its gesture API acts only while it is the active tool, and the whole
+   * `ToolApi` except `query` is inert while its `reset` runs (a reset must issue no command), so
+   * a reset during a tool switch, page switch or load cannot open a gesture or change the
+   * document. A throw from `input` or `reset` is the extension's defect: it is rethrown
+   * asynchronously, as for an extension command; after a throw from `input` the event counts as
+   * not consumed and the editor cancels any open gesture and resets the tool, so a broken tool
+   * cannot hold a gesture (and the keyboard) open. `input` re-entered through
+   * `execute({ type: 'input' })` shares the extension command depth limit. A throwing or
+   * malformed `overlay` gives no overlay.
+   */
+  private extensionTool(registered: RegisteredTool): Tool {
+    const control = this.gesture;
+    let resetting = false;
+    const own = () => !resetting && this.tool === registered.id;
+    const gesture: ToolGesture = Object.freeze({
+      get active() {
+        return control.active;
+      },
+      begin: () => own() && control.begin(),
+      update: (command: DocumentCommand) =>
+        own() ? control.update(command) : failure('editor.invalid-command'),
+      replace: (commands: readonly DocumentCommand[]) =>
+        own() ? control.replace(commands) : failure('editor.invalid-command'),
+      commit: () => {
+        if (own()) control.commit();
+      },
+      cancel: () => {
+        if (own()) control.cancel();
+      },
+    });
+    const api: ToolApi = Object.freeze({
+      execute: (command: Command) =>
+        resetting ? failure('editor.invalid-command') : this.execute(command),
+      query: <Q extends Query>(query: Q) => this.query(query),
+      gesture,
+    });
+    const rethrow = (error: unknown) => {
+      void Promise.resolve().then(() => {
+        throw error;
+      });
+    };
+    return {
+      input: (event) => {
+        // Re-entry through `execute({ type: 'input' })` stops at the extension depth limit.
+        if (this.extensionDepth >= MAX_EXTENSION_DEPTH) return false;
+        this.extensionDepth += 1;
+        try {
+          return registered.input(event, api) === true;
+        } catch (error) {
+          rethrow(error);
+          try {
+            this.interrupt(true);
+          } catch (inner) {
+            rethrow(inner);
+          }
+          return false;
+        } finally {
+          this.extensionDepth -= 1;
+        }
+      },
+      reset: () => {
+        // Nested resets (a reset that triggers another) keep the outer flag.
+        const outer = resetting;
+        resetting = true;
+        try {
+          registered.reset();
+        } catch (error) {
+          rethrow(error);
+        } finally {
+          resetting = outer;
+        }
+      },
+      overlay: () => {
+        if (registered.overlay === null) return null;
+        try {
+          return toolOverlay(registered.overlay());
+        } catch {
+          return null;
+        }
+      },
+    };
   }
 
   /**
@@ -538,9 +637,10 @@ class EditorCore implements Editor {
     const owners = new Map<string, string>();
     extensions.forEach((extension, index) => {
       const { id, bindings = [] } = extension;
-      const own = (command: string) =>
-        (command === id || command.startsWith(`${id}.`)) && this.isCommand(command);
-      const layer = validateLayer(bindings, this.platform, own);
+      // Its own commands, and in `setTool` its own tools (built-in tools are always allowed).
+      const ownCommand = (command: string) => owned(id, command) && this.isCommand(command);
+      const ownTool = (tool: string) => this.extensions.tool(tool)?.owner === id;
+      const layer = validateLayer(bindings, this.platform, ownCommand, ownTool);
       if (!layer.ok) {
         throw new Error(
           `createEditor: editor.invalid-keymap at /extensions/${index}/bindings${layer.path}`,
@@ -654,8 +754,10 @@ class EditorCore implements Editor {
         if (!this.document.pages.some((page) => page.id === command.id)) {
           return failure('editor.unknown-page');
         }
-        // Like setTool, it first cancels an active gesture (M1 contract, section 3).
-        this.interrupt();
+        // Like setTool, it first cancels an active gesture (M1 contract, section 3). A real
+        // switch resets the tool once, in switchPage.
+        if (command.id === this.activePage) this.interrupt();
+        else this.cancelGesture();
         if (command.id !== this.activePage) {
           const hadSelection = this.selection.length > 0;
           const hadScope = this.scope !== null;
@@ -674,7 +776,10 @@ class EditorCore implements Editor {
         return { ok: true, ids: [] };
       }
       case 'setTool': {
-        if (!TOOLS.includes(command.tool)) return failure('editor.unknown-tool');
+        // A built-in name or a registered extension tool ID (section 7).
+        if (typeof command.tool !== 'string' || !this.tools.has(command.tool)) {
+          return failure('editor.unknown-tool');
+        }
         this.interrupt(true);
         if (command.tool !== this.tool) {
           this.tool = command.tool;
@@ -734,7 +839,12 @@ class EditorCore implements Editor {
       }
       case 'setKeymap': {
         if (!Array.isArray(command.bindings)) return failure('editor.invalid-command', '/bindings');
-        const layer = validateLayer(command.bindings, this.platform, (id) => this.isCommand(id));
+        const layer = validateLayer(
+          command.bindings,
+          this.platform,
+          (id) => this.isCommand(id),
+          (id) => this.extensions.tool(id) !== undefined,
+        );
         if (!layer.ok) return failure('editor.invalid-keymap', `/bindings${layer.path}`);
         this.hostLayer = layer.bindings;
         if (this.updateKeymap()) this.refresh({ type: 'session', field: 'keymap' });
@@ -1029,7 +1139,7 @@ class EditorCore implements Editor {
       case 'setTool':
         return this.run({
           type: 'setTool',
-          tool: (binding.args as { tool: ToolName }).tool,
+          tool: (binding.args as { tool: ToolId }).tool,
         });
       case 'undo':
         return this.run({ type: 'undo' });
@@ -1408,7 +1518,8 @@ class EditorCore implements Editor {
     if (scopeChanged) this.scope = null;
     if (pageChanged) {
       selectionChanged = this.selection.length > 0;
-      this.switchPage(page);
+      // A load has already reset the tool (interrupt), so it is reset once.
+      this.switchPage(page, cause !== 'load');
     } else {
       // Deleting or undoing away a selected node removes it from the selection, and a node
       // whose ancestor is selected too gives way to it.
@@ -1436,11 +1547,11 @@ class EditorCore implements Editor {
    * Activates `page`: the selection and the scope are cleared and the active tool reset (it
    * stays selected). The caller raises the events and updates the renderer.
    */
-  private switchPage(page: string): void {
+  private switchPage(page: string, reset = true): void {
     this.activePage = page;
     this.selection = Object.freeze([]);
     this.scope = null;
-    this.tools.get(this.tool)?.reset();
+    if (reset) this.tools.get(this.tool)?.reset();
   }
 
   /** Runs `action` on the attached projector, collecting its diagnostics into `into`. */

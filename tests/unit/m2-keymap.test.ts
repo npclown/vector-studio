@@ -700,3 +700,252 @@ describe('M2-A11 group and ungroup actions leave the toolbar selection', () => {
     expect(serializeDocument(target.query({ type: 'document' }))).toBe(before);
   });
 });
+
+describe('M2-A11 rest (M2-U7): every default binding through input, and host-bound actions', () => {
+  // Rectangles a (0, 0), b (20, 0) and c (50, 50), 10 by 10, with b selected and a viewport of
+  // 800 by 600; each scenario presses its chord once and checks the action's effect.
+  type Scene = { target: Editor; a: string; b: string; c: string };
+  function scene(): Scene {
+    const target = editor();
+    const a = rect(target);
+    const b = rect(target, 20);
+    const c = rect(target, 50, 50);
+    ok(target, { type: 'setSelection', ids: [b] });
+    ok(target, { type: 'setViewportSize', width: 800, height: 600 });
+    return { target, a, b, c };
+  }
+  const frameOf = (target: Editor, id: string) => target.query({ type: 'node', id })?.frame;
+  const zoom = (target: Editor) => target.query({ type: 'viewport' }).zoom;
+  const grouped = (s: Scene) => {
+    const [group] = ok(s.target, { type: 'groupNodes', ids: [s.a, s.b], kind: 'group' });
+    ok(s.target, { type: 'setSelection', ids: [group!] });
+    return group!;
+  };
+  const fiveNodes = (s: Scene) => {
+    rect(s.target, 70, 70);
+    rect(s.target, 90, 90);
+    ok(s.target, { type: 'setSelection', ids: [s.c] });
+  };
+  const tool = (name: ToolName) => (s: Scene) => {
+    expect(s.target.query({ type: 'tool' })).toBe(name);
+  };
+  const nudged = (dx: number, dy: number) => (s: Scene) => {
+    expect(frameOf(s.target, s.b)).toEqual({ x: 20 + dx, y: dy, width: 10, height: 10 });
+  };
+  const order = (names: ('a' | 'b' | 'c')[]) => (s: Scene) => {
+    expect(children(s.target)).toEqual(names.map((name) => s[name]));
+  };
+
+  type Case = {
+    chord: string;
+    key: string;
+    modifiers?: Modifiers;
+    before?: (s: Scene) => void;
+    result?: (s: Scene) => CommandResult;
+    check: (s: Scene) => void;
+  };
+  const cases: Case[] = [
+    {
+      chord: 'V',
+      key: 'v',
+      before: (s) => ok(s.target, { type: 'setTool', tool: 'line' }),
+      check: tool('select'),
+    },
+    { chord: 'R', key: 'r', check: tool('rectangle') },
+    { chord: 'O', key: 'o', check: tool('ellipse') },
+    { chord: 'L', key: 'l', check: tool('line') },
+    { chord: 'F', key: 'f', check: tool('frame') },
+    { chord: 'P', key: 'p', check: tool('path') },
+    { chord: 'Delete', key: 'Delete', check: order(['a', 'c']) },
+    { chord: 'Backspace', key: 'Backspace', check: order(['a', 'c']) },
+    { chord: 'Mod+Z', key: 'z', modifiers: mods('ctrl'), check: order(['a', 'b']) },
+    {
+      chord: 'Mod+Shift+Z',
+      key: 'Z',
+      modifiers: mods('ctrl', 'shift'),
+      before: (s) => ok(s.target, { type: 'undo' }),
+      check: order(['a', 'b', 'c']),
+    },
+    {
+      chord: 'Mod+Y',
+      key: 'y',
+      modifiers: mods('ctrl'),
+      before: (s) => ok(s.target, { type: 'undo' }),
+      check: order(['a', 'b', 'c']),
+    },
+    {
+      chord: 'Mod+A',
+      key: 'a',
+      modifiers: mods('ctrl'),
+      check: (s) => expect(s.target.query({ type: 'selection' })).toEqual([s.a, s.b, s.c]),
+    },
+    {
+      chord: 'Mod+G',
+      key: 'g',
+      modifiers: mods('ctrl'),
+      result: () => ({ ok: true, ids: ['n6'], consumed: true }),
+      check: (s) => {
+        expect(children(s.target)).toEqual([s.a, 'n6', s.c]);
+        expect(s.target.query({ type: 'selection' })).toEqual(['n6']);
+      },
+    },
+    {
+      chord: 'Mod+Shift+G',
+      key: 'G',
+      modifiers: mods('ctrl', 'shift'),
+      before: grouped,
+      check: (s) => {
+        expect(children(s.target)).toEqual([s.a, s.b, s.c]);
+        expect(s.target.query({ type: 'selection' })).toEqual([s.a, s.b]);
+      },
+    },
+    {
+      chord: 'Mod+Alt+M',
+      key: 'm',
+      modifiers: mods('ctrl', 'alt'),
+      // The action ran: a rectangle cannot be the mask source.
+      result: () => ({
+        ok: false,
+        code: 'editor.invalid-mask-source',
+        path: '/children/0',
+        consumed: true,
+      }),
+      check: order(['a', 'b', 'c']),
+    },
+    {
+      chord: 'Mod+D',
+      key: 'd',
+      modifiers: mods('ctrl'),
+      result: () => ({ ok: true, ids: ['n6'], consumed: true }),
+      check: (s) => {
+        expect(children(s.target)).toEqual([s.a, s.b, 'n6', s.c]);
+        expect(frameOf(s.target, 'n6')).toEqual(frameOf(s.target, s.b));
+        expect(s.target.query({ type: 'selection' })).toEqual(['n6']);
+      },
+    },
+    { chord: 'ArrowLeft', key: 'ArrowLeft', check: nudged(-1, 0) },
+    { chord: 'ArrowRight', key: 'ArrowRight', check: nudged(1, 0) },
+    { chord: 'ArrowUp', key: 'ArrowUp', check: nudged(0, -1) },
+    { chord: 'ArrowDown', key: 'ArrowDown', check: nudged(0, 1) },
+    { chord: 'Shift+ArrowLeft', key: 'ArrowLeft', modifiers: mods('shift'), check: nudged(-10, 0) },
+    {
+      chord: 'Shift+ArrowRight',
+      key: 'ArrowRight',
+      modifiers: mods('shift'),
+      check: nudged(10, 0),
+    },
+    { chord: 'Shift+ArrowUp', key: 'ArrowUp', modifiers: mods('shift'), check: nudged(0, -10) },
+    { chord: 'Shift+ArrowDown', key: 'ArrowDown', modifiers: mods('shift'), check: nudged(0, 10) },
+    // Five nodes [a, b, c, d, e] with c selected, so the four ops give four different orders.
+    {
+      chord: 'Mod+]',
+      key: ']',
+      modifiers: mods('ctrl'),
+      before: fiveNodes,
+      check: (s) => expect(children(s.target)).toEqual([s.a, s.b, 'n6', s.c, 'n7']),
+    },
+    {
+      chord: 'Mod+[',
+      key: '[',
+      modifiers: mods('ctrl'),
+      before: fiveNodes,
+      check: (s) => expect(children(s.target)).toEqual([s.a, s.c, s.b, 'n6', 'n7']),
+    },
+    {
+      chord: 'Mod+Shift+}',
+      key: '}',
+      modifiers: mods('ctrl', 'shift'),
+      before: fiveNodes,
+      check: (s) => expect(children(s.target)).toEqual([s.a, s.b, 'n6', 'n7', s.c]),
+    },
+    {
+      chord: 'Mod+Shift+{',
+      key: '{',
+      modifiers: mods('ctrl', 'shift'),
+      before: fiveNodes,
+      check: (s) => expect(children(s.target)).toEqual([s.c, s.a, s.b, 'n6', 'n7']),
+    },
+    { chord: '=', key: '=', check: (s) => expect(zoom(s.target)).toBe(2) },
+    { chord: '-', key: '-', check: (s) => expect(zoom(s.target)).toBe(0.5) },
+    {
+      chord: 'Shift+!',
+      key: '!',
+      modifiers: mods('shift'),
+      // Bounds 60 by 60: min((800 − 64) / 60, (600 − 64) / 60).
+      check: (s) => expect(zoom(s.target)).toBe(536 / 60),
+    },
+    {
+      chord: 'Shift+@',
+      key: '@',
+      modifiers: mods('shift'),
+      check: (s) => expect(zoom(s.target)).toBe(536 / 10),
+    },
+    {
+      chord: 'Shift+)',
+      key: ')',
+      modifiers: mods('shift'),
+      before: (s) => ok(s.target, { type: 'zoomBy', factor: 4 }),
+      check: (s) => expect(zoom(s.target)).toBe(1),
+    },
+    {
+      chord: 'Enter',
+      key: 'Enter',
+      before: grouped,
+      check: (s) => {
+        expect(s.target.query({ type: 'scope' })).toBe('n6');
+        expect(s.target.query({ type: 'selection' })).toEqual([s.a, s.b]);
+      },
+    },
+    {
+      chord: 'Escape',
+      key: 'Escape',
+      check: (s) => expect(s.target.query({ type: 'selection' })).toEqual([]),
+    },
+  ];
+
+  it('the cases cover exactly the default bindings', () => {
+    expect(cases.map((entry) => entry.chord)).toEqual(DEFAULT_KEYMAP.map((entry) => entry.chord));
+  });
+
+  it.each(cases)('$chord runs its action', (entry) => {
+    const s = scene();
+    entry.before?.(s);
+    expect(press(s.target, entry.key, entry.modifiers ?? none)).toEqual(
+      entry.result?.(s) ?? { ok: true, ids: [], consumed: true },
+    );
+    entry.check(s);
+  });
+
+  it('host-bound align, distribute, copy, cut and paste run through input', () => {
+    const target = editor({
+      keymap: [
+        { chord: 'Alt+1', action: 'align', args: { edge: 'top' } },
+        { chord: 'Alt+2', action: 'distribute', args: { axis: 'horizontal' } },
+        { chord: 'Mod+C', action: 'copy' },
+        { chord: 'Mod+X', action: 'cut' },
+        { chord: 'Mod+V', action: 'paste' },
+      ],
+    });
+    const a = rect(target);
+    const b = rect(target, 20, 30);
+    const c = rect(target, 100, 50);
+    ok(target, { type: 'setSelection', ids: [a, b, c] });
+    expect(press(target, '1', mods('alt'))).toEqual({ ok: true, ids: [], consumed: true });
+    expect([a, b, c].map((id) => target.query({ type: 'node', id })?.frame.y)).toEqual([0, 0, 0]);
+    // Span 0 to 110, sizes 30: gap 40, so b moves to x 50.
+    expect(press(target, '2', mods('alt'))).toEqual({ ok: true, ids: [], consumed: true });
+    expect(target.query({ type: 'node', id: b })?.frame.x).toBe(50);
+    ok(target, { type: 'setSelection', ids: [b] });
+    expect(press(target, 'c', mods('ctrl'))).toEqual({ ok: true, ids: [b], consumed: true });
+    expect(press(target, 'x', mods('ctrl'))).toEqual({ ok: true, ids: [b], consumed: true });
+    expect(children(target)).toEqual([a, c]);
+    expect(press(target, 'v', mods('ctrl'))).toEqual({ ok: true, ids: ['n6'], consumed: true });
+    expect(children(target)).toEqual([a, c, 'n6']);
+    expect(target.query({ type: 'node', id: 'n6' })?.frame).toEqual({
+      x: 50,
+      y: 0,
+      width: 10,
+      height: 10,
+    });
+  });
+});

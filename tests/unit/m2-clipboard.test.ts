@@ -1418,6 +1418,71 @@ describe('M2-A10 EditorCanvas clipboard events (section 6)', () => {
     expect(written).toEqual([]);
   });
 
+  it('an extension tool that consumes Mod+C makes no clipboard write (M2-U7, U6 note 6)', () => {
+    const { writer, written } = systemClipboard();
+    const keys: string[] = [];
+    const target = createEditor({
+      document: FIXTURE,
+      keymap: CLIPBOARD_KEYS,
+      extensions: [
+        tallyExtension().extension,
+        {
+          id: 'ext.keys',
+          tools: [
+            {
+              id: 'ext.keys.tool',
+              input: (event) => {
+                if (event.kind !== 'keydown') return false;
+                keys.push(event.key);
+                return event.key === 'c' && event.modifiers.ctrl;
+              },
+              reset: () => undefined,
+            },
+          ],
+        },
+      ],
+    });
+    const element = {
+      getBoundingClientRect: () => ({ left: 0, top: 0 }),
+      clientLeft: 0,
+      clientTop: 0,
+    };
+    const canvasInput = new CanvasInput(
+      target,
+      () => 600,
+      () => element,
+      () => writer,
+    );
+    const key = (k: string) => {
+      let prevented = false;
+      canvasInput.keyDown({
+        key: k,
+        code: `Key${k.toUpperCase()}`,
+        repeat: false,
+        isComposing: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        ctrlKey: true,
+        preventDefault: () => {
+          prevented = true;
+        },
+      });
+      return prevented;
+    };
+    select(target, ['a']);
+    ok(target, { type: 'setTool', tool: 'ext.keys.tool' });
+    // Consumed by the tool: prevented, so no DOM copy follows, and nothing copied or written.
+    expect(key('c')).toBe(true);
+    expect(clipboard(target)).toBeNull();
+    expect(written).toEqual([]);
+    // Mod+X is not the tool's: the bound cut runs and writes its text.
+    expect(key('x')).toBe(true);
+    expect(keys).toEqual(['c', 'x']);
+    expect(written).toEqual([clipboard(target)]);
+    expect(nodeOf(target, 'a')).toBeNull();
+  });
+
   it('writeText is guarded: missing, not a function, throwing or rejecting', async () => {
     const throwing = systemClipboard(() => {
       throw new Error('no permission');
