@@ -25,7 +25,7 @@ import type {
 // Public command, query and event shapes (P5 plan, sections 4.1 to 4.3; MVP M1 contract,
 // sections 3 and 4).
 
-export type ToolName = 'select' | 'rectangle' | 'path';
+export type ToolName = 'select' | 'rectangle' | 'ellipse' | 'line' | 'frame' | 'path';
 
 export type PagePoint = Readonly<{ x: number; y: number }>;
 export type Modifiers = Readonly<{ shift: boolean; alt: boolean; meta: boolean; ctrl: boolean }>;

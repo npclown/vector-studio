@@ -20,7 +20,7 @@ import {
   relocate,
   rotatedBounds,
 } from './geometry.js';
-import { resizeContainer } from './resize.js';
+import { mapNodeInPageSpace, resizeContainer, type ScaleMap } from './resize.js';
 import {
   ancestors,
   childrenOf,
@@ -408,6 +408,64 @@ export function refitGesture(
   const document = draft.finish((node) => custom.check(node), { refit: true, placementBase: base });
   if ('ok' in document) return document;
   return { ok: true, document, touched: [...draft.touched], created: [] };
+}
+
+/**
+ * Package-internal gesture edits for the built-in tools, for placements no public command
+ * expresses (M1 contract, section 4.4 and 7): `map` resizes a multi-selection by a page-space
+ * scale, each node mapped from its pre-gesture state as in a group resize; `line` moves the
+ * endpoints of a line to page points.
+ */
+export type GestureEdit =
+  | Readonly<{ kind: 'map'; ids: readonly string[]; map: ScaleMap }>
+  | Readonly<{ kind: 'line'; id: string; start: PagePoint; end: PagePoint }>;
+
+/**
+ * Applies a gesture edit to the live `document` of a gesture whose pre-gesture document is
+ * `base`. Groups do not refit (that happens at commit, section 4.2).
+ */
+export function applyGestureEdit(
+  document: DocumentV2,
+  base: DocumentV2,
+  edit: GestureEdit,
+  custom: CustomRules = NO_CUSTOM,
+): EditResult {
+  const draft = new Draft(document);
+  if (edit.kind === 'map') {
+    if (edit.ids.some((id) => nodeOf(document, id) === undefined)) {
+      return fail('editor.unknown-node');
+    }
+    // Every mapped subtree first returns to its pre-gesture state, so updates do not compound
+    // and a node the map leaves in place is back where it started.
+    const baseTree = documentTree(base);
+    for (const id of edit.ids) {
+      for (const member of subtree(draft, id)) {
+        const original = baseTree.node(member);
+        if (original !== undefined && draft.node(member) !== original) {
+          draft.setChecked(original, true);
+        }
+      }
+    }
+    for (const id of edit.ids) mapNodeInPageSpace(draft, id, edit.map);
+  } else {
+    const node = nodeOf(document, edit.id);
+    if (node === undefined) return fail('editor.unknown-node');
+    if (node.type !== 'line' || !isPoint(edit.start) || !isPoint(edit.end)) {
+      return fail('editor.invalid-command');
+    }
+    // Into the parent's local space, as `createLine` maps them; on a page nothing changes.
+    const inverse = invertRigid(spaceOf(draft, node.parent).matrix);
+    const onPage = draft.page(node.parent) !== undefined;
+    const start = onPage ? edit.start : apply(inverse, edit.start.x, edit.start.y);
+    const end = onPage ? edit.end : apply(inverse, edit.end.x, edit.end.y);
+    const { frame, unit } = fitPoints([start.x, start.y, end.x, end.y], node.rotation);
+    draft.set({ ...node, frame, points: [unit[0]!, unit[1]!, unit[2]!, unit[3]!] });
+  }
+  return success(
+    draft.finish((node) => custom.check(node), { refit: false }),
+    draft,
+    [],
+  );
 }
 
 function isPoint(value: unknown): value is PagePoint {

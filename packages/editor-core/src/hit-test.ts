@@ -1,14 +1,20 @@
 import type { DocumentV2, Frame, NodeV2, PathData } from '@vector-studio/model';
-import { apply, boundsOfPoints, corners, rotate } from './geometry.js';
-import { documentTree, spaceOf } from './tree.js';
+import {
+  apply,
+  boundsOfPoints,
+  corners,
+  invertRigid,
+  localTransform,
+  rotate,
+  rotatedBounds,
+} from './geometry.js';
+import { clampedRadii } from './projector.js';
+import { ancestors, documentTree, isContainer, isGroup, spaceOf } from './tree.js';
 import type { PagePoint } from './types.js';
 
-// P5 hit testing (plan section 4.4): fill regions and outlines, with outlines flattened by
-// editor-core itself at 0.25 / zoom page units. Exact geometry-port hit testing is deferred.
-//
-// M1-U2 scope: the active page's root rectangles, paths and custom nodes hit as in P5, through
-// their rotation. Ellipses, lines, containers and their subtrees, clips and masks are not hit
-// tested yet: that is M1-U4 (section 6).
+// Hit testing (P5 plan, section 4.4; MVP M1 contract, section 6): fill regions and outlines,
+// with outlines flattened by editor-core itself at 0.25 / zoom page units, through rotation and
+// containers, inside frame clips and mask regions. Exact geometry-port hit testing is deferred.
 
 /** Frame-local path geometry for a custom node (its extension's `toScene`), or null. */
 export type CustomGeometry = (node: NodeV2) => PathData | null;
@@ -136,7 +142,140 @@ function rectangleOutline(frame: Frame): Polyline {
   };
 }
 
-/** Whether `point`, in the node's parent space, hits `node` at `zoom` (plan section 4.4). */
+/** Segments for an arc of `radius` over `sweep` radians within `tolerance` of the curve. */
+function arcSegments(radius: number, sweep: number, tolerance: number): number {
+  // The sagitta of a chord over angle a is about r·a²/8.
+  const n = Math.ceil(sweep * Math.sqrt(radius / (8 * tolerance)));
+  return Math.min(MAX_SEGMENTS_PER_CUBIC, Math.max(1, Number.isFinite(n) ? n : 1));
+}
+
+/** Appends the arc about `(cx, cy)` from angle `from` over `sweep` (clockwise on screen). */
+function pushArc(
+  points: PagePoint[],
+  cx: number,
+  cy: number,
+  radius: number,
+  from: number,
+  sweep: number,
+  tolerance: number,
+): void {
+  const n = arcSegments(radius, Math.abs(sweep), tolerance);
+  for (let i = 0; i <= n; i += 1) {
+    const angle = from + (sweep * i) / n;
+    points.push({ x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
+  }
+}
+
+/** The outline of a rectangle with clamped corner radii (section 5), flattened. */
+function roundedOutline(frame: Frame, radii: readonly number[], tolerance: number): Polyline {
+  const { x, y, width: w, height: h } = frame;
+  const [tl, tr, br, bl] = radii as [number, number, number, number];
+  const points: PagePoint[] = [];
+  const half = Math.PI / 2;
+  if (tl > 0) pushArc(points, x + tl, y + tl, tl, Math.PI, half, tolerance);
+  else points.push({ x, y });
+  if (tr > 0) pushArc(points, x + w - tr, y + tr, tr, -half, half, tolerance);
+  else points.push({ x: x + w, y });
+  if (br > 0) pushArc(points, x + w - br, y + h - br, br, 0, half, tolerance);
+  else points.push({ x: x + w, y: y + h });
+  if (bl > 0) pushArc(points, x + bl, y + h - bl, bl, half, half, tolerance);
+  else points.push({ x, y: y + h });
+  return { points, closed: true };
+}
+
+/** Whether `p` is inside the rectangle with clamped corner radii. */
+function insideRounded(p: PagePoint, frame: Frame, radii: readonly number[]): boolean {
+  const { x, y, width: w, height: h } = frame;
+  if (p.x < x || p.x > x + w || p.y < y || p.y > y + h) return false;
+  const [tl, tr, br, bl] = radii as [number, number, number, number];
+  const corner = (cx: number, cy: number, r: number, inX: boolean, inY: boolean) =>
+    !(inX && inY) || Math.hypot(p.x - cx, p.y - cy) <= r;
+  return (
+    corner(x + tl, y + tl, tl, p.x < x + tl, p.y < y + tl) &&
+    corner(x + w - tr, y + tr, tr, p.x > x + w - tr, p.y < y + tr) &&
+    corner(x + w - br, y + h - br, br, p.x > x + w - br, p.y > y + h - br) &&
+    corner(x + bl, y + h - bl, bl, p.x < x + bl, p.y > y + h - bl)
+  );
+}
+
+function insideBox(p: PagePoint, frame: Frame): boolean {
+  return (
+    p.x >= frame.x &&
+    p.x <= frame.x + frame.width &&
+    p.y >= frame.y &&
+    p.y <= frame.y + frame.height
+  );
+}
+
+/** The ellipse inscribed in a frame, flattened within `tolerance`. */
+function ellipseOutline(frame: Frame, tolerance: number): Polyline {
+  const rx = frame.width / 2;
+  const ry = frame.height / 2;
+  const cx = frame.x + rx;
+  const cy = frame.y + ry;
+  const n = Math.max(8, arcSegments(Math.max(rx, ry), 2 * Math.PI, tolerance));
+  const points: PagePoint[] = [];
+  for (let i = 0; i < n; i += 1) {
+    const angle = (2 * Math.PI * i) / n;
+    points.push({ x: cx + rx * Math.cos(angle), y: cy + ry * Math.sin(angle) });
+  }
+  return { points, closed: true };
+}
+
+function insideEllipse(p: PagePoint, frame: Frame): boolean {
+  const rx = frame.width / 2;
+  const ry = frame.height / 2;
+  if (rx <= 0 || ry <= 0) return false;
+  const u = (p.x - frame.x - rx) / rx;
+  const v = (p.y - frame.y - ry) / ry;
+  return u * u + v * v <= 1;
+}
+
+/**
+ * The outline pieces of a line in its unrotated frame (section 5 geometry): the segment, then
+ * each arrowhead as an open polyline (`line`) or a closed triangle (`triangle`). A line without
+ * a stroke, of stroke width 0 or of zero length has no arrowheads.
+ */
+function lineOutline(node: Extract<NodeV2, { type: 'line' }>): {
+  lines: Polyline[];
+  triangles: Polyline[];
+} {
+  const { x, y, width, height } = node.frame;
+  const p0 = { x: x + node.points[0] * width, y: y + node.points[1] * height };
+  const p1 = { x: x + node.points[2] * width, y: y + node.points[3] * height };
+  const lines: Polyline[] = [{ points: [p0, p1], closed: false }];
+  const triangles: Polyline[] = [];
+  const w = node.stroke?.width ?? 0;
+  const length = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+  if (w === 0 || length === 0) return { lines, triangles };
+  const d = { x: (p1.x - p0.x) / length, y: (p1.y - p0.y) / length };
+  const n = { x: -d.y, y: d.x };
+  const head = (arrow: string, tip: PagePoint, u: PagePoint) => {
+    if (arrow === 'none') return;
+    const base = { x: tip.x - 4 * w * u.x, y: tip.y - 4 * w * u.y };
+    const left = { x: base.x + 2 * w * n.x, y: base.y + 2 * w * n.y };
+    const right = { x: base.x - 2 * w * n.x, y: base.y - 2 * w * n.y };
+    const outline = { points: [left, tip, right], closed: arrow === 'triangle' };
+    (arrow === 'triangle' ? triangles : lines).push(outline);
+  };
+  head(node.startArrow, p0, { x: -d.x, y: -d.y });
+  head(node.endArrow, p1, d);
+  return { lines, triangles };
+}
+
+/** A point in a node's parent space, turned into its unrotated frame (a rigid map). */
+function intoFrame(node: NodeV2, parentPoint: PagePoint): PagePoint {
+  if (node.rotation === 0) return parentPoint;
+  const cx = node.frame.x + node.frame.width / 2;
+  const cy = node.frame.y + node.frame.height / 2;
+  const turned = rotate(-node.rotation, parentPoint.x - cx, parentPoint.y - cy);
+  return { x: cx + turned.x, y: cy + turned.y };
+}
+
+/**
+ * Whether `point`, in the node's parent space, hits the leaf `node` at `zoom` (P5 plan, section
+ * 4.4; M1 contract, section 6). Containers never hit here; `visible` of the node itself counts.
+ */
 export function hitsNode(
   node: NodeV2,
   parentPoint: PagePoint,
@@ -144,71 +283,168 @@ export function hitsNode(
   custom: CustomGeometry,
 ): boolean {
   if (!node.visible) return false;
-  if (node.type !== 'rectangle' && node.type !== 'path' && node.type !== 'custom') return false;
+  if (isContainer(node)) return false;
   // Into the unrotated frame: a rigid map, so distances are unchanged (M1 contract, section 6).
-  const cx = node.frame.x + node.frame.width / 2;
-  const cy = node.frame.y + node.frame.height / 2;
-  const turned = rotate(-node.rotation, parentPoint.x - cx, parentPoint.y - cy);
-  const point = node.rotation === 0 ? parentPoint : { x: cx + turned.x, y: cy + turned.y };
+  const point = intoFrame(node, parentPoint);
   const radius = Math.max((node.stroke?.width ?? 0) / 2, 4 / zoom);
+  const tolerance = 0.25 / zoom;
   if (node.type === 'rectangle') {
-    const { x, y, width, height } = node.frame;
-    if (
-      node.fill !== null &&
-      point.x >= x &&
-      point.x <= x + width &&
-      point.y >= y &&
-      point.y <= y + height
-    ) {
-      return true;
+    const radii = clampedRadii(node.cornerRadii, node.frame.width, node.frame.height);
+    if (radii.every((r) => r === 0)) {
+      if (node.fill !== null && insideBox(point, node.frame)) return true;
+      return nearOutline(point, [rectangleOutline(node.frame)], radius);
     }
-    return nearOutline(point, [rectangleOutline(node.frame)], radius);
+    if (node.fill !== null && insideRounded(point, node.frame, radii)) return true;
+    return nearOutline(point, [roundedOutline(node.frame, radii, tolerance)], radius);
+  }
+  if (node.type === 'ellipse') {
+    if (node.fill !== null && insideEllipse(point, node.frame)) return true;
+    return nearOutline(point, [ellipseOutline(node.frame, tolerance)], radius);
+  }
+  if (node.type === 'line') {
+    const { lines, triangles } = lineOutline(node);
+    if (triangles.some((triangle) => insideFill(point, [triangle], false))) return true;
+    return nearOutline(point, [...lines, ...triangles], radius);
   }
   const geometry = node.type === 'path' ? node.path : custom(node);
   if (geometry === null) return false;
-  const lines = flatten(geometry, node.frame, node.type === 'path', 0.25 / zoom);
+  const lines = flatten(geometry, node.frame, node.type === 'path', tolerance);
   if (node.fill !== null && insideFill(point, lines, geometry.fillRule === 'evenodd')) return true;
   return nearOutline(point, lines, radius);
 }
 
-function pageChildren(document: DocumentV2, page: string): readonly string[] {
-  return document.pages.find((entry) => entry.id === page)?.children ?? [];
+/** Whether `point`, in a mask group's local space, is inside its source's fill region. */
+function insideMask(source: NodeV2 | undefined, point: PagePoint, zoom: number): boolean {
+  if (source?.type !== 'path') return false;
+  // Fill, opacity and visibility of the source are ignored; its fill rule applies.
+  const lines = flatten(source.path, source.frame, true, 0.25 / zoom);
+  return insideFill(intoFrame(source, point), lines, source.path.fillRule === 'evenodd');
 }
 
-/** The topmost visible root node of `page` hit at `point`, in reverse paint order, or null. */
-export function topmostHit(
+/** A lazily evaluated clip: whether the point is inside every clipping ancestor. */
+type Clip = () => boolean;
+
+function memo(test: () => boolean): Clip {
+  let value: boolean | undefined;
+  return () => (value ??= test());
+}
+
+/**
+ * The deepest node of `page` hit at `point` in reverse paint order, at any depth (M1 contract,
+ * section 6): a leaf, or a frame on its background or border; never a group, a mask group or a
+ * mask source. Null when nothing is hit.
+ */
+export function deepestHit(
   document: DocumentV2,
   page: string,
   point: PagePoint,
   zoom: number,
   custom: CustomGeometry,
 ): string | null {
-  const children = pageChildren(document, page);
-  for (let i = children.length - 1; i >= 0; i -= 1) {
-    const node = document.nodes[children[i]!];
-    if (node !== undefined && hitsNode(node, point, zoom, custom)) return node.id;
+  const tree = documentTree(document);
+  // The tree depth is bounded by 256 (M1-S3), so the recursion is too.
+  const visit = (id: string, parentPoint: PagePoint, clip: Clip): string | null => {
+    const node = tree.node(id);
+    if (node === undefined || !node.visible) return null;
+    if (!isContainer(node)) return hitsNode(node, parentPoint, zoom, custom) && clip() ? id : null;
+    const local = apply(
+      invertRigid(localTransform(node.frame, node.rotation)),
+      parentPoint.x,
+      parentPoint.y,
+    );
+    const box = { x: 0, y: 0, width: node.frame.width, height: node.frame.height };
+    const children = (inner: Clip, from: number): string | null => {
+      for (let i = node.children.length - 1; i >= from; i -= 1) {
+        const found = visit(node.children[i]!, local, inner);
+        if (found !== null) return found;
+      }
+      return null;
+    };
+    if (isGroup(node)) {
+      if (node.type === 'group') return children(clip, 0);
+      const source = tree.node(node.children[0]!);
+      return children(
+        memo(() => clip() && insideMask(source, local, zoom)),
+        1,
+      );
+    }
+    // A frame paints its background, its children inside its rect, then its border.
+    if (node.stroke !== null) {
+      const radius = Math.max(node.stroke.width / 2, 4 / zoom);
+      if (nearOutline(local, [rectangleOutline(box)], radius) && clip()) return id;
+    }
+    const inside = insideBox(local, box);
+    const found = children(
+      memo(() => inside && clip()),
+      0,
+    );
+    if (found !== null) return found;
+    return node.fill !== null && inside && clip() ? id : null;
+  };
+  const roots = tree.page(page)?.children ?? [];
+  for (let i = roots.length - 1; i >= 0; i -= 1) {
+    const found = visit(roots[i]!, point, () => true);
+    if (found !== null) return found;
   }
   return null;
 }
 
 /**
- * Visible root rectangles, paths and custom nodes of `page`, in paint order, whose rotated
- * frame's bounds intersect the rectangle (P5-Q5); the M1 candidates of section 6 are M1-U4.
+ * The selection target of a hit node (section 6): its outermost ancestor below the scope, which
+ * is the page, or a frame whose parent is the page (a top-level frame acts as an artboard). A hit
+ * on a top-level frame itself targets the frame.
+ */
+export function selectionTarget(document: DocumentV2, id: string): string {
+  const tree = documentTree(document);
+  const chain = [id, ...ancestors(tree, id).map((node) => node.id)];
+  const top = tree.node(chain[chain.length - 1]!)!;
+  if (top.type === 'frame' && chain.length >= 2) return chain[chain.length - 2]!;
+  return top.id;
+}
+
+/** The chain from a hit node up to its selection target, innermost first. */
+export function targetChain(document: DocumentV2, id: string): string[] {
+  const target = selectionTarget(document, id);
+  const tree = documentTree(document);
+  const chain = [id];
+  for (const node of ancestors(tree, id)) {
+    if (chain[chain.length - 1] === target) break;
+    chain.push(node.id);
+  }
+  return chain;
+}
+
+function intersects(frame: Frame, box: Frame): boolean {
+  return (
+    frame.x <= box.x + box.width &&
+    box.x <= frame.x + frame.width &&
+    frame.y <= box.y + box.height &&
+    box.y <= frame.y + frame.height
+  );
+}
+
+function contains(box: Frame, frame: Frame): boolean {
+  return (
+    box.x <= frame.x &&
+    frame.x + frame.width <= box.x + box.width &&
+    box.y <= frame.y &&
+    frame.y + frame.height <= box.y + box.height
+  );
+}
+
+/**
+ * The marquee candidates of section 6, in paint order: the visible page children whose rotated
+ * frame's bounds intersect the rectangle (P5-Q5), except that a top-level frame is selected only
+ * when the rectangle contains those bounds entirely. Children of containers are not candidates.
  */
 export function marqueeHits(document: DocumentV2, page: string, box: Frame): string[] {
-  return pageChildren(document, page).filter((id) => {
-    const node = document.nodes[id];
+  const tree = documentTree(document);
+  return (tree.page(page)?.children ?? []).filter((id) => {
+    const node = tree.node(id);
     if (node === undefined || !node.visible) return false;
-    if (node.type !== 'rectangle' && node.type !== 'path' && node.type !== 'custom') return false;
     // Rotation 0 uses the frame itself, bit-identical with P5.
-    const frame =
-      node.rotation === 0 ? node.frame : boundsOfPoints(corners(node.frame, node.rotation))!;
-    return (
-      frame.x <= box.x + box.width &&
-      box.x <= frame.x + frame.width &&
-      frame.y <= box.y + box.height &&
-      box.y <= frame.y + frame.height
-    );
+    const frame = node.rotation === 0 ? node.frame : rotatedBounds(node);
+    return node.type === 'frame' ? contains(box, frame) : intersects(frame, box);
   });
 }
 
