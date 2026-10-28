@@ -148,10 +148,16 @@ function record(check: Check, value: number, tolerance: number, example: () => u
 }
 
 /** Interior probes on a grid: the section 3 oracle within 2/255. */
-function checkInterior(view: View, leaves: readonly DrawnLeaf[], frame: Frame): Check {
+function checkInterior(
+  view: View,
+  leaves: readonly DrawnLeaf[],
+  frame: Frame,
+  stride = INTERIOR_STRIDE,
+): Check {
   const check = newCheck();
-  for (let y = 1; y < frame.height; y += INTERIOR_STRIDE) {
-    for (let x = 1; x < frame.width; x += INTERIOR_STRIDE) {
+  const start = stride === 1 ? 0 : 1;
+  for (let y = start; y < frame.height; y += stride) {
+    for (let x = start; x < frame.width; x += stride) {
       const expected = oracle(view, leaves, x, y);
       if (expected === null) continue;
       const observed = pixel(frame, x, y);
@@ -304,8 +310,9 @@ async function runImageCase(
   item: ImageCase,
   dpr: number,
   failures: string[],
+  options: Readonly<{ view?: View; interiorStride?: number }> = {},
 ) {
-  const view = viewOf(item.zoom, dpr, item.centre);
+  const view = options.view ?? viewOf(item.zoom, dpr, item.centre);
   const before = await diagnosticCount(page);
   const { result, frame } = await render(page, item.items, view);
   const added = await diagnosticsSince(page, before);
@@ -321,7 +328,7 @@ async function runImageCase(
     return { report, frame };
   }
   const leaves = drawnLeaves(item.expectedItems ?? item.items);
-  const interior = checkInterior(view, leaves, frame);
+  const interior = checkInterior(view, leaves, frame, options.interiorStride);
   report.interior = interior;
   if (interior.probes === 0) failures.push(`${item.id}: no interior probe`);
   if (interior.failures > 0)
@@ -1122,3 +1129,104 @@ for (const samples of [4, 1] as const) {
     expect(result.framesSubmitted).toBeGreaterThanOrEqual(100);
   });
 }
+
+// --- E22-A5: tiled mask passes at 3840 x 2160 (E22 contract, unit U3) ---
+
+const SOURCE = { r: 0.9, g: 0.3, b: 0.2, a: 1 };
+
+function star(cx: number, cy: number, inner: number, outer: number): number[] {
+  const points: number[] = [];
+  for (let index = 0; index < 14; index += 1) {
+    const radius = index % 2 === 0 ? outer : inner;
+    const angle = (index * Math.PI) / 7 + 0.13;
+    points.push(cx + radius * Math.cos(angle), cy + radius * Math.sin(angle));
+  }
+  return points;
+}
+
+/** World units at DPR 2: the surface is 1920 x 1080 units; tile seams every 512 units. */
+const E22_CASES: readonly ImageCase[] = [
+  {
+    id: 'e22-full-screen-mask',
+    criterion: 'P4-A03',
+    zoom: 1,
+    items: [
+      container('full', IDENTITY, { kind: 'mask' }, [
+        leaf('full-source', ellipse(1880, 1040), translate(20, 20), SOURCE),
+        leaf('full-content', rect(1920, 1080), IDENTITY),
+      ]),
+    ],
+    edgeContent: 'full-content',
+    grey: true,
+  },
+  {
+    id: 'e22-nested-mesh-mask-over-seams',
+    criterion: 'P4-A03',
+    zoom: 1,
+    items: [
+      container('outer', IDENTITY, { kind: 'mask' }, [
+        leaf('outer-source', polygon([star(960, 540, 260, 520)]), IDENTITY, SOURCE),
+        container('inner', IDENTITY, { kind: 'mask' }, [
+          leaf('inner-source', ellipse(1100, 700), translate(410, 190), SOURCE),
+          leaf('inner-content', rect(1920, 1080), IDENTITY),
+        ]),
+      ]),
+    ],
+    edgeContent: 'inner-content',
+    grey: true,
+  },
+];
+
+test('E22 U3 tiled mask passes at 3840 x 2160 (E22-A5), 4x, DPR 2', async ({
+  browser,
+  page,
+}, info) => {
+  test.setTimeout(1_800_000);
+  const write = reporter('e22-uhd-4x-dpr2', info);
+  const { ready, pageErrors } = await open(page, 4, 2);
+  const failures: string[] = [];
+  // A capture needs a scene, so the empty scene comes first.
+  await render(page, [], viewOf(1, 2));
+  const resized = await page.evaluate(() => window.__vectorStudioP4.resize(1920, 1080, 2));
+  const view: View = {
+    camera: { position: { x: 0, y: 0 }, zoom: 1 },
+    devicePixelRatio: 2,
+    width: resized.frame.width,
+    height: resized.frame.height,
+  };
+  if (view.width !== 3840 || view.height !== 2160)
+    failures.push(`surface ${view.width} x ${view.height}`);
+  const references = new References(page);
+  const cases: unknown[] = [];
+  for (const item of E22_CASES) {
+    // Every pixel is probed: stride 1 interior, and the edge check walks the whole frame, so
+    // every pixel on a tile seam is checked against the oracle.
+    const { report } = await runImageCase(page, references, item, 2, failures, {
+      view,
+      interiorStride: 1,
+    });
+    cases.push(report);
+  }
+  if (pageErrors.length > 0) failures.push(`page errors: ${pageErrors.join('; ')}`);
+  write(
+    'report.json',
+    `${JSON.stringify(
+      {
+        criteria: ['E22-A5'],
+        browser: { project: info.project.name, version: browser.version() },
+        host: { platform: os.platform(), release: os.release(), cpus: os.cpus()[0]?.model },
+        source: p1Source(),
+        ready,
+        surface: { width: view.width, height: view.height },
+        tolerances: { interior: INTERIOR_TOLERANCE, edge: EDGE_TOLERANCE },
+        referenceRenders: references.renders,
+        cases,
+        failures,
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await page.evaluate(() => window.__vectorStudioP4.dispose());
+  expect(failures).toEqual([]);
+});
