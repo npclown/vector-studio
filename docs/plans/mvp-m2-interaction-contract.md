@@ -169,7 +169,7 @@ This contract is the M2 execution plan (approved 2026-10-28). The user accepted 
 
 | Unit | State |
 | --- | --- |
-| M2-U1 | Not started |
+| M2-U1 | In review: input kinds, dispatch, `consumed`, keymap core and viewport (A01, A02, A11 for existing actions); independent review round 1 READY WITH FOLLOW-UPS, applied |
 | M2-U2 | Not started |
 | M2-U3 | Not started |
 | M2-U4 | Not started |
@@ -178,3 +178,5 @@ This contract is the M2 execution plan (approved 2026-10-28). The user accepted 
 | M2-U7 | Not started |
 | M2-U8 | Not started |
 | M2-U9 | Not started |
+
+M2-U1 notes (2026-10-28, recorded from its review): (1) Space is navigation's: an event is Space when `key` is `' '` or, under the `code` rule of section 7, its `code` token is `Space`; a chord whose key is `Space` is rejected in every layer with `editor.invalid-keymap`. (2) Token case is exact: `Keyz`, `digit1` or `space` are malformed chords. Whether a layer is valid can depend on `platform` (`Mod+Ctrl+X` is valid on `mac`, a repeated modifier on `other`). (3) The `group` and `maskGroup` actions select the new container; `ungroup` acts only when exactly one group or mask group is selected and selects the released children; any other selection is a consumed no-op. M2-U8 aligns the next-host toolbar's ungroup with this. (4) `setViewport` keeps the P5 rule and emits on every call; the no-event rule for an unchanged value applies to computed camera changes and the new session fields. (5) During a gesture a bound key is not consumed (M2-I2 step 3). (6) Cancelling any gesture restores the selection recorded when it began, filtered to existing nodes on the active page.
