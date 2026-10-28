@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Editor, EditorEvent, SelectionHandles } from '@vector-studio/editor-core';
+import type { Command, Editor, EditorEvent, SelectionHandles } from '@vector-studio/editor-core';
 import type { DocumentV2, NodeV2 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
 
@@ -35,6 +35,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const FIXTURE = JSON.parse(
   readFileSync(path.join(root, 'tests/fixtures/m1-model/containers.json'), 'utf8'),
 ) as DocumentV2;
+const FIXTURE_LINE_STROKE = (FIXTURE.nodes.l1 as Extract<NodeV2, { type: 'line' }>).stroke!;
 /** The page's fixture camera (apps/next-host/app/page.tsx): css = (page - position) * zoom. */
 const CAMERA = { x: -20, y: -20, zoom: 2 };
 
@@ -155,6 +156,54 @@ function nearest(colour: Rgb, references: Readonly<Record<string, Rgb>>): string
   return best;
 }
 
+/**
+ * The canvas clears to opaque black, which the fixture also uses for l1, f1's border and r2, so
+ * the spec recolours those three through commands right after the load (`RECOLOURS`, undone
+ * last) and classifies against colours that differ from the measured clear colour.
+ */
+const MAGENTA = { r: 1, g: 0, b: 1, a: 1 };
+const GREEN = { r: 0, g: 1, b: 0, a: 1 };
+const ORANGE = { r: 1, g: 0.5, b: 0, a: 1 };
+const RECOLOURS: readonly Command[] = [
+  { type: 'setNodeProps', id: 'l1', props: { stroke: { ...FIXTURE_LINE_STROKE, color: MAGENTA } } },
+  { type: 'setNodeProps', id: 'f1', props: { stroke: { color: GREEN, width: 1 } } },
+  // r2 is on page 2, which is not active: setNodeProps takes a node of any page by ID.
+  { type: 'setNodeProps', id: 'r2', props: { fill: ORANGE } },
+];
+/** The fixture after `RECOLOURS`, as the document reads before they are undone. */
+const RECOLOURED = (() => {
+  const document = structuredClone(FIXTURE) as unknown as {
+    nodes: Record<string, Record<string, unknown>>;
+  };
+  for (const command of RECOLOURS) {
+    if (command.type !== 'setNodeProps') continue;
+    Object.assign(document.nodes[command.id]!, command.props);
+  }
+  return document as unknown as DocumentV2;
+})();
+/** Reference colours in bytes; `canvas` and `white` are measured per check. */
+const PAINTS: Readonly<Record<string, Rgb>> = {
+  blue: [51, 102, 204],
+  red: [255, 0, 0],
+  magenta: [255, 0, 255],
+  green: [0, 255, 0],
+  orange: [255, 128, 0],
+  fill: [204, 204, 204],
+};
+
+/** References for a classification: each must differ from the measured clear colour. */
+function referencesWith(canvas: Rgb, extra: Readonly<Record<string, Rgb>> = {}) {
+  const references: Record<string, Rgb> = { canvas, ...PAINTS, ...extra };
+  for (const [name, colour] of Object.entries(references)) {
+    if (name === 'canvas') continue;
+    expect(
+      distance(colour, canvas),
+      `reference ${name} ${JSON.stringify(colour)} is too close to the canvas ${JSON.stringify(canvas)}`,
+    ).toBeGreaterThan(32);
+  }
+  return references;
+}
+
 /** Each fixture sample's colour is nearest to the paint the clip and the mask leave there. */
 async function expectFixturePixels(page: Page) {
   const names = Object.keys(SAMPLES) as (keyof typeof SAMPLES)[];
@@ -166,14 +215,8 @@ async function expectFixturePixels(page: Page) {
     keyof typeof SAMPLES,
     Rgb
   >;
-  // The canvas clear colour and the frame's white fill are measured; the rest are the fixture's.
-  const references: Record<string, Rgb> = {
-    canvas: sample.emptyCanvas,
-    white: sample.frameBackground,
-    blue: [51, 102, 204],
-    red: [255, 0, 0],
-    black: [0, 0, 0],
-  };
+  // The canvas clear colour and the frame's white fill are measured; the rest are the paints.
+  const references = referencesWith(sample.emptyCanvas, { white: sample.frameBackground });
   const classes = Object.fromEntries(
     names.map((name) => [name, nearest(sample[name], references)]),
   );
@@ -183,21 +226,21 @@ async function expectFixturePixels(page: Page) {
     frameBackground: 'white',
     insideMask: 'red',
     outsideMask: 'white',
-    lineMiddle: 'black',
-    arrowInterior: 'black',
+    lineMiddle: 'magenta',
+    arrowInterior: 'magenta',
     beyondTip: 'canvas',
     insideBorder: 'white',
     outsideBorder: 'canvas',
     emptyCanvas: 'canvas',
   });
-  // The frame's white fill is a paint, not the clear colour.
-  expect(distance(sample.frameBackground, sample.emptyCanvas)).toBeGreaterThan(32);
   // The border: a scan of about 5 CSS px (2.5 page units at zoom 2) across f1's bottom edge at
-  // local x = 100 meets the black stroke; its darkest pixel is nearest black.
+  // local x = 100 meets the green stroke; the pixel closest to green is nearest green.
   const scan = Array.from({ length: 11 }, (_, i) => inFrame(100, 147.5 + i * 0.5));
   const across = await pixels(page, scan);
-  const darkest = across.reduce((a, b) => (a[0] + a[1] + a[2] <= b[0] + b[1] + b[2] ? a : b));
-  expect(nearest(darkest, references), JSON.stringify(across)).toBe('black');
+  const greenest = across.reduce((a, b) =>
+    distance(a, PAINTS.green!) <= distance(b, PAINTS.green!) ? a : b,
+  );
+  expect(nearest(greenest, references), JSON.stringify(across)).toBe('green');
   return sample;
 }
 
@@ -240,6 +283,18 @@ test('M1-A12: the next-host page renders the M1 fixture and edits it', async ({ 
   await expect(status).toHaveAttribute('data-page', 'page-1');
   await expect(status).toHaveAttribute('data-nodes', '4');
 
+  // Recolour the black paints (see RECOLOURS), three undoable commands.
+  // Commands cross the page boundary as JSON text, as in the P5 spec.
+  const recoloured = await page.evaluate(
+    (script: string) =>
+      (JSON.parse(script) as Command[]).map(
+        (command) => window.__p5Host!.editor.execute(command).ok,
+      ),
+    JSON.stringify(RECOLOURS),
+  );
+  expect(recoloured).toEqual([true, true, true]);
+  expect(await readDocument(page)).toEqual(RECOLOURED);
+
   // Rendering: the clip, the mask, the frame background and the arrow line are on the canvas.
   if (rendering) await expectFixturePixels(page);
 
@@ -255,9 +310,10 @@ test('M1-A12: the next-host page renders the M1 fixture and edits it', async ({ 
       SAMPLES.emptyCanvas,
       { x: 5, y: 5 },
     ]);
-    expect(nearest(blank!, { blue: [51, 102, 204], canvas: empty! })).toBe('canvas');
-    // Page 2's own content: r2, black, at (0, 0) with size 10.
-    expect(nearest(r2!, { black: [0, 0, 0], canvas: empty! })).toBe('black');
+    const references = referencesWith(empty!);
+    expect(nearest(blank!, { blue: references.blue!, canvas: empty! })).toBe('canvas');
+    // Page 2's own content: r2, recoloured orange, at (0, 0) with size 10.
+    expect(nearest(r2!, { orange: references.orange!, canvas: empty! })).toBe('orange');
   }
   await page.getByTestId('page-page-1').click();
   await expect(status).toHaveAttribute('data-page', 'page-1');
@@ -306,7 +362,8 @@ test('M1-A12: the next-host page renders the M1 fixture and edits it', async ({ 
   if (rendering) {
     // The new rectangle has the default fill (0.8 grey).
     const [clear, filled] = await pixels(page, [SAMPLES.emptyCanvas, { x: 400, y: 50 }]);
-    expect(nearest(filled!, { fill: [204, 204, 204], canvas: clear! })).toBe('fill');
+    const references = referencesWith(clear!);
+    expect(nearest(filled!, { fill: references.fill!, canvas: clear! })).toBe('fill');
   }
 
   // Group: the rectangle and the ellipse, selected by click and shift-click.
@@ -370,14 +427,17 @@ test('M1-A12: the next-host page renders the M1 fixture and edits it', async ({ 
   const scaled = await readDocument(page);
   expect(scaled.nodes[groupId!]!.frame).toEqual({ x: 350, y: 40, width: 90, height: 110 });
 
-  // Undo: every edit since the load, back to the fixture byte for byte.
+  // Undo: the 9 edits back to the recoloured fixture (checked on the canvas while its paints
+  // still differ from the clear colour), then the 3 recolours back to the fixture.
   const history = await page.evaluate(() => window.__p5Host!.editor.query({ type: 'history' }));
-  expect(history.undoDepth).toBe(9);
+  expect(history.undoDepth).toBe(12);
   for (let i = 0; i < 9; i += 1) await page.getByTestId('undo').click();
-  await expect(page.getByTestId('undo')).toBeDisabled();
-  expect(await readDocument(page)).toEqual(FIXTURE);
+  expect(await readDocument(page)).toEqual(RECOLOURED);
   await expect(status).toHaveAttribute('data-nodes', '4');
   if (rendering) await expectFixturePixels(page);
+  for (let i = 0; i < 3; i += 1) await page.getByTestId('undo').click();
+  await expect(page.getByTestId('undo')).toBeDisabled();
+  expect(await readDocument(page)).toEqual(FIXTURE);
 
   const diagnostics = await page.evaluate(() =>
     window.__p5Host!.events.filter((event) => event.type === 'diagnostic'),
