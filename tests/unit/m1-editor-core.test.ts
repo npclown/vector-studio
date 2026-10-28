@@ -1866,7 +1866,7 @@ describe('M1-U2 review fixes', () => {
     ok(target, { type: 'createRectangle', frame: f(0, 0, 5, 5), parent: 'm31' });
   });
 
-  it('offers resize handles only for page-root selections with rotation 0', () => {
+  it('offers resize handles for rotated and nested selections (M1-U4)', () => {
     const value = () =>
       doc(
         [['p', ['r', 'G']]],
@@ -1881,7 +1881,7 @@ describe('M1-U2 review fixes', () => {
     ok(plain, { type: 'setSelection', ids: ['r'] });
     pointerDrag(plain, [100, 100], [150, 150]);
     expect(nodeOf(plain, 'r').frame).toEqual(f(0, 0, 150, 150));
-    // Rotated: the same press moves the node instead (it is under the handle).
+    // Rotated: the handle at local (0, 0) sits at page (100, 100) and scales in the node's axes.
     const turned = editor(value());
     ok(turned, {
       type: 'setFrames',
@@ -1889,12 +1889,12 @@ describe('M1-U2 review fixes', () => {
     });
     ok(turned, { type: 'setSelection', ids: ['r'] });
     pointerDrag(turned, [99, 99], [149, 149]);
-    expect(nodeOf(turned, 'r')).toMatchObject({ frame: f(50, 50, 100, 100), rotation: Math.PI });
-    // Nested: no handle, and nested nodes are not hit before M1-U4, so nothing changes.
+    expect(nodeOf(turned, 'r')).toMatchObject({ frame: f(0, 0, 150, 150), rotation: Math.PI });
+    // Nested: the corner handle resizes the child, and its group refits at commit.
     const nested = editor(value());
     ok(nested, { type: 'setSelection', ids: ['a'] });
-    const before = text(nested);
     pointerDrag(nested, [300, 100], [350, 150]);
-    expect(text(nested)).toBe(before);
+    expect(nodeOf(nested, 'a').frame).toEqual(f(0, 0, 150, 150));
+    expect(nodeOf(nested, 'G').frame).toEqual(f(200, 0, 150, 150));
   });
 });

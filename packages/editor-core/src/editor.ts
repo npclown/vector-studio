@@ -5,11 +5,18 @@ import {
   type DocumentV2,
   type ParseResult,
 } from '@vector-studio/model';
-import { applyEdit, deepFreeze, refitGesture } from './edits.js';
+import {
+  applyEdit,
+  applyGestureEdit,
+  deepFreeze,
+  refitGesture,
+  type EditResult,
+  type GestureEdit,
+} from './edits.js';
 import { ExtensionRegistry, extensionApi } from './extensions.js';
 import { createCounterIdSource } from './ids.js';
 import { SceneProjector } from './projector.js';
-import { createPathTool, createRectangleTool, createSelectTool } from './tools.js';
+import { createBoxTool, createLineTool, createPathTool, createSelectTool } from './tools.js';
 import { ancestors, documentClipViolation, documentTree, nodePath, pageOf } from './tree.js';
 import type {
   Command,
@@ -66,6 +73,11 @@ export interface GestureControl {
   /** Returns false while another gesture is active. */
   begin(): boolean;
   update(command: DocumentCommand): CommandResult;
+  /**
+   * Package-internal: an update no public command expresses (a multi-selection resize from the
+   * pre-gesture state, a line drag), applied like `update`.
+   */
+  edit(edit: GestureEdit): CommandResult;
   commit(): void;
   cancel(): void;
 }
@@ -78,7 +90,7 @@ type HistoryEntry = Readonly<{
 
 type Gesture = { base: DocumentV2; touched: Set<string>; updated: boolean };
 
-const TOOLS: readonly ToolName[] = ['select', 'rectangle', 'path'];
+const TOOLS: readonly ToolName[] = ['select', 'rectangle', 'ellipse', 'line', 'frame', 'path'];
 const DEFAULT_VIEWPORT: RenderCamera = deepFreeze({ position: { x: 0, y: 0 }, zoom: 1 });
 const DOCUMENT_COMMANDS = new Set([
   'createRectangle',
@@ -269,7 +281,10 @@ class EditorCore implements Editor {
       'select',
       createSelectTool((node) => this.extensions.geometry(node)),
     );
-    this.tools.set('rectangle', createRectangleTool());
+    this.tools.set('rectangle', createBoxTool('createRectangle'));
+    this.tools.set('ellipse', createBoxTool('createEllipse'));
+    this.tools.set('frame', createBoxTool('createFrame'));
+    this.tools.set('line', createLineTool());
     this.tools.set('path', createPathTool());
     const isActive = () => this.gestureState !== null;
     this.gesture = {
@@ -278,6 +293,7 @@ class EditorCore implements Editor {
       },
       begin: () => this.beginGesture(),
       update: (command) => this.updateGesture(command),
+      edit: (edit) => this.editGesture(edit),
       commit: () => this.commitGesture(),
       cancel: () => this.cancelGesture(),
     };
@@ -538,6 +554,17 @@ class EditorCore implements Editor {
       ...this.context(false),
       resizeBase: gesture.base,
     });
+    return this.applyGestureResult(gesture, result);
+  }
+
+  private editGesture(edit: GestureEdit): CommandResult {
+    const gesture = this.gestureState;
+    if (gesture === null) return failure('editor.invalid-command');
+    const result = applyGestureEdit(this.document, gesture.base, edit, this.extensions);
+    return this.applyGestureResult(gesture, result);
+  }
+
+  private applyGestureResult(gesture: Gesture, result: EditResult): CommandResult {
     if (!result.ok) return result;
     result.touched.forEach((id) => gesture.touched.add(id));
     gesture.updated = true;
