@@ -1,4 +1,4 @@
-import { serializeDocument, type DocumentV1 } from '@vector-studio/model';
+import { serializeDocument, type DocumentV2 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   createCounterIdSource,
@@ -66,7 +66,7 @@ function drag(target: Editor, from: [number, number], to: [number, number]) {
   pointer(target, 'pointerup', to[0], to[1]);
 }
 
-function documentOf(target: Editor): DocumentV1 {
+function documentOf(target: Editor): DocumentV2 {
   return target.query({ type: 'document' });
 }
 
@@ -75,7 +75,7 @@ function expectSynchronized(target: Editor, renderer: RecordingRenderer) {
   const document = documentOf(target);
   const scene = renderer.mirror.readRetainedScene();
   expect(scene).not.toBeNull();
-  const children = document.pages[0].children;
+  const children = document.pages[0]!.children;
   expect(scene!.rootOrder).toEqual(children);
   expect(children.map((id) => scene!.getNode(id))).toEqual(
     children.map((id) => projectNode(document.nodes[id]!, () => null)),
@@ -106,7 +106,10 @@ describe('P5-U4 scene projector', () => {
     expect(first.method).toBe('replaceSnapshot');
     if (first.method !== 'replaceSnapshot') return;
     const document = documentOf(target);
-    expect(first.input.identity).toEqual({ documentId: document.id, pageId: document.pages[0].id });
+    expect(first.input.identity).toEqual({
+      documentId: document.id,
+      pageId: document.pages[0]!.id,
+    });
     expect(first.input.rootOrder).toEqual([a]);
     expect(renderer.calls[1]?.method).toBe('setCamera');
     expectSynchronized(target, renderer);
@@ -237,7 +240,7 @@ describe('P5-U4 scene projector', () => {
     ]);
     const scene = renderer.mirror.readRetainedScene()!;
     expect(scene.rootOrder).toEqual([a]);
-    expect(documentOf(target).pages[0].children).toEqual([a, p]);
+    expect(documentOf(target).pages[0]!.children).toEqual([a, p]);
     rect(target, 100, 0);
     expect(renderer.mirror.readRetainedScene()!.rootOrder).toHaveLength(2);
   });
@@ -417,7 +420,7 @@ describe('P5-U4 scene projector', () => {
     renderer.applyChanges = () => ({ status: 'resync-required', current: null });
     renderer.replaceSnapshot = () => ({ status: 'resync-required', current: null });
     rect(target, 50, 0);
-    expect(documentOf(target).pages[0].children).toHaveLength(2);
+    expect(documentOf(target).pages[0]!.children).toHaveLength(2);
   });
 
   it('sends a full snapshot after resync-required', () => {
@@ -452,7 +455,7 @@ describe('P5-U4 scene projector', () => {
     rect(target, 90, 0);
     ok(target, { type: 'setViewport', camera: { position: { x: 1, y: 1 }, zoom: 1 } });
     expect(renderer.calls).toHaveLength(count);
-    expect(documentOf(target).pages[0].children).toHaveLength(3);
+    expect(documentOf(target).pages[0]!.children).toHaveLength(3);
 
     const second = attached();
     second.detach();

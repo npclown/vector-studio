@@ -5,22 +5,27 @@ import type {
   SceneRejectionReason,
 } from '@vector-studio/contracts';
 import type {
+  Arrow,
   Color,
+  Constraints,
+  CornerRadii,
   DocumentErrorCode,
-  DocumentV1,
+  DocumentV2,
   FillRule,
   Frame,
   JsonValue,
   ModelErrorCode,
-  NodeV1,
+  NodeV2,
+  PageV2,
   PathStroke,
   PathVerb,
   RectStroke,
 } from '@vector-studio/model';
 
-// Public command, query and event shapes (P5 plan, sections 4.1 to 4.3).
+// Public command, query and event shapes (P5 plan, sections 4.1 to 4.3; MVP M1 contract,
+// sections 3 and 4).
 
-export type ToolName = 'select' | 'rectangle' | 'path';
+export type ToolName = 'select' | 'rectangle' | 'ellipse' | 'line' | 'frame' | 'path';
 
 export type PagePoint = Readonly<{ x: number; y: number }>;
 export type Modifiers = Readonly<{ shift: boolean; alt: boolean; meta: boolean; ctrl: boolean }>;
@@ -46,6 +51,7 @@ export type ToolOverlay =
   | Readonly<{ kind: 'marquee'; frame: Frame }>
   | Readonly<{ kind: 'path'; anchors: readonly PathAnchor[] }>;
 
+/** A prop that the node's type does not have is `editor.invalid-command`. */
 export type NodeProps = Readonly<{
   name?: string;
   fill?: Color | null;
@@ -54,18 +60,66 @@ export type NodeProps = Readonly<{
   visible?: boolean;
   /** Custom nodes only. */
   data?: JsonValue;
+  /** Rectangles only. */
+  cornerRadii?: CornerRadii;
+  /** Lines only. */
+  startArrow?: Arrow;
+  endArrow?: Arrow;
+  constraints?: Constraints;
+}>;
+
+/**
+ * Optional placement of a new node (M1 contract, section 4.1). The command's frames and points
+ * are in page space and are mapped into the parent's local space; `rotation` is the node's page
+ * rotation (radians, clockwise), so its stored rotation is this minus the parent chain's.
+ */
+export type Placement = Readonly<{
+  rotation?: number;
+  /** A page or container; defaults to the active page. */
+  parent?: string;
+  /** Into the parent's children, `0..children.length`; defaults to the top. */
+  index?: number;
 }>;
 
 /** Commands that change the document; each successful one is one transaction. */
 export type DocumentCommand =
-  | Readonly<{
+  | (Readonly<{
       type: 'createRectangle';
       frame: Frame;
       name?: string;
       fill?: Color | null;
       stroke?: RectStroke | null;
-    }>
-  | Readonly<{
+      cornerRadii?: CornerRadii;
+    }> &
+      Placement)
+  | (Readonly<{
+      type: 'createEllipse';
+      frame: Frame;
+      name?: string;
+      fill?: Color | null;
+      stroke?: RectStroke | null;
+    }> &
+      Placement)
+  | (Readonly<{
+      type: 'createLine';
+      /** Page-space endpoints. */
+      start: PagePoint;
+      end: PagePoint;
+      name?: string;
+      stroke?: PathStroke | null;
+      startArrow?: Arrow;
+      endArrow?: Arrow;
+    }> &
+      Placement)
+  | (Readonly<{
+      type: 'createFrame';
+      frame: Frame;
+      name?: string;
+      fill?: Color | null;
+      stroke?: RectStroke | null;
+    }> &
+      Placement)
+  | (Readonly<{
       type: 'createPath';
       verbs: readonly PathVerb[];
       /** Interleaved page-space x, y; the frame is their bounding box (plan section 3.1). */
@@ -74,8 +128,9 @@ export type DocumentCommand =
       name?: string;
       fill?: Color | null;
       stroke?: PathStroke | null;
-    }>
-  | Readonly<{
+    }> &
+      Placement)
+  | (Readonly<{
       type: 'createCustomNode';
       customType: string;
       frame: Frame;
@@ -84,14 +139,27 @@ export type DocumentCommand =
       name?: string;
       fill?: Color | null;
       stroke?: PathStroke | null;
+    }> &
+      Placement)
+  | Readonly<{
+      type: 'setFrames';
+      /** Parent-local frames; `rotation` defaults to the node's current one. */
+      frames: readonly Readonly<{ id: string; frame: Frame; rotation?: number }>[];
     }>
-  | Readonly<{ type: 'setFrames'; frames: readonly Readonly<{ id: string; frame: Frame }>[] }>
   | Readonly<{ type: 'setNodeProps'; id: string; props: NodeProps }>
-  | Readonly<{ type: 'deleteNodes'; ids: readonly string[] }>;
+  | Readonly<{ type: 'deleteNodes'; ids: readonly string[] }>
+  | Readonly<{ type: 'groupNodes'; ids: readonly string[]; kind: 'group' | 'maskGroup' }>
+  | Readonly<{ type: 'ungroupNodes'; id: string }>
+  | Readonly<{ type: 'moveNodes'; ids: readonly string[]; parent: string; index: number }>
+  | Readonly<{ type: 'addPage'; name?: string; index?: number }>
+  | Readonly<{ type: 'removePage'; id: string }>
+  | Readonly<{ type: 'renamePage'; id: string; name: string }>
+  | Readonly<{ type: 'movePage'; id: string; index: number }>;
 
 /** Commands that are never recorded in history. */
 export type SessionCommand =
   | Readonly<{ type: 'setSelection'; ids: readonly string[] }>
+  | Readonly<{ type: 'setActivePage'; id: string }>
   | Readonly<{ type: 'setTool'; tool: ToolName }>
   | Readonly<{ type: 'setViewport'; camera: RenderCamera }>
   | Readonly<{ type: 'input'; event: InputEvent }>;
@@ -120,7 +188,16 @@ export type EditorErrorCode =
   | 'editor.nothing-to-redo'
   | 'editor.invalid-camera'
   | 'editor.unknown-command'
-  | 'editor.extension-failed';
+  | 'editor.extension-failed'
+  // MVP M1 contract, section 4.3.1.
+  | 'editor.unknown-page'
+  | 'editor.invalid-index'
+  | 'editor.last-page'
+  | 'editor.invalid-parent'
+  | 'editor.not-siblings'
+  | 'editor.not-a-group'
+  | 'editor.invalid-mask-source'
+  | 'editor.clip-depth';
 
 export type CommandResult =
   | Readonly<{ ok: true; ids: readonly string[] }>
@@ -129,7 +206,9 @@ export type CommandResult =
 export type HistoryState = Readonly<{ undoDepth: number; redoDepth: number }>;
 
 export type EditorSnapshot = Readonly<{
-  document: DocumentV1;
+  document: DocumentV2;
+  /** The page tools, hit testing and the projector work on (M1 contract, section 3). */
+  activePage: string;
   /** Increases by one for every document change, including gesture updates, undo and redo. */
   revision: number;
   selection: readonly string[];
@@ -148,12 +227,36 @@ export type Query =
   | Readonly<{ type: 'viewport' }>
   | Readonly<{ type: 'history' }>
   | Readonly<{ type: 'revision' }>
-  | Readonly<{ type: 'overlay' }>;
+  | Readonly<{ type: 'overlay' }>
+  | Readonly<{ type: 'activePage' }>
+  | Readonly<{ type: 'pages' }>
+  /** The select tool's resize handle box for the selection (M1-U5). */
+  | Readonly<{ type: 'handles' }>;
+
+/**
+ * The select tool's resize handle box for the selection, in page space (M1 contract, section
+ * 4.4), as the tool picks its handles. The box is the node's own rotated frame for a single node
+ * that is not a page-root node with rotation 0; for any other selection it is the page-aligned
+ * bounds of the selected nodes' rotated frames. Null for an empty selection. The result is a
+ * frozen value computed from the current document, page and selection.
+ */
+export type SelectionHandles = Readonly<{
+  /** Top-left, top-right, bottom-right and bottom-left, in the box's own axes. */
+  corners: readonly [PagePoint, PagePoint, PagePoint, PagePoint];
+  /** The box's page rotation in radians, normalized to (−π, π]; 0 for a page-aligned box. */
+  rotation: number;
+  /**
+   * The active handles, clockwise from the top-left corner (corners and edge midpoints): a
+   * handle is active when it scales an axis of nonzero size, so a box of height 0 (a horizontal
+   * line) has no top or bottom edge handle and keeps only its left and right ones and corners.
+   */
+  handles: readonly PagePoint[];
+}>;
 
 export type QueryResult<Q extends Query> = Q extends { type: 'document' }
-  ? DocumentV1
+  ? DocumentV2
   : Q extends { type: 'node' }
-    ? NodeV1 | null
+    ? NodeV2 | null
     : Q extends { type: 'selection' }
       ? readonly string[]
       : Q extends { type: 'tool' }
@@ -164,7 +267,13 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' }
             ? HistoryState
             : Q extends { type: 'overlay' }
               ? ToolOverlay | null
-              : number;
+              : Q extends { type: 'activePage' }
+                ? string
+                : Q extends { type: 'pages' }
+                  ? readonly PageV2[]
+                  : Q extends { type: 'handles' }
+                    ? SelectionHandles | null
+                    : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';
@@ -174,10 +283,13 @@ export type EditorEvent =
       type: 'document';
       cause: DocumentChangeCause;
       revision: number;
-      /** IDs of the nodes the change created, changed or removed, sorted. */
+      /** IDs of the nodes the change created, changed or removed, sorted (pages excluded). */
       touched: readonly string[];
     }>
-  | Readonly<{ type: 'session'; field: 'selection' | 'tool' | 'viewport' | 'overlay' }>
+  | Readonly<{
+      type: 'session';
+      field: 'selection' | 'tool' | 'viewport' | 'overlay' | 'activePage';
+    }>
   | DiagnosticEvent;
 
 /** A structured diagnostic from the scene projector (plan section 4.5). */

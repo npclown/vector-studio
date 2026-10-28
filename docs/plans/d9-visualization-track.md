@@ -17,6 +17,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | V-5 | P5 editor slice | Full | Parallel with the P3 exit (user approval 2026-10-25) | Plan APPROVED 2026-10-24; implementation approved 2026-10-25; P5-U1 to U7 merged; exit record [p5-exit-2026-10-26](../evidence/p5-exit-2026-10-26.md) accepted by the user 2026-10-26 ([plan, section 14](p5-editor-slice.md#14-implementation-decision-and-progress-2026-10-25)) |
 | V-6 | V-1 and V-3 review follow-ups (status crediting, zoom clear, field validity, R2 mesh gate) | Light | Backlog | Done: review READY WITH FOLLOW-UPS (applied), headed V-1/V-3 8 of 8 PASS 2026-10-25 ([record](../evidence/viz-v6-review-followups-2026-10-25.md)) |
 | V-7 | MVP editor plan (milestones M1 to M9 after P5 and P4) | Full | R5 | Plan APPROVED 2026-10-28; M1 implementation awaits the user's decision ([plan](mvp-editor-plan.md)) |
+| V-8 | MVP M1: document v2 and containers | Full | R5 | Start approved by the user 2026-10-28; contract APPROVED 2026-10-28; M1-U1 done (#298), M1-U2 done (#299), M1-U3 done (#301), M1-U4 done (#300), M1-U5 in review ([contract](mvp-m1-document-v2-contract.md)) |
 
 ## V-1: path appearance editing
 

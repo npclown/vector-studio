@@ -1,4 +1,4 @@
-import type { DocumentV1, JsonValue, NodeV1, PathStroke, RectStroke } from './types.js';
+import type { DocumentV2, JsonValue, NodeV2, PathStroke, RectStroke } from './types.js';
 
 // Fixed key order (plan section 3.3). Node and custom-data keys are inserted in code-unit order,
 // so the text does not depend on the order nodes were created, deleted or restored in. (Object
@@ -39,16 +39,45 @@ function json(value: JsonValue): unknown {
   );
 }
 
-function node(value: NodeV1): Ordered {
+/** Fields after `type` of path and custom nodes. */
+function pathFields(value: Extract<NodeV2, { type: 'path' | 'custom' }>): Ordered {
+  if (value.type === 'path') {
+    return {
+      path: {
+        verbs: [...value.path.verbs],
+        points: [...value.path.points],
+        fillRule: value.path.fillRule,
+      },
+      fill: nullable(value.fill, color),
+      stroke: nullable(value.stroke, pathStroke),
+    };
+  }
+  return {
+    customType: value.customType,
+    data: json(value.data),
+    fill: nullable(value.fill, color),
+    stroke: nullable(value.stroke, pathStroke),
+  };
+}
+
+function frame(value: { x: number; y: number; width: number; height: number }): Ordered {
+  return { x: value.x, y: value.y, width: value.width, height: value.height };
+}
+
+function compareCodeUnits(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function nodeV2(value: NodeV2): Ordered {
   const base = {
     id: value.id,
     name: value.name,
     parent: value.parent,
-    frame: {
-      x: value.frame.x,
-      y: value.frame.y,
-      width: value.frame.width,
-      height: value.frame.height,
+    frame: frame(value.frame),
+    rotation: value.rotation,
+    constraints: {
+      horizontal: value.constraints.horizontal,
+      vertical: value.constraints.vertical,
     },
     opacity: value.opacity,
     visible: value.visible,
@@ -58,46 +87,57 @@ function node(value: NodeV1): Ordered {
     case 'rectangle':
       return {
         ...base,
+        cornerRadii: [...value.cornerRadii],
         fill: nullable(value.fill, color),
         stroke: nullable(value.stroke, rectStroke),
       };
-    case 'path':
+    case 'ellipse':
       return {
         ...base,
-        path: {
-          verbs: [...value.path.verbs],
-          points: [...value.path.points],
-          fillRule: value.path.fillRule,
-        },
         fill: nullable(value.fill, color),
-        stroke: nullable(value.stroke, pathStroke),
+        stroke: nullable(value.stroke, rectStroke),
       };
-    case 'custom':
+    case 'line':
       return {
         ...base,
-        customType: value.customType,
-        data: json(value.data),
-        fill: nullable(value.fill, color),
+        points: [...value.points],
         stroke: nullable(value.stroke, pathStroke),
+        startArrow: value.startArrow,
+        endArrow: value.endArrow,
+      };
+    case 'path':
+    case 'custom':
+      return { ...base, ...pathFields(value) };
+    case 'group':
+    case 'maskGroup':
+      return { ...base, children: [...value.children] };
+    case 'frame':
+      return {
+        ...base,
+        children: [...value.children],
+        fill: nullable(value.fill, color),
+        stroke: nullable(value.stroke, rectStroke),
       };
   }
 }
 
-function compareCodeUnits(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-
-/** Emits canonical JSON: two-space indentation, fixed key order and a final newline. */
-export function serializeDocument(document: DocumentV1): string {
-  const [page] = document.pages;
+/**
+ * Emits canonical schema v2 JSON (M1 contract, section 2.1): two-space indentation, fixed key
+ * order and a final newline.
+ */
+export function serializeDocument(document: DocumentV2): string {
   const ordered = {
     schemaVersion: document.schemaVersion,
     id: document.id,
-    pages: [{ id: page.id, name: page.name, children: [...page.children] }],
+    pages: document.pages.map((page) => ({
+      id: page.id,
+      name: page.name,
+      children: [...page.children],
+    })),
     nodes: Object.fromEntries(
       Object.keys(document.nodes)
         .sort(compareCodeUnits)
-        .map((key) => [key, node(document.nodes[key]!)]),
+        .map((key) => [key, nodeV2(document.nodes[key]!)]),
     ),
   };
   return `${JSON.stringify(ordered, null, 2)}\n`;

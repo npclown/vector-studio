@@ -5,7 +5,7 @@ import {
   type Editor,
   type EditorEvent,
 } from '@vector-studio/editor-core';
-import type { DocumentV1 } from '@vector-studio/model';
+import type { DocumentV2 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
 import { RecordingRenderer } from '../support/p5-recording-renderer.js';
 
@@ -51,11 +51,11 @@ const SCRIPT: readonly Command[] = [
   { type: 'setViewport', camera: { position: { x: -20, y: -10 }, zoom: 1.25 } },
 ];
 
-async function readDocument(page: Page): Promise<DocumentV1> {
+async function readDocument(page: Page): Promise<DocumentV2> {
   const text = await page.evaluate(() =>
     JSON.stringify(window.__p5Host!.editor.query({ type: 'document' })),
   );
-  return JSON.parse(text) as DocumentV1;
+  return JSON.parse(text) as DocumentV2;
 }
 
 async function open(page: Page) {
@@ -136,7 +136,7 @@ test('P5-A12: the page creates, selects, moves, undoes and draws through EditorC
   await page.mouse.move(at(230, 200).x, at(230, 200).y, { steps: 10 });
   await page.mouse.up();
   const moved = await readDocument(page);
-  const id = before.pages[0].children[0]!;
+  const id = before.pages[0]!.children[0]!;
   expect(moved.nodes[id]!.frame.x).toBe(before.nodes[id]!.frame.x + 50);
   await page.getByTestId('undo').click();
   const undone = await readDocument(page);

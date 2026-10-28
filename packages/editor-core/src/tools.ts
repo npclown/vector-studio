@@ -1,10 +1,25 @@
-import type { Frame } from '@vector-studio/model';
+import { normalizeRotation, type DocumentV2, type Frame } from '@vector-studio/model';
 import type { Tool, ToolContext } from './editor.js';
-import { deepFreeze } from './edits.js';
-import { boundsOf, marqueeHits, topmostHit, type CustomGeometry } from './hit-test.js';
-import type { InputEvent, PagePoint, PathAnchor, ToolOverlay } from './types.js';
+import { deepFreeze } from './freeze.js';
+import { apply, invertRigid, localTransform, multiply, rotate, type Matrix } from './geometry.js';
+import {
+  boundsOf,
+  deepestHit,
+  marqueeHits,
+  selectionTarget,
+  targetChain,
+  type CustomGeometry,
+} from './hit-test.js';
+import { resizeInOwnAxes, scaleAbout } from './resize.js';
+import { documentTree, spaceOf } from './tree.js';
+import type { InputEvent, PagePoint, PathAnchor, SelectionHandles, ToolOverlay } from './types.js';
 
-// P5 tools (plan section 4.4). Tools act only through commands and the gesture API.
+// P5 tools (plan section 4.4) and the M1 tools (M1 contract, section 7). Tools act only through
+// commands and the gesture API. They work on the active page; drawing tools create at its root,
+// also over a top-level frame. Move drags convert the page delta into each node's parent space;
+// resize follows section 4.4: the P5 box resize for page-root selections with rotation 0, the
+// node's own axes for any other single node, and the page-space box mapped node by node (as a
+// group resize, from the pre-gesture state) for any other multi-selection.
 
 type Pointer = Extract<InputEvent, { point: PagePoint }>;
 
@@ -29,7 +44,10 @@ function boxOf(a: PagePoint, b: PagePoint): Frame {
   };
 }
 
-export function createRectangleTool(): Tool {
+/** The rectangle, ellipse and frame tools: a drag from a to b creates the box between them. */
+export function createBoxTool(
+  type: 'createRectangle' | 'createEllipse' | 'createFrame' = 'createRectangle',
+): Tool {
   let drag: { start: PagePoint; id: string | null } | null = null;
   return {
     input(event, context) {
@@ -49,10 +67,76 @@ export function createRectangleTool(): Tool {
       if (drag.id !== null || distance(event.point, drag.start) > 0) {
         const frame = boxOf(drag.start, event.point);
         if (drag.id === null) {
-          const result = context.gesture.update({ type: 'createRectangle', frame });
+          const result = context.gesture.update({ type, frame });
           if (result.ok) drag.id = result.ids[0] ?? null;
         } else {
           context.gesture.update({ type: 'setFrames', frames: [{ id: drag.id, frame }] });
+        }
+      }
+      if (event.kind === 'pointerup') {
+        // A click without movement made no update, so the commit creates nothing.
+        const id = drag.id;
+        drag = null;
+        context.gesture.commit();
+        if (id !== null) context.execute({ type: 'setSelection', ids: [id] });
+      }
+    },
+    reset() {
+      drag = null;
+    },
+    overlay: () => null,
+  };
+}
+
+/** The eight 45° directions, exact on the axes. */
+const STEPS: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [Math.SQRT1_2, Math.SQRT1_2],
+  [0, 1],
+  [-Math.SQRT1_2, Math.SQRT1_2],
+  [-1, 0],
+  [-Math.SQRT1_2, -Math.SQRT1_2],
+  [0, -1],
+  [Math.SQRT1_2, -Math.SQRT1_2],
+];
+
+/** The drag end, constrained to the nearest 45° step from the start with Shift (same length). */
+function lineEnd(start: PagePoint, point: PagePoint, shift: boolean): PagePoint {
+  if (!shift) return point;
+  const dx = point.x - start.x;
+  const dy = point.y - start.y;
+  const length = Math.hypot(dx, dy);
+  if (length === 0) return point;
+  const step = ((Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) % 8) + 8) % 8;
+  const [ux, uy] = STEPS[step]!;
+  return { x: start.x + length * ux, y: start.y + length * uy };
+}
+
+/** The line tool: a drag from start to end creates the line; Shift constrains it to 45° steps. */
+export function createLineTool(): Tool {
+  let drag: { start: PagePoint; id: string | null } | null = null;
+  return {
+    input(event, context) {
+      if (event.kind === 'keydown') {
+        if (event.key === 'Escape' && drag !== null) {
+          context.gesture.cancel();
+          drag = null;
+        }
+        return;
+      }
+      if (event.kind === 'pointerdown') {
+        if (drag === null && context.gesture.begin()) drag = { start: event.point, id: null };
+        return;
+      }
+      if (drag === null) return;
+      // The up point is the drag's end, so it updates like a move first.
+      const end = lineEnd(drag.start, event.point, event.modifiers.shift);
+      if (drag.id !== null || distance(end, drag.start) > 0) {
+        if (drag.id === null) {
+          const result = context.gesture.update({ type: 'createLine', start: drag.start, end });
+          if (result.ok) drag.id = result.ids[0] ?? null;
+        } else {
+          context.gesture.edit({ kind: 'line', id: drag.id, start: drag.start, end });
         }
       }
       if (event.kind === 'pointerup') {
@@ -152,7 +236,7 @@ export function createPathTool(): Tool {
 }
 
 /** Handle positions on the box, as fractions of its width and height. */
-const HANDLES = [
+export const HANDLES = [
   [0, 0],
   [0.5, 0],
   [1, 0],
@@ -163,16 +247,101 @@ const HANDLES = [
   [0, 0.5],
 ] as const;
 
-type Handle = (typeof HANDLES)[number];
+export type Handle = (typeof HANDLES)[number];
+
+/** The handles that can scale at least one axis of `box`, in `HANDLES` order. */
+export function activeHandles(box: Frame): Handle[] {
+  return HANDLES.filter(
+    (handle) => (handle[0] !== 0.5 && box.width > 0) || (handle[1] !== 0.5 && box.height > 0),
+  );
+}
+
+/**
+ * The box the handles sit on. `p5`: the page-aligned bounds of a page-root selection with
+ * rotation 0, resized as in P5. `single`: one other node, its own rotated box (`matrix` maps
+ * its local space to the page). `map`: the page-aligned bounds of any other multi-selection.
+ */
+export type HandleBox =
+  | { mode: 'p5' | 'map'; box: Frame }
+  | { mode: 'single'; box: Frame; id: string; matrix: Matrix; turn: number };
+
+/** The handle box of `selection` on `page` (section 4.4), or null for an empty selection. */
+export function handleBoxOf(
+  document: DocumentV2,
+  page: string,
+  selection: readonly string[],
+): HandleBox | null {
+  const box = boundsOf(document, selection);
+  if (box === null) return null;
+  const p5 = selection.every((id) => {
+    const node = document.nodes[id];
+    return node !== undefined && node.parent === page && node.rotation === 0;
+  });
+  if (p5) return { mode: 'p5', box };
+  if (selection.length > 1) return { mode: 'map', box };
+  // A single node: the handles follow its rotation (section 4.4).
+  const id = selection[0]!;
+  const node = document.nodes[id]!;
+  const space = spaceOf(documentTree(document), node.parent);
+  return {
+    mode: 'single',
+    box: { x: 0, y: 0, width: node.frame.width, height: node.frame.height },
+    id,
+    matrix: multiply(space.matrix, localTransform(node.frame, node.rotation)),
+    turn: space.rotation + node.rotation,
+  };
+}
+
+/** A handle's page-space point on the handle box. */
+export function handlePoint(handles: HandleBox, handle: Handle): PagePoint {
+  const { box } = handles;
+  if (handles.mode !== 'single') {
+    return { x: box.x + handle[0] * box.width, y: box.y + handle[1] * box.height };
+  }
+  return apply(handles.matrix, handle[0] * box.width, handle[1] * box.height);
+}
+
+/**
+ * The `handles` query (M1-U5): the select tool's handle box in page space, so a host draws the
+ * handles where the tool picks them, also for nested and rotated nodes.
+ */
+export function selectionHandles(
+  document: DocumentV2,
+  page: string,
+  selection: readonly string[],
+): SelectionHandles | null {
+  const box = handleBoxOf(document, page, selection);
+  if (box === null) return null;
+  // The corner handles: top-left, top-right, bottom-right and bottom-left.
+  const [tl, , tr, , br, , bl] = HANDLES;
+  return deepFreeze({
+    corners: [
+      handlePoint(box, tl),
+      handlePoint(box, tr),
+      handlePoint(box, br),
+      handlePoint(box, bl),
+    ],
+    rotation: box.mode === 'single' ? normalizeRotation(box.turn) : 0,
+    handles: activeHandles(box.box).map((handle) => handlePoint(box, handle)),
+  });
+}
 
 type SelectState =
   | { kind: 'idle' }
-  | { kind: 'move'; start: PagePoint; frames: Map<string, Frame>; moved: boolean; hit: string }
+  | {
+      kind: 'move';
+      start: PagePoint;
+      frames: Map<string, Frame>;
+      /** Each node's parent-chain rotation, to turn the page delta into its parent space. */
+      turns: Map<string, number>;
+      moved: boolean;
+      hit: string;
+    }
   | {
       kind: 'resize';
       start: PagePoint;
       frames: Map<string, Frame>;
-      box: Frame;
+      handles: HandleBox;
       handle: Handle;
       moved: boolean;
     }
@@ -183,6 +352,17 @@ function scaled(origin: number, value: number, scale: number): number {
   return origin + (value - origin) * scale;
 }
 
+/**
+ * One axis of a box resize: the box scales about the opposite handle; an axis of size 0 or an
+ * edge handle's other axis is not scaled, and the scale clamps at 0, so sizes do too.
+ */
+function axis(fraction: number, origin: number, size: number, delta: number) {
+  if (fraction === 0.5 || size === 0) return { origin, scale: 1 };
+  const anchor = origin + (1 - fraction) * size;
+  const from = origin + fraction * size;
+  return { origin: anchor, scale: Math.max(0, (from + delta - anchor) / (from - anchor)) };
+}
+
 export function createSelectTool(custom: CustomGeometry): Tool {
   let state: SelectState = { kind: 'idle' };
 
@@ -191,16 +371,34 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     return new Map(ids.map((id) => [id, document.nodes[id]!.frame]));
   }
 
+  function handlesOf(context: ToolContext, selection: readonly string[]): HandleBox | null {
+    return handleBoxOf(
+      context.query({ type: 'document' }),
+      context.query({ type: 'activePage' }),
+      selection,
+    );
+  }
+
+  /** Whether `point` is strictly inside the handle box. */
+  function insideHandles(handles: HandleBox, point: PagePoint): boolean {
+    const local =
+      handles.mode === 'single' ? apply(invertRigid(handles.matrix), point.x, point.y) : point;
+    const { box } = handles;
+    return (
+      local.x > box.x &&
+      local.x < box.x + box.width &&
+      local.y > box.y &&
+      local.y < box.y + box.height
+    );
+  }
+
   /** The nearest handle within reach that can scale at least one axis of the box. */
-  function handleAt(box: Frame, point: PagePoint, zoom: number): Handle | null {
+  function handleAt(handles: HandleBox, point: PagePoint, zoom: number): Handle | null {
+    const { box } = handles;
     let best: Handle | null = null;
     let bestDistance = HANDLE_RADIUS / zoom;
-    for (const handle of HANDLES) {
-      const scalesX = handle[0] !== 0.5 && box.width > 0;
-      const scalesY = handle[1] !== 0.5 && box.height > 0;
-      if (!scalesX && !scalesY) continue;
-      const at = { x: box.x + handle[0] * box.width, y: box.y + handle[1] * box.height };
-      const d = distance(point, at);
+    for (const handle of activeHandles(box)) {
+      const d = distance(point, handlePoint(handles, handle));
       if (d <= bestDistance) {
         best = handle;
         bestDistance = d;
@@ -214,35 +412,38 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     const document = context.query({ type: 'document' });
     const selection = context.query({ type: 'selection' });
     const zoom = zoomOf(context);
-    const box = boundsOf(document, selection);
-    const hit = topmostHit(document, event.point, zoom, custom);
+    const page = context.query({ type: 'activePage' });
+    const handles = handlesOf(context, selection);
+    // The node hit and its selection target (section 6). A press on an already selected node
+    // between them (one selected below the target, for example from a layers panel) keeps the
+    // selection and acts on that node.
+    const deepest = deepestHit(document, page, event.point, zoom, custom);
+    const target = deepest === null ? null : selectionTarget(document, deepest);
+    const hit =
+      deepest === null
+        ? null
+        : (targetChain(document, deepest).find((id) => selection.includes(id)) ?? target);
     // On a box too small for its handles to stay apart, a press on a selected node inside it
     // moves; otherwise a handle wins over the node under it.
     const reach = (4 * HANDLE_RADIUS) / zoom;
-    const small = box !== null && (box.width < reach || box.height < reach);
+    const small = handles !== null && (handles.box.width < reach || handles.box.height < reach);
     const movesSmall =
-      small &&
-      hit !== null &&
-      selection.includes(hit) &&
-      event.point.x > box.x &&
-      event.point.x < box.x + box.width &&
-      event.point.y > box.y &&
-      event.point.y < box.y + box.height;
-    const handle = box === null || movesSmall ? null : handleAt(box, event.point, zoom);
-    if (box !== null && handle !== null) {
+      small && hit !== null && selection.includes(hit) && insideHandles(handles, event.point);
+    const handle = handles === null || movesSmall ? null : handleAt(handles, event.point, zoom);
+    if (handles !== null && handle !== null) {
       if (context.gesture.begin()) {
         state = {
           kind: 'resize',
           start: event.point,
           frames: framesOf(context, selection),
-          box,
+          handles,
           handle,
           moved: false,
         };
       }
       return;
     }
-    if (hit === null) {
+    if (hit === null || target === null) {
       state = {
         kind: 'marquee',
         start: event.point,
@@ -261,48 +462,52 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     if (!selection.includes(hit)) context.execute({ type: 'setSelection', ids: [hit] });
     if (context.gesture.begin()) {
       const ids = context.query({ type: 'selection' });
+      const tree = documentTree(context.query({ type: 'document' }));
       state = {
         kind: 'move',
         start: event.point,
         frames: framesOf(context, ids),
+        turns: new Map(ids.map((id) => [id, spaceOf(tree, tree.node(id)!.parent).rotation])),
         moved: false,
-        hit,
+        hit: target,
       };
     }
   }
 
-  function pointerMove(event: Pointer, context: ToolContext): void {
-    if (state.kind === 'marquee') {
-      state.current = event.point;
+  function resize(
+    current: Extract<SelectState, { kind: 'resize' }>,
+    dx: number,
+    dy: number,
+    context: ToolContext,
+  ): void {
+    const { handles, handle } = current;
+    const { box } = handles;
+    if (handles.mode === 'single') {
+      // In the node's own axes about the opposite handle (section 4.4, rotated node).
+      const delta = rotate(-handles.turn, dx, dy);
+      const sx = axis(handle[0], 0, box.width, delta.x).scale;
+      const sy = axis(handle[1], 0, box.height, delta.y).scale;
+      const node = context.query({ type: 'node', id: handles.id })!;
+      const frame = resizeInOwnAxes(
+        current.frames.get(handles.id)!,
+        node.rotation,
+        1 - handle[0],
+        1 - handle[1],
+        sx,
+        sy,
+      );
+      context.gesture.update({ type: 'setFrames', frames: [{ id: handles.id, frame }] });
       return;
     }
-    if (state.kind === 'idle') return;
-    const dx = event.point.x - state.start.x;
-    const dy = event.point.y - state.start.y;
-    if (state.kind === 'move') {
-      if (!state.moved && dx === 0 && dy === 0) return;
-      state.moved = true;
-      const frames = [...state.frames].map(([id, frame]) => ({
-        id,
-        frame: { ...frame, x: frame.x + dx, y: frame.y + dy },
-      }));
-      context.gesture.update({ type: 'setFrames', frames });
-      return;
-    }
-    if (!state.moved && dx === 0 && dy === 0) return;
-    state.moved = true;
-    // Resize: the box scales about the opposite handle; an axis of size 0 is not scaled, and
-    // scales clamp at 0, so sizes do too.
-    const { box, handle } = state;
-    const axis = (fraction: number, origin: number, size: number, delta: number) => {
-      if (fraction === 0.5 || size === 0) return { origin, scale: 1 };
-      const anchor = origin + (1 - fraction) * size;
-      const from = origin + fraction * size;
-      return { origin: anchor, scale: Math.max(0, (from + delta - anchor) / (from - anchor)) };
-    };
     const x = axis(handle[0], box.x, box.width, dx);
     const y = axis(handle[1], box.y, box.height, dy);
-    const frames = [...state.frames].map(([id, frame]) => ({
+    if (handles.mode === 'map') {
+      // Several nodes: each maps by the box scale as in a group resize (section 4.4).
+      const map = scaleAbout(x.scale, y.scale, { x: x.origin, y: y.origin });
+      context.gesture.edit({ kind: 'map', ids: [...current.frames.keys()], map });
+      return;
+    }
+    const frames = [...current.frames].map(([id, frame]) => ({
       id,
       frame: {
         x: scaled(x.origin, frame.x, x.scale),
@@ -314,6 +519,28 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     context.gesture.update({ type: 'setFrames', frames });
   }
 
+  function pointerMove(event: Pointer, context: ToolContext): void {
+    if (state.kind === 'marquee') {
+      state.current = event.point;
+      return;
+    }
+    if (state.kind === 'idle') return;
+    const dx = event.point.x - state.start.x;
+    const dy = event.point.y - state.start.y;
+    if (!state.moved && dx === 0 && dy === 0) return;
+    state.moved = true;
+    if (state.kind === 'resize') {
+      resize(state, dx, dy, context);
+      return;
+    }
+    const { turns } = state;
+    const frames = [...state.frames].map(([id, frame]) => {
+      const delta = rotate(-turns.get(id)!, dx, dy);
+      return { id, frame: { ...frame, x: frame.x + delta.x, y: frame.y + delta.y } };
+    });
+    context.gesture.update({ type: 'setFrames', frames });
+  }
+
   function pointerUp(event: Pointer, context: ToolContext): void {
     // The up point ends the drag, so it updates like a move first.
     if (state.kind === 'move' || state.kind === 'resize') pointerMove(event, context);
@@ -321,7 +548,7 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     state = { kind: 'idle' };
     if (current.kind === 'move' || current.kind === 'resize') {
       context.gesture.commit();
-      // A click without movement selects the node hit, even inside a larger selection.
+      // A click without movement selects the target hit, even inside a larger selection.
       if (current.kind === 'move' && !current.moved) {
         context.execute({ type: 'setSelection', ids: [current.hit] });
       }
@@ -334,6 +561,7 @@ export function createSelectTool(custom: CustomGeometry): Tool {
       }
       const hits = marqueeHits(
         context.query({ type: 'document' }),
+        context.query({ type: 'activePage' }),
         boxOf(current.start, current.current),
       );
       const ids = current.additive

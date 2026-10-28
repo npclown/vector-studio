@@ -1,7 +1,11 @@
 export {
   DOCUMENT_ERROR_CODES,
   isValidId,
+  MAX_TREE_DEPTH,
+  migrateV1toV2,
+  normalizeRotation,
   parseDocument,
+  validateAnyDocument,
   validateDocument,
   validateNode,
   type DocumentErrorCode,

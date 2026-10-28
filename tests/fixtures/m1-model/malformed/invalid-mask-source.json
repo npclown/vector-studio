@@ -1,0 +1,431 @@
+{
+  "schemaVersion": 2,
+  "id": "doc-containers",
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Page 1",
+      "children": [
+        "f1",
+        "g1",
+        "e1",
+        "l1"
+      ]
+    },
+    {
+      "id": "page-2",
+      "name": "Page 2",
+      "children": [
+        "r2"
+      ]
+    }
+  ],
+  "nodes": {
+    "e1": {
+      "id": "e1",
+      "name": "e1",
+      "parent": "page-1",
+      "frame": {
+        "x": 20,
+        "y": 200,
+        "width": 80,
+        "height": 40
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "ellipse",
+      "fill": null,
+      "stroke": {
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "width": 3
+      }
+    },
+    "e2": {
+      "id": "e2",
+      "name": "e2",
+      "parent": "g1",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 50,
+        "height": 60
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "ellipse",
+      "fill": {
+        "r": 0,
+        "g": 0.6,
+        "b": 0.3,
+        "a": 1
+      },
+      "stroke": {
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "width": 1
+      }
+    },
+    "f1": {
+      "id": "f1",
+      "name": "f1",
+      "parent": "page-1",
+      "frame": {
+        "x": 10,
+        "y": 10,
+        "width": 200,
+        "height": 150
+      },
+      "rotation": 0.25,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "frame",
+      "children": [
+        "r1",
+        "mg1",
+        "g2"
+      ],
+      "fill": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "stroke": {
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "width": 1
+      }
+    },
+    "g1": {
+      "id": "g1",
+      "name": "g1",
+      "parent": "page-1",
+      "frame": {
+        "x": 260,
+        "y": 20,
+        "width": 100,
+        "height": 60
+      },
+      "rotation": -1.5,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "group",
+      "children": [
+        "e2",
+        "r3"
+      ]
+    },
+    "g2": {
+      "id": "g2",
+      "name": "g2",
+      "parent": "f1",
+      "frame": {
+        "x": 20,
+        "y": 90,
+        "width": 50,
+        "height": 40
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "group",
+      "children": [
+        "star"
+      ]
+    },
+    "l1": {
+      "id": "l1",
+      "name": "l1",
+      "parent": "page-1",
+      "frame": {
+        "x": 150,
+        "y": 200,
+        "width": 120,
+        "height": 30
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "line",
+      "points": [
+        0,
+        1,
+        1,
+        0
+      ],
+      "stroke": {
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "width": 2,
+        "cap": "round",
+        "join": "miter",
+        "miterLimit": 4
+      },
+      "startArrow": "line",
+      "endArrow": "triangle"
+    },
+    "m-r": {
+      "id": "m-r",
+      "name": "m-r",
+      "parent": "mg1",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 60,
+        "height": 60
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "rectangle",
+      "cornerRadii": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "fill": {
+        "r": 1,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "stroke": null
+    },
+    "m-src": {
+      "id": "m-src",
+      "name": "m-src",
+      "parent": "mg1",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 60,
+        "height": 60
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "path",
+      "path": {
+        "verbs": [
+          "move",
+          "line",
+          "line",
+          "close"
+        ],
+        "points": [
+          0.5,
+          0,
+          1,
+          1,
+          0,
+          1
+        ],
+        "fillRule": "nonzero"
+      },
+      "fill": null,
+      "stroke": null
+    },
+    "mg1": {
+      "id": "mg1",
+      "name": "mg1",
+      "parent": "f1",
+      "frame": {
+        "x": 100,
+        "y": 60,
+        "width": 60,
+        "height": 60
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "maskGroup",
+      "children": [
+        "m-r",
+        "m-src"
+      ]
+    },
+    "r1": {
+      "id": "r1",
+      "name": "r1",
+      "parent": "f1",
+      "frame": {
+        "x": -20,
+        "y": 20,
+        "width": 80,
+        "height": 40
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "startEnd",
+        "vertical": "end"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "rectangle",
+      "cornerRadii": [
+        4,
+        8,
+        0,
+        2
+      ],
+      "fill": {
+        "r": 0.2,
+        "g": 0.4,
+        "b": 0.8,
+        "a": 1
+      },
+      "stroke": null
+    },
+    "r2": {
+      "id": "r2",
+      "name": "r2",
+      "parent": "page-2",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 10,
+        "height": 10
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "rectangle",
+      "cornerRadii": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "fill": {
+        "r": 0,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "stroke": null
+    },
+    "r3": {
+      "id": "r3",
+      "name": "r3",
+      "parent": "g1",
+      "frame": {
+        "x": 50,
+        "y": 10,
+        "width": 50,
+        "height": 40
+      },
+      "rotation": 0.5,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "rectangle",
+      "cornerRadii": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "fill": {
+        "r": 0.5,
+        "g": 0.5,
+        "b": 0.5,
+        "a": 0.5
+      },
+      "stroke": null
+    },
+    "star": {
+      "id": "star",
+      "name": "star",
+      "parent": "g2",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 50,
+        "height": 40
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "custom",
+      "customType": "ext.star",
+      "data": {
+        "innerRatio": 0.5,
+        "points": 5
+      },
+      "fill": {
+        "r": 1,
+        "g": 0.8,
+        "b": 0,
+        "a": 1
+      },
+      "stroke": null
+    }
+  }
+}

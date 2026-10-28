@@ -1,22 +1,65 @@
-import { validateNode, type DocumentV1, type NodeV1 } from '@vector-studio/model';
+import {
+  isValidId,
+  MAX_TREE_DEPTH,
+  normalizeRotation,
+  validateNode,
+  type DocumentV2,
+  type Frame,
+  type NodeV2,
+  type PageV2,
+} from '@vector-studio/model';
+import { Draft, fail, type Failure } from './draft.js';
 import type { CustomDefaults, CustomFailure } from './extensions.js';
-import type { CommandResult, DocumentCommand, EditorErrorCode, IdSource } from './types.js';
+import { deepFreeze } from './freeze.js';
+import {
+  apply,
+  fitPoints,
+  IDENTITY,
+  invertRigid,
+  localTransform,
+  relocate,
+  rotatedBounds,
+} from './geometry.js';
+import { mapNodeInPageSpace, resizeContainer, type ScaleMap } from './resize.js';
+import {
+  ancestors,
+  childrenOf,
+  clipDepth,
+  clipDepthViolation,
+  documentTree,
+  isAncestor,
+  isContainer,
+  isGroup,
+  nodePath,
+  pageOf,
+  spaceOf,
+  subtree,
+  treeDepth,
+  treeDepthViolation,
+  type TreeView,
+} from './tree.js';
+import type { DocumentCommand, IdSource, PagePoint } from './types.js';
 
 // Pure document edits: each takes a valid document and returns a new valid document, or a
 // failure that leaves nothing changed. Nodes are validated with the model's own field rules.
+// MVP M1 contract, sections 3 and 4: pages, creation with placement, placement edits with the
+// resize rules and group refit, grouping and reparenting, and the clip and tree depth bounds.
+// Failures follow the precedence of section 4.3.1.
+
+export { deepFreeze };
 
 export type EditResult =
   | Readonly<{
       ok: true;
-      document: DocumentV1;
+      document: DocumentV2;
       /** Nodes created, changed or removed. */
       touched: readonly string[];
-      /** Nodes the command created. */
+      /** Nodes or pages the command created. */
       created: readonly string[];
     }>
-  | Extract<CommandResult, { ok: false }>;
+  | Failure;
 
-/** Defaults for creation when the command gives no style (P5 plan section 14). */
+/** Defaults for creation when the command gives no style (P5 plan section 14, M1 section 4.1). */
 export const DEFAULT_RECTANGLE_FILL = deepFreeze({ r: 0.8, g: 0.8, b: 0.8, a: 1 } as const);
 export const DEFAULT_PATH_STROKE = deepFreeze({
   color: { r: 0, g: 0, b: 0, a: 1 },
@@ -25,10 +68,12 @@ export const DEFAULT_PATH_STROKE = deepFreeze({
   join: 'miter',
   miterLimit: 4,
 } as const);
+export const DEFAULT_FRAME_FILL = deepFreeze({ r: 1, g: 1, b: 1, a: 1 } as const);
+const START = deepFreeze({ horizontal: 'start', vertical: 'start' } as const);
 
 /** The extension checks edits need (an `ExtensionRegistry`). */
 export type CustomRules = Readonly<{
-  check(node: NodeV1): CustomFailure | null;
+  check(node: NodeV2): CustomFailure | null;
   defaults(customType: string): CustomDefaults;
 }>;
 
@@ -38,76 +83,51 @@ const NO_CUSTOM: CustomRules = {
   defaults: () => ({ code: 'document.unknown-custom-type', path: '/customType' }),
 };
 
+export type EditContext = Readonly<{
+  ids: IdSource;
+  custom?: CustomRules;
+  /** Creation without `parent` uses this page's root. */
+  activePage: string;
+  /** False during a gesture update: groups refit only at commit (section 4.2). */
+  refit?: boolean;
+  /**
+   * A gesture's pre-gesture document. A container resized during the gesture applies the resize
+   * rules from its state there, so each update is independent of the ones before it.
+   */
+  resizeBase?: DocumentV2;
+}>;
+
 const ID_ATTEMPTS = 1000;
 const PENDING_ID = 'pending';
-const PROP_KEYS = ['name', 'fill', 'stroke', 'opacity', 'visible', 'data'] as const;
+/** Clip levels a frame or mask group, and any node, may sit at (section 4.3). */
+const MAX_CLIP_CONTAINER_DEPTH = 31;
+const MAX_CLIP_DEPTH = 32;
 
-/** Freezes a fresh value in place; history holds these objects, so nobody may mutate them. */
-export function deepFreeze<T>(value: T): T {
-  if (typeof value === 'object' && value !== null && !Object.isFrozen(value)) {
-    Object.freeze(value);
-    for (const key of Object.keys(value)) deepFreeze((value as Record<string, unknown>)[key]);
-  }
-  return value;
-}
+/** The props each node type has (section 4.2); any other prop is `editor.invalid-command`. */
+const COMMON_PROPS = ['name', 'opacity', 'visible', 'constraints'];
+const PROPS: Readonly<Record<NodeV2['type'], readonly string[]>> = {
+  rectangle: [...COMMON_PROPS, 'fill', 'stroke', 'cornerRadii'],
+  ellipse: [...COMMON_PROPS, 'fill', 'stroke'],
+  line: [...COMMON_PROPS, 'stroke', 'startArrow', 'endArrow'],
+  path: [...COMMON_PROPS, 'fill', 'stroke'],
+  custom: [...COMMON_PROPS, 'fill', 'stroke', 'data'],
+  group: COMMON_PROPS,
+  maskGroup: COMMON_PROPS,
+  frame: [...COMMON_PROPS, 'fill', 'stroke'],
+};
 
-function fail(code: EditorErrorCode, path?: string): Extract<CommandResult, { ok: false }> {
-  return path === undefined ? { ok: false, code } : { ok: false, code, path };
-}
-
-function checked(
-  id: string,
-  value: unknown,
-  custom: CustomRules,
-): NodeV1 | Extract<CommandResult, { ok: false }> {
-  const result = validateNode(value);
-  // Frozen before the extension sees it, so `validate` cannot change what is stored.
-  const failure = result.ok ? custom.check(deepFreeze(result.node)) : result;
-  if (failure === null && result.ok) return result.node;
-  return fail(
-    failure!.code,
-    `/nodes/${id.replaceAll('~', '~0').replaceAll('/', '~1')}${failure!.path}`,
-  );
-}
-
-function isFailure(
-  value: NodeV1 | Extract<CommandResult, { ok: false }>,
-): value is Extract<CommandResult, { ok: false }> {
-  return 'ok' in value;
-}
-
-function freshId(document: DocumentV1, ids: IdSource): string | null {
+function freshId(document: DocumentV2, ids: IdSource): string | null {
   for (let attempt = 0; attempt < ID_ATTEMPTS; attempt += 1) {
     const id = ids();
     if (
-      typeof id === 'string' &&
-      id.length > 0 &&
-      id !== document.pages[0].id &&
+      isValidId(id) &&
+      !document.pages.some((page) => page.id === id) &&
       !Object.hasOwn(document.nodes, id)
     ) {
       return id;
     }
   }
   return null;
-}
-
-function withNodes(
-  document: DocumentV1,
-  replaced: readonly NodeV1[],
-  removed: ReadonlySet<string> = new Set(),
-  appended: readonly string[] = [],
-): DocumentV1 {
-  // fromEntries defines own properties, so a "__proto__" ID stays data.
-  const nodes: Record<string, NodeV1> = Object.fromEntries([
-    ...Object.entries(document.nodes).filter(([id]) => !removed.has(id)),
-    ...replaced.map((node) => [node.id, node] as const),
-  ]);
-  const [page] = document.pages;
-  const children =
-    removed.size === 0 && appended.length === 0
-      ? page.children
-      : [...page.children.filter((child) => !removed.has(child)), ...appended];
-  return deepFreeze({ ...document, pages: [{ ...page, children }], nodes });
 }
 
 function uniqueIds(ids: unknown): readonly string[] | null {
@@ -120,173 +140,729 @@ function uniqueIds(ids: unknown): readonly string[] | null {
   return [...seen];
 }
 
-function nodeOf(document: DocumentV1, id: string): NodeV1 | undefined {
-  return Object.hasOwn(document.nodes, id) ? document.nodes[id] : undefined;
+function nodeOf(document: DocumentV2, id: unknown): NodeV2 | undefined {
+  return typeof id === 'string' && Object.hasOwn(document.nodes, id)
+    ? document.nodes[id]
+    : undefined;
 }
 
-/** Maps page-space points into the unit box of their bounding box (plan section 3.1). */
-export function unitBox(points: readonly number[]) {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (let i = 0; i + 1 < points.length; i += 2) {
-    const x = points[i]!;
-    const y = points[i + 1]!;
-    minX = Math.min(minX, x);
-    maxX = Math.max(maxX, x);
-    minY = Math.min(minY, y);
-    maxY = Math.max(maxY, y);
+function isIndex(value: unknown, max: number): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= max;
+}
+
+function inserted<T>(list: readonly T[], index: number, items: readonly T[]): T[] {
+  return [...list.slice(0, index), ...items, ...list.slice(index)];
+}
+
+/** Clip levels a new child of `owner` sits at. */
+function childClipDepth(tree: TreeView, owner: string): number {
+  const node = tree.node(owner);
+  if (!isContainer(node)) return 0;
+  return clipDepth(tree, owner) + (node.type === 'frame' || node.type === 'maskGroup' ? 1 : 0);
+}
+
+/**
+ * The structural rules checked after a command's document is built, in the section 4.3.1 table
+ * order: every touched mask group keeps a path as its first child, then the clip depth of the
+ * subtrees whose ancestry changed.
+ */
+function structural(
+  document: DocumentV2,
+  touched: Iterable<string>,
+  clipRoots: readonly string[],
+): Failure | null {
+  for (const id of touched) {
+    const node = nodeOf(document, id);
+    if (node?.type !== 'maskGroup') continue;
+    if (document.nodes[node.children[0]!]?.type !== 'path') {
+      return fail('editor.invalid-mask-source', nodePath(id, '/children/0'));
+    }
   }
-  const width = maxX - minX;
-  const height = maxY - minY;
-  const unit = points.map((value, index) => {
-    const size = index % 2 === 0 ? width : height;
-    const origin = index % 2 === 0 ? minX : minY;
-    const mapped = size === 0 ? 0 : (value - origin) / size;
-    return mapped === 0 ? 0 : mapped;
-  });
-  return { frame: { x: minX, y: minY, width, height }, unit };
+  const deep = clipDepthViolation(documentTree(document), clipRoots);
+  return deep === null ? null : fail('editor.clip-depth', nodePath(deep, '/parent'));
+}
+
+function success(
+  document: DocumentV2 | Failure,
+  draft: Draft,
+  created: readonly string[],
+  clipRoots: readonly string[] = [],
+): EditResult {
+  if ('ok' in document) return document;
+  const rejected = structural(document, draft.touched, clipRoots);
+  if (rejected !== null) return rejected;
+  return { ok: true, document, touched: [...draft.touched], created };
+}
+
+/**
+ * Restores the descendants of container `id` to their state in `base` when its subtree there has
+ * the same members, and returns the container's frame in `base`; null leaves the draft as is.
+ */
+function restoreSubtree(draft: Draft, base: DocumentV2, id: string): Frame | null {
+  const baseTree = documentTree(base);
+  const origin = baseTree.node(id);
+  if (origin === undefined) return null;
+  const members = subtree(baseTree, id);
+  const current = subtree(draft, id);
+  if (members.length !== current.length || members.some((member, i) => member !== current[i])) {
+    return null;
+  }
+  for (const member of members.slice(1)) {
+    const node = baseTree.node(member)!;
+    if (draft.node(member) !== node) draft.setChecked(node, true);
+  }
+  return origin.frame;
 }
 
 export function applyEdit(
-  document: DocumentV1,
+  document: DocumentV2,
   command: DocumentCommand,
-  ids: IdSource,
-  custom: CustomRules = NO_CUSTOM,
+  context: EditContext,
 ): EditResult {
-  const [page] = document.pages;
+  const custom = context.custom ?? NO_CUSTOM;
+  const refit = context.refit ?? true;
+  const finish = (draft: Draft) => draft.finish((node) => custom.check(node), { refit });
   switch (command.type) {
     case 'createRectangle':
+    case 'createEllipse':
+    case 'createFrame':
+    case 'createLine':
     case 'createPath':
-    case 'createCustomNode': {
-      // Validate before drawing an ID, so a failed create leaves the ID source untouched.
-      // Failure paths are relative to the new node.
-      let candidate: Record<string, unknown>;
-      if (command.type === 'createRectangle') {
-        candidate = {
-          id: PENDING_ID,
-          name: command.name ?? 'Rectangle',
-          parent: page.id,
-          frame: command.frame,
-          opacity: 1,
-          visible: true,
-          type: 'rectangle',
-          fill: command.fill === undefined ? DEFAULT_RECTANGLE_FILL : command.fill,
-          stroke: command.stroke ?? null,
-        };
-      } else if (command.type === 'createCustomNode') {
-        let data = command.data;
-        if (data === undefined) {
-          const defaults = custom.defaults(command.customType);
-          if ('code' in defaults) return fail(defaults.code, defaults.path);
-          data = defaults.data;
-        }
-        candidate = {
-          id: PENDING_ID,
-          name: command.name ?? command.customType,
-          parent: page.id,
-          frame: command.frame,
-          opacity: 1,
-          visible: true,
-          type: 'custom',
-          customType: command.customType,
-          data,
-          fill: command.fill ?? null,
-          stroke: command.stroke === undefined ? DEFAULT_PATH_STROKE : command.stroke,
-        };
-      } else {
-        const points: unknown = command.points;
-        if (!Array.isArray(points) || points.length < 2) {
-          return fail('editor.invalid-command', '/points');
-        }
-        for (let i = 0; i < points.length; i += 1) {
-          if (typeof points[i] !== 'number' || !Number.isFinite(points[i])) {
-            return fail('editor.invalid-command', `/points/${i}`);
-          }
-        }
-        const { frame, unit } = unitBox(points as readonly number[]);
-        candidate = {
-          id: PENDING_ID,
-          name: command.name ?? 'Path',
-          parent: page.id,
-          frame,
-          opacity: 1,
-          visible: true,
-          type: 'path',
-          path: { verbs: command.verbs, points: unit, fillRule: command.fillRule ?? 'nonzero' },
-          fill: command.fill ?? null,
-          stroke: command.stroke === undefined ? DEFAULT_PATH_STROKE : command.stroke,
-        };
-      }
-      let result: ReturnType<typeof validateNode>;
-      try {
-        result = validateNode(candidate);
-      } catch {
-        // Only extension `defaults()` can put an exotic value (a throwing getter or proxy) here.
-        return fail('document.invalid-custom-data', '/data');
-      }
-      if (!result.ok) return fail(result.code, result.path);
-      const rejected = custom.check(deepFreeze(result.node));
-      if (rejected !== null) return fail(rejected.code, rejected.path);
-      const id = freshId(document, ids);
-      if (id === null) return fail('editor.duplicate-id');
-      const node = deepFreeze({ ...result.node, id });
-      return {
-        ok: true,
-        document: withNodes(document, [node], new Set(), [id]),
-        touched: [id],
-        created: [id],
-      };
-    }
+    case 'createCustomNode':
+      return create(document, command, context, custom, finish);
     case 'setFrames': {
       const frames: unknown = command.frames;
       if (!Array.isArray(frames)) return fail('editor.invalid-command', '/frames');
-      const entries = frames as readonly { id: string; frame: unknown }[];
+      const entries = frames as readonly { id: string; frame: unknown; rotation?: unknown }[];
       const frameIds = uniqueIds(entries.map((entry) => (entry as { id?: unknown } | null)?.id));
       if (frameIds === null || frameIds.length === 0) {
         return fail('editor.invalid-command', '/frames');
       }
-      const replaced: NodeV1[] = [];
-      for (const entry of entries) {
-        const node = nodeOf(document, entry.id);
-        if (node === undefined) return fail('editor.unknown-node');
-        const next = checked(entry.id, { ...node, frame: entry.frame }, custom);
-        if (isFailure(next)) return next;
-        replaced.push(next);
+      if (frameIds.some((id) => nodeOf(document, id) === undefined)) {
+        return fail('editor.unknown-node');
       }
-      return { ok: true, document: withNodes(document, replaced), touched: frameIds, created: [] };
+      const tree = documentTree(document);
+      const named = new Set(frameIds);
+      if (frameIds.some((id) => ancestors(tree, id).some((node) => named.has(node.id)))) {
+        // A container and its descendant in one call (section 4.2).
+        return fail('editor.invalid-command', '/frames');
+      }
+      const next: NodeV2[] = [];
+      for (const entry of entries) {
+        const node = document.nodes[entry.id]!;
+        const rotation = entry.rotation === undefined ? node.rotation : entry.rotation;
+        const result = validateNode({ ...node, frame: entry.frame, rotation });
+        if (!result.ok) return fail(result.code, nodePath(entry.id, result.path));
+        const rejected = custom.check(deepFreeze(result.node));
+        if (rejected !== null) return fail(rejected.code, nodePath(entry.id, rejected.path));
+        next.push(result.node);
+      }
+      const draft = new Draft(document);
+      for (const node of next) {
+        let before = draft.node(node.id)!.frame;
+        draft.setChecked(node, true);
+        if (!isContainer(node)) continue;
+        const base = context.resizeBase;
+        if (base !== undefined) {
+          const restored = restoreSubtree(draft, base, node.id);
+          if (restored !== null) before = restored;
+        }
+        // A container's new size applies the resize rules to its descendants (section 4.4).
+        resizeContainer(draft, node.id, before);
+      }
+      return success(finish(draft), draft, []);
     }
     case 'setNodeProps': {
-      const node = typeof command.id === 'string' ? nodeOf(document, command.id) : undefined;
+      const node = nodeOf(document, command.id);
       if (node === undefined) return fail('editor.unknown-node');
       const props = command.props as Record<string, unknown> | null;
       if (typeof props !== 'object' || props === null || Object.keys(props).length === 0) {
         return fail('editor.invalid-command', '/props');
       }
       for (const key of Object.keys(props)) {
-        if (!(PROP_KEYS as readonly string[]).includes(key)) {
-          return fail('editor.invalid-command', `/props/${key}`);
-        }
+        if (!PROPS[node.type].includes(key)) return fail('editor.invalid-command', `/props/${key}`);
       }
-      if ('data' in props && node.type !== 'custom') {
-        return fail('editor.invalid-command', '/props/data');
-      }
-      const next = checked(node.id, { ...node, ...props }, custom);
-      if (isFailure(next)) return next;
-      return { ok: true, document: withNodes(document, [next]), touched: [node.id], created: [] };
+      const result = validateNode({ ...node, ...props });
+      if (!result.ok) return fail(result.code, nodePath(node.id, result.path));
+      const rejected = custom.check(deepFreeze(result.node));
+      if (rejected !== null) return fail(rejected.code, nodePath(node.id, rejected.path));
+      const draft = new Draft(document);
+      draft.setChecked(result.node, true);
+      return success(finish(draft), draft, []);
     }
     case 'deleteNodes': {
-      const removed = uniqueIds(command.ids);
-      if (removed === null || removed.length === 0) return fail('editor.invalid-command', '/ids');
-      if (removed.some((id) => nodeOf(document, id) === undefined))
-        return fail('editor.unknown-node');
-      return {
-        ok: true,
-        document: withNodes(document, [], new Set(removed)),
-        touched: removed,
-        created: [],
+      const ids = uniqueIds(command.ids);
+      if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');
+      if (ids.some((id) => nodeOf(document, id) === undefined)) return fail('editor.unknown-node');
+      const tree = documentTree(document);
+      const listed = new Set(ids);
+      // A listed descendant of a listed node goes with its ancestor.
+      const roots = ids.filter((id) => !ancestors(tree, id).some((node) => listed.has(node.id)));
+      const draft = new Draft(document);
+      for (const id of roots) {
+        const owner = document.nodes[id]!.parent;
+        draft.setChildren(
+          owner,
+          childrenOf(draft, owner).filter((child) => child !== id),
+        );
+        for (const removed of subtree(tree, id)) draft.remove(removed);
+      }
+      return success(finish(draft), draft, []);
+    }
+    case 'groupNodes':
+      return group(document, command, context, finish);
+    case 'ungroupNodes': {
+      if (typeof command.id !== 'string') return fail('editor.invalid-command', '/id');
+      const node = nodeOf(document, command.id);
+      if (node === undefined) return fail('editor.unknown-node');
+      if (!isGroup(node)) return fail('editor.not-a-group');
+      const draft = new Draft(document);
+      const owner = node.parent;
+      const siblings = childrenOf(draft, owner);
+      const at = siblings.indexOf(node.id);
+      // Each child keeps its page placement: the container's transform is composed into it.
+      const space = localTransform(node.frame, node.rotation);
+      for (const id of node.children) {
+        const child = document.nodes[id]!;
+        const moved = relocate(child.frame, child.rotation, space, node.rotation, IDENTITY, 0);
+        draft.set({ ...child, parent: owner, ...moved });
+      }
+      draft.setChildren(owner, [
+        ...siblings.slice(0, at),
+        ...node.children,
+        ...siblings.slice(at + 1),
+      ]);
+      draft.remove(node.id);
+      return success(finish(draft), draft, []);
+    }
+    case 'moveNodes':
+      return move(document, command, finish);
+    case 'addPage': {
+      if (command.name !== undefined && typeof command.name !== 'string') {
+        return fail('editor.invalid-command', '/name');
+      }
+      const index = command.index ?? document.pages.length;
+      if (!isIndex(index, document.pages.length)) return fail('editor.invalid-index');
+      // The ID is drawn once every other check passed, so a failed command draws none.
+      const id = freshId(document, context.ids);
+      if (id === null) return fail('editor.duplicate-id');
+      const page: PageV2 = {
+        id,
+        name: command.name ?? `Page ${document.pages.length + 1}`,
+        children: [],
       };
+      const draft = new Draft(document);
+      draft.setPages(inserted(document.pages, index, [page]));
+      return success(finish(draft), draft, [id]);
+    }
+    case 'removePage': {
+      if (typeof command.id !== 'string') return fail('editor.invalid-command', '/id');
+      const page = document.pages.find((entry) => entry.id === command.id);
+      if (page === undefined) return fail('editor.unknown-page');
+      if (document.pages.length === 1) return fail('editor.last-page');
+      const tree = documentTree(document);
+      const draft = new Draft(document);
+      for (const child of page.children) for (const id of subtree(tree, child)) draft.remove(id);
+      draft.setPages(document.pages.filter((entry) => entry !== page));
+      return success(finish(draft), draft, []);
+    }
+    case 'renamePage': {
+      if (typeof command.id !== 'string') return fail('editor.invalid-command', '/id');
+      if (typeof command.name !== 'string') return fail('editor.invalid-command', '/name');
+      const index = document.pages.findIndex((entry) => entry.id === command.id);
+      if (index < 0) return fail('editor.unknown-page');
+      const draft = new Draft(document);
+      const pages = [...document.pages];
+      pages[index] = { ...pages[index]!, name: command.name };
+      draft.setPages(pages);
+      return success(finish(draft), draft, []);
+    }
+    case 'movePage': {
+      if (typeof command.id !== 'string') return fail('editor.invalid-command', '/id');
+      const page = document.pages.find((entry) => entry.id === command.id);
+      if (page === undefined) return fail('editor.unknown-page');
+      // The index is into the list after the page is removed.
+      if (!isIndex(command.index, document.pages.length - 1)) return fail('editor.invalid-index');
+      const draft = new Draft(document);
+      const rest = document.pages.filter((entry) => entry !== page);
+      draft.setPages(inserted(rest, command.index, [page]));
+      return success(finish(draft), draft, []);
+    }
+    default:
+      return fail('editor.invalid-command', '/type');
+  }
+}
+
+/**
+ * The refit a gesture defers to its commit (section 4.2): groups whose children changed placement
+ * between the gesture's `base` and `current` refit, innermost first.
+ */
+export function refitGesture(
+  base: DocumentV2,
+  current: DocumentV2,
+  touched: Iterable<string>,
+  custom: CustomRules = NO_CUSTOM,
+): EditResult {
+  const draft = new Draft(current);
+  draft.adopt(touched);
+  const document = draft.finish((node) => custom.check(node), { refit: true, placementBase: base });
+  if ('ok' in document) return document;
+  return { ok: true, document, touched: [...draft.touched], created: [] };
+}
+
+/**
+ * Package-internal gesture edits for the built-in tools, for placements no public command
+ * expresses (M1 contract, section 4.4 and 7): `map` resizes a multi-selection by a page-space
+ * scale, each node mapped from its pre-gesture state as in a group resize; `line` moves the
+ * endpoints of a line to page points.
+ */
+export type GestureEdit =
+  | Readonly<{ kind: 'map'; ids: readonly string[]; map: ScaleMap }>
+  | Readonly<{ kind: 'line'; id: string; start: PagePoint; end: PagePoint }>;
+
+/**
+ * Applies a gesture edit to the live `document` of a gesture whose pre-gesture document is
+ * `base`. Groups do not refit (that happens at commit, section 4.2).
+ */
+export function applyGestureEdit(
+  document: DocumentV2,
+  base: DocumentV2,
+  edit: GestureEdit,
+  custom: CustomRules = NO_CUSTOM,
+): EditResult {
+  const draft = new Draft(document);
+  if (edit.kind === 'map') {
+    if (edit.ids.some((id) => nodeOf(document, id) === undefined)) {
+      return fail('editor.unknown-node');
+    }
+    // Every mapped subtree first returns to its pre-gesture state, so updates do not compound
+    // and a node the map leaves in place is back where it started.
+    const baseTree = documentTree(base);
+    for (const id of edit.ids) {
+      for (const member of subtree(draft, id)) {
+        const original = baseTree.node(member);
+        if (original !== undefined && draft.node(member) !== original) {
+          draft.setChecked(original, true);
+        }
+      }
+    }
+    for (const id of edit.ids) mapNodeInPageSpace(draft, id, edit.map);
+  } else {
+    const node = nodeOf(document, edit.id);
+    if (node === undefined) return fail('editor.unknown-node');
+    if (node.type !== 'line' || !isPoint(edit.start) || !isPoint(edit.end)) {
+      return fail('editor.invalid-command');
+    }
+    // Into the parent's local space, as `createLine` maps them; on a page nothing changes.
+    const inverse = invertRigid(spaceOf(draft, node.parent).matrix);
+    const onPage = draft.page(node.parent) !== undefined;
+    const start = onPage ? edit.start : apply(inverse, edit.start.x, edit.start.y);
+    const end = onPage ? edit.end : apply(inverse, edit.end.x, edit.end.y);
+    const { frame, unit } = fitPoints([start.x, start.y, end.x, end.y], node.rotation);
+    draft.set({ ...node, frame, points: [unit[0]!, unit[1]!, unit[2]!, unit[3]!] });
+  }
+  return success(
+    draft.finish((node) => custom.check(node), { refit: false }),
+    draft,
+    [],
+  );
+}
+
+function isPoint(value: unknown): value is PagePoint {
+  const point = value as PagePoint | null;
+  return (
+    typeof point === 'object' &&
+    point !== null &&
+    typeof point.x === 'number' &&
+    Number.isFinite(point.x) &&
+    typeof point.y === 'number' &&
+    Number.isFinite(point.y)
+  );
+}
+
+type CreateCommand = Extract<
+  DocumentCommand,
+  {
+    type:
+      | 'createRectangle'
+      | 'createEllipse'
+      | 'createFrame'
+      | 'createLine'
+      | 'createPath'
+      | 'createCustomNode';
+  }
+>;
+
+/**
+ * Creation (section 4.1): the command's frame or points are in page space and are mapped into
+ * the parent's local space. A failed create draws no ID (P5-U2), so `editor.duplicate-id` is the
+ * last check here.
+ */
+function create(
+  document: DocumentV2,
+  command: CreateCommand,
+  context: EditContext,
+  custom: CustomRules,
+  finish: (draft: Draft) => DocumentV2 | Failure,
+): EditResult {
+  if (command.parent !== undefined && typeof command.parent !== 'string') {
+    return fail('editor.invalid-command', '/parent');
+  }
+  // Interleaved page points of a path or line; frame-based nodes have none.
+  let points: number[] | null = null;
+  if (command.type === 'createPath') {
+    const raw: unknown = command.points;
+    if (!Array.isArray(raw) || raw.length < 2) return fail('editor.invalid-command', '/points');
+    for (let i = 0; i < raw.length; i += 1) {
+      if (typeof raw[i] !== 'number' || !Number.isFinite(raw[i])) {
+        return fail('editor.invalid-command', `/points/${i}`);
+      }
+    }
+    points = [...(raw as number[])];
+  } else if (command.type === 'createLine') {
+    if (!isPoint(command.start)) return fail('editor.invalid-command', '/start');
+    if (!isPoint(command.end)) return fail('editor.invalid-command', '/end');
+    points = [command.start.x, command.start.y, command.end.x, command.end.y];
+  }
+  const tree = documentTree(document);
+  const parent = command.parent ?? context.activePage;
+  const onPage = tree.page(parent) !== undefined;
+  const owner = tree.node(parent);
+  if (!onPage && owner === undefined) return fail('editor.unknown-node');
+  const siblings = childrenOf(tree, parent);
+  const index = command.index ?? siblings.length;
+  if (!isIndex(index, siblings.length)) return fail('editor.invalid-index');
+  const rotation: unknown = command.rotation ?? 0;
+  if (typeof rotation !== 'number' || !Number.isFinite(rotation)) {
+    return fail('document.invalid-field', '/rotation');
+  }
+
+  // The node in page space, validated before an ID is drawn; failure paths are relative to it.
+  const base = {
+    id: PENDING_ID,
+    parent: PENDING_ID,
+    rotation,
+    constraints: START,
+    opacity: 1,
+    visible: true,
+  };
+  const fitted = points === null ? null : fitPoints(points, normalizeRotation(rotation));
+  let candidate: Record<string, unknown>;
+  switch (command.type) {
+    case 'createRectangle':
+      candidate = {
+        ...base,
+        name: command.name ?? 'Rectangle',
+        frame: command.frame,
+        type: 'rectangle',
+        cornerRadii: command.cornerRadii ?? [0, 0, 0, 0],
+        fill: command.fill === undefined ? DEFAULT_RECTANGLE_FILL : command.fill,
+        stroke: command.stroke ?? null,
+      };
+      break;
+    case 'createEllipse':
+      candidate = {
+        ...base,
+        name: command.name ?? 'Ellipse',
+        frame: command.frame,
+        type: 'ellipse',
+        fill: command.fill === undefined ? DEFAULT_RECTANGLE_FILL : command.fill,
+        stroke: command.stroke ?? null,
+      };
+      break;
+    case 'createFrame':
+      candidate = {
+        ...base,
+        name: command.name ?? 'Frame',
+        frame: command.frame,
+        type: 'frame',
+        children: [],
+        fill: command.fill === undefined ? DEFAULT_FRAME_FILL : command.fill,
+        stroke: command.stroke ?? null,
+      };
+      break;
+    case 'createLine':
+      candidate = {
+        ...base,
+        name: command.name ?? 'Line',
+        frame: fitted!.frame,
+        type: 'line',
+        points: fitted!.unit,
+        stroke: command.stroke === undefined ? DEFAULT_PATH_STROKE : command.stroke,
+        startArrow: command.startArrow ?? 'none',
+        endArrow: command.endArrow ?? 'none',
+      };
+      break;
+    case 'createPath':
+      candidate = {
+        ...base,
+        name: command.name ?? 'Path',
+        frame: fitted!.frame,
+        type: 'path',
+        path: {
+          verbs: command.verbs,
+          points: fitted!.unit,
+          fillRule: command.fillRule ?? 'nonzero',
+        },
+        fill: command.fill ?? null,
+        stroke: command.stroke === undefined ? DEFAULT_PATH_STROKE : command.stroke,
+      };
+      break;
+    case 'createCustomNode': {
+      let data = command.data;
+      if (data === undefined) {
+        const defaults = custom.defaults(command.customType);
+        if ('code' in defaults) return fail(defaults.code, defaults.path);
+        data = defaults.data;
+      }
+      candidate = {
+        ...base,
+        name: command.name ?? command.customType,
+        frame: command.frame,
+        type: 'custom',
+        customType: command.customType,
+        data,
+        fill: command.fill ?? null,
+        stroke: command.stroke === undefined ? DEFAULT_PATH_STROKE : command.stroke,
+      };
+      break;
     }
   }
+  let result: ReturnType<typeof validateNode>;
+  try {
+    result = validateNode(candidate);
+  } catch {
+    // Only extension `defaults()` can put an exotic value (a throwing getter or proxy) here.
+    return fail('document.invalid-custom-data', '/data');
+  }
+  if (!result.ok) return fail(result.code, result.path);
+  const depth = onPage ? 0 : treeDepth(tree, parent) + 1;
+  if (depth > MAX_TREE_DEPTH) return fail('document.invalid-field', '/parent');
+  const rejected = custom.check(deepFreeze(result.node));
+  if (rejected !== null) return fail(rejected.code, rejected.path);
+  if (!onPage && !isContainer(owner)) return fail('editor.invalid-parent', '/parent');
+  if (owner?.type === 'maskGroup' && index === 0 && result.node.type !== 'path') {
+    return fail('editor.invalid-mask-source', '/index');
+  }
+  const clips = childClipDepth(tree, parent);
+  if (
+    clips > MAX_CLIP_DEPTH ||
+    (result.node.type === 'frame' && clips > MAX_CLIP_CONTAINER_DEPTH)
+  ) {
+    return fail('editor.clip-depth', '/parent');
+  }
+  const id = freshId(document, context.ids);
+  if (id === null) return fail('editor.duplicate-id');
+
+  // Into the parent's local space; on a page nothing changes.
+  let placed: NodeV2 = { ...result.node, id, parent };
+  if (!onPage) {
+    const space = spaceOf(tree, parent);
+    const local = normalizeRotation(result.node.rotation - space.rotation);
+    if (points !== null) {
+      const inverse = invertRigid(space.matrix);
+      const mapped: number[] = [];
+      for (let i = 0; i + 1 < points.length; i += 2) {
+        const p = apply(inverse, points[i]!, points[i + 1]!);
+        mapped.push(p.x, p.y);
+      }
+      const { frame, unit } = fitPoints(mapped, local);
+      if (placed.type === 'path') {
+        placed = { ...placed, frame, rotation: local, path: { ...placed.path, points: unit } };
+      } else if (placed.type === 'line') {
+        placed = {
+          ...placed,
+          frame,
+          rotation: local,
+          points: [unit[0]!, unit[1]!, unit[2]!, unit[3]!],
+        };
+      }
+    } else {
+      placed = {
+        ...placed,
+        ...relocate(placed.frame, placed.rotation, IDENTITY, 0, space.matrix, space.rotation),
+      };
+    }
+    const mapped = validateNode(placed);
+    if (!mapped.ok) return fail(mapped.code, mapped.path);
+    placed = mapped.node;
+  }
+  const draft = new Draft(document);
+  draft.setChecked(placed, true);
+  draft.setChildren(parent, inserted(siblings, index, [id]));
+  return success(finish(draft), draft, [id], [id]);
+}
+
+/** `groupNodes` (section 4.3). */
+function group(
+  document: DocumentV2,
+  command: Extract<DocumentCommand, { type: 'groupNodes' }>,
+  context: EditContext,
+  finish: (draft: Draft) => DocumentV2 | Failure,
+): EditResult {
+  const ids = uniqueIds(command.ids);
+  if (ids === null) return fail('editor.invalid-command', '/ids');
+  if (command.kind !== 'group' && command.kind !== 'maskGroup') {
+    return fail('editor.invalid-command', '/kind');
+  }
+  if (ids.some((id) => nodeOf(document, id) === undefined)) return fail('editor.unknown-node');
+  const owner = ids.length === 0 ? undefined : document.nodes[ids[0]!]!.parent;
+  if (owner === undefined || ids.some((member) => document.nodes[member]!.parent !== owner)) {
+    return fail('editor.not-siblings');
+  }
+  // Every check runs with a placeholder ID first, so a failed command draws no ID; the result
+  // does not depend on the ID, so the build with the drawn one passes too.
+  const placeholder = placeholderId(document);
+  const trial = buildGroup(document, command.kind, ids, owner, placeholder, finish);
+  if (!trial.ok) return relativeToNew(trial, nodePath(placeholder));
+  const id = freshId(document, context.ids);
+  if (id === null) return fail('editor.duplicate-id');
+  return buildGroup(document, command.kind, ids, owner, id, finish);
+}
+
+/** A failure inside the new container is reported relative to it, as for creation commands. */
+function relativeToNew(failure: Failure, prefix: string): Failure {
+  const path = failure.path;
+  if (path === undefined || (path !== prefix && !path.startsWith(`${prefix}/`))) return failure;
+  return fail(failure.code, path.slice(prefix.length) || undefined);
+}
+
+/** An ID that no page or node of `document` has, for checks that run before the ID is drawn. */
+function placeholderId(document: DocumentV2): string {
+  let id = PENDING_ID;
+  for (
+    let n = 1;
+    document.pages.some((page) => page.id === id) || Object.hasOwn(document.nodes, id);
+    n += 1
+  ) {
+    id = `${PENDING_ID}-${n}`;
+  }
+  return id;
+}
+
+function buildGroup(
+  document: DocumentV2,
+  kind: 'group' | 'maskGroup',
+  ids: readonly string[],
+  owner: string,
+  id: string,
+  finish: (draft: Draft) => DocumentV2 | Failure,
+): EditResult {
+  const siblings = childrenOf(documentTree(document), owner);
+  const members = siblings.filter((child) => ids.includes(child));
+  const nodes = members.map((member) => document.nodes[member]!);
+  // The new container's frame is the bounds of their rotated frames, rotation 0.
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const node of nodes) {
+    const b = rotatedBounds(node);
+    minX = Math.min(minX, b.x);
+    minY = Math.min(minY, b.y);
+    maxX = Math.max(maxX, b.x + b.width);
+    maxY = Math.max(maxY, b.y + b.height);
+  }
+  const container: NodeV2 = {
+    id,
+    name: kind === 'group' ? 'Group' : 'Mask group',
+    parent: owner,
+    frame: { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
+    rotation: 0,
+    constraints: START,
+    opacity: 1,
+    visible: true,
+    type: kind,
+    children: members,
+  };
+  const draft = new Draft(document);
+  draft.set(container);
+  for (const node of nodes) {
+    draft.set({
+      ...node,
+      parent: id,
+      frame: { ...node.frame, x: node.frame.x - minX, y: node.frame.y - minY },
+    });
+  }
+  // The container takes the place of the topmost member in paint order.
+  const top = siblings.indexOf(members[members.length - 1]!) - (members.length - 1);
+  draft.setChildren(
+    owner,
+    inserted(
+      siblings.filter((child) => !ids.includes(child)),
+      top,
+      [id],
+    ),
+  );
+  const deep = treeDepthViolation(draft, [id]);
+  if (deep !== null) return fail('document.invalid-field', nodePath(deep, '/parent'));
+  return success(finish(draft), draft, [id], [id]);
+}
+
+/** `moveNodes` (section 4.3): reparenting within one page, keeping page placement. */
+function move(
+  document: DocumentV2,
+  command: Extract<DocumentCommand, { type: 'moveNodes' }>,
+  finish: (draft: Draft) => DocumentV2 | Failure,
+): EditResult {
+  const ids = uniqueIds(command.ids);
+  if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');
+  if (typeof command.parent !== 'string') return fail('editor.invalid-command', '/parent');
+  if (ids.some((id) => nodeOf(document, id) === undefined)) return fail('editor.unknown-node');
+  const tree = documentTree(document);
+  const target = command.parent;
+  const targetPage = tree.page(target) !== undefined ? target : pageOf(tree, target);
+  if (targetPage === undefined) return fail('editor.unknown-node');
+  const listed = new Set(ids);
+  const roots = ids.filter((id) => !ancestors(tree, id).some((node) => listed.has(node.id)));
+  const remaining = childrenOf(tree, target).filter((child) => !roots.includes(child));
+  if (!isIndex(command.index, remaining.length)) return fail('editor.invalid-index');
+  const targetNode = tree.node(target);
+  if (
+    (targetNode !== undefined && !isContainer(targetNode)) ||
+    roots.some(
+      (id) => id === target || isAncestor(tree, id, target) || pageOf(tree, id) !== targetPage,
+    )
+  ) {
+    return fail('editor.invalid-parent', '/parent');
+  }
+  // The moved nodes keep their document pre-order.
+  const order = new Map(
+    document.pages
+      .find((page) => page.id === targetPage)!
+      .children.flatMap((child) => subtree(tree, child))
+      .map((id, position) => [id, position] as const),
+  );
+  roots.sort((a, b) => order.get(a)! - order.get(b)!);
+  const to = spaceOf(tree, target);
+  const draft = new Draft(document);
+  for (const id of roots) {
+    const owner = document.nodes[id]!.parent;
+    draft.setChildren(
+      owner,
+      childrenOf(draft, owner).filter((child) => child !== id),
+    );
+  }
+  for (const id of roots) {
+    const node = document.nodes[id]!;
+    if (node.parent === target) {
+      // A reorder within one parent keeps the node exactly.
+      draft.setChecked(node, true);
+      continue;
+    }
+    const from = spaceOf(tree, node.parent);
+    const moved = relocate(
+      node.frame,
+      node.rotation,
+      from.matrix,
+      from.rotation,
+      to.matrix,
+      to.rotation,
+    );
+    draft.set({ ...node, parent: target, ...moved });
+  }
+  draft.setChildren(target, inserted(childrenOf(draft, target), command.index, roots));
+  const deep = treeDepthViolation(draft, roots);
+  if (deep !== null) return fail('document.invalid-field', nodePath(deep, '/parent'));
+  return success(finish(draft), draft, [], roots);
 }
