@@ -882,6 +882,29 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       }
     }
 
+    // E22-K4: once per generation, when the scene comes up without the clip variants a source
+    // that draws clips asked for; its clipped draws are not drawn (P4 U3, fail closed). A
+    // backend test hook has already failed the generation above.
+    if (
+      primitive !== undefined &&
+      this.#clipPipelineRequired &&
+      primitive.scene.clipPipelineAvailable !== true
+    ) {
+      this.#emit(
+        DIAGNOSTIC_CODES.CLIP_UNAVAILABLE,
+        'The clip pipelines are unavailable; clipped and masked content is not drawn.',
+        'warning',
+        generation,
+      );
+      if (!this.#isCurrent(token)) {
+        releaseAttempt();
+        if (this.#pendingAttemptRelease === releaseAttempt) {
+          this.#pendingAttemptRelease = undefined;
+        }
+        return this.#stale(generation);
+      }
+    }
+
     const capabilities: RendererCapabilities = Object.freeze({
       backend: 'webgpu',
       adapter: Object.freeze({ ...adapter.info }),
