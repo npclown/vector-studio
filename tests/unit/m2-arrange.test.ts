@@ -397,11 +397,17 @@ function distributeFrames(document: DocumentV2, ids: readonly string[], horizont
   let previous = first.min + first.size;
   for (const entry of entries.slice(1, -1)) {
     const min = previous + gap;
-    const delta = min - entry.min;
-    frames.set(
-      entry.id,
-      translated(document, entry.id, horizontal ? delta : 0, horizontal ? 0 : delta),
-    );
+    const node = document.nodes[entry.id]!;
+    if (isPageRoot(document, entry.id) && node.rotation === 0) {
+      // A page-root node with rotation 0 takes the new min exactly.
+      frames.set(entry.id, horizontal ? { ...node.frame, x: min } : { ...node.frame, y: min });
+    } else {
+      const delta = min - entry.min;
+      frames.set(
+        entry.id,
+        translated(document, entry.id, horizontal ? delta : 0, horizontal ? 0 : delta),
+      );
+    }
     previous = min + entry.size;
   }
   return { frames, gap, sorted: entries.map((entry) => entry.id) };
@@ -423,6 +429,33 @@ describe('M2-A05 distribute', () => {
     expect(nodeOf(target, 'd2').frame).toEqual(f(45, 0, 20, 10));
     expect(nodeOf(target, 'd3').frame).toEqual(f(100, 0, 10, 10));
     expect(undoDepth(target)).toBe(1);
+  });
+
+  it('sets page-root mins exactly to the formula on non-integer frames', () => {
+    // A deterministic generator (an LCG), so the cases are reproducible.
+    let seed = 12345;
+    const next = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    const round = (v: number) => Math.round(v * 100) / 100;
+    for (let trial = 0; trial < 500; trial += 1) {
+      const n = 3 + Math.floor(next() * 4);
+      const frames = Array.from({ length: n }, () =>
+        f(round(next() * 500), round(next() * 500), round(1 + next() * 80), round(1 + next() * 80)),
+      );
+      const horizontal = trial % 2 === 0;
+      const target = editor(row(frames));
+      const before = documentOf(target);
+      const ids = frames.map((_, i) => `d${i + 1}`);
+      select(target, ids);
+      press(target, horizontal ? '7' : '8', alt);
+      const expected = distributeFrames(before, ids, horizontal).frames;
+      for (const id of ids) {
+        const frame = expected.get(id) ?? before.nodes[id]!.frame;
+        expect(nodeOf(target, id).frame, `${trial} ${id}`).toEqual(frame);
+      }
+    }
   });
 
   it('distributes vertically (literal values)', () => {
@@ -549,7 +582,10 @@ describe('M2-A06 reorder', () => {
     expect(reorder(target, ['r5', 'r2', 'r3'], op)).toEqual({ ok: true, ids: [], consumed: true });
     expect(childrenOf(target, 'p1')).toEqual(expected);
     // A reorder keeps every node exactly; only the children order changes.
-    for (const id of ['r2', 'r3', 'r5']) expect(nodeOf(target, id).frame.x).toBeGreaterThan(0);
+    const original = documentOf(editor(stack()));
+    for (const id of ['r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'q']) {
+      expect(nodeOf(target, id), id).toEqual(original.nodes[id]);
+    }
     expect(undoDepth(target)).toBe(1);
     ok(target, { type: 'undo' });
     expect(text(target)).toBe(before);

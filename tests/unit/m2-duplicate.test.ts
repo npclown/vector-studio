@@ -143,9 +143,9 @@ function tallyExtension() {
           return !state.strict && typeof data === 'object' && data !== null && 'level' in data;
         },
         defaults: () => ({ level: 1 }),
-        toScene: () => ({
+        toScene: (_, frame) => ({
           verbs: ['move', 'line', 'line', 'close'],
-          points: [0, 0, 1, 0, 1, 1],
+          points: [0, 0, frame.width, 0, frame.width, frame.height],
           fillRule: 'nonzero',
         }),
       },
@@ -319,9 +319,9 @@ describe('M2-A08 duplicateNodes', () => {
     expect(childrenOf(target, 'n2')).toEqual(['n3', 'n4', 'n5']);
   });
 
-  it('returns the copies in the result paint order when it differs from the originals', () => {
+  it('draws IDs in the copies’ paint order when it differs from the originals’', () => {
     // Originals in paint order: a, gb (inside g, between a and b), b. Copies: a and b go above
-    // b; gb's copy stays in g, so it paints first.
+    // b; gb's copy stays in g, so it paints first and draws the first ID.
     const { target } = setup(
       doc(
         [['p1', ['a', 'g', 'b']]],
@@ -335,10 +335,11 @@ describe('M2-A08 duplicateNodes', () => {
     );
     expect(target.execute({ type: 'duplicateNodes', ids: ['b', 'gb', 'a'] })).toEqual({
       ok: true,
-      ids: ['n2', 'n1', 'n3'],
+      ids: ['n1', 'n2', 'n3'],
     });
-    expect(childrenOf(target, 'p1')).toEqual(['a', 'g', 'b', 'n1', 'n3']);
-    expect(childrenOf(target, 'g')).toEqual(['gb', 'n2']);
+    expect(childrenOf(target, 'p1')).toEqual(['a', 'g', 'b', 'n2', 'n3']);
+    expect(childrenOf(target, 'g')).toEqual(['gb', 'n1']);
+    expect(nodeOf(target, 'n2')).toMatchObject({ name: 'a', parent: 'p1' });
   });
 
   it('copies inside a mask group keep its path source first', () => {
@@ -641,5 +642,59 @@ describe('M2-A08 Alt-drag', () => {
     expect(documentOf(target)).toBe(before);
     expect(drawn.drawn).toBe(0);
     expect(undoDepth(target)).toBe(0);
+    // Selects the pressed target as a click does, until overlap cycling (M2-U5) replaces it.
+    expect(selection(target)).toEqual(['b']);
+  });
+
+  it('Alt on a resize handle resizes, and in the rotate zone rotates, without copying', () => {
+    const resized = raw();
+    select(resized.target, ['b']);
+    // b's bottom-right handle is at (50, 30).
+    pointer(resized.target, 'pointerdown', at(50, 30));
+    pointer(resized.target, 'pointermove', at(60, 40));
+    pointer(resized.target, 'pointerup', at(60, 40));
+    expect(nodeOf(resized.target, 'b').frame).toEqual(f(30, 20, 30, 20));
+    expect(resized.drawn.drawn).toBe(0);
+    expect(selection(resized.target)).toEqual(['b']);
+    expect(undoDepth(resized.target)).toBe(1);
+
+    const rotated = raw();
+    select(rotated.target, ['b']);
+    // Outside the box near its bottom-right corner.
+    pointer(rotated.target, 'pointerdown', at(55, 35));
+    pointer(rotated.target, 'pointermove', at(40, 45));
+    pointer(rotated.target, 'pointerup', at(40, 45));
+    expect(nodeOf(rotated.target, 'b').rotation).not.toBe(0);
+    expect(nodeOf(rotated.target, 'b').frame).toEqual(f(30, 20, 20, 10));
+    expect(rotated.drawn.drawn).toBe(0);
+    expect(undoDepth(rotated.target)).toBe(1);
+  });
+
+  it('an Alt-drag whose duplicate fails moves nothing and keeps the selection', () => {
+    const { target, drawn, custom } = raw(
+      doc(
+        [['p1', ['a', 'ct']]],
+        [rect('a', 'p1', f(100, 0, 10, 10)), tally('ct', 'p1', f(0, 0, 10, 10))],
+      ),
+    );
+    const before = documentOf(target);
+    select(target, ['a']);
+    custom.strict = true;
+    // Inside ct's triangle (0, 0), (10, 0), (10, 10).
+    pointer(target, 'pointerdown', at(7, 3));
+    pointer(target, 'pointermove', at(17, 3));
+    pointer(target, 'pointermove', at(27, 8));
+    pointer(target, 'pointerup', at(27, 8));
+    expect(documentOf(target)).toBe(before);
+    expect(drawn.drawn).toBe(0);
+    expect(undoDepth(target)).toBe(0);
+    expect(selection(target)).toEqual(['a']);
+    // The same press duplicates once the check passes.
+    custom.strict = false;
+    pointer(target, 'pointerdown', at(7, 3));
+    pointer(target, 'pointermove', at(17, 3));
+    pointer(target, 'pointerup', at(17, 3));
+    expect(selection(target)).toEqual(['n1']);
+    expect(nodeOf(target, 'n1').frame).toEqual(f(10, 0, 10, 10));
   });
 });
