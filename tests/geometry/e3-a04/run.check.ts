@@ -34,7 +34,9 @@ import {
   buildRecord,
   combineGpuChecks,
   renderRecordMarkdown,
+  reviveRow,
   validateRecord,
+  type A04Record,
   type GpuBrowserCheck,
 } from './record.js';
 import { SMOKE_CASES } from './smoke.js';
@@ -54,13 +56,29 @@ const retryCases =
 /** The oracle's starting resolution 2^-K px (contract section 19); K = 10 is r_m of section 4.3. */
 const startResolution = Number(process.env.E3_A04_RUN_START_RESOLUTION ?? '10');
 
-/** JSON with non-finite numbers kept as strings ("Infinity"), since JSON has none. */
+/** Non-finite numbers kept as strings ("Infinity"), since JSON has none. */
+const nonFinite = (_: string, v: unknown) =>
+  typeof v === 'number' && !Number.isFinite(v) ? String(v) : v;
+
+/** JSON with non-finite numbers kept as strings. */
 export function toJson(value: unknown): string {
-  return `${JSON.stringify(
-    value,
-    (_, v: unknown) => (typeof v === 'number' && !Number.isFinite(v) ? String(v) : v),
-    2,
-  )}\n`;
+  return `${JSON.stringify(value, nonFinite, 2)}\n`;
+}
+
+/** One shard row (E20-K8): a single line, with `+∞` kept as "Infinity" like the record. */
+function toLine(row: HarnessRow): string {
+  return `${JSON.stringify(row, nonFinite)}\n`;
+}
+
+/** E20-K9: the old record's GPU check, which stands only for the same shader. */
+function carriedGpu(file: string, shaderSha256: string): A04Record['gpu'] {
+  const c = JSON.parse(readFileSync(file, 'utf8')) as {
+    shaderSha256: string;
+    gpu: A04Record['gpu'];
+  };
+  if (c.shaderSha256 !== shaderSha256)
+    throw new Error(`the carried GPU check is for shader ${c.shaderSha256}, not ${shaderSha256}`);
+  return c.gpu;
 }
 
 async function loadPorts() {
@@ -147,15 +165,11 @@ it(`runs the A04 ${phase} phase`, async () => {
           : retryCases.has(i);
       if (!mine || i < resumeAt) continue;
       if (i === resumeAt) {
-        if (!lastRowIs(file, String(kase.id)))
-          appendFileSync(file, `${JSON.stringify(errorRow(kase, crash))}\n`);
+        if (!lastRowIs(file, String(kase.id))) appendFileSync(file, toLine(errorRow(kase, crash)));
         continue;
       }
       writeFileSync(current, `${i}\n`);
-      appendFileSync(
-        file,
-        `${JSON.stringify(measureLogged(kase, ports, partnerOf(kase, partners)))}\n`,
-      );
+      appendFileSync(file, toLine(measureLogged(kase, ports, partnerOf(kase, partners))));
     }
     return;
   }
@@ -168,7 +182,7 @@ it(`runs the A04 ${phase} phase`, async () => {
     const file = path.join(out, `shard-${i}.ndjson`);
     if (!existsSync(file)) continue;
     for (const line of readFileSync(file, 'utf8').split('\n'))
-      if (line) rows.push(JSON.parse(line) as HarnessRow);
+      if (line) rows.push(reviveRow(JSON.parse(line) as HarnessRow));
   }
   const base = JSON.parse(readFileSync(path.join(out, 'provenance.json'), 'utf8')) as Record<
     string,
@@ -176,14 +190,18 @@ it(`runs the A04 ${phase} phase`, async () => {
   >;
   const shaderSha256 = createHash('sha256').update(MESH_FILL_SHADER, 'utf8').digest('hex');
   const gpuPaths = (process.env.E3_A04_RUN_GPU ?? '').split(',').filter((p) => p !== '');
+  // E20-K9: a superseding record carries the old record's GPU check unless --gpu replaces it.
+  const carried = process.env.E3_A04_RUN_GPU_CARRIED;
   const gpu =
-    gpuPaths.length === 0
-      ? null
-      : combineGpuChecks(
-          gpuPaths.map((p) => JSON.parse(readFileSync(p, 'utf8')) as GpuBrowserCheck),
-          { shaderSha256, wasmSha256: String(base.wasmSha256) },
-          gpuPaths.join(', '),
-        );
+    gpuPaths.length === 0 && carried !== undefined
+      ? carriedGpu(carried, shaderSha256)
+      : gpuPaths.length === 0
+        ? null
+        : combineGpuChecks(
+            gpuPaths.map((p) => JSON.parse(readFileSync(p, 'utf8')) as GpuBrowserCheck),
+            { shaderSha256, wasmSha256: String(base.wasmSha256) },
+            gpuPaths.join(', '),
+          );
   const ports = await loadPorts();
   const record = buildRecord({
     provenance: {
