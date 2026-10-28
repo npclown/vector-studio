@@ -8,7 +8,7 @@ import type {
   SceneApplyResult,
   SceneSynchronizationState,
 } from '@vector-studio/contracts';
-import { RetainedSceneMirror } from '@vector-studio/renderer-core';
+import { RetainedSceneMirror, type RetainedSceneMirrorOptions } from '@vector-studio/renderer-core';
 
 // P5-U4 recording test renderer (P5 plan, sections 4.5 and 7, P5-A09): the renderer-core
 // scene mirror, which validates every snapshot and change set as the real renderer does,
@@ -29,10 +29,19 @@ export class RecordingRenderer implements RendererSceneSynchronization {
     setCamera: CameraApplyResult;
   }> = {};
 
-  constructor(paths: 'supported' | 'unsupported' = 'supported') {
+  /**
+   * `paths` sets every path port; `options` overrides single ports (M1-U3: a renderer without a
+   * fill port). Clips (P4) are drawn unless `options.clips` says otherwise.
+   */
+  constructor(
+    paths: 'supported' | 'unsupported' = 'supported',
+    options: Partial<RetainedSceneMirrorOptions> = {},
+  ) {
     this.mirror = new RetainedSceneMirror(() => undefined, {
       pathNodes: paths,
       pathStrokes: paths,
+      clips: 'supported',
+      ...options,
     });
   }
 
