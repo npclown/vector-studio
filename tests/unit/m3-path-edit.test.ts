@@ -1168,6 +1168,40 @@ describe('M3-A09 segment double-click, Delete and togglePathClosed', () => {
     }
   });
 
+  it('a double-click past an open end of a wide stroke hits the segment and inserts nothing', () => {
+    // Width 40: the segment radius is 20 > 12 / zoom, so a point 10 past either end along the
+    // tangent is outside ρ = 6 of the anchor but on segment 0, with σ clamped to 0 or 1.
+    const wide = doc(
+      [['p1', ['w']]],
+      [
+        {
+          ...path(
+            'w',
+            'p1',
+            f(100, 100, 100, 0),
+            [
+              ['move', 'line'],
+              [0, 0, 1, 0],
+            ],
+            { fill: false },
+          ),
+          stroke: { ...DEFAULT_PATH_STROKE, width: 40 },
+        },
+      ],
+    );
+    const target = editing('w', [], wide);
+    const before = text(target);
+    for (const point of [at(90, 100), at(210, 100)]) {
+      expect(doubleclick(target, point)).toEqual(consumed);
+    }
+    expect(text(target)).toBe(before);
+    expect(editOf(target)).toEqual({ id: 'w', anchors: [] });
+    expect(undoDepth(target)).toBe(0);
+    // The same points are segment presses: they select both ends.
+    click(target, at(90, 100));
+    expect(anchorsOf(target)).toEqual([ref(0, 0), ref(0, 1)]);
+  });
+
   it('Delete and Backspace remove the anchor selection in one step', () => {
     const target = editing('curve', [ref(0, 1)]);
     const before = text(target);

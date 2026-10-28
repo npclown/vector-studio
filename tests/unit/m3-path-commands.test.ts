@@ -16,6 +16,7 @@ import {
   type Editor,
   type EditorEvent,
   type PagePoint,
+  type PathAnchorRef,
 } from '../../packages/editor-core/src/index.js';
 // Source imports: the anchor model, the gesture API and the tree geometry are package-internal.
 import { Draft } from '../../packages/editor-core/src/draft.js';
@@ -1224,21 +1225,31 @@ describe('M3-A04 insertPathAnchor', () => {
   });
 
   it('splits the implicit closing segment: one line before close, the new anchor n', () => {
-    const target = editor();
-    ok(target, insert('tri', 0, 2, 0.25));
-    expect(pathOf(target, 'tri').path).toEqual({
-      verbs: ['move', 'line', 'line', 'line', 'close'],
-      points: [0, 0, 1, 0, 1, 1, 0.75, 0.75],
-      fillRule: 'nonzero',
-    });
-    const [sub] = readAnchorModel(pathOf(target, 'tri').path);
-    expect(sub).toMatchObject({ closed: true, explicit: false });
-    expect(sub!.anchors[3]).toEqual(s(0.75, 0.75));
+    for (const t of [0.5, 0.25, 0.3]) {
+      const target = editor();
+      ok(target, insert('tri', 0, 2, t));
+      const S = lerp(at(100, 100), at(0, 0), t);
+      expect(pathOf(target, 'tri').path).toEqual({
+        verbs: ['move', 'line', 'line', 'line', 'close'],
+        points: [0, 0, 1, 0, 1, 1, S.x / 100, S.y / 100],
+        fillRule: 'nonzero',
+      });
+      const [sub] = readAnchorModel(pathOf(target, 'tri').path);
+      expect(sub).toMatchObject({ closed: true, explicit: false });
+      expect(sub!.anchors[3]).toEqual(s(S.x / 100, S.y / 100));
+    }
+    const literal = (t: number) => {
+      const target = editor();
+      ok(target, insert('tri', 0, 2, t));
+      return pathOf(target, 'tri').path.points.slice(6);
+    };
+    expect(literal(0.5)).toEqual([0.5, 0.5]);
+    expect(literal(0.25)).toEqual([0.75, 0.75]);
   });
 
   it('splits the explicit closing segment, its end still a copy of anchor 0', () => {
     const head = [0, 0.5, 0, 0.5, 0.25, 0, 0.5, 0, 0.75, 0, 1, 0.5, 1, 0.5, 0.5, 1];
-    for (const t of [0.5, 0.3]) {
+    for (const t of [0.5, 0.25, 0.3]) {
       const target = editor();
       ok(target, insert('closed', 0, 3, t));
       const S = lerp(at(50, 100), at(0, 50), t);
@@ -1414,6 +1425,51 @@ describe('M3-A05 removePathAnchors', () => {
       explicit: true,
       anchors: [s(1, 1), s(1, 0)],
     });
+  });
+
+  it('a removal that lands the new last anchor on anchor 0 reads back in the explicit form', () => {
+    // Implicit with n = 5: A3 = (0, 0) equals A0, but the last stored anchor A4 = (0, 1) does not.
+    const five = doc(
+      [['p1', ['five']]],
+      [
+        path(
+          'five',
+          'p1',
+          f(0, 0, 100, 100),
+          ['move', 'line', 'line', 'line', 'line', 'close'],
+          [0, 0, 1, 0, 1, 1, 0, 0, 0, 1],
+        ),
+      ],
+    );
+    expect(readAnchorModel(stored(five as never, 'five').path)[0]).toMatchObject({
+      explicit: false,
+    });
+    const target = editor(five);
+    ok(target, { type: 'enterPathEdit', id: 'five' });
+    ok(target, { type: 'setPathSelection', anchors: [{ subpath: 0, anchor: 1 }] });
+    expect(target.execute(remove('five', [[0, 4]]))).toEqual({ ok: true, ids: ['five'] });
+    // M3-P2 keeps the implicit form: no closing segment is written after A3.
+    expect(pathOf(target, 'five').frame).toEqual(f(0, 0, 100, 100));
+    expect(pathOf(target, 'five').path.verbs).toEqual(['move', 'line', 'line', 'line', 'close']);
+    expect(pathOf(target, 'five').path.points).toEqual([0, 0, 1, 0, 1, 1, 0, 0]);
+    // Read back, the last segment ends on anchor 0: the explicit form with 3 anchors, not 4.
+    expect(readAnchorModel(pathOf(target, 'five').path)).toEqual([
+      {
+        closed: true,
+        explicit: true,
+        anchors: [s(0, 0), s(1, 0), s(1, 1)],
+        segments: [{ kind: 'line' }, { kind: 'line' }, { kind: 'line' }],
+      },
+    ]);
+    // The structure changed (5 anchors to 3), so retention clears the anchor selection; edit
+    // mode stays, and the old index 3 is no longer an anchor.
+    expect(target.query({ type: 'pathEdit' })).toEqual({ id: 'five', anchors: [] });
+    expect(
+      target.execute({ type: 'setPathSelection', anchors: [{ subpath: 0, anchor: 3 }] }),
+    ).toEqual({ ok: false, code: 'editor.invalid-path-ref', path: '/anchors/0' });
+    ok(target, { type: 'undo' });
+    expect(readAnchorModel(pathOf(target, 'five').path)[0]!.anchors).toHaveLength(5);
+    expect(target.query({ type: 'pathEdit' })).toEqual({ id: 'five', anchors: [] });
   });
 
   it('several anchors over two subpaths; a lone untouched subpath stays', () => {
@@ -1820,26 +1876,52 @@ function randomCommand(random: () => number, document: DocumentV2, id: string): 
     return insert(id, subpath, segment, t);
   }
   if (roll < 0.35) {
-    const removable = refs.filter((ref) => model[ref.subpath]!.anchors.length >= 3);
+    // Sometimes every anchor: `editor.empty-path`, nothing changes.
+    if (random() < 0.15)
+      return remove(
+        id,
+        refs.map((ref) => [ref.subpath, ref.anchor]),
+      );
+    // Else one or two anchors, keeping a subpath with segments when the path has one (any
+    // subpath otherwise), so a removal may drop a subpath but never stalls the run.
+    const segmented = model.some((sub) => sub.segments.length > 0);
+    const keeps = (list: readonly PathAnchorRef[]) =>
+      model.some((sub, subpath) => {
+        const left = sub.anchors.length - list.filter((ref) => ref.subpath === subpath).length;
+        const survives = left === sub.anchors.length || left >= 2;
+        return survives && (!segmented || left >= 2);
+      });
+    const removable = refs.filter((ref) => keeps([ref]));
     if (removable.length > 0) {
       const first = pick(removable);
       const second = pick(removable);
+      const pair = [first, second];
       const both =
         random() < 0.3 &&
-        (second.subpath !== first.subpath ||
-          (second.anchor !== first.anchor && model[first.subpath]!.anchors.length >= 4));
+        (second.subpath !== first.subpath || second.anchor !== first.anchor) &&
+        keeps(pair);
       return remove(
         id,
-        (both ? [first, second] : [first]).map((ref) => [ref.subpath, ref.anchor]),
+        (both ? pair : [first]).map((ref) => [ref.subpath, ref.anchor]),
       );
     }
   }
   if (roll < 0.45) return close(id, Math.floor(random() * model.length));
   if (roll < 0.55) {
-    const subpath = Math.floor(random() * model.length);
-    const count = model[subpath]!.segments.length;
-    const segment = count > 0 && random() < 0.5 ? Math.floor(random() * count) : undefined;
-    return open(id, subpath, segment);
+    // Opening a one-anchor subpath leaves a lone `move`; only when another subpath still has
+    // segments, so an opened loop cannot stall the run.
+    const openable = model.flatMap((sub, subpath) =>
+      sub.anchors.length >= 2 ||
+      model.some((other, o) => o !== subpath && other.segments.length > 0)
+        ? [subpath]
+        : [],
+    );
+    if (openable.length > 0) {
+      const subpath = pick(openable);
+      const count = model[subpath]!.segments.length;
+      const segment = count > 0 && random() < 0.5 ? Math.floor(random() * count) : undefined;
+      return open(id, subpath, segment);
+    }
   }
   const ref = pick(refs);
   if (roll < 0.75) {
@@ -1906,14 +1988,19 @@ describe('M3-A07 grammar and history under seeded path commands', () => {
         const random = seeded(0x5eed + 97 * index + id.charCodeAt(0));
         let changed = 0;
         const kinds = new Set<string>();
+        let empties = 0;
+        let drops = 0;
+        const subpaths = () => readAnchorModel(stored(documentOf(target), id).path).length;
         for (let step = 0; step < 1000; step += 1) {
           const before = text(target);
           const depth = undoDepth(target);
+          const subpathsBefore = subpaths();
           const command = randomCommand(random, documentOf(target), id);
           const label = `step ${step}: ${JSON.stringify(command)}`;
           const result = target.execute(command);
           if (!result.ok) {
             expect(['editor.too-few-anchors', 'editor.empty-path'], label).toContain(result.code);
+            if (result.code === 'editor.empty-path') empties += 1;
             expect(text(target), label).toBe(before);
             continue;
           }
@@ -1927,6 +2014,7 @@ describe('M3-A07 grammar and history under seeded path commands', () => {
           }
           changed += 1;
           kinds.add(command.type);
+          if (subpaths() < subpathsBefore) drops += 1;
           ok(target, { type: 'undo' });
           expect(text(target), label).toBe(before);
           mirrored();
@@ -1939,7 +2027,10 @@ describe('M3-A07 grammar and history under seeded path commands', () => {
         expect(scene.every((call) => call.result.status === 'applied')).toBe(true);
         // Shapes without segments (`dot`, `moves`, an opened loop) can only move or drop.
         expect(changed).toBeGreaterThan(300);
-        if (['open', 'closed', 'tri', 'multi'].includes(shape)) {
+        expect(empties).toBeGreaterThan(0);
+        // `multi` loses subpaths (its 1- and 2-anchor ones) while another remains.
+        if (shape === 'multi') expect(drops).toBeGreaterThan(0);
+        if (['open', 'closed', 'tri', 'loop', 'multi'].includes(shape)) {
           expect([...kinds].sort()).toEqual([
             'closePathSubpath',
             'insertPathAnchor',
