@@ -161,14 +161,32 @@ describe('E22-K5 no cached clip variant after a failed step (E22-A8)', () => {
     cache.evict(key);
     expect(release).toHaveBeenCalledWith('ready');
     expect(cache.snapshot().readyEntries).toBe(0);
-    const pending = cache.getOrCreate(key, () => new Promise<string>(() => {}));
+    // Evicted before its factory starts: the creation is invalidated.
+    const early = cache.getOrCreate(key, () => 'never');
     cache.evict(key);
     expect(cache.snapshot().pendingEntries).toBe(0);
+    await expect(early).rejects.toThrow('invalidated before it started');
+    // Evicted while its factory runs: the late value is released and the promise rejects.
+    let finish!: (value: string) => void;
+    const running = cache.getOrCreate(
+      key,
+      () =>
+        new Promise<string>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await vi.waitFor(() => expect(finish).toBeDefined());
     cache.evict(key);
-    void pending.catch(() => undefined);
+    finish('late');
+    await expect(running).rejects.toThrow('evicted');
+    expect(release).toHaveBeenCalledWith('late');
+    expect(cache.snapshot().readyEntries).toBe(0);
+    cache.evict(key);
   });
 
   const steps: readonly (readonly [string, { failPipeline?: string; failTexture?: string }])[] = [
+    // Nothing is cached before the analytic variant, so this case holds without eviction too;
+    // the five after it exercise E22-K5.
     ['analytic', { failPipeline: 'primitive-stencil-4x+clip' }],
     ['mask analytic', { failPipeline: 'primitive-4x+mask' }],
     ['default mask', { failTexture: 'clip-default-mask' }],

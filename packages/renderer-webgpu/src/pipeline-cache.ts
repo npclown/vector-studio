@@ -166,7 +166,9 @@ export class PipelineCache<T> {
 
   /**
    * E22-K5: removes the entry for `key`, if any, so a later `getOrCreate` builds it again; a
-   * ready value is released, and a pending creation is invalidated (its promise rejects).
+   * ready value is released, and a pending creation is invalidated: its promise rejects, and a
+   * value that still arrives is released (and counted in `successfulCreations`, as for a stale
+   * generation).
    */
   evict(key: PipelineCacheKey): void {
     const identity = keyIdentity(snapshotKey(key));
@@ -230,7 +232,9 @@ export class PipelineCache<T> {
     this.#successfulCreations += 1;
     if (!this.#isCurrent(entry)) {
       this.#releaseEntry(entry, value);
-      entry.reject(new Error('Pipeline creation completed for a stale generation.'));
+      entry.reject(
+        new Error('Pipeline creation completed for a stale generation or evicted entry.'),
+      );
       return;
     }
 
