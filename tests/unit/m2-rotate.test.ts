@@ -21,7 +21,7 @@ import { Draft } from '../../packages/editor-core/src/draft.js';
 import { internalsOf } from '../../packages/editor-core/src/editor.js';
 import { apply, invertRigid } from '../../packages/editor-core/src/geometry.js';
 import { boundsOf } from '../../packages/editor-core/src/hit-test.js';
-import { handleBoxOf, handleCentre } from '../../packages/editor-core/src/tools.js';
+import { handleBoxOf, handleCentre } from '../../packages/editor-core/src/handles.js';
 import { documentTree, spaceOf } from '../../packages/editor-core/src/tree.js';
 
 // MVP M2-U2, M2-A03 (M2 contract, section 4.1 and S1): `rotateNodes` with the one-node pivot
@@ -315,6 +315,30 @@ describe('M2-A03 rotateNodes', () => {
     expect(nodeOf(target, 'fr')).toBe(fr);
   });
 
+  it('rotating a mask source refits its mask group, with byte-identical undo', () => {
+    const target = editor();
+    const before = documentOf(target);
+    ok(target, { type: 'rotateNodes', ids: ['mp'], angle: 0.6 });
+    expect(nodeOf(target, 'mp').rotation).toBe(0.6);
+    expect(nodeOf(target, 'mg').frame).not.toEqual(before.nodes.mg!.frame);
+    expect(text(target)).toBe(expectedText(before, ['mp'], 0.6, at(0, 0), true));
+    expect(undoDepth(target)).toBe(1);
+    ok(target, { type: 'undo' });
+    expect(text(target)).toBe(serializeDocument(before));
+    // The same through the rotate gesture.
+    ok(target, { type: 'setSelection', ids: ['mp'] });
+    const [tl, , br] = target.query({ type: 'handles' })!.corners;
+    const length = Math.hypot(tl.x - br.x, tl.y - br.y);
+    const press = at(tl.x + ((tl.x - br.x) / length) * 10, tl.y + ((tl.y - br.y) / length) * 10);
+    const pivot = pivotOf(target, ['mp']);
+    const end = at(press.x + 40, press.y - 25);
+    drag(target, press, [end]);
+    expect(text(target)).toBe(expectedText(before, ['mp'], sweep(pivot, press, end), pivot, true));
+    expect(undoDepth(target)).toBe(1);
+    ok(target, { type: 'undo' });
+    expect(text(target)).toBe(serializeDocument(before));
+  });
+
   it('ignores a listed descendant of a listed node', () => {
     const a = editor();
     const b = editor();
@@ -507,6 +531,66 @@ describe('M2-A03 gesture replace and update', () => {
     });
     gesture.cancel();
     expect(gesture.replace([])).toEqual({ ok: false, code: 'editor.invalid-command' });
+  });
+
+  it('rejects a non-object command in replace and update', () => {
+    const target = editor();
+    const before = documentOf(target);
+    const { gesture } = internalsOf(target);
+    gesture.begin();
+    expect(gesture.replace([null as never])).toEqual({
+      ok: false,
+      code: 'editor.invalid-command',
+      path: '/commands/0',
+    });
+    expect(gesture.replace([{ type: 'rotateNodes', ids: ['r'], angle: 1 }, 5 as never])).toEqual({
+      ok: false,
+      code: 'editor.invalid-command',
+      path: '/commands/1',
+    });
+    expect(gesture.update(null as never)).toEqual({ ok: false, code: 'editor.invalid-command' });
+    expect(gesture.update('x' as never)).toEqual({ ok: false, code: 'editor.invalid-command' });
+    expect(documentOf(target)).toBe(before);
+    gesture.commit();
+    expect(undoDepth(target)).toBe(0);
+  });
+
+  it('commit and its step list only nodes that differ from the pre-gesture document', () => {
+    const target = editor();
+    const before = text(target);
+    const { gesture } = internalsOf(target);
+    const events: EditorEvent[] = [];
+    target.subscribe((event) => events.push(event));
+    gesture.begin();
+    // A node created by an update and discarded by a later replace exists in neither document.
+    expect(gesture.update({ type: 'createRectangle', frame: f(0, 0, 5, 5) })).toEqual({
+      ok: true,
+      ids: ['n1'],
+    });
+    gesture.replace([{ type: 'rotateNodes', ids: ['r'], angle: 1 }]);
+    gesture.commit();
+    const commit = events.find(
+      (event) => event.type === 'document' && event.cause === 'gesture-commit',
+    );
+    expect(commit).toMatchObject({ touched: ['r'] });
+    events.length = 0;
+    ok(target, { type: 'undo' });
+    expect(events.find((event) => event.type === 'document')).toMatchObject({ touched: ['r'] });
+    expect(text(target)).toBe(before);
+  });
+
+  it('cancelling after a replace back to the pre-gesture document raises no event', () => {
+    const target = editor();
+    const before = documentOf(target);
+    const { gesture } = internalsOf(target);
+    gesture.begin();
+    gesture.replace([{ type: 'rotateNodes', ids: ['r'], angle: 1 }]);
+    gesture.replace([]);
+    const events: EditorEvent[] = [];
+    target.subscribe((event) => events.push(event));
+    gesture.cancel();
+    expect(events).toEqual([]);
+    expect(documentOf(target)).toBe(before);
   });
 
   it('a replace back to the pre-gesture document commits no step', () => {
@@ -734,6 +818,17 @@ describe('M2-A03 rotate gesture', () => {
     expect(text(target)).toBe(before);
   });
 
+  /** Drags one selected node from `press` to `end` and asserts the exact one-node rotation. */
+  function rotatesExactly(target: Editor, id: string, press: PagePoint, end: PagePoint) {
+    const before = documentOf(target);
+    const pivot = pivotOf(target, [id]);
+    drag(target, press, [end]);
+    const angle = sweep(pivot, press, end);
+    expect(angle).not.toBe(0);
+    expect(nodeOf(target, id).rotation).toBe(rotated(before, id, angle, pivot, true).rotation);
+    expect(text(target)).toBe(expectedText(before, [id], angle, pivot, true));
+  }
+
   describe('press precedence', () => {
     it('a handle within 6 / zoom wins over the rotate zone', () => {
       const target = selected(['r']);
@@ -747,8 +842,7 @@ describe('M2-A03 rotate gesture', () => {
         [rect('r', 'p1', f(0, 0, 100, 50)), rect('under', 'p1', f(105, -40, 30, 35))],
       );
       const target = selected(['r'], 1, document);
-      drag(target, ZONE, [at(60, 120)]);
-      expect(nodeOf(target, 'r').rotation).not.toBe(0);
+      rotatesExactly(target, 'r', ZONE, at(60, 120));
       expect(nodeOf(target, 'under').frame).toEqual(f(105, -40, 30, 35));
       expect(target.query({ type: 'selection' })).toEqual(['r']);
     });
@@ -764,8 +858,7 @@ describe('M2-A03 rotate gesture', () => {
       expect(nodeOf(edge, 'r')).toMatchObject({ frame: f(0, 5, 100, 50), rotation: 0 });
       // 18 away from the corner is still in the zone; just beyond it is empty canvas.
       const near = selected(['r']);
-      drag(near, at(118, 0), [at(118, 40)]);
-      expect(nodeOf(near, 'r').rotation).not.toBe(0);
+      rotatesExactly(near, 'r', at(118, 0), at(118, 40));
       const far = selected(['r']);
       drag(far, at(118.5, 0), [at(118.5, 40)]);
       expect(nodeOf(far, 'r').rotation).toBe(0);
@@ -774,8 +867,7 @@ describe('M2-A03 rotate gesture', () => {
 
     it('scales the zone with zoom', () => {
       const near = selected(['r'], 4);
-      drag(near, at(100, -4.5), [at(100, 60)]);
-      expect(nodeOf(near, 'r').rotation).not.toBe(0);
+      rotatesExactly(near, 'r', at(100, -4.5), at(100, 60));
       const far = selected(['r'], 4);
       drag(far, at(100, -4.6), [at(100, 60)]);
       expect(nodeOf(far, 'r').rotation).toBe(0);
@@ -788,8 +880,7 @@ describe('M2-A03 rotate gesture', () => {
       // Along the top edge's line beyond the top-left corner: outside in the box's axes.
       const length = Math.hypot(tr.x - tl.x, tr.y - tl.y);
       const press = at(tl.x - ((tr.x - tl.x) / length) * 12, tl.y - ((tr.y - tl.y) / length) * 12);
-      drag(target, press, [at(press.x - 10, press.y + 30)]);
-      expect(nodeOf(target, 'ga').rotation).not.toBe(0);
+      rotatesExactly(target, 'ga', press, at(press.x - 10, press.y + 30));
     });
 
     it('keeps the small-box rule first and has no zone without a selection', () => {
@@ -800,12 +891,20 @@ describe('M2-A03 rotate gesture', () => {
       expect(nodeOf(small, 't')).toMatchObject({ frame: f(1, 1, 10, 10), rotation: 0 });
       // Outside it near a corner, beyond the handles, the zone still rotates.
       const zone = selected(['t'], 1, document);
-      drag(zone, at(20, -8), [at(20, 30)]);
-      expect(nodeOf(zone, 't').rotation).not.toBe(0);
+      rotatesExactly(zone, 't', at(20, -8), at(20, 30));
       // Without a selection the same press is a marquee.
       const empty = selected([], 1, document);
       drag(empty, at(20, -8), [at(20, 30)]);
       expect(nodeOf(empty, 't').rotation).toBe(0);
+    });
+
+    it('rotates a zero-height rectangle from its corner zone', () => {
+      const document = doc([['p1', ['flat']]], [rect('flat', 'p1', f(0, 0, 100, 0))]);
+      const target = selected(['flat'], 1, document);
+      // Above the right end: outside the box (y < 0), 10 from the corner, beyond the handles.
+      rotatesExactly(target, 'flat', at(100, -10), at(40, 60));
+      expect(nodeOf(target, 'flat').frame).toEqual(f(0, 0, 100, 0));
+      expect(undoDepth(target)).toBe(1);
     });
 
     it('a click in the zone without movement changes nothing', () => {

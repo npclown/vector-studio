@@ -347,6 +347,18 @@ function copyInput(event: InputEvent): InputEvent {
 
 const clampZoom = (zoom: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom));
 
+function nodeIn(document: DocumentV2, id: string) {
+  return Object.hasOwn(document.nodes, id) ? document.nodes[id] : undefined;
+}
+
+/** Whether node `id` differs between two documents; a node in only one of them differs. */
+function nodeDiffers(a: DocumentV2, b: DocumentV2, id: string): boolean {
+  const x = nodeIn(a, id);
+  const y = nodeIn(b, id);
+  if (x === y) return false;
+  return x === undefined || y === undefined || JSON.stringify(x) !== JSON.stringify(y);
+}
+
 function sorted(ids: Iterable<string>): string[] {
   return [...new Set(ids)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
@@ -1018,7 +1030,8 @@ class EditorCore implements Editor {
   private updateGesture(command: DocumentCommand): CommandResult {
     const gesture = this.gestureState;
     if (gesture === null) return failure('editor.invalid-command');
-    const type = (command as { type?: unknown } | null)?.type;
+    if (typeof command !== 'object' || command === null) return failure('editor.invalid-command');
+    const type = (command as { type?: unknown }).type;
     if (typeof type === 'string' && RELATIVE_COMMANDS.has(type)) {
       return failure('editor.invalid-command', '/type');
     }
@@ -1042,7 +1055,10 @@ class EditorCore implements Editor {
     let document = gesture.base;
     const touched = new Set<string>();
     const created: string[] = [];
-    for (const command of commands as readonly DocumentCommand[]) {
+    for (const [index, command] of (commands as readonly DocumentCommand[]).entries()) {
+      if (typeof command !== 'object' || command === null) {
+        return failure('editor.invalid-command', `/commands/${index}`);
+      }
       const result = applyEdit(document, command, {
         ...this.context(false),
         resizeBase: gesture.base,
@@ -1059,8 +1075,6 @@ class EditorCore implements Editor {
     gesture.updated = true;
     const previous = this.document;
     if (document !== previous) {
-      const nodeIn = (from: DocumentV2, id: string) =>
-        Object.hasOwn(from.nodes, id) ? from.nodes[id] : undefined;
       const changed = [...touched].filter((id) => nodeIn(previous, id) !== nodeIn(document, id));
       this.changeDocument(document, 'gesture-update', changed);
     }
@@ -1092,10 +1106,21 @@ class EditorCore implements Editor {
     const refit = refitGesture(gesture.base, this.document, gesture.touched, this.extensions);
     // A refit that fails the model's rules (binary64 overflow) leaves the live document as is.
     const after = refit.ok ? refit.document : this.document;
-    const touched = sorted(refit.ok ? refit.touched : gesture.touched);
+    // The step lists only nodes that differ between the pre-gesture and committed documents,
+    // added or removed ones included, so an ID an earlier update touched and a later replace
+    // discarded is not listed. The commit event adds the nodes the refit changed from the live
+    // document, so the renderer follows every change.
+    const live = this.document;
+    const candidates = [...gesture.touched, ...(refit.ok ? refit.touched : [])];
+    const touched = sorted(candidates.filter((id) => nodeDiffers(gesture.base, after, id)));
+    const changed = sorted(
+      candidates.filter(
+        (id) => nodeDiffers(gesture.base, after, id) || nodeDiffers(live, after, id),
+      ),
+    );
     this.undoStack.push({ before: gesture.base, after, touched });
     this.redoStack = [];
-    this.changeDocument(after, 'gesture-commit', touched);
+    this.changeDocument(after, 'gesture-commit', changed);
   }
 
   /**

@@ -22,7 +22,7 @@ import {
   rotatedBounds,
 } from './geometry.js';
 import { mapNodeInPageSpace, resizeContainer, type ScaleMap } from './resize.js';
-import { handleBoxOf, handleCentre } from './tools.js';
+import { handleBoxOf, handleCentre } from './handles.js';
 import {
   ancestors,
   childrenOf,
