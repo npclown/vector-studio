@@ -470,7 +470,7 @@ describe('M1-A09 line projection', () => {
     for (const piece of subpaths(g)) expect(area(piece)).toBeGreaterThan(0);
   });
 
-  it('fill mode: triangle at P0, round cap half disc at P1 with κ = 0.5523', () => {
+  it('fill mode: triangle at P0, round cap at P1 as a 16-segment half circle', () => {
     const g = lineContent(line('triangle', 'none', 'round') as never).geometry;
     expect(g.verbs).toEqual([
       'move',
@@ -479,60 +479,61 @@ describe('M1-A09 line projection', () => {
       'line',
       'close',
       'move',
-      'cubic',
-      'cubic',
+      ...Array<string>(16).fill('line'),
       'close',
       'move',
       'line',
       'line',
       'close',
     ]);
-    const k = 0.5523;
-    expectPoints(g.points, [
-      8,
-      -1,
-      100,
-      -1,
-      100,
-      1,
-      8,
-      1,
-      // E = (100, 0), u = (1, 0), N = −n = (0, −1), w/2 = 1.
-      100,
-      -1,
-      100 + k,
-      -1,
-      101,
-      -k,
-      101,
-      0,
-      101,
-      k,
-      100 + k,
-      1,
-      100,
-      1,
-      // Triangle at P0: T, B − 2w·n, B + 2w·n.
-      0,
-      0,
-      8,
-      -4,
-      8,
-      4,
-    ]);
+    expectPoints(
+      g.points,
+      [
+        8, -1, 100, -1, 100, 1, 8, 1,
+        // E = (100, 0), u = (1, 0), N = −n = (0, −1), w/2 = 1: E + (w/2)(cos(kπ/16)·N +
+        // sin(kπ/16)·u) for k = 0..16, from E + (w/2)N to E − (w/2)N (both exact).
+        100, -1, 100.19509032201613, -0.9807852804032304, 100.38268343236508, -0.9238795325112867,
+        100.55557023301961, -0.8314696123025452, 100.70710678118655, -0.7071067811865476,
+        100.83146961230254, -0.5555702330196023, 100.9238795325113, -0.38268343236508984,
+        100.98078528040323, -0.19509032201612833, 101, -6.123233995736766e-17, 100.98078528040323,
+        0.1950903220161282, 100.9238795325113, 0.3826834323650897, 100.83146961230254,
+        0.555570233019602, 100.70710678118655, 0.7071067811865475, 100.55557023301961,
+        0.8314696123025453, 100.38268343236508, 0.9238795325112867, 100.19509032201613,
+        0.9807852804032304, 100, 1,
+        // Triangle at P0: T, B − 2w·n, B + 2w·n.
+        0, 0, 8, -4, 8, 4,
+      ],
+    );
+    // The cap's ends are exact, not rounded through cos and sin.
+    expect(g.points.slice(8, 10)).toEqual([100, -1]);
+    expect(g.points.slice(40, 42)).toEqual([100, 1]);
     for (const piece of subpaths(g)) expect(area(piece)).toBeGreaterThan(0);
   });
 
-  it('a line head alone stays in stroke mode; with a triangle end, P0 gets a round half disc', () => {
+  it('a line head alone stays in stroke mode; with a triangle end, P0 gets a round half circle', () => {
     const g = lineContent(line('none', 'line', 'round') as never).geometry;
     // Stroke mode: a line head alone keeps the stroke.
     expect(g.verbs).toEqual(['move', 'line', 'move', 'line', 'line']);
     const both = lineContent(
       line('none', 'triangle', 'round', { points: [0, 0, 1, 0] }) as never,
     ).geometry;
-    // Shaft, then the P0 half disc (N = n = (0, 1), u = (−1, 0)), then the P1 triangle.
-    const k = 0.5523;
-    expectPoints(both.points.slice(8, 22), [0, 1, -k, 1, -1, k, -1, 0, -1, -k, -k, -1, 0, -1]);
+    // Shaft, then the P0 half circle (N = n = (0, 1), u = (−1, 0)), then the P1 triangle.
+    expect(both.verbs.slice(5, 23)).toEqual(['move', ...Array<string>(16).fill('line'), 'close']);
+    expectPoints(
+      both.points.slice(8, 42),
+      [
+        0, 1, -0.19509032201612825, 0.9807852804032304, -0.3826834323650898, 0.9238795325112867,
+        -0.5555702330196022, 0.8314696123025452, -0.7071067811865475, 0.7071067811865476,
+        -0.8314696123025452, 0.5555702330196023, -0.9238795325112867, 0.38268343236508984,
+        -0.9807852804032304, 0.19509032201612833, -1, 6.123233995736766e-17, -0.9807852804032304,
+        -0.1950903220161282, -0.9238795325112867, -0.3826834323650897, -0.8314696123025455,
+        -0.555570233019602, -0.7071067811865476, -0.7071067811865475, -0.5555702330196022,
+        -0.8314696123025453, -0.3826834323650899, -0.9238795325112867, -0.1950903220161286,
+        -0.9807852804032304, 0, -1,
+      ],
+    );
+    expect(both.points.slice(8, 10)).toEqual([0, 1]);
+    expect(both.points.slice(40, 42)).toEqual([0, -1]);
     for (const piece of subpaths(both)) expect(area(piece)).toBeGreaterThan(0);
   });
 
