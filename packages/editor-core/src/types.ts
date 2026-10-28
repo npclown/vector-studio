@@ -91,6 +91,12 @@ export type PathAnchor = Readonly<{
   out: PagePoint | null;
 }>;
 
+/**
+ * An anchor of a path's anchor model (MVP M3 contract, section 2): subpath `subpath` (from 0)
+ * and its anchor `anchor` (from 0), both integers in range.
+ */
+export type PathAnchorRef = Readonly<{ subpath: number; anchor: number }>;
+
 /** Tool state the host UI draws over the canvas; it is never document content. */
 export type ToolOverlay =
   | Readonly<{ kind: 'marquee'; frame: Frame }>
@@ -245,6 +251,30 @@ export type DocumentCommand =
    * gesture it goes through `update` once.
    */
   | Readonly<{ type: 'paste'; text?: string; at?: PagePoint }>
+  // Path commands (MVP M3 contract, section 3) on one `path` node of the active page at any
+  // depth; re-normalized after the edit (section 3.1). Relative commands: inside a gesture they
+  // go through `replace`, never `update`.
+  /** Moves the listed anchors and their handles by the page vector `(dx, dy)`. */
+  | Readonly<{
+      type: 'movePathAnchors';
+      id: string;
+      anchors: readonly PathAnchorRef[];
+      dx: number;
+      dy: number;
+    }>
+  /**
+   * Moves the anchor's `side` handle to the page point `to` (a line there becomes a cubic), with
+   * `mirror` (default false) the opposite handle to its reflection through the anchor; `to: null`
+   * retracts the handle (and with `mirror` the opposite one) onto the anchor.
+   */
+  | Readonly<{
+      type: 'setPathHandle';
+      id: string;
+      anchor: PathAnchorRef;
+      side: 'in' | 'out';
+      to: PagePoint | null;
+      mirror?: boolean;
+    }>
   | Readonly<{ type: 'addPage'; name?: string; index?: number }>
   | Readonly<{ type: 'removePage'; id: string }>
   | Readonly<{ type: 'renamePage'; id: string; name: string }>
@@ -328,7 +358,10 @@ export type EditorErrorCode =
   | 'editor.invalid-keymap'
   | 'editor.empty-clipboard'
   | 'editor.invalid-clipboard'
-  | 'editor.unsupported-clipboard';
+  | 'editor.unsupported-clipboard'
+  // MVP M3 contract, section 3.5.
+  | 'editor.not-a-path'
+  | 'editor.invalid-path-ref';
 
 /**
  * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key
@@ -530,7 +563,10 @@ export type ToolGesture = Readonly<{
   readonly active: boolean;
   /** Returns false while another gesture is active, or when the tool is not active. */
   begin(): boolean;
-  /** A relative command (`rotateNodes`, the arrange commands) fails: it goes through `replace`. */
+  /**
+   * A relative command (`rotateNodes`, the arrange commands, the path commands) fails: it goes
+   * through `replace`.
+   */
   update(command: DocumentCommand): CommandResult;
   replace(commands: readonly DocumentCommand[]): CommandResult;
   commit(): void;
