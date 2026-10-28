@@ -642,7 +642,8 @@ describe('M2-A08 Alt-drag', () => {
     expect(documentOf(target)).toBe(before);
     expect(drawn.drawn).toBe(0);
     expect(undoDepth(target)).toBe(0);
-    // Selects the pressed target as a click does, until overlap cycling (M2-U5) replaces it.
+    // An Alt-click cycles (M2-U5): the pre-press selection `a` is not in the stack under the
+    // point, whose only item is b, so cycling selects the stack's top item, b.
     expect(selection(target)).toEqual(['b']);
   });
 

@@ -350,6 +350,33 @@ describe('M2-A09 frame entry by double-click', () => {
     expect(events).toEqual(['scope', 'selection']);
   });
 
+  it('a stroked frame’s border scopes that frame with an empty selection', () => {
+    // A top-level frame without a fill: only its border (width 2) and its child are hittable.
+    const target = setup(
+      doc(
+        [['p1', ['S']]],
+        [
+          {
+            ...container('frame', 'S', 'p1', ['sa'], f(0, 0, 100, 100)),
+            fill: null,
+            stroke: { color: black, width: 2 },
+          },
+          rect('sa', 'S', f(10, 10, 20, 20)),
+        ],
+      ),
+    );
+    select(target, ['sa']);
+    const events = record(target);
+    expect(doubleclick(target, at(0, 50))).toEqual(consumed);
+    expect(scope(target)).toBe('S');
+    expect(selection(target)).toEqual([]);
+    expect(events).toEqual(['scope', 'selection']);
+    // Inside the unfilled frame, off its child and border, nothing is hit.
+    const second = setup(target.query({ type: 'document' }));
+    expect(doubleclick(second, at(50, 50))).toEqual(unconsumed);
+    expect(scope(second)).toBeNull();
+  });
+
   it('a top-level frame’s leaf child is a leaf target: nothing happens', () => {
     const target = setup();
     expect(doubleclick(target, P.fa)).toEqual(unconsumed);
@@ -640,14 +667,17 @@ describe('M2-A09 scope target and marquee rules', () => {
     expect(selection(target)).toEqual(['g', 'r']);
   });
 
-  it('a resize handle wins over the scope reset', () => {
+  it('a resize handle of a node outside the scope wins over the scope reset', () => {
     const target = setup();
     enter(target, 'gg');
-    select(target, ['gga']);
-    // The bottom-right handle of gga at (170, 70), dragged outward.
-    drag(target, at(170, 70), at(175, 75));
+    select(target, ['r']);
+    // r's bottom-right handle at (620, 20) is on r itself, outside gg: the handle wins, so the
+    // press resizes r and leaves the scope as it is.
+    drag(target, at(620, 20), at(625, 25));
     expect(scope(target)).toBe('gg');
-    expect(nodeOf(target, 'gga').frame).toEqual(f(0, 0, 25, 25));
+    expect(selection(target)).toEqual(['r']);
+    expect(nodeOf(target, 'r').frame).toEqual(f(600, 0, 25, 25));
+    expect(undoDepth(target)).toBe(1);
   });
 });
 
