@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { controlPorts, fan, meshFromTriangles } from './e3-a04/controls.js';
 import {
+  collapseOf,
+  decodeCase,
   mapPoint,
   measureCase,
   noFlip,
@@ -15,10 +17,11 @@ import {
   DECLARED_TRANSFORMS,
   buildRecord,
   knownClassOf,
+  reviveRow,
   validateRecord,
 } from './e3-a04/record.js';
 import { harnessCase } from './e3-a04/smoke.js';
-import { fill, polygon, rect } from './e3-a04/oracle-cases.js';
+import { fill, polygon, rect, stroke } from './e3-a04/oracle-cases.js';
 
 // D9 E3 section 21 (docs/plans/d9-e3-b4-precision-contract.md): the known classes A04
 // discloses instead of counting, the `PASS with disclosure` verdict, and the off-window
@@ -119,6 +122,8 @@ describe('E3 section 21 known classes', () => {
       'collapsed-feature': ['C4/n07/T5/z64-d3/center/k0'],
       'far-vertices': ['far'],
       'degenerate-stroke-triangle': [],
+      'oracle-work-cap': [],
+      'sub-pixel-collapse': [],
     });
     const ids = withKnown.map((r) => r.id);
     expect(validateRecord(record, ids)).toEqual([]);
@@ -162,6 +167,98 @@ describe('E3 section 21 known classes', () => {
     });
     expect(record.uncoveredCells).toEqual(['fill/T0/z1-d1']);
     expect(record.verdict).toBe('UNVERIFIED');
+  });
+});
+
+// D9 E20 (docs/plans/d9-e20-a04-remedies-contract.md): the classes of E20-K5 and K7, and the
+// `+∞` form of K8.
+describe('E20 known classes and record form', () => {
+  it('discloses oracle work-cap rows (E20-K5)', () => {
+    const cap = { status: 'undecided' as const, reason: 'work cap: rational' };
+    expect(knownClassOf(row(cap))).toBe('oracle-work-cap');
+    expect(knownClassOf(row({ ...cap, status: 'fail' }))).toBeNull();
+    // Section 21's classes take precedence: a C4 work-cap row stays a collapsed feature.
+    const c4 = { stratum: 'C4', gapTarget: 2 ** -16, id: 'C4/n20/T5/z0.01-d3/center/k0' };
+    expect(knownClassOf(row({ ...cap, ...c4 }))).toBe('collapsed-feature');
+  });
+
+  it('discloses a FAIL whose mesh collapses entirely under a sub-pixel region (E20-K7)', () => {
+    // A 0.5 x 0.25 px rectangle whose two triangles each have two vertices on one p*.
+    const lanes: ShaderLanes = {
+      linear: [1, 0, 0, 1],
+      anchor: [0, 0],
+      frame: { originMinusCamera: [0, 0], zoom: 1, dpr: 1, width: 640, height: 360 },
+    };
+    const pts = [
+      [10, 10],
+      [10.5, 10.25],
+    ] as const;
+    const mapped = (indices: number[]): Mapped => ({
+      points: pts.map(([x, y]) => mapPoint(x, y, lanes)),
+      indices,
+      width: 640,
+      height: 360,
+    });
+    const sub = decodeCase(
+      harnessCase({ id: 'sub', ...polygon(rect(10, 10, 10.5, 10.25)), paint: fill() }),
+    );
+    const { collapse } = collapseOf(sub, mapped([0, 0, 1, 1, 1, 0]));
+    expect(collapse?.triangles).toBe(2);
+    // Rounded up: never below the exact extent, and not by more than a hair.
+    expect(collapse!.regionWidth).toBeGreaterThanOrEqual(0.5);
+    expect(collapse!.regionWidth).toBeLessThan(0.5 + 1e-9);
+    expect(collapse!.regionHeight).toBeGreaterThanOrEqual(0.25);
+    expect(collapse!.regionHeight).toBeLessThan(0.25 + 1e-9);
+    // A triangle left uncollapsed, a stroke or no triangles: no field.
+    const square = rect(10, 10, 10.5, 10.25);
+    const three: Mapped = {
+      ...mapped([]),
+      points: square.slice(0, 3).map(([x, y]) => mapPoint(x, y, lanes)),
+      indices: [0, 1, 2],
+    };
+    expect(collapseOf(sub, three)).toEqual({});
+    expect(collapseOf(sub, mapped([]))).toEqual({});
+    const line = decodeCase(harnessCase({ id: 'sub', ...polygon(square), paint: stroke(1) }));
+    expect(collapseOf(line, mapped([0, 0, 1]))).toEqual({});
+
+    const failed = row({
+      status: 'fail',
+      noFlip: { checked: 2, failed: 0, zeroArea: 2, collapsed: 2 },
+      collapse: { triangles: 2, regionWidth: 0.5, regionHeight: 0.5 },
+    });
+    expect(knownClassOf(failed)).toBe('sub-pixel-collapse');
+    // A region one pixel wide, a triangle left uncollapsed, a stroke, a row without the field
+    // (carried from before E20) or an UNDECIDED row is not in the class.
+    expect(
+      knownClassOf({ ...failed, collapse: { triangles: 2, regionWidth: 1, regionHeight: 0.5 } }),
+    ).toBeNull();
+    expect(
+      knownClassOf({ ...failed, noFlip: { checked: 2, failed: 0, zeroArea: 1, collapsed: 1 } }),
+    ).toBeNull();
+    expect(knownClassOf({ ...failed, paint: 'stroke' })).toBeNull();
+    expect(knownClassOf(row({ status: 'fail', noFlip: failed.noFlip }))).toBeNull();
+    expect(knownClassOf({ ...failed, status: 'undecided', reason: 'x' })).toBeNull();
+  });
+
+  it('accepts both forms of +∞ in a row (E20-K8)', () => {
+    const open = row({ status: 'undecided', reason: 'no-flip certificate', eHi: null, u: null });
+    const json = { ...open, eHi: 'Infinity', u: 'Infinity' } as unknown as HarnessRow;
+    expect(reviveRow(json)).toEqual({ ...open, eHi: Infinity, u: Infinity });
+    expect(reviveRow(open)).toBe(open);
+    const rows = [...fullCoverage()];
+    const forms = [json, open].map((r, k) => ({ ...r, id: `open${k}`, index: rows.length + k }));
+    const all = [...rows, ...forms];
+    const record = buildRecord({
+      ...passing,
+      selection: { stride: 1, shards: 1, corpusCases: all.length },
+      rows: all.map(reviveRow),
+    });
+    expect(
+      validateRecord(
+        { ...record, rows: all },
+        all.map((r) => r.id),
+      ),
+    ).toEqual([]);
   });
 });
 

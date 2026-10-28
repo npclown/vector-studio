@@ -119,7 +119,14 @@ export type HarnessRow = Readonly<{
   work: number | null;
   /** E20: the remedies that ran on this row, absent on a row the 2026-10-27 harness decided. */
   e20?: readonly E20Trace[];
+  /**
+   * E20-K7: on a FAIL fill row whose drawn mesh has every triangle collapsed (so M* is empty),
+   * the device bounding box of the path's control points, which contains R. Absent otherwise.
+   */
+  collapse?: Readonly<{ triangles: number; regionWidth: number; regionHeight: number }>;
   ms: number;
+  /** E20-K9: on a row a superseding record re-measured, the 2026-10-27 row's status and reason. */
+  former?: Readonly<{ status: CaseStatus; reason: string | null }>;
 }>;
 
 /** One E20 remedy on a row (d9-e20-a04-remedies-contract.md, section 2). */
@@ -1897,5 +1904,33 @@ export function measureCase(
     eHi: m.e.hi,
     u,
     l,
+    ...(status === 'fail' ? collapseOf(d, mapped) : {}),
   });
+}
+
+/**
+ * E20-K7's row field: on a fill whose drawn mesh collapses entirely, the device bounding box of
+ * the path's control points under the case's linear map, zoom and DPR. A cubic lies in the
+ * convex hull of its control points, so the box contains R's; it is rounded up.
+ */
+export function collapseOf(d: Decoded, mapped: Mapped): Pick<HarnessRow, 'collapse'> {
+  const triangles = mapped.indices.length / 3;
+  if (d.paint !== 'fill' || triangles === 0 || withoutCollapsed(mapped).length > 0) return {};
+  const [a, c, b, dd] = d.transform; // x' = a·x + b·y, y' = c·x + dd·y
+  const xs: number[] = [];
+  const ys: number[] = [];
+  // The binary64 sums carry an absolute error of a few ulps of |a·x| + |b·y|, which the
+  // extent's cancellation does not shrink: it is bounded by GAMMA·mag below.
+  let mag = 0;
+  for (let i = 0; i + 1 < d.points.length; i += 2) {
+    const [x, y] = [d.points[i]!, d.points[i + 1]!];
+    xs.push(a * x + b * y);
+    ys.push(c * x + dd * y);
+    mag = Math.max(mag, Math.abs(a * x) + Math.abs(b * y), Math.abs(c * x) + Math.abs(dd * y));
+  }
+  const GAMMA = 2 ** -48;
+  const scale = d.zoom * d.dpr;
+  const extent = (v: number[]) =>
+    a04NextUp((Math.max(...v) - Math.min(...v) + 2 * GAMMA * mag) * scale * (1 + GAMMA) + 2 ** -60);
+  return { collapse: { triangles, regionWidth: extent(xs), regionHeight: extent(ys) } };
 }
