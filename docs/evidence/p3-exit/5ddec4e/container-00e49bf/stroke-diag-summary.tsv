@@ -1,0 +1,4 @@
+stratum	status	error	class	requests [rows]	rows (source)
+C5/generated	unsupported-geometry	Rounded(TopologyAmbiguous)	E4 class	6 [2]	g0075 g0084
+C5/named	numeric-range	Front(NumericRange)	B2 literal (ST-F24/2^30)	14 [1]	l24 (ST-F24/2^30)
+C5/named	unsupported-geometry	Rounded(TopologyAmbiguous)	E4 class	30 [3]	l77 (ST-U3f/chev-1.40625) l78 (ST-U3f/rev-4/3-3-1) l79 (ST-U3f/rev-4/3-1-7)

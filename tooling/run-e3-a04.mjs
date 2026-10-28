@@ -5,7 +5,11 @@
 //   pnpm e3-a04:run [--shards N] [--stride S] [--start-resolution K] [--gpu <chrome.json>,<edge.json>]
 //                   [--wasm <path>] [--only i,j,…]
 //   pnpm e3-a04:run --merge <run dir>,<run dir>,… [--shards N] [--stride S] [--start-resolution K]
-//                   [--gpu …] [--wasm <path>]
+//                   [--gpu …] [--wasm <path>] [--retried <retry dir>,…]
+//   pnpm e3-a04:run --retry-cases i,j,… [--shards N] [--stride S] [--start-resolution K] [--heap MB]
+//   pnpm e3-a04:run --supersede <record.json> --remeasured <retry dir>,… --identity <retry dir>,…
+//                   --e20-commit <sha>
+//                   [--shards N] [--stride S] [--start-resolution K] [--gpu …]
 //
 // Uses the release WASM that `pnpm test:geometry` builds (or --wasm <path>), then:
 //
@@ -22,6 +26,19 @@
 // N, on the same commit, WASM and options, and one host merges their run directories with
 // `--merge`, which checks that their provenance agrees and that every shard is there exactly once,
 // then finalizes. A host that runs only some shards does not finalize.
+//
+// A case whose worker died (a heap limit) is UNDECIDED. `--retry-cases` re-measures such cases by
+// corpus index, with a larger `--heap`, into a retry directory; `--merge … --retried <dirs>` then
+// replaces exactly those rows. Run directories may come from an earlier commit when the commits
+// differ only in this tool, the run driver or documents (contract section 22).
+//
+// `--supersede` writes a record that replaces the committed 2026-10-27 record
+// (docs/plans/d9-e20-a04-remedies-contract.md, E20-K9 and K10). It runs on the measurement branch
+// (7443c2b plus E20's harness, tool and documents) and starts from that record's rows. The
+// `--remeasured` retry directories re-measure the rows E20 names; each replaces the old row of the
+// same index and id, which it keeps as `former`. The `--identity` directories re-measure the
+// stride-25 sample of the decided rows, which must come out identical apart from `ms` and the
+// form of `+∞` (E20-A5). The old record's hosts, retries and GPU check are carried forward.
 //
 // It exits non-zero when a shard fails, the validator finds a problem, or (smoke) a control or
 // an expected PASS is not met. The verdict is the measured disposition; A04 acceptance is the
@@ -49,6 +66,15 @@ const startResolution = Number(value('--start-resolution') ?? 10);
 const mergeDirs = value('--merge')
   ?.split(',')
   .map((d) => path.resolve(d));
+const retryCases = value('--retry-cases')
+  ?.split(',')
+  .map((v) => Number(v));
+const retriedDirs = value('--retried')
+  ?.split(',')
+  .map((d) => path.resolve(d));
+// The shard workers' V8 heap in MB (contract section 22). It is a host resource, not part of the
+// measurement.
+const heap = Number(value('--heap') ?? 6144);
 const only = value('--only')
   ?.split(',')
   .map((v) => Number(v));
@@ -60,8 +86,42 @@ if (only !== undefined && !only.every((i) => Number.isInteger(i) && i >= 0 && i 
   throw new Error(`--only takes shard indices from 0 to ${shards - 1}`);
 if (only !== undefined && (mergeDirs !== undefined || smoke))
   throw new Error('--only cannot be combined with --merge or --smoke');
+if (!Number.isInteger(heap) || heap < 1024) throw new Error('--heap takes an integer MB ≥ 1024');
+if (
+  retryCases !== undefined &&
+  (retryCases.length === 0 || !retryCases.every((i) => Number.isInteger(i) && i >= 0))
+)
+  throw new Error('--retry-cases takes corpus indices');
+if (retryCases !== undefined && (only !== undefined || mergeDirs !== undefined || smoke))
+  throw new Error('--retry-cases cannot be combined with --only, --merge or --smoke');
+if (retriedDirs !== undefined && mergeDirs === undefined)
+  throw new Error('--retried needs --merge');
+const supersede = value('--supersede');
+const remeasuredDirs = value('--remeasured')
+  ?.split(',')
+  .map((d) => path.resolve(d));
+const identityDirs = value('--identity')
+  ?.split(',')
+  .map((d) => path.resolve(d));
+// The E20 commit on main whose harness, tool and documents the measurement branch carries.
+const e20Commit = value('--e20-commit');
+if (
+  supersede !== undefined &&
+  (remeasuredDirs === undefined ||
+    identityDirs === undefined ||
+    e20Commit === undefined ||
+    mergeDirs !== undefined ||
+    retryCases !== undefined ||
+    only !== undefined ||
+    smoke)
+)
+  throw new Error(
+    '--supersede needs --remeasured, --identity and --e20-commit, and no --merge, --retry-cases, --only or --smoke',
+  );
+if (supersede === undefined && (remeasuredDirs !== undefined || identityDirs !== undefined))
+  throw new Error('--remeasured and --identity need --supersede');
 const here = only === undefined ? Array.from({ length: shards }, (_, i) => i) : [...new Set(only)];
-const partial = here.length < shards;
+const partial = here.length < shards || retryCases !== undefined;
 
 const contractPath = 'docs/plans/d9-e3-b4-precision-contract.md';
 const manifestPath = 'tests/geometry/e3-a04/corpus-v1.manifest.json';
@@ -143,11 +203,86 @@ const host = {
   node: process.version,
   os: `${os.type()} ${os.release()} ${os.arch()}`,
   cpus: os.cpus().length,
+  heap,
 };
+/** Paths a run commit may differ in from this checkout (contract section 22). */
+const SAME_MEASUREMENT = (file) =>
+  file === 'tooling/run-e3-a04.mjs' ||
+  file === 'tests/geometry/e3-a04/run.check.ts' ||
+  file.startsWith('docs/');
+
+/**
+ * Checks a run directory's provenance against this checkout: every `common` field must agree,
+ * except that the commit (with the contract SHA) may be an ancestor of HEAD that differs from
+ * it only in SAME_MEASUREMENT paths, renames counted as a delete and an add. Returns the paths
+ * that differ, which the merged provenance records.
+ */
+function checkProvenance(dir, p) {
+  if (p.commit === common.commit) {
+    checkCommon(dir, p, true);
+    return { changedFromHead: [] };
+  }
+  if (
+    spawnSync('git', ['merge-base', '--is-ancestor', p.commit, 'HEAD'], { cwd: root }).status !== 0
+  )
+    throw new Error(`refusing the merge: ${dir} commit ${p.commit} is not an ancestor of HEAD`);
+  const changed = git('diff', '--name-only', '--no-renames', p.commit, 'HEAD')
+    .split('\n')
+    .filter(Boolean);
+  const other = changed.filter((f) => !SAME_MEASUREMENT(f));
+  if (other.length > 0)
+    throw new Error(
+      `refusing the merge: ${dir} commit ${p.commit} differs from HEAD in ${other.join(', ')}`,
+    );
+  checkCommon(dir, p, false);
+  // Recorded for the evidence review: run.check.ts also sets the measurement options.
+  return { changedFromHead: changed };
+}
+
+function checkCommon(dir, p, sameCommit) {
+  for (const [k, v] of Object.entries(common)) {
+    if (!sameCommit && (k === 'commit' || k === 'contractSha256')) continue;
+    if (JSON.stringify(p[k]) !== JSON.stringify(v))
+      throw new Error(
+        `refusing the merge: ${dir} has ${k} ${JSON.stringify(p[k])}, here ${JSON.stringify(v)}`,
+      );
+  }
+}
+
+/** E20-K10: the committed 2026-10-27 record, the hosts' commit and the paths E20 may change. */
+const SUPERSEDED_SHA256 = '5df0c5a633de733ae964a560cbedd9838d5c2929360dfa98705dce88dd0e6b2e';
+const MEASUREMENT_BASE = '7443c2b3a763d3b21bde1e601fea794076f1ab67';
+const E20_PATHS = (file) =>
+  file.startsWith('tests/geometry/e3-a04/') ||
+  file === 'tooling/run-e3-a04.mjs' ||
+  file.startsWith('docs/');
+/** Old-record identity fields that must equal this checkout's (E20-K10). */
+const SUPERSEDE_IDENTITY = [
+  'corpusSha256',
+  'generatorSha256',
+  'oracleSha256',
+  'oracleCertified',
+  'wasmSha256',
+  'shards',
+  'stride',
+  'startResolution',
+];
+const BOUND_FIELDS = ['eLo', 'eHi', 'u', 'l'];
+const nonFinite = (_, v) => (typeof v === 'number' && !Number.isFinite(v) ? String(v) : v);
+
+const merged = mergeDirs === undefined ? null : mergeHosts(mergeDirs);
+const retried = merged === null || retriedDirs === undefined ? [] : applyRetries(retriedDirs);
+const superseded = supersede === undefined ? null : supersedeRecord(path.resolve(supersede));
 const provenance =
-  mergeDirs === undefined
-    ? { ...common, ...host, ...(partial ? { shardsHere: here } : {}) }
-    : { ...common, runId, hosts: mergeHosts(mergeDirs) };
+  superseded !== null
+    ? { ...common, runId, ...superseded }
+    : merged === null
+      ? {
+          ...common,
+          ...host,
+          ...(retryCases !== undefined ? { retryCases } : partial ? { shardsHere: here } : {}),
+        }
+      : { ...common, runId, hosts: merged, ...(retried.length > 0 ? { retried } : {}) };
 writeFileSync(path.join(out, 'provenance.json'), `${JSON.stringify(provenance, null, 2)}\n`);
 
 /**
@@ -160,11 +295,9 @@ function mergeHosts(dirs) {
   const hosts = dirs.map((dir) => {
     const p = JSON.parse(readFileSync(path.join(dir, 'provenance.json'), 'utf8'));
     const h = JSON.parse(readFileSync(path.join(dir, 'host.json'), 'utf8'));
-    for (const [k, v] of Object.entries(common))
-      if (JSON.stringify(p[k]) !== JSON.stringify(v))
-        throw new Error(
-          `refusing the merge: ${dir} has ${k} ${JSON.stringify(p[k])}, here ${JSON.stringify(v)}`,
-        );
+    const { changedFromHead } = checkProvenance(dir, p);
+    if (h.shardsHere === undefined)
+      throw new Error(`refusing the merge: ${dir} is a retry directory`);
     for (const i of h.shardsHere) {
       if (seen.has(i))
         throw new Error(`refusing the merge: shard ${i} is in ${seen.get(i)} and ${dir}`);
@@ -173,7 +306,10 @@ function mergeHosts(dirs) {
     }
     return {
       runId: p.runId,
+      commit: p.commit,
+      changedFromHead,
       node: p.node,
+      heap: p.heap ?? 6144,
       os: p.os,
       cpus: p.cpus,
       shards: h.shardsHere,
@@ -185,6 +321,230 @@ function mergeHosts(dirs) {
   if (missing.length > 0)
     throw new Error(`refusing the merge: shards ${missing.join(', ')} are missing`);
   return hosts;
+}
+
+/**
+ * Replaces, in the merged shard files, each row whose worker died by the row a retry directory
+ * measured for the same corpus index (contract section 22). A retry row must name such a row,
+ * and two retry directories may not measure the same case.
+ */
+function applyRetries(dirs) {
+  const rows = new Map();
+  for (const dir of dirs) {
+    const p = JSON.parse(readFileSync(path.join(dir, 'provenance.json'), 'utf8'));
+    const { changedFromHead } = checkProvenance(dir, p);
+    if (p.retryCases === undefined) throw new Error(`refusing the merge: ${dir} is not a retry`);
+    const h = JSON.parse(readFileSync(path.join(dir, 'host.json'), 'utf8'));
+    for (const line of readFileSync(path.join(dir, 'retry.ndjson'), 'utf8').split('\n')) {
+      if (line === '') continue;
+      const row = JSON.parse(line);
+      if (rows.has(row.index))
+        throw new Error(`refusing the merge: case ${row.index} is retried twice`);
+      if (String(row.reason ?? '').startsWith('harness-error'))
+        throw new Error(`refusing the merge: the retry of case ${row.index} failed again`);
+      rows.set(row.index, {
+        row,
+        line,
+        dir,
+        runId: p.runId,
+        commit: p.commit,
+        changedFromHead,
+        heap: p.heap,
+        exitCodes: h.exitCodes,
+      });
+    }
+  }
+  const done = [];
+  for (let i = 0; i < shards; i += 1) {
+    const file = path.join(out, `shard-${i}.ndjson`);
+    const lines = readFileSync(file, 'utf8').split('\n');
+    let changed = false;
+    for (let k = 0; k < lines.length; k += 1) {
+      if (lines[k] === '') continue;
+      const row = JSON.parse(lines[k]);
+      const retry = rows.get(row.index);
+      if (retry === undefined) continue;
+      if (retry.row.id !== row.id || !String(row.reason ?? '').startsWith('harness-error: worker'))
+        throw new Error(`refusing the merge: retried case ${row.index} is not a dead-worker row`);
+      done.push({
+        index: row.index,
+        id: row.id,
+        before: row.reason,
+        runId: retry.runId,
+        commit: retry.commit,
+        changedFromHead: retry.changedFromHead,
+        heap: retry.heap,
+        exitCodes: retry.exitCodes,
+      });
+      lines[k] = retry.line;
+      rows.delete(row.index);
+      changed = true;
+    }
+    if (changed) writeFileSync(file, lines.join('\n'));
+  }
+  if (rows.size > 0)
+    throw new Error(
+      `refusing the merge: retried cases ${[...rows.keys()].join(', ')} not in the run`,
+    );
+  return done.sort((a, b) => a.index - b.index);
+}
+
+/** A row as E20-A5 compares it: without `ms`, and with both forms of `+∞` (E20-K8) as null. */
+function identityForm(row) {
+  const out = { ...row };
+  delete out.ms;
+  for (const k of BOUND_FIELDS) if (out[k] === 'Infinity') out[k] = null;
+  return JSON.stringify(out);
+}
+
+/**
+ * The rows of retry directories, by corpus index, each with its directory's provenance. A row
+ * whose worker failed (`harness-error`) is left out and its index added to `failed`: another
+ * directory must measure it, with a larger --heap.
+ */
+function retryRows(dirs, kind, rows, failed) {
+  const runs = [];
+  for (const dir of dirs) {
+    const p = JSON.parse(readFileSync(path.join(dir, 'provenance.json'), 'utf8'));
+    const { changedFromHead } = checkProvenance(dir, p);
+    if (p.retryCases === undefined) throw new Error(`refusing the merge: ${dir} is not a retry`);
+    const h = JSON.parse(readFileSync(path.join(dir, 'host.json'), 'utf8'));
+    let count = 0;
+    const failedHere = [];
+    for (const line of readFileSync(path.join(dir, 'retry.ndjson'), 'utf8').split('\n')) {
+      if (line === '') continue;
+      const row = JSON.parse(line);
+      if (String(row.reason ?? '').startsWith('harness-error')) {
+        failed.add(row.index);
+        failedHere.push(row.index);
+        continue;
+      }
+      if (rows.has(row.index))
+        throw new Error(`refusing the merge: case ${row.index} is measured twice`);
+      rows.set(row.index, { row, kind });
+      count += 1;
+    }
+    runs.push({
+      runId: p.runId,
+      commit: p.commit,
+      changedFromHead,
+      node: p.node,
+      heap: p.heap,
+      os: p.os,
+      cpus: p.cpus,
+      cases: count,
+      failedCases: failedHere,
+      exitCodes: h.exitCodes,
+      restarts: h.restarts,
+    });
+  }
+  return { rows, runs };
+}
+
+/**
+ * E20-K9 and K10: checks the 2026-10-27 record and this checkout, replaces the re-measured rows,
+ * checks the identity sample, and writes every row into `shard-0.ndjson` for the finalize phase.
+ * Returns the provenance it adds.
+ */
+function supersedeRecord(file) {
+  const bytes = readFileSync(file);
+  if (sha256(bytes) !== SUPERSEDED_SHA256)
+    throw new Error(`refusing to supersede: ${file} is not the record of E20-K10`);
+  const old = JSON.parse(bytes.toString('utf8'));
+  for (const k of SUPERSEDE_IDENTITY)
+    if (JSON.stringify(old.provenance[k]) !== JSON.stringify(common[k]))
+      throw new Error(
+        `refusing to supersede: the old record has ${k} ${JSON.stringify(old.provenance[k])}, ` +
+          `here ${JSON.stringify(common[k])}`,
+      );
+  if (
+    spawnSync('git', ['merge-base', '--is-ancestor', MEASUREMENT_BASE, 'HEAD'], { cwd: root })
+      .status !== 0
+  )
+    throw new Error(`refusing to supersede: ${MEASUREMENT_BASE} is not an ancestor of HEAD`);
+  const changed = git('diff', '--name-only', '--no-renames', MEASUREMENT_BASE, 'HEAD')
+    .split('\n')
+    .filter(Boolean);
+  const other = changed.filter((f) => !E20_PATHS(f));
+  if (other.length > 0)
+    throw new Error(`refusing to supersede: HEAD differs from ${MEASUREMENT_BASE} in ${other}`);
+  const e20 = git('rev-parse', '--verify', `${e20Commit}^{commit}`);
+  if (!/^[0-9a-f]{40}$/u.test(e20))
+    throw new Error(`refusing to supersede: no commit ${e20Commit}`);
+  const fromE20 = git(
+    'diff',
+    '--name-only',
+    '--no-renames',
+    e20,
+    'HEAD',
+    '--',
+    'tests/geometry/e3-a04',
+    'tooling/run-e3-a04.mjs',
+    'docs',
+  );
+  if (fromE20 !== '')
+    throw new Error(`refusing to supersede: HEAD differs from E20 commit ${e20} in ${fromE20}`);
+
+  const measured = new Map();
+  const failed = new Set();
+  const { runs: remeasured } = retryRows(remeasuredDirs, 'remeasured', measured, failed);
+  const { runs: identity } = retryRows(identityDirs, 'identity', measured, failed);
+  const unmeasured = [...failed].filter((i) => !measured.has(i));
+  if (unmeasured.length > 0)
+    throw new Error(`refusing to supersede: the workers of cases ${unmeasured} failed`);
+  // The rows E20-R3 names: every UNDECIDED row but the work-cap rows outside section 21's classes,
+  // and every FAIL row outside them. The sample of E20-A5: every 25th corpus index among the
+  // decided rows.
+  const disclosed = new Set(Object.values(old.disclosed).flat());
+  const remeasure = (r) =>
+    (r.status === 'undecided' &&
+      !(String(r.reason ?? '').startsWith('work cap:') && !disclosed.has(r.id))) ||
+    (r.status === 'fail' && !disclosed.has(r.id));
+  const sampled = (r) => r.status !== 'undecided' && r.index % 25 === 0;
+  const rows = old.rows.map((r) => {
+    const m = measured.get(r.index);
+    const kind = remeasure(r) ? 'remeasured' : sampled(r) ? 'identity' : null;
+    if (kind === null) {
+      if (m !== undefined)
+        throw new Error(`refusing to supersede: case ${r.index} is not one E20 re-measures`);
+      return r;
+    }
+    if (m === undefined) throw new Error(`refusing to supersede: case ${r.index} is missing`);
+    if (m.kind !== kind || m.row.id !== r.id)
+      throw new Error(`refusing to supersede: case ${r.index} is not the ${kind} row ${r.id}`);
+    measured.delete(r.index);
+    if (kind === 'identity') {
+      if (identityForm(m.row) !== identityForm(r))
+        throw new Error(`refusing to supersede: identity case ${r.index} (${r.id}) differs`);
+      return r;
+    }
+    return { ...m.row, former: { status: r.status, reason: r.reason } };
+  });
+  if (measured.size > 0)
+    throw new Error(`refusing to supersede: cases ${[...measured.keys()]} are not in the record`);
+  writeFileSync(
+    path.join(out, 'shard-0.ndjson'),
+    rows.map((r) => `${JSON.stringify(r, nonFinite)}\n`).join(''),
+  );
+  // E20 changes no shader, WASM or product path, so the old GPU check stands (contract section 1).
+  writeFileSync(
+    path.join(out, 'gpu-carried.json'),
+    `${JSON.stringify({ shaderSha256: old.provenance.shaderSha256, gpu: old.gpu }, null, 2)}\n`,
+  );
+  return {
+    supersedes: {
+      runId: old.provenance.runId,
+      sha256: SUPERSEDED_SHA256,
+      commit: old.provenance.commit,
+    },
+    measurementBase: MEASUREMENT_BASE,
+    e20Commit: e20,
+    changedFromBase: changed,
+    hosts: old.provenance.hosts,
+    retried: old.provenance.retried,
+    remeasured,
+    identity,
+  };
 }
 
 /** The corpus position in a shard's `.current` file, or null when it is not one. */
@@ -205,7 +565,7 @@ const runPhase = (env) =>
         stdio: ['ignore', 'ignore', 'inherit'],
         env: {
           ...process.env,
-          NODE_OPTIONS: '--max-old-space-size=6144',
+          NODE_OPTIONS: `--max-old-space-size=${heap}`,
           P2_WASM_PATH: wasm,
           E3_A04_RUN_OUT: out,
           E3_A04_RUN_SHARD: `0/${shards}`,
@@ -244,12 +604,16 @@ if (smoke) {
   // after the case it was measuring, which is recorded UNDECIDED (contract section 19).
   const restarts = Array.from({ length: shards }, () => []);
   const runShard = async (i) => {
-    const current = path.join(out, `shard-${i}.current`);
+    const current = path.join(
+      out,
+      retryCases === undefined ? `shard-${i}.current` : 'retry.current',
+    );
     let resume;
     for (;;) {
       const code = await runPhase({
         E3_A04_RUN_PHASE: 'shard',
         E3_A04_RUN_SHARD: `${i}/${shards}`,
+        ...(retryCases === undefined ? {} : { E3_A04_RUN_CASES: retryCases.join(',') }),
         ...(resume === undefined ? {} : { E3_A04_RUN_RESUME: resume }),
       });
       if (code === 0 || !existsSync(current) || restarts[i].length >= MAX_RESTARTS) return code;
@@ -260,7 +624,11 @@ if (smoke) {
     }
   };
   const hereCodes =
-    mergeDirs === undefined ? await Promise.all(here.map((i) => runShard(i))) : null;
+    mergeDirs !== undefined || superseded !== null
+      ? null
+      : retryCases !== undefined
+        ? [await runShard(0)]
+        : await Promise.all(here.map((i) => runShard(i)));
   // Exit codes and restarts indexed by shard, whichever host ran it.
   const shardCodes = Array.from({ length: shards }, () => null);
   const shardRestarts = Array.from({ length: shards }, () => []);
@@ -277,6 +645,17 @@ if (smoke) {
       });
   const codes = hereCodes ?? shardCodes;
   const restarted = shardRestarts;
+  if (retryCases !== undefined) {
+    writeFileSync(
+      path.join(out, 'host.json'),
+      `${JSON.stringify({ retryCases, exitCodes: codes, restarts: restarts[0] }, null, 2)}\n`,
+    );
+    console.log(
+      JSON.stringify({ retryCases, exitCodes: codes, wallMilliseconds: Date.now() - started }),
+    );
+    console.log(`retry run: ${out} (pass it to --merge … --retried)`);
+    process.exit(codes.some((c) => c !== 0) ? 1 : 0);
+  }
   if (partial) {
     writeFileSync(
       path.join(out, 'host.json'),
@@ -299,6 +678,7 @@ if (smoke) {
   );
   const finalize = await runPhase({
     E3_A04_RUN_PHASE: 'finalize',
+    ...(superseded === null ? {} : { E3_A04_RUN_GPU_CARRIED: path.join(out, 'gpu-carried.json') }),
     E3_A04_RUN_GPU:
       gpu === undefined
         ? ''
@@ -325,7 +705,17 @@ if (smoke) {
       2,
     ),
   );
-  if (stride === 1 && !dirty && codes.every((c) => c === 0) && record.validator.length === 0) {
+  const retriesOk = [
+    ...retried,
+    ...(superseded === null ? [] : [...superseded.remeasured, ...superseded.identity]),
+  ].every((r) => (r.exitCodes ?? []).every((c) => c === 0));
+  if (
+    stride === 1 &&
+    !dirty &&
+    codes.every((c) => c === 0) &&
+    retriesOk &&
+    record.validator.length === 0
+  ) {
     const evidence = path.join(root, 'docs', 'evidence', 'e3-a04', `${stamp}-${runId}`);
     if (existsSync(evidence)) throw new Error(`refusing to overwrite ${evidence}`);
     mkdirSync(evidence, { recursive: true });

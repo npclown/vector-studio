@@ -1,0 +1,319 @@
+{
+  "provenance": {
+    "label": "5ddec4e",
+    "runId": "6624127b",
+    "identities": {
+      "Run commit": "00e49bf20b3dcb08c459de335fe25bb2f8a0d8df",
+      "Clean tree": "yes",
+      "Fill operation": "geometry-wasm/fill-v0+r4",
+      "Stroke operation": "geometry-wasm/stroke-v0+r7",
+      "Release WASM SHA-256": "58f26517603d0d599f187481c967832e3f6abea2eb53c738e5540b6200b4fd35",
+      "Map": "tooling/p3-exit-a03-map.json",
+      "Map SHA-256": "d5c595ecfc1ae457d59a0d5380f9c1c3ca013c8ad7608dbc225841bd39e7c863",
+      "Rust host": "x86_64-unknown-linux-gnu",
+      "Node": "v24.15.0",
+      "OS": "Linux 6.18.44-fc-v153 x64"
+    }
+  },
+  "rows": [
+    {
+      "criterion": "A03",
+      "entry": {
+        "id": "ST-F1 to ST-F14, ST-F21 to ST-F26 (kernel, line strokes)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "cargo",
+        "filter": "stroke_outline_tests::",
+        "each": [
+          "st_f1_to_f3_",
+          "st_f4_",
+          "st_f5_",
+          "st_f6_",
+          "st_f7_f8_f9_",
+          "st_f10_",
+          "st_f11_",
+          "st_f12_",
+          "st_f13_",
+          "st_f14_",
+          "st_f21_to_f24_",
+          "st_f25_",
+          "st_f26_"
+        ]
+      },
+      "verdict": "PASS",
+      "selected": 13,
+      "failures": []
+    },
+    {
+      "criterion": "A03",
+      "entry": {
+        "id": "ST-F15 to ST-F20 (kernel, cubic strokes)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "cargo",
+        "filter": "stroke_cubic_tests::",
+        "each": ["st_f15_", "st_f16_", "st_f16p_", "st_f17_", "st_f18_", "st_f19_", "st_f20_"]
+      },
+      "verdict": "PASS",
+      "selected": 7,
+      "failures": []
+    },
+    {
+      "criterion": "A03",
+      "entry": {
+        "id": "ST-F1 to ST-F26 with ST-O1 to ST-O5 (dump hand-off)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "geometry",
+        "file": "tests/geometry/stroke-oracle.test.ts",
+        "each": [
+          "dumps every case",
+          "ST-O1 to ST-O4 of",
+          "ST-F1 to ST-F3:",
+          "ST-F4:",
+          "ST-F5:",
+          "ST-F6:",
+          "ST-F7 to ST-F10:",
+          "ST-F11:",
+          "ST-F12:",
+          "ST-F13:",
+          "ST-F14:",
+          "ST-F21 to ST-F24:",
+          "ST-F25:",
+          "ST-F26:",
+          "ST-O1 and ST-O2 on every cubic",
+          "ST-O3 (tau band)",
+          "ST-F15:",
+          "ST-F16:",
+          "ST-F16p:",
+          "ST-F17 to ST-F20:"
+        ]
+      },
+      "verdict": "PASS",
+      "selected": 20,
+      "failures": []
+    },
+    {
+      "criterion": "A03",
+      "entry": {
+        "id": "ST-O1 to ST-O5 oracle, fixtures and positive controls",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "unit",
+        "file": "tests/unit/geometry-stroke-region.test.ts"
+      },
+      "verdict": "PASS",
+      "selected": 173,
+      "failures": []
+    },
+    {
+      "criterion": "A03",
+      "entry": {
+        "id": "SC01-SC22 (release WASM)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "geometry",
+        "file": "tests/geometry/stroke-mesh-port.test.ts",
+        "each": [
+          "SC01 ",
+          "SC02 ",
+          "SC03 ",
+          "SC04 ",
+          "SC05 ",
+          "SC06 ",
+          "SC07 ",
+          "SC08 ",
+          "SC09 ",
+          "SC10 ",
+          "SC11 ",
+          "SC12 ",
+          "SC13 ",
+          "SC14 ",
+          "SC15 ",
+          "SC16 ",
+          "SC17 ",
+          "SC18 ",
+          "SC19 ",
+          "SC20 ",
+          "SC21 ",
+          "SC22 "
+        ]
+      },
+      "verdict": "PASS",
+      "selected": 22,
+      "failures": []
+    },
+    {
+      "criterion": "A03",
+      "entry": {
+        "id": "SC01-SC22 (test double)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "unit",
+        "file": "tests/unit/stroke-mesh-port-double.test.ts",
+        "each": [
+          "SC01 ",
+          "SC02 ",
+          "SC03 ",
+          "SC04 ",
+          "SC05 ",
+          "SC06 ",
+          "SC07 ",
+          "SC08 ",
+          "SC09 ",
+          "SC10 ",
+          "SC11 ",
+          "SC12 ",
+          "SC13 ",
+          "SC14 ",
+          "SC15 ",
+          "SC16 ",
+          "SC17 ",
+          "SC18 ",
+          "SC19 ",
+          "SC20 ",
+          "SC21 ",
+          "SC22 "
+        ]
+      },
+      "verdict": "PASS",
+      "selected": 22,
+      "failures": []
+    },
+    {
+      "criterion": "A03",
+      "entry": {
+        "id": "ST-A10 probes (scene validation)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "unit",
+        "file": "tests/unit/st-u6-stroke-scene.test.ts",
+        "each": ["ST-A10"]
+      },
+      "verdict": "PASS",
+      "selected": 16,
+      "failures": []
+    },
+    {
+      "criterion": "A03",
+      "entry": {
+        "id": "ST-A10 probes (stroke pipeline)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "required",
+        "runner": "unit",
+        "file": "tests/unit/st-u6-stroke-pipeline.test.ts",
+        "each": ["ST-A10"]
+      },
+      "verdict": "PASS",
+      "selected": 33,
+      "failures": []
+    },
+    {
+      "criterion": "A03",
+      "entry": {
+        "id": "Stroke kernel transport (B2 section 7)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "supplementary",
+        "runner": "cargo",
+        "filter": "stroke_export_tests::"
+      },
+      "verdict": "PASS",
+      "selected": 18,
+      "failures": []
+    },
+    {
+      "criterion": "A03",
+      "entry": {
+        "id": "Early abort (B2 S7)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "supplementary",
+        "runner": "cargo",
+        "filter": "stroke_early_abort_tests::"
+      },
+      "verdict": "PASS",
+      "selected": 13,
+      "failures": []
+    },
+    {
+      "criterion": "A03",
+      "entry": {
+        "id": "E2-K1 seam merge and E2-K3 family-B rung",
+        "source": "docs/plans/d9-e2-stroke-fast-rung-contract.md",
+        "kind": "supplementary",
+        "runner": "cargo",
+        "filter": "stroke_merge_tests::"
+      },
+      "verdict": "PASS",
+      "selected": 11,
+      "failures": []
+    },
+    {
+      "criterion": "A03",
+      "entry": {
+        "id": "E2-K2 band leaf rule",
+        "source": "docs/plans/d9-e2-stroke-fast-rung-contract.md",
+        "kind": "supplementary",
+        "runner": "cargo",
+        "filter": "stroke_band_tests::"
+      },
+      "verdict": "PASS",
+      "selected": 7,
+      "failures": []
+    },
+    {
+      "criterion": "A03",
+      "entry": {
+        "id": "Stroke adapter (B2 section 8)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "supplementary",
+        "runner": "geometry",
+        "file": "tests/geometry/stroke-adapter.test.ts"
+      },
+      "verdict": "PASS",
+      "selected": 57,
+      "failures": []
+    },
+    {
+      "criterion": "A03",
+      "entry": {
+        "id": "ST-U6 headed stroke fixtures (ST-A10)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "headed",
+        "runner": "headed",
+        "file": "tests/gpu/p3-st-u6-stroke.spec.ts"
+      },
+      "verdict": "HEADED",
+      "selected": 0,
+      "failures": []
+    },
+    {
+      "criterion": "A03",
+      "entry": {
+        "id": "ST-U7 headed joint fixtures (ST-A11, ST-A16, ST-A17)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "headed",
+        "runner": "headed",
+        "file": "tests/gpu/p3-st-u7-joint.spec.ts"
+      },
+      "verdict": "HEADED",
+      "selected": 0,
+      "failures": []
+    },
+    {
+      "criterion": "A03",
+      "entry": {
+        "id": "B2 stroke page (p3-b2-strokes)",
+        "source": "docs/plans/p3-b2-stroke-contract.md",
+        "kind": "headed",
+        "runner": "headed",
+        "file": "tests/gpu/p3-b2-strokes.spec.ts"
+      },
+      "verdict": "HEADED",
+      "selected": 0,
+      "failures": []
+    }
+  ],
+  "criteria": {
+    "A03": "PASS (CI part; headed part cited separately)"
+  }
+}

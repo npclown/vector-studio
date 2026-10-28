@@ -1,0 +1,677 @@
+﻿node.exe : $ node tooling/test-geometry.mjs
+At line:1 char:393
++ ... unction P { & "$n\node.exe" "$n\node_modules\corepack\dist\corepack.j ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ($ node tooling/test-geometry.mjs:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+> node.exe D:\GIT\vs-e11h\tooling\generate-p3-fill-predicate-fixtures.mjs --check
+tests\fixtures\p3-fill-orientation-v1.txt matches 4112 generated rows
+> node.exe D:\GIT\vs-e11h\tooling\generate-p3-fill-intersection-fixtures.mjs --check
+tests\fixtures\p3-fill-intersections-v1.txt matches 260 generated rows
+> node.exe D:\GIT\vs-e11h\tooling\generate-p3-fill-event-fixtures.mjs --check
+tests\fixtures\p3-fill-event-order-v1.txt matches 528 generated rows
+> node.exe D:\GIT\vs-e11h\tooling\generate-p3-rounded-fill-fixtures.mjs --check
+checked tests\fixtures\p3-rounded-fill-v1.txt (202 rows)
+> node.exe D:\GIT\vs-e11h\tooling\generate-p3-transverse-pair-fixtures.mjs --check
+tests\fixtures\p3-transverse-pairs-v1.txt matches 60 generated rows
+rustc 1.94.1 (e408947bf 2026-03-25)
+binary: rustc
+commit-hash: e408947bfd200af42db322daf0fadfe7e26d3bd1
+commit-date: 2026-03-25
+host: x86_64-pc-windows-msvc
+release: 1.94.1
+LLVM version: 21.1.8
+> rustup.exe run 1.94.1 cargo fmt --manifest-path D:\GIT\vs-e11h\packages\geometry-wasm\kernel\Cargo.toml -- --check
+> rustup.exe run 1.94.1 cargo clippy --manifest-path D:\GIT\vs-e11h\packages\geometry-wasm\kernel\Cargo.toml --locked --offline --all-targets -- -D warnings
+    Checking vector-studio-geometry-kernel v0.0.0 (D:\GIT\vs-e11h\packages\geometry-wasm\kernel)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 10.74s
+> rustup.exe run 1.94.1 cargo test --manifest-path D:\GIT\vs-e11h\packages\geometry-wasm\kernel\Cargo.toml --locked --offline
+   Compiling vector-studio-geometry-kernel v0.0.0 (D:\GIT\vs-e11h\packages\geometry-wasm\kernel)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 16.78s
+     Running unittests src\lib.rs (.tools\geometry-build\debug\deps\vector_studio_geometry_kernel-899696955d061a3d.exe)
+
+running 595 tests
+test e14_fill_limit_diag_tests::e14_fill_limit_diag ... ignored, E14 fill cap diagnostic; run by hand with E14_FILL_INPUT
+test codec::tests::checked_layout_rejects_overflow ... ok
+test codec::tests::output_layout_observes_alignment_and_terminal_length ... ok
+test e14_fill_rung0_tests::e14_f4_search ... ignored, E14-F4 literal search; run by hand
+test e14_fill_rung0_tests::e14_d4_diagonal_order_is_observable_on_a_tie ... ok
+test e16_fill_remedy_tests::e16_d4_exponent_bound_is_caught ... ok
+test e16_fill_remedy_tests::e16_retry_stop_field_format ... ok
+test e8_direction_hint_tests::an_implicit_closure_contributes_its_endpoint_derivative ... ok
+test e8_direction_hint_tests::antiparallel_vectors_have_no_extreme ... ok
+test e8_direction_hint_tests::collinear_same_direction_takes_d2_equal_to_a ... ok
+test e8_direction_hint_tests::cyclic_only_replacement_is_unresolved_natively ... ok
+test e8_direction_hint_tests::d1_success_computes_nothing_else ... ok
+test e16_fill_remedy_tests::e16_d1_line_caps_on_a_cubic_path_is_caught ... ok
+test e14_fill_rung0_tests::e14_d1_exact_rung_with_fast_caps_is_caught ... ok
+test e8_direction_hint_tests::emit_e8_corner_digests ... ignored, E8-U1 corpus digests; run by tests/geometry/e8-corner-corpus.test.ts
+test e8_direction_hint_tests::emit_e8_corner_topology ... ignored, E8-U1 topology inputs; run by tests/geometry/native-e8-corner.test.ts
+test e8_direction_hint_tests::d2_sign_is_j_of_a_minus_b ... ok
+test e8_direction_hint_tests::own_progress_guard_keeps_a_reversed_actual_chord_unresolved ... ok
+test e8_direction_hint_tests::d2_admits_a_corner_that_d1_rejects ... ok
+test e8_direction_hint_tests::widths_hold_at_the_largest_admitted_magnitudes ... ok
+test e8_final_knot_tests::an_endpoint_equal_in_value_keeps_its_emitted_bits ... ok
+test e16_fill_remedy_tests::e16_d3_retry_after_success_is_caught ... ok
+test engine::native_differential::census_transport_limits_reject_before_allocation_or_write ... ok
+test e8_final_knot_tests::e8_c6_zero_length_final_leaf_is_left_as_emitted ... ok
+test e8_final_knot_tests::e8_f5_snaps_only_source_final_knots_in_the_exact_rung ... ok
+test engine::native_differential::ordinary_differential_transport_retains_existing_limits ... ok
+test engine::native_differential::run_framed_inputs ... ignored, requires framed files; explicitly executed by pnpm test:geometry
+test engine::tests::allocation_counter_positive_control_detects_heap_work ... ok
+test engine::tests::allocation_failure_seam_leaves_no_result ... ok
+test engine::tests::capacity_retry_keeps_input_and_publishes_only_complete_output ... ok
+test engine::tests::empty_batch_has_terminal_offsets_and_header_only_output ... ok
+test engine::tests::epoch_exhaustion_fails_closed_without_wrapping ... ok
+test engine::tests::failed_path_does_not_block_later_path ... ok
+test engine::tests::dispose_is_terminal_and_epoch_advances_per_call ... ok
+test engine::tests::invalid_path_wins_before_tolerance ... ok
+test engine::tests::malformed_envelope_is_atomic_and_reports_zero_work ... ok
+test engine::tests::process_does_not_reallocate_reserved_storage ... ok
+test engine::tests::resource_caps_reject_first_exceeding_byte ... ok
+test engine::tests::result_bounds_and_source_echo_are_little_endian ... ok
+test fill_event_order::tests::both_operands_are_validated_before_crossing_classification ... ok
+test fill_event_order::tests::endpoint_and_crossing_order_remains_exact_after_factoring ... ok
+test fill_event_order_filter_tests::b0r_o2_decided_controls ... ok
+test fill_event_order_filter_tests::b0r_o2_equal_x_crossings_use_the_tie_rule ... ok
+test fill_event_order_filter_tests::b0r_o2_error_precedence_is_unchanged ... ok
+test fill_event_order_filter_tests::b0r_o2_nearly_parallel_crossing_falls_back ... ok
+test fill_event_order_filter_tests::b0r_o2_overflowing_crossings_fall_back ... ok
+test fill_event_order_filter_tests::b0r_oracle_full_o1_event_order ... ignored, B0R O1 full size; release profile via pnpm test:p3-fill-identity
+test e16_fill_remedy_tests::e16_f4_cubic_paths_keep_b1_caps ... ok
+test fill_event_order_tests::endpoint_crossing_equality_and_equal_x_order_use_exact_y ... ok
+test fill_event_order_tests::every_nonproper_crossing_relation_is_rejected_on_either_operand ... ok
+test e16_fill_remedy_tests::e16_f9_clearance_stays_work_limit ... ok
+test fill_event_order_tests::exact_scale_translation_reflection_and_half_ulp_crossing_preserve_order ... ok
+test fill_event_order_tests::every_pair_of_four_concurrent_lines_compares_equal ... ok
+test fill_event_order_tests::endpoint_crossing_equal_and_error_comparisons_allocate_nothing ... ok
+test fill_event_order_tests::x_comparison_ignores_y_without_changing_lexicographic_order ... ok
+test fill_event_order_tests::nonfinite_coordinates_in_both_variants_and_operands_precede_classification ... ok
+test fill_event_order_tests::x_comparison_validates_both_events_before_classification ... ok
+test fill_exact::tests::bounded_product_overflow_asserts - should panic ... ok
+test fill_exact::tests::bounded_addition_overflow_asserts - should panic ... ok
+test fill_exact::tests::carry_borrow_multiply_and_narrow_are_exact ... ok
+test fill_exact::tests::decode_canonicalizes_zero_and_covers_literal_boundaries ... ok
+test fill_exact::tests::power_of_two_shift_is_literal_and_canonical ... ok
+test fill_exact::tests::top_event_product_uses_final_limb ... ok
+test fill_exact_tests::b0r_oracle_full_u1b_fill_exact ... ignored, B0R O1 full size; release profile via pnpm test:p3-fill-identity
+test fill_exact::tests::widening_zero_fills_and_intermediate_products_keep_high_words ... ok
+test fill_exact_tests::b0r_u1b_boundary_fixtures ... ok
+test e14_fill_rung0_tests::e14_f7_near_touching_simple_path_falls_back ... ok
+test fill_exact_tests::b0r_u1b_capacity_assertions_unchanged ... ok
+test e8_final_knot_tests::e8_k11_snapped_final_knot_moves_less_than_the_guard_at_the_largest_admitted_magnitudes ... ok
+test fill_exact_tests::b0r_u1b_differential_detects_forbidden_borrow_skip ... ok
+test e16_fill_remedy_tests::e16_d2_stopped_retry_own_result_is_caught ... ok
+test e16_fill_remedy_tests::e16_f3_caps_are_inclusive ... ok
+test e16_fill_remedy_tests::e16_f1_f2_line_only_source_caps ... ok
+test e14_fill_rung0_tests::e14_f5_f6_scene_paths_stay_work_limit ... ok
+test fill_export_ladder_tests::al_u3_al_f2_range_ends_through_the_export ... ok
+test e14_fill_rung0_tests::e14_f1_to_f3_circles ... ok
+test e16_fill_remedy_tests::e16_f5_to_f8_refinement_retries ... ok
+test e14_fill_rung0_tests::e14_work_cap_is_inclusive_and_d2_is_caught ... ok
+test fill_export_ladder_tests::al_u3_rung_zero_storage_is_reserved_with_the_engine ... ok
+test fill_event_order_filter_tests::b0r_o8_r1_widening_removed_is_detected_by_event_enclosures ... ok
+test fill_export_ladder_tests::al_u3_al_f9_b0_fixture_paths_are_fast_through_the_export ... ok
+test fill_export_ladder_tests::al_u3_line_only_square_takes_rung_zero_and_no_topology ... ok
+test fill_export_tests::b1_257_leaves_fail_with_owner_limit ... ok
+test e14_fill_rung0_tests::e14_d4_indexed_next_half_equals_the_linear_scan_on_the_fixtures ... ok
+test fill_export_ladder_tests::al_u3_fast_square_publishes_rung_zero_without_refinement ... ok
+test fill_event_order_tests::independent_fixture_matches_under_event_swap_and_all_crossing_permutations ... ok
+test e14_fill_rung0_tests::e14_f4_cap_is_inclusive ... ok
+test fill_export_tests::b1_rings_process_without_allocation_or_storage_change ... ok
+test fill_export_tests::dispose_is_terminal_and_idempotent ... ok
+test fill_export_tests::e14_f1_output_is_the_r2_output ... ok
+test fill_export_tests::e8_c6_zero_length_final_leaf_maps_to_unsupported_geometry ... ok
+test fill_export_tests::e8_crossing_replacement_meets_its_preconditions ... ok
+test fill_export_tests::capacity_retry_reports_the_exact_requirement ... ok
+test fill_export_ladder_tests::al_u3_al_f8_mesh_check_through_the_export_equals_exact_only ... ok
+test fill_export_tests::b1_pre_b1_cap_mode_restores_the_old_caps ... ok
+test fill_export_tests::empty_batch_publishes_header_only_and_rejects_nothing ... ok
+test fill_export_tests::epochs_advance_once_per_mutation_and_exhaustion_fails_closed ... ok
+test fill_export_tests::hanging_boundary_t_junction_is_split_at_its_vertex ... ok
+test fill_export_tests::hanging_interior_split_edge_is_not_boundary ... ok
+test fill_export_tests::b1_ring_of_32_cubics_at_lambda_8_is_fast_admitted ... ok
+test fill_export_tests::mapping_table_is_exhaustive_and_matches_section_e ... ok
+test fill_export_tests::e14_g3_process_does_not_allocate_on_rung0_fixtures ... ok
+test fill_export_tests::b1_source_and_command_caps_admit_exactly_their_limit ... ok
+test fill_export_ladder_tests::al_u3_defect_14_cascade_inverted_is_detected ... ok
+test fill_export_tests::request_echo_and_record_fields_are_little_endian ... ok
+test fill_export_tests::results_are_deterministic_and_position_independent ... ok
+test fill_export_tests::e8_f6_output_bytes_equal_the_merge_base ... ok
+test fill_export_tests::runtime_limits_equal_the_native_test_limits ... ok
+test fill_export_tests::tolerances_are_exact_normal_powers_of_two ... ok
+test fill_export_tests::self_check_failure_is_internal_error_and_the_engine_recovers ... ok
+test fill_export_tests::integer_fixtures_mesh_their_exact_regions ... ok
+test fill_export_tests::input_framing_rejections_are_invalid_batch ... ok
+test fill_export_tests::workspace_construction_failure_keeps_no_workspace_and_retries ... ok
+test fill_export_tests::reachable_mapping_rows_have_fixtures ... ok
+test fill_filter_tests::b0r_o2_enclosure_limits_at_binade_boundaries ... ok
+test fill_filter_tests::b0r_o2_endpoint_sections_through_ratio_enclosure ... ok
+test fill_filter_tests::b0r_o1_smoke_enclosure_containment ... ok
+test fill_export_tests::per_path_statuses_follow_the_stage_order ... ok
+test fill_filter_tests::b0r_o2_nan_producing_operations_are_undecided ... ok
+test fill_filter_tests::b0r_o2_trimmed_invariant_violation_is_not_enclosed ... ok
+test fill_filter_tests::b0r_o8_enclosure_widening_removed_is_detected ... ok
+test fill_filter_tests::b0r_oracle_full_o1_filter_module ... ignored, B0R O1 full size; release profile via pnpm test:p3-fill-identity
+test fill_intersections::tests::arithmetic_widens_and_preserves_permitted_exact_zero_results ... ok
+test fill_event_order_filter_tests::b0r_o1_smoke_event_order ... ok
+test fill_intersections::tests::division_rejects_every_interval_containing_zero ... ok
+test fill_intersections_tests::emit_certified_intersections ... ignored
+test fill_filter_tests::b0r_o8_ratio_fixed_numerator_unit_is_detected ... ok
+test fill_intersections::tests::widening_covers_zero_subnormal_normal_and_maximum_transitions ... ok
+test fill_intersections_tests::every_relation_rejects_nan_infinite_zero_and_negative_tolerance ... ok
+test fill_intersections_tests::exact_scale_translation_and_reflection_have_independent_expected_crossings ... ok
+test fill_intersections_tests::exact_overlap_forms_use_existing_lexicographic_endpoints ... ok
+test fill_intersections_tests::exact_points_degeneracies_and_disjoint_segments_are_canonical ... ok
+test fill_intersections_tests::nonfinite_coordinates_precede_invalid_tolerance_in_all_positions ... ok
+test fill_intersections_tests::positive_certificate_is_the_tolerance_acceptance_boundary ... ok
+test fill_intersections_tests::uncertain_proper_crossings_fail_for_every_permutation ... ok
+test fill_ladder_diag_tests::al_u4a_certificate_sub_stage_split ... ignored, AL-U4a diagnostic split; needs P3_B0R_B0_CORPUS; release profile; not evidence
+test fill_intersections_tests::successful_and_error_intersections_allocate_nothing ... ok
+test fill_intersections_tests::independent_crossing_fixture_resolves_with_directed_bounds_and_permutation_identity ... ok
+test fill_ladder_dump_tests::emit_fill_ladder_dump ... ignored, AL-U2 oracle hand-off; needs P3_FILL_LADDER_INPUT and P3_FILL_LADDER_DUMP
+test fill_ladder_dump_tests::emit_fill_ladder_dump_production ... ignored, E14-A3 oracle hand-off; needs P3_FILL_LADDER_INPUT and P3_FILL_LADDER_DUMP
+test fill_ladder_identity::dump_rungs ... ignored, AL-U2 rung record; run only by pnpm test:p3-fill-identity --revision-change
+test fill_export_tests::cascade_retries_triangle_free_only_after_knot_or_unresolved ... ok
+test fill_ladder_identity::rung_lines_name_the_rung_reason_and_exact_step ... ok
+test fill_export_tests::transport_caps_hold_at_limit_and_reject_limit_plus_one ... ok
+test fill_ladder_tests::al_defect_01_clearance_ge_without_r1_widening_is_detected ... ok
+test fill_ladder_dump_tests::dump_reads_its_input_and_frames_each_entry ... ok
+test fill_ladder_tests::al_defect_05_cone_inverted_is_detected ... ok
+test fill_ladder_tests::al_defect_06_nesting_from_orientation_is_detected ... ok
+test fill_ladder_tests::al_defect_02_knot_errors_omitted_is_detected ... ok
+test fill_ladder_tests::al_defect_07_flipped_triangle_is_detected ... ok
+test fill_ladder_tests::al_defect_08_non_boundary_triangulated_is_detected ... ok
+test fill_ladder_tests::al_defect_03_monotone_chords_only_is_detected ... ok
+test fill_filter_tests::b0r_o1_smoke_interval_operations ... ok
+test fill_ladder_tests::al_defect_04_simplicity_only_is_detected ... ok
+test fill_ladder_tests::al_defect_09_scan_bound_without_radius_is_detected ... ok
+test fill_ladder_tests::al_f10_triangle_is_covered_by_its_fault_variant ... ok
+test fill_ladder_tests::al_f7_b0_corpus_closure_and_prefix_inputs ... ignored, AL-F7 corpus inputs; needs P3_B0R_B0_CORPUS; release profile
+test fill_ladder_tests::al_f5_line_only_square_is_fast_with_the_four_directed_edges ... ok
+test fill_ladder_tests::al_f7_triangle_search_on_synthetic_line_paths ... ignored, AL-F7 TRIANGLE search; release profile
+test fill_ladder_tests::al_defect_11_al_m5_omitted_is_detected ... ok
+test fill_export_tests::mapping_row_fixtures_reach_their_kernel_values ... ok
+test fill_ladder_tests::al_f2_range_ends_are_admitted ... ok
+test fill_ladder_tests::al_f6_simple_curve_is_monotone_and_legacy_admits_it ... ok
+test fill_ladder_tests::al_i3_full_corpus_equals_the_spike_and_allocates_nothing ... ignored, AL-I3 full corpus; needs P3_B0R_B0_CORPUS and P3_B0R_RANDOM_CORPUS; release profile
+test fill_ladder_tests::al_defect_10_skip_two_apart_is_detected ... ok
+test fill_filter_tests::b0r_o8_r1_widening_removed_is_detected ... ok
+test fill_ladder_tests::al_u4b1_full_corpus_keeps_the_spike_max_deviation_bits ... ignored, AL-U4b1 S1 full corpus; needs P3_B0R_B0_CORPUS and P3_B0R_RANDOM_CORPUS; release profile
+test fill_ladder_tests::al_f8_flipped_triangle_is_mesh_check_item_1_then_exact ... ok
+test fill_ladder_tests::al_u4b2_full_corpus_fr4_shared_operands_decide_as_before ... ignored, AL-U4b2 FR4 full corpus; needs P3_B0R_B0_CORPUS and P3_B0R_RANDOM_CORPUS; release profile
+test fill_ladder_tests::al_f8b_and_defect_13_mesh_check_item_3_then_exact ... ok
+test fill_ladder_tests::al_u4b3_full_corpus_fr5_boxes_once_decide_as_before ... ignored, AL-U4b3 FR5 full corpus; needs P3_B0R_B0_CORPUS and P3_B0R_RANDOM_CORPUS; release profile
+test fill_ladder_tests::al_f7_real_inputs_reach_their_reasons_and_fall_back_to_the_exact_cascade ... ok
+test fill_filter_tests::b0r_o1_smoke_ratio_enclosures ... ok
+test fill_ladder_tests::defect_12_and_al_f1_range_outside_the_fast_exponents ... ok
+test fill_ladder_tests::e14_d4_next_half_differential_on_the_full_corpus ... ignored, E14-D4 full corpus; needs P3_B0R_B0_CORPUS and P3_B0R_RANDOM_CORPUS; release profile
+test fill_ladder_tests::e14_d3_scratch_sized_from_the_exact_limits_only_is_refused ... ok
+test fill_ladder_tests::al_f9_b0_fixture_paths_are_fast_and_the_exact_rung_admits_them ... ok
+test fill_ladder_tests::al_u4b1_fixtures_and_debug_sample_keep_the_spike_max_deviation_bits ... ok
+test fill_exact_tests::b0r_u1b_exhaustive_small_limb_patterns ... ok
+test fill_ladder_tests::al_i3_fixtures_and_debug_sample_equal_the_spike ... ok
+test fill_ladder_tests::ladder_storage_is_reserved_once_and_checked_against_the_fill_scratch ... ok
+test fill_ladder_tests::stage_stops_return_after_their_stage_and_publish_only_after_al_fr9 ... ok
+test fill_ladder_tests::sl_f21a_full_run_is_recorded ... ok
+test fill_predicates_filter_tests::b0r_o2_collinear_slope_one_third_falls_back ... ok
+test fill_predicates_filter_tests::b0r_o2_f1_guard_bounds ... ok
+test fill_predicates_filter_tests::b0r_o2_one_ulp_perturbations_of_collinear_triples ... ok
+test fill_predicates_filter_tests::b0r_o2_shared_points_are_exact_identities ... ok
+test fill_predicates_filter_tests::b0r_o2_segment_boxes ... ok
+test fill_ladder_tests::production_prefix_equals_the_spike_accessor ... ok
+test fill_predicates_filter_tests::b0r_o8_f1_bound_halved_is_detected ... ok
+test fill_predicates_filter_tests::b0r_o2_stage_a_wrong_sign_triples_fall_back ... ok
+test fill_predicates_filter_tests::b0r_oracle_full_o1_binary64_predicates ... ignored, B0R O1 full size; release profile via pnpm test:p3-fill-identity
+test fill_predicates_tests::all_segment_relations_obey_endpoint_and_segment_symmetry ... ok
+test fill_predicates_tests::every_nonfinite_coordinate_is_rejected_before_degenerate_shortcuts ... ok
+test fill_predicates_tests::exact_translations_scales_and_reflection_obey_metamorphic_relations ... ok
+test fill_predicates_tests::point_membership_is_exact_inclusive_and_handles_degenerate_segments ... ok
+test fill_predicates_tests::shifted_product_boundaries_and_highest_limb_have_exact_signs ... ok
+test fill_predicates_tests::segment_degeneracies_and_extreme_exact_cases_are_classified ... ok
+test fill_predicates_tests::successful_and_error_predicates_allocate_nothing ... ok
+test fill_ladder_tests::e14_d4_next_half_differential_on_the_debug_sample ... ok
+test fill_sections::tests::endpoint_sections_pin_subnormal_and_signed_zero ... ok
+test fill_sections::tests::canonical_rank_has_one_zero_and_strict_finite_order ... ok
+test fill_sections::tests::half_budget_accepts_the_inclusive_boundary_and_rejects_stricter_tolerance ... ok
+test fill_sections::tests::mediant_is_strictly_between_adjacent_floats ... ok
+test fill_ladder_tests::rung_zero_allocates_nothing_on_the_debug_sample ... ok
+test fill_sections::tests::extreme_crossing_columns_and_sections_preserve_independent_identities ... ok
+test fill_sections::tests::normalization_is_literal_across_zero_sign_and_word_boundaries ... ok
+test fill_sections::tests::sections_use_exact_column_not_rounded_evaluation ... ok
+test fill_predicates_tests::independent_fixture_and_all_permutations_match_exactly ... ok
+test fill_sections_filter_tests::b0r_o2_decided_controls ... ok
+test fill_sections_filter_tests::b0r_o2_endpoint_sections_through_ratio_enclosures ... ok
+test fill_sections_filter_tests::b0r_o2_equal_sections_at_crossing_and_shared_vertex_fall_back ... ok
+test fill_sections_filter_tests::b0r_o2_half_budget_ties_fall_back ... ok
+test fill_sections_filter_tests::b0r_o2_half_budget_tolerance_limits ... ok
+test fill_sections_filter_tests::b0r_o2_nonfinite_sources_keep_their_errors ... ok
+test fill_predicates_filter_tests::b0r_o1_smoke_binary64_predicates ... ok
+test fill_sections_filter_tests::b0r_o2_representation_identity ... ok
+test fill_sections_filter_tests::b0r_o2_section_equal_to_candidate_falls_back ... ok
+test fill_exact_tests::b0r_u1b_smoke_low_limb_skipping_matches_reference ... ok
+test fill_ladder_tests::production_fixtures_match_their_literal_expectations ... ok
+test fill_sections_filter_tests::b0r_oracle_full_o10_tessellation_shadow ... ignored, B0R O10 full size; release profile via pnpm test:p3-fill-identity
+test fill_sections_filter_tests::b0r_oracle_full_o1_sections ... ignored, B0R O1 full size; release profile via pnpm test:p3-fill-identity
+test fill_sections_filter_tests::b0r_o8_ratio_fixed_numerator_unit_is_detected_by_section_filters ... ok
+test fill_sections_filter_tests::b0r_o8_r1_widening_removed_is_detected_by_section_sources ... ok
+test fill_export_ladder_tests::al_u3_defect_15_fallback_from_partial_state_is_detected ... ok
+test fill_sections_slab_tests::b0r_o2_t3_applies_only_at_equal_x ... ok
+test fill_sections_slab_tests::b0r_o2_t3_decided_controls ... ok
+test fill_sections_slab_tests::b0r_o2_t3_signed_zero_endpoint ... ok
+test fill_sections_slab_tests::b0r_o2_t5_decided_controls ... ok
+test fill_sections_slab_tests::b0r_o2_t5_fallback_resolves_sentinels_first ... ok
+test fill_sections_slab_tests::b0r_o2_t5_sentinel_is_not_a_value ... ok
+test fill_sections_filter_tests::b0r_o8_ratio_fixed_numerator_unit_is_detected_by_shadow_mode ... ok
+test fill_sections_slab_tests::b0r_o1_smoke_t3_endpoint_sections ... ok
+test fill_sections_slab_tests::b0r_o8_t3_one_ulp_is_detected ... ok
+test fill_sections_slab_tests::b0r_oracle_full_o1_slab_sections ... ignored, B0R O1 full size; release profile via pnpm test:p3-fill-identity
+test fill_sections_slab_tests::b0r_oracle_full_slab_corpus_rates ... ignored, B0R T3/T5 corpus rates; release profile via pnpm test:p3-fill-identity
+test geometry::tests::cubic_emits_dyadic_coverage_and_tight_extrema ... ok
+test geometry::tests::depth_or_line_cap_returns_work_limit ... ok
+test geometry::tests::depth_twenty_is_inclusive_and_its_first_exceeding_split_is_rejected ... ok
+test geometry::tests::earlier_path_failure_retains_later_path_progress ... ok
+test geometry::tests::endpoint_hull_certifies_translated_reverse_reflected_and_axis_cases ... ok
+test geometry::tests::endpoint_hull_is_inclusive_and_does_not_require_control_order ... ok
+test fill_export_ladder_tests::al_u3_fallback_fixtures_take_the_exact_rung_and_equal_exact_only ... ok
+test geometry::tests::endpoint_hull_is_per_axis_and_non_hull_fallback_remains_active ... ok
+test geometry::tests::endpoint_hull_preserves_overflow_and_guard_failure_precedence ... ok
+test geometry::tests::endpoint_hull_success_and_failure_passes_do_not_allocate ... ok
+test geometry::tests::huge_opposite_controls_fail_without_panicking ... ok
+test geometry::tests::invalid_state_precedes_invalid_tolerance ... ok
+test geometry::tests::line_and_close_preserve_structure ... ok
+test geometry::tests::path_visit_limit_is_inclusive_at_the_internal_node_seam ... ok
+test fill_sections_slab_tests::b0r_o8_t5_sentinel_read_as_value_is_detected ... ok
+test geometry::tests::previous_conflict_index_209_now_succeeds_with_4873_leaves ... ok
+test geometry::tests::raised_line_cap_admits_the_frozen_8192_leaf_boundary ... ok
+test geometry::tests::translated_endpoint_hull_emission_keeps_endpoint_and_provenance ... ok
+test geometry::tests::uncertain_non_hull_seam_rejects_without_publishing_a_candidate ... ok
+test geometry::tests::raised_line_cap_rejects_the_first_exceeding_leaf ... ok
+test line_fill::tests::allocated_bytes_uses_actual_capacities ... ok
+test line_fill::tests::cut_y_search_covers_direction_extremes_and_nonrepresentable_root ... ok
+test line_fill::tests::event_x_search_covers_exact_domains_and_rejects_a_third ... ok
+test line_fill::tests::ordered_keys_round_trip_finite_boundaries_and_canonicalize_zero ... ok
+test line_fill::tests::strict_samples_cover_negative_and_zero_crossing_ranges ... ok
+test line_fill_tests::construction_rejects_unrepresentable_limits_and_zero_capacity_accepts_empty ... ok
+test line_fill_tests::emit_line_fill_meshes ... ignored
+test line_fill_tests::empty_degenerate_retrace_and_repeated_close_inputs_have_fixed_semantics ... ok
+test line_fill_tests::exact_crossing_coincident_touch_and_multiplicity_fixtures_resolve ... ok
+test line_fill_tests::finite_validation_precedes_geometry_and_each_attempt_clears_publication ... ok
+test line_fill_tests::horizontal_probe_touch_and_signed_zero_outputs_are_exact ... ok
+test line_fill_tests::input_edge_pair_and_event_limits_are_inclusive_with_partial_stats ... ok
+test line_fill_tests::repeated_calls_are_deterministic_and_workspaces_are_independent ... ok
+test line_fill_tests::unresolved_controls_and_late_failures_publish_no_mesh ... ok
+test line_fill_tests::tessellation_never_allocates_and_capacity_bytes_remain_stable ... ok
+test mixed_line_arrangement_tests::emit_mixed_line_arrangement ... ignored
+test line_fill_tests::work_and_independent_output_limits_are_atomic_at_the_boundary ... ok
+test mixed_line_arrangement_tests::mixed_line_caps_closures_and_multiple_partner_order_are_frozen ... ok
+test mixed_line_arrangement_tests::mixed_line_preflight_shape_and_final_precedence_are_frozen ... ok
+test mixed_line_arrangement_tests::mixed_line_successes_preserve_source_identity_and_owned_output ... ok
+test native_cubic_fill_tests::emit_depth_positive_native_cubic_fill ... ignored
+test native_cubic_fill_tests::emit_mixed_native_cubic_fill ... ignored
+test native_cubic_fill_tests::emit_native_cubic_fill ... ignored
+test native_cubic_fill_tests::emit_nonlinear_transverse_native_cubic_fill ... ignored
+test native_cubic_fill_tests::emit_rounded_native_cubic_fill ... ignored
+test native_cubic_fill_tests::emit_transverse_native_cubic_fill ... ignored
+test native_cubic_fill_tests::emit_triangle_free_native_cubic_fill ... ignored
+test mixed_line_arrangement_tests::mixed_line_lifecycle_old_entry_and_resource_accounting_are_frozen ... ok
+test fill_sections_filter_tests::b0r_o1_smoke_section_crate_filters ... ok
+test native_cubic_fill_tests::tests::all_four_closure_forms_normalize_to_the_literal_triangle ... ok
+test geometry::tests::output_verb_limit_is_inclusive ... ok
+test native_cubic_fill_tests::tests::all_line_degenerates_match_direct_rounded_standalone ... ok
+test native_cubic_fill_tests::tests::all_line_degenerate_signed_zero_and_source_caps_are_exact ... ok
+test native_cubic_fill_tests::tests::all_line_eligibility_does_not_migrate_mixed_empty_or_collapsed_contours ... ok
+test native_cubic_fill_tests::tests::all_line_a02_retraces_retain_proof_and_rounded_ambiguity ... ok
+test native_cubic_fill_tests::tests::attempt_is_allocation_free_and_owns_every_edge ... ok
+test native_cubic_fill_tests::tests::bounded_command_work_and_output_failures_publish_nothing ... ok
+test fill_ladder_tests::al_u4b2_fr4_shared_operands_decide_as_before ... ok
+test native_cubic_fill_tests::tests::canonical_implicit_closure_is_owned_and_source_p0_tracks_prior_p3 ... ok
+test native_cubic_fill_tests::tests::collapsed_lines_compose_while_mixed_and_decode_precedence_remain_bounded ... ok
+test native_cubic_fill_tests::tests::consecutive_and_signed_zero_lines_preserve_shifted_owners_and_compact_proof ... ok
+test native_cubic_fill_tests::tests::constructor_accounts_all_four_retained_workspaces ... ok
+test native_cubic_fill_tests::tests::degenerate_output_owns_caller_data_and_workspaces_are_independent ... ok
+test native_cubic_fill_tests::tests::canonical_source_caps_and_decoded_identity_are_exact ... ok
+test native_cubic_fill_tests::tests::all_line_degenerates_preserve_f02_composition_order_and_carrier ... ok
+test native_cubic_fill_tests::tests::depth_positive_outputs_own_inputs_and_workspaces_are_isolated ... ok
+test native_cubic_fill_tests::tests::depth_positive_old_modes_reject_then_triangle_free_recovers ... ok
+test native_cubic_fill_tests::tests::legacy_two_edge_forms_reach_topology_and_recover_atomically ... ok
+test native_cubic_fill_tests::tests::f09_repeat_matches_f01_in_all_rules_and_closure_forms ... ok
+test native_cubic_fill_tests::tests::depth_positive_families_preserve_partitions_owners_and_paired_closures ... ok
+test native_cubic_fill_tests::tests::line_identity_does_not_bypass_mixed_cubic_topology ... ok
+test native_cubic_fill_tests::tests::line_two_edge_forms_publish_empty_and_zero_line_triangle_normalizes ... ok
+test native_cubic_fill_tests::tests::malformed_close_and_zero_length_leaf_fail_without_stale_output ... ok
+test native_cubic_fill_tests::tests::mixed_next_move_ordinals_and_signed_zero_line_bits_are_exact ... ok
+test native_cubic_fill_tests::tests::every_triangle_source_kind_mask_matches_the_all_cubic_mesh ... ok
+test native_cubic_fill_tests::tests::mixed_parser_isolates_kind_masks_and_accepts_canonical_zero_lines ... ok
+test native_cubic_fill_tests::tests::mixed_transverse_outputs_own_inputs_and_workspaces_are_isolated ... ok
+test native_cubic_fill_tests::tests::mixed_sixteen_segment_limit_and_geometry_are_exact ... ok
+test native_cubic_fill_tests::tests::all_line_identity_matches_literal_rounded_carriers_in_all_closure_forms ... ok
+test native_cubic_fill_tests::tests::next_move_finalizes_open_forms_and_preserves_shifted_ordinals ... ok
+test native_cubic_fill_tests::tests::mixed_transverse_canonical_families_preserve_sources_owners_and_paired_closures ... ok
+test native_cubic_fill_tests::tests::native_topology_guard_precedes_rounding_and_recovers ... ok
+test native_cubic_fill_tests::tests::repeated_line_square_normalizes_and_short_contours_publish_empty ... ok
+test native_cubic_fill_tests::tests::rounded_selection_resets_diagnostics_and_preserves_cached_stats_across_skips ... ok
+test native_cubic_fill_tests::tests::restricted_grammar_is_left_to_right_and_path_status_precedes_decode ... ok
+test native_cubic_fill_tests::tests::non_knot_topology_failure_never_invokes_rounded_fallback ... ok
+test native_cubic_fill_tests::tests::mixed_transverse_failures_reset_publication_and_preserve_cached_stats ... ok
+test native_cubic_fill_tests::tests::signed_zero_close_owned_sources_and_workspace_isolation ... ok
+test native_cubic_fill_tests::tests::signed_zero_returning_endpoint_is_geometrically_equal_but_bit_exact_in_sources ... ok
+test native_cubic_fill_tests::tests::rounded_selection_rounding_failure_and_owned_source_recover ... ok
+test native_cubic_fill_tests::tests::skipped_topology_retains_stats_and_line_rounding_failures_recover_atomically ... ok
+test native_cubic_fill_tests::tests::strict_parser_preserves_signed_zero_and_rejects_malformed_rows ... ok
+test native_cubic_fill_tests::tests::rounded_topology_failure_preserves_exact_knot_mismatch_and_recovers ... ok
+test native_cubic_fill_tests::tests::source_and_command_failures_recover_without_dependent_work ... ok
+test native_cubic_fill_tests::tests::success_failure_success_sequences_publish_atomically ... ok
+test native_cubic_fill_tests::tests::transverse_output_owns_sources_and_workspaces_remain_isolated ... ok
+test native_cubic_fill_tests::tests::translated_and_reflected_line_identity_matches_direct_rounded_carriers ... ok
+test native_cubic_fill_tests::tests::transverse_route_failures_cached_stats_and_alternating_modes_are_atomic ... ok
+test native_cubic_fill_tests::tests::transverse_canonical_families_match_paired_closure_forms_and_direct_meshes ... ok
+test native_cubic_fill_tests::tests::triangle_free_canonical_families_preserve_sources_owners_and_paired_closures ... ok
+test native_cubic_fill_tests::tests::two_contour_zero_lines_preserve_global_ordinals_and_fill_rules ... ok
+test native_cubic_fill_tests::tests::triangle_free_outputs_own_inputs_and_workspaces_are_isolated ... ok
+test native_cubic_fill_tests::tests::zero_line_classification_uses_original_source_endpoints ... ok
+test native_cubic_fill_tests::tests::triangle_free_failures_reset_publication_preserve_cache_and_recover ... ok
+test p3_al_ob5_bench::run_ob5_native ... ignored, P3 AL-OB5 native leg repetition; run only by pnpm benchmark:p3-al-ob5
+test p3_al_ob5_bench::run_ob5_observation ... ignored, P3 AL-OB5 OB5-Q7 (a) observation; run only by pnpm benchmark:p3-al-ob5
+test p3_al_ob5_bench::run_ob5_oracle ... ignored, P3 AL-OB5 oracle run; run only by pnpm benchmark:p3-al-ob5
+test p3_al_ob5_tests::emit_p3_al_ob5_fixture ... ignored, writes tests/geometry/p3-al-ob5/fixture.json
+test native_cubic_fill_tests::tests::zero_lines_still_charge_the_shared_sixteen_source_limit ... ok
+test p3_al_ob5_bench::ob5_frame_and_path_folds_compose ... ok
+test p3_b0_bench::independent_generator_matches_committed_fixture_bits ... ok
+test p3_b0_bench::order_shuffle_is_a_permutation ... ok
+test p3_b0_bench::run_decision ... ignored, P3 B0 decision repetition; run only by pnpm benchmark:p3-b0
+test p3_b0_bench::run_diagnostic ... ignored, P3 B0 diagnostic run; needs --cfg p3_b0_diag
+test p3_b0_spike_bench::run_spike_decision ... ignored, P3 B0 spike decision repetition; run only by pnpm benchmark:p3-b0-spike
+test p3_b0_spike_bench::run_spike_diagnostic ... ignored, P3 B0 spike diagnostic run; run only by pnpm benchmark:p3-b0-spike
+test p3_b0_spike_bench::run_spike_oracle ... ignored, P3 B0 spike oracle run; run only by pnpm benchmark:p3-b0-spike
+test p3_b0_spike_tests::emit_spike_fixtures ... ignored, SL-U2 hand-off; run with --ignored --exact --nocapture
+test p3_b0_spike_tests::ladder_falls_back_to_the_exact_rung_with_its_reason ... ok
+test native_cubic_fill_tests::tests::zero_line_triangle_matrix_preserves_normalized_geometry_and_original_identity ... ok
+test p3_b0_spike_tests::sl_defect_01_clearance_ge_without_r1_widening_is_detected ... ok
+test p3_b0_spike_tests::sl_defect_02_knot_errors_omitted_is_detected ... ok
+test p3_b0_spike_tests::s1_accessor_matches_published_output_on_small_paths ... ok
+test p3_b0_spike_tests::sl_defect_03_monotone_chords_only_is_detected ... ok
+test p3_b0_spike_tests::sl_defect_05_cone_inverted_is_detected ... ok
+test p3_b0_spike_tests::sl_defect_04_simplicity_only_is_detected ... ok
+test p3_b0_spike_tests::sl_defect_06_nesting_from_orientation_is_detected ... ok
+test p3_b0_spike_tests::sl_defect_07_flipped_triangle_is_detected ... ok
+test p3_b0_spike_tests::sl_defect_08_non_boundary_triangulated_is_detected ... ok
+test p3_b0_spike_tests::sl_defect_10_skip_two_apart_is_detected ... ok
+test p3_b0_spike_tests::sl_defect_09_scan_bound_without_radius_is_detected ... ok
+test p3_al_ob5_tests::ob5_fixture_matches_the_independent_generator ... ok
+test p3_b0_spike_tests::spike_corpus_ladder_is_allocation_free ... ignored, B0 corpus; needs P3_B0R_B0_CORPUS; run in the release profile
+test p3_b0_spike_tests::spike_corpus_s1_accessor_matches_published_output ... ignored, B0 corpus; needs P3_B0R_B0_CORPUS; run in the release profile
+test p3_b0_spike_tests::sl_f21a_full_run_is_recorded ... ok
+test p3_b0_spike_tests::spike_fixtures_match_their_literal_expectations ... ok
+test p3_b0r_identity::dump_native_digests ... ignored, B0R identity digests; run only by pnpm test:p3-fill-identity
+test p3_b0_spike_tests::stage_stops_return_after_their_stage ... ok
+test p3_b0r_identity::pre_rounded_failure_digest_ignores_stale_rounded_stats ... ok
+test p3_b0_spike_tests::sl_f13_b0_fixture_paths_take_the_fast_rung ... ok
+test p3_b0r_identity::sha256_matches_fips_180_known_answers ... ok
+test p3_b0r_identity::packed_fill_input_has_the_section_a_layout ... ok
+test p3_fill_ladder_bench::run_ladder_decision ... ignored, P3 Alt-A1 AL-S1 decision repetition; run only by pnpm benchmark:p3-fill-ladder
+test p3_fill_ladder_bench::run_ladder_oracle ... ignored, P3 Alt-A1 AL-S1 oracle run; run only by pnpm benchmark:p3-fill-ladder
+test p3_fill_ladder_bench::run_ladder_ratio ... ignored, P3 Alt-A1 AL-S2 native leg (AL-S1 ratio mode); run only by the AL-S2 runner
+test rounded_cubic_topology_tests::emit_rounded_cubic_topology ... ignored
+test rounded_cubic_topology_tests::rounded_closure_is_charged_and_later_capacity_precedes_earlier_minimum ... ok
+test p3_b0r_identity::topology_free_attempt_digest_ignores_stale_topology_stats ... ok
+test rounded_cubic_topology_tests::rounded_constructor_limits_and_retained_capacity_are_stable ... ok
+test rounded_cubic_topology_tests::rounded_depth_twenty_partition_uses_exact_restrictions ... ok
+test rounded_cubic_topology_tests::rounded_earlier_closure_consumes_declared_leaf_cap_before_later_projection ... ok
+test rounded_cubic_topology_tests::rounded_exact_triangle_and_four_copy_limits_are_inclusive ... ok
+test rounded_cubic_topology_tests::rounded_output_is_owned_and_caller_mutation_cannot_change_it ... ok
+test p3_fill_ladder_bench::frames_multi_path_inputs_and_folds_the_decoded_output ... ok
+test rounded_line_fill::tests::constructor_accounts_every_actual_capacity_and_zero_is_allocation_free ... ok
+test rounded_cubic_topology_tests::rounded_stationary_endpoint_tangents_allow_zero_coefficients_with_positive_sum ... ok
+test rounded_line_fill::tests::exact_square_builds_shared_mesh_and_boundary_ledger ... ok
+test rounded_line_fill::tests::invalid_tolerance_precedes_no_topology_work_and_clears_prior_output ... ok
+test rounded_line_fill::tests::nonrepresentable_window_search_is_exact_bounded_and_canonical ... ok
+test rounded_cubic_topology_tests::rounded_preflight_precedence_is_global_and_publication_recovers ... ok
+test rounded_line_fill_loop_tests::b0r_o11_fallback_and_size_guards ... ok
+test fill_export_tests::process_does_not_allocate_or_move_storage ... ok
+test rounded_line_fill_loop_tests::b0r_o11_merge_sort_compares_every_element ... ok
+test fill_sections_slab_tests::b0r_o1_smoke_t5_slab_sections ... ok
+test fill_sections_slab_tests::b0r_o8_t5_sentinel_identity_is_detected ... ok
+test fill_export_tests::b1_ring_exact_rung_also_admits ... ok
+test fill_sections_filter_tests::b0r_o1_smoke_section_sources ... ok
+test rounded_line_fill_loop_tests::b0r_oracle_full_o10_event_loops ... ignored, B0R O10 full size; release profile via pnpm test:p3-fill-identity
+test rounded_line_fill_loop_tests::b0r_oracle_full_o11_charge_lemmas ... ignored, B0R O11 full size; release profile via pnpm test:p3-fill-identity
+test rounded_line_fill_loop_tests::b0r_o8_lemma_d_without_minimum_is_detected ... ok
+test fill_export_tests::e8_fixtures_reach_their_e8_u1_status_through_the_export ... ok
+test rounded_line_fill_scan_tests::b0r_o11_scan_size_guard ... ok
+test rounded_line_fill_loop_tests::b0r_o11_smoke_lemma_d_sequences ... ok
+test rounded_line_fill_scan_tests::b0r_o11_smoke_scan_failure_points ... ok
+test fill_ladder_tests::al_u4b1_shared_subdivision_is_bit_identical_to_the_per_leaf_restrict ... ok
+test rounded_line_fill_scan_tests::b0r_o11_smoke_lookup_every_budget ... ok
+test rounded_line_fill_scan_tests::b0r_oracle_full_o10_scan_loops ... ignored, B0R O10 full size; release profile via pnpm test:p3-fill-identity
+test rounded_line_fill_scan_tests::b0r_oracle_full_o11_scan_loops ... ignored, B0R O11 full size; release profile via pnpm test:p3-fill-identity
+test rounded_line_fill_tests::constructor_byte_accounting_and_invalid_arithmetic_are_exact ... ok
+test rounded_line_fill_tests::emit_rounded_fill_meshes ... ignored
+test rounded_line_fill_loop_tests::b0r_o8_c1_outer_charge_short_is_detected ... ok
+test rounded_line_fill_tests::exact_adjacent_cluster_extremes_and_signed_zero_succeed ... ok
+test rounded_line_fill_tests::inclusive_record_output_and_work_limits_reject_one_below_atomically ... ok
+test rounded_line_fill_tests::independent_workspaces_keep_borrowed_publication_isolated ... ok
+test rounded_line_fill_tests::input_edge_and_pair_caps_are_independent_and_inclusive ... ok
+test rounded_line_fill_tests::invalid_input_tolerance_and_limit_precedence_clear_publication ... ok
+test rounded_line_fill_scan_tests::b0r_o8_l3_outer_charge_short_is_detected ... ok
+test rounded_line_fill_tests::zero_cap_workspace_accepts_empty_and_cancelled_fill_retains_proof_only ... ok
+test rounded_line_fill_tests::repeated_success_ambiguity_and_invalid_attempts_allocate_nothing ... ok
+test simple_cubic_topology::tests::all_knots_precede_every_projection_failure ... ok
+test simple_cubic_topology::tests::contour_and_cubic_count_limits_are_exact ... ok
+test simple_cubic_topology::tests::certify_is_allocation_free_and_workspaces_are_isolated ... ok
+test simple_cubic_topology::tests::earlier_implicit_closure_consumes_capacity_before_later_projection ... ok
+test simple_cubic_topology::tests::exact_depth_twenty_and_extreme_grid_widths_are_literal ... ok
+test simple_cubic_topology::tests::exact_square_certifies_owned_orientation_and_winding ... ok
+test simple_cubic_topology::tests::knot_mismatch_precedes_projection_and_copies_signed_zero_on_success ... ok
+test simple_cubic_topology::tests::limits_are_inclusive_and_byte_accounting_uses_actual_capacity ... ok
+test simple_cubic_topology::tests::malformed_ranges_nonfinite_values_and_provenance_are_distinct ... ok
+test simple_cubic_topology::tests::pair_and_leaf_caps_fail_before_excess_work ... ok
+test simple_cubic_topology::tests::depth_twenty_partition_certifies_with_bounded_leaf_and_pair_counts ... ok
+test simple_cubic_topology::tests::rounded_exact_storage_and_source_scratch_fit_frozen_byte_bounds ... ok
+test simple_cubic_topology::tests::rounded_extreme_grid_decode_and_dot_stay_within_fixed_width ... ok
+test simple_cubic_topology::tests::rounded_six_point_hull_uses_every_vertex_in_lexicographic_cycle ... ok
+test simple_cubic_topology::tests::stationary_endpoint_tangents_and_signed_zero_preserve_owned_points ... ok
+test rounded_line_fill_scan_tests::b0r_o8_l4_charge_short_is_detected ... ok
+test simple_cubic_topology::tests::validation_precedence_and_atomic_publication_are_stable ... ok
+test simple_cubic_topology_filter_tests::b0r_o2_decided_controls ... ok
+test simple_cubic_topology_filter_tests::b0r_o2_equal_points_use_identity ... ok
+test simple_cubic_topology_filter_tests::b0r_o2_closure_leaf_and_transverse_zero_generators_fall_back ... ok
+test simple_cubic_topology_filter_tests::b0r_o2_exactly_collinear_slope_third_falls_back ... ok
+test simple_cubic_topology_filter_tests::b0r_o2_extreme_magnitudes ... ok
+test simple_cubic_topology_filter_tests::b0r_o2_grid_unit_neighbours_fall_back ... ok
+test simple_cubic_topology_filter_tests::b0r_o2_one_ulp_perturbations_fall_back ... ok
+test simple_cubic_topology_filter_tests::b0r_o2_parallel_and_perpendicular_vectors_fall_back ... ok
+test simple_cubic_topology_filter_tests::b0r_o2_subnormal_coordinates_fall_back ... ok
+test simple_cubic_topology_filter_tests::b0r_oracle_full_o1_topology ... ignored, B0R O1 full size; release profile via pnpm test:p3-fill-identity
+test fill_ladder_tests::al_u4b3_fr5_boxes_once_decide_as_before ... ok
+test rounded_line_fill_loop_tests::b0r_o10_smoke_event_loops_random_scenes ... ok
+test rounded_line_fill_tests::frozen_rows_have_required_success_ambiguity_caps_and_determinism ... ok
+test rounded_line_fill_loop_tests::b0r_o11_smoke_lemma_c_and_loop_failure_points ... ok
+test rounded_line_fill_loop_tests::b0r_o8_l1_sorted_by_x_is_detected ... ok
+test rounded_line_fill_scan_tests::b0r_o10_smoke_scan_loops_random_scenes ... ok
+test fill_sections_slab_tests::b0r_o10_smoke_slab_shadow ... ok
+test simple_cubic_topology_sweep_tests::b0r_oracle_full_o3a_lemma_a ... ignored, B0R O3 full size; release profile via pnpm test:p3-fill-identity
+test simple_cubic_topology_sweep_tests::b0r_oracle_full_o3b_corpus_shadow ... ignored, B0R O3 full size; release profile via pnpm test:p3-fill-identity
+test simple_cubic_topology_sweep_tests::b0r_oracle_full_o3b_random_scenes ... ignored, B0R O3 full size; release profile via pnpm test:p3-fill-identity
+test simple_cubic_topology_tests::emit_simple_cubic_topology ... ignored
+test simple_cubic_topology_sweep_tests::b0r_o3a_smoke_lemma_a ... ok
+test stroke_band_tests::e2_d2_fold_predicate ... ok
+test stroke_band_tests::e2_d3_halved_chord_predicate ... ok
+test fill_sections_filter_tests::b0r_o10_smoke_rounded_fixture_shadow ... ok
+test stroke_band_tests::e2_k2_needs_the_full_cone_set ... ok
+test stroke_band_tests::e2_negative_zero_band_corner_cancels_against_a_hull_neighbour ... ok
+test stroke_band_tests::e2_s1_sample_outside_seam_and_side_edge_is_kept ... ok
+test simple_cubic_topology_sweep_tests::b0r_o3_lemma_b_counter_matches_reference_loop ... ok
+test stroke_band_tests::e2_d3_leaf_sets ... ok
+test stroke_cubic_tests::leaves_share_their_knot_triples_and_tile_their_range ... ok
+test stroke_cubic_tests::piece_points_after_an_input_limit_overflow ... ok
+test rounded_line_fill_loop_tests::b0r_o10_smoke_event_loops_fixture_rows ... ok
+test stroke_band_tests::e2_f4f_fold_control ... ok
+test stroke_cubic_tests::st_f16p_cusp_disk_at_production_limits ... ok
+test stroke_cubic_tests::st_f17_collinear_reversal_areas ... ok
+test stroke_cubic_tests::st_f18_stationary_start_tangent_and_membership ... ok
+test stroke_cubic_tests::st_f19_collinear_continuation_has_no_disk ... ok
+test stroke_cubic_tests::st_f20_the_s2_stationary_probes_are_ok ... ok
+test stroke_cubic_tests::st_g5_and_the_cubic_range_condition_are_numeric_range ... ok
+test stroke_cubic_tests::st_u4_cusp_knot_has_one_mirrored_triple ... ok
+test stroke_cubic_tests::st_u4_cusp_shared_triple_fixtures_are_ok ... ok
+test stroke_cubic_tests::st_u4_reversal_near_a_segment_end_is_depth_limited ... ok
+test stroke_cubic_tests::stationary_classification_is_exact ... ok
+test stroke_dump_tests::dump_escapes_case_names ... ok
+test stroke_dump_tests::dump_reads_its_input_and_frames_each_case ... ok
+test stroke_dump_tests::emit_stroke_dump ... ignored, ST-U3 oracle hand-off; needs P3_STROKE_INPUT and P3_STROKE_DUMP
+test stroke_early_abort_tests::e1_c1_differential_sweep ... ignored, ST-U10 differential sweep; needs P3_E1_CORPUS (tooling/p3-stroke-e1-corpus.mjs c1)
+test stroke_early_abort_tests::e1_corpus_reader_reads_the_input_format ... ok
+test simple_cubic_topology_sweep_tests::b0r_o3_candidate_set_matches_definition ... ok
+test stroke_cubic_tests::seeded_cubic_defects_fail_their_named_checks ... ok
+test rounded_line_fill_scan_tests::b0r_o10_smoke_scan_loops_fixture_rows ... ok
+test simple_cubic_topology_filter_tests::b0r_o1_smoke_topology_predicates ... ok
+test stroke_cubic_tests::st_f15_s2_families_ok_or_work_limit ... ok
+test stroke_early_abort_tests::e1_f6_chev_1_40625_is_unchanged ... ok
+test stroke_early_abort_tests::e1_f7_swept_path_fires ... ok
+test stroke_cubic_tests::deterministic_and_allocation_free_on_cubics ... ok
+test stroke_early_abort_tests::e1_fill_workspace_has_no_checkpoint ... ok
+test stroke_early_abort_tests::e1_f1_edges_1024_aborts_at_k1 ... ok
+test stroke_early_abort_tests::e1_k1_on_the_r5_merged_input ... ok
+test stroke_export_tests::capacity_retry_reports_the_exact_requirement ... ok
+test stroke_export_tests::dispose_is_terminal_and_idempotent ... ok
+test stroke_export_tests::empty_batch_publishes_header_only ... ok
+test stroke_export_tests::epochs_advance_once_per_mutation_and_exhaustion_fails_closed ... ok
+test stroke_export_tests::export_meshes_equal_the_workspace_and_their_fixture_areas ... ok
+test fill_sections_filter_tests::b0r_o10_smoke_random_scene_shadow ... ok
+test stroke_export_tests::heap_cap_is_checked_at_reserve ... ok
+test stroke_export_tests::identity_constants_match_section_7_1 ... ok
+test stroke_cubic_tests::st_f16_cusp_disk_under_wide_limits_and_the_production_node_limit ... ok
+test stroke_export_tests::p2_v1_verb_limit_paths_are_work_limit ... ok
+test stroke_early_abort_tests::e1_f2_edges_1024_wide_is_ok_and_identical ... ok
+test stroke_export_tests::process_does_not_allocate_or_move_storage ... ok
+test stroke_export_tests::request_echo_and_record_fields_are_little_endian ... ok
+test stroke_export_tests::input_framing_rejections_are_invalid_batch ... ok
+test stroke_export_tests::self_check_failure_is_internal_error_and_the_engine_recovers ... ok
+test stroke_export_tests::results_are_deterministic_and_position_independent ... ok
+test stroke_export_tests::status_mapping_rows_of_section_7_8 ... ok
+test stroke_export_tests::workspace_construction_failure_keeps_no_workspace_and_retries ... ok
+test stroke_export_tests::per_path_statuses_follow_the_stage_order ... ok
+test stroke_merge_tests::e2_d1_dropped_outside_sample_is_caught ... ok
+test stroke_export_tests::transport_caps_hold_at_limit_and_reject_limit_plus_one ... ok
+test stroke_merge_tests::e2_differential ... ignored, E2-U1 differential (E2-G1, E2-G2, E2-A4); release profile, --nocapture, one thread
+test stroke_merge_tests::e2_d4_skipped_clearance_is_caught ... ok
+test stroke_early_abort_tests::e1_f8_vertical_edges_fire_and_not_fire ... ok
+test stroke_merge_tests::e2_fixture_literals ... ok
+test stroke_merge_tests::e2_section_7_caps ... ok
+test stroke_merge_tests::e2_merge_is_deterministic_and_allocates_nothing ... ok
+test stroke_merge_tests::e2_u2_differential ... ignored, E2-U2 differential (E2-G1, E2-G2, E2-A4); release profile, --nocapture, one thread
+test stroke_merge_tests::e2_u3_differential ... ignored, E2-U3 differential r4 vs r7 (E2-G1, E2-G2, E2-A4, E2-A5); release, --nocapture, one thread
+test stroke_merge_tests::e2_storage_fits_the_heap_cap ... ok
+test stroke_outline_tests::arrangement_tolerance_is_a_quarter_of_the_curve_share ... ok
+test stroke_outline_tests::deterministic_and_batch_independent ... ok
+test stroke_outline_tests::disk_directions_and_count_rule ... ok
+test stroke_outline_tests::every_piece_is_positive_convex_and_hull_ordered ... ok
+test stroke_outline_tests::seeded_defects_fail_their_named_tests ... ok
+test stroke_outline_tests::source_caps_are_work_limits ... ok
+test stroke_outline_tests::st_f10_zero_length_segments_are_removed_before_joins ... ok
+test stroke_outline_tests::st_f11_closed_square_ignores_caps ... ok
+test stroke_outline_tests::st_f12_implicit_closing_edge_is_not_stroked ... ok
+test stroke_outline_tests::st_f13_forward_continuation_shares_the_triple ... ok
+test stroke_outline_tests::build_allocates_nothing ... ok
+test stroke_outline_tests::st_f14_overlaps_are_counted_once ... ok
+test stroke_outline_tests::st_f1_to_f3_caps_give_their_areas_and_bounds ... ok
+test stroke_outline_tests::st_f21_to_f24_thin_collapse_and_numeric_range ... ok
+test stroke_outline_tests::st_f25_miter_exactly_where_the_ratio_is_at_most_the_limit ... ok
+test stroke_outline_tests::st_f4_joins_give_their_areas_and_the_miter_tip ... ok
+test stroke_outline_tests::st_f5_exact_miter_predicate_on_the_ratio_five_quarters ... ok
+test stroke_outline_tests::st_f6_reversal_adds_no_miter_or_bevel_and_a_round_disk ... ok
+test stroke_outline_tests::st_f7_f8_f9_move_only_zero_length_and_collapsed ... ok
+test stroke_outline_tests::st_u3c_disk_vertices_share_the_sweep_offset_points ... ok
+test stroke_outline_tests::st_u3c_round_join_shared_vertex_fixtures_are_ok ... ok
+test stroke_outline_tests::st_u3d_near_direction_chevrons_are_ok_and_share_the_disk_vertices ... ok
+test stroke_outline_tests::st_u3d_share_factor_stays_inside_the_arc_margin ... ok
+test simple_cubic_topology_sweep_tests::b0r_o8_forced_pairs_not_marked_is_detected ... ok
+test stroke_outline_tests::st_u3e_exact_reversals_are_ok_and_share_one_triple ... ok
+test stroke_outline_tests::st_u3e_review_near_reversals_are_turns ... ok
+test stroke_outline_tests::st_u3f_chev_1_40625_is_a_known_topology_ambiguous_defect ... ok
+test stroke_outline_tests::st_u3e_mixed_and_seam_reversals_are_ok_and_share_one_triple ... ok
+test stroke_outline_tests::stage_order_and_value_statuses ... ok
+test stroke_outline_tests::stroke_v0_limits_fit_the_workspace_and_heap_caps ... ok
+test stroke_outline_tests::tip_guard_values ... ok
+test stroke_outline_tests::tip_guard_uses_the_actual_ratio ... ok
+test stroke_probe_tests::stroke_scaling_probe ... ignored, B2-Q8 ST-U3b scaling probe; release profile, --nocapture; diagnostic, not evidence
+test transverse_arrangement_tests::constructor_storage_and_byte_boundaries_are_owned_once ... ok
+test stroke_probe_tests::polylines_have_the_requested_segment_count ... ok
+test transverse_arrangement_tests::emit_transverse_arrangement ... ignored
+test transverse_arrangement_tests::direct_borrowed_pair_helper_covers_line_and_cubic_generator_counts ... ok
+test transverse_arrangement_tests::limits_precedence_closure_charge_and_rounded_capacity_are_frozen ... ok
+test transverse_pair_tests::frozen_sixty_rows_match_native_certificate_and_failure_precedence ... ok
+test transverse_arrangement_tests::success_failure_reset_copy_ownership_and_recovery_are_atomic ... ok
+test transverse_pair_tests::returned_copies_survive_later_input_changes_and_failures ... ok
+test triangle_free_arrangement_tests::emit_triangle_free_arrangement ... ignored
+test transverse_pair_tests::malformed_fixture_controls_reject ... ok
+test triangle_free_arrangement_tests::old_matching_modes_retain_all_multiple_partner_restrictions ... ok
+test triangle_free_arrangement_tests::triangle_free_alternates_with_old_modes_and_preserves_stationary_regression ... ok
+test triangle_free_arrangement_tests::triangle_free_lifecycle_is_atomic_allocation_free_and_isolated ... ok
+test triangle_free_arrangement_tests::triangle_free_limits_triangle_and_crossing_capacity_are_inclusive ... ok
+test triangle_free_arrangement_tests::triangle_free_preflight_kind_shape_and_knot_precedence_are_frozen ... ok
+test triangle_free_arrangement_tests::triangle_free_star_variants_preserve_crossing_order_and_ranges ... ok
+test stroke_export_tests::former_interim_cubics_are_ok_through_the_export ... ok
+test stroke_outline_tests::st_f26_current_cap_fixtures ... ok
+test stroke_early_abort_tests::e1_f4_edges_1024_bounds_guard ... ok
+test stroke_early_abort_tests::e1_f3_edges_1024_boundary_trio ... ok
+test stroke_merge_tests::e2_a5_family_b_meshes_cover_the_contour_region ... ok
+test stroke_early_abort_tests::e9_edges_1024_guard_equality_points ... ok
+test p3_al_ob5_tests::ob5_decision_sets_are_all_ok_on_rung_0_with_the_expected_counts ... ok
+test p3_al_ob5_tests::ob5_unsnapped_observation_records_status_and_rung_mix ... ok
+test simple_cubic_topology_sweep_tests::b0r_o3b_smoke_workspace_differential ... ok
+test stroke_early_abort_tests::e1_f5_node_limit_cases_are_unchanged ... ok
+test simple_cubic_topology_sweep_tests::b0r_o8_counter_off_by_one_is_detected ... ok
+test simple_cubic_topology_sweep_tests::b0r_o8_strict_box_overlap_is_detected ... ok
+test simple_cubic_topology_sweep_tests::b0r_o8_sorted_by_x_order_is_detected has been running for over 60 seconds
+test stroke_merge_tests::e2_fixture_table_and_lossless_merge ... ok
+test simple_cubic_topology_sweep_tests::b0r_o8_sorted_by_x_order_is_detected ... ok
+
+test result: ok. 526 passed; 0 failed; 69 ignored; 0 measured; 0 filtered out; finished in 86.92s
+
+   Doc-tests vector_studio_geometry_kernel
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+verified 260 native intersections and two corrupt-output controls
+> rustup.exe run 1.94.1 cargo build --manifest-path D:\GIT\vs-e11h\packages\geometry-wasm\kernel\Cargo.toml --locked --offline --release --target wasm32-unknown-unknown
+   Compiling vector-studio-geometry-kernel v0.0.0 (D:\GIT\vs-e11h\packages\geometry-wasm\kernel)
+    Finished `release` profile [optimized] target(s) in 11.47s
+> rustup.exe run 1.94.1 cargo build --manifest-path D:\GIT\vs-e11h\packages\geometry-wasm\kernel\Cargo.toml --locked --offline --release --target wasm32-unknown-unknown
+   Compiling vector-studio-geometry-kernel v0.0.0 (D:\GIT\vs-e11h\packages\geometry-wasm\kernel)
+    Finished `release` profile [optimized] target(s) in 11.85s
+WASM independent-build SHA-256: 58f26517603d0d599f187481c967832e3f6abea2eb53c738e5540b6200b4fd35
+> node.exe D:\GIT\vs-e11h\node_modules\vitest\vitest.mjs run --config vitest.geometry.config.ts
+
+ RUN  v4.1.11 D:/GIT/vs-e11h
+
+    Finished `release` profile [optimized] target(s) in 0.02s
+     Running unittests src\lib.rs (.tools\geometry-build\release\deps\vector_studio_geometry_kernel-57fa1f1e0e26e2c5.ex
+e)
+
+running 1 test
+p3-fill-ladder dump: 3 entries, 14579 bytes
+test fill_ladder_dump_tests::emit_fill_ladder_dump ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 594 filtered out; finished in 0.02s
+
+    Finished `release` profile [optimized] target(s) in 0.02s
+     Running unittests src\lib.rs (.tools\geometry-build\release\deps\vector_studio_geometry_kernel-57fa1f1e0e26e2c5.ex
+e)
+
+running 1 test
+p3-fill-ladder dump: 1 entries, 4366 bytes
+test fill_ladder_dump_tests::emit_fill_ladder_dump ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 594 filtered out; finished in 0.02s
+
+
+ Test Files  70 passed | 4 skipped (74)
+      Tests  1195 passed | 6 skipped (1201)
+   Start at  18:47:16
+   Duration  1556.98s (transform 5.62s, setup 0ms, import 25.66s, tests 1509.69s, environment 8ms)
+

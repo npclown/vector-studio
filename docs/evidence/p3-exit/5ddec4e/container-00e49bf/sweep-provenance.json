@@ -1,0 +1,12 @@
+{
+  "commit": "00e49bf20b3dcb08c459de335fe25bb2f8a0d8df",
+  "dirty": false,
+  "runId": "97b85e98",
+  "wasmSha256": "58f26517603d0d599f187481c967832e3f6abea2eb53c738e5540b6200b4fd35",
+  "corpusSha256": "7f4bb1c97b2358ef45d23fdcab31aadc35fe4e7d3d5de25ce1bea7a8203d721c",
+  "sceneSha256": "516855ad38c9e0fcfdc97449c5be11d3e70afb87eaedc98bb076da1ead1e6e0e",
+  "checkerSha256": "9065aca79827f1028ff00764053368b61cb15638fa8a005df0e42acf80f58ffb",
+  "batch": 32,
+  "node": "v24.15.0",
+  "os": "Linux 6.18.44-fc-v153 x64"
+}

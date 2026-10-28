@@ -1,0 +1,690 @@
+$ playwright test --config playwright.gpu.config.ts "--reporter=list,json"
+[WebServer] (node:6892) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:21084) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 116 tests using 1 worker
+
+(node:23108) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok   1 [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 1x, DPR 1 (2.6s)
+  ok   2 [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 1x, DPR 1.5 (2.4s)
+  ok   3 [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 1x, DPR 2 (2.2s)
+  ok   4 [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 4x, DPR 1 (2.1s)
+  ok   5 [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 4x, DPR 1.5 (2.2s)
+  ok   6 [chrome] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 4x, DPR 2 (2.2s)
+  ok   7 [chrome] › tests\gpu\e17-write-once.spec.ts:120:1 › E17-A5 fixtures: count at most 1, covered pixels counted once, 4x equals 1x (57.9s)
+  ok   8 [chrome] › tests\gpu\e17-write-once.spec.ts:226:3 › E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at 1x (1.6s)
+  ok   9 [chrome] › tests\gpu\e17-write-once.spec.ts:226:3 › E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at 4x (1.7s)
+  ok  10 [chrome] › tests\gpu\e3-a04-readback.spec.ts:73:1 › E3-U4 GPU model check and E3-PC12 (11.8m)
+  ok  11 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples1 dpr1 (17.7s)
+  ok  12 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples1 dpr1 (58.5s)
+  ok  13 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples1 dpr1.5 (7.4s)
+  ok  14 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples1 dpr1.5 (1.6m)
+  ok  15 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples1 dpr2 (11.7s)
+  ok  16 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples1 dpr2 (3.6m)
+  ok  17 [chrome] › tests\gpu\p1-primitives.spec.ts:149:3 › P1 latest-scene recovery samples1 (2.2s)
+  ok  18 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples4 dpr1 (4.8s)
+  ok  19 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples4 dpr1 (58.8s)
+  ok  20 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples4 dpr1.5 (7.5s)
+  ok  21 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples4 dpr1.5 (1.6m)
+  ok  22 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples4 dpr2 (17.1s)
+  ok  23 [chrome] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples4 dpr2 (8.6m)
+  ok  24 [chrome] › tests\gpu\p1-primitives.spec.ts:149:3 › P1 latest-scene recovery samples4 (2.5s)
+  ok  25 [chrome] › tests\gpu\p3-b2-strokes.spec.ts:177:5 › DPR 1 › P3 B2 stroke page screenshots at DPR 1 (UNVERIFIED precision) (12.1s)
+  ok  26 [chrome] › tests\gpu\p3-b2-strokes.spec.ts:177:5 › DPR 2 › P3 B2 stroke page screenshots at DPR 2 (UNVERIFIED precision) (6.2s)
+  ok  27 [chrome] › tests\gpu\p3-b2-strokes.spec.ts:177:5 › DPR 3 › P3 B2 stroke page screenshots at DPR 3 (UNVERIFIED precision) (5.5s)
+  ok  28 [chrome] › tests\gpu\p3-st-u6-stroke.spec.ts:38:3 › P3 ST-U6 stroke fixtures samples1 (UNVERIFIED precision) (5.8s)
+  ok  29 [chrome] › tests\gpu\p3-st-u6-stroke.spec.ts:38:3 › P3 ST-U6 stroke fixtures samples4 (UNVERIFIED precision) (6.3s)
+  ok  30 [chrome] › tests\gpu\p3-st-u7-joint.spec.ts:76:3 › P3 ST-U7 joint fixtures samples1 (UNVERIFIED precision) (17.7s)
+  ok  31 [chrome] › tests\gpu\p3-st-u7-joint.spec.ts:76:3 › P3 ST-U7 joint fixtures samples4 (UNVERIFIED precision) (17.4s)
+  ok  32 [chrome] › tests\gpu\p3-st-u7-joint.spec.ts:296:1 › P3 ST-U7 seeded defects fail their checks (UNVERIFIED precision) (10.6s)
+  ok  33 [chrome] › tests\gpu\p3-v3-mesh-smoke.spec.ts:36:3 › P3 V3c mesh smoke samples1 (UNVERIFIED precision) (17.7s)
+  ok  34 [chrome] › tests\gpu\p3-v3-mesh-smoke.spec.ts:36:3 › P3 V3c mesh smoke samples4 (UNVERIFIED precision) (17.3s)
+  ok  35 [chrome] › tests\gpu\p3-v4-paths.spec.ts:75:1 › P3 V4 path page screenshots (UNVERIFIED precision) (2.9s)
+  ok  36 [chrome] › tests\gpu\viz-v1-appearance.spec.ts:218:5 › DPR 1 › V-1 path appearance page at DPR 1 (UNVERIFIED precision) (28.8s)
+  ok  37 [chrome] › tests\gpu\viz-v1-appearance.spec.ts:218:5 › DPR 2 › V-1 path appearance page at DPR 2 (UNVERIFIED precision) (30.0s)
+  ok  38 [chrome] › tests\gpu\viz-v2-path-data.spec.ts:212:5 › DPR 1 › V-2 path-data page at DPR 1 (UNVERIFIED precision) (34.1s)
+  ok  39 [chrome] › tests\gpu\viz-v2-path-data.spec.ts:212:5 › DPR 2 › V-2 path-data page at DPR 2 (UNVERIFIED precision) (35.6s)
+  ok  40 [chrome] › tests\gpu\viz-v3-integration.spec.ts:96:5 › DPR 1 › V-3 A07 integration page at DPR 1 (UNVERIFIED precision) (50.3s)
+  ok  41 [chrome] › tests\gpu\viz-v3-integration.spec.ts:96:5 › DPR 2 › V-3 A07 integration page at DPR 2 (UNVERIFIED precision) (51.4s)
+  x   42 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 1 (288ms)
+(node:18276) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x   43 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 1.5 (357ms)
+(node:23048) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x   44 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 2 (331ms)
+(node:25456) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x   45 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 3 (403ms)
+(node:13236) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x   46 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 1 (378ms)
+(node:14440) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x   47 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 1.5 (390ms)
+(node:24040) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x   48 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 2 (336ms)
+(node:24128) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x   49 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 3 (347ms)
+(node:22452) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x   50 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 1 (344ms)
+(node:25596) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x   51 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 1.5 (335ms)
+(node:25592) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x   52 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 2 (341ms)
+(node:23268) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x   53 [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 3 (339ms)
+(node:12796) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  54 [chrome] › tests\gpu\foundation-experiments.spec.ts:175:5 › camera triangle at DPR 1 › preserves camera, shared-buffer, and pipeline-cache evidence through recovery (2.3s)
+  ok  55 [chrome] › tests\gpu\foundation-experiments.spec.ts:175:5 › camera triangle at DPR 1.5 › preserves camera, shared-buffer, and pipeline-cache evidence through recovery (1.7s)
+  ok  56 [chrome] › tests\gpu\foundation-experiments.spec.ts:175:5 › camera triangle at DPR 2 › preserves camera, shared-buffer, and pipeline-cache evidence through recovery (1.7s)
+  ok  57 [chrome] › tests\gpu\playground-dashboard.spec.ts:12:1 › captures a functional dashboard smoke artifact (1.6s)
+  ok  58 [chrome] › tests\gpu\webgpu-recovery.spec.ts:13:1 › surfaces validation error and recovers once after deliberate device destruction (1.2s)
+(node:16312) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  59 [edge] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 1x, DPR 1 (2.7s)
+  ok  60 [edge] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 1x, DPR 1.5 (8.2s)
+  ok  61 [edge] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 1x, DPR 2 (2.5s)
+  ok  62 [edge] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 4x, DPR 1 (2.5s)
+  ok  63 [edge] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 4x, DPR 1.5 (2.4s)
+  ok  64 [edge] › tests\gpu\e10-test-hooks.spec.ts:104:5 › E10-A7 controls at 4x, DPR 2 (2.3s)
+  ok  65 [edge] › tests\gpu\e17-write-once.spec.ts:120:1 › E17-A5 fixtures: count at most 1, covered pixels counted once, 4x equals 1x (46.4s)
+  ok  66 [edge] › tests\gpu\e17-write-once.spec.ts:226:3 › E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at 1x (1.6s)
+  ok  67 [edge] › tests\gpu\e17-write-once.spec.ts:226:3 › E17-A5 reset path: 511 mesh draws, rectangle A at ordinals 0, 255 and 510, at 4x (1.6s)
+  ok  68 [edge] › tests\gpu\e3-a04-readback.spec.ts:73:1 › E3-U4 GPU model check and E3-PC12 (9.6m)
+  ok  69 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples1 dpr1 (5.8s)
+  ok  70 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples1 dpr1 (1.2m)
+  ok  71 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples1 dpr1.5 (8.6s)
+  ok  72 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples1 dpr1.5 (1.9m)
+  ok  73 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples1 dpr2 (11.5s)
+  ok  74 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples1 dpr2 (2.5m)
+  ok  75 [edge] › tests\gpu\p1-primitives.spec.ts:149:3 › P1 latest-scene recovery samples1 (2.0s)
+  ok  76 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples4 dpr1 (4.1s)
+  ok  77 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples4 dpr1 (48.4s)
+  ok  78 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples4 dpr1.5 (6.8s)
+  ok  79 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples4 dpr1.5 (8.4m)
+  ok  80 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 visual samples4 dpr2 (9.1s)
+  ok  81 [edge] › tests\gpu\p1-primitives.spec.ts:56:7 › P1 precision samples4 dpr2 (2.3m)
+  ok  82 [edge] › tests\gpu\p1-primitives.spec.ts:149:3 › P1 latest-scene recovery samples4 (1.8s)
+  ok  83 [edge] › tests\gpu\p3-b2-strokes.spec.ts:177:5 › DPR 1 › P3 B2 stroke page screenshots at DPR 1 (UNVERIFIED precision) (8.8s)
+  ok  84 [edge] › tests\gpu\p3-b2-strokes.spec.ts:177:5 › DPR 2 › P3 B2 stroke page screenshots at DPR 2 (UNVERIFIED precision) (4.4s)
+  ok  85 [edge] › tests\gpu\p3-b2-strokes.spec.ts:177:5 › DPR 3 › P3 B2 stroke page screenshots at DPR 3 (UNVERIFIED precision) (4.0s)
+  ok  86 [edge] › tests\gpu\p3-st-u6-stroke.spec.ts:38:3 › P3 ST-U6 stroke fixtures samples1 (UNVERIFIED precision) (3.7s)
+  ok  87 [edge] › tests\gpu\p3-st-u6-stroke.spec.ts:38:3 › P3 ST-U6 stroke fixtures samples4 (UNVERIFIED precision) (3.9s)
+  ok  88 [edge] › tests\gpu\p3-st-u7-joint.spec.ts:76:3 › P3 ST-U7 joint fixtures samples1 (UNVERIFIED precision) (12.7s)
+  ok  89 [edge] › tests\gpu\p3-st-u7-joint.spec.ts:76:3 › P3 ST-U7 joint fixtures samples4 (UNVERIFIED precision) (13.0s)
+  ok  90 [edge] › tests\gpu\p3-st-u7-joint.spec.ts:296:1 › P3 ST-U7 seeded defects fail their checks (UNVERIFIED precision) (7.5s)
+  ok  91 [edge] › tests\gpu\p3-v3-mesh-smoke.spec.ts:36:3 › P3 V3c mesh smoke samples1 (UNVERIFIED precision) (10.2s)
+  ok  92 [edge] › tests\gpu\p3-v3-mesh-smoke.spec.ts:36:3 › P3 V3c mesh smoke samples4 (UNVERIFIED precision) (10.0s)
+  ok  93 [edge] › tests\gpu\p3-v4-paths.spec.ts:75:1 › P3 V4 path page screenshots (UNVERIFIED precision) (2.4s)
+  ok  94 [edge] › tests\gpu\viz-v1-appearance.spec.ts:218:5 › DPR 1 › V-1 path appearance page at DPR 1 (UNVERIFIED precision) (24.7s)
+  ok  95 [edge] › tests\gpu\viz-v1-appearance.spec.ts:218:5 › DPR 2 › V-1 path appearance page at DPR 2 (UNVERIFIED precision) (25.1s)
+  ok  96 [edge] › tests\gpu\viz-v2-path-data.spec.ts:212:5 › DPR 1 › V-2 path-data page at DPR 1 (UNVERIFIED precision) (28.8s)
+  ok  97 [edge] › tests\gpu\viz-v2-path-data.spec.ts:212:5 › DPR 2 › V-2 path-data page at DPR 2 (UNVERIFIED precision) (29.6s)
+  ok  98 [edge] › tests\gpu\viz-v3-integration.spec.ts:96:5 › DPR 1 › V-3 A07 integration page at DPR 1 (UNVERIFIED precision) (48.1s)
+  ok  99 [edge] › tests\gpu\viz-v3-integration.spec.ts:96:5 › DPR 2 › V-3 A07 integration page at DPR 2 (UNVERIFIED precision) (48.8s)
+  x  100 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 1 (212ms)
+(node:8348) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  101 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 1.5 (342ms)
+(node:6764) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  102 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 2 (362ms)
+(node:17880) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  103 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 3 (416ms)
+(node:11484) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  104 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 1 (435ms)
+(node:24836) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  105 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 1.5 (327ms)
+(node:22984) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  106 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 2 (345ms)
+(node:13040) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  107 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 3 (420ms)
+(node:23992) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  108 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 1 (360ms)
+(node:2748) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  109 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 1.5 (367ms)
+(node:23632) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  110 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 2 (364ms)
+(node:24928) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  111 [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 3 (342ms)
+(node:23900) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 112 [edge] › tests\gpu\foundation-experiments.spec.ts:175:5 › camera triangle at DPR 1 › preserves camera, shared-buffer, and pipeline-cache evidence through recovery (1.8s)
+  ok 113 [edge] › tests\gpu\foundation-experiments.spec.ts:175:5 › camera triangle at DPR 1.5 › preserves camera, shared-buffer, and pipeline-cache evidence through recovery (1.3s)
+  ok 114 [edge] › tests\gpu\foundation-experiments.spec.ts:175:5 › camera triangle at DPR 2 › preserves camera, shared-buffer, and pipeline-cache evidence through recovery (1.3s)
+  ok 115 [edge] › tests\gpu\playground-dashboard.spec.ts:12:1 › captures a functional dashboard smoke artifact (1.2s)
+  ok 116 [edge] › tests\gpu\webgpu-recovery.spec.ts:13:1 › surfaces validation error and recovers once after deliberate device destruction (935ms)
+
+
+  1) [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 1 ──────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-fringe-1x-dpr-1-chrome\error-context.md
+
+  2) [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 1.5 ────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-fringe-1x-dpr-1-5-chrome\error-context.md
+
+  3) [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 2 ──────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-fringe-1x-dpr-2-chrome\error-context.md
+
+  4) [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 3 ──────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-fringe-1x-dpr-3-chrome\error-context.md
+
+  5) [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 1 ──────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-fringe-4x-dpr-1-chrome\error-context.md
+
+  6) [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 1.5 ────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-fringe-4x-dpr-1-5-chrome\error-context.md
+
+  7) [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 2 ──────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-fringe-4x-dpr-2-chrome\error-context.md
+
+  8) [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 3 ──────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-fringe-4x-dpr-3-chrome\error-context.md
+
+  9) [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 1 ────────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-msaa-4x-dpr-1-chrome\error-context.md
+
+  10) [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 1.5 ─────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-msaa-4x-dpr-1-5-chrome\error-context.md
+
+  11) [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 2 ───────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-msaa-4x-dpr-2-chrome\error-context.md
+
+  12) [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 3 ───────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-msaa-4x-dpr-3-chrome\error-context.md
+
+  13) [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 1 ───────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-fringe-1x-dpr-1-edge\error-context.md
+
+  14) [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 1.5 ─────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-fringe-1x-dpr-1-5-edge\error-context.md
+
+  15) [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 2 ───────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-fringe-1x-dpr-2-edge\error-context.md
+
+  16) [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 3 ───────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-fringe-1x-dpr-3-edge\error-context.md
+
+  17) [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 1 ───────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-fringe-4x-dpr-1-edge\error-context.md
+
+  18) [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 1.5 ─────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-fringe-4x-dpr-1-5-edge\error-context.md
+
+  19) [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 2 ───────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-fringe-4x-dpr-2-edge\error-context.md
+
+  20) [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 3 ───────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-fringe-4x-dpr-3-edge\error-context.md
+
+  21) [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 1 ─────────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-msaa-4x-dpr-1-edge\error-context.md
+
+  22) [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 1.5 ───────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-msaa-4x-dpr-1-5-edge\error-context.md
+
+  23) [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 2 ─────────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-msaa-4x-dpr-2-edge\error-context.md
+
+  24) [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 3 ─────────────────
+
+    Error: run pnpm viz-v4:expected first (section 5.1)
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      73 |         'E3 section 5.5: no kernel run on corpus cases before the a04-corpus/v1 freeze record',
+      74 |       );
+    > 75 |       expect(existsSync(expectedPath), 'run pnpm viz-v4:expected first (section 5.1)').toBe(true);
+         |                                                                                        ^
+      76 |       const expected = JSON.parse(readFileSync(expectedPath, 'utf8')) as Expected;
+      77 |       expect(expected.subsetKeysSha256).toBe(summarizeA08Subset(subset).keysSha256);
+      78 |       const wasmBytes = new Uint8Array(readFileSync(wasmPath));
+        at D:\GIT\vs-e11g\tests\gpu\viz-v4-a08-corpus.spec.ts:75:88
+
+    Error Context: test-results\gpu\viz-v4-a08-corpus-A08-corpus-msaa-4x-dpr-3-edge\error-context.md
+
+  Slow test file: [chrome] › tests\gpu\p1-primitives.spec.ts (18.6m)
+  Slow test file: [edge] › tests\gpu\p1-primitives.spec.ts (17.9m)
+  Slow test file: [chrome] › tests\gpu\e3-a04-readback.spec.ts (11.8m)
+  Slow test file: [edge] › tests\gpu\e3-a04-readback.spec.ts (9.6m)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  24 failed
+    [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 1 ───────────────
+    [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 1.5 ─────────────
+    [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 2 ───────────────
+    [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 3 ───────────────
+    [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 1 ───────────────
+    [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 1.5 ─────────────
+    [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 2 ───────────────
+    [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 3 ───────────────
+    [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 1 ─────────────────
+    [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 1.5 ───────────────
+    [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 2 ─────────────────
+    [chrome] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 3 ─────────────────
+    [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 1 ─────────────────
+    [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 1.5 ───────────────
+    [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 2 ─────────────────
+    [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-1x dpr 3 ─────────────────
+    [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 1 ─────────────────
+    [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 1.5 ───────────────
+    [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 2 ─────────────────
+    [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus fringe-4x dpr 3 ─────────────────
+    [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 1 ───────────────────
+    [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 1.5 ─────────────────
+    [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 2 ───────────────────
+    [edge] › tests\gpu\viz-v4-a08-corpus.spec.ts:69:5 › A08 corpus msaa-4x dpr 3 ───────────────────
+  92 passed (1.2h)
+[ELIFECYCLE] Command failed with exit code 1.

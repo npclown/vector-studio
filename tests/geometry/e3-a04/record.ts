@@ -56,8 +56,24 @@ export type Aggregate = {
 /** `PASS with disclosure`: PASS but for cases in the known classes of section 21. */
 export type Verdict = 'PASS' | 'PASS with disclosure' | 'FAIL' | 'UNVERIFIED';
 
-/** Section 21: the known classes A04 discloses instead of counting (E11 section 7.2). */
-export type KnownClass = 'collapsed-feature' | 'far-vertices' | 'degenerate-stroke-triangle';
+/**
+ * Section 21: the known classes A04 discloses instead of counting (E11 section 7.2), and the two
+ * E20 adds (d9-e20-a04-remedies-contract.md, E20-K5 and K7).
+ */
+export type KnownClass =
+  | 'collapsed-feature'
+  | 'far-vertices'
+  | 'degenerate-stroke-triangle'
+  | 'oracle-work-cap'
+  | 'sub-pixel-collapse';
+
+const KNOWN_CLASSES: readonly KnownClass[] = [
+  'collapsed-feature',
+  'far-vertices',
+  'degenerate-stroke-triangle',
+  'oracle-work-cap',
+  'sub-pixel-collapse',
+];
 
 export type A04Record = Readonly<{
   schema: typeof A04_RECORD_SCHEMA;
@@ -202,7 +218,8 @@ const FAR_VERTEX_REASONS: ReadonlySet<string> = new Set(['beta ≥ 1 px', 'clip 
 
 /**
  * Section 21: the known class of a FAIL or UNDECIDED row, or null. Each test is mechanical on
- * the row: no judgment of the case's geometry enters.
+ * the row: no judgment of the case's geometry enters. The classes of section 21 take precedence
+ * over E20's, so a row they disclosed stays where it was.
  */
 export function knownClassOf(row: HarnessRow): KnownClass | null {
   if (row.status !== 'fail' && row.status !== 'undecided') return null;
@@ -214,20 +231,34 @@ export function knownClassOf(row: HarnessRow): KnownClass | null {
     !C4_OVERLAP_ROWS.has(row.id.split('/')[1] ?? '')
   )
     return 'collapsed-feature';
-  if (row.status !== 'undecided') return null;
+  if (row.status !== 'undecided') {
+    // E20-K7: a fill whose drawn mesh collapses entirely (M* empty) under a sub-pixel R. A row
+    // without the field (carried from before E20) is not in the class.
+    const c = row.collapse;
+    return row.paint === 'fill' &&
+      c !== undefined &&
+      c.triangles > 0 &&
+      row.noFlip !== null &&
+      row.noFlip.collapsed === row.noFlip.checked &&
+      c.regionWidth < 1 &&
+      c.regionHeight < 1
+      ? 'sub-pixel-collapse'
+      : null;
+  }
   if (row.reason !== null && FAR_VERTEX_REASONS.has(row.reason)) return 'far-vertices';
   if (row.paint === 'stroke' && row.flipTolerant?.reason === 'zero-area triangle off M*')
     return 'degenerate-stroke-triangle';
+  // E20-K5 (Q3 (a)): the frozen oracle stopped at its measurement work cap.
+  if (row.reason !== null && row.reason.startsWith('work cap:')) return 'oracle-work-cap';
   return null;
 }
 
 /** Section 21: the FAIL and UNDECIDED case ids per known class, in row order. */
 export function disclosedCases(rows: readonly HarnessRow[]): Record<KnownClass, string[]> {
-  const out: Record<KnownClass, string[]> = {
-    'collapsed-feature': [],
-    'far-vertices': [],
-    'degenerate-stroke-triangle': [],
-  };
+  const out = Object.fromEntries(KNOWN_CLASSES.map((k) => [k, [] as string[]])) as Record<
+    KnownClass,
+    string[]
+  >;
   for (const r of rows) {
     const k = knownClassOf(r);
     if (k !== null) out[k].push(r.id);
@@ -303,13 +334,32 @@ export function buildRecord(
   };
 }
 
+/** The bound fields of a row, which JSON cannot hold as `+∞` (E20-K8). */
+const BOUND_FIELDS = ['eLo', 'eHi', 'u', 'l'] as const;
+
+/**
+ * A row read back from JSON (E20-K8): `"Infinity"` and `"-Infinity"` in a bound field become
+ * numbers again. Rows written before E20 hold `null` there and stay as they are.
+ */
+export function reviveRow(row: HarnessRow): HarnessRow {
+  let out: HarnessRow | null = null;
+  for (const k of BOUND_FIELDS) {
+    const v = row[k] as unknown;
+    if (v === 'Infinity' || v === '-Infinity')
+      out = { ...(out ?? row), [k]: v === 'Infinity' ? Infinity : -Infinity };
+  }
+  return out ?? row;
+}
+
 /**
  * E3-A7: the validator. It reconciles the rows with the corpus ids (by index), recomputes the
  * aggregates, the coverage and the verdict, and checks each row's status against its bounds.
  * `corpusIds` is the corpus's id list in generation order. Returns the problems found.
  */
-export function validateRecord(record: A04Record, corpusIds: readonly string[]): string[] {
+export function validateRecord(input: A04Record, corpusIds: readonly string[]): string[] {
   const problems: string[] = [];
+  // E20-K8: both forms of +∞ are accepted, in any record.
+  const record: A04Record = { ...input, rows: input.rows.map(reviveRow) };
   if (record.schema !== A04_RECORD_SCHEMA) problems.push(`schema ${String(record.schema)}`);
   if (record.selection.corpusCases !== corpusIds.length)
     problems.push(

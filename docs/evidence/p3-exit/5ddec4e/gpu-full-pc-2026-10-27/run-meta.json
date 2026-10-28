@@ -1,0 +1,104 @@
+{
+  "schema": "e11-u3-headed-transfer-meta/1",
+  "label": "E11-U3 A07 literal re-run: full pnpm test:gpu PC run (VZ3-A17 / A07) on the exit snapshot plus the A08 expected-status list",
+  "commit": "dae5de944dd442ae297e9d0ef57260bc1e2d2978",
+  "commitNote": "dae5de9 = 00e49bf (exit snapshot record at 5ddec4e) + tests/visual/viz-v4/a08-expected-status.json; branch claude/eng-e11-u3-a07-rerun, do not merge",
+  "worktree": "D:\\GIT\\vs-e11r",
+  "worktreeHeadAtRun": "dae5de944dd442ae297e9d0ef57260bc1e2d2978",
+  "cleanTree": {
+    "beforeInstall": "git status --porcelain empty (2026-10-27T02:32:40Z)",
+    "beforeGpuRun": "git status --porcelain empty (2026-10-27T02:58:04Z)",
+    "afterGpuRun": "git status --porcelain empty (2026-10-27T07:31:07Z)",
+    "beforeTransferCommit": "git status --porcelain empty (checked 2026-10-27T15:20Z before creating the transfer branch)"
+  },
+  "toolchain": {
+    "node": "v24.15.0 (%USERPROFILE%\\.tools\\node-v24.15.0-win-x64, first on PATH)",
+    "pnpm": "11.1.2 via the node 24.15.0 corepack; a pnpm.cmd shim on PATH routed every pnpm call, including the Playwright webServer, to the same node",
+    "cargoHome": "D:\\GIT\\vector-studio\\.tools\\rust\\cargo",
+    "rustupHome": "D:\\GIT\\vector-studio\\.tools\\rust\\rustup"
+  },
+  "steps": {
+    "install": { "command": "pnpm install --frozen-lockfile", "exit": 0 },
+    "build": { "command": "pnpm build", "exit": 0 },
+    "testGeometry": {
+      "command": "pnpm test:geometry",
+      "exit": 0,
+      "wall": "00:25:12.88",
+      "wasmIndependentBuildSha256": "58f26517603d0d599f187481c967832e3f6abea2eb53c738e5540b6200b4fd35",
+      "rust": { "passed": 526, "failed": 0, "ignored": 69 },
+      "vitest": {
+        "files": { "passed": 70, "skipped": 4, "total": 74 },
+        "tests": { "passed": 1195, "failed": 0, "skipped": 6, "total": 1201 }
+      }
+    },
+    "gpu": {
+      "command": "pnpm test:gpu --reporter=list,json",
+      "specFilter": "none (every spec in playwright.gpu.config.ts, projects chrome and edge)",
+      "env": { "PLAYWRIGHT_JSON_OUTPUT_NAME": "D:\\GIT\\vs-e11r\\.tools\\e11-gpu-full\\results.json" },
+      "exit": 1,
+      "playwrightProcesses": 1,
+      "workers": 1,
+      "retries": 0,
+      "timeoutsChanged": false,
+      "startUtc": "2026-10-27T02:58:05.064Z",
+      "endUtc": "2026-10-27T07:31:07.716Z",
+      "wall": "04:33:02.65",
+      "playwrightDurationMs": 16381187.871,
+      "stats": { "expected": 115, "unexpected": 1, "flaky": 0, "skipped": 0 },
+      "perSpec": {
+        "e10-test-hooks.spec.ts": { "chrome": [6, 0, 0], "edge": [6, 0, 0] },
+        "e17-write-once.spec.ts": { "chrome": [3, 0, 0], "edge": [3, 0, 0] },
+        "e3-a04-readback.spec.ts": { "chrome": [1, 0, 0], "edge": [1, 0, 0] },
+        "foundation-experiments.spec.ts": { "chrome": [3, 0, 0], "edge": [3, 0, 0] },
+        "p1-primitives.spec.ts": { "chrome": [14, 0, 0], "edge": [14, 0, 0] },
+        "p3-b2-strokes.spec.ts": { "chrome": [3, 0, 0], "edge": [3, 0, 0] },
+        "p3-st-u6-stroke.spec.ts": { "chrome": [2, 0, 0], "edge": [2, 0, 0] },
+        "p3-st-u7-joint.spec.ts": { "chrome": [3, 0, 0], "edge": [3, 0, 0] },
+        "p3-v3-mesh-smoke.spec.ts": { "chrome": [2, 0, 0], "edge": [2, 0, 0] },
+        "p3-v4-paths.spec.ts": { "chrome": [1, 0, 0], "edge": [1, 0, 0] },
+        "playground-dashboard.spec.ts": { "chrome": [1, 0, 0], "edge": [1, 0, 0] },
+        "viz-v1-appearance.spec.ts": { "chrome": [2, 0, 0], "edge": [2, 0, 0] },
+        "viz-v2-path-data.spec.ts": { "chrome": [2, 0, 0], "edge": [2, 0, 0] },
+        "viz-v3-integration.spec.ts": { "chrome": [1, 1, 0], "edge": [2, 0, 0] },
+        "viz-v4-a08-corpus.spec.ts": { "chrome": [12, 0, 0], "edge": [12, 0, 0] },
+        "webgpu-recovery.spec.ts": { "chrome": [1, 0, 0], "edge": [1, 0, 0] },
+        "format": "[passed, failed, skipped]"
+      },
+      "failures": {
+        "spec": "tests/gpu/viz-v3-integration.spec.ts:96",
+        "count": 1,
+        "cases": "[chrome] DPR 1 > V-3 A07 integration page at DPR 1 (UNVERIFIED precision)",
+        "error": "Test timeout of 1800000ms exceeded. / Error: page.evaluate: Target page, context or browser has been closed (at hook, viz-v3-integration.spec.ts:121, called from :807)",
+        "durationMs": 1800038,
+        "kind": "timeout at the 30 min test limit; the same case passed in edge in 23.7 min and chrome DPR 2 passed in 49.0 s after the browser relaunch (chrome pid 8336 -> 7340)",
+        "partialArtifacts": "artifacts/viz-v3-integration/2026-10-27T03-18-36-953Z-8336/chrome/dpr1 (17 files, written before the timeout)",
+        "rerun": "none in this run"
+      }
+    }
+  },
+  "environment": {
+    "os": "Windows 11 Pro 10.0.26200",
+    "timezone": "Korea Standard Time",
+    "cpu": "AMD Ryzen 7 3700X, 8 cores, 16 logical",
+    "ramGB": 31.9,
+    "gpu": "NVIDIA GeForce GTX 1660 SUPER",
+    "gpuDriver": "32.0.16.1088 (2026-07-22), from Win32_VideoController",
+    "webgpuAdapter": { "vendor": "nvidia", "architecture": "turing", "description": "" },
+    "browsers": { "chrome": "155.0.8059.85", "edge": "156.0.4314.42", "source": "spec records" },
+    "dprs": "per spec as recorded: p1.5 1/1.5/2, p3-b2-strokes 1/2/3, viz-v1/v2/v3 1/2, viz-v4-a08-corpus 1/1.5/2/3",
+    "launchFlags": ["--enable-unsafe-webgpu"],
+    "headed": true,
+    "buildMode": "development (Vite dev server 127.0.0.1:4175)",
+    "viewportCss": "800x500 (config default)",
+    "overhead": "no DevTools or screen recording; trace retain-on-failure",
+    "concurrentLoad": "not recorded for this run; other threads' worktrees (D:\\GIT\\vs-a08, D:\\GIT\\vs-e3-rerun) were active on the same PC on 2026-10-27"
+  },
+  "contents": {
+    "results.json": "Playwright JSON reporter output",
+    "logs": ["e11r-install.log", "e11r-build.log", "e11r-geom.log", "e11r-gpu.log", "e11r-state.log (HEAD/status checks, exits, UTC start/end)"],
+    "artifacts": "artifacts/<spec>/<ISO timestamp>-<pid>/...; chrome pid 8336 then 7340 after the viz-v3 DPR 1 timeout, edge pid 15700",
+    "p1.5": "not committed; p1.5-manifest.txt lists every file under artifacts/p1.5 as '<git blob SHA-1> <size bytes> <path>'",
+    "testResults": "not committed: test-results/gpu (Playwright outputDir) matches .gitignore test-results/",
+    "excludedOther": "artifacts/viz-v3-integration/packer-churn and artifacts/p3-st-u7-real-ports (written by test:geometry, not by the GPU run)"
+  }
+}

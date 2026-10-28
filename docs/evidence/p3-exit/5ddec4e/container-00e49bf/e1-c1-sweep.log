@@ -1,0 +1,13 @@
+> P3_E1_CORPUS=<e1-c1.txt sha256 5294066523814ce66546b0629eeb15aa4084750d17b7309d5ec10bfb9aa14af9> rustup run 1.94.1 cargo test --release --lib e1_ -- --ignored --nocapture  (commit 00e49bf20b3dcb08c459de335fe25bb2f8a0d8df, porcelain: '')
+rustc 1.94.1 (e408947bf 2026-03-25)
+    Finished `release` profile [optimized] target(s) in 1.95s
+     Running unittests src/lib.rs (target/release/deps/vector_studio_geometry_kernel-3df388e373c82561)
+
+running 1 test
+test stroke_early_abort_tests::e1_c1_differential_sweep has been running for over 60 seconds
+E1-C1 sweep: 1195 cases, SweepTally { cases: 1195, reaching: 288, runs: 10568, fired_small: 58, fired_large: 789, blocked: 345, boundary_blocked: 288, contributor_blocked: 57, vertical_reaching: 57, exact_checks: 4606 }
+test stroke_early_abort_tests::e1_c1_differential_sweep ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 594 filtered out; finished in 160.39s
+
+EXIT 0
