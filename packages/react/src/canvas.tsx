@@ -9,6 +9,8 @@ import { useEditor } from './context.js';
 // globals at import time, and the WebGPU backend stays a host choice. M2-U1 (MVP M2 contract,
 // M2-I4): wheel, middle button, key-up, double-click and pointercancel input, the viewport
 // size, event-time camera mapping and the blur reset; the mapping lives in canvas-input.ts.
+// M2-U6 (section 6): DOM copy, cut and paste on the focused canvas, and the system clipboard
+// write of the bound clipboard actions.
 
 /** What a host factory returns: the renderer to attach, and how to release it. */
 export type RendererHandle = Readonly<{
@@ -64,6 +66,8 @@ export function EditorCanvas({
         editor,
         () => heightRef.current,
         () => canvasRef.current,
+        // Read at use, so importing this module touches no browser global.
+        () => (typeof navigator === 'undefined' ? undefined : navigator.clipboard),
       ),
     [editor],
   );
@@ -74,8 +78,8 @@ export function EditorCanvas({
 
   useEffect(() => syncViewportSize(editor, width, height), [editor, width, height]);
 
-  // Wheel, the canvas blur and the window blur (canvas-input.ts). The canvas is the focus
-  // target; focus moving within it is not a blur.
+  // Wheel, the canvas blur, the clipboard events and the window blur (canvas-input.ts). The
+  // canvas is the focus target; focus moving within it is not a blur.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas === null) return;

@@ -592,6 +592,9 @@ describe('M2-A01 EditorCanvas wiring (M2-I4)', () => {
     expect(canvas.listeners.map(({ type, options }) => [type, options])).toEqual([
       ['wheel', { passive: false }],
       ['blur', undefined],
+      ['copy', undefined],
+      ['cut', undefined],
+      ['paste', undefined],
     ]);
     expect(view.listeners.map(({ type }) => type)).toEqual(['blur']);
     let prevented = false;

@@ -505,7 +505,11 @@ describe('M2-A11 layers and setKeymap', () => {
       '/bindings/1/chord',
     ],
     ['an unknown action', [{ chord: 'X', action: 'explode' }], '/bindings/0/action'],
-    ['a later unit’s action', [{ chord: 'X', action: 'paste' }], '/bindings/0/action'],
+    [
+      'a command type that is not an action',
+      [{ chord: 'X', action: 'nudgeNodes' }],
+      '/bindings/0/action',
+    ],
     ['an unregistered command', [{ chord: 'X', action: 'ext.none' }], '/bindings/0/action'],
     ['a non-string action', [{ chord: 'X', action: 3 }], '/bindings/0/action'],
     ['a missing action', [{ chord: 'X' }], '/bindings/0/action'],

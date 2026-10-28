@@ -37,6 +37,13 @@ export type EditContext = Readonly<{
    * rules from its state there, so each update is independent of the ones before it.
    */
   resizeBase?: DocumentV2;
+  /**
+   * The session state `paste` reads (M2 contract, section 6): the in-memory clipboard, used when
+   * the command has no `text`, and the scope and selection that pick its target parent.
+   */
+  clipboard?: string | null;
+  scope?: string | null;
+  selection?: readonly string[];
 }>;
 
 export const ID_ATTEMPTS = 1000;
@@ -119,6 +126,40 @@ export function isPoint(value: unknown): value is PagePoint {
     typeof point.y === 'number' &&
     Number.isFinite(point.y)
   );
+}
+
+/**
+ * `count` placeholder IDs (`pending-1`, `pending-2`, ...) that no page or node of `document` has,
+ * for the trial build a creating command checks before it draws any ID (M2 contract, S8).
+ */
+export function placeholderIds(document: DocumentV2, count: number): string[] {
+  const placeholders: string[] = [];
+  for (let n = 1; placeholders.length < count; n += 1) {
+    const id = `${PENDING_ID}-${n}`;
+    if (!document.pages.some((page) => page.id === id) && !Object.hasOwn(document.nodes, id)) {
+      placeholders.push(id);
+    }
+  }
+  return placeholders;
+}
+
+/**
+ * A trial failure whose path lies inside node `from[i]` reported at node `to[i]` instead, the
+ * rest of the path kept; any other failure is returned as is.
+ */
+export function remapFailure(
+  failure: Failure,
+  from: readonly string[],
+  to: readonly string[],
+): Failure {
+  const path = failure.path;
+  for (let i = 0; path !== undefined && i < from.length; i += 1) {
+    const prefix = nodePath(from[i]!);
+    if (path === prefix || path.startsWith(`${prefix}/`)) {
+      return fail(failure.code, nodePath(to[i]!) + path.slice(prefix.length));
+    }
+  }
+  return failure;
 }
 
 /**

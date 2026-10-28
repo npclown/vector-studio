@@ -18,7 +18,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | V-6 | V-1 and V-3 review follow-ups (status crediting, zoom clear, field validity, R2 mesh gate) | Light | Backlog | Done: review READY WITH FOLLOW-UPS (applied), headed V-1/V-3 8 of 8 PASS 2026-10-25 ([record](../evidence/viz-v6-review-followups-2026-10-25.md)) |
 | V-7 | MVP editor plan (milestones M1 to M9 after P5 and P4) | Full | R5 | Plan APPROVED 2026-10-28; M1 done 2026-10-28 (see V-8); M2 contract APPROVED 2026-10-28 (see V-9) ([plan](mvp-editor-plan.md)) |
 | V-8 | MVP M1: document v2 and containers | Full | R5 | Start approved by the user 2026-10-28; contract APPROVED 2026-10-28 ([contract](mvp-m1-document-v2-contract.md)); M1-U1 to U6 done (#298–#303); M1 exit ACCEPTED by the user 2026-10-28 ([exit record](../evidence/m1-exit-2026-10-28.md)) |
-| V-9 | MVP M2: interaction completeness | Full | R5 | Contract APPROVED 2026-10-28 ([contract](mvp-m2-interaction-contract.md)); M2-U1 to U4 done (#308, #309, #311, #313), M2-U5 in review |
+| V-9 | MVP M2: interaction completeness | Full | R5 | Contract APPROVED 2026-10-28 ([contract](mvp-m2-interaction-contract.md)); M2-U1 to U5 done (#308, #309, #311, #313, #314), M2-U6 in review |
 
 ## V-1: path appearance editing
 

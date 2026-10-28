@@ -5,7 +5,8 @@ import {
   inserted,
   isPoint,
   nodeOf,
-  PENDING_ID,
+  placeholderIds,
+  remapFailure,
   success,
   uniqueIds,
   type EditContext,
@@ -33,7 +34,7 @@ import type { AlignEdge, DocumentCommand, PagePoint, ReorderOp } from './types.j
 // vector turned into its parent space, so nodes of different parents mix freely. A command that
 // changes nothing returns the document itself, which the editor records as no step.
 
-type Finish = (draft: Draft) => DocumentV2 | Failure;
+export type Finish = (draft: Draft) => DocumentV2 | Failure;
 type Arranged = Readonly<{ tree: TreeView; roots: readonly string[] }>;
 
 const EDGES: readonly AlignEdge[] = ['left', 'hcenter', 'right', 'top', 'vcenter', 'bottom'];
@@ -44,10 +45,10 @@ const OPS: readonly ReorderOp[] = ['forward', 'backward', 'front', 'back'];
  * strings, not empty) at `/ids`, then the command's own fields (`fields`), then the nodes, which
  * must be on the active page. Returns the listed roots in listed order.
  */
-function arranged(
+export function arranged(
   document: DocumentV2,
   rawIds: unknown,
-  context: EditContext,
+  context: Pick<EditContext, 'activePage'>,
   fields: () => Failure | null,
 ): Arranged | Failure {
   const ids = uniqueIds(rawIds);
@@ -78,7 +79,7 @@ function place(draft: Draft, node: NodeV2, frame: Frame): boolean {
 }
 
 /** Each node's position in the document pre-order of `page`. */
-function preorder(document: DocumentV2, tree: TreeView, page: string): Map<string, number> {
+export function preorder(document: DocumentV2, tree: TreeView, page: string): Map<string, number> {
   const roots = document.pages.find((entry) => entry.id === page)?.children ?? [];
   return new Map(
     roots.flatMap((child) => subtree(tree, child)).map((id, position) => [id, position] as const),
@@ -323,25 +324,12 @@ export function duplicateNodes(
   // The trial: roots in the originals' paint order, with placeholders no page or node has.
   const roots = [...checked.roots].sort((a, b) => order.get(a)! - order.get(b)!);
   const count = roots.reduce((sum, root) => sum + subtree(tree, root).length, 0);
-  const placeholders: string[] = [];
-  for (let n = 1; placeholders.length < count; n += 1) {
-    const id = `${PENDING_ID}-${n}`;
-    if (!document.pages.some((page) => page.id === id) && !Object.hasOwn(document.nodes, id)) {
-      placeholders.push(id);
-    }
-  }
+  const placeholders = placeholderIds(document, count);
   const trial = build(roots, placeholders);
   if (!trial.ok) {
     // A failure in a copy is reported at its original.
     const originals = roots.flatMap((root) => subtree(tree, root));
-    const path = trial.path;
-    for (let i = 0; path !== undefined && i < placeholders.length; i += 1) {
-      const prefix = nodePath(placeholders[i]!);
-      if (path === prefix || path.startsWith(`${prefix}/`)) {
-        return fail(trial.code, nodePath(originals[i]!) + path.slice(prefix.length));
-      }
-    }
-    return trial;
+    return remapFailure(trial, placeholders, originals);
   }
   // The originals in their copies' paint order in the result.
   const rootOf = new Map(roots.map((root, i) => [trial.ids[i]!, root] as const));

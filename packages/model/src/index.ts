@@ -13,6 +13,6 @@ export {
   type NodeResult,
   type ParseResult,
 } from './parse.js';
-export { MAX_DEPTH } from './json-scan.js';
+export { MAX_DEPTH, scanJson, type ScanFinding } from './json-scan.js';
 export { serializeDocument } from './serialize.js';
 export type * from './types.js';

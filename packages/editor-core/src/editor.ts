@@ -5,6 +5,7 @@ import {
   type DocumentV2,
   type ParseResult,
 } from '@vector-studio/model';
+import { copyFragment } from './clipboard.js';
 import {
   applyEdit,
   applyGestureEdit,
@@ -182,6 +183,7 @@ const DOCUMENT_COMMANDS = new Set([
   'reorderNodes',
   'nudgeNodes',
   'duplicateNodes',
+  'paste',
 ]);
 
 /**
@@ -222,6 +224,9 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.too-few-nodes',
   'editor.invalid-scope',
   'editor.invalid-keymap',
+  'editor.empty-clipboard',
+  'editor.invalid-clipboard',
+  'editor.unsupported-clipboard',
 ]);
 
 /**
@@ -462,6 +467,11 @@ class EditorCore implements Editor {
   private snapping = true;
   /** The entered container of the active page (M2 contract, section 5), or null. */
   private scope: string | null = null;
+  /**
+   * The in-memory clipboard (M2 contract, section 6): fragment text, or null. Session state with
+   * no snapshot field or event; it survives loads and page switches.
+   */
+  private clipboard: string | null = null;
   private extensionDepth = 0;
   private readonly ids: IdSource;
   private readonly extensions: ExtensionRegistry;
@@ -596,6 +606,8 @@ class EditorCore implements Editor {
       this.undoStack.push(entry);
       this.redoStack = [];
       this.changeDocument(result.document, 'command', result.touched);
+      // The pasted roots become the selection (section 6).
+      if (command.type === 'paste') this.setSelectionState(result.created);
       return { ok: true, ids: result.created };
     }
     switch (command.type) {
@@ -753,6 +765,28 @@ class EditorCore implements Editor {
         this.setScopeState(id);
         return { ok: true, ids: [] };
       }
+      case 'copy':
+      case 'cut': {
+        const ids: unknown = command.ids;
+        // The selection by default; an empty one changes nothing (section 6).
+        if (ids === undefined && this.selection.length === 0) return { ok: true, ids: [] };
+        // A cut is a document change: during a drag it applies to the pre-gesture document, as
+        // any host command does; a copy reads the live document and leaves the drag alone.
+        const source =
+          command.type === 'cut' ? (this.gestureState?.base ?? this.document) : this.document;
+        // Only an omitted `ids` means the selection; any other value is checked (`null` fails).
+        const listed = ids === undefined ? this.selection : ids;
+        const copied = copyFragment(source, listed, this.activePage);
+        if ('ok' in copied) return copied;
+        if (command.type === 'cut') {
+          // One transaction; a failed delete leaves the clipboard as it was.
+          const result = this.run({ type: 'deleteNodes', ids: copied.roots });
+          if (!result.ok) return result;
+        }
+        this.clipboard = copied.text;
+        // The copied roots in paint order, so a host can tell a copy from an empty one.
+        return { ok: true, ids: copied.roots };
+      }
       case 'runCommand': {
         const extension =
           typeof command.id === 'string' ? this.extensions.command(command.id) : undefined;
@@ -796,7 +830,15 @@ class EditorCore implements Editor {
   }
 
   private context(refit: boolean) {
-    return { ids: this.ids, custom: this.extensions, activePage: this.activePage, refit };
+    return {
+      ids: this.ids,
+      custom: this.extensions,
+      activePage: this.activePage,
+      refit,
+      clipboard: this.clipboard,
+      scope: this.scope,
+      selection: this.selection,
+    };
   }
 
   query<Q extends Query>(query: Q): QueryResult<Q> {
@@ -836,6 +878,8 @@ class EditorCore implements Editor {
           return this.snapping;
         case 'scope':
           return this.scope;
+        case 'clipboard':
+          return this.clipboard;
       }
     })();
     return value as QueryResult<Q>;
@@ -967,6 +1011,10 @@ class EditorCore implements Editor {
     const chord = eventChord(event, event.modifiers);
     const binding = chord === null ? undefined : this.bindings.get(chord);
     if (binding === undefined) return done(false);
+    // A copy or cut with an empty selection is not consumed, so the host leaves the browser's
+    // clipboard event alone (section 6).
+    const clipboardAction = binding.action === 'copy' || binding.action === 'cut';
+    if (clipboardAction && this.selection.length === 0) return done(false);
     return { ...this.runAction(binding), consumed: true };
   }
 
@@ -1078,6 +1126,14 @@ class EditorCore implements Editor {
         return this.run({ type: 'zoomTo', target: 'selection' });
       case 'zoomTo100':
         return this.run({ type: 'zoomTo', target: 'actual' });
+      // The in-memory clipboard (section 6); the dispatch leaves an empty-selection copy or
+      // cut unconsumed before it gets here.
+      case 'copy':
+        return this.run({ type: 'copy', ids: selection });
+      case 'cut':
+        return this.run({ type: 'cut', ids: selection });
+      case 'paste':
+        return this.run({ type: 'paste' });
       default: {
         const command = { type: 'runCommand', id: binding.action! } as const;
         return this.run(binding.args === undefined ? command : { ...command, args: binding.args });

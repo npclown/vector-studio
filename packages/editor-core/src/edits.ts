@@ -14,6 +14,7 @@ import {
   nudgeNodes,
   reorderNodes,
 } from './arrange.js';
+import { paste } from './clipboard.js';
 import { Draft, fail, type Failure } from './draft.js';
 import {
   freshId,
@@ -268,6 +269,8 @@ export function applyEdit(
       return nudgeNodes(document, command, context, finish);
     case 'duplicateNodes':
       return duplicateNodes(document, command, context, finish);
+    case 'paste':
+      return paste(document, command, context, custom, finish);
     case 'addPage': {
       if (command.name !== undefined && typeof command.name !== 'string') {
         return fail('editor.invalid-command', '/name');
