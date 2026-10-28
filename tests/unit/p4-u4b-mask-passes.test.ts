@@ -1,6 +1,6 @@
 import type { RenderNodeSnapshot, SceneAffine, SceneClip } from '@vector-studio/contracts';
 import { PrimitiveRendererService, type PrimitivePacket } from '@vector-studio/renderer-core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   CLIP_STATE_HEADER_SIZE,
@@ -327,6 +327,84 @@ describe('P4 U4b mask passes', () => {
     creation.dispose();
     expect(fixture.destroyed).toContain('primitive/1/mask-2');
     expect(accounting.snapshot().live).toBe(0);
+  });
+});
+
+describe('P4 U4b mask failures and buffer growth', () => {
+  it('a failed submission discards the created texture; the next frame renders it again', async () => {
+    const fixture = nativeFixture();
+    const { scene, creation, target, accounting } = await nativeScene(fixture);
+    const h = harness(primitiveMask());
+    const live = accounting.snapshot().byCategory.texture.live;
+    const queue = fixture.device.queue as unknown as { submit: ReturnType<typeof vi.fn> };
+    queue.submit.mockImplementationOnce(() => {
+      throw new Error('injected submission failure');
+    });
+    expect(scene.submitPrimitivePacket(h.source.prepare(target)!)).toEqual({
+      status: 'failed',
+      reason: 'submission-failed',
+    });
+    expect(fixture.destroyed).toContain('primitive/1/mask-1');
+    expect(accounting.snapshot().byCategory.texture.live).toBe(live);
+    expect(scene.maskPasses).toBe(0);
+    submitted(scene.submitPrimitivePacket(h.source.prepare(target)!));
+    expect(scene.maskPasses).toBe(1);
+    creation.dispose();
+  });
+
+  it('a cached texture gets a new bind group when the clip buffer grows', async () => {
+    const fixture = nativeFixture();
+    const { scene, creation, target } = await nativeScene(fixture);
+    const h = harness(primitiveMask());
+    submitted(scene.submitPrimitivePacket(h.source.prepare(target)!));
+    h.replace([
+      ...primitiveMask(),
+      group('c1', ['b1'], { kind: 'rect', x: 0, y: 0, width: 300, height: 300 }),
+      box('b1', 'c1', 200),
+      group('c2', ['b2'], { kind: 'rect', x: 0, y: 0, width: 300, height: 300 }),
+      box('b2', 'c2', 220),
+    ]);
+    fixture.calls.length = 0;
+    submitted(scene.submitPrimitivePacket(h.source.prepare(target)!));
+    expect(scene.maskPasses).toBe(1);
+    const device = fixture.device as unknown as {
+      createBindGroup: ReturnType<typeof vi.fn<(descriptor: GPUBindGroupDescriptor) => unknown>>;
+    };
+    const labels = device.createBindGroup.mock.calls.map(([descriptor]) => descriptor.label);
+    expect(labels.filter((label) => label === 'primitive/1/mask-1/bind-group')).toHaveLength(2);
+    expect(labels).toContain('primitive/1/clip-states-2/bind-group');
+    creation.dispose();
+  });
+
+  it('without the mesh path a mesh source pass only clears its texture', async () => {
+    const fixture = nativeFixture();
+    const { scene, creation, target } = await nativeScene(fixture, { clipPipeline: true });
+    const packet = harness([
+      group('m', ['s', 'a'], MASK),
+      pathNode('s', 0, { parentId: 'm', fill: null, points: [0, 0, 200, 0, 0, 200] }),
+      box('a', 'm', 30),
+    ]).source.prepare(target)!;
+    submitted(scene.submitPrimitivePacket(packet));
+    expect(encoded(fixture.calls).slice(0, 3)).toEqual([
+      [
+        'beginRenderPass',
+        'vector-studio/mask-pass/m',
+        'primitive/1/mask-pass-1/color',
+        'primitive/1/mask-1',
+        null,
+      ],
+      [
+        'setViewport',
+        -packet.clip!.masks[0]!.device.x,
+        -packet.clip!.masks[0]!.device.y,
+        640,
+        360,
+        0,
+        1,
+      ],
+      ['end'],
+    ]);
+    creation.dispose();
   });
 });
 

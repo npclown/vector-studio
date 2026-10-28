@@ -265,9 +265,7 @@ function validMaskSource(source: unknown, validated: ValidatedPacket): boolean {
     );
   }
   return (
-    value.kind === 'mesh' &&
-    typeof value.nodeId === 'string' &&
-    (value.draw === null || (typeof value.draw === 'object' && value.draw !== undefined))
+    value.kind === 'mesh' && typeof value.nodeId === 'string' && typeof value.draw === 'object'
   );
 }
 
@@ -484,8 +482,13 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       this.#target = copyTarget(target);
       return;
     }
-    // P4 section 4, Resources: a resize releases the mask textures.
-    this.#releaseMasks();
+    // P4 section 4, Resources: a resize releases the mask textures, best effort, so a release
+    // error never leaves the target stale.
+    try {
+      this.#releaseMasks();
+    } catch {
+      // Accounting cleanup is best effort.
+    }
     if (target.width === 0 || target.height === 0) {
       this.#releaseAttachment();
       this.#target = copyTarget(target);
@@ -624,6 +627,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     }
     // U4: the mask passes' transient attachments, released after the submission.
     const transients: Transient[] = [];
+    // U4: once submitted, created mask entries belong to the cache and are not discarded.
+    let submittedWork = false;
     try {
       if (clip !== null) this.#writeClip(clip);
       // P4 section 4, Resources: a frame with no clip part releases the clip buffer, so a scene
@@ -789,6 +794,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       }
       const commandBuffer = encoder.finish();
       this.#device.queue.submit([commandBuffer]);
+      submittedWork = true;
 
       const serial = this.#nextSubmissionSerial;
       this.#nextSubmissionSerial += 1;
@@ -817,14 +823,19 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           mesh === null ? undefined : meshReceipt(packet.mesh!, mesh),
         ),
       });
-    } catch {
+    } catch (error) {
       if (validated.createdArena) this.#releaseArena(arena);
       if (mesh !== null && !mesh.skipped && mesh.createdArena && mesh.arena !== null) {
         this.#releaseArena(mesh.arena);
       }
-      if (clip !== null) this.#discardCreatedMasks(clip.masks);
+      if (clip !== null && !submittedWork) this.#discardCreatedMasks(clip.masks);
       this.#releaseTransients(transients);
-      return frozenResult('submission-failed');
+      // U4: a mask pass's transient attachment that cannot be created is an allocation failure.
+      return frozenResult(
+        !submittedWork && error instanceof AllocationError
+          ? 'allocation-failed'
+          : 'submission-failed',
+      );
     }
   }
 
@@ -958,6 +969,9 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     const states = new Map<number, Uint8Array>();
     const stateMasks = new Map<number, string>();
     for (const record of records.values()) {
+      if (!record.masks.every((id) => levels.has(id))) {
+        throw new Error('A clip state names a missing mask level.');
+      }
       const innermost = record.masks.at(-1);
       let bytes: Uint8Array | null;
       if (innermost === undefined) {
@@ -1108,15 +1122,22 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       mask.entry.key = mask.level.key;
       used.add(mask.entry.id);
       const previous = this.#masks.get(mask.level.id);
-      if (previous !== undefined && previous !== mask.entry) {
-        this.#destroyTrackedTexture(previous.id, previous.texture);
-      }
       this.#masks.set(mask.level.id, mask.entry);
+      if (previous !== undefined && previous !== mask.entry) this.#destroyQuietly(previous);
     }
     for (const [levelId, entry] of this.#masks) {
       if (used.has(entry.id)) continue;
       this.#masks.delete(levelId);
+      this.#destroyQuietly(entry);
+    }
+  }
+
+  /** Releases a mask texture after a submission; a release error must not undo the frame. */
+  #destroyQuietly(entry: MaskEntry): void {
+    try {
       this.#destroyTrackedTexture(entry.id, entry.texture);
+    } catch {
+      // Accounting cleanup is best effort.
     }
   }
 
