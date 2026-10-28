@@ -1,8 +1,30 @@
 import type { DocumentV2, JsonValue, NodeV2, PathData } from '@vector-studio/model';
-import type { CustomNodeType, Extension, ExtensionApi, ExtensionCommand, Query } from './types.js';
+import { TOOL_NAMES } from './keymap.js';
+import type {
+  CustomNodeType,
+  Extension,
+  ExtensionApi,
+  ExtensionCommand,
+  ExtensionTool,
+  PagePoint,
+  PathAnchor,
+  Query,
+  ToolOverlay,
+} from './types.js';
 
-// The extension registry (P5 plan, section 5): custom node types and extension commands,
-// registered once at construction. Extensions reach the editor only through `ExtensionApi`.
+// The extension registry (P5 plan, section 5): custom node types, extension commands and
+// extension tools (MVP M2 contract, section 7), registered once at construction. Extensions
+// reach the editor only through `ExtensionApi` and, for tools, `ToolApi`.
+
+/** A registered extension tool: frozen, its methods bound to the host's object. */
+export type RegisteredTool = Readonly<{
+  id: string;
+  /** The ID of the extension that registered it. */
+  owner: string;
+  input: ExtensionTool['input'];
+  reset: ExtensionTool['reset'];
+  overlay: (() => unknown) | null;
+}>;
 
 /** A custom-node check failure; `path` is relative to the node. */
 export type CustomFailure = Readonly<{
@@ -29,7 +51,7 @@ function hasPathGrammar(verbs: readonly string[]): boolean {
   return true;
 }
 
-function owned(extension: string, id: unknown): boolean {
+export function owned(extension: string, id: unknown): boolean {
   return typeof id === 'string' && (id === extension || id.startsWith(`${extension}.`));
 }
 
@@ -65,6 +87,8 @@ function pathData(value: unknown): PathData | null {
 export class ExtensionRegistry {
   private readonly types = new Map<string, CustomNodeType>();
   private readonly commands = new Map<string, ExtensionCommand>();
+  /** In registration order. */
+  private readonly toolMap = new Map<string, RegisteredTool>();
 
   /**
    * Throws on a malformed or conflicting registration: that is a host programming error. The
@@ -78,15 +102,15 @@ export class ExtensionRegistry {
     for (const extension of extensions as readonly unknown[]) {
       if (typeof extension !== 'object' || extension === null)
         reject('an extension is not an object');
-      const { id, nodeTypes = [], commands = [] } = extension as Extension;
+      const { id, nodeTypes = [], commands = [], tools = [] } = extension as Extension;
       if (typeof id !== 'string' || id.length === 0) reject(`invalid extension id ${String(id)}`);
       // One extension may not own another's namespace, so every ID has exactly one owner.
       if (ids.some((other) => owned(other, id) || owned(id, other))) {
         reject(`extension id ${id} overlaps another extension`);
       }
       ids.push(id);
-      if (!Array.isArray(nodeTypes) || !Array.isArray(commands)) {
-        reject(`${id} has malformed nodeTypes or commands`);
+      if (!Array.isArray(nodeTypes) || !Array.isArray(commands) || !Array.isArray(tools)) {
+        reject(`${id} has malformed nodeTypes, commands or tools`);
       }
       for (const type of nodeTypes as readonly unknown[]) {
         const entry = type as Partial<CustomNodeType> | null;
@@ -127,7 +151,43 @@ export class ExtensionRegistry {
         const own = entry as ExtensionCommand;
         this.commands.set(own.id, Object.freeze({ id: own.id, run: own.run.bind(own) }));
       }
+      // Tool IDs follow the command rule (owned, unique) and never shadow a built-in tool.
+      for (const tool of tools as readonly unknown[]) {
+        const entry = tool as Partial<ExtensionTool> | null;
+        if (
+          typeof entry !== 'object' ||
+          entry === null ||
+          !owned(id, entry.id) ||
+          (TOOL_NAMES as readonly string[]).includes(entry.id!) ||
+          this.toolMap.has(entry.id!) ||
+          typeof entry.input !== 'function' ||
+          typeof entry.reset !== 'function' ||
+          (entry.overlay !== undefined && typeof entry.overlay !== 'function')
+        ) {
+          reject(`${id} cannot register tool ${String(entry?.id)}`);
+        }
+        const own = entry as ExtensionTool;
+        this.toolMap.set(
+          own.id,
+          Object.freeze({
+            id: own.id,
+            owner: id,
+            input: own.input.bind(own),
+            reset: own.reset.bind(own),
+            overlay: own.overlay === undefined ? null : own.overlay.bind(own),
+          }),
+        );
+      }
     }
+  }
+
+  /** The registered extension tools in registration order. */
+  get tools(): readonly RegisteredTool[] {
+    return [...this.toolMap.values()];
+  }
+
+  tool(id: string): RegisteredTool | undefined {
+    return this.toolMap.get(id);
   }
 
   /** The default data of a custom type; a throw or an `undefined` result is invalid data. */
@@ -187,6 +247,56 @@ export class ExtensionRegistry {
   command(id: string): ExtensionCommand | undefined {
     return this.commands.get(id);
   }
+}
+
+const finite = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
+function pointCopy(value: unknown): PagePoint | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { x, y } = value as Record<string, unknown>;
+  return finite(x) && finite(y) ? { x: x + 0, y: y + 0 } : null;
+}
+
+/**
+ * A frozen plain copy of an extension tool's overlay, or null when the value is not a
+ * `ToolOverlay` with finite numbers, so the host never draws the extension's own objects.
+ */
+export function toolOverlay(value: unknown): ToolOverlay | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const record = value as Record<string, unknown>;
+  if (record.kind === 'marquee') {
+    const frame = record.frame as Record<string, unknown> | null;
+    if (typeof frame !== 'object' || frame === null) return null;
+    const { x, y, width, height } = frame;
+    if (!(finite(x) && finite(y) && finite(width) && finite(height))) return null;
+    return Object.freeze({
+      kind: 'marquee',
+      frame: Object.freeze({ x: x + 0, y: y + 0, width: width + 0, height: height + 0 }),
+    });
+  }
+  if (record.kind === 'path') {
+    if (!Array.isArray(record.anchors)) return null;
+    const anchors: PathAnchor[] = [];
+    for (const anchor of record.anchors as unknown[]) {
+      if (typeof anchor !== 'object' || anchor === null) return null;
+      const entry = anchor as Record<string, unknown>;
+      const point = pointCopy(entry.point);
+      const handleIn = entry.in === null ? null : pointCopy(entry.in);
+      const handleOut = entry.out === null ? null : pointCopy(entry.out);
+      if (point === null || (entry.in !== null && handleIn === null)) return null;
+      if (entry.out !== null && handleOut === null) return null;
+      anchors.push(
+        Object.freeze({
+          point: Object.freeze(point),
+          in: handleIn === null ? null : Object.freeze(handleIn),
+          out: handleOut === null ? null : Object.freeze(handleOut),
+        }),
+      );
+    }
+    return Object.freeze({ kind: 'path', anchors: Object.freeze(anchors) });
+  }
+  return null;
 }
 
 /** The only editor surface an extension sees: a fresh object with two functions. */

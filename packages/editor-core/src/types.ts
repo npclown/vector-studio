@@ -27,6 +27,12 @@ import type {
 
 export type ToolName = 'select' | 'rectangle' | 'ellipse' | 'line' | 'frame' | 'path';
 
+/**
+ * A built-in tool name or a registered extension tool ID (MVP M2 contract, section 7; M2-Q13).
+ * `string & {}` keeps the built-in names visible to editors while any string is accepted.
+ */
+export type ToolId = ToolName | (string & {});
+
 export type PagePoint = Readonly<{ x: number; y: number }>;
 export type Modifiers = Readonly<{ shift: boolean; alt: boolean; meta: boolean; ctrl: boolean }>;
 
@@ -252,7 +258,7 @@ export type ReorderOp = 'forward' | 'backward' | 'front' | 'back';
 export type SessionCommand =
   | Readonly<{ type: 'setSelection'; ids: readonly string[] }>
   | Readonly<{ type: 'setActivePage'; id: string }>
-  | Readonly<{ type: 'setTool'; tool: ToolName }>
+  | Readonly<{ type: 'setTool'; tool: ToolId }>
   | Readonly<{ type: 'setViewport'; camera: RenderCamera }>
   | Readonly<{ type: 'input'; event: InputEvent }>
   // MVP M2 contract, sections 3 and 7.
@@ -341,7 +347,7 @@ export type EditorSnapshot = Readonly<{
   /** Increases by one for every document change, including gesture updates, undo and redo. */
   revision: number;
   selection: readonly string[];
-  tool: ToolName;
+  tool: ToolId;
   viewport: RenderCamera;
   /** Null until the host sends `setViewportSize`. */
   viewportSize: ViewportSize | null;
@@ -409,7 +415,7 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' }
     : Q extends { type: 'selection' }
       ? readonly string[]
       : Q extends { type: 'tool' }
-        ? ToolName
+        ? ToolId
         : Q extends { type: 'viewport' }
           ? RenderCamera
           : Q extends { type: 'history' }
@@ -514,10 +520,45 @@ export type ExtensionCommand = Readonly<{
   run(args: JsonValue | undefined, api: ExtensionApi): CommandResult;
 }>;
 
+/**
+ * The gesture API an extension tool receives (MVP M2 contract, sections 4 and 7): `update`
+ * applies an absolute command to the live document, `replace` restores the pre-gesture document
+ * and applies its commands in order; commit records one undo step, cancel restores. It acts only
+ * while its tool is the active tool.
+ */
+export type ToolGesture = Readonly<{
+  readonly active: boolean;
+  /** Returns false while another gesture is active, or when the tool is not active. */
+  begin(): boolean;
+  /** A relative command (`rotateNodes`, the arrange commands) fails: it goes through `replace`. */
+  update(command: DocumentCommand): CommandResult;
+  replace(commands: readonly DocumentCommand[]): CommandResult;
+  commit(): void;
+  cancel(): void;
+}>;
+
+/** What an extension tool receives: the extension API plus the gesture API (no `edit`). */
+export type ToolApi = ExtensionApi & Readonly<{ gesture: ToolGesture }>;
+
+/**
+ * An extension tool (MVP M2 contract, section 7); its `id` is the extension's ID or starts with
+ * it and a dot. `input` gets the events a built-in tool gets (M2-I2) and returns `true` to
+ * consume one; `reset` drops drag and overlay state and must issue no command; `overlay` is the
+ * state the host draws, surfaced as the editor's `overlay`.
+ */
+export type ExtensionTool = Readonly<{
+  id: string;
+  input(event: InputEvent, api: ToolApi): boolean | void;
+  reset(): void;
+  overlay?(): ToolOverlay | null;
+}>;
+
 export type Extension = Readonly<{
   id: string;
   nodeTypes?: readonly CustomNodeType[];
   commands?: readonly ExtensionCommand[];
+  /** Tools `setTool` can activate by ID (MVP M2 contract, section 7). */
+  tools?: readonly ExtensionTool[];
   /**
    * The extension's keymap layer (M2 contract, section 7): built-in actions and the extension's
    * own commands only.

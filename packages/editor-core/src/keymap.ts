@@ -220,16 +220,25 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isFiniteNumber = (value: unknown) => typeof value === 'number' && Number.isFinite(value);
 
 /**
- * Whether a built-in action's `args` are well formed (section 7): `setTool { tool }`,
+ * Whether a built-in action's `args` are well formed (section 7): `setTool { tool }` (a built-in
+ * tool, or an extension tool `tool(id)` accepts),
  * `nudge { dx, dy }` (finite page units), `reorder { op }`, `align { edge }`,
  * `distribute { axis }` and `duplicate { offset? }` with a finite page vector. Other actions take
  * any JSON `args` (an extension command validates its own).
  */
-function argsValid(action: string, args: JsonValue | undefined): boolean {
+function argsValid(
+  action: string,
+  args: JsonValue | undefined,
+  tool: (id: string) => boolean,
+): boolean {
   const record = isRecord(args) ? args : null;
   switch (action) {
     case 'setTool':
-      return record !== null && TOOL_NAMES.includes(record.tool as ToolName);
+      return (
+        record !== null &&
+        typeof record.tool === 'string' &&
+        (TOOL_NAMES.includes(record.tool as ToolName) || tool(record.tool))
+      );
     case 'nudge':
       return record !== null && isFiniteNumber(record.dx) && isFiniteNumber(record.dy);
     case 'reorder':
@@ -266,13 +275,15 @@ export type LayerResult =
 
 /**
  * Validates one layer. `command(id)` says whether an action that is not built-in names a command
- * the layer may run. A failure gives the path of the first malformed field, relative to the
- * layer (`/0/chord`); a second binding of one canonical chord fails at its `chord`.
+ * the layer may run, and `tool(id)` whether a `setTool` binding may name an extension tool. A
+ * failure gives the path of the first malformed field, relative to the layer (`/0/chord`); a
+ * second binding of one canonical chord fails at its `chord`.
  */
 export function validateLayer(
   value: unknown,
   platform: Platform,
   command: (id: string) => boolean,
+  tool: (id: string) => boolean = () => false,
 ): LayerResult {
   if (!Array.isArray(value)) return { ok: false, path: '' };
   const seen = new Set<string>();
@@ -301,7 +312,7 @@ export function validateLayer(
       args = jsonCopy(entry.args);
       if (args === undefined) return { ok: false, path: `/${i}/args` };
     }
-    if (typeof action === 'string' && !argsValid(action, args)) {
+    if (typeof action === 'string' && !argsValid(action, args, tool)) {
       return { ok: false, path: `/${i}/args` };
     }
     bindings.push(args === undefined ? { chord, action: action } : { chord, action, args });
