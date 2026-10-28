@@ -7,6 +7,8 @@
 //   pnpm e3-a04:run --merge <run dir>,<run dir>,… [--shards N] [--stride S] [--start-resolution K]
 //                   [--gpu …] [--wasm <path>] [--retried <retry dir>,…]
 //   pnpm e3-a04:run --retry-cases i,j,… [--shards N] [--stride S] [--start-resolution K] [--heap MB]
+//   pnpm e3-a04:run --supersede <record.json> --remeasured <retry dir>,… --identity <retry dir>,…
+//                   [--shards N] [--stride S] [--start-resolution K] [--gpu …]
 //
 // Uses the release WASM that `pnpm test:geometry` builds (or --wasm <path>), then:
 //
@@ -28,6 +30,14 @@
 // corpus index, with a larger `--heap`, into a retry directory; `--merge … --retried <dirs>` then
 // replaces exactly those rows. Run directories may come from an earlier commit when the commits
 // differ only in this tool, the run driver or documents (contract section 22).
+//
+// `--supersede` writes a record that replaces the committed 2026-10-27 record
+// (docs/plans/d9-e20-a04-remedies-contract.md, E20-K9 and K10). It runs on the measurement branch
+// (7443c2b plus E20's harness, tool and documents) and starts from that record's rows. The
+// `--remeasured` retry directories re-measure the rows E20 names; each replaces the old row of the
+// same index and id, which it keeps as `former`. The `--identity` directories re-measure the
+// stride-25 sample of the decided rows, which must come out identical apart from `ms` and the
+// form of `+∞` (E20-A5). The old record's hosts, retries and GPU check are carried forward.
 //
 // It exits non-zero when a shard fails, the validator finds a problem, or (smoke) a control or
 // an expected PASS is not met. The verdict is the measured disposition; A04 acceptance is the
@@ -85,6 +95,27 @@ if (retryCases !== undefined && (only !== undefined || mergeDirs !== undefined |
   throw new Error('--retry-cases cannot be combined with --only, --merge or --smoke');
 if (retriedDirs !== undefined && mergeDirs === undefined)
   throw new Error('--retried needs --merge');
+const supersede = value('--supersede');
+const remeasuredDirs = value('--remeasured')
+  ?.split(',')
+  .map((d) => path.resolve(d));
+const identityDirs = value('--identity')
+  ?.split(',')
+  .map((d) => path.resolve(d));
+if (
+  supersede !== undefined &&
+  (remeasuredDirs === undefined ||
+    identityDirs === undefined ||
+    mergeDirs !== undefined ||
+    retryCases !== undefined ||
+    only !== undefined ||
+    smoke)
+)
+  throw new Error(
+    '--supersede needs --remeasured and --identity, and no --merge, --retry-cases, --only or --smoke',
+  );
+if (supersede === undefined && (remeasuredDirs !== undefined || identityDirs !== undefined))
+  throw new Error('--remeasured and --identity need --supersede');
 const here = only === undefined ? Array.from({ length: shards }, (_, i) => i) : [...new Set(only)];
 const partial = here.length < shards || retryCases !== undefined;
 
@@ -212,16 +243,40 @@ function checkCommon(dir, p, sameCommit) {
   }
 }
 
+/** E20-K10: the committed 2026-10-27 record, the hosts' commit and the paths E20 may change. */
+const SUPERSEDED_SHA256 = '5df0c5a633de733ae964a560cbedd9838d5c2929360dfa98705dce88dd0e6b2e';
+const MEASUREMENT_BASE = '7443c2b3a763d3b21bde1e601fea794076f1ab67';
+const E20_PATHS = (file) =>
+  file.startsWith('tests/geometry/e3-a04/') ||
+  file === 'tooling/run-e3-a04.mjs' ||
+  file.startsWith('docs/');
+/** Old-record identity fields that must equal this checkout's (E20-K10). */
+const SUPERSEDE_IDENTITY = [
+  'corpusSha256',
+  'generatorSha256',
+  'oracleSha256',
+  'oracleCertified',
+  'wasmSha256',
+  'shards',
+  'stride',
+  'startResolution',
+];
+const BOUND_FIELDS = ['eLo', 'eHi', 'u', 'l'];
+const nonFinite = (_, v) => (typeof v === 'number' && !Number.isFinite(v) ? String(v) : v);
+
 const merged = mergeDirs === undefined ? null : mergeHosts(mergeDirs);
 const retried = merged === null || retriedDirs === undefined ? [] : applyRetries(retriedDirs);
+const superseded = supersede === undefined ? null : supersedeRecord(path.resolve(supersede));
 const provenance =
-  merged === null
-    ? {
-        ...common,
-        ...host,
-        ...(retryCases !== undefined ? { retryCases } : partial ? { shardsHere: here } : {}),
-      }
-    : { ...common, runId, hosts: merged, ...(retried.length > 0 ? { retried } : {}) };
+  superseded !== null
+    ? { ...common, runId, ...superseded }
+    : merged === null
+      ? {
+          ...common,
+          ...host,
+          ...(retryCases !== undefined ? { retryCases } : partial ? { shardsHere: here } : {}),
+        }
+      : { ...common, runId, hosts: merged, ...(retried.length > 0 ? { retried } : {}) };
 writeFileSync(path.join(out, 'provenance.json'), `${JSON.stringify(provenance, null, 2)}\n`);
 
 /**
@@ -328,6 +383,131 @@ function applyRetries(dirs) {
   return done.sort((a, b) => a.index - b.index);
 }
 
+/** A row as E20-A5 compares it: without `ms`, and with both forms of `+∞` (E20-K8) as null. */
+function identityForm(row) {
+  const out = { ...row };
+  delete out.ms;
+  for (const k of BOUND_FIELDS)
+    if (out[k] === 'Infinity' || out[k] === '-Infinity' || out[k] === null) out[k] = null;
+  return JSON.stringify(out);
+}
+
+/** The rows of retry directories, by corpus index, each with its directory's provenance. */
+function retryRows(dirs, kind, rows = new Map()) {
+  const runs = [];
+  for (const dir of dirs) {
+    const p = JSON.parse(readFileSync(path.join(dir, 'provenance.json'), 'utf8'));
+    const { changedFromHead } = checkProvenance(dir, p);
+    if (p.retryCases === undefined) throw new Error(`refusing the merge: ${dir} is not a retry`);
+    const h = JSON.parse(readFileSync(path.join(dir, 'host.json'), 'utf8'));
+    let count = 0;
+    for (const line of readFileSync(path.join(dir, 'retry.ndjson'), 'utf8').split('\n')) {
+      if (line === '') continue;
+      const row = JSON.parse(line);
+      if (rows.has(row.index))
+        throw new Error(`refusing the merge: case ${row.index} is measured twice`);
+      if (String(row.reason ?? '').startsWith('harness-error'))
+        throw new Error(`refusing the merge: the ${kind} row of case ${row.index} failed`);
+      rows.set(row.index, { row, kind });
+      count += 1;
+    }
+    runs.push({
+      runId: p.runId,
+      commit: p.commit,
+      changedFromHead,
+      node: p.node,
+      heap: p.heap,
+      os: p.os,
+      cpus: p.cpus,
+      cases: count,
+      exitCodes: h.exitCodes,
+      restarts: h.restarts,
+    });
+  }
+  return { rows, runs };
+}
+
+/**
+ * E20-K9 and K10: checks the 2026-10-27 record and this checkout, replaces the re-measured rows,
+ * checks the identity sample, and writes every row into `shard-0.ndjson` for the finalize phase.
+ * Returns the provenance it adds.
+ */
+function supersedeRecord(file) {
+  const bytes = readFileSync(file);
+  if (sha256(bytes) !== SUPERSEDED_SHA256)
+    throw new Error(`refusing to supersede: ${file} is not the record of E20-K10`);
+  const old = JSON.parse(bytes.toString('utf8'));
+  for (const k of SUPERSEDE_IDENTITY)
+    if (JSON.stringify(old.provenance[k]) !== JSON.stringify(common[k]))
+      throw new Error(
+        `refusing to supersede: the old record has ${k} ${JSON.stringify(old.provenance[k])}, ` +
+          `here ${JSON.stringify(common[k])}`,
+      );
+  if (
+    spawnSync('git', ['merge-base', '--is-ancestor', MEASUREMENT_BASE, 'HEAD'], { cwd: root })
+      .status
+  )
+    throw new Error(`refusing to supersede: ${MEASUREMENT_BASE} is not an ancestor of HEAD`);
+  const changed = git('diff', '--name-only', '--no-renames', MEASUREMENT_BASE, 'HEAD')
+    .split('\n')
+    .filter(Boolean);
+  const other = changed.filter((f) => !E20_PATHS(f));
+  if (other.length > 0)
+    throw new Error(`refusing to supersede: HEAD differs from ${MEASUREMENT_BASE} in ${other}`);
+
+  const { rows: measured, runs: remeasured } = retryRows(remeasuredDirs, 'remeasured');
+  const { runs: identity } = retryRows(identityDirs, 'identity', measured);
+  // The rows E20-R3 names: every UNDECIDED row but the work-cap rows outside section 21's classes,
+  // and every FAIL row outside them. The sample of E20-A5: every 25th corpus index among the
+  // decided rows.
+  const disclosed = new Set(Object.values(old.disclosed).flat());
+  const remeasure = (r) =>
+    (r.status === 'undecided' &&
+      !(String(r.reason ?? '').startsWith('work cap:') && !disclosed.has(r.id))) ||
+    (r.status === 'fail' && !disclosed.has(r.id));
+  const sampled = (r) => r.status !== 'undecided' && r.index % 25 === 0;
+  const rows = old.rows.map((r) => {
+    const m = measured.get(r.index);
+    const kind = remeasure(r) ? 'remeasured' : sampled(r) ? 'identity' : null;
+    if (kind === null) {
+      if (m !== undefined)
+        throw new Error(`refusing to supersede: case ${r.index} is not one E20 re-measures`);
+      return r;
+    }
+    if (m === undefined) throw new Error(`refusing to supersede: case ${r.index} is missing`);
+    if (m.kind !== kind || m.row.id !== r.id)
+      throw new Error(`refusing to supersede: case ${r.index} is not the ${kind} row ${r.id}`);
+    measured.delete(r.index);
+    if (kind === 'identity') {
+      if (identityForm(m.row) !== identityForm(r))
+        throw new Error(`refusing to supersede: identity case ${r.index} (${r.id}) differs`);
+      return r;
+    }
+    return { ...m.row, former: { status: r.status, reason: r.reason } };
+  });
+  if (measured.size > 0)
+    throw new Error(`refusing to supersede: cases ${[...measured.keys()]} are not in the record`);
+  writeFileSync(
+    path.join(out, 'shard-0.ndjson'),
+    rows.map((r) => `${JSON.stringify(r, nonFinite)}\n`).join(''),
+  );
+  // E20 changes no shader, WASM or product path, so the old GPU check stands (contract section 1).
+  writeFileSync(path.join(out, 'gpu-carried.json'), `${JSON.stringify(old.gpu, null, 2)}\n`);
+  return {
+    supersedes: {
+      runId: old.provenance.runId,
+      sha256: SUPERSEDED_SHA256,
+      commit: old.provenance.commit,
+    },
+    measurementBase: MEASUREMENT_BASE,
+    changedFromBase: changed,
+    hosts: old.provenance.hosts,
+    retried: old.provenance.retried,
+    remeasured,
+    identity,
+  };
+}
+
 /** The corpus position in a shard's `.current` file, or null when it is not one. */
 function readCurrent(file) {
   const at = Number(readFileSync(file, 'utf8').trim());
@@ -405,7 +585,7 @@ if (smoke) {
     }
   };
   const hereCodes =
-    mergeDirs !== undefined
+    mergeDirs !== undefined || superseded !== null
       ? null
       : retryCases !== undefined
         ? [await runShard(0)]
@@ -459,6 +639,7 @@ if (smoke) {
   );
   const finalize = await runPhase({
     E3_A04_RUN_PHASE: 'finalize',
+    ...(superseded === null ? {} : { E3_A04_RUN_GPU_CARRIED: path.join(out, 'gpu-carried.json') }),
     E3_A04_RUN_GPU:
       gpu === undefined
         ? ''
@@ -485,7 +666,10 @@ if (smoke) {
       2,
     ),
   );
-  const retriesOk = retried.every((r) => (r.exitCodes ?? []).every((c) => c === 0));
+  const retriesOk = [
+    ...retried,
+    ...(superseded === null ? [] : [...superseded.remeasured, ...superseded.identity]),
+  ].every((r) => (r.exitCodes ?? []).every((c) => c === 0));
   if (
     stride === 1 &&
     !dirty &&
