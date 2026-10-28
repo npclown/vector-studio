@@ -1,9 +1,10 @@
-import type {
-  CommandResult,
-  Editor,
-  InputEvent,
-  Modifiers,
-  PagePoint,
+import {
+  eventChord,
+  type CommandResult,
+  type Editor,
+  type InputEvent,
+  type Modifiers,
+  type PagePoint,
 } from '@vector-studio/editor-core';
 
 // MVP M2 contract, M2-I4: how `EditorCanvas` turns DOM input into editor `input` commands. Kept
@@ -59,6 +60,23 @@ export type KeyLike = ModifierKeys &
     preventDefault(): void;
   }>;
 
+/** The `clipboardData` of a DOM `copy`, `cut` or `paste` event, as the canvas uses it. */
+export type ClipboardDataLike = Readonly<{
+  getData(format: string): string;
+  setData(format: string, data: string): void;
+}>;
+
+export type ClipboardEventLike = Readonly<{
+  clipboardData: ClipboardDataLike | null;
+  preventDefault(): void;
+}>;
+
+/** `navigator.clipboard` as the bound clipboard actions use it; absent outside a secure page. */
+export type ClipboardWriter = Readonly<{ writeText?: unknown }>;
+
+/** The built-in actions whose in-memory text is also written to the system clipboard. */
+const CLIPBOARD_ACTIONS: ReadonlySet<string> = new Set(['copy', 'cut', 'paste']);
+
 function modifiersOf(event: ModifierKeys): Modifiers {
   return { shift: event.shiftKey, alt: event.altKey, meta: event.metaKey, ctrl: event.ctrlKey };
 }
@@ -82,6 +100,8 @@ export class CanvasInput {
     private readonly editor: Editor,
     private readonly height: () => number,
     private readonly canvas: () => CanvasLike | null,
+    /** The system clipboard for the bound clipboard actions (`navigator.clipboard`), if any. */
+    private readonly writer: () => ClipboardWriter | null | undefined = () => undefined,
   ) {}
 
   /**
@@ -169,15 +189,63 @@ export class CanvasInput {
   }
 
   keyDown(event: KeyLike): void {
-    const result = this.send({
+    const keydown = {
       kind: 'keydown',
       key: event.key,
       code: event.code,
       repeat: event.repeat,
       composing: event.isComposing,
       modifiers: modifiersOf(event),
-    });
+    } as const;
+    // The binding the keymap would run, looked up before the action can change the keymap.
+    const chord = eventChord(keydown, keydown.modifiers);
+    const action = this.editor
+      .getSnapshot()
+      .keymap.find((binding) => binding.chord === chord)?.action;
+    const result = this.send(keydown);
     if (result.consumed === true) event.preventDefault();
+    // A bound copy, cut or paste works on the in-memory clipboard; its text also goes to the
+    // system clipboard when the page has one (M2 contract, section 6). The consumed keydown is
+    // prevented, so no DOM clipboard event follows.
+    if (result.ok && result.consumed === true && action != null && CLIPBOARD_ACTIONS.has(action)) {
+      this.writeSystemClipboard();
+    }
+  }
+
+  /** `writeText` of the in-memory text; a missing API, a throw or a rejection is ignored. */
+  private writeSystemClipboard(): void {
+    const text = this.editor.query({ type: 'clipboard' });
+    if (text === null) return;
+    try {
+      const writer = this.writer();
+      if (typeof writer?.writeText !== 'function') return;
+      const pending: unknown = (writer.writeText as (text: string) => unknown).call(writer, text);
+      const thenable = pending as { catch?: unknown } | null;
+      if (typeof thenable?.catch === 'function') {
+        (thenable.catch as (onRejected: () => void) => unknown).call(pending, () => undefined);
+      }
+    } catch {
+      // A permission or focus refusal leaves the in-memory clipboard as the only copy.
+    }
+  }
+
+  /**
+   * A DOM `copy` or `cut` on the focused canvas (section 6): the command runs on the selection;
+   * when it copied nothing (an empty selection, or a failure) the event is left to the browser,
+   * otherwise it is prevented and carries the fragment as `text/plain`.
+   */
+  clipboardCopy(type: 'copy' | 'cut', event: ClipboardEventLike): void {
+    const result = this.editor.execute({ type });
+    if (!result.ok || result.ids.length === 0) return;
+    event.preventDefault();
+    event.clipboardData?.setData('text/plain', this.editor.query({ type: 'clipboard' }) ?? '');
+  }
+
+  /** A DOM `paste`: always `paste { text }`, the empty string without `text/plain`; prevented. */
+  clipboardPaste(event: ClipboardEventLike): void {
+    event.preventDefault();
+    const text = event.clipboardData?.getData('text/plain') ?? '';
+    this.editor.execute({ type: 'paste', text });
   }
 
   keyUp(event: KeyLike): void {
@@ -219,8 +287,9 @@ export function syncViewportSize(editor: Editor, width: number, height: number):
 }
 
 /**
- * The canvas's native listeners (M2-I4), returning their cleanup. Wheel needs a non-passive
- * listener so that a consumed Ctrl+wheel or pinch can be prevented. A window blur, or focus
+ * The canvas's native listeners (M2-I4, section 6), returning their cleanup. Wheel needs a
+ * non-passive listener so that a consumed Ctrl+wheel or pinch can be prevented; `copy`, `cut`
+ * and `paste` use the system clipboard through `clipboardData`. A window blur, or focus
  * leaving the canvas's focus target (`isFocusTarget` says whether a node belongs to it), resets
  * input, since a key-up or release may never arrive.
  */
@@ -237,12 +306,23 @@ export function attachCanvasListeners(
     input.reset();
   };
   const onWindowBlur = () => input.reset();
+  // Clipboard events target the focused element, so these run only while the canvas has focus
+  // (the M2-U6 headed probe: Chrome and Edge fire them on a focused canvas).
+  const onCopy = (event: Event) => input.clipboardCopy('copy', event as ClipboardEvent);
+  const onCut = (event: Event) => input.clipboardCopy('cut', event as ClipboardEvent);
+  const onPaste = (event: Event) => input.clipboardPaste(event as ClipboardEvent);
   canvas.addEventListener('wheel', onWheel, { passive: false });
   canvas.addEventListener('blur', onBlur);
+  canvas.addEventListener('copy', onCopy);
+  canvas.addEventListener('cut', onCut);
+  canvas.addEventListener('paste', onPaste);
   view.addEventListener('blur', onWindowBlur);
   return () => {
     canvas.removeEventListener('wheel', onWheel);
     canvas.removeEventListener('blur', onBlur);
+    canvas.removeEventListener('copy', onCopy);
+    canvas.removeEventListener('cut', onCut);
+    canvas.removeEventListener('paste', onPaste);
     view.removeEventListener('blur', onWindowBlur);
   };
 }

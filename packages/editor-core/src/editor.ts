@@ -784,7 +784,8 @@ class EditorCore implements Editor {
           if (!result.ok) return result;
         }
         this.clipboard = copied.text;
-        return { ok: true, ids: [] };
+        // The copied roots in paint order, so a host can tell a copy from an empty one.
+        return { ok: true, ids: copied.roots };
       }
       case 'runCommand': {
         const extension =

@@ -27,6 +27,14 @@ import {
   relocate,
 } from '../../packages/editor-core/src/geometry.js';
 import { documentTree, spaceOf } from '../../packages/editor-core/src/tree.js';
+import {
+  CanvasInput,
+  attachCanvasListeners,
+  type ClipboardEventLike,
+  type ClipboardWriter,
+  type KeyLike,
+  type ListenerTarget,
+} from '../../packages/react/src/canvas-input.js';
 
 // MVP M2-U6, M2-A10 (M2 contract, section 6; IDs per section 4.3, S8; codes per section 4.4):
 // `copy`, `cut` and `paste` and the `clipboard` query, driven through `input` with host bindings
@@ -339,7 +347,7 @@ describe('M2-A10 copy', () => {
     expect(clipboard(target)).toBeNull();
     select(target, ['k', 'a', 'z']);
     const before = documentOf(target);
-    expect(press(target, 'c')).toEqual({ ok: true, ids: [], consumed: true });
+    expect(press(target, 'c')).toEqual({ ok: true, ids: ['z', 'a', 'k'], consumed: true });
     expect(clipboard(target)).toBe(BYTES_FRAGMENT);
     // Copy changes neither the document, the history nor the selection.
     expect(documentOf(target)).toBe(before);
@@ -349,7 +357,7 @@ describe('M2-A10 copy', () => {
     const other = setup(BYTES).target;
     expect(other.execute({ type: 'copy', ids: ['z', 'kc', 'k', 'a'] })).toEqual({
       ok: true,
-      ids: [],
+      ids: ['z', 'a', 'k'],
     });
     expect(clipboard(other)).toBe(BYTES_FRAGMENT);
   });
@@ -630,7 +638,7 @@ describe('M2-A10 cut', () => {
     const { target } = setup();
     const before = documentOf(target);
     select(target, ['gb', 'a']);
-    expect(press(target, 'x')).toEqual({ ok: true, ids: [], consumed: true });
+    expect(press(target, 'x')).toEqual({ ok: true, ids: ['a', 'gb'], consumed: true });
     expect(nodeOf(target, 'a')).toBeNull();
     expect(nodeOf(target, 'gb')).toBeNull();
     expect(selection(target)).toEqual([]);
@@ -1057,7 +1065,7 @@ describe('M2-A10 copy and cut details', () => {
   it('copy during a move drag copies the live position and leaves the drag running', () => {
     const { target, pointer, gesture } = dragging();
     expect(nodeOf(target, 'a').frame).toEqual(f(20, 10, 10, 10));
-    expect(target.execute({ type: 'copy' })).toEqual({ ok: true, ids: [] });
+    expect(target.execute({ type: 'copy' })).toEqual({ ok: true, ids: ['a'] });
     expect(frameIn(clipboard(target), 'a')).toEqual(f(20, 10, 10, 10));
     expect(gesture.active).toBe(true);
     pointer('pointermove', at(35, 15));
@@ -1068,7 +1076,7 @@ describe('M2-A10 copy and cut details', () => {
 
   it('cut during a move drag copies the pre-drag frame, deletes and interrupts the drag', () => {
     const { target, pointer, gesture } = dragging();
-    expect(target.execute({ type: 'cut' })).toEqual({ ok: true, ids: [] });
+    expect(target.execute({ type: 'cut' })).toEqual({ ok: true, ids: ['a'] });
     expect(frameIn(clipboard(target), 'a')).toEqual(f(0, 0, 10, 10));
     expect(nodeOf(target, 'a')).toBeNull();
     expect(gesture.active).toBe(false);
@@ -1193,5 +1201,213 @@ describe('M2-A10 paste depth at the target', () => {
       code: 'document.invalid-field',
       path: '/nodes/fr/parent',
     });
+  });
+});
+
+/** A DOM clipboard event stand-in that records `preventDefault` and `setData`. */
+function clipboardEvent(plain: string | null = null, withData = true) {
+  const state = { prevented: false, set: [] as [string, string][], read: [] as string[] };
+  const event: ClipboardEventLike = {
+    clipboardData: withData
+      ? {
+          getData: (format) => {
+            state.read.push(format);
+            return format === 'text/plain' && plain !== null ? plain : '';
+          },
+          setData: (format, data) => {
+            state.set.push([format, data]);
+          },
+        }
+      : null,
+    preventDefault: () => {
+      state.prevented = true;
+    },
+  };
+  return { event, state };
+}
+
+function listenerTarget() {
+  const listeners: { type: string; listener: (event: Event) => void }[] = [];
+  const target: ListenerTarget = {
+    addEventListener: (type, listener) => listeners.push({ type, listener }),
+    removeEventListener: (type, listener) => {
+      const index = listeners.findIndex((e) => e.type === type && e.listener === listener);
+      if (index >= 0) listeners.splice(index, 1);
+    },
+  };
+  const fire = (type: string, event: object) =>
+    listeners.filter((e) => e.type === type).forEach((e) => e.listener(event as Event));
+  return { target, fire };
+}
+
+/** EditorCanvas's clipboard path over structural events, with a stand-in system clipboard. */
+function canvasHost(writer?: ClipboardWriter | null, document: unknown = FIXTURE) {
+  const harness = setup(document);
+  const element = {
+    getBoundingClientRect: () => ({ left: 0, top: 0 }),
+    clientLeft: 0,
+    clientTop: 0,
+  };
+  const canvasInput = new CanvasInput(
+    harness.target,
+    () => 600,
+    () => element,
+    () => writer,
+  );
+  const canvas = listenerTarget();
+  const view = listenerTarget();
+  attachCanvasListeners(canvas.target, view.target, canvasInput, () => false);
+  const key = (k: string) => {
+    let prevented = false;
+    const event: KeyLike = {
+      key: k,
+      code: `Key${k.toUpperCase()}`,
+      repeat: false,
+      isComposing: false,
+      shiftKey: false,
+      altKey: false,
+      metaKey: false,
+      ctrlKey: true,
+      preventDefault: () => {
+        prevented = true;
+      },
+    };
+    canvasInput.keyDown(event);
+    return prevented;
+  };
+  return { ...harness, canvasInput, canvas, key };
+}
+
+/** A recording `navigator.clipboard` stand-in. */
+function systemClipboard(writeText: (text: string) => unknown = () => Promise.resolve()) {
+  const written: string[] = [];
+  const writer: ClipboardWriter = {
+    writeText: (text: string) => {
+      written.push(text);
+      return writeText(text);
+    },
+  };
+  return { writer, written };
+}
+
+describe('M2-A10 EditorCanvas clipboard events (section 6)', () => {
+  it('copy and cut with an empty selection leave the DOM event untouched', () => {
+    const { target, canvas } = canvasHost();
+    const before = documentOf(target);
+    for (const type of ['copy', 'cut']) {
+      const { event, state } = clipboardEvent();
+      canvas.fire(type, event);
+      expect(state).toEqual({ prevented: false, set: [], read: [] });
+    }
+    expect(clipboard(target)).toBeNull();
+    expect(documentOf(target)).toBe(before);
+  });
+
+  it('copy prevents the event and writes the fragment as text/plain', () => {
+    const { target, canvas } = canvasHost(undefined, BYTES);
+    select(target, ['k', 'a', 'z']);
+    const { event, state } = clipboardEvent();
+    canvas.fire('copy', event);
+    expect(state.prevented).toBe(true);
+    expect(state.set).toEqual([['text/plain', BYTES_FRAGMENT]]);
+    expect(clipboard(target)).toBe(BYTES_FRAGMENT);
+    expect(undoDepth(target)).toBe(0);
+  });
+
+  it('cut prevents the event, writes text/plain and deletes in one step', () => {
+    const { target, canvas } = canvasHost();
+    const before = text(target);
+    select(target, ['a']);
+    const { event, state } = clipboardEvent();
+    canvas.fire('cut', event);
+    expect(state.prevented).toBe(true);
+    expect(state.set).toEqual([['text/plain', clipboard(target)]]);
+    expect(nodeOf(target, 'a')).toBeNull();
+    expectOneStep(target, before);
+  });
+
+  it('a failed cut leaves the DOM event untouched', () => {
+    const { target, canvas } = canvasHost();
+    select(target, ['mp']);
+    const { event, state } = clipboardEvent();
+    canvas.fire('cut', event);
+    expect(state).toEqual({ prevented: false, set: [], read: [] });
+    expect(nodeOf(target, 'mp')).not.toBeNull();
+  });
+
+  it('paste always runs paste { text }, the empty string without text/plain, and prevents', () => {
+    const { target, canvas } = canvasHost();
+    const pastes: unknown[] = [];
+    const execute = target.execute.bind(target);
+    target.execute = (command) => {
+      if (command.type === 'paste') pastes.push(command);
+      return execute(command);
+    };
+    // The in-memory clipboard is never used for a DOM paste.
+    ok(target, { type: 'copy', ids: ['a'] });
+    const before = documentOf(target);
+    const empty = clipboardEvent(null);
+    canvas.fire('paste', empty.event);
+    const missing = clipboardEvent(null, false);
+    canvas.fire('paste', missing.event);
+    expect(empty.state.prevented).toBe(true);
+    expect(empty.state.read).toEqual(['text/plain']);
+    expect(missing.state.prevented).toBe(true);
+    expect(pastes).toEqual([
+      { type: 'paste', text: '' },
+      { type: 'paste', text: '' },
+    ]);
+    expect(documentOf(target)).toBe(before);
+    // Fragment text pastes and selects.
+    const marked = clipboardEvent(BYTES_FRAGMENT);
+    canvas.fire('paste', marked.event);
+    expect(marked.state.prevented).toBe(true);
+    expect(selection(target)).toEqual(['n1', 'n2', 'n3']);
+    expect(nodeOf(target, 'n1')).toMatchObject({ name: 'z', parent: 'p1' });
+  });
+
+  it('bound actions write the in-memory text with writeText', () => {
+    const { writer, written } = systemClipboard();
+    const { target, key } = canvasHost(writer);
+    // An empty-selection copy is not consumed and writes nothing.
+    expect(key('c')).toBe(false);
+    expect(written).toEqual([]);
+    // A failing bound paste (empty clipboard) writes nothing.
+    expect(key('v')).toBe(true);
+    expect(written).toEqual([]);
+    select(target, ['a']);
+    expect(key('c')).toBe(true);
+    expect(written).toEqual([clipboard(target)]);
+    expect(key('x')).toBe(true);
+    expect(key('v')).toBe(true);
+    expect(written).toHaveLength(3);
+    expect(new Set(written)).toEqual(new Set([clipboard(target)]));
+    // Another bound key writes nothing.
+    expect(key('z')).toBe(true);
+    expect(written).toHaveLength(3);
+  });
+
+  it('writeText is guarded: missing, not a function, throwing or rejecting', async () => {
+    const throwing = systemClipboard(() => {
+      throw new Error('no permission');
+    });
+    const rejecting = systemClipboard(() => Promise.reject(new Error('not focused')));
+    for (const writer of [
+      undefined,
+      null,
+      {},
+      { writeText: 'yes' },
+      throwing.writer,
+      rejecting.writer,
+    ]) {
+      const { target, key } = canvasHost(writer);
+      select(target, ['a']);
+      expect(key('c')).toBe(true);
+      expect(clipboard(target)).not.toBeNull();
+    }
+    expect(throwing.written).toHaveLength(1);
+    expect(rejecting.written).toHaveLength(1);
+    // The rejection is handled: no unhandled rejection reaches the test run.
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 });

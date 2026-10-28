@@ -271,7 +271,8 @@ export type SessionCommand =
   | Readonly<{ type: 'setScope'; id: string | null }>
   /**
    * Serializes the subtrees of `ids` (default the selection) as a fragment into the in-memory
-   * clipboard (M2 contract, section 6); an empty selection changes nothing.
+   * clipboard (M2 contract, section 6); an empty selection changes nothing. Returns the copied
+   * roots in paint order (none for an empty selection).
    */
   | Readonly<{ type: 'copy'; ids?: readonly string[] }>;
 
@@ -283,7 +284,7 @@ export type Command =
   | Readonly<{ type: 'redo' }>
   /**
    * `copy` and `deleteNodes` as one transaction (M2 contract, section 6); a failed cut changes
-   * neither the document nor the clipboard.
+   * neither the document nor the clipboard. Returns the cut (now removed) roots in paint order.
    */
   | Readonly<{ type: 'cut'; ids?: readonly string[] }>
   /** Runs a registered extension command (P5 plan, section 5). */
