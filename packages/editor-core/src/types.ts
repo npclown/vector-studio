@@ -190,6 +190,12 @@ export type DocumentCommand =
   | Readonly<{ type: 'groupNodes'; ids: readonly string[]; kind: 'group' | 'maskGroup' }>
   | Readonly<{ type: 'ungroupNodes'; id: string }>
   | Readonly<{ type: 'moveNodes'; ids: readonly string[]; parent: string; index: number }>
+  /**
+   * Rotates by `angle` (radians, clockwise) about the page point `pivot`, by default the centre
+   * of the `handles` box (MVP M2 contract, section 4.1). A relative command: inside a gesture it
+   * goes through `replace`, never `update`.
+   */
+  | Readonly<{ type: 'rotateNodes'; ids: readonly string[]; angle: number; pivot?: PagePoint }>
   | Readonly<{ type: 'addPage'; name?: string; index?: number }>
   | Readonly<{ type: 'removePage'; id: string }>
   | Readonly<{ type: 'renamePage'; id: string; name: string }>

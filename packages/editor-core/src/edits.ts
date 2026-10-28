@@ -18,9 +18,11 @@ import {
   invertRigid,
   localTransform,
   relocate,
+  rotate,
   rotatedBounds,
 } from './geometry.js';
 import { mapNodeInPageSpace, resizeContainer, type ScaleMap } from './resize.js';
+import { handleBoxOf, handleCentre } from './tools.js';
 import {
   ancestors,
   childrenOf,
@@ -337,6 +339,8 @@ export function applyEdit(
     }
     case 'moveNodes':
       return move(document, command, finish);
+    case 'rotateNodes':
+      return rotateNodes(document, command, context, finish);
     case 'addPage': {
       if (command.name !== undefined && typeof command.name !== 'string') {
         return fail('editor.invalid-command', '/name');
@@ -865,4 +869,68 @@ function move(
   const deep = treeDepthViolation(draft, roots);
   if (deep !== null) return fail('document.invalid-field', nodePath(deep, '/parent'));
   return success(finish(draft), draft, [], roots);
+}
+
+/**
+ * `rotateNodes` (MVP M2 contract, section 4.1): each listed node's page rotation `θ` (its parent
+ * chain's rotation plus its own) becomes `normalize(θ + angle)`, stored minus the chain's; its
+ * frame centre turns by `angle` about the page point `pivot` in page space and maps back into
+ * its parent space; its size is kept. Containers turn rigidly (children are parent-local), and
+ * group ancestors refit when `context.refit` holds. With one listed node and no `pivot`, the
+ * node keeps its stored `x` and `y`. A rotation that changes no node returns the document
+ * itself with nothing touched, which the editor records as no step.
+ */
+function rotateNodes(
+  document: DocumentV2,
+  command: Extract<DocumentCommand, { type: 'rotateNodes' }>,
+  context: EditContext,
+  finish: (draft: Draft) => DocumentV2 | Failure,
+): EditResult {
+  const ids = uniqueIds(command.ids);
+  if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');
+  const angle: unknown = command.angle;
+  if (typeof angle !== 'number' || !Number.isFinite(angle)) {
+    return fail('editor.invalid-command', '/angle');
+  }
+  if (command.pivot !== undefined && !isPoint(command.pivot)) {
+    return fail('editor.invalid-command', '/pivot');
+  }
+  const tree = documentTree(document);
+  if (
+    ids.some((id) => nodeOf(document, id) === undefined || pageOf(tree, id) !== context.activePage)
+  ) {
+    return fail('editor.unknown-node');
+  }
+  // A listed descendant of a listed node turns with its ancestor (the M1 selection rule).
+  const listed = new Set(ids);
+  const roots = ids.filter((id) => !ancestors(tree, id).some((node) => listed.has(node.id)));
+  const unchanged: EditResult = { ok: true, document, touched: [], created: [] };
+  // A whole number of turns changes nothing.
+  if (normalizeRotation(angle) === 0) return unchanged;
+  const keepPosition = roots.length === 1 && command.pivot === undefined;
+  const pivot = command.pivot ?? handleCentre(handleBoxOf(document, context.activePage, roots)!);
+  const draft = new Draft(document);
+  for (const id of roots) {
+    const node = document.nodes[id]!;
+    const space = spaceOf(tree, node.parent);
+    const rotation = normalizeRotation(
+      normalizeRotation(space.rotation + node.rotation + angle) - space.rotation,
+    );
+    let frame = node.frame;
+    if (!keepPosition) {
+      const { x, y, width, height } = node.frame;
+      const onPage = tree.page(node.parent) !== undefined;
+      const centre = onPage
+        ? { x: x + width / 2, y: y + height / 2 }
+        : apply(space.matrix, x + width / 2, y + height / 2);
+      const d = rotate(angle, centre.x - pivot.x, centre.y - pivot.y);
+      const turned = { x: pivot.x + d.x, y: pivot.y + d.y };
+      const local = onPage ? turned : apply(invertRigid(space.matrix), turned.x, turned.y);
+      frame = { x: local.x - width / 2, y: local.y - height / 2, width, height };
+    }
+    const same = rotation === node.rotation && frame.x === node.frame.x && frame.y === node.frame.y;
+    if (!same) draft.set({ ...node, frame, rotation });
+  }
+  if (draft.touched.size === 0) return unchanged;
+  return success(finish(draft), draft, []);
 }
