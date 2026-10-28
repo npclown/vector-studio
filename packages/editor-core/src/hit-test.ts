@@ -19,12 +19,12 @@ import type { PagePoint } from './types.js';
 /** Frame-local path geometry for a custom node (its extension's `toScene`), or null. */
 export type CustomGeometry = (node: NodeV2) => PathData | null;
 
-type Polyline = { points: PagePoint[]; closed: boolean };
+export type Polyline = { points: PagePoint[]; closed: boolean };
 
 /** Holds the 0.25 / zoom bound for curves up to about 10^5 / zoom page units across. */
 const MAX_SEGMENTS_PER_CUBIC = 4096;
 
-function cubicSegments(
+export function cubicSegments(
   p0: PagePoint,
   p1: PagePoint,
   p2: PagePoint,
@@ -36,6 +36,25 @@ function cubicSegments(
   const ddy = Math.max(Math.abs(p0.y - 2 * p1.y + p2.y), Math.abs(p1.y - 2 * p2.y + p3.y));
   const n = Math.ceil(Math.sqrt((3 * Math.hypot(ddx, ddy)) / (4 * tolerance)));
   return Math.min(MAX_SEGMENTS_PER_CUBIC, Math.max(1, Number.isFinite(n) ? n : 1));
+}
+
+/** The cubic Bézier point at `t`, in Bernstein form (the chord ends of `flatten`). */
+export function cubicAt(
+  p0: PagePoint,
+  p1: PagePoint,
+  p2: PagePoint,
+  p3: PagePoint,
+  t: number,
+): PagePoint {
+  const u = 1 - t;
+  const a = u * u * u;
+  const b = 3 * u * u * t;
+  const c = 3 * u * t * t;
+  const d = t * t * t;
+  return {
+    x: a * p0.x + b * p1.x + c * p2.x + d * p3.x,
+    y: a * p0.y + b * p1.y + c * p2.y + d * p3.y,
+  };
 }
 
 /**
@@ -69,18 +88,7 @@ export function flatten(
       const p0 = current.points[current.points.length - 1]!;
       const [p1, p2, p3] = [at(cursor), at(cursor + 2), at(cursor + 4)];
       const n = cubicSegments(p0, p1, p2, p3, tolerance);
-      for (let i = 1; i <= n; i += 1) {
-        const t = i / n;
-        const u = 1 - t;
-        const a = u * u * u;
-        const b = 3 * u * u * t;
-        const c = 3 * u * t * t;
-        const d = t * t * t;
-        current.points.push({
-          x: a * p0.x + b * p1.x + c * p2.x + d * p3.x,
-          y: a * p0.y + b * p1.y + c * p2.y + d * p3.y,
-        });
-      }
+      for (let i = 1; i <= n; i += 1) current.points.push(cubicAt(p0, p1, p2, p3, i / n));
       cursor += 6;
     } else if (verb === 'close' && current !== null) {
       current.closed = true;
@@ -90,7 +98,7 @@ export function flatten(
   return lines;
 }
 
-function distanceToSegment(p: PagePoint, a: PagePoint, b: PagePoint): number {
+export function distanceToSegment(p: PagePoint, a: PagePoint, b: PagePoint): number {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const length2 = dx * dx + dy * dy;
@@ -113,7 +121,7 @@ function nearOutline(p: PagePoint, lines: readonly Polyline[], radius: number): 
 }
 
 /** Winding number over every subpath, each closed implicitly, as a fill does. */
-function insideFill(p: PagePoint, lines: readonly Polyline[], evenOdd: boolean): boolean {
+export function insideFill(p: PagePoint, lines: readonly Polyline[], evenOdd: boolean): boolean {
   let winding = 0;
   for (const { points } of lines) {
     for (let i = 0; i < points.length; i += 1) {
