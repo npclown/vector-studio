@@ -688,12 +688,14 @@ describe('V4 host injection', () => {
         /[\\/]src[\\/]viz-v2-path-data\.ts$/.test(file) ||
         /[\\/]src[\\/]viz-v3-integration\.ts$/.test(file) ||
         /[\\/]src[\\/]viz-v4-a08-corpus\.ts$/.test(file) ||
+        // P4 U5: the clip and mask check page injects both real ports, on V-3's pattern.
+        /[\\/]src[\\/]p4-clip-mask\.ts$/.test(file) ||
         /[\\/]playground[\\/](package|tsconfig)\.json$/.test(file) ||
         // P5-U6: the Next.js host composes the V-1 renderer (P5 plan, P5-Q8).
         /[\\/]next-host[\\/]src[\\/]webgpu-renderer\.ts$/.test(file) ||
         /[\\/]next-host[\\/](package|tsconfig)\.json$/.test(file),
     );
-    expect(host).toHaveLength(11);
+    expect(host).toHaveLength(12);
     // The V3-A14 smoke fixture page and the E10-U3 test-hooks check page are test fixtures with a
     // static test-double port, not hosts; they must not reach a real port (no geometry-wasm).
     const fixture = files.filter((file) => /(p3-v3-mesh|e10-test-hooks)\.(ts|html)$/.test(file));

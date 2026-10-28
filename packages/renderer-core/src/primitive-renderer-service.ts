@@ -165,6 +165,14 @@ export class PrimitiveRendererService
   }
 
   /**
+   * @internal Tests only (P4 contract, P4-A06): clip-state records written so far, counting a
+   * record only when its index slot changed content against the previous frame.
+   */
+  public getClipStateWritesForTesting(): number {
+    return this.#source.getClipStateWrites();
+  }
+
+  /**
    * @internal Tests only (E10 contract, section 3.1): the draw record of the last non-null
    * prepare; null before the first one and without a port.
    */

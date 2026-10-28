@@ -59,6 +59,7 @@ export default defineConfig({
         e3A04Readback: `${import.meta.dirname}/e3-a04-readback.html`,
         e10TestHooks: `${import.meta.dirname}/e10-test-hooks.html`,
         vizV4A08Corpus: `${import.meta.dirname}/viz-v4-a08-corpus.html`,
+        p4ClipMask: `${import.meta.dirname}/p4-clip-mask.html`,
       },
     },
   },
