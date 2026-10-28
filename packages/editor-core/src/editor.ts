@@ -534,7 +534,10 @@ class EditorCore implements Editor {
     const gesture = this.gestureState;
     if (gesture === null) return failure('editor.invalid-command');
     // Groups refit only at commit (M1 contract, section 4.2).
-    const result = applyEdit(this.document, command, this.context(false));
+    const result = applyEdit(this.document, command, {
+      ...this.context(false),
+      resizeBase: gesture.base,
+    });
     if (!result.ok) return result;
     result.touched.forEach((id) => gesture.touched.add(id));
     gesture.updated = true;

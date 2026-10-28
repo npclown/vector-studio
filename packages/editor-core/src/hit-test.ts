@@ -200,7 +200,9 @@ export function marqueeHits(document: DocumentV2, page: string, box: Frame): str
     const node = document.nodes[id];
     if (node === undefined || !node.visible) return false;
     if (node.type !== 'rectangle' && node.type !== 'path' && node.type !== 'custom') return false;
-    const frame = boundsOfPoints(corners(node.frame, node.rotation))!;
+    // Rotation 0 uses the frame itself, bit-identical with P5.
+    const frame =
+      node.rotation === 0 ? node.frame : boundsOfPoints(corners(node.frame, node.rotation))!;
     return (
       frame.x <= box.x + box.width &&
       box.x <= frame.x + frame.width &&

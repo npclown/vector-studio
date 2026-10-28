@@ -150,7 +150,8 @@ export function relocate(
   toRotation: number,
 ): { frame: Frame; rotation: number } {
   const map = multiply(invertRigid(to), from);
-  const next = normalizeRotation(rotation + fromRotation - toRotation);
+  // The spaces' difference first, so that equal spaces keep the rotation exactly.
+  const next = normalizeRotation(rotation + (fromRotation - toRotation));
   if (isTranslation(map)) {
     return { frame: { ...frame, x: frame.x + map[4], y: frame.y + map[5] }, rotation: next };
   }

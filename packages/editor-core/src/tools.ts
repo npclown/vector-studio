@@ -242,7 +242,14 @@ export function createSelectTool(custom: CustomGeometry): Tool {
       event.point.x < box.x + box.width &&
       event.point.y > box.y &&
       event.point.y < box.y + box.height;
-    const handle = box === null || movesSmall ? null : handleAt(box, event.point, zoom);
+    // Until M1-U4 the P5 resize geometry applies, so handles are offered only when every
+    // selected node sits on the page root with rotation 0; other selections only move.
+    const resizable = selection.every((id) => {
+      const node = document.nodes[id];
+      return node !== undefined && node.parent === page && node.rotation === 0;
+    });
+    const handle =
+      box === null || movesSmall || !resizable ? null : handleAt(box, event.point, zoom);
     if (box !== null && handle !== null) {
       if (context.gesture.begin()) {
         state = {

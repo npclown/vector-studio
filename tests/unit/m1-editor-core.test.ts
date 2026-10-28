@@ -1685,3 +1685,215 @@ describe('M1 node props and failure precedence', () => {
     expect(target.query({ type: 'history' }).undoDepth).toBe(1);
   });
 });
+
+/** `depth` nested mask groups, each with a path source and the next mask group above it. */
+function maskChain(depth: number) {
+  const nodes: Loose[] = [];
+  let parent = 'p';
+  for (let level = 0; level < depth; level += 1) {
+    const id = `m${level}`;
+    const children = level + 1 < depth ? [`s${level}`, `m${level + 1}`] : [`s${level}`];
+    nodes.push(container('maskGroup', id, parent, children, f(0, 0, 10, 10)));
+    nodes.push(pathNode(`s${level}`, id, f(0, 0, 10, 10)));
+    parent = id;
+  }
+  nodes.push(container('maskGroup', 'loose', 'p', ['ls'], f(0, 0, 10, 10)));
+  nodes.push(pathNode('ls', 'loose', f(0, 0, 10, 10)));
+  return doc([['p', ['m0', 'loose']]], nodes);
+}
+
+describe('M1-U2 review fixes', () => {
+  function pointerDrag(target: Editor, from: [number, number], to: [number, number]) {
+    const send = (kind: 'pointerdown' | 'pointermove' | 'pointerup', [x, y]: [number, number]) =>
+      ok(target, { type: 'input', event: { kind, point: { x, y }, modifiers: none } });
+    send('pointerdown', from);
+    send('pointermove', to);
+    send('pointerup', to);
+  }
+
+  function gestureResize(value: unknown, id: string, frames: Frame[]) {
+    const target = editor(value);
+    const { gesture } = internalsOf(target);
+    expect(gesture.begin()).toBe(true);
+    for (const frame of frames) {
+      const result = gesture.update({ type: 'setFrames', frames: [{ id, frame }] });
+      expect(result.ok).toBe(true);
+    }
+    gesture.commit();
+    return target;
+  }
+
+  it.each<[string, () => ReturnType<typeof doc>, string]>([
+    [
+      'a frame with a startEnd child',
+      () =>
+        doc(
+          [['p', ['F']]],
+          [
+            container('frame', 'F', 'p', ['c'], f(0, 0, 100, 50)),
+            rect('c', 'F', f(10, 10, 80, 20), 0, {
+              constraints: { horizontal: 'startEnd', vertical: 'start' },
+            }),
+          ],
+        ),
+      'F',
+    ],
+    [
+      'a group with a rotated child',
+      () =>
+        doc(
+          [['p', ['G']]],
+          [
+            container('group', 'G', 'p', ['a', 'b'], f(0, 0, 100, 50)),
+            rect('a', 'G', f(0, 0, 100, 20)),
+            rect('b', 'G', f(30, 20, 40, 30), 0.5),
+          ],
+        ),
+      'G',
+    ],
+  ])('a gesture resize of %s depends only on its last update', (_, value, id) => {
+    const start = value().nodes[id]!.frame as Frame;
+    const wide = { ...start, width: 200 };
+    const direct = editor(value());
+    ok(direct, { type: 'setFrames', frames: [{ id, frame: wide }] });
+    const viaGesture = gestureResize(value(), id, [{ ...start, width: 5 }, wide]);
+    expect(text(viaGesture)).toBe(text(direct));
+    expect(viaGesture.query({ type: 'history' }).undoDepth).toBe(1);
+    // Through zero width and back to the start size commits the start document.
+    const back = gestureResize(value(), id, [{ ...start, width: 0 }, start]);
+    expect(text(back)).toBe(text(editor(value())));
+  });
+
+  it('keeps the startEnd child at 180 after a gesture 100 → 5 → 200', () => {
+    const target = gestureResize(
+      doc(
+        [['p', ['F']]],
+        [
+          container('frame', 'F', 'p', ['c'], f(0, 0, 100, 50)),
+          rect('c', 'F', f(10, 10, 80, 20), 0, {
+            constraints: { horizontal: 'startEnd', vertical: 'start' },
+          }),
+        ],
+      ),
+      'F',
+      [f(0, 0, 5, 50), f(0, 0, 200, 50)],
+    );
+    expect(nodeOf(target, 'c').frame).toEqual(f(10, 10, 180, 20));
+  });
+
+  it('failed groupNodes and addPage draw no ID', () => {
+    const value = doc(
+      [['p', ['M']]],
+      [
+        container('maskGroup', 'M', 'p', ['S', 'R'], f(0, 0, 10, 10)),
+        pathNode('S', 'M', f(0, 0, 10, 10)),
+        rect('R', 'M', f(0, 0, 10, 10)),
+      ],
+    );
+    const target = editor(value);
+    expectFailure(
+      target,
+      { type: 'groupNodes', ids: ['S', 'R'], kind: 'group' },
+      'editor.invalid-mask-source',
+      '/nodes/M/children/0',
+    );
+    expectFailure(
+      target,
+      { type: 'groupNodes', ids: ['R'], kind: 'maskGroup' },
+      'editor.invalid-mask-source',
+    );
+    expectFailure(
+      target,
+      { type: 'groupNodes', ids: ['S', 'M'], kind: 'group' },
+      'editor.not-siblings',
+    );
+    expectFailure(target, { type: 'addPage', index: 5 }, 'editor.invalid-index');
+    // The first ID the source hands out is still unused.
+    expect(ok(target, { type: 'addPage' })).toEqual(['n1']);
+    const [g] = ok(target, { type: 'groupNodes', ids: ['M'], kind: 'group' });
+    expect(g).toBe('n2');
+    expect(nodeOf(target, g!)).toMatchObject({ children: ['M'], parent: 'p' });
+  });
+
+  it('a reorder within a rotated group keeps frames and rotations exactly', () => {
+    const value = doc(
+      [['p', ['G']]],
+      [
+        container('group', 'G', 'p', ['a', 'b'], f(0, 0, 100, 100), 0.7),
+        rect('a', 'G', f(12.3, 4.5, 40, 30), 0.3),
+        rect('b', 'G', f(50, 50, 50, 50)),
+      ],
+    );
+    const target = editor(value);
+    const before = documentOf(target);
+    ok(target, { type: 'moveNodes', ids: ['a'], parent: 'G', index: 1 });
+    const after = documentOf(target);
+    expect(after.nodes.G).toMatchObject({ children: ['b', 'a'], frame: before.nodes.G!.frame });
+    expect(after.nodes.a!.frame).toEqual(before.nodes.a!.frame);
+    expect(after.nodes.a!.rotation).toBe(0.3);
+    expect(after.nodes.b).toEqual(before.nodes.b);
+  });
+
+  it('loads 32 nested mask groups and rejects 33', () => {
+    expect(() => editor(maskChain(32))).not.toThrow();
+    expect(() => editor(maskChain(33))).toThrow('editor.clip-depth at /nodes/m32/parent');
+    const target = editor(maskChain(32));
+    expectFailure(
+      target,
+      { type: 'loadDocument', document: maskChain(33) },
+      'editor.clip-depth',
+      '/nodes/m32/parent',
+    );
+  });
+
+  it('rejects a frame or mask group inside the 32nd nested mask group', () => {
+    const target = editor(maskChain(32));
+    expectFailure(
+      target,
+      { type: 'createFrame', frame: f(0, 0, 5, 5), parent: 'm31' },
+      'editor.clip-depth',
+      '/parent',
+    );
+    expectFailure(
+      target,
+      { type: 'moveNodes', ids: ['loose'], parent: 'm31', index: 1 },
+      'editor.clip-depth',
+      '/nodes/loose/parent',
+    );
+    // One level up, the mask group fits; a leaf fits in the 32nd.
+    ok(target, { type: 'moveNodes', ids: ['loose'], parent: 'm30', index: 2 });
+    ok(target, { type: 'createRectangle', frame: f(0, 0, 5, 5), parent: 'm31' });
+  });
+
+  it('offers resize handles only for page-root selections with rotation 0', () => {
+    const value = () =>
+      doc(
+        [['p', ['r', 'G']]],
+        [
+          rect('r', 'p', f(0, 0, 100, 100)),
+          container('group', 'G', 'p', ['a'], f(200, 0, 100, 100)),
+          rect('a', 'G', f(0, 0, 100, 100)),
+        ],
+      );
+    // Page root, rotation 0: the corner handle resizes.
+    const plain = editor(value());
+    ok(plain, { type: 'setSelection', ids: ['r'] });
+    pointerDrag(plain, [100, 100], [150, 150]);
+    expect(nodeOf(plain, 'r').frame).toEqual(f(0, 0, 150, 150));
+    // Rotated: the same press moves the node instead (it is under the handle).
+    const turned = editor(value());
+    ok(turned, {
+      type: 'setFrames',
+      frames: [{ id: 'r', frame: f(0, 0, 100, 100), rotation: Math.PI }],
+    });
+    ok(turned, { type: 'setSelection', ids: ['r'] });
+    pointerDrag(turned, [99, 99], [149, 149]);
+    expect(nodeOf(turned, 'r')).toMatchObject({ frame: f(50, 50, 100, 100), rotation: Math.PI });
+    // Nested: no handle, and nested nodes are not hit before M1-U4, so nothing changes.
+    const nested = editor(value());
+    ok(nested, { type: 'setSelection', ids: ['a'] });
+    const before = text(nested);
+    pointerDrag(nested, [300, 100], [350, 150]);
+    expect(text(nested)).toBe(before);
+  });
+});

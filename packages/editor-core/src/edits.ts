@@ -4,6 +4,7 @@ import {
   normalizeRotation,
   validateNode,
   type DocumentV2,
+  type Frame,
   type NodeV2,
   type PageV2,
 } from '@vector-studio/model';
@@ -89,6 +90,11 @@ export type EditContext = Readonly<{
   activePage: string;
   /** False during a gesture update: groups refit only at commit (section 4.2). */
   refit?: boolean;
+  /**
+   * A gesture's pre-gesture document. A container resized during the gesture applies the resize
+   * rules from its state there, so each update is independent of the ones before it.
+   */
+  resizeBase?: DocumentV2;
 }>;
 
 const ID_ATTEMPTS = 1000;
@@ -188,6 +194,26 @@ function success(
   return { ok: true, document, touched: [...draft.touched], created };
 }
 
+/**
+ * Restores the descendants of container `id` to their state in `base` when its subtree there has
+ * the same members, and returns the container's frame in `base`; null leaves the draft as is.
+ */
+function restoreSubtree(draft: Draft, base: DocumentV2, id: string): Frame | null {
+  const baseTree = documentTree(base);
+  const origin = baseTree.node(id);
+  if (origin === undefined) return null;
+  const members = subtree(baseTree, id);
+  const current = subtree(draft, id);
+  if (members.length !== current.length || members.some((member, i) => member !== current[i])) {
+    return null;
+  }
+  for (const member of members.slice(1)) {
+    const node = baseTree.node(member)!;
+    if (draft.node(member) !== node) draft.setChecked(node, true);
+  }
+  return origin.frame;
+}
+
 export function applyEdit(
   document: DocumentV2,
   command: DocumentCommand,
@@ -233,10 +259,16 @@ export function applyEdit(
       }
       const draft = new Draft(document);
       for (const node of next) {
-        const before = draft.node(node.id)!.frame;
+        let before = draft.node(node.id)!.frame;
         draft.setChecked(node, true);
+        if (!isContainer(node)) continue;
+        const base = context.resizeBase;
+        if (base !== undefined) {
+          const restored = restoreSubtree(draft, base, node.id);
+          if (restored !== null) before = restored;
+        }
         // A container's new size applies the resize rules to its descendants (section 4.4).
-        if (isContainer(node)) resizeContainer(draft, node.id, before);
+        resizeContainer(draft, node.id, before);
       }
       return success(finish(draft), draft, []);
     }
@@ -309,10 +341,11 @@ export function applyEdit(
       if (command.name !== undefined && typeof command.name !== 'string') {
         return fail('editor.invalid-command', '/name');
       }
-      const id = freshId(document, context.ids);
-      if (id === null) return fail('editor.duplicate-id');
       const index = command.index ?? document.pages.length;
       if (!isIndex(index, document.pages.length)) return fail('editor.invalid-index');
+      // The ID is drawn once every other check passed, so a failed command draws none.
+      const id = freshId(document, context.ids);
+      if (id === null) return fail('editor.duplicate-id');
       const page: PageV2 = {
         id,
         name: command.name ?? `Page ${document.pages.length + 1}`,
@@ -615,12 +648,40 @@ function group(
     return fail('editor.invalid-command', '/kind');
   }
   if (ids.some((id) => nodeOf(document, id) === undefined)) return fail('editor.unknown-node');
-  const id = freshId(document, context.ids);
-  if (id === null) return fail('editor.duplicate-id');
   const owner = ids.length === 0 ? undefined : document.nodes[ids[0]!]!.parent;
   if (owner === undefined || ids.some((member) => document.nodes[member]!.parent !== owner)) {
     return fail('editor.not-siblings');
   }
+  // Every check runs with a placeholder ID first, so a failed command draws no ID; the result
+  // does not depend on the ID, so the build with the drawn one passes too.
+  const trial = buildGroup(document, command.kind, ids, owner, placeholderId(document), finish);
+  if (!trial.ok) return trial;
+  const id = freshId(document, context.ids);
+  if (id === null) return fail('editor.duplicate-id');
+  return buildGroup(document, command.kind, ids, owner, id, finish);
+}
+
+/** An ID that no page or node of `document` has, for checks that run before the ID is drawn. */
+function placeholderId(document: DocumentV2): string {
+  let id = PENDING_ID;
+  for (
+    let n = 1;
+    document.pages.some((page) => page.id === id) || Object.hasOwn(document.nodes, id);
+    n += 1
+  ) {
+    id = `${PENDING_ID}-${n}`;
+  }
+  return id;
+}
+
+function buildGroup(
+  document: DocumentV2,
+  kind: 'group' | 'maskGroup',
+  ids: readonly string[],
+  owner: string,
+  id: string,
+  finish: (draft: Draft) => DocumentV2 | Failure,
+): EditResult {
   const siblings = childrenOf(documentTree(document), owner);
   const members = siblings.filter((child) => ids.includes(child));
   const nodes = members.map((member) => document.nodes[member]!);
@@ -638,14 +699,14 @@ function group(
   }
   const container: NodeV2 = {
     id,
-    name: command.kind === 'group' ? 'Group' : 'Mask group',
+    name: kind === 'group' ? 'Group' : 'Mask group',
     parent: owner,
     frame: { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
     rotation: 0,
     constraints: START,
     opacity: 1,
     visible: true,
-    type: command.kind,
+    type: kind,
     children: members,
   };
   const draft = new Draft(document);
@@ -718,6 +779,11 @@ function move(
   }
   for (const id of roots) {
     const node = document.nodes[id]!;
+    if (node.parent === target) {
+      // A reorder within one parent keeps the node exactly.
+      draft.setChecked(node, true);
+      continue;
+    }
     const from = spaceOf(tree, node.parent);
     const moved = relocate(
       node.frame,
