@@ -92,7 +92,10 @@ function Toolbar() {
 
 function Status({ errors, renderer }: { errors: readonly string[]; renderer: string }) {
   const revision = useEditorSelector((snapshot) => snapshot.revision);
-  const count = useEditorSelector((snapshot) => snapshot.document.pages[0].children.length);
+  const count = useEditorSelector(
+    (snapshot) =>
+      snapshot.document.pages.find((page) => page.id === snapshot.activePage)?.children.length ?? 0,
+  );
   const selected = useEditorSelector((snapshot) => snapshot.selection.length);
   return (
     <p

@@ -1,12 +1,4 @@
-import type {
-  DocumentV1,
-  DocumentV2,
-  JsonValue,
-  NodeV1,
-  NodeV2,
-  PathStroke,
-  RectStroke,
-} from './types.js';
+import type { DocumentV2, JsonValue, NodeV2, PathStroke, RectStroke } from './types.js';
 
 // Fixed key order (plan section 3.3). Node and custom-data keys are inserted in code-unit order,
 // so the text does not depend on the order nodes were created, deleted or restored in. (Object
@@ -47,8 +39,8 @@ function json(value: JsonValue): unknown {
   );
 }
 
-/** Fields after `type` for the node types v1 and v2 share. */
-function pathFields(value: Extract<NodeV1 | NodeV2, { type: 'path' | 'custom' }>): Ordered {
+/** Fields after `type` of path and custom nodes. */
+function pathFields(value: Extract<NodeV2, { type: 'path' | 'custom' }>): Ordered {
   if (value.type === 'path') {
     return {
       path: {
@@ -72,44 +64,8 @@ function frame(value: { x: number; y: number; width: number; height: number }): 
   return { x: value.x, y: value.y, width: value.width, height: value.height };
 }
 
-function node(value: NodeV1): Ordered {
-  const base = {
-    id: value.id,
-    name: value.name,
-    parent: value.parent,
-    frame: frame(value.frame),
-    opacity: value.opacity,
-    visible: value.visible,
-    type: value.type,
-  };
-  if (value.type === 'rectangle') {
-    return {
-      ...base,
-      fill: nullable(value.fill, color),
-      stroke: nullable(value.stroke, rectStroke),
-    };
-  }
-  return { ...base, ...pathFields(value) };
-}
-
 function compareCodeUnits(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
-}
-
-/** Emits canonical JSON: two-space indentation, fixed key order and a final newline. */
-export function serializeDocument(document: DocumentV1): string {
-  const [page] = document.pages;
-  const ordered = {
-    schemaVersion: document.schemaVersion,
-    id: document.id,
-    pages: [{ id: page.id, name: page.name, children: [...page.children] }],
-    nodes: Object.fromEntries(
-      Object.keys(document.nodes)
-        .sort(compareCodeUnits)
-        .map((key) => [key, node(document.nodes[key]!)]),
-    ),
-  };
-  return `${JSON.stringify(ordered, null, 2)}\n`;
 }
 
 function nodeV2(value: NodeV2): Ordered {
@@ -165,8 +121,11 @@ function nodeV2(value: NodeV2): Ordered {
   }
 }
 
-/** Emits canonical v2 JSON with the rules of `serializeDocument` (MVP M1 contract, section 2.1). */
-export function serializeDocumentV2(document: DocumentV2): string {
+/**
+ * Emits canonical schema v2 JSON (M1 contract, section 2.1): two-space indentation, fixed key
+ * order and a final newline.
+ */
+export function serializeDocument(document: DocumentV2): string {
   const ordered = {
     schemaVersion: document.schemaVersion,
     id: document.id,

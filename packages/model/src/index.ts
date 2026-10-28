@@ -5,18 +5,14 @@ export {
   migrateV1toV2,
   normalizeRotation,
   parseDocument,
-  parseDocumentV2,
   validateAnyDocument,
-  validateNodeV2,
   validateDocument,
   validateNode,
   type DocumentErrorCode,
   type ModelErrorCode,
   type NodeResult,
-  type NodeResultV2,
   type ParseResult,
-  type ParseResultV2,
 } from './parse.js';
 export { MAX_DEPTH } from './json-scan.js';
-export { serializeDocument, serializeDocumentV2 } from './serialize.js';
+export { serializeDocument } from './serialize.js';
 export type * from './types.js';

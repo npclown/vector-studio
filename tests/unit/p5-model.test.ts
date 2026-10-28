@@ -6,26 +6,34 @@ import {
   MAX_DEPTH,
   parseDocument,
   serializeDocument,
-  validateDocument,
+  validateAnyDocument,
   validateNode,
-  type DocumentV1,
+  type DocumentV2,
   type ParseResult,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 // @ts-expect-error The repository's executable boundary policy is JavaScript tooling.
 import { boundaries, evaluatePackageBoundaries } from '../../tooling/boundary-policy.mjs';
 
-// P5-U1 (P5 editor-slice plan, sections 3 and 7): P5-A06 to P5-A08 for the document model.
+// P5-U1 (P5 editor-slice plan, sections 3 and 7): P5-A06 to P5-A08 for the document model. Since
+// MVP M1-U2 the model reads schema v1 and v2 and returns and writes v2 (M1 contract, section
+// 2.1): the v1 fixtures here parse to v2, so their round trip goes through the committed v2
+// fixtures of tests/fixtures/m1-model, and the in-memory v1 cases use `validateAnyDocument`.
 
 const root = path.resolve(import.meta.dirname, '../..');
 const fixtures = path.join(root, 'tests/fixtures/p5-model');
+const migrated = path.join(root, 'tests/fixtures/m1-model');
 const VALID = ['empty', 'shapes', 'ext-star'] as const;
 
 async function fixture(name: string): Promise<string> {
   return readFile(path.join(fixtures, `${name}.json`), 'utf8');
 }
 
-function parsed(text: string): DocumentV1 {
+async function migratedFixture(name: string): Promise<string> {
+  return readFile(path.join(migrated, `${name}.v2.json`), 'utf8');
+}
+
+function parsed(text: string): DocumentV2 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -119,11 +127,13 @@ function edited(...edits: readonly Edit[]): Record<string, unknown> {
 
 describe('P5-A06 JSON round trip', () => {
   it.each(VALID)(
-    'serialize(parse(t)) = t and parse(serialize(d)) deep-equals d for %s',
+    'serialize(parse(t)) is the committed v2 fixture and parse(serialize(d)) deep-equals d for %s',
     async (name) => {
       const text = await fixture(name);
       const document = parsed(text);
-      expect(serializeDocument(document)).toBe(text);
+      const v2 = await migratedFixture(name);
+      expect(serializeDocument(document)).toBe(v2);
+      expect(serializeDocument(parsed(v2))).toBe(v2);
       expect(parsed(serializeDocument(document))).toEqual(document);
     },
   );
@@ -131,7 +141,7 @@ describe('P5-A06 JSON round trip', () => {
   it('preserves IDs, frames, path data and paint order', async () => {
     const shapes = parsed(await fixture('shapes'));
     expect(shapes.id).toBe('doc-shapes');
-    expect(shapes.pages[0].children).toEqual(['r1', 'r2', 'p1', 'p2', 'r3']);
+    expect(shapes.pages[0]!.children).toEqual(['r1', 'r2', 'p1', 'p2', 'r3']);
     expect(Object.keys(shapes.nodes).sort()).toEqual(['p1', 'p2', 'r1', 'r2', 'r3']);
     expect(shapes.nodes.r2?.frame).toEqual({ x: -30.5, y: 0, width: 0, height: 12.25 });
     expect(shapes.nodes.r3?.frame).toEqual({ x: 1e-7, y: 123456.789, width: 0.1, height: 0.3 });
@@ -145,7 +155,7 @@ describe('P5-A06 JSON round trip', () => {
 
   it('round-trips the ext.star custom node as opaque data', async () => {
     const star = parsed(await fixture('ext-star'));
-    expect(star.pages[0].children).toEqual(['n10', 'n2']);
+    expect(star.pages[0]!.children).toEqual(['n10', 'n2']);
     const node = star.nodes.n2;
     expect(node?.type === 'custom' && [node.customType, node.data]).toEqual([
       'ext.star',
@@ -161,8 +171,8 @@ describe('P5-A06 JSON round trip', () => {
       id: document.id,
       schemaVersion: 1,
     };
-    const a = validateDocument(document);
-    const b = validateDocument(reordered);
+    const a = validateAnyDocument(document);
+    const b = validateAnyDocument(reordered);
     if (!a.ok || !b.ok) throw new Error('fixture invalid');
     const text = serializeDocument(a.document);
     expect(serializeDocument(b.document)).toBe(text);
@@ -177,6 +187,8 @@ describe('P5-A06 JSON round trip', () => {
       'name',
       'parent',
       'frame',
+      'rotation',
+      'constraints',
       'opacity',
       'visible',
       'type',
@@ -214,7 +226,7 @@ describe('P5-A06 JSON round trip', () => {
 
   it('returns a copy that shares nothing with the input', () => {
     const input = smallDocument();
-    const result = validateDocument(input);
+    const result = validateAnyDocument(input);
     if (!result.ok) throw new Error('fixture invalid');
     const nodes = input.nodes as Record<string, { frame: object }>;
     expect(result.document.nodes.a?.frame).toEqual(nodes.a?.frame);
@@ -389,7 +401,7 @@ describe('P5-A07 validation codes', () => {
       '/pages/0/children/0',
     ],
   ])('%s', (_label, edits, code, at) => {
-    expect(failure(validateDocument(edited(...edits)))).toEqual({
+    expect(failure(validateAnyDocument(edited(...edits)))).toEqual({
       code: `document.${code}`,
       path: at,
     });
@@ -453,7 +465,7 @@ describe('P5-A07 validation codes', () => {
     cyclic.push(cyclic);
     for (const data of [nested, cyclic]) {
       const doc = edited(['set', '/nodes/c', customNode(data)], ['push', '/pages/0/children', 'c']);
-      expect(failure(validateDocument(doc)).code).toBe('document.invalid-field');
+      expect(failure(validateAnyDocument(doc)).code).toBe('document.invalid-field');
     }
   });
 
@@ -466,7 +478,7 @@ describe('P5-A07 validation codes', () => {
       '/nodes/b/path/verbs/1',
     ],
   ])('rejects a sparse %s array', (_label, edits, at) => {
-    expect(failure(validateDocument(edited(...edits)))).toEqual({
+    expect(failure(validateAnyDocument(edited(...edits)))).toEqual({
       code: 'document.invalid-field',
       path: at,
     });
@@ -477,7 +489,7 @@ describe('P5-A07 validation codes', () => {
       ['set', '/nodes/c', customNode(holed([1, 0, 2], 1))],
       ['push', '/pages/0/children', 'c'],
     );
-    expect(failure(validateDocument(doc))).toEqual({
+    expect(failure(validateAnyDocument(doc))).toEqual({
       code: 'document.invalid-field',
       path: '/nodes/c/data/1',
     });
@@ -497,7 +509,7 @@ describe('P5-A07 validation codes', () => {
       ['set', '/nodes/c', customNode({ f: () => 0 })],
       ['push', '/pages/0/children', 'c'],
     );
-    expect(failure(validateDocument(doc))).toEqual({
+    expect(failure(validateAnyDocument(doc))).toEqual({
       code: 'document.invalid-field',
       path: '/nodes/c/data/f',
     });
@@ -514,8 +526,13 @@ describe('P5-A07 validation codes', () => {
 });
 
 describe('validateNode', () => {
-  it('applies the document field rules to one node', () => {
-    const node = (smallDocument().nodes as Record<string, Record<string, unknown>>).a!;
+  it('applies the document field rules to one v2 node', () => {
+    const node = {
+      ...(smallDocument().nodes as Record<string, Record<string, unknown>>).a!,
+      rotation: 0,
+      constraints: { horizontal: 'start', vertical: 'start' },
+      cornerRadii: [0, 0, 0, 0],
+    };
     const result = validateNode(node);
     expect(result.ok && result.node).toEqual(node);
     expect(failure(validateNode({ ...node, opacity: 2 }) as ParseResult)).toEqual({
@@ -551,7 +568,7 @@ describe('P5-A08 no session state in the document', () => {
     const found = [...keys(JSON.parse(text), new Set())];
     expect(found.filter((key) => FORBIDDEN.test(key))).toEqual([]);
     const schema = new Set(
-      'schemaVersion id pages nodes name children parent frame x y width height opacity visible type fill stroke color r g b a cap join miterLimit path verbs points fillRule customType data'.split(
+      'schemaVersion id pages nodes name children parent frame x y width height rotation constraints horizontal vertical opacity visible type cornerRadii fill stroke color r g b a cap join miterLimit path verbs points fillRule customType data'.split(
         ' ',
       ),
     );

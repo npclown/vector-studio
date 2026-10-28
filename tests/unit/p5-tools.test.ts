@@ -364,7 +364,7 @@ describe('Rectangle tool', () => {
     const seen: EditorEvent[] = [];
     target.subscribe((event) => seen.push(event));
     drag(target, [50, 10], [20, 40]);
-    const [id] = target.query({ type: 'document' }).pages[0].children;
+    const [id] = target.query({ type: 'document' }).pages[0]!.children;
     expect(frame(target, id!)).toEqual({ x: 20, y: 10, width: 30, height: 30 });
     expect(history(target)).toEqual({ undoDepth: 1, redoDepth: 0 });
     expect(selection(target)).toEqual([id]);
@@ -372,7 +372,7 @@ describe('Rectangle tool', () => {
       cause: 'gesture-commit',
     });
     ok(target, { type: 'undo' });
-    expect(target.query({ type: 'document' }).pages[0].children).toEqual([]);
+    expect(target.query({ type: 'document' }).pages[0]!.children).toEqual([]);
   });
 
   it('a click without movement creates nothing', () => {
@@ -394,7 +394,7 @@ describe('Path tool', () => {
   }
 
   const created = (target: Editor) => {
-    const [id] = target.query({ type: 'document' }).pages[0].children;
+    const [id] = target.query({ type: 'document' }).pages[0]!.children;
     return target.query({ type: 'node', id: id! });
   };
 
@@ -485,7 +485,7 @@ describe('P5-U3 review follow-ups', () => {
     pointer(target, 'pointerdown', 0, 0);
     pointer(target, 'pointermove', 5, 5);
     pointer(target, 'pointerup', 10, 10);
-    const [id] = target.query({ type: 'document' }).pages[0].children;
+    const [id] = target.query({ type: 'document' }).pages[0]!.children;
     expect(frame(target, id!)).toEqual({ x: 0, y: 0, width: 10, height: 10 });
     ok(target, { type: 'setTool', tool: 'select' });
     pointer(target, 'pointerdown', 5, 5);
@@ -570,7 +570,7 @@ describe('P5-U3 review follow-ups', () => {
     pointer(target, 'pointermove', 120, 120);
     key(target, 'Escape');
     pointer(target, 'pointerup', 120, 120);
-    expect(target.query({ type: 'document' }).pages[0].children).toEqual([a]);
+    expect(target.query({ type: 'document' }).pages[0]!.children).toEqual([a]);
     expect(history(target).undoDepth).toBe(depth);
   });
 
@@ -630,7 +630,7 @@ describe('P5-U3 review follow-ups', () => {
     click(target, 0, 0);
     click(target, 0, 0);
     key(target, 'Enter');
-    expect(target.query({ type: 'document' }).pages[0].children).toEqual([]);
+    expect(target.query({ type: 'document' }).pages[0]!.children).toEqual([]);
     const overlay = target.query({ type: 'overlay' });
     expect(overlay?.kind === 'path' && overlay.anchors).toHaveLength(1);
     expect(Object.isFrozen(overlay)).toBe(true);

@@ -1,22 +1,24 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import {
+  isValidId,
   MAX_TREE_DEPTH,
   migrateV1toV2,
   normalizeRotation,
   parseDocument,
-  parseDocumentV2,
   serializeDocument,
-  serializeDocumentV2,
   validateAnyDocument,
-  validateNodeV2,
+  validateDocument,
+  validateNode,
+  type DocumentV1,
   type DocumentV2,
-  type ParseResultV2,
+  type ParseResult,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 
 // MVP M1-U1 (M1 contract, section 2): schema v2, the v1 migration and the new codes
-// (M1-A01 model half, M1-A02).
+// (M1-A01 model half, M1-A02). Since M1-U2 `parseDocument`, `validateDocument`,
+// `validateNode` and `serializeDocument` have the section 2.1 meaning.
 
 const root = path.resolve(import.meta.dirname, '../..');
 const p5 = path.join(root, 'tests/fixtures/p5-model');
@@ -32,12 +34,12 @@ function read(dir: string, name: string): Promise<string> {
 }
 
 function parsed(text: string): DocumentV2 {
-  const result = parseDocumentV2(text);
+  const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
 }
 
-function failure(result: ParseResultV2): { code: string; path: string } {
+function failure(result: ParseResult): { code: string; path: string } {
   expect(result.ok).toBe(false);
   expect(result).not.toHaveProperty('document');
   return result.ok ? { code: 'none', path: '' } : { code: result.code, path: result.path };
@@ -96,11 +98,9 @@ describe('M1-A01 migration and round trip', () => {
     async (name) => {
       const v1 = await read(p5, name);
       const v2 = await read(m1, `${name}.v2`);
-      expect(serializeDocumentV2(parsed(v1))).toBe(v2);
-      const viaMigrate = parseDocument(v1);
-      if (!viaMigrate.ok) throw new Error(viaMigrate.code);
-      const migrated = migrateV1toV2(viaMigrate.document);
-      expect(migrated.ok && serializeDocumentV2(migrated.document)).toBe(v2);
+      expect(serializeDocument(parsed(v1))).toBe(v2);
+      const migrated = migrateV1toV2(JSON.parse(v1) as DocumentV1);
+      expect(migrated.ok && serializeDocument(migrated.document)).toBe(v2);
     },
   );
 
@@ -109,8 +109,8 @@ describe('M1-A01 migration and round trip', () => {
     async (name) => {
       const text = await read(m1, name);
       const document = parsed(text);
-      expect(serializeDocumentV2(document)).toBe(text);
-      expect(parsed(serializeDocumentV2(document))).toEqual(document);
+      expect(serializeDocument(document)).toBe(text);
+      expect(parsed(serializeDocument(document))).toEqual(document);
     },
   );
 
@@ -143,12 +143,15 @@ describe('M1-A01 migration and round trip', () => {
     }
   });
 
-  it('keeps the v1 functions unchanged until editor-core moves to v2', async () => {
-    for (const name of MIGRATED) {
-      const text = await read(p5, name);
-      const result = parseDocument(text);
-      expect(result.ok && serializeDocument(result.document)).toBe(text);
-    }
+  it('validates in-memory v2 only through validateDocument', async () => {
+    const v1 = JSON.parse(await read(p5, 'shapes')) as unknown;
+    const v2 = JSON.parse(await read(m1, 'shapes.v2')) as unknown;
+    expect(failure(validateDocument(v1))).toEqual({
+      code: 'document.unsupported-version',
+      path: '/schemaVersion',
+    });
+    const result = validateDocument(v2);
+    expect(result.ok && serializeDocument(result.document)).toBe(await read(m1, 'shapes.v2'));
   });
 
   it('accepts in-memory v1 and v2 values through validateAnyDocument', async () => {
@@ -182,7 +185,7 @@ describe('M1-A02 malformed v2 documents', () => {
 
   it.each(Object.entries(expected))('%s fails with its code and path', async (name, [code, at]) => {
     const text = await read(path.join(m1, 'malformed'), name);
-    expect(failure(parseDocumentV2(text))).toEqual({ code, path: at });
+    expect(failure(parseDocument(text))).toEqual({ code, path: at });
     expect(failure(validateAnyDocument(JSON.parse(text)))).toEqual({ code, path: at });
   });
 
@@ -194,11 +197,15 @@ describe('M1-A02 malformed v2 documents', () => {
     const page = 'page\u00001';
     v1.pages[0]!.id = page;
     for (const node of Object.values(v1.nodes)) node.parent = page;
-    expect(parseDocument(JSON.stringify(v1)).ok).toBe(true);
-    expect(failure(parseDocumentV2(JSON.stringify(v1)))).toEqual({
+    expect(failure(parseDocument(JSON.stringify(v1)))).toEqual({
       code: 'document.invalid-field',
       path: '/pages/0/id',
     });
+    expect(failure(migrateV1toV2(v1 as unknown as DocumentV1))).toEqual({
+      code: 'document.invalid-field',
+      path: '/pages/0/id',
+    });
+    expect([isValidId('a'), isValidId('a\u0000b')]).toEqual([true, false]);
   });
 
   it(`allows a tree depth of ${MAX_TREE_DEPTH} and rejects one more`, () => {
@@ -269,9 +276,9 @@ describe('rotation normalization (M1-S1)', () => {
 
   it('normalizes rotation on parse and rejects a non-finite one in a node', () => {
     const node = { ...rect('a', 'p'), rotation: 4 * Math.PI + 1 };
-    const result = validateNodeV2(node);
+    const result = validateNode(node);
     expect(result.ok && result.node.rotation).toBeCloseTo(1, 12);
-    expect(validateNodeV2({ ...node, rotation: Number.POSITIVE_INFINITY })).toEqual({
+    expect(validateNode({ ...node, rotation: Number.POSITIVE_INFINITY })).toEqual({
       ok: false,
       code: 'document.invalid-field',
       path: '/rotation',
@@ -376,13 +383,13 @@ describe('M1-A02 field and tree rules, inline cases', () => {
   it('rejects a duplicate node key and nesting deeper than the text bound', async () => {
     const text = await read(m1, 'containers');
     const duplicated = text.replace('"r3": {', '"r3": {"id": "r3"}, "r3": {');
-    expect(failure(parseDocumentV2(duplicated))).toEqual({
+    expect(failure(parseDocument(duplicated))).toEqual({
       code: 'document.duplicate-id',
       path: '/nodes/r3',
     });
     const deep = `${'['.repeat(300)}${']'.repeat(300)}`;
     const nested = text.replace('"points": 5', `"points": 5, "deep": ${deep}`);
-    expect(failure(parseDocumentV2(nested)).code).toBe('document.invalid-field');
+    expect(failure(parseDocument(nested)).code).toBe('document.invalid-field');
   });
 
   it('writes negative zero as 0', async () => {
@@ -391,7 +398,7 @@ describe('M1-A02 field and tree rules, inline cases', () => {
     at(document, 'r1').cornerRadii[3] = -0;
     const result = validateAnyDocument(document);
     if (!result.ok) throw new Error(result.code);
-    const reread = JSON.parse(serializeDocumentV2(result.document)) as LooseDocument;
+    const reread = JSON.parse(serializeDocument(result.document)) as LooseDocument;
     expect(Object.is(at(reread, 'r1').rotation, 0)).toBe(true);
     expect(Object.is(at(reread, 'r1').cornerRadii[3], 0)).toBe(true);
     expect(Object.is(result.document.nodes.r1!.rotation, 0)).toBe(true);

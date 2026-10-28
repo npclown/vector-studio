@@ -1,10 +1,16 @@
 import type { RenderCamera, RendererSceneSynchronization } from '@vector-studio/contracts';
-import { DOCUMENT_ERROR_CODES, validateDocument, type DocumentV1 } from '@vector-studio/model';
-import { applyEdit, deepFreeze } from './edits.js';
+import {
+  DOCUMENT_ERROR_CODES,
+  validateAnyDocument,
+  type DocumentV2,
+  type ParseResult,
+} from '@vector-studio/model';
+import { applyEdit, deepFreeze, refitGesture } from './edits.js';
 import { ExtensionRegistry, extensionApi } from './extensions.js';
 import { createCounterIdSource } from './ids.js';
 import { SceneProjector } from './projector.js';
 import { createPathTool, createRectangleTool, createSelectTool } from './tools.js';
+import { ancestors, documentClipViolation, documentTree, nodePath, pageOf } from './tree.js';
 import type {
   Command,
   CommandResult,
@@ -23,7 +29,8 @@ import type {
   ToolOverlay,
 } from './types.js';
 
-// Editor core (P5 plan, section 4): commands, transactions, history, gestures and session.
+// Editor core (P5 plan, section 4): commands, transactions, history, gestures and session; the
+// pages, active page and selection rules of the MVP M1 contract (sections 3 and 6).
 
 export type EditorOptions = Readonly<{
   /** A document value; it is validated like `loadDocument`. Defaults to an empty document. */
@@ -64,22 +71,32 @@ export interface GestureControl {
 }
 
 type HistoryEntry = Readonly<{
-  before: DocumentV1;
-  after: DocumentV1;
+  before: DocumentV2;
+  after: DocumentV2;
   touched: readonly string[];
 }>;
 
-type Gesture = { base: DocumentV1; touched: Set<string>; updated: boolean };
+type Gesture = { base: DocumentV2; touched: Set<string>; updated: boolean };
 
 const TOOLS: readonly ToolName[] = ['select', 'rectangle', 'path'];
 const DEFAULT_VIEWPORT: RenderCamera = deepFreeze({ position: { x: 0, y: 0 }, zoom: 1 });
 const DOCUMENT_COMMANDS = new Set([
   'createRectangle',
+  'createEllipse',
+  'createLine',
+  'createFrame',
   'createPath',
   'createCustomNode',
   'setFrames',
   'setNodeProps',
   'deleteNodes',
+  'groupNodes',
+  'ungroupNodes',
+  'moveNodes',
+  'addPage',
+  'removePage',
+  'renamePage',
+  'movePage',
 ]);
 
 /** Extension commands may nest this deep through `runCommand` (P5-U5). */
@@ -96,13 +113,21 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.invalid-camera',
   'editor.unknown-command',
   'editor.extension-failed',
+  'editor.unknown-page',
+  'editor.invalid-index',
+  'editor.last-page',
+  'editor.invalid-parent',
+  'editor.not-siblings',
+  'editor.not-a-group',
+  'editor.invalid-mask-source',
+  'editor.clip-depth',
 ]);
 
 /**
  * A frozen copy of an extension command's result, or null when it is not a `CommandResult`
  * with a known code and, on success, IDs of nodes in `document`.
  */
-function extensionResult(value: unknown, document: DocumentV1): CommandResult | null {
+function extensionResult(value: unknown, document: DocumentV2): CommandResult | null {
   if (typeof value !== 'object' || value === null) return null;
   const record = value as Record<string, unknown>;
   if (record.ok === true) {
@@ -174,17 +199,34 @@ function sorted(ids: Iterable<string>): string[] {
 }
 
 /** Validated by the caller like any initial document, so a bad ID source fails at creation. */
-function emptyDocument(ids: IdSource): DocumentV1 {
+function emptyDocument(ids: IdSource): DocumentV2 {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: ids(),
     pages: [{ id: ids(), name: 'Page 1', children: [] }],
     nodes: {},
   };
 }
 
+/**
+ * The selection rule of section 6: nodes of `page` only, in order, without repeats, and a node
+ * whose ancestor is also listed is dropped (the ancestor wins).
+ */
+function normalizeSelection(
+  document: DocumentV2,
+  page: string,
+  ids: readonly string[],
+): string[] | null {
+  const tree = documentTree(document);
+  const unique = [...new Set(ids)];
+  if (unique.some((id) => typeof id !== 'string' || pageOf(tree, id) !== page)) return null;
+  const listed = new Set(unique);
+  return unique.filter((id) => !ancestors(tree, id).some((node) => listed.has(node.id)));
+}
+
 class EditorCore implements Editor {
-  private document: DocumentV1;
+  private document: DocumentV2;
+  private activePage: string;
   private revision = 0;
   private selection: readonly string[] = Object.freeze([]);
   private tool: ToolName = 'select';
@@ -221,6 +263,7 @@ class EditorCore implements Editor {
     );
     if (!result.ok) throw new Error(`createEditor: ${result.code} at ${result.path}`);
     this.document = deepFreeze(result.document);
+    this.activePage = this.document.pages[0]!.id;
     this.snapshot = this.buildSnapshot();
     this.tools.set(
       'select',
@@ -262,7 +305,7 @@ class EditorCore implements Editor {
       // A host command during a drag would leave the gesture's base stale, so it applies to the
       // pre-gesture document and, only if it succeeds, cancels the drag first.
       const base = this.gestureState?.base ?? this.document;
-      const result = applyEdit(base, command as DocumentCommand, this.ids, this.extensions);
+      const result = applyEdit(base, command as DocumentCommand, this.context(true));
       if (!result.ok) return result;
       this.interrupt();
       const entry = { before: base, after: result.document, touched: result.touched };
@@ -304,11 +347,32 @@ class EditorCore implements Editor {
       }
       case 'setSelection': {
         if (!Array.isArray(command.ids)) return failure('editor.invalid-command', '/ids');
-        const ids = [...new Set(command.ids)];
-        if (ids.some((id) => typeof id !== 'string' || !Object.hasOwn(this.document.nodes, id))) {
-          return failure('editor.unknown-node');
-        }
+        // Nodes of the active page at any depth; the ancestor of a listed descendant wins.
+        const ids = normalizeSelection(this.document, this.activePage, command.ids);
+        if (ids === null) return failure('editor.unknown-node');
         this.setSelectionState(ids);
+        return { ok: true, ids: [] };
+      }
+      case 'setActivePage': {
+        if (typeof command.id !== 'string') return failure('editor.invalid-command', '/id');
+        if (!this.document.pages.some((page) => page.id === command.id)) {
+          return failure('editor.unknown-page');
+        }
+        // Like setTool, it first cancels an active gesture (M1 contract, section 3).
+        this.interrupt();
+        if (command.id !== this.activePage) {
+          const hadSelection = this.selection.length > 0;
+          this.switchPage(command.id);
+          // A new page is a new scene identity: the renderer gets a full snapshot.
+          const diagnostics: EditorEvent[] = [];
+          this.withProjector(
+            (projector) => projector.replace(this.document, this.activePage),
+            diagnostics,
+          );
+          this.refresh({ type: 'session', field: 'activePage' });
+          if (hadSelection) this.emit({ type: 'session', field: 'selection' });
+          diagnostics.forEach((event) => this.emit(event));
+        }
         return { ok: true, ids: [] };
       }
       case 'setTool': {
@@ -367,13 +431,24 @@ class EditorCore implements Editor {
     }
   }
 
-  /** The model's rules, then each custom node against its extension (plan section 3.3). */
-  private validate(value: unknown): ReturnType<typeof validateDocument> | CommandFailure {
-    const result = validateDocument(value);
+  /**
+   * The model's rules (a v1 value is migrated), then each custom node against its extension
+   * wherever it is nested (plan section 3.3), then the clip depth (M1 contract, section 4.3).
+   */
+  private validate(value: unknown): ParseResult | CommandFailure {
+    const result = validateAnyDocument(value);
     if (!result.ok) return result;
     // Frozen before any extension sees it, so `validate` cannot change what is stored.
     const rejected = this.extensions.checkDocument(deepFreeze(result.document));
-    return rejected === null ? result : { ok: false, ...rejected };
+    if (rejected !== null) return { ok: false, ...rejected };
+    const deep = documentClipViolation(result.document);
+    return deep === null
+      ? result
+      : { ok: false, code: 'editor.clip-depth', path: nodePath(deep, '/parent') };
+  }
+
+  private context(refit: boolean) {
+    return { ids: this.ids, custom: this.extensions, activePage: this.activePage, refit };
   }
 
   query<Q extends Query>(query: Q): QueryResult<Q> {
@@ -397,6 +472,10 @@ class EditorCore implements Editor {
           return this.revision;
         case 'overlay':
           return this.tools.get(this.tool)?.overlay() ?? null;
+        case 'activePage':
+          return this.activePage;
+        case 'pages':
+          return this.document.pages;
       }
     })();
     return value as QueryResult<Q>;
@@ -420,7 +499,7 @@ class EditorCore implements Editor {
     this.projector = projector;
     this.renderer = renderer;
     const diagnostics: EditorEvent[] = [];
-    this.withProjector((attached) => attached.replace(this.document), diagnostics);
+    this.withProjector((attached) => attached.replace(this.document, this.activePage), diagnostics);
     // The editor's viewport is already valid; a renderer that rejects it keeps its own camera
     // until the next `setViewport`.
     this.applyCamera(this.viewport);
@@ -454,7 +533,11 @@ class EditorCore implements Editor {
   private updateGesture(command: DocumentCommand): CommandResult {
     const gesture = this.gestureState;
     if (gesture === null) return failure('editor.invalid-command');
-    const result = applyEdit(this.document, command, this.ids, this.extensions);
+    // Groups refit only at commit (M1 contract, section 4.2).
+    const result = applyEdit(this.document, command, {
+      ...this.context(false),
+      resizeBase: gesture.base,
+    });
     if (!result.ok) return result;
     result.touched.forEach((id) => gesture.touched.add(id));
     gesture.updated = true;
@@ -468,10 +551,13 @@ class EditorCore implements Editor {
     this.gestureState = null;
     // A gesture with no update (a click) creates no step and no change.
     if (!gesture.updated) return;
-    const touched = sorted(gesture.touched);
-    this.undoStack.push({ before: gesture.base, after: this.document, touched });
+    const refit = refitGesture(gesture.base, this.document, gesture.touched, this.extensions);
+    // A refit that fails the model's rules (binary64 overflow) leaves the live document as is.
+    const after = refit.ok ? refit.document : this.document;
+    const touched = sorted(refit.ok ? refit.touched : gesture.touched);
+    this.undoStack.push({ before: gesture.base, after, touched });
     this.redoStack = [];
-    this.changeDocument(this.document, 'gesture-commit', touched);
+    this.changeDocument(after, 'gesture-commit', touched);
   }
 
   /**
@@ -493,26 +579,58 @@ class EditorCore implements Editor {
   }
 
   private changeDocument(
-    document: DocumentV1,
+    document: DocumentV2,
     cause: DocumentChangeCause,
     touched: Iterable<string>,
   ): void {
+    const previous = this.document;
     this.document = document;
     this.revision += 1;
     const ids = sorted(touched);
+    // A load activates the first page; removing or undoing away the active page activates the
+    // page now at its index, else the last one (M1 contract, section 3).
+    const index = previous.pages.findIndex((page) => page.id === this.activePage);
+    const page =
+      cause === 'load'
+        ? document.pages[0]!.id
+        : document.pages.some((entry) => entry.id === this.activePage)
+          ? this.activePage
+          : document.pages[Math.min(index, document.pages.length - 1)]!.id;
+    const pageChanged = page !== this.activePage;
+    let selectionChanged: boolean;
+    if (pageChanged) {
+      selectionChanged = this.selection.length > 0;
+      this.switchPage(page);
+    } else {
+      // Deleting or undoing away a selected node removes it from the selection, and a node
+      // whose ancestor is selected too gives way to it.
+      const kept = this.selection.filter(
+        (id) => Object.hasOwn(document.nodes, id) && pageOf(documentTree(document), id) === page,
+      );
+      const normalized = normalizeSelection(document, page, kept) ?? [];
+      selectionChanged = normalized.length !== this.selection.length;
+      if (selectionChanged) this.selection = Object.freeze(normalized);
+    }
     // The renderer follows before any listener runs; its diagnostics follow the change event.
     const diagnostics: EditorEvent[] = [];
     this.withProjector((projector) => {
-      if (cause === 'load') projector.replace(document);
-      else projector.change(document, ids);
+      if (cause === 'load' || pageChanged) projector.replace(document, page);
+      else projector.change(document, page, ids);
     }, diagnostics);
-    // Deleting or undoing away a selected node removes it from the selection.
-    const kept = this.selection.filter((id) => Object.hasOwn(document.nodes, id));
-    const selectionChanged = kept.length !== this.selection.length;
-    if (selectionChanged) this.selection = Object.freeze(kept);
     this.refresh({ type: 'document', cause, revision: this.revision, touched: ids });
     if (selectionChanged) this.emit({ type: 'session', field: 'selection' });
+    if (pageChanged) this.emit({ type: 'session', field: 'activePage' });
     diagnostics.forEach((event) => this.emit(event));
+  }
+
+  /**
+   * Activates `page`: the selection is cleared and the active tool reset (it stays selected).
+   * The caller raises the events and updates the renderer.
+   */
+  private switchPage(page: string): void {
+    this.activePage = page;
+    this.selection = Object.freeze([]);
+    this.tools.get(this.tool)?.reset();
   }
 
   /** Runs `action` on the attached projector, collecting its diagnostics into `into`. */
@@ -553,6 +671,7 @@ class EditorCore implements Editor {
     return deepFreeze({
       overlay: this.overlay,
       document: this.document,
+      activePage: this.activePage,
       revision: this.revision,
       selection: this.selection,
       tool: this.tool,

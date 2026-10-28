@@ -6,14 +6,20 @@ import type {
   SceneRejectionReason,
   ScenePathGeometry,
 } from '@vector-studio/contracts';
-import type { DocumentV1, NodeV1, PathData } from '@vector-studio/model';
+import type { DocumentV2, NodeV2, PathData } from '@vector-studio/model';
+import { localTransform } from './geometry.js';
 import type { DiagnosticEvent } from './types.js';
 
-// The scene projector (P5 plan, section 4.5): maps the document to `contracts` scene data and
-// keeps an injected renderer synchronized with it.
+// The scene projector (P5 plan, section 4.5): maps the active page of the document to
+// `contracts` scene data and keeps an injected renderer synchronized with it.
+//
+// M1-U2 scope: rectangle, path and custom nodes at the page root project as in P5, with the
+// section 5 transform (exactly P5's translation for θ = 0) and clamped corner radii. Ellipses,
+// lines and containers with their subtrees are not projected yet: their projection, synthetic
+// frame nodes and the per-subtree isolation are M1-U3.
 
 /** Frame-local path geometry for a custom node (its extension's `toScene`), or null. */
-export type CustomProjection = (node: NodeV1) => PathData | null;
+export type CustomProjection = (node: NodeV2) => PathData | null;
 
 function sameStrings(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
@@ -28,13 +34,35 @@ function pathGeometry(path: PathData, sx: number, sy: number): ScenePathGeometry
   };
 }
 
-/** One node's scene snapshot, or null when it cannot be projected (an unowned custom type). */
-export function projectNode(node: NodeV1, custom: CustomProjection): RenderNodeSnapshot | null {
+/** Corner radii scaled by `min(1, w/(tl+tr), w/(bl+br), h/(tl+bl), h/(tr+br))` (section 5). */
+export function clampedRadii(
+  radii: readonly [number, number, number, number],
+  width: number,
+  height: number,
+): [number, number, number, number] {
+  const [tl, tr, br, bl] = radii;
+  let f = 1;
+  for (const [size, sum] of [
+    [width, tl + tr],
+    [width, bl + br],
+    [height, tl + bl],
+    [height, tr + br],
+  ] as const) {
+    if (sum > 0) f = Math.min(f, size / sum);
+  }
+  return f === 1 ? [tl, tr, br, bl] : [tl * f, tr * f, br * f, bl * f];
+}
+
+/**
+ * One page-root node's scene snapshot, or null when it cannot be projected: an unowned custom
+ * type, or a node type whose projection is M1-U3 work (ellipse, line, containers).
+ */
+export function projectNode(node: NodeV2, custom: CustomProjection): RenderNodeSnapshot | null {
   const base = {
     id: node.id,
     parentId: null,
-    // Translation to the frame origin only (plan section 4.5).
-    transform: [1, 0, 0, 1, node.frame.x, node.frame.y] as const,
+    // Exactly the translation to the frame origin for θ = 0 (P5), else section 5's rotation.
+    transform: localTransform(node.frame, node.rotation),
     visible: node.visible,
     opacity: node.opacity,
   };
@@ -47,7 +75,7 @@ export function projectNode(node: NodeV1, custom: CustomProjection): RenderNodeS
           kind: 'rectangle',
           width: node.frame.width,
           height: node.frame.height,
-          cornerRadii: [0, 0, 0, 0],
+          cornerRadii: clampedRadii(node.cornerRadii, node.frame.width, node.frame.height),
         },
         style: { fill: node.fill, stroke: node.stroke },
       };
@@ -69,7 +97,15 @@ export function projectNode(node: NodeV1, custom: CustomProjection): RenderNodeS
         style: { fill: node.fill, stroke: node.stroke },
       };
     }
+    default:
+      // Ellipse, line, group, mask group and frame: projected by M1-U3.
+      return null;
   }
+}
+
+/** Whether `node` is projected on `page`: a page child (M1-U2; nested nodes come with M1-U3). */
+function onPageRoot(node: NodeV2 | undefined, page: string): node is NodeV2 {
+  return node !== undefined && node.parent === page;
 }
 
 export class SceneProjector {
@@ -88,6 +124,8 @@ export class SceneProjector {
   private readonly excluded = new Set<string>();
   private disposed = false;
   private resyncing = false;
+  /** The page the projection shows (M1 contract, section 3). */
+  private page = '';
 
   constructor(
     renderer: RendererSceneSynchronization,
@@ -103,13 +141,17 @@ export class SceneProjector {
     return !this.disposed;
   }
 
-  /** Sends the whole projection: on attach, after a load and after `resync-required`. */
-  replace(document: DocumentV1, retried = false): void {
+  /**
+   * Sends the whole projection of `page`: on attach, after a load, after a change of active page
+   * and after `resync-required`.
+   */
+  replace(document: DocumentV2, page: string, retried = false): void {
     if (this.disposed) return;
+    this.page = page;
     // A renderer may already hold a scene from an earlier attach; start above its revision.
     this.raiseRevision(this.renderer.getSynchronizationState().current?.revision);
-    const { nodes, order } = this.project(document, document.pages[0].children);
-    const identity = { documentId: document.id, pageId: document.pages[0].id };
+    const { nodes, order } = this.project(document, this.childrenOf(document));
+    const identity = { documentId: document.id, pageId: page };
     const result = this.renderer.replaceSnapshot({
       identity,
       revision: this.nextRevision(),
@@ -128,7 +170,7 @@ export class SceneProjector {
     if (result.reason === 'stale-snapshot' || result.reason === 'revision-conflict') {
       // Revision bookkeeping, not a node rejection: move above the renderer and send once more.
       this.raiseRevision(result.current?.revision);
-      if (!retried) this.replace(document, true);
+      if (!retried) this.replace(document, page, true);
       return;
     }
     // Start from an empty scene and add the nodes one at a time, so only the nodes the renderer
@@ -149,19 +191,19 @@ export class SceneProjector {
     this.isolate(document, [...nodes.values()], nodes.size === 1 ? result : null);
   }
 
-  /** Sends one change set for a document change that touched `touched`. */
-  change(document: DocumentV1, touched: readonly string[]): void {
+  /** Sends one change set for a document change on `page` that touched `touched`. */
+  change(document: DocumentV2, page: string, touched: readonly string[]): void {
     if (this.disposed) return;
     touched.forEach((id) => this.excluded.delete(id));
-    if (this.identity === null || this.base === null) {
-      this.replace(document);
+    if (this.identity === null || this.base === null || this.page !== page) {
+      this.replace(document, page);
       return;
     }
     const candidates: RenderNodeSnapshot[] = [];
     const removed: string[] = [];
     for (const id of touched) {
       const node = Object.hasOwn(document.nodes, id) ? document.nodes[id] : undefined;
-      const snapshot = node === undefined ? null : projectNode(node, this.custom);
+      const snapshot = onPageRoot(node, page) ? projectNode(node, this.custom) : null;
       if (snapshot !== null) candidates.push(snapshot);
       else if (this.sent.has(id)) removed.push(id);
     }
@@ -193,7 +235,7 @@ export class SceneProjector {
    * from the renderer. Any other failure ends in a full snapshot.
    */
   private isolate(
-    document: DocumentV1,
+    document: DocumentV2,
     candidates: readonly RenderNodeSnapshot[],
     first: SceneApplyResult | null,
   ): void {
@@ -227,13 +269,13 @@ export class SceneProjector {
    * Forgets the renderer's state and sends a full snapshot, once per call chain: a renderer
    * that keeps failing is retried at the next document change, never in a loop.
    */
-  private resync(document: DocumentV1): void {
+  private resync(document: DocumentV2): void {
     this.identity = null;
     this.base = null;
     if (this.resyncing) return;
     this.resyncing = true;
     try {
-      this.replace(document);
+      this.replace(document, this.page);
     } finally {
       this.resyncing = false;
     }
@@ -245,7 +287,7 @@ export class SceneProjector {
    * `disposed` result; state is updated only on success.
    */
   private send(
-    document: DocumentV1,
+    document: DocumentV2,
     candidates: readonly RenderNodeSnapshot[],
     removed: readonly string[],
   ): SceneApplyResult | null {
@@ -253,7 +295,7 @@ export class SceneProjector {
     const next = new Map(this.sent);
     removed.forEach((id) => next.delete(id));
     candidates.forEach((snapshot) => next.set(snapshot.id, snapshot));
-    const order = document.pages[0].children.filter((id) => next.has(id));
+    const order = this.childrenOf(document).filter((id) => next.has(id));
     const reordered = !sameStrings(order, this.sentOrder);
     if (candidates.length === 0 && removed.length === 0 && !reordered) return null;
     const result = this.renderer.applyChanges({
@@ -301,7 +343,12 @@ export class SceneProjector {
     ids.forEach((id) => this.excluded.add(id));
   }
 
-  private project(document: DocumentV1, children: readonly string[]) {
+  /** The active page's children, or none when the page is gone. */
+  private childrenOf(document: DocumentV2): readonly string[] {
+    return document.pages.find((entry) => entry.id === this.page)?.children ?? [];
+  }
+
+  private project(document: DocumentV2, children: readonly string[]) {
     const nodes = new Map<string, RenderNodeSnapshot>();
     for (const id of children) {
       if (this.excluded.has(id)) continue;

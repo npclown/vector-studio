@@ -48,15 +48,28 @@ export type ModelErrorCode = Exclude<
 
 /** `path` is a JSON Pointer (RFC 6901) to the offending field; `''` is the whole document. */
 export type ParseResult =
-  | Readonly<{ ok: true; document: DocumentV1 }>
+  | Readonly<{ ok: true; document: DocumentV2 }>
   | Readonly<{ ok: false; code: ModelErrorCode; path: string }>;
 
-/** IDs are opaque non-empty strings, unique across the document's pages and nodes. */
+export type NodeResult =
+  | Readonly<{ ok: true; node: NodeV2 }>
+  | Readonly<{ ok: false; code: 'document.invalid-field'; path: string }>;
+
+/** Deepest container nesting of the node tree (ancestors that are containers). */
+export const MAX_TREE_DEPTH = 256;
+
+/**
+ * IDs are opaque non-empty strings, unique across the document's pages and nodes, without
+ * U+0000, which synthetic scene IDs use (M1-S4).
+ */
 export function isValidId(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0;
+  return typeof value === 'string' && value.length > 0 && !value.includes('\u0000');
 }
 
-/** Parses JSON text into a validated document; no partial document is ever returned. */
+/**
+ * Parses JSON text of schema version 1 or 2 into a validated v2 document (M1 contract, section
+ * 2.1); v1 is migrated by `migrateV1toV2`. No partial document is ever returned.
+ */
 export function parseDocument(text: string): ParseResult {
   let value: unknown;
   try {
@@ -64,7 +77,7 @@ export function parseDocument(text: string): ParseResult {
   } catch {
     return { ok: false, code: 'document.malformed-json', path: '' };
   }
-  const version = checkVersion(value);
+  const version = checkVersion(value, [1, 2]);
   if (version !== null) return version;
   // JSON.parse keeps the last of two equal keys, which would silently drop an entity. The scan
   // also bounds nesting, so validation never recurses deeper than MAX_DEPTH.
@@ -78,36 +91,47 @@ export function parseDocument(text: string): ParseResult {
       path: pointer(finding.path),
     };
   }
-  return validateDocument(value);
+  return validateAnyDocument(value);
 }
 
 /**
- * Validates a document value, for example one built in memory, and returns a normalized copy:
- * negative zero becomes 0 and nothing is shared with the input.
+ * Validates an in-memory v2 document value and returns a normalized copy: negative zero becomes
+ * 0, rotations are normalized and nothing is shared with the input. A v1 value is
+ * `document.unsupported-version`; `validateAnyDocument` accepts both.
  */
 export function validateDocument(value: unknown): ParseResult {
-  const version = checkVersion(value);
+  const version = checkVersion(value, [2]);
   if (version !== null) return version;
-  try {
-    return { ok: true, document: readDocument(value as Record<string, unknown>) };
-  } catch (error) {
-    if (error instanceof Failure) return { ok: false, code: error.code, path: pointer(error.path) };
-    throw error;
-  }
+  return guarded(() => readDocumentV2(value as Record<string, unknown>));
 }
 
-export type NodeResult =
-  | Readonly<{ ok: true; node: NodeV1 }>
-  | Readonly<{ ok: false; code: 'document.invalid-field'; path: string }>;
+/** Validates an in-memory v1 or v2 value and returns a normalized v2 copy (v1 is migrated). */
+export function validateAnyDocument(value: unknown): ParseResult {
+  const version = checkVersion(value, [1, 2]);
+  if (version !== null) return version;
+  if ((value as Record<string, unknown>).schemaVersion === 1) {
+    let v1: DocumentV1;
+    try {
+      v1 = readDocumentV1(value as Record<string, unknown>);
+    } catch (error) {
+      if (error instanceof Failure) {
+        return { ok: false, code: error.code, path: pointer(error.path) };
+      }
+      throw error;
+    }
+    return migrateV1toV2(v1);
+  }
+  return guarded(() => readDocumentV2(value as Record<string, unknown>));
+}
 
 /**
- * Validates one node with the field rules of `validateDocument`, so commands reject the values
+ * Validates one v2 node with the field rules of `validateDocument`, so commands reject the values
  * a load would reject. `path` is relative to the node; references are not checked here.
  */
 export function validateNode(value: unknown): NodeResult {
   try {
     const id = isPlainObject(value) ? value.id : undefined;
-    return { ok: true, node: readNode(typeof id === 'string' ? id : '', value, []) };
+    return { ok: true, node: readNodeV2(typeof id === 'string' ? id : '', value, []) };
   } catch (error) {
     if (error instanceof Failure) {
       return { ok: false, code: 'document.invalid-field', path: pointer(error.path) };
@@ -137,9 +161,9 @@ function pointer(path: Path): string {
     .join('');
 }
 
-function checkVersion(value: unknown): ParseResult | null {
+function checkVersion(value: unknown, versions: readonly number[]): ParseResult | null {
   if (!isPlainObject(value)) return { ok: false, code: 'document.invalid-field', path: '' };
-  if (value.schemaVersion !== 1) {
+  if (!versions.includes(value.schemaVersion as number)) {
     return { ok: false, code: 'document.unsupported-version', path: '/schemaVersion' };
   }
   return null;
@@ -171,8 +195,13 @@ function readString(value: unknown, path: Path): string {
   return value;
 }
 
+/** A v1 ID: any non-empty string. U+0000 is rejected by the v2 rules after migration. */
+function isValidIdV1(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
 function readId(value: unknown, path: Path): string {
-  if (!isValidId(value)) invalid(path);
+  if (!isValidIdV1(value)) invalid(path);
   return value;
 }
 
@@ -297,11 +326,12 @@ const NODE_KEYS = {
 } as const;
 type NodeType = keyof typeof NODE_KEYS;
 
-function readNode(key: string, value: unknown, path: Path): NodeV1 {
+/** The v1 node reader, used only to migrate v1 input (M1 contract, section 2.1). */
+function readNodeV1(key: string, value: unknown, path: Path): NodeV1 {
   if (!isPlainObject(value)) invalid(path);
   const type = readEnum(value.type, Object.keys(NODE_KEYS) as NodeType[], [...path, 'type']);
   const record = readRecord(value, NODE_KEYS[type], path);
-  if (!isValidId(key) || record.id !== key) invalid([...path, 'id']);
+  if (!isValidIdV1(key) || record.id !== key) invalid([...path, 'id']);
   const base = {
     id: key,
     name: readString(record.name, [...path, 'name']),
@@ -338,7 +368,7 @@ function readNode(key: string, value: unknown, path: Path): NodeV1 {
   }
 }
 
-function readPage(value: unknown, path: Path): PageV1 {
+function readPageV1(value: unknown, path: Path): PageV1 {
   const record = readRecord(value, ['id', 'name', 'children'], path);
   const childrenPath = [...path, 'children'];
   return {
@@ -348,14 +378,15 @@ function readPage(value: unknown, path: Path): PageV1 {
   };
 }
 
-function readDocument(value: Record<string, unknown>): DocumentV1 {
+/** The v1 document reader: exactly one page, v1 nodes; input of `migrateV1toV2` only. */
+function readDocumentV1(value: Record<string, unknown>): DocumentV1 {
   const record = readRecord(value, ['schemaVersion', 'id', 'pages', 'nodes'], []);
   const id = readId(record.id, ['id']);
   if (!Array.isArray(record.pages) || record.pages.length !== 1) invalid(['pages']);
-  const page = readPage(record.pages[0], ['pages', 0]);
+  const page = readPageV1(record.pages[0], ['pages', 0]);
   if (!isPlainObject(record.nodes)) invalid(['nodes']);
   const entries = Object.entries(record.nodes).map(
-    ([key, node]) => [key, readNode(key, node, ['nodes', key])] as const,
+    ([key, node]) => [key, readNodeV1(key, node, ['nodes', key])] as const,
   );
   const nodes: Record<string, NodeV1> = Object.fromEntries(entries);
 
@@ -382,60 +413,13 @@ function readDocument(value: Record<string, unknown>): DocumentV1 {
   return { schemaVersion: 1, id, pages: [page], nodes };
 }
 
-// Schema v2 (MVP M1 contract, section 2). `parseDocumentV2` and `validateAnyDocument` accept v1
-// and v2 and return v2; v1 is migrated by `migrateV1toV2`. Until editor-core moves to v2 (M1-U2)
-// the v1 functions above stay as they are.
-
-export type ParseResultV2 =
-  | Readonly<{ ok: true; document: DocumentV2 }>
-  | Readonly<{ ok: false; code: ModelErrorCode; path: string }>;
-
-export type NodeResultV2 =
-  | Readonly<{ ok: true; node: NodeV2 }>
-  | Readonly<{ ok: false; code: 'document.invalid-field'; path: string }>;
-
-/** Deepest container nesting of the node tree (ancestors that are containers). */
-export const MAX_TREE_DEPTH = 256;
-
-/** Parses JSON text of schema version 1 or 2 into a validated v2 document. */
-export function parseDocumentV2(text: string): ParseResultV2 {
-  let value: unknown;
-  try {
-    value = JSON.parse(text);
-  } catch {
-    return { ok: false, code: 'document.malformed-json', path: '' };
-  }
-  const version = checkAnyVersion(value);
-  if (version !== null) return version;
-  const finding = scanJson(text);
-  if (finding !== null) {
-    const nodeKey =
-      finding.kind === 'duplicate-key' && finding.path.length === 2 && finding.path[0] === 'nodes';
-    return {
-      ok: false,
-      code: nodeKey ? 'document.duplicate-id' : 'document.invalid-field',
-      path: pointer(finding.path),
-    };
-  }
-  return validateAnyDocument(value);
-}
-
-/** Validates an in-memory v1 or v2 value and returns a normalized v2 copy. */
-export function validateAnyDocument(value: unknown): ParseResultV2 {
-  const version = checkAnyVersion(value);
-  if (version !== null) return version;
-  if ((value as Record<string, unknown>).schemaVersion === 1) {
-    const v1 = validateDocument(value);
-    return v1.ok ? migrateV1toV2(v1.document) : v1;
-  }
-  return guarded(() => readDocumentV2(value as Record<string, unknown>));
-}
+// Schema v2 (MVP M1 contract, section 2): the v1 migration and the v2 readers.
 
 /**
  * Adds `rotation: 0`, start constraints on every node and zero corner radii on rectangles, and
  * changes nothing else; the result is validated with the v2 rules (U+0000 in an ID fails).
  */
-export function migrateV1toV2(document: DocumentV1): ParseResultV2 {
+export function migrateV1toV2(document: DocumentV1): ParseResult {
   const nodes = Object.fromEntries(
     Object.entries(document.nodes).map(([key, node]) => {
       const migrated: Record<string, unknown> = {
@@ -457,19 +441,6 @@ export function migrateV1toV2(document: DocumentV1): ParseResultV2 {
   );
 }
 
-/** Validates one v2 node with the field rules of `validateAnyDocument`; references unchecked. */
-export function validateNodeV2(value: unknown): NodeResultV2 {
-  try {
-    const id = isPlainObject(value) ? value.id : undefined;
-    return { ok: true, node: readNodeV2(typeof id === 'string' ? id : '', value, []) };
-  } catch (error) {
-    if (error instanceof Failure) {
-      return { ok: false, code: 'document.invalid-field', path: pointer(error.path) };
-    }
-    throw error;
-  }
-}
-
 /** Normalizes radians to (−π, π], negative zero to 0 (contract M1-S1). */
 export function normalizeRotation(theta: number): number {
   let t = theta - 2 * Math.PI * Math.round(theta / (2 * Math.PI));
@@ -478,7 +449,7 @@ export function normalizeRotation(theta: number): number {
   return t === 0 ? 0 : t;
 }
 
-function guarded(read: () => DocumentV2): ParseResultV2 {
+function guarded(read: () => DocumentV2): ParseResult {
   try {
     return { ok: true, document: read() };
   } catch (error) {
@@ -487,21 +458,8 @@ function guarded(read: () => DocumentV2): ParseResultV2 {
   }
 }
 
-function checkAnyVersion(value: unknown): ParseResultV2 | null {
-  if (!isPlainObject(value)) return { ok: false, code: 'document.invalid-field', path: '' };
-  if (value.schemaVersion !== 1 && value.schemaVersion !== 2) {
-    return { ok: false, code: 'document.unsupported-version', path: '/schemaVersion' };
-  }
-  return null;
-}
-
-/** v2 IDs may not contain U+0000, which synthetic scene IDs use (M1-S4). */
-function isValidIdV2(value: unknown): value is string {
-  return isValidId(value) && !value.includes('\u0000');
-}
-
 function readIdV2(value: unknown, path: Path): string {
-  if (!isValidIdV2(value)) invalid(path);
+  if (!isValidId(value)) invalid(path);
   return value;
 }
 
@@ -555,7 +513,7 @@ function readNodeV2(key: string, value: unknown, path: Path): NodeV2 {
   if (!isPlainObject(value)) invalid(path);
   const type = readEnum(value.type, Object.keys(NODE_KEYS_V2) as NodeTypeKey[], [...path, 'type']);
   const record = readRecord(value, NODE_KEYS_V2[type], path);
-  if (!isValidIdV2(key) || record.id !== key) invalid([...path, 'id']);
+  if (!isValidId(key) || record.id !== key) invalid([...path, 'id']);
   const base = {
     id: key,
     name: readString(record.name, [...path, 'name']),
