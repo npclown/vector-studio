@@ -641,7 +641,7 @@ class EditorCore implements Editor {
     // The renderer follows before any listener runs; its diagnostics follow the change event.
     const diagnostics: EditorEvent[] = [];
     this.withProjector((projector) => {
-      if (cause === 'load' || pageChanged) projector.replace(document, page);
+      if (cause === 'load' || pageChanged) projector.replace(document, page, ids);
       else projector.change(document, page, ids);
     }, diagnostics);
     this.refresh({ type: 'document', cause, revision: this.revision, touched: ids });

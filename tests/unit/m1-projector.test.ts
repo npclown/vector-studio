@@ -523,7 +523,7 @@ describe('M1-A09 line projection', () => {
     for (const piece of subpaths(g)) expect(area(piece)).toBeGreaterThan(0);
   });
 
-  it('fill mode: round caps at both non-triangle ends, line head at P1', () => {
+  it('a line head alone stays in stroke mode; with a triangle end, P0 gets a round half disc', () => {
     const g = lineContent(line('none', 'line', 'round') as never).geometry;
     // Stroke mode: a line head alone keeps the stroke.
     expect(g.verbs).toEqual(['move', 'line', 'move', 'line', 'line']);
@@ -534,6 +534,31 @@ describe('M1-A09 line projection', () => {
     const k = 0.5523;
     expectPoints(both.points.slice(8, 22), [0, 1, -k, 1, -1, k, -1, 0, -1, -k, -k, -1, 0, -1]);
     for (const piece of subpaths(both)) expect(area(piece)).toBeGreaterThan(0);
+  });
+
+  it('a diagonal line pins the sign of the normal in both modes', () => {
+    // P0 = (0, 0), P1 = (30, 40): d = (0.6, 0.8), n = (−0.8, 0.6); B1 = (25.2, 33.6).
+    const diagonal = { frame: { x: 0, y: 0, width: 30, height: 40 }, points: [0, 0, 1, 1] };
+    const stroked = lineContent(line('none', 'line', 'butt', diagonal) as never).geometry;
+    expect(stroked.verbs).toEqual(['move', 'line', 'move', 'line', 'line']);
+    expectPoints(stroked.points, [0, 0, 30, 40, 22, 36, 30, 40, 28.4, 31.2]);
+    const filled = lineContent(line('none', 'triangle', 'butt', diagonal) as never).geometry;
+    expect(filled.verbs).toEqual([
+      'move',
+      'line',
+      'line',
+      'line',
+      'close',
+      'move',
+      'line',
+      'line',
+      'close',
+    ]);
+    expectPoints(
+      filled.points,
+      [0.8, -0.6, 26, 33, 24.4, 34.2, -0.8, 0.6, 30, 40, 22, 36, 28.4, 31.2],
+    );
+    for (const piece of subpaths(filled)) expect(area(piece)).toBeGreaterThan(0);
   });
 
   it('fill mode omits the shaft and its caps when the heads overlap', () => {
@@ -802,6 +827,41 @@ describe('M1-A09 synchronization', () => {
     expect(diagnostics(events)).toMatchObject([{ nodeIds: ['y'] }]);
     gate.block = false;
     ok(target, { type: 'setNodeProps', id: 'y', props: { name: 'kept' } });
+    expectSynchronized(target, renderer);
+  });
+
+  it('a load after a rejection projects the excluded subtree again', async () => {
+    const { target, renderer, events } = attached(await fixture('containers.json'));
+    const gate = rejecting(renderer, (entry) => entry.id === 'f1');
+    ok(target, {
+      type: 'setFrames',
+      frames: [{ id: 'f1', frame: { x: 0, y: 0, width: 200, height: 150 } }],
+    });
+    expectSynchronized(target, renderer, ['f1']);
+    expect(diagnostics(events)).toMatchObject([{ nodeIds: ['f1'] }]);
+    gate.block = false;
+    ok(target, { type: 'loadDocument', document: JSON.parse(JSON.stringify(documentOf(target))) });
+    expectSynchronized(target, renderer);
+  });
+
+  it('removing the active page with an excluded node, then undo and redo, keep the projection', async () => {
+    const { target, renderer } = attached(await fixture('containers.json'));
+    const gate = rejecting(renderer, (entry) => entry.id === 'f1');
+    ok(target, {
+      type: 'setFrames',
+      frames: [{ id: 'f1', frame: { x: 0, y: 0, width: 200, height: 150 } }],
+    });
+    expectSynchronized(target, renderer, ['f1']);
+    gate.block = false;
+    // Removing the active page touches f1 and switches to page-2 with a snapshot.
+    ok(target, { type: 'removePage', id: 'page-1' });
+    expect(target.query({ type: 'activePage' })).toBe('page-2');
+    expectSynchronized(target, renderer);
+    ok(target, { type: 'undo' });
+    ok(target, { type: 'setActivePage', id: 'page-1' });
+    expectSynchronized(target, renderer);
+    ok(target, { type: 'redo' });
+    expect(target.query({ type: 'activePage' })).toBe('page-2');
     expectSynchronized(target, renderer);
   });
 

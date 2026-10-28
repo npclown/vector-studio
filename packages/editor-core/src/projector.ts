@@ -528,11 +528,18 @@ export class SceneProjector {
 
   /**
    * Sends the whole projection of `page` under the identity `{ documentId, pageId: page }`: on
-   * attach, after a load, after a change of active page and after `resync-required`.
+   * attach, after a load, after a change of active page and after `resync-required`. The
+   * excluded subtrees that `touched` reaches (the change that caused it) are projected again.
    */
-  replace(document: DocumentV2, page: string, retried = false): void {
+  replace(
+    document: DocumentV2,
+    page: string,
+    touched: readonly string[] = [],
+    retried = false,
+  ): void {
     if (this.disposed) return;
     this.page = page;
+    this.release(document, touched);
     // A renderer may already hold a scene from an earlier attach; start above its revision.
     this.raiseRevision(this.renderer.getSynchronizationState().current?.revision);
     const projection = this.project(document);
@@ -555,7 +562,7 @@ export class SceneProjector {
     if (isBookkeeping(result)) {
       // Revision bookkeeping, not a node rejection: move above the renderer and send once more.
       this.raiseRevision(result.current?.revision);
-      if (!retried) this.replace(document, page, true);
+      if (!retried) this.replace(document, page, [], true);
       return;
     }
     // A projection of one unit was rejected on its own (P5-U4); otherwise isolate.
