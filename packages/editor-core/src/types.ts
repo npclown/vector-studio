@@ -229,7 +229,22 @@ export type Query =
   | Readonly<{ type: 'revision' }>
   | Readonly<{ type: 'overlay' }>
   | Readonly<{ type: 'activePage' }>
-  | Readonly<{ type: 'pages' }>;
+  | Readonly<{ type: 'pages' }>
+  /** The select tool's resize handle box for the selection (M1-U5). */
+  | Readonly<{ type: 'handles' }>;
+
+/**
+ * The resize handle box of the selection in page space (M1 contract, section 4.4), as the select
+ * tool picks it: the eight handles sit on its corners and edge midpoints. A single node other
+ * than a page-root node with rotation 0 has its own rotated box; any other selection has the
+ * page-aligned bounds of its rotated frames. Null for an empty selection.
+ */
+export type SelectionHandles = Readonly<{
+  /** The box's top-left, top-right, bottom-right and bottom-left corners in its own axes. */
+  corners: readonly [PagePoint, PagePoint, PagePoint, PagePoint];
+  /** The box's page rotation in radians (M1-S1 range); 0 for a page-aligned box. */
+  rotation: number;
+}>;
 
 export type QueryResult<Q extends Query> = Q extends { type: 'document' }
   ? DocumentV2
@@ -249,7 +264,9 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' }
                 ? string
                 : Q extends { type: 'pages' }
                   ? readonly PageV2[]
-                  : number;
+                  : Q extends { type: 'handles' }
+                    ? SelectionHandles | null
+                    : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';

@@ -5,8 +5,36 @@ import type { RendererFactory, RendererHandle } from '@vector-studio/react';
 // fill-mesh and stroke-mesh ports from geometry-wasm. Every renderer module is loaded by dynamic
 // `import()` inside the factory, which runs only in the canvas effect, so nothing here is
 // evaluated during prerender. Precision stays UNVERIFIED until P3 A04 evidence exists.
+// M1-U5: the service draws rect and mask clips (P4), which M1 frames and mask groups project to.
+// With `?test=1` the backend also enables the E10 frame capture, and `window.__nextHostRenderer`
+// gives the headed M1-A12 spec the next presented frame and the backend's diagnostics.
 
 const WASM_URL = '/geometry-kernel.wasm';
+
+/** One presented frame: R, G, B, A bytes, rows top first, in physical pixels. */
+export type NextHostFrame = Readonly<{
+  width: number;
+  height: number;
+  devicePixelRatio: number;
+  rgba: Uint8Array;
+}>;
+
+/** A backend diagnostic, as the test hook records it. */
+export type NextHostDiagnostic = Readonly<{ code: string; severity: string; message: string }>;
+
+declare global {
+  interface Window {
+    /** Present only with `?test=1` while a renderer exists; `capture` needs it to be ready. */
+    __nextHostRenderer?: Readonly<{
+      capture: () => Promise<NextHostFrame>;
+      diagnostics: readonly NextHostDiagnostic[];
+    }>;
+  }
+}
+
+function nextAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
 
 export const createWebGpuRenderer: RendererFactory = async (canvas, size) => {
   const [geometry, core, webgpu] = await Promise.all([
@@ -34,13 +62,42 @@ export const createWebGpuRenderer: RendererFactory = async (canvas, size) => {
     releases.push(() => fill.dispose());
     const stroke = await geometry.createStrokeMeshPort(bytes);
     releases.push(() => stroke.dispose());
-    const backend = new webgpu.WebGpuBackend();
+    const testing = new URLSearchParams(window.location.search).get('test') === '1';
+    const backend = new webgpu.WebGpuBackend(testing ? { frameCaptureForTesting: true } : {});
     releases.push(() => backend.dispose());
+    if (testing) {
+      const diagnostics: NextHostDiagnostic[] = [];
+      const subscription = backend.subscribeDiagnostics(({ code, severity, message }) => {
+        diagnostics.push({ code, severity, message });
+      });
+      releases.push(() => subscription.dispose());
+      const hook = {
+        diagnostics,
+        capture: async (): Promise<NextHostFrame> => {
+          // Two frames for the last change to settle, then the next presented frame.
+          backend.invalidate({ reason: 'scene' });
+          await nextAnimationFrame();
+          await nextAnimationFrame();
+          const frame = await backend.captureFrameForTesting({ timeoutMs: 30_000 });
+          return {
+            width: frame.width,
+            height: frame.height,
+            devicePixelRatio: frame.devicePixelRatio,
+            rgba: frame.rgba,
+          };
+        },
+      };
+      window.__nextHostRenderer = hook;
+      releases.push(() => {
+        if (window.__nextHostRenderer === hook) delete window.__nextHostRenderer;
+      });
+    }
     const service = new core.PrimitiveRendererService(backend, {
       fillMesh: fill,
       fillMeshMemoryBytes: () => fill.linearMemoryBytes(),
       strokeMesh: stroke,
       strokeMeshMemoryBytes: () => stroke.linearMemoryBytes(),
+      clips: 'all',
     });
     releases.push(() => service.dispose());
     const source = backend.attachPrimitiveFrameSource(service);

@@ -1,4 +1,4 @@
-import type { Frame } from '@vector-studio/model';
+import { normalizeRotation, type DocumentV2, type Frame } from '@vector-studio/model';
 import type { Tool, ToolContext } from './editor.js';
 import { deepFreeze } from './freeze.js';
 import { apply, invertRigid, localTransform, multiply, rotate, type Matrix } from './geometry.js';
@@ -12,7 +12,7 @@ import {
 } from './hit-test.js';
 import { resizeInOwnAxes, scaleAbout } from './resize.js';
 import { documentTree, spaceOf } from './tree.js';
-import type { InputEvent, PagePoint, PathAnchor, ToolOverlay } from './types.js';
+import type { InputEvent, PagePoint, PathAnchor, SelectionHandles, ToolOverlay } from './types.js';
 
 // P5 tools (plan section 4.4) and the M1 tools (M1 contract, section 7). Tools act only through
 // commands and the gesture API. They work on the active page; drawing tools create at its root,
@@ -258,6 +258,68 @@ type HandleBox =
   | { mode: 'p5' | 'map'; box: Frame }
   | { mode: 'single'; box: Frame; id: string; matrix: Matrix; turn: number };
 
+/** The handle box of `selection` on `page` (section 4.4), or null for an empty selection. */
+function handleBoxOf(
+  document: DocumentV2,
+  page: string,
+  selection: readonly string[],
+): HandleBox | null {
+  const box = boundsOf(document, selection);
+  if (box === null) return null;
+  const p5 = selection.every((id) => {
+    const node = document.nodes[id];
+    return node !== undefined && node.parent === page && node.rotation === 0;
+  });
+  if (p5) return { mode: 'p5', box };
+  if (selection.length > 1) return { mode: 'map', box };
+  // A single node: the handles follow its rotation (section 4.4).
+  const id = selection[0]!;
+  const node = document.nodes[id]!;
+  const space = spaceOf(documentTree(document), node.parent);
+  return {
+    mode: 'single',
+    box: { x: 0, y: 0, width: node.frame.width, height: node.frame.height },
+    id,
+    matrix: multiply(space.matrix, localTransform(node.frame, node.rotation)),
+    turn: space.rotation + node.rotation,
+  };
+}
+
+/**
+ * The `handles` query (M1-U5): the select tool's handle box in page space, so a host draws the
+ * handles where the tool picks them, also for nested and rotated nodes.
+ */
+export function selectionHandles(
+  document: DocumentV2,
+  page: string,
+  selection: readonly string[],
+): SelectionHandles | null {
+  const handles = handleBoxOf(document, page, selection);
+  if (handles === null) return null;
+  const { x, y, width, height } = handles.box;
+  if (handles.mode !== 'single') {
+    return deepFreeze({
+      corners: [
+        { x, y },
+        { x: x + width, y },
+        { x: x + width, y: y + height },
+        { x, y: y + height },
+      ],
+      rotation: 0,
+    });
+  }
+  const { matrix } = handles;
+  return deepFreeze({
+    corners: [
+      apply(matrix, 0, 0),
+      apply(matrix, width, 0),
+      apply(matrix, width, height),
+      apply(matrix, 0, height),
+    ],
+    rotation: normalizeRotation(handles.turn),
+  });
+}
+
 type SelectState =
   | { kind: 'idle' }
   | {
@@ -304,27 +366,11 @@ export function createSelectTool(custom: CustomGeometry): Tool {
   }
 
   function handlesOf(context: ToolContext, selection: readonly string[]): HandleBox | null {
-    const document = context.query({ type: 'document' });
-    const page = context.query({ type: 'activePage' });
-    const box = boundsOf(document, selection);
-    if (box === null) return null;
-    const p5 = selection.every((id) => {
-      const node = document.nodes[id];
-      return node !== undefined && node.parent === page && node.rotation === 0;
-    });
-    if (p5) return { mode: 'p5', box };
-    if (selection.length > 1) return { mode: 'map', box };
-    // A single node: the handles follow its rotation (section 4.4).
-    const id = selection[0]!;
-    const node = document.nodes[id]!;
-    const space = spaceOf(documentTree(document), node.parent);
-    return {
-      mode: 'single',
-      box: { x: 0, y: 0, width: node.frame.width, height: node.frame.height },
-      id,
-      matrix: multiply(space.matrix, localTransform(node.frame, node.rotation)),
-      turn: space.rotation + node.rotation,
-    };
+    return handleBoxOf(
+      context.query({ type: 'document' }),
+      context.query({ type: 'activePage' }),
+      selection,
+    );
   }
 
   function handlePoint(handles: HandleBox, handle: Handle): PagePoint {
