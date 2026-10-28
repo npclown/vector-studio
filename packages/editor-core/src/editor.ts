@@ -16,7 +16,13 @@ import {
 import { ExtensionRegistry, extensionApi } from './extensions.js';
 import { createCounterIdSource } from './ids.js';
 import { SceneProjector } from './projector.js';
-import { createBoxTool, createLineTool, createPathTool, createSelectTool } from './tools.js';
+import {
+  createBoxTool,
+  createLineTool,
+  createPathTool,
+  createSelectTool,
+  selectionHandles,
+} from './tools.js';
 import { ancestors, documentClipViolation, documentTree, nodePath, pageOf } from './tree.js';
 import type {
   Command,
@@ -492,6 +498,8 @@ class EditorCore implements Editor {
           return this.activePage;
         case 'pages':
           return this.document.pages;
+        case 'handles':
+          return selectionHandles(this.document, this.activePage, this.selection);
       }
     })();
     return value as QueryResult<Q>;

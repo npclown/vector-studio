@@ -1,26 +1,16 @@
-import type { EditorSnapshot, ToolOverlay } from '@vector-studio/editor-core';
-import type { Frame } from '@vector-studio/model';
+import type { EditorSnapshot, SelectionHandles, ToolOverlay } from '@vector-studio/editor-core';
 
 // P5-U6: the host's selection and tool overlay (P5 plan, section 4.5). It is drawn in CSS pixels
-// over the canvas and is never document content.
+// over the canvas and is never document content. M1-U5: the selection box and its active handles
+// come from the editor's `handles` query in page space, so a nested or rotated selection is drawn
+// where the select tool picks its handles (M1 contract, section 4.4).
 
-type Props = Readonly<{ snapshot: EditorSnapshot; width: number; height: number }>;
-
-function bounds(snapshot: EditorSnapshot): Frame | null {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const id of snapshot.selection) {
-    const frame = snapshot.document.nodes[id]?.frame;
-    if (frame === undefined) continue;
-    minX = Math.min(minX, frame.x);
-    minY = Math.min(minY, frame.y);
-    maxX = Math.max(maxX, frame.x + frame.width);
-    maxY = Math.max(maxY, frame.y + frame.height);
-  }
-  return minX === Infinity ? null : { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
-}
+type Props = Readonly<{
+  snapshot: EditorSnapshot;
+  handles: SelectionHandles | null;
+  width: number;
+  height: number;
+}>;
 
 function ToolShape({
   overlay,
@@ -63,40 +53,37 @@ function ToolShape({
   );
 }
 
-export function SelectionOverlay({ snapshot, width, height }: Props) {
+export function SelectionOverlay({ snapshot, handles, width, height }: Props) {
   const { position, zoom } = snapshot.viewport;
   const toScreen = (x: number, y: number): [number, number] => [
     (x - position.x) * zoom,
     (y - position.y) * zoom,
   ];
-  const box = bounds(snapshot);
-  const handles: [number, number][] = [];
-  let outline = null;
-  if (box !== null) {
-    const [x, y] = toScreen(box.x, box.y);
-    const [x2, y2] = toScreen(box.x + box.width, box.y + box.height);
-    outline = (
-      <rect
-        data-testid="selection"
-        x={x}
-        y={y}
-        width={x2 - x}
-        height={y2 - y}
-        fill="none"
-        stroke="#1e78ff"
-      />
-    );
-    for (const hx of [x, (x + x2) / 2, x2]) {
-      for (const hy of [y, (y + y2) / 2, y2]) {
-        if (hx !== (x + x2) / 2 || hy !== (y + y2) / 2) handles.push([hx, hy]);
-      }
-    }
-  }
+  const corners = handles === null ? [] : handles.corners.map((p) => toScreen(p.x, p.y));
+  // Only the handles the select tool can pick (a zero-size axis has no edge handles on it).
+  const points = handles === null ? [] : handles.handles.map((p) => toScreen(p.x, p.y));
   return (
     <svg width={width} height={height} style={{ position: 'absolute', inset: 0 }}>
-      {outline}
-      {handles.map(([x, y], index) => (
-        <rect key={index} x={x - 3} y={y - 3} width={6} height={6} fill="#fff" stroke="#1e78ff" />
+      {handles === null ? null : (
+        <polygon
+          data-testid="selection"
+          data-rotation={handles.rotation}
+          points={corners.map(([x, y]) => `${x},${y}`).join(' ')}
+          fill="none"
+          stroke="#1e78ff"
+        />
+      )}
+      {points.map(([x, y], index) => (
+        <rect
+          key={index}
+          data-testid="handle"
+          x={x - 3}
+          y={y - 3}
+          width={6}
+          height={6}
+          fill="#fff"
+          stroke="#1e78ff"
+        />
       ))}
       {snapshot.overlay === null ? null : (
         <ToolShape overlay={snapshot.overlay} toScreen={toScreen} />

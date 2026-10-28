@@ -229,7 +229,29 @@ export type Query =
   | Readonly<{ type: 'revision' }>
   | Readonly<{ type: 'overlay' }>
   | Readonly<{ type: 'activePage' }>
-  | Readonly<{ type: 'pages' }>;
+  | Readonly<{ type: 'pages' }>
+  /** The select tool's resize handle box for the selection (M1-U5). */
+  | Readonly<{ type: 'handles' }>;
+
+/**
+ * The select tool's resize handle box for the selection, in page space (M1 contract, section
+ * 4.4), as the tool picks its handles. The box is the node's own rotated frame for a single node
+ * that is not a page-root node with rotation 0; for any other selection it is the page-aligned
+ * bounds of the selected nodes' rotated frames. Null for an empty selection. The result is a
+ * frozen value computed from the current document, page and selection.
+ */
+export type SelectionHandles = Readonly<{
+  /** Top-left, top-right, bottom-right and bottom-left, in the box's own axes. */
+  corners: readonly [PagePoint, PagePoint, PagePoint, PagePoint];
+  /** The box's page rotation in radians, normalized to (−π, π]; 0 for a page-aligned box. */
+  rotation: number;
+  /**
+   * The active handles, clockwise from the top-left corner (corners and edge midpoints): a
+   * handle is active when it scales an axis of nonzero size, so a box of height 0 (a horizontal
+   * line) has no top or bottom edge handle and keeps only its left and right ones and corners.
+   */
+  handles: readonly PagePoint[];
+}>;
 
 export type QueryResult<Q extends Query> = Q extends { type: 'document' }
   ? DocumentV2
@@ -249,7 +271,9 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' }
                 ? string
                 : Q extends { type: 'pages' }
                   ? readonly PageV2[]
-                  : number;
+                  : Q extends { type: 'handles' }
+                    ? SelectionHandles | null
+                    : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';

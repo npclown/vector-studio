@@ -43,8 +43,12 @@ export function documentIdOf(sceneId: string): string {
 
 const IDENTITY_TRANSFORM = [1, 0, 0, 1, 0, 0] as const;
 const ZERO_RADII = [0, 0, 0, 0] as const;
-/** The cubic half-disc constant of the line fill outline, literal by contract (section 5). */
-const KAPPA = 0.5523;
+/**
+ * Segments of a fill-mode round cap's half circle (section 5). A line-only polygon, not cubics:
+ * the fill kernel rejects cubic caps that share the shaft's end edge (M1-U5 probe), while 16
+ * chords stay within 0.25 px up to zoom 104 / w (chord error (w/2)(1 − cos(π/32))).
+ */
+const ROUND_CAP_SEGMENTS = 16;
 /** Above the model's tree depth bound (256), so every walk up a parent chain ends. */
 const PARENT_WALK_LIMIT = 300;
 
@@ -104,10 +108,6 @@ class Outline {
 
   line(p: Vec): this {
     return this.push('line', [p]);
-  }
-
-  cubic(c1: Vec, c2: Vec, p: Vec): this {
-    return this.push('cubic', [c1, c2, p]);
   }
 
   close(): this {
@@ -185,19 +185,15 @@ export function lineContent(node: LineNode): PathContent {
       const h = w / 2;
       for (const { arrow, tip: e, out: u, side: s } of ends) {
         if (arrow === 'triangle') continue;
-        outline
-          .move(add(e, s, h))
-          .cubic(
-            add(e, { x: s.x + KAPPA * u.x, y: s.y + KAPPA * u.y }, h),
-            add(e, { x: u.x + KAPPA * s.x, y: u.y + KAPPA * s.y }, h),
-            add(e, u, h),
-          )
-          .cubic(
-            add(e, { x: u.x - KAPPA * s.x, y: u.y - KAPPA * s.y }, h),
-            add(e, { x: KAPPA * u.x - s.x, y: KAPPA * u.y - s.y }, h),
-            add(e, s, -h),
-          )
-          .close();
+        // From E + (w/2)N through E + (w/2)u to E − (w/2)N; both ends exact.
+        outline.move(add(e, s, h));
+        for (let k = 1; k < ROUND_CAP_SEGMENTS; k += 1) {
+          const angle = (k * Math.PI) / ROUND_CAP_SEGMENTS;
+          const c = Math.cos(angle);
+          const t = Math.sin(angle);
+          outline.line(add(e, { x: c * s.x + t * u.x, y: c * s.y + t * u.y }, h));
+        }
+        outline.line(add(e, s, -h)).close();
       }
     }
   }
