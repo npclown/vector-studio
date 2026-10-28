@@ -228,7 +228,7 @@ describe('P4 U2 clip states', () => {
     expect(runs(source.prepare(target)!)).toEqual([[1, 0]]);
   });
 
-  it('nesting: rects outermost first, masks listed, and a later sibling is unclipped (P4-K4)', () => {
+  it('nesting: rects inside the innermost mask, masks listed, a later sibling unclipped (P4-K4)', () => {
     const { source } = setup([
       group('outer', null, ['m', 'sibling'], rect(0, 0, 300, 300)),
       group('m', 'outer', ['s', 'inner'], { kind: 'mask' }),
@@ -245,11 +245,15 @@ describe('P4 U2 clip states', () => {
       [1, 0],
     ]);
     const [deep, outer] = packet.clip!.states;
+    // U4: the rect outside the mask is in the mask level's texture, so the content state keeps
+    // only the rect inside it.
     expect(deep!.rects.map((r) => [r.width, r.height, r.toLocal[4], r.toLocal[5]])).toEqual([
-      [300, 300, 0, 0],
       [100, 100, -1, -2],
     ]);
     expect(deep!.masks).toEqual(['m']);
+    expect(
+      packet.clip!.masks.map((level) => [level.id, level.parent, level.rects.length, level.source]),
+    ).toEqual([['m', null, 1, { kind: 'primitive', slot: expect.any(Number) as number }]]);
     expect(outer!.rects).toHaveLength(1);
     expect(outer!.masks).toEqual([]);
   });

@@ -304,6 +304,7 @@ describe('P4 U3 clip record packing', () => {
       layoutVersion: 0 as const,
       states: [],
       maxIndex: 1,
+      masks: [],
       origin: { x: 1000, y: 2000 },
       camera: { x: 1010.5, y: 1990, zoom: 4 },
     };

@@ -20,6 +20,7 @@ import {
   DiagnosticChannel,
   FrameScheduler,
   ResourceAccounting,
+  clipResourceLimitDiagnostic,
   pathMeshNoticeDiagnostic,
   type AnimationFrameClock,
   type DiagnosticClock,
@@ -1199,6 +1200,12 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         // P3 V3 section h: notices describe CPU state, so they are emitted right after a
         // non-null prepare, before the generation and submission checks.
         this.#emitPathMeshNotices(packet.mesh?.notices, generation);
+        // P4 contract, section 5: budget notices, likewise CPU state.
+        if (packet.clipNotices !== undefined && isList(packet.clipNotices)) {
+          for (const notice of packet.clipNotices.slice(0, NOTICES_PER_PACKET)) {
+            this.#diagnostics.emit(clipResourceLimitDiagnostic(notice, generation));
+          }
+        }
         if (
           this.#state !== 'ready' ||
           this.#primitiveScene !== scene ||
