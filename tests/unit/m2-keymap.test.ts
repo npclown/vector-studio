@@ -250,17 +250,27 @@ describe('M2-A11 default bindings run their actions through input', () => {
     expect(Object.isFrozen(keymap)).toBe(true);
     const chords = keymap.map((binding) => binding.chord);
     expect(chords).toEqual([...chords].sort());
+    // M2-U4 adds duplicate, nudge and reorder (section 7).
     expect(chords).toEqual([
       '-',
       '=',
+      'ArrowDown',
+      'ArrowLeft',
+      'ArrowRight',
+      'ArrowUp',
       'Backspace',
       'Ctrl+Alt+KeyM',
       'Ctrl+KeyA',
+      'Ctrl+KeyD',
       'Ctrl+KeyG',
       'Ctrl+KeyY',
       'Ctrl+KeyZ',
       'Ctrl+Shift+KeyG',
       'Ctrl+Shift+KeyZ',
+      'Ctrl+Shift+{',
+      'Ctrl+Shift+}',
+      'Ctrl+[',
+      'Ctrl+]',
       'Delete',
       'KeyF',
       'KeyL',
@@ -271,6 +281,10 @@ describe('M2-A11 default bindings run their actions through input', () => {
       'Shift+!',
       'Shift+)',
       'Shift+@',
+      'Shift+ArrowDown',
+      'Shift+ArrowLeft',
+      'Shift+ArrowRight',
+      'Shift+ArrowUp',
     ]);
     expect(keymap.find((binding) => binding.chord === 'KeyR')).toEqual({
       chord: 'KeyR',
@@ -489,7 +503,7 @@ describe('M2-A11 layers and setKeymap', () => {
       '/bindings/1/chord',
     ],
     ['an unknown action', [{ chord: 'X', action: 'explode' }], '/bindings/0/action'],
-    ['a later unit’s action', [{ chord: 'X', action: 'nudge' }], '/bindings/0/action'],
+    ['a later unit’s action', [{ chord: 'X', action: 'enterScope' }], '/bindings/0/action'],
     ['an unregistered command', [{ chord: 'X', action: 'ext.none' }], '/bindings/0/action'],
     ['a non-string action', [{ chord: 'X', action: 3 }], '/bindings/0/action'],
     ['a missing action', [{ chord: 'X' }], '/bindings/0/action'],

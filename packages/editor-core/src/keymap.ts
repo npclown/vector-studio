@@ -16,9 +16,9 @@ export const TOOL_NAMES: readonly ToolName[] = [
 ];
 
 /**
- * The built-in actions this editor runs. M2-U1 implements the actions of existing commands;
- * later M2 units add `duplicate`, `nudge`, `reorder`, `align`, `distribute`, `enterScope`,
- * `exitScope`, `copy`, `cut` and `paste` with their commands.
+ * The built-in actions this editor runs. M2-U1 implements the actions of existing commands and
+ * M2-U4 the arrange actions; later M2 units add `enterScope`, `exitScope`, `copy`, `cut` and
+ * `paste` with their commands.
  */
 export const BUILTIN_ACTIONS: ReadonlySet<string> = new Set([
   'setTool',
@@ -29,6 +29,11 @@ export const BUILTIN_ACTIONS: ReadonlySet<string> = new Set([
   'group',
   'ungroup',
   'maskGroup',
+  'duplicate',
+  'nudge',
+  'reorder',
+  'align',
+  'distribute',
   'zoomIn',
   'zoomOut',
   'zoomToFit',
@@ -56,6 +61,19 @@ export const DEFAULT_KEYMAP: readonly KeyBinding[] = deepFreeze([
   { chord: 'Mod+G', action: 'group' },
   { chord: 'Mod+Shift+G', action: 'ungroup' },
   { chord: 'Mod+Alt+M', action: 'maskGroup' },
+  { chord: 'Mod+D', action: 'duplicate' },
+  { chord: 'ArrowLeft', action: 'nudge', args: { dx: -1, dy: 0 } },
+  { chord: 'ArrowRight', action: 'nudge', args: { dx: 1, dy: 0 } },
+  { chord: 'ArrowUp', action: 'nudge', args: { dx: 0, dy: -1 } },
+  { chord: 'ArrowDown', action: 'nudge', args: { dx: 0, dy: 1 } },
+  { chord: 'Shift+ArrowLeft', action: 'nudge', args: { dx: -10, dy: 0 } },
+  { chord: 'Shift+ArrowRight', action: 'nudge', args: { dx: 10, dy: 0 } },
+  { chord: 'Shift+ArrowUp', action: 'nudge', args: { dx: 0, dy: -10 } },
+  { chord: 'Shift+ArrowDown', action: 'nudge', args: { dx: 0, dy: 10 } },
+  { chord: 'Mod+]', action: 'reorder', args: { op: 'forward' } },
+  { chord: 'Mod+[', action: 'reorder', args: { op: 'backward' } },
+  { chord: 'Mod+Shift+}', action: 'reorder', args: { op: 'front' } },
+  { chord: 'Mod+Shift+{', action: 'reorder', args: { op: 'back' } },
   { chord: '=', action: 'zoomIn' },
   { chord: '-', action: 'zoomOut' },
   { chord: 'Shift+!', action: 'zoomToFit' },
@@ -190,6 +208,48 @@ function jsonCopy(value: unknown, depth = 0): JsonValue | undefined {
   return undefined;
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+const isFiniteNumber = (value: unknown) => typeof value === 'number' && Number.isFinite(value);
+
+/**
+ * Whether a built-in action's `args` are well formed (section 7): `setTool { tool }`,
+ * `nudge { dx, dy }` (finite page units), `reorder { op }`, `align { edge }`,
+ * `distribute { axis }` and `duplicate { offset? }` with a finite page vector. Other actions take
+ * any JSON `args` (an extension command validates its own).
+ */
+function argsValid(action: string, args: JsonValue | undefined): boolean {
+  const record = isRecord(args) ? args : null;
+  switch (action) {
+    case 'setTool':
+      return record !== null && TOOL_NAMES.includes(record.tool as ToolName);
+    case 'nudge':
+      return record !== null && isFiniteNumber(record.dx) && isFiniteNumber(record.dy);
+    case 'reorder':
+      return (
+        record !== null && ['forward', 'backward', 'front', 'back'].includes(record.op as string)
+      );
+    case 'align':
+      return (
+        record !== null &&
+        ['left', 'hcenter', 'right', 'top', 'vcenter', 'bottom'].includes(record.edge as string)
+      );
+    case 'distribute':
+      return record !== null && (record.axis === 'horizontal' || record.axis === 'vertical');
+    case 'duplicate': {
+      if (args === undefined) return true;
+      if (record === null) return false;
+      const offset = record.offset;
+      return (
+        offset === undefined ||
+        (isRecord(offset) && isFiniteNumber(offset.x) && isFiniteNumber(offset.y))
+      );
+    }
+    default:
+      return true;
+  }
+}
+
 /** A binding in canonical form, as the effective keymap holds it. */
 export type CanonicalBinding = Readonly<{ chord: string; action: string | null; args?: JsonValue }>;
 
@@ -234,16 +294,8 @@ export function validateLayer(
       args = jsonCopy(entry.args);
       if (args === undefined) return { ok: false, path: `/${i}/args` };
     }
-    if (action === 'setTool') {
-      const tool = (args as Record<string, unknown> | undefined)?.tool;
-      if (
-        typeof args !== 'object' ||
-        args === null ||
-        Array.isArray(args) ||
-        !TOOL_NAMES.includes(tool as ToolName)
-      ) {
-        return { ok: false, path: `/${i}/args` };
-      }
+    if (typeof action === 'string' && !argsValid(action, args)) {
+      return { ok: false, path: `/${i}/args` };
     }
     bindings.push(args === undefined ? { chord, action: action } : { chord, action, args });
   }

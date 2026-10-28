@@ -42,9 +42,11 @@ import {
   pageOf,
 } from './tree.js';
 import type {
+  AlignEdge,
   Command,
   CommandResult,
   DocumentChangeCause,
+  DistributeAxis,
   DocumentCommand,
   Editor,
   EditorErrorCode,
@@ -58,6 +60,7 @@ import type {
   Platform,
   Query,
   QueryResult,
+  ReorderOp,
   SnapOverlay,
   ToolName,
   ToolOverlay,
@@ -172,6 +175,11 @@ const DOCUMENT_COMMANDS = new Set([
   'renamePage',
   'movePage',
   'rotateNodes',
+  'alignNodes',
+  'distributeNodes',
+  'reorderNodes',
+  'nudgeNodes',
+  'duplicateNodes',
 ]);
 
 /**
@@ -209,6 +217,7 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.invalid-mask-source',
   'editor.clip-depth',
   'editor.no-viewport-size',
+  'editor.too-few-nodes',
   'editor.invalid-keymap',
 ]);
 
@@ -982,6 +991,38 @@ class EditorCore implements Editor {
         const result = this.run({ type: 'ungroupNodes', id: node.id });
         if (result.ok) this.run({ type: 'setSelection', ids: released });
         return result;
+      }
+      case 'duplicate': {
+        if (selection.length === 0) return nothing;
+        const offset = (binding.args as { offset?: PagePoint } | undefined)?.offset;
+        const result = this.run({
+          type: 'duplicateNodes',
+          ids: selection,
+          ...(offset === undefined ? {} : { offset }),
+        });
+        // As for `group`, the copies become the selection, so a nudge moves them.
+        if (result.ok) this.run({ type: 'setSelection', ids: result.ids });
+        return result;
+      }
+      case 'nudge': {
+        if (selection.length === 0) return nothing;
+        const { dx, dy } = binding.args as { dx: number; dy: number };
+        return this.run({ type: 'nudgeNodes', ids: selection, dx, dy });
+      }
+      case 'reorder': {
+        if (selection.length === 0) return nothing;
+        const { op } = binding.args as { op: ReorderOp };
+        return this.run({ type: 'reorderNodes', ids: selection, op });
+      }
+      case 'align': {
+        if (selection.length === 0) return nothing;
+        const { edge } = binding.args as { edge: AlignEdge };
+        return this.run({ type: 'alignNodes', ids: selection, edge });
+      }
+      case 'distribute': {
+        if (selection.length === 0) return nothing;
+        const { axis } = binding.args as { axis: DistributeAxis };
+        return this.run({ type: 'distributeNodes', ids: selection, axis });
       }
       case 'zoomIn':
         return this.run({ type: 'zoomBy', factor: 2 });
