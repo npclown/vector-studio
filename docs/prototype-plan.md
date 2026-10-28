@@ -172,7 +172,7 @@ This table maps [the product baseline](requirements.md) to validation scope; it 
 | Text                       | Architecture reservation only                             | Styled runs, font services, layout, caret/selection and Korean IME                                                  |
 | Performance                | P1 fixed primitive workloads; P2/P3 geometry workloads    | Representative mixed editor workloads and lower-tier hardware before alpha                                          |
 
-P5 completion authorizes planning the remaining editor work; it does not establish MVP completion. Features absent from the first column's prototype coverage need a later execution plan, not an implicit implementation inside P0-P5.
+P5 completion authorizes planning the remaining editor work; it does not establish MVP completion. Features absent from the first column's prototype coverage need a later execution plan, not an implicit implementation inside P0-P5. That later plan is the [MVP editor plan](plans/mvp-editor-plan.md).
 
 ## Deferred from the graphics prototype
 
