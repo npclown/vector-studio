@@ -448,6 +448,7 @@ function retryRows(dirs, kind, rows, failed) {
       heap: p.heap,
       os: p.os,
       cpus: p.cpus,
+      planned: p.retryCases.length,
       cases: count,
       failedCases: failedHere,
       ...(interrupted
@@ -722,6 +723,8 @@ if (smoke) {
       2,
     ),
   );
+  // An interrupted retry run has no exit codes; the supersede merge's row checks (every named row
+  // present exactly once) stand in for them.
   const retriesOk = [
     ...retried,
     ...(superseded === null ? [] : [...superseded.remeasured, ...superseded.identity]),
