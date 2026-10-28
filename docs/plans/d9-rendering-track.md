@@ -32,7 +32,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | E18 | A04 far-vertex carrier: cases UNDECIDED on `β_c ≥ 1` px or the clip bound | Full | Backlog | Candidate 2026-10-26: an A04 known class ([E3 section 21](d9-e3-b4-precision-contract.md#21-known-classes-and-pass-with-disclosure-2026-10-26)) |
 | E19 | Zero-area triangles in stroke meshes not covered by the mesh | Full | Backlog | Candidate 2026-10-26: an A04 known class ([E3 section 21](d9-e3-b4-precision-contract.md#21-known-classes-and-pass-with-disclosure-2026-10-26)) |
 | E20 | A04 remedies (E3-U7): sub-pixel collapsed meshes, flip-tolerant bound for clipped draws and fill zero-area triangles, oracle work cap on heavy strokes | Full | Backlog | Candidate 2026-10-27 from the E3-U5 reference run ([E3 section 23.5](d9-e3-b4-precision-contract.md#235-e3-u7-backlog)); user chose to record the FAIL as a disclosed defect |
-| E21 | P4 clip and mask (frame clips, transformed clips, path masks, depth 32) | Full (shared surface) | R3 | Contract APPROVED 2026-10-27; U1 merged (#285); U2 merged (#286); U3 merged (#287); U4a merged (#288); U4b merged (#289); U5 headed spec in review, PC run owed ([contract](p4-clip-mask.md)) |
+| E21 | P4 clip and mask (frame clips, transformed clips, path masks, depth 32) | Full (shared surface) | R3 | Contract APPROVED 2026-10-27; U1 merged (#285); U2 merged (#286); U3 merged (#287); U4a merged (#288); U4b merged (#289); U5 merged (#290), headed PC run PASS 16/16 and full `pnpm test:gpu` 132/132 (operator-reported); U6 exit record next ([contract](p4-clip-mask.md)) |
 
 E1 comes before E2: the early abort is a smaller, independent bound and needs no new certificate. The order is otherwise D9's.
 
