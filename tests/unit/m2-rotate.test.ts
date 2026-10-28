@@ -198,6 +198,45 @@ function expectedText(
   return serializeDocument(result);
 }
 
+/** The expected document of a one-node Shift step: the stored rotation set, then the refit. */
+function steppedText(document: DocumentV2, id: string, rotation: number): string {
+  const draft = new Draft(document);
+  draft.set({ ...document.nodes[id]!, rotation });
+  const result = draft.finish(() => null);
+  if ('ok' in result) throw new Error(result.code);
+  return serializeDocument(result);
+}
+
+/**
+ * Checks a one-node Shift rotation from `press` to `end`: the stored rotation is exactly
+ * `normalize(normalize(k · π/12) − chain)`, x and y are kept, and undo is one step and
+ * byte-identical.
+ */
+function checkStep(
+  target: Editor,
+  before: DocumentV2,
+  id: string,
+  press: PagePoint,
+  end: PagePoint,
+) {
+  const pivot = pivotOf(target, [id]);
+  drag(target, press, [end], shift);
+  const node = before.nodes[id]!;
+  const chain = spaceOf(documentTree(before), node.parent).rotation;
+  const result = stepped(normalizeRotation(chain + node.rotation + sweep(pivot, press, end)));
+  const rotation = normalizeRotation(result - chain);
+  expect(nodeOf(target, id).rotation, id).toBe(rotation);
+  if (chain === 0) expect(nodeOf(target, id).rotation, id).toBe(result);
+  if (rotation === node.rotation) {
+    expect(documentOf(target), id).toBe(before);
+    return;
+  }
+  expect(text(target), id).toBe(steppedText(before, id, rotation));
+  expect(undoDepth(target), id).toBe(1);
+  ok(target, { type: 'undo' });
+  expect(text(target), id).toBe(serializeDocument(before));
+}
+
 /** The pivot the tool fixes at press: the handle-box centre of the selection. */
 function pivotOf(target: Editor, ids: readonly string[]): PagePoint {
   return handleCentre(handleBoxOf(documentOf(target), 'p1', ids)!);
@@ -529,7 +568,9 @@ describe('M2-A03 rotate gesture', () => {
     const end = at(60, 120);
     drag(target, ZONE, [at(120, 10), at(100, 60), end]);
     const angle = sweep(pivot, ZONE, end);
-    expect(text(target)).toBe(expectedText(before, ['r'], angle, pivot));
+    // One node: the gesture omits the pivot, so x and y stay exactly as stored.
+    expect(text(target)).toBe(expectedText(before, ['r'], angle, pivot, true));
+    expect(nodeOf(target, 'r').frame).toEqual(before.nodes.r!.frame);
     expect(nodeOf(target, 'r').rotation).toBe(angle);
     expect(target.query({ type: 'selection' })).toEqual(['r']);
     expect(undoDepth(target)).toBe(1);
@@ -575,9 +616,9 @@ describe('M2-A03 rotate gesture', () => {
       const end = at(press.x + 40, press.y - 25);
       drag(target, press, [at(press.x + 5, press.y), end]);
       const angle = sweep(pivot, press, end);
-      expect(text(target), id).toBe(expectedText(before, [id], angle, pivot));
+      expect(text(target), id).toBe(expectedText(before, [id], angle, pivot, true));
       const command = editor();
-      ok(command, { type: 'rotateNodes', ids: [id], angle, pivot });
+      ok(command, { type: 'rotateNodes', ids: [id], angle });
       expect(text(target), id).toBe(text(command));
       for (const child of (before.nodes[id] as { children?: readonly string[] }).children ?? []) {
         expect(nodeOf(target, child), child).toBe(before.nodes[child]);
@@ -598,22 +639,11 @@ describe('M2-A03 rotate gesture', () => {
       const [tl, , br] = handles.corners;
       const length = Math.hypot(tl.x - br.x, tl.y - br.y);
       const press = at(tl.x + ((tl.x - br.x) / length) * 10, tl.y + ((tl.y - br.y) / length) * 10);
-      const pivot = pivotOf(target, [id]);
-      drag(target, press, [end], shift);
-      const node = before.nodes[id]!;
-      const chain = spaceOf(documentTree(before), node.parent).rotation;
-      const theta = chain + node.rotation;
-      const result = stepped(normalizeRotation(theta + sweep(pivot, press, end)));
-      const angle = normalizeRotation(result - theta);
-      expect(nodeOf(target, id).rotation, id).toBe(
-        normalizeRotation(normalizeRotation(theta + angle) - chain),
-      );
-      expect(text(target), id).toBe(expectedText(before, [id], angle, pivot));
-      if (id === 'r') expect(nodeOf(target, id).frame).toEqual(node.frame);
+      checkStep(target, before, id, press, end);
     }
   });
 
-  it('steps every direction by the binary64 formula, within 1e-15 of the step', () => {
+  it('stores exactly the stepped rotation for every direction', () => {
     for (const id of ['r', 'fc', 'gb']) {
       for (let i = 0; i < 96; i += 1) {
         const target = selected([id]);
@@ -627,18 +657,7 @@ describe('M2-A03 rotate gesture', () => {
         const pivot = pivotOf(target, [id]);
         const turn = (2 * Math.PI * i) / 96 + 0.01;
         const end = at(pivot.x + 80 * Math.cos(turn), pivot.y + 80 * Math.sin(turn));
-        drag(target, press, [end], shift);
-        const node = before.nodes[id]!;
-        const chain = spaceOf(documentTree(before), node.parent).rotation;
-        const theta = chain + node.rotation;
-        const result = stepped(normalizeRotation(theta + sweep(pivot, press, end)));
-        // The adjusted angle `wrap(result − θ)` through the rotateNodes rule, in binary64.
-        const angle = normalizeRotation(result - theta);
-        expect(nodeOf(target, id).rotation, `${id} ${i}`).toBe(
-          normalizeRotation(normalizeRotation(theta + angle) - chain),
-        );
-        expect(text(target)).toBe(expectedText(before, [id], angle, pivot));
-        expect(Math.abs(normalizeRotation(theta + angle) - result)).toBeLessThan(1e-15);
+        checkStep(target, before, id, press, end);
       }
     }
   });

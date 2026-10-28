@@ -338,10 +338,14 @@ export function handleCentre(handles: HandleBox): PagePoint {
   return apply(handles.matrix, box.width / 2, box.height / 2);
 }
 
-/** The page rotation of a node: its parent chain's rotation plus its own, not normalized. */
-export function pageRotation(document: DocumentV2, id: string): number {
+/**
+ * A node's page rotation `turn` (its parent chain's rotation `chain` plus its own, not
+ * normalized), its stored frame and rotation, as the rotate gesture records them at press.
+ */
+function singleOf(document: DocumentV2, id: string) {
   const node = document.nodes[id]!;
-  return spaceOf(documentTree(document), node.parent).rotation + node.rotation;
+  const chain = spaceOf(documentTree(document), node.parent).rotation;
+  return { turn: chain + node.rotation, chain, frame: node.frame, rotation: node.rotation };
 }
 
 /**
@@ -394,8 +398,11 @@ type SelectState =
       ids: readonly string[];
       /** The handle-box centre at press. */
       pivot: PagePoint;
-      /** For one node, its page rotation at press (the Shift step's base); else null. */
-      turn: number | null;
+      /**
+       * For one node: its page rotation at press (the Shift step's base), its parent chain's
+       * rotation and its frame; else null.
+       */
+      single: { turn: number; chain: number; frame: Frame; rotation: number } | null;
       moved: boolean;
     }
   | { kind: 'marquee'; start: PagePoint; current: PagePoint; additive: boolean };
@@ -522,7 +529,7 @@ export function createSelectTool(custom: CustomGeometry): Tool {
           start: event.point,
           ids: selection,
           pivot: handleCentre(handles),
-          turn: selection.length === 1 ? pageRotation(document, selection[0]!) : null,
+          single: selection.length === 1 ? singleOf(document, selection[0]!) : null,
           moved: false,
         };
       }
@@ -615,22 +622,42 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     event: Pointer,
     context: ToolContext,
   ): void {
-    const { pivot, start, turn } = current;
+    const { pivot, start, single, ids } = current;
     const q = event.point;
     let angle = normalizeRotation(
       Math.atan2(q.y - pivot.y, q.x - pivot.x) - Math.atan2(start.y - pivot.y, start.x - pivot.x),
     );
-    if (event.modifiers.shift) {
-      if (turn === null) angle = normalizeRotation(Math.round(angle / ROTATE_STEP) * ROTATE_STEP);
-      else {
-        const result = normalizeRotation(turn + angle);
-        // The adjustment to the stepped rotation; `normalize(turn + angle)` reaches it up to
-        // binary64 rounding (exactly for 0 on a page-root node).
-        const target = normalizeRotation(Math.round(result / ROTATE_STEP) * ROTATE_STEP);
-        angle = normalizeRotation(target - turn);
+    if (single === null) {
+      if (event.modifiers.shift) {
+        angle = normalizeRotation(Math.round(angle / ROTATE_STEP) * ROTATE_STEP);
       }
+      context.gesture.replace([{ type: 'rotateNodes', ids, angle, pivot }]);
+      return;
     }
-    context.gesture.replace([{ type: 'rotateNodes', ids: current.ids, angle, pivot }]);
+    // One node: the pivot is its own centre, so it is omitted and the node keeps its stored x
+    // and y (section 4.1, one-node rule); the default pivot equals the one fixed at press.
+    if (!event.modifiers.shift) {
+      context.gesture.replace([{ type: 'rotateNodes', ids, angle }]);
+      return;
+    }
+    // Shift: the resulting page rotation steps to `normalize(k · π/12)`. The adjustment
+    // `wrap(target − turn)` reaches it only up to binary64 rounding, so an absolute set after it
+    // stores exactly `normalize(target − chain)` (exactly the target for a page-root node).
+    const result = normalizeRotation(single.turn + angle);
+    const target = normalizeRotation(Math.round(result / ROTATE_STEP) * ROTATE_STEP);
+    const rotation = normalizeRotation(target - single.chain);
+    // Stepped back to the stored rotation: the pre-gesture document, so no step at commit.
+    if (rotation === single.rotation) {
+      context.gesture.replace([]);
+      return;
+    }
+    context.gesture.replace([
+      { type: 'rotateNodes', ids, angle: normalizeRotation(target - single.turn) },
+      {
+        type: 'setFrames',
+        frames: [{ id: ids[0]!, frame: single.frame, rotation }],
+      },
+    ]);
   }
 
   function pointerMove(event: Pointer, context: ToolContext): void {
