@@ -1,6 +1,6 @@
 # E28 contract: text through a browser-rasterized glyph atlas
 
-Status: APPROVED 2026-10-29 after independent review round 2 (recommended options auto-adopted, section 10), Full tier. It touches shared surface:
+Status: DONE 2026-10-29 ([evidence index](../evidence/e28/README.md), U5); APPROVED 2026-10-29 after independent review round 2 (recommended options auto-adopted, section 10), Full tier. It touches shared surface:
 
 - a new `text` kind in `RenderNodeSnapshot` (`packages/contracts/src/scene.ts`);
 - a new `GlyphRasterPort` in `packages/contracts`;
