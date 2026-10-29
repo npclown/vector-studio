@@ -9,6 +9,8 @@ export const boundaries = new Map([
   ['@vector-studio/editor-core', new Set(['@vector-studio/contracts', '@vector-studio/model'])],
   // P5-U6: the React bindings reach the renderer only through contracts (P5 plan, section 2).
   ['@vector-studio/react', new Set(['@vector-studio/contracts', '@vector-studio/editor-core'])],
+  // MVP M5-U3: persistence adapters -> model, contracts (ARCHITECTURE.md; M5 contract, 4.1).
+  ['@vector-studio/persistence-idb', new Set(['@vector-studio/contracts', '@vector-studio/model'])],
   ['@vector-studio/geometry-reference', new Set(['@vector-studio/contracts'])],
   ['@vector-studio/geometry-wasm', new Set(['@vector-studio/contracts'])],
   ['@vector-studio/renderer-core', new Set(['@vector-studio/contracts'])],
@@ -35,6 +37,7 @@ export const boundaries = new Map([
       '@vector-studio/editor-core',
       '@vector-studio/geometry-wasm',
       '@vector-studio/model',
+      '@vector-studio/persistence-idb',
       '@vector-studio/react',
       '@vector-studio/renderer-core',
       '@vector-studio/renderer-webgpu',
@@ -50,6 +53,8 @@ export const externalDenied = new Map([
   ['@vector-studio/model', new Set(UI_PACKAGES)],
   ['@vector-studio/editor-core', new Set(UI_PACKAGES)],
   ['@vector-studio/react', new Set(['next'])],
+  // MVP M5-U3: the adapter names neither UI packages nor the test-only fake IndexedDB (M5-Q4).
+  ['@vector-studio/persistence-idb', new Set([...UI_PACKAGES, 'fake-indexeddb'])],
 ]);
 
 export const packageDirectories = [
@@ -58,6 +63,7 @@ export const packageDirectories = [
   'packages/geometry-reference',
   'packages/geometry-wasm',
   'packages/model',
+  'packages/persistence-idb',
   'packages/react',
   'packages/renderer-core',
   'packages/renderer-webgpu',
