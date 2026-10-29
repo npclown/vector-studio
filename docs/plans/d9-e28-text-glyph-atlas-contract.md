@@ -101,7 +101,7 @@ Notation follows P1 D2: a leaf's premultiplied contribution `P` blends source-ov
 - **E28-K6 colour glyphs (E28-Q4 (a)).** A colour glyph, such as emoji, draws as its coverage silhouette tinted by the run colour. Colour fidelity is out of MVP scope, disclosed.
 - **E28-K7 order.** A text node is one leaf at its paint position. Its clusters draw in run order, then cluster order, and overlapping clusters blend in that order.
 - **E28-K8 clips and layers.** A text draw is multiplied by its full clip coverage `K_n` (P4-K3) and sits inside isolated layers as any leaf (E25-K1, K2). At 4x every sample of a pixel receives the pixel's value, as E25's composite does. Text never writes the stencil.
-- **E28-K9 bounds.** For culling, clip-chain culling and E25-K5 layer bounds, a cluster's local bound is `[x − size, x + advance + size] × [y − 2·size, y + size]`. A node's bound is the union over its clusters. The bound is assumed conservative for the test fonts (section 8); T5's probes check that their ink is not cut.
+- **E28-K9 bounds.** For culling, clip-chain culling and E25-K5 layer bounds, a cluster's local bound is `[x + min(advance, 0) − size, x + max(advance, 0) + size] × [y − 2·size, y + size]`. The advance may be negative (letter spacing), so the bound covers both ends of the pen box (amendment, 2026-10-29, from the M6a-U2 cross-review; U2's code already did this). A node's bound is the union over its clusters. The bound is assumed conservative for the test fonts (section 8); T5's probes check that their ink is not cut.
 
 ## 4. Realization (E28-Q1 (a))
 
@@ -124,7 +124,7 @@ Notation follows P1 D2: a leaf's premultiplied contribution `P` blends source-ov
 
   So step 3 applies only when every entry in the atlas is drawn exactly by the frame, which is section 5's "this frame's clusters alone exceed the atlas"; a deferral whose fallback is drawn is then omitted only because that fallback is itself an exact entry of the frame. Each compaction frees one page with stale entries, so for an unchanging scene a fragmented atlas needs at most one compaction per page. A scene that changes while compacting can make new stale entries and start further compactions.
 
-  The cost is disclosed. While a compaction is pending, the misses it defers draw only their fallback. In the compacting frame, the clusters that were drawn from the evicted page are rasterized again. Those beyond the raster budget draw only their fallback, so text that was visible can disappear for a frame or more. A deferred cluster whose fallback was on the evicted page also draws nothing until it is rasterized, for example after a zoom on a full atlas. U4's T8 shows this on a one-page atlas, including a zoom on that atlas.
+  The cost is disclosed. While a compaction is pending, the misses it defers draw only their fallback. In the compacting frame, the clusters that were drawn from the evicted page are rasterized again. Those beyond the raster budget draw only their fallback, so text that was visible can disappear for a frame or more. A deferred cluster whose fallback was on the evicted page also draws nothing until it is rasterized, for example after a zoom on a full atlas. U4's T8 shows this on a one-page atlas, including a subpixel move of its text.
 - **Raster budget (E28-Q6 (a)).** At most `E28_RASTER_PER_FRAME = 256` port calls per prepared frame. A cluster still missing an entry after that:
   1. draws from an entry whose key differs only in bucket and phase, the nearest bucket to `b` (the smaller on a tie, then phase 0), by the general path scaled to `s`, if one exists;
   2. otherwise does not draw this frame.
@@ -328,7 +328,7 @@ U2 amendment, compaction (2026-10-29):
 - **Review** (R1 NOT READY):
   - The first version evicted every page, and suppressed compaction until a frame drew every cluster. That left the lock possible after a compaction that ended over the limit. It also blanked a large atlas.
   - The rule now evicts one page per compaction and has no suppression.
-  - R3 READY WITH FOLLOW-UPS: the cost paragraph now names fallbacks on the evicted page; a mixed budget-and-fragmentation frame is left to U4's T8 zoom check.
+  - R3 READY WITH FOLLOW-UPS: the cost paragraph now names fallbacks on the evicted page; U4's T8 adds R2's subpixel move on the real port. A frame that both fragments and defers under the raster budget is covered by the convergence argument only, since one page of T8 cannot hold 256 misses.
   - R2 NOT READY: an entry drawn only as a fallback counted as drawn, so after a subpixel move on a full atlas its stale space was hidden and the frame omitted with a false E28-D2. A fallback now keeps its page used but its entry stays stale.
 - **Tests:** `tests/unit/e28-u2-atlas-plan.test.ts`, "E28 section 4 compaction". They cover:
   - the deferral and the eviction;
@@ -339,6 +339,15 @@ U2 amendment, compaction (2026-10-29):
   - compaction under the raster budget, with one invalidation per deferring frame;
   - an unacknowledged fragmented frame, and an unacknowledged compacting frame;
   - a release while a compaction is pending.
+
+U4 record, headed spec (2026-10-29):
+
+- **Spec:** `tests/gpu/e28-text-atlas.spec.ts`, with the oracle in `tests/support/e28-text-oracle.ts`. E25's scene builder moved to `tests/support/e25-scene.ts` so both specs share it. The E23 page gains `raster=fake`, `pages` and `pagesize` options and the M6c hand-off hooks `placements`, `readCluster` and `rasterCost`.
+- **Oracle:** snapped clusters read one texel per pixel. General clusters sample bilinearly at the pixel centre with the 0.5-texel inset clamp. A general pixel within 1.5 device px of a quad edge is undecided unless the bilinear value there is at most 1/255. Colours are premultiplied and blend in order, through E25's layer oracle.
+- **SwiftShader pre-run:** [../evidence/e28/u4-swiftshader.md](../evidence/e28/u4-swiftshader.md). All 13 tests pass. General text needs `E28_GENERAL_TOLERANCE=16` there, because SwiftShader's bilinear filtering is coarser than the section 6 tolerance. The reference-PC run keeps the default tolerance, 3.
+- **Out-of-memory, disclosed:** the spec does not force a real `createTexture` failure. A05 and the 32 MiB bound check that page allocations raise no uncaptured device error. A real out-of-memory would surface as an uncaptured device-error diagnostic, not as E28-D1, because `createTexture` reports it asynchronously (U3's known limit).
+- **E28-K9:** amended for negative advances (above), with a unit test; U2's code already used both ends of the pen box.
+- **Reference-PC run:** pending, through the coordinator (`pnpm test:gpu` on Chrome and Edge).
 
 ## 8. Risks
 
