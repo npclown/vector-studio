@@ -226,6 +226,11 @@ export interface PrimitiveFrameSource {
    * initialization and recovery. Optional; absent means false.
    */
   readonly requiresClipPipeline?: boolean;
+  /**
+   * E23 contract, U3: true when the backend must create the gradient paint pipeline variants
+   * at initialization and recovery. Optional; absent means false.
+   */
+  readonly requiresPaintPipeline?: boolean;
   prepare(target: PrimitiveTarget): PrimitivePacket | null;
   acknowledge(receipt: PrimitiveReceipt): void;
 }

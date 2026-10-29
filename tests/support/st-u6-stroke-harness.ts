@@ -209,6 +209,8 @@ export function createStrokeHarness(
     strokeMemoryBytes?: () => number;
     /** P4 contract, U3: the mirror's clip support; default none. */
     clips?: ClipSupport;
+    /** E23 contract, U3: the mirror's paint support; default solid. */
+    paints?: 'solid' | 'gradient';
   }>,
 ) {
   const mirror = new RetainedSceneMirror(undefined, {
@@ -216,6 +218,7 @@ export function createStrokeHarness(
     pathFills: options.fillPort === undefined ? 'unsupported' : 'supported',
     pathStrokes: options.strokePort === undefined ? 'unsupported' : 'supported',
     ...(options.clips === undefined ? {} : { clips: options.clips }),
+    ...(options.paints === undefined ? {} : { paints: options.paints }),
   });
   const pipeline = new PathMeshPipeline({
     ...(options.fillPort === undefined ? {} : { port: options.fillPort }),

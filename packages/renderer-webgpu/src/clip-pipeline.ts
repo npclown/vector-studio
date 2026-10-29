@@ -42,7 +42,7 @@ const FRAGMENT_VISIBILITY = 0x2;
  * control flow. U4: a state with a mask multiplies by its mask texture's texel at the pixel
  * plus the state's texel offset, and by 0 outside the texture.
  */
-const CLIP_BLOCK = /* wgsl */ `
+export const CLIP_BLOCK = /* wgsl */ `
 struct ClipFrame {
   cameraMinusOrigin: vec2f,
   pixelSize: f32,
@@ -113,10 +113,10 @@ fn clipCoverage(pixel: vec2f) -> f32 {
 `;
 
 /** Replaces `header` (which must occur exactly once) by `replacement`. */
-function replaceOnce(source: string, header: string, replacement: string): string {
+export function replaceOnce(source: string, header: string, replacement: string): string {
   const first = source.indexOf(header);
   if (first < 0 || source.indexOf(header, first + 1) >= 0) {
-    throw new Error(`Clip variant: the entry point header "${header}" must occur once.`);
+    throw new Error(`Shader variant: the header "${header}" must occur once.`);
   }
   return source.slice(0, first) + replacement + source.slice(first + header.length);
 }
