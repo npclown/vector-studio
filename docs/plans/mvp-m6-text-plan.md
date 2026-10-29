@@ -206,17 +206,19 @@ Documentation only: local links and anchors were checked. Markdown formatting is
 
 ## 14. Gate
 
-Independent review round 2 is READY WITH FOLLOW-UPS, applied. The plan then needs the user's decisions on M6-Q1, M6-Q2, M6-Q7 and M6-Q20 and confirmations on M6-Q11, M6-Q12, M6-Q14 and M6-Q23. On approval, M6-S0 (light tier) and M6-ADR may start; R-T is filed on the rendering track once the ADR is accepted, which is later than MVP plan section 5's "when the text plan is approved" (the MVP plan's M6 pointer says so); the M6a contract, a shared-surface change reviewed by both tracks, may be written. No M6 product code starts before the M6a contract is approved; M6 implementation entry follows the MVP plan's milestone order and the user's acceptance of the earlier exits.
+Independent review round 2 is READY WITH FOLLOW-UPS, applied. The plan then needs the user's decisions on M6-Q1, M6-Q2, M6-Q7 and M6-Q20 and confirmations on M6-Q11, M6-Q12, M6-Q14 and M6-Q23. On approval, M6-S0 (light tier) and M6-ADR may start; R-T is filed on the rendering track once the ADR is accepted and its independent review applied, which is later than MVP plan section 5's "when the text plan is approved" (the MVP plan's M6 pointer says so); the M6a contract, a shared-surface change reviewed by both tracks, may be written. No M6 product code starts before the M6a contract is approved; M6 implementation entry follows the MVP plan's milestone order and the user's acceptance of the earlier exits.
 
 Decided 2026-10-29: M6-Q1, M6-Q2, M6-Q7 and M6-Q20 take option (a), and M6-Q11, M6-Q12, M6-Q14 and M6-Q23 are confirmed as reading (a), 추천안 자동 채택 under the standing rule of 2026-10-24, recorded while the user's decision cards were open; if the user picks differently on a card, that pick replaces the option here before the unit it affects starts. M6-S0 and M6-ADR may start.
+
+Written 2026-10-29: [ADR 0003](../decisions/0003-browser-text-and-glyph-atlas.md) records M6-Q7 (a) and M6-Q2 (a) with the M6-S0 main-PC evidence, under the same 추천안 자동 채택. Its independent review (full tier) is READY WITH FOLLOW-UPS, applied, so R-T may now be filed on the rendering track. A different user pick on the M6 decision card supersedes or withdraws the ADR, and R-T is then not filed for route (a).
 
 ## 15. Progress
 
 | Unit | State |
 | --- | --- |
 | Plan | APPROVED 2026-10-29: review round 1 NOT READY, applied; round 2 READY WITH FOLLOW-UPS, applied; user-level questions adopted as (a), 추천안 자동 채택 2026-10-29 (section 14) |
-| M6-S0 | In progress: spike page and scripts (local) |
-| M6-ADR | Not started |
+| M6-S0 | In progress: automated runs recorded on the main PC 2026-10-29 ([record](../evidence/m6-s0/main-pc-2026-10-29.md)); IME recordings pending |
+| M6-ADR | Accepted 2026-10-29, 추천안 자동 채택 ([ADR 0003](../decisions/0003-browser-text-and-glyph-atlas.md)); review READY WITH FOLLOW-UPS, applied |
 | M6a | Not started |
 | R-T | Not filed |
 | M6b | Not started |

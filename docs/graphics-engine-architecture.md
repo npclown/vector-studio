@@ -270,6 +270,8 @@ Text is not part of the first graphics-kernel milestone. The architecture reserv
 
 Committed text will eventually render through GPU glyph atlases, while active editing uses a DOM overlay. No DOM or browser font object enters persistent document data.
 
+Decided 2026-10-29: browser-rasterized cluster atlas and browser-owned layout ([ADR 0003](decisions/0003-browser-text-and-glyph-atlas.md)); recommended option auto-adopted, user card open.
+
 ## Approved P1 visual behavior
 
 On 2026-09-09 the user approved [P1 D2](plans/p1-instanced-primitives.md#d2--approved-p1-visual-behavior): straight-alpha sRGB input, encoded-sRGB premultiplied source-over on a non-sRGB unorm target/view, and primitive opacity applied once after local fill/stroke composition. The linked contract fixes canvas configuration, blend factors, coverage and compositing formulas, local-space stroke transforms, radius normalization and degenerate-input behavior.
