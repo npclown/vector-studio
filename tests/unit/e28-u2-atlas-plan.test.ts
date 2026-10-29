@@ -591,6 +591,107 @@ describe('E28 section 4 over the atlas limit', () => {
   });
 });
 
+describe('E28 section 4 compaction', () => {
+  // Size 4 on one 16 px page: two bitmaps fit.
+  const small = { size: 4 } as const;
+  const ch = (index: number) => String.fromCodePoint(0x4e00 + index);
+
+  it('defers instead of omitting when stale entries fill the pages, then starts from empty', () => {
+    const { frame, replace, service, takeInvalidations } = setup([textNode('t', many(2), small)], {
+      pages: 1,
+      pageSize: 16,
+    });
+    frame();
+    // One hit marks the page used; the miss finds it full of an entry this frame does not draw.
+    replace([
+      textNode(
+        't',
+        [
+          [ch(0), 0],
+          [ch(50), 1],
+        ],
+        small,
+      ),
+    ]);
+    takeInvalidations();
+    const fragmented = frame();
+    expect(instanceCount(fragmented)).toBe(1);
+    expect(fragmented.text!.notices).toEqual([]);
+    expect(fragmented.text!.clears).toEqual([]);
+    expect(takeInvalidations()).toBe(1);
+    expect(service.getAtlasEvictionsForTesting()).toBe(0);
+    // The next frame evicts every page and rasterizes both clusters again.
+    const calls = service.getGlyphRasterCallsForTesting();
+    const compacted = frame();
+    expect(compacted.text!.clears).toEqual([{ page: 0, x: 0, y: 0, width: 16, height: 16 }]);
+    expect(compacted.text!.uploads).toHaveLength(2);
+    expect(instanceCount(compacted)).toBe(2);
+    expect(compacted.text!.notices).toEqual([]);
+    expect(service.getGlyphRasterCallsForTesting() - calls).toBe(2);
+    expect(service.getAtlasEvictionsForTesting()).toBe(1);
+    expect(takeInvalidations()).toBe(0);
+    // Converged: nothing more to rasterize, nothing cleared.
+    const settled = frame();
+    expect(settled.text!.clears).toEqual([]);
+    expect(service.getGlyphRasterCallsForTesting() - calls).toBe(2);
+  });
+
+  it('omits and reports E28-D2 when the frame alone exceeds the compacted atlas', () => {
+    const { frame, replace, service } = setup([textNode('t', many(2), small)], {
+      pages: 1,
+      pageSize: 16,
+    });
+    frame();
+    replace([
+      textNode(
+        't',
+        [
+          [ch(0), 0],
+          [ch(50), 1],
+          [ch(51), 2],
+        ],
+        small,
+      ),
+    ]);
+    const fragmented = frame();
+    expect(instanceCount(fragmented)).toBe(1);
+    expect(fragmented.text!.notices).toEqual([]);
+    const compacted = frame();
+    expect(compacted.text!.clears).toHaveLength(1);
+    expect(instanceCount(compacted)).toBe(2);
+    expect(compacted.text!.notices).toEqual([
+      { code: 'text-resource-limit', nodeId: 't', omitted: 1, pages: 1 },
+    ]);
+    // No stale entry is left, so later frames omit without compacting again.
+    const later = frame();
+    expect(later.text!.clears).toEqual([]);
+    expect(later.text!.notices).toEqual([]);
+    expect(instanceCount(later)).toBe(2);
+    expect(service.getAtlasEvictionsForTesting()).toBe(1);
+  });
+
+  it('compacts in the next acknowledged frame when a compacting frame is not acknowledged', () => {
+    const { frame, replace } = setup([textNode('t', many(2), small)], { pages: 1, pageSize: 16 });
+    frame();
+    replace([
+      textNode(
+        't',
+        [
+          [ch(0), 0],
+          [ch(50), 1],
+        ],
+        small,
+      ),
+    ]);
+    frame();
+    expect(frame(target, false).text!.clears).toHaveLength(1);
+    const again = frame();
+    expect(again.text!.clears).toHaveLength(1);
+    expect(instanceCount(again)).toBe(2);
+    expect(frame().text!.clears).toEqual([]);
+  });
+});
+
 describe('E28 section 4 raster budget', () => {
   it('defers clusters past the budget, invalidates once per acknowledged packet and converges', () => {
     const { frame, service, takeInvalidations } = setup([textNode('t', many(300), { size: 4 })]);

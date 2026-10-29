@@ -117,6 +117,12 @@ Notation follows P1 D2: a leaf's premultiplied contribution `P` blends source-ov
   3. If every page is used by this frame, the clusters that do not fit are *omitted*: not drawn, and `render.text-resource-limit` is reported.
 
   Pages are cleared by `writeTexture` of zeros over the evicted area (pages have no `RENDER_ATTACHMENT`).
+- **Compaction (amendment, 2026-10-29).** Eviction frees whole pages only, so a page that holds one entry this frame draws keeps all its stale entries. When every page is used by this frame but some page holds an entry this frame does not draw, step 3 does not apply:
+  1. The clusters that do not fit are *deferred* (with the raster budget's fallback), and E28-D2 is not reported.
+  2. The next acknowledged frame starts from an empty atlas: it evicts and clears every page, and its clusters are rasterized again under the raster budget.
+  3. Until a frame draws every cluster, step 3 applies as written, so a frame whose clusters alone exceed the atlas omits and reports E28-D2.
+
+  A compaction redraws every visible cluster over a few frames, deferred clusters without a fallback draw nothing until then (disclosed).
 - **Raster budget (E28-Q6 (a)).** At most `E28_RASTER_PER_FRAME = 256` port calls per prepared frame. A cluster still missing an entry after that:
   1. draws from an entry whose key differs only in bucket and phase, the nearest bucket to `b` (the smaller on a tie, then phase 0), by the general path scaled to `s`, if one exists;
   2. otherwise does not draw this frame.
@@ -310,6 +316,12 @@ U3 (2026-10-29):
 - Evidence: [u3-swiftshader.md](../evidence/e28/u3-swiftshader.md), the A07 capture part and a snapped-text check on SwiftShader. The check is exact against the port's own bitmaps, and all four variants are identical.
 - Known limit, disclosed: WebGPU's `createTexture` does not throw on out-of-memory. It returns a texture and reports the error asynchronously, so the fake device's thrown failure covers only synchronous failures. U4 checks a real page allocation with an error scope on the reference PC.
 - Left to U4: partial clips over text, text under group opacity, and bilinear general text against the oracle (T3 and T5). U3's SwiftShader check covers only snapped text, clips that do not cut glyphs, layers at opacity 1, and that rotated text draws ink.
+
+U2 amendment, compaction (2026-10-29):
+
+- Found by U4's T8 spec on SwiftShader. With a one-page atlas, a layout generation change put new entries into the page's free space, which marked the page used by the frame; the remaining clusters were then omitted and E28-D2 reported, although they alone fit the atlas. Every later frame hit the same page, so the text never converged. The same lock can occur with eight pages once every page receives one of a frame's entries.
+- Fix: the section 4 compaction rule, in `renderer-core`'s `GlyphAtlasPlan`. It changes nothing for an atlas without stale entries, so U2's and U3's tests pass unchanged.
+- Tests: `tests/unit/e28-u2-atlas-plan.test.ts`, "E28 section 4 compaction": the deferral and the empty start, a frame that exceeds the compacted atlas, and a compacting frame that is not acknowledged.
 
 ## 8. Risks
 

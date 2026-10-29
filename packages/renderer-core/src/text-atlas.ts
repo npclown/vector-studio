@@ -216,6 +216,10 @@ export type AtlasFrame = Readonly<{
   evicted: ReadonlySet<number>;
   used: ReadonlySet<number>;
   evictions: number;
+  /** This frame started from an empty atlas (section 4, Compaction). */
+  compacted: boolean;
+  /** Clusters were deferred because stale entries filled the pages: compact next frame. */
+  fragmented: boolean;
 }>;
 
 /** The backend's part of a receipt for a packet with a `text` part (section 4, Lifetime). */
@@ -249,6 +253,10 @@ export class GlyphAtlasPlan {
   #newestGeneration = -1;
   #frame = 0;
   #overLimit = false;
+  /** Section 4, Compaction: the next frame starts from an empty atlas. */
+  #compactNext = false;
+  /** The atlas was compacted and no frame has drawn every cluster since. */
+  #compacted = false;
   #failuresReported = new Set<string>();
   #notices: TextNotice[] = [];
   #noticesDropped = 0;
@@ -298,6 +306,8 @@ export class GlyphAtlasPlan {
 
   /** Drops every entry and page: device loss, release and dispose. */
   public reset(): void {
+    this.#compactNext = false;
+    this.#compacted = false;
     this.#pages = [];
     this.#entries.clear();
     this.#bases.clear();
@@ -334,6 +344,8 @@ export class GlyphAtlasPlan {
         evicted: new Set(this.#pages.map((_, index) => index)),
         used: new Set<number>(),
         evictions: 0,
+        compacted: false,
+        fragmented: false,
       });
     }
     for (const request of requests) this.#observeGeneration(request.generation);
@@ -345,6 +357,25 @@ export class GlyphAtlasPlan {
     const used = new Set<number>();
     const clears: TextClear[] = [];
     const uploads: TextUpload[] = [];
+    // Keys this frame draws from; an entry outside it is stale for this frame.
+    const usedKeys = new Set<string>();
+    // Pages whose key set this frame already copied, so an allocation adds to it in place.
+    const ownedKeys = new Set<number>();
+    let evictions = 0;
+    const evict = (index: number) => {
+      evicted.add(index);
+      clears.push(fullPageClear(index, this.#pageSize));
+      evictions += 1;
+      pages[index] = Object.freeze({
+        ...EMPTY_PAGE,
+        keys: new Set<string>(),
+        incarnation: pages[index]!.incarnation,
+      });
+      ownedKeys.add(index);
+    };
+    // Section 4, Compaction: every page is evicted, so the frame re-rasterizes what it draws.
+    const compacted = this.#compactNext;
+    if (compacted) for (let index = 0; index < pages.length; index += 1) evict(index);
     const lookup = (key: string): AtlasEntry | undefined => {
       const fresh = added.get(key);
       if (fresh !== undefined) return fresh;
@@ -367,6 +398,7 @@ export class GlyphAtlasPlan {
       const entry = lookup(keys[index]!);
       if (entry === undefined) return undefined;
       used.add(entry.page);
+      usedKeys.add(entry.key);
       return Object.freeze({ kind: 'entry', entry, fallback: false });
     });
 
@@ -374,14 +406,14 @@ export class GlyphAtlasPlan {
     let calls = 0;
     let deferred = 0;
     let omitted = 0;
-    let evictions = 0;
     let firstOmitted: string | null = null;
     // Eviction step 3: once every page is used by this frame, later misses are omitted without a
     // port call, so an over-limit frame neither spends the budget nor defers (and converges).
     let full = false;
+    // Section 4, Compaction: every page is used by this frame, but some hold entries it does not
+    // draw. Later misses are deferred, and the next frame starts from an empty atlas.
+    let fragmented = false;
     const omittedKeys = new Set<string>();
-    // Pages whose key set this frame already copied, so an allocation adds to it in place.
-    const ownedKeys = new Set<number>();
     const addKey = (index: number, key: string) => {
       if (!ownedKeys.has(index)) {
         pages[index] = Object.freeze({ ...pages[index]!, keys: new Set(pages[index]!.keys) });
@@ -434,10 +466,11 @@ export class GlyphAtlasPlan {
         }
       }
       if (victim < 0) {
-        full = true;
+        const stale = pages.some((page) => [...page.keys].some((key) => !usedKeys.has(key)));
+        if (stale && !this.#compacted) fragmented = true;
+        else full = true;
         return null;
       }
-      evicted.add(victim);
       for (const key of pages[victim]!.keys) {
         const entry = added.get(key);
         if (entry !== undefined) {
@@ -445,14 +478,7 @@ export class GlyphAtlasPlan {
           addedBases.get(entry.base)?.delete(key);
         }
       }
-      clears.push(fullPageClear(victim, this.#pageSize));
-      evictions += 1;
-      pages[victim] = Object.freeze({
-        ...EMPTY_PAGE,
-        keys: new Set<string>(),
-        incarnation: pages[victim]!.incarnation,
-      });
-      ownedKeys.add(victim);
+      evict(victim);
       return fit(victim);
     };
 
@@ -463,6 +489,7 @@ export class GlyphAtlasPlan {
       const known = lookup(key);
       if (known !== undefined) {
         used.add(known.page);
+        usedKeys.add(known.key);
         resolutions[index] = Object.freeze({ kind: 'entry', entry: known, fallback: false });
         return;
       }
@@ -478,15 +505,21 @@ export class GlyphAtlasPlan {
         resolutions[index] = Object.freeze({ kind: 'omitted' });
         return;
       }
-      if (calls >= E28_RASTER_PER_FRAME) {
+      const defer = () => {
         deferred += 1;
         const fallback = this.#fallback(request, lookup, addedBases);
-        if (fallback !== null) used.add(fallback.page);
+        if (fallback !== null) {
+          used.add(fallback.page);
+          usedKeys.add(fallback.key);
+        }
         resolutions[index] = Object.freeze(
           fallback === null
             ? { kind: 'deferred' }
             : { kind: 'entry', entry: fallback, fallback: true },
         );
+      };
+      if (calls >= E28_RASTER_PER_FRAME || fragmented) {
+        defer();
         return;
       }
       calls += 1;
@@ -511,6 +544,10 @@ export class GlyphAtlasPlan {
         return;
       }
       const place = allocate(result.width, result.height);
+      if (place === null && fragmented) {
+        defer();
+        return;
+      }
       if (place === null) {
         omitted += 1;
         firstOmitted ??= request.nodeId;
@@ -535,6 +572,7 @@ export class GlyphAtlasPlan {
       });
       addKey(place.page, key);
       added.set(key, entry);
+      usedKeys.add(key);
       const list = addedBases.get(base);
       if (list === undefined) addedBases.set(base, new Set([key]));
       else list.add(key);
@@ -580,6 +618,8 @@ export class GlyphAtlasPlan {
       evicted,
       used,
       evictions,
+      compacted,
+      fragmented,
     });
   }
 
@@ -636,6 +676,12 @@ export class GlyphAtlasPlan {
     }
     this.#uploads += frame.uploads.length;
     this.#evictions += frame.evictions;
+    if (frame.compacted) {
+      this.#compactNext = false;
+      this.#compacted = true;
+    }
+    if (frame.fragmented) this.#compactNext = true;
+    if (frame.omitted === 0 && frame.deferred === 0) this.#compacted = false;
     return lost;
   }
 
