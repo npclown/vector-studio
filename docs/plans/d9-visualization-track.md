@@ -19,7 +19,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | V-7 | MVP editor plan (milestones M1 to M9 after P5 and P4) | Full | R5 | Plan APPROVED 2026-10-28; M1 done 2026-10-28 (see V-8); M2 done 2026-10-28 (see V-9); M3 contract APPROVED 2026-10-28 (see V-10) ([plan](mvp-editor-plan.md)) |
 | V-8 | MVP M1: document v2 and containers | Full | R5 | Start approved by the user 2026-10-28; contract APPROVED 2026-10-28 ([contract](mvp-m1-document-v2-contract.md)); M1-U1 to U6 done (#298–#303); M1 exit ACCEPTED by the user 2026-10-28 ([exit record](../evidence/m1-exit-2026-10-28.md)) |
 | V-9 | MVP M2: interaction completeness | Full | R5 | Contract APPROVED 2026-10-28 ([contract](mvp-m2-interaction-contract.md)); M2-U1 to U9 done (#308, #309, #311, #313, #314, #315, #316, #317, #318); M2 exit accepted by the user 2026-10-28 ([exit record](../evidence/m2-exit-2026-10-28.md)) |
-| V-10 | MVP M3: path editing | Full | R5 | Contract APPROVED 2026-10-28 (#319); M2 exit accepted 2026-10-28; M3-U1 done (anchor model, move and handle commands), M3-U2 done (edit mode and gestures), M3-U3 done (insert, remove, close and open), M3-U4 done (next-host page, headed Chrome and Edge PASS) ([contract](mvp-m3-path-editing-contract.md)) |
+| V-10 | MVP M3: path editing | Full | R5 | Contract APPROVED 2026-10-28 (#319); M2 exit accepted 2026-10-28; M3-U1 done (anchor model, move and handle commands), M3-U2 done (edit mode and gestures), M3-U3 done (insert, remove, close and open), M3-U4 done (next-host page, headed Chrome and Edge PASS), M3-U5 exit record in review ([contract](mvp-m3-path-editing-contract.md)) |
 
 ## V-1: path appearance editing
 
