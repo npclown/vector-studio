@@ -211,13 +211,13 @@ for (const samples of [4, 1]) {
           [snapshot, camera],
         );
         if (shown.status !== 'applied') throw new Error(`${name}: ${shown.status}`);
-        const before = await page.evaluate(() => window.__vectorStudioE23.layerPasses());
+        const before = await page.evaluate(() => window.__vectorStudioE23.counters().layerPasses);
         const rendered = await page.evaluate(
           ([scene, at]) => window.__vectorStudioE23.render(scene, at),
           [snapshot, camera],
         );
         if (rendered.status !== 'applied') throw new Error(`${name}: ${rendered.status}`);
-        const after = await page.evaluate(() => window.__vectorStudioE23.layerPasses());
+        const after = await page.evaluate(() => window.__vectorStudioE23.counters().layerPasses);
         const errors = (await page.evaluate(() => window.__vectorStudioE23.diagnostics())).filter(
           (diagnostic) => diagnostic.severity === 'error',
         );
