@@ -75,6 +75,16 @@ export type PrimitiveRendererServiceOptions = Readonly<{
   text?: 'none' | 'atlas';
   /** E28 contract, section 2: the glyph raster port; required by `text: 'atlas'`. */
   glyphRaster?: GlyphRasterPort;
+  /**
+   * @internal Tests only (E28 contract, T8): the atlas page limit, 1 to 8, with `text: 'atlas'`.
+   * Default 8.
+   */
+  textAtlasPagesForTesting?: number;
+  /**
+   * @internal Tests only (E28 contract, T8): the atlas page edge, 16 to 2048 px, with
+   * `text: 'atlas'`. Default 2048; the backend reads it from the packet.
+   */
+  textAtlasPageSizeForTesting?: number;
 }>;
 
 /** Owns the CPU scene mirror and packet source while the backend owns scheduling and native state. */
@@ -151,6 +161,23 @@ export class PrimitiveRendererService
     if (text === 'atlas' && glyphRaster === undefined) {
       throw new TypeError("text: 'atlas' needs a glyphRaster port.");
     }
+    const atlasPages = options.textAtlasPagesForTesting;
+    if (
+      atlasPages !== undefined &&
+      (text !== 'atlas' || !Number.isSafeInteger(atlasPages) || atlasPages < 1 || atlasPages > 8)
+    ) {
+      throw new TypeError("textAtlasPagesForTesting must be 1 to 8, with text: 'atlas'.");
+    }
+    const atlasPageSize = options.textAtlasPageSizeForTesting;
+    if (
+      atlasPageSize !== undefined &&
+      (text !== 'atlas' ||
+        !Number.isSafeInteger(atlasPageSize) ||
+        atlasPageSize < 16 ||
+        atlasPageSize > 2048)
+    ) {
+      throw new TypeError("textAtlasPageSizeForTesting must be 16 to 2048, with text: 'atlas'.");
+    }
     this.#invalidationTarget = invalidationTarget;
     this.requiresTextPipeline = text === 'atlas';
     this.requiresClipPipeline = clips !== 'none';
@@ -185,7 +212,21 @@ export class PrimitiveRendererService
             // stroke mesh uses it unchanged (B2 section 9.5). E10: no builder when 'off'.
             ...(fringe === 'on' ? { fringeBuilder: buildPathFringe } : {}),
           }),
-      isolateUnit ? { isolateUnitOpacityForTesting: true } : {},
+      {
+        ...(isolateUnit ? { isolateUnitOpacityForTesting: true } : {}),
+        // E28 section 4: the service holds the invalidation target, so a packet with deferred
+        // clusters invalidates once when it is acknowledged.
+        ...(text === 'atlas'
+          ? {
+              text: {
+                port: glyphRaster!,
+                ...(atlasPages === undefined ? {} : { pages: atlasPages }),
+                ...(atlasPageSize === undefined ? {} : { pageSize: atlasPageSize }),
+                onDeferred: () => this.#invalidate('scene'),
+              },
+            }
+          : {}),
+      },
     );
   }
 
@@ -241,6 +282,21 @@ export class PrimitiveRendererService
    */
   public getDashExpansionCountForTesting(): number {
     return this.#source.getDashExpansionCountForTesting();
+  }
+
+  /** @internal Tests only (E28 section 4, Counters): glyph raster port calls so far. */
+  public getGlyphRasterCallsForTesting(): number {
+    return this.#source.getGlyphRasterCallsForTesting();
+  }
+
+  /** @internal Tests only (E28 section 4, Counters): bitmaps written by acknowledged packets. */
+  public getGlyphUploadsForTesting(): number {
+    return this.#source.getGlyphUploadsForTesting();
+  }
+
+  /** @internal Tests only (E28 section 4, Counters): atlas pages evicted by acknowledged packets. */
+  public getAtlasEvictionsForTesting(): number {
+    return this.#source.getAtlasEvictionsForTesting();
   }
 
   /**

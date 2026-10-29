@@ -545,7 +545,7 @@ describe('E25 U3 nesting, tiles, ties and variants', () => {
     creation.dispose();
   });
 
-  it('places a composite between the mesh draws its meshOrder counts', async () => {
+  it('places a composite between the mesh draws its order counts', async () => {
     const fixture = nativeFixture();
     const { scene, creation, target } = await nativeScene(fixture, allOptions);
     const h = harness([
@@ -555,9 +555,7 @@ describe('E25 U3 nesting, tiles, ties and variants', () => {
       fillPath('p2', 40),
     ]);
     const packet = prepared(h, target);
-    expect(packet.layers?.composites).toEqual([
-      { layer: 0, target: -1, position: 0, meshOrder: 1 },
-    ]);
+    expect(packet.layers?.composites).toEqual([{ layer: 0, target: -1, position: 0, order: 1 }]);
     fixture.calls.length = 0;
     submitted(scene.submitPrimitivePacket(packet));
     const main = fixture.calls.findIndex((call) => call[1] === 'vector-studio/primitive-pass');
@@ -815,9 +813,9 @@ describe('E25 U3 fail-closed layers, identity and lifetime', () => {
           { ...part, composites: [{ ...part.composites[0]!, position: 3 }] },
         ],
         [
-          'meshOrder past the mesh draws',
+          'order past its slots',
           packet,
-          { ...part, composites: [{ ...part.composites[0]!, meshOrder: 1 }] },
+          { ...part, composites: [{ ...part.composites[0]!, order: 1 }] },
         ],
         [
           'parent before the child',
@@ -842,8 +840,20 @@ describe('E25 U3 fail-closed layers, identity and lifetime', () => {
             ...part,
             layers: [layer, { ...layer, nodeId: 'x' }],
             composites: [
-              { layer: 0, target: -1, position: 1, meshOrder: 0 },
-              { layer: 1, target: -1, position: 0, meshOrder: 0 },
+              { layer: 0, target: -1, position: 1, order: 0 },
+              { layer: 1, target: -1, position: 0, order: 0 },
+            ],
+          },
+        ],
+        [
+          'two composites in one slot',
+          packet,
+          {
+            ...part,
+            layers: [layer, { ...layer, nodeId: 'x' }],
+            composites: [
+              { ...part.composites[0]!, layer: 0 },
+              { ...part.composites[0]!, layer: 1 },
             ],
           },
         ],
@@ -854,6 +864,31 @@ describe('E25 U3 fail-closed layers, identity and lifetime', () => {
           reason: 'invalid-packet',
         });
       }
+      // E28 section 4: a text draw in a composite's slot.
+      const composite = part.composites[0]!;
+      const textPart = {
+        layoutVersion: 0 as const,
+        pageSize: 2048,
+        pageCount: 0,
+        clears: [],
+        uploads: [],
+        instances: new Float32Array(0),
+        draws: [
+          {
+            first: 0,
+            count: 1,
+            page: 0,
+            target: composite.target,
+            position: composite.position,
+            order: composite.order,
+          },
+        ],
+        notices: [],
+      };
+      expect(scene.submitPrimitivePacket({ ...packet, text: textPart }), 'shared slot').toEqual({
+        status: 'failed',
+        reason: 'invalid-packet',
+      });
       creation.dispose();
     },
   );

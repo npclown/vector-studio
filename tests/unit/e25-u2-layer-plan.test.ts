@@ -194,9 +194,7 @@ describe('E25-A02 layer plan', () => {
     expect(runs(layer.draws)).toEqual([[1, 2]]);
     // Content [100, 115] × [20, 30], widened by 1 px to [99, 116] × [19, 31], made even.
     expect(layer.bound).toEqual({ x: 98, y: 18, width: 18, height: 14 });
-    expect(packet.layers!.composites).toEqual([
-      { layer: 0, target: -1, position: 1, meshOrder: 0 },
-    ]);
+    expect(packet.layers!.composites).toEqual([{ layer: 0, target: -1, position: 1, order: 0 }]);
     expect(packet.layers!.notices).toEqual([]);
   });
 
@@ -226,9 +224,10 @@ describe('E25-A02 layer plan', () => {
     ]);
     expect(runs(part.layers[2]!.draws)).toEqual([[3, 1]]);
     expect(part.composites).toEqual([
-      { layer: 1, target: -1, position: 0, meshOrder: 0 },
-      { layer: 0, target: 1, position: 1, meshOrder: 0 },
-      { layer: 2, target: -1, position: 0, meshOrder: 0 },
+      { layer: 1, target: -1, position: 0, order: 0 },
+      { layer: 0, target: 1, position: 1, order: 0 },
+      // E28 section 4: `order` also counts the composite of `outer` before it.
+      { layer: 2, target: -1, position: 0, order: 1 },
     ]);
     const inner = part.layers[0]!.bound;
     const outer = part.layers[1]!.bound;
@@ -253,7 +252,7 @@ describe('E25-A02 layer plan', () => {
     expect(packet.draws).toEqual([]);
     // Main pass: q, the composite of g, then s; all at analytic position 0.
     expect(packet.mesh!.draws.map((draw) => draw.position)).toEqual([0, 0]);
-    expect(part.composites).toEqual([{ layer: 0, target: -1, position: 0, meshOrder: 1 }]);
+    expect(part.composites).toEqual([{ layer: 0, target: -1, position: 0, order: 1 }]);
     expect(part.layers[0]!.meshDraws.map((draw) => draw.position)).toEqual([0]);
     expect(runs(part.layers[0]!.draws)).toEqual([[0, 1]]);
     // The layer's bound covers the path's point box [20, 30] × [0, 10] and the box.
@@ -299,8 +298,8 @@ describe('E25-A02 layer plan', () => {
     expect(part.layers.map((layer) => layer.nodeId)).toEqual(['inner', 'outer']);
     expect(part.layers[1]!.meshDraws.map((draw) => draw.position)).toEqual([0]);
     expect(part.composites).toEqual([
-      { layer: 1, target: -1, position: 0, meshOrder: 0 },
-      { layer: 0, target: 1, position: 0, meshOrder: 1 },
+      { layer: 1, target: -1, position: 0, order: 0 },
+      { layer: 0, target: 1, position: 0, order: 1 },
     ]);
     expect(packet.mesh!.draws).toEqual([]);
   });

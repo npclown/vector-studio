@@ -356,11 +356,92 @@ type Transient = Readonly<{ id: string; resource: Readonly<{ destroy(): void }> 
 /** E25 U3: one layer tile pass, at its offset in the layer, with its pass record. */
 type LayerTile = Readonly<{ x: number; y: number; width: number; height: number; record: number }>;
 
+/**
+ * E28 section 4, Order key: a non-analytic slot of a target other than a mesh draw, a composite
+ * (its layer) or a text draw (`layer` null). At each position slot `order` holds it; the other
+ * slots hold the mesh draws in array order.
+ */
+type OrderSlot = Readonly<{ position: number; order: number; layer: number | null }>;
+
+/**
+ * E28 section 4: checks the `order` of composites and text draws per target and merges them in
+ * paint order. Each target's composites and text draws come in (position, order) order; orders
+ * at a position are distinct and below the number of the target's non-analytic draws there, so
+ * every slot is filled. Throws on a violation (`invalid-packet`).
+ */
+function orderSlots(packet: PrimitivePacket): ReadonlyMap<number, readonly OrderSlot[]> {
+  const layers = packet.layers?.layers ?? [];
+  const slots = new Map<number, OrderSlot[]>();
+  const add = (target: number, slot: OrderSlot, kind: string) => {
+    if (
+      !Number.isSafeInteger(target) ||
+      target < -1 ||
+      target >= layers.length ||
+      !Number.isSafeInteger(slot.position) ||
+      slot.position < 0 ||
+      !Number.isSafeInteger(slot.order) ||
+      slot.order < 0
+    ) {
+      throw new Error(`Invalid ${kind} order.`);
+    }
+    const list = slots.get(target) ?? [];
+    list.push(slot);
+    slots.set(target, list);
+  };
+  const ofKind = new Map<string, OrderSlot>();
+  for (const composite of packet.layers?.composites ?? []) {
+    const slot = { position: composite.position, order: composite.order, layer: composite.layer };
+    const previous = ofKind.get(`composite:${composite.target}`);
+    if (previous !== undefined && compareSlots(previous, slot) >= 0) {
+      throw new Error("A composite out of its target's paint order.");
+    }
+    ofKind.set(`composite:${composite.target}`, slot);
+    add(composite.target, slot, 'composite');
+  }
+  const textDraws: unknown = packet.text?.draws;
+  if (packet.text !== undefined && !Array.isArray(textDraws))
+    throw new Error('Invalid text draws.');
+  for (const draw of (textDraws ?? []) as NonNullable<PrimitivePacket['text']>['draws']) {
+    if (typeof draw !== 'object' || draw === null) throw new Error('Invalid text draw.');
+    const slot = { position: draw.position, order: draw.order, layer: null };
+    const previous = ofKind.get(`text:${draw.target}`);
+    if (previous !== undefined && compareSlots(previous, slot) >= 0) {
+      throw new Error("A text draw out of its target's paint order.");
+    }
+    ofKind.set(`text:${draw.target}`, slot);
+    add(draw.target, slot, 'text');
+  }
+  for (const [target, list] of slots) {
+    list.sort(compareSlots);
+    const runs = target === -1 ? packet.draws.length : layers[target]!.draws.length;
+    const meshList = target === -1 ? (packet.mesh?.draws ?? []) : layers[target]!.meshDraws;
+    // Non-analytic draws per position: mesh draws and these slots.
+    const counts = new Map<number, number>();
+    for (const draw of meshList) counts.set(draw.position, (counts.get(draw.position) ?? 0) + 1);
+    for (const slot of list) counts.set(slot.position, (counts.get(slot.position) ?? 0) + 1);
+    list.forEach((slot, index) => {
+      const previous = list[index - 1];
+      if (
+        slot.position > runs ||
+        (previous !== undefined && compareSlots(previous, slot) === 0) ||
+        slot.order >= counts.get(slot.position)!
+      ) {
+        throw new Error("A slot out of its target's paint order.");
+      }
+    });
+  }
+  return slots;
+}
+
+function compareSlots(left: OrderSlot, right: OrderSlot): number {
+  return left.position - right.position || left.order - right.order;
+}
+
 /** E25 U3: the layers of a validated packet; null when it draws none. */
 type ValidatedLayers = Readonly<{
   layers: LayerPacketPart['layers'];
-  /** Per target (-1: the main pass), its composites in paint order. */
-  composites: ReadonlyMap<number, readonly LayerPacketPart['composites'][number][]>;
+  /** Per target (-1: the main pass), its composites and text draws in paint order (E28). */
+  slots: ReadonlyMap<number, readonly OrderSlot[]>;
   /** Per layer, the mesh draws drawn (none when the mesh path is unavailable). */
   meshDraws: readonly (readonly MeshFillDraw[])[];
   tileWidth: number;
@@ -861,11 +942,14 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     let paint: ValidatedPaint;
     let clip: ValidatedClip;
     let layers: ValidatedLayers;
+    let slots: ReadonlyMap<number, readonly OrderSlot[]>;
     try {
       // E23 U3: checks and packs only; the paint buffers are created and written below.
       paint = this.#preflightPaint(packet, analyticDraws, allMeshDraws, validated);
       clip = this.#preflightClip(packet, analyticDraws, allMeshDraws, validated);
-      layers = this.#preflightLayers(packet, layerEntries, layerMeshDraws);
+      // E28 section 4: composites and text draws by (position, order), per target.
+      slots = orderSlots(packet);
+      layers = this.#preflightLayers(packet, layerEntries, layerMeshDraws, slots);
     } catch (error) {
       if (validated.createdArena) this.#releaseArena(arena);
       if (mesh !== null && !mesh.skipped && mesh.createdArena && mesh.arena !== null) {
@@ -994,27 +1078,30 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       // pipeline has no bind group, so the next mesh draw binds its pipeline and group 0.
       let bound: string | null = 'analytic';
       let nextMeshDraw = 0;
-      // E25 U3: a composite at a position follows the mesh draws its meshOrder counts there; it
-      // binds its own groups, so the next draw binds its pipeline and groups again.
-      const mainComposites = layers?.composites.get(-1) ?? [];
-      let nextComposite = 0;
-      const drawCompositesAt = (position: number, meshOrder: number) => {
-        for (
-          let composite = mainComposites[nextComposite];
-          composite !== undefined &&
-          composite.position === position &&
-          composite.meshOrder <= meshOrder;
-          composite = mainComposites[++nextComposite]
-        ) {
-          this.#encodeComposite(pass, layerFrame!, composite.layer, 0);
-          bound = null;
-          clipBoundState = 0;
-        }
+      // E28 section 4 (E25 U3): at each position, slot k holds the composite or text draw whose
+      // order is k, otherwise the next mesh draw. A composite binds its own groups, so the next
+      // draw binds its pipeline and groups again. Text draws are encoded from E28-U3; until then
+      // they hold their slot and draw nothing.
+      const mainSlots = slots.get(-1) ?? [];
+      let nextSlot = 0;
+      const drawSlot = (slot: OrderSlot) => {
+        if (slot.layer === null || layerFrame === null) return;
+        this.#encodeComposite(pass, layerFrame, slot.layer, 0);
+        bound = null;
+        clipBoundState = 0;
       };
       const drawMeshesAt = (position: number) => {
-        let meshOrder = 0;
-        while (meshDraws[nextMeshDraw]?.position === position) {
-          if (mainComposites.length > 0) drawCompositesAt(position, meshOrder++);
+        let order = 0;
+        for (;;) {
+          const slot = mainSlots[nextSlot];
+          if (slot !== undefined && slot.position === position && slot.order === order) {
+            drawSlot(slot);
+            nextSlot += 1;
+            order += 1;
+            continue;
+          }
+          if (meshDraws[nextMeshDraw]?.position !== position) break;
+          order += 1;
           const draw = meshDraws[nextMeshDraw]!;
           const joint = draw.composite === 'joint-fill';
           const state = draw.clipState ?? 0;
@@ -1061,7 +1148,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           pass.setStencilReference(step.reference);
           pass.draw(3 * draw.triangleCount, 1, 3 * draw.firstTriangle, draw.instance);
         }
-        if (mainComposites.length > 0) drawCompositesAt(position, Infinity);
+        // Slots after mesh draws that are not drawn (the mesh path is unavailable).
+        while (mainSlots[nextSlot]?.position === position) drawSlot(mainSlots[nextSlot++]!);
       };
       packet.draws.forEach((draw, index) => {
         drawMeshesAt(index);
@@ -1674,6 +1762,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     packet: PrimitivePacket,
     layers: LayerPacketPart['layers'],
     meshDraws: readonly (readonly MeshFillDraw[])[],
+    slots: ReadonlyMap<number, readonly OrderSlot[]>,
   ): ValidatedLayers {
     const part = packet.layers;
     if (part === undefined || layers.length === 0) {
@@ -1716,7 +1805,6 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         }
       }
     });
-    const composites = new Map<number, LayerPacketPart['composites'][number][]>();
     const seen = new Set<number>();
     for (const composite of part.composites) {
       if (
@@ -1728,30 +1816,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         seen.has(composite.layer) ||
         composite.target !== layers[composite.layer]!.parent ||
         !Number.isSafeInteger(composite.position) ||
-        composite.position < 0 ||
-        !Number.isSafeInteger(composite.meshOrder) ||
-        composite.meshOrder < 0
+        composite.position < 0
       ) {
         throw new Error('Invalid composite.');
       }
-      const runs =
-        composite.target === -1 ? packet.draws.length : layers[composite.target]!.draws.length;
-      const meshList =
-        composite.target === -1 ? (packet.mesh?.draws ?? []) : layers[composite.target]!.meshDraws;
-      const atPosition = meshList.filter((draw) => draw.position === composite.position).length;
-      const list = composites.get(composite.target) ?? [];
-      const previous = list.at(-1);
-      if (
-        composite.position > runs ||
-        composite.meshOrder > atPosition ||
-        (previous !== undefined &&
-          (composite.position < previous.position ||
-            (composite.position === previous.position && composite.meshOrder < previous.meshOrder)))
-      ) {
-        throw new Error("A composite out of its target's paint order.");
-      }
-      list.push(composite);
-      composites.set(composite.target, list);
       seen.add(composite.layer);
     }
     if (seen.size !== count) throw new Error('A layer without its composite.');
@@ -1810,7 +1878,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     }
     return Object.freeze({
       layers,
-      composites,
+      slots,
       meshDraws,
       tileWidth,
       tileHeight,
@@ -2018,7 +2086,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     const pipelines = this.#layer!;
     const draws = layers.layers[index]!.draws;
     const meshDraws = layers.meshDraws[index]!;
-    const composites = layers.composites.get(index) ?? [];
+    const slots = layers.slots.get(index) ?? [];
     const { arena, meshArena, clip, paint } = env;
     const paintBuffers = paint === null ? null : this.#paintBuffers!;
     let pipeline: GPURenderPipeline | null = null;
@@ -2064,27 +2132,30 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       group2 = kind;
     };
     pass.setBindGroup(LAYER_BIND_GROUP_INDEX, frame.passGroup, [passOffset]);
-    let nextComposite = 0;
-    const drawCompositesAt = (position: number, meshOrder: number) => {
-      for (
-        let composite = composites[nextComposite];
-        composite !== undefined &&
-        composite.position === position &&
-        composite.meshOrder <= meshOrder;
-        composite = composites[++nextComposite]
-      ) {
-        this.#encodeComposite(pass, frame, composite.layer, passOffset);
-        pipeline = pipelines.composite;
-        group0 = null;
-        group1 = 0;
-        group2 = 'empty';
-      }
+    // E28 section 4: slot k at a position holds the composite or text draw whose order is k,
+    // otherwise the next mesh draw; text draws hold their slot until E28-U3.
+    let nextSlot = 0;
+    const drawSlot = (slot: OrderSlot) => {
+      if (slot.layer === null) return;
+      this.#encodeComposite(pass, frame, slot.layer, passOffset);
+      pipeline = pipelines.composite;
+      group0 = null;
+      group1 = 0;
+      group2 = 'empty';
     };
     let nextMeshDraw = 0;
     const drawMeshesAt = (position: number) => {
-      let meshOrder = 0;
-      while (meshDraws[nextMeshDraw]?.position === position) {
-        drawCompositesAt(position, meshOrder++);
+      let order = 0;
+      for (;;) {
+        const slot = slots[nextSlot];
+        if (slot !== undefined && slot.position === position && slot.order === order) {
+          drawSlot(slot);
+          nextSlot += 1;
+          order += 1;
+          continue;
+        }
+        if (meshDraws[nextMeshDraw]?.position !== position) break;
+        order += 1;
         const draw = meshDraws[nextMeshDraw]!;
         const step = meshStencilStep(nextMeshDraw);
         nextMeshDraw += 1;
@@ -2120,7 +2191,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         pass.setStencilReference(step.reference);
         pass.draw(3 * draw.triangleCount, 1, 3 * draw.firstTriangle, draw.instance);
       }
-      drawCompositesAt(position, Infinity);
+      while (slots[nextSlot]?.position === position) drawSlot(slots[nextSlot++]!);
     };
     draws.forEach((draw, position) => {
       drawMeshesAt(position);

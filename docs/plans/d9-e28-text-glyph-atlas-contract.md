@@ -257,6 +257,28 @@ U1 (2026-10-29):
 - Carried to U2: the world-bounds arithmetic for text (E28-K9 bounds through the node transform) must be checked for finiteness, as `hasFiniteSceneArithmetic` does for other leaves.
 - Tests: `tests/unit/e28-u1-text-scene.test.ts` (E28-A01).
 
+U2 (2026-10-29):
+
+- `renderer-core`:
+  - `text-atlas.ts`: E28-K1 to K3 placement, E28-K2 buckets, the E28-K10 keys, the page plan with shelf packing, two-phase lookup, eviction and the raster budget, the instance records, E28-D2 and D3 notices with `textNoticeDiagnostic`, and the counters;
+  - `PrimitiveSceneSource`: text leaves in the traversal with E28-K9 bounds, culling, layer bounds, mask admission and clip states, the `text` packet part, and commit on `acknowledge`;
+  - the service options `textAtlasPagesForTesting` and `textAtlasPageSizeForTesting`, and the invalidation once per acknowledged packet with deferred clusters;
+  - the U1 carry-over: a text node with a cluster whose E28-K9 world bound is not finite is `invalid-value`, as P1's arithmetic rule asks of other leaves.
+- The order key: E25's composite `meshOrder` is now `order` with the section 4 definition, in `renderer-core` and in the backend merge of `renderer-webgpu`. The backend checks the orders of composites and text draws per target and holds a text draw's slot without drawing it until U3. E25's tests and contract carry the rename (E25 section 4, amendment note).
+- Refinements recorded here, within section 4:
+  - The `text` part is also present while the atlas holds pages, so `pageCount` keeps them for culled text, and once with `pageCount` 0 when the scene's last text node goes, which releases them.
+  - Draws are split per text leaf as well as at a page or clip-state change.
+  - The receipt's `text` part is `{ pages, clears, uploads }`: the incarnation per page index and the counts of clears and uploads applied. A page whose incarnation changed loses the entries from earlier packets, and the service invalidates once.
+  - A page written by a packet replaced without acknowledgement is cleared before its next allocation.
+  - Empty and failed port results are kept per key and layout generation, since they touch no page; a frame does not ask the port again for them.
+  - A port result that is not well formed counts as a throw (`'threw'`).
+  - Eviction step 3 ends the frame's port calls: once every page is used by the frame, the remaining misses are omitted without a port call and are not deferred, so an over-limit frame converges. An omitted key is rasterized at most once per frame, and a bitmap larger than a page evicts nothing.
+  - The part is also present when the frame deferred clusters, so its acknowledgement invalidates.
+  - E28-D2 clears when a frame omits and defers nothing. The D2 and D3 notices leave their queue when a packet carries them, as the mask and layer notices do, so a packet that is never acknowledged takes its notices with it.
+- Interim state until U3: the WebGPU backend returns no `text` receipt part, so a packet with a text part is never acknowledged there. No host enables `text: 'atlas'` before U3 lands the receipt part.
+- Observation for U3: a `not-ready` result writes nothing, yet the plan drops the pages of the replaced packet as section 4 asks. U3 may let the backend report that it wrote nothing.
+- Tests: `tests/unit/e28-u2-atlas-plan.test.ts` (E28-A02; unit parts of A04, A06 and A08), and the updated `tests/unit/e25-u2-layer-plan.test.ts` and `tests/unit/e25-u3-layer-passes.test.ts`.
+
 ## 8. Risks
 
 - **Main-thread cost.** Rasterization runs on the main thread and competes with M9's pointer priority. E28's raster budget bounds it per frame (`E28_RASTER_PER_FRAME`), which U4 measures; a zoom gesture over much text draws scaled fallbacks for a few frames.
