@@ -84,6 +84,13 @@ export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
   readonly layerPipelineAvailable?: boolean;
   /** E25 contract, section 4, Lifetime: the layer passes this generation has run, per layer. */
   readonly layerPasses?: number;
+  /**
+   * E28 contract, U3: true when this generation created the text pipelines and the sampler.
+   * Absent or false: text is not drawn.
+   */
+  readonly textPipelineAvailable?: boolean;
+  /** E28-D1: true once an atlas page could not be created; text stays undrawn. */
+  readonly textPageAllocationFailed?: boolean;
   setTarget(target: PrimitiveTarget): void;
   submitPrimitivePacket: PrimitivePacketConsumer['submitPrimitivePacket'];
   /**
@@ -155,6 +162,11 @@ export interface WebGpuPrimitiveSceneOptions {
    * `maxBindGroups` of at least 4; without it the layer pipeline is unavailable.
    */
   readonly layerPipeline?: boolean;
+  /**
+   * E28 contract, U3: creates the text pipeline with its clip and layer variants (as the
+   * generation has the clip and layer variants) and the sampler. Without it text is not drawn.
+   */
+  readonly textPipeline?: boolean;
   /**
    * @internal Tests only (E25 contract, section 4): the layer tile edge instead of 1024; a
    * positive even integer.
