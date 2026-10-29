@@ -1,5 +1,6 @@
 import { isValidId, type DocumentV3, type NodeV3 } from '@vector-studio/model';
 import { fail, type Draft, type Failure } from './draft.js';
+import { expansionFailure, type ExpansionCache } from './expansion.js';
 import type { CustomDefaults, CustomFailure } from './extensions.js';
 import { clipDepthViolation, documentTree, nodePath } from './tree.js';
 import type { IdSource, PagePoint } from './types.js';
@@ -46,6 +47,11 @@ export type EditContext = Readonly<{
   clipboard?: string | null;
   scope?: string | null;
   selection?: readonly string[];
+  /**
+   * The editor's expansion cache (M7 contract, M7-X4), which the expansion checks of every
+   * command use; without it a command uses a fresh cache with `custom`'s check.
+   */
+  expansions?: ExpansionCache;
 }>;
 
 export const ID_ATTEMPTS = 1000;
@@ -115,6 +121,10 @@ export function success(
   if ('ok' in document) return document;
   const rejected = structural(document, draft.touched, clipRoots);
   if (rejected !== null) return rejected;
+  // Then the expansions of every instance (M7 contract, sections 3 and 4.1, order of 5.5).
+  const expansion =
+    draft.expansions === undefined ? null : expansionFailure(document, draft.expansions);
+  if (expansion !== null) return expansion;
   return { ok: true, document, touched: [...draft.touched], created };
 }
 

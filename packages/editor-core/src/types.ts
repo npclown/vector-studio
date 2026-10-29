@@ -415,7 +415,10 @@ export type EditorErrorCode =
   | 'editor.invalid-path-ref'
   | 'editor.too-few-anchors'
   | 'editor.empty-path'
-  | 'editor.no-path-edit';
+  | 'editor.no-path-edit'
+  // MVP M7 contract, section 5.5.
+  | 'editor.invalid-expansion'
+  | 'editor.expansion-limit';
 
 /**
  * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key

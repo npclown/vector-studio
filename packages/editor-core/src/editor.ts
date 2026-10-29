@@ -6,6 +6,7 @@ import {
   type ParseResult,
 } from '@vector-studio/model';
 import { copyFragment } from './clipboard.js';
+import { ExpansionCache, expansionFailure } from './expansion.js';
 import {
   applyEdit,
   applyGestureEdit,
@@ -53,6 +54,7 @@ import {
   documentClipViolation,
   documentTree,
   isContainer,
+  isFrameLike,
   isGroup,
   nodePath,
   pageOf,
@@ -263,6 +265,8 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.too-few-anchors',
   'editor.empty-path',
   'editor.no-path-edit',
+  'editor.invalid-expansion',
+  'editor.expansion-limit',
 ]);
 
 /**
@@ -522,6 +526,11 @@ class EditorCore implements Editor {
   private extensionDepth = 0;
   private readonly ids: IdSource;
   private readonly extensions: ExtensionRegistry;
+  /**
+   * The editor's one expansion cache (M7 contract, M7-X4): the load and command checks use it,
+   * and the projector and hit testing share it from M7-U3.
+   */
+  readonly expansions: ExpansionCache;
   /** The built-in tools by name, then the extension tools by ID in registration order. */
   readonly tools = new Map<string, Tool>();
   readonly gesture: GestureControl;
@@ -534,6 +543,7 @@ class EditorCore implements Editor {
   constructor(options: EditorOptions) {
     this.ids = options.ids ?? createCounterIdSource('node-');
     this.extensions = new ExtensionRegistry(options.extensions ?? []);
+    this.expansions = new ExpansionCache((node) => this.extensions.check(node));
     const platform: unknown = options.platform ?? 'other';
     if (platform !== 'mac' && platform !== 'other') {
       throw new Error(`createEditor: invalid platform ${String(platform)}`);
@@ -1012,7 +1022,9 @@ class EditorCore implements Editor {
 
   /**
    * The model's rules (a v1 value is migrated), then each custom node against its extension
-   * wherever it is nested (plan section 3.3), then the clip depth (M1 contract, section 4.3).
+   * wherever it is nested (plan section 3.3), then the clip depth (M1 contract, section 4.3;
+   * through each expansion, M7-S5), then each expansion's validity and the expansion caps (M7
+   * contract, M7-X3 and section 4.1).
    */
   private validate(value: unknown): ParseResult | CommandFailure {
     const result = validateAnyDocument(value);
@@ -1021,9 +1033,11 @@ class EditorCore implements Editor {
     const rejected = this.extensions.checkDocument(deepFreeze(result.document));
     if (rejected !== null) return { ok: false, ...rejected };
     const deep = documentClipViolation(result.document);
-    return deep === null
-      ? result
-      : { ok: false, code: 'editor.clip-depth', path: nodePath(deep, '/parent') };
+    if (deep !== null) {
+      return { ok: false, code: 'editor.clip-depth', path: nodePath(deep, '/parent') };
+    }
+    const expansion = expansionFailure(result.document, this.expansions, false);
+    return expansion === null ? result : { ok: false, code: expansion.code, path: expansion.path! };
   }
 
   private context(refit: boolean) {
@@ -1035,6 +1049,7 @@ class EditorCore implements Editor {
       clipboard: this.clipboard,
       scope: this.scope,
       selection: this.selection,
+      expansions: this.expansions,
     };
   }
 
@@ -1266,13 +1281,13 @@ class EditorCore implements Editor {
       }
       case 'exitScope': {
         // Without a scope, Escape clears the selection. With one, the scope node is selected and
-        // the scope moves to its nearest container ancestor that is not a top-level frame (a
-        // top-level frame's children are targets at the page already), or the page.
+        // the scope moves to its nearest container ancestor that is not a top-level frame or
+        // symbol (their children are targets at the page already, M7 section 1.2), or the page.
         const scope = this.scope;
         if (scope === null) return this.run({ type: 'setSelection', ids: [] });
         const tree = documentTree(this.document);
         const up = ancestors(tree, scope).find(
-          (node) => !(node.type === 'frame' && tree.page(node.parent) !== undefined),
+          (node) => !(isFrameLike(node) && tree.page(node.parent) !== undefined),
         );
         this.run({ type: 'setSelection', ids: [scope] });
         return this.run({ type: 'setScope', id: up?.id ?? null });
@@ -1566,7 +1581,13 @@ class EditorCore implements Editor {
   private editGesture(edit: GestureEdit): CommandResult {
     const gesture = this.gestureState;
     if (gesture === null) return failure('editor.invalid-command');
-    const result = applyGestureEdit(this.document, gesture.base, edit, this.extensions);
+    const result = applyGestureEdit(
+      this.document,
+      gesture.base,
+      edit,
+      this.extensions,
+      this.expansions,
+    );
     return this.applyGestureResult(gesture, result);
   }
 
@@ -1607,7 +1628,13 @@ class EditorCore implements Editor {
     // A gesture with no update (a click), or one replaced back to the pre-gesture document,
     // creates no step and no change.
     if (!gesture.updated || this.document === gesture.base) return;
-    const refit = refitGesture(gesture.base, this.document, gesture.touched, this.extensions);
+    const refit = refitGesture(
+      gesture.base,
+      this.document,
+      gesture.touched,
+      this.extensions,
+      this.expansions,
+    );
     // A refit that fails the model's rules (binary64 overflow) leaves the live document as is.
     const after = refit.ok ? refit.document : this.document;
     // The step lists only nodes that differ between the pre-gesture and committed documents,
@@ -1893,7 +1920,7 @@ export function createEditor(options: EditorOptions = {}): Editor {
 }
 
 /** Package-internal access for tools (P5-U3) and tests; not exported from the package. */
-export function internalsOf(editor: Editor): Pick<EditorCore, 'tools' | 'gesture'> {
+export function internalsOf(editor: Editor): Pick<EditorCore, 'tools' | 'gesture' | 'expansions'> {
   if (!(editor instanceof EditorCore)) throw new Error('not an editor-core editor');
   return editor;
 }
