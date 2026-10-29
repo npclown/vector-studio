@@ -3,8 +3,8 @@ import path from 'node:path';
 import {
   serializeDocument,
   validateDocument,
-  type DocumentV4,
-  type NodeV4,
+  type DocumentV5,
+  type NodeV5,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
@@ -27,14 +27,14 @@ import { documentTree, symbolChange } from '../../packages/editor-core/src/tree.
 // no ID.
 
 const root = path.resolve(import.meta.dirname, '../..');
-// Since M6a-U1 the model returns schema v4, so each M7 fixture is read as its committed v4
-// migration under tests/fixtures/m6-text/migrated (M6a contract, section 2.1).
+// Since M7-U7 the model returns schema v5, so each M7 fixture is read as its committed v5
+// migration under tests/fixtures/m7-symbols/migrated (M6a contract, section 9).
 const fixture = (name: string) =>
   readFileSync(
     path.join(
       root,
-      'tests/fixtures/m6-text/migrated',
-      `${path.basename(name).replace(/(\.v3)?\.json$/, '')}.v4.json`,
+      'tests/fixtures/m7-symbols/migrated',
+      `${path.basename(name).replace(/(\.v3)?\.json$/, '')}.v5.json`,
     ),
     'utf8',
   );
@@ -105,6 +105,8 @@ function node(id: string, parent: string, type: string, extra = {}) {
     opacity: 1,
     visible: true,
     type,
+    // Schema v5 (M6a contract, section 9): an instance always has its text overrides.
+    ...(type === 'instance' ? { textOverrides: {} } : {}),
     ...extra,
   };
 }
@@ -113,7 +115,7 @@ const rect = (id: string, parent: string, frame: Record<string, number>) =>
   node(id, parent, 'rectangle', { frame, cornerRadii: [0, 0, 0, 0], fill: red, stroke: null });
 
 /** A document whose source `S` has an expansion that overflows to Infinity in instance `I`. */
-function overflowing(masked = false): DocumentV4 {
+function overflowing(masked = false): DocumentV5 {
   // With `masked`, a mask group `M` on the page: a path `mp` masking a rectangle `mr`.
   const mask = {
     M: node('M', 'p', 'maskGroup', { children: ['mp', 'mr'] }),
@@ -129,7 +131,7 @@ function overflowing(masked = false): DocumentV4 {
     mr: rect('mr', 'M', { x: 0, y: 0, width: 10, height: 10 }),
   };
   const result = validateDocument({
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc',
     pages: [{ id: 'p', name: 'P', children: ['S', 'I', 'x', ...(masked ? ['M'] : [])] }],
     nodes: {
@@ -151,18 +153,18 @@ function overflowing(masked = false): DocumentV4 {
 
 /** The copy of source node `n` renamed by `copyOf`, its parent the instance for a direct child. */
 function renamed(
-  original: NodeV4,
+  original: NodeV5,
   copyOf: ReadonlyMap<string, string>,
   source: string,
   instance: string,
-): NodeV4 {
+): NodeV5 {
   const copy: Record<string, unknown> = {
     ...original,
     id: copyOf.get(original.id)!,
     parent: original.parent === source ? instance : copyOf.get(original.parent)!,
   };
   if ('children' in original) copy.children = original.children.map((id) => copyOf.get(id)!);
-  return copy as NodeV4;
+  return copy as NodeV5;
 }
 
 /**
@@ -170,18 +172,18 @@ function renamed(
  * pre-order: the literal result of section 5.2.
  */
 function detachedNodes(
-  before: DocumentV4,
+  before: DocumentV5,
   instance: string,
   ids: readonly string[],
-): Record<string, NodeV4> {
-  const node = before.nodes[instance] as Extract<NodeV4, { type: 'instance' }>;
-  const source = before.nodes[node.symbol] as Extract<NodeV4, { type: 'symbol' }>;
+): Record<string, NodeV5> {
+  const node = before.nodes[instance] as Extract<NodeV5, { type: 'instance' }>;
+  const source = before.nodes[node.symbol] as Extract<NodeV5, { type: 'symbol' }>;
   const result = expandInstance(before, instance);
   if (result === null || !result.ok) throw new Error('no expansion');
   const keys = [...result.expansion.nodes.keys()];
   expect(keys.length).toBe(ids.length);
   const copyOf = new Map(keys.map((key, i) => [key, ids[i]!] as const));
-  const out: Record<string, NodeV4> = {
+  const out: Record<string, NodeV5> = {
     [instance]: {
       id: instance,
       name: node.name,
@@ -205,12 +207,12 @@ function detachedNodes(
 
 /** `before` with `nodes` replaced or added and `removed` taken out, in canonical text. */
 function expectedText(
-  before: DocumentV4,
-  nodes: Record<string, NodeV4>,
+  before: DocumentV5,
+  nodes: Record<string, NodeV5>,
   removed: readonly string[] = [],
   pages = before.pages,
 ): string {
-  const next: Record<string, NodeV4> = { ...before.nodes, ...nodes };
+  const next: Record<string, NodeV5> = { ...before.nodes, ...nodes };
   for (const id of removed) delete next[id];
   return serializeDocument({ ...before, pages, nodes: next });
 }
@@ -227,7 +229,7 @@ describe('createSymbol (M7-A07)', () => {
     expect(run(target, { type: 'createSymbol', ids: ['d1'] })).toEqual({ ok: true, ids: ['d1'] });
     expect(drawn()).toBe(0);
     expect(text(target)).toBe(
-      expectedText(before, { d1: { ...before.nodes.d1!, type: 'symbol' } as NodeV4 }),
+      expectedText(before, { d1: { ...before.nodes.d1!, type: 'symbol' } as NodeV5 }),
     );
     // It is a source at once: an instance of it, and its child edits propagate.
     const [instance] = ok(target, { type: 'createInstance', symbol: 'd1' });
@@ -239,7 +241,7 @@ describe('createSymbol (M7-A07)', () => {
 
   it('wraps siblings as groupNodes does: bounds, paint index, page placement, Symbol, no style', () => {
     const value: Json = {
-      schemaVersion: 4,
+      schemaVersion: 5,
       id: 'doc',
       pages: [{ id: 'p', name: 'P', children: ['r0', 'r1', 'r2', 'r3'] }],
       nodes: {
@@ -270,7 +272,7 @@ describe('createSymbol (M7-A07)', () => {
       children: ['r1', 'r2'],
       fill: null,
       stroke: null,
-    } as NodeV4;
+    } as NodeV5;
     expect(text(target)).toBe(
       expectedText(
         before,
@@ -290,7 +292,7 @@ describe('createSymbol (M7-A07)', () => {
     // 0-high line of the default stroke (width 1, butt caps) gives a 1-high symbol that keeps it
     // painted, and the line keeps its page placement half a unit below the symbol's top.
     const setup = counted({
-      schemaVersion: 4,
+      schemaVersion: 5,
       id: 'doc',
       pages: [{ id: 'p', name: 'P', children: [] }],
       nodes: {},
@@ -384,7 +386,7 @@ describe('createSymbol (M7-A07)', () => {
       });
     }
     const setup = counted({
-      schemaVersion: 4,
+      schemaVersion: 5,
       id: 'd',
       pages: [{ id: 'p', name: 'P', children: ['t'] }],
       nodes,
@@ -428,6 +430,7 @@ describe('createInstance (M7-A07)', () => {
     visible: true,
     type: 'instance',
     symbol: 's1',
+    textOverrides: {},
     ...extra,
   });
 
@@ -442,7 +445,7 @@ describe('createInstance (M7-A07)', () => {
     expect(text(target)).toBe(
       expectedText(
         before,
-        { n1: instance('n1', {}) as NodeV4 },
+        { n1: instance('n1', {}) as NodeV5 },
         [],
         [{ ...before.pages[0]!, children: ['s1', 'i1', 'i3', 'n1'] }, before.pages[1]!],
       ),
@@ -592,7 +595,7 @@ describe('createInstance (M7-A07)', () => {
       children.push(`i${k}`);
     }
     const capped = counted({
-      schemaVersion: 4,
+      schemaVersion: 5,
       id: 'd',
       pages: [{ id: 'p', name: 'P', children }],
       nodes,
@@ -668,7 +671,7 @@ describe('setNodeProps and setFrames on instances and symbols (M7-A07, section 5
     ok(target, { type: 'setNodeProps', id: 's1', props: { fill: green, stroke: null, name: 'S' } });
     expect(text(target)).toBe(
       expectedText(before, {
-        s1: { ...before.nodes.s1!, fill: green, stroke: null, name: 'S' } as NodeV4,
+        s1: { ...before.nodes.s1!, fill: green, stroke: null, name: 'S' } as NodeV5,
       }),
     );
     fails(
@@ -913,7 +916,7 @@ describe('detachInstances (M7-A09)', () => {
     S1_ORDER.forEach((source, i) =>
       expect(nodes[ids[i]!]).toEqual(renamed(before.nodes[source]!, copyOf, 's1', 'i1')),
     );
-    const s1 = before.nodes.s1 as Extract<NodeV4, { type: 'symbol' }>;
+    const s1 = before.nodes.s1 as Extract<NodeV5, { type: 'symbol' }>;
     expect(nodes.i1).toEqual({
       id: 'i1',
       name: 'Card',
@@ -996,7 +999,12 @@ describe('detachInstances (M7-A09)', () => {
     const before = documentOf(target);
     ok(target, { type: 'detachInstances', ids: ['i3'] });
     expect(drawn()).toBe(0);
-    const { symbol: _symbol, ...rest } = before.nodes.i3 as Extract<NodeV4, { type: 'instance' }>;
+    const {
+      symbol: _symbol,
+      textOverrides: _overrides,
+      ...rest
+    } = before.nodes.i3 as Extract<NodeV5, { type: 'instance' }>;
+    expect(_overrides).toEqual({});
     expect(_symbol).toBe('s2');
     expect(documentOf(target).nodes.i3).toEqual({
       ...rest,
@@ -1049,14 +1057,14 @@ describe('the source deletion rule (M7-A13, section 5.4)', () => {
     detached: readonly string[],
     removed: readonly string[],
     page = 'page-1',
-    pages?: DocumentV4['pages'],
+    pages?: DocumentV5['pages'],
   ) {
     const { target, drawn } = counted();
     ok(target, { type: 'setActivePage', id: page });
     const before = documentOf(target);
     expect(run(target, command)).toEqual({ ok: true, ids: [] });
     let next = 0;
-    const nodes: Record<string, NodeV4> = {};
+    const nodes: Record<string, NodeV5> = {};
     for (const instance of detached) {
       const count =
         before.nodes[instance]!.type === 'instance' ? expandedCount(before, instance) : 0;
@@ -1078,12 +1086,12 @@ describe('the source deletion rule (M7-A13, section 5.4)', () => {
     return { target, before };
   }
 
-  function expandedCount(document: DocumentV4, instance: string): number {
+  function expandedCount(document: DocumentV5, instance: string): number {
     const result = expandInstance(document, instance);
     return result !== null && result.ok ? result.expansion.nodes.size : 0;
   }
 
-  const pagesWithout = (pages: DocumentV4['pages'], page: string, removed: readonly string[]) =>
+  const pagesWithout = (pages: DocumentV5['pages'], page: string, removed: readonly string[]) =>
     pages.map((entry) =>
       entry.id === page
         ? { ...entry, children: entry.children.filter((id) => !removed.includes(id)) }
@@ -1096,7 +1104,7 @@ describe('the source deletion rule (M7-A13, section 5.4)', () => {
       ['i1', 'i2', 'i4'],
       S1_SUBTREE,
       'page-1',
-      pagesWithout((JSON.parse(SYMBOLS) as DocumentV4).pages, 'page-1', ['s1']),
+      pagesWithout((JSON.parse(SYMBOLS) as DocumentV5).pages, 'page-1', ['s1']),
     );
     expect(before.nodes.s1).toBeDefined();
   });
@@ -1107,7 +1115,7 @@ describe('the source deletion rule (M7-A13, section 5.4)', () => {
       ['i2', 'i4'],
       [...S1_SUBTREE, 'i1'],
       'page-1',
-      pagesWithout((JSON.parse(SYMBOLS) as DocumentV4).pages, 'page-1', ['s1', 'i1']),
+      pagesWithout((JSON.parse(SYMBOLS) as DocumentV5).pages, 'page-1', ['s1', 'i1']),
     );
   });
 
@@ -1140,12 +1148,12 @@ describe('the source deletion rule (M7-A13, section 5.4)', () => {
     const page1 = ['s1', 'i1', 'i3', ...S1_ORDER];
     expectDeleted({ type: 'removePage', id: 'page-1' }, ['i2', 'i4'], page1, 'page-2', [
       value.pages[1]!,
-    ] as DocumentV4['pages']);
+    ] as DocumentV5['pages']);
     // page-2 holds s2, whose instance i3 on page-1 detaches (an empty frame).
     const page2 = ['g1', 'i2', 'r2', 'f2', 'i4', 's2', 'd1', 'd1-r'];
     expectDeleted({ type: 'removePage', id: 'page-2' }, ['i3'], page2, 'page-1', [
       value.pages[0]!,
-    ] as DocumentV4['pages']);
+    ] as DocumentV5['pages']);
   });
 
   it('deletes instances, and a symbol whose instances are all deleted with it, detaching none', () => {

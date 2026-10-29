@@ -1,8 +1,8 @@
 import {
   serializeDocument,
   validateDocument,
-  type DocumentV4,
-  type NodeV4,
+  type DocumentV5,
+  type NodeV5,
   type PathStroke,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
@@ -56,7 +56,7 @@ function ok(target: Editor, command: Command): readonly string[] {
   return result.ids;
 }
 
-const documentOf = (target: Editor): DocumentV4 => target.query({ type: 'document' });
+const documentOf = (target: Editor): DocumentV5 => target.query({ type: 'document' });
 
 /** Wraps `ids` in a symbol and returns the document and the symbol's ID. */
 function wrap(target: Editor, ids: readonly string[]) {
@@ -65,7 +65,7 @@ function wrap(target: Editor, ids: readonly string[]) {
 }
 
 /** A child's frame in page space (the symbol is at the page root, rotation 0). */
-function pageFrame(document: DocumentV4, id: string) {
+function pageFrame(document: DocumentV5, id: string) {
   const node = document.nodes[id]!;
   const parent = document.nodes[node.parent]!;
   return { ...node.frame, x: parent.frame.x + node.frame.x, y: parent.frame.y + node.frame.y };
@@ -191,11 +191,11 @@ describe('createSymbol wraps by visual bounds (M7 section 5.1)', () => {
       data: { points: 5, innerRatio: 0.5 },
       fill: null,
       stroke: stroke(10, 'butt', 'miter', 4),
-    } as unknown as NodeV4;
-    const document = { nodes: { s: star } } as unknown as DocumentV4;
+    } as unknown as NodeV5;
+    const document = { nodes: { s: star } } as unknown as DocumentV5;
     // 10 / 2 · 4 = 20 on every side.
     expect(visualBounds(document, star)).toEqual({ x: -20, y: -20, width: 140, height: 140 });
-    expect(visualBounds(document, { ...star, stroke: null } as NodeV4)).toEqual(star.frame);
+    expect(visualBounds(document, { ...star, stroke: null } as NodeV5)).toEqual(star.frame);
   });
 
   it('grows a stroked rectangle by half its stroke and leaves an unstroked one as is', () => {

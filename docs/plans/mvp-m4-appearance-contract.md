@@ -31,7 +31,7 @@ Out of scope (deferred by requirements or by this contract): multiple fills, sha
 
 ## 2. Schema
 
-The bump is from vN to vN+1, vN being the latest `schemaVersion` on main when M4-U1 starts: 3 today, 4 if M6a bumps first (MVP-Q2 (a)).
+The bump is from vN to vN+1, vN being the latest `schemaVersion` on main when M4-U1 starts: 3 today, 4 if M6a bumps first (MVP-Q2 (a)). **Note (M7-U7, 2026-10-29):** M6a-U1 took v4 and M7-U7 takes v5 for the instance text overrides ([M6a contract, section 9](mvp-m6a-text-model-contract.md#9-m7-addendum-text-in-symbols), M7-T3), so if M7-U7 merges first M4-U1 rebases to v6: vN is 5, its migration chains after `migrateV4toV5` (`v4 -> v5 -> v6`) and the unsupported-version fixtures move from 6 to 7 ([M7 contract, section 16](mvp-m7-symbols-contract.md#16-progress), M7-U7 notes).
 
 ```ts
 type GradientStop = { offset: number; color: Color };

@@ -1,7 +1,8 @@
 import {
+  MAX_TREE_DEPTH,
   validateNode,
-  type DocumentV4,
-  type NodeV4,
+  type DocumentV5,
+  type NodeV5,
   type PageV2,
   type TextNode,
 } from '@vector-studio/model';
@@ -23,11 +24,11 @@ export function fail(code: EditorErrorCode, path?: string): Failure {
 
 /** The extension check of a custom node; other nodes pass. `path` is relative to the node. */
 export type CustomCheck = (
-  node: NodeV4,
+  node: NodeV5,
 ) => Readonly<{ code: EditorErrorCode; path: string }> | null;
 
 /** Whether two versions of a node have the same parent, frame and rotation. */
-export function samePlacement(a: NodeV4, b: NodeV4): boolean {
+export function samePlacement(a: NodeV5, b: NodeV5): boolean {
   return (
     a.parent === b.parent &&
     a.rotation === b.rotation &&
@@ -39,8 +40,8 @@ export function samePlacement(a: NodeV4, b: NodeV4): boolean {
 }
 
 export class Draft implements WritableTree {
-  readonly base: DocumentV4;
-  private readonly nodes: Map<string, NodeV4>;
+  readonly base: DocumentV5;
+  private readonly nodes: Map<string, NodeV5>;
   private pages: PageV2[];
   /** Nodes created, changed or removed. */
   readonly touched = new Set<string>();
@@ -57,13 +58,13 @@ export class Draft implements WritableTree {
    */
   expansions: ExpansionCache | undefined;
 
-  constructor(base: DocumentV4) {
+  constructor(base: DocumentV5) {
     this.base = base;
     this.nodes = new Map(Object.entries(base.nodes));
     this.pages = [...base.pages];
   }
 
-  node(id: string): NodeV4 | undefined {
+  node(id: string): NodeV5 | undefined {
     return this.nodes.get(id);
   }
 
@@ -76,7 +77,7 @@ export class Draft implements WritableTree {
   }
 
   /** Replaces or adds a node; `finish` validates it with the model's field rules. */
-  set(node: NodeV4): void {
+  set(node: NodeV5): void {
     this.nodes.set(node.id, node);
     this.touched.add(node.id);
     this.unchecked.add(node.id);
@@ -87,7 +88,7 @@ export class Draft implements WritableTree {
    * Replaces or adds a node the command has already validated with the model's rules, and with
    * its extension when `custom` is true.
    */
-  setChecked(node: NodeV4, custom = false): void {
+  setChecked(node: NodeV5, custom = false): void {
     this.nodes.set(node.id, node);
     this.touched.add(node.id);
     this.unchecked.delete(node.id);
@@ -140,22 +141,25 @@ export class Draft implements WritableTree {
    * `editor.no-text-layout`), refits the groups whose children changed placement or membership
    * against `placementBase` (innermost first), validates every derived node with the model's
    * rules and every touched custom node with its extension, and returns the frozen document.
-   * The text refit runs whether or not groups refit, so a gesture update refits text too.
+   * The text refit runs whether or not groups refit, so a gesture update refits text too. Then
+   * every instance text override whose key no longer names a text node of the instance's source
+   * is dropped (M6a contract, section 9, M7-T3, keeping keys valid), in the same transaction.
    */
   finish(
     check: CustomCheck,
     options: Readonly<{
       refit: boolean;
-      placementBase?: DocumentV4;
+      placementBase?: DocumentV5;
       expansions?: ExpansionCache;
       layout?: TextLayouter | undefined;
     }> = { refit: true },
-  ): DocumentV4 | Failure {
+  ): DocumentV5 | Failure {
     this.expansions = options.expansions;
     this.deleteEmptyGroups();
     const text = this.refitText(options.layout);
     if (text !== null) return text;
     if (options.refit) this.refit(options.placementBase ?? this.base);
+    this.pruneOverrides();
     for (const id of this.unchecked) {
       const node = this.nodes.get(id);
       if (node === undefined) continue;
@@ -174,9 +178,9 @@ export class Draft implements WritableTree {
   }
 
   /** The current state as a frozen document, without the `finish` rules. */
-  document(): DocumentV4 {
+  document(): DocumentV5 {
     return deepFreeze({
-      schemaVersion: 4,
+      schemaVersion: 5,
       id: this.base.id,
       pages: this.pages,
       // fromEntries defines own properties, so a "__proto__" ID stays data.
@@ -200,6 +204,51 @@ export class Draft implements WritableTree {
     return null;
   }
 
+  /**
+   * Drops the text override keys left without their text node (deleted, moved out of the
+   * source, retyped) or whose instance now names another source. Runs only when the change can
+   * have done so: a touched instance, or a touched node that was a text node or a container in
+   * `base`; then it visits every instance with overrides.
+   */
+  private pruneOverrides(): void {
+    let possible = false;
+    for (const id of this.touched) {
+      const before = Object.hasOwn(this.base.nodes, id) ? this.base.nodes[id] : undefined;
+      if (
+        this.nodes.get(id)?.type === 'instance' ||
+        before?.type === 'text' ||
+        isContainer(before)
+      ) {
+        possible = true;
+        break;
+      }
+    }
+    if (!possible) return;
+    for (const [id, node] of this.nodes) {
+      if (node.type !== 'instance') continue;
+      const keys = Object.keys(node.textOverrides);
+      if (keys.length === 0) continue;
+      const kept = keys.filter((key) => this.isSourceText(key, node.symbol));
+      if (kept.length === keys.length) continue;
+      const textOverrides = Object.fromEntries(kept.map((key) => [key, node.textOverrides[key]!]));
+      // Removing keys keeps a valid node valid, so it needs no new field check.
+      const unchecked = this.unchecked.has(id);
+      this.setChecked({ ...node, textOverrides }, this.customChecked.has(id));
+      if (unchecked) this.unchecked.add(id);
+    }
+  }
+
+  /** Whether `id` is a text node with the `symbol` node `symbol` among its ancestors. */
+  private isSourceText(id: string, symbol: string): boolean {
+    if (this.nodes.get(id)?.type !== 'text') return false;
+    let up = this.nodes.get(this.nodes.get(id)!.parent);
+    for (let steps = 0; up !== undefined && steps <= MAX_TREE_DEPTH + 1; steps += 1) {
+      if (up.id === symbol) return up.type === 'symbol';
+      up = this.nodes.get(up.parent);
+    }
+    return false;
+  }
+
   private deleteEmptyGroups(): void {
     let queue = [...this.touched];
     while (queue.length > 0) {
@@ -219,7 +268,7 @@ export class Draft implements WritableTree {
     }
   }
 
-  private refit(placementBase: DocumentV4): void {
+  private refit(placementBase: DocumentV5): void {
     const pending = new Set<string>();
     const consider = (owner: string | undefined) => {
       if (owner !== undefined && isGroup(this.nodes.get(owner))) pending.add(owner);

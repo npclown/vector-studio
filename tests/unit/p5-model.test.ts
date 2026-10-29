@@ -8,7 +8,7 @@ import {
   serializeDocument,
   validateAnyDocument,
   validateNode,
-  type DocumentV4,
+  type DocumentV5,
   type ParseResult,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
@@ -22,20 +22,20 @@ import { boundaries, evaluatePackageBoundaries } from '../../tooling/boundary-po
 
 const root = path.resolve(import.meta.dirname, '../..');
 const fixtures = path.join(root, 'tests/fixtures/p5-model');
-const migrated = path.join(root, 'tests/fixtures/m6-text/migrated');
+const migrated = path.join(root, 'tests/fixtures/m7-symbols/migrated');
 const VALID = ['empty', 'shapes', 'ext-star'] as const;
 
 async function fixture(name: string): Promise<string> {
   return readFile(path.join(fixtures, `${name}.json`), 'utf8');
 }
 
-// Since M6a-U1 a v1 document migrates through v2 and v3 to the committed v4 fixture (M7 contract,
-// section 2.1; M6a contract, section 2.1).
+// Since M7-U7 a v1 document migrates through v2, v3 and v4 to the committed v5 fixture (M7
+// contract, section 2.1; M6a contract, sections 2.1 and 9).
 async function migratedFixture(name: string): Promise<string> {
-  return readFile(path.join(migrated, `${name}.v4.json`), 'utf8');
+  return readFile(path.join(migrated, `${name}.v5.json`), 'utf8');
 }
 
-function parsed(text: string): DocumentV4 {
+function parsed(text: string): DocumentV5 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -129,13 +129,13 @@ function edited(...edits: readonly Edit[]): Record<string, unknown> {
 
 describe('P5-A06 JSON round trip', () => {
   it.each(VALID)(
-    'serialize(parse(t)) is the committed v4 fixture and parse(serialize(d)) deep-equals d for %s',
+    'serialize(parse(t)) is the committed v5 fixture and parse(serialize(d)) deep-equals d for %s',
     async (name) => {
       const text = await fixture(name);
       const document = parsed(text);
-      const v4 = await migratedFixture(name);
-      expect(serializeDocument(document)).toBe(v4);
-      expect(serializeDocument(parsed(v4))).toBe(v4);
+      const v5 = await migratedFixture(name);
+      expect(serializeDocument(document)).toBe(v5);
+      expect(serializeDocument(parsed(v5))).toBe(v5);
       expect(parsed(serializeDocument(document))).toEqual(document);
     },
   );

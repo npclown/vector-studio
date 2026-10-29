@@ -1,0 +1,523 @@
+{
+  "schemaVersion": 5,
+  "id": "doc-symbols",
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Page 1",
+      "children": [
+        "s1",
+        "i1",
+        "i3"
+      ]
+    },
+    {
+      "id": "page-2",
+      "name": "Page 2",
+      "children": [
+        "g1",
+        "f2",
+        "s2",
+        "d1"
+      ]
+    }
+  ],
+  "nodes": {
+    "d1": {
+      "id": "d1",
+      "name": "Card",
+      "parent": "page-2",
+      "frame": {
+        "x": 600,
+        "y": 0,
+        "width": 100,
+        "height": 80
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "frame",
+      "children": [
+        "d1-r"
+      ],
+      "fill": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "stroke": {
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "width": 1
+      }
+    },
+    "d1-r": {
+      "id": "d1-r",
+      "name": "d1-r",
+      "parent": "d1",
+      "frame": {
+        "x": 10,
+        "y": 10,
+        "width": 30,
+        "height": 20
+      },
+      "rotation": 0.5,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "rectangle",
+      "cornerRadii": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "fill": {
+        "r": 1,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "stroke": null
+    },
+    "f2": {
+      "id": "f2",
+      "name": "Board",
+      "parent": "page-2",
+      "frame": {
+        "x": 300,
+        "y": 0,
+        "width": 200,
+        "height": 200
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "frame",
+      "children": [
+        "i4"
+      ],
+      "fill": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "stroke": null
+    },
+    "g1": {
+      "id": "g1",
+      "name": "g1",
+      "parent": "page-2",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 200,
+        "height": 160
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "group",
+      "children": [
+        "i2",
+        "r2"
+      ]
+    },
+    "i1": {
+      "id": "i1",
+      "name": "Card",
+      "parent": "page-1",
+      "frame": {
+        "x": 140,
+        "y": 0,
+        "width": 100,
+        "height": 80
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "instance",
+      "symbol": "s1",
+      "textOverrides": {}
+    },
+    "i2": {
+      "id": "i2",
+      "name": "Card",
+      "parent": "g1",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 200,
+        "height": 160
+      },
+      "rotation": -1.25,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "instance",
+      "symbol": "s1",
+      "textOverrides": {}
+    },
+    "i3": {
+      "id": "i3",
+      "name": "Empty",
+      "parent": "page-1",
+      "frame": {
+        "x": 0,
+        "y": 120,
+        "width": 50,
+        "height": 40
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": false,
+      "type": "instance",
+      "symbol": "s2",
+      "textOverrides": {}
+    },
+    "i4": {
+      "id": "i4",
+      "name": "Card",
+      "parent": "f2",
+      "frame": {
+        "x": 20,
+        "y": 20,
+        "width": 50,
+        "height": 40
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "scale",
+        "vertical": "startEnd"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "instance",
+      "symbol": "s1",
+      "textOverrides": {}
+    },
+    "r2": {
+      "id": "r2",
+      "name": "r2",
+      "parent": "g1",
+      "frame": {
+        "x": 150,
+        "y": 100,
+        "width": 50,
+        "height": 60
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "rectangle",
+      "cornerRadii": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "fill": {
+        "r": 1,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "stroke": null
+    },
+    "s1": {
+      "id": "s1",
+      "name": "Card",
+      "parent": "page-1",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 80
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "symbol",
+      "children": [
+        "s1-r",
+        "s1-g",
+        "s1-f"
+      ],
+      "fill": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "stroke": {
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "width": 1
+      }
+    },
+    "s1-e": {
+      "id": "s1-e",
+      "name": "s1-e",
+      "parent": "s1-g",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 20,
+        "height": 20
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "ellipse",
+      "fill": {
+        "r": 0,
+        "g": 0,
+        "b": 1,
+        "a": 1
+      },
+      "stroke": null
+    },
+    "s1-f": {
+      "id": "s1-f",
+      "name": "s1-f",
+      "parent": "s1",
+      "frame": {
+        "x": 10,
+        "y": 45,
+        "width": 80,
+        "height": 30
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "startEnd",
+        "vertical": "end"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "frame",
+      "children": [
+        "s1-l"
+      ],
+      "fill": {
+        "r": 0.5,
+        "g": 0.5,
+        "b": 0.5,
+        "a": 1
+      },
+      "stroke": null
+    },
+    "s1-g": {
+      "id": "s1-g",
+      "name": "s1-g",
+      "parent": "s1",
+      "frame": {
+        "x": 50,
+        "y": 10,
+        "width": 40,
+        "height": 30
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "group",
+      "children": [
+        "s1-e",
+        "s1-p"
+      ]
+    },
+    "s1-l": {
+      "id": "s1-l",
+      "name": "s1-l",
+      "parent": "s1-f",
+      "frame": {
+        "x": 0,
+        "y": 15,
+        "width": 80,
+        "height": 0
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "scale",
+        "vertical": "center"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "line",
+      "points": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "stroke": {
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "width": 1,
+        "cap": "butt",
+        "join": "miter",
+        "miterLimit": 4
+      },
+      "startArrow": "none",
+      "endArrow": "triangle"
+    },
+    "s1-p": {
+      "id": "s1-p",
+      "name": "s1-p",
+      "parent": "s1-g",
+      "frame": {
+        "x": 20,
+        "y": 10,
+        "width": 20,
+        "height": 20
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "path",
+      "path": {
+        "verbs": [
+          "move",
+          "line",
+          "line",
+          "close"
+        ],
+        "points": [
+          0,
+          0,
+          1,
+          0,
+          0.5,
+          1
+        ],
+        "fillRule": "nonzero"
+      },
+      "fill": null,
+      "stroke": {
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "width": 2,
+        "cap": "round",
+        "join": "round",
+        "miterLimit": 4
+      }
+    },
+    "s1-r": {
+      "id": "s1-r",
+      "name": "s1-r",
+      "parent": "s1",
+      "frame": {
+        "x": 10,
+        "y": 10,
+        "width": 30,
+        "height": 20
+      },
+      "rotation": 0.5,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "rectangle",
+      "cornerRadii": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "fill": {
+        "r": 1,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "stroke": null
+    },
+    "s2": {
+      "id": "s2",
+      "name": "Empty",
+      "parent": "page-2",
+      "frame": {
+        "x": 0,
+        "y": 300,
+        "width": 50,
+        "height": 40
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "symbol",
+      "children": [],
+      "fill": null,
+      "stroke": null
+    }
+  }
+}

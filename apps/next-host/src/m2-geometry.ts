@@ -1,5 +1,5 @@
 import type { PagePoint, SelectionHandles } from '@vector-studio/editor-core';
-import type { DocumentV4 } from '@vector-studio/model';
+import type { DocumentV5 } from '@vector-studio/model';
 
 // M2-U8 (MVP M2 contract, sections 3, 4.1 and 5): the host-side geometry of the next-host page's
 // M2 chrome, kept pure so it is unit tested without a DOM. The editor decides every behaviour;
@@ -53,7 +53,7 @@ function apply(m: Matrix, x: number, y: number): PagePoint {
  * node's own axes, composed up its parent chain (M1 contract, section 5). Null for an unknown
  * node or a broken chain. The page draws the scope indicator from it.
  */
-export function nodePageCorners(document: DocumentV4, id: string): Quad | null {
+export function nodePageCorners(document: DocumentV5, id: string): Quad | null {
   const node = document.nodes[id];
   if (node === undefined) return null;
   let matrix = local(node.frame, node.rotation);

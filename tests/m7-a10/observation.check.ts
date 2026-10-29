@@ -23,7 +23,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import type { RenderChangeSet } from '@vector-studio/contracts';
-import { parseDocument, type DocumentV4 } from '@vector-studio/model';
+import { parseDocument, type DocumentV5 } from '@vector-studio/model';
 import { expect, it } from 'vitest';
 import {
   createCounterIdSource,
@@ -173,7 +173,7 @@ it('M7-A10 observation: load, projection, source edits, instance move and detach
   for (let run = 0; run < RUNS; run += 1) {
     const [parsed, parseMs] = timed(() => parseDocument(text));
     if (!parsed.ok) throw new Error(`parse: ${parsed.code} ${parsed.path}`);
-    const document: DocumentV4 = parsed.document;
+    const document: DocumentV5 = parsed.document;
     expect(Object.keys(document.nodes)).toHaveLength(M7_A10_SOURCE_NODES + M7_A10_INSTANCES);
 
     const [target, constructMs] = timed(() =>

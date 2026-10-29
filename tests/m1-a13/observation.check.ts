@@ -20,7 +20,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { parseDocument, type DocumentV4 } from '@vector-studio/model';
+import { parseDocument, type DocumentV5 } from '@vector-studio/model';
 import { expect, it } from 'vitest';
 import {
   createCounterIdSource,
@@ -90,7 +90,7 @@ function expectSynchronized(target: Editor, renderer: RecordingRenderer): number
  * The isolation units of a page, counted from the document: one per node in its subtrees, a
  * frame and its synthetic scene nodes being one unit (projector, section 5).
  */
-function pageUnitCount(document: DocumentV4, pageId: string): number {
+function pageUnitCount(document: DocumentV5, pageId: string): number {
   const page = document.pages.find((candidate) => candidate.id === pageId)!;
   let count = 0;
   const visit = (id: string) => {
@@ -152,7 +152,7 @@ it('M1-A13 observation: load, projection, one move commit and one forced isolati
   for (let run = 0; run < Math.max(RUNS, ISOLATION_RUNS); run += 1) {
     const [parsed, parseMs] = timed(() => parseDocument(text));
     if (!parsed.ok) throw new Error(`parse: ${parsed.code} ${parsed.path}`);
-    const document: DocumentV4 = parsed.document;
+    const document: DocumentV5 = parsed.document;
     expect(Object.keys(document.nodes)).toHaveLength(10_000);
     expect(document.pages).toHaveLength(2);
 

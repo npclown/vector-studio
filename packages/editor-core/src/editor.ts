@@ -7,7 +7,7 @@ import {
   DOCUMENT_ERROR_CODES,
   isValidId,
   validateAnyDocument,
-  type DocumentV4,
+  type DocumentV5,
   type ParseResult,
 } from '@vector-studio/model';
 import { copyFragment } from './clipboard.js';
@@ -171,8 +171,8 @@ export interface GestureControl {
 }
 
 type HistoryEntry = Readonly<{
-  before: DocumentV4;
-  after: DocumentV4;
+  before: DocumentV5;
+  after: DocumentV5;
   touched: readonly string[];
   /**
    * The IDs the ID source returned for the step (M7 contract, section 6): an undo or redo
@@ -182,7 +182,7 @@ type HistoryEntry = Readonly<{
 }>;
 
 type Gesture = {
-  base: DocumentV4;
+  base: DocumentV5;
   touched: Set<string>;
   updated: boolean;
   /** The selection when the gesture began, restored on cancel (M2 contract, section 2). */
@@ -218,6 +218,8 @@ const DOCUMENT_COMMANDS = new Set([
   'createSymbol',
   'createInstance',
   'detachInstances',
+  'setInstanceText',
+  'clearInstanceText',
   'addPage',
   'removePage',
   'renamePage',
@@ -309,7 +311,7 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
  * A frozen copy of an extension command's result, or null when it is not a `CommandResult`
  * with a known code and, on success, IDs of nodes in `document`.
  */
-function extensionResult(value: unknown, document: DocumentV4): CommandResult | null {
+function extensionResult(value: unknown, document: DocumentV5): CommandResult | null {
   if (typeof value !== 'object' || value === null) return null;
   const record = value as Record<string, unknown>;
   if (record.ok === true) {
@@ -459,12 +461,12 @@ function structuredCopy(overlay: SnapOverlay): SnapOverlay {
 
 const clampZoom = (zoom: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom));
 
-function nodeIn(document: DocumentV4, id: string) {
+function nodeIn(document: DocumentV5, id: string) {
   return Object.hasOwn(document.nodes, id) ? document.nodes[id] : undefined;
 }
 
 /** Whether node `id` differs between two documents; a node in only one of them differs. */
-function nodeDiffers(a: DocumentV4, b: DocumentV4, id: string): boolean {
+function nodeDiffers(a: DocumentV5, b: DocumentV5, id: string): boolean {
   const x = nodeIn(a, id);
   const y = nodeIn(b, id);
   if (x === y) return false;
@@ -472,7 +474,7 @@ function nodeDiffers(a: DocumentV4, b: DocumentV4, id: string): boolean {
 }
 
 /** Whether two documents have the same pages, children orders included. */
-function samePages(a: DocumentV4, b: DocumentV4): boolean {
+function samePages(a: DocumentV5, b: DocumentV5): boolean {
   return a.pages === b.pages || JSON.stringify(a.pages) === JSON.stringify(b.pages);
 }
 
@@ -484,9 +486,9 @@ function sorted(ids: Iterable<string>): string[] {
 }
 
 /** Validated by the caller like any initial document, so a bad ID source fails at creation. */
-function emptyDocument(ids: IdSource): DocumentV4 {
+function emptyDocument(ids: IdSource): DocumentV5 {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: ids(),
     pages: [{ id: ids(), name: 'Page 1', children: [] }],
     nodes: {},
@@ -498,7 +500,7 @@ function emptyDocument(ids: IdSource): DocumentV4 {
  * whose ancestor is also listed is dropped (the ancestor wins).
  */
 function normalizeSelection(
-  document: DocumentV4,
+  document: DocumentV5,
   page: string,
   ids: readonly string[],
 ): string[] | null {
@@ -510,7 +512,7 @@ function normalizeSelection(
 }
 
 class EditorCore implements Editor {
-  private document: DocumentV4;
+  private document: DocumentV5;
   private activePage: string;
   private revision = 0;
   private selection: readonly string[] = Object.freeze([]);
@@ -600,7 +602,7 @@ class EditorCore implements Editor {
    * IDs that the document they draw on holds (or that are invalid), so an ID `drawnOn` does not
    * hold was taken (M7 contract, section 6).
    */
-  private static taken(returned: readonly string[], drawnOn: DocumentV4): string[] {
+  private static taken(returned: readonly string[], drawnOn: DocumentV5): string[] {
     return returned.filter(
       (id) =>
         isValidId(id) &&
@@ -616,7 +618,7 @@ class EditorCore implements Editor {
   }
 
   /** Runs one gesture step drawing on `drawnOn`, recording the IDs it accepted. */
-  private gestureStep<T>(gesture: Gesture, drawnOn: DocumentV4, step: () => T): T {
+  private gestureStep<T>(gesture: Gesture, drawnOn: DocumentV5, step: () => T): T {
     this.drawing = [];
     const result = step();
     gesture.accepted.push(...EditorCore.taken(this.drawing, drawnOn));
@@ -1856,7 +1858,7 @@ class EditorCore implements Editor {
   }
 
   private changeDocument(
-    document: DocumentV4,
+    document: DocumentV5,
     cause: DocumentChangeCause,
     touched: Iterable<string>,
   ): void {
@@ -1986,7 +1988,7 @@ class EditorCore implements Editor {
    * After a document change from `previous` (null for a load, which always ends it), the anchor
    * selection is kept when the path's structure is unchanged, else cleared.
    */
-  private syncPathEdit(previous?: DocumentV4 | null): void {
+  private syncPathEdit(previous?: DocumentV5 | null): void {
     const edit = this.pathEdit;
     if (edit === null) return;
     const node = editablePath(this.document, this.activePage, edit.id);

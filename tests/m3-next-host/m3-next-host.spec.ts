@@ -1,5 +1,5 @@
 import type { Editor, EditorEvent, PathEditOverlay } from '@vector-studio/editor-core';
-import { validateDocument, type DocumentV4, type NodeV4 } from '@vector-studio/model';
+import { validateDocument, type DocumentV5, type NodeV5 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
 
 // M3-U4 (MVP M3 contract, section 6): M3-A12, the next-host page's path edit mode on the
@@ -27,7 +27,7 @@ declare global {
 }
 
 type Point = Readonly<{ x: number; y: number }>;
-type PathNode = Extract<NodeV4, { type: 'path' }>;
+type PathNode = Extract<NodeV5, { type: 'path' }>;
 
 /** Page coordinates within the M1-A05 placement bound for this fixture's range (< 10^3). */
 const NEAR = 1e-6;
@@ -110,7 +110,7 @@ async function session(page: Page) {
 }
 
 function pathNode(text: string, id: string): PathNode {
-  const node = (JSON.parse(text) as DocumentV4).nodes[id];
+  const node = (JSON.parse(text) as DocumentV5).nodes[id];
   expect(node?.type).toBe('path');
   return node as PathNode;
 }
@@ -276,9 +276,9 @@ async function unchanged(page: Page, run: () => Promise<void>) {
 
 /** Every node except `id` is byte-identical between the two texts. */
 function othersKept(before: string, after: string, id: string) {
-  const a = JSON.parse(before) as DocumentV4;
-  const b = JSON.parse(after) as DocumentV4;
-  const rest = (document: DocumentV4, skip: readonly string[]) =>
+  const a = JSON.parse(before) as DocumentV5;
+  const b = JSON.parse(after) as DocumentV5;
+  const rest = (document: DocumentV5, skip: readonly string[]) =>
     Object.fromEntries(Object.entries(document.nodes).filter(([key]) => !skip.includes(key)));
   // A path inside a group refits the group (M1 section 4.2), so the group may change with it.
   const skip = b.nodes[id]?.parent === 'g1' ? [id, 'g1'] : [id];
@@ -289,8 +289,8 @@ function othersKept(before: string, after: string, id: string) {
 type Matrix = readonly [number, number, number, number, number, number];
 
 /** A node's node-local to page transform of schema v2: rotation about each frame centre. */
-function nodeToPage(document: DocumentV4, id: string): Matrix {
-  const local = (node: NodeV4): Matrix => {
+function nodeToPage(document: DocumentV5, id: string): Matrix {
+  const local = (node: NodeV5): Matrix => {
     const { x, y, width, height } = node.frame;
     const cos = Math.cos(node.rotation);
     const sin = Math.sin(node.rotation);
@@ -478,7 +478,7 @@ test('M3-A12: edits a closed cubic path and an open path in a rotated group', as
   // --- The open path `open` inside the rotated group `g1`.
 
   // Its anchor 1 on the page, from the stored document (no edit mode yet).
-  const document = JSON.parse(await documentText(page)) as DocumentV4;
+  const document = JSON.parse(await documentText(page)) as DocumentV5;
   const openNode = pathNode(JSON.stringify(document), 'open');
   const m = nodeToPage(document, 'open');
   const unit = (index: number): Point => {

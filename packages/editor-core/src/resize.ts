@@ -2,7 +2,7 @@ import {
   normalizeRotation,
   type Constraint,
   type Frame,
-  type NodeV4,
+  type NodeV5,
   type TextNode,
 } from '@vector-studio/model';
 import {
@@ -24,7 +24,7 @@ import type { PagePoint } from './types.js';
 
 /** A tree whose nodes can be replaced, such as the edit draft. */
 export interface WritableTree extends TreeView {
-  set(node: NodeV4): void;
+  set(node: NodeV5): void;
   /**
    * Marks a text node whose auto dimensions are refit after the tree edit (M6a contract, section
    * 6.3); a tree without it, such as an instance expansion (M7-T2), keeps the mapped frame.
@@ -142,7 +142,7 @@ function isAligned(theta: number): boolean {
 }
 
 /** The points of a path or line in its parent's space, interleaved. */
-function parentPoints(node: Extract<NodeV4, { type: 'path' | 'line' }>): number[] {
+function parentPoints(node: Extract<NodeV5, { type: 'path' | 'line' }>): number[] {
   const unit = node.type === 'path' ? node.path.points : node.points;
   const m = localTransform(node.frame, node.rotation);
   const out: number[] = [];

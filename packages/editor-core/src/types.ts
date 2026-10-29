@@ -11,12 +11,12 @@ import type {
   Constraints,
   CornerRadii,
   DocumentErrorCode,
-  DocumentV4,
+  DocumentV5,
   FillRule,
   Frame,
   JsonValue,
   ModelErrorCode,
-  NodeV4,
+  NodeV5,
   PageV2,
   PathStroke,
   PathVerb,
@@ -264,6 +264,14 @@ export type DocumentCommand =
    */
   | Readonly<{ type: 'detachInstances'; ids: readonly string[] }>
   /**
+   * Sets the text of the source text node `node` inside instance `id` (MVP M6a contract, section
+   * 9, M7-T3): canonical `runs`, sizes in the source's space; runs equal to the source node's
+   * remove the override. Needs no text layout. Returns empty `ids`.
+   */
+  | Readonly<{ type: 'setInstanceText'; id: string; node: string; runs: readonly TextRun[] }>
+  /** Removes the text override of `node` in instance `id`, or every one without `node`. */
+  | Readonly<{ type: 'clearInstanceText'; id: string; node?: string }>
+  /**
    * Rotates by `angle` (radians, clockwise) about the page point `pivot`, by default the centre
    * of the `handles` box (MVP M2 contract, section 4.1). A relative command: inside a gesture it
    * goes through `replace`, never `update`.
@@ -503,7 +511,7 @@ export type CommandResult =
 export type HistoryState = Readonly<{ undoDepth: number; redoDepth: number }>;
 
 export type EditorSnapshot = Readonly<{
-  document: DocumentV4;
+  document: DocumentV5;
   /** The page tools, hit testing and the projector work on (M1 contract, section 3). */
   activePage: string;
   /** Increases by one for every document change, including gesture updates, undo and redo. */
@@ -587,9 +595,9 @@ export type SelectionHandles = Readonly<{
 }>;
 
 export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'committedDocument' }
-  ? DocumentV4
+  ? DocumentV5
   : Q extends { type: 'node' }
-    ? NodeV4 | null
+    ? NodeV5 | null
     : Q extends { type: 'selection' }
       ? readonly string[]
       : Q extends { type: 'tool' }
