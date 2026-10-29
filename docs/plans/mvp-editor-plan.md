@@ -74,6 +74,7 @@ Each milestone is one visualization-track item with its own contract of 300 line
 - **Isolated container opacity** for groups, frames and mask groups (MVP-Q9), including its interaction with masks (the P4 design gate).
 - Needs rendering items R-G, R-D and R-O (section 5) merged first; the editor half is model fields, commands, projection and panel controls.
 - Exit gate: each appearance field round-trips and projects; headed pixel probes for gradient, dash and isolated group opacity against references written in the rendering items' contracts.
+- Contract: [mvp-m4-appearance-contract.md](mvp-m4-appearance-contract.md) (V-14, accepted 2026-10-29); it lifts the M1 rejection of container opacity other than 1 in M4-U3, model and commands together.
 
 ### M5: Persistence
 
