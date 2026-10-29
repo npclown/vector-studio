@@ -1,6 +1,6 @@
 # MVP M5 contract: persistence
 
-Status: APPROVED 2026-10-29 after independent review round 1 (APPROVED WITH FOLLOW-UPS, applied); Full tier (persisted format, new package and boundary-policy entry, a public query, product behavior). Visualization-track item [V-11](d9-visualization-track.md#status-index), milestone M5 of the [MVP editor plan](mvp-editor-plan.md#m5-persistence). It is drafted while the user's acceptance of the M3 exit ([V-10](d9-visualization-track.md#status-index), [exit record](../evidence/m3-exit-2026-10-29.md)) is pending. Implementation waits for the user's acceptance of the M3 exit, and for the M5-Q4 decision (a new dev dependency, not assumed approved) before the first unit that needs the fake (section 12).
+Status: APPROVED 2026-10-29 after independent review round 1 (APPROVED WITH FOLLOW-UPS, applied); Full tier (persisted format, new package and boundary-policy entry, a public query, product behavior). Visualization-track item [V-11](d9-visualization-track.md#status-index), milestone M5 of the [MVP editor plan](mvp-editor-plan.md#m5-persistence). It was drafted while the user's acceptance of the M3 exit ([V-10](d9-visualization-track.md#status-index), [exit record](../evidence/m3-exit-2026-10-29.md)) was pending; the user accepted the M3 exit on 2026-10-29, so implementation starts at M5-U1 (section 12). The user approved M5-Q4 (a) `fake-indexeddb` on 2026-10-29.
 
 Owners: this file owns M5 scope, the persistence envelope and its codes, the IndexedDB adapter's API and codes, the autosave and restore rules, the `committedDocument` query, acceptance criteria M5-A01 to M5-A11 and the units. Product behavior stays in [`requirements.md`](../requirements.md#persistence) (Persistence), which this contract does not change; package boundaries in [`ARCHITECTURE.md`](../../ARCHITECTURE.md#dependency-direction); the migration policy in MVP-Q2 ([plan, section 9](mvp-editor-plan.md#9-open-questions)); the P5, M1, M2 and M3 rules stay in force.
 
@@ -148,7 +148,7 @@ The plan's exit gate is M5-A04 and M5-A08 (unit tests with a fake IndexedDB), M5
 | --- | --- | --- |
 | M5-U1 | `model`: envelope type, `serializeEnvelope`, `parseEnvelope`, `ENVELOPE_ERROR_CODES`, `scanJson` `maxDepth`, fixtures (A01 to A03) | Full (persisted format, public API) |
 | M5-U2 | `editor-core`: the `committedDocument` query (A07) | Full (public API) |
-| M5-U3 | `packages/persistence-idb`: store, autosave scheduler, codes; boundary-policy entry, tsconfig and manifest wiring; the fake IndexedDB dev dependency only after M5-Q4 is decided (A04, A05, A09) | Full (new package, boundary) |
+| M5-U3 | `packages/persistence-idb`: store, autosave scheduler, codes; boundary-policy entry, tsconfig and manifest wiring; the `fake-indexeddb` dev dependency (M5-Q4 (a), approved 2026-10-29) (A04, A05, A09) | Full (new package, boundary) |
 | M5-U4 | next-host: event mapping, `restoreEnvelope`, `?persist=1` composition, Save and Open, discard, status and test hook (A06, A08) | Full (product behavior in the host composition) |
 | M5-U5 | Headed spec `tests/m5-next-host/`, `playwright.m5-next-host.config.ts`, `test:m5-next-host` (A10) | Light |
 | M5-U6 | Exit record (A11) | Full |
@@ -171,7 +171,7 @@ Order: U1 and U2 (independent), then U3, then U4, then U5, then U6. Every unit r
 | M5-Q1 | Envelope text form | (a) the document as an embedded JSON object: a saved file stays readable and diffable, and one scan keeps the duplicate-key and depth rules (codes prefixed `/document`). (b) the document as an embedded string: `parseDocument` reused unchanged, at the cost of escaped, unreadable files |
 | M5-Q2 | Does the envelope have its own version? | (a) yes, `envelopeVersion: 1`, independent of `schemaVersion`; document migrations stay in the model's document parse. (b) reuse `schemaVersion`: every document bump would also version the envelope |
 | M5-Q3 | `lastOpenPageId` naming no page | (a) `envelope.unknown-page`, load nothing: the writer always pairs a document with its own active page, so a mismatch means corruption. (b) fall back to the first page |
-| M5-Q4 | Fake IndexedDB for unit tests (**needs user approval: new dev dependency**) | (a) `fake-indexeddb`, exact version pinned at approval, in root `devDependencies` only, imported only by `tests/unit/m5-*.test.ts` and denied in `persistence-idb` by `externalDenied`. (b) if declined: a hand-written fake of the subset the store uses under `tests/support/`, no new dependency, lower fidelity (the plan's exit gate then rests more on M5-A10) |
+| M5-Q4 | Fake IndexedDB for unit tests (new dev dependency; **(a) approved by the user 2026-10-29**) | (a) `fake-indexeddb`, exact version pinned at approval, in root `devDependencies` only, imported only by `tests/unit/m5-*.test.ts` and denied in `persistence-idb` by `externalDenied`. (b) if declined: a hand-written fake of the subset the store uses under `tests/support/`, no new dependency, lower fidelity (the plan's exit gate then rests more on M5-A10) |
 | M5-Q5 | What schedules a write | (a) committed document events (`command`, `gesture-commit`, `undo`, `redo`, `load`) and `activePage` changes, so a page switch alone is restored; never `gesture-update` or `gesture-cancel`. (b) document events only |
 | M5-Q6 | Debounce values | (a) 500 ms trailing, 2,000 ms maximum wait, host-configurable |
 | M5-Q7 | Multi-tab and concurrent writes | (a) last writer wins, disclosed, backlog. (b) single writer by the Web Locks API (a second tab restores but does not autosave). (c) a write generation in the record, refusing a write over a newer one. None changes a requirement; (a) keeps M5 small |
@@ -181,7 +181,7 @@ Order: U1 and U2 (independent), then U3, then U4, then U5, then U6. Every unit r
 | M5-Q11 | After a failed restore | (a) keep the entry and keep autosave off until the user discards it, so a corrupt or newer-build entry is never lost by accident. (b) start autosaving over it |
 | M5-Q12 | next-host opt-in | (a) `?persist=1`, so earlier headed specs and the default page stay storage-free |
 
-No question narrows or changes a requirement. M5-Q1 to M5-Q3 and M5-Q5 to M5-Q12 are adopted as recommended under the user's standing rule of 2026-10-24 ("추천안 자동 채택", 2026-10-29). M5-Q4 (the `fake-indexeddb` dev dependency) needs the user's explicit approval, asked on a decision card; its fallback is the hand-written fake of (b).
+No question narrows or changes a requirement. M5-Q1 to M5-Q3 and M5-Q5 to M5-Q12 are adopted as recommended under the user's standing rule of 2026-10-24 ("추천안 자동 채택", 2026-10-29). M5-Q4 (the `fake-indexeddb` dev dependency) needed the user's explicit approval; the user chose (a) on a decision card on 2026-10-29 at 01:10Z, so (b) is not used.
 
 ## 11. Validation of this contract
 
@@ -189,13 +189,13 @@ Documentation only: Markdown formatting (`npx prettier --check`) and local links
 
 ## 12. Gate
 
-This contract is drafted on 2026-10-29 while the user's acceptance of the M3 exit (M3-U5, [exit record](../evidence/m3-exit-2026-10-29.md)) is pending. The main line M1 to M3 is waiting on the user's acceptance of the M3 exit, and M4 needs rendering items E23 to E25 (R-G, R-D, R-O), which have now started on the [rendering track](d9-rendering-track.md#status-index); so under [MVP plan section 7](mvp-editor-plan.md#7-order-and-parallelism) (M1 -> M5; M5 "may be taken whenever the main line is blocked", there on review) M5 runs next. Implementation starts at M5-U1 only after both (1) this contract is approved by independent review (done 2026-10-29) and (2) the user has accepted the M3 exit, the second by the MVP plan's milestone order and the pattern of the M2 and M3 gates; approval alone does not start implementation. M5-U3 adds the fake IndexedDB dependency only after the user decides M5-Q4. The M5 exit is the user's acceptance of the M5-U6 record.
+This contract was drafted on 2026-10-29 while the user's acceptance of the M3 exit (M3-U5, [exit record](../evidence/m3-exit-2026-10-29.md)) was pending; the user accepted it on 2026-10-29 at 01:10Z. The main line M1 to M3 was waiting on the user's acceptance of the M3 exit, and M4 needs rendering items E23 to E25 (R-G, R-D, R-O), which have now started on the [rendering track](d9-rendering-track.md#status-index); so under [MVP plan section 7](mvp-editor-plan.md#7-order-and-parallelism) (M1 -> M5; M5 "may be taken whenever the main line is blocked", there on review) M5 runs next. Implementation starts at M5-U1 only after both (1) this contract is approved by independent review (done 2026-10-29) and (2) the user has accepted the M3 exit, the second by the MVP plan's milestone order and the pattern of the M2 and M3 gates; approval alone does not start implementation. M5-U3 adds the fake IndexedDB dependency, which the user approved on 2026-10-29 (M5-Q4 (a)). The M5 exit is the user's acceptance of the M5-U6 record.
 
 ## 13. Progress
 
 | Unit | State |
 | --- | --- |
-| M5-U1 | Not started |
+| M5-U1 | In progress (started 2026-10-29 after the M3 exit acceptance) |
 | M5-U2 | Not started |
 | M5-U3 | Not started |
 | M5-U4 | Not started |
