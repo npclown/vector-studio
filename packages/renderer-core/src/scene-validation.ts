@@ -28,6 +28,7 @@ import {
   SCENE_MAX_ISOLATION_DEPTH,
   SCENE_TEXT_MAX_CLUSTER_UNITS,
   SCENE_TEXT_MAX_CLUSTERS,
+  SCENE_TEXT_MAX_RUNS,
   SCENE_TEXT_MAX_FONT_LIST,
   SCENE_TEXT_MAX_LANG,
   SCENE_TEXT_MAX_SIZE,
@@ -369,6 +370,7 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
     const lang = copyLang(value.lang);
     const runs = copyArray(value.runs, copyTextRun);
     if (generation === null || lang === null || runs === null) return null;
+    if (runs.length > SCENE_TEXT_MAX_RUNS) return null;
     let clusters = 0;
     for (const run of runs) clusters += run.clusters.length;
     if (clusters > SCENE_TEXT_MAX_CLUSTERS) return null;
@@ -517,7 +519,7 @@ function isClusterText(text: string): boolean {
   if (text.length === 0 || text.length > SCENE_TEXT_MAX_CLUSTER_UNITS) return false;
   for (let index = 0; index < text.length; index += 1) {
     const unit = text.charCodeAt(index);
-    if (unit < 0x20 || (unit >= 0x7f && unit <= 0x9f)) return false;
+    if (unit < 0x20 || (unit >= 0x80 && unit <= 0x9f)) return false;
     if (unit >= 0xd800 && unit <= 0xdbff) {
       const next = text.charCodeAt(index + 1);
       if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
@@ -978,7 +980,7 @@ function nodeEquals(left: RenderNodeSnapshot, right: RenderNodeSnapshot): boolea
   return geometryEquals(left.geometry, right.geometry) && styleEquals(left.style, right.style);
 }
 
-/** Path data equality under the replay rule (`===`); it also decides geometry-revision reuse. */
+/** E28-S1: text run equality under the replay rule (`===`), cluster by cluster. */
 function textRunEquals(left: SceneTextRun, right: SceneTextRun): boolean {
   return (
     left.fontList === right.fontList &&
@@ -997,6 +999,7 @@ function textRunEquals(left: SceneTextRun, right: SceneTextRun): boolean {
   );
 }
 
+/** Path data equality under the replay rule (`===`); it also decides geometry-revision reuse. */
 export function pathDataEquals(left: ScenePathGeometry, right: ScenePathGeometry): boolean {
   return arraysEqual(left.verbs, right.verbs) && arraysEqual(left.points, right.points);
 }

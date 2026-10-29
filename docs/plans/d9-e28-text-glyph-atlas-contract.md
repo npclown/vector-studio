@@ -50,7 +50,7 @@ type SceneTextRun = Readonly<{
 ```
 
 - **E28-S1 shape.** `x` and `y` are the node-local pen origin of a cluster on its baseline, in the units of the node's transform: layout's cluster `x` and line baseline, with alignment and letter spacing already applied. `advance` is used for bounds only. `generation` is the layout port's generation (the *layout generation*), a non-negative safe integer. The layout port only increases it, but the renderer does not enforce that: keys differ, so a decrease is harmless. One frame may hold nodes of different layout generations, as it does while M6c re-projects. `lang` is checked syntactically, not through ICU, so Node and the browser agree: 1 to 35 ASCII letters, digits and `-`. M6a's `createTextDom` validates its configured `lang` by this same rule. A run need not span lines: M6c sends one run per same-style stretch of each line (M6a section 3, the E28 mapping). Letter spacing, line height and alignment reach the renderer only through positions.
-- **E28-S2 limits.** `size` is finite and in `(0, 4096]`; positions and advances are finite; a cluster's `text` is non-empty with at most 32 UTF-16 units, no C0 or C1 control and no lone surrogate (as M6-T1); M6a splits a longer grapheme at code-point boundaries, which may draw it imperfectly, disclosed; `fontList` has at most 512 characters; a node has at most 16,384 clusters in all. A text node has no `children` and no `clip`. A shape or limit violation is `invalid-value`, as for any leaf.
+- **E28-S2 limits.** `size` is finite and in `(0, 4096]`; positions and advances are finite; a cluster's `text` is non-empty with at most 32 UTF-16 units, no C0 or C1 control and no lone surrogate (as M6-T1); M6a splits a longer grapheme at code-point boundaries, which may draw it imperfectly, disclosed; `fontList` has 1 to 512 characters; a node has at most 16,384 runs and at most 16,384 clusters in all. DEL (U+007F) is neither C0 nor C1 and is accepted. A text node has no `children` and no `clip`. A shape or limit violation is `invalid-value`, as for any leaf.
 - **E28-S3 gate.**
   - `PrimitiveRendererService` gains `text?: 'none' | 'atlas'` and `glyphRaster?: GlyphRasterPort`. The default `'none'` rejects every text node with `unsupported-feature`, after the shape check.
   - `'atlas'` requires `clips` other than `'none'` (clip variants, as E25-S1) and a `glyphRaster` whose shape passes `hasPortShape`; otherwise construction throws a `TypeError`.
@@ -253,6 +253,8 @@ U1 (2026-10-29):
   - the service options `text` and `glyphRaster`, with their `TypeError`s, and `requiresTextPipeline`.
 - Text nodes are accepted under `text: 'atlas'` but draw nothing and take no paint position until U2. The backend does not read `requiresTextPipeline` until U3.
 - The architecture's text reservation gains the section 4 sentence.
+- Review follow-ups applied in U1: the run cap (`SCENE_TEXT_MAX_RUNS`), the `fontList` lower bound and the DEL wording in E28-S2.
+- Carried to U2: the world-bounds arithmetic for text (E28-K9 bounds through the node transform) must be checked for finiteness, as `hasFiniteSceneArithmetic` does for other leaves.
 - Tests: `tests/unit/e28-u1-text-scene.test.ts` (E28-A01).
 
 ## 8. Risks

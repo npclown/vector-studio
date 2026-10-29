@@ -9,6 +9,7 @@ import type {
 import {
   DIAGNOSTIC_CODES,
   SCENE_TEXT_MAX_CLUSTERS,
+  SCENE_TEXT_MAX_RUNS,
   SCENE_TEXT_MAX_SIZE,
 } from '@vector-studio/contracts';
 import { describe, expect, it } from 'vitest';
@@ -123,6 +124,9 @@ describe('E28-A01 text scene kind', () => {
     expect(replace([text('t', null, { lang: 'zh-Hant-TW' })])).toBe('applied');
     expect(replace([withRun({ size: SCENE_TEXT_MAX_SIZE })])).toBe('applied');
     expect(replace([withCluster({ text: '👨‍👩‍👧', x: -3.5, y: 0, advance: 0 })])).toBe('applied');
+    // DEL (U+007F) is neither C0 nor C1 (E28-S2); U+00A0 follows the C1 range.
+    expect(replace([withCluster({ text: '\u007f', x: 0, y: 0, advance: 0 })])).toBe('applied');
+    expect(replace([withCluster({ text: '\u00a0', x: 0, y: 0, advance: 0 })])).toBe('applied');
   });
 
   it('reports text as unsupported-feature without the gate, after the shape check', () => {
@@ -153,6 +157,8 @@ describe('E28-A01 text scene kind', () => {
       withCluster({ text: 'a'.repeat(33), x: 0, y: 0, advance: 0 }),
       withCluster({ text: '\n', x: 0, y: 0, advance: 0 }),
       withCluster({ text: '\u0085', x: 0, y: 0, advance: 0 }),
+      withCluster({ text: '\u0080', x: 0, y: 0, advance: 0 }),
+      withCluster({ text: '\u009f', x: 0, y: 0, advance: 0 }),
       withCluster({ text: '\ud800', x: 0, y: 0, advance: 0 }),
       withCluster({ text: '\udc00a', x: 0, y: 0, advance: 0 }),
       withCluster({ text: 'a', x: Number.POSITIVE_INFINITY, y: 0, advance: 0 }),
@@ -172,6 +178,15 @@ describe('E28-A01 text scene kind', () => {
     ];
     expect(replace([text('t', null, { runs: runs(0) })])).toBe('applied');
     expect(replace([text('t', null, { runs: runs(1) })])).toBe('invalid-value');
+  });
+
+  it('accepts exactly SCENE_TEXT_MAX_RUNS runs', () => {
+    const empty = run({ clusters: [] });
+    const runs = (count: number) => Array.from({ length: count }, () => empty);
+    expect(replace([text('t', null, { runs: runs(SCENE_TEXT_MAX_RUNS) })])).toBe('applied');
+    expect(replace([text('t', null, { runs: runs(SCENE_TEXT_MAX_RUNS + 1) })])).toBe(
+      'invalid-value',
+    );
   });
 
   it('E28-S4: a text mask source is unsupported-feature; text under a mask is accepted', () => {
@@ -223,8 +238,13 @@ describe('E28-A01 text scene kind', () => {
       withRun({ size: 17 }),
       withRun({ color: { r: 0, g: 0, b: 0, a: 0.5 } }),
       withCluster({ text: 'B', x: 0, y: 12, advance: 10 }),
-      text('t', null, {
-        runs: [run({ clusters: [{ text: 'A', x: 0.5, y: 12, advance: 10 }] })],
+      text('t', null, { runs: [run(), run()] }),
+      // Each cluster field of the second cluster, at an unchanged cluster count.
+      ...(['text', 'x', 'y', 'advance'] as const).map((field) => {
+        const clusters = run().clusters.map((cluster) => ({ ...cluster }));
+        const second: Record<string, unknown> = clusters[1]!;
+        second[field] = field === 'text' ? '글' : (second[field] as number) + 0.5;
+        return withRun({ clusters });
       }),
     ];
     for (const node of changed) {
@@ -232,6 +252,16 @@ describe('E28-A01 text scene kind', () => {
         'revision-conflict',
       );
     }
+    // A change in the second run only.
+    const twoRuns = new RetainedSceneMirror(undefined, ATLAS);
+    expect(
+      status(twoRuns.replaceSnapshot(snapshot([text('t', null, { runs: [run(), run()] })]))),
+    ).toBe('applied');
+    expect(
+      status(
+        twoRuns.replaceSnapshot(snapshot([text('t', null, { runs: [run(), run({ size: 17 })] })])),
+      ),
+    ).toBe('revision-conflict');
     const update: RenderChangeSet = {
       identity,
       revision: 2,
@@ -249,6 +279,38 @@ describe('E28-A01 text scene kind', () => {
       updated: [text('t', null, { lang: '' })],
     };
     expect(status(mirror.applyChanges(badUpdate))).toBe('invalid-value');
+  });
+
+  it('change sets insert and remove text nodes', () => {
+    const mirror = new RetainedSceneMirror(undefined, ATLAS);
+    expect(status(mirror.replaceSnapshot(snapshot([rect('r', null)])))).toBe('applied');
+    const insert: RenderChangeSet = {
+      identity,
+      revision: 2,
+      baseRevision: 1,
+      inserted: [text('t')],
+      updated: [],
+      removed: [],
+      orders: [{ parentId: null, children: ['r', 't'] }],
+    };
+    expect(status(mirror.applyChanges(insert))).toBe('applied');
+    const remove: RenderChangeSet = {
+      identity,
+      revision: 3,
+      baseRevision: 2,
+      inserted: [],
+      updated: [],
+      removed: ['t'],
+      orders: [{ parentId: null, children: ['r'] }],
+    };
+    expect(status(mirror.applyChanges(remove))).toBe('applied');
+    const badInsert: RenderChangeSet = {
+      ...insert,
+      revision: 4,
+      baseRevision: 3,
+      inserted: [text('t', null, { lang: '' })],
+    };
+    expect(status(mirror.applyChanges(badInsert))).toBe('invalid-value');
   });
 });
 

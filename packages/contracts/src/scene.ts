@@ -110,6 +110,7 @@ export type SceneTextRun = Readonly<{
 /** E28-S2 limits. */
 export const SCENE_TEXT_MAX_SIZE = 4096;
 export const SCENE_TEXT_MAX_CLUSTERS = 16_384;
+export const SCENE_TEXT_MAX_RUNS = 16_384;
 export const SCENE_TEXT_MAX_CLUSTER_UNITS = 32;
 export const SCENE_TEXT_MAX_FONT_LIST = 512;
 export const SCENE_TEXT_MAX_LANG = 35;

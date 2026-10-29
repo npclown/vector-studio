@@ -23,10 +23,10 @@ import {
   type ClipSupport,
   type DashSupport,
   type GroupOpacitySupport,
-  type TextSupport,
   type PaintSupport,
   type PathNodeSupport,
   type PathSupport,
+  type TextSupport,
   type ValidatedChangesInput,
   type ValidatedSnapshotInput,
 } from './scene-validation.js';
