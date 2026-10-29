@@ -332,6 +332,39 @@ function strokeCover(stroke: DashedStroke, x: number, y: number, m: number): Cov
 }
 
 /**
+ * One dash element's premultiplied source at world point (wx, wy): 'none' where it contributes
+ * nothing, null within 2 physical px of a boundary. E25 U4 composes these through isolated
+ * containers.
+ */
+export function dashElementSource(
+  element: DashElement,
+  wx: number,
+  wy: number,
+  pixelSize: number,
+): Premultiplied | 'none' | null {
+  const inverse = invert(element.world);
+  const [x, y] = transformPoint(inverse, wx, wy);
+  const m = 2 * pixelSize * Math.hypot(inverse[0], inverse[1], inverse[2], inverse[3]);
+  let fillCoverage: Coverage = 0;
+  if (element.fill !== null) {
+    fillCoverage =
+      edgeDistance(element.fill.polygons, x, y) <= m
+        ? null
+        : evenOdd(element.fill.polygons, x, y)
+          ? 1
+          : 0;
+  }
+  const strokeCoverage = element.stroke === null ? 0 : strokeCover(element.stroke, x, y, m);
+  if (fillCoverage === null || strokeCoverage === null) return null;
+  if (fillCoverage === 0 && strokeCoverage === 0) return 'none';
+  const fill = fillCoverage === 0 ? [0, 0, 0, 0] : paintAt(element.fill!.paint, x, y);
+  const stroke = strokeCoverage === 0 ? [0, 0, 0, 0] : paintAt(element.stroke!.paint, x, y);
+  return [0, 1, 2, 3].map(
+    (lane) => (stroke[lane]! + fill[lane]! * (1 - stroke[3])) * element.opacity,
+  ) as unknown as Premultiplied;
+}
+
+/**
  * The expected 8-bit-scale RGB at world point (wx, wy) over black, in element order, or null
  * when the probe is within 2 physical px of any boundary. `pixelSize` is world units per
  * physical pixel.
@@ -344,28 +377,11 @@ export function expectedDashAt(
 ): readonly [number, number, number] | null {
   let out: Premultiplied = [0, 0, 0, 1];
   for (const element of elements) {
-    const inverse = invert(element.world);
-    const [x, y] = transformPoint(inverse, wx, wy);
-    const m = 2 * pixelSize * Math.hypot(inverse[0], inverse[1], inverse[2], inverse[3]);
-    let fillCoverage: Coverage = 0;
-    if (element.fill !== null) {
-      fillCoverage =
-        edgeDistance(element.fill.polygons, x, y) <= m
-          ? null
-          : evenOdd(element.fill.polygons, x, y)
-            ? 1
-            : 0;
-    }
-    const strokeCoverage = element.stroke === null ? 0 : strokeCover(element.stroke, x, y, m);
-    if (fillCoverage === null || strokeCoverage === null) return null;
-    if (fillCoverage === 0 && strokeCoverage === 0) continue;
-    const fill = fillCoverage === 0 ? [0, 0, 0, 0] : paintAt(element.fill!.paint, x, y);
-    const stroke = strokeCoverage === 0 ? [0, 0, 0, 0] : paintAt(element.stroke!.paint, x, y);
-    const source = [0, 1, 2, 3].map(
-      (lane) => (stroke[lane]! + fill[lane]! * (1 - stroke[3])) * element.opacity,
-    );
+    const source = dashElementSource(element, wx, wy, pixelSize);
+    if (source === null) return null;
+    if (source === 'none') continue;
     out = [0, 1, 2, 3].map(
-      (lane) => source[lane]! + out[lane]! * (1 - source[3]!),
+      (lane) => source[lane]! + out[lane]! * (1 - source[3]),
     ) as unknown as Premultiplied;
   }
   return [out[0] * 255, out[1] * 255, out[2] * 255];

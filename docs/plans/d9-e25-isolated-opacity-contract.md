@@ -327,6 +327,41 @@ U3 (2026-10-29):
   - The hook claim and the section 4 pointer were fixed.
   - Not added: a test with more than 255 mesh draws in a layer across tiles. The per-pass stencil restart is covered by the call order of the existing tests.
 
+U4 (2026-10-29):
+
+- The E23 check page takes three more query options: `groups=isolated`, `isolate=1` (`isolateUnitOpacityForTesting`) and `tile=N` (`layerTileSizeForTesting`).
+  - The page forwards `requiresLayerPipeline`.
+  - Its packet summary has a layers part, and its counters have `layerPasses`.
+  - Its `edit` call applies a change set that updates nodes in place.
+- `tests/support/e25-layer-oracle.ts` composes section 3 over leaf sources. The E23 and E24 oracles now export theirs: `elementSource` and `dashElementSource`. Their `expectedAt` and `expectedDashAt` are unchanged in behaviour.
+- `tests/gpu/e25-isolated-opacity.spec.ts` holds:
+  - O1 to O6 and O8 (a) and (b), at 4x and 1x and at DPR 1 and 2;
+  - O8 (c), the tile seams, on a 2100 × 1300 surface;
+  - O7 and O9 (A07);
+  - the GPU parts of A04 to A06;
+  - shape edge probes in O1 and O8 (b), clip edge probes and masked-out probes in O6, and O8 (b)'s exact even origin;
+  - the shared-edge observation.
+- Evidence on SwiftShader: [u4-swiftshader.md](../evidence/e25/u4-swiftshader.md).
+- **Gate:** U4's gate stays open until the reference-PC run. That run covers the spec on Chrome and Edge, the headed A08 captures, and the full `pnpm test:gpu`. It is the criteria evidence, and U5 indexes it.
+- **Departure, notice emission:** U3 did not emit the layers part's notices; the backend dropped them. U4 emits them as `render.layer-resource-limit`, as it emits P4's clip notices: after a non-null prepare, up to 32 per packet. `tests/unit/e25-u4-layer-notices.test.ts` checks this at 3840 × 2160 and 4x.
+- **A04 through change sets:** the opacity edits are change sets, as in U2's unit test. A replaced snapshot rebuilt the rectangle's primitive record (one geometry build) even when only the container's opacity changed. Producers that replace whole snapshots pay that cost; it is a backlog item, not an E25 criterion.
+- **Shared edges:** the section 8 risk is measured on axis-aligned edges on pixel centres. The scene is white under the layer, red in the layer and green over it, drawn as rectangles and as path fills. The stated tolerance is the edge tolerance at depth 1, 5/255.
+  - On SwiftShader at 4x, the layer path and the main pass agree exactly at opacity 1.
+  - At opacity 0.5 they match the per-pixel model within 0.625.
+  - The reference-PC run repeats the measurement.
+- Review (fresh context, 2026-10-29): READY WITH FOLLOW-UPS. These were applied:
+  - O6's mask now cuts the children;
+  - shape edge probes in O1 and O8 (b);
+  - O8 (b)'s odd origin, with the exact bound origin asserted;
+  - O8 (a) at zoom 8 really half off;
+  - layer-count and diagnostics checks in the shared-edge test;
+  - A06's tile-set bytes and release on the layered frame;
+  - the fringe-cap allowance scoped to O2's strokes;
+  - edit and render statuses asserted;
+  - the probe grid kept 2 px from the target edge.
+  
+  Release on resize stays with U3's unit test.
+
 ## 8. Risks
 
 - **Memory.** Bound-sized layers keep ordinary groups small. But full-screen groups at 4K and 4x admit only two nesting levels within 96 MiB (E25-Q3). Deeper full-screen stacks report instead of drawing. Two remedies are open if real documents hit this: re-rendering per tile together with the composite (no full layer texture), or a cache with eviction.
