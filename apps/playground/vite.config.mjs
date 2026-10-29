@@ -61,6 +61,8 @@ export default defineConfig({
         vizV4A08Corpus: `${import.meta.dirname}/viz-v4-a08-corpus.html`,
         p4ClipMask: `${import.meta.dirname}/p4-clip-mask.html`,
         e23GradientPaint: `${import.meta.dirname}/e23-gradient-paint.html`,
+        m6S0TextLayout: `${import.meta.dirname}/m6-s0-text-layout.html`,
+        m6S0ImeRecorder: `${import.meta.dirname}/m6-s0-ime-recorder.html`,
       },
     },
   },

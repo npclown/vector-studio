@@ -215,7 +215,7 @@ Decided 2026-10-29: M6-Q1, M6-Q2, M6-Q7 and M6-Q20 take option (a), and M6-Q11, 
 | Unit | State |
 | --- | --- |
 | Plan | APPROVED 2026-10-29: review round 1 NOT READY, applied; round 2 READY WITH FOLLOW-UPS, applied; user-level questions adopted as (a), 추천안 자동 채택 2026-10-29 (section 14) |
-| M6-S0 | Not started |
+| M6-S0 | In progress: spike page and scripts (local) |
 | M6-ADR | Not started |
 | M6a | Not started |
 | R-T | Not filed |
