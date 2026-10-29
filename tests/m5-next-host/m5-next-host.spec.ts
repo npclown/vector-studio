@@ -40,7 +40,10 @@ const STORE = 'envelopes';
 const KEY = 'default';
 /** Past the autosave's 500 ms debounce and 2,000 ms maximum wait (M5-Q6). */
 const AFTER_AUTOSAVE_MS = 2_500;
-/** The editor's empty document from its default counter ID source (editor-core `emptyDocument`). */
+/**
+ * The editor's empty document. `node-1` and `node-2` follow editor-core's default counter ID
+ * source (`createCounterIdSource('node-')`, used by `emptyDocument`, editor.ts:444).
+ */
 const DEFAULT_DOCUMENT: DocumentV2 = {
   schemaVersion: 2,
   id: 'node-1',
@@ -48,6 +51,33 @@ const DEFAULT_DOCUMENT: DocumentV2 = {
   nodes: {},
 };
 const DEFAULT_CAMERA = { position: { x: 0, y: 0 }, zoom: 1 };
+/** Cameras set before a flush, Save or Open, so the checks after them show what is not restored. */
+const PANNED_CAMERA = { position: { x: 40, y: -30 }, zoom: 2 };
+const OTHER_CAMERA = { position: { x: -25, y: 15 }, zoom: 0.5 };
+
+/**
+ * The renderer state after a load: ready with no `error` element in the headed projects; in the
+ * headless smoke project only past `pending`, since the renderer may fail to start there.
+ */
+async function rendererSettled(page: Page) {
+  const status = page.getByTestId('status');
+  if (test.info().project.name === 'chromium-smoke') {
+    await expect(status).not.toHaveAttribute('data-renderer', 'pending', { timeout: 30_000 });
+  } else {
+    await expect(status).toHaveAttribute('data-renderer', 'ready', { timeout: 30_000 });
+    await expect(page.getByTestId('error')).toHaveCount(0);
+  }
+}
+
+/** Sets the camera through the session command (a session change, which schedules no write). */
+async function setCamera(page: Page, camera: typeof DEFAULT_CAMERA) {
+  const ok = await page.evaluate(
+    (value) => window.__p5Host!.editor.execute({ type: 'setViewport', camera: value }).ok,
+    camera,
+  );
+  expect(ok).toBe(true);
+  expect((await session(page)).viewport).toEqual(camera);
+}
 
 /** Opens the page, waits for the hook and the renderer state, and returns a page-to-screen map. */
 async function open(page: Page, query: string) {
@@ -56,12 +86,7 @@ async function open(page: Page, query: string) {
   await page.goto(`/?test=1${query}`);
   await page.waitForFunction(() => window.__p5Host !== undefined);
   const status = page.getByTestId('status');
-  if (test.info().project.name === 'chromium-smoke') {
-    await expect(status).not.toHaveAttribute('data-renderer', 'pending', { timeout: 30_000 });
-  } else {
-    await expect(status).toHaveAttribute('data-renderer', 'ready', { timeout: 30_000 });
-    await expect(page.getByTestId('error')).toHaveCount(0);
-  }
+  await rendererSettled(page);
   /** A page point on screen with the current camera and canvas content box, read at call time. */
   const screen = async (p: Point): Promise<Point> => {
     const { origin, position, zoom } = await page.evaluate(() => {
@@ -233,8 +258,11 @@ test('M5-A10: a reload restores the document and the last open page', async ({ p
   await drawRectangle(page, screen, { x: 300, y: 200 }, { x: 380, y: 260 });
   const drawn = await documentOf(page);
   expect(drawn.pages.map((p) => p.children.length)).toEqual([1, 1]);
+  // Pan and zoom before the flush: the camera after the reload must still be the default one.
+  await setCamera(page, PANNED_CAMERA);
 
   await flush(page);
+  // The state alone may come from the debounce; the entry content check below is what counts.
   await persistState(page, 'saved');
   const before = await serialized(page);
   // The entry holds that document and page 2, in the envelope text form.
@@ -248,6 +276,7 @@ test('M5-A10: a reload restores the document and the last open page', async ({ p
 
   await page.reload();
   await page.waitForFunction(() => window.__p5Host !== undefined);
+  await rendererSettled(page);
   await persistState(page, 'restored');
   expect(await serialized(page)).toBe(before);
   expect(await session(page)).toEqual({
@@ -267,6 +296,8 @@ test('M5-A10: Save file downloads an envelope and Open file restores it', async 
   await drawRectangle(page, screen, { x: 100, y: 100 }, { x: 220, y: 180 });
   const page2 = await addPage(page);
   await drawRectangle(page, screen, { x: 300, y: 200 }, { x: 380, y: 260 });
+  // A camera at save time; the envelope does not carry it (section 5.1).
+  await setCamera(page, PANNED_CAMERA);
   const saved = await serialized(page);
 
   const downloading = page.waitForEvent('download');
@@ -283,11 +314,14 @@ test('M5-A10: Save file downloads an envelope and Open file restores it', async 
   expect(text).toBe(serializeEnvelope(parsed.envelope));
   await expect(page.getByTestId('file-status')).toHaveText('file: saved');
 
-  // A change: another rectangle on page 2, then back to page 1.
-  await drawRectangle(page, screen, { x: 500, y: 300 }, { x: 560, y: 360 });
+  // A change: another rectangle on page 2, in view at the panned camera, then back to page 1.
+  await drawRectangle(page, screen, { x: 120, y: 40 }, { x: 160, y: 80 });
   const page1 = (await documentOf(page)).pages[0]!.id;
   await page.getByTestId(`page-${page1}`).click();
   expect(await serialized(page)).not.toBe(saved);
+  // Another camera before Open: a load keeps the current viewport (section 5.1), so after Open
+  // the camera is this one, not the one at save time.
+  await setCamera(page, OTHER_CAMERA);
 
   await page.getByTestId('open-file').setInputFiles({
     name: 'document.vstudio.json',
@@ -299,7 +333,7 @@ test('M5-A10: Save file downloads an envelope and Open file restores it', async 
   expect(await session(page)).toEqual({
     activePage: page2,
     selection: [],
-    viewport: DEFAULT_CAMERA,
+    viewport: OTHER_CAMERA,
     undoDepth: 0,
   });
   expect(errors).toEqual([]);
