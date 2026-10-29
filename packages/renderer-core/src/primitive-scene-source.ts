@@ -1466,6 +1466,9 @@ function derivePrimitives(
       sequence += 1;
       continue;
     }
+    // E28 contract, unit U1: text nodes are accepted under `text: 'atlas'`; U2 plans and draws
+    // them. Until then they draw nothing and take no paint position.
+    if (node.kind === 'text') continue;
     const localKey = primitiveBoundsKey(node);
     const boundsChanged =
       worldChanged || previous === undefined || !numericArraysEqual(previous.localKey, localKey);

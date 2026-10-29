@@ -410,7 +410,8 @@ function maskSourceBounds(
   source: RenderNodeSnapshot | undefined,
   sourceWorld: SceneAffine,
 ): SceneBounds | null {
-  if (source === undefined || source.kind === 'container') return null;
+  // E28-S4: a text node is never a mask source, so it never reaches here.
+  if (source === undefined || source.kind === 'container' || source.kind === 'text') return null;
   if (sourceWorld[0] * sourceWorld[3] - sourceWorld[1] * sourceWorld[2] === 0) return null;
   let local: SceneBounds | null;
   if (source.kind === 'path') {

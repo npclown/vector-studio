@@ -240,6 +240,21 @@ Evidence goes to `docs/evidence/e28/`.
 
 Order: U1, U2, U3, U4, U5. U1 may start once this contract is approved; it does not wait for M6a, because the scene node is plain data. M6c needs U5.
 
+U1 (2026-10-29):
+
+- `packages/contracts`:
+  - the `text` kind in `RenderNodeSnapshot`, with `SceneTextRun`, `SceneTextCluster` and the E28-S2 limits as `SCENE_TEXT_MAX_*` constants;
+  - `GlyphRasterPort` and its request and result types in `text.ts`;
+  - the codes `TEXT_UNAVAILABLE`, `TEXT_RESOURCE_LIMIT` and `GLYPH_RASTER_FAILURE`.
+- `renderer-core`:
+  - validation and equality of the kind;
+  - the `textNodes` mirror option;
+  - the E28-S4 mask-source rule in the graph walk;
+  - the service options `text` and `glyphRaster`, with their `TypeError`s, and `requiresTextPipeline`.
+- Text nodes are accepted under `text: 'atlas'` but draw nothing and take no paint position until U2. The backend does not read `requiresTextPipeline` until U3.
+- The architecture's text reservation gains the section 4 sentence.
+- Tests: `tests/unit/e28-u1-text-scene.test.ts` (E28-A01).
+
 ## 8. Risks
 
 - **Main-thread cost.** Rasterization runs on the main thread and competes with M9's pointer priority. E28's raster budget bounds it per frame (`E28_RASTER_PER_FRAME`), which U4 measures; a zoom gesture over much text draws scaled fallbacks for a few frames.

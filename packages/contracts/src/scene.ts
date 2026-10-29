@@ -92,6 +92,27 @@ export const SCENE_MAX_CLIP_DEPTH = 32;
  * isolation depth of a node, the number of its visible proper ancestors with 0 < opacity < 1.
  */
 export const SCENE_MAX_ISOLATION_DEPTH = 32;
+/**
+ * E28 contract (docs/plans/d9-e28-text-glyph-atlas-contract.md), E28-S1 and S2: one grapheme
+ * cluster of a text run. `x` and `y` are the node-local pen origin on the baseline, with
+ * alignment and letter spacing already applied by layout; `advance` is used for bounds only.
+ */
+export type SceneTextCluster = Readonly<{ text: string; x: number; y: number; advance: number }>;
+/** E28-S1: a run of clusters in one font list, size and solid colour. */
+export type SceneTextRun = Readonly<{
+  /** The M6-F2 CSS font-family list, exactly as layout used it. */
+  fontList: string;
+  /** Node-local units, in (0, SCENE_TEXT_MAX_SIZE]. */
+  size: number;
+  color: SceneColor;
+  clusters: readonly SceneTextCluster[];
+}>;
+/** E28-S2 limits. */
+export const SCENE_TEXT_MAX_SIZE = 4096;
+export const SCENE_TEXT_MAX_CLUSTERS = 16_384;
+export const SCENE_TEXT_MAX_CLUSTER_UNITS = 32;
+export const SCENE_TEXT_MAX_FONT_LIST = 512;
+export const SCENE_TEXT_MAX_LANG = 35;
 export type SceneNodeBase = Readonly<{
   id: string;
   parentId: string | null;
@@ -104,6 +125,14 @@ export type RenderNodeSnapshot = SceneNodeBase &
     | Readonly<{ kind: 'primitive'; geometry: PrimitiveGeometry; style: PrimitiveStyle }>
     | Readonly<{ kind: 'path'; geometry: ScenePathGeometry; style: PathStyle }>
     | Readonly<{ kind: 'container'; children: readonly string[]; clip: SceneClip }>
+    | Readonly<{
+        kind: 'text';
+        /** The layout port's generation (M6-F4), a non-negative safe integer. */
+        generation: number;
+        /** E28-S1: 1 to SCENE_TEXT_MAX_LANG ASCII letters, digits and '-'. */
+        lang: string;
+        runs: readonly SceneTextRun[];
+      }>
   );
 export type RenderSceneSnapshot = SceneVersion &
   Readonly<{ nodes: readonly RenderNodeSnapshot[]; rootOrder: readonly string[] }>;
