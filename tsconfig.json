@@ -22,6 +22,7 @@
     { "path": "./packages/react" },
     { "path": "./packages/renderer-core" },
     { "path": "./packages/renderer-webgpu" },
+    { "path": "./packages/text-dom" },
     { "path": "./apps/playground" }
   ]
 }

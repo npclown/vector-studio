@@ -44,6 +44,9 @@ importers:
       '@vector-studio/renderer-webgpu':
         specifier: workspace:*
         version: link:packages/renderer-webgpu
+      '@vector-studio/text-dom':
+        specifier: workspace:*
+        version: link:packages/text-dom
       eslint:
         specifier: 10.9.1
         version: 10.9.1
@@ -190,6 +193,12 @@ importers:
       '@vector-studio/renderer-core':
         specifier: workspace:*
         version: link:../renderer-core
+
+  packages/text-dom:
+    dependencies:
+      '@vector-studio/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
 packages:
 

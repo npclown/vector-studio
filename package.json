@@ -76,6 +76,7 @@
     "@vector-studio/react": "workspace:*",
     "@vector-studio/renderer-core": "workspace:*",
     "@vector-studio/renderer-webgpu": "workspace:*",
+    "@vector-studio/text-dom": "workspace:*",
     "eslint": "10.9.1",
     "fake-indexeddb": "6.2.5",
     "prettier": "3.9.6",

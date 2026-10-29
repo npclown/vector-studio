@@ -18,6 +18,8 @@ export const boundaries = new Map([
     '@vector-studio/renderer-webgpu',
     new Set(['@vector-studio/contracts', '@vector-studio/renderer-core']),
   ],
+  // MVP M6a-U4: the browser text layout port -> contracts only (ADR 0003; M6a contract, section 4).
+  ['@vector-studio/text-dom', new Set(['@vector-studio/contracts'])],
   [
     // P-B1 (P3 V2): the host composition root may depend on geometry-wasm.
     // The playground manifest edge itself lands in V4 with its first import.
@@ -41,6 +43,8 @@ export const boundaries = new Map([
       '@vector-studio/react',
       '@vector-studio/renderer-core',
       '@vector-studio/renderer-webgpu',
+      // MVP M6a-U4: the host composition creates text-dom and injects it (M6a contract, 4 and 5).
+      '@vector-studio/text-dom',
     ]),
   ],
 ]);
@@ -55,6 +59,8 @@ export const externalDenied = new Map([
   ['@vector-studio/react', new Set(['next'])],
   // MVP M5-U3: the adapter names neither UI packages nor the test-only fake IndexedDB (M5-Q4).
   ['@vector-studio/persistence-idb', new Set([...UI_PACKAGES, 'fake-indexeddb'])],
+  // MVP M6a-U4: text-dom names no UI package (M6a contract, section 4).
+  ['@vector-studio/text-dom', new Set(UI_PACKAGES)],
 ]);
 
 export const packageDirectories = [
@@ -67,6 +73,7 @@ export const packageDirectories = [
   'packages/react',
   'packages/renderer-core',
   'packages/renderer-webgpu',
+  'packages/text-dom',
   'apps/next-host',
   'apps/playground',
 ];
