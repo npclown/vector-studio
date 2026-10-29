@@ -376,10 +376,25 @@ export class GlyphAtlasPlan {
     let omitted = 0;
     let evictions = 0;
     let firstOmitted: string | null = null;
+    // Eviction step 3: once every page is used by this frame, later misses are omitted without a
+    // port call, so an over-limit frame neither spends the budget nor defers (and converges).
+    let full = false;
+    const omittedKeys = new Set<string>();
+    // Pages whose key set this frame already copied, so an allocation adds to it in place.
+    const ownedKeys = new Set<number>();
+    const addKey = (index: number, key: string) => {
+      if (!ownedKeys.has(index)) {
+        pages[index] = Object.freeze({ ...pages[index]!, keys: new Set(pages[index]!.keys) });
+        ownedKeys.add(index);
+      }
+      (pages[index]!.keys as Set<string>).add(key);
+    };
     const allocate = (
       width: number,
       height: number,
     ): Readonly<{ page: number; x: number; y: number }> | null => {
+      // A bitmap larger than a page fits nowhere; it evicts nothing.
+      if (width > this.#pageSize || height > this.#pageSize) return null;
       const fit = (index: number) => {
         const page = pages[index]!;
         const placed = placeOnPage(page, width, height, this.#pageSize);
@@ -418,7 +433,10 @@ export class GlyphAtlasPlan {
           victimOld = old;
         }
       }
-      if (victim < 0) return null;
+      if (victim < 0) {
+        full = true;
+        return null;
+      }
       evicted.add(victim);
       for (const key of pages[victim]!.keys) {
         const entry = added.get(key);
@@ -429,7 +447,12 @@ export class GlyphAtlasPlan {
       }
       clears.push(fullPageClear(victim, this.#pageSize));
       evictions += 1;
-      pages[victim] = Object.freeze({ ...EMPTY_PAGE, incarnation: pages[victim]!.incarnation });
+      pages[victim] = Object.freeze({
+        ...EMPTY_PAGE,
+        keys: new Set<string>(),
+        incarnation: pages[victim]!.incarnation,
+      });
+      ownedKeys.add(victim);
       return fit(victim);
     };
 
@@ -447,6 +470,12 @@ export class GlyphAtlasPlan {
       if (outcome !== undefined) {
         if (outcome.status === 'failed') this.#reportFailure(request, outcome.reason!);
         resolutions[index] = Object.freeze({ kind: outcome.status });
+        return;
+      }
+      if (full || omittedKeys.has(key)) {
+        omitted += 1;
+        firstOmitted ??= request.nodeId;
+        resolutions[index] = Object.freeze({ kind: 'omitted' });
         return;
       }
       if (calls >= E28_RASTER_PER_FRAME) {
@@ -485,6 +514,7 @@ export class GlyphAtlasPlan {
       if (place === null) {
         omitted += 1;
         firstOmitted ??= request.nodeId;
+        omittedKeys.add(key);
         resolutions[index] = Object.freeze({ kind: 'omitted' });
         return;
       }
@@ -503,8 +533,7 @@ export class GlyphAtlasPlan {
         phaseX: request.phaseX,
         generation: request.generation,
       });
-      const page = pages[place.page]!;
-      pages[place.page] = Object.freeze({ ...page, keys: new Set([...page.keys, key]) });
+      addKey(place.page, key);
       added.set(key, entry);
       const list = addedBases.get(base);
       if (list === undefined) addedBases.set(base, new Set([key]));
@@ -523,8 +552,8 @@ export class GlyphAtlasPlan {
       resolutions[index] = Object.freeze({ kind: 'entry', entry, fallback: false });
     });
 
-    // E28-D2: raised on the transition into the over-limit state; cleared by a frame that omits
-    // no cluster.
+    // E28-D2: raised on the transition into the over-limit state; cleared by a frame that draws
+    // every cluster (none omitted and none deferred).
     if (omitted > 0 && !this.#overLimit) {
       this.#queue(
         Object.freeze({
@@ -535,7 +564,8 @@ export class GlyphAtlasPlan {
         }),
       );
     }
-    this.#overLimit = omitted > 0;
+    if (omitted > 0) this.#overLimit = true;
+    else if (deferred === 0) this.#overLimit = false;
     return Object.freeze({
       rendererGeneration,
       frame,

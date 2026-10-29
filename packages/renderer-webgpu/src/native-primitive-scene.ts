@@ -415,14 +415,17 @@ function orderSlots(packet: PrimitivePacket): ReadonlyMap<number, readonly Order
     list.sort(compareSlots);
     const runs = target === -1 ? packet.draws.length : layers[target]!.draws.length;
     const meshList = target === -1 ? (packet.mesh?.draws ?? []) : layers[target]!.meshDraws;
+    // Non-analytic draws per position: mesh draws and these slots.
+    const counts = new Map<number, number>();
+    for (const draw of meshList) counts.set(draw.position, (counts.get(draw.position) ?? 0) + 1);
+    for (const slot of list) counts.set(slot.position, (counts.get(slot.position) ?? 0) + 1);
     list.forEach((slot, index) => {
       const previous = list[index - 1];
-      if (slot.position > runs || (previous !== undefined && compareSlots(previous, slot) === 0)) {
-        throw new Error("A slot out of its target's paint order.");
-      }
-      const meshes = meshList.filter((draw) => draw.position === slot.position).length;
-      const others = list.filter((other) => other.position === slot.position).length;
-      if (slot.order >= meshes + others) {
+      if (
+        slot.position > runs ||
+        (previous !== undefined && compareSlots(previous, slot) === 0) ||
+        slot.order >= counts.get(slot.position)!
+      ) {
         throw new Error("A slot out of its target's paint order.");
       }
     });

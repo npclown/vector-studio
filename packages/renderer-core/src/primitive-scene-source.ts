@@ -680,7 +680,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
             notices: Object.freeze(layerNotices),
           });
     // E28 contract, section 4: the text part; present while text is drawn, the atlas holds or
-    // releases pages, or a notice is pending.
+    // releases pages, a notice is pending or clusters are deferred (whose acknowledgement
+    // invalidates).
     const textNotices = this.#atlas?.peekNotices() ?? [];
     const atlasFrame = textFrame?.atlas ?? null;
     const textDraws: TextDraw[] = textItems.map((item, index) => {
@@ -699,6 +700,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       atlasFrame === null ||
       (textDraws.length === 0 &&
         textNotices.length === 0 &&
+        atlasFrame.deferred === 0 &&
         atlasFrame.pageCount === 0 &&
         this.#atlas!.committedPageCount === 0)
         ? null
@@ -1891,15 +1893,9 @@ function mergeItems(
 
 /** E28 section 4: without layers, an item's order counts the items before it at its position. */
 function flatOrders(positions: readonly number[]): number[] {
+  let order = 0;
   return positions.map((position, index) => {
-    let order = 0;
-    for (
-      let previous = index - 1;
-      previous >= 0 && positions[previous] === position;
-      previous -= 1
-    ) {
-      order += 1;
-    }
+    order = index > 0 && positions[index - 1] === position ? order + 1 : 0;
     return order;
   });
 }

@@ -272,6 +272,11 @@ U2 (2026-10-29):
   - A page written by a packet replaced without acknowledgement is cleared before its next allocation.
   - Empty and failed port results are kept per key and layout generation, since they touch no page; a frame does not ask the port again for them.
   - A port result that is not well formed counts as a throw (`'threw'`).
+  - Eviction step 3 ends the frame's port calls: once every page is used by the frame, the remaining misses are omitted without a port call and are not deferred, so an over-limit frame converges. An omitted key is rasterized at most once per frame, and a bitmap larger than a page evicts nothing.
+  - The part is also present when the frame deferred clusters, so its acknowledgement invalidates.
+  - E28-D2 clears when a frame omits and defers nothing. The D2 and D3 notices leave their queue when a packet carries them, as the mask and layer notices do, so a packet that is never acknowledged takes its notices with it.
+- Interim state until U3: the WebGPU backend returns no `text` receipt part, so a packet with a text part is never acknowledged there. No host enables `text: 'atlas'` before U3 lands the receipt part.
+- Observation for U3: a `not-ready` result writes nothing, yet the plan drops the pages of the replaced packet as section 4 asks. U3 may let the backend report that it wrote nothing.
 - Tests: `tests/unit/e28-u2-atlas-plan.test.ts` (E28-A02; unit parts of A04, A06 and A08), and the updated `tests/unit/e25-u2-layer-plan.test.ts` and `tests/unit/e25-u3-layer-passes.test.ts`.
 
 ## 8. Risks

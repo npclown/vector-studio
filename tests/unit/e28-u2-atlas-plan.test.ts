@@ -53,7 +53,8 @@ const red: SceneColor = { r: 1, g: 0, b: 0, a: 1 };
 /**
  * A fake raster port. A bitmap is `round(0.6 b) + 4` by `round(1.2 b) + 4` px with left 2 and top
  * `round(b) + 2`, filled with a byte that changes on every call (T9: a new raster never repeats
- * an earlier one). Texts 'FAIL', 'BIG' and 'THROW' fail; ' ' is empty.
+ * an earlier one). Texts 'FAIL', 'BIG' and 'THROW' fail, 'HUGE' is wider than 1,024 px and
+ * 'BAD' is malformed; whitespace and texts starting with '~' are empty.
  */
 class FakeRaster implements GlyphRasterPort {
   readonly portVersion = 0 as const;
@@ -65,7 +66,20 @@ class FakeRaster implements GlyphRasterPort {
     if (request.text === 'THROW') throw new Error('raster');
     if (request.text === 'FAIL') return { status: 'failed', reason: 'unavailable' };
     if (request.text === 'BIG') return { status: 'failed', reason: 'too-large' };
-    if (request.text.trim() === '') return { status: 'empty' };
+    if (request.text.trim() === '' || request.text.startsWith('~')) return { status: 'empty' };
+    if (request.text === 'HUGE') {
+      return {
+        status: 'ok',
+        width: 1100,
+        height: 4,
+        left: 0,
+        top: 2,
+        coverage: new Uint8Array(4400),
+      };
+    }
+    if (request.text === 'BAD') {
+      return { status: 'ok', width: 4, height: 4, left: 0, top: 2, coverage: new Uint8Array(3) };
+    }
     const width = Math.round(0.6 * request.pixelSize) + 4;
     const height = Math.round(1.2 * request.pixelSize) + 4;
     return {
@@ -431,6 +445,17 @@ describe('E28-K10 keys and the raster port', () => {
     expect(frame().text!.notices).toEqual([
       { code: 'glyph-raster-failure', nodeId: 't', reason: 'unavailable' },
     ]);
+    // A bitmap over 1,024 px is too large; a malformed result counts as a throw.
+    replace([
+      textNode('u', [
+        ['HUGE', 0],
+        ['BAD', 10],
+      ]),
+    ]);
+    expect(frame().text!.notices).toEqual([
+      { code: 'glyph-raster-failure', nodeId: 'u', reason: 'too-large' },
+      { code: 'glyph-raster-failure', nodeId: 'u', reason: 'threw' },
+    ]);
     expect(
       textNoticeDiagnostic({ code: 'glyph-raster-failure', nodeId: 't', reason: 'threw' }, 3),
     ).toMatchObject({
@@ -557,6 +582,16 @@ describe('E28 section 4 pages and eviction', () => {
     expect(service.getAtlasEvictionsForTesting()).toBe(2);
   });
 
+  it('evicts the least recently used page when the frames that drew them differ', () => {
+    const { frame, replace } = setup([textNode('t', many(4), small)], { pages: 2, pageSize: 16 });
+    frame();
+    // Draws page 1 only, so page 0 becomes the least recently used.
+    replace([textNode('t', many(2, 2), small)]);
+    frame();
+    replace([textNode('t', many(1, 20), small)]);
+    expect(frame().text!.clears.map((clear) => clear.page)).toEqual([0]);
+  });
+
   it('evicts pages holding only older-generation entries first', () => {
     const { frame, replace } = setup([textNode('a', many(2), { ...small, generation: 1 })], {
       pages: 2,
@@ -604,6 +639,50 @@ describe('E28 section 4 pages and eviction', () => {
   });
 });
 
+describe('E28 section 4 over the atlas limit', () => {
+  const small = { size: 4 } as const;
+
+  it('converges: an over-limit frame omits the rest without port calls and defers nothing', () => {
+    const { frame, service, takeInvalidations } = setup([textNode('t', many(300), small)], {
+      pages: 1,
+      pageSize: 16,
+    });
+    takeInvalidations();
+    const first = frame();
+    // Two bitmaps fit; the third finds every page used by this frame, and the rest are omitted.
+    expect(service.getGlyphRasterCallsForTesting()).toBe(3);
+    expect(instanceCount(first)).toBe(2);
+    expect(first.text!.notices).toEqual([
+      { code: 'text-resource-limit', nodeId: 't', omitted: 298, pages: 1 },
+    ]);
+    expect(takeInvalidations()).toBe(0);
+    frame();
+    frame();
+    expect(service.getGlyphRasterCallsForTesting()).toBe(5);
+    expect(takeInvalidations()).toBe(0);
+  });
+
+  it('rasterizes an omitted key once per frame', () => {
+    const { frame, port } = setup(
+      [
+        textNode(
+          't',
+          [
+            ...many(2),
+            [String.fromCodePoint(0x5000), 20],
+            [String.fromCodePoint(0x5000), 21],
+            [String.fromCodePoint(0x5000), 22],
+          ],
+          small,
+        ),
+      ],
+      { pages: 1, pageSize: 16 },
+    );
+    frame();
+    expect(port.requests).toHaveLength(3);
+  });
+});
+
 describe('E28 section 4 raster budget', () => {
   it('defers clusters past the budget, invalidates once per acknowledged packet and converges', () => {
     const { frame, service, takeInvalidations } = setup([textNode('t', many(300), { size: 4 })]);
@@ -635,6 +714,19 @@ describe('E28 section 4 raster budget', () => {
     frame();
     expect(service.getGlyphRasterCallsForTesting()).toBe(600);
     expect(takeInvalidations()).toBe(0);
+  });
+
+  it('keeps the text part for a frame whose only text is deferred, so it is drawn later', () => {
+    const empties: [string, number][] = Array.from({ length: E28_RASTER_PER_FRAME }, (_, index) => [
+      `~${index}`,
+      index,
+    ]);
+    const { frame, takeInvalidations } = setup([textNode('t', [...empties, ['A', 300]])]);
+    takeInvalidations();
+    const first = frame();
+    expect(first.text).toMatchObject({ draws: [], pageCount: 0 });
+    expect(takeInvalidations()).toBe(1);
+    expect(instanceCount(frame())).toBe(1);
   });
 
   it('defers nothing for omitted or failed clusters', () => {
