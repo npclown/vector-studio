@@ -1,4 +1,8 @@
-import type { GlyphRasterRequest, RenderCamera } from '@vector-studio/contracts';
+import type {
+  GlyphRasterRequest,
+  RenderCamera,
+  RenderSceneSnapshot,
+} from '@vector-studio/contracts';
 
 import type { E28Placement } from '../../apps/playground/src/e23-gradient-paint.js';
 import type { Premultiplied } from './e23-gradient-oracle.js';
@@ -171,6 +175,97 @@ function coverageAt(item: Placed, dx: number, dy: number): number | null {
     return value <= 1 / 255 ? 0 : null;
   }
   return inside ? bilinear(item.bitmap, u, v) : 0;
+}
+
+type Affine = readonly [number, number, number, number, number, number];
+
+/**
+ * E28-K1 to K3 from the contract's text, written apart from renderer-core's helpers, checked
+ * against the page's placements: the device map, the device size, the bucket, the snapped or
+ * general mode, and a snapped cluster's phase and pixel corner. Returns the disagreements.
+ */
+export function checkPlacements(
+  snapshot: RenderSceneSnapshot,
+  camera: RenderCamera,
+  dpr: number,
+  placements: readonly E28Placement[],
+): string[] {
+  const byId = new Map(snapshot.nodes.map((node) => [node.id, node]));
+  // Column-vector affines [a, b, c, d, e, f]: x' = a·x + c·y + e, y' = b·x + d·y + f.
+  const then = (outer: Affine, inner: Affine): Affine => [
+    outer[0] * inner[0] + outer[2] * inner[1],
+    outer[1] * inner[0] + outer[3] * inner[1],
+    outer[0] * inner[2] + outer[2] * inner[3],
+    outer[1] * inner[2] + outer[3] * inner[3],
+    outer[0] * inner[4] + outer[2] * inner[5] + outer[4],
+    outer[1] * inner[4] + outer[3] * inner[5] + outer[5],
+  ];
+  const world = (id: string): Affine => {
+    const node = byId.get(id)!;
+    const local = node.transform;
+    return node.parentId === null ? local : then(world(node.parentId), local);
+  };
+  const k = camera.zoom * dpr;
+  const view: Affine = [k, 0, 0, k, -k * camera.position.x, -k * camera.position.y];
+  const near = (left: number, right: number) =>
+    Math.abs(left - right) <= 1e-9 * Math.max(1, Math.abs(left), Math.abs(right));
+  const failures: string[] = [];
+  let index = 0;
+  for (const node of snapshot.nodes) {
+    if (node.kind !== 'text') continue;
+    const m = then(view, world(node.id));
+    const sigma = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
+    const eps = 1e-9 * sigma;
+    const uniform =
+      m[0] > 0 &&
+      m[3] > 0 &&
+      Math.abs(m[0] - sigma) <= eps &&
+      Math.abs(m[3] - sigma) <= eps &&
+      Math.abs(m[1]) <= eps &&
+      Math.abs(m[2]) <= eps;
+    node.runs.forEach((run, runIndex) => {
+      const s = run.size * sigma;
+      if (s < 0.5) return;
+      // K2: quarter pixels up to 64 px, whole pixels above, half up; capped at 256 (K4).
+      const bucket = Math.min(256, s <= 64 ? Math.floor(s * 4 + 0.5) / 4 : Math.floor(s + 0.5));
+      const snapped = uniform && s <= 256;
+      run.clusters.forEach((cluster, clusterIndex) => {
+        const label = `${node.id}/${runIndex}/${clusterIndex}`;
+        const placement = placements[index];
+        index += 1;
+        if (placement === undefined) {
+          failures.push(`${label}: no placement`);
+          return;
+        }
+        const ox = m[0] * cluster.x + m[2] * cluster.y + m[4];
+        const oy = m[1] * cluster.x + m[3] * cluster.y + m[5];
+        const problems: string[] = [];
+        if (placement.nodeId !== node.id || placement.cluster !== clusterIndex)
+          problems.push('order');
+        if (!m.every((value, at) => near(value, placement.map[at]!))) problems.push('map');
+        if (!near(ox, placement.origin[0]) || !near(oy, placement.origin[1]))
+          problems.push('origin');
+        if (!near(s, placement.deviceSize)) problems.push('size');
+        if (placement.bucket !== bucket) problems.push(`bucket ${placement.bucket} vs ${bucket}`);
+        if (placement.mode !== (snapped ? 'snapped' : 'general')) problems.push('mode');
+        if (snapped) {
+          // K3: the pen x rounds half up to a quarter pixel; its whole part is the corner and
+          // its fraction the phase. The pen y rounds half up to a whole pixel.
+          const quarters = Math.floor(ox * 4 + 0.5);
+          const cornerX = Math.floor(quarters / 4);
+          const phase = (quarters - 4 * cornerX) / 4;
+          const cornerY = Math.floor(oy + 0.5);
+          if (placement.phaseX !== phase) problems.push(`phase ${placement.phaseX} vs ${phase}`);
+          if (placement.corner?.[0] !== cornerX || placement.corner?.[1] !== cornerY)
+            problems.push(`corner ${JSON.stringify(placement.corner)} vs [${cornerX},${cornerY}]`);
+        }
+        if (problems.length > 0) failures.push(`${label}: ${problems.join(', ')}`);
+      });
+    });
+  }
+  if (index !== placements.length)
+    failures.push(`${placements.length} placements, ${index} expected`);
+  return failures.slice(0, 12);
 }
 
 export type TextView = Readonly<{ camera: RenderCamera; dpr: number }>;

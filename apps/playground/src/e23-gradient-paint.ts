@@ -562,7 +562,7 @@ const api = {
       ],
       rootOrder: ['cluster'],
     };
-    apply(snapshot, camera);
+    const applied = apply(snapshot, camera);
     await submitted();
     const frame = await capture();
     const placement = placements(snapshot, camera)[0] ?? null;
@@ -584,42 +584,62 @@ const api = {
         };
       }
     }
-    return { frame, placement, rect, counters: counters() };
+    return { status: applied.status, frame, placement, rect, counters: counters() };
   },
   /**
    * E28 U4, raster cost: times `repeat` passes over `requests` through the page's port, and
-   * one pass of 256 distinct requests built from them (phases and sizes varied).
+   * one pass of 256 distinct requests built from them at new sizes.
    */
   rasterCost(requests: readonly GlyphRasterRequest[], repeat: number) {
-    const perCall: number[] = [];
+    // The first pass meets each request once (cold); later passes repeat it (warm).
+    const cold: number[] = [];
+    const warm: number[] = [];
     for (let pass = 0; pass < repeat; pass += 1) {
       for (const request of requests) {
         const start = performance.now();
         glyphRaster.rasterize(request);
-        perCall.push(performance.now() - start);
+        (pass === 0 ? cold : warm).push(performance.now() - start);
       }
     }
-    const phases = [0, 0.25, 0.5, 0.75] as const;
+    // One frame of 256 distinct requests at sizes not timed above: each base request steps up
+    // by a quarter pixel per round.
     const frame: GlyphRasterRequest[] = [];
+    const seen = new Set<string>();
     for (let index = 0; frame.length < 256; index += 1) {
       const base = requests[index % requests.length]!;
-      frame.push({
+      const request = {
         ...base,
-        phaseX: phases[index % 4]!,
-        pixelSize: base.pixelSize + Math.floor(index / (4 * requests.length)) * 0.25,
-      });
+        pixelSize: base.pixelSize + (1 + Math.floor(index / requests.length)) * 0.25,
+      };
+      const key = JSON.stringify([
+        request.text,
+        request.fontList,
+        request.lang,
+        request.pixelSize,
+        request.phaseX,
+      ]);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      frame.push(request);
     }
     const start = performance.now();
     for (const request of frame) glyphRaster.rasterize(request);
     const frameMs = performance.now() - start;
-    perCall.sort((left, right) => left - right);
-    const quantile = (q: number) =>
-      perCall[Math.min(perCall.length - 1, Math.floor(q * perCall.length))]!;
+    const summary = (values: number[]) => {
+      const sorted = [...values].sort((left, right) => left - right);
+      const quantile = (q: number) =>
+        sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]!;
+      return {
+        calls: sorted.length,
+        meanMs: sorted.reduce((sum, value) => sum + value, 0) / sorted.length,
+        medianMs: quantile(0.5),
+        p95Ms: quantile(0.95),
+      };
+    };
     return {
-      calls: perCall.length,
-      meanMs: perCall.reduce((sum, value) => sum + value, 0) / perCall.length,
-      medianMs: quantile(0.5),
-      p95Ms: quantile(0.95),
+      cold: summary(cold),
+      warm: summary(warm),
+      frameDistinct: seen.size,
       frame256Ms: frameMs,
     };
   },

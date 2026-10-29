@@ -11,9 +11,9 @@ Contract: [d9-e28-text-glyph-atlas-contract.md](../../plans/d9-e28-text-glyph-at
 
 ## Results
 
-All 13 tests pass.
+All 14 tests pass.
 
-**E28-A03 (T1 to T7).** 14 rows at each of 4x and 1x, DPR 1 and 2. No row has a failure or an undecided pixel.
+**E28-A03 (T1 to T7).** 14 rows at each of 4x and 1x, DPR 1 and 2. No row has a failure or an undecided pixel. Each fixture also checks the page's placements against E28-K1 to K3 computed in the spec apart from renderer-core's helpers (device map, size, bucket, mode, phase, corner); all agree.
 
 | Row | Worst difference (/255), 4x DPR 1 | 1x DPR 2 | Tolerance |
 | --- | --- | --- | --- |
@@ -22,13 +22,13 @@ All 13 tests pass.
 | T5 layer, nested | 0.73, 0.98 | 0.72, 1.06 | 3, 4 |
 | T6 zoom 0.25 and 4 (snapped) | 0.88, 0.48 | 0.48, 0.48 | 2 |
 | T3 rotated, skewed, mirrored (general) | 10.53, 6.58, 6.85 | 8.33, 6.00, 6.50 | 16 (override) |
-| T6 zoom 16 (general) | 4.62 | 1.53 | 16 (override) |
+| T6 zoom 16 (24 px run general; 16 px run snapped at DPR 1) | 4.62 | 1.53 | 16 (override) |
 
-General text exceeds the default tolerance of 3 on SwiftShader. Experiments that quantized the texel offset to 4 and 8 bits did not model the error, so the override is used here only. The reference PC must pass with 3.
+General text exceeds the default tolerance of 3 on SwiftShader. Experiments that quantized the texel offset to 4 and 8 bits did not model the error. The mean signed difference over inked probes is within ±0.03/255 for every general row, so the error is not a systematic offset in placement. The override is used here only: the spec fails if it is set on a hardware adapter, and each report records the tolerance used. The reference PC must pass with 3.
 
 **E28-A04.** Colour, opacity, a whole-pixel pan and out-and-back cost 0 raster calls and 0 uploads. A subpixel pan and a zoom each cost 27 calls for 27 new keys. A generation change costs 28 for 28. The path port made no call.
 
-**E28-A05.** One page (4 MiB) and the sampler appear in accounting. A resize costs 0 calls. Removing the last text node returns live texture bytes to the baseline. After device loss, the first recovered frame and the converged frame equal the pre-loss capture. Dispose leaves 0 live resources.
+**E28-A05.** One page (4 MiB) and the sampler appear in accounting. A resize costs 0 calls and 0 uploads. Removing the last text node returns live texture bytes to the baseline. After device loss, the converged frame equals the pre-loss capture (asserted); the first recovered frame was also equal (recorded, not asserted). Page release on device loss itself is covered by U3's unit test, not observed here. Dispose leaves 0 live resources.
 
 **E28-A06 (T8).** On one 256 px page:
 
@@ -42,12 +42,24 @@ General text exceeds the default tolerance of 3 on SwiftShader. Experiments that
 
 Every step converges to the oracle exactly (worst 0). The over-limit scene raised E28-D2 once, and once more on re-entry. The subpixel move raised none. With the raster budget, 300 syllables took 256 calls in the first frame and 300 in all. 600 clusters at 256 px reached 8 pages and 33,554,432 bytes at peak, the 32 MiB bound.
 
-**E28-A07.** Scenes without text give identical hashes with `text=none` and `text=atlas` at both sample counts and DPRs.
+**E28-A07.** Scenes without text give identical hashes with `text=none` and `text=atlas` at both sample counts and DPRs. The comparison against `main` at U1's merge base is U3's capture record; the headed part is the full `pnpm test:gpu` on the reference PC.
 
-**E28-A08.** Whitespace returns `empty`, thirty `W` at 256 px (wider than 1,024 px) `too-large` and `'serif; color: red'` `unavailable`. Bearing clusters (`j`, a combining acute, `ƒ`, math italic `𝑓`) have no ink on the bitmap border. T1's 28 bitmaps hash identically on two pages. T9: generation 2 never drew generation 1's fake-port pattern.
+**Eviction order (E28-A06).** With the fake port on two 32 px pages (four bitmaps each): X (generation 1) fills page 0 and Y (generation 2) page 1; X drawn again makes page 1 the least recent. Z (generation 2) then evicts page 0, the older-generation page, with one eviction and 4 calls; Y still costs 0 calls and X costs 4 again. Pages used by the frame are never evicted in any T8 step, since every step converges with all clusters drawn.
 
-**M6c hand-off.** `readCluster` returned each of four clusters (`g`, `W`, `한`, `글`) with worst difference 0 and no stray pixel, at DPR 1 and 2, with their E28-K3 placements. Raster cost on SwiftShader: a 256-call frame took 6.8 ms at DPR 1 and 10.6 ms at DPR 2, so it fits a 60 Hz frame here. The reference PC records its own figure.
+**E28-A08.** Whitespace returns `empty`, thirty `W` at 256 px (wider than 1,024 px) `too-large` and `'serif; color: red'` `unavailable`. Bearing clusters (`j`, a combining acute, `ƒ`, math italic `𝑓`) have no ink on the bitmap border. Every request returned `ok`, and `j` (left 4) and the combining acute (left 11) reach left of the pen point, so the case is exercised. T1's 28 bitmaps hash identically on two pages. T9: generation 2 never drew generation 1's fake-port pattern.
+
+**M6c hand-off.** `readCluster` returned each of four clusters (`g`, `W`, `한`, `글`), applied, with worst difference 0 and no stray pixel, at DPR 1 and 2, with their E28-K3 placements.
+
+**Raster cost (observation).** At T1's sizes on SwiftShader's host CPU:
+
+| DPR | Cold call, mean / p95 (ms) | Warm call, mean / p95 (ms) | 256 distinct calls (ms) |
+| --- | --- | --- | --- |
+| 1 | 0.09 / 0.20 | 0.02 / 0.10 | 16.3 |
+| 2 | 0.14 / 0.40 | 0.02 / 0.10 | 21.8 |
+
+Cold is the first call of each request, warm the four repeats (the browser's glyph cache). The 256-call frame uses 256 distinct requests at sizes not timed before. It is at the 16.7 ms budget at DPR 1 and above it at DPR 2 on this host. The reference PC's figure decides whether E28-Q6's 256 is lowered before U5 (contract section 6).
 
 ## Not run
 
-- The reference-PC run (Chrome and Edge, hardware GPU, real fonts, default tolerance). It is queued through the coordinator.
+- The reference-PC run: the full `pnpm test:gpu` on Chrome and Edge, hardware GPU, real fonts, default tolerance. It is queued through the coordinator.
+- The fonts are not checked to be the named ones: on a host without Malgun Gothic, T1 draws a fallback. The oracle uses the same port, so this changes the glyphs, not the verdict.

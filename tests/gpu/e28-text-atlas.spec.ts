@@ -22,6 +22,7 @@ import {
 } from '../support/e25-layer-oracle.js';
 import { Scene, gate, rect, rings, square, type Ctx } from '../support/e25-scene.js';
 import {
+  checkPlacements,
   requestKey,
   textLeafSource,
   uniqueRequests,
@@ -66,6 +67,7 @@ const SNAPPED_TOLERANCE = 2;
  * Section 6: 3/255. `E28_GENERAL_TOLERANCE` may raise it for a software-adapter pre-run only
  * (SwiftShader's bilinear filtering is coarser); the reference-PC run never sets it.
  */
+const GENERAL_OVERRIDDEN = process.env.E28_GENERAL_TOLERANCE !== undefined;
 const GENERAL_TOLERANCE = Number(process.env.E28_GENERAL_TOLERANCE ?? '3');
 const HOME: RenderCamera = { position: { x: 0, y: 0 }, zoom: 1 };
 
@@ -407,6 +409,8 @@ async function converge(
       camera,
     ] as const);
     const next = (await counters(page)).glyphRasterCalls;
+    // A frame with deferred clusters always makes a call: a budget deferral follows 256 calls,
+    // and the miss that finds the atlas fragmented is rasterized before it is deferred.
     if (next === calls && frames > 0) break;
     calls = next;
   }
@@ -442,6 +446,10 @@ function compare(
   const failures: string[] = [];
   let count = 0;
   let worst = 0;
+  // Mean signed difference of the first lane over probes with ink in either image, so a
+  // systematic offset can be told apart from filter quantization.
+  let signedSum = 0;
+  let signedCount = 0;
   for (let y = 2; y < height - 2; y += 1) {
     for (let x = 2; x < width - 2; x += 1) {
       const wx = camera.position.x + (x + 0.5) / scaleFactor;
@@ -452,13 +460,23 @@ function compare(
       const got = pixelAt(rendered, x, y);
       const difference = worstLane(got, expected);
       worst = Math.max(worst, difference);
+      if (got[0]! > 0 || expected[0] > 0.5) {
+        signedSum += got[0]! - expected[0];
+        signedCount += 1;
+      }
       if (difference > tolerance && failures.length < 12)
         failures.push(
           `${name} (${x}, ${y}): ${got.join(',')} vs ${expected.map((v) => v.toFixed(2)).join(',')}`,
         );
     }
   }
-  return { probes: count, worst, tolerance, failures };
+  return {
+    probes: count,
+    worst,
+    meanSigned: signedCount === 0 ? 0 : signedSum / signedCount,
+    tolerance,
+    failures,
+  };
 }
 
 type Allowance = (diagnostic: RendererDiagnostic) => boolean;
@@ -485,6 +503,9 @@ for (const samples of [4, 1] as const) {
       const { ready, pageErrors } = await open(page, { dpr, samples });
       const rows: unknown[] = [];
       const failures: string[] = [];
+      // The general-tolerance override is for the software pre-run only.
+      if (GENERAL_OVERRIDDEN && ready.adapter?.architecture !== 'swiftshader')
+        failures.push(`E28_GENERAL_TOLERANCE=${GENERAL_TOLERANCE} on a hardware adapter`);
       for (const fixture of fixtures(dpr)) {
         const { placements } = await fixture.scene.prepare(page, fixture.camera, dpr);
         const general = placements.filter((placement) => placement.mode === 'general').length;
@@ -513,6 +534,16 @@ for (const samples of [4, 1] as const) {
         );
         if (statistics.inked < 200)
           failures.push(`${fixture.name}: only ${statistics.inked} inked probes`);
+        // Undecided probes are skipped, so they stay few: none for snapped text, which has no
+        // edge band, and at most 2% of the inked probes for general text.
+        if (statistics.undecided > (fixture.general ? 0.02 * statistics.inked : 0))
+          failures.push(`${fixture.name}: ${statistics.undecided} undecided probes`);
+        // E28-K1 to K3 computed here, apart from renderer-core's helpers, against the page.
+        failures.push(
+          ...checkPlacements(fixture.scene.snapshot(), fixture.camera, dpr, placements).map(
+            (failure) => `${fixture.name}: ${failure}`,
+          ),
+        );
         failures.push(...outcome.failures);
         const extra: Record<string, unknown> = {};
         if (fixture.name === 'T2') {
@@ -535,6 +566,7 @@ for (const samples of [4, 1] as const) {
           inked: statistics.inked,
           undecided: statistics.undecided,
           worst: outcome.worst,
+          meanSigned: outcome.meanSigned,
           tolerance: outcome.tolerance,
           frames: rendered.frames,
           rasterCalls: rendered.calls,
@@ -548,7 +580,20 @@ for (const samples of [4, 1] as const) {
       failures.push(...unexpected(diagnostics));
       report(
         'report.json',
-        JSON.stringify({ ready, samples, dpr, rows, diagnostics, pageErrors, failures }, null, 2),
+        JSON.stringify(
+          {
+            ready,
+            samples,
+            dpr,
+            generalTolerance: GENERAL_TOLERANCE,
+            rows,
+            diagnostics,
+            pageErrors,
+            failures,
+          },
+          null,
+          2,
+        ),
       );
       expect(pageErrors).toEqual([]);
       expect(failures).toEqual([]);
@@ -644,9 +689,15 @@ test('E28-A04 edits, pans, zoom and generation on the raster counters', async ({
   if (whole.calls !== 0 || whole.uploads !== 0)
     failures.push(`whole-px pan: ${JSON.stringify(whole)}`);
   const sub = rows.subPixelPan as ReturnType<typeof cost> & { newKeys: number };
-  if (sub.calls > sub.newKeys) failures.push(`sub-px pan: ${JSON.stringify(sub)}`);
+  if (sub.calls > sub.newKeys || sub.newKeys === 0)
+    failures.push(`sub-px pan: ${JSON.stringify(sub)}`);
   const outBack = rows.outAndBack as Record<string, ReturnType<typeof cost>>;
-  if (outBack.out!.calls !== 0 || outBack.back!.calls !== 0)
+  if (
+    outBack.out!.calls !== 0 ||
+    outBack.back!.calls !== 0 ||
+    outBack.out!.uploads !== 0 ||
+    outBack.back!.uploads !== 0
+  )
     failures.push(`out and back: ${JSON.stringify(outBack)}`);
   const zoom = rows.zoom as ReturnType<typeof cost> & { newKeys: number };
   if (zoom.calls > zoom.newKeys || zoom.calls === 0) failures.push(`zoom: ${JSON.stringify(zoom)}`);
@@ -707,7 +758,10 @@ test('E28-A05 atlas pages and sampler in accounting, resize, removal, device los
     calls: back.counters.glyphRasterCalls - before.glyphRasterCalls,
     uploads: back.counters.glyphUploads - before.glyphUploads,
   };
-  if (back.counters.glyphRasterCalls !== before.glyphRasterCalls)
+  if (
+    back.counters.glyphRasterCalls !== before.glyphRasterCalls ||
+    back.counters.glyphUploads !== before.glyphUploads
+  )
     failures.push(`resize: ${JSON.stringify(rows.resize)}`);
   // Removing the last text node releases the pages.
   const removed = await converge(page, plain.snapshot(), HOME);
@@ -904,6 +958,59 @@ test('T8 raster budget convergence and the 32 MiB atlas bound (E28-A06)', async 
   expect(failures).toEqual([]);
 });
 
+test('T8 eviction order: an older-generation page goes before the least recent (E28-A06)', async ({
+  page,
+}, info) => {
+  const report = reporter('t8-order', info);
+  // The fake port's 12 × 14 bitmaps pack four to a 32 px page (1 px gutters), with no slack.
+  const { pageErrors } = await open(page, { dpr: 1, raster: 'fake', pages: 2, pageSize: 32 });
+  const failures: string[] = [];
+  const rows: Record<string, unknown> = {};
+  const step = async (name: string, start: number, generation: number) => {
+    const before = await counters(page);
+    const rendered = await converge(
+      page,
+      pressure('t8', syllables(start, 4, GRID_20), 20, generation).snapshot(),
+      HOME,
+    );
+    const value = {
+      calls: rendered.calls,
+      evictions: rendered.result.counters.atlasEvictions - before.atlasEvictions,
+      pages: rendered.result.frame.packet?.text?.pageCount,
+      instances: rendered.result.frame.packet?.text?.instances,
+    };
+    rows[name] = value;
+    return value;
+  };
+  const expectStep = (
+    value: Awaited<ReturnType<typeof step>>,
+    name: string,
+    calls: number,
+    evictions: number,
+  ) => {
+    if (value.calls !== calls || value.evictions !== evictions || value.instances !== 4)
+      failures.push(
+        `${name}: ${JSON.stringify(value)}, expected ${calls} calls, ${evictions} evictions`,
+      );
+  };
+  // X (generation 1) fills page 0 and Y (generation 2) page 1. X drawn again makes page 0 the
+  // most recently used, so page 1 is the least recent, but page 0 holds only an older generation.
+  expectStep(await step('X gen 1', 0, 1), 'X gen 1', 4, 0);
+  expectStep(await step('Y gen 2', 100, 2), 'Y gen 2', 4, 0);
+  expectStep(await step('X gen 1 again', 0, 1), 'X gen 1 again', 0, 0);
+  // Z needs a page: page 0 (older generation) is evicted although page 1 is the least recent.
+  expectStep(await step('Z gen 2', 200, 2), 'Z gen 2', 4, 1);
+  // Y still hits page 1; X must be rasterized again.
+  expectStep(await step('Y gen 2 again', 100, 2), 'Y gen 2 again', 0, 0);
+  const x = await step('X gen 1 last', 0, 1);
+  if (x.calls !== 4) failures.push(`X after Z: ${JSON.stringify(x)}, expected 4 calls`);
+  const diagnostics = await diagnosticsOf(page);
+  failures.push(...unexpected(diagnostics));
+  report('report.json', JSON.stringify({ rows, diagnostics, pageErrors, failures }, null, 2));
+  expect(pageErrors).toEqual([]);
+  expect(failures).toEqual([]);
+});
+
 // --- T9: generations with a fake port. ---
 
 test('T9 generation 2 never draws generation 1 bitmaps (E28-A08)', async ({ page }, info) => {
@@ -1054,6 +1161,7 @@ test('E28-A08 the canvas port: identity, empty, too-large, unavailable, bearings
     const result = await raster(page, request(text, fontList, 48, 0));
     if (result.status !== 'ok') {
       bearings[text] = result;
+      failures.push(`${text}: ${JSON.stringify(result)}`);
       continue;
     }
     const coverage = Buffer.from(result.coverage, 'base64');
@@ -1065,6 +1173,9 @@ test('E28-A08 the canvas port: identity, empty, too-large, unavailable, bearings
       }
     }
     bearings[text] = { left: result.left, width: result.width, edgeInk };
+    // The hook of j and the combining mark reach left of the pen point: the case is exercised.
+    if ((text === 'j' || text === '́') && result.left <= 2)
+      failures.push(`${text}: left ${result.left}, no negative bearing`);
     if (edgeInk > 0) failures.push(`${text}: ${edgeInk} border pixels with ink`);
   }
   rows.bearings = bearings;
@@ -1120,6 +1231,7 @@ for (const dpr of [1, 2]) {
         ([value, view]) => window.__vectorStudioE23.readCluster(value, view),
         [cluster, HOME] as const,
       );
+      if (read.status !== 'applied') failures.push(`${cluster.text}: ${read.status}`);
       const rgba = decodeFrame(read.frame.rgbaBase64);
       const bitmap = await page.evaluate((value) => window.__vectorStudioE23.rasterize(value), {
         text: cluster.text,
@@ -1162,6 +1274,7 @@ for (const dpr of [1, 2]) {
       (requests) => window.__vectorStudioE23.rasterCost(requests, 5),
       t1Requests,
     );
+    if (cost.frameDistinct !== 256) failures.push(`raster frame: ${cost.frameDistinct} distinct`);
     const diagnostics = await diagnosticsOf(page);
     failures.push(...unexpected(diagnostics));
     report(

@@ -344,9 +344,11 @@ U4 record, headed spec (2026-10-29):
 
 - **Spec:** `tests/gpu/e28-text-atlas.spec.ts`, with the oracle in `tests/support/e28-text-oracle.ts`. E25's scene builder moved to `tests/support/e25-scene.ts` so both specs share it. The E23 page gains `raster=fake`, `pages` and `pagesize` options and the M6c hand-off hooks `placements`, `readCluster` and `rasterCost`.
 - **Oracle:** snapped clusters read one texel per pixel. General clusters sample bilinearly at the pixel centre with the 0.5-texel inset clamp. A general pixel within 1.5 device px of a quad edge is undecided unless the bilinear value there is at most 1/255. Colours are premultiplied and blend in order, through E25's layer oracle.
-- **SwiftShader pre-run:** [../evidence/e28/u4-swiftshader.md](../evidence/e28/u4-swiftshader.md). All 13 tests pass. General text needs `E28_GENERAL_TOLERANCE=16` there, because SwiftShader's bilinear filtering is coarser than the section 6 tolerance. The reference-PC run keeps the default tolerance, 3.
+- **SwiftShader pre-run:** [../evidence/e28/u4-swiftshader.md](../evidence/e28/u4-swiftshader.md). All 14 tests pass. General text needs `E28_GENERAL_TOLERANCE=16` there, because SwiftShader's bilinear filtering is coarser than the section 6 tolerance. The reference-PC run keeps the default tolerance, 3.
 - **Out-of-memory, disclosed:** the spec does not force a real `createTexture` failure. A05 and the 32 MiB bound check that page allocations raise no uncaptured device error. A real out-of-memory would surface as an uncaptured device-error diagnostic, not as E28-D1, because `createTexture` reports it asynchronously (U3's known limit).
 - **E28-K9:** amended for negative advances (above), with a unit test; U2's code already used both ends of the pen box.
+- **Review** (READY WITH FOLLOW-UPS, all applied): the raster-cost frame now has 256 distinct requests (it had 84), and cold and warm calls are reported apart; the spec checks the page's placements against K1 to K3 computed apart from renderer-core; T8 gains an eviction-order test on two pages; A08's bearing check fails on a non-`ok` result and requires a real negative bearing; undecided probes are bounded; the general-tolerance override fails on a hardware adapter.
+- **Raster cost:** on SwiftShader's host a 256-call frame takes 16.3 ms at DPR 1 and 21.8 ms at DPR 2. The reference-PC figure decides E28-Q6 before U5.
 - **Reference-PC run:** pending, through the coordinator (`pnpm test:gpu` on Chrome and Edge).
 
 ## 8. Risks
