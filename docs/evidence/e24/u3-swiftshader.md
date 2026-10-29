@@ -12,8 +12,8 @@ Contract: [d9-e24-dash-contract.md](../../plans/d9-e24-dash-contract.md), sectio
   - Composition is E23's: the joint stroke-over-fill source, scaled by node opacity, over black.
 - **Spec.** `tests/gpu/e24-stroke-dash.spec.ts` defines fixtures D1 to D9 with the values pinned in section 6. Placements are recorded in the spec. D2's square-cap copy rotates the geometry, not the node, so that the local-axis-aligned squares of E24-K5 differ from SVG's path-aligned squares. It runs these tests:
   - **A05 per DPR:** interior probes at 2/255, and edge probes at 4/255 on D1's butt dash ends, whose pixel centres lie on the end lines. A non-section-6 row, "D6 solid reference", draws D6 with a solid stroke.
-  - **D7 per DPR:** dash ends measured at zoom 0.25, 1 and 8. Each end is a half-coverage crossing along its tangent, found by bilinear reads. Zoom 8 uses one camera per end. Ends must agree within 0.5 physical px at the coarsest zoom.
-  - **A04 GPU part:** port-call, geometry-build and dash-expansion counters.
+  - **D7 per DPR:** dash ends measured at zoom 0.25, 1 and 8. Each end is a half-coverage crossing along its tangent, found by bilinear reads. Zoom 8 uses one camera per end. Ends must agree within 0.5 physical px at the coarsest zoom, and at zoom 8 each end must lie within 0.5 physical px of the oracle's end. Any diagnostic other than a fringe cap fails the test.
+  - **A04 GPU part:** port-call, geometry-build and dash-expansion counters. Any diagnostic other than a fringe cap fails the test.
   - **A03 note:** informational only.
 
 ## SwiftShader run
@@ -46,12 +46,12 @@ Run in the container on Playwright Chromium (Chrome for Testing 153.0.8010.12) w
   The zoom re-requests both paints under the existing tolerance rules and runs no expansion.
 - **Diagnostics.** The spec fails on any diagnostic outside this list:
   - `fringe-work-cap` (E24-Q6 (a), O2: region-only):
-    - D2's round dots, D6's stroke, and D7's stroke at DPR 1.
-    - At DPR 2, also D4's stroke and D6's fill. D6's solid reference shows the same caps at DPR 2.
+    - D2's round dots, D6's stroke, D6's solid-reference stroke, and D7's stroke at DPR 1.
+    - At DPR 2, also D4's stroke and D6's fill. D6's solid reference shows the same caps (fill and stroke) at DPR 2.
   - `dash-limit`: exactly once, on D8's node A (`failureScope: 'renderer'`, `toleranceExponent: null`, `paint: 'stroke'`). A is not drawn (O1), including its filled subpath, and B draws.
   - `overlay-unsupported` on D6 at DPR 2 (the ST7-Q8 (a) class, not the section 8 work cap):
     - At DPR 2, D6's fill is over the fringe cap and draws region-only. The dash butt ends then put Steiner points on the fill's sloped outer edges, and the ST-U7 overlay builder refuses with `sloped-outer-edge` (ST7-Q8 (a), [p3-b2-stroke-contract.md](../../plans/p3-b2-stroke-contract.md), "Narrower sloped-edge class"). D6 takes E11-U4 O3 and is not drawn. The frame is checked to show exactly that.
-    - The builder's work caps are not reached. The reason is not carried into the diagnostic; it was found by running the builder on D6's meshes.
+    - The builder's `unsupported` reason is not carried into the diagnostic. The attribution comes from review: the builder was run on D6's meshes in a scratch probe that is not committed, and the code path (`path-joint-overlay.ts`, `fail('sloped-outer-edge')` under an outer edge of a region-only fill) fits it. E27 carries the reason into the diagnostic or commits the probe.
     - D6's solid reference draws at both DPRs within 0.5/255, including at DPR 2, where its fill is also region-only.
     - At DPR 1, D6 draws through the joint overlay: the fill shows in the gaps and the stroke covers the fill on the dashes.
     - The spec allows this notice only for D6 at DPR 2. At DPR 1 it is a failure.

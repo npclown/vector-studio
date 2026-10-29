@@ -43,7 +43,8 @@ declare global {
 // any fill) are compared with the independent CPU oracle of tests/support/e24-dash-oracle.ts
 // within 2/255; edge probes sit on D1's straight butt dash ends, where the coverage is 0.5, and
 // are compared within 4/255 (E24-A05). D7's dash ends are measured at zoom 0.25, 1 and 8 and
-// must agree within 0.5 physical px at the coarsest zoom. E24-A04's GPU part reads the port,
+// must agree within 0.5 physical px at the coarsest zoom, and at zoom 8 each end must lie within
+// 0.5 physical px of the oracle's end. E24-A04's GPU part reads the port,
 // geometry-build and dash-expansion counters; the A03 note records whether the real kernel
 // reaches its own work-limit at 4,096 dashes. Reports go under artifacts/e24-stroke-dash (or
 // E24_OUTPUT_DIR).
@@ -414,6 +415,18 @@ const FRINGE_CAPS: Readonly<Record<number, ReadonlySet<string>>> = {
   ]),
 };
 
+/** Diagnostics other than fringe caps, for the tests that pin no per-node list. */
+function notFringeCaps(diagnostics: readonly { code: string; context?: unknown }[]) {
+  return diagnostics
+    .filter(
+      (diagnostic) =>
+        diagnostic.code !== 'render.path-mesh-failure' ||
+        (diagnostic.context as Record<string, unknown> | undefined)?.failureCode !==
+          'fringe-work-cap',
+    )
+    .map((diagnostic) => `diagnostic ${diagnostic.code} ${JSON.stringify(diagnostic.context)}`);
+}
+
 /** Diagnostics other than the pinned fringe caps, D6's known O3 at DPR 2, and D8's dash-limit. */
 function unexpected(diagnostics: readonly { code: string; context?: unknown }[], dpr: number) {
   const failures: string[] = [];
@@ -589,6 +602,9 @@ for (const dpr of [1, 2]) {
     );
     expect(pageErrors).toEqual([]);
     expect(failures).toEqual([]);
+    expect(
+      notFringeCaps(await page.evaluate(() => window.__vectorStudioE23.diagnostics())),
+    ).toEqual([]);
   });
 }
 
@@ -796,6 +812,9 @@ test('E24-A04 GPU part: invalidation counters', async ({ page }, info) => {
   report('report.json', JSON.stringify({ steps, failures, pageErrors }, null, 2));
   expect(failures).toEqual([]);
   expect(pageErrors).toEqual([]);
+  expect(notFringeCaps(await page.evaluate(() => window.__vectorStudioE23.diagnostics()))).toEqual(
+    [],
+  );
 });
 
 test('E24-A03 note: the real kernel at 4,096 dashes on D8 geometry', async ({ page }, info) => {
