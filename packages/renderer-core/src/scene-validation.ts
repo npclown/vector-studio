@@ -18,12 +18,20 @@ import type {
   ScenePoint,
   SceneRejectionReason,
   SceneStroke,
+  SceneTextCluster,
+  SceneTextRun,
 } from '@vector-studio/contracts';
 import {
   SCENE_MAX_CLIP_DEPTH,
   SCENE_MAX_DASH_ENTRIES,
   SCENE_MAX_GRADIENT_STOPS,
   SCENE_MAX_ISOLATION_DEPTH,
+  SCENE_TEXT_MAX_CLUSTER_UNITS,
+  SCENE_TEXT_MAX_CLUSTERS,
+  SCENE_TEXT_MAX_RUNS,
+  SCENE_TEXT_MAX_FONT_LIST,
+  SCENE_TEXT_MAX_LANG,
+  SCENE_TEXT_MAX_SIZE,
 } from '@vector-studio/contracts';
 import { hasFiniteSceneArithmetic } from './scene-numeric.js';
 
@@ -49,6 +57,11 @@ export type DashSupport = 'unsupported' | 'supported';
  * 'supported', a container whose opacity is not 1 is reported as `unsupported-feature`.
  */
 export type GroupOpacitySupport = 'unsupported' | 'supported';
+/**
+ * E28 contract, E28-S3: whether the renderer draws text nodes. Unless 'supported', every text
+ * node is reported as `unsupported-feature`, after its shape check.
+ */
+export type TextSupport = 'unsupported' | 'supported';
 
 /**
  * The port-presence facts of a mirror (V3 section a; B2 stroke contract, section 5 and the
@@ -67,6 +80,8 @@ export type PathSupport = Readonly<{
   dashes?: DashSupport;
   /** E25-S1; absent means 'unsupported'. */
   groupOpacity?: GroupOpacitySupport;
+  /** E28-S3; absent means 'unsupported'. */
+  textNodes?: TextSupport;
 }>;
 
 const NO_PATH_SUPPORT: PathSupport = Object.freeze({
@@ -243,7 +258,10 @@ function hasUnsupportedClipGraph(
     if (node === undefined || node.kind !== 'container') continue;
     if (node.clip !== null && node.clip.kind === 'mask' && node.children.length > 0) {
       const source = nodes.get(node.children[0]!);
-      if (source === undefined || source.kind === 'container') return true;
+      // E28-S4: text is never a mask source (MVP-Q12).
+      if (source === undefined || source.kind === 'container' || source.kind === 'text') {
+        return true;
+      }
       if (source.kind === 'path' && support.pathFills !== 'supported') return true;
     }
     const childDepth = node.clip === null ? depth : depth + 1;
@@ -289,7 +307,19 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
       ? ['id', 'parentId', 'transform', 'visible', 'opacity', 'kind', 'geometry', 'style']
       : kind === 'container'
         ? ['id', 'parentId', 'transform', 'visible', 'opacity', 'kind', 'children', 'clip']
-        : null;
+        : kind === 'text'
+          ? [
+              'id',
+              'parentId',
+              'transform',
+              'visible',
+              'opacity',
+              'kind',
+              'generation',
+              'lang',
+              'runs',
+            ]
+          : null;
   if (fields === null || !hasExactFields(value, fields)) {
     return null;
   }
@@ -331,6 +361,31 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
         (opacity !== 1 && pathNodes.groupOpacity !== 'supported') ||
         !clipSupported(clip, pathNodes.clips),
     });
+  }
+
+  if (kind === 'text') {
+    // E28-S1 and S2: the shape and limits are checked here, before graph checks; text without
+    // `text: 'atlas'` is reported last as unsupported-feature (E28-S3).
+    const generation = copySafeCount(value.generation);
+    const lang = copyLang(value.lang);
+    const runs = copyArray(value.runs, copyTextRun);
+    if (generation === null || lang === null || runs === null) return null;
+    if (runs.length > SCENE_TEXT_MAX_RUNS) return null;
+    let clusters = 0;
+    for (const run of runs) clusters += run.clusters.length;
+    if (clusters > SCENE_TEXT_MAX_CLUSTERS) return null;
+    const node = Object.freeze({
+      id,
+      parentId,
+      transform,
+      visible,
+      opacity,
+      kind: 'text' as const,
+      generation,
+      lang,
+      runs,
+    });
+    return Object.freeze({ node, unsupported: pathNodes.textNodes !== 'supported' });
   }
 
   if (kind === 'path') {
@@ -410,6 +465,70 @@ function dashSupported(stroke: PathStroke | null, support: PathSupport): boolean
   if (stroke.dash.pattern.length > SCENE_MAX_DASH_ENTRIES) return false;
   // A stroke of width 0 draws nothing, so only the support gate exempts it.
   return !(stroke.width > 0) || support.dashes === 'supported';
+}
+
+/** E28-S1: a non-negative safe integer. */
+function copySafeCount(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+/** E28-S1: checked syntactically, not through ICU, so Node and the browser agree. */
+function copyLang(value: unknown): string | null {
+  return typeof value === 'string' &&
+    value.length <= SCENE_TEXT_MAX_LANG &&
+    /^[A-Za-z0-9-]+$/.test(value)
+    ? value
+    : null;
+}
+
+function copyTextRun(value: unknown): SceneTextRun | null {
+  if (!hasExactFields(value, ['fontList', 'size', 'color', 'clusters'])) return null;
+  const record = value as Record<string, unknown>;
+  const fontList = record.fontList;
+  const size = copyFiniteNumber(record.size);
+  const color = copyColor(record.color);
+  const clusters = copyArray(record.clusters, copyTextCluster);
+  if (
+    typeof fontList !== 'string' ||
+    fontList.length === 0 ||
+    fontList.length > SCENE_TEXT_MAX_FONT_LIST ||
+    size === null ||
+    !(size > 0 && size <= SCENE_TEXT_MAX_SIZE) ||
+    color === null ||
+    clusters === null ||
+    clusters.length > SCENE_TEXT_MAX_CLUSTERS
+  ) {
+    return null;
+  }
+  return Object.freeze({ fontList, size, color, clusters });
+}
+
+function copyTextCluster(value: unknown): SceneTextCluster | null {
+  if (!hasExactFields(value, ['text', 'x', 'y', 'advance'])) return null;
+  const record = value as Record<string, unknown>;
+  const text = record.text;
+  const x = copyFiniteNumber(record.x);
+  const y = copyFiniteNumber(record.y);
+  const advance = copyFiniteNumber(record.advance);
+  if (typeof text !== 'string' || !isClusterText(text) || x === null || y === null) return null;
+  return advance === null ? null : Object.freeze({ text, x, y, advance });
+}
+
+/** E28-S2: 1 to 32 UTF-16 units, no C0 or C1 control and no lone surrogate. */
+function isClusterText(text: string): boolean {
+  if (text.length === 0 || text.length > SCENE_TEXT_MAX_CLUSTER_UNITS) return false;
+  for (let index = 0; index < text.length; index += 1) {
+    const unit = text.charCodeAt(index);
+    if (unit < 0x20 || (unit >= 0x80 && unit <= 0x9f)) return false;
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = text.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+      index += 1;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** P4-S1 and P4-S3: `undefined` marks an invalid clip, since `null` is a valid one. */
@@ -841,6 +960,14 @@ function nodeEquals(left: RenderNodeSnapshot, right: RenderNodeSnapshot): boolea
   if (left.kind === 'container' && right.kind === 'container') {
     return arraysEqual(left.children, right.children) && clipEquals(left.clip, right.clip);
   }
+  if (left.kind === 'text' && right.kind === 'text') {
+    return (
+      left.generation === right.generation &&
+      left.lang === right.lang &&
+      left.runs.length === right.runs.length &&
+      left.runs.every((run, index) => textRunEquals(run, right.runs[index]!))
+    );
+  }
   if (left.kind === 'path' && right.kind === 'path') {
     return (
       pathDataEquals(left.geometry, right.geometry) &&
@@ -851,6 +978,25 @@ function nodeEquals(left: RenderNodeSnapshot, right: RenderNodeSnapshot): boolea
   }
   if (left.kind !== 'primitive' || right.kind !== 'primitive') return false;
   return geometryEquals(left.geometry, right.geometry) && styleEquals(left.style, right.style);
+}
+
+/** E28-S1: text run equality under the replay rule (`===`), cluster by cluster. */
+function textRunEquals(left: SceneTextRun, right: SceneTextRun): boolean {
+  return (
+    left.fontList === right.fontList &&
+    left.size === right.size &&
+    colorEquals(left.color, right.color) &&
+    left.clusters.length === right.clusters.length &&
+    left.clusters.every((cluster, index) => {
+      const other = right.clusters[index]!;
+      return (
+        cluster.text === other.text &&
+        cluster.x === other.x &&
+        cluster.y === other.y &&
+        cluster.advance === other.advance
+      );
+    })
+  );
 }
 
 /** Path data equality under the replay rule (`===`); it also decides geometry-revision reuse. */

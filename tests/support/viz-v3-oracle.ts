@@ -453,14 +453,14 @@ export function colorChangeWithin(
   return null;
 }
 
-/** World bounds of a node's shape, strokes included; null for containers. */
+/** World bounds of a node's shape, strokes included; null for containers and text. */
 export function nodeBounds(
   node: RenderNodeSnapshot,
   world: SceneAffine,
 ): Readonly<{ minX: number; minY: number; maxX: number; maxY: number }> | null {
   let local: Point[] = [];
   let pad = 0;
-  if (node.kind === 'container') return null;
+  if (node.kind === 'container' || node.kind === 'text') return null;
   if (node.kind === 'primitive') {
     const g = node.geometry;
     if (g.kind === 'line') {

@@ -47,6 +47,22 @@ export const DIAGNOSTIC_CODES = Object.freeze({
    * docs/plans/d9-e25-isolated-opacity-contract.md); reserved by unit U1, reported from unit U2.
    */
   LAYER_RESOURCE_LIMIT: 'render.layer-resource-limit',
+  /**
+   * The source draws text but the renderer could not create its text pipeline or atlas pages, so
+   * text is not drawn (E28 contract, E28-D1, docs/plans/d9-e28-text-glyph-atlas-contract.md);
+   * reserved by unit U1, reported from unit U3.
+   */
+  TEXT_UNAVAILABLE: 'render.text-unavailable',
+  /**
+   * A frame's text clusters alone exceed the glyph atlas, so some are not drawn (E28-D2);
+   * reserved by unit U1, reported from unit U2.
+   */
+  TEXT_RESOURCE_LIMIT: 'render.text-resource-limit',
+  /**
+   * The glyph raster port failed or threw for a cluster, which is not drawn (E28-D3); reserved
+   * by unit U1, reported from unit U2.
+   */
+  GLYPH_RASTER_FAILURE: 'render.glyph-raster-failure',
   DISPOSAL_COMPLETED: 'disposal.completed',
   DISPOSAL_FAILED: 'disposal.failed',
 } as const);

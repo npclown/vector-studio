@@ -272,6 +272,8 @@ Committed text will eventually render through GPU glyph atlases, while active ed
 
 Decided 2026-10-29: browser-rasterized cluster atlas and browser-owned layout ([ADR 0003](decisions/0003-browser-text-and-glyph-atlas.md)); recommended option auto-adopted, user card open.
 
+Since E28 (2026-10-29), committed text draws as `text` scene leaves through a browser-rasterized grapheme-cluster atlas ([E28 contract](plans/d9-e28-text-glyph-atlas-contract.md)).
+
 ## Approved P1 visual behavior
 
 On 2026-09-09 the user approved [P1 D2](plans/p1-instanced-primitives.md#d2--approved-p1-visual-behavior): straight-alpha sRGB input, encoded-sRGB premultiplied source-over on a non-sRGB unorm target/view, and primitive opacity applied once after local fill/stroke composition. The linked contract fixes canvas configuration, blend factors, coverage and compositing formulas, local-space stroke transforms, radius normalization and degenerate-input behavior.

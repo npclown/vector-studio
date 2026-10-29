@@ -26,6 +26,7 @@ import {
   type PaintSupport,
   type PathNodeSupport,
   type PathSupport,
+  type TextSupport,
   type ValidatedChangesInput,
   type ValidatedSnapshotInput,
 } from './scene-validation.js';
@@ -61,6 +62,8 @@ export type RetainedSceneMirrorOptions = Readonly<{
    * them yet, and no service sets this option before then.
    */
   groupOpacity?: GroupOpacitySupport;
+  /** E28 contract, E28-S3: whether text nodes are drawn; default 'unsupported'. */
+  textNodes?: TextSupport;
 }>;
 
 export type ScenePendingChangeState = Readonly<{
@@ -125,6 +128,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     const dashes: DashSupport = options.dashes === 'supported' ? 'supported' : 'unsupported';
     const groupOpacity: GroupOpacitySupport =
       options.groupOpacity === 'supported' ? 'supported' : 'unsupported';
+    const textNodes: TextSupport = options.textNodes === 'supported' ? 'supported' : 'unsupported';
     this.#pathNodes = Object.freeze({
       pathNodes,
       pathFills,
@@ -133,6 +137,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       paints,
       dashes,
       groupOpacity,
+      textNodes,
     });
   }
 

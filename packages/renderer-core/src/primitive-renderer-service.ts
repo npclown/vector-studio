@@ -1,6 +1,7 @@
 import type {
   CameraApplyResult,
   FillMeshPort,
+  GlyphRasterPort,
   RenderCamera,
   RenderCameraState,
   RenderChangeSet,
@@ -65,6 +66,15 @@ export type PrimitiveRendererServiceOptions = Readonly<{
    * opacity 1 is drawn as a layer too, so its layer variants can be compared with the main pass.
    */
   isolateUnitOpacityForTesting?: boolean;
+  /**
+   * E28 contract, E28-S3: 'atlas' accepts text nodes and draws them from a glyph atlas filled by
+   * `glyphRaster`, through the text pipeline, which the backend then creates. It needs `clips`
+   * other than 'none' and a `glyphRaster` port. Default 'none': every text node is reported as
+   * `unsupported-feature`, and nothing else changes.
+   */
+  text?: 'none' | 'atlas';
+  /** E28 contract, section 2: the glyph raster port; required by `text: 'atlas'`. */
+  glyphRaster?: GlyphRasterPort;
 }>;
 
 /** Owns the CPU scene mirror and packet source while the backend owns scheduling and native state. */
@@ -86,6 +96,8 @@ export class PrimitiveRendererService
   public readonly requiresPaintPipeline: boolean;
   /** E25 contract, U3: true exactly when the `groups` option is 'isolated'; read at attach. */
   public readonly requiresLayerPipeline: boolean;
+  /** E28 contract, E28-S3: true exactly when the `text` option is 'atlas'; read at attach. */
+  public readonly requiresTextPipeline: boolean;
 
   public constructor(
     invalidationTarget: RendererInvalidationTarget,
@@ -127,7 +139,20 @@ export class PrimitiveRendererService
     if (typeof isolateUnit !== 'boolean' || (isolateUnit && groups !== 'isolated')) {
       throw new TypeError("isolateUnitOpacityForTesting needs groups: 'isolated'.");
     }
+    const text = options.text ?? 'none';
+    if (text !== 'none' && text !== 'atlas') {
+      throw new TypeError("text must be 'none' or 'atlas'.");
+    }
+    const glyphRaster = options.glyphRaster;
+    if (glyphRaster !== undefined) assertGlyphRasterPort(glyphRaster);
+    if (text === 'atlas' && clips === 'none') {
+      throw new TypeError("text: 'atlas' needs clips other than 'none'.");
+    }
+    if (text === 'atlas' && glyphRaster === undefined) {
+      throw new TypeError("text: 'atlas' needs a glyphRaster port.");
+    }
     this.#invalidationTarget = invalidationTarget;
+    this.requiresTextPipeline = text === 'atlas';
     this.requiresClipPipeline = clips !== 'none';
     this.requiresPaintPipeline = paints === 'gradient';
     this.requiresLayerPipeline = groups === 'isolated';
@@ -145,6 +170,7 @@ export class PrimitiveRendererService
       clips: clips === 'all' ? 'supported' : clips === 'rect' ? 'rect' : 'unsupported',
       paints,
       groupOpacity: groups === 'isolated' ? 'supported' : 'unsupported',
+      textNodes: text === 'atlas' ? 'supported' : 'unsupported',
     });
     this.#source = new PrimitiveSceneSource(
       this.#mirror,
@@ -265,6 +291,13 @@ function assertFillMeshPort(port: FillMeshPort): void {
 function assertStrokeMeshPort(port: StrokeMeshPort): void {
   if (!hasPortShape(port, 'buildStrokeMeshes')) {
     throw new TypeError('strokeMesh must be a StrokeMeshPort with portVersion 0.');
+  }
+}
+
+/** E28 contract, E28-S3: V3's port shape check applied to the glyph raster port. */
+function assertGlyphRasterPort(port: GlyphRasterPort): void {
+  if (!hasPortShape(port, 'rasterize')) {
+    throw new TypeError('glyphRaster must be a GlyphRasterPort with portVersion 0.');
   }
 }
 
