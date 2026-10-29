@@ -36,7 +36,7 @@ E11-Q3 (a), quoted: "Adopt the three D8-interim outcomes as P3's product behavio
 
 ## 3. Classes that reach each outcome
 
-Codes are those of `PathMeshFailureCode` (20: 6 path, 4 batch, 10 renderer).
+Codes are those of `PathMeshFailureCode` (20: 6 path, 4 batch, 10 renderer; 21 with 11 renderer once E24-U2 adds `dash-limit`).
 
 | Scope | Code | Outcome | Known classes of input |
 | --- | --- | --- | --- |
@@ -52,10 +52,11 @@ Codes are those of `PathMeshFailureCode` (20: 6 path, 4 batch, 10 renderer).
 | renderer | `fringe-range`, `fringe-unsupported`, `packing-range` | O1 | Fringe bucket out of range; a mesh the exact fringe builder cannot partition; a packet over the K4 packing range |
 | renderer | `invalid-response`, `invalid-mesh` | O1 | A port answer that breaks V3 section h's validation (a defect, never expected) |
 | renderer | `port-version`, `mesh-pipeline-unavailable` | O1 | A port of another version (every path with a drawable paint on that port); a backend without the mesh pipeline (every mesh path) |
+| renderer | `dash-limit` | O1 | A dashed path stroke whose expansion exceeds 4,096 dashes ([E24-K8](d9-e24-dash-contract.md), added 2026-10-29; the code lands with E24-U2) |
 | renderer | `fringe-work-cap` | O2 | Meshes with more than 128 distinct boundary vertices |
 | renderer | `overlay-unsupported` | O3 | A failed partition check; a triangulator failure; a Steiner point on a sloped outer edge (open subpaths, or `r_phys·cos(θ/2) ≤ δ_F + δ_S`, ST7-R10); an overlay over its work cap (ST7-Q5) |
 
-The code and outcome columns are closed for P3: a new code or outcome is a contract change. The last column is informative and is updated by the item that changes it (E2, E4, E8, E12, E14).
+The code and outcome columns are closed for P3: a new code or outcome is a contract change. E24 (2026-10-29) added `dash-limit` under O1, so the table now has 21 codes (11 renderer). The last column is informative and is updated by the item that changes it (E2, E4, E8, E12, E14).
 
 ## 4. Dependencies
 

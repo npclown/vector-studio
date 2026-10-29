@@ -8,6 +8,7 @@ import type {
   SceneAffine,
   SceneClip,
   SceneColor,
+  SceneDash,
   SceneGradient,
   SceneGradientStop,
   SceneIdentity,
@@ -18,7 +19,12 @@ import type {
   SceneRejectionReason,
   SceneStroke,
 } from '@vector-studio/contracts';
-import { SCENE_MAX_CLIP_DEPTH, SCENE_MAX_GRADIENT_STOPS } from '@vector-studio/contracts';
+import {
+  SCENE_MAX_CLIP_DEPTH,
+  SCENE_MAX_DASH_ENTRIES,
+  SCENE_MAX_GRADIENT_STOPS,
+  SCENE_MAX_ISOLATION_DEPTH,
+} from '@vector-studio/contracts';
 import { hasFiniteSceneArithmetic } from './scene-numeric.js';
 
 /** Port presence, fixed when a mirror is constructed (P3 V3 contract, section a). */
@@ -33,6 +39,16 @@ export type ClipSupport = 'supported' | 'rect' | 'unsupported';
  * any gradient paint is reported as `unsupported-feature`.
  */
 export type PaintSupport = 'solid' | 'gradient';
+/**
+ * E24 contract, E24-S3: whether the renderer dashes path strokes. Unless 'supported', a node
+ * with a non-null dash on a stroke of width > 0 is reported as `unsupported-feature`.
+ */
+export type DashSupport = 'unsupported' | 'supported';
+/**
+ * E25 contract, E25-S1: whether the renderer draws isolated container opacity. Unless
+ * 'supported', a container whose opacity is not 1 is reported as `unsupported-feature`.
+ */
+export type GroupOpacitySupport = 'unsupported' | 'supported';
 
 /**
  * The port-presence facts of a mirror (V3 section a; B2 stroke contract, section 5 and the
@@ -47,6 +63,10 @@ export type PathSupport = Readonly<{
   clips: ClipSupport;
   /** E23-S3; absent means 'solid'. */
   paints?: PaintSupport;
+  /** E24-S3; absent means 'unsupported'. */
+  dashes?: DashSupport;
+  /** E25-S1; absent means 'unsupported'. */
+  groupOpacity?: GroupOpacitySupport;
 }>;
 
 const NO_PATH_SUPPORT: PathSupport = Object.freeze({
@@ -190,7 +210,8 @@ export function validateCandidateGraph(
     return 'invalid-order';
   }
   // P4 contract, P4-S2 and P4-S3: the mask-source and clip-depth rules are graph rules over the
-  // whole candidate, so a change set that only reorders or reparents is checked as well.
+  // whole candidate, so a change set that only reorders or reparents is checked as well. E25-S2's
+  // isolation depth is checked in the same walk, after clip depth.
   if (hasUnsupportedClipGraph(nodes, rootOrder, support)) {
     return 'unsupported-feature';
   }
@@ -200,17 +221,24 @@ export function validateCandidateGraph(
 /**
  * P4-S2: a mask source (`children[0]` of a mask container) must not be a container, and a path
  * source needs a fill port whatever its style. Clip depth: no node may have more than
- * SCENE_MAX_CLIP_DEPTH clipping proper ancestors. One walk from the roots, O(n).
+ * SCENE_MAX_CLIP_DEPTH clipping proper ancestors. E25-S2: no node may have more than
+ * SCENE_MAX_ISOLATION_DEPTH visible proper ancestors with 0 < opacity < 1. One walk from the
+ * roots, O(n).
  */
 function hasUnsupportedClipGraph(
   nodes: ReadonlyMap<string, RenderNodeSnapshot>,
   rootOrder: readonly string[],
   support: PathSupport,
 ): boolean {
-  const pending: { id: string; depth: number }[] = rootOrder.map((id) => ({ id, depth: 0 }));
+  const pending: { id: string; depth: number; isolation: number }[] = rootOrder.map((id) => ({
+    id,
+    depth: 0,
+    isolation: 0,
+  }));
   while (pending.length > 0) {
-    const { id, depth } = pending.pop()!;
+    const { id, depth, isolation } = pending.pop()!;
     if (depth > SCENE_MAX_CLIP_DEPTH) return true;
+    if (isolation > SCENE_MAX_ISOLATION_DEPTH) return true;
     const node = nodes.get(id);
     if (node === undefined || node.kind !== 'container') continue;
     if (node.clip !== null && node.clip.kind === 'mask' && node.children.length > 0) {
@@ -219,7 +247,11 @@ function hasUnsupportedClipGraph(
       if (source.kind === 'path' && support.pathFills !== 'supported') return true;
     }
     const childDepth = node.clip === null ? depth : depth + 1;
-    for (const childId of node.children) pending.push({ id: childId, depth: childDepth });
+    const isolated = node.visible && node.opacity > 0 && node.opacity < 1;
+    const childIsolation = isolated ? isolation + 1 : isolation;
+    for (const childId of node.children) {
+      pending.push({ id: childId, depth: childDepth, isolation: childIsolation });
+    }
   }
   return false;
 }
@@ -295,7 +327,9 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
     });
     return Object.freeze({
       node,
-      unsupported: opacity !== 1 || !clipSupported(clip, pathNodes.clips),
+      unsupported:
+        (opacity !== 1 && pathNodes.groupOpacity !== 'supported') ||
+        !clipSupported(clip, pathNodes.clips),
     });
   }
 
@@ -322,6 +356,7 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
     // last slot as a path without any port. A width-0 stroke is accepted and draws nothing.
     const unsupported =
       !paintsSupported([style.fill, style.stroke?.color ?? null], pathNodes) ||
+      !dashSupported(style.stroke, pathNodes) ||
       pathNodes.pathNodes !== 'supported' ||
       (style.fill !== null && pathNodes.pathFills !== 'supported') ||
       (style.stroke !== null && style.stroke.width > 0 && pathNodes.pathStrokes !== 'supported');
@@ -363,6 +398,18 @@ function paintsSupported(paints: readonly (ScenePaint | null)[], support: PathSu
     }
   }
   return true;
+}
+
+/**
+ * E24-S1 and S3: a dash with more than SCENE_MAX_DASH_ENTRIES entries is unsupported, and so is
+ * a dash on a stroke of width > 0 unless the renderer dashes. Both are reported after the graph
+ * checks.
+ */
+function dashSupported(stroke: PathStroke | null, support: PathSupport): boolean {
+  if (stroke === null || stroke.dash === undefined || stroke.dash === null) return true;
+  if (stroke.dash.pattern.length > SCENE_MAX_DASH_ENTRIES) return false;
+  // A stroke of width 0 draws nothing, so only the support gate exempts it.
+  return !(stroke.width > 0) || support.dashes === 'supported';
 }
 
 /** P4-S1 and P4-S3: `undefined` marks an invalid clip, since `null` is a valid one. */
@@ -476,7 +523,10 @@ function copyPathStyle(value: unknown): PathStyle | null {
 
 /** B2 stroke contract, section 5 validation rows; every failure here is invalid-value. */
 function copyPathStroke(value: unknown): PathStroke | null {
-  if (!hasExactFields(value, ['color', 'width', 'cap', 'join', 'miterLimit'])) return null;
+  // E24-S2: the five B2 fields and an optional `dash`, kept in the producer's form.
+  const hasDash = isRecord(value) && Object.hasOwn(value, 'dash');
+  const fields = ['color', 'width', 'cap', 'join', 'miterLimit'];
+  if (!hasExactFields(value, hasDash ? [...fields, 'dash'] : fields)) return null;
   const record = value as Record<string, unknown>;
   const color = copyPaint(record.color);
   const width = copyNonnegativeNumber(record.width);
@@ -497,7 +547,39 @@ function copyPathStroke(value: unknown): PathStroke | null {
   ) {
     return null;
   }
-  return Object.freeze({ color, width, cap, join, miterLimit });
+  if (!hasDash) return Object.freeze({ color, width, cap, join, miterLimit });
+  const dash = copyDash(record.dash);
+  if (dash === undefined) return null;
+  return Object.freeze({ color, width, cap, join, miterLimit, dash });
+}
+
+/**
+ * E24-S1: `null`, or exactly `{ pattern, phase }` with at least one entry, every entry finite
+ * and >= 0, at least one > 0, a finite period (the binary64 sum, left to right) and a finite
+ * phase. `undefined` marks an invalid dash, since `null` is a valid one. More than
+ * SCENE_MAX_DASH_ENTRIES entries is reported by `dashSupported`.
+ */
+function copyDash(value: unknown): SceneDash | null | undefined {
+  if (value === null) return null;
+  if (!hasExactFields(value, ['pattern', 'phase'])) return undefined;
+  const record = value as Record<string, unknown>;
+  if (!Array.isArray(record.pattern) || record.pattern.length === 0) return undefined;
+  const pattern: number[] = [];
+  let period = 0;
+  let positive = false;
+  for (let index = 0; index < record.pattern.length; index += 1) {
+    if (!Object.hasOwn(record.pattern, index)) return undefined;
+    const entry = copyNonnegativeNumber((record.pattern as unknown[])[index]);
+    if (entry === null) return undefined;
+    pattern.push(entry);
+    period += entry;
+    positive ||= entry > 0;
+  }
+  // E24-S1: the period is that of the list after E24-K1 doubles an odd pattern.
+  if (pattern.length % 2 === 1) for (const entry of pattern) period += entry;
+  const phase = copyFiniteNumber(record.phase);
+  if (!positive || !Number.isFinite(period) || phase === null) return undefined;
+  return Object.freeze({ pattern: Object.freeze(pattern), phase });
 }
 
 function copyStyle(value: unknown): PrimitiveStyle | null {
@@ -816,7 +898,17 @@ function nullablePathStrokeEquals(left: PathStroke | null, right: PathStroke | n
         left.cap === right.cap &&
         left.join === right.join &&
         left.miterLimit === right.miterLimit &&
-        paintEquals(left.color, right.color);
+        paintEquals(left.color, right.color) &&
+        nullableDashEquals(left.dash ?? null, right.dash ?? null);
+}
+
+/** E24-S2: absent and null are equal; patterns entry by entry, and the phase, with `===`. */
+function nullableDashEquals(left: SceneDash | null, right: SceneDash | null): boolean {
+  return left === null || right === null
+    ? left === right
+    : left.phase === right.phase &&
+        left.pattern.length === right.pattern.length &&
+        left.pattern.every((entry, index) => entry === right.pattern[index]);
 }
 
 function nullablePaintEquals(left: ScenePaint | null, right: ScenePaint | null): boolean {

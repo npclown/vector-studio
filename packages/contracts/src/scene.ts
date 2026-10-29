@@ -55,6 +55,13 @@ export type ScenePathGeometry = Readonly<{
 }>;
 export type SceneStrokeCap = 'butt' | 'round' | 'square';
 export type SceneStrokeJoin = 'miter' | 'round' | 'bevel';
+/**
+ * E24 contract, section 2: a dash pattern and phase in node-local units, the units of the
+ * stroke's width. Entries alternate on and off, starting on; an odd count is repeated once.
+ */
+export type SceneDash = Readonly<{ pattern: readonly number[]; phase: number }>;
+/** E24-S1: more pattern entries than this is `unsupported-feature`. */
+export const SCENE_MAX_DASH_ENTRIES = 16;
 /** A path stroke (P3 B2 stroke contract, section 5). Primitive strokes keep SceneStroke. */
 export type PathStroke = Readonly<{
   color: ScenePaint;
@@ -64,6 +71,8 @@ export type PathStroke = Readonly<{
   join: SceneStrokeJoin;
   /** Finite, >= 1, required for every join kind. */
   miterLimit: number;
+  /** E24 contract (E24-Q5 (a)): absent or null is a solid stroke. */
+  dash?: SceneDash | null;
 }>;
 /** `stroke` is required and explicitly null when absent. */
 export type PathStyle = Readonly<{ fill: ScenePaint | null; stroke: PathStroke | null }>;
@@ -78,6 +87,11 @@ export type SceneClip =
   | Readonly<{ kind: 'mask' }>;
 /** P4 contract, section 2: the deepest supported clip depth of a node. */
 export const SCENE_MAX_CLIP_DEPTH = 32;
+/**
+ * E25 contract (docs/plans/d9-e25-isolated-opacity-contract.md), E25-S2: the deepest supported
+ * isolation depth of a node, the number of its visible proper ancestors with 0 < opacity < 1.
+ */
+export const SCENE_MAX_ISOLATION_DEPTH = 32;
 export type SceneNodeBase = Readonly<{
   id: string;
   parentId: string | null;

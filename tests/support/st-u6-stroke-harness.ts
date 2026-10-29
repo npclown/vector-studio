@@ -181,6 +181,7 @@ export function pathStroke(overrides: Partial<PathStroke> = {}): PathStroke {
     cap: overrides.cap ?? 'butt',
     join: overrides.join ?? 'miter',
     miterLimit: overrides.miterLimit ?? 4,
+    ...(overrides.dash === undefined ? {} : { dash: overrides.dash }),
   };
 }
 
@@ -217,6 +218,8 @@ export function createStrokeHarness(
     pathNodes: 'supported',
     pathFills: options.fillPort === undefined ? 'unsupported' : 'supported',
     pathStrokes: options.strokePort === undefined ? 'unsupported' : 'supported',
+    // E24-S3: dashes with strokes, as the renderer service sets them.
+    dashes: options.strokePort === undefined ? 'unsupported' : 'supported',
     ...(options.clips === undefined ? {} : { clips: options.clips }),
     ...(options.paints === undefined ? {} : { paints: options.paints }),
   });
