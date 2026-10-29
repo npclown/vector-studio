@@ -81,7 +81,7 @@ async function rawPut(factory: IDBFactory, value: unknown, key = DEFAULT_KEY): P
 }
 
 /** Aborts the transaction of the next `method` request right after the adapter creates it. */
-function abortNext(method: 'get' | 'put'): void {
+function abortNext(method: 'get' | 'put' | 'delete'): void {
   const prototype = IDBObjectStore.prototype as unknown as Record<
     typeof method,
     (this: IDBObjectStore, ...args: unknown[]) => IDBRequest
@@ -272,20 +272,37 @@ describe('M5-A04 store unavailable', () => {
   });
 
   it('is unavailable on a blocked open and closes a connection that still opens', async () => {
-    const close = vi.fn();
-    const req = {} as {
-      result: unknown;
-      onblocked: (() => void) | null;
-      onsuccess: (() => void) | null;
-    };
-    const factory = { open: () => req } as unknown as IDBFactory;
-    const result = openDocumentStore({ indexedDB: factory });
-    req.onblocked!();
-    expect(await result).toEqual({ ok: false, code: 'persistence.unavailable', path: '' });
-    expect(close).toHaveBeenCalledTimes(0);
-    req.result = { close };
-    req.onsuccess!();
-    expect(close).toHaveBeenCalledTimes(1);
+    const factory = new IDBFactory();
+    // A held connection that ignores versionchange blocks an upgrade. The adapter opens
+    // version 1, which nothing can block, so the factory it is given asks for the next version.
+    const held = await connect(factory);
+    held.onversionchange = () => undefined;
+    const blocking = {
+      open: (name: string, version?: number) => factory.open(name, (version ?? 1) + 1),
+    } as unknown as IDBFactory;
+    const closed = vi.fn();
+    const opened = openDocumentStore({ indexedDB: blocking });
+    expect(await opened).toEqual({ ok: false, code: 'persistence.unavailable', path: '' });
+    // Record each close: after the held connection closes, the adapter's request still opens.
+    const original = (IDBDatabase.prototype as unknown as { close: (this: IDBDatabase) => void })
+      .close;
+    const closes = vi.spyOn(IDBDatabase.prototype, 'close').mockImplementation(function (
+      this: IDBDatabase,
+    ) {
+      closed(this.version);
+      original.call(this);
+    });
+    held.close();
+    // The adapter's connection opens at version 2 and is closed at once, so a version 3 open
+    // is not blocked.
+    const later = factory.open(DEFAULT_DATABASE_NAME, 3);
+    const blocked = vi.fn();
+    later.onblocked = blocked;
+    const database = await request(later);
+    expect([database.version, blocked.mock.calls.length]).toEqual([3, 0]);
+    expect(closed.mock.calls).toEqual([[1], [2]]);
+    closes.mockRestore();
+    database.close();
   });
 
   it('closes on versionchange, and a later call is unavailable', async () => {
@@ -362,6 +379,91 @@ describe('M5-A04 store failed transactions', () => {
       { ok: true, written: true },
     ]);
     expect(await rawGet(factory)).toBe(await text('shapes.envelope'));
+  });
+});
+
+describe('M5-A04 store follow-ups: throws, versionchange, clear and pending writes', () => {
+  it('resolves write-failed when the envelope cannot be serialized, without a transaction', async () => {
+    const factory = new IDBFactory();
+    const store = await opened(factory);
+    await store.write(await envelope('empty.envelope'));
+    const transactions = vi.spyOn(IDBDatabase.prototype, 'transaction');
+    const broken = { document: null, lastOpenPageId: 'page-1' } as unknown as PersistenceEnvelope;
+    expect(await store.write(broken)).toEqual({
+      ok: false,
+      code: 'persistence.write-failed',
+      path: '',
+    });
+    expect(transactions).toHaveBeenCalledTimes(0);
+    expect(await rawGet(factory)).toBe(await text('empty.envelope'));
+    // The failed write emptied the cache.
+    expect(await store.write(await envelope('empty.envelope'))).toEqual({
+      ok: true,
+      written: true,
+    });
+  });
+
+  it('completes a write in flight at a versionchange, then is unavailable', async () => {
+    const factory = new IDBFactory();
+    const store = await opened(factory);
+    const writing = store.write(await envelope('shapes.envelope'));
+    const newer = await request(factory.open(DEFAULT_DATABASE_NAME, 2));
+    expect(await writing).toEqual({ ok: true, written: true });
+    expect(await store.read()).toEqual({
+      ok: false,
+      code: 'persistence.unavailable',
+      path: '',
+    });
+    expect(
+      await request(
+        newer
+          .transaction(OBJECT_STORE_NAME, 'readonly')
+          .objectStore(OBJECT_STORE_NAME)
+          .get(DEFAULT_KEY),
+      ),
+    ).toBe(await text('shapes.envelope'));
+    newer.close();
+  });
+
+  it('does not skip a write equal to a completed write while a later clear is pending', async () => {
+    const factory = new IDBFactory();
+    const store = await opened(factory);
+    const empty = await envelope('empty.envelope');
+    const writing = store.write(empty);
+    const clearing = store.clear();
+    expect(await writing).toEqual({ ok: true, written: true });
+    const again = store.write(empty);
+    expect(await clearing).toEqual({ ok: true });
+    expect(await again).toEqual({ ok: true, written: true });
+    expect(await rawGet(factory)).toBe(await text('empty.envelope'));
+  });
+
+  it('gives write-failed for a failed clear and leaves the entry', async () => {
+    const factory = new IDBFactory();
+    const store = await opened(factory);
+    const empty = await envelope('empty.envelope');
+    await store.write(empty);
+    abortNext('delete');
+    expect(await store.clear()).toEqual({ ok: false, code: 'persistence.write-failed', path: '' });
+    expect(await rawGet(factory)).toBe(await text('empty.envelope'));
+    // A failed clear also empties the cache.
+    expect(await store.write(empty)).toEqual({ ok: true, written: true });
+  });
+
+  it('leaves the cache to the pending write when a read finishes during it', async () => {
+    const factory = new IDBFactory();
+    await rawPut(factory, await text('empty.envelope'));
+    const store = await opened(factory);
+    const empty = await envelope('empty.envelope');
+    const shapes = await envelope('shapes.envelope');
+    // The read is created first, so it finishes while the write is still pending.
+    const reading = store.read();
+    const writing = store.write(shapes);
+    expect(await reading).toEqual({ ok: true, envelope: empty });
+    expect(await writing).toEqual({ ok: true, written: true });
+    expect(await store.write(shapes)).toEqual({ ok: true, written: false });
+    expect(await store.write(empty)).toEqual({ ok: true, written: true });
+    expect(await rawGet(factory)).toBe(await text('empty.envelope'));
   });
 });
 

@@ -122,9 +122,9 @@ describe('M5-A05 autosave debounce', () => {
     });
     autosave.schedule();
     autosave.schedule();
-    expect(set.mock.calls.map(([, ms]) => ms)).toEqual([50, 400, 50]);
+    expect(set.mock.calls.map(([, ms]) => ms)).toEqual([400, 50, 50]);
     expect(clear).toHaveBeenCalledTimes(1);
-    expect(clear).toHaveBeenCalledWith(set.mock.results[0]!.value);
+    expect(clear).toHaveBeenCalledWith(set.mock.results[1]!.value);
   });
 
   it('reads envelope() when the write starts, not when scheduled', async () => {
@@ -153,19 +153,57 @@ describe('M5-A05 autosave write in flight', () => {
     expect(calls.length).toBe(1);
     current = shapes;
     autosave.schedule();
-    await vi.advanceTimersByTimeAsync(10_000);
+    await vi.advanceTimersByTimeAsync(1000);
     expect(calls.length).toBe(1);
     calls[0]!.resolve(WRITTEN);
     await settle();
-    expect(Date.now()).toBe(10_500);
+    expect(Date.now()).toBe(1500);
     await vi.advanceTimersByTimeAsync(499);
     expect(calls.length).toBe(1);
     await vi.advanceTimersByTimeAsync(1);
     expect(calls.map((call) => [call.at, call.envelope])).toEqual([
       [500, empty],
-      [11_000, shapes],
+      [2000, shapes],
     ]);
     expect(maxInFlight()).toBe(1);
+  });
+
+  it('keeps the maximum wait anchored to the first unsaved schedule across a write', async () => {
+    const { store, calls } = double();
+    const autosave = createAutosave({ store, envelope: () => empty });
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(500);
+    // The write started at 500 is in flight; the first unsaved schedule is at 600.
+    await vi.advanceTimersByTimeAsync(100);
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(1800);
+    calls[0]!.resolve(WRITTEN);
+    await settle();
+    expect(Date.now()).toBe(2400);
+    // Under a schedule every 100 ms the next write starts at 600 + 2000, not 2400 + 2000.
+    while (calls.length < 2 && Date.now() < 6000) {
+      autosave.schedule();
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    expect(calls.map((call) => call.at)).toEqual([500, 2600]);
+  });
+
+  it('starts the next write as soon as the write in flight ends once the maximum wait ran out', async () => {
+    const { store, calls } = double();
+    const autosave = createAutosave({ store, envelope: () => empty });
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.advanceTimersByTimeAsync(100);
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(2400);
+    expect(calls.length).toBe(1);
+    calls[0]!.resolve(WRITTEN);
+    await settle();
+    expect(calls.map((call) => call.at)).toEqual([500, 3000]);
+    calls[1]!.resolve(WRITTEN);
+    await settle();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(calls.length).toBe(2);
   });
 
   it('flush writes now and clears the timers', async () => {
@@ -280,6 +318,76 @@ describe('M5-A05 autosave failure, dispose and onResult', () => {
     calls[1]!.resolve({ ok: true, written: false });
     await settle();
     expect(results).toEqual([WRITTEN, { ok: true, written: false }]);
+  });
+
+  it('keeps the change unsaved when envelope() throws, and a later flush writes it', async () => {
+    const { store, calls } = double();
+    const results: WriteResult[] = [];
+    let throwing = true;
+    const autosave = createAutosave({
+      store,
+      envelope: () => {
+        if (throwing) {
+          throwing = false;
+          throw new Error('envelope unavailable');
+        }
+        return shapes;
+      },
+      onResult: (result) => results.push(result),
+    });
+    autosave.schedule();
+    await vi.advanceTimersByTimeAsync(500);
+    expect([calls.length, results]).toEqual([0, [FAILED]]);
+    const flushed = autosave.flush();
+    expect(calls.length).toBe(1);
+    expect(calls[0]!.envelope).toBe(shapes);
+    calls[0]!.resolve(WRITTEN);
+    await flushed;
+    expect(results).toEqual([FAILED, WRITTEN]);
+  });
+
+  it('reports a rejected store write and a throwing onResult without an unhandled rejection', async () => {
+    const unhandled: unknown[] = [];
+    const listener = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', listener);
+    try {
+      let rejecting = true;
+      const writes: PersistenceEnvelope[] = [];
+      const store: DocumentStore = {
+        ...double().store,
+        write: (value) => {
+          writes.push(value);
+          if (rejecting) {
+            rejecting = false;
+            return Promise.reject(new Error('store broke'));
+          }
+          return Promise.resolve(WRITTEN);
+        },
+      };
+      const results: WriteResult[] = [];
+      const autosave = createAutosave({
+        store,
+        envelope: () => empty,
+        onResult: (result) => {
+          results.push(result);
+          throw new Error('listener broke');
+        },
+      });
+      autosave.schedule();
+      await vi.advanceTimersByTimeAsync(500);
+      expect(results).toEqual([FAILED]);
+      await autosave.flush();
+      expect([writes.length, results]).toEqual([2, [FAILED, WRITTEN]]);
+      await autosave.flush();
+      expect(writes.length).toBe(2);
+      // Let any stray rejection reach the process.
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', listener);
+    }
   });
 
   it('dispose clears the timers and ignores later calls', async () => {

@@ -156,7 +156,14 @@ function createStore(database: IDBDatabase, key: string): DocumentStore {
 
     write(envelope: PersistenceEnvelope): Promise<WriteResult> {
       if (closed) return Promise.resolve(fail('persistence.unavailable'));
-      const text = serializeEnvelope(envelope);
+      let text: string;
+      try {
+        text = serializeEnvelope(envelope);
+      } catch {
+        // A value the serializer cannot write fails like a write, without a transaction.
+        lastText = null;
+        return Promise.resolve(fail('persistence.write-failed'));
+      }
       if (pending === 0 && lastText !== null && text === lastText) {
         return Promise.resolve({ ok: true, written: false });
       }

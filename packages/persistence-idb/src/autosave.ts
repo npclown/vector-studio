@@ -41,12 +41,19 @@ export function createAutosave(options: AutosaveOptions): Autosave {
   const timers = options.timers ?? globalTimers;
 
   let disposed = false;
-  let dirty = false;
-  // A `schedule()` arrived while a write was in flight: its timers start after that write.
+  // Each `schedule()` is one change; the store is dirty while a change is not yet saved. A
+  // change is saved only when a write that started after it succeeds.
+  let changes = 0;
+  let saved = 0;
+  const isDirty = (): boolean => changes !== saved;
+  // A `schedule()` arrived while a write was in flight: its trailing timer starts after that
+  // write, while its maximum wait already runs from that first unsaved `schedule()`.
   let scheduledDuringWrite = false;
+  // The maximum wait ran out during a write: the next write starts as soon as that one ends.
+  let dueAfterWrite = false;
   let trailing: { handle: unknown } | null = null;
   let maxWait: { handle: unknown } | null = null;
-  // Resolves true when the write succeeded.
+  // Resolves true when the write succeeded; it never rejects.
   let inFlight: Promise<boolean> | null = null;
 
   const clearTimers = (): void => {
@@ -56,48 +63,87 @@ export function createAutosave(options: AutosaveOptions): Autosave {
     maxWait = null;
   };
 
-  const startTimers = (): void => {
+  const startTrailing = (): void => {
     if (trailing !== null) timers.clear(trailing.handle);
     trailing = { handle: timers.set(fire, delayMs) };
-    // The maximum wait counts from the first unsaved `schedule()`.
+  };
+
+  // The maximum wait counts from the first unsaved `schedule()`, so it starts only then.
+  const startMaxWait = (): void => {
     if (maxWait === null) maxWait = { handle: timers.set(fire, maxWaitMs) };
   };
 
   function fire(): void {
+    if (disposed) return;
+    if (inFlight !== null) {
+      // Only the maximum wait runs during a write.
+      if (maxWait !== null) timers.clear(maxWait.handle);
+      maxWait = null;
+      dueAfterWrite = true;
+      return;
+    }
     clearTimers();
-    if (disposed || inFlight !== null || !dirty) return;
-    void startWrite();
+    if (isDirty()) void startWrite();
+  }
+
+  const FAILED: WriteResult = { ok: false, code: 'persistence.write-failed', path: '' };
+
+  async function attempt(upTo: number): Promise<boolean> {
+    let result: WriteResult;
+    try {
+      // The envelope is read when the write starts, never when it was scheduled.
+      result = await store.write(envelope());
+    } catch {
+      result = FAILED;
+    }
+    if (result.ok) saved = upTo;
+    try {
+      onResult?.(result);
+    } catch {
+      // A throwing listener does not change the result or the scheduler.
+    }
+    return result.ok;
+  }
+
+  function afterWrite(): void {
+    inFlight = null;
+    const due = dueAfterWrite;
+    const pending = scheduledDuringWrite;
+    dueAfterWrite = false;
+    scheduledDuringWrite = false;
+    if (disposed || !isDirty()) {
+      if (!isDirty()) clearTimers();
+      return;
+    }
+    if (due) {
+      void startWrite();
+      return;
+    }
+    if (pending) startTrailing();
   }
 
   function startWrite(): Promise<boolean> {
     clearTimers();
-    dirty = false;
-    // The envelope is read when the write starts, never when it was scheduled.
-    const write = store.write(envelope());
-    const running = write.then((result) => {
-      if (!result.ok) dirty = true;
-      onResult?.(result);
-      return result.ok;
+    dueAfterWrite = false;
+    scheduledDuringWrite = false;
+    const running = attempt(changes).then((ok) => {
+      afterWrite();
+      return ok;
     });
-    inFlight = running.finally(() => {
-      inFlight = null;
-      if (scheduledDuringWrite) {
-        scheduledDuringWrite = false;
-        if (!disposed) startTimers();
-      }
-    });
-    return inFlight;
+    inFlight = running;
+    return running;
   }
 
   return {
     schedule(): void {
       if (disposed) return;
-      dirty = true;
+      changes += 1;
+      startMaxWait();
       if (inFlight !== null) {
         scheduledDuringWrite = true;
         return;
       }
-      startTimers();
+      startTrailing();
     },
 
     async flush(): Promise<void> {
@@ -107,8 +153,7 @@ export function createAutosave(options: AutosaveOptions): Autosave {
           if (!(await inFlight)) return;
           continue;
         }
-        if (disposed || !dirty) return;
-        scheduledDuringWrite = false;
+        if (disposed || !isDirty()) return;
         if (!(await startWrite())) return;
       }
     },
