@@ -60,6 +60,7 @@ export default defineConfig({
         e10TestHooks: `${import.meta.dirname}/e10-test-hooks.html`,
         vizV4A08Corpus: `${import.meta.dirname}/viz-v4-a08-corpus.html`,
         p4ClipMask: `${import.meta.dirname}/p4-clip-mask.html`,
+        e23GradientPaint: `${import.meta.dirname}/e23-gradient-paint.html`,
       },
     },
   },
