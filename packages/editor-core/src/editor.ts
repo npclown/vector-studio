@@ -193,6 +193,9 @@ const DOCUMENT_COMMANDS = new Set([
   'groupNodes',
   'ungroupNodes',
   'moveNodes',
+  'createSymbol',
+  'createInstance',
+  'detachInstances',
   'addPage',
   'removePage',
   'renamePage',
@@ -265,6 +268,9 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.too-few-anchors',
   'editor.empty-path',
   'editor.no-path-edit',
+  'editor.not-a-symbol',
+  'editor.not-an-instance',
+  'editor.nested-symbol',
   'editor.invalid-expansion',
   'editor.expansion-limit',
 ]);
@@ -1036,7 +1042,7 @@ class EditorCore implements Editor {
     if (deep !== null) {
       return { ok: false, code: 'editor.clip-depth', path: nodePath(deep, '/parent') };
     }
-    const expansion = expansionFailure(result.document, this.expansions, false);
+    const expansion = expansionFailure(result.document, this.expansions);
     return expansion === null ? result : { ok: false, code: expansion.code, path: expansion.path! };
   }
 

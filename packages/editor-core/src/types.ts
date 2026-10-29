@@ -243,6 +243,23 @@ export type DocumentCommand =
   | Readonly<{ type: 'groupNodes'; ids: readonly string[]; kind: 'group' | 'maskGroup' }>
   | Readonly<{ type: 'ungroupNodes'; id: string }>
   | Readonly<{ type: 'moveNodes'; ids: readonly string[]; parent: string; index: number }>
+  // Symbol commands (MVP M7 contract, section 5).
+  /**
+   * Makes a source of sibling nodes of the active page: one `frame` becomes a `symbol` in place
+   * (same ID); otherwise a new `symbol` wraps the nodes as `groupNodes` does. Returns its ID.
+   */
+  | Readonly<{ type: 'createSymbol'; ids: readonly string[] }>
+  /**
+   * Creates an instance of `symbol` (a source on any page). `frame` is in page space; by default
+   * the source's size, its top-left the source's page bounds' top-left moved by the bounds width
+   * plus 40 along x. Returns the instance's ID.
+   */
+  | (Readonly<{ type: 'createInstance'; symbol: string; frame?: Frame }> & Placement)
+  /**
+   * Turns instances of the active page into frames with the same IDs, holding copies of their
+   * expansions with fresh IDs (section 5.2). Returns empty `ids`; the selection is unchanged.
+   */
+  | Readonly<{ type: 'detachInstances'; ids: readonly string[] }>
   /**
    * Rotates by `angle` (radians, clockwise) about the page point `pivot`, by default the centre
    * of the `handles` box (MVP M2 contract, section 4.1). A relative command: inside a gesture it
@@ -417,6 +434,9 @@ export type EditorErrorCode =
   | 'editor.empty-path'
   | 'editor.no-path-edit'
   // MVP M7 contract, section 5.5.
+  | 'editor.not-a-symbol'
+  | 'editor.not-an-instance'
+  | 'editor.nested-symbol'
   | 'editor.invalid-expansion'
   | 'editor.expansion-limit';
 
