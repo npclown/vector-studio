@@ -237,12 +237,41 @@ describe('M5-A07 committedDocument during a gesture', () => {
     expect(committed(target)).toBe(before);
     expect(target.query({ type: 'document' })).toBe(before);
 
+    // No hold is left over from the eventless end: a host command is committed at once.
+    ok(target, { type: 'setNodeProps', id: 'b', props: { fill: red } });
+    const recolored = target.query({ type: 'document' });
+    expect(recolored).not.toBe(before);
+    expect(committed(target)).toBe(recolored);
+    expect(recolored.nodes.b).toMatchObject({ fill: red });
+
     pointer(target, 'pointerdown', at(0, 0));
     pointer(target, 'pointermove', at(4, 6));
-    expect(committed(target)).toBe(before);
+    expect(committed(target)).toBe(recolored);
     pointer(target, 'pointerup', at(4, 6));
     expect(committed(target)).toBe(target.query({ type: 'document' }));
     expect(frameOf(committed(target), 'a')).toEqual(f(4, 6, 100, 100));
+    expect(committed(target).nodes.b).toMatchObject({ fill: red });
+  });
+
+  it('a host command right after a replace back to the base ends the gesture: its result', () => {
+    const target = editor();
+    ok(target, { type: 'setTool', tool: 'ext.slide' });
+    const before = target.query({ type: 'document' });
+    pointer(target, 'pointerdown', at(0, 0));
+    pointer(target, 'pointermove', at(8, 9));
+    pointer(target, 'pointermove', at(0, 0));
+    expect(target.query({ type: 'document' })).toBe(before);
+    expect(committed(target)).toBe(before);
+    ok(target, { type: 'setNodeProps', id: 'b', props: { fill: red } });
+    const after = target.query({ type: 'document' });
+    expect(after).not.toBe(before);
+    expect(committed(target)).toBe(after);
+    expect(frameOf(after, 'a')).toEqual(f(0, 0, 100, 100));
+    expect(after.nodes.b).toMatchObject({ fill: red });
+    // The gesture is over: a later move changes nothing.
+    pointer(target, 'pointermove', at(20, 0));
+    expect(target.query({ type: 'document' })).toBe(after);
+    expect(committed(target)).toBe(after);
   });
 
   it('a host command that cancels the drag: the command result on the pre-gesture document', () => {
@@ -273,6 +302,124 @@ describe('M5-A07 committedDocument during a gesture', () => {
     ok(target, { type: 'setTool', tool: 'rectangle' });
     expect(target.query({ type: 'document' })).toBe(before);
     expect(committed(target)).toBe(before);
+  });
+});
+
+describe('M5-A07 committedDocument when other commands end or skip a drag', () => {
+  /** An editor with `a` dragged by (30, 40); returns the pre-gesture document. */
+  function dragging(target: Editor): DocumentV2 {
+    const before = target.query({ type: 'document' });
+    pointer(target, 'pointerdown', at(50, 50));
+    pointer(target, 'pointermove', at(80, 90));
+    expect(frameOf(target.query({ type: 'document' }), 'a')).toEqual(f(30, 40, 100, 100));
+    expect(committed(target)).toBe(before);
+    return before;
+  }
+
+  it('undo during a drag ends it: the undone document', () => {
+    const target = editor();
+    ok(target, { type: 'setNodeProps', id: 'b', props: { fill: red } });
+    dragging(target);
+    ok(target, { type: 'undo' });
+    expect(committed(target)).toBe(target.query({ type: 'document' }));
+    expect(serializeDocument(committed(target))).toBe(ORIGIN);
+    expect(target.query({ type: 'history' })).toEqual({ undoDepth: 0, redoDepth: 1 });
+    pointer(target, 'pointermove', at(120, 90));
+    expect(serializeDocument(committed(target))).toBe(ORIGIN);
+  });
+
+  it('loadDocument during a drag ends it: the loaded document', () => {
+    const target = editor();
+    dragging(target);
+    const loaded = {
+      ...FIXTURE,
+      pages: [{ id: 'p1', name: 'p1', children: ['b'] }],
+      nodes: { b: rect('b', f(1, 2, 3, 4)) },
+    };
+    ok(target, { type: 'loadDocument', document: loaded });
+    expect(committed(target)).toBe(target.query({ type: 'document' }));
+    expect(committed(target).pages).toEqual([{ id: 'p1', name: 'p1', children: ['b'] }]);
+    expect(frameOf(committed(target), 'b')).toEqual(f(1, 2, 3, 4));
+    expect(Object.keys(committed(target).nodes)).toEqual(['b']);
+    expect(isDeepFrozen(committed(target))).toBe(true);
+  });
+
+  it('cut during a drag ends it: the cut applied to the pre-gesture document', () => {
+    const target = editor();
+    const before = dragging(target);
+    ok(target, { type: 'cut', ids: ['b'] });
+    const after = target.query({ type: 'document' });
+    expect(after).not.toBe(before);
+    expect(committed(target)).toBe(after);
+    expect(Object.keys(after.nodes)).toEqual(['a']);
+    expect(frameOf(after, 'a')).toEqual(f(0, 0, 100, 100));
+    expect(after.pages[0]!.children).toEqual(['a']);
+  });
+
+  it('a host command that fails during a drag leaves it going: still the pre-gesture document', () => {
+    const target = editor();
+    const before = dragging(target);
+    const failed = target.execute({ type: 'setNodeProps', id: 'zz', props: { fill: red } });
+    expect(failed.ok).toBe(false);
+    expect(target.execute({ type: 'undo' })).toEqual({
+      ok: false,
+      code: 'editor.nothing-to-undo',
+    });
+    expect(committed(target)).toBe(before);
+    pointer(target, 'pointermove', at(60, 60));
+    expect(frameOf(target.query({ type: 'document' }), 'a')).toEqual(f(10, 10, 100, 100));
+    expect(committed(target)).toBe(before);
+    pointer(target, 'pointerup', at(60, 60));
+    expect(committed(target)).toBe(target.query({ type: 'document' }));
+    expect(frameOf(committed(target), 'a')).toEqual(f(10, 10, 100, 100));
+  });
+
+  it('an anchor drag in path edit mode: the pre-gesture document, then the committed one', () => {
+    // The triangle `t` (0, 0), (1, 0), (1, 1) in the frame (100, 100, 100, 100); anchor 1 at
+    // page (200, 100) is dragged by (10, 20).
+    const triangle = {
+      ...rect('t', f(100, 100, 100, 100)),
+      type: 'path',
+      path: {
+        verbs: ['move', 'line', 'line', 'close'],
+        points: [0, 0, 1, 0, 1, 1],
+        fillRule: 'nonzero',
+      },
+    } as Record<string, unknown>;
+    delete triangle.cornerRadii;
+    const document = {
+      ...FIXTURE,
+      pages: [{ id: 'p1', name: 'p1', children: ['t'] }],
+      nodes: { t: triangle },
+    };
+    const create = () => {
+      const target = createEditor({ ids: createCounterIdSource('n'), document });
+      ok(target, { type: 'setSnapping', enabled: false });
+      ok(target, { type: 'enterPathEdit', id: 't' });
+      return target;
+    };
+    const twin = create();
+    ok(twin, {
+      type: 'movePathAnchors',
+      id: 't',
+      anchors: [{ subpath: 0, anchor: 1 }],
+      dx: 10,
+      dy: 20,
+    });
+    const target = create();
+    const before = target.query({ type: 'document' });
+    pointer(target, 'pointerdown', at(200, 100));
+    pointer(target, 'pointermove', at(205, 110));
+    pointer(target, 'pointermove', at(210, 120));
+    expect(target.query({ type: 'document' })).not.toBe(before);
+    expect(committed(target)).toBe(before);
+    expect(serializeDocument(committed(target))).toBe(serializeDocument(before));
+    pointer(target, 'pointerup', at(210, 120));
+    expect(committed(target)).toBe(target.query({ type: 'document' }));
+    expect(serializeDocument(committed(target))).toBe(
+      serializeDocument(twin.query({ type: 'document' })),
+    );
+    expect(target.query({ type: 'history' })).toEqual({ undoDepth: 1, redoDepth: 0 });
   });
 });
 
