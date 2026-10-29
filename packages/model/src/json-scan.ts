@@ -23,12 +23,18 @@ function pathOf(container: Container | null, last?: string | number): (string | 
   return path;
 }
 
+export type ScanOptions = Readonly<{
+  /** Deepest container nesting allowed; defaults to `MAX_DEPTH`. */
+  maxDepth?: number;
+}>;
+
 /**
  * Finds the first key that repeats inside one object of `text`, or the first container nested
- * deeper than `MAX_DEPTH`. `text` must already be valid JSON; the scan only tracks strings and
- * container punctuation.
+ * deeper than `maxDepth` (default `MAX_DEPTH`). `text` must already be valid JSON; the scan only
+ * tracks strings and container punctuation.
  */
-export function scanJson(text: string): ScanFinding | null {
+export function scanJson(text: string, options: ScanOptions = {}): ScanFinding | null {
+  const maxDepth = options.maxDepth ?? MAX_DEPTH;
   let top = null as Container | null;
   let depth = 0;
   let expectKey = false;
@@ -56,7 +62,7 @@ export function scanJson(text: string): ScanFinding | null {
         index: 0,
       };
       depth += 1;
-      if (depth > MAX_DEPTH) return { kind: 'too-deep', path: pathOf(container) };
+      if (depth > maxDepth) return { kind: 'too-deep', path: pathOf(container) };
       top = container;
       expectKey = char === '{';
     } else if (char === '}' || char === ']') {
