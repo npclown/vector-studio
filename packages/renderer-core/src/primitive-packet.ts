@@ -1,5 +1,6 @@
 import type { SceneVersion } from '@vector-studio/contracts';
 import type { ClipStateRecord, MaskBudgetNotice, MaskLevelRecord } from './clip-resolution.js';
+import type { GradientPaintRecord } from './paint-records.js';
 import type { PathMeshNotice } from './path-mesh-pipeline.js';
 
 export type PrimitiveResourceId = 'transforms' | 'geometry' | 'styles' | 'order' | 'frame';
@@ -31,6 +32,28 @@ export type PrimitiveDraw = Readonly<{
   variant: 'analytic-v1';
   /** P4 contract, U2: the 1-based clip state of a clipped run; absent when unclipped. */
   clipState?: number;
+  /**
+   * E23 contract, U2: present only on a run whose primitives have a gradient record (the paint
+   * part's `primitives`); such a run uses the paint pipeline variant.
+   */
+  paint?: 'gradient';
+}>;
+/**
+ * E23 contract, U2: the frame's gradient records, present only when a drawn draw has one.
+ * Record indices are 1-based into `records`; 0 is a solid paint or an out-of-range record
+ * (E23-K8), whose solid lanes are transparent. Plain records; U3 owns the GPU layout.
+ */
+export type PaintPacketPart = Readonly<{
+  layoutVersion: 0;
+  records: readonly GradientPaintRecord[];
+  /** Per primitive slot with a gradient record: its fill and stroke indices. */
+  primitives: readonly Readonly<{ slot: number; fill: number; stroke: number }>[];
+  /** The primitive origin, which primitive records are rebased to. */
+  origin: Readonly<{ x: number; y: number }>;
+  /** The mesh origin O_m, which mesh records are rebased to. */
+  meshOrigin: Readonly<{ x: number; y: number }>;
+  /** Records built this frame (values changed); a camera change builds none. */
+  builds: number;
 }>;
 /**
  * P4 contract, U4: a mask level of the clip part. A mesh source carries its packed fill draw in
@@ -93,6 +116,17 @@ export type MeshFillDraw = Readonly<{
   composite?: 'joint-fill';
   /** P4 contract, U2: the 1-based clip state of a clipped draw; absent when unclipped. */
   clipState?: number;
+  /**
+   * E23 contract, U2: the 1-based paint-part record of this draw's paint (the fill for a fill
+   * or joint fill draw, the stroke for a stroke draw); absent for a solid paint.
+   */
+  gradient?: number;
+  /**
+   * E23 contract, U2: on a joint fill draw only, the record of the stroke paint it reads for
+   * a_S (E23-K4); absent when the stroke is solid. A joint fill draw with either field uses the
+   * paint variant.
+   */
+  strokeGradient?: number;
 }>;
 export type MeshResource = Readonly<{
   id: MeshResourceId;
@@ -146,6 +180,8 @@ export type PrimitivePacket = Readonly<{
   mesh?: MeshPacketPart;
   /** Absent for every unclipped frame (P4 contract, U2). */
   clip?: ClipPacketPart;
+  /** Absent for every frame without a drawn gradient record (E23 contract, U2). */
+  paint?: PaintPacketPart;
   /**
    * P4 contract, U4 and section 5: mask levels newly over the mask texture budget, at most 32;
    * absent when none. Emitted as `render.clip-resource-limit`.
