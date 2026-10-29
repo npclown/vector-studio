@@ -219,7 +219,7 @@ Written 2026-10-29: [ADR 0003](../decisions/0003-browser-text-and-glyph-atlas.md
 | Plan | APPROVED 2026-10-29: review round 1 NOT READY, applied; round 2 READY WITH FOLLOW-UPS, applied; user-level questions adopted as (a), 추천안 자동 채택 2026-10-29 (section 14) |
 | M6-S0 | In progress: automated runs recorded on the main PC 2026-10-29 ([record](../evidence/m6-s0/main-pc-2026-10-29.md)); IME recordings pending |
 | M6-ADR | Accepted 2026-10-29, 추천안 자동 채택 ([ADR 0003](../decisions/0003-browser-text-and-glyph-atlas.md)); review READY WITH FOLLOW-UPS, applied |
-| M6a | Not started |
+| M6a | Contract DRAFT 2026-10-29, review r1 NOT READY applied ([M6a contract](mvp-m6a-text-model-contract.md)) |
 | R-T | Not filed |
 | M6b | Not started |
 | M6c | Not started |
