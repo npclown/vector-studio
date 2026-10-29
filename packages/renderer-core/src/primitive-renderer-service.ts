@@ -181,6 +181,14 @@ export class PrimitiveRendererService
   }
 
   /**
+   * @internal Tests only (E24-A04): dash expansions of the path-mesh pipeline so far, 0 without
+   * a port. It is not part of PathMeshStatistics.
+   */
+  public getDashExpansionCountForTesting(): number {
+    return this.#source.getDashExpansionCountForTesting();
+  }
+
+  /**
    * @internal Tests only (P4 contract, P4-A06): clip-state records written so far, counting a
    * record only when its index slot changed content against the previous frame.
    */

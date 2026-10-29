@@ -298,7 +298,8 @@ describe('E24-A02 dash geometry (stroke-dash.ts)', () => {
     checkCubic(near as unknown as Cubic, dash([7, 3]), [0.375]);
     // A cusp at t = 0.3, not dyadic: its cell refines to depth 24.
     checkCubic(cuspCubic(0.3, [500, -150], [100, 700]), dash([11, 4, 0, 4]), [0.3]);
-  });
+    // The arc-length reference is slow (about 2 s here, over 5 s on loaded CI runners).
+  }, 30_000);
 
   it('K3: cubic dashes keep the source endpoints and split by de Casteljau', () => {
     const c: Cubic = [0, 0, 100, 100, 200, -100, 300, 0];
@@ -366,7 +367,7 @@ describe('E24-A02 dash geometry (stroke-dash.ts)', () => {
   it('K7: a cubic with a non-zero phase meets the cubic bound', () => {
     checkCubic([0, 0, 100, 100, 200, -100, 300, 0], dash([30, 20], 20));
     checkCubic(cuspCubic(0.3, [500, -150], [100, 700]), dash([11, 4], -7.25), [0.3]);
-  });
+  }, 30_000);
 
   it('K7: equal inputs give bit-identical output', () => {
     const c = [0, 0, 100, 100, 200, -100, 300, 0];
