@@ -14,7 +14,9 @@ import type { WebGpuCanvasContextPort } from '../../packages/renderer-webgpu/src
 
 export type Call = readonly [string, ...unknown[]];
 
-export function nativeFixture(options: Readonly<{ failPipeline?: string }> = {}) {
+export function nativeFixture(
+  options: Readonly<{ failPipeline?: string; failTexture?: string }> = {},
+) {
   const calls: Call[] = [];
   const pipelineLabels: string[] = [];
   const descriptors: GPURenderPipelineDescriptor[] = [];
@@ -29,6 +31,17 @@ export function nativeFixture(options: Readonly<{ failPipeline?: string }> = {})
     usage: number;
   }[] = [];
   const destroyed: string[] = [];
+  /** E28 U3: `queue.writeTexture` calls, in order. */
+  const textureWrites: {
+    label: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    bytesPerRow: number;
+    bytes: Uint8Array;
+  }[] = [];
+  const samplers: GPUSamplerDescriptor[] = [];
   const device = {
     limits: {
       minStorageBufferOffsetAlignment: 256,
@@ -55,6 +68,10 @@ export function nativeFixture(options: Readonly<{ failPipeline?: string }> = {})
       groups: [...descriptor.bindGroupLayouts],
     })),
     createBindGroup: vi.fn((descriptor: GPUBindGroupDescriptor) => ({ label: descriptor.label })),
+    createSampler: vi.fn((descriptor: GPUSamplerDescriptor) => {
+      samplers.push(descriptor);
+      return { label: descriptor.label };
+    }),
     createShaderModule: vi.fn((descriptor: GPUShaderModuleDescriptor) => {
       modules.push(descriptor.code);
       return { label: descriptor.label };
@@ -70,6 +87,9 @@ export function nativeFixture(options: Readonly<{ failPipeline?: string }> = {})
     }),
     createTexture: vi.fn((descriptor: GPUTextureDescriptor) => {
       const label = descriptor.label ?? '';
+      if (options.failTexture !== undefined && label.includes(options.failTexture)) {
+        throw new Error('injected texture failure');
+      }
       const { width, height } = descriptor.size as GPUExtent3DDict;
       textures.push({
         label,
@@ -133,6 +153,23 @@ export function nativeFixture(options: Readonly<{ failPipeline?: string }> = {})
       writeBuffer: vi.fn((buffer: { label: string }, offset: number, bytes: Uint8Array) =>
         writes.push({ label: buffer.label, offset, bytes: bytes.byteLength }),
       ),
+      writeTexture: vi.fn(
+        (
+          destination: { texture: { label: string }; origin: { x: number; y: number } },
+          data: Uint8Array,
+          layout: { bytesPerRow: number },
+          size: { width: number; height: number },
+        ) =>
+          textureWrites.push({
+            label: destination.texture.label,
+            x: destination.origin.x,
+            y: destination.origin.y,
+            width: size.width,
+            height: size.height,
+            bytesPerRow: layout.bytesPerRow,
+            bytes: data,
+          }),
+      ),
       submit: vi.fn(),
       onSubmittedWorkDone: vi.fn(() => new Promise<void>(() => {})),
     },
@@ -152,6 +189,8 @@ export function nativeFixture(options: Readonly<{ failPipeline?: string }> = {})
     writes,
     textures,
     destroyed,
+    textureWrites,
+    samplers,
   };
 }
 
@@ -162,6 +201,7 @@ export async function nativeScene(
     clipPipeline?: boolean;
     paintPipeline?: boolean;
     layerPipeline?: boolean;
+    textPipeline?: boolean;
     layerTileSizeForTesting?: number;
     sampleCount?: 1 | 4;
   }> = {

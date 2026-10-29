@@ -1,4 +1,5 @@
 import type {
+  GlyphRasterRequest,
   RenderCamera,
   RenderNodeSnapshot,
   RendererDiagnostic,
@@ -18,7 +19,7 @@ import {
   type PrimitiveFrameSource,
   type PrimitivePacket,
 } from '@vector-studio/renderer-core';
-import { WebGpuBackend } from '@vector-studio/renderer-webgpu';
+import { WebGpuBackend, createCanvasGlyphRaster } from '@vector-studio/renderer-webgpu';
 
 // E23 contract, unit U4 (docs/plans/d9-e23-gradient-paint-contract.md, section 6): the headed
 // check page of gradient paints. Like the P4 page it hosts the real fill-mesh and stroke-mesh
@@ -29,6 +30,8 @@ import { WebGpuBackend } from '@vector-studio/renderer-webgpu';
 // E25 contract, unit U4: `groups=isolated` sets the service's `groups` option, `isolate=1` its
 // `isolateUnitOpacityForTesting` hook and `tile=N` the backend's `layerTileSizeForTesting`;
 // tests/gpu/e25-isolated-opacity.spec.ts uses them. Without them the page is as before.
+// E28 contract, unit U3: `text=atlas` sets the service's `text` option with the canvas raster
+// port, whose bitmaps `rasterize` returns; docs/evidence/e28/u3-swiftshader-captures.mjs uses it.
 
 /** Served by the playground's Vite config from the local kernel build; see vite.config.mjs. */
 const WASM_URL = '/__vector-studio/geometry-kernel.wasm';
@@ -38,6 +41,8 @@ const samples = parameters.get('samples') === '1' ? 1 : 4;
 const groups = parameters.get('groups') === 'isolated' ? 'isolated' : 'flat';
 const isolateUnit = parameters.get('isolate') === '1';
 const tileParameter = parameters.get('tile');
+const text = parameters.get('text') === 'atlas' ? 'atlas' : 'none';
+const glyphRaster = createCanvasGlyphRaster();
 const dpr = Number(parameters.get('dpr') ?? '1');
 /** CSS size of the canvas at load (the spec uses 512 × 320 at every DPR); `resize` changes it. */
 const CSS_SIZE = Object.freeze({ width: 512, height: 320 });
@@ -72,6 +77,8 @@ export type E23PacketSummary = Readonly<{
     composites: number;
     notices: readonly string[];
   }> | null;
+  /** E28: the text part, null without one. */
+  text: Readonly<{ pageCount: number; draws: number; instances: number }> | null;
 }>;
 
 export type E23Frame = Readonly<{
@@ -94,6 +101,9 @@ export type E23Counters = Readonly<{
   preparation: ReturnType<PrimitiveRendererService['getPreparationStatistics']>;
   /** E25: layer passes of the current generation so far, one per layer (section 4, Lifetime). */
   layerPasses: number;
+  /** E28: glyph raster port calls and bitmaps uploaded by acknowledged packets. */
+  glyphRasterCalls: number;
+  glyphUploads: number;
 }>;
 
 declare global {
@@ -138,6 +148,14 @@ function summarize(packet: PrimitivePacket): E23PacketSummary {
             })),
             composites: packet.layers.composites.length,
             notices: packet.layers.notices.map((notice) => notice.nodeId),
+          },
+    text:
+      packet.text === undefined
+        ? null
+        : {
+            pageCount: packet.text.pageCount,
+            draws: packet.text.draws.length,
+            instances: packet.text.instances.length / 16,
           },
   };
 }
@@ -197,6 +215,7 @@ async function start() {
     paints: 'gradient',
     groups,
     ...(isolateUnit ? { isolateUnitOpacityForTesting: true } : {}),
+    ...(text === 'atlas' ? { text, glyphRaster } : {}),
   });
   service = product;
   const source: PrimitiveFrameSource = {
@@ -204,6 +223,7 @@ async function start() {
     requiresClipPipeline: product.requiresClipPipeline,
     requiresPaintPipeline: product.requiresPaintPipeline,
     requiresLayerPipeline: product.requiresLayerPipeline,
+    requiresTextPipeline: product.requiresTextPipeline,
     prepare(target) {
       const packet = product.prepare(target);
       if (packet !== null) lastPacket = summarize(packet);
@@ -231,6 +251,7 @@ async function start() {
     groups,
     isolateUnit,
     tile: tileParameter === null ? null : Number(tileParameter),
+    text,
   };
 }
 
@@ -263,6 +284,8 @@ function counters(): E23Counters {
     dashExpansions: service!.getDashExpansionCountForTesting(),
     preparation: service!.getPreparationStatistics(),
     layerPasses: backend.getLayerPassesForTesting(),
+    glyphRasterCalls: service!.getGlyphRasterCallsForTesting(),
+    glyphUploads: service!.getGlyphUploadsForTesting(),
   };
 }
 
@@ -355,6 +378,11 @@ const api = {
     }
     const frame = await capture();
     return { frame, counters: counters() };
+  },
+  /** E28 U3: the canvas port's bitmap for a request, the coverage as base64. */
+  rasterize(request: GlyphRasterRequest) {
+    const result = glyphRaster.rasterize(request);
+    return result.status === 'ok' ? { ...result, coverage: base64(result.coverage) } : result;
   },
   counters() {
     return counters();

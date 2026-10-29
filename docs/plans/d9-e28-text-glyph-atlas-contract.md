@@ -279,6 +279,38 @@ U2 (2026-10-29):
 - Observation for U3: a `not-ready` result writes nothing, yet the plan drops the pages of the replaced packet as section 4 asks. U3 may let the backend report that it wrote nothing.
 - Tests: `tests/unit/e28-u2-atlas-plan.test.ts` (E28-A02; unit parts of A04, A06 and A08), and the updated `tests/unit/e25-u2-layer-plan.test.ts` and `tests/unit/e25-u3-layer-passes.test.ts`.
 
+U3 (2026-10-29):
+
+- `renderer-webgpu`:
+  - `text-pipeline.ts`: the text module (`e28-text-v0`), its `+clip-v0`, `+layer-v0` and combined variants, keys, the group 0 layout, the sampler descriptor and the pipeline descriptor;
+  - `canvas-glyph-raster.ts`: `createCanvasGlyphRaster()` as section 2 states, exported from the package;
+  - the native scene: the text pipelines and sampler at creation, atlas pages, clears and uploads, the text buffer, the receipt's `text` part, text draws in the main pass and in layer passes, and release;
+  - the backend: the `textPipeline` creation option from `requiresTextPipeline`, E28-D1, and E28-D2 and D3 from the packet's notices, emitted as the clip and layer notices are.
+- The E23 headed page gains `text=atlas`, which sets the service's `text` option with the canvas port and exposes the port's bitmaps. U3's SwiftShader script uses it, and U4 may.
+- Refinements recorded here, within section 4:
+  - Each variant has its own module, pipeline layout and pipeline. The clip variants exist when the clip variants do, the layer variants when the layer pipeline does. So `textPipeline` adds one to four modules and as many pipelines, which U3 pins. Creation is all or nothing: any failure leaves text unavailable for the generation (E28-D1, `'pipeline'`).
+  - Group 0's target uniform and the instance records share one text buffer. The uniform is at offset 0 and the records start at the storage offset alignment. The buffer grows by powers of two and is released on a frame without text draws. The uniform is written only when the target size changes.
+  - Pages are created through `#createTrackedTextureWithUsage`, which takes exactly the given usage. The existing helper now calls it with `RENDER_ATTACHMENT` added. A page whose size differs from the packet's `pageSize` is recreated, which changes its incarnation.
+  - Without the text pipeline, or once a page could not be created, the scene writes and draws no text for the rest of its generation. It releases its pages, and its receipts name stable placeholder incarnations per page index. The plan then settles instead of re-rasterizing every frame. A page allocation failure is E28-D1 with `'page-allocation'`. E28-D1 is reported once per renderer generation, for whichever reason comes first.
+  - The text buffer fails the same way. If it cannot be created or tracked, or the instance records exceed `maxStorageBufferBindingSize` or `maxBufferSize`, the frame still submits without text, and E28-D1 is reported with `'page-allocation'`. A limit never fails the frame with `allocation-failed`.
+  - A clear is written in bands of whole rows from one 64 KiB zero array, so no page-sized array is allocated.
+  - The canvas port remembers that it has no 2D context and does not ask again. A cluster whose measured box has no width or no height is `empty`, so it takes no atlas space.
+  - A text draw in the main pass binds its pipeline, group 0 for its page and, when clipped, the clip group. In a layer pass it also binds the empty group, or the clip group, at 1 and the empty group at 2. A clipped text draw without the clip variant, or a layer text draw without the layer variant, is not drawn (fail closed).
+- Not adopted: the U2 observation about `not-ready`. A `not-ready` or `stale-generation` result writes nothing, and the plan still drops the replaced packet's pages, as section 4 asks. That happens only before the first target or after dispose, so the extra rasters are rare.
+- Tests: `tests/unit/e28-u3-text-pipeline.test.ts`. It covers the unit part of E28-A05 and the hash, key and count part of A07. It also covers the gaps carried from U2:
+  - fallback tie-breaking with the entry's phase kept;
+  - snapped placement at negative coordinates;
+  - an incarnation change on a page with this frame's uploads;
+  - a packet replaced after an eviction;
+  - text, mesh draws and composites ordered in a layer;
+  - positive backend tests for text slots;
+  - no path port call for text.
+  
+  The fake raster port and text nodes moved to `tests/support/e28-text-harness.ts`. The fake device gains `createSampler`, `queue.writeTexture` and texture-failure injection.
+- Evidence: [u3-swiftshader.md](../evidence/e28/u3-swiftshader.md), the A07 capture part and a snapped-text check on SwiftShader. The check is exact against the port's own bitmaps, and all four variants are identical.
+- Known limit, disclosed: WebGPU's `createTexture` does not throw on out-of-memory. It returns a texture and reports the error asynchronously, so the fake device's thrown failure covers only synchronous failures. U4 checks a real page allocation with an error scope on the reference PC.
+- Left to U4: partial clips over text, text under group opacity, and bilinear general text against the oracle (T3 and T5). U3's SwiftShader check covers only snapped text, clips that do not cut glyphs, layers at opacity 1, and that rotated text draws ink.
+
 ## 8. Risks
 
 - **Main-thread cost.** Rasterization runs on the main thread and competes with M9's pointer priority. E28's raster budget bounds it per frame (`E28_RASTER_PER_FRAME`), which U4 measures; a zoom gesture over much text draws scaled fallbacks for a few frames.
