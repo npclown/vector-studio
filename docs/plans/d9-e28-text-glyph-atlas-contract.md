@@ -1,6 +1,6 @@
 # E28 contract: text through a browser-rasterized glyph atlas
 
-Status: APPROVED 2026-10-29 after independent review round 2 (recommended options auto-adopted, section 10), Full tier. It touches shared surface:
+Status: DONE 2026-10-29 ([evidence index](../evidence/e28/README.md), U5); APPROVED 2026-10-29 after independent review round 2 (recommended options auto-adopted, section 10), Full tier. It touches shared surface:
 
 - a new `text` kind in `RenderNodeSnapshot` (`packages/contracts/src/scene.ts`);
 - a new `GlyphRasterPort` in `packages/contracts`;
@@ -125,7 +125,7 @@ Notation follows P1 D2: a leaf's premultiplied contribution `P` blends source-ov
   So step 3 applies only when every entry in the atlas is drawn exactly by the frame, which is section 5's "this frame's clusters alone exceed the atlas"; a deferral whose fallback is drawn is then omitted only because that fallback is itself an exact entry of the frame. Each compaction frees one page with stale entries, so for an unchanging scene a fragmented atlas needs at most one compaction per page. A scene that changes while compacting can make new stale entries and start further compactions.
 
   The cost is disclosed. While a compaction is pending, the misses it defers draw only their fallback. In the compacting frame, the clusters that were drawn from the evicted page are rasterized again. Those beyond the raster budget draw only their fallback, so text that was visible can disappear for a frame or more. A deferred cluster whose fallback was on the evicted page also draws nothing until it is rasterized, for example after a zoom on a full atlas. U4's T8 shows this on a one-page atlas, including a subpixel move of its text.
-- **Raster budget (E28-Q6 (a), lowered by U4).** At most `E28_RASTER_PER_FRAME = 64` port calls per prepared frame. **U4 amendment (2026-10-29):** the figure was 256; on the reference PC a frame of 256 distinct calls took 19.4 to 27.9 ms (section 7, U4 record), over a 60 Hz frame, so it is lowered to 64. Criterion: the budget takes at most about half of a 60 Hz frame at the worst measured rate (0.11 ms per call at T1's sizes, so 64 calls are about 7 ms; 128 would be about 14 ms). The budget counts calls, not pixels, so 64 calls at large sizes can cost more; U5 or M9 times a 64-call frame on hardware. A cluster still missing an entry after that:
+- **Raster budget (E28-Q6 (a), lowered by U4).** At most `E28_RASTER_PER_FRAME = 64` port calls per prepared frame. **U4 amendment (2026-10-29):** the figure was 256; on the reference PC a frame of 256 distinct calls took 19.4 to 27.9 ms (section 7, U4 record), over a 60 Hz frame, so it is lowered to 64. Criterion: the budget takes at most about half of a 60 Hz frame at the worst measured rate (0.11 ms per call at T1's sizes, so 64 calls are about 7 ms; 128 would be about 14 ms). The budget counts calls, not pixels, so 64 calls at large sizes can cost more; U5 did not time a 64-call frame on hardware; M9, or the next reference-PC run of the E28 spec, does. A cluster still missing an entry after that:
   1. draws from an entry whose key differs only in bucket and phase, the nearest bucket to `b` (the smaller on a tie, then phase 0), by the general path scaled to `s`, if one exists;
   2. otherwise does not draw this frame.
 
@@ -358,9 +358,11 @@ U4 amendment, raster budget (2026-10-29):
 - Review R1 NOT READY: T8's over-limit steps assumed 256 and the cost note claimed fallbacks for new text; both fixed as stated here, with the unit tests now checking the per-frame budget after a compaction and one invalidation per deferring frame after a zoom.
 - T8's over-limit steps show the scene until E28-D2 appears (bounded by the frames the budget needs plus 3), then check it is not repeated, instead of a fixed frame count.
 
+U5 (2026-10-29): the evidence index [../evidence/e28/README.md](../evidence/e28/README.md) records E28-A01 to A08 as PASS: the unit criteria in CI, A07's captures on SwiftShader, and the headed spec and the full `pnpm test:gpu` on the reference PC at the tree of #370. That run predates #378, so the budget of 64 is checked by unit tests and a SwiftShader re-run only, and its hardware cost (about 7 ms) is extrapolated from the 256-call figure; timing a 64-call frame passes to M9 or the next reference-PC run. Review: READY WITH FOLLOW-UPS, all applied.
+
 ## 8. Risks
 
-- **Main-thread cost.** Rasterization runs on the main thread and competes with M9's pointer priority. E28's raster budget bounds it per frame (`E28_RASTER_PER_FRAME`, 64 after U4's measurement, about 7 ms on the reference PC). New or regenerated text past the budget is blank until its frame comes (up to about 16 frames for 1,000 visible clusters after a font-load generation bump); a zoom gesture over much text draws scaled fallbacks for a few frames.
+- **Main-thread cost.** Rasterization runs on the main thread and competes with M9's pointer priority. E28's raster budget bounds it per frame (`E28_RASTER_PER_FRAME`, 64 after U4's measurement, about 7 ms on the reference PC by extrapolation). New or regenerated text past the budget is blank until its frame comes (up to about 16 frames for 1,000 visible clusters after a font-load generation bump); a zoom gesture over much text draws scaled fallbacks for a few frames.
 - **Browser raster changes.** Canvas text rasterization follows Chrome and Edge and can change with updates. E28's oracle uses the same browser's bitmaps, so it is not affected; M6c's DOM agreement is.
 - **Grayscale coverage.** The atlas holds grayscale coverage, so text may look lighter than ClearType DOM text (ADR 0003).
 - **Snapped bucket error.** Drawing an unscaled bucket changes size by up to half a step, and rounding the baseline moves a glyph by up to 0.5 px vertically. M6c measures whether this explains M6-S0's 1.0 px offset, with U4's hook.
