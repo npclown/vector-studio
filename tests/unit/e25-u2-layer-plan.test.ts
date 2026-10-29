@@ -3,6 +3,7 @@ import type {
   SceneAffine,
   SceneClip,
   SceneColor,
+  SceneGradient,
 } from '@vector-studio/contracts';
 import { DIAGNOSTIC_CODES } from '@vector-studio/contracts';
 import { describe, expect, it } from 'vitest';
@@ -41,6 +42,15 @@ const target: PrimitiveTarget = {
 const UHD: PrimitiveTarget = { ...target, width: 3840, height: 2160, sampleCount: 4 };
 const IDENTITY: SceneAffine = [1, 0, 0, 1, 0, 0];
 const red: SceneColor = { r: 1, g: 0, b: 0, a: 1 };
+const G1: SceneGradient = {
+  kind: 'linear',
+  transform: [200, 0, 0, 200, 50, 0],
+  stops: [
+    { offset: 0, color: red },
+    { offset: 1, color: { r: 0, g: 0, b: 1, a: 1 } },
+  ],
+  spread: 'pad',
+};
 
 function group(
   id: string,
@@ -87,6 +97,7 @@ function setup(nodes: readonly RenderNodeSnapshot[], withPaths = false) {
     pathFills: 'supported',
     pathStrokes: 'supported',
     clips: 'supported',
+    paints: 'gradient',
     groupOpacity: 'supported',
   });
   mirror.setCamera({ position: { x: 0, y: 0 }, zoom: 1 });
@@ -247,6 +258,51 @@ describe('E25-A02 layer plan', () => {
     expect(runs(part.layers[0]!.draws)).toEqual([[0, 1]]);
     // The layer's bound covers the path's point box [20, 30] × [0, 10] and the box.
     expect(part.layers[0]!.bound).toEqual({ x: 18, y: 0, width: 34, height: 32 });
+  });
+
+  it('splits layer runs on clip state and paint, which they carry', () => {
+    const gradient = box('b', 'g', 20);
+    const { source } = setup([
+      group('g', null, ['a', 'b', 'c'], 0.5, { kind: 'rect', x: 0, y: 0, width: 300, height: 300 }),
+      box('a', 'g', 0),
+      { ...gradient, style: { fill: G1, stroke: null } } as RenderNodeSnapshot,
+      box('c', 'g', 40),
+      box('d', null, 60),
+    ]);
+    const packet = source.prepare(target)!;
+    checkComposites(packet);
+    const draws = packet.layers!.layers[0]!.draws;
+    expect(runs(draws)).toEqual([
+      [0, 1],
+      [1, 1],
+      [2, 1],
+    ]);
+    expect(draws.map((draw) => draw.paint)).toEqual([undefined, 'gradient', undefined]);
+    expect(draws.every((draw) => (draw.clipState ?? 0) > 0)).toBe(true);
+    expect(packet.clip!.states.length).toBeGreaterThan(0);
+    expect(packet.draws).toEqual([{ first: 3, count: 1, variant: 'analytic-v1' }]);
+  });
+
+  it('places a nested composite after a mesh draw at the same position in its parent layer', () => {
+    const { source } = setup(
+      [
+        group('outer', null, ['p', 'inner'], 0.5),
+        pathNode('p', 0, { parentId: 'outer' }),
+        group('inner', 'outer', ['b'], 0.5),
+        box('b', 'inner', 20),
+      ],
+      true,
+    );
+    const packet = source.prepare(target)!;
+    checkComposites(packet);
+    const part = packet.layers!;
+    expect(part.layers.map((layer) => layer.nodeId)).toEqual(['inner', 'outer']);
+    expect(part.layers[1]!.meshDraws.map((draw) => draw.position)).toEqual([0]);
+    expect(part.composites).toEqual([
+      { layer: 1, target: -1, position: 0, meshOrder: 0 },
+      { layer: 0, target: 1, position: 0, meshOrder: 1 },
+    ]);
+    expect(packet.mesh!.draws).toEqual([]);
   });
 
   it('E25-K3: opacity 0 makes no layer, no draw and no path request', () => {

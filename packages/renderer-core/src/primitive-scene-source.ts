@@ -622,6 +622,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     });
     this.#prepareSerial += 1;
     if (this.#pathMeshes !== undefined) {
+      // E25: layer draws keep layer-local positions; scenes with layers are outside the E10
+      // count pass, so the record matches `mesh.draws` only without layers.
       this.#drawRecord = drawRecord(
         this.#prepareSerial,
         contentPathDraws,

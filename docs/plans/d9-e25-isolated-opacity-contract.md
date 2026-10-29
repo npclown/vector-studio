@@ -291,7 +291,10 @@ U2 (2026-10-29):
 - Layers are planned after clip culling and the path port, and before `MaskPlan`, as section 4's planning order states. A layer whose bound is empty, or whose parent is not drawn, is not drawn; nor is its content.
 - `interleaveLayerDraws` extends P3's interleaving to several targets. A run covers consecutive order-stream entries of one target only. A composite sits at its layer's first sequence, outer layers first, and closes its target's run.
 - Layer notices have their own queue and transition set (section 5); `getLayerNoticesDropped` counts the overflow.
-- The E10 draw record still lists every content mesh draw. Scenes with layers are outside the count pass (section 4, Count pass).
+- The E10 draw record still lists every content mesh draw, with layer-local positions for layer draws; it matches `packet.mesh.draws` only on scenes without layers, which are the count pass's scope (section 4, Count pass).
+- Step 2 of E25-K5 is applied per clip level: each level's bound is widened by 1 px before the intersection, which is conservative.
+- Layers are planned before `MaskPlan` and before E23-K8's out-of-range gradient drop. Content those later steps remove leaves its layer drawn, possibly with no draws, a conservative cost the contract allows; U3 may skip the pass of an empty layer.
+- The over-budget set is the set of roots over budget in the current frame, as P4 U4a's is for masks. A root that fits for a frame, or draws nothing, raises a new notice when it is again over budget.
 - Tests: `tests/unit/e25-u2-layer-plan.test.ts` (E25-A02, the unit parts of A04 and A07).
 
 ## 8. Risks
