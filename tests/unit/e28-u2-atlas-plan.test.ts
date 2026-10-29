@@ -549,7 +549,8 @@ describe('E28 section 4 pages and eviction', () => {
     // Size 600 caps at 256: bitmaps 158 × 311; a page holds 12 × 6 = 72 of them.
     const { frame } = setup([textNode('t', many(700), { size: 600 })], { pages: 8 });
     let packet = frame();
-    for (let index = 0; index < 4; index += 1) {
+    // The raster budget fills the atlas over several frames.
+    for (let index = 0; index < 16; index += 1) {
       expect(packet.text!.pageCount).toBeLessThanOrEqual(E28_ATLAS_PAGES_MAX);
       packet = frame();
     }
@@ -779,7 +780,7 @@ describe('E28 section 4 compaction', () => {
       pages: 1,
       pageSize: 256,
     });
-    for (let index = 0; index < 4; index += 1) frame();
+    for (let index = 0; index < 16; index += 1) frame();
     expect(instanceCount(frame())).toBe(890);
     replace([textNode('t', [...many(100), ...many(400, 2000)], small)]);
     takeInvalidations();
@@ -794,12 +795,17 @@ describe('E28 section 4 compaction', () => {
     expect(service.getGlyphRasterCallsForTesting() - calls).toBe(E28_RASTER_PER_FRAME);
     expect(instanceCount(compacted)).toBe(E28_RASTER_PER_FRAME);
     expect(takeInvalidations()).toBe(1);
-    const last = frame();
+    // Later frames rasterize the rest under the budget, each deferring frame invalidating once.
+    let last = compacted;
+    for (let index = 0; index < 16 && instanceCount(last) < 500; index += 1) {
+      last = frame();
+      expect(instanceCount(last)).toBe(Math.min(500, (index + 2) * E28_RASTER_PER_FRAME));
+      expect(last.text!.clears).toEqual([]);
+      expect(takeInvalidations()).toBe(instanceCount(last) < 500 ? 1 : 0);
+    }
     expect(instanceCount(last)).toBe(500);
-    expect(last.text!.clears).toEqual([]);
     expect(last.text!.notices).toEqual([]);
     expect(service.getGlyphRasterCallsForTesting() - calls).toBe(500);
-    expect(takeInvalidations()).toBe(0);
   });
 
   it('a fragmented frame that is not acknowledged requests nothing', () => {
@@ -875,29 +881,39 @@ describe('E28 section 4 raster budget', () => {
     expect(service.getGlyphRasterCallsForTesting()).toBe(E28_RASTER_PER_FRAME);
     expect(instanceCount(first)).toBe(E28_RASTER_PER_FRAME);
     expect(takeInvalidations()).toBe(1);
-    const second = frame();
+    let rest = first;
+    for (let index = 0; index < 16 && instanceCount(rest) < 300; index += 1) {
+      rest = frame();
+      expect(instanceCount(rest)).toBe(Math.min(300, (index + 2) * E28_RASTER_PER_FRAME));
+      expect(takeInvalidations()).toBe(instanceCount(rest) < 300 ? 1 : 0);
+    }
     expect(service.getGlyphRasterCallsForTesting()).toBe(300);
-    expect(instanceCount(second)).toBe(300);
-    expect(takeInvalidations()).toBe(0);
+    expect(instanceCount(rest)).toBe(300);
   });
 
   it('draws a deferred cluster from the nearest bucket by the general path', () => {
     const { frame, service, takeInvalidations } = setup([textNode('t', many(300), { size: 4 })]);
-    frame();
-    frame();
+    for (let index = 0; index < 8; index += 1) frame();
+    expect(service.getGlyphRasterCallsForTesting()).toBe(300);
     service.setCamera({ position: { x: 0, y: 0 }, zoom: 2 });
     takeInvalidations();
     const zoomed = frame();
-    // 256 new rasters at bucket 8; the other 44 fall back to bucket 4, scaled by 2.
-    expect(service.getGlyphRasterCallsForTesting()).toBe(300 + 256);
+    // The budget's new rasters at bucket 8; the others fall back to bucket 4, scaled by 2.
+    const budget = E28_RASTER_PER_FRAME;
+    expect(service.getGlyphRasterCallsForTesting()).toBe(300 + budget);
     expect(instanceCount(zoomed)).toBe(300);
     const modes = Array.from({ length: 300 }, (_, index) => instance(zoomed, index)[11]);
-    expect(modes.filter((mode) => mode === 1)).toHaveLength(44);
+    expect(modes.filter((mode) => mode === 1)).toHaveLength(300 - budget);
     expect(instance(zoomed, 299).slice(2, 6)).toEqual([12, 0, 0, 18]);
     expect(takeInvalidations()).toBe(1);
-    frame();
+    // Each later frame rasterizes the budget; the frame that completes the set requests nothing.
+    for (let index = 0, done = budget; done < 300; index += 1) {
+      frame();
+      done = Math.min(300, done + budget);
+      expect(service.getGlyphRasterCallsForTesting()).toBe(300 + done);
+      expect(takeInvalidations()).toBe(done < 300 ? 1 : 0);
+    }
     expect(service.getGlyphRasterCallsForTesting()).toBe(600);
-    expect(takeInvalidations()).toBe(0);
   });
 
   it('keeps the text part for a frame whose only text is deferred, so it is drawn later', () => {
