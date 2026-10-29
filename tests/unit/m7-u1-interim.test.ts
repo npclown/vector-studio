@@ -8,18 +8,13 @@ import {
   type CommandResult,
   type Editor,
 } from '../../packages/editor-core/src/index.js';
-import {
-  deepestHit,
-  hitsAt,
-  marqueeHits,
-  selectionTarget,
-  targetChain,
-} from '../../packages/editor-core/src/hit-test.js';
 
 // MVP M7-U1 interim editor rules (M7 contract, section 16, M7-U1 notes (5) and (6)): until M7-U4
 // and M7-U5, no command commits a document that breaks M7-S2 or M7-S3. A symbol is a container
 // (section 1.2); deleting a source that still has instances elsewhere fails; nothing moves a
-// symbol or instance into a symbol; fragment version 1 carries no symbol or instance.
+// symbol or instance into a symbol; fragment version 1 carries no symbol or instance. The
+// interim hit-test guards (round 2, S3) are lifted by M7-U3, whose behaviour
+// `m7-u3-projection.test.ts` tests.
 
 const root = path.resolve(import.meta.dirname, '../..');
 const SYMBOLS = readFileSync(path.join(root, 'tests/fixtures/m7-symbols/symbols.v3.json'), 'utf8');
@@ -232,50 +227,6 @@ describe('M7-U1 interim: commands keep the M7-S5 tree depth through an expansion
         parent: 'b0',
       }).ok,
     ).toBe(true);
-  });
-});
-
-describe('M7-U1 interim: symbols are neither hit nor selected until they are drawn (round 2, S3)', () => {
-  const none = () => null;
-
-  it('hits no symbol background, border or descendant, and still hits other nodes', () => {
-    const document = loaded().query({ type: 'document' });
-    for (const point of [
-      { x: 5, y: 5 },
-      { x: 25, y: 20 },
-      { x: 0, y: 40 },
-    ]) {
-      expect(deepestHit(document, 'page-1', point, 1, none)).toBeNull();
-      expect(hitsAt(document, 'page-1', point, 1, none)).toEqual([]);
-    }
-    expect(deepestHit(document, 'page-2', { x: 605, y: 5 }, 1, none)).toBe('d1');
-  });
-
-  it('leaves symbols and their descendants out of the marquee and selection targets', () => {
-    const document = loaded().query({ type: 'document' });
-    const all = { x: -10, y: -10, width: 1000, height: 1000 };
-    // i3 is hidden; s1 is a symbol.
-    expect(marqueeHits(document, 'page-1', all)).toEqual(['i1']);
-    expect(marqueeHits(document, 'page-1', all, 's1')).toEqual([]);
-    expect(marqueeHits(document, 'page-1', all, 's1-g')).toEqual([]);
-    for (const id of ['s1', 's1-r', 's1-e']) {
-      expect(selectionTarget(document, id)).toBeNull();
-      expect(targetChain(document, id)).toEqual([]);
-    }
-    expect(selectionTarget(document, 'r2')).toBe('g1');
-  });
-
-  it('selects nothing on a click over a source with the select tool', () => {
-    const target = loaded();
-    const point = { x: 25, y: 20 };
-    const none = { shift: false, alt: false, meta: false, ctrl: false };
-    target.execute({ type: 'setSelection', ids: ['i1'] });
-    for (const kind of ['pointerdown', 'pointerup'] as const) {
-      expect(target.execute({ type: 'input', event: { kind, point, modifiers: none } }).ok).toBe(
-        true,
-      );
-    }
-    expect(target.query({ type: 'selection' })).toEqual([]);
   });
 });
 

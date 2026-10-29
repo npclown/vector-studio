@@ -8,6 +8,7 @@ import {
   rotate,
   rotatedBounds,
 } from './geometry.js';
+import { ExpansionCache, type Expansion } from './expansion.js';
 import { clampedRadii } from './projector.js';
 import {
   ancestors,
@@ -24,6 +25,9 @@ import type { PagePoint } from './types.js';
 // Hit testing (P5 plan, section 4.4; MVP M1 contract, section 6): fill regions and outlines,
 // with outlines flattened by editor-core itself at 0.25 / zoom page units, through rotation and
 // containers, inside frame clips and mask regions. Exact geometry-port hit testing is deferred.
+// A `symbol` is hit as a frame; an `instance` (MVP M7 contract, section 4.3) is hit as a frame
+// on its source's background and border and wherever a node of its expansion, read from the
+// editor's expansion cache, would be hit inside its content clip, and the hit names the instance.
 
 /** Frame-local path geometry for a custom node (its extension's `toScene`), or null. */
 export type CustomGeometry = (node: NodeV3) => PathData | null;
@@ -310,7 +314,7 @@ export function hitsNode(
 ): boolean {
   if (!node.visible) return false;
   if (isContainer(node)) return false;
-  // Instances are hit-tested from M7-U3 (M7 contract, section 4.3); until then never.
+  // An instance is hit through its expansion in `visitHits` (M7 contract, section 4.3).
   if (node.type === 'instance') return false;
   // Into the unrotated frame: a rigid map, so distances are unchanged (M1 contract, section 6).
   const point = intoFrame(node, parentPoint);
@@ -357,11 +361,18 @@ function memo(test: () => boolean): Clip {
   return () => (value ??= test());
 }
 
+/** The nodes of one instance's expansion as a tree, for the walk below. */
+function expansionTree(expansion: Expansion): TreeView {
+  return { node: (id) => expansion.nodes.get(id), page: () => undefined };
+}
+
 /**
  * Visits the nodes of `page` hit at `point` in reverse paint order, at any depth (M1 contract,
- * section 6): leaves, and frames on their background or border; never a group, a mask group or a
- * mask source. `take` returns true to stop. A frame hit on both its border and its background is
- * visited twice.
+ * section 6): leaves, and frames and symbols on their background or border; never a group, a
+ * mask group or a mask source. An instance is visited as a frame with its source's fill and
+ * stroke, and once for each hit of a node of its expansion (M7 contract, section 4.3); with an
+ * invalid expansion (M7-X3) only its background and border are hit. `take` returns true to stop.
+ * A frame hit on both its border and its background is visited twice.
  */
 function visitHits(
   document: DocumentV3,
@@ -370,63 +381,106 @@ function visitHits(
   zoom: number,
   custom: CustomGeometry,
   take: (id: string) => boolean,
+  expansions: ExpansionCache,
 ): void {
   const tree = documentTree(document);
-  // The tree depth is bounded by 256 (M1-S3), so the recursion is too. Each call returns true
-  // when `take` stopped the walk.
-  const visit = (id: string, parentPoint: PagePoint, clip: Clip): boolean => {
-    const node = tree.node(id);
+  // The tree depth is bounded by 256 (M1-S3), and through an expansion by M7-S5, so the
+  // recursion is too. Each call returns true when `take` stopped the walk. Inside an expansion
+  // `view` is the expansion's tree and `owner` the instance every hit names.
+  const visit = (
+    view: TreeView,
+    owner: string | null,
+    id: string,
+    parentPoint: PagePoint,
+    clip: Clip,
+  ): boolean => {
+    const node = view.node(id);
     if (node === undefined || !node.visible) return false;
-    // Interim until M7-U3 projects symbols (kept by M7-U2): a symbol is not drawn, so neither
-    // it nor anything inside it is hit (no background, border or children).
-    if (node.type === 'symbol') return false;
-    if (!isContainer(node)) return hitsNode(node, parentPoint, zoom, custom) && clip() && take(id);
+    const hit = () => clip() && take(owner ?? id);
+    if (!isContainer(node) && node.type !== 'instance') {
+      return hitsNode(node, parentPoint, zoom, custom) && hit();
+    }
     const local = apply(
       invertRigid(localTransform(node.frame, node.rotation)),
       parentPoint.x,
       parentPoint.y,
     );
     const box = { x: 0, y: 0, width: node.frame.width, height: node.frame.height };
-    const children = (inner: Clip, from: number): boolean => {
-      for (let i = node.children.length - 1; i >= from; i -= 1) {
-        if (visit(node.children[i]!, local, inner)) return true;
+    const children = (
+      inner: Clip,
+      ids: readonly string[],
+      from: number,
+      within: TreeView,
+      as: string | null,
+    ): boolean => {
+      for (let i = ids.length - 1; i >= from; i -= 1) {
+        if (visit(within, as, ids[i]!, local, inner)) return true;
       }
       return false;
     };
     if (isGroup(node)) {
-      if (node.type === 'group') return children(clip, 0);
-      const source = tree.node(node.children[0]!);
+      if (node.type === 'group') return children(clip, node.children, 0, view, owner);
+      const source = view.node(node.children[0]!);
       return children(
         memo(() => clip() && insideMask(source, local, zoom)),
+        node.children,
         1,
+        view,
+        owner,
       );
     }
-    // A frame paints its background, its children inside its rect, then its border.
-    if (node.stroke !== null) {
-      const radius = Math.max(node.stroke.width / 2, 4 / zoom);
-      if (nearOutline(local, [rectangleOutline(box)], radius) && clip() && take(id)) return true;
-    }
+    // A frame paints its background, its children inside its rect, then its border; an
+    // instance paints its source's background and border around its expansion.
+    let fill: boolean;
+    let stroke: Extract<NodeV3, { type: 'frame' }>['stroke'];
+    let content: readonly string[] = [];
+    let within = view;
+    let as = owner;
     const inside = insideBox(local, box);
+    if (node.type === 'instance') {
+      const source = tree.node(node.symbol);
+      fill = source?.type === 'symbol' && source.fill !== null;
+      stroke = source?.type === 'symbol' ? source.stroke : null;
+      // An instance's content is always clipped to its box, so outside it nothing inside hits.
+      const result = inside ? expansions.expand(document, node.id) : null;
+      if (result !== null && result.ok) {
+        content = result.expansion.children;
+        within = expansionTree(result.expansion);
+        as = owner ?? node.id;
+      }
+    } else {
+      fill = node.fill !== null;
+      stroke = node.stroke;
+      content = node.children;
+    }
+    if (stroke !== null) {
+      const radius = Math.max(stroke.width / 2, 4 / zoom);
+      if (nearOutline(local, [rectangleOutline(box)], radius) && hit()) return true;
+    }
     if (
       children(
         memo(() => inside && clip()),
+        content,
         0,
+        within,
+        as,
       )
     ) {
       return true;
     }
-    return node.fill !== null && inside && clip() && take(id);
+    return fill && inside && hit();
   };
   const roots = tree.page(page)?.children ?? [];
   for (let i = roots.length - 1; i >= 0; i -= 1) {
-    if (visit(roots[i]!, point, () => true)) return;
+    if (visit(tree, null, roots[i]!, point, () => true)) return;
   }
 }
 
 /**
  * The deepest node of `page` hit at `point` in reverse paint order, at any depth (M1 contract,
- * section 6): a leaf, or a frame on its background or border; never a group, a mask group or a
- * mask source. Null when nothing is hit.
+ * section 6): a leaf or an instance, or a frame or symbol on its background or border; never a
+ * group, a mask group, a mask source or a node of an expansion. Null when nothing is hit.
+ * `expansions` is the editor's expansion cache, shared with the projector (M7-X4).
  */
 export function deepestHit(
   document: DocumentV3,
@@ -434,12 +488,21 @@ export function deepestHit(
   point: PagePoint,
   zoom: number,
   custom: CustomGeometry,
+  expansions: ExpansionCache = new ExpansionCache(),
 ): string | null {
   let found: string | null = null;
-  visitHits(document, page, point, zoom, custom, (id) => {
-    found = id;
-    return true;
-  });
+  visitHits(
+    document,
+    page,
+    point,
+    zoom,
+    custom,
+    (id) => {
+      found = id;
+      return true;
+    },
+    expansions,
+  );
   return found;
 }
 
@@ -453,12 +516,21 @@ export function hitsAt(
   point: PagePoint,
   zoom: number,
   custom: CustomGeometry,
+  expansions: ExpansionCache = new ExpansionCache(),
 ): string[] {
   const found = new Set<string>();
-  visitHits(document, page, point, zoom, custom, (id) => {
-    found.add(id);
-    return false;
-  });
+  visitHits(
+    document,
+    page,
+    point,
+    zoom,
+    custom,
+    (id) => {
+      found.add(id);
+      return false;
+    },
+    expansions,
+  );
   return [...found];
 }
 
@@ -476,8 +548,6 @@ export function selectionTarget(
   scope: string | null = null,
 ): string | null {
   const tree = documentTree(document);
-  // Interim until M7-U3 (see `visitHits`): a symbol and its descendants are no target.
-  if (inSymbol(tree, id)) return null;
   const chain = [id, ...ancestors(tree, id).map((node) => node.id)];
   const index = scope === null ? -1 : chain.indexOf(scope);
   if (index > 0) return chain[index - 1]!;
@@ -485,13 +555,6 @@ export function selectionTarget(
   // A top-level frame or symbol acts as an artboard (M7 contract, section 1.2).
   if (isFrameLike(top) && chain.length >= 2) return chain[chain.length - 2]!;
   return top.id;
-}
-
-/** Whether `id` is a `symbol` or has a `symbol` ancestor. */
-function inSymbol(tree: TreeView, id: string): boolean {
-  return (
-    tree.node(id)?.type === 'symbol' || ancestors(tree, id).some((node) => node.type === 'symbol')
-  );
 }
 
 /** The chain from a hit node up to its selection target, innermost first; empty for no target. */
@@ -532,8 +595,9 @@ function contains(box: Frame, frame: Frame): boolean {
 /**
  * The marquee candidates of section 6, in paint order: the visible children of the scope owner
  * (`scope`, or the page when null; M2 contract, section 5) whose rotated frame's page-aligned
- * bounds intersect the rectangle (P5-Q5), except that a frame child is selected only when the
- * rectangle contains those bounds entirely. Children of other containers are not candidates.
+ * bounds intersect the rectangle (P5-Q5), except that a frame or symbol child is selected only
+ * when the rectangle contains those bounds entirely (M7 contract, section 4.3); an instance is a
+ * candidate as a leaf. Children of other containers are not candidates.
  */
 export function marqueeHits(
   document: DocumentV3,
@@ -542,11 +606,9 @@ export function marqueeHits(
   scope: string | null = null,
 ): string[] {
   const tree = documentTree(document);
-  // Interim until M7-U3 (see `visitHits`): no symbol, and nothing inside one.
-  if (scope !== null && inSymbol(tree, scope)) return [];
   return childrenOf(tree, scope ?? page).filter((id) => {
     const node = tree.node(id);
-    if (node === undefined || !node.visible || node.type === 'symbol') return false;
+    if (node === undefined || !node.visible) return false;
     // A page child with rotation 0 uses the frame itself, bit-identical with P5; a scope's
     // child is in its parent's space, so it uses its page-space bounds.
     const frame =

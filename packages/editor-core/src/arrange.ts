@@ -19,6 +19,7 @@ import {
   childrenOf,
   documentTree,
   isContainer,
+  isFrameLike,
   nodePath,
   pageOf,
   spaceOf,
@@ -110,7 +111,8 @@ export function alignNodes(
   const { tree, roots } = checked;
   let target: Frame | null;
   if (roots.length === 1) {
-    const frame = ancestors(tree, roots[0]!).find((node) => node.type === 'frame');
+    // A symbol is an alignment target as a frame (MVP M7 contract, section 1.2).
+    const frame = ancestors(tree, roots[0]!).find(isFrameLike);
     target = frame === undefined ? null : boundsOf(document, [frame.id]);
   } else {
     target = boundsOf(document, roots);

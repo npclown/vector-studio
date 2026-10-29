@@ -1,6 +1,6 @@
 import { normalizeRotation, type DocumentV3, type Frame } from '@vector-studio/model';
 import { boundsOf } from './hit-test.js';
-import { ancestors, childrenOf, documentTree, spaceOf, subtree } from './tree.js';
+import { ancestors, childrenOf, documentTree, isFrameLike, spaceOf, subtree } from './tree.js';
 import type { PagePoint, Segment, SnapOverlay } from './types.js';
 
 // Snapping (MVP M2 contract, section 4.2): the candidate set of a gesture, align, spacing and
@@ -71,7 +71,9 @@ function lowHigh(box: Box, axis: Axis): readonly [number, number] {
  * a child of the page, and every frame ancestor of a moving node. Excluded: the moving nodes,
  * their descendants, their group and mask-group ancestors, mask sources and nodes not visible
  * through their ancestors. Boxes are the page-aligned bounds in `document`, the pre-gesture
- * document.
+ * document. A `symbol` counts as a frame here and an `instance` as a leaf, its frame's edges
+ * and centre (MVP M7 contract, sections 1.2 and 4.3): the nodes of an expansion are not
+ * document nodes and are never candidates.
  */
 export function snapSet(
   document: DocumentV3,
@@ -83,14 +85,14 @@ export function snapSet(
   const included = new Set<string>(childrenOf(tree, scope ?? page));
   for (const id of childrenOf(tree, page)) {
     const node = tree.node(id);
-    if (node?.type === 'frame') node.children.forEach((child) => included.add(child));
+    if (isFrameLike(node)) node.children.forEach((child) => included.add(child));
   }
   const excluded = new Set<string>();
   for (const id of moving) {
     if (tree.node(id) === undefined) continue;
     subtree(tree, id).forEach((inner) => excluded.add(inner));
     for (const ancestor of ancestors(tree, id)) {
-      if (ancestor.type === 'frame') included.add(ancestor.id);
+      if (isFrameLike(ancestor)) included.add(ancestor.id);
       else excluded.add(ancestor.id);
     }
   }

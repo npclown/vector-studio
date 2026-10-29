@@ -5,6 +5,7 @@ import {
   type PathNodeV2,
 } from '@vector-studio/model';
 import type { Tool, ToolContext } from './editor.js';
+import { ExpansionCache } from './expansion.js';
 import { deepFreeze } from './freeze.js';
 import { apply, invertRigid, rotate } from './geometry.js';
 import {
@@ -534,7 +535,14 @@ function axis(fraction: number, origin: number, size: number, delta: number) {
   return { origin: anchor, scale: Math.max(0, (from + delta - anchor) / (from - anchor)) };
 }
 
-export function createSelectTool(custom: CustomGeometry): Tool {
+/**
+ * The select tool. `expansions` is the editor's expansion cache, which hit testing shares with
+ * the projector (MVP M7 contract, M7-X4); by default the tool has its own.
+ */
+export function createSelectTool(
+  custom: CustomGeometry,
+  expansions: ExpansionCache = new ExpansionCache(),
+): Tool {
   let state: SelectState = { kind: 'idle' };
 
   function framesOf(context: ToolContext, ids: readonly string[]): Map<string, Frame> {
@@ -614,6 +622,7 @@ export function createSelectTool(custom: CustomGeometry): Tool {
       point,
       zoomOf(context),
       custom,
+      expansions,
     );
     if (session === null) return { deepest, scope: null, leaves: false };
     if (deepest === session) return { deepest: null, scope: session, leaves: false };
@@ -640,6 +649,7 @@ export function createSelectTool(custom: CustomGeometry): Tool {
       current.start,
       zoomOf(context),
       custom,
+      expansions,
     ).filter((id) => scope === null || isAncestor(tree, scope, id));
     const stack = [
       ...new Set(
