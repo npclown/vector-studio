@@ -11,7 +11,7 @@ import {
   RetainedSceneMirror,
   type RetainedSceneMirrorOptions,
 } from '../../packages/renderer-core/src/scene-mirror.js';
-import { solidPaint } from '../../packages/renderer-core/src/scene-paint.js';
+import { paintColorLanes } from '../../packages/renderer-core/src/paint-records.js';
 
 // E23 contract (docs/plans/d9-e23-gradient-paint-contract.md), E23-A01: E23-S1 to S3 through the
 // retained scene mirror, with their reasons and precedence.
@@ -256,10 +256,10 @@ describe('E23-A01 scene paint validation', () => {
     expect(reason(mirror.replaceSnapshot(snapshot([rect('a', moved)])))).toBe('revision-conflict');
   });
 
-  it('isSceneGradient and solidPaint discriminate by kind', () => {
+  it('isSceneGradient discriminates by kind; a gradient packs transparent solid lanes', () => {
     expect(isSceneGradient(linear)).toBe(true);
     expect(isSceneGradient(red)).toBe(false);
-    expect(solidPaint(red)).toBe(red);
-    expect(() => solidPaint(linear)).toThrow(TypeError);
+    expect(paintColorLanes(red)).toBe(red);
+    expect(paintColorLanes(linear)).toEqual({ r: 0, g: 0, b: 0, a: 0 });
   });
 });

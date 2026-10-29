@@ -1,3 +1,4 @@
+import { isSceneGradient } from '@vector-studio/contracts';
 import type { RenderNodeSnapshot, SceneAffine, SceneVersion } from '@vector-studio/contracts';
 import type {
   ClipMaskPacketLevel,
@@ -35,7 +36,7 @@ import {
   selectMeshOrigin,
   type MeshOrigin,
 } from './path-mesh-packet.js';
-import { solidPaint } from './scene-paint.js';
+import { GradientRecordTable, paintColorLanes, type GradientPaintRecord } from './paint-records.js';
 import type { RetainedSceneMirror, RetainedSceneView } from './scene-mirror.js';
 import {
   ClipStateTable,
@@ -163,6 +164,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   /** P4 contract, U2: the frame's clip states and their change count. */
   readonly #clipStates = new ClipStateTable();
   #clipStatesUsed = false;
+  /** E23 contract, U2: the frame's gradient records. */
+  readonly #gradients = new GradientRecordTable();
   /**
    * P4 contract, section 5: budget notices are queued on a level's transition to over budget,
    * at most 4,096 queued and 32 per packet; overflow is counted.
@@ -299,6 +302,74 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       this.#originRevision = Symbol('primitive-origin');
     }
 
+    // E23 contract, U2: gradient records for the drawn mesh paints, against the mesh origin. An
+    // out-of-range record (E23-K8) skips its draw; a joint path skips both of its draws.
+    this.#gradients.begin();
+    const meshRecords = new Map<PathMeshDraw, GradientPaintRecord>();
+    if (pathDraws.length > 0) {
+      const pathById = new Map(paths.map((path) => [path.id, path] as const));
+      const meshOrigin = this.#meshOrigin ?? { x: 0, y: 0 };
+      const outOfRange = new Set<string>();
+      for (const draw of pathDraws) {
+        if (draw.maskSource === true) continue;
+        const path = pathById.get(draw.nodeId)!;
+        const role = draw.paint ?? 'fill';
+        const paint = role === 'fill' ? path.node.style.fill : path.node.style.stroke?.color;
+        if (paint === null || paint === undefined || !isSceneGradient(paint)) continue;
+        const record = this.#gradients.recordOf(
+          `mesh:${draw.nodeId}:${role}`,
+          paint,
+          path.world,
+          meshOrigin,
+        );
+        if (record === null) outOfRange.add(`${draw.nodeId}:${role}`);
+        else meshRecords.set(draw, record);
+      }
+      if (outOfRange.size > 0) {
+        const jointDropped = new Set(
+          pathDraws
+            .filter(
+              (draw) =>
+                draw.composite === 'joint-fill' &&
+                (outOfRange.has(`${draw.nodeId}:fill`) || outOfRange.has(`${draw.nodeId}:stroke`)),
+            )
+            .map((draw) => draw.nodeId),
+        );
+        pathDraws = pathDraws.filter(
+          (draw) =>
+            draw.maskSource === true ||
+            !(
+              jointDropped.has(draw.nodeId) ||
+              outOfRange.has(`${draw.nodeId}:${draw.paint ?? 'fill'}`)
+            ),
+        );
+      }
+    }
+    // Primitive records, against the primitive origin; an out-of-range paint keeps index 0, whose
+    // transparent solid lanes contribute nothing (E23-K8).
+    const primitivePaints: { slot: number; fill: number; stroke: number }[] = [];
+    const paintFlags = visible.map((primitive) => {
+      const { fill, stroke } = primitive.node.style;
+      const fillIndex =
+        fill !== null && isSceneGradient(fill)
+          ? this.#gradients.indexOf(`primitive:${primitive.id}:fill`, fill, primitive.world, origin)
+          : 0;
+      const strokeIndex =
+        stroke !== null && isSceneGradient(stroke.color)
+          ? this.#gradients.indexOf(
+              `primitive:${primitive.id}:stroke`,
+              stroke.color,
+              primitive.world,
+              origin,
+            )
+          : 0;
+      if (fillIndex === 0 && strokeIndex === 0) return false;
+      primitivePaints.push(
+        Object.freeze({ slot: primitive.slot, fill: fillIndex, stroke: strokeIndex }),
+      );
+      return true;
+    });
+
     const grew = this.#ensureCapacities(highWater(this.#slotIds), visible.length);
     if (grew) rebased = true;
     this.#updateInstanceRecords(derived, origin, epochChanged || grew || rebased);
@@ -338,6 +409,16 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
             ...packedMesh,
             draws: packedMesh.draws.filter((_, index) => pathDraws[index]!.maskSource !== true),
           });
+    // E23 U2: mesh records join the table only for draws the mesh part carries, after the
+    // primitive records; a joint fill draw also names its stroke's record (E23-K4).
+    const meshGradients = (mesh?.draws ?? []).map((_, index) => {
+      const record = meshRecords.get(contentPathDraws[index]!);
+      return record === undefined ? 0 : this.#gradients.add(record);
+    });
+    const strokeGradients = (mesh?.draws ?? []).map((_, index) =>
+      contentPathDraws[index]!.composite === 'joint-fill' ? (meshGradients[index + 1] ?? 0) : 0,
+    );
+    const gradients = this.#gradients.end();
     // P4 contract, U2: clip states are numbered in drawn paint order; a state change splits an
     // analytic run. An unclipped frame has no states and the P3 draws, unchanged.
     let clip: ClipStates = NO_CLIP_STATES;
@@ -360,6 +441,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       visible,
       mesh?.draws.map((draw) => draw.sequence) ?? [],
       clip.primitiveStates,
+      primitivePaints.length === 0 ? [] : paintFlags,
     );
     const packetId = Symbol('primitive-packet');
     const packet: PrimitivePacket = Object.freeze({
@@ -395,6 +477,21 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
               }),
             }),
           }),
+      ...(gradients.records.length === 0
+        ? {}
+        : {
+            paint: Object.freeze({
+              layoutVersion: 0 as const,
+              records: gradients.records,
+              primitives: Object.freeze(primitivePaints),
+              origin: Object.freeze({ x: origin.x, y: origin.y }),
+              meshOrigin: Object.freeze({
+                x: this.#meshOrigin?.x ?? 0,
+                y: this.#meshOrigin?.y ?? 0,
+              }),
+              builds: gradients.builds,
+            }),
+          }),
       ...(mesh === undefined
         ? {}
         : {
@@ -411,6 +508,10 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
                     ...((clip.meshStates[index] ?? 0) === 0
                       ? {}
                       : { clipState: clip.meshStates[index]! }),
+                    ...(meshGradients[index] === 0 ? {} : { gradient: meshGradients[index]! }),
+                    ...(strokeGradients[index] === 0
+                      ? {}
+                      : { strokeGradient: strokeGradients[index]! }),
                   }),
                 ),
               ),
@@ -602,6 +703,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   public dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
+    this.#gradients.clear();
     this.#sceneEpoch = null;
     this.#slots.clear();
     this.#slotIds = [];
@@ -1202,6 +1304,7 @@ function interleaveDraws(
   visible: readonly DerivedPrimitive[],
   meshSequences: readonly number[],
   states: readonly number[],
+  paints: readonly boolean[],
 ): Readonly<{ analytic: PrimitiveDraw[]; positions: number[] }> {
   const analytic: PrimitiveDraw[] = [];
   const positions: number[] = [];
@@ -1217,20 +1320,29 @@ function interleaveDraws(
           variant: 'analytic-v1' as const,
           // P4 contract, U2: present only on a clipped run, so P3 draws stay unchanged.
           ...(state === 0 ? {} : { clipState: state }),
+          // E23 contract, U2: present only on a gradient run.
+          ...(paints[runStart] === true ? { paint: 'gradient' as const } : {}),
         }),
       );
       runStart = next;
     }
   };
-  // P4 contract, U2: a clip-state change closes the run; the order is never changed.
+  // P4 contract, U2: a clip-state change closes the run; the order is never changed. E23 U2: so
+  // does a change between a solid and a gradient primitive.
   const advanceTo = (end: number) => {
-    // An unclipped frame has no states: the P3 jump, without a per-primitive walk.
-    if (states.length === 0) {
+    // A frame without clip states or gradients: the P3 jump, without a per-primitive walk.
+    if (states.length === 0 && paints.length === 0) {
       next = Math.max(next, end);
       return;
     }
     while (next < end) {
-      if (next > runStart && states[next] !== states[runStart]) close();
+      if (
+        next > runStart &&
+        ((states[next] ?? 0) !== (states[runStart] ?? 0) ||
+          (paints[next] ?? false) !== (paints[runStart] ?? false))
+      ) {
+        close();
+      }
       next += 1;
     }
   };
@@ -1287,9 +1399,9 @@ function primitiveGeometryKey(
 function primitiveStyleKey(
   node: Extract<RenderNodeSnapshot, { kind: 'primitive' }>,
 ): readonly number[] {
-  const fill = node.style.fill === null ? null : solidPaint(node.style.fill);
+  const fill = node.style.fill === null ? null : paintColorLanes(node.style.fill);
   const stroke = node.style.stroke;
-  const strokeColor = stroke === null ? null : solidPaint(stroke.color);
+  const strokeColor = stroke === null ? null : paintColorLanes(stroke.color);
   return [
     fill === null ? 0 : 1,
     fill?.r ?? 0,
@@ -1342,12 +1454,12 @@ function packGeometry(node: Extract<RenderNodeSnapshot, { kind: 'primitive' }>):
 function packStyle(node: Extract<RenderNodeSnapshot, { kind: 'primitive' }>): readonly number[] {
   const lanes = Array<number>(12).fill(0);
   if (node.style.fill !== null) {
-    const fill = solidPaint(node.style.fill);
+    const fill = paintColorLanes(node.style.fill);
     lanes.splice(0, 4, fill.r, fill.g, fill.b, fill.a);
   }
   if (node.style.stroke !== null) {
     const { width } = node.style.stroke;
-    const color = solidPaint(node.style.stroke.color);
+    const color = paintColorLanes(node.style.stroke.color);
     lanes.splice(4, 4, color.r, color.g, color.b, color.a);
     lanes[8] = width;
   }

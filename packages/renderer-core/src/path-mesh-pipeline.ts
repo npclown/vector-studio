@@ -44,7 +44,7 @@ import {
   transformSceneBounds,
   type SceneBounds,
 } from './scene-numeric.js';
-import { solidPaint } from './scene-paint.js';
+import { paintColorLanes } from './paint-records.js';
 
 // CPU path-mesh pipeline of the P3 V3 contract: port consumption, batch isolation, exact
 // buckets, the mesh cache, the failure memo and the failure notice queue (unit V3a), plus the
@@ -558,7 +558,7 @@ export class PathMeshPipeline {
             color:
               path.maskSource === true
                 ? MASK_SOURCE_COLOR
-                : solidPaint(paint === 'fill' ? node.style.fill! : node.style.stroke!.color),
+                : paintColorLanes(paint === 'fill' ? node.style.fill! : node.style.stroke!.color),
           }),
         );
         if (this.#lookup(paint, path.id, e) !== undefined) continue;
