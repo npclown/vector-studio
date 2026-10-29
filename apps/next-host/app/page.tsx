@@ -16,9 +16,20 @@ import {
   useEditorCommands,
   useEditorSelector,
 } from '@vector-studio/react';
-import { useEffect, useMemo, useState, type PointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { inRotateZone, zoomLabel } from '../src/m2-geometry';
 import { toggleClosedCommand } from '../src/m3-path-overlay';
+import {
+  attachPersistence,
+  offersDiscard,
+  persistQuery,
+  persistStatusLabel,
+  restoreEnvelope,
+  saveFileText,
+  SAVE_FILE_NAME,
+  type PersistenceSession,
+  type PersistStatus,
+} from '../src/m5-persistence';
 import { SelectionOverlay } from '../src/overlay';
 import { createWebGpuRenderer } from '../src/webgpu-renderer';
 
@@ -33,6 +44,9 @@ import { createWebGpuRenderer } from '../src/webgpu-renderer';
 // M3-U4 (M3 contract, M3-A12): the path edit anchor overlay from the `pathOverlay` query, a
 // toggle-closed button that runs what the unbound `togglePathClosed` action runs (M3-Q11), and
 // the M3 path-edit fixture with `?fixture=path-edit`, shown at zoom 1.
+// M5-U4 (M5 contract, sections 3 and 5.3): "Save file" and "Open file" (the envelope text), and
+// with `?persist=1` only the IndexedDB restore and autosave (src/m5-persistence.ts), its status,
+// "Discard stored document" after a failed restore, and the test hook's `persistence.flush`.
 
 const WIDTH = 960;
 const HEIGHT = 640;
@@ -63,12 +77,24 @@ function hostPlatform(): Platform {
   return typeof navigator !== 'undefined' && /^Mac/u.test(navigator.platform) ? 'mac' : 'other';
 }
 
-/** Test hook for the headed P5, M1, M2 and M3 specs: present only with `?test=1`. */
+/** Test hook for the headed P5, M1, M2, M3 and M5 specs: present only with `?test=1`. */
 declare global {
   interface Window {
-    __p5Host?: Readonly<{ editor: Editor; events: readonly EditorEvent[] }>;
+    __p5Host?: Readonly<{
+      editor: Editor;
+      events: readonly EditorEvent[];
+      /** M5 contract, section 5.3; resolves at once without `?persist=1` or autosave. */
+      persistence: Readonly<{ flush(): Promise<void> }>;
+    }>;
   }
 }
+
+/** The page's persistence state for the toolbar and status (section 5.3). */
+type PersistenceView = Readonly<{
+  /** null without `?persist=1`. */
+  status: PersistStatus | null;
+  discard(): void;
+}>;
 
 /**
  * The `pathOverlay` query for the current document and path edit state. The query computes a new
@@ -87,7 +113,7 @@ function usePathOverlay(): PathEditOverlay | null {
   );
 }
 
-function Toolbar() {
+function Toolbar({ onFileStatus }: { onFileStatus: (status: string) => void }) {
   const editor = useEditor();
   const execute = useEditorCommands();
   const tool = useEditorSelector((snapshot) => snapshot.tool);
@@ -190,8 +216,65 @@ function Toolbar() {
       >
         toggle closed
       </button>
+      <FileControls onFileStatus={onFileStatus} />
       <ZoomControls />
     </div>
+  );
+}
+
+/**
+ * M5 contract, section 3: "Save file" downloads the envelope text of the committed document and
+ * the active page; "Open file" restores a file through `restoreEnvelope` (section 5.2) and shows
+ * `code path` on failure, loading nothing.
+ */
+function FileControls({ onFileStatus }: { onFileStatus: (status: string) => void }) {
+  const editor = useEditor();
+  const input = useRef<HTMLInputElement>(null);
+  const save = () => {
+    const blob = new Blob([saveFileText(editor)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = SAVE_FILE_NAME;
+    link.click();
+    // Revoke well after the click has started the download.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    onFileStatus('saved');
+  };
+  const open = async (file: File) => {
+    let text: string;
+    try {
+      text = await file.text();
+    } catch {
+      // A host-local status in the `code path` style; not a persistence code.
+      onFileStatus('error file.read-failed');
+      return;
+    }
+    const result = restoreEnvelope(editor, text);
+    onFileStatus(result.ok ? 'opened' : `error ${result.code} ${result.path}`.trimEnd());
+  };
+  return (
+    <span role="group" aria-label="file" style={{ display: 'flex', gap: 8 }}>
+      <button type="button" data-testid="save-file" onClick={save}>
+        Save file
+      </button>
+      <button type="button" data-testid="open-file-button" onClick={() => input.current?.click()}>
+        Open file
+      </button>
+      <input
+        ref={input}
+        type="file"
+        accept=".json,application/json"
+        data-testid="open-file"
+        style={{ display: 'none' }}
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          // Clear the input so the same file can be opened again.
+          event.currentTarget.value = '';
+          if (file !== undefined) void open(file);
+        }}
+      />
+    </span>
   );
 }
 
@@ -255,10 +338,14 @@ function Status({
   errors,
   renderer,
   fixture,
+  file,
+  persistence,
 }: {
   errors: readonly string[];
   renderer: string;
   fixture: string;
+  file: string;
+  persistence: PersistenceView;
 }) {
   const revision = useEditorSelector((snapshot) => snapshot.revision);
   const page = useEditorSelector((snapshot) => snapshot.activePage);
@@ -288,6 +375,32 @@ function Status({
       <span data-testid="scope-label" style={{ display: 'block' }}>
         scope: {scope === null ? 'page' : `${scopeName ?? ''} (${scope})`}
       </span>
+      {fixture === 'ignored' && (
+        <span data-testid="fixture-ignored" style={{ display: 'block' }}>
+          fixture ignored: persist=1 wins over fixture=
+        </span>
+      )}
+      {persistence.status !== null && (
+        <span
+          data-testid="persist-status"
+          data-persist={persistence.status.state}
+          data-code={persistence.status.state === 'error' ? persistence.status.code : ''}
+          data-path={persistence.status.state === 'error' ? persistence.status.path : ''}
+          style={{ display: 'block' }}
+        >
+          {persistStatusLabel(persistence.status)}{' '}
+          {offersDiscard(persistence.status) && (
+            <button type="button" data-testid="persist-discard" onClick={persistence.discard}>
+              Discard stored document
+            </button>
+          )}
+        </span>
+      )}
+      {file !== '' && (
+        <span data-testid="file-status" style={{ display: 'block' }}>
+          file: {file}
+        </span>
+      )}
       {errors.map((error) => (
         <span key={error} data-testid="error" style={{ display: 'block', color: '#b00' }}>
           {error}
@@ -297,14 +410,20 @@ function Status({
   );
 }
 
-function Surface() {
+function Surface({ persistence }: { persistence: PersistenceView }) {
   const editor = useEditor();
   const execute = useEditorCommands();
   const snapshot = useEditorSelector((value) => value);
   const [errors, setErrors] = useState<readonly string[]>([]);
   const [renderer, setRenderer] = useState('pending');
   const [fixture, setFixture] = useState('none');
+  const [file, setFile] = useState('');
   useEffect(() => {
+    // Section 5.3: with `?persist=1` the fixture is ignored, and the status says so.
+    if (persistQuery(window.location.search).fixtureIgnored) {
+      setFixture('ignored');
+      return;
+    }
     const name = new URLSearchParams(window.location.search).get('fixture');
     const entry = name === null || !Object.hasOwn(FIXTURES, name) ? undefined : FIXTURES[name];
     if (entry === undefined) return;
@@ -356,7 +475,7 @@ function Surface() {
   };
   return (
     <>
-      <Toolbar />
+      <Toolbar onFileStatus={setFile} />
       <Pages />
       <div
         data-testid="canvas-host"
@@ -385,29 +504,75 @@ function Surface() {
           />
         </EditorCanvas>
       </div>
-      <Status errors={errors} renderer={renderer} fixture={fixture} />
+      <Status
+        errors={errors}
+        renderer={renderer}
+        fixture={fixture}
+        file={file}
+        persistence={persistence}
+      />
     </>
   );
+}
+
+/**
+ * Section 5.3: with `?persist=1`, open the store, restore, then attach autosave. The effect's
+ * cleanup unsubscribes, disposes the autosave and closes the store, so a strict-mode remount
+ * leaves one subscription and one connection. A hidden page flushes, best effort.
+ */
+function usePersistence(
+  editor: Editor,
+  baseRevision: number,
+): PersistenceView & Readonly<{ session: { current: PersistenceSession | null } }> {
+  const [status, setStatus] = useState<PersistStatus | null>(null);
+  const session = useRef<PersistenceSession | null>(null);
+  useEffect(() => {
+    if (!persistQuery(window.location.search).persist) return;
+    const current = attachPersistence(editor, { baseRevision, onStatus: setStatus });
+    session.current = current;
+    const hidden = () => {
+      if (document.visibilityState === 'hidden') void current.flush();
+    };
+    document.addEventListener('visibilitychange', hidden);
+    return () => {
+      document.removeEventListener('visibilitychange', hidden);
+      current.dispose();
+      if (session.current === current) session.current = null;
+    };
+  }, [editor, baseRevision]);
+  return {
+    status,
+    discard: () => void session.current?.discard(),
+    session,
+  };
 }
 
 export default function Page() {
   const [editor] = useState(() =>
     createEditor({ extensions: [starExtension], platform: hostPlatform() }),
   );
+  // The revision when the page loaded (section 5.3: the attach saves edits made during the read).
+  const [baseRevision] = useState(() => editor.getSnapshot().revision);
+  const persistence = usePersistence(editor, baseRevision);
+  const { session } = persistence;
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('test') !== '1') return;
     const events: EditorEvent[] = [];
     const unsubscribe = editor.subscribe((event) => events.push(event));
-    window.__p5Host = { editor, events };
+    window.__p5Host = {
+      editor,
+      events,
+      persistence: { flush: () => session.current?.flush() ?? Promise.resolve() },
+    };
     return () => {
       unsubscribe();
       delete window.__p5Host;
     };
-  }, [editor]);
+  }, [editor, session]);
   return (
     <EditorProvider editor={editor}>
       <main>
-        <Surface />
+        <Surface persistence={persistence} />
       </main>
     </EditorProvider>
   );

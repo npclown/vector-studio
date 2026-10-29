@@ -25,6 +25,9 @@
       "path": "../../packages/editor-core"
     },
     {
+      "path": "../../packages/persistence-idb"
+    },
+    {
       "path": "../../packages/react"
     },
     {

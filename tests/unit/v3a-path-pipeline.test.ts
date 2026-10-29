@@ -1064,6 +1064,13 @@ describe('V3a device loss, ownership and host injection', () => {
     expect(p4Source).toMatch(/from '@vector-studio\/geometry-wasm'/);
     expect(p4Source).toMatch(/fillMesh: fill,/);
     expect(p4Source).toMatch(/strokeMesh: strokes,/);
+    // E23 U4: the gradient paint check page is the eighth host, on P4's pattern.
+    const e23Host = files.filter((file) => /[\\/]src[\\/]e23-gradient-paint\.ts$/.test(file));
+    expect(e23Host).toHaveLength(1);
+    const e23Source = readFileSync(e23Host[0]!, 'utf8');
+    expect(e23Source).toMatch(/from '@vector-studio\/geometry-wasm'/);
+    expect(e23Source).toMatch(/fillMesh: fill,/);
+    expect(e23Source).toMatch(/strokeMesh: strokes,/);
     const host = [
       ...v4Host,
       ...b2Host,
@@ -1072,6 +1079,7 @@ describe('V3a device loss, ownership and host injection', () => {
       ...viz3Host,
       ...viz4Host,
       ...p4Host,
+      ...e23Host,
     ];
     // The manifest and project-reference edges of that import (boundary rule P-B1).
     const edges = files.filter((file) =>
