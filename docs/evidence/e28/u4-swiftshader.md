@@ -28,7 +28,7 @@ General text exceeds the default tolerance of 3 on SwiftShader. Experiments that
 
 **E28-A04.** Colour, opacity, a whole-pixel pan and out-and-back cost 0 raster calls and 0 uploads. A subpixel pan and a zoom each cost 27 calls for 27 new keys. A generation change costs 28 for 28. The path port made no call.
 
-**E28-A05.** One page (4 MiB) and the sampler appear in accounting. A resize costs 0 calls and 0 uploads. Removing the last text node returns live texture bytes to the baseline. After device loss, the converged frame equals the pre-loss capture (asserted); the first recovered frame was also equal (recorded, not asserted). Page release on device loss itself is covered by U3's unit test, not observed here. Dispose leaves 0 live resources.
+**E28-A05.** One page (4 MiB) and the sampler appear in accounting. A resize costs 0 calls and 0 uploads. Removing the last text node returns live texture bytes to the baseline. After device loss, the converged frame equals the pre-loss capture (asserted); the first recovered frame was also equal (recorded, not asserted). Page release on device loss itself is not observed here; recovery re-rasterizes into new pages. Dispose leaves 0 live resources.
 
 **E28-A06 (T8).** On one 256 px page:
 
@@ -69,5 +69,5 @@ After the reference PC (see [u4-main-pc.md](u4-main-pc.md)), `E28_RASTER_PER_FRA
 
 ## Not run
 
-- The reference-PC run: the full `pnpm test:gpu` on Chrome and Edge, hardware GPU, real fonts, default tolerance. It is queued through the coordinator.
+- The reference-PC run: the full `pnpm test:gpu` on Chrome and Edge, hardware GPU, real fonts, default tolerance. It ran on 2026-10-29: [u4-main-pc.md](u4-main-pc.md).
 - The fonts are not checked to be the named ones: on a host without Malgun Gothic, T1 draws a fallback. The oracle uses the same port, so this changes the glyphs, not the verdict.
