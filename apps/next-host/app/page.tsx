@@ -47,6 +47,9 @@ import { createWebGpuRenderer } from '../src/webgpu-renderer';
 // M5-U4 (M5 contract, sections 3 and 5.3): "Save file" and "Open file" (the envelope text), and
 // with `?persist=1` only the IndexedDB restore and autosave (src/m5-persistence.ts), its status,
 // "Discard stored document" after a failed restore, and the test hook's `persistence.flush`.
+// M7-U6 (M7 contract, M7-A11): "symbol", "instance" and "detach" buttons for the `createSymbol`,
+// `createInstance` and `detachInstances` commands beside the page switcher (no key is bound),
+// and the M7 symbols fixture with `?fixture=symbols`, shown at zoom 2.
 
 const WIDTH = 960;
 const HEIGHT = 640;
@@ -60,6 +63,7 @@ const FIXTURES: Readonly<
 > = {
   containers: { url: '/m1-containers.json', camera: { position: { x: -20, y: -20 }, zoom: 2 } },
   'path-edit': { url: '/m3-path-edit.json', camera: { position: { x: 0, y: 0 }, zoom: 1 } },
+  symbols: { url: '/m7-symbols.json', camera: { position: { x: -20, y: -20 }, zoom: 2 } },
 };
 /** A rotate cursor (a circular arrow) with a standard fallback; the hotspot is its centre. */
 const ROTATE_CURSOR =
@@ -77,7 +81,7 @@ function hostPlatform(): Platform {
   return typeof navigator !== 'undefined' && /^Mac/u.test(navigator.platform) ? 'mac' : 'other';
 }
 
-/** Test hook for the headed P5, M1, M2, M3 and M5 specs: present only with `?test=1`. */
+/** Test hook for the headed P5, M1, M2, M3, M5 and M7 specs: present only with `?test=1`. */
 declare global {
   interface Window {
     __p5Host?: Readonly<{
@@ -313,6 +317,57 @@ function ZoomControls() {
   );
 }
 
+/**
+ * M7 contract, section 5: "symbol", "instance" and "detach" for the selection, in the page row so
+ * the toolbar row and the canvas keep their place (the earlier specs measure them). The new
+ * source or instance becomes the selection, as a group does; a detach keeps the selection, whose
+ * IDs are now frames (section 5.2).
+ */
+function SymbolControls() {
+  const execute = useEditorCommands();
+  const selection = useEditorSelector((snapshot) => snapshot.selection);
+  // The selected nodes' types as one string, so a detach (same IDs, new type) re-renders.
+  const types = useEditorSelector((snapshot) =>
+    snapshot.selection.map((id) => snapshot.document.nodes[id]?.type ?? '').join(' '),
+  ).split(' ');
+  const createSymbol = () => {
+    const result = execute({ type: 'createSymbol', ids: selection });
+    if (result.ok) execute({ type: 'setSelection', ids: result.ids });
+  };
+  const createInstance = () => {
+    const result = execute({ type: 'createInstance', symbol: selection[0]! });
+    if (result.ok) execute({ type: 'setSelection', ids: result.ids });
+  };
+  return (
+    <span role="group" aria-label="symbols" style={{ display: 'flex', gap: 8 }}>
+      <button
+        type="button"
+        data-testid="create-symbol"
+        disabled={selection.length === 0}
+        onClick={createSymbol}
+      >
+        symbol
+      </button>
+      <button
+        type="button"
+        data-testid="create-instance"
+        disabled={selection.length !== 1 || types[0] !== 'symbol'}
+        onClick={createInstance}
+      >
+        instance
+      </button>
+      <button
+        type="button"
+        data-testid="detach"
+        disabled={selection.length === 0 || types.some((type) => type !== 'instance')}
+        onClick={() => execute({ type: 'detachInstances', ids: selection })}
+      >
+        detach
+      </button>
+    </span>
+  );
+}
+
 function Pages() {
   const execute = useEditorCommands();
   const pages = useEditorSelector((snapshot) => snapshot.document.pages);
@@ -476,7 +531,10 @@ function Surface({ persistence }: { persistence: PersistenceView }) {
   return (
     <>
       <Toolbar onFileStatus={setFile} />
-      <Pages />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Pages />
+        <SymbolControls />
+      </div>
       <div
         data-testid="canvas-host"
         data-cursor={rotating ? 'rotate' : 'default'}

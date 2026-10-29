@@ -1,0 +1,151 @@
+{
+  "acceptance": "M7-A10",
+  "kind": "observation (no claim)",
+  "revision": "6ff93bfbd54fb587f519abad295fd32582fe4cb0",
+  "worktree": "clean",
+  "environment": {
+    "node": "v22.22.0",
+    "platform": "linux 6.18.44-fc-v185",
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+    "logicalCpus": 4
+  },
+  "document": {
+    "documentNodes": 200,
+    "source": "S",
+    "sourceNodes": 100,
+    "instances": 100,
+    "jsonBytes": 64070,
+    "sceneNodes": 10302,
+    "sceneNodesAfterDetach": 10302,
+    "edited": "G0-0",
+    "dragged": "G0",
+    "moved": "I0",
+    "detached": "I1"
+  },
+  "changes": {
+    "sourceEdit": {
+      "sets": 1,
+      "inserted": 0,
+      "updated": 101,
+      "removed": 0
+    },
+    "dragCommit": {
+      "sets": 0,
+      "inserted": 0,
+      "updated": 0,
+      "removed": 0
+    },
+    "instanceMove": {
+      "sets": 1,
+      "inserted": 0,
+      "updated": 1,
+      "removed": 0
+    },
+    "detach": {
+      "sets": 1,
+      "inserted": 99,
+      "updated": 1,
+      "removed": 99
+    }
+  },
+  "runs": 5,
+  "generateMs": 1.87,
+  "steps": {
+    "parse": {
+      "medianMs": 7.17,
+      "minMs": 3.64,
+      "maxMs": 14.02,
+      "runsMs": [14.02, 7.17, 12.83, 3.64, 3.87]
+    },
+    "construct": {
+      "medianMs": 60.71,
+      "minMs": 51.16,
+      "maxMs": 145.34,
+      "runsMs": [145.34, 60.71, 73.29, 51.75, 51.16]
+    },
+    "project": {
+      "medianMs": 108.98,
+      "minMs": 97.12,
+      "maxMs": 174.23,
+      "runsMs": [174.23, 103.33, 97.12, 113.65, 108.98]
+    },
+    "attach": {
+      "medianMs": 322.12,
+      "minMs": 250.44,
+      "maxMs": 543.66,
+      "runsMs": [543.66, 273.39, 322.12, 327.26, 250.44]
+    },
+    "sourceEdit": {
+      "medianMs": 186.69,
+      "minMs": 131.21,
+      "maxMs": 269.21,
+      "runsMs": [269.21, 195.73, 186.69, 149.69, 131.21]
+    },
+    "dragPointerDown": {
+      "medianMs": 1.63,
+      "minMs": 1.05,
+      "maxMs": 7,
+      "runsMs": [7, 1.5, 2.1, 1.63, 1.05]
+    },
+    "dragPointerMoves": {
+      "medianMs": 843.79,
+      "minMs": 640.83,
+      "maxMs": 990.14,
+      "runsMs": [938.25, 690.17, 990.14, 843.79, 640.83]
+    },
+    "dragCommit": {
+      "medianMs": 40.93,
+      "minMs": 33.65,
+      "maxMs": 48.34,
+      "runsMs": [48.34, 34.28, 44.77, 40.93, 33.65]
+    },
+    "instanceMove": {
+      "medianMs": 115.28,
+      "minMs": 99.9,
+      "maxMs": 158.09,
+      "runsMs": [158.09, 99.9, 123.85, 114.65, 115.28]
+    },
+    "detach": {
+      "medianMs": 122.82,
+      "minMs": 112.11,
+      "maxMs": 240.77,
+      "runsMs": [147.64, 122.82, 240.77, 122.6, 112.11]
+    },
+    "attachRenderer": {
+      "medianMs": 266.66,
+      "minMs": 210.01,
+      "maxMs": 486.43,
+      "runsMs": [486.43, 230.5, 266.93, 266.66, 210.01]
+    },
+    "sourceEditRenderer": {
+      "medianMs": 151.14,
+      "minMs": 100.52,
+      "maxMs": 168.58,
+      "runsMs": [168.58, 155.12, 151.14, 105.64, 100.52]
+    },
+    "dragPointerMovesRenderer": {
+      "medianMs": 633.93,
+      "minMs": 493.73,
+      "maxMs": 773.02,
+      "runsMs": [633.93, 505.13, 773.02, 650.55, 493.73]
+    },
+    "dragCommitRenderer": {
+      "medianMs": 0,
+      "minMs": 0,
+      "maxMs": 0,
+      "runsMs": [0, 0, 0, 0, 0]
+    },
+    "instanceMoveRenderer": {
+      "medianMs": 106.01,
+      "minMs": 90.92,
+      "maxMs": 138.06,
+      "runsMs": [138.06, 90.92, 113.69, 105.22, 106.01]
+    },
+    "detachRenderer": {
+      "medianMs": 107.37,
+      "minMs": 97.02,
+      "maxMs": 217.48,
+      "runsMs": [120.84, 107.17, 217.48, 107.37, 97.02]
+    }
+  }
+}
