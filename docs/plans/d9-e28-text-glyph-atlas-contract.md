@@ -117,6 +117,14 @@ Notation follows P1 D2: a leaf's premultiplied contribution `P` blends source-ov
   3. If every page is used by this frame, the clusters that do not fit are *omitted*: not drawn, and `render.text-resource-limit` is reported.
 
   Pages are cleared by `writeTexture` of zeros over the evicted area (pages have no `RENDER_ATTACHMENT`).
+- **Compaction (amendment, 2026-10-29).** Eviction frees whole pages only, so a page that holds one entry this frame draws keeps all its stale entries (entries this frame does not draw exactly; an entry drawn only as a raster-budget fallback is stale, though it keeps its page used for the frame). When every page is used by this frame but some page holds a stale entry, step 3 does not apply:
+  1. The miss that found no room, and every later miss of the frame, is *deferred*, with the raster budget's fallback. E28-D2 is not reported.
+  2. The frame chooses the page with the most stale area, counted after all its lookups and fallbacks (the lowest index on a tie). The next acknowledged frame evicts and clears that page before its lookups. The clusters it drew from that page are rasterized again under the raster budget.
+  3. If the frame's exact lookups used every stale entry, nothing can be freed. Its deferred misses are then omitted under step 3, and E28-D2 follows its transition rule.
+
+  So step 3 applies only when every entry in the atlas is drawn exactly by the frame, which is section 5's "this frame's clusters alone exceed the atlas"; a deferral whose fallback is drawn is then omitted only because that fallback is itself an exact entry of the frame. Each compaction frees one page with stale entries, so for an unchanging scene a fragmented atlas needs at most one compaction per page. A scene that changes while compacting can make new stale entries and start further compactions.
+
+  The cost is disclosed. While a compaction is pending, the misses it defers draw only their fallback. In the compacting frame, the clusters that were drawn from the evicted page are rasterized again. Those beyond the raster budget draw only their fallback, so text that was visible can disappear for a frame or more. A deferred cluster whose fallback was on the evicted page also draws nothing until it is rasterized, for example after a zoom on a full atlas. U4's T8 shows this on a one-page atlas, including a zoom on that atlas.
 - **Raster budget (E28-Q6 (a)).** At most `E28_RASTER_PER_FRAME = 256` port calls per prepared frame. A cluster still missing an entry after that:
   1. draws from an entry whose key differs only in bucket and phase, the nearest bucket to `b` (the smaller on a tie, then phase 0), by the general path scaled to `s`, if one exists;
   2. otherwise does not draw this frame.
@@ -310,6 +318,27 @@ U3 (2026-10-29):
 - Evidence: [u3-swiftshader.md](../evidence/e28/u3-swiftshader.md), the A07 capture part and a snapped-text check on SwiftShader. The check is exact against the port's own bitmaps, and all four variants are identical.
 - Known limit, disclosed: WebGPU's `createTexture` does not throw on out-of-memory. It returns a texture and reports the error asynchronously, so the fake device's thrown failure covers only synchronous failures. U4 checks a real page allocation with an error scope on the reference PC.
 - Left to U4: partial clips over text, text under group opacity, and bilinear general text against the oracle (T3 and T5). U3's SwiftShader check covers only snapped text, clips that do not cut glyphs, layers at opacity 1, and that rotated text draws ink.
+
+U2 amendment, compaction (2026-10-29):
+
+- **Found by** U4's T8 spec on SwiftShader. On a one-page atlas, a layout generation change put new entries into the page's free space, which marked the page as used by the frame. The remaining clusters were then omitted and E28-D2 was reported, although they fit the atlas on their own. Every later frame hit the same page, so the text never converged. The same lock can occur with eight pages once every page receives one of a frame's new entries.
+- **Fix:** the section 4 compaction rule, in `renderer-core`'s `GlyphAtlasPlan`.
+  - The pending page is committed only on `acknowledge`. It is dropped by `reset` and by a frame without text.
+  - An atlas without stale entries behaves as before, so the U2 and U3 tests pass unchanged.
+- **Review** (R1 NOT READY):
+  - The first version evicted every page, and suppressed compaction until a frame drew every cluster. That left the lock possible after a compaction that ended over the limit. It also blanked a large atlas.
+  - The rule now evicts one page per compaction and has no suppression.
+  - R3 READY WITH FOLLOW-UPS: the cost paragraph now names fallbacks on the evicted page; a mixed budget-and-fragmentation frame is left to U4's T8 zoom check.
+  - R2 NOT READY: an entry drawn only as a fallback counted as drawn, so after a subpixel move on a full atlas its stale space was hidden and the frame omitted with a false E28-D2. A fallback now keeps its page used but its entry stays stale.
+- **Tests:** `tests/unit/e28-u2-atlas-plan.test.ts`, "E28 section 4 compaction". They cover:
+  - the deferral and the eviction;
+  - a frame that exceeds the compacted atlas;
+  - recovery after an over-limit compaction (the review's case), with E28-D2 raised again on re-entry;
+  - an entry drawn only as a fallback after a subpixel move (R2's case);
+  - the choice of the stalest page with two pages;
+  - compaction under the raster budget, with one invalidation per deferring frame;
+  - an unacknowledged fragmented frame, and an unacknowledged compacting frame;
+  - a release while a compaction is pending.
 
 ## 8. Risks
 
