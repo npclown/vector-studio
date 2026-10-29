@@ -122,11 +122,11 @@ function nodeV2(value: NodeV2): Ordered {
 }
 
 /**
- * Emits canonical schema v2 JSON (M1 contract, section 2.1): two-space indentation, fixed key
- * order and a final newline.
+ * The document as a plain object in canonical key order, for `serializeDocument` and the
+ * persistence envelope (MVP M5 contract, M5-E3). Not exported from the package.
  */
-export function serializeDocument(document: DocumentV2): string {
-  const ordered = {
+export function orderedDocument(document: DocumentV2): Ordered {
+  return {
     schemaVersion: document.schemaVersion,
     id: document.id,
     pages: document.pages.map((page) => ({
@@ -140,5 +140,12 @@ export function serializeDocument(document: DocumentV2): string {
         .map((key) => [key, nodeV2(document.nodes[key]!)]),
     ),
   };
-  return `${JSON.stringify(ordered, null, 2)}\n`;
+}
+
+/**
+ * Emits canonical schema v2 JSON (M1 contract, section 2.1): two-space indentation, fixed key
+ * order and a final newline.
+ */
+export function serializeDocument(document: DocumentV2): string {
+  return `${JSON.stringify(orderedDocument(document), null, 2)}\n`;
 }

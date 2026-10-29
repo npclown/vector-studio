@@ -195,9 +195,11 @@ This contract was drafted on 2026-10-29 while the user's acceptance of the M3 ex
 
 | Unit | State |
 | --- | --- |
-| M5-U1 | In progress (started 2026-10-29 after the M3 exit acceptance) |
+| M5-U1 | Done: envelope type, `serializeEnvelope`, `parseEnvelope`, `ENVELOPE_ERROR_CODES`, `scanJson` `maxDepth`, fixtures (A01 to A03); independent review round 1 READY WITH FOLLOW-UPS, applied |
 | M5-U2 | Not started |
 | M5-U3 | Not started |
 | M5-U4 | Not started |
 | M5-U5 | Not started |
 | M5-U6 | Not started |
+
+M5-U1 notes (2026-10-29, Primary decisions recorded from its review): (1) `document.malformed-json` cannot occur inside an envelope (step 1 parses the whole text, and the document validator never returns it), so A02 tests every other document code with its prefixed path. (2) "Exactly 1" is the JSON number 1: the text `1.0` is accepted; `"1"`, `true` and `[1]` are rejected. (3) A `document` value that is not an object fails at step 6 as `document.invalid-field` at `/document`; a top-level value that is not an object (`null`, a number, a boolean, a string, an array) is `envelope.invalid-field` at `''`. (4) Results are not frozen, as with `parseDocument`; `Readonly` is a type-level promise. (5) The model also exports the types `ScanOptions` (the `scanJson` options parameter), `EnvelopeErrorCode`, `EnvelopeResult` and `PersistenceEnvelope`. (6) `serializeEnvelope` writes the document in `serializeDocument`'s key order through an internal helper; `serializeDocument` output is unchanged (A03). The committed canonical envelopes were built from the M1 fixture text, not by `serializeEnvelope`, so the byte checks are independent. (7) The fixtures under `tests/fixtures/m5-persistence/` are listed in `.prettierignore`, as the P5 and M1 fixtures are, because some are intentionally invalid JSON.
