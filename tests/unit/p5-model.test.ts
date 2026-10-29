@@ -8,7 +8,7 @@ import {
   serializeDocument,
   validateAnyDocument,
   validateNode,
-  type DocumentV2,
+  type DocumentV3,
   type ParseResult,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
@@ -22,18 +22,20 @@ import { boundaries, evaluatePackageBoundaries } from '../../tooling/boundary-po
 
 const root = path.resolve(import.meta.dirname, '../..');
 const fixtures = path.join(root, 'tests/fixtures/p5-model');
-const migrated = path.join(root, 'tests/fixtures/m1-model');
+const migrated = path.join(root, 'tests/fixtures/m7-symbols/migrated');
 const VALID = ['empty', 'shapes', 'ext-star'] as const;
 
 async function fixture(name: string): Promise<string> {
   return readFile(path.join(fixtures, `${name}.json`), 'utf8');
 }
 
+// Since M7-U1 a v1 document migrates through v2 to the committed v3 fixture (M7 contract,
+// section 2.1).
 async function migratedFixture(name: string): Promise<string> {
-  return readFile(path.join(migrated, `${name}.v2.json`), 'utf8');
+  return readFile(path.join(migrated, `${name}.v3.json`), 'utf8');
 }
 
-function parsed(text: string): DocumentV2 {
+function parsed(text: string): DocumentV3 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -127,13 +129,13 @@ function edited(...edits: readonly Edit[]): Record<string, unknown> {
 
 describe('P5-A06 JSON round trip', () => {
   it.each(VALID)(
-    'serialize(parse(t)) is the committed v2 fixture and parse(serialize(d)) deep-equals d for %s',
+    'serialize(parse(t)) is the committed v3 fixture and parse(serialize(d)) deep-equals d for %s',
     async (name) => {
       const text = await fixture(name);
       const document = parsed(text);
-      const v2 = await migratedFixture(name);
-      expect(serializeDocument(document)).toBe(v2);
-      expect(serializeDocument(parsed(v2))).toBe(v2);
+      const v3 = await migratedFixture(name);
+      expect(serializeDocument(document)).toBe(v3);
+      expect(serializeDocument(parsed(v3))).toBe(v3);
       expect(parsed(serializeDocument(document))).toEqual(document);
     },
   );
@@ -236,7 +238,7 @@ describe('P5-A06 JSON round trip', () => {
 });
 
 describe('P5-A07 validation codes', () => {
-  it('lists the section 3.3 codes, then the two schema v2 codes of MVP M1', () => {
+  it('lists the section 3.3 codes, the two schema v2 codes of MVP M1 and the v3 code of M7', () => {
     expect(DOCUMENT_ERROR_CODES).toEqual([
       'document.malformed-json',
       'document.unsupported-version',
@@ -247,6 +249,7 @@ describe('P5-A07 validation codes', () => {
       'document.invalid-custom-data',
       'document.cyclic-parent',
       'document.invalid-mask-source',
+      'document.invalid-symbol',
     ]);
   });
 

@@ -3,9 +3,9 @@ import path from 'node:path';
 import {
   parseDocument,
   serializeDocument,
-  type DocumentV2,
+  type DocumentV3,
   type Frame,
-  type NodeV2,
+  type NodeV3,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
@@ -54,11 +54,11 @@ function text(target: Editor): string {
   return serializeDocument(target.query({ type: 'document' }));
 }
 
-function documentOf(target: Editor): DocumentV2 {
+function documentOf(target: Editor): DocumentV3 {
   return target.query({ type: 'document' });
 }
 
-function nodeOf(target: Editor, id: string): NodeV2 {
+function nodeOf(target: Editor, id: string): NodeV3 {
   const node = target.query({ type: 'node', id });
   if (node === null) throw new Error(`no node ${id}`);
   return node;
@@ -164,7 +164,7 @@ const f = (x: number, y: number, width: number, height: number): Frame => ({ x, 
 
 type M = [number, number, number, number, number, number];
 
-function local(node: NodeV2): M {
+function local(node: NodeV3): M {
   const { x, y, width: w, height: h } = node.frame;
   const t = node.rotation;
   if (t === 0) return [1, 0, 0, 1, x, y];
@@ -191,8 +191,8 @@ function mul(m: M, n: M): M {
   ];
 }
 
-function pageMatrix(document: DocumentV2, id: string): { m: M; rotation: number } {
-  const chain: NodeV2[] = [];
+function pageMatrix(document: DocumentV3, id: string): { m: M; rotation: number } {
+  const chain: NodeV3[] = [];
   for (let node = document.nodes[id]; node !== undefined; node = document.nodes[node.parent]) {
     chain.unshift(node);
   }
@@ -210,7 +210,7 @@ function at(m: M, x: number, y: number) {
 }
 
 /** Page centre, page rotation (normalized), size and page points of a path or line. */
-function placement(document: DocumentV2, id: string) {
+function placement(document: DocumentV3, id: string) {
   const node = document.nodes[id]!;
   const { m, rotation } = pageMatrix(document, id);
   const unit =
@@ -241,7 +241,7 @@ function angleNear(actual: number, expected: number) {
 }
 
 /** M1-A05: every listed node keeps its page placement within the contract's tolerance. */
-function expectSamePlacement(before: DocumentV2, after: DocumentV2, ids: readonly string[]) {
+function expectSamePlacement(before: DocumentV3, after: DocumentV3, ids: readonly string[]) {
   for (const id of ids) {
     const a = placement(before, id);
     const b = placement(after, id);
@@ -272,7 +272,8 @@ describe('M1-A01 editor half: a migrated ext.star node nested in a group and a f
       await readFile(path.join(root, 'tests/fixtures/p5-model/ext-star.json'), 'utf8'),
     ) as unknown;
     const target = editor(v1);
-    expect(documentOf(target).schemaVersion).toBe(2);
+    // Migrated through v2 to the latest schema, v3 since M7-U1.
+    expect(documentOf(target).schemaVersion).toBe(3);
     const [group] = ok(target, { type: 'groupNodes', ids: ['n2'], kind: 'group' });
     const [frame] = ok(target, {
       type: 'createFrame',
@@ -325,7 +326,13 @@ describe('M1-A01 editor half: a migrated ext.star node nested in a group and a f
   it('loads the containers fixture and checks its nested star', async () => {
     const text = await readFile(path.join(root, 'tests/fixtures/m1-model/containers.json'), 'utf8');
     const target = editor(JSON.parse(text));
-    expect(serializeDocument(documentOf(target))).toBe(text);
+    // Since M7-U1 the editor holds the v3 migration of the v2 fixture (M7 contract, section 2.1).
+    expect(serializeDocument(documentOf(target))).toBe(
+      await readFile(
+        path.join(root, 'tests/fixtures/m7-symbols/migrated/containers.v3.json'),
+        'utf8',
+      ),
+    );
     expect(target.query({ type: 'activePage' })).toBe('page-1');
     expect(target.query({ type: 'pages' }).map((page) => page.id)).toEqual(['page-1', 'page-2']);
   });
@@ -567,8 +574,8 @@ describe('M1-A04 creation commands', () => {
       stroke: null,
       name: 'Arrow',
     });
-    const expected: DocumentV2 = {
-      schemaVersion: 2,
+    const expected: DocumentV3 = {
+      schemaVersion: 3,
       id: 'n1',
       pages: [{ id: 'n2', name: 'Page 1', children: ['n3', 'n4', 'n5', 'n8', 'n9'] }],
       nodes: {
@@ -1322,7 +1329,7 @@ describe('M1-A08 resize rules', () => {
     const target = editor(doc([['p', ['a']]], [rect('a', 'p', frame, Math.PI / 2)]));
     const before = documentOf(target);
     ok(target, { type: 'setFrames', frames: [{ id: 'a', frame: turned }] });
-    const anchor = (document: DocumentV2) => at(pageMatrix(document, 'a').m, 0, 0);
+    const anchor = (document: DocumentV3) => at(pageMatrix(document, 'a').m, 0, 0);
     near(anchor(documentOf(target)).x, anchor(before).x);
     near(anchor(documentOf(target)).y, anchor(before).y);
     expect(nodeOf(target, 'a').rotation).toBe(Math.PI / 2);

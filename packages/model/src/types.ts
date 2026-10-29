@@ -1,7 +1,7 @@
 // Document schemas (P5 editor-slice plan, section 3; MVP M1 contract, section 2). The model imports
 // nothing, so these types mirror the matching `contracts` scene fields instead of importing them.
-// Schema v2 is the document the model returns and writes; the v1 types describe the input of
-// `migrateV1toV2` only.
+// Schema v3 (MVP M7 contract, section 2) is the document the model returns and writes; the v1
+// and v2 types describe the input of `migrateV1toV2` and `migrateV2toV3` only.
 
 export type JsonValue =
   null | boolean | number | string | readonly JsonValue[] | { readonly [key: string]: JsonValue };
@@ -159,4 +159,36 @@ export type DocumentV2 = Readonly<{
   /** One or more pages. */
   pages: readonly PageV2[];
   nodes: Readonly<Record<string, NodeV2>>;
+}>;
+
+// Document schema v3 (MVP M7 contract, section 2): v2 plus the symbol source and its instances.
+
+/** A symbol source (M7-S1): the fields of a frame; never inside another symbol (M7-S3). */
+export type SymbolNode = NodeBaseV2 &
+  Readonly<{
+    type: 'symbol';
+    children: readonly string[];
+    fill: Color | null;
+    stroke: RectStroke | null;
+  }>;
+
+/**
+ * An instance (M7-S2): a leaf whose content is the expansion of the `symbol` node it names, on
+ * any page of the same document; never inside a symbol (M7-S3); opacity 1 (M7-S4).
+ */
+export type InstanceNode = NodeBaseV2 & Readonly<{ type: 'instance'; symbol: string }>;
+
+export type LeafNodeV3 = LeafNodeV2 | InstanceNode;
+export type ContainerNodeV3 = ContainerNode | SymbolNode;
+export type NodeV3 = LeafNodeV3 | ContainerNodeV3;
+export type NodeTypeV3 = NodeV3['type'];
+
+export type PageV3 = PageV2;
+
+export type DocumentV3 = Readonly<{
+  schemaVersion: 3;
+  id: string;
+  /** One or more pages. */
+  pages: readonly PageV3[];
+  nodes: Readonly<Record<string, NodeV3>>;
 }>;

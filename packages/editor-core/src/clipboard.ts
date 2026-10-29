@@ -4,8 +4,8 @@ import {
   serializeDocument,
   validateDocument,
   validateNode,
-  type DocumentV2,
-  type NodeV2,
+  type DocumentV3,
+  type NodeV3,
 } from '@vector-studio/model';
 import { arranged, preorder, type Finish } from './arrange.js';
 import { Draft, fail, type Failure } from './draft.js';
@@ -53,7 +53,7 @@ type Fragment = Readonly<{
   /** In fragment order, which is the copied paint order. */
   roots: readonly string[];
   /** Validated nodes; a root's frame and rotation are in page space. */
-  nodes: Readonly<Record<string, NodeV2>>;
+  nodes: Readonly<Record<string, NodeV3>>;
 }>;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -69,12 +69,12 @@ function pointer(path: readonly (string | number)[]): string {
 /**
  * The fragment text of the subtrees of `ids` (nodes of `activePage` at any depth; a listed
  * descendant of a listed node is ignored): the marker line, then compact JSON of
- * `{ fragmentVersion: 1, schemaVersion: 2, roots, nodes }` with `roots` in document paint order,
+ * `{ fragmentVersion: 1, schemaVersion: 3, roots, nodes }` with `roots` in document paint order,
  * each root's frame and rotation in page space and its parent `""`, and the nodes and their keys
  * in `serializeDocument` order.
  */
 export function copyFragment(
-  document: DocumentV2,
+  document: DocumentV3,
   ids: unknown,
   activePage: string,
 ): Copied | Failure {
@@ -83,9 +83,14 @@ export function copyFragment(
   const { tree } = checked;
   const order = preorder(document, tree, activePage);
   const roots = [...checked.roots].sort((a, b) => order.get(a)! - order.get(b)!);
-  const nodes = new Map<string, NodeV2>();
+  const nodes = new Map<string, NodeV3>();
   for (const root of roots) {
-    for (const id of subtree(tree, root)) nodes.set(id, document.nodes[id]!);
+    for (const id of subtree(tree, root)) {
+      // Fragment version 1 carries no symbol or instance (see `parseFragment`), so a copy or cut
+      // of one fails and changes nothing until M7-U5.
+      if (isSymbolType(document.nodes[id]!.type)) return fail('editor.invalid-command', '/ids');
+      nodes.set(id, document.nodes[id]!);
+    }
     const node = document.nodes[root]!;
     let placement = { frame: node.frame, rotation: node.rotation };
     if (tree.page(node.parent) === undefined) {
@@ -97,7 +102,7 @@ export function copyFragment(
   // The model's canonical node text, re-read so the fragment keeps its key order compactly.
   const canonical = JSON.parse(
     serializeDocument({
-      schemaVersion: 2,
+      schemaVersion: 3,
       id: 'fragment',
       pages: [],
       // fromEntries defines own properties, so a "__proto__" ID stays data.
@@ -106,11 +111,16 @@ export function copyFragment(
   ) as { nodes: unknown };
   const body = JSON.stringify({
     fragmentVersion: 1,
-    schemaVersion: 2,
+    schemaVersion: 3,
     roots,
     nodes: canonical.nodes,
   });
   return { text: `${FRAGMENT_MARKER}\n${body}`, roots };
+}
+
+/** Schema v3 node types that fragment version 1 does not carry (interim until M7-U5). */
+function isSymbolType(type: unknown): boolean {
+  return type === 'symbol' || type === 'instance';
 }
 
 /** An ID that is not a key of `nodes`, for the page that holds the fragment roots in checks. */
@@ -175,14 +185,24 @@ export function parseFragment(text: string, custom: CustomRules): Fragment | Fai
     rootSet.add(root);
   }
   // Every fragment-shape failure comes before every model code.
-  if (value.schemaVersion !== 2) return fail('document.unsupported-version', '/schemaVersion');
+  // Schema v3 changed only the version (M7 contract, section 2.1), so v2 nodes are read unchanged
+  // (section 6, Versions). Until M7-U5 adds fragment version 2, version 1 also carries v3.
+  if (value.schemaVersion !== 2 && value.schemaVersion !== 3) {
+    return fail('document.unsupported-version', '/schemaVersion');
+  }
 
   // The model's field rules; the empty parent of a fragment root stands for the holder page.
   const holder = holderId(nodes);
-  const read: [string, NodeV2][] = [];
+  const read: [string, NodeV3][] = [];
   // Nodes whose parent is written as `""`: only these may be roots, whatever the holder is.
   const unparented = new Set<string>();
   for (const [key, raw] of Object.entries(nodes)) {
+    // Fragment version 1 holds v2 node types only: schema v2 has no `symbol` or `instance`, and
+    // at v3 they wait for fragment version 2 (M7-U5). Reported as the model's field rule would
+    // report an unknown type, before the node's other fields.
+    if (isRecord(raw) && isSymbolType(raw.type)) {
+      return fail('document.invalid-field', nodePath(key, '/type'));
+    }
     const empty = isRecord(raw) && raw.parent === '';
     if (empty) unparented.add(key);
     const candidate = empty ? { ...raw, parent: holder } : raw;
@@ -226,7 +246,7 @@ export function parseFragment(text: string, custom: CustomRules): Fragment | Fai
 
   // The model's tree rules, with the roots on a holder page.
   const tree = validateDocument({
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: holder,
     pages: [{ id: holder, name: '', children: [...rootSet] }],
     nodes: Object.fromEntries(read),
@@ -260,7 +280,7 @@ function pasteTarget(tree: TreeView, context: EditContext): string {
  * each subtree in pre-order. Failures inside a pasted node are reported at its fragment path.
  */
 export function paste(
-  document: DocumentV2,
+  document: DocumentV3,
   command: Extract<DocumentCommand, { type: 'paste' }>,
   context: EditContext,
   custom: CustomRules,
@@ -291,7 +311,7 @@ export function paste(
     dx = at.x - (bounds.x + bounds.width / 2);
     dy = at.y - (bounds.y + bounds.height / 2);
   }
-  const place = (node: NodeV2) => {
+  const place = (node: NodeV3) => {
     const frame =
       at === undefined ? node.frame : { ...node.frame, x: node.frame.x + dx, y: node.frame.y + dy };
     return onPage
@@ -300,7 +320,7 @@ export function paste(
   };
 
   const fragmentTree = documentTree({
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: '',
     pages: [],
     nodes: fragment.nodes,
@@ -321,8 +341,8 @@ export function paste(
       };
       if (isContainer(node)) copy.children = node.children.map((child) => copyOf.get(child)!);
       // A root's mapped placement is validated again; the rest is as the fragment checks left it.
-      if (root) draft.set({ ...copy, ...place(node) } as NodeV2);
-      else draft.setChecked(copy as NodeV2, true);
+      if (root) draft.set({ ...copy, ...place(node) } as NodeV3);
+      else draft.setChecked(copy as NodeV3, true);
     }
     const copies = fragment.roots.map((id) => copyOf.get(id)!);
     draft.setChildren(target, [...siblings, ...copies]);

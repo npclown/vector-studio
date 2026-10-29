@@ -1,4 +1,4 @@
-import { normalizeRotation, type DocumentV2, type Frame } from '@vector-studio/model';
+import { normalizeRotation, type DocumentV3, type Frame } from '@vector-studio/model';
 import { boundsOf } from './hit-test.js';
 import { ancestors, childrenOf, documentTree, spaceOf, subtree } from './tree.js';
 import type { PagePoint, Segment, SnapOverlay } from './types.js';
@@ -74,7 +74,7 @@ function lowHigh(box: Box, axis: Axis): readonly [number, number] {
  * document.
  */
 export function snapSet(
-  document: DocumentV2,
+  document: DocumentV3,
   page: string,
   scope: string | null,
   moving: readonly string[],

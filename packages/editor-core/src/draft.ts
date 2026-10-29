@@ -1,7 +1,14 @@
-import { validateNode, type DocumentV2, type NodeV2, type PageV2 } from '@vector-studio/model';
+import { validateNode, type DocumentV3, type NodeV3, type PageV2 } from '@vector-studio/model';
 import { deepFreeze } from './freeze.js';
 import { refitGroup, type WritableTree } from './resize.js';
-import { childrenOf, isContainer, isGroup, nodePath, treeDepth } from './tree.js';
+import {
+  childrenOf,
+  expansionDepthViolation,
+  isContainer,
+  isGroup,
+  nodePath,
+  treeDepth,
+} from './tree.js';
 import type { CommandResult, EditorErrorCode } from './types.js';
 
 // The edit draft: a mutable copy of a document that one command changes, then validates and
@@ -15,10 +22,10 @@ export function fail(code: EditorErrorCode, path?: string): Failure {
 
 /** The extension check of a custom node; other nodes pass. `path` is relative to the node. */
 export type CustomCheck = (
-  node: NodeV2,
+  node: NodeV3,
 ) => Readonly<{ code: EditorErrorCode; path: string }> | null;
 
-function samePlacement(a: NodeV2, b: NodeV2): boolean {
+function samePlacement(a: NodeV3, b: NodeV3): boolean {
   return (
     a.parent === b.parent &&
     a.rotation === b.rotation &&
@@ -30,8 +37,8 @@ function samePlacement(a: NodeV2, b: NodeV2): boolean {
 }
 
 export class Draft implements WritableTree {
-  readonly base: DocumentV2;
-  private readonly nodes: Map<string, NodeV2>;
+  readonly base: DocumentV3;
+  private readonly nodes: Map<string, NodeV3>;
   private pages: PageV2[];
   /** Nodes created, changed or removed. */
   readonly touched = new Set<string>();
@@ -40,13 +47,13 @@ export class Draft implements WritableTree {
   /** Custom nodes whose extension check the command already ran. */
   private readonly customChecked = new Set<string>();
 
-  constructor(base: DocumentV2) {
+  constructor(base: DocumentV3) {
     this.base = base;
     this.nodes = new Map(Object.entries(base.nodes));
     this.pages = [...base.pages];
   }
 
-  node(id: string): NodeV2 | undefined {
+  node(id: string): NodeV3 | undefined {
     return this.nodes.get(id);
   }
 
@@ -59,7 +66,7 @@ export class Draft implements WritableTree {
   }
 
   /** Replaces or adds a node; `finish` validates it with the model's field rules. */
-  set(node: NodeV2): void {
+  set(node: NodeV3): void {
     this.nodes.set(node.id, node);
     this.touched.add(node.id);
     this.unchecked.add(node.id);
@@ -70,7 +77,7 @@ export class Draft implements WritableTree {
    * Replaces or adds a node the command has already validated with the model's rules, and with
    * its extension when `custom` is true.
    */
-  setChecked(node: NodeV2, custom = false): void {
+  setChecked(node: NodeV3, custom = false): void {
     this.nodes.set(node.id, node);
     this.touched.add(node.id);
     this.unchecked.delete(node.id);
@@ -119,8 +126,8 @@ export class Draft implements WritableTree {
    */
   finish(
     check: CustomCheck,
-    options: Readonly<{ refit: boolean; placementBase?: DocumentV2 }> = { refit: true },
-  ): DocumentV2 | Failure {
+    options: Readonly<{ refit: boolean; placementBase?: DocumentV3 }> = { refit: true },
+  ): DocumentV3 | Failure {
     this.deleteEmptyGroups();
     if (options.refit) this.refit(options.placementBase ?? this.base);
     for (const id of this.unchecked) {
@@ -137,13 +144,17 @@ export class Draft implements WritableTree {
       if (rejected !== null) return fail(rejected.code, nodePath(id, rejected.path));
     }
     this.unchecked.clear();
-    return this.document();
+    const document = this.document();
+    // Interim until M7-U4's command checks (M7 contract, section 5.3): no command commits a
+    // document whose expansions break the M7-S5 tree depth; the model's code and path.
+    const deep = expansionDepthViolation(document);
+    return deep === null ? document : fail('document.invalid-field', nodePath(deep, '/parent'));
   }
 
   /** The current state as a frozen document, without the `finish` rules. */
-  document(): DocumentV2 {
+  document(): DocumentV3 {
     return deepFreeze({
-      schemaVersion: 2,
+      schemaVersion: 3,
       id: this.base.id,
       pages: this.pages,
       // fromEntries defines own properties, so a "__proto__" ID stays data.
@@ -170,7 +181,7 @@ export class Draft implements WritableTree {
     }
   }
 
-  private refit(placementBase: DocumentV2): void {
+  private refit(placementBase: DocumentV3): void {
     const pending = new Set<string>();
     const consider = (owner: string | undefined) => {
       if (owner !== undefined && isGroup(this.nodes.get(owner))) pending.add(owner);

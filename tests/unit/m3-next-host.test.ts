@@ -17,7 +17,12 @@ import {
   type PathEditOverlay,
   type SelectionHandles,
 } from '../../packages/editor-core/src/index.js';
-import { validateDocument, type DocumentV2 } from '../../packages/model/src/index.js';
+import {
+  validateAnyDocument,
+  validateDocument,
+  type DocumentV2,
+  type DocumentV3,
+} from '../../packages/model/src/index.js';
 import { RecordingRenderer } from '../support/p5-recording-renderer.js';
 
 // MVP M3-U4 (M3 contract, sections 4, 5.1 and M3-A12): the next-host page's pure path edit
@@ -89,7 +94,7 @@ function pathsDocument(
     verbs: Extract<Command, { type: 'createPath' }>['verbs'];
     points: readonly number[];
   }>[],
-): DocumentV2 {
+): DocumentV3 {
   const target = createEditor({ ids: createCounterIdSource('p') });
   for (const entry of paths) ok(target, { type: 'createPath', ...entry });
   return target.query({ type: 'document' });
@@ -97,7 +102,7 @@ function pathsDocument(
 
 describe('M3-U4 path-edit fixture', () => {
   it('is a valid document with a closed cubic path and an open path in a rotated group', () => {
-    const result = validateDocument(FIXTURE);
+    const result = validateAnyDocument(FIXTURE);
     expect(result.ok).toBe(true);
     expect(FIXTURE.pages.map((page) => page.children)).toEqual([['closed', 'g1']]);
     const closed = FIXTURE.nodes.closed!;
@@ -123,8 +128,10 @@ describe('M3-U4 path-edit fixture', () => {
     ok(target, { type: 'enterPathEdit', id: 'open' });
     const nested = target.query({ type: 'pathOverlay' })!;
     expect(nested.subpaths.map((s) => [s.closed, s.anchors.length])).toEqual([[false, 4]]);
-    // Loading it in the editor keeps it byte for byte.
-    expect(JSON.stringify(target.query({ type: 'document' }))).toBe(JSON.stringify(FIXTURE));
+    // Loading it in the editor keeps it byte for byte, up to the v3 version (M7-U1).
+    expect(JSON.stringify(target.query({ type: 'document' }))).toBe(
+      JSON.stringify({ ...FIXTURE, schemaVersion: 3 }),
+    );
   });
 });
 

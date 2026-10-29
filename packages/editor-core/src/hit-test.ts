@@ -1,4 +1,4 @@
-import type { DocumentV2, Frame, NodeV2, PathData } from '@vector-studio/model';
+import type { DocumentV3, Frame, NodeV3, PathData } from '@vector-studio/model';
 import {
   apply,
   boundsOfPoints,
@@ -9,7 +9,15 @@ import {
   rotatedBounds,
 } from './geometry.js';
 import { clampedRadii } from './projector.js';
-import { ancestors, childrenOf, documentTree, isContainer, isGroup, spaceOf } from './tree.js';
+import {
+  ancestors,
+  childrenOf,
+  documentTree,
+  isContainer,
+  isGroup,
+  spaceOf,
+  type TreeView,
+} from './tree.js';
 import type { PagePoint } from './types.js';
 
 // Hit testing (P5 plan, section 4.4; MVP M1 contract, section 6): fill regions and outlines,
@@ -17,7 +25,7 @@ import type { PagePoint } from './types.js';
 // containers, inside frame clips and mask regions. Exact geometry-port hit testing is deferred.
 
 /** Frame-local path geometry for a custom node (its extension's `toScene`), or null. */
-export type CustomGeometry = (node: NodeV2) => PathData | null;
+export type CustomGeometry = (node: NodeV3) => PathData | null;
 
 export type Polyline = { points: PagePoint[]; closed: boolean };
 
@@ -253,7 +261,7 @@ function insideEllipse(p: PagePoint, frame: Frame): boolean {
  * each arrowhead as an open polyline (`line`) or a closed triangle (`triangle`). A line without
  * a stroke, of stroke width 0 or of zero length has no arrowheads.
  */
-function lineOutline(node: Extract<NodeV2, { type: 'line' }>): {
+function lineOutline(node: Extract<NodeV3, { type: 'line' }>): {
   lines: Polyline[];
   triangles: Polyline[];
 } {
@@ -281,7 +289,7 @@ function lineOutline(node: Extract<NodeV2, { type: 'line' }>): {
 }
 
 /** A point in a node's parent space, turned into its unrotated frame (a rigid map). */
-function intoFrame(node: NodeV2, parentPoint: PagePoint): PagePoint {
+function intoFrame(node: NodeV3, parentPoint: PagePoint): PagePoint {
   if (node.rotation === 0) return parentPoint;
   const cx = node.frame.x + node.frame.width / 2;
   const cy = node.frame.y + node.frame.height / 2;
@@ -294,13 +302,15 @@ function intoFrame(node: NodeV2, parentPoint: PagePoint): PagePoint {
  * 4.4; M1 contract, section 6). Containers never hit here; `visible` of the node itself counts.
  */
 export function hitsNode(
-  node: NodeV2,
+  node: NodeV3,
   parentPoint: PagePoint,
   zoom: number,
   custom: CustomGeometry,
 ): boolean {
   if (!node.visible) return false;
   if (isContainer(node)) return false;
+  // Instances are hit-tested from M7-U3 (M7 contract, section 4.3); until then never.
+  if (node.type === 'instance') return false;
   // Into the unrotated frame: a rigid map, so distances are unchanged (M1 contract, section 6).
   const point = intoFrame(node, parentPoint);
   const radius = Math.max((node.stroke?.width ?? 0) / 2, 4 / zoom);
@@ -331,7 +341,7 @@ export function hitsNode(
 }
 
 /** Whether `point`, in a mask group's local space, is inside its source's fill region. */
-function insideMask(source: NodeV2 | undefined, point: PagePoint, zoom: number): boolean {
+function insideMask(source: NodeV3 | undefined, point: PagePoint, zoom: number): boolean {
   if (source?.type !== 'path') return false;
   // Fill, opacity and visibility of the source are ignored; its fill rule applies.
   const lines = flatten(source.path, source.frame, true, 0.25 / zoom);
@@ -353,7 +363,7 @@ function memo(test: () => boolean): Clip {
  * visited twice.
  */
 function visitHits(
-  document: DocumentV2,
+  document: DocumentV3,
   page: string,
   point: PagePoint,
   zoom: number,
@@ -366,6 +376,9 @@ function visitHits(
   const visit = (id: string, parentPoint: PagePoint, clip: Clip): boolean => {
     const node = tree.node(id);
     if (node === undefined || !node.visible) return false;
+    // Interim until M7-U2 and M7-U3 project symbols: a symbol is not drawn, so neither it nor
+    // anything inside it is hit (no background, border or children).
+    if (node.type === 'symbol') return false;
     if (!isContainer(node)) return hitsNode(node, parentPoint, zoom, custom) && clip() && take(id);
     const local = apply(
       invertRigid(localTransform(node.frame, node.rotation)),
@@ -415,7 +428,7 @@ function visitHits(
  * mask source. Null when nothing is hit.
  */
 export function deepestHit(
-  document: DocumentV2,
+  document: DocumentV3,
   page: string,
   point: PagePoint,
   zoom: number,
@@ -434,7 +447,7 @@ export function deepestHit(
  * stack of M2 contract, section 5, before its selection targets are taken).
  */
 export function hitsAt(
-  document: DocumentV2,
+  document: DocumentV3,
   page: string,
   point: PagePoint,
   zoom: number,
@@ -457,11 +470,13 @@ export function hitsAt(
  * passes a scope only for a hit strictly inside its subtree; otherwise the page rule applies.
  */
 export function selectionTarget(
-  document: DocumentV2,
+  document: DocumentV3,
   id: string,
   scope: string | null = null,
-): string {
+): string | null {
   const tree = documentTree(document);
+  // Interim until M7-U2 and M7-U3 (see `visitHits`): a symbol and its descendants are no target.
+  if (inSymbol(tree, id)) return null;
   const chain = [id, ...ancestors(tree, id).map((node) => node.id)];
   const index = scope === null ? -1 : chain.indexOf(scope);
   if (index > 0) return chain[index - 1]!;
@@ -470,13 +485,21 @@ export function selectionTarget(
   return top.id;
 }
 
-/** The chain from a hit node up to its selection target, innermost first. */
+/** Whether `id` is a `symbol` or has a `symbol` ancestor. */
+function inSymbol(tree: TreeView, id: string): boolean {
+  return (
+    tree.node(id)?.type === 'symbol' || ancestors(tree, id).some((node) => node.type === 'symbol')
+  );
+}
+
+/** The chain from a hit node up to its selection target, innermost first; empty for no target. */
 export function targetChain(
-  document: DocumentV2,
+  document: DocumentV3,
   id: string,
   scope: string | null = null,
 ): string[] {
   const target = selectionTarget(document, id, scope);
+  if (target === null) return [];
   const tree = documentTree(document);
   const chain = [id];
   for (const node of ancestors(tree, id)) {
@@ -511,15 +534,17 @@ function contains(box: Frame, frame: Frame): boolean {
  * rectangle contains those bounds entirely. Children of other containers are not candidates.
  */
 export function marqueeHits(
-  document: DocumentV2,
+  document: DocumentV3,
   page: string,
   box: Frame,
   scope: string | null = null,
 ): string[] {
   const tree = documentTree(document);
+  // Interim until M7-U2 and M7-U3 (see `visitHits`): no symbol, and nothing inside one.
+  if (scope !== null && inSymbol(tree, scope)) return [];
   return childrenOf(tree, scope ?? page).filter((id) => {
     const node = tree.node(id);
-    if (node === undefined || !node.visible) return false;
+    if (node === undefined || !node.visible || node.type === 'symbol') return false;
     // A page child with rotation 0 uses the frame itself, bit-identical with P5; a scope's
     // child is in its parent's space, so it uses its page-space bounds.
     const frame =
@@ -536,7 +561,7 @@ export function marqueeHits(
  * The page-aligned bounds of the rotated frames of `ids` in page space, at any depth (M1
  * contract, section 6), or null when there are none.
  */
-export function boundsOf(document: DocumentV2, ids: readonly string[]): Frame | null {
+export function boundsOf(document: DocumentV3, ids: readonly string[]): Frame | null {
   const tree = documentTree(document);
   const points: PagePoint[] = [];
   for (const id of ids) {

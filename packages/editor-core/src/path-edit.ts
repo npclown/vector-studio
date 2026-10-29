@@ -1,4 +1,4 @@
-import type { DocumentV2, PathData, PathNodeV2 } from '@vector-studio/model';
+import type { DocumentV3, PathData, PathNodeV2 } from '@vector-studio/model';
 import { deepFreeze } from './freeze.js';
 import { apply, invertRigid, localTransform, multiply, type Matrix } from './geometry.js';
 import {
@@ -65,7 +65,7 @@ export type PathTarget =
 
 /** The `path` node `id` of `page`, or undefined. */
 export function editablePath(
-  document: DocumentV2,
+  document: DocumentV3,
   page: string,
   id: string,
 ): PathNodeV2 | undefined {
@@ -79,7 +79,7 @@ export function editablePath(
  * `apply(C, L.x, L.y)` with `C = spaceOf(parent).matrix · localTransform(frame, θ)`, and exactly
  * to `(x + u·W, y + v·H)` for a page-root node with `θ = 0`, as `flatten` does.
  */
-export function pathGeometry(document: DocumentV2, node: PathNodeV2): PathGeometry {
+export function pathGeometry(document: DocumentV3, node: PathNodeV2): PathGeometry {
   const tree = documentTree(document);
   const { frame, rotation } = node;
   const pageRoot = tree.page(node.parent) !== undefined && rotation === 0;
@@ -197,7 +197,7 @@ function selectedTest(state: PathEditState) {
 }
 
 /** The `pathOverlay` query value (section 5.1): frozen, in page space. */
-export function pathEditOverlay(document: DocumentV2, state: PathEditState): PathEditOverlay {
+export function pathEditOverlay(document: DocumentV3, state: PathEditState): PathEditOverlay {
   const node = document.nodes[state.id] as PathNodeV2;
   const geometry = pathGeometry(document, node);
   const selected = selectedTest(state);
@@ -235,7 +235,7 @@ export function segmentPolyline(subpath: PageSubpath, k: number, tolerance: numb
  * chord `j` (ties to the lower `j`) with clamped projection parameter `σ`, `t = (j + σ) / N`.
  */
 export function segmentParameter(
-  document: DocumentV2,
+  document: DocumentV3,
   node: PathNodeV2,
   s: number,
   k: number,
@@ -270,7 +270,7 @@ function insidePathFill(geometry: PathGeometry, point: PagePoint, tolerance: num
  * the path has one; else null (the M2 hit rules apply).
  */
 export function pathTargetAt(
-  document: DocumentV2,
+  document: DocumentV3,
   state: PathEditState,
   point: PagePoint,
   zoom: number,
