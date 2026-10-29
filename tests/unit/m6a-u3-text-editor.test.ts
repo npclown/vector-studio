@@ -3,7 +3,7 @@ import {
   serializeDocument,
   validateDocument,
   type Color,
-  type DocumentV4,
+  type DocumentV5,
   type Frame,
   type TextNode,
   type TextRun,
@@ -36,12 +36,18 @@ import { createFakeTextLayout, fakeLayout } from '../support/fake-text-layout.js
 // option, cache, query and session event; the section 6.1 commands and codes; auto sizing and
 // the growth anchor (6.2); every resize and scale row of section 6.3 with `map` handles scaling
 // sizes as a group (M6a-Q18 (a)); hit testing (7); fragments (8); the interim nesting rule in
-// commands (M6a-S7). Every layout comes from the fake port of section 5: an `a` advances 0.5 em,
+// commands (M6a-S7), lifted by M7-U7 (section 9, M7-T1), which also moved the schema to v5. Every
+// layout comes from the fake port of section 5: an `a` advances 0.5 em,
 // a Hangul syllable 1 em, a space 0.25 em, and a line is `lineHeight` times its largest size.
 // Criteria A03, A06 to A10 and A13.
 
 const root = path.resolve(import.meta.dirname, '../..');
 const TEXT_FIXTURE = readFileSync(path.join(root, 'tests/fixtures/m6-text/text.v4.json'), 'utf8');
+/** Its v5 migration (M6a contract, section 9), which the editor holds and writes. */
+const TEXT_FIXTURE_V5 = readFileSync(
+  path.join(root, 'tests/fixtures/m7-symbols/migrated/text.v5.json'),
+  'utf8',
+);
 const START = { horizontal: 'start', vertical: 'start' } as const;
 const black: Color = { r: 0, g: 0, b: 0, a: 1 };
 const red: Color = { r: 1, g: 0, b: 0, a: 1 };
@@ -101,13 +107,13 @@ function container(
   return { ...base(id, parent, frame), type, children, ...extra };
 }
 
-function doc(nodes: Loose[], children: string[]): DocumentV4 {
+function doc(nodes: Loose[], children: string[]): DocumentV5 {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc',
     pages: [{ id: 'p1', name: 'Page 1', children }],
     nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
-  } as unknown as DocumentV4;
+  } as unknown as DocumentV5;
 }
 
 /** An ID source that counts its calls. */
@@ -124,7 +130,7 @@ function counted(prefix = 'n'): IdSource & { calls: number } {
 }
 
 function editor(
-  document?: DocumentV4,
+  document?: DocumentV5,
   port: TextLayoutPort | null = createFakeTextLayout(),
   ids: IdSource = createCounterIdSource('n'),
 ): Editor {
@@ -365,7 +371,7 @@ describe('M6a-A06: failure codes in the section 6.1 order', () => {
   const fail = (code: string, at?: string): CommandResult =>
     (at === undefined ? { ok: false, code } : { ok: false, code, path: at }) as CommandResult;
 
-  it('createText: shape, unknown node, model rules, size floor, no port, nesting, parent, IDs', () => {
+  it('createText: shape, unknown node, model rules, size floor, no port, parent, IDs', () => {
     const ids = counted();
     const document = doc(
       [
@@ -398,7 +404,6 @@ describe('M6a-A06: failure codes in the section 6.1 order', () => {
       ],
       [noPort, create(), fail('editor.no-text-layout')],
       [noPort, create({ parent: 's1' }), fail('editor.no-text-layout')],
-      [target, create({ parent: 's1' }), fail('editor.nested-symbol', '/parent')],
       [target, create({ parent: 'r1' }), fail('editor.invalid-parent', '/parent')],
     ];
     for (const [editorCase, command, expected] of cases) fails(editorCase, command, expected);
@@ -784,7 +789,7 @@ describe('M6a-A07: map handles (section 6.3, M6a-Q18 (a))', () => {
 describe('M6a-A08: without a port', () => {
   it('loads, round-trips and accepts the commands that need no layout', () => {
     const target = createEditor({ document: JSON.parse(TEXT_FIXTURE) as unknown });
-    expect(serialized(target)).toBe(TEXT_FIXTURE);
+    expect(serialized(target)).toBe(TEXT_FIXTURE_V5);
     expect(target.query({ type: 'textLayout', id: 't1' })).toBeNull();
     step(target, { type: 'nudgeNodes', ids: ['t1', 't2'], dx: 1, dy: 2 });
     step(target, {
@@ -962,7 +967,7 @@ describe('M6a-A10: projection and hit testing', () => {
   });
 });
 
-describe('M6a-A13: the interim nesting rule in commands (M6a-S7)', () => {
+describe('M6a-A13: the interim nesting rule in commands (M6a-S7), lifted by M7-U7 (M7-T1)', () => {
   const withSymbol = () =>
     doc(
       [
@@ -973,31 +978,18 @@ describe('M6a-A13: the interim nesting rule in commands (M6a-S7)', () => {
       ['s1', 't1'],
     );
 
-  it('fails createText into, moveNodes into and createSymbol over text', () => {
+  it('creates text into, moves text into and makes a symbol over text', () => {
     const target = editor(withSymbol());
-    fails(target, create({ parent: 's1' }), {
-      ok: false,
-      code: 'editor.nested-symbol',
-      path: '/parent',
-    });
-    fails(
-      target,
-      { type: 'moveNodes', ids: ['t1'], parent: 's1', index: 0 },
-      {
-        ok: false,
-        code: 'editor.nested-symbol',
-        path: '/nodes/t1/parent',
-      },
+    const created = target.execute(create({ parent: 's1' }));
+    expect(created.ok).toBe(true);
+    const id = created.ok ? created.ids[0]! : '';
+    expect(target.query({ type: 'node', id })!.parent).toBe('s1');
+    expect(target.execute({ type: 'moveNodes', ids: ['t1'], parent: 's1', index: 0 }).ok).toBe(
+      true,
     );
-    fails(
-      target,
-      { type: 'createSymbol', ids: ['t1'] },
-      {
-        ok: false,
-        code: 'editor.nested-symbol',
-        path: '/nodes/t1/parent',
-      },
-    );
+    expect(target.query({ type: 'node', id: 't1' })!.parent).toBe('s1');
+    const other = editor(withSymbol());
+    expect(other.execute({ type: 'createSymbol', ids: ['t1'] }).ok).toBe(true);
   });
 });
 
@@ -1014,7 +1006,7 @@ describe('M6a-A03: fragments with text (section 8)', () => {
     run_(target, { type: 'copy', ids: ['t1'] });
     expect(target.query({ type: 'clipboard' })).toBe(
       MARKER +
-        '{"fragmentVersion":2,"schemaVersion":4,"roots":["t1"],"nodes":{"t1":{"id":"t1","name":"t1","parent":"","frame":{"x":1,"y":2,"width":0,"height":0},"rotation":0,"constraints":{"horizontal":"start","vertical":"start"},"opacity":1,"visible":true,"type":"text","runs":[{"text":"ab","family":"Test","size":10,"color":{"r":0,"g":0,"b":0,"a":1}},{"text":"가","family":"Test","size":20,"color":{"r":1,"g":0,"b":0,"a":1}}],"sizing":"autoWidth","align":"center","letterSpacing":0,"lineHeight":1.2}},"sources":[],"sourceNodes":{}}',
+        '{"fragmentVersion":2,"schemaVersion":5,"roots":["t1"],"nodes":{"t1":{"id":"t1","name":"t1","parent":"","frame":{"x":1,"y":2,"width":0,"height":0},"rotation":0,"constraints":{"horizontal":"start","vertical":"start"},"opacity":1,"visible":true,"type":"text","runs":[{"text":"ab","family":"Test","size":10,"color":{"r":0,"g":0,"b":0,"a":1}},{"text":"가","family":"Test","size":20,"color":{"r":1,"g":0,"b":0,"a":1}}],"sizing":"autoWidth","align":"center","letterSpacing":0,"lineHeight":1.2}},"sources":[],"sourceNodes":{}}',
     );
     const pasted = step(target, { type: 'paste' });
     const id = pasted.ok ? pasted.ids[0]! : '';

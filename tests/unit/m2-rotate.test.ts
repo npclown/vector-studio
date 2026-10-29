@@ -1,7 +1,7 @@
 import {
   normalizeRotation,
   serializeDocument,
-  type DocumentV4,
+  type DocumentV5,
   type Frame,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
@@ -161,7 +161,7 @@ const stepped = (value: number) => normalizeRotation(Math.round(value / STEP) * 
  * `normalize(θ + angle)` stored minus the parent chain's, frame centre turned about the pivot
  * in page space and mapped back into the parent space, size kept; `keep` keeps `x` and `y`.
  */
-function rotated(document: DocumentV4, id: string, angle: number, pivot: PagePoint, keep = false) {
+function rotated(document: DocumentV5, id: string, angle: number, pivot: PagePoint, keep = false) {
   const node = document.nodes[id]!;
   const space = spaceOf(documentTree(document), node.parent);
   const rotation = normalizeRotation(
@@ -184,7 +184,7 @@ function rotated(document: DocumentV4, id: string, angle: number, pivot: PagePoi
 
 /** The expected document: `ids` placed by `rotated`, then the M1 group refit. */
 function expectedText(
-  document: DocumentV4,
+  document: DocumentV5,
   ids: readonly string[],
   angle: number,
   pivot: PagePoint,
@@ -199,7 +199,7 @@ function expectedText(
 }
 
 /** The expected document of a one-node Shift step: the stored rotation set, then the refit. */
-function steppedText(document: DocumentV4, id: string, rotation: number): string {
+function steppedText(document: DocumentV5, id: string, rotation: number): string {
   const draft = new Draft(document);
   draft.set({ ...document.nodes[id]!, rotation });
   const result = draft.finish(() => null);
@@ -214,7 +214,7 @@ function steppedText(document: DocumentV4, id: string, rotation: number): string
  */
 function checkStep(
   target: Editor,
-  before: DocumentV4,
+  before: DocumentV5,
   id: string,
   press: PagePoint,
   end: PagePoint,

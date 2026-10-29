@@ -233,3 +233,35 @@ export type DocumentV4 = Readonly<{
   pages: readonly PageV4[];
   nodes: Readonly<Record<string, NodeV4>>;
 }>;
+
+// Document schema v5 (M6a contract, section 9, M7-T3): v4 with the text overrides of instances.
+
+/** An instance's text for one text node of its source (M7-T3): canonical runs only. */
+export type TextOverride = Readonly<{ runs: readonly TextRun[] }>;
+
+/**
+ * An instance at v5 (M7-T3): `textOverrides` is always present (`{}` when none), keyed by the
+ * IDs of text nodes of its source's subtree in UTF-16 code unit order, sizes in the source's
+ * space.
+ */
+export type InstanceNodeV5 = NodeBaseV2 &
+  Readonly<{
+    type: 'instance';
+    symbol: string;
+    textOverrides: Readonly<Record<string, TextOverride>>;
+  }>;
+
+export type LeafNodeV5 = LeafNodeV2 | TextNode | InstanceNodeV5;
+export type ContainerNodeV5 = ContainerNodeV4;
+export type NodeV5 = LeafNodeV5 | ContainerNodeV5;
+export type NodeTypeV5 = NodeV5['type'];
+
+export type PageV5 = PageV4;
+
+export type DocumentV5 = Readonly<{
+  schemaVersion: 5;
+  id: string;
+  /** One or more pages. */
+  pages: readonly PageV5[];
+  nodes: Readonly<Record<string, NodeV5>>;
+}>;

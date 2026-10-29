@@ -6,6 +6,7 @@ export {
   migrateV1toV2,
   migrateV2toV3,
   migrateV3toV4,
+  migrateV4toV5,
   normalizeRotation,
   parseDocument,
   validateAnyDocument,
@@ -20,6 +21,7 @@ export {
   type ParseResult,
   type ParseResultV2,
   type ParseResultV3,
+  type ParseResultV4,
 } from './parse.js';
 export {
   ENVELOPE_ERROR_CODES,

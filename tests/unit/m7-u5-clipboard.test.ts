@@ -3,8 +3,8 @@ import path from 'node:path';
 import {
   serializeDocument,
   validateDocument,
-  type DocumentV4,
-  type NodeV4,
+  type DocumentV5,
+  type NodeV5,
 } from '@vector-studio/model';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -27,14 +27,14 @@ import { ExpansionCache } from '../../packages/editor-core/src/expansion.js';
 // accepts; a failed command changes nothing, keeps the clipboard and draws no ID.
 
 const root = path.resolve(import.meta.dirname, '../..');
-// Since M6a-U1 the model returns schema v4, so each M7 fixture is read as its committed v4
-// migration under tests/fixtures/m6-text/migrated (M6a contract, section 2.1).
+// Since M7-U7 the model returns schema v5, so each M7 fixture is read as its committed v5
+// migration under tests/fixtures/m7-symbols/migrated (M6a contract, section 9).
 const fixture = (name: string) =>
   readFileSync(
     path.join(
       root,
-      'tests/fixtures/m6-text/migrated',
-      `${path.basename(name).replace(/(\.v3)?\.json$/, '')}.v4.json`,
+      'tests/fixtures/m7-symbols/migrated',
+      `${path.basename(name).replace(/(\.v3)?\.json$/, '')}.v5.json`,
     ),
     'utf8',
   );
@@ -90,6 +90,7 @@ const instance = (id: string, parent: string, frame: Frame, symbol: string) => (
   ...base(id, parent, frame),
   type: 'instance',
   symbol,
+  textOverrides: {},
 });
 
 /**
@@ -98,7 +99,7 @@ const instance = (id: string, parent: string, frame: Frame, symbol: string) => (
  */
 function small(): Json {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'd',
     pages: [{ id: 'p', name: 'P', children: ['F', 'I', 'X'] }],
     nodes: {
@@ -111,7 +112,7 @@ function small(): Json {
   };
 }
 const emptyDocument = (): Json => ({
-  schemaVersion: 4,
+  schemaVersion: 5,
   id: 'e',
   pages: [{ id: 'q', name: 'Q', children: [] }],
   nodes: {},
@@ -189,9 +190,9 @@ const marked = (body: unknown) => MARKER + JSON.stringify(body);
 /** The literal text of `copy { ids: ['I'] }` on `small()`. */
 const I_FRAGMENT =
   MARKER +
-  '{"fragmentVersion":2,"schemaVersion":4,"roots":["I"],"nodes":{' +
+  '{"fragmentVersion":2,"schemaVersion":5,"roots":["I"],"nodes":{' +
   '"I":{"id":"I","name":"I","parent":"","frame":{"x":100,"y":0,"width":80,"height":40},' +
-  `"rotation":0,${TAIL},"type":"instance","symbol":"S"}},` +
+  `"rotation":0,${TAIL},"type":"instance","symbol":"S","textOverrides":{}}},` +
   '"sources":["S"],"sourceNodes":{' +
   '"S":{"id":"S","name":"S","parent":"","frame":{"x":10,"y":10,"width":40,"height":20},' +
   `"rotation":0,${TAIL},"type":"symbol","children":["r"],"fill":${JSON.stringify(RED)},` +
@@ -613,7 +614,7 @@ describe('paste of an instance alone (M7-Q9 (a))', () => {
     expect(oneStep(target, { type: 'paste', text: fragment })).toEqual(['n1', 'n3']);
     expect(drawn()).toBe(3);
     expect(documentOf(target)).toEqual({
-      schemaVersion: 4,
+      schemaVersion: 5,
       id: 'e',
       pages: [{ id: 'q', name: 'Q', children: ['n1', 'n3'] }],
       nodes: {
@@ -912,13 +913,13 @@ describe('expansion validity and caps through paste (M7-X3, section 4.1)', () =>
     };
     let drawn = 0;
     const custom = {
-      check: (node: NodeV4) =>
+      check: (node: NodeV5) =>
         node.type === 'custom' && node.frame.width > 50
           ? { code: 'document.invalid-custom-data' as const, path: '/data' }
           : null,
       defaults: () => ({ data: {} }),
     };
-    const document = JSON.parse(JSON.stringify(emptyDocument())) as DocumentV4;
+    const document = JSON.parse(JSON.stringify(emptyDocument())) as DocumentV5;
     const context = { ids: () => `n${++drawn}`, activePage: 'q', custom };
     expect(applyEdit(document, { type: 'paste', text: marked(body) }, context)).toEqual({
       ok: false,
@@ -946,7 +947,7 @@ describe('expansion validity and caps through paste (M7-X3, section 4.1)', () =>
       for (const id of ids) nodes[id] = instance(id, page, f(0, 0, 10, 10), 's');
       return { id: page, name: page, children: k === 0 ? ['s', ...ids] : ids };
     });
-    return { schemaVersion: 4, id: 'cap', pages, nodes };
+    return { schemaVersion: 5, id: 'cap', pages, nodes };
   }
 
   it('a paste over the page cap is editor.expansion-limit at its fragment path', () => {
@@ -981,7 +982,7 @@ describe('expansion validity and caps through paste (M7-X3, section 4.1)', () =>
     roots.forEach((id, k) => (nodes[id] = instance(id, '', frameOf(k), 's')));
     return marked({
       fragmentVersion: 2,
-      schemaVersion: 3,
+      schemaVersion: 5,
       roots,
       nodes,
       sources: ['s'],
@@ -1040,7 +1041,7 @@ describe('expansion validity and caps through paste (M7-X3, section 4.1)', () =>
 describe('rule (1) review follow-ups (B1, S1, S2)', () => {
   /** Page `p` holding source `node-3` (with `c`) and its instance `I`. */
   const reused = (): Json => ({
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'd',
     pages: [{ id: 'p', name: 'P', children: ['node-3', 'I'] }],
     nodes: {

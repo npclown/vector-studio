@@ -2,9 +2,9 @@ import {
   MAX_TREE_DEPTH,
   normalizeRotation,
   validateNode,
-  type DocumentV4,
+  type DocumentV5,
   type Frame,
-  type NodeV4,
+  type NodeV5,
   type PageV2,
   type SymbolNode,
   type TextNode,
@@ -61,6 +61,7 @@ import {
 } from './text.js';
 import { refitText, setText, setTextProps, setTextStyle } from './text-edits.js';
 import { boundsOf } from './hit-test.js';
+import { clearInstanceText, setInstanceText } from './instance-text.js';
 import { detachInstances, orphanedInstances, withDetach } from './symbols.js';
 import { visualBounds } from './visual-bounds.js';
 import { handleBoxOf, handleCentre } from './handles.js';
@@ -121,7 +122,7 @@ const MAX_CLIP_DEPTH = 32;
 
 /** The props each node type has (section 4.2); any other prop is `editor.invalid-command`. */
 const COMMON_PROPS = ['name', 'opacity', 'visible', 'constraints'];
-const PROPS: Readonly<Record<NodeV4['type'], readonly string[]>> = {
+const PROPS: Readonly<Record<NodeV5['type'], readonly string[]>> = {
   rectangle: [...COMMON_PROPS, 'fill', 'stroke', 'cornerRadii'],
   ellipse: [...COMMON_PROPS, 'fill', 'stroke'],
   line: [...COMMON_PROPS, 'stroke', 'startArrow', 'endArrow'],
@@ -154,7 +155,7 @@ function childClipDepth(tree: TreeView, owner: string): number {
  * Restores the descendants of container `id` to their state in `base` when its subtree there has
  * the same members, and returns the container's frame in `base`; null leaves the draft as is.
  */
-function restoreSubtree(draft: Draft, base: DocumentV4, id: string): Frame | null {
+function restoreSubtree(draft: Draft, base: DocumentV5, id: string): Frame | null {
   const baseTree = documentTree(base);
   const origin = baseTree.node(id);
   if (origin === undefined) return null;
@@ -171,7 +172,7 @@ function restoreSubtree(draft: Draft, base: DocumentV4, id: string): Frame | nul
 }
 
 export function applyEdit(
-  document: DocumentV4,
+  document: DocumentV5,
   command: DocumentCommand,
   context: EditContext,
 ): EditResult {
@@ -214,7 +215,7 @@ export function applyEdit(
         // A container and its descendant in one call (section 4.2).
         return fail('editor.invalid-command', '/frames');
       }
-      const next: NodeV4[] = [];
+      const next: NodeV5[] = [];
       const refits = new Set<string>();
       for (const entry of entries) {
         const node = document.nodes[entry.id]!;
@@ -308,6 +309,10 @@ export function applyEdit(
       return create(document, command, context, custom, finish);
     case 'detachInstances':
       return detachInstances(document, command, context, expansions, finish);
+    case 'setInstanceText':
+      return setInstanceText(document, command, context, finish);
+    case 'clearInstanceText':
+      return clearInstanceText(document, command, context, finish);
     case 'ungroupNodes': {
       if (typeof command.id !== 'string') return fail('editor.invalid-command', '/id');
       const node = nodeOf(document, command.id);
@@ -430,8 +435,8 @@ export function applyEdit(
  * between the gesture's `base` and `current` refit, innermost first.
  */
 export function refitGesture(
-  base: DocumentV4,
-  current: DocumentV4,
+  base: DocumentV5,
+  current: DocumentV5,
   touched: Iterable<string>,
   custom: CustomRules = NO_CUSTOM,
   expansions: ExpansionCache = new ExpansionCache((node) => custom.check(node)),
@@ -461,8 +466,8 @@ export type GestureEdit =
  * `base`. Groups do not refit (that happens at commit, section 4.2).
  */
 export function applyGestureEdit(
-  document: DocumentV4,
-  base: DocumentV4,
+  document: DocumentV5,
+  base: DocumentV5,
   edit: GestureEdit,
   custom: CustomRules = NO_CUSTOM,
   expansions: ExpansionCache = new ExpansionCache((node) => custom.check(node)),
@@ -530,16 +535,17 @@ type CreateCommand = Extract<
  * (`editor.nested-symbol`) before the clip depth, and the clip depth through its expansion; its
  * other checks (validity, caps) run on a build with a placeholder ID, and a failure at the new
  * instance has a path relative to it, as every creation failure. `createText` (M6a contract,
- * section 6.1) checks after the model's rules the authored size floor, `editor.no-text-layout`
- * for an auto mode without a port, then `editor.nested-symbol` (M6a-S7), and lays out its auto
- * dimensions in page space with the growth anchor on the given frame before placement.
+ * section 6.1) checks after the model's rules the authored size floor and `editor.no-text-layout`
+ * for an auto mode without a port (a text node may sit in a source, section 9, M7-T1), and lays
+ * out its auto dimensions in page space with the growth anchor on the given frame before
+ * placement.
  */
 function create(
-  document: DocumentV4,
+  document: DocumentV5,
   command: CreateCommand,
   context: EditContext,
   custom: CustomRules,
-  finish: (draft: Draft) => DocumentV4 | Failure,
+  finish: (draft: Draft) => DocumentV5 | Failure,
 ): EditResult {
   if (command.parent !== undefined && typeof command.parent !== 'string') {
     return fail('editor.invalid-command', '/parent');
@@ -704,6 +710,7 @@ function create(
               },
         type: 'instance',
         symbol: source!.id,
+        textOverrides: {},
       };
       break;
     }
@@ -719,7 +726,7 @@ function create(
   const inSymbol =
     owner?.type === 'symbol' || ancestors(tree, parent).some((node) => node.type === 'symbol');
   if (result.node.type === 'text') {
-    const text = textChecks(result.node, context.layout, inSymbol);
+    const text = textChecks(result.node, context.layout);
     if ('ok' in text) return text;
     result = { ok: true, node: text };
   }
@@ -744,7 +751,7 @@ function create(
   }
   const build = (id: string): EditResult => {
     // Into the parent's local space; on a page nothing changes.
-    let placed: NodeV4 = { ...result.node, id, parent };
+    let placed: NodeV5 = { ...result.node, id, parent };
     if (!onPage) {
       const space = spaceOf(tree, parent);
       const local = normalizeRotation(result.node.rotation - space.rotation);
@@ -796,19 +803,15 @@ function create(
 
 /**
  * The `createText` checks after the model's rules (M6a contract, section 6.1): the authored size
- * floor at `/runs/<k>/size`, `editor.no-text-layout` for an auto mode without a port, then the
- * M6a-S7 nesting rule; on success the node in page space with its auto dimensions laid out, the
+ * floor at `/runs/<k>/size`, then `editor.no-text-layout` for an auto mode without a port; a text
+ * node may be created inside a source (section 9, M7-T1). On success the node in page space with
+ * its auto dimensions laid out, the
  * growth anchor `(x + a·width, y)` of the given frame kept (section 6.2).
  */
-function textChecks(
-  node: TextNode,
-  layout: TextLayouter | undefined,
-  inSymbol: boolean,
-): TextNode | Failure {
+function textChecks(node: TextNode, layout: TextLayouter | undefined): TextNode | Failure {
   const small = node.runs.findIndex((run) => run.size < MIN_AUTHORED_TEXT_SIZE);
   if (small >= 0) return fail('editor.invalid-command', `/runs/${small}/size`);
   if (isAuto(node) && layout === undefined) return fail('editor.no-text-layout');
-  if (inSymbol) return fail('editor.nested-symbol', '/parent');
   if (layout === undefined || !isAuto(node)) return node;
   const frame = refitFrame(node, layout(node));
   if (frame === node.frame) return node;
@@ -824,10 +827,10 @@ function textChecks(
  * that would hold or sit in a source fails with `editor.nested-symbol` (section 5.3).
  */
 function createSymbol(
-  document: DocumentV4,
+  document: DocumentV5,
   command: Extract<DocumentCommand, { type: 'createSymbol' }>,
   context: EditContext,
-  finish: (draft: Draft) => DocumentV4 | Failure,
+  finish: (draft: Draft) => DocumentV5 | Failure,
 ): EditResult {
   const ids = uniqueIds(command.ids);
   if (ids === null) return fail('editor.invalid-command', '/ids');
@@ -858,10 +861,10 @@ function createSymbol(
 
 /** `groupNodes` (section 4.3). */
 function group(
-  document: DocumentV4,
+  document: DocumentV5,
   command: Extract<DocumentCommand, { type: 'groupNodes' }>,
   context: EditContext,
-  finish: (draft: Draft) => DocumentV4 | Failure,
+  finish: (draft: Draft) => DocumentV5 | Failure,
 ): EditResult {
   const ids = uniqueIds(command.ids);
   if (ids === null) return fail('editor.invalid-command', '/ids');
@@ -891,7 +894,7 @@ function relativeToNew(failure: Failure, prefix: string): Failure {
 }
 
 /** An ID that no page or node of `document` has, for checks that run before the ID is drawn. */
-function placeholderId(document: DocumentV4): string {
+function placeholderId(document: DocumentV5): string {
   let id = PENDING_ID;
   for (
     let n = 1;
@@ -904,12 +907,12 @@ function placeholderId(document: DocumentV4): string {
 }
 
 function buildGroup(
-  document: DocumentV4,
+  document: DocumentV5,
   kind: 'group' | 'maskGroup' | 'symbol',
   ids: readonly string[],
   owner: string,
   id: string,
-  finish: (draft: Draft) => DocumentV4 | Failure,
+  finish: (draft: Draft) => DocumentV5 | Failure,
 ): EditResult {
   const siblings = childrenOf(documentTree(document), owner);
   const members = siblings.filter((child) => ids.includes(child));
@@ -939,7 +942,7 @@ function buildGroup(
     children: members,
   };
   // A source wraps the nodes as a group does, with no fill or stroke (M7 contract, section 5.1).
-  const container: NodeV4 =
+  const container: NodeV5 =
     kind === 'symbol'
       ? { ...shared, name: 'Symbol', type: 'symbol', fill: null, stroke: null }
       : { ...shared, name: kind === 'group' ? 'Group' : 'Mask group', type: kind };
@@ -969,9 +972,9 @@ function buildGroup(
 
 /** `moveNodes` (section 4.3): reparenting within one page, keeping page placement. */
 function move(
-  document: DocumentV4,
+  document: DocumentV5,
   command: Extract<DocumentCommand, { type: 'moveNodes' }>,
-  finish: (draft: Draft) => DocumentV4 | Failure,
+  finish: (draft: Draft) => DocumentV5 | Failure,
 ): EditResult {
   const ids = uniqueIds(command.ids);
   if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');
@@ -1045,10 +1048,10 @@ function move(
  * itself with nothing touched, which the editor records as no step.
  */
 function rotateNodes(
-  document: DocumentV4,
+  document: DocumentV5,
   command: Extract<DocumentCommand, { type: 'rotateNodes' }>,
   context: EditContext,
-  finish: (draft: Draft) => DocumentV4 | Failure,
+  finish: (draft: Draft) => DocumentV5 | Failure,
 ): EditResult {
   const ids = uniqueIds(command.ids);
   if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');

@@ -16,10 +16,17 @@ import { projectPage } from '../../packages/editor-core/src/projector.js';
 // and rejected inside a copied or carried symbol (section 8);
 // `editor.nested-symbol` covers text (M6a-S7); a text node projects nothing (section 7);
 // `setNodeProps` takes the common props only (section 6.1). M6a-U3 replaced the interim hit
-// rule (tests/unit/m6a-u3-text-editor.test.ts).
+// rule (tests/unit/m6a-u3-text-editor.test.ts). M7-U7 (section 9) moved the editor to schema v5,
+// with fragment version 2 written at v5 and read at 3 to 5, and lifted M6a-S7 (M7-T1): the
+// nesting cases below now succeed (tests/unit/m7-u7-text-symbols.test.ts covers the rest).
 
 const root = path.resolve(import.meta.dirname, '../..');
 const TEXT = readFileSync(path.join(root, 'tests/fixtures/m6-text/text.v4.json'), 'utf8');
+/** Its v5 migration (M6a contract, section 9). */
+const TEXT_V5 = readFileSync(
+  path.join(root, 'tests/fixtures/m7-symbols/migrated/text.v5.json'),
+  'utf8',
+);
 const MARKER = 'vector-studio/fragment\n';
 const none = () => null;
 
@@ -29,17 +36,17 @@ function loaded(): Editor {
 
 const text = (target: Editor) => serializeDocument(target.query({ type: 'document' }));
 
-/** Runs `command` and checks the editor's document is still a valid v4 document. */
+/** Runs `command` and checks the editor's document is still a valid v5 document. */
 function run(target: Editor, command: Command): CommandResult {
   const result = target.execute(command);
   expect(validateDocument(JSON.parse(text(target))).ok).toBe(true);
   return result;
 }
 
-describe('M6a-U1 interim: editor-core at schema v4', () => {
-  it('loads the text fixture unchanged and creates empty documents at v4', () => {
-    expect(text(loaded())).toBe(TEXT);
-    expect(createEditor().query({ type: 'document' }).schemaVersion).toBe(4);
+describe('M6a-U1 interim: editor-core at schema v4, v5 since M7-U7', () => {
+  it('loads the text fixture as its v5 migration and creates empty documents at v5', () => {
+    expect(text(loaded())).toBe(TEXT_V5);
+    expect(createEditor().query({ type: 'document' }).schemaVersion).toBe(5);
   });
 
   it('projects nothing for a text node and reports no diagnostic', () => {
@@ -62,45 +69,37 @@ describe('M6a-U1 interim: editor-core at schema v4', () => {
   });
 });
 
-describe('M6a-U1 interim: editor.nested-symbol covers text (M6a-S7)', () => {
-  it('fails moving a text node into a symbol and changes nothing', () => {
+describe('M6a-U1 interim lifted by M7-U7: text may enter a symbol (M7-T1)', () => {
+  it('moves a text node into a symbol', () => {
     const target = loaded();
     run(target, { type: 'setActivePage', id: 'page-2' });
-    const before = text(target);
     expect(run(target, { type: 'moveNodes', ids: ['t6'], parent: 's1', index: 0 })).toEqual({
-      ok: false,
-      code: 'editor.nested-symbol',
-      path: '/nodes/t6/parent',
+      ok: true,
+      ids: [],
     });
-    expect(text(target)).toBe(before);
+    expect(target.query({ type: 'node', id: 't6' })!.parent).toBe('s1');
   });
 
-  it('fails pasting a text node into a symbol scope and changes nothing', () => {
+  it('pastes a text node into a symbol scope', () => {
     const target = loaded();
     run(target, { type: 'setActivePage', id: 'page-2' });
     run(target, { type: 'copy', ids: ['t6'] });
     run(target, { type: 'setScope', id: 's1' });
-    const before = text(target);
-    expect(run(target, { type: 'paste' })).toMatchObject({
-      ok: false,
-      code: 'editor.nested-symbol',
-    });
-    expect(text(target)).toBe(before);
+    const pasted = run(target, { type: 'paste' });
+    expect(pasted.ok).toBe(true);
+    const id = pasted.ok ? pasted.ids[0]! : '';
+    expect(target.query({ type: 'node', id })!.parent).toBe('s1');
   });
 
-  it('fails making a symbol over a group holding text and changes nothing', () => {
+  it('makes a symbol over a group holding text', () => {
     const target = loaded();
-    const before = text(target);
-    expect(run(target, { type: 'createSymbol', ids: ['g1'] })).toEqual({
-      ok: false,
-      code: 'editor.nested-symbol',
-      path: '/nodes/t4/parent',
-    });
-    expect(text(target)).toBe(before);
+    const made = run(target, { type: 'createSymbol', ids: ['g1'] });
+    expect(made.ok).toBe(true);
+    expect(target.query({ type: 'node', id: 'g1' })!.parent).toBe(made.ok ? made.ids[0] : '');
   });
 });
 
-describe('M6a-U1 interim: fragments at schema v4 (section 8)', () => {
+describe('M6a-U1 interim: fragments at schema v4, v5 since M7-U7 (section 8)', () => {
   type Body = {
     fragmentVersion: number;
     schemaVersion: number;
@@ -124,11 +123,11 @@ describe('M6a-U1 interim: fragments at schema v4 (section 8)', () => {
     return bodyOf(target.query({ type: 'clipboard' })!);
   }
 
-  it('copies a text node as fragment version 2 at schemaVersion 4 and pastes its runs and props', () => {
+  it('copies a text node as fragment version 2 at schemaVersion 5 and pastes its runs and props', () => {
     const target = loaded();
     run(target, { type: 'copy', ids: ['t2'] });
     const fragment = target.query({ type: 'clipboard' })!;
-    expect(fragment.startsWith(`${MARKER}{"fragmentVersion":2,"schemaVersion":4,`)).toBe(true);
+    expect(fragment.startsWith(`${MARKER}{"fragmentVersion":2,"schemaVersion":5,`)).toBe(true);
     const pasted = run(target, { type: 'paste' });
     expect(pasted.ok).toBe(true);
     const id = pasted.ok ? pasted.ids[0]! : '';
@@ -137,7 +136,7 @@ describe('M6a-U1 interim: fragments at schema v4 (section 8)', () => {
     );
   });
 
-  it('fails a text node below schema v4 at its type, and versions 2 and 5 of fragment version 2', () => {
+  it('fails a text node below schema v4 at its type, and versions 2 and 6 of fragment version 2', () => {
     const target = loaded();
     const body = copied(target, ['t1']);
     const before = text(target);
@@ -146,7 +145,7 @@ describe('M6a-U1 interim: fragments at schema v4 (section 8)', () => {
       typeFailure,
     );
     expect(run(target, { type: 'paste', text: marked(versionOne(body, 2)) })).toEqual(typeFailure);
-    for (const schemaVersion of [2, 5]) {
+    for (const schemaVersion of [2, 6]) {
       expect(run(target, { type: 'paste', text: marked({ ...body, schemaVersion }) })).toEqual({
         ok: false,
         code: 'document.unsupported-version',
@@ -160,6 +159,10 @@ describe('M6a-U1 interim: fragments at schema v4 (section 8)', () => {
       path: '/schemaVersion',
     });
     expect(text(target)).toBe(before);
+    // Schema v4 still reads a text node.
+    expect(run(target, { type: 'paste', text: marked({ ...body, schemaVersion: 4 }) }).ok).toBe(
+      true,
+    );
   });
 
   it('still pastes a fragment without text at its older versions', () => {
@@ -171,32 +174,26 @@ describe('M6a-U1 interim: fragments at schema v4 (section 8)', () => {
     }
   });
 
-  it('rejects a text node inside a copied or a carried symbol (M6a-S7)', () => {
+  it('accepts a text node inside a copied or a carried symbol since M7-U7 (M7-T1)', () => {
     const target = loaded();
     run(target, { type: 'setActivePage', id: 'page-2' });
     const t6 = copied(target, ['t6']).nodes.t6!;
-    const before = text(target);
     const textIn = (parent: string) => ({ ...t6, id: 'st', parent });
 
     const source = copied(target, ['s1']);
     source.nodes.s1!.children = [...(source.nodes.s1!.children as string[]), 'st'];
     source.nodes.st = textIn('s1');
-    expect(run(target, { type: 'paste', text: marked(source) })).toEqual({
-      ok: false,
-      code: 'document.invalid-symbol',
-      path: '/nodes/st/parent',
-    });
+    expect(run(target, { type: 'paste', text: marked(source) }).ok).toBe(true);
 
     const carried = copied(target, ['i1']);
     expect(carried.sources).toEqual(['s1']);
     const sourceNodes = carried.sourceNodes!;
     sourceNodes.s1!.children = [...(sourceNodes.s1!.children as string[]), 'st'];
     sourceNodes.st = textIn('s1');
-    expect(run(target, { type: 'paste', text: marked(carried) })).toEqual({
-      ok: false,
-      code: 'document.invalid-symbol',
-      path: '/sourceNodes/st/parent',
-    });
-    expect(text(target)).toBe(before);
+    // The carried source differs from the document's, so the instance pastes detached.
+    const pasted = run(target, { type: 'paste', text: marked(carried) });
+    expect(pasted.ok).toBe(true);
+    const id = pasted.ok ? pasted.ids[0]! : '';
+    expect(target.query({ type: 'node', id })!.type).toBe('frame');
   });
 });

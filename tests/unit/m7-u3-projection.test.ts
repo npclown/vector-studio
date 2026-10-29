@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { RenderChangeSet } from '@vector-studio/contracts';
-import { validateDocument, type DocumentV4 } from '@vector-studio/model';
+import { validateDocument, type DocumentV5 } from '@vector-studio/model';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createEditor,
@@ -37,14 +37,14 @@ import { RecordingRenderer } from '../support/p5-recording-renderer.js';
 // M7-A04, M7-A05, and the artboard-target and marquee half of M7-A06.
 
 const root = path.resolve(import.meta.dirname, '../..');
-// Since M6a-U1 the model returns schema v4, so each M7 fixture is read as its committed v4
-// migration under tests/fixtures/m6-text/migrated (M6a contract, section 2.1).
+// Since M7-U7 the model returns schema v5, so each M7 fixture is read as its committed v5
+// migration under tests/fixtures/m7-symbols/migrated (M6a contract, section 9).
 const fixture = (name: string) =>
   readFileSync(
     path.join(
       root,
-      'tests/fixtures/m6-text/migrated',
-      `${path.basename(name).replace(/(\.v3)?\.json$/, '')}.v4.json`,
+      'tests/fixtures/m7-symbols/migrated',
+      `${path.basename(name).replace(/(\.v3)?\.json$/, '')}.v5.json`,
     ),
     'utf8',
   );
@@ -71,7 +71,7 @@ type Json = {
 };
 
 /** The symbols fixture after `edit`, read by the model. */
-function symbols(edit: (value: Json) => void = () => {}): DocumentV4 {
+function symbols(edit: (value: Json) => void = () => {}): DocumentV5 {
   const value = JSON.parse(SYMBOLS) as Json;
   edit(value);
   const result = validateDocument(value);
@@ -90,6 +90,8 @@ function base(id: string, parent: string, type: string, extra: Record<string, un
     opacity: 1,
     visible: true,
     type,
+    // Schema v5 (M6a contract, section 9): an instance always has its text overrides.
+    ...(type === 'instance' ? { textOverrides: {} } : {}),
     ...extra,
   };
 }
@@ -102,9 +104,9 @@ const rect = (id: string, parent: string, frame: JsonNode['frame'], fill = red) 
  * rectangle `a` at (80, 40, 40, 20), which sticks out of the source's clip, and instance `I` of
  * it at (200, 0) with size `size`.
  */
-function clipped(size = 100, sourceStroke: unknown = null, rotation = 0): DocumentV4 {
+function clipped(size = 100, sourceStroke: unknown = null, rotation = 0): DocumentV5 {
   const result = validateDocument({
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc',
     pages: [{ id: 'p', name: 'Page 1', children: ['S', 'I'] }],
     nodes: {
@@ -138,10 +140,10 @@ const starGeometry = (node: { type: string; customType?: string; data?: unknown;
  * triangle `mp` masking a red square `mr`, both 50 × 50) and a star `c` at (60, 60, 40, 40);
  * instance `I` of it at (200, 0), 200 × 200 (scale 2).
  */
-function masked(): DocumentV4 {
+function masked(): DocumentV5 {
   const square = { x: 0, y: 0, width: 50, height: 50 };
   const result = validateDocument({
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'doc',
     pages: [{ id: 'p', name: 'Page 1', children: ['S', 'I'] }],
     nodes: {

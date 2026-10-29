@@ -1,4 +1,4 @@
-import type { DocumentV4, JsonValue, NodeV4, PathStroke, RectStroke } from './types.js';
+import type { DocumentV5, JsonValue, NodeV5, PathStroke, RectStroke, TextRun } from './types.js';
 
 // Fixed key order (plan section 3.3). Node and custom-data keys are inserted in code-unit order,
 // so the text does not depend on the order nodes were created, deleted or restored in. (Object
@@ -40,7 +40,7 @@ function json(value: JsonValue): unknown {
 }
 
 /** Fields after `type` of path and custom nodes. */
-function pathFields(value: Extract<NodeV4, { type: 'path' | 'custom' }>): Ordered {
+function pathFields(value: Extract<NodeV5, { type: 'path' | 'custom' }>): Ordered {
   if (value.type === 'path') {
     return {
       path: {
@@ -64,11 +64,20 @@ function frame(value: { x: number; y: number; width: number; height: number }): 
   return { x: value.x, y: value.y, width: value.width, height: value.height };
 }
 
+function runs(value: readonly TextRun[]): Ordered[] {
+  return value.map((run) => ({
+    text: run.text,
+    family: run.family,
+    size: run.size,
+    color: color(run.color),
+  }));
+}
+
 function compareCodeUnits(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-function nodeV4(value: NodeV4): Ordered {
+function nodeV5(value: NodeV5): Ordered {
   const base = {
     id: value.id,
     name: value.name,
@@ -120,16 +129,20 @@ function nodeV4(value: NodeV4): Ordered {
         stroke: nullable(value.stroke, rectStroke),
       };
     case 'instance':
-      return { ...base, symbol: value.symbol };
+      return {
+        ...base,
+        symbol: value.symbol,
+        // Code unit order, with the node map's caveat above: array-index-like keys come first.
+        textOverrides: Object.fromEntries(
+          Object.keys(value.textOverrides)
+            .sort(compareCodeUnits)
+            .map((key) => [key, { runs: runs(value.textOverrides[key]!.runs) }]),
+        ),
+      };
     case 'text':
       return {
         ...base,
-        runs: value.runs.map((run) => ({
-          text: run.text,
-          family: run.family,
-          size: run.size,
-          color: color(run.color),
-        })),
+        runs: runs(value.runs),
         sizing: value.sizing,
         align: value.align,
         letterSpacing: value.letterSpacing,
@@ -142,7 +155,7 @@ function nodeV4(value: NodeV4): Ordered {
  * The document as a plain object in canonical key order, for `serializeDocument` and the
  * persistence envelope (MVP M5 contract, M5-E3). Not exported from the package.
  */
-export function orderedDocument(document: DocumentV4): Ordered {
+export function orderedDocument(document: DocumentV5): Ordered {
   return {
     schemaVersion: document.schemaVersion,
     id: document.id,
@@ -154,18 +167,19 @@ export function orderedDocument(document: DocumentV4): Ordered {
     nodes: Object.fromEntries(
       Object.keys(document.nodes)
         .sort(compareCodeUnits)
-        .map((key) => [key, nodeV4(document.nodes[key]!)]),
+        .map((key) => [key, nodeV5(document.nodes[key]!)]),
     ),
   };
 }
 
 /**
- * Emits canonical schema v4 JSON (M1 contract, section 2.1; M7 contract, section 2.1; M6a
- * contract, section 2): two-space indentation, fixed key order and a final newline. A symbol's
- * keys are in a frame's order, an instance's in the base order followed by `symbol`, a text
+ * Emits canonical schema v5 JSON (M1 contract, section 2.1; M7 contract, section 2.1; M6a
+ * contract, sections 2 and 9): two-space indentation, fixed key order and a final newline. A
+ * symbol's keys are in a frame's order, an instance's in the base order followed by `symbol` and
+ * `textOverrides` (its keys in code unit order, each value `{ runs }`), a text
  * node's in the base order followed by `runs` (each `text`, `family`, `size`, `color`),
  * `sizing`, `align`, `letterSpacing`, `lineHeight`.
  */
-export function serializeDocument(document: DocumentV4): string {
+export function serializeDocument(document: DocumentV5): string {
   return `${JSON.stringify(orderedDocument(document), null, 2)}\n`;
 }

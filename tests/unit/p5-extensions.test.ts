@@ -412,10 +412,13 @@ describe('P5-A07 custom-node codes', () => {
   it('needs the extension to load a custom node', async () => {
     const document = await fixture('ext-star');
     expect(() => editor([], document)).toThrow('document.unknown-custom-type');
-    // The v1 fixture loads migrated to the latest schema (MVP M1 contract, section 2.1), v4
-    // since M6a-U1 (M6a contract, section 2.1).
+    // The v1 fixture loads migrated to the latest schema (MVP M1 contract, section 2.1), v5
+    // since M7-U7 (M6a contract, section 9).
     expect(text(editor([starExtension], document))).toBe(
-      await readFile(path.join(root, 'tests/fixtures/m6-text/migrated/ext-star.v4.json'), 'utf8'),
+      await readFile(
+        path.join(root, 'tests/fixtures/m7-symbols/migrated/ext-star.v5.json'),
+        'utf8',
+      ),
     );
   });
 

@@ -4,9 +4,9 @@ import {
   serializeDocument,
   validateFragmentTree,
   validateNode,
-  type DocumentV4,
-  type InstanceNode,
-  type NodeV4,
+  type DocumentV5,
+  type InstanceNodeV5,
+  type NodeV5,
   type SymbolNode,
 } from '@vector-studio/model';
 import { arranged, preorder, type Finish } from './arrange.js';
@@ -28,6 +28,7 @@ import {
   type Expansion,
 } from './expansion.js';
 import { deepFreeze } from './freeze.js';
+import { remappedOverrides } from './instance-text.js';
 import { boundsOfPoints, corners, IDENTITY, relocate } from './geometry.js';
 import {
   childrenOf,
@@ -71,14 +72,14 @@ type Fragment = Readonly<{
   /** In fragment order, which is the copied paint order. */
   roots: readonly string[];
   /** Validated nodes; a root's frame and rotation are in page space. */
-  nodes: Readonly<Record<string, NodeV4>>;
+  nodes: Readonly<Record<string, NodeV5>>;
   /** The carried source roots (fragment version 2; empty for version 1). */
   sources: readonly string[];
   /**
    * The carried sources' validated subtrees; a carried root keeps its own local placement and
    * names `sourceHolder` as its parent.
    */
-  sourceNodes: Readonly<Record<string, NodeV4>>;
+  sourceNodes: Readonly<Record<string, NodeV5>>;
   sourceHolder: string;
 }>;
 
@@ -98,9 +99,9 @@ function pointer(path: readonly (string | number)[]): string {
 const mapPath = (map: string, key: string, field = '') => pointer([map, key]) + field;
 
 /** The model's canonical node objects for `nodes`, in `serializeDocument` key order. */
-function canonicalNodes(nodes: ReadonlyMap<string, NodeV4>): unknown {
+function canonicalNodes(nodes: ReadonlyMap<string, NodeV5>): unknown {
   const text = serializeDocument({
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: 'fragment',
     pages: [],
     // fromEntries defines own properties, so a "__proto__" ID stays data.
@@ -110,7 +111,7 @@ function canonicalNodes(nodes: ReadonlyMap<string, NodeV4>): unknown {
 }
 
 /** The nodes of `wanted` in `pages` order, then page-tree pre-order. */
-function inPageOrder(document: DocumentV4, tree: TreeView, wanted: ReadonlySet<string>): string[] {
+function inPageOrder(document: DocumentV5, tree: TreeView, wanted: ReadonlySet<string>): string[] {
   if (wanted.size === 0) return [];
   return document.pages.flatMap((page) =>
     page.children.flatMap((root) => subtree(tree, root).filter((id) => wanted.has(id))),
@@ -120,7 +121,7 @@ function inPageOrder(document: DocumentV4, tree: TreeView, wanted: ReadonlySet<s
 /**
  * The fragment text of the subtrees of `ids` (nodes of `activePage` at any depth; a listed
  * descendant of a listed node is ignored): the marker line, then compact JSON of
- * `{ fragmentVersion: 2, schemaVersion: 4, roots, nodes, sources, sourceNodes }` with `roots` in
+ * `{ fragmentVersion: 2, schemaVersion: 5, roots, nodes, sources, sourceNodes }` with `roots` in
  * document paint order, each root's frame and rotation in page space and its parent `""`, and
  * the nodes and their keys in `serializeDocument` order. `sources` lists, once each and in
  * `pages` order then page-tree pre-order, the source of every copied instance whose source is
@@ -128,7 +129,7 @@ function inPageOrder(document: DocumentV4, tree: TreeView, wanted: ReadonlySet<s
  * `""` and its own local placement (M7 contract, section 6).
  */
 export function copyFragment(
-  document: DocumentV4,
+  document: DocumentV5,
   ids: unknown,
   activePage: string,
 ): Copied | Failure {
@@ -137,7 +138,7 @@ export function copyFragment(
   const { tree } = checked;
   const order = preorder(document, tree, activePage);
   const roots = [...checked.roots].sort((a, b) => order.get(a)! - order.get(b)!);
-  const nodes = new Map<string, NodeV4>();
+  const nodes = new Map<string, NodeV5>();
   const symbols = new Set<string>();
   for (const root of roots) {
     for (const id of subtree(tree, root)) {
@@ -155,14 +156,14 @@ export function copyFragment(
   }
   for (const id of nodes.keys()) symbols.delete(id);
   const sources = inPageOrder(document, tree, symbols);
-  const carried = new Map<string, NodeV4>();
+  const carried = new Map<string, NodeV5>();
   for (const source of sources) {
     for (const id of subtree(tree, source)) carried.set(id, document.nodes[id]!);
     carried.set(source, { ...document.nodes[source]!, parent: '' });
   }
   const body = JSON.stringify({
     fragmentVersion: FRAGMENT_VERSION,
-    schemaVersion: 4,
+    schemaVersion: 5,
     roots,
     nodes: canonicalNodes(nodes),
     sources,
@@ -180,7 +181,7 @@ function holderId(nodes: Record<string, unknown>): string {
 
 /** One node map of a fragment after its field rules: entries in map order, roots `""`-parented. */
 type ReadMap = Readonly<{
-  read: readonly (readonly [string, NodeV4])[];
+  read: readonly (readonly [string, NodeV5])[];
   unparented: ReadonlySet<string>;
   holder: string;
 }>;
@@ -197,7 +198,7 @@ function readFields(
 ): ReadMap | Failure {
   // The empty parent of a fragment root stands for the holder page.
   const holder = holderId(map);
-  const read: [string, NodeV4][] = [];
+  const read: [string, NodeV5][] = [];
   // Nodes whose parent is written as `""`: only these may be roots, whatever the holder is.
   const unparented = new Set<string>();
   for (const [key, raw] of Object.entries(map)) {
@@ -210,9 +211,28 @@ function readFields(
     if (schemaVersion < 4 && isRecord(raw) && raw.type === 'text') {
       return fail('document.invalid-field', mapPath(name, key, '/type'));
     }
+    // Below schema v5 an instance has no `textOverrides`, which the v4 to v5 migration adds empty
+    // (M6a contract, section 9, M7-T3); a key written there is unknown at that version.
+    const older = schemaVersion < 5 && isRecord(raw) && raw.type === 'instance';
     const empty = isRecord(raw) && raw.parent === '';
     if (empty) unparented.add(key);
-    const candidate = empty ? { ...raw, parent: holder } : raw;
+    let candidate: unknown = empty ? { ...raw, parent: holder } : raw;
+    if (older) {
+      const rest = { ...(candidate as Record<string, unknown>) };
+      delete rest.textOverrides;
+      candidate = { ...rest, textOverrides: {} };
+      if (Object.hasOwn(raw, 'textOverrides')) {
+        // As a v4 document reads it: a missing key comes before the unknown `textOverrides`.
+        const probe = validateNode(candidate);
+        if (!probe.ok) {
+          const field = probe.path.slice(1);
+          if (field !== '' && !field.includes('/') && !Object.hasOwn(raw, field)) {
+            return fail(probe.code, mapPath(name, key, probe.path));
+          }
+        }
+        return fail('document.invalid-field', mapPath(name, key, '/textOverrides'));
+      }
+    }
     const result = validateNode(candidate);
     if (!result.ok) return fail(result.code, mapPath(name, key, result.path));
     if (result.node.id !== key) return fail('document.invalid-field', mapPath(name, key, '/id'));
@@ -270,13 +290,13 @@ function checkReferences(
 }
 
 /**
- * M7-S3 with M6a-S7 in one map: the first `symbol`, `instance` or `text` node, in map order, with
- * a `symbol` ancestor.
+ * M7-S3 in one map: the first `symbol` or `instance` node, in map order, with a `symbol` ancestor.
+ * A text node may be inside one (M6a contract, section 9, M7-T1).
  */
 function nestingFailure(name: string, { read }: ReadMap): Failure | null {
   const byId = new Map(read);
   for (const [key, node] of read) {
-    if (!isSymbolType(node.type) && node.type !== 'text') continue;
+    if (!isSymbolType(node.type)) continue;
     // The reference rules hold, so every parent chain ends at a root, whose parent is the holder.
     for (let up = byId.get(node.parent); up !== undefined; up = byId.get(up.parent)) {
       if (up.type === 'symbol') {
@@ -287,14 +307,27 @@ function nestingFailure(name: string, { read }: ReadMap): Failure | null {
   return null;
 }
 
+/**
+ * Whether `id` is a text node of `map` with the `symbol` node `symbol` among its ancestors. The
+ * reference rules hold, so every parent chain ends at a root.
+ */
+function inSource(map: ReadonlyMap<string, NodeV5>, id: string, symbol: string): boolean {
+  const node = map.get(id);
+  if (node?.type !== 'text') return false;
+  for (let up = map.get(node.parent); up !== undefined; up = map.get(up.parent)) {
+    if (up.id === symbol) return up.type === 'symbol';
+  }
+  return false;
+}
+
 /** The model's tree rules on one map, on a holder page holding `roots` (paths into `name`). */
 function treeRules(
   name: string,
   { read, holder }: ReadMap,
   roots: readonly string[],
-): Readonly<{ nodes: Readonly<Record<string, NodeV4>> }> | Failure {
+): Readonly<{ nodes: Readonly<Record<string, NodeV5>> }> | Failure {
   const tree = validateFragmentTree({
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: holder,
     pages: [{ id: holder, name: '', children: [...roots] }],
     nodes: Object.fromEntries(read),
@@ -313,9 +346,10 @@ const byCodeUnits = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
  * fragment version 2, else four), `fragmentVersion` (1 or 2), `roots` (a non-empty array of
  * distinct IDs, each a key of `nodes`) and `nodes` (an object), then for version 2 `sources`
  * (distinct IDs, each a key of `sourceNodes` and none of `nodes`) and `sourceNodes` (an object),
- * then `schemaVersion` (2 for version 1, 3 or 4 for version 2), each node's model field rules
- * in `nodes` then `sourceNodes` (a `text` node below v4 failing at its type), the reference rules
- * of each map (every carried root a `symbol`), M7-S3 nesting with M6a-S7 in both maps, every
+ * then `schemaVersion` (2 for version 1, 3 to 5 for version 2), each node's model field rules
+ * in `nodes` then `sourceNodes` (a `text` node below v4 failing at its type; an instance below
+ * v5 read with `textOverrides: {}` added, a written one failing at that key), the reference
+ * rules of each map (every carried root a `symbol`), M7-S3 nesting in both maps, every
  * instance in `nodes` naming a copied or carried `symbol`, the model's tree rules
  * (`validateFragmentTree`) on two holder documents, `nodes` then `sourceNodes`, then each custom
  * node's extension check in ID order, `nodes` then `sourceNodes`. Paths are into the fragment
@@ -392,11 +426,14 @@ export function parseFragment(text: string, custom: CustomRules): Fragment | Fai
     sourceNodes = carried;
   }
   // Every fragment-shape failure comes before every model code. Fragment version 1 is read at
-  // schema v2 only and version 2 at v3 or v4, their nodes unchanged, since v3 and v4 changed only
-  // the version (section 6, Versions; M6a contract, section 8); copy writes version 2 at v4.
+  // schema v2 only and version 2 at v3 to v5 (section 6, Versions; M6a contract, sections 8 and
+  // 9): v3 and v4 changed only the version, and v5 adds an empty `textOverrides` to instances,
+  // which `readFields` applies; copy writes version 2 at v5.
   const schemaVersion = value.schemaVersion;
   const supported =
-    version === 1 ? schemaVersion === 2 : schemaVersion === 3 || schemaVersion === 4;
+    version === 1
+      ? schemaVersion === 2
+      : schemaVersion === 3 || schemaVersion === 4 || schemaVersion === 5;
   if (!supported) return fail('document.unsupported-version', '/schemaVersion');
 
   const main = readFields('nodes', nodes, version, schemaVersion as number);
@@ -415,6 +452,21 @@ export function parseFragment(text: string, custom: CustomRules): Fragment | Fai
     if (node.type !== 'instance') continue;
     if (byId.get(node.symbol)?.type !== 'symbol' && !sourceSet.has(node.symbol)) {
       return fail('editor.invalid-clipboard', mapPath('nodes', key, '/symbol'));
+    }
+  }
+  // M7-T3: every override key names a text node of the copied or carried source's subtree.
+  const sideById = new Map(side.read);
+  for (const [key, node] of main.read) {
+    if (node.type !== 'instance') continue;
+    const copied = byId.get(node.symbol)?.type === 'symbol';
+    const map = copied ? byId : sideById;
+    for (const name of Object.keys(node.textOverrides)) {
+      if (!inSource(map, name, node.symbol)) {
+        return fail(
+          'document.invalid-symbol',
+          mapPath('nodes', key, `/textOverrides/${pointer([name]).slice(1)}`),
+        );
+      }
     }
   }
 
@@ -458,8 +510,8 @@ function pasteTarget(tree: TreeView, context: EditContext): string {
 }
 
 /** The node objects of the subtree of `root` in `nodes`, in pre-order. */
-function subtreeOf(nodes: Readonly<Record<string, NodeV4>>, root: string): NodeV4[] {
-  const out: NodeV4[] = [];
+function subtreeOf(nodes: Readonly<Record<string, NodeV5>>, root: string): NodeV5[] {
+  const out: NodeV5[] = [];
   const stack = [root];
   while (stack.length > 0) {
     const node = nodes[stack.pop()!]!;
@@ -475,8 +527,8 @@ function subtreeOf(nodes: Readonly<Record<string, NodeV4>>, root: string): NodeV
  * size, `fill`, `stroke`, children and every descendant; its placement, name, constraints,
  * opacity and visibility do not count.
  */
-function contentText(nodes: readonly NodeV4[]): string {
-  const [root, ...rest] = nodes as [SymbolNode, ...NodeV4[]];
+function contentText(nodes: readonly NodeV5[]): string {
+  const [root, ...rest] = nodes as [SymbolNode, ...NodeV5[]];
   const normalized: SymbolNode = {
     ...root,
     name: '',
@@ -498,7 +550,7 @@ type Resolution =
 
 /** The scene nodes the instances of `page` and of the whole document add (section 4.1). */
 function expandedCounts(
-  document: DocumentV4,
+  document: DocumentV5,
   page: string,
   cache: ExpansionCache,
 ): { page: number; total: number } {
@@ -506,7 +558,7 @@ function expandedCounts(
   let total = 0;
   pageInstances(document).forEach((ids, index) => {
     for (const id of ids) {
-      const count = cache.count(document, (document.nodes[id] as InstanceNode).symbol);
+      const count = cache.count(document, (document.nodes[id] as InstanceNodeV5).symbol);
       total += count;
       if (document.pages[index]!.id === page) onPage += count;
     }
@@ -527,7 +579,7 @@ function expandedCounts(
  * instances after it are not resolved further.
  */
 function resolveInstances(
-  document: DocumentV4,
+  document: DocumentV5,
   fragment: Fragment,
   order: readonly string[],
   links: ReadonlySet<string>,
@@ -536,9 +588,9 @@ function resolveInstances(
 ): Map<string, Resolution> | Failure {
   const resolved = new Map<string, Resolution>();
   const matches = new Map<string, boolean>();
-  const carriedOf = new Map<string, { nodes: NodeV4[]; count: number }>();
+  const carriedOf = new Map<string, { nodes: NodeV5[]; count: number }>();
   const tree = documentTree(document);
-  const check = (n: NodeV4) => custom.check(n);
+  const check = (n: NodeV5) => custom.check(n);
   let counts: { page: number; total: number } | null = null;
   const detached: string[] = [];
   for (const key of order) {
@@ -587,21 +639,21 @@ function resolveInstances(
   }
   if (detached.length === 0) return resolved;
   // One holder for every detached instance, each under a key no valid ID has (U+0000).
-  const holderNodes: Record<string, NodeV4> = Object.fromEntries(
+  const holderNodes: Record<string, NodeV5> = Object.fromEntries(
     Object.entries(fragment.sourceNodes),
   );
   detached.forEach((key, i) => {
     holderNodes[`\u0000${i}`] = { ...fragment.nodes[key]!, id: `\u0000${i}` };
   });
-  const holder: DocumentV4 = {
-    schemaVersion: 4,
+  const holder: DocumentV5 = {
+    schemaVersion: 5,
     id: fragment.sourceHolder,
     pages: [],
     nodes: holderNodes,
   };
   const cache = new ExpansionCache(check);
   detached.forEach((key, i) => {
-    const node = fragment.nodes[key] as InstanceNode;
+    const node = fragment.nodes[key] as InstanceNodeV5;
     const result = cache.expand(holder, `\u0000${i}`);
     resolved.set(key, {
       kind: 'detached',
@@ -625,7 +677,7 @@ function resolveInstances(
  * reported at its fragment path (a detached copy's at its carried node in `sourceNodes`).
  */
 export function paste(
-  document: DocumentV4,
+  document: DocumentV5,
   command: Extract<DocumentCommand, { type: 'paste' }>,
   context: EditContext,
   custom: CustomRules,
@@ -641,7 +693,7 @@ export function paste(
   const fragment = parseFragment(source, custom);
   if ('ok' in fragment) return fragment;
   const fragmentTree = documentTree({
-    schemaVersion: 4,
+    schemaVersion: 5,
     id: '',
     pages: [],
     nodes: fragment.nodes,
@@ -670,7 +722,7 @@ export function paste(
     dx = at.x - (bounds.x + bounds.width / 2);
     dy = at.y - (bounds.y + bounds.height / 2);
   }
-  const place = (node: NodeV4) => {
+  const place = (node: NodeV5) => {
     const frame =
       at === undefined ? node.frame : { ...node.frame, x: node.frame.x + dx, y: node.frame.y + dy };
     return onPage
@@ -713,7 +765,14 @@ export function paste(
       };
       if (isContainer(node)) copy.children = node.children.map((child) => copyOf.get(child)!);
       const how = resolved.get(id);
-      if (how?.kind === 'copied') copy.symbol = copyOf.get((node as InstanceNode).symbol)!;
+      if (how?.kind === 'copied') {
+        // With its source, the copy's overrides name the copies of the source's text nodes; a
+        // linked copy keeps its keys, and a detached one takes the overrides in its expansion
+        // (M6a contract, section 9, M7-T3).
+        const instance = node as InstanceNodeV5;
+        copy.symbol = copyOf.get(instance.symbol)!;
+        copy.textOverrides = remappedOverrides(instance.textOverrides, copyOf);
+      }
       if (how?.kind === 'detached') {
         // A frame as `detachInstances` makes one (section 5.2), from the carried subtree; with
         // an invalid expansion the trial builds it empty, and the paste fails after it.
@@ -728,9 +787,10 @@ export function paste(
           if (isContainer(expanded)) {
             inner.children = expanded.children.map((child) => map.get(child)!);
           }
-          draft.set(inner as NodeV4);
+          draft.set(inner as NodeV5);
         }
         delete copy.symbol;
+        delete copy.textOverrides;
         Object.assign(copy, {
           type: 'frame',
           children: (how.expansion?.children ?? []).map((child) => map.get(child)!),
@@ -740,9 +800,9 @@ export function paste(
       }
       // A root's mapped placement and a detached frame are validated again; the rest is as the
       // fragment checks left it.
-      if (root) draft.set({ ...copy, ...place(node) } as NodeV4);
-      else if (how?.kind === 'detached') draft.set(copy as NodeV4);
-      else draft.setChecked(copy as NodeV4, true);
+      if (root) draft.set({ ...copy, ...place(node) } as NodeV5);
+      else if (how?.kind === 'detached') draft.set(copy as NodeV5);
+      else draft.setChecked(copy as NodeV5, true);
     }
     const copies = fragment.roots.map((id) => copyOf.get(id)!);
     draft.setChildren(target, [...siblings, ...copies]);
