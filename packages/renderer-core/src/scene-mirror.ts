@@ -21,6 +21,7 @@ import {
   validateSnapshotShape,
   pathDataEquals,
   type ClipSupport,
+  type DashSupport,
   type PaintSupport,
   type PathNodeSupport,
   type PathSupport,
@@ -51,6 +52,8 @@ export type RetainedSceneMirrorOptions = Readonly<{
   clips?: ClipSupport;
   /** E23 contract, E23-S3: whether gradient paints are drawn; default 'solid'. */
   paints?: PaintSupport;
+  /** E24 contract, E24-S3: whether path stroke dashes are drawn; default 'unsupported'. */
+  dashes?: DashSupport;
 }>;
 
 export type ScenePendingChangeState = Readonly<{
@@ -112,7 +115,8 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     const clips: ClipSupport =
       options.clips === 'supported' || options.clips === 'rect' ? options.clips : 'unsupported';
     const paints: PaintSupport = options.paints === 'gradient' ? 'gradient' : 'solid';
-    this.#pathNodes = Object.freeze({ pathNodes, pathFills, pathStrokes, clips, paints });
+    const dashes: DashSupport = options.dashes === 'supported' ? 'supported' : 'unsupported';
+    this.#pathNodes = Object.freeze({ pathNodes, pathFills, pathStrokes, clips, paints, dashes });
   }
 
   public replaceSnapshot(snapshot: RenderSceneSnapshot): SceneApplyResult {

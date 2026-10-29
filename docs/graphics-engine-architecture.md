@@ -292,6 +292,8 @@ The remaining decisions below must be resolved with acceptance fixtures in the o
 | P4                | Mask coverage semantics, stencil push/pop and sibling restoration, attachment format, antialiasing of mask edges, and interaction with container opacity; validate depths 0, 1, 32, and rejected 33  |
 | Post-P5 text plan | Font loading/fallback and shaping ownership, matching DOM/GPU layout, Korean IME composition transactions, and selection/caret fixtures                                                              |
 
+The P3 row's "dash units/phase" was resolved on 2026-10-29 by [E24](plans/d9-e24-dash-contract.md): dash lengths and phase are in node-local units, the units of the stroke width; the pattern restarts at each subpath; dashes meeting at a closed seam are joined (E24-K4); and dashes are expanded in `renderer-core` ahead of the unchanged stroke port.
+
 ## Failure and capability behavior
 
 The prototype requires a secure context and a usable WebGPU adapter. Unsupported devices receive an explicit capability error rather than a silent Canvas fallback.

@@ -111,7 +111,7 @@ The visualization track files these on the [rendering track](d9-rendering-track.
 | Label | Need | Needed by | Note |
 | --- | --- | --- | --- |
 | R-G | Linear and radial gradient paint for primitives and paths (one gradient per paint) | M4 | New `ScenePaint` variant beside `SceneColor` |
-| R-D | Dash pattern and phase for path strokes (`PathStroke`; dashed shapes project as paths) | M4 | Kernel stroke work (Rust); dash units and phase are a P3 design gate item |
+| R-D | Dash pattern and phase for path strokes (`PathStroke`; dashed shapes project as paths) | M4 | Dash expansion in `renderer-core` ahead of the unchanged stroke port, kernel unchanged ([E24](d9-e24-dash-contract.md), E24-Q1 (a), 2026-10-29); this resolves the P3 design-gate item on dash units and phase |
 | R-O | Isolated container opacity (offscreen group composite) | M4 | Lifts the P1 rejection, which requires isolated composition ([architecture](../graphics-engine-architecture.md#approved-p1-visual-behavior)); states the interaction with masks; uses the reserved offscreen textures |
 | R-T | Glyph rendering route chosen by the text plan | M6 | Atlas or outline-as-path, decided in the text plan |
 | R-P | Pointer-priority scheduling and a mixed 10,000-node benchmark workload | M9 | Benchmark methodology change only if needed |
