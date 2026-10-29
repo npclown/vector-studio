@@ -87,3 +87,5 @@ docs/evidence/p3-exit/*/container-*/viz-v3-packer-churn.json
 # Preserve the V-4 A08 counted-run record and the expected-status list byte-for-byte.
 docs/evidence/viz-v4-a08/**/*.json
 tests/visual/viz-v4/a08-expected-status.json
+# M6-S0 spike reports: written by docs/evidence/m6-s0/*.mjs, kept byte-for-byte.
+docs/evidence/m6-s0/**/*.json
