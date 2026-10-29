@@ -243,6 +243,13 @@ describe('M5-A02 envelope codes and their order', () => {
     expect(failure(parseEnvelope(text))).toEqual({ code, path: at });
   });
 
+  it.each(['null', '1', 'true', '"text"', '[]'])(
+    'fails a top-level %s with the envelope code at the root',
+    (text) => {
+      expect(failure(parseEnvelope(text))).toEqual({ code: 'envelope.invalid-field', path: '' });
+    },
+  );
+
   it('fails each order fixture at the later step once the earlier step is fixed', async () => {
     const later: Record<string, [string, string]> = {
       'order-2-3': ['envelope.unsupported-version', '/envelopeVersion'],
