@@ -305,7 +305,10 @@ export function nudgeNodes(
  * the IDs are then drawn root by root in that order, each subtree in pre-order (a container
  * before its children, in `children` order), so the drawn order is the returned order. Each copy
  * goes into its original's parent directly above the topmost original of that parent, the
- * copies of one parent in their originals' relative order, and moves by the page `offset`.
+ * copies of one parent in their originals' relative order, and moves by the page `offset`. A
+ * duplicated `symbol` is a new, independent source; a duplicated instance is an instance of the
+ * same source, or of the source's copy when the source is duplicated with it (M7 contract,
+ * section 6).
  */
 export function duplicateNodes(
   document: DocumentV3,
@@ -373,6 +376,9 @@ function buildDuplicate(
       parent: rootSet.has(id) ? node.parent : copyOf.get(node.parent)!,
     };
     if (isContainer(node)) copy.children = node.children.map((child) => copyOf.get(child)!);
+    // A copied instance refers to the copy of its source when the source is duplicated too,
+    // else to the same source (M7 contract, section 6, M7-Q10 (a)).
+    if (node.type === 'instance' && copyOf.has(node.symbol)) copy.symbol = copyOf.get(node.symbol);
     if (rootSet.has(id)) copy.frame = translated(tree, node, offset.x, offset.y);
     draft.set(copy as NodeV3);
   }

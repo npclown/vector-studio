@@ -284,11 +284,13 @@ export type DocumentCommand =
    */
   | Readonly<{ type: 'duplicateNodes'; ids: readonly string[]; offset?: PagePoint }>
   /**
-   * Pastes a fragment (MVP M2 contract, section 6): `text` when given, else the in-memory
-   * clipboard. The roots go on top of the scope, else a single selected frame, else the active
-   * page, at their page placement, or with their joint page bounds centred on `at`; fresh IDs.
-   * Returns the pasted roots in paint order and selects them. A creating command: inside a
-   * gesture it goes through `update` once.
+   * Pastes a fragment (MVP M2 contract, section 6; M7 contract, section 6): `text` when given,
+   * else the in-memory clipboard. The roots go on top of the scope, else a single selected frame
+   * or symbol, else the active page, at their page placement, or with their joint page bounds
+   * centred on `at`; fresh IDs. A pasted source is a new source; an instance refers to its
+   * pasted source, else is linked to its carried source or pasted detached as a frame. Returns
+   * the pasted roots in paint order and selects them. A creating command: inside a gesture it
+   * goes through `update` once.
    */
   | Readonly<{ type: 'paste'; text?: string; at?: PagePoint }>
   // Path commands (MVP M3 contract, section 3) on one `path` node of the active page at any
@@ -364,7 +366,8 @@ export type SessionCommand =
   | Readonly<{ type: 'setScope'; id: string | null }>
   /**
    * Serializes the subtrees of `ids` (default the selection) as a fragment into the in-memory
-   * clipboard (M2 contract, section 6); an empty selection changes nothing. Returns the copied
+   * clipboard (M2 contract, section 6; fragment version 2 with the carried sources of copied
+   * instances, M7 contract, section 6); an empty selection changes nothing. Returns the copied
    * roots in paint order (none for an empty selection).
    */
   | Readonly<{ type: 'copy'; ids?: readonly string[] }>

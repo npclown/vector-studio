@@ -1,6 +1,7 @@
 import type { RenderCamera, RendererSceneSynchronization } from '@vector-studio/contracts';
 import {
   DOCUMENT_ERROR_CODES,
+  isValidId,
   validateAnyDocument,
   type DocumentV3,
   type ParseResult,
@@ -162,6 +163,11 @@ type HistoryEntry = Readonly<{
   before: DocumentV3;
   after: DocumentV3;
   touched: readonly string[];
+  /**
+   * The IDs the ID source returned for the step (M7 contract, section 6): an undo or redo
+   * replaces the nodes under them, so they leave the rule (1) link set as a new draw does.
+   */
+  drawn: readonly string[];
 }>;
 
 type Gesture = {
@@ -172,6 +178,11 @@ type Gesture = {
   selection: readonly string[];
   /** Path edit mode when the gesture began; its anchor selection is restored on cancel. */
   pathEdit: PathEditState | null;
+  /**
+   * The IDs the gesture's updates and replaces accepted, each judged against the document its
+   * draw ran on (M7 contract, section 6), discarded steps included.
+   */
+  accepted: string[];
 };
 
 /** The zoom range (M2-Q2). */
@@ -446,6 +457,9 @@ function samePages(a: DocumentV3, b: DocumentV3): boolean {
   return a.pages === b.pages || JSON.stringify(a.pages) === JSON.stringify(b.pages);
 }
 
+/** The rule (1) links of a clipboard copied in an earlier generation: none (M7, section 6). */
+const NO_LINKS: ReadonlySet<string> = new Set();
+
 function sorted(ids: Iterable<string>): string[] {
   return [...new Set(ids)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
@@ -519,6 +533,24 @@ class EditorCore implements Editor {
    */
   private clipboard: string | null = null;
   /**
+   * The clipboard generation (M7 contract, section 6): a session counter, 0 at construction,
+   * that each successful `loadDocument` increments; `copy` and `cut` record it with the text in
+   * `clipboardCopiedIn`. A paste links an instance by its carried source's ID alone only while
+   * the two are equal (rule (1)).
+   */
+  private clipboardGenerationValue = 0;
+  private clipboardCopiedIn: number | null = null;
+  /**
+   * The clipboard's carried source IDs that rule (1) of section 6 may still link: recorded by
+   * `copy` and `cut`, less every ID the ID source has returned since (a freed ID can be drawn
+   * again for an unrelated node). Empty with a host-supplied ID source.
+   */
+  private clipboardLinks = new Set<string>();
+  /** The IDs drawn since the current command or gesture began, for its history entry. */
+  private drawing: string[] = [];
+  /** Whether the host supplied the ID source, which rule (1) of section 6 cannot rely on. */
+  private readonly hostIds: boolean;
+  /**
    * Path edit mode (M3 contract, section 4): while set, the selection is exactly `[id]` and the
    * tool is `select`; every change that breaks either ends it.
    */
@@ -537,6 +569,40 @@ class EditorCore implements Editor {
    * checks, the projector and hit testing.
    */
   readonly expansions: ExpansionCache;
+
+  /**
+   * The IDs of `returned` that a draw on `drawnOn` accepted: `drawIds` and `freshId` skip only
+   * IDs that the document they draw on holds (or that are invalid), so an ID `drawnOn` does not
+   * hold was taken (M7 contract, section 6).
+   */
+  private static taken(returned: readonly string[], drawnOn: DocumentV3): string[] {
+    return returned.filter(
+      (id) =>
+        isValidId(id) &&
+        !Object.hasOwn(drawnOn.nodes, id) &&
+        !drawnOn.pages.some((p) => p.id === id),
+    );
+  }
+
+  /** Removes a recorded step's accepted IDs from the rule (1) link set and returns them. */
+  private unlink(taken: readonly string[]): readonly string[] {
+    for (const id of taken) this.clipboardLinks.delete(id);
+    return taken;
+  }
+
+  /** Runs one gesture step drawing on `drawnOn`, recording the IDs it accepted. */
+  private gestureStep<T>(gesture: Gesture, drawnOn: DocumentV3, step: () => T): T {
+    this.drawing = [];
+    const result = step();
+    gesture.accepted.push(...EditorCore.taken(this.drawing, drawnOn));
+    this.drawing = [];
+    return result;
+  }
+
+  /** The clipboard generation (M7 contract, section 6), for tests through `internalsOf`. */
+  get clipboardGeneration(): number {
+    return this.clipboardGenerationValue;
+  }
   /** The built-in tools by name, then the extension tools by ID in registration order. */
   readonly tools = new Map<string, Tool>();
   readonly gesture: GestureControl;
@@ -547,7 +613,15 @@ class EditorCore implements Editor {
   });
 
   constructor(options: EditorOptions) {
-    this.ids = options.ids ?? createCounterIdSource('node-');
+    const source = options.ids ?? createCounterIdSource('node-');
+    // Every ID the source returns is noted; those a step accepts leave the rule (1) link set
+    // (section 6) when the step is recorded (`accepted`).
+    this.ids = () => {
+      const id = source();
+      if (typeof id === 'string') this.drawing.push(id);
+      return id;
+    };
+    this.hostIds = options.ids !== undefined;
     this.extensions = new ExtensionRegistry(options.extensions ?? []);
     this.expansions = new ExpansionCache((node) => this.extensions.check(node));
     const platform: unknown = options.platform ?? 'other';
@@ -755,12 +829,19 @@ class EditorCore implements Editor {
       // A host command during a drag would leave the gesture's base stale, so it applies to the
       // pre-gesture document and, only if it succeeds, cancels the drag first.
       const base = this.gestureState?.base ?? this.document;
+      // The command's own draws, apart from those of a gesture it may interrupt.
+      const outer = this.drawing;
+      this.drawing = [];
       const result = applyEdit(base, command as DocumentCommand, this.context(true));
+      const returned = this.drawing;
+      this.drawing = outer;
       if (!result.ok) return result;
       // A relative command that changes nothing records no step and no event (M2 section 4).
       if (result.document === base) return { ok: true, ids: [] };
+      // A command's draws all run on `base`.
+      const drawn = this.unlink(EditorCore.taken(returned, base));
       this.interrupt();
-      const entry = { before: base, after: result.document, touched: result.touched };
+      const entry = { before: base, after: result.document, touched: result.touched, drawn };
       this.undoStack.push(entry);
       this.redoStack = [];
       this.changeDocument(result.document, 'command', result.touched);
@@ -782,6 +863,8 @@ class EditorCore implements Editor {
         this.interrupt();
         const entry = from.pop()!;
         to.push(entry);
+        // The step's IDs now name other nodes, or none (section 6, rule (1)).
+        for (const id of entry.drawn) this.clipboardLinks.delete(id);
         const target = command.type === 'undo' ? entry.before : entry.after;
         this.changeDocument(target, command.type, entry.touched);
         return { ok: true, ids: [] };
@@ -796,6 +879,8 @@ class EditorCore implements Editor {
         ];
         this.undoStack = [];
         this.redoStack = [];
+        // The clipboard survives a load, but its IDs may name other nodes now (section 6).
+        this.clipboardGenerationValue += 1;
         this.changeDocument(deepFreeze(result.document), 'load', touched);
         return { ok: true, ids: [] };
       }
@@ -956,6 +1041,8 @@ class EditorCore implements Editor {
           if (!result.ok) return result;
         }
         this.clipboard = copied.text;
+        this.clipboardCopiedIn = this.clipboardGenerationValue;
+        this.clipboardLinks = new Set(this.hostIds ? [] : copied.sources);
         // The copied roots in paint order, so a host can tell a copy from an empty one.
         return { ok: true, ids: copied.roots };
       }
@@ -1053,6 +1140,8 @@ class EditorCore implements Editor {
       activePage: this.activePage,
       refit,
       clipboard: this.clipboard,
+      clipboardLinks:
+        this.clipboardCopiedIn === this.clipboardGenerationValue ? this.clipboardLinks : NO_LINKS,
       scope: this.scope,
       selection: this.selection,
       expansions: this.expansions,
@@ -1525,6 +1614,7 @@ class EditorCore implements Editor {
       base: this.document,
       touched: new Set(),
       updated: false,
+      accepted: [],
       selection: this.selection,
       pathEdit: this.pathEdit,
     };
@@ -1539,11 +1629,11 @@ class EditorCore implements Editor {
     if (typeof type === 'string' && RELATIVE_COMMANDS.has(type)) {
       return failure('editor.invalid-command', '/type');
     }
-    // Groups refit only at commit (M1 contract, section 4.2).
-    const result = applyEdit(this.document, command, {
-      ...this.context(false),
-      resizeBase: gesture.base,
-    });
+    // Groups refit only at commit (M1 contract, section 4.2). Its draws run on the live document.
+    const live = this.document;
+    const result = this.gestureStep(gesture, live, () =>
+      applyEdit(live, command, { ...this.context(false), resizeBase: gesture.base }),
+    );
     return this.applyGestureResult(gesture, result);
   }
 
@@ -1563,10 +1653,11 @@ class EditorCore implements Editor {
       if (typeof command !== 'object' || command === null) {
         return failure('editor.invalid-command', `/commands/${index}`);
       }
-      const result = applyEdit(document, command, {
-        ...this.context(false),
-        resizeBase: gesture.base,
-      });
+      // Each step draws on the document the steps before it made.
+      const on = document;
+      const result = this.gestureStep(gesture, on, () =>
+        applyEdit(on, command, { ...this.context(false), resizeBase: gesture.base }),
+      );
       if (!result.ok) return result;
       document = result.document;
       result.touched.forEach((id) => touched.add(id));
@@ -1665,7 +1756,9 @@ class EditorCore implements Editor {
       }
       return;
     }
-    this.undoStack.push({ before: gesture.base, after, touched });
+    // Including IDs of updates the commit discarded, which errs on the safe side.
+    const drawn = this.unlink([...new Set(gesture.accepted)]);
+    this.undoStack.push({ before: gesture.base, after, touched, drawn });
     this.redoStack = [];
     this.changeDocument(after, 'gesture-commit', changed);
   }
@@ -1927,7 +2020,9 @@ export function createEditor(options: EditorOptions = {}): Editor {
 }
 
 /** Package-internal access for tools (P5-U3) and tests; not exported from the package. */
-export function internalsOf(editor: Editor): Pick<EditorCore, 'tools' | 'gesture' | 'expansions'> {
+export function internalsOf(
+  editor: Editor,
+): Pick<EditorCore, 'tools' | 'gesture' | 'expansions' | 'clipboardGeneration'> {
   if (!(editor instanceof EditorCore)) throw new Error('not an editor-core editor');
   return editor;
 }

@@ -1152,11 +1152,7 @@ describe('the source deletion rule (M7-A13, section 5.4)', () => {
     expect(drawn()).toBe(0);
   });
 
-  it('cut of a source still fails before any delete until M7-U5 (U1 note 6)', () => {
-    const setup = counted();
-    fails(setup, { type: 'cut', ids: ['s1'] }, { code: 'editor.invalid-command', path: '/ids' });
-    expect(setup.target.query({ type: 'clipboard' })).toBeNull();
-  });
+  // The `cut` part of the rule (U1 note 6 lifted by M7-U5) is tested in `m7-u5-clipboard.test.ts`.
 
   it('a failing automatic detach fails the delete with nothing drawn (M7-X3)', () => {
     const document = overflowing();

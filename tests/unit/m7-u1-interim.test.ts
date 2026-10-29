@@ -11,10 +11,12 @@ import {
 
 // MVP M7-U1 interim editor rules (M7 contract, section 16, M7-U1 notes (5) and (6)) that still
 // hold: a symbol is a container (section 1.2) and adds a clip level as a frame; fragment version
-// 1 carries no symbol or instance until M7-U5. The interim hit-test guards (round 2, S3) were
-// lifted by M7-U3 (`m7-u3-projection.test.ts`); the interim delete, move and tree-depth guards
-// were replaced by M7-U4's source deletion rule and section 5.3 checks
-// (`m7-u4-commands.test.ts`).
+// 1 carries no symbol or instance (M7-U5 writes version 2 and reads version 1 at schema v2
+// only). The interim hit-test guards (round 2, S3) were lifted by M7-U3
+// (`m7-u3-projection.test.ts`); the interim delete, move and tree-depth guards were replaced by
+// M7-U4's source deletion rule and section 5.3 checks (`m7-u4-commands.test.ts`); the failing
+// copy and cut of a symbol or an instance by M7-U5's fragment version 2
+// (`m7-u5-clipboard.test.ts`).
 
 const root = path.resolve(import.meta.dirname, '../..');
 const SYMBOLS = readFileSync(path.join(root, 'tests/fixtures/m7-symbols/symbols.v3.json'), 'utf8');
@@ -74,49 +76,30 @@ describe('M7-U1 interim: fragment version 1 carries no symbol or instance', () =
   delete instanceNode.fill;
   delete instanceNode.stroke;
 
-  it.each([2, 3])(
-    'rejects a symbol and an instance at schemaVersion %i with document.invalid-field at /type',
-    (schemaVersion) => {
-      const target = loaded();
-      const before = text(target);
-      const fragment = (nodes: Record<string, unknown>, roots: string[]) =>
-        `${MARKER}${JSON.stringify({ fragmentVersion: 1, schemaVersion, roots, nodes })}`;
-      expect(
-        run(target, {
-          type: 'paste',
-          text: fragment({ s: symbolNode, i: instanceNode }, ['s', 'i']),
-        }),
-      ).toEqual({
-        ok: false,
-        code: 'document.invalid-field',
-        path: '/nodes/s/type',
-      });
-      expect(run(target, { type: 'paste', text: fragment({ i: instanceNode }, ['i']) })).toEqual({
-        ok: false,
-        code: 'document.invalid-field',
-        path: '/nodes/i/type',
-      });
-      expect(text(target)).toBe(before);
-    },
-  );
-
-  it('fails a copy or cut of a symbol or an instance, keeping the clipboard', () => {
+  // Fragment version 1 is read at schemaVersion 2 only since M7-U5, which writes version 2
+  // (`m7-u5-clipboard.test.ts`: version 1 at schemaVersion 3 is `document.unsupported-version`,
+  // and copy and cut of a symbol or an instance carry it, replacing U1's failing copy).
+  it('rejects a symbol and an instance at schemaVersion 2 with document.invalid-field at /type', () => {
     const target = loaded();
     const before = text(target);
-    for (const ids of [['s1'], ['i1'], ['s1-r', 'i1']]) {
-      for (const type of ['copy', 'cut'] as const) {
-        expect(run(target, { type, ids })).toEqual({
-          ok: false,
-          code: 'editor.invalid-command',
-          path: '/ids',
-        });
-      }
-    }
+    const fragment = (nodes: Record<string, unknown>, roots: string[]) =>
+      `${MARKER}${JSON.stringify({ fragmentVersion: 1, schemaVersion: 2, roots, nodes })}`;
+    expect(
+      run(target, {
+        type: 'paste',
+        text: fragment({ s: symbolNode, i: instanceNode }, ['s', 'i']),
+      }),
+    ).toEqual({
+      ok: false,
+      code: 'document.invalid-field',
+      path: '/nodes/s/type',
+    });
+    expect(run(target, { type: 'paste', text: fragment({ i: instanceNode }, ['i']) })).toEqual({
+      ok: false,
+      code: 'document.invalid-field',
+      path: '/nodes/i/type',
+    });
     expect(text(target)).toBe(before);
-    expect(target.query({ type: 'clipboard' })).toBeNull();
-    // A source child alone copies and pastes.
-    expect(run(target, { type: 'copy', ids: ['s1-r'] }).ok).toBe(true);
-    expect(run(target, { type: 'paste' }).ok).toBe(true);
   });
 });
 
