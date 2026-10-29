@@ -1,11 +1,13 @@
 import type {
   EditorSnapshot,
   PagePoint,
+  PathEditOverlay,
   SelectionHandles,
   SnapOverlay,
   ToolOverlay,
 } from '@vector-studio/editor-core';
 import { degreesLabel, nodePageCorners } from './m2-geometry';
+import { pathMarkers } from './m3-path-overlay';
 
 // P5-U6: the host's selection and tool overlay (P5 plan, section 4.5). It is drawn in CSS pixels
 // over the canvas and is never document content. M1-U5: the selection box and its active handles
@@ -14,12 +16,17 @@ import { degreesLabel, nodePageCorners } from './m2-geometry';
 // session `snap` (M2 contract, section 4.2: guides, equal-spacing gaps and the snapped angle) and
 // the outline of session `scope` (section 5), which can lag behind the press during an Alt-drag
 // begun outside the scope (M2-U5 note 1), since it is drawn from the session value as is.
+// M3-U4: the anchor markers of path edit mode from the `pathOverlay` query (M3 contract,
+// section 5.1), the value the select tool picks its edit-mode targets from: every anchor, filled
+// when selected, and the visible handles with their lines.
 
 type Props = Readonly<{
   snapshot: EditorSnapshot;
   handles: SelectionHandles | null;
   width: number;
   height: number;
+  /** The `pathOverlay` query result for `snapshot` (null outside path edit mode). */
+  pathOverlay?: PathEditOverlay | null;
 }>;
 
 type ToScreen = (x: number, y: number) => [number, number];
@@ -60,6 +67,57 @@ function ToolShape({ overlay, toScreen }: { overlay: ToolOverlay; toScreen: ToSc
 }
 
 const SNAP_COLOUR = '#e0218a';
+const PATH_COLOUR = '#1e78ff';
+
+function PathShapes({ overlay, snapshot }: { overlay: PathEditOverlay; snapshot: EditorSnapshot }) {
+  const { anchors, handles } = pathMarkers(overlay, snapshot.viewport);
+  return (
+    <g data-testid="path-edit" data-path={overlay.id}>
+      {handles.map((handle) => (
+        <g key={`h-${handle.subpath}-${handle.anchor}-${handle.side}`}>
+          <line
+            x1={handle.anchorX}
+            y1={handle.anchorY}
+            x2={handle.x}
+            y2={handle.y}
+            stroke={PATH_COLOUR}
+          />
+          <circle
+            data-testid="path-handle"
+            data-subpath={handle.subpath}
+            data-anchor={handle.anchor}
+            data-side={handle.side}
+            data-x={handle.x}
+            data-y={handle.y}
+            cx={handle.x}
+            cy={handle.y}
+            r={3}
+            fill="#fff"
+            stroke={PATH_COLOUR}
+          />
+        </g>
+      ))}
+      {anchors.map((anchor) => (
+        <rect
+          key={`a-${anchor.subpath}-${anchor.anchor}`}
+          data-testid="path-anchor"
+          data-subpath={anchor.subpath}
+          data-anchor={anchor.anchor}
+          data-selected={anchor.selected}
+          data-mirrored={anchor.mirrored}
+          data-x={anchor.x}
+          data-y={anchor.y}
+          x={anchor.x - 3.5}
+          y={anchor.y - 3.5}
+          width={7}
+          height={7}
+          fill={anchor.selected ? PATH_COLOUR : '#fff'}
+          stroke={PATH_COLOUR}
+        />
+      ))}
+    </g>
+  );
+}
 
 function SnapShapes({
   snap,
@@ -122,7 +180,7 @@ function SnapShapes({
   );
 }
 
-export function SelectionOverlay({ snapshot, handles, width, height }: Props) {
+export function SelectionOverlay({ snapshot, handles, width, height, pathOverlay = null }: Props) {
   const { position, zoom } = snapshot.viewport;
   const toScreen = (x: number, y: number): [number, number] => [
     (x - position.x) * zoom,
@@ -173,6 +231,7 @@ export function SelectionOverlay({ snapshot, handles, width, height }: Props) {
           stroke="#1e78ff"
         />
       ))}
+      {pathOverlay === null ? null : <PathShapes overlay={pathOverlay} snapshot={snapshot} />}
       {snapshot.overlay === null ? null : (
         <ToolShape overlay={snapshot.overlay} toScreen={toScreen} />
       )}

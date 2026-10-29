@@ -5,6 +5,7 @@ import {
   starExtension,
   type Editor,
   type EditorEvent,
+  type PathEditOverlay,
   type Platform,
   type ToolName,
 } from '@vector-studio/editor-core';
@@ -15,8 +16,9 @@ import {
   useEditorCommands,
   useEditorSelector,
 } from '@vector-studio/react';
-import { useEffect, useState, type PointerEvent } from 'react';
+import { useEffect, useMemo, useState, type PointerEvent } from 'react';
 import { inRotateZone, zoomLabel } from '../src/m2-geometry';
+import { toggleClosedCommand } from '../src/m3-path-overlay';
 import { SelectionOverlay } from '../src/overlay';
 import { createWebGpuRenderer } from '../src/webgpu-renderer';
 
@@ -28,12 +30,23 @@ import { createWebGpuRenderer } from '../src/webgpu-renderer';
 // EditorCanvas, zoom controls with the current zoom, the snap overlay, the scope indicator and
 // the rotate cursor; the toolbar's ungroup selects the released children as the `ungroup` action
 // does (M2-U1 note 3). The toolbar lists the built-in tools only (M2-U7 note 8).
+// M3-U4 (M3 contract, M3-A12): the path edit anchor overlay from the `pathOverlay` query, a
+// toggle-closed button that runs what the unbound `togglePathClosed` action runs (M3-Q11), and
+// the M3 path-edit fixture with `?fixture=path-edit`, shown at zoom 1.
 
 const WIDTH = 960;
 const HEIGHT = 640;
 const TOOLS: readonly ToolName[] = ['select', 'rectangle', 'ellipse', 'line', 'frame', 'path'];
-const FIXTURE_URL = '/m1-containers.json';
-const FIXTURE_CAMERA = { position: { x: -20, y: -20 }, zoom: 2 };
+/** The `?fixture=` documents and the camera each is shown at. */
+const FIXTURES: Readonly<
+  Record<
+    string,
+    Readonly<{ url: string; camera: { position: { x: number; y: number }; zoom: number } }>
+  >
+> = {
+  containers: { url: '/m1-containers.json', camera: { position: { x: -20, y: -20 }, zoom: 2 } },
+  'path-edit': { url: '/m3-path-edit.json', camera: { position: { x: 0, y: 0 }, zoom: 1 } },
+};
 /** A rotate cursor (a circular arrow) with a standard fallback; the hotspot is its centre. */
 const ROTATE_CURSOR =
   'url("data:image/svg+xml,' +
@@ -50,11 +63,28 @@ function hostPlatform(): Platform {
   return typeof navigator !== 'undefined' && /^Mac/u.test(navigator.platform) ? 'mac' : 'other';
 }
 
-/** Test hook for the headed P5, M1 and M2 specs: present only with `?test=1`. */
+/** Test hook for the headed P5, M1, M2 and M3 specs: present only with `?test=1`. */
 declare global {
   interface Window {
     __p5Host?: Readonly<{ editor: Editor; events: readonly EditorEvent[] }>;
   }
+}
+
+/**
+ * The `pathOverlay` query for the current document and path edit state. The query computes a new
+ * value on each call (M3-U2 note 10), so it is memoized on its inputs rather than read through a
+ * snapshot selector, which would see a new value on every read.
+ */
+function usePathOverlay(): PathEditOverlay | null {
+  const editor = useEditor();
+  const pathEdit = useEditorSelector((snapshot) => snapshot.pathEdit);
+  const content = useEditorSelector((snapshot) => snapshot.document);
+  const page = useEditorSelector((snapshot) => snapshot.activePage);
+  return useMemo(
+    () => (pathEdit === null ? null : editor.query({ type: 'pathOverlay' })),
+    // The query reads the editor's current state, which these values identify.
+    [editor, pathEdit, content, page],
+  );
 }
 
 function Toolbar() {
@@ -63,6 +93,7 @@ function Toolbar() {
   const tool = useEditorSelector((snapshot) => snapshot.tool);
   const history = useEditorSelector((snapshot) => snapshot.history);
   const selection = useEditorSelector((snapshot) => snapshot.selection);
+  const toggleClosed = toggleClosedCommand(usePathOverlay());
   const group = (kind: 'group' | 'maskGroup') => {
     const result = execute({ type: 'groupNodes', ids: selection, kind });
     if (result.ok) execute({ type: 'setSelection', ids: result.ids });
@@ -148,6 +179,16 @@ function Toolbar() {
         onClick={() => execute({ type: 'deleteNodes', ids: selection })}
       >
         delete
+      </button>
+      <button
+        type="button"
+        data-testid="toggle-closed"
+        disabled={toggleClosed === null}
+        onClick={() => {
+          if (toggleClosed !== null) execute(toggleClosed);
+        }}
+      >
+        toggle closed
       </button>
       <ZoomControls />
     </div>
@@ -264,18 +305,21 @@ function Surface() {
   const [renderer, setRenderer] = useState('pending');
   const [fixture, setFixture] = useState('none');
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('fixture') !== 'containers') return;
+    const name = new URLSearchParams(window.location.search).get('fixture');
+    const entry = name === null || !Object.hasOwn(FIXTURES, name) ? undefined : FIXTURES[name];
+    if (entry === undefined) return;
+    const { url, camera } = entry;
     let live = true;
     setFixture('loading');
     void (async () => {
       try {
-        const response = await fetch(FIXTURE_URL, { cache: 'no-store' });
-        if (!response.ok) throw new Error(`HTTP ${response.status} for ${FIXTURE_URL}`);
+        const response = await fetch(url, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
         const document: unknown = await response.json();
         if (!live) return;
         const result = execute({ type: 'loadDocument', document });
         if (!result.ok) throw new Error(`loadDocument: ${result.code} ${result.path ?? ''}`);
-        execute({ type: 'setViewport', camera: FIXTURE_CAMERA });
+        execute({ type: 'setViewport', camera });
         setFixture('loaded');
       } catch (error) {
         if (!live) return;
@@ -289,6 +333,7 @@ function Surface() {
   }, [execute]);
   // The handle box follows the snapshot: this component re-renders on every editor change.
   const handles = editor.query({ type: 'handles' });
+  const pathOverlay = usePathOverlay();
   // The rotate cursor over the select tool's rotate zone while no button is held (hover only:
   // EditorCanvas forwards no move without a press). Set only when it changes.
   const [rotating, setRotating] = useState(false);
@@ -331,7 +376,13 @@ function Surface() {
           onRendererReady={() => setRenderer('ready')}
           style={{ border: '1px solid #ccc' }}
         >
-          <SelectionOverlay snapshot={snapshot} handles={handles} width={WIDTH} height={HEIGHT} />
+          <SelectionOverlay
+            snapshot={snapshot}
+            handles={handles}
+            pathOverlay={pathOverlay}
+            width={WIDTH}
+            height={HEIGHT}
+          />
         </EditorCanvas>
       </div>
       <Status errors={errors} renderer={renderer} fixture={fixture} />
