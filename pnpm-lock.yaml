@@ -83,6 +83,9 @@ importers:
       '@vector-studio/model':
         specifier: workspace:*
         version: link:../../packages/model
+      '@vector-studio/persistence-idb':
+        specifier: workspace:*
+        version: link:../../packages/persistence-idb
       '@vector-studio/react':
         specifier: workspace:*
         version: link:../../packages/react
