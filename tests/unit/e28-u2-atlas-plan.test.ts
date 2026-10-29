@@ -670,6 +670,39 @@ describe('E28 section 4 compaction', () => {
     expect(service.getAtlasEvictionsForTesting()).toBe(1);
   });
 
+  it('counts an entry drawn only as a fallback as stale (review case, subpixel move)', () => {
+    const { frame, replace, service } = setup([textNode('t', many(2), small)], {
+      pages: 1,
+      pageSize: 16,
+    });
+    frame();
+    // B moves by a quarter pixel: its phase-0 entry is now only a fallback, so it is stale.
+    replace([
+      textNode(
+        't',
+        [
+          [ch(0), 0],
+          [ch(1), 1.25],
+        ],
+        small,
+      ),
+    ]);
+    const fragmented = frame();
+    expect(instanceCount(fragmented)).toBe(2);
+    expect(fragmented.text!.notices).toEqual([]);
+    const compacted = frame();
+    expect(compacted.text!.clears).toEqual([{ page: 0, x: 0, y: 0, width: 16, height: 16 }]);
+    expect(compacted.text!.uploads).toHaveLength(2);
+    expect(instanceCount(compacted)).toBe(2);
+    expect(compacted.text!.notices).toEqual([]);
+    const settled = frame();
+    expect(settled.text!.clears).toEqual([]);
+    expect(settled.text!.uploads).toEqual([]);
+    expect(instanceCount(settled)).toBe(2);
+    expect(settled.text!.notices).toEqual([]);
+    expect(service.getAtlasEvictionsForTesting()).toBe(1);
+  });
+
   it('does not lock after a compaction that ended over the limit (review case)', () => {
     const { frame, replace } = setup([textNode('t', many(2), small)], { pages: 1, pageSize: 16 });
     const nodeOf = (...indices: number[]) =>

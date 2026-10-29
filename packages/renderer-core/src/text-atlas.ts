@@ -354,7 +354,8 @@ export class GlyphAtlasPlan {
     const used = new Set<number>();
     const clears: TextClear[] = [];
     const uploads: TextUpload[] = [];
-    // Keys this frame draws from; an entry outside it is stale for this frame.
+    // Keys this frame draws exactly; an entry outside it is stale for this frame. A fallback marks
+    // its page used but stays stale, so it never hides space a compaction could free.
     const usedKeys = new Set<string>();
     // Pages whose key set this frame already copied, so an allocation adds to it in place.
     const ownedKeys = new Set<number>();
@@ -510,10 +511,7 @@ export class GlyphAtlasPlan {
       const defer = () => {
         deferred += 1;
         const fallback = this.#fallback(request, lookup, addedBases);
-        if (fallback !== null) {
-          used.add(fallback.page);
-          usedKeys.add(fallback.key);
-        }
+        if (fallback !== null) used.add(fallback.page);
         resolutions[index] = Object.freeze(
           fallback === null
             ? { kind: 'deferred' }
@@ -600,10 +598,10 @@ export class GlyphAtlasPlan {
       resolutions[index] = Object.freeze({ kind: 'entry', entry, fallback: false });
     });
 
-    // Section 4, Compaction: the page with the most stale area (entries this frame does not draw,
-    // its fallbacks included), the lowest index on a tie. When the frame's later lookups used
-    // every stale entry, nothing can be freed: the fragmentation deferrals become omissions
-    // (step 3), drawn fallbacks included.
+    // Section 4, Compaction: the page with the most stale area (entries this frame does not draw
+    // exactly; an entry drawn only as a fallback is stale), the lowest index on a tie. When the
+    // frame's later exact lookups used every stale entry, nothing can be freed: the fragmentation
+    // deferrals become omissions (step 3). A deferral's fallback is then itself an exact entry.
     let compactNext: number | null = null;
     if (fragmented) {
       let most = 0;
