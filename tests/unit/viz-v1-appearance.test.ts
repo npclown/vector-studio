@@ -33,6 +33,7 @@ import {
   type EditorSync,
 } from '../../apps/playground/src/viz-v1-appearance-state.js';
 import { RetainedSceneMirror } from '../../packages/renderer-core/src/scene-mirror.js';
+import { solidColor } from '../support/scene-paint.js';
 
 // Visualization track V-1 (docs/plans/viz-v1-path-appearance-contract.md), acceptance criteria
 // V1-A3 to V1-A6: the state-to-scene mapping, the change shape and its acceptance by the mirror,
@@ -99,7 +100,7 @@ describe('V1-A3 state to scene mapping', () => {
       b: 0,
       a: 1,
     });
-    expect(apply('stroke-alpha', '0.5').style.stroke?.color.a).toBe(0.5);
+    expect(solidColor(apply('stroke-alpha', '0.5').style.stroke!.color).a).toBe(0.5);
     expect(apply('stroke-width-number', '12.3456').style.stroke?.width).toBe(12.3456);
     expect(apply('stroke-width-slider', '24').style.stroke?.width).toBe(24);
     expect(apply('cap', 'round').style.stroke?.cap).toBe('round');

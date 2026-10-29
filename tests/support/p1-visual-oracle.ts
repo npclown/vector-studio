@@ -1,5 +1,6 @@
 import type { RenderNodeSnapshot, SceneAffine } from '@vector-studio/contracts';
 import type { VisualFixture } from './p1-visual-corpus.js';
+import { solidColor } from './scene-paint.js';
 
 type Point = Readonly<{ x: number; y: number }>;
 type Rgba = readonly [number, number, number, number];
@@ -274,7 +275,7 @@ function localContourDistance(shape: Shape, signedDistance: number): number {
   if (geometry.kind === 'line') return Math.abs(signedDistance);
   const distances: number[] = [];
   const stroke = style.stroke !== null && style.stroke.width > 0 ? style.stroke : null;
-  if (style.fill !== null && (stroke === null || stroke.color.a < 1))
+  if (style.fill !== null && (stroke === null || solidColor(stroke.color).a < 1))
     distances.push(Math.abs(signedDistance));
   if (stroke !== null) {
     const halfStroke = stroke.width / 2;
@@ -312,13 +313,15 @@ function shapeColor(shape: Shape, documentPoint: Point): Rgba {
   const style = shape.node.style;
   const fill =
     geometry.kind !== 'line' && style.fill !== null && distance <= 0
-      ? premultiplied(style.fill)
+      ? premultiplied(solidColor(style.fill))
       : ([0, 0, 0, 0] as const);
   const strokePresent =
     style.stroke !== null &&
     style.stroke.width > 0 &&
     (geometry.kind === 'line' ? distance <= 0 : Math.abs(distance) <= style.stroke.width / 2);
-  const stroke = strokePresent ? premultiplied(style.stroke.color) : ([0, 0, 0, 0] as const);
+  const stroke = strokePresent
+    ? premultiplied(solidColor(style.stroke.color))
+    : ([0, 0, 0, 0] as const);
   const local = sourceOver(stroke, fill);
   return [
     local[0] * shape.opacity,
@@ -616,7 +619,9 @@ function buildPhysicalContours(
       continue;
     }
     const levels = stroke === null ? [0] : [stroke.width / 2, -stroke.width / 2];
-    if (shape.node.style.fill !== null && stroke !== null && stroke.color.a < 1) levels.push(0);
+    if (shape.node.style.fill !== null && stroke !== null && solidColor(stroke.color).a < 1) {
+      levels.push(0);
+    }
     for (const level of levels) {
       if (geometry.kind === 'rectangle')
         result.push(...rectangleLevelContours(shape, fixture, dpr, level));

@@ -13,6 +13,7 @@ import {
   type B2View,
 } from '../../apps/playground/src/p3-b2-strokes-scene.js';
 import { p1Source } from '../support/p1-evidence.js';
+import { solidColor } from '../support/scene-paint.js';
 
 declare global {
   interface Window {
@@ -165,8 +166,8 @@ function expectedColor(
     to8(alpha * color.b + (1 - alpha) * background.b),
   ];
   if (kind === 'background') return mix(background, 1);
-  if (kind === 'stroke') return mix(spec.stroke!.color, 1);
-  if (kind === 'stroke-half') return mix(spec.stroke!.color, spec.opacity);
+  if (kind === 'stroke') return mix(solidColor(spec.stroke!.color), 1);
+  if (kind === 'stroke-half') return mix(solidColor(spec.stroke!.color), spec.opacity);
   return mix(spec.fill!, spec.opacity);
 }
 

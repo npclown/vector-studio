@@ -11,6 +11,7 @@ import type {
 } from '@vector-studio/contracts';
 import { B2_PATHS } from './p3-b2-strokes-scene.js';
 import { V4_PATHS } from './p3-v4-paths-scene.js';
+import { solidColor } from './scene-paint.js';
 
 // Visualization track V-3 (docs/plans/viz-v3-a07-integration-contract.md, sections 3.2 to 3.5):
 // the scene of the A07 integration page, its ordered-check states S0 to S5, the recovery edit X
@@ -49,7 +50,7 @@ const rgb = (r: number, g: number, b: number, a = 1): SceneColor => Object.freez
 export const VIZ_V3_COLORS = Object.freeze({
   bg: rgb(0.85, 0.85, 0.85),
   squareFill: SQUARE.fill!,
-  squareStroke: SQUARE.stroke!.color,
+  squareStroke: solidColor(SQUARE.stroke!.color),
   squareFillS2: rgb(0.95, 0.75, 0.1),
   squareStrokeS2: rgb(0.6, 0.2, 0.75),
   band: rgb(0.2, 0.7, 0.3),

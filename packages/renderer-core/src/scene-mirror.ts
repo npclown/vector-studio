@@ -21,6 +21,7 @@ import {
   validateSnapshotShape,
   pathDataEquals,
   type ClipSupport,
+  type PaintSupport,
   type PathNodeSupport,
   type PathSupport,
   type ValidatedChangesInput,
@@ -48,6 +49,8 @@ export type RetainedSceneMirrorOptions = Readonly<{
   pathStrokes?: PathNodeSupport;
   /** P4 contract, units U1 and U3: which non-null container clips are drawn; default none. */
   clips?: ClipSupport;
+  /** E23 contract, E23-S3: whether gradient paints are drawn; default 'solid'. */
+  paints?: PaintSupport;
 }>;
 
 export type ScenePendingChangeState = Readonly<{
@@ -108,7 +111,8 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     const pathStrokes = options.pathStrokes === 'supported' ? 'supported' : 'unsupported';
     const clips: ClipSupport =
       options.clips === 'supported' || options.clips === 'rect' ? options.clips : 'unsupported';
-    this.#pathNodes = Object.freeze({ pathNodes, pathFills, pathStrokes, clips });
+    const paints: PaintSupport = options.paints === 'gradient' ? 'gradient' : 'solid';
+    this.#pathNodes = Object.freeze({ pathNodes, pathFills, pathStrokes, clips, paints });
   }
 
   public replaceSnapshot(snapshot: RenderSceneSnapshot): SceneApplyResult {

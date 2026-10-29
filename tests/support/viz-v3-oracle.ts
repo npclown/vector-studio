@@ -2,8 +2,9 @@ import type {
   RenderNodeSnapshot,
   RenderSceneSnapshot,
   SceneAffine,
-  SceneColor,
+  ScenePaint,
 } from '@vector-studio/contracts';
+import { solidColor } from './scene-paint.js';
 
 // Visualization track V-3 (docs/plans/viz-v3-a07-integration-contract.md, section 4): the
 // independent painter's-order oracle. It walks a scene snapshot's depth-first order, tests a
@@ -58,12 +59,10 @@ function invertPoint(m: SceneAffine, x: number, y: number): Point | null {
   return [(d * px - c * py) / det, (-b * px + a * py) / det];
 }
 
-const premultiply = (color: SceneColor): Premultiplied => [
-  color.r * color.a,
-  color.g * color.a,
-  color.b * color.a,
-  color.a,
-];
+const premultiply = (paint: ScenePaint): Premultiplied => {
+  const color = solidColor(paint);
+  return [color.r * color.a, color.g * color.a, color.b * color.a, color.a];
+};
 
 /** Source-over: s + d * (1 - s.a). */
 const over = (s: Premultiplied, d: Premultiplied): Premultiplied => [

@@ -1,6 +1,27 @@
 export type SceneAffine = readonly [number, number, number, number, number, number];
 export type ScenePoint = Readonly<{ x: number; y: number }>;
 export type SceneColor = Readonly<{ r: number; g: number; b: number; a: number }>;
+/** E23 contract (docs/plans/d9-e23-gradient-paint-contract.md), section 2. */
+export type SceneGradientSpread = 'pad' | 'reflect' | 'repeat';
+export type SceneGradientStop = Readonly<{ offset: number; color: SceneColor }>;
+/**
+ * `transform` maps gradient space to the node's local space. Linear: t = x in gradient space.
+ * Radial: t = |g|, so the unit circle is t = 1. Stops are interpolated premultiplied.
+ */
+export type SceneGradient = Readonly<{
+  kind: 'linear' | 'radial';
+  transform: SceneAffine;
+  stops: readonly SceneGradientStop[];
+  spread: SceneGradientSpread;
+}>;
+/** A solid colour or one gradient (E23-S1). */
+export type ScenePaint = SceneColor | SceneGradient;
+/** E23-S2: more stops is `unsupported-feature`. */
+export const SCENE_MAX_GRADIENT_STOPS = 16;
+/** E23-S1: a gradient paint carries `kind`; a solid colour does not. */
+export function isSceneGradient(paint: ScenePaint): paint is SceneGradient {
+  return 'kind' in paint;
+}
 export type SceneIdentity = Readonly<{ documentId: string; pageId: string }>;
 export type SceneVersion = Readonly<{ identity: SceneIdentity; revision: number }>;
 export type RenderCamera = Readonly<{ position: ScenePoint; zoom: number }>;
@@ -9,9 +30,9 @@ export type CameraApplyResult =
   | Readonly<{ status: 'applied' | 'unchanged'; current: RenderCameraState }>
   | Readonly<{ status: 'invalid-camera'; reason: 'invalid-value' | 'revision-overflow' }>
   | Readonly<{ status: 'disposed' }>;
-export type SceneStroke = Readonly<{ color: SceneColor; width: number }>;
+export type SceneStroke = Readonly<{ color: ScenePaint; width: number }>;
 export type PrimitiveStyle = Readonly<{
-  fill: SceneColor | null;
+  fill: ScenePaint | null;
   stroke: SceneStroke | null;
 }>;
 export type PrimitiveGeometry =
@@ -36,7 +57,7 @@ export type SceneStrokeCap = 'butt' | 'round' | 'square';
 export type SceneStrokeJoin = 'miter' | 'round' | 'bevel';
 /** A path stroke (P3 B2 stroke contract, section 5). Primitive strokes keep SceneStroke. */
 export type PathStroke = Readonly<{
-  color: SceneColor;
+  color: ScenePaint;
   /** Node-local units, finite, >= 0. */
   width: number;
   cap: SceneStrokeCap;
@@ -45,7 +66,7 @@ export type PathStroke = Readonly<{
   miterLimit: number;
 }>;
 /** `stroke` is required and explicitly null when absent. */
-export type PathStyle = Readonly<{ fill: SceneColor | null; stroke: PathStroke | null }>;
+export type PathStyle = Readonly<{ fill: ScenePaint | null; stroke: PathStroke | null }>;
 /**
  * P4 contract (docs/plans/p4-clip-mask.md), section 2. `rect` clips the container's descendants
  * to a closed rectangle in its local space; `mask` uses `children[0]`'s fill area as the mask of

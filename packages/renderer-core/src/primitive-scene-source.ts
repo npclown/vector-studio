@@ -35,6 +35,7 @@ import {
   selectMeshOrigin,
   type MeshOrigin,
 } from './path-mesh-packet.js';
+import { solidPaint } from './scene-paint.js';
 import type { RetainedSceneMirror, RetainedSceneView } from './scene-mirror.js';
 import {
   ClipStateTable,
@@ -1286,8 +1287,9 @@ function primitiveGeometryKey(
 function primitiveStyleKey(
   node: Extract<RenderNodeSnapshot, { kind: 'primitive' }>,
 ): readonly number[] {
-  const fill = node.style.fill;
+  const fill = node.style.fill === null ? null : solidPaint(node.style.fill);
   const stroke = node.style.stroke;
+  const strokeColor = stroke === null ? null : solidPaint(stroke.color);
   return [
     fill === null ? 0 : 1,
     fill?.r ?? 0,
@@ -1295,10 +1297,10 @@ function primitiveStyleKey(
     fill?.b ?? 0,
     fill?.a ?? 0,
     stroke === null ? 0 : 1,
-    stroke?.color.r ?? 0,
-    stroke?.color.g ?? 0,
-    stroke?.color.b ?? 0,
-    stroke?.color.a ?? 0,
+    strokeColor?.r ?? 0,
+    strokeColor?.g ?? 0,
+    strokeColor?.b ?? 0,
+    strokeColor?.a ?? 0,
     stroke?.width ?? 0,
     node.opacity,
   ];
@@ -1340,10 +1342,12 @@ function packGeometry(node: Extract<RenderNodeSnapshot, { kind: 'primitive' }>):
 function packStyle(node: Extract<RenderNodeSnapshot, { kind: 'primitive' }>): readonly number[] {
   const lanes = Array<number>(12).fill(0);
   if (node.style.fill !== null) {
-    lanes.splice(0, 4, node.style.fill.r, node.style.fill.g, node.style.fill.b, node.style.fill.a);
+    const fill = solidPaint(node.style.fill);
+    lanes.splice(0, 4, fill.r, fill.g, fill.b, fill.a);
   }
   if (node.style.stroke !== null) {
-    const { color, width } = node.style.stroke;
+    const { width } = node.style.stroke;
+    const color = solidPaint(node.style.stroke.color);
     lanes.splice(4, 4, color.r, color.g, color.b, color.a);
     lanes[8] = width;
   }
