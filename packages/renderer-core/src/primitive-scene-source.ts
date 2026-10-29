@@ -36,7 +36,7 @@ import {
   selectMeshOrigin,
   type MeshOrigin,
 } from './path-mesh-packet.js';
-import { GradientRecordTable, paintColorLanes } from './paint-records.js';
+import { GradientRecordTable, paintColorLanes, type GradientPaintRecord } from './paint-records.js';
 import type { RetainedSceneMirror, RetainedSceneView } from './scene-mirror.js';
 import {
   ClipStateTable,
@@ -305,7 +305,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     // E23 contract, U2: gradient records for the drawn mesh paints, against the mesh origin. An
     // out-of-range record (E23-K8) skips its draw; a joint path skips both of its draws.
     this.#gradients.begin();
-    const meshGradients = new Map<PathMeshDraw, number>();
+    const meshRecords = new Map<PathMeshDraw, GradientPaintRecord>();
     if (pathDraws.length > 0) {
       const pathById = new Map(paths.map((path) => [path.id, path] as const));
       const meshOrigin = this.#meshOrigin ?? { x: 0, y: 0 };
@@ -316,14 +316,14 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
         const role = draw.paint ?? 'fill';
         const paint = role === 'fill' ? path.node.style.fill : path.node.style.stroke?.color;
         if (paint === null || paint === undefined || !isSceneGradient(paint)) continue;
-        const index = this.#gradients.indexOf(
+        const record = this.#gradients.recordOf(
           `mesh:${draw.nodeId}:${role}`,
           paint,
           path.world,
           meshOrigin,
         );
-        if (index === 0) outOfRange.add(`${draw.nodeId}:${role}`);
-        else meshGradients.set(draw, index);
+        if (record === null) outOfRange.add(`${draw.nodeId}:${role}`);
+        else meshRecords.set(draw, record);
       }
       if (outOfRange.size > 0) {
         const jointDropped = new Set(
@@ -369,7 +369,6 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       );
       return true;
     });
-    const gradients = this.#gradients.end();
 
     const grew = this.#ensureCapacities(highWater(this.#slotIds), visible.length);
     if (grew) rebased = true;
@@ -410,6 +409,16 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
             ...packedMesh,
             draws: packedMesh.draws.filter((_, index) => pathDraws[index]!.maskSource !== true),
           });
+    // E23 U2: mesh records join the table only for draws the mesh part carries, after the
+    // primitive records; a joint fill draw also names its stroke's record (E23-K4).
+    const meshGradients = (mesh?.draws ?? []).map((_, index) => {
+      const record = meshRecords.get(contentPathDraws[index]!);
+      return record === undefined ? 0 : this.#gradients.add(record);
+    });
+    const strokeGradients = (mesh?.draws ?? []).map((_, index) =>
+      contentPathDraws[index]!.composite === 'joint-fill' ? (meshGradients[index + 1] ?? 0) : 0,
+    );
+    const gradients = this.#gradients.end();
     // P4 contract, U2: clip states are numbered in drawn paint order; a state change splits an
     // analytic run. An unclipped frame has no states and the P3 draws, unchanged.
     let clip: ClipStates = NO_CLIP_STATES;
@@ -499,9 +508,10 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
                     ...((clip.meshStates[index] ?? 0) === 0
                       ? {}
                       : { clipState: clip.meshStates[index]! }),
-                    ...(meshGradients.has(contentPathDraws[index]!)
-                      ? { gradient: meshGradients.get(contentPathDraws[index]!)! }
-                      : {}),
+                    ...(meshGradients[index] === 0 ? {} : { gradient: meshGradients[index]! }),
+                    ...(strokeGradients[index] === 0
+                      ? {}
+                      : { strokeGradient: strokeGradients[index]! }),
                   }),
                 ),
               ),
@@ -693,6 +703,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   public dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
+    this.#gradients.clear();
     this.#sceneEpoch = null;
     this.#slots.clear();
     this.#slotIds = [];

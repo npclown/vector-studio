@@ -179,7 +179,7 @@ describe('E23 U2 paint part and runs', () => {
   });
 
   it('E23-A02/A05: a camera pan builds no record; an origin rebase rebuilds every record', () => {
-    const { mirror, source } = setup([box('a', 10, G1), box('b', 30, red, G1)]);
+    const { mirror, source, replace } = setup([box('a', 10, G1), box('b', 30, red, G1)]);
     const first = source.prepare(target)!;
     expect(first.paint!.builds).toBe(2);
     mirror.setCamera({ position: { x: 5, y: 3 }, zoom: 2 });
@@ -187,10 +187,17 @@ describe('E23 U2 paint part and runs', () => {
     expect(panned.originRevision).toBe(first.originRevision);
     expect(panned.paint!.builds).toBe(0);
     expect(panned.paint!.records[0]).toBe(first.paint!.records[0]);
+    // Far enough to rebase the primitive origin, with the nodes moved along so they stay drawn.
+    replace([
+      box('a', 5010, G1, null, [1, 0, 0, 1, 5010, 20]),
+      box('b', 5030, red, G1, [1, 0, 0, 1, 5030, 20]),
+    ]);
+    source.prepare(target);
     mirror.setCamera({ position: { x: 5000, y: 0 }, zoom: 1 });
     const moved = source.prepare(target)!;
     expect(moved.originRevision).not.toBe(first.originRevision);
-    expect(moved.paint?.builds ?? 0).toBe(moved.paint?.records.length ?? 0);
+    expect(moved.paint!.records).toHaveLength(2);
+    expect(moved.paint!.builds).toBe(2);
   });
 
   it('E23-A05: a stop edit rebuilds only that record and rewrites no style record', () => {
@@ -250,6 +257,29 @@ describe('E23 U2 paint part and runs', () => {
 describe('E23 U2 mesh paints', () => {
   const stroke = (color: ScenePaint) => pathStroke({ color, width: 4 });
 
+  it('a joint fill draw with a solid fill names its gradient stroke record', () => {
+    const { source } = setup(
+      [strokedNode('p', 0, { opacity: 0.5, fill: red, stroke: stroke(G1) })],
+      true,
+    );
+    const draws = source.prepare(target)!.mesh!.draws;
+    expect(
+      draws.map((draw) => [draw.composite ?? 'plain', draw.gradient, draw.strokeGradient]),
+    ).toEqual([
+      ['joint-fill', undefined, 1],
+      ['plain', 1, undefined],
+    ]);
+  });
+
+  it('E23-A05: a mesh camera pan builds no record', () => {
+    const { mirror, source } = setup([strokedNode('p', 0, { fill: G1, stroke: stroke(G1) })], true);
+    expect(source.prepare(target)!.paint!.builds).toBe(2);
+    mirror.setCamera({ position: { x: 3, y: 2 }, zoom: 1.5 });
+    const panned = source.prepare(target)!;
+    expect(panned.paint!.builds).toBe(0);
+    expect(panned.mesh!.draws.map((draw) => draw.gradient)).toEqual([1, 2]);
+  });
+
   it('fill and stroke draws carry their record; paint edits make no port call (E23-A05)', () => {
     const { source, port, strokePort, replace } = setup(
       [strokedNode('p', 0, { fill: red, stroke: stroke(blue) })],
@@ -290,6 +320,8 @@ describe('E23 U2 mesh paints', () => {
     );
     const packet = source.prepare(target)!;
     expect(packet.mesh?.draws ?? []).toHaveLength(0);
+    // The fill's in-range record is not drawn, so the frame has no paint part.
+    expect(packet.paint).toBeUndefined();
     const control = setup(
       [strokedNode('p', 0, { opacity: 0.5, fill: G1, stroke: stroke(G1) })],
       true,

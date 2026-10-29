@@ -96,6 +96,26 @@ export class GradientRecordTable {
 
   /** The 1-based record index of a gradient paint, or 0 when it is out of binary32 range. */
   public indexOf(key: string, gradient: SceneGradient, world: SceneAffine, origin: Origin): number {
+    const record = this.recordOf(key, gradient, world, origin);
+    return record === null ? 0 : this.add(record);
+  }
+
+  /** Adds a record to the frame's table and returns its 1-based index. */
+  public add(record: GradientPaintRecord): number {
+    this.#records.push(record);
+    return this.#records.length;
+  }
+
+  /**
+   * The record of a gradient paint, built only when its values changed, or null when it is out
+   * of binary32 range. It joins the frame's table only through `add` or `indexOf`.
+   */
+  public recordOf(
+    key: string,
+    gradient: SceneGradient,
+    world: SceneAffine,
+    origin: Origin,
+  ): GradientPaintRecord | null {
     this.#seen.add(key);
     let entry = this.#cache.get(key);
     if (
@@ -114,9 +134,7 @@ export class GradientRecordTable {
       this.#cache.set(key, entry);
       this.#builds += 1;
     }
-    if (entry.record === null) return 0;
-    this.#records.push(entry.record);
-    return this.#records.length;
+    return entry.record;
   }
 
   /** Ends the frame: entries not requested this frame are released. */

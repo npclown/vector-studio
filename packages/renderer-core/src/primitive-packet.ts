@@ -118,10 +118,15 @@ export type MeshFillDraw = Readonly<{
   clipState?: number;
   /**
    * E23 contract, U2: the 1-based paint-part record of this draw's paint (the fill for a fill
-   * or joint fill draw, the stroke for a stroke draw); absent for a solid paint. A joint fill
-   * draw reads its stroke's record through the stroke draw's `gradient`.
+   * or joint fill draw, the stroke for a stroke draw); absent for a solid paint.
    */
   gradient?: number;
+  /**
+   * E23 contract, U2: on a joint fill draw only, the record of the stroke paint it reads for
+   * a_S (E23-K4); absent when the stroke is solid. A joint fill draw with either field uses the
+   * paint variant.
+   */
+  strokeGradient?: number;
 }>;
 export type MeshResource = Readonly<{
   id: MeshResourceId;
