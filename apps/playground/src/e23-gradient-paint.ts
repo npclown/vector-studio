@@ -1,10 +1,13 @@
 import type {
+  GlyphRasterPort,
   GlyphRasterRequest,
+  GlyphRasterResult,
   RenderCamera,
   RenderNodeSnapshot,
   RendererDiagnostic,
   RendererStatistics,
   RenderSceneSnapshot,
+  SceneAffine,
   SceneApplyResult,
 } from '@vector-studio/contracts';
 import {
@@ -14,7 +17,12 @@ import {
   type StrokeMeshAdapter,
 } from '@vector-studio/geometry-wasm';
 import {
+  E28_RASTER_CAP,
   PrimitiveRendererService,
+  isUniformScale,
+  sizeBucket,
+  snappedPlacement,
+  textDeviceMap,
   type PathMeshStatistics,
   type PrimitiveFrameSource,
   type PrimitivePacket,
@@ -32,6 +40,10 @@ import { WebGpuBackend, createCanvasGlyphRaster } from '@vector-studio/renderer-
 // tests/gpu/e25-isolated-opacity.spec.ts uses them. Without them the page is as before.
 // E28 contract, unit U3: `text=atlas` sets the service's `text` option with the canvas raster
 // port, whose bitmaps `rasterize` returns; docs/evidence/e28/u3-swiftshader-captures.mjs uses it.
+// E28 contract, unit U4: `raster=fake` swaps in a fake port whose pattern `setFakePattern`
+// selects (T9), `pages=N` and `pagesize=S` set the service's atlas test options (T8), and
+// `placements`, `readCluster` and `rasterCost` are the M6c hand-off and the raster-cost
+// observation; tests/gpu/e28-text-atlas.spec.ts uses them.
 
 /** Served by the playground's Vite config from the local kernel build; see vite.config.mjs. */
 const WASM_URL = '/__vector-studio/geometry-kernel.wasm';
@@ -42,7 +54,30 @@ const groups = parameters.get('groups') === 'isolated' ? 'isolated' : 'flat';
 const isolateUnit = parameters.get('isolate') === '1';
 const tileParameter = parameters.get('tile');
 const text = parameters.get('text') === 'atlas' ? 'atlas' : 'none';
-const glyphRaster = createCanvasGlyphRaster();
+const canvasRaster = createCanvasGlyphRaster();
+const pagesParameter = parameters.get('pages');
+const pageSizeParameter = parameters.get('pagesize');
+/** E28 U4, T9: the fake port's pattern; 1 draws vertical stripes, 2 horizontal ones. */
+let fakePattern = 1;
+/** A 12 × 14 bitmap with a 2 px empty border and the pen corner at (2, 10). */
+const fakeRaster: GlyphRasterPort = Object.freeze({
+  portVersion: 0,
+  operationId: 'e28-u4/fake-pattern',
+  rasterize(request: GlyphRasterRequest): GlyphRasterResult {
+    if (request.text.trim().length === 0) return { status: 'empty' };
+    const width = 12;
+    const height = 14;
+    const coverage = new Uint8Array(width * height);
+    for (let y = 2; y < height - 2; y += 1) {
+      for (let x = 2; x < width - 2; x += 1) {
+        const on = fakePattern === 1 ? x % 2 === 0 : y % 2 === 0;
+        coverage[y * width + x] = on ? 255 : 64;
+      }
+    }
+    return { status: 'ok', width, height, left: 2, top: 10, coverage };
+  },
+});
+const glyphRaster = parameters.get('raster') === 'fake' ? fakeRaster : canvasRaster;
 const dpr = Number(parameters.get('dpr') ?? '1');
 /** CSS size of the canvas at load (the spec uses 512 × 320 at every DPR); `resize` changes it. */
 const CSS_SIZE = Object.freeze({ width: 512, height: 320 });
@@ -104,6 +139,31 @@ export type E23Counters = Readonly<{
   /** E28: glyph raster port calls and bitmaps uploaded by acknowledged packets. */
   glyphRasterCalls: number;
   glyphUploads: number;
+  /** E28 U4: atlas pages evicted (E28-A06). */
+  atlasEvictions: number;
+}>;
+
+/** E28 U4: one cluster's E28-K1 to K3 placement, for the oracle and the M6c hand-off. */
+export type E28Placement = Readonly<{
+  nodeId: string;
+  run: number;
+  cluster: number;
+  text: string;
+  fontList: string;
+  lang: string;
+  size: number;
+  /** The device pen origin `o` and the device size `s`. */
+  origin: readonly [number, number];
+  deviceSize: number;
+  bucket: number;
+  phaseX: number;
+  mode: 'snapped' | 'general';
+  /** Snapped: the device pixel corner `P` of the pen point. */
+  corner: readonly [number, number] | null;
+  /** The device map `M` of the node: its world transform, then the camera. */
+  map: SceneAffine;
+  /** Straight run colour times the node's opacity. */
+  color: Readonly<{ r: number; g: number; b: number; a: number }>;
 }>;
 
 declare global {
@@ -216,6 +276,10 @@ async function start() {
     groups,
     ...(isolateUnit ? { isolateUnitOpacityForTesting: true } : {}),
     ...(text === 'atlas' ? { text, glyphRaster } : {}),
+    ...(pagesParameter === null ? {} : { textAtlasPagesForTesting: Number(pagesParameter) }),
+    ...(pageSizeParameter === null
+      ? {}
+      : { textAtlasPageSizeForTesting: Number(pageSizeParameter) }),
   });
   service = product;
   const source: PrimitiveFrameSource = {
@@ -286,7 +350,68 @@ function counters(): E23Counters {
     layerPasses: backend.getLayerPassesForTesting(),
     glyphRasterCalls: service!.getGlyphRasterCallsForTesting(),
     glyphUploads: service!.getGlyphUploadsForTesting(),
+    atlasEvictions: service!.getAtlasEvictionsForTesting(),
   };
+}
+
+const multiplyAffine = (left: SceneAffine, right: SceneAffine): SceneAffine => [
+  left[0] * right[0] + left[2] * right[1],
+  left[1] * right[0] + left[3] * right[1],
+  left[0] * right[2] + left[2] * right[3],
+  left[1] * right[2] + left[3] * right[3],
+  left[0] * right[4] + left[2] * right[5] + left[4],
+  left[1] * right[4] + left[3] * right[5] + left[5],
+];
+
+/**
+ * E28 U4: every cluster's placement by E28-K1 to K3, with the renderer-core helpers the plan
+ * uses, at the current surface's DPR. Culling, the raster budget and fallbacks are not applied.
+ */
+function placements(snapshot: RenderSceneSnapshot, camera: RenderCamera): E28Placement[] {
+  const byId = new Map(snapshot.nodes.map((item) => [item.id, item]));
+  const world = (id: string): SceneAffine => {
+    const item = byId.get(id)!;
+    return item.parentId === null
+      ? item.transform
+      : multiplyAffine(world(item.parentId), item.transform);
+  };
+  const out: E28Placement[] = [];
+  for (const item of snapshot.nodes) {
+    if (item.kind !== 'text') continue;
+    const map = textDeviceMap(world(item.id), camera, surface.dpr);
+    const [a, b, c, d, e, f] = map;
+    const sigma = Math.sqrt(Math.abs(a * d - b * c));
+    const uniform = isUniformScale(map, sigma);
+    item.runs.forEach((run, runIndex) => {
+      const deviceSize = run.size * sigma;
+      if (!(deviceSize >= 0.5)) return;
+      const bucket = sizeBucket(deviceSize);
+      const snapped = uniform && deviceSize <= E28_RASTER_CAP;
+      run.clusters.forEach((cluster, clusterIndex) => {
+        const ox = a * cluster.x + c * cluster.y + e;
+        const oy = b * cluster.x + d * cluster.y + f;
+        const snap = snapped ? snappedPlacement(ox, oy) : null;
+        out.push({
+          nodeId: item.id,
+          run: runIndex,
+          cluster: clusterIndex,
+          text: cluster.text,
+          fontList: run.fontList,
+          lang: item.lang,
+          size: run.size,
+          origin: [ox, oy],
+          deviceSize,
+          bucket,
+          phaseX: snap?.phaseX ?? 0,
+          mode: snapped ? 'snapped' : 'general',
+          corner: snap === null ? null : [snap.px, snap.py],
+          map,
+          color: { ...run.color, a: run.color.a * item.opacity },
+        });
+      });
+    });
+  }
+  return out;
 }
 
 function apply(snapshot: RenderSceneSnapshot, camera: RenderCamera): SceneApplyResult {
@@ -379,10 +504,144 @@ const api = {
     const frame = await capture();
     return { frame, counters: counters() };
   },
-  /** E28 U3: the canvas port's bitmap for a request, the coverage as base64. */
+  /** E28 U3: the page port's bitmap for a request (U4: the fake one with `raster=fake`). */
   rasterize(request: GlyphRasterRequest) {
     const result = glyphRaster.rasterize(request);
     return result.status === 'ok' ? { ...result, coverage: base64(result.coverage) } : result;
+  },
+  /** E28 U4, T9: selects the fake port's pattern. */
+  setFakePattern(pattern: 1 | 2) {
+    fakePattern = pattern;
+  },
+  /** E28 U4: the E28-K1 to K3 placement of every cluster of a scene under a camera. */
+  placements(snapshot: RenderSceneSnapshot, camera: RenderCamera) {
+    return placements(snapshot, camera);
+  },
+  /**
+   * E28 U4, the M6c hand-off: draws one cluster alone (white on the page's black) through the
+   * atlas, after a frame that rasterizes it, and returns the frame with the cluster's placement
+   * and the port's bitmap rectangle in device px (snapped clusters only).
+   */
+  async readCluster(
+    cluster: Readonly<{
+      text: string;
+      fontList: string;
+      lang: string;
+      size: number;
+      x: number;
+      y: number;
+      generation?: number;
+    }>,
+    camera: RenderCamera,
+  ) {
+    await ready;
+    const snapshot: RenderSceneSnapshot = {
+      identity: { documentId: 'e28-u4-read-cluster', pageId: 'page' },
+      revision: 1,
+      nodes: [
+        {
+          id: 'cluster',
+          parentId: null,
+          transform: [1, 0, 0, 1, 0, 0],
+          visible: true,
+          opacity: 1,
+          kind: 'text',
+          generation: cluster.generation ?? 1,
+          lang: cluster.lang,
+          runs: [
+            {
+              fontList: cluster.fontList,
+              size: cluster.size,
+              color: { r: 1, g: 1, b: 1, a: 1 },
+              clusters: [
+                { text: cluster.text, x: cluster.x, y: cluster.y, advance: cluster.size / 2 },
+              ],
+            },
+          ],
+        },
+      ],
+      rootOrder: ['cluster'],
+    };
+    const applied = apply(snapshot, camera);
+    await submitted();
+    const frame = await capture();
+    const placement = placements(snapshot, camera)[0] ?? null;
+    let rect: Readonly<{ x: number; y: number; width: number; height: number }> | null = null;
+    if (placement?.corner != null) {
+      const bitmap = glyphRaster.rasterize({
+        text: cluster.text,
+        fontList: cluster.fontList,
+        lang: cluster.lang,
+        pixelSize: placement.bucket,
+        phaseX: placement.phaseX as GlyphRasterRequest['phaseX'],
+      });
+      if (bitmap.status === 'ok') {
+        rect = {
+          x: placement.corner[0] - bitmap.left,
+          y: placement.corner[1] - bitmap.top,
+          width: bitmap.width,
+          height: bitmap.height,
+        };
+      }
+    }
+    return { status: applied.status, frame, placement, rect, counters: counters() };
+  },
+  /**
+   * E28 U4, raster cost: times `repeat` passes over `requests` through the page's port, and
+   * one pass of 256 distinct requests built from them at new sizes.
+   */
+  rasterCost(requests: readonly GlyphRasterRequest[], repeat: number) {
+    // The first pass meets each request once (cold); later passes repeat it (warm).
+    const cold: number[] = [];
+    const warm: number[] = [];
+    for (let pass = 0; pass < repeat; pass += 1) {
+      for (const request of requests) {
+        const start = performance.now();
+        glyphRaster.rasterize(request);
+        (pass === 0 ? cold : warm).push(performance.now() - start);
+      }
+    }
+    // One frame of 256 distinct requests at sizes not timed above: each base request steps up
+    // by a quarter pixel per round.
+    const frame: GlyphRasterRequest[] = [];
+    const seen = new Set<string>();
+    for (let index = 0; frame.length < 256; index += 1) {
+      const base = requests[index % requests.length]!;
+      const request = {
+        ...base,
+        pixelSize: base.pixelSize + (1 + Math.floor(index / requests.length)) * 0.25,
+      };
+      const key = JSON.stringify([
+        request.text,
+        request.fontList,
+        request.lang,
+        request.pixelSize,
+        request.phaseX,
+      ]);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      frame.push(request);
+    }
+    const start = performance.now();
+    for (const request of frame) glyphRaster.rasterize(request);
+    const frameMs = performance.now() - start;
+    const summary = (values: number[]) => {
+      const sorted = [...values].sort((left, right) => left - right);
+      const quantile = (q: number) =>
+        sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]!;
+      return {
+        calls: sorted.length,
+        meanMs: sorted.reduce((sum, value) => sum + value, 0) / sorted.length,
+        medianMs: quantile(0.5),
+        p95Ms: quantile(0.95),
+      };
+    };
+    return {
+      cold: summary(cold),
+      warm: summary(warm),
+      frameDistinct: seen.size,
+      frame256Ms: frameMs,
+    };
   },
   counters() {
     return counters();

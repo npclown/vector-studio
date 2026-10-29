@@ -197,6 +197,17 @@ describe('E28-K1 to K3 placement', () => {
     expect(getTextLocalBounds(textNode('e', []) as never)).toBeNull();
   });
 
+  it('E28-K9: a negative advance keeps both ends of the pen box (letter spacing)', () => {
+    const node = textNode('t', [['a', 10]]) as Extract<RenderNodeSnapshot, { kind: 'text' }>;
+    const run = node.runs[0]!;
+    const negative = {
+      ...node,
+      runs: [{ ...run, clusters: [{ ...run.clusters[0]!, advance: -6 }] }],
+    } as typeof node;
+    // x 10, advance -6, size 16: [10 - 6 - 16, 10 + 0 + 16].
+    expect(getTextLocalBounds(negative)).toEqual({ minX: -12, minY: -12, maxX: 26, maxY: 36 });
+  });
+
   it('rejects a text node whose E28-K9 world bound is not finite', () => {
     const service = new PrimitiveRendererService(
       { invalidate: () => undefined, setMode: () => undefined },
