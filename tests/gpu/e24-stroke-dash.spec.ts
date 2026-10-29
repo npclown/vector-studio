@@ -360,6 +360,8 @@ function compare(rendered: Rendered, fixture: Fixture, dpr: number) {
   const scaleFactor = fixture.camera.zoom * dpr;
   const failures: string[] = [];
   let probes = 0;
+  /** Probes whose expected colour is not the black background: stroke on dash, fill in gap. */
+  let content = 0;
   let worst = 0;
   const check = (
     x: number,
@@ -385,39 +387,58 @@ function compare(rendered: Rendered, fixture: Fixture, dpr: number) {
       const wx = fixture.camera.position.x + (x + 0.5) / scaleFactor;
       const wy = fixture.camera.position.y + (y + 0.5) / scaleFactor;
       const expected = expectedDashAt(elements, wx, wy, 1 / scaleFactor);
-      if (expected !== null) check(x, y, expected, INTERIOR_TOLERANCE, 'interior');
+      if (expected === null) continue;
+      if (expected.some((lane) => lane > 0)) content += 1;
+      check(x, y, expected, INTERIOR_TOLERANCE, 'interior');
     }
   }
   for (const edge of fixture.edges ?? []) check(edge.x, edge.y, edge.rgb, EDGE_TOLERANCE, 'edge');
-  return { probes, worst, failures };
+  return { probes, content, worst, failures };
 }
 
-/** Diagnostics other than the expected fringe caps and D8's one dash-limit. */
-function unexpected(diagnostics: readonly { code: string; context?: unknown }[]) {
+/**
+ * The fringe caps observed per DPR, by node and paint (E24-Q6 (a), O2: region-only). They are
+ * deterministic: the kernel's meshes and the tolerance buckets do not depend on the adapter.
+ * D1 is not among them, so its edge probes run on a fringed mesh (section 8).
+ */
+const FRINGE_CAPS: Readonly<Record<number, ReadonlySet<string>>> = {
+  1: new Set(['d2-round:stroke', 'd6:stroke', 'd6-solid:stroke', 'd7:stroke']),
+  2: new Set([
+    'd2-round:stroke',
+    'd4:stroke',
+    'd6:fill',
+    'd6:stroke',
+    'd6-solid:fill',
+    'd6-solid:stroke',
+    'd7:stroke',
+  ]),
+};
+
+/** Diagnostics other than the pinned fringe caps, D6's known O3 at DPR 2, and D8's dash-limit. */
+function unexpected(diagnostics: readonly { code: string; context?: unknown }[], dpr: number) {
   const failures: string[] = [];
   let dashLimits = 0;
   for (const diagnostic of diagnostics) {
     const context = diagnostic.context as Record<string, unknown> | undefined;
+    const node = String(context?.nodeId).replace(/^.*:/u, '');
     if (diagnostic.code !== 'render.path-mesh-failure') {
       failures.push(`diagnostic ${diagnostic.code} ${JSON.stringify(context)}`);
       continue;
     }
-    // E24-Q6 (a): a dashed stroke over the fringe cap draws region-only with a notice (O2), and
-    // so may D6's fill, whose cubic is flattened finely at DPR 2.
-    if (context?.failureCode === 'fringe-work-cap') continue;
-    // Only D6 and its solid reference may take O3 (see the A05 loop); the frame is then checked
-    // without that path.
     if (
-      context?.failureCode === 'overlay-unsupported' &&
-      /d6(-solid)?$/u.test(String(context.nodeId))
+      context?.failureCode === 'fringe-work-cap' &&
+      FRINGE_CAPS[dpr]!.has(`${node}:${String(context.paint)}`)
     )
       continue;
+    // The known failure of U3: D6's joint overlay refuses at DPR 2 (`sloped-outer-edge`, see
+    // the A05 loop). Its solid reference must not take O3.
+    if (context?.failureCode === 'overlay-unsupported' && dpr === 2 && node === 'd6') continue;
     if (
       context?.failureCode === 'dash-limit' &&
       context.paint === 'stroke' &&
       context.failureScope === 'renderer' &&
       context.toleranceExponent === null &&
-      String(context.nodeId).endsWith('d8-a')
+      node === 'd8-a'
     ) {
       dashLimits += 1;
       continue;
@@ -440,9 +461,11 @@ for (const dpr of [1, 2]) {
       const seen = (await page.evaluate(() => window.__vectorStudioE23.diagnostics())).length;
       const rendered = await render(page, fixture.items, fixture.camera);
       const fresh = (await page.evaluate(() => window.__vectorStudioE23.diagnostics())).slice(seen);
-      // D6 needs the ST-U7 joint overlay. When the existing overlay builder gives up (its
-      // fill-fringe and work caps, independent of dashes), the path takes E11-U4 O3 and is not
-      // drawn; the frame must then show exactly that.
+      // D6 needs the ST-U7 joint overlay. At DPR 2 its fill draws region-only (fringe cap), and
+      // the overlay builder then refuses the butt dash ends that cross the fill's sloped outer
+      // edges (ST7-Q8, `sloped-outer-edge`): D6 takes E11-U4 O3 and is not drawn. This is U3's
+      // known failure, recorded in the evidence; the frame must show exactly that, and only
+      // there (the diagnostics check rejects O3 anywhere else, including D6's solid reference).
       const hidden = new Set(
         fresh.flatMap((diagnostic) => {
           const context = diagnostic.context as Record<string, unknown> | undefined;
@@ -464,17 +487,25 @@ for (const dpr of [1, 2]) {
       const outcome = compare(rendered, expected, dpr);
       if (rendered.result.status !== 'applied')
         failures.push(`${fixture.name}: ${rendered.result.status}`);
-      if (outcome.probes < 50) failures.push(`${fixture.name}: only ${outcome.probes} probes`);
+      // Every drawn fixture must be tested where it paints, not only on the background. Probes
+      // within 2 physical px of an edge are left out, so thin strokes keep few interior probes;
+      // D7 at zoom 0.25 keeps none (its ends are measured by the D7 test instead).
+      const floor = hidden.size > 0 || fixture.name === 'D7 zoom 0.25' ? 0 : 1;
+      if (outcome.content < floor)
+        failures.push(`${fixture.name}: only ${outcome.content} content probes`);
       failures.push(...outcome.failures);
       rows.push({
         fixture: fixture.name,
         probes: outcome.probes,
+        content: outcome.content,
         worst: outcome.worst,
         packet: rendered.result.frame.packet,
       });
     }
     const diagnostics = await page.evaluate(() => window.__vectorStudioE23.diagnostics());
-    failures.push(...unexpected(diagnostics));
+    failures.push(...unexpected(diagnostics, dpr));
+    if (dpr === 1 && Object.keys(outcomes).length > 0)
+      failures.push(`O3 at DPR 1: ${JSON.stringify(outcomes)}`);
     report(
       'report.json',
       JSON.stringify({ ready, dpr, rows, outcomes, diagnostics, pageErrors, failures }, null, 2),
@@ -486,7 +517,7 @@ for (const dpr of [1, 2]) {
   test(`E24-A05 D7 dash ends agree across zooms at DPR ${dpr}`, async ({ page }, info) => {
     test.setTimeout(300_000);
     const report = reporter(`a05-d7-dpr-${dpr}`, info);
-    await open(page, dpr);
+    const { pageErrors } = await open(page, dpr);
     const dashes = dashPath(CUBIC.verbs, CUBIC.points, D4_DASH);
     const ends = dashEnds(dashes);
     const measured: Record<string, (number | null)[]> = {};
@@ -523,11 +554,40 @@ for (const dpr of [1, 2]) {
           failures.push(`end ${index} (${end.at.join(', ')}) zoom ${zoom}: ${fine} vs ${coarse}`);
       }
     });
-    if (compared < 4) failures.push(`only ${compared} comparisons`);
+    if (compared < 40) failures.push(`only ${compared} comparisons`);
+    // Absolute: at zoom 8 each end's half-coverage crossing lies within 0.5 physical px of the
+    // oracle's end (offset 0).
+    const fineLimit = 0.5 / (8 * dpr);
+    let absolute = 0;
+    let worstAbsolute = 0;
+    measured[8].forEach((offset, index) => {
+      if (offset === null || offset === undefined) return;
+      absolute += 1;
+      worstAbsolute = Math.max(worstAbsolute, Math.abs(offset));
+      if (Math.abs(offset) > fineLimit) failures.push(`end ${index} zoom 8 offset ${offset}`);
+    });
+    if (absolute < 20) failures.push(`only ${absolute} zoom-8 ends measured`);
     report(
       'report.json',
-      JSON.stringify({ dpr, limit, compared, worst, ends, measured, failures }, null, 2),
+      JSON.stringify(
+        {
+          dpr,
+          limit,
+          compared,
+          worst,
+          fineLimit,
+          absolute,
+          worstAbsolute,
+          ends,
+          measured,
+          pageErrors,
+          failures,
+        },
+        null,
+        2,
+      ),
     );
+    expect(pageErrors).toEqual([]);
     expect(failures).toEqual([]);
   });
 }
@@ -638,7 +698,7 @@ function measureEnd(rendered: Rendered, camera: RenderCamera, dpr: number, end: 
 
 test('E24-A04 GPU part: invalidation counters', async ({ page }, info) => {
   const report = reporter('a04', info);
-  await open(page, 1);
+  const { pageErrors } = await open(page, 1);
   const failures: string[] = [];
   const counters = () => page.evaluate(() => window.__vectorStudioE23.counters());
   const show = (items: readonly Item[], camera: RenderCamera) =>
@@ -730,15 +790,17 @@ test('E24-A04 GPU part: invalidation counters', async ({ page }, info) => {
     'zoom',
     () =>
       page.evaluate(() => window.__vectorStudioE23.pan({ position: { x: 200, y: 120 }, zoom: 8 })),
-    { builds: 0, expansions: 0 },
+    // The zoom crosses tolerance buckets, so both paints re-request once (existing rules).
+    { fill: 1, stroke: 1, builds: 0, expansions: 0 },
   );
-  report('report.json', JSON.stringify({ steps, failures }, null, 2));
+  report('report.json', JSON.stringify({ steps, failures, pageErrors }, null, 2));
   expect(failures).toEqual([]);
+  expect(pageErrors).toEqual([]);
 });
 
 test('E24-A03 note: the real kernel at 4,096 dashes on D8 geometry', async ({ page }, info) => {
   const report = reporter('a03-note', info);
-  await open(page, 1);
+  const { pageErrors } = await open(page, 1);
   // [1, 1] on M 0 0 L 8190 0 is exactly 4,096 dashes: the most the renderer requests.
   const item = pathItem({
     id: 'limit',
@@ -759,10 +821,12 @@ test('E24-A03 note: the real kernel at 4,096 dashes on D8 geometry', async ({ pa
         meshDraws,
         diagnostics,
         pathMesh: rendered.result.counters.pathMesh,
+        pageErrors,
       },
       null,
       2,
     ),
   );
   expect(rendered.result.status).toBe('applied');
+  expect(pageErrors).toEqual([]);
 });

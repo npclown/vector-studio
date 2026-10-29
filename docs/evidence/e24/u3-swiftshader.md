@@ -24,9 +24,13 @@ Run in the container on Playwright Chromium (Chrome for Testing 153.0.8010.12) w
   - There are 0 failing probes at both DPRs. Every fixture has about 17,000 to 18,200 probes at DPR 1 and about 69,500 to 72,600 at DPR 2.
   - The worst difference is 0.5/255 or less: D1 0.5, D6 0.5, D9 0.475 (DPR 1) and 0.5 (DPR 2). Every other fixture is 0.
   - D1's 33 (DPR 1) and 66 (DPR 2) edge probes pass at 4/255.
+  - Content probes are those whose expected colour is not the black background. Probes within 2 physical px of an edge are left out, so thin strokes keep few. Every drawn fixture must have at least one, except D7 at zoom 0.25, whose strokes are narrower than that band and whose ends the D7 test measures. The counts at DPR 1 / DPR 2:
+    - D1, D8 and D9: 50 / 550. D2: 70 / 633. D3: 22 / 972. D4 and D7 at zoom 1: 4 / 185. D5: 26 / 403.
+    - D6: 2,218 / 0 (O3 at DPR 2). D6 solid reference: 2,131 / 9,253. D7 at zoom 8: 1,412 / 6,177. D7 at zoom 0.25: 0 / 0.
 - **D7:**
   - At DPR 1, 46 end comparisons have a worst disagreement of 1.01 local units, against a limit of 2 (0.5 physical px at zoom 0.25).
   - At DPR 2, 46 comparisons have a worst of 0.17, against a limit of 1.
+  - Absolute check at zoom 8: each end's crossing lies within 0.5 physical px of the oracle's end (0.0625 local units at DPR 1, 0.03125 at DPR 2). 23 ends are measured at each DPR; the worst offsets are 1.9e-4 and 9.3e-5 local units.
 - **A04 GPU part** (D6 with its fill, at zoom 1):
 
   | Step | Fill calls | Stroke calls | Geometry builds | Dash expansions |
@@ -45,11 +49,13 @@ Run in the container on Playwright Chromium (Chrome for Testing 153.0.8010.12) w
     - D2's round dots, D6's stroke, and D7's stroke at DPR 1.
     - At DPR 2, also D4's stroke and D6's fill. D6's solid reference shows the same caps at DPR 2.
   - `dash-limit`: exactly once, on D8's node A (`failureScope: 'renderer'`, `toleranceExponent: null`, `paint: 'stroke'`). A is not drawn (O1), including its filled subpath, and B draws.
-  - `overlay-unsupported` on D6 at DPR 2 (section 8, overlay work cap):
-    - The dashed stroke on the filled path at opacity 0.5 makes the ST-U7 overlay builder give up, so D6 takes E11-U4 O3 and is not drawn. The frame is checked to show exactly that.
-    - D6's solid reference at DPR 2 does not hit it: there the overlay builds and the path draws within 0.5/255.
+  - `overlay-unsupported` on D6 at DPR 2 (the ST7-Q8 (a) class, not the section 8 work cap):
+    - At DPR 2, D6's fill is over the fringe cap and draws region-only. The dash butt ends then put Steiner points on the fill's sloped outer edges, and the ST-U7 overlay builder refuses with `sloped-outer-edge` (ST7-Q8 (a), [p3-b2-stroke-contract.md](../../plans/p3-b2-stroke-contract.md), "Narrower sloped-edge class"). D6 takes E11-U4 O3 and is not drawn. The frame is checked to show exactly that.
+    - The builder's work caps are not reached. The reason is not carried into the diagnostic; it was found by running the builder on D6's meshes.
+    - D6's solid reference draws at both DPRs within 0.5/255, including at DPR 2, where its fill is also region-only.
     - At DPR 1, D6 draws through the joint overlay: the fill shows in the gaps and the stroke covers the fill on the dashes.
-    - This is the risk named in section 8, now observed. It is recorded for U4 and the M4 exit, and is not fixed here.
+    - The spec allows this notice only for D6 at DPR 2. At DPR 1 it is a failure.
+    - Decision (2026-10-29, recommended option auto-adopted): disclose it as a known failure of E24 and add backlog item E27 for the overlay builder. It is not fixed in E24.
 - **A03 note:** `[1, 1]` on `M 0 0 L 8190 0` with width 2 is exactly 4,096 dashes, the most the renderer requests. The real kernel does not build it: it reports `work-limit` (path scope, tolerance exponent −3), and the path is not drawn (O1). The kernel's E2 work limit is therefore reached at or below the renderer's `dash-limit` on this geometry, as section 8's kernel-work risk anticipated. Both outcomes fail closed with a diagnostic. This note is informational, not a gate.
 
 ## A06 capture comparison
