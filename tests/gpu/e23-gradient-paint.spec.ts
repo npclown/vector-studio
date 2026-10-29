@@ -561,8 +561,18 @@ for (const dpr of [1, 2]) {
       });
     }
     const diagnostics = await page.evaluate(() => window.__vectorStudioE23.diagnostics());
-    if (diagnostics.some((diagnostic) => diagnostic.code === 'render.paint-unavailable'))
-      failures.push('render.paint-unavailable');
+    // The only expected diagnostic is the existing P3 fringe work cap on G3's 12-unit stroke
+    // (U3 evidence): that stroke is drawn without its coverage fringe, which the 2 px interior
+    // margin excludes. Anything else, including render.paint-unavailable, fails.
+    for (const diagnostic of diagnostics) {
+      const context = diagnostic.context as Record<string, unknown> | undefined;
+      const expected =
+        diagnostic.code === 'render.path-mesh-failure' &&
+        context?.failureCode === 'fringe-work-cap' &&
+        context.paint === 'stroke' &&
+        String(context.nodeId).endsWith('g3');
+      if (!expected) failures.push(`diagnostic ${diagnostic.code} ${JSON.stringify(context)}`);
+    }
     report(
       'report.json',
       JSON.stringify({ ready, dpr, rows, diagnostics, pageErrors, failures }, null, 2),
@@ -668,28 +678,52 @@ test('E23-A05 and A06: invalidation and batching counters', async ({ page }, inf
   );
   if (edit.packet?.paint?.builds !== 1)
     failures.push(`stop edit builds ${JSON.stringify(edit.packet?.paint)}`);
-  // A05 (E23-K6): solid ↔ gradient on a path calls no fill or stroke port and builds no geometry.
+  // A05 (E23-K6): solid ↔ gradient and a stop edit on a path call no fill or stroke port and
+  // build no geometry. The first solid build must have called both ports, so the counters exist.
   const g3 = g3Path({ id: 'g3', transform: translate(100, 70) });
-  const solid = {
+  const restyled = (fill: ScenePaint, color: ScenePaint) => ({
     ...g3,
     node: {
       ...g3.node,
       style: {
-        fill: RED,
-        stroke: { color: BLUE, width: 12, cap: 'butt', join: 'round', miterLimit: 4 },
+        fill,
+        stroke: { color, width: 12, cap: 'butt', join: 'round', miterLimit: 4 },
       },
     } as RenderNodeSnapshot,
-  };
+  });
+  const solid = restyled(RED, BLUE);
+  const stopEdited = restyled(
+    linear(
+      [173.205, 100, -100, 173.205, 0, 0],
+      [
+        [0, { r: 1, g: 1, b: 0, a: 1 }],
+        [0.4, { r: 0, g: 1, b: 0, a: 1 }],
+        [1, { r: 1, g: 0, b: 1, a: 1 }],
+      ],
+    ),
+    G3_STROKE,
+  );
   await render(page, [solid], HOME);
   const before = await page.evaluate(() => window.__vectorStudioE23.counters());
+  if (
+    before.pathMesh === null ||
+    before.pathMesh.portCalls === 0 ||
+    before.pathMesh.strokePortCalls === 0
+  )
+    failures.push(`path counters ${JSON.stringify(before.pathMesh)}`);
   await render(page, [g3], HOME);
   await render(page, [solid], HOME);
+  await render(page, [g3], HOME);
+  await render(page, [stopEdited], HOME);
   const after = await page.evaluate(() => window.__vectorStudioE23.counters());
   const portCalls = (after.pathMesh?.portCalls ?? 0) - (before.pathMesh?.portCalls ?? 0);
   const strokeCalls =
     (after.pathMesh?.strokePortCalls ?? 0) - (before.pathMesh?.strokePortCalls ?? 0);
-  if (portCalls !== 0 || strokeCalls !== 0)
-    failures.push(`paint toggle port calls ${portCalls}/${strokeCalls}`);
+  const geometryBuilds = after.preparation.geometryBuilds - before.preparation.geometryBuilds;
+  if (portCalls !== 0 || strokeCalls !== 0 || geometryBuilds !== 0)
+    failures.push(
+      `path paint edits port calls ${portCalls}/${strokeCalls}, builds ${geometryBuilds}`,
+    );
   report(
     'report.json',
     JSON.stringify(
@@ -700,6 +734,7 @@ test('E23-A05 and A06: invalidation and batching counters', async ({ page }, inf
         edit: edit.packet?.paint,
         portCalls,
         strokeCalls,
+        geometryBuilds,
         failures,
       },
       null,

@@ -69,6 +69,7 @@ export type E23Counters = Readonly<{
   clipStateWrites: number;
   pathMesh: PathMeshStatistics | null;
   overlayBuilds: number;
+  preparation: ReturnType<PrimitiveRendererService['getPreparationStatistics']>;
 }>;
 
 declare global {
@@ -210,6 +211,7 @@ function counters(): E23Counters {
     clipStateWrites: service!.getClipStateWritesForTesting(),
     pathMesh: service!.getPathMeshStatistics(),
     overlayBuilds: service!.getOverlayBuildCountForTesting(),
+    preparation: service!.getPreparationStatistics(),
   };
 }
 

@@ -73,12 +73,15 @@ function nearDiscontinuity(
 ): boolean {
   if (!isGradient(paint)) return false;
   const local = invert(world);
+  // A linear gradient's t is affine in the pixel, so axis neighbours at √2 px bound t over the
+  // whole 1 px disk whatever the gradient's direction; for a radial one they approximate it.
+  const reach = Math.SQRT2;
   const values = [
     [0, 0],
-    [1, 0],
-    [-1, 0],
-    [0, 1],
-    [0, -1],
+    [reach, 0],
+    [-reach, 0],
+    [0, reach],
+    [0, -reach],
   ].map(([dx, dy]) => {
     const [x, y] = transformPoint(local, wx + dx! * pixelSize, wy + dy! * pixelSize);
     return rawT(paint, x, y);
