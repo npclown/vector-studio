@@ -19,7 +19,7 @@ import {
   type WebGpuPlatform,
   type WebGpuPrimitiveScenePort,
 } from '@vector-studio/renderer-webgpu';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, type Mock } from 'vitest';
 
 import type {
   PrimitivePacket,
@@ -393,10 +393,18 @@ describe('E28 U3 pages, clears, uploads and the receipt (section 4, Lifetime)', 
     fixture.textureWrites.length = 0;
     const { packet } = frame();
     expect(packet.text!.clears).toEqual([{ page: 0, x: 0, y: 0, width: 2048, height: 2048 }]);
-    const [clear, ...uploads] = fixture.textureWrites;
-    expect(clear).toMatchObject({ x: 0, y: 0, width: 2048, height: 2048, bytesPerRow: 2048 });
-    expect(clear!.bytes.every((value) => value === 0)).toBe(true);
+    // The clear arrives in bands of 32 rows (64 KiB of zeros at 2,048 bytes a row), then the uploads.
+    const bands = fixture.textureWrites.slice(0, 64);
+    expect(
+      bands.map((band) => [band.x, band.y, band.width, band.height, band.bytesPerRow]),
+    ).toEqual(Array.from({ length: 64 }, (_, index) => [0, index * 32, 2048, 32, 2048]));
+    expect(bands.every((band) => band.bytes.every((value) => value === 0))).toBe(true);
+    expect(bands[0]!.bytes.byteLength).toBe(64 * 1024);
+    const uploads = fixture.textureWrites.slice(64);
     expect(uploads).toHaveLength(2);
+    expect(uploads.map((upload) => upload.bytes)).toEqual(
+      packet.text!.uploads.map((upload) => upload.coverage),
+    );
   });
 
   it('keeps pages on resize and for culled text, and releases them with the last text node', async () => {
@@ -457,6 +465,20 @@ describe('E28 U3 pages, clears, uploads and the receipt (section 4, Lifetime)', 
     replace([textNode('t', many(7))]);
     frame();
     expect(textWrites()[0]).toEqual({ label: 'primitive/1/text-buffer-2', offset: 0, bytes: 16 });
+    // The instance write's size argument counts Float32Array elements, not bytes.
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- a mock, read for its calls
+    const writeBuffer = fixture.device.queue.writeBuffer as unknown as Mock<
+      (...args: unknown[]) => unknown
+    >;
+    const instanceWrite = writeBuffer.mock.calls
+      .filter(
+        (call) => (call[0] as { label: string }).label.includes('text-buffer') && call[1] === 256,
+      )
+      .at(-1)!;
+    expect(instanceWrite[2]).toBeInstanceOf(Float32Array);
+    expect(instanceWrite[3]).toBe(0);
+    expect(instanceWrite[4]).toBe((instanceWrite[2] as Float32Array).length);
+    expect(instanceWrite[4]).toBe(7 * TEXT_INSTANCE_FLOATS);
   });
 });
 
@@ -622,6 +644,38 @@ describe('E28 U3 text unavailable (E28-D1, fail closed)', () => {
     const attempts = created();
     frame();
     expect(created()).toBe(attempts);
+  });
+
+  it('after a text buffer allocation failure: the same, with the frame still submitted', async () => {
+    const { frame, fixture, scene } = await setup([textNode('t', many(2)), box('a', 40)]);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- a mock, given a new implementation
+    const createBuffer = fixture.device.createBuffer as unknown as Mock<
+      (descriptor: GPUBufferDescriptor) => unknown
+    >;
+    const original = createBuffer.getMockImplementation()!;
+    createBuffer.mockImplementation((descriptor) => {
+      if (String(descriptor.label).includes('text-buffer')) throw new Error('out of memory');
+      return original(descriptor);
+    });
+    fixture.calls.length = 0;
+    expect(frame().result.status).toBe('submitted');
+    expect(scene.textPageAllocationFailed).toBe(true);
+    expect(fixture.calls.some((call) => call[0] === 'draw' && call[1] === 6)).toBe(false);
+    expect(fixture.destroyed).toContain('primitive/1/text-page-1');
+  });
+
+  it('instances past the storage binding limit fail closed instead of failing the frame', async () => {
+    const { frame, fixture, scene } = await setup([textNode('t', many(80))]);
+    // 80 records need 5,120 bytes; every other storage binding of this frame fits in 4 KiB.
+    (fixture.device.limits as { maxStorageBufferBindingSize: number }).maxStorageBufferBindingSize =
+      4096;
+    fixture.calls.length = 0;
+    const { result } = frame();
+    expect(result.status).toBe('submitted');
+    expect(receiptOf(result).text).toMatchObject({ pages: [expect.any(Symbol)], uploads: 80 });
+    expect(scene.textPageAllocationFailed).toBe(true);
+    expect(fixture.textureWrites).toEqual([]);
+    expect(fixture.calls.some((call) => call[0] === 'draw' && call[1] === 6)).toBe(false);
   });
 
   it('skips clipped text when the scene has no clip variants', async () => {
@@ -990,6 +1044,20 @@ describe('E28 U3 canvas raster port (section 2; E28-A08 unit part)', () => {
       },
     });
     expect(none.rasterize(request)).toEqual({ status: 'failed', reason: 'unavailable' });
+  });
+
+  it('returns empty for a box without ink and does not retry a failed context', () => {
+    const ink = fakeCanvas({ left: 0, right: 0, ascent: 0, descent: 0 });
+    const port = createCanvasGlyphRaster({ createCanvas: ink.createCanvas });
+    expect(port.rasterize({ ...request, text: '\u200d' })).toEqual({ status: 'empty' });
+    expect(ink.fills).toEqual([]);
+    const createCanvas = vi.fn(() => {
+      throw new Error('no OffscreenCanvas');
+    });
+    const none = createCanvasGlyphRaster({ createCanvas });
+    expect(none.rasterize(request)).toEqual({ status: 'failed', reason: 'unavailable' });
+    expect(none.rasterize(request)).toEqual({ status: 'failed', reason: 'unavailable' });
+    expect(createCanvas).toHaveBeenCalledTimes(1);
   });
 
   it('keeps ink with a negative left bearing inside the bitmap, and resizes the canvas', () => {

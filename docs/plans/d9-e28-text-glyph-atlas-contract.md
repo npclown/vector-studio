@@ -292,6 +292,9 @@ U3 (2026-10-29):
   - Group 0's target uniform and the instance records share one text buffer. The uniform is at offset 0 and the records start at the storage offset alignment. The buffer grows by powers of two and is released on a frame without text draws. The uniform is written only when the target size changes.
   - Pages are created through `#createTrackedTextureWithUsage`, which takes exactly the given usage. The existing helper now calls it with `RENDER_ATTACHMENT` added. A page whose size differs from the packet's `pageSize` is recreated, which changes its incarnation.
   - Without the text pipeline, or once a page could not be created, the scene writes and draws no text for the rest of its generation. It releases its pages, and its receipts name stable placeholder incarnations per page index. The plan then settles instead of re-rasterizing every frame. A page allocation failure is E28-D1 with `'page-allocation'`. E28-D1 is reported once per renderer generation, for whichever reason comes first.
+  - The text buffer fails the same way. If it cannot be created or tracked, or the instance records exceed `maxStorageBufferBindingSize` or `maxBufferSize`, the frame still submits without text, and E28-D1 is reported with `'page-allocation'`. A limit never fails the frame with `allocation-failed`.
+  - A clear is written in bands of whole rows from one 64 KiB zero array, so no page-sized array is allocated.
+  - The canvas port remembers that it has no 2D context and does not ask again. A cluster whose measured box has no width or no height is `empty`, so it takes no atlas space.
   - A text draw in the main pass binds its pipeline, group 0 for its page and, when clipped, the clip group. In a layer pass it also binds the empty group, or the clip group, at 1 and the empty group at 2. A clipped text draw without the clip variant, or a layer text draw without the layer variant, is not drawn (fail closed).
 - Not adopted: the U2 observation about `not-ready`. A `not-ready` or `stale-generation` result writes nothing, and the plan still drops the replaced packet's pages, as section 4 asks. That happens only before the first target or after dispose, so the extra rasters are rare.
 - Tests: `tests/unit/e28-u3-text-pipeline.test.ts`. It covers the unit part of E28-A05 and the hash, key and count part of A07. It also covers the gaps carried from U2:
@@ -305,6 +308,8 @@ U3 (2026-10-29):
   
   The fake raster port and text nodes moved to `tests/support/e28-text-harness.ts`. The fake device gains `createSampler`, `queue.writeTexture` and texture-failure injection.
 - Evidence: [u3-swiftshader.md](../evidence/e28/u3-swiftshader.md), the A07 capture part and a snapped-text check on SwiftShader. The check is exact against the port's own bitmaps, and all four variants are identical.
+- Known limit, disclosed: WebGPU's `createTexture` does not throw on out-of-memory. It returns a texture and reports the error asynchronously, so the fake device's thrown failure covers only synchronous failures. U4 checks a real page allocation with an error scope on the reference PC.
+- Left to U4: partial clips over text, text under group opacity, and bilinear general text against the oracle (T3 and T5). U3's SwiftShader check covers only snapped text, clips that do not cut glyphs, layers at opacity 1, and that rotated text draws ink.
 
 ## 8. Risks
 

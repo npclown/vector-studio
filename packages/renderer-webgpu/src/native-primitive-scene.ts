@@ -180,6 +180,9 @@ const TEXTURE_BINDING_USAGE = 0x04;
 const TEXTURE_COPY_SOURCE_USAGE = 0x01;
 const TEXTURE_COPY_DESTINATION_USAGE = 0x02;
 const FRAGMENT_STAGE = 0x2;
+/** E28 U3: the zeros a page clear is written from, in bands of whole rows. */
+const TEXT_ZEROS_SIZE = 64 * 1024;
+const TEXT_ZEROS = new Uint8Array(TEXT_ZEROS_SIZE);
 
 interface NativeCanvasContextPort extends WebGpuCanvasContextPort {
   readonly native: GPUCanvasContext;
@@ -329,6 +332,8 @@ type ValidatedText = Readonly<{
   part: TextPacketPart;
   /** Bytes of the instance records. */
   instanceBytes: number;
+  /** False when the records exceed the buffer limits; text is then unavailable (E28-D1). */
+  fits: boolean;
 }> | null;
 
 /** E23 U3: one paint buffer, the record table or an index table. */
@@ -742,10 +747,9 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   #nextTextPage = 1;
   #textBuffer: TextBufferState | undefined;
   #nextTextBuffer = 1;
-  /** Zeros for the clears, grown to the largest clear. */
-  #textZeros = new Uint8Array(0);
   /**
-   * E28-D1: set when a page could not be created; text stays undrawn for the generation, and
+   * E28-D1: set when a page or the text buffer could not be created, or the records exceed the
+   * buffer limits; text stays undrawn for the generation, and
    * the text receipt reports the stable placeholder incarnations below so the plan settles.
    */
   #textPageAllocationFailed = false;
@@ -2005,13 +2009,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     }
     const instanceBytes = part.instances.byteLength;
     const limits = this.#device.limits;
-    if (
-      instanceBytes > safeLimit(limits.maxStorageBufferBindingSize, 0) ||
-      this.#textInstanceOffset() + instanceBytes > safeLimit(limits.maxBufferSize, 0)
-    ) {
-      throw new AllocationError();
-    }
-    return Object.freeze({ part, instanceBytes });
+    const fits =
+      instanceBytes <= safeLimit(limits.maxStorageBufferBindingSize, 0) &&
+      this.#textInstanceOffset() + instanceBytes <= safeLimit(limits.maxBufferSize, 0);
+    return Object.freeze({ part, instanceBytes, fits });
   }
 
   /** E28 U3: the instance records' offset in the text buffer, after the target uniform. */
@@ -2047,6 +2048,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       return receipt(this.#textPlaceholders.slice(0, part.pageCount));
     };
     if (this.#text === null || this.#textPageAllocationFailed) return unavailable();
+    if (!text.fits) {
+      this.#textPageAllocationFailed = true;
+      return unavailable();
+    }
     if (this.#textPages.some((page) => page.size !== part.pageSize)) this.#releaseTextPages();
     while (this.#textPages.length > part.pageCount) this.#releaseTextPage(this.#textPages.pop()!);
     while (this.#textPages.length < part.pageCount) {
@@ -2059,14 +2064,20 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     }
     const queue = this.#device.queue;
     for (const clear of part.clears) {
-      const bytes = clear.width * clear.height;
-      if (this.#textZeros.byteLength < bytes) this.#textZeros = new Uint8Array(bytes);
-      queue.writeTexture(
-        { texture: this.#textPages[clear.page]!.texture, origin: { x: clear.x, y: clear.y } },
-        this.#textZeros,
-        { offset: 0, bytesPerRow: clear.width, rowsPerImage: clear.height },
-        { width: clear.width, height: clear.height },
-      );
+      // In bands of whole rows from one small zero buffer, so a page clear holds no 4 MiB array.
+      const rows = Math.max(1, Math.floor(TEXT_ZEROS_SIZE / clear.width));
+      for (let y = 0; y < clear.height; y += rows) {
+        const height = Math.min(rows, clear.height - y);
+        queue.writeTexture(
+          {
+            texture: this.#textPages[clear.page]!.texture,
+            origin: { x: clear.x, y: clear.y + y },
+          },
+          TEXT_ZEROS,
+          { offset: 0, bytesPerRow: clear.width, rowsPerImage: height },
+          { width: clear.width, height },
+        );
+      }
     }
     for (const upload of part.uploads) {
       queue.writeTexture(
@@ -2076,7 +2087,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         { width: upload.width, height: upload.height },
       );
     }
-    this.#writeTextBuffer(text);
+    if (!this.#writeTextBuffer(text)) {
+      this.#textPageAllocationFailed = true;
+      return unavailable();
+    }
     return receipt(this.#textPages.map((page) => page.incarnation));
   }
 
@@ -2137,12 +2151,13 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
 
   /**
    * E28 U3: writes the target uniform when it changed and the instance records, growing the
-   * buffer to a power of two; a frame without text draws releases it.
+   * buffer to a power of two; a frame without text draws releases it. False when the buffer
+   * cannot be created or tracked.
    */
-  #writeTextBuffer(text: NonNullable<ValidatedText>): void {
+  #writeTextBuffer(text: NonNullable<ValidatedText>): boolean {
     if (text.part.draws.length === 0) {
       this.#releaseTextBuffer();
-      return;
+      return true;
     }
     const instanceOffset = this.#textInstanceOffset();
     const size = instanceOffset + text.instanceBytes;
@@ -2161,14 +2176,14 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           size: capacity,
           usage: STORAGE_BUFFER_USAGE | UNIFORM_BUFFER_USAGE | COPY_DESTINATION_USAGE,
         });
-      } catch (error) {
-        throw new AllocationError(error);
+      } catch {
+        return false;
       }
       try {
         this.#resources.track(id, { category: 'buffer', size: capacity });
-      } catch (error) {
+      } catch {
         buffer.destroy();
-        throw new AllocationError(error);
+        return false;
       }
       state = { id, buffer, size: capacity, instanceOffset, bindGroups: new Map(), target: null };
       this.#textBuffer = state;
@@ -2187,6 +2202,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       0,
       instances.length,
     );
+    return true;
   }
 
   #releaseTextBuffer(): void {
@@ -2237,7 +2253,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     return group;
   }
 
-  /** E28-D1: true once a page could not be created this generation. */
+  /** E28-D1: true once a page or the text buffer could not be created this generation. */
   get textPageAllocationFailed(): boolean {
     return this.#textPageAllocationFailed;
   }

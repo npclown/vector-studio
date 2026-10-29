@@ -43,6 +43,8 @@ export function createCanvasGlyphRaster(options: CanvasGlyphRasterOptions = {}):
     options.createCanvas ?? ((width: number, height: number) => new OffscreenCanvas(width, height));
   let canvas: OffscreenCanvas | null = null;
   let context: RasterContext | null = null;
+  /** A page without `OffscreenCanvas` or a 2D context does not ask again. */
+  let unavailable = false;
 
   const setFont = (request: GlyphRasterRequest): boolean => {
     const ctx = context!;
@@ -59,6 +61,7 @@ export function createCanvasGlyphRaster(options: CanvasGlyphRasterOptions = {}):
 
   const rasterize = (request: GlyphRasterRequest): GlyphRasterResult => {
     if (request.text.trim().length === 0) return EMPTY;
+    if (unavailable) return FAILED_UNAVAILABLE;
     if (context === null) {
       try {
         canvas = createCanvas(64, 64);
@@ -68,6 +71,7 @@ export function createCanvasGlyphRaster(options: CanvasGlyphRasterOptions = {}):
       }
       if (context === null) {
         canvas = null;
+        unavailable = true;
         return FAILED_UNAVAILABLE;
       }
     }
@@ -78,6 +82,8 @@ export function createCanvasGlyphRaster(options: CanvasGlyphRasterOptions = {}):
     const ascent = metrics.actualBoundingBoxAscent;
     const descent = metrics.actualBoundingBoxDescent;
     if (![boxLeft, boxRight, ascent, descent].every(Number.isFinite)) return FAILED_UNAVAILABLE;
+    // A cluster without ink (a lone joiner, say) takes no atlas space.
+    if (!(boxLeft + boxRight > 0 && ascent + descent > 0)) return EMPTY;
     const left = PAD + Math.ceil(boxLeft);
     const top = PAD + Math.ceil(ascent);
     const width = left + Math.ceil(boxRight + request.phaseX) + PAD;
@@ -85,8 +91,6 @@ export function createCanvasGlyphRaster(options: CanvasGlyphRasterOptions = {}):
     if (width > CANVAS_GLYPH_RASTER_MAX_EXTENT || height > CANVAS_GLYPH_RASTER_MAX_EXTENT) {
       return FAILED_TOO_LARGE;
     }
-    // A box whose sides cancel (ink entirely left of the pen, say) still has its border.
-    if (!(width >= 1 && height >= 1)) return EMPTY;
     const surface = canvas!;
     if (surface.width < width || surface.height < height) {
       // Resizing resets the context's state, so the font is set again.

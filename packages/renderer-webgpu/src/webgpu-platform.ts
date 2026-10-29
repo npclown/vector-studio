@@ -89,7 +89,7 @@ export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
    * Absent or false: text is not drawn.
    */
   readonly textPipelineAvailable?: boolean;
-  /** E28-D1: true once an atlas page could not be created; text stays undrawn. */
+  /** E28-D1: true once an atlas page or the text buffer could not be created; text stays undrawn. */
   readonly textPageAllocationFailed?: boolean;
   setTarget(target: PrimitiveTarget): void;
   submitPrimitivePacket: PrimitivePacketConsumer['submitPrimitivePacket'];
