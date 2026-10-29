@@ -274,6 +274,8 @@ Committed text will eventually render through GPU glyph atlases, while active ed
 
 On 2026-09-09 the user approved [P1 D2](plans/p1-instanced-primitives.md#d2--approved-p1-visual-behavior): straight-alpha sRGB input, encoded-sRGB premultiplied source-over on a non-sRGB unorm target/view, and primitive opacity applied once after local fill/stroke composition. The linked contract fixes canvas configuration, blend factors, coverage and compositing formulas, local-space stroke transforms, radius normalization and degenerate-input behavior.
 
+**Gradient paint (E23, 2026-10-29, [contract](plans/d9-e23-gradient-paint-contract.md)).** A fill or stroke paint is a solid colour or one linear or radial gradient. The gradient is evaluated per pixel in the node's local space, through one gradient affine, and its stops are interpolated premultiplied in encoded sRGB. The paint replaces the constant colour in every coverage and composition formula above and in P3's mesh and joint formulas; nothing else in compositing changes. Solid-only draws keep their pipelines; gradient draws use paint variants.
+
 P1 structural containers support transform/visibility and require opacity 1. Non-unit container opacity rejects the transaction; descendant alpha multiplication is not a substitute. Future non-unit container opacity requires isolated composition and its own implementation plan. This does not remove the MVP appearance requirement or add offscreen composition to P1.
 
 ## Design gates before later implementation
