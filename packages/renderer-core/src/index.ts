@@ -50,6 +50,11 @@ export {
   E28_RASTER_CAP,
   E28_RASTER_PER_FRAME,
   TEXT_INSTANCE_FLOATS,
+  isUniformScale,
+  roundHalfUp,
+  sizeBucket,
+  snappedPlacement,
+  textDeviceMap,
   textNoticeDiagnostic,
 } from './text-atlas.js';
 export type { TextClear, TextNotice, TextUpload } from './text-atlas.js';
