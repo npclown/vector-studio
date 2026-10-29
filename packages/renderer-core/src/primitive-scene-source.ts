@@ -192,10 +192,17 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   #layersOverBudget = new Set<string>();
   #layerNotices: LayerResourceNotice[] = [];
   #layerNoticesDropped = 0;
+  /** @internal Tests only (E25-A05): every visible container with opacity 1 is a layer too. */
+  readonly #isolateUnitOpacity: boolean;
   /** P3 V3 section f: true exactly when this source consumes a fill-mesh or stroke-mesh port. */
   public readonly requiresMeshPipeline: boolean;
 
-  public constructor(mirror: RetainedSceneMirror, pathMeshes?: PathMeshPipeline) {
+  public constructor(
+    mirror: RetainedSceneMirror,
+    pathMeshes?: PathMeshPipeline,
+    options: Readonly<{ isolateUnitOpacityForTesting?: boolean }> = {},
+  ) {
+    this.#isolateUnitOpacity = options.isolateUnitOpacityForTesting === true;
     this.#mirror = mirror;
     this.#pathMeshes = pathMeshes;
     this.requiresMeshPipeline = pathMeshes !== undefined;
@@ -226,6 +233,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       clipSeen,
       layerScopes,
       pathLayers,
+      this.#isolateUnitOpacity,
     );
     let visible = cullPrimitives(
       derived.filter((entry) => !entry.hidden && !entry.omitted && entry.clip?.empty !== true),
@@ -1314,6 +1322,7 @@ function derivePrimitives(
   clipSeen: { value: boolean },
   layerScopes: LayerScope[],
   pathLayers: Map<string, LayerScope>,
+  isolateUnitOpacity = false,
 ): DerivedPrimitive[] {
   const result: DerivedPrimitive[] = [];
   const present = new Set<string>();
@@ -1374,7 +1383,7 @@ function derivePrimitives(
       // a visible container with 0 < opacity < 1 is a layer.
       const subtreeHidden = hidden || node.opacity === 0;
       let layer = item.layer;
-      if (!subtreeHidden && node.opacity < 1) {
+      if (!subtreeHidden && (node.opacity < 1 || isolateUnitOpacity)) {
         layer = {
           nodeId: node.id,
           opacity: node.opacity,

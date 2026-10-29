@@ -73,6 +73,8 @@ export interface WebGpuBackendOptions {
   readonly frameCaptureForTesting?: boolean;
   /** @internal Tests only (E10 contract, section 5): count pipelines; needs frame capture. */
   readonly countPassForTesting?: boolean;
+  /** @internal Tests only (E25 contract, section 4): the layer tile edge, positive and even. */
+  readonly layerTileSizeForTesting?: number;
 }
 
 /** @internal Tests only (E10 contract, section 3.2): one captured frame. */
@@ -156,6 +158,8 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   #clipPipelineRequired = false;
   /** E23 contract, U3: read once at attach, like the clip flag. */
   #paintPipelineRequired = false;
+  /** E25 contract, U3: the attached source draws isolated container opacity. */
+  #layerPipelineRequired = false;
   #primitiveMode = false;
   #primitiveCreation: WebGpuPrimitiveSceneCreationPort | undefined;
   #primitiveScene: WebGpuPrimitiveScenePort | undefined;
@@ -196,6 +200,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   readonly #sampleCountForTesting: 1 | 4 | undefined;
   readonly #frameCapture: boolean;
   readonly #countPass: boolean;
+  readonly #layerTileSizeForTesting: number | undefined;
   #capture: ArmedCapture | undefined;
 
   constructor(options: WebGpuBackendOptions = {}) {
@@ -221,6 +226,14 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     if (this.#countPass && !this.#frameCapture) {
       throw new RangeError('countPassForTesting needs frameCaptureForTesting.');
     }
+    const tileSize = options.layerTileSizeForTesting;
+    if (
+      tileSize !== undefined &&
+      !(Number.isSafeInteger(tileSize) && tileSize > 0 && tileSize % 2 === 0)
+    ) {
+      throw new RangeError('layerTileSizeForTesting must be a positive even integer.');
+    }
+    this.#layerTileSizeForTesting = tileSize;
     this.#scheduler = new FrameScheduler({
       ...(options.animationFrameClock === undefined ? {} : { clock: options.animationFrameClock }),
       render: (timestampMs) => this.#render(timestampMs),
@@ -270,6 +283,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     this.#meshPipelineRequired = source.requiresMeshPipeline === true;
     this.#clipPipelineRequired = source.requiresClipPipeline === true;
     this.#paintPipelineRequired = source.requiresPaintPipeline === true;
+    this.#layerPipelineRequired = source.requiresLayerPipeline === true;
     let disposed = false;
     return {
       get disposed() {
@@ -283,6 +297,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
           this.#meshPipelineRequired = false;
           this.#clipPipelineRequired = false;
           this.#paintPipelineRequired = false;
+          this.#layerPipelineRequired = false;
         }
       },
     };
@@ -370,6 +385,14 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
    */
   getMaskPassesForTesting(): number {
     return this.#primitiveScene?.maskPasses ?? 0;
+  }
+
+  /**
+   * @internal Tests only (E25 contract, section 4, Lifetime): the current generation's layer
+   * passes so far, one per layer; 0 without a primitive scene or the layer pipeline.
+   */
+  getLayerPassesForTesting(): number {
+    return this.#primitiveScene?.layerPasses ?? 0;
   }
 
   destroyDeviceForTesting(): void {
@@ -749,16 +772,21 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
             ? {}
             : { sampleCount: this.#sampleCountForTesting }),
           ...(this.#countPass && this.#meshPipelineRequired ? { countPass: true } : {}),
+          ...(this.#layerTileSizeForTesting === undefined || !this.#layerPipelineRequired
+            ? {}
+            : { layerTileSizeForTesting: this.#layerTileSizeForTesting }),
         };
         primitiveCreation =
           this.#meshPipelineRequired ||
           this.#clipPipelineRequired ||
           this.#paintPipelineRequired ||
+          this.#layerPipelineRequired ||
           Object.keys(hooks).length > 0
             ? device.createPrimitiveScene(context, format, generation, tracker, {
                 ...(this.#meshPipelineRequired ? { meshPipeline: true } : {}),
                 ...(this.#clipPipelineRequired ? { clipPipeline: true } : {}),
                 ...(this.#paintPipelineRequired ? { paintPipeline: true } : {}),
+                ...(this.#layerPipelineRequired ? { layerPipeline: true } : {}),
                 ...hooks,
               })
             : device.createPrimitiveScene(context, format, generation, tracker);
@@ -792,6 +820,16 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         ) {
           throw new TestHookCreationError('The paint pipeline is unavailable.', {
             paintPipeline: 'unavailable',
+          });
+        }
+        // E25 contract, U3: likewise for the layer variants; otherwise layer content fails closed.
+        if (
+          this.#hooksSet() &&
+          this.#layerPipelineRequired &&
+          primitive.scene.layerPipelineAvailable !== true
+        ) {
+          throw new TestHookCreationError('The layer pipeline is unavailable.', {
+            layerPipeline: 'unavailable',
           });
         }
       }

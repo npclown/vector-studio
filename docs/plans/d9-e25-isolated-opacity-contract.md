@@ -144,7 +144,7 @@ type LayerPacketPart = Readonly<{
 - the gradient position (`paintValue`, `paintContribution`, paint-pipeline.ts);
 - the clip block (`clipCoverage`, clip-pipeline.ts).
 
-A draw inside a layer tile therefore uses a *layer variant*, keyed `+layer-v0`. In every one of these reads it replaces the position by `position.xy + layerShift`, where `layerShift = B_g.origin + tile offset` is a per-pass uniform in a layer bind group at group index 3. Groups 0 to 2 keep their roles (scene, clip or empty, paint or empty); layer variants without clip or paint carry empty layouts at 1 and 2, as paint variants do at 1. `requiresLayerPipeline` requires the adapter's `maxBindGroups ≥ 4`; otherwise initialization reports the layer pipeline unavailable and non-unit container opacity stays rejected. Clip records and their `pixelShift` and `maskOffset` stay target-based and unchanged, so no per-tile clip records are needed.
+A draw inside a layer tile therefore uses a *layer variant*, keyed `+layer-v0`. In every one of these reads it replaces the position by `position.xy + layerShift`, where `layerShift = B_g.origin + tile offset` is a per-pass uniform in a layer bind group at group index 3. Groups 0 to 2 keep their roles (scene, clip or empty, paint or empty); layer variants without clip or paint carry empty layouts at 1 and 2, as paint variants do at 1. `requiresLayerPipeline` requires the adapter's `maxBindGroups ≥ 4`; otherwise initialization reports the layer pipeline unavailable and non-unit container opacity stays rejected (as built, the content of isolated containers is not drawn instead: see the U3 record's departure). Clip records and their `pixelShift` and `maskOffset` stay target-based and unchanged, so no per-tile clip records are needed.
 
 The variants:
 
@@ -297,6 +297,36 @@ U2 (2026-10-29):
 - The over-budget set is the set of roots over budget in the current frame, as P4 U4a's is for masks. A root that fits for a frame, or draws nothing, raises a new notice when it is again over budget.
 - Tests: `tests/unit/e25-u2-layer-plan.test.ts` (E25-A02, the unit parts of A04 and A07).
 
+U3 (2026-10-29):
+
+- `packages/renderer-webgpu/src/layer-pipeline.ts` holds the layer block, `layerVariantSource` and the seven `+layer-v0` modules, which are generated from the existing modules. The file also holds the variant keys (layout key part `e25-layer-v0`), the composite pipeline `e25-layer-composite-v0` with and without the stencil keep state, and the pass and composite record packing.
+- The native scene creates the composite pipeline and the variants of the variants this generation has, after the paint variants and never on the frame path. That is up to 11 variants: analytic clip, paint and paint-clip; mesh fill and joint, each plain, clip, paint and paint-clip.
+  - Layouts are `[group 0, clip or empty, paint or empty, layer]`.
+  - A failure, or `maxBindGroups < 4`, caches and tracks nothing and leaves the layer pipeline unavailable (the E22-K5 rule).
+- Each frame with layers builds one transient records buffer: the main pass record (shift 0), the tile pass records, then one composite record per layer, at the uniform offset alignment. It also builds the layer textures and the tile set.
+  - Layers render in post-order after the mask passes, tile by tile. The viewport is moved by −(bound origin + tile offset), as E22 does, and each tile is copied into its layer texture.
+  - Composites draw at their position and `meshOrder` in the main pass and in parent tiles, with the target pass's record.
+  - Every frame resource is released after submission, or when the submission fails. `layerPasses` counts one per layer.
+- A scene without layers encodes exactly as before, and the E10-A1 golden log is unchanged.
+- The service option `groups` (`'flat'` by default), its `TypeError` with `clips: 'none'`, `requiresLayerPipeline` (backend option `layerPipeline`), and the test hooks `isolateUnitOpacityForTesting` (service) and `layerTileSizeForTesting` (backend and scene) are added. With the E10 frame-capture or sample-count hook set, an unavailable layer pipeline fails creation, as the other pipelines do; `layerTileSizeForTesting` alone does not.
+- Tests: `tests/unit/e25-u3-layer-passes.test.ts` covers creation, failure, encoding, nesting, tiles, `meshOrder`, fail-closed layers, identity, the unit part of A06, and A01's option wiring. Evidence: [u3-swiftshader.md](../evidence/e25/u3-swiftshader.md) (A05; A08 capture part).
+- **Departure, unavailable layer pipeline:** section 4 says non-unit container opacity "stays rejected" when the layer pipeline is unavailable. The mirror's `groupOpacity` is fixed when the service is constructed, before the adapter is known. So U3 accepts the scene and does not draw the content of isolated containers (fail closed), and the rest of the scene draws. This is how E23 handles gradients without the paint variants. No diagnostic is reserved for this case, so none is emitted. `layerPipelineAvailable` reports it, and the E10 test hooks turn it into a creation failure. WebGPU guarantees `maxBindGroups ≥ 4`, so in practice only a failed pipeline creation leads here. The layers part is still checked in full; its draws still count toward the clip and paint preflight.
+- **Departure, empty layers:** U3 does not skip the pass of a layer with no draws (U2 record). Such a layer renders a cleared tile and composites transparent pixels, which changes nothing.
+- **Departure, layer texture usage:** the shared texture helper also gives layer textures `RENDER_ATTACHMENT`, beside section 4's `TEXTURE_BINDING | COPY_DST`. This is harmless.
+- **Finding, layers next to other content at 4x:** A05's byte identity needs content neither under nor over a layer in its parent.
+  - The layer texture holds one resolved value per pixel, and the composite gives it to every sample (section 4). Content under a layer at 4x, or content drawn over a composite, therefore blends with that pixel value rather than with the per-sample values. The main pass blends per sample and resolves once.
+  - Both paths agree in the interior. Where a shape inside the layer and a shape outside it have partial coverage in the same pixel, they differ by the opacity times the covariance of the two coverages over the samples. Shapes whose edges coincide can differ by a large fraction of a channel (up to about a quarter of the layer's or the backdrop's value), not just one 8-bit step.
+  - On SwiftShader, the `under` and `over` scenes have no shared edges and differ by at most 1/255 ([u3-swiftshader.md](../evidence/e25/u3-swiftshader.md)). That figure is specific to those scenes.
+  - Content under a layer also takes E25-K4's rounding.
+  - E25-K2's statement that the two models agree as α → 1 "apart from rounding" does not hold at 4x on shared edges. Section 8 records the risk. U4 adds a shared-edge probe (content under and over a layer edge) to O1 or O6 and reports the measured difference against a stated edge tolerance. The remedy, if one is needed, is a multisampled layer texture composited per sample.
+- Review (fresh context, 2026-10-29): READY WITH FOLLOW-UPS, all applied.
+  - The layers part is now checked before the unavailable-pipeline return.
+  - Tile sizes use a reduce instead of a spread.
+  - Tests were added: 1x, no stencil, state after a composite in a layer pass, submission failure, and eleven malformed parts with and without the pipeline.
+  - The 4x shared-edge finding above was corrected.
+  - The hook claim and the section 4 pointer were fixed.
+  - Not added: a test with more than 255 mesh draws in a layer across tiles. The per-pass stencil restart is covered by the call order of the existing tests.
+
 ## 8. Risks
 
 - **Memory.** Bound-sized layers keep ordinary groups small. But full-screen groups at 4K and 4x admit only two nesting levels within 96 MiB (E25-Q3). Deeper full-screen stacks report instead of drawing. Two remedies are open if real documents hit this: re-rendering per tile together with the composite (no full layer texture), or a cache with eviction.
@@ -304,6 +334,7 @@ U2 (2026-10-29):
 - **Re-render cost.** Without a cache, every drawn frame re-renders every visible layer, tile by tile. Typical documents have few isolated groups. U4 records the cost as an observation, with no threshold.
 - **Clip ramp model.** E25-K2 differs from SVG's group-result clipping on clip ramps where translucent children overlap (section 3). O6 pins the chosen model.
 - **Quantization.** There is one 8-bit rounding per isolation level (E25-K4). A wider layer format is the remedy if a fixture needs it.
+- **Shared edges at 4x (U3 finding).** A layer is a single-sample image, so at 4x a layer edge that coincides with an edge drawn under or over it in the parent blends against the resolved pixel, not per sample. That pixel can differ from the opacity-1 rendering by more than the edge tolerance. U4 measures it. The remedy is a multisampled layer composited per sample, at four times the layer bytes.
 - **Viewport offsets.** Layer tiles move the viewport origin as E22 tiles do (E22-R1). E25-A05 checks the seams, and checks that the even origin keeps the main pass's quads.
 
 ## 9. Questions (each with a recommended option)

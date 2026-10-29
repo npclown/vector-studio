@@ -77,6 +77,13 @@ export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
   readonly paintPipelineAvailable?: boolean;
   /** P4 contract, U4 (Mask cache): the mask passes this generation has run. */
   readonly maskPasses?: number;
+  /**
+   * E25 contract, U3: true when this generation created the layer variants and the composite
+   * pipeline. Absent or false: the content of isolated containers is not drawn.
+   */
+  readonly layerPipelineAvailable?: boolean;
+  /** E25 contract, section 4, Lifetime: the layer passes this generation has run, per layer. */
+  readonly layerPasses?: number;
   setTarget(target: PrimitiveTarget): void;
   submitPrimitivePacket: PrimitivePacketConsumer['submitPrimitivePacket'];
   /**
@@ -142,6 +149,17 @@ export interface WebGpuPrimitiveSceneOptions {
    * them a draw with a gradient paint is not drawn (fail closed).
    */
   readonly paintPipeline?: boolean;
+  /**
+   * E25 contract, U3: creates the layer pipeline variants of every variant the generation has
+   * (section 4, Layer pipeline variants) and the composite pipeline. It needs the adapter's
+   * `maxBindGroups` of at least 4; without it the layer pipeline is unavailable.
+   */
+  readonly layerPipeline?: boolean;
+  /**
+   * @internal Tests only (E25 contract, section 4): the layer tile edge instead of 1024; a
+   * positive even integer.
+   */
+  readonly layerTileSizeForTesting?: number;
   /**
    * @internal Tests only (E10 contract, section 3.2): a forced sample count. 4 fails creation
    * when a 4x pipeline is unavailable; 1 creates 1x only. Absent: try 4x, then fall back.

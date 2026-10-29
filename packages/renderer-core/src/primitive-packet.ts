@@ -266,6 +266,11 @@ export interface PrimitiveFrameSource {
    * at initialization and recovery. Optional; absent means false.
    */
   readonly requiresPaintPipeline?: boolean;
+  /**
+   * E25 contract, U3: true when the backend must create the layer variants and the composite
+   * pipeline at initialization and recovery. Optional; absent means false.
+   */
+  readonly requiresLayerPipeline?: boolean;
   prepare(target: PrimitiveTarget): PrimitivePacket | null;
   acknowledge(receipt: PrimitiveReceipt): void;
 }

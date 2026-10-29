@@ -3,11 +3,13 @@ import type {
   ClipMaskPacketLevel,
   ClipPacketPart,
   GradientPaintRecord,
+  LayerPacketPart,
   MeshFillDraw,
   MeshPacketPart,
   MeshReceiptPart,
   MeshReceiptResource,
   MeshResourceId,
+  PrimitiveDraw,
   PrimitivePacket,
   PrimitiveReceipt,
   PrimitiveRecordVersion,
@@ -15,7 +17,7 @@ import type {
   PrimitiveSubmitResult,
   PrimitiveTarget,
 } from '@vector-studio/renderer-core';
-import { maskTileSet } from '@vector-studio/renderer-core';
+import { E25_LAYER_TILE_SIZE, maskTileSet } from '@vector-studio/renderer-core';
 import {
   CLIP_BINDINGS,
   CLIP_BIND_GROUP_INDEX,
@@ -69,6 +71,30 @@ import {
   meshStencilStep,
   meshWriteOnceStencilState,
 } from './mesh-pipeline.js';
+import {
+  LAYER_BIND_GROUP_INDEX,
+  LAYER_COMPOSITE_BINDINGS,
+  LAYER_COMPOSITE_RECORD_SIZE,
+  LAYER_COMPOSITE_SHADER,
+  LAYER_PASS_RECORD_SIZE,
+  LAYER_REQUIRED_BIND_GROUPS,
+  LAYER_VARIANT_SUFFIX,
+  MESH_FILL_CLIP_LAYER_SHADER,
+  MESH_FILL_LAYER_SHADER,
+  MESH_FILL_PAINT_CLIP_LAYER_SHADER,
+  MESH_FILL_PAINT_LAYER_SHADER,
+  PRIMITIVE_ANALYTIC_CLIP_LAYER_SHADER,
+  PRIMITIVE_ANALYTIC_PAINT_CLIP_LAYER_SHADER,
+  PRIMITIVE_ANALYTIC_PAINT_LAYER_SHADER,
+  createLayerBindGroupLayoutDescriptor,
+  createLayerCompositeBindGroupLayoutDescriptor,
+  createLayerCompositePipelineDescriptor,
+  layerCompositePipelineKey,
+  layerVariantBaseKey,
+  packLayerCompositeRecord,
+  packLayerPassRecord,
+  type LayerVariantBase,
+} from './layer-pipeline.js';
 import { PipelineCache, type PipelineCacheSnapshot } from './pipeline-cache.js';
 import { PRIMITIVE_ANALYTIC_SHADER } from './primitive-analytic-shader.js';
 import {
@@ -214,6 +240,30 @@ interface PaintPipelineState {
   readonly meshJointClip: GPURenderPipeline | null;
 }
 
+/**
+ * E25 contract, U3: the layer variants and the composite pipeline created at initialization or
+ * recovery. A variant exists exactly when its non-layer variant does; the plain analytic module
+ * reads no position, so an unclipped solid analytic run in a layer uses the base pipeline.
+ */
+interface LayerPipelineState {
+  readonly bindGroupLayout: GPUBindGroupLayout;
+  readonly compositeBindGroupLayout: GPUBindGroupLayout;
+  /** Bound at groups 1 and 2 of a layer variant without a clip or a paint. */
+  readonly emptyBindGroup: GPUBindGroup;
+  readonly composite: GPURenderPipeline;
+  readonly analyticClip: GPURenderPipeline | null;
+  readonly analyticPaint: GPURenderPipeline | null;
+  readonly analyticPaintClip: GPURenderPipeline | null;
+  readonly mesh: GPURenderPipeline | null;
+  readonly meshJoint: GPURenderPipeline | null;
+  readonly meshClip: GPURenderPipeline | null;
+  readonly meshJointClip: GPURenderPipeline | null;
+  readonly meshPaint: GPURenderPipeline | null;
+  readonly meshJointPaint: GPURenderPipeline | null;
+  readonly meshPaintClip: GPURenderPipeline | null;
+  readonly meshJointPaintClip: GPURenderPipeline | null;
+}
+
 /** E23 U3: one paint buffer, the record table or an index table. */
 interface PaintTable {
   readonly id: string;
@@ -301,7 +351,33 @@ type ValidatedClip = Readonly<{
 }> | null;
 
 /** U4 and E22-K1: a tile set attachment, released after the frame's submission. */
-type Transient = Readonly<{ id: string; texture: GPUTexture }>;
+type Transient = Readonly<{ id: string; resource: Readonly<{ destroy(): void }> }>;
+
+/** E25 U3: one layer tile pass, at its offset in the layer, with its pass record. */
+type LayerTile = Readonly<{ x: number; y: number; width: number; height: number; record: number }>;
+
+/** E25 U3: the layers of a validated packet; null when it draws none. */
+type ValidatedLayers = Readonly<{
+  layers: LayerPacketPart['layers'];
+  /** Per target (-1: the main pass), its composites in paint order. */
+  composites: ReadonlyMap<number, readonly LayerPacketPart['composites'][number][]>;
+  /** Per layer, the mesh draws drawn (none when the mesh path is unavailable). */
+  meshDraws: readonly (readonly MeshFillDraw[])[];
+  tileWidth: number;
+  tileHeight: number;
+  tiles: readonly (readonly LayerTile[])[];
+  /** Pass records (0: the main pass, then the tiles), then one composite record per layer. */
+  records: Uint8Array;
+  stride: number;
+  compositeRecordBase: number;
+}> | null;
+
+/** E25 U3: a frame's layer resources, released with the frame's transients. */
+type LayerFrame = Readonly<{
+  passGroup: GPUBindGroup;
+  compositeGroups: readonly GPUBindGroup[];
+  textures: readonly GPUTexture[];
+}>;
 
 type MaskSourceDraw = Readonly<{ instance: number; firstTriangle: number; triangleCount: number }>;
 
@@ -361,6 +437,34 @@ interface ValidatedPacket {
   readonly order: ReadonlyMap<number, number>;
   readonly frameInitialized: boolean;
   readonly receiptResources: PrimitiveReceipt['resources'];
+}
+
+/** E25 U3: the layers part's layer entries, or none without the part; a malformed part throws. */
+function packetLayers(packet: PrimitivePacket): LayerPacketPart['layers'] {
+  const part = packet.layers as Partial<LayerPacketPart> | null | undefined;
+  if (part === undefined) return [];
+  if (
+    typeof part !== 'object' ||
+    part === null ||
+    part.layoutVersion !== 0 ||
+    !isArrayValue(part.layers) ||
+    !isArrayValue(part.composites) ||
+    !isArrayValue(part.notices)
+  ) {
+    throw new TypeError('Invalid layers part.');
+  }
+  for (const layer of part.layers as readonly unknown[]) {
+    const value = layer as Partial<LayerPacketPart['layers'][number]> | null;
+    if (
+      typeof value !== 'object' ||
+      value === null ||
+      !isArrayValue(value.draws) ||
+      !isArrayValue(value.meshDraws)
+    ) {
+      throw new TypeError('Invalid layer.');
+    }
+  }
+  return part.layers;
 }
 
 function isNativeCanvasContext(
@@ -466,6 +570,12 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   public clipStateWritesForTesting = 0;
   readonly paintPipelineAvailable: boolean;
   readonly #paint: PaintPipelineState | null;
+  readonly layerPipelineAvailable: boolean;
+  readonly #layer: LayerPipelineState | null;
+  /** E25 section 4: the layer tile edge, `layerTileSizeForTesting` or 1024. */
+  readonly #layerTileSize: number;
+  #nextLayerFrame = 1;
+  #layerPasses = 0;
   #paintBuffers: PaintBufferState | undefined;
   #nextPaintBuffer = 1;
   /** Packed bytes per record object; renderer-core keeps a record object while it is unchanged. */
@@ -503,7 +613,12 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     stencil = false,
     clip: ClipPipelineState | null = null,
     paint: PaintPipelineState | null = null,
+    layer: LayerPipelineState | null = null,
+    layerTileSize: number = E25_LAYER_TILE_SIZE,
   ) {
+    this.#layerTileSize = layerTileSize;
+    this.#layer = layer;
+    this.layerPipelineAvailable = layer !== null;
     this.#mesh = mesh;
     this.#clip = clip;
     this.clipPipelineAvailable = clip !== null;
@@ -526,15 +641,32 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       paint === null
         ? 0
         : (1 + (paint.mesh === null ? 0 : 1)) * (paint.analyticClip === null ? 1 : 2);
+    // E25 contract, U3: the composite module and one layer module per position-reading module
+    // (the clip and paint ones, and the plain mesh module); none without the layerPipeline
+    // option. Each mesh layer module has a fill and a joint pipeline.
+    const analyticLayerModules =
+      layer === null
+        ? 0
+        : [layer.analyticClip, layer.analyticPaint, layer.analyticPaintClip].filter(
+            (pipeline) => pipeline !== null,
+          ).length;
+    const meshLayerModules =
+      layer === null
+        ? 0
+        : [layer.mesh, layer.meshClip, layer.meshPaint, layer.meshPaintClip].filter(
+            (pipeline) => pipeline !== null,
+          ).length;
+    const layerModules = layer === null ? 0 : 1 + analyticLayerModules + meshLayerModules;
     this.shaderModulesCreated =
-      1 + meshShaderModulesCreated + countModules + clipModules + paintModules;
+      1 + meshShaderModulesCreated + countModules + clipModules + paintModules + layerModules;
     this.pipelinesCreated =
       (mesh === null ? 1 : 4) +
       (count === null ? 0 : countModules + 2) +
       (clip === null ? 0 : clip.mesh === null ? 2 : 5) +
       (paint === null
         ? 0
-        : (1 + (paint.mesh === null ? 0 : 2)) * (paint.analyticClip === null ? 1 : 2));
+        : (1 + (paint.mesh === null ? 0 : 2)) * (paint.analyticClip === null ? 1 : 2)) +
+      (layer === null ? 0 : 1 + analyticLayerModules + 2 * meshLayerModules);
     this.#device = device;
     this.#context = context;
     this.#format = format;
@@ -693,10 +825,24 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     }
 
     const { arena } = validated;
+    // E25 U3: #preflight has checked the part's shape.
+    const layerEntries = packetLayers(packet);
     let mesh: ValidatedMesh | null = null;
+    if (packet.mesh === undefined && layerEntries.some((layer) => layer.meshDraws.length > 0)) {
+      if (validated.createdArena) this.#releaseArena(arena);
+      return frozenResult('invalid-packet');
+    }
     if (packet.mesh !== undefined) {
       try {
-        mesh = this.#preflightMesh(packet.mesh, packet.draws.length, maskSourceDraws(packet));
+        mesh = this.#preflightMesh(
+          packet.mesh,
+          packet.draws.length,
+          maskSourceDraws(packet),
+          layerEntries.map((layer) => ({
+            draws: layer.meshDraws,
+            analyticDraws: layer.draws.length,
+          })),
+        );
       } catch (error) {
         if (validated.createdArena) this.#releaseArena(arena);
         return frozenResult(
@@ -706,12 +852,20 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     }
     const meshArena = mesh !== null && !mesh.skipped ? mesh.arena : null;
     const meshDraws = mesh !== null && !mesh.skipped ? mesh.draws : [];
+    // E25 U3: a layer's mesh draws are drawn exactly when the main pass's are.
+    const layerMeshDraws = layerEntries.map((layer) =>
+      mesh !== null && !mesh.skipped ? layer.meshDraws : [],
+    );
+    const analyticDraws = [...packet.draws, ...layerEntries.flatMap((layer) => layer.draws)];
+    const allMeshDraws = [...meshDraws, ...layerMeshDraws.flat()];
     let paint: ValidatedPaint;
     let clip: ValidatedClip;
+    let layers: ValidatedLayers;
     try {
       // E23 U3: checks and packs only; the paint buffers are created and written below.
-      paint = this.#preflightPaint(packet, meshDraws, validated);
-      clip = this.#preflightClip(packet, meshDraws, validated);
+      paint = this.#preflightPaint(packet, analyticDraws, allMeshDraws, validated);
+      clip = this.#preflightClip(packet, analyticDraws, allMeshDraws, validated);
+      layers = this.#preflightLayers(packet, layerEntries, layerMeshDraws);
     } catch (error) {
       if (validated.createdArena) this.#releaseArena(arena);
       if (mesh !== null && !mesh.skipped && mesh.createdArena && mesh.arena !== null) {
@@ -767,6 +921,11 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       if (clip !== null) {
         this.#encodeMaskPasses(encoder, clip, arena, meshArena, transients);
       }
+      // E25 section 4, Pass order: the layers in post-order, after the mask passes.
+      const layerFrame =
+        layers === null
+          ? null
+          : this.#encodeLayerPasses(encoder, layers, arena, meshArena, clip, paint, transients);
       const stencilView = this.#stencilAttachment?.createView();
       const pass = encoder.beginRenderPass({
         label: 'vector-studio/primitive-pass',
@@ -835,8 +994,27 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       // pipeline has no bind group, so the next mesh draw binds its pipeline and group 0.
       let bound: string | null = 'analytic';
       let nextMeshDraw = 0;
+      // E25 U3: a composite at a position follows the mesh draws its meshOrder counts there; it
+      // binds its own groups, so the next draw binds its pipeline and groups again.
+      const mainComposites = layers?.composites.get(-1) ?? [];
+      let nextComposite = 0;
+      const drawCompositesAt = (position: number, meshOrder: number) => {
+        for (
+          let composite = mainComposites[nextComposite];
+          composite !== undefined &&
+          composite.position === position &&
+          composite.meshOrder <= meshOrder;
+          composite = mainComposites[++nextComposite]
+        ) {
+          this.#encodeComposite(pass, layerFrame!, composite.layer, 0);
+          bound = null;
+          clipBoundState = 0;
+        }
+      };
       const drawMeshesAt = (position: number) => {
+        let meshOrder = 0;
         while (meshDraws[nextMeshDraw]?.position === position) {
+          if (mainComposites.length > 0) drawCompositesAt(position, meshOrder++);
           const draw = meshDraws[nextMeshDraw]!;
           const joint = draw.composite === 'joint-fill';
           const state = draw.clipState ?? 0;
@@ -883,6 +1061,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           pass.setStencilReference(step.reference);
           pass.draw(3 * draw.triangleCount, 1, 3 * draw.firstTriangle, draw.instance);
         }
+        if (mainComposites.length > 0) drawCompositesAt(position, Infinity);
       };
       packet.draws.forEach((draw, index) => {
         drawMeshesAt(index);
@@ -950,6 +1129,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       if (mesh !== null && !mesh.skipped) this.#commitMesh(mesh);
       this.#releaseTransients(transients);
       this.#commitMasks(clip);
+      if (layers !== null) this.#layerPasses += layers.layers.length;
       this.#observeCompletion();
       return Object.freeze({
         status: 'submitted',
@@ -1024,11 +1204,12 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
    */
   #preflightClip(
     packet: PrimitivePacket,
+    analyticDraws: readonly PrimitiveDraw[],
     meshDraws: readonly MeshFillDraw[],
     validated: ValidatedPacket,
   ): ValidatedClip {
     const used = new Set<number>();
-    for (const draw of [...packet.draws, ...meshDraws]) {
+    for (const draw of [...analyticDraws, ...meshDraws]) {
       const state: unknown = draw.clipState;
       if (state === undefined) continue;
       if (typeof state !== 'number' || !isPositiveSafeInteger(state)) {
@@ -1355,6 +1536,11 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   }
 
   /** U4 (P4-A08): mask passes run so far; a pass runs only for a level whose key changed. */
+  /** E25 section 4, Lifetime: the layer passes submitted, one per layer, not per tile. */
+  public get layerPasses(): number {
+    return this.#layerPasses;
+  }
+
   public get maskPasses(): number {
     return this.#maskPasses;
   }
@@ -1394,7 +1580,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     const tile = (name: string, format: GPUTextureFormat, sampleCount: number, usage: number) => {
       const id = `${prefix}/${name}`;
       const texture = this.#createTrackedTexture(id, width, height, format, sampleCount, 1, usage);
-      transients.push({ id, texture });
+      transients.push({ id, resource: texture });
       return texture;
     };
     const color = tile(
@@ -1479,11 +1665,513 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     }
   }
 
+  /**
+   * E25 section 4: checks the layers part against the packet and plans the layer tiles and the
+   * pass and composite records. Each layer is post-ordered, even-origined and inside its parent;
+   * each has one composite on its parent's pass, in that target's paint order.
+   */
+  #preflightLayers(
+    packet: PrimitivePacket,
+    layers: LayerPacketPart['layers'],
+    meshDraws: readonly (readonly MeshFillDraw[])[],
+  ): ValidatedLayers {
+    const part = packet.layers;
+    if (part === undefined || layers.length === 0) {
+      if (part !== undefined && part.composites.length !== 0) {
+        throw new Error('Composites without layers.');
+      }
+      return null;
+    }
+    const target = this.#target!;
+    const count = layers.length;
+    layers.forEach((layer, index) => {
+      const bound = layer.bound;
+      if (
+        typeof layer.nodeId !== 'string' ||
+        typeof layer.opacity !== 'number' ||
+        !(layer.opacity > 0 && layer.opacity <= 1) ||
+        typeof bound !== 'object' ||
+        bound === null ||
+        ![bound.x, bound.y].every(
+          (value) => Number.isSafeInteger(value) && value >= 0 && value % 2 === 0,
+        ) ||
+        !isPositiveSafeInteger(bound.width) ||
+        !isPositiveSafeInteger(bound.height) ||
+        bound.x + bound.width > target.width ||
+        bound.y + bound.height > target.height ||
+        !Number.isSafeInteger(layer.parent) ||
+        !(layer.parent === -1 || (layer.parent > index && layer.parent < count))
+      ) {
+        throw new Error('Invalid layer.');
+      }
+      if (layer.parent !== -1) {
+        const parent = layers[layer.parent]!.bound;
+        if (
+          bound.x < parent.x ||
+          bound.y < parent.y ||
+          bound.x + bound.width > parent.x + parent.width ||
+          bound.y + bound.height > parent.y + parent.height
+        ) {
+          throw new Error('A layer outside its parent.');
+        }
+      }
+    });
+    const composites = new Map<number, LayerPacketPart['composites'][number][]>();
+    const seen = new Set<number>();
+    for (const composite of part.composites) {
+      if (
+        typeof composite !== 'object' ||
+        composite === null ||
+        !Number.isSafeInteger(composite.layer) ||
+        composite.layer < 0 ||
+        composite.layer >= count ||
+        seen.has(composite.layer) ||
+        composite.target !== layers[composite.layer]!.parent ||
+        !Number.isSafeInteger(composite.position) ||
+        composite.position < 0 ||
+        !Number.isSafeInteger(composite.meshOrder) ||
+        composite.meshOrder < 0
+      ) {
+        throw new Error('Invalid composite.');
+      }
+      const runs =
+        composite.target === -1 ? packet.draws.length : layers[composite.target]!.draws.length;
+      const meshList =
+        composite.target === -1 ? (packet.mesh?.draws ?? []) : layers[composite.target]!.meshDraws;
+      const atPosition = meshList.filter((draw) => draw.position === composite.position).length;
+      const list = composites.get(composite.target) ?? [];
+      const previous = list.at(-1);
+      if (
+        composite.position > runs ||
+        composite.meshOrder > atPosition ||
+        (previous !== undefined &&
+          (composite.position < previous.position ||
+            (composite.position === previous.position && composite.meshOrder < previous.meshOrder)))
+      ) {
+        throw new Error("A composite out of its target's paint order.");
+      }
+      list.push(composite);
+      composites.set(composite.target, list);
+      seen.add(composite.layer);
+    }
+    if (seen.size !== count) throw new Error('A layer without its composite.');
+    // Without the layer pipeline the layers' content is not drawn (fail closed), as E23's
+    // gradient draws are without the paint variants; the part is still checked.
+    if (this.#layer === null) return null;
+    // Section 4: the tile set covers the largest layer, at most T on each side.
+    const tileWidth = Math.min(
+      this.#layerTileSize,
+      layers.reduce((widest, layer) => Math.max(widest, layer.bound.width), 0),
+    );
+    const tileHeight = Math.min(
+      this.#layerTileSize,
+      layers.reduce((tallest, layer) => Math.max(tallest, layer.bound.height), 0),
+    );
+    const alignment = this.#device.limits.minUniformBufferOffsetAlignment;
+    if (typeof alignment !== 'number' || !isPowerOfTwo(alignment)) throw new AllocationError();
+    const stride = align(Math.max(LAYER_PASS_RECORD_SIZE, LAYER_COMPOSITE_RECORD_SIZE), alignment);
+    const passRecords: Uint8Array[] = [
+      packLayerPassRecord({ x: 0, y: 0 }, { width: target.width, height: target.height }),
+    ];
+    const tiles = layers.map((layer) => {
+      const list: LayerTile[] = [];
+      for (let y = 0; y < layer.bound.height; y += tileHeight) {
+        for (let x = 0; x < layer.bound.width; x += tileWidth) {
+          list.push(
+            Object.freeze({
+              x,
+              y,
+              width: Math.min(tileWidth, layer.bound.width - x),
+              height: Math.min(tileHeight, layer.bound.height - y),
+              record: passRecords.length,
+            }),
+          );
+          passRecords.push(
+            packLayerPassRecord(
+              { x: layer.bound.x + x, y: layer.bound.y + y },
+              { width: target.width, height: target.height },
+            ),
+          );
+        }
+      }
+      return Object.freeze(list);
+    });
+    const compositeRecordBase = passRecords.length;
+    const records = new Uint8Array((compositeRecordBase + count) * stride);
+    passRecords.forEach((bytes, index) => records.set(bytes, index * stride));
+    layers.forEach((layer, index) => {
+      records.set(
+        packLayerCompositeRecord(layer.bound, layer.opacity),
+        (compositeRecordBase + index) * stride,
+      );
+    });
+    if (records.byteLength > safeLimit(this.#device.limits.maxBufferSize, 0)) {
+      throw new AllocationError();
+    }
+    return Object.freeze({
+      layers,
+      composites,
+      meshDraws,
+      tileWidth,
+      tileHeight,
+      tiles: Object.freeze(tiles),
+      records,
+      stride,
+      compositeRecordBase,
+    });
+  }
+
+  /**
+   * E25 section 4, Layer passes: creates the frame's records buffer, layer textures and tile set
+   * (all transient), then renders each layer, in post-order, tile by tile: the viewport is the
+   * target's at −(B_g origin + tile offset), the tile's stencil is cleared, and the 1-sample tile
+   * is copied into the layer texture at the tile's offset.
+   */
+  #encodeLayerPasses(
+    encoder: GPUCommandEncoder,
+    layers: NonNullable<ValidatedLayers>,
+    arena: ArenaState,
+    meshArena: MeshArenaState | null,
+    clip: ValidatedClip,
+    paint: ValidatedPaint,
+    transients: Transient[],
+  ): LayerFrame {
+    const pipelines = this.#layer!;
+    const target = this.#target!;
+    const prefix = `primitive/${this.#generation}/layer-frame-${this.#nextLayerFrame++}`;
+    const recordsId = `${prefix}/records`;
+    let records: GPUBuffer;
+    try {
+      records = this.#device.createBuffer({
+        label: recordsId,
+        size: layers.records.byteLength,
+        usage: UNIFORM_BUFFER_USAGE | COPY_DESTINATION_USAGE,
+      });
+    } catch (error) {
+      throw new AllocationError(error);
+    }
+    try {
+      this.#resources.track(recordsId, { category: 'buffer', size: layers.records.byteLength });
+    } catch (error) {
+      records.destroy();
+      throw new AllocationError(error);
+    }
+    transients.push({ id: recordsId, resource: records });
+    this.#device.queue.writeBuffer(records, 0, layers.records, 0, layers.records.byteLength);
+    const texture = (
+      name: string,
+      width: number,
+      height: number,
+      format: GPUTextureFormat,
+      sampleCount: number,
+      bytesPerTexel: number,
+      usage: number,
+    ) => {
+      const id = `${prefix}/${name}`;
+      const created = this.#createTrackedTexture(
+        id,
+        width,
+        height,
+        format,
+        sampleCount,
+        bytesPerTexel,
+        usage,
+      );
+      transients.push({ id, resource: created });
+      return created;
+    };
+    const textures = layers.layers.map((layer, index) =>
+      texture(
+        `layer-${index}`,
+        layer.bound.width,
+        layer.bound.height,
+        this.#format,
+        1,
+        4,
+        TEXTURE_BINDING_USAGE | TEXTURE_COPY_DESTINATION_USAGE,
+      ),
+    );
+    const { tileWidth, tileHeight } = layers;
+    const color = texture(
+      'tile-color',
+      tileWidth,
+      tileHeight,
+      this.#format,
+      this.sampleCount,
+      4,
+      this.sampleCount === 4 ? 0 : TEXTURE_COPY_SOURCE_USAGE,
+    );
+    const resolve =
+      this.sampleCount === 4
+        ? texture(
+            'tile-resolve',
+            tileWidth,
+            tileHeight,
+            this.#format,
+            1,
+            4,
+            TEXTURE_COPY_SOURCE_USAGE,
+          )
+        : null;
+    // Section 4: the tile's stencil exists exactly when the main pass has one.
+    const stencil = this.#stencil
+      ? texture('tile-stencil', tileWidth, tileHeight, MESH_STENCIL_FORMAT, this.sampleCount, 1, 0)
+      : null;
+    const passGroup = this.#device.createBindGroup({
+      label: `${prefix}/pass-bind-group`,
+      layout: pipelines.bindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: records, offset: 0, size: LAYER_PASS_RECORD_SIZE } },
+      ],
+    });
+    const compositeGroups = textures.map((layerTexture, index) =>
+      this.#device.createBindGroup({
+        label: `${prefix}/composite-${index}`,
+        layout: pipelines.compositeBindGroupLayout,
+        entries: [
+          { binding: LAYER_COMPOSITE_BINDINGS.layer, resource: layerTexture.createView() },
+          {
+            binding: LAYER_COMPOSITE_BINDINGS.record,
+            resource: {
+              buffer: records,
+              offset: (layers.compositeRecordBase + index) * layers.stride,
+              size: LAYER_COMPOSITE_RECORD_SIZE,
+            },
+          },
+        ],
+      }),
+    );
+    const frame: LayerFrame = Object.freeze({ passGroup, compositeGroups, textures });
+    const colorView = color.createView();
+    const resolveView = resolve?.createView();
+    const stencilView = stencil?.createView();
+    const copySource = resolve ?? color;
+    layers.layers.forEach((layer, index) => {
+      for (const tile of layers.tiles[index]!) {
+        const pass = encoder.beginRenderPass({
+          label: `vector-studio/layer-pass/${index}`,
+          colorAttachments: [
+            {
+              view: colorView,
+              ...(resolveView === undefined ? {} : { resolveTarget: resolveView }),
+              clearValue: { r: 0, g: 0, b: 0, a: 0 },
+              loadOp: 'clear',
+              storeOp: resolveView === undefined ? 'store' : 'discard',
+            },
+          ],
+          ...(stencilView === undefined
+            ? {}
+            : {
+                depthStencilAttachment: {
+                  view: stencilView,
+                  stencilClearValue: 0,
+                  stencilLoadOp: 'clear',
+                  stencilStoreOp: 'discard',
+                },
+              }),
+        });
+        pass.setViewport(
+          -(layer.bound.x + tile.x),
+          -(layer.bound.y + tile.y),
+          target.width,
+          target.height,
+          0,
+          1,
+        );
+        this.#encodeLayerPassDraws(pass, frame, layers, index, tile.record * layers.stride, {
+          arena,
+          meshArena,
+          clip,
+          paint,
+        });
+        pass.end();
+        encoder.copyTextureToTexture(
+          { texture: copySource },
+          { texture: textures[index]!, origin: { x: tile.x, y: tile.y } },
+          { width: tile.width, height: tile.height },
+        );
+      }
+    });
+    return frame;
+  }
+
+  /**
+   * E25 section 4: one layer tile pass's draws, in the layer's paint order with its children's
+   * composites. A draw that reads its position uses its layer variant; an unclipped solid
+   * analytic run uses the base pipeline. Groups 1 and 2 are bound for each variant's layout (the
+   * clip group or the empty group; the paint group or the empty group). Unavailable variants
+   * fail closed, as in the main pass, and E17's write-once references restart in each pass.
+   */
+  #encodeLayerPassDraws(
+    pass: GPURenderPassEncoder,
+    frame: LayerFrame,
+    layers: NonNullable<ValidatedLayers>,
+    index: number,
+    passOffset: number,
+    env: Readonly<{
+      arena: ArenaState;
+      meshArena: MeshArenaState | null;
+      clip: ValidatedClip;
+      paint: ValidatedPaint;
+    }>,
+  ): void {
+    const pipelines = this.#layer!;
+    const draws = layers.layers[index]!.draws;
+    const meshDraws = layers.meshDraws[index]!;
+    const composites = layers.composites.get(index) ?? [];
+    const { arena, meshArena, clip, paint } = env;
+    const paintBuffers = paint === null ? null : this.#paintBuffers!;
+    let pipeline: GPURenderPipeline | null = null;
+    let group0: string | null = null;
+    let group1: number | null = null;
+    let group2: string | null = null;
+    const usePipeline = (next: GPURenderPipeline) => {
+      if (pipeline === next) return;
+      pass.setPipeline(next);
+      pipeline = next;
+    };
+    const bind0 = (kind: 'analytic' | 'mesh') => {
+      if (group0 === kind) return;
+      if (kind === 'analytic') {
+        pass.setBindGroup(0, arena.bindGroup);
+        pass.setVertexBuffer(0, this.#vertexBuffer, 0, 32);
+        pass.setIndexBuffer(this.#indexBuffer, 'uint16', 0, 12);
+      } else {
+        pass.setBindGroup(0, meshArena!.bindGroup);
+      }
+      group0 = kind;
+    };
+    const bind1 = (state: number) => {
+      if (group1 === state) return;
+      if (state === 0) pass.setBindGroup(CLIP_BIND_GROUP_INDEX, pipelines.emptyBindGroup);
+      else {
+        pass.setBindGroup(CLIP_BIND_GROUP_INDEX, this.#clipBindGroup(clip!, state), [
+          state * clip!.stride,
+        ]);
+      }
+      group1 = state;
+    };
+    const bind2 = (kind: 'empty' | 'analytic' | 'mesh') => {
+      if (group2 === kind) return;
+      pass.setBindGroup(
+        PAINT_BIND_GROUP_INDEX,
+        kind === 'empty'
+          ? pipelines.emptyBindGroup
+          : kind === 'analytic'
+            ? paintBuffers!.primitiveBindGroup
+            : paintBuffers!.meshBindGroup,
+      );
+      group2 = kind;
+    };
+    pass.setBindGroup(LAYER_BIND_GROUP_INDEX, frame.passGroup, [passOffset]);
+    let nextComposite = 0;
+    const drawCompositesAt = (position: number, meshOrder: number) => {
+      for (
+        let composite = composites[nextComposite];
+        composite !== undefined &&
+        composite.position === position &&
+        composite.meshOrder <= meshOrder;
+        composite = composites[++nextComposite]
+      ) {
+        this.#encodeComposite(pass, frame, composite.layer, passOffset);
+        pipeline = pipelines.composite;
+        group0 = null;
+        group1 = 0;
+        group2 = 'empty';
+      }
+    };
+    let nextMeshDraw = 0;
+    const drawMeshesAt = (position: number) => {
+      let meshOrder = 0;
+      while (meshDraws[nextMeshDraw]?.position === position) {
+        drawCompositesAt(position, meshOrder++);
+        const draw = meshDraws[nextMeshDraw]!;
+        const step = meshStencilStep(nextMeshDraw);
+        nextMeshDraw += 1;
+        if (step.reset) {
+          usePipeline(this.#mesh!.resetPipeline);
+          pass.draw(3);
+        }
+        const state = draw.clipState ?? 0;
+        const joint = draw.composite === 'joint-fill';
+        const painted = draw.gradient !== undefined || draw.strokeGradient !== undefined;
+        if (state !== 0 && clip === null) continue;
+        if (painted && paint === null) continue;
+        const variant = painted
+          ? state === 0
+            ? joint
+              ? pipelines.meshJointPaint
+              : pipelines.meshPaint
+            : joint
+              ? pipelines.meshJointPaintClip
+              : pipelines.meshPaintClip
+          : state === 0
+            ? joint
+              ? pipelines.meshJoint
+              : pipelines.mesh
+            : joint
+              ? pipelines.meshJointClip
+              : pipelines.meshClip;
+        if (variant === null) continue;
+        usePipeline(variant);
+        bind0('mesh');
+        bind1(state);
+        bind2(painted ? 'mesh' : 'empty');
+        pass.setStencilReference(step.reference);
+        pass.draw(3 * draw.triangleCount, 1, 3 * draw.firstTriangle, draw.instance);
+      }
+      drawCompositesAt(position, Infinity);
+    };
+    draws.forEach((draw, position) => {
+      drawMeshesAt(position);
+      const state = draw.clipState ?? 0;
+      const painted = draw.paint === 'gradient';
+      if (state !== 0 && clip === null) return;
+      if (painted && paint === null) return;
+      const variant = painted
+        ? state === 0
+          ? pipelines.analyticPaint
+          : pipelines.analyticPaintClip
+        : state === 0
+          ? this.#pipeline
+          : pipelines.analyticClip;
+      if (variant === null) return;
+      usePipeline(variant);
+      bind0('analytic');
+      if (variant !== this.#pipeline) {
+        bind1(state);
+        bind2(painted ? 'analytic' : 'empty');
+      }
+      pass.drawIndexed(6, draw.count, 0, 0, draw.first);
+    });
+    drawMeshesAt(draws.length);
+  }
+
+  /** E25 section 4, Composite pipeline: the child layer's quad, at the pass's record. */
+  #encodeComposite(
+    pass: GPURenderPassEncoder,
+    frame: LayerFrame,
+    layer: number,
+    passOffset: number,
+  ): void {
+    const pipelines = this.#layer!;
+    pass.setPipeline(pipelines.composite);
+    pass.setBindGroup(0, frame.compositeGroups[layer]!);
+    pass.setBindGroup(CLIP_BIND_GROUP_INDEX, pipelines.emptyBindGroup);
+    pass.setBindGroup(PAINT_BIND_GROUP_INDEX, pipelines.emptyBindGroup);
+    pass.setBindGroup(LAYER_BIND_GROUP_INDEX, frame.passGroup, [passOffset]);
+    pass.draw(6);
+  }
+
   /** Destroys the frame's transient attachments and releases their accounting entries. */
   #releaseTransients(transients: Transient[]): void {
     for (const transient of transients.splice(0)) {
       try {
-        this.#destroyTrackedTexture(transient.id, transient.texture);
+        try {
+          transient.resource.destroy();
+        } finally {
+          this.#resources.release(transient.id);
+        }
       } catch {
         // Accounting cleanup is best effort.
       }
@@ -1623,11 +2311,12 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
    */
   #preflightPaint(
     packet: PrimitivePacket,
+    analyticDraws: readonly PrimitiveDraw[],
     meshDraws: readonly MeshFillDraw[],
     validated: ValidatedPacket,
   ): ValidatedPaint {
     let used = false;
-    for (const draw of packet.draws) {
+    for (const draw of analyticDraws) {
       const flag: unknown = draw.paint;
       if (flag === undefined) continue;
       if (flag !== 'gradient') throw new Error('Invalid paint flag.');
@@ -2027,18 +2716,30 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       throw new TypeError('Reconstruction initialized slot sets differ.');
     }
     if (!frameInitialized) throw new TypeError('Frame data is uninitialized.');
-    let expectedFirst = 0;
-    for (const draw of packet.draws) {
-      if (
-        draw.variant !== 'analytic-v1' ||
-        !Number.isSafeInteger(draw.first) ||
-        !Number.isSafeInteger(draw.count) ||
-        draw.first !== expectedFirst ||
-        draw.count <= 0
-      ) {
-        throw new TypeError('Invalid primitive draw range.');
+    // E25 contract, U3: the main pass's runs and every layer's runs together cover the order
+    // stream's first entries exactly once; each target's runs are in order.
+    const ranges: (readonly [number, number])[] = [];
+    for (const draws of [packet.draws, ...packetLayers(packet).map((layer) => layer.draws)]) {
+      let previousEnd = 0;
+      for (const draw of draws) {
+        if (
+          draw.variant !== 'analytic-v1' ||
+          !Number.isSafeInteger(draw.first) ||
+          !Number.isSafeInteger(draw.count) ||
+          draw.first < previousEnd ||
+          draw.count <= 0
+        ) {
+          throw new TypeError('Invalid primitive draw range.');
+        }
+        previousEnd = draw.first + draw.count;
+        ranges.push([draw.first, draw.count]);
       }
-      expectedFirst += draw.count;
+    }
+    ranges.sort((left, right) => left[0] - right[0]);
+    let expectedFirst = 0;
+    for (const [first, count] of ranges) {
+      if (first !== expectedFirst) throw new TypeError('Invalid primitive draw range.');
+      expectedFirst += count;
     }
     if (expectedFirst * PRIMITIVE_ORDER_STRIDE > capacities.order) {
       throw new TypeError('Primitive draw exceeds order capacity.');
@@ -2089,6 +2790,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     part: MeshPacketPart,
     analyticDraws: number,
     maskDraws: readonly MaskSourceDraw[] = [],
+    layerDraws: readonly Readonly<{ draws: readonly MeshFillDraw[]; analyticDraws: number }>[] = [],
   ): ValidatedMesh {
     if (
       typeof part !== 'object' ||
@@ -2105,7 +2807,11 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     // The mesh path is unavailable for this generation: skip mesh writes and draws.
     if (this.#mesh === null) return Object.freeze({ skipped: true as const });
     if (part.resources.length === 0) {
-      if (part.writes.length !== 0 || part.draws.length !== 0) {
+      if (
+        part.writes.length !== 0 ||
+        part.draws.length !== 0 ||
+        layerDraws.some((layer) => layer.draws.length !== 0)
+      ) {
         throw new TypeError('A mesh part without resources carries notices only.');
       }
       return Object.freeze({
@@ -2216,36 +2922,42 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
 
     const instanceCapacity = capacities.meshInstances / MESH_RESOURCE_STRIDES.meshInstances;
     const triangleCapacity = capacities.meshTriangles / MESH_RESOURCE_STRIDES.meshTriangles;
-    let previousPosition = 0;
-    for (const draw of part.draws) {
-      if (
-        typeof draw !== 'object' ||
-        draw === null ||
-        !Number.isSafeInteger(draw.position) ||
-        draw.position < previousPosition ||
-        draw.position > analyticDraws ||
-        !Number.isSafeInteger(draw.instance) ||
-        draw.instance < 0 ||
-        draw.instance >= instanceCapacity ||
-        !instances.has(draw.instance) ||
-        !Number.isSafeInteger(draw.firstTriangle) ||
-        draw.firstTriangle < 0 ||
-        !Number.isSafeInteger(draw.triangleCount) ||
-        draw.triangleCount <= 0 ||
-        draw.firstTriangle + draw.triangleCount > triangleCapacity ||
-        (draw.composite !== undefined && draw.composite !== 'joint-fill')
-      ) {
-        throw new TypeError('Invalid mesh draw.');
-      }
-      if (draw.composite === 'joint-fill') {
-        // ST-U7 addendum, section 4.5: word 15 - 1 of a joint fill record names the stroke
-        // record, which must be a written instance below capacity, as draw.instance is.
-        const stroke = (links.get(draw.instance) ?? 0) - 1;
-        if (stroke < 0 || stroke >= instanceCapacity || !instances.has(stroke)) {
-          throw new TypeError('Invalid joint mesh draw.');
+    // E25 U3: a layer's mesh draws are checked like the main pass's, against the layer's runs.
+    for (const { draws, analyticDraws: runs } of [
+      { draws: part.draws, analyticDraws },
+      ...layerDraws,
+    ]) {
+      let previousPosition = 0;
+      for (const draw of draws) {
+        if (
+          typeof draw !== 'object' ||
+          draw === null ||
+          !Number.isSafeInteger(draw.position) ||
+          draw.position < previousPosition ||
+          draw.position > runs ||
+          !Number.isSafeInteger(draw.instance) ||
+          draw.instance < 0 ||
+          draw.instance >= instanceCapacity ||
+          !instances.has(draw.instance) ||
+          !Number.isSafeInteger(draw.firstTriangle) ||
+          draw.firstTriangle < 0 ||
+          !Number.isSafeInteger(draw.triangleCount) ||
+          draw.triangleCount <= 0 ||
+          draw.firstTriangle + draw.triangleCount > triangleCapacity ||
+          (draw.composite !== undefined && draw.composite !== 'joint-fill')
+        ) {
+          throw new TypeError('Invalid mesh draw.');
         }
+        if (draw.composite === 'joint-fill') {
+          // ST-U7 addendum, section 4.5: word 15 - 1 of a joint fill record names the stroke
+          // record, which must be a written instance below capacity, as draw.instance is.
+          const stroke = (links.get(draw.instance) ?? 0) - 1;
+          if (stroke < 0 || stroke >= instanceCapacity || !instances.has(stroke)) {
+            throw new TypeError('Invalid joint mesh draw.');
+          }
+        }
+        previousPosition = draw.position;
       }
-      previousPosition = draw.position;
     }
     // P4 contract, U4: a mask level's mesh source draw is checked like a plain mesh draw.
     for (const draw of maskDraws) {
@@ -2263,7 +2975,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         throw new TypeError('Invalid mask source draw.');
       }
     }
-    if (part.draws.length + maskDraws.length > 0 && !frameInitialized) {
+    const layerDrawCount = layerDraws.reduce((sum, layer) => sum + layer.draws.length, 0);
+    if (part.draws.length + maskDraws.length + layerDrawCount > 0 && !frameInitialized) {
       throw new TypeError('Mesh frame data is uninitialized.');
     }
 
@@ -2816,6 +3529,10 @@ export function createNativePrimitiveSceneCreation(
     if (!isPositiveSafeInteger(generation)) {
       throw new RangeError('generation must be a positive safe integer.');
     }
+    const tileSize = options.layerTileSizeForTesting;
+    if (tileSize !== undefined && !(isPositiveSafeInteger(tileSize) && tileSize % 2 === 0)) {
+      throw new RangeError('layerTileSizeForTesting must be a positive even integer.');
+    }
     const bindGroupLayout = device.createBindGroupLayout(
       createPrimitiveBindGroupLayoutDescriptor(),
     );
@@ -3322,6 +4039,232 @@ export function createNativePrimitiveSceneCreation(
         paint = null;
       }
     }
+    // E25 contract, U3: the layer variants and the composite pipeline, created here like the
+    // paint variants and never on the frame path. A failure, or an adapter with fewer than 4
+    // bind groups, leaves them unavailable, and the content of isolated containers is then not
+    // drawn (fail closed; the U3 record's departure).
+    let layer: LayerPipelineState | null = null;
+    if (
+      options.layerPipeline === true &&
+      !disposed &&
+      safeLimit(device.limits.maxBindGroups, 0) >= LAYER_REQUIRED_BIND_GROUPS
+    ) {
+      const layerTracked: string[] = [];
+      const trackLayer = (id: string, descriptor: ResourceDescriptor) => {
+        track(id, descriptor);
+        layerTracked.push(id);
+      };
+      const analyticKey = primitivePipelineKey(format, sampleCount, stencil);
+      try {
+        const layerBindGroupLayout = device.createBindGroupLayout(
+          createLayerBindGroupLayoutDescriptor(),
+        );
+        trackLayer(`${prefix}/layer-bind-group-layout`, { category: 'bind-group-layout' });
+        const emptyLayout = device.createBindGroupLayout({
+          label: `${prefix}/layer-empty-bind-group-layout`,
+          entries: [],
+        });
+        trackLayer(`${prefix}/layer-empty-bind-group-layout`, { category: 'bind-group-layout' });
+        const emptyBindGroup = device.createBindGroup({
+          label: `${prefix}/layer-empty-bind-group`,
+          layout: emptyLayout,
+          entries: [],
+        });
+        const compositeBindGroupLayout = device.createBindGroupLayout(
+          createLayerCompositeBindGroupLayoutDescriptor(),
+        );
+        trackLayer(`${prefix}/layer-composite-bind-group-layout`, {
+          category: 'bind-group-layout',
+        });
+        const layout = (name: string, groups: GPUBindGroupLayout[]) => {
+          const created = device.createPipelineLayout({
+            label: `${prefix}/${name}`,
+            bindGroupLayouts: [...groups, layerBindGroupLayout],
+          });
+          trackLayer(`${prefix}/${name}`, { category: 'pipeline-layout' });
+          return created;
+        };
+        const module = (name: string, code: string) => {
+          const created = device.createShaderModule({ label: `${prefix}/${name}`, code });
+          trackLayer(`${prefix}/${name}`, { category: 'shader-module' });
+          return created;
+        };
+        const compositeModule = module('layer-composite-shader', LAYER_COMPOSITE_SHADER);
+        const compositeLayout = layout('layer-composite-pipeline-layout', [
+          compositeBindGroupLayout,
+          emptyLayout,
+          emptyLayout,
+        ]);
+        const composite = await pipelineCache.getOrCreate(
+          layerCompositePipelineKey(format, sampleCount, stencil),
+          () =>
+            device.createRenderPipelineAsync(
+              createLayerCompositePipelineDescriptor(
+                compositeModule,
+                compositeLayout,
+                format,
+                sampleCount,
+                stencil,
+              ),
+            ),
+        );
+        trackLayer(`${prefix}/layer-composite-pipeline`, { category: 'render-pipeline' });
+        const analyticVariant = async (
+          kind: 'clip' | 'paint' | 'paint-clip',
+          code: string,
+          groups: GPUBindGroupLayout[],
+        ) => {
+          const shader = module(`layer-${kind}-shader`, code);
+          const pipelineLayout = layout(`layer-${kind}-pipeline-layout`, groups);
+          const created = await pipelineCache!.getOrCreate(
+            layerVariantBaseKey(analyticKey, kind),
+            () =>
+              device.createRenderPipelineAsync(
+                variantDescriptor(
+                  createPrimitivePipelineDescriptor(
+                    shader,
+                    pipelineLayout,
+                    format,
+                    sampleCount,
+                    stencil,
+                  ),
+                  `${kind === 'clip' ? '+clip-v0' : kind === 'paint' ? '+paint-v0' : '+paint-v0+clip-v0'}${LAYER_VARIANT_SUFFIX}`,
+                ),
+              ),
+          );
+          trackLayer(`${prefix}/layer-${kind}-pipeline`, { category: 'render-pipeline' });
+          return created;
+        };
+        const meshVariants = async (
+          kind: LayerVariantBase,
+          code: string,
+          groups: GPUBindGroupLayout[],
+        ) => {
+          const shader = module(`mesh-layer-${kind}-shader`, code);
+          const pipelineLayout = layout(`mesh-layer-${kind}-pipeline-layout`, groups);
+          const suffix = `${kind === 'plain' ? '' : kind === 'clip' ? '+clip-v0' : kind === 'paint' ? '+paint-v0' : '+paint-v0+clip-v0'}${LAYER_VARIANT_SUFFIX}`;
+          const variant = (meshKind: 'fill' | 'joint') =>
+            pipelineCache!.getOrCreate(
+              layerVariantBaseKey(meshPipelineKey(format, sampleCount, meshKind), kind),
+              () =>
+                device.createRenderPipelineAsync(
+                  variantDescriptor(
+                    createMeshPipelineDescriptor(
+                      shader,
+                      pipelineLayout,
+                      format,
+                      sampleCount,
+                      meshKind,
+                    ),
+                    suffix,
+                  ),
+                ),
+            );
+          const fill = await variant('fill');
+          trackLayer(`${prefix}/mesh-layer-${kind}-pipeline`, { category: 'render-pipeline' });
+          const joint = await variant('joint');
+          trackLayer(`${prefix}/mesh-joint-layer-${kind}-pipeline`, {
+            category: 'render-pipeline',
+          });
+          return [fill, joint] as const;
+        };
+        const analyticClip =
+          clip === null
+            ? null
+            : await analyticVariant('clip', PRIMITIVE_ANALYTIC_CLIP_LAYER_SHADER, [
+                bindGroupLayout,
+                clip.bindGroupLayout,
+                emptyLayout,
+              ]);
+        const analyticPaint =
+          paint === null
+            ? null
+            : await analyticVariant('paint', PRIMITIVE_ANALYTIC_PAINT_LAYER_SHADER, [
+                bindGroupLayout,
+                emptyLayout,
+                paint.bindGroupLayout,
+              ]);
+        const analyticPaintClip =
+          paint === null || clip === null || paint.analyticClip === null
+            ? null
+            : await analyticVariant('paint-clip', PRIMITIVE_ANALYTIC_PAINT_CLIP_LAYER_SHADER, [
+                bindGroupLayout,
+                clip.bindGroupLayout,
+                paint.bindGroupLayout,
+              ]);
+        const meshPlain =
+          mesh === null
+            ? null
+            : await meshVariants('plain', MESH_FILL_LAYER_SHADER, [
+                mesh.bindGroupLayout,
+                emptyLayout,
+                emptyLayout,
+              ]);
+        const meshClip =
+          mesh === null || clip?.mesh == null
+            ? null
+            : await meshVariants('clip', MESH_FILL_CLIP_LAYER_SHADER, [
+                mesh.bindGroupLayout,
+                clip.bindGroupLayout,
+                emptyLayout,
+              ]);
+        const meshPaint =
+          mesh === null || paint?.mesh == null
+            ? null
+            : await meshVariants('paint', MESH_FILL_PAINT_LAYER_SHADER, [
+                mesh.bindGroupLayout,
+                emptyLayout,
+                paint.bindGroupLayout,
+              ]);
+        const meshPaintClip =
+          mesh === null || paint?.meshClip == null || clip === null
+            ? null
+            : await meshVariants('paint-clip', MESH_FILL_PAINT_CLIP_LAYER_SHADER, [
+                mesh.bindGroupLayout,
+                clip.bindGroupLayout,
+                paint.bindGroupLayout,
+              ]);
+        layer = Object.freeze({
+          bindGroupLayout: layerBindGroupLayout,
+          compositeBindGroupLayout,
+          emptyBindGroup,
+          composite,
+          analyticClip,
+          analyticPaint,
+          analyticPaintClip,
+          mesh: meshPlain?.[0] ?? null,
+          meshJoint: meshPlain?.[1] ?? null,
+          meshClip: meshClip?.[0] ?? null,
+          meshJointClip: meshClip?.[1] ?? null,
+          meshPaint: meshPaint?.[0] ?? null,
+          meshJointPaint: meshPaint?.[1] ?? null,
+          meshPaintClip: meshPaintClip?.[0] ?? null,
+          meshJointPaintClip: meshPaintClip?.[1] ?? null,
+        });
+      } catch {
+        // The E22-K5 rule: no layer variant this attempt cached outlives the failure.
+        pipelineCache.evict(layerCompositePipelineKey(format, sampleCount, stencil));
+        for (const kind of ['clip', 'paint', 'paint-clip'] as const) {
+          pipelineCache.evict(layerVariantBaseKey(analyticKey, kind));
+        }
+        for (const kind of ['plain', 'clip', 'paint', 'paint-clip'] as const) {
+          for (const meshKind of ['fill', 'joint'] as const) {
+            pipelineCache.evict(
+              layerVariantBaseKey(meshPipelineKey(format, sampleCount, meshKind), kind),
+            );
+          }
+        }
+        for (const id of layerTracked) {
+          tracked.delete(id);
+          try {
+            resources.release(id);
+          } catch {
+            // Accounting cleanup is best effort.
+          }
+        }
+        layer = null;
+      }
+    }
     if (disposed || vertexBuffer === undefined || indexBuffer === undefined) {
       throw new Error('Primitive scene creation completed after disposal.');
     }
@@ -3345,6 +4288,8 @@ export function createNativePrimitiveSceneCreation(
       stencil,
       clip,
       paint,
+      layer,
+      options.layerTileSizeForTesting,
     );
     vertexBuffer = undefined;
     indexBuffer = undefined;

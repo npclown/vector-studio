@@ -212,6 +212,10 @@ export function createStrokeHarness(
     clips?: ClipSupport;
     /** E23 contract, U3: the mirror's paint support; default solid. */
     paints?: 'solid' | 'gradient';
+    /** E25 contract, U3: the mirror's container opacity support; default unsupported. */
+    groupOpacity?: 'supported' | 'unsupported';
+    /** E25 contract, U3: the source's test-only unit-opacity isolation. */
+    isolateUnitOpacityForTesting?: boolean;
   }>,
 ) {
   const mirror = new RetainedSceneMirror(undefined, {
@@ -222,6 +226,7 @@ export function createStrokeHarness(
     dashes: options.strokePort === undefined ? 'unsupported' : 'supported',
     ...(options.clips === undefined ? {} : { clips: options.clips }),
     ...(options.paints === undefined ? {} : { paints: options.paints }),
+    ...(options.groupOpacity === undefined ? {} : { groupOpacity: options.groupOpacity }),
   });
   const pipeline = new PathMeshPipeline({
     ...(options.fillPort === undefined ? {} : { port: options.fillPort }),
@@ -233,7 +238,11 @@ export function createStrokeHarness(
       ? {}
       : { strokeMemoryBytes: options.strokeMemoryBytes }),
   });
-  const source = new PrimitiveSceneSource(mirror, pipeline);
+  const source = new PrimitiveSceneSource(
+    mirror,
+    pipeline,
+    options.isolateUnitOpacityForTesting === true ? { isolateUnitOpacityForTesting: true } : {},
+  );
   let served: readonly PathMeshDraw[] = [];
   const pipelinePrepare = pipeline.prepare.bind(pipeline);
   pipeline.prepare = (input) => {
