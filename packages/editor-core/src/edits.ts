@@ -53,6 +53,7 @@ import {
 import { mapNodeInPageSpace, resizeContainer, type ScaleMap } from './resize.js';
 import { boundsOf } from './hit-test.js';
 import { detachInstances, orphanedInstances, withDetach } from './symbols.js';
+import { visualBounds } from './visual-bounds.js';
 import { handleBoxOf, handleCentre } from './handles.js';
 import {
   ancestors,
@@ -833,13 +834,15 @@ function buildGroup(
   const siblings = childrenOf(documentTree(document), owner);
   const members = siblings.filter((child) => ids.includes(child));
   const nodes = members.map((member) => document.nodes[member]!);
-  // The new container's frame is the bounds of their rotated frames, rotation 0.
+  // The new container's frame is the bounds of their rotated frames, rotation 0; a source,
+  // which clips its content, takes their visual bounds instead, strokes and arrowheads included
+  // (M7 contract, section 5.1, from the M7-U6 hands-on check).
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
   for (const node of nodes) {
-    const b = rotatedBounds(node);
+    const b = kind === 'symbol' ? visualBounds(document, node) : rotatedBounds(node);
     minX = Math.min(minX, b.x);
     minY = Math.min(minY, b.y);
     maxX = Math.max(maxX, b.x + b.width);
