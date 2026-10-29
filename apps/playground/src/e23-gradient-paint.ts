@@ -69,6 +69,8 @@ export type E23Counters = Readonly<{
   clipStateWrites: number;
   pathMesh: PathMeshStatistics | null;
   overlayBuilds: number;
+  /** E24 U3: dash expansions of the path-mesh pipeline (E24-A04). */
+  dashExpansions: number;
   preparation: ReturnType<PrimitiveRendererService['getPreparationStatistics']>;
 }>;
 
@@ -211,6 +213,7 @@ function counters(): E23Counters {
     clipStateWrites: service!.getClipStateWritesForTesting(),
     pathMesh: service!.getPathMeshStatistics(),
     overlayBuilds: service!.getOverlayBuildCountForTesting(),
+    dashExpansions: service!.getDashExpansionCountForTesting(),
     preparation: service!.getPreparationStatistics(),
   };
 }

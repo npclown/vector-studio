@@ -647,6 +647,11 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     return this.#pathMeshes?.getOverlayBuildCount() ?? 0;
   }
 
+  /** @internal Tests only (E24-A04): dash expansions of the path-mesh pipeline so far. */
+  public getDashExpansionCountForTesting(): number {
+    return this.#pathMeshes?.getDashExpansionCount() ?? 0;
+  }
+
   public acknowledge(receipt: PrimitiveReceipt): void {
     const pending = this.#pending;
     if (pending === null || !receiptMatchesPacket(receipt, pending.packet)) return;
