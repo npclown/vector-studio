@@ -1,4 +1,4 @@
-import { serializeDocument, type DocumentV2, type Frame, type NodeV2 } from '@vector-studio/model';
+import { serializeDocument, type DocumentV3, type Frame, type NodeV3 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_FRAME_FILL,
@@ -253,12 +253,12 @@ const childrenOf = (target: Editor, owner: string): readonly string[] => {
 };
 
 /** A copy of `node` with ID `id` and, optionally, other fields replaced. */
-function copyOf(node: NodeV2, id: string, changes: Partial<Record<string, unknown>> = {}) {
+function copyOf(node: NodeV3, id: string, changes: Partial<Record<string, unknown>> = {}) {
   return { ...node, id, ...changes };
 }
 
 /** A node's frame and rotation in page space, as `copy` converts a root. */
-function pagePlacement(document: DocumentV2, id: string) {
+function pagePlacement(document: DocumentV3, id: string) {
   const node = document.nodes[id]!;
   const tree = documentTree(document);
   if (tree.page(node.parent) !== undefined) return { frame: node.frame, rotation: node.rotation };
@@ -268,7 +268,7 @@ function pagePlacement(document: DocumentV2, id: string) {
 
 /** A page placement mapped into the space of container `owner`, as `paste` maps a root. */
 function placedIn(
-  document: DocumentV2,
+  document: DocumentV3,
   owner: string,
   placement: Readonly<{ frame: Frame; rotation: number }>,
 ) {
@@ -277,7 +277,7 @@ function placedIn(
 }
 
 /** The page corners of a node's rotated frame. */
-function pageCorners(document: DocumentV2, id: string): PagePoint[] {
+function pageCorners(document: DocumentV3, id: string): PagePoint[] {
   const node = document.nodes[id]!;
   const { matrix } = spaceOf(documentTree(document), node.parent);
   const local = localTransform(node.frame, node.rotation);
@@ -329,7 +329,7 @@ const BYTES = doc(
 /** The fragment of `k`, `a` and `z` of BYTES, written out by hand. */
 const BYTES_FRAGMENT =
   MARKER +
-  '{"fragmentVersion":1,"schemaVersion":2,"roots":["z","a","k"],"nodes":{' +
+  '{"fragmentVersion":1,"schemaVersion":3,"roots":["z","a","k"],"nodes":{' +
   '"a":{"id":"a","name":"a","parent":"","frame":{"x":105,"y":55,"width":10,"height":10},' +
   `"rotation":0,${TAIL},"type":"rectangle","cornerRadii":[0,0,0,0],"fill":${BLACK},` +
   '"stroke":null},' +
@@ -368,7 +368,7 @@ describe('M2-A10 copy', () => {
     ok(target, { type: 'copy', ids: ['fc', 'gb'] });
     const body = JSON.parse(clipboard(target)!.slice(MARKER.length)) as {
       roots: string[];
-      nodes: Record<string, NodeV2>;
+      nodes: Record<string, NodeV3>;
     };
     // gb (inside g) paints before fc (inside fr).
     expect(body.roots).toEqual(['gb', 'fc']);
@@ -719,7 +719,7 @@ describe('M2-A10 paste failures', () => {
     ],
     [
       'a document text',
-      { type: 'paste', text: serializeDocument(FIXTURE as unknown as DocumentV2) },
+      { type: 'paste', text: serializeDocument(FIXTURE as unknown as DocumentV3) },
       { ok: false, code: 'editor.unsupported-clipboard' },
     ],
     [
@@ -833,23 +833,23 @@ describe('M2-A10 paste failures', () => {
     ],
     // Two failures at once: the first in the parse order wins.
     [
-      'schemaVersion 3 with no roots: the roots shape first',
-      { type: 'paste', text: marked({ ...body({ a: leaf('a') }, []), schemaVersion: 3 }) },
+      'schemaVersion 4 with no roots: the roots shape first',
+      { type: 'paste', text: marked({ ...body({ a: leaf('a') }, []), schemaVersion: 4 }) },
       { ok: false, code: 'editor.invalid-clipboard', path: '/roots' },
     ],
     [
-      'schemaVersion 3 with a root that is not a node: the roots first',
-      { type: 'paste', text: marked({ ...body({ a: leaf('a') }, ['b']), schemaVersion: 3 }) },
+      'schemaVersion 4 with a root that is not a node: the roots first',
+      { type: 'paste', text: marked({ ...body({ a: leaf('a') }, ['b']), schemaVersion: 4 }) },
       { ok: false, code: 'editor.invalid-clipboard', path: '/roots/0' },
     ],
     [
-      'schemaVersion 3 with a repeated root: the roots first',
-      { type: 'paste', text: marked({ ...body({ a: leaf('a') }, ['a', 'a']), schemaVersion: 3 }) },
+      'schemaVersion 4 with a repeated root: the roots first',
+      { type: 'paste', text: marked({ ...body({ a: leaf('a') }, ['a', 'a']), schemaVersion: 4 }) },
       { ok: false, code: 'editor.invalid-clipboard', path: '/roots/1' },
     ],
     [
-      'schemaVersion 3 with valid roots: the version',
-      { type: 'paste', text: marked({ ...body({ a: leaf('a') }), schemaVersion: 3 }) },
+      'schemaVersion 4 with valid roots: the version',
+      { type: 'paste', text: marked({ ...body({ a: leaf('a') }), schemaVersion: 4 }) },
       { ok: false, code: 'document.unsupported-version', path: '/schemaVersion' },
     ],
     [
@@ -1049,7 +1049,7 @@ describe('M2-A10 copy and cut details', () => {
     ok(target, { type: 'copy', ids: ['rc'] });
     expect(clipboard(target)).toBe(
       MARKER +
-        '{"fragmentVersion":1,"schemaVersion":2,"roots":["rc"],"nodes":{' +
+        '{"fragmentVersion":1,"schemaVersion":3,"roots":["rc"],"nodes":{' +
         '"rc":{"id":"rc","name":"rc","parent":"","frame":{"x":40,"y":40,"width":20,"height":20},' +
         `"rotation":0.75,${TAIL},"type":"custom","customType":"ext.tally",` +
         '"data":{"alpha":{"a":1,"b":2},"level":1,"zeta":1},"fill":null,"stroke":null}}}',
@@ -1069,7 +1069,7 @@ describe('M2-A10 copy and cut details', () => {
   }
 
   const frameIn = (fragment: string | null, id: string) =>
-    (JSON.parse(fragment!.slice(MARKER.length)) as { nodes: Record<string, NodeV2> }).nodes[id]!
+    (JSON.parse(fragment!.slice(MARKER.length)) as { nodes: Record<string, NodeV3> }).nodes[id]!
       .frame;
 
   it('copy during a move drag copies the live position and leaves the drag running', () => {

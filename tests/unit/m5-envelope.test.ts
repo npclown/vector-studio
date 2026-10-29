@@ -12,7 +12,7 @@ import {
   scanJson,
   serializeDocument,
   serializeEnvelope,
-  type DocumentV2,
+  type DocumentV3,
   type EnvelopeResult,
   type PersistenceEnvelope,
 } from '@vector-studio/model';
@@ -23,12 +23,17 @@ import { boundaries } from '../../tooling/boundary-policy.mjs';
 // MVP M5-U1 (M5 contract, section 2): the persistence envelope, its text form and codes, and the
 // `scanJson` `maxDepth` option (M5-A01 to M5-A03). The committed envelope fixtures under
 // tests/fixtures/m5-persistence were built from the committed M1 v2 fixtures (three header lines,
-// then the document text indented by two spaces), not by `serializeEnvelope`.
+// then the document text indented by two spaces), not by `serializeEnvelope`. Since M7-U1 the
+// model returns and writes schema v3, so they read as their committed v3 migrations under
+// tests/fixtures/m7-symbols/migrated, which differ from them in the document's version only (M7
+// contract, section 2.1).
 
 const root = path.resolve(import.meta.dirname, '../..');
 const m5 = path.join(root, 'tests/fixtures/m5-persistence');
 const m1 = path.join(root, 'tests/fixtures/m1-model');
 const p5 = path.join(root, 'tests/fixtures/p5-model');
+const m7 = path.join(root, 'tests/fixtures/m7-symbols/migrated');
+const v3Name = (name: string) => `${name.replace(/\.v2$/, '')}.v3`;
 
 /** Each committed envelope fixture, its M1 v2 document fixture and its last open page. */
 const ENVELOPES = [
@@ -43,7 +48,7 @@ function read(dir: string, name: string): Promise<string> {
   return readFile(path.join(dir, `${name}.json`), 'utf8');
 }
 
-function parsedDocument(text: string): DocumentV2 {
+function parsedDocument(text: string): DocumentV3 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -109,9 +114,11 @@ describe('M5-A01 envelope text and round trip', () => {
     'serializes the %s envelope byte for byte to its committed fixture',
     async (name, documentName, page) => {
       const text = await read(m5, `${name}.envelope`);
-      const document = parsedDocument(await read(m1, documentName));
-      expect(serializeEnvelope({ document, lastOpenPageId: page })).toBe(text);
-      expect(serializeEnvelope(parsed(text))).toBe(text);
+      const v3 = await read(m7, `${name}.envelope.v3`);
+      const document = parsedDocument(await read(m7, v3Name(documentName)));
+      expect(serializeEnvelope({ document, lastOpenPageId: page })).toBe(v3);
+      expect(serializeEnvelope(parsed(text))).toBe(v3);
+      expect(serializeEnvelope(parsed(v3))).toBe(v3);
     },
   );
 
@@ -122,7 +129,7 @@ describe('M5-A01 envelope text and round trip', () => {
     });
     expect(
       text.startsWith(
-        '{\n  "envelopeVersion": 1,\n  "lastOpenPageId": "page-1",\n  "document": {\n    "schemaVersion": 2,\n',
+        '{\n  "envelopeVersion": 1,\n  "lastOpenPageId": "page-1",\n  "document": {\n    "schemaVersion": 3,\n',
       ),
     ).toBe(true);
     expect(Object.keys(JSON.parse(text) as object)).toEqual([
@@ -136,8 +143,8 @@ describe('M5-A01 envelope text and round trip', () => {
   it.each(ENVELOPES.map(([, documentName]) => documentName))(
     'round-trips the M1 fixture %s with each page as lastOpenPageId',
     async (documentName) => {
-      const documentText = await read(m1, documentName);
-      const document = parsedDocument(documentText);
+      const documentText = await read(m7, v3Name(documentName));
+      const document = parsedDocument(await read(m1, documentName));
       expect(document.pages.length).toBeGreaterThan(0);
       for (const page of document.pages) {
         const envelope = { document, lastOpenPageId: page.id };
@@ -154,16 +161,16 @@ describe('M5-A01 envelope text and round trip', () => {
   });
 
   it.each(V1)(
-    'migrates the v1 document inside the %s envelope to the committed v2 text',
+    'migrates the v1 document inside the %s envelope to the committed v3 text',
     async (name) => {
       const v1 = await read(path.join(m5, 'v1'), `${name}.envelope`);
       expect(
         (JSON.parse(v1) as { document: { schemaVersion: number } }).document.schemaVersion,
       ).toBe(1);
       const envelope = parsed(v1);
-      expect(envelope.document.schemaVersion).toBe(2);
-      expect(serializeEnvelope(envelope)).toBe(await read(m5, `${name}.envelope`));
-      expect(serializeDocument(envelope.document)).toBe(await read(m1, `${name}.v2`));
+      expect(envelope.document.schemaVersion).toBe(3);
+      expect(serializeEnvelope(envelope)).toBe(await read(m7, `${name}.envelope.v3`));
+      expect(serializeDocument(envelope.document)).toBe(await read(m7, `${name}.v3`));
     },
   );
 
@@ -432,7 +439,8 @@ describe('M5-A03 model stays unchanged and import-free', () => {
     'm1-model/malformed/nul-id.json':
       'e6dc522209f7a492e37072be17090bb2431bf86909ce24445522b28b1e2431d4',
     'm1-model/malformed/unsupported-version.json':
-      '640eba4ea610b814bf2abb42ca794cff07e0e49c6ac306ba5baaf126bef7c99f',
+      // Moved from schemaVersion 3 to 4 by M7-U1 (M7 contract, section 2.1).
+      'cd862fa875b1f89fb4fb4af8845ab7d46a6e655789c80216958405c6f57cc493',
     'm1-model/shapes.v2.json': '7d03fa27cb8ce892150eea79aba402a596a9dfd0f26a8115efc9c5fd90226948',
     'p5-model/empty.json': '5935aafb5604fd7847dfe5c1a6e843f021aaa523bfb26ff50fdf3c4d13b5dc7f',
     'p5-model/ext-star.json': '942ad8c439902aaf1c30bce6b0e8cf0690eeff2613c899372ab250a9f43b9246',
@@ -449,7 +457,8 @@ describe('M5-A03 model stays unchanged and import-free', () => {
     'p5-model/malformed/malformed-json.json':
       '9677e620c8f60b085efd1cab642a751c49565d8d86fb8fa99f662f5efd158ee9',
     'p5-model/malformed/unsupported-version.json':
-      'd11e52f6a96abc000c7cd1b03c9a9cfb5456abec29893f11065b2b808b4b59a6',
+      // Moved from schemaVersion 3 to 4 by M7-U1 (M7 contract, section 2.1).
+      '0965e93a0d66c5e9b69d2e1d363f15887823efab7464b267b16d855cd83154b8',
     'p5-model/shapes.json': '82f2172b30188618e5e925cba612bc72ac439eeed189bdd0eae2eba63a9f0474',
   };
 
@@ -478,11 +487,11 @@ describe('M5-A03 model stays unchanged and import-free', () => {
   it('keeps parseDocument and serializeDocument on the M1 fixtures', async () => {
     for (const name of ['empty.v2', 'shapes.v2', 'ext-star.v2', 'containers']) {
       const text = await read(m1, name);
-      expect(serializeDocument(parsedDocument(text))).toBe(text);
+      expect(serializeDocument(parsedDocument(text))).toBe(await read(m7, v3Name(name)));
     }
     for (const name of V1) {
       expect(serializeDocument(parsedDocument(await read(p5, name)))).toBe(
-        await read(m1, `${name}.v2`),
+        await read(m7, `${name}.v3`),
       );
     }
     // parseDocument still scans at MAX_DEPTH, not MAX_DEPTH + 1, and does not accept an envelope.

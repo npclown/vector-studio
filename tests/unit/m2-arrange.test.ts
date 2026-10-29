@@ -1,4 +1,4 @@
-import { serializeDocument, type DocumentV2, type Frame } from '@vector-studio/model';
+import { serializeDocument, type DocumentV3, type Frame } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_FRAME_FILL,
@@ -170,7 +170,7 @@ function events(target: Editor): EditorEvent[] {
 }
 
 /** The node's frame moved by the page vector `(dx, dy)` turned into its parent space. */
-function translated(document: DocumentV2, id: string, dx: number, dy: number): Frame {
+function translated(document: DocumentV3, id: string, dx: number, dy: number): Frame {
   const node = document.nodes[id]!;
   const chain = spaceOf(documentTree(document), node.parent).rotation;
   if (chain === 0) return { ...node.frame, x: node.frame.x + dx, y: node.frame.y + dy };
@@ -184,7 +184,7 @@ function translated(document: DocumentV2, id: string, dx: number, dy: number): F
 }
 
 /** The expected document: each node set to its frame, then the M1 group refit. */
-function expectedText(document: DocumentV2, frames: ReadonlyMap<string, Frame>): string {
+function expectedText(document: DocumentV3, frames: ReadonlyMap<string, Frame>): string {
   const draft = new Draft(document);
   for (const [id, frame] of frames) draft.set({ ...document.nodes[id]!, frame });
   const result = draft.finish(() => null);
@@ -202,14 +202,14 @@ function expectOneStep(target: Editor, before: string, after: string) {
   expect(text(target)).toBe(after);
 }
 
-const isPageRoot = (document: DocumentV2, id: string) =>
+const isPageRoot = (document: DocumentV3, id: string) =>
   document.pages.some((page) => page.children.includes(id));
 
 /**
  * The section 4.3 align frames: a page-root node with rotation 0 sets `x` or `y` exactly; any
  * other node moves by its box's value minus the target's, as a page translation.
  */
-function alignFrames(document: DocumentV2, ids: readonly string[], edge: Edge, target: Frame) {
+function alignFrames(document: DocumentV3, ids: readonly string[], edge: Edge, target: Frame) {
   const horizontal = edge === 'left' || edge === 'hcenter' || edge === 'right';
   const at =
     edge === 'left' || edge === 'top' ? 0 : edge === 'hcenter' || edge === 'vcenter' ? 0.5 : 1;
@@ -235,7 +235,7 @@ function alignFrames(document: DocumentV2, ids: readonly string[], edge: Edge, t
 }
 
 /** The page-space centre of a node's rotated frame. */
-function pageCentre(document: DocumentV2, id: string) {
+function pageCentre(document: DocumentV3, id: string) {
   const node = document.nodes[id]!;
   const { matrix } = spaceOf(documentTree(document), node.parent);
   const { x, y, width, height } = node.frame;
@@ -376,7 +376,7 @@ describe('M2-A05 align', () => {
 });
 
 /** The section 4.3 distribute frames, from the sorted boxes. */
-function distributeFrames(document: DocumentV2, ids: readonly string[], horizontal: boolean) {
+function distributeFrames(document: DocumentV3, ids: readonly string[], horizontal: boolean) {
   const order = document.pages[0]!.children.flatMap(function walk(id): string[] {
     const node = document.nodes[id] as { children?: readonly string[] };
     return [id, ...(node.children ?? []).flatMap(walk)];

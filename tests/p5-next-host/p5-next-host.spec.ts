@@ -5,7 +5,7 @@ import {
   type Editor,
   type EditorEvent,
 } from '@vector-studio/editor-core';
-import type { DocumentV2 } from '@vector-studio/model';
+import type { DocumentV3 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
 import { RecordingRenderer } from '../support/p5-recording-renderer.js';
 
@@ -51,11 +51,11 @@ const SCRIPT: readonly Command[] = [
   { type: 'setViewport', camera: { position: { x: -20, y: -10 }, zoom: 1.25 } },
 ];
 
-async function readDocument(page: Page): Promise<DocumentV2> {
+async function readDocument(page: Page): Promise<DocumentV3> {
   const text = await page.evaluate(() =>
     JSON.stringify(window.__p5Host!.editor.query({ type: 'document' })),
   );
-  return JSON.parse(text) as DocumentV2;
+  return JSON.parse(text) as DocumentV3;
 }
 
 async function open(page: Page) {

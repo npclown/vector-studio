@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 3,
+  "id": "d",
+  "pages": [
+    {
+      "id": "p",
+      "name": "P",
+      "children": [
+        "s",
+        "i"
+      ]
+    }
+  ],
+  "nodes": {
+    "s": {
+      "id": "s",
+      "name": "s",
+      "parent": "p",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 10,
+        "height": 10
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "symbol",
+      "children": [],
+      "fill": null,
+      "stroke": null
+    },
+    "i": {
+      "id": "i",
+      "name": "i",
+      "parent": "p",
+      "frame": {
+        "x": 20,
+        "y": 0,
+        "width": 10,
+        "height": 10
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "instance",
+      "symbol": "nope"
+    }
+  }
+}

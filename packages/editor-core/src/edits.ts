@@ -2,9 +2,9 @@ import {
   MAX_TREE_DEPTH,
   normalizeRotation,
   validateNode,
-  type DocumentV2,
+  type DocumentV3,
   type Frame,
-  type NodeV2,
+  type NodeV3,
   type PageV2,
 } from '@vector-studio/model';
 import {
@@ -53,6 +53,7 @@ import {
   ancestors,
   childrenOf,
   clipDepth,
+  clipsChildren,
   documentTree,
   isAncestor,
   isContainer,
@@ -100,7 +101,7 @@ const MAX_CLIP_DEPTH = 32;
 
 /** The props each node type has (section 4.2); any other prop is `editor.invalid-command`. */
 const COMMON_PROPS = ['name', 'opacity', 'visible', 'constraints'];
-const PROPS: Readonly<Record<NodeV2['type'], readonly string[]>> = {
+const PROPS: Readonly<Record<NodeV3['type'], readonly string[]>> = {
   rectangle: [...COMMON_PROPS, 'fill', 'stroke', 'cornerRadii'],
   ellipse: [...COMMON_PROPS, 'fill', 'stroke'],
   line: [...COMMON_PROPS, 'stroke', 'startArrow', 'endArrow'],
@@ -109,7 +110,30 @@ const PROPS: Readonly<Record<NodeV2['type'], readonly string[]>> = {
   group: COMMON_PROPS,
   maskGroup: COMMON_PROPS,
   frame: [...COMMON_PROPS, 'fill', 'stroke'],
+  // M7 contract: a symbol has a frame's props (section 1.2), an instance only the common ones
+  // (section 5.1). Their commands and tests come with M7-U4.
+  symbol: [...COMMON_PROPS, 'fill', 'stroke'],
+  instance: COMMON_PROPS,
 };
+
+/**
+ * Whether removing `removed` would leave an instance outside it naming a symbol inside it. Interim
+ * until M7-U4 adds the source deletion rule (M7 contract, section 5.4): until then `deleteNodes`,
+ * `cut` and `removePage` fail with `editor.invalid-command` and change nothing.
+ */
+function strandsInstances(document: DocumentV3, removed: ReadonlySet<string>): boolean {
+  return Object.values(document.nodes).some(
+    (node) => node.type === 'instance' && !removed.has(node.id) && removed.has(node.symbol),
+  );
+}
+
+/** Whether the subtree of `id` holds a `symbol` or an `instance`. */
+function holdsSymbolNode(tree: TreeView, id: string): boolean {
+  return subtree(tree, id).some((entry) => {
+    const type = tree.node(entry)?.type;
+    return type === 'symbol' || type === 'instance';
+  });
+}
 
 function isIndex(value: unknown, max: number): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= max;
@@ -119,14 +143,14 @@ function isIndex(value: unknown, max: number): value is number {
 function childClipDepth(tree: TreeView, owner: string): number {
   const node = tree.node(owner);
   if (!isContainer(node)) return 0;
-  return clipDepth(tree, owner) + (node.type === 'frame' || node.type === 'maskGroup' ? 1 : 0);
+  return clipDepth(tree, owner) + (clipsChildren(node) ? 1 : 0);
 }
 
 /**
  * Restores the descendants of container `id` to their state in `base` when its subtree there has
  * the same members, and returns the container's frame in `base`; null leaves the draft as is.
  */
-function restoreSubtree(draft: Draft, base: DocumentV2, id: string): Frame | null {
+function restoreSubtree(draft: Draft, base: DocumentV3, id: string): Frame | null {
   const baseTree = documentTree(base);
   const origin = baseTree.node(id);
   if (origin === undefined) return null;
@@ -143,7 +167,7 @@ function restoreSubtree(draft: Draft, base: DocumentV2, id: string): Frame | nul
 }
 
 export function applyEdit(
-  document: DocumentV2,
+  document: DocumentV3,
   command: DocumentCommand,
   context: EditContext,
 ): EditResult {
@@ -175,7 +199,7 @@ export function applyEdit(
         // A container and its descendant in one call (section 4.2).
         return fail('editor.invalid-command', '/frames');
       }
-      const next: NodeV2[] = [];
+      const next: NodeV3[] = [];
       for (const entry of entries) {
         const node = document.nodes[entry.id]!;
         const rotation = entry.rotation === undefined ? node.rotation : entry.rotation;
@@ -226,6 +250,8 @@ export function applyEdit(
       const listed = new Set(ids);
       // A listed descendant of a listed node goes with its ancestor.
       const roots = ids.filter((id) => !ancestors(tree, id).some((node) => listed.has(node.id)));
+      const removed = new Set(roots.flatMap((id) => subtree(tree, id)));
+      if (strandsInstances(document, removed)) return fail('editor.invalid-command', '/ids');
       const draft = new Draft(document);
       for (const id of roots) {
         const owner = document.nodes[id]!.parent;
@@ -315,8 +341,10 @@ export function applyEdit(
       if (page === undefined) return fail('editor.unknown-page');
       if (document.pages.length === 1) return fail('editor.last-page');
       const tree = documentTree(document);
+      const removed = new Set(page.children.flatMap((child) => subtree(tree, child)));
+      if (strandsInstances(document, removed)) return fail('editor.invalid-command', '/id');
       const draft = new Draft(document);
-      for (const child of page.children) for (const id of subtree(tree, child)) draft.remove(id);
+      for (const id of removed) draft.remove(id);
       draft.setPages(document.pages.filter((entry) => entry !== page));
       return success(finish(draft), draft, []);
     }
@@ -352,8 +380,8 @@ export function applyEdit(
  * between the gesture's `base` and `current` refit, innermost first.
  */
 export function refitGesture(
-  base: DocumentV2,
-  current: DocumentV2,
+  base: DocumentV3,
+  current: DocumentV3,
   touched: Iterable<string>,
   custom: CustomRules = NO_CUSTOM,
 ): EditResult {
@@ -379,8 +407,8 @@ export type GestureEdit =
  * `base`. Groups do not refit (that happens at commit, section 4.2).
  */
 export function applyGestureEdit(
-  document: DocumentV2,
-  base: DocumentV2,
+  document: DocumentV3,
+  base: DocumentV3,
   edit: GestureEdit,
   custom: CustomRules = NO_CUSTOM,
 ): EditResult {
@@ -441,11 +469,11 @@ type CreateCommand = Extract<
  * last check here.
  */
 function create(
-  document: DocumentV2,
+  document: DocumentV3,
   command: CreateCommand,
   context: EditContext,
   custom: CustomRules,
-  finish: (draft: Draft) => DocumentV2 | Failure,
+  finish: (draft: Draft) => DocumentV3 | Failure,
 ): EditResult {
   if (command.parent !== undefined && typeof command.parent !== 'string') {
     return fail('editor.invalid-command', '/parent');
@@ -597,7 +625,7 @@ function create(
   if (id === null) return fail('editor.duplicate-id');
 
   // Into the parent's local space; on a page nothing changes.
-  let placed: NodeV2 = { ...result.node, id, parent };
+  let placed: NodeV3 = { ...result.node, id, parent };
   if (!onPage) {
     const space = spaceOf(tree, parent);
     const local = normalizeRotation(result.node.rotation - space.rotation);
@@ -637,10 +665,10 @@ function create(
 
 /** `groupNodes` (section 4.3). */
 function group(
-  document: DocumentV2,
+  document: DocumentV3,
   command: Extract<DocumentCommand, { type: 'groupNodes' }>,
   context: EditContext,
-  finish: (draft: Draft) => DocumentV2 | Failure,
+  finish: (draft: Draft) => DocumentV3 | Failure,
 ): EditResult {
   const ids = uniqueIds(command.ids);
   if (ids === null) return fail('editor.invalid-command', '/ids');
@@ -670,7 +698,7 @@ function relativeToNew(failure: Failure, prefix: string): Failure {
 }
 
 /** An ID that no page or node of `document` has, for checks that run before the ID is drawn. */
-function placeholderId(document: DocumentV2): string {
+function placeholderId(document: DocumentV3): string {
   let id = PENDING_ID;
   for (
     let n = 1;
@@ -683,12 +711,12 @@ function placeholderId(document: DocumentV2): string {
 }
 
 function buildGroup(
-  document: DocumentV2,
+  document: DocumentV3,
   kind: 'group' | 'maskGroup',
   ids: readonly string[],
   owner: string,
   id: string,
-  finish: (draft: Draft) => DocumentV2 | Failure,
+  finish: (draft: Draft) => DocumentV3 | Failure,
 ): EditResult {
   const siblings = childrenOf(documentTree(document), owner);
   const members = siblings.filter((child) => ids.includes(child));
@@ -705,7 +733,7 @@ function buildGroup(
     maxX = Math.max(maxX, b.x + b.width);
     maxY = Math.max(maxY, b.y + b.height);
   }
-  const container: NodeV2 = {
+  const container: NodeV3 = {
     id,
     name: kind === 'group' ? 'Group' : 'Mask group',
     parent: owner,
@@ -743,9 +771,9 @@ function buildGroup(
 
 /** `moveNodes` (section 4.3): reparenting within one page, keeping page placement. */
 function move(
-  document: DocumentV2,
+  document: DocumentV3,
   command: Extract<DocumentCommand, { type: 'moveNodes' }>,
-  finish: (draft: Draft) => DocumentV2 | Failure,
+  finish: (draft: Draft) => DocumentV3 | Failure,
 ): EditResult {
   const ids = uniqueIds(command.ids);
   if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');
@@ -766,6 +794,13 @@ function move(
       (id) => id === target || isAncestor(tree, id, target) || pageOf(tree, id) !== targetPage,
     )
   ) {
+    return fail('editor.invalid-parent', '/parent');
+  }
+  // Interim until M7-U4's `editor.nested-symbol` (M7 contract, section 5.3): no symbol or instance
+  // moves into a symbol (M7-S3).
+  const intoSymbol =
+    targetNode?.type === 'symbol' || ancestors(tree, target).some((node) => node.type === 'symbol');
+  if (intoSymbol && roots.some((id) => holdsSymbolNode(tree, id))) {
     return fail('editor.invalid-parent', '/parent');
   }
   // The moved nodes keep their document pre-order.
@@ -819,10 +854,10 @@ function move(
  * itself with nothing touched, which the editor records as no step.
  */
 function rotateNodes(
-  document: DocumentV2,
+  document: DocumentV3,
   command: Extract<DocumentCommand, { type: 'rotateNodes' }>,
   context: EditContext,
-  finish: (draft: Draft) => DocumentV2 | Failure,
+  finish: (draft: Draft) => DocumentV3 | Failure,
 ): EditResult {
   const ids = uniqueIds(command.ids);
   if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');

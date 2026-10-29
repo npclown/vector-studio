@@ -1,4 +1,4 @@
-import { normalizeRotation, type Constraint, type Frame, type NodeV2 } from '@vector-studio/model';
+import { normalizeRotation, type Constraint, type Frame, type NodeV3 } from '@vector-studio/model';
 import {
   apply,
   boundsOfPoints,
@@ -17,7 +17,7 @@ import type { PagePoint } from './types.js';
 
 /** A tree whose nodes can be replaced, such as the edit draft. */
 export interface WritableTree extends TreeView {
-  set(node: NodeV2): void;
+  set(node: NodeV3): void;
 }
 
 /**
@@ -122,7 +122,7 @@ function isAligned(theta: number): boolean {
 }
 
 /** The points of a path or line in its parent's space, interleaved. */
-function parentPoints(node: Extract<NodeV2, { type: 'path' | 'line' }>): number[] {
+function parentPoints(node: Extract<NodeV3, { type: 'path' | 'line' }>): number[] {
   const unit = node.type === 'path' ? node.path.points : node.points;
   const m = localTransform(node.frame, node.rotation);
   const out: number[] = [];

@@ -1,9 +1,9 @@
 import {
   MAX_TREE_DEPTH,
-  type ContainerNode,
-  type DocumentV2,
+  type ContainerNodeV3,
+  type DocumentV3,
   type GroupNode,
-  type NodeV2,
+  type NodeV3,
   type PageV2,
 } from '@vector-studio/model';
 import { IDENTITY, localTransform, multiply, type Matrix } from './geometry.js';
@@ -13,32 +13,39 @@ import { IDENTITY, localTransform, multiply, type Matrix } from './geometry.js';
 
 /** Read access to a document tree, shared by documents and the edit draft. */
 export interface TreeView {
-  node(id: string): NodeV2 | undefined;
+  node(id: string): NodeV3 | undefined;
   page(id: string): PageV2 | undefined;
 }
 
-export function documentTree(document: DocumentV2): TreeView {
+export function documentTree(document: DocumentV3): TreeView {
   return {
     node: (id) => (Object.hasOwn(document.nodes, id) ? document.nodes[id] : undefined),
     page: (id) => document.pages.find((page) => page.id === id),
   };
 }
 
-export function isContainer(node: NodeV2 | undefined): node is ContainerNode {
+/**
+ * A node with children: a group, mask group, frame or symbol. A symbol is a container as a frame
+ * is (M7 contract, section 1.2); its frame rules (clip, constraints, projection) come with M7-U2.
+ */
+export function isContainer(node: NodeV3 | undefined): node is ContainerNodeV3 {
   return (
     node !== undefined &&
-    (node.type === 'group' || node.type === 'maskGroup' || node.type === 'frame')
+    (node.type === 'group' ||
+      node.type === 'maskGroup' ||
+      node.type === 'frame' ||
+      node.type === 'symbol')
   );
 }
 
 /** A `group` or `maskGroup`: the containers that refit to their children. */
-export function isGroup(node: NodeV2 | undefined): node is GroupNode {
+export function isGroup(node: NodeV3 | undefined): node is GroupNode {
   return node !== undefined && (node.type === 'group' || node.type === 'maskGroup');
 }
 
 /** Container ancestors of `id`, innermost first. */
-export function ancestors(tree: TreeView, id: string): ContainerNode[] {
-  const chain: ContainerNode[] = [];
+export function ancestors(tree: TreeView, id: string): ContainerNodeV3[] {
+  const chain: ContainerNodeV3[] = [];
   let parent = tree.node(id)?.parent;
   for (let guard = 0; parent !== undefined && guard <= MAX_TREE_DEPTH + 1; guard += 1) {
     const node = tree.node(parent);
@@ -105,10 +112,17 @@ export function treeDepth(tree: TreeView, id: string): number {
   return ancestors(tree, id).length;
 }
 
-/** Clip levels above a node: one per `frame` or `maskGroup` ancestor (section 4.3). */
+/**
+ * Whether a container adds a clip level: a `frame`, a `maskGroup` (section 4.3) or a `symbol`,
+ * which clips as a frame (M7 contract, section 1.2).
+ */
+export function clipsChildren(node: NodeV3 | undefined): boolean {
+  return node?.type === 'frame' || node?.type === 'maskGroup' || node?.type === 'symbol';
+}
+
+/** Clip levels above a node: one per `frame`, `maskGroup` or `symbol` ancestor (section 4.3). */
 export function clipDepth(tree: TreeView, id: string): number {
-  return ancestors(tree, id).filter((node) => node.type === 'frame' || node.type === 'maskGroup')
-    .length;
+  return ancestors(tree, id).filter(clipsChildren).length;
 }
 
 /** Deepest clip level a frame or mask group may sit at, and a node may sit at. */
@@ -127,7 +141,7 @@ export function clipDepthViolation(tree: TreeView, roots: readonly string[]): st
       const [id, depth] = stack.pop()!;
       const node = tree.node(id);
       if (node === undefined) continue;
-      const clips = node.type === 'frame' || node.type === 'maskGroup';
+      const clips = clipsChildren(node);
       if (depth > MAX_CLIP_DEPTH || (clips && depth > MAX_CLIP_CONTAINER_DEPTH)) return id;
       if (isContainer(node)) {
         const next = clips ? depth + 1 : depth;
@@ -159,11 +173,46 @@ export function treeDepthViolation(tree: TreeView, roots: readonly string[]): st
 }
 
 /** The first node of a document that breaks the clip-depth rule, in page and pre-order. */
-export function documentClipViolation(document: DocumentV2): string | null {
+export function documentClipViolation(document: DocumentV3): string | null {
   const tree = documentTree(document);
   for (const page of document.pages) {
     const found = clipDepthViolation(tree, page.children);
     if (found !== null) return found;
+  }
+  return null;
+}
+
+/**
+ * The first instance, in `pages` order then page-tree pre-order, whose deepest expanded node
+ * breaks the M7-S5 tree depth (M7 contract, section 2): the instance's depth plus its source
+ * subtree's height above `MAX_TREE_DEPTH`. Null when none does, or the document holds no instance.
+ */
+export function expansionDepthViolation(document: DocumentV3): string | null {
+  const nodes = Object.values(document.nodes);
+  if (!nodes.some((node) => node.type === 'instance')) return null;
+  const tree = documentTree(document);
+  const heights = new Map<string, number>();
+  const heightOf = (source: string): number => {
+    let height = heights.get(source);
+    if (height !== undefined) return height;
+    height = 0;
+    const stack: [string, number][] = [[source, 0]];
+    while (stack.length > 0) {
+      const [id, below] = stack.pop()!;
+      if (below > height) height = below;
+      for (const child of childrenOf(tree, id)) stack.push([child, below + 1]);
+    }
+    heights.set(source, height);
+    return height;
+  };
+  for (const page of document.pages) {
+    for (const root of page.children) {
+      for (const id of subtree(tree, root)) {
+        const node = tree.node(id);
+        if (node?.type !== 'instance') continue;
+        if (treeDepth(tree, id) + heightOf(node.symbol) > MAX_TREE_DEPTH) return id;
+      }
+    }
   }
   return null;
 }

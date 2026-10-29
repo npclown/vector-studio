@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { DocumentV2 } from '@vector-studio/model';
+import type { DocumentV3 } from '@vector-studio/model';
 import { createElement, type ComponentType } from 'react';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -27,7 +27,7 @@ const { degreesLabel, inRotateZone, nodePageCorners, zoomLabel } = (await import
 )) as {
   degreesLabel: (radians: number) => string;
   inRotateZone: (handles: SelectionHandles, point: PagePoint, zoom: number) => boolean;
-  nodePageCorners: (document: DocumentV2, id: string) => Quad | null;
+  nodePageCorners: (document: DocumentV3, id: string) => Quad | null;
   zoomLabel: (zoom: number) => string;
 };
 const { SelectionOverlay } = (await import(path.join(appSource, 'overlay.tsx'))) as {

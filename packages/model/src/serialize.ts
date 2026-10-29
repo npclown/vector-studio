@@ -1,4 +1,4 @@
-import type { DocumentV2, JsonValue, NodeV2, PathStroke, RectStroke } from './types.js';
+import type { DocumentV3, JsonValue, NodeV3, PathStroke, RectStroke } from './types.js';
 
 // Fixed key order (plan section 3.3). Node and custom-data keys are inserted in code-unit order,
 // so the text does not depend on the order nodes were created, deleted or restored in. (Object
@@ -40,7 +40,7 @@ function json(value: JsonValue): unknown {
 }
 
 /** Fields after `type` of path and custom nodes. */
-function pathFields(value: Extract<NodeV2, { type: 'path' | 'custom' }>): Ordered {
+function pathFields(value: Extract<NodeV3, { type: 'path' | 'custom' }>): Ordered {
   if (value.type === 'path') {
     return {
       path: {
@@ -68,7 +68,7 @@ function compareCodeUnits(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-function nodeV2(value: NodeV2): Ordered {
+function nodeV3(value: NodeV3): Ordered {
   const base = {
     id: value.id,
     name: value.name,
@@ -112,12 +112,15 @@ function nodeV2(value: NodeV2): Ordered {
     case 'maskGroup':
       return { ...base, children: [...value.children] };
     case 'frame':
+    case 'symbol':
       return {
         ...base,
         children: [...value.children],
         fill: nullable(value.fill, color),
         stroke: nullable(value.stroke, rectStroke),
       };
+    case 'instance':
+      return { ...base, symbol: value.symbol };
   }
 }
 
@@ -125,7 +128,7 @@ function nodeV2(value: NodeV2): Ordered {
  * The document as a plain object in canonical key order, for `serializeDocument` and the
  * persistence envelope (MVP M5 contract, M5-E3). Not exported from the package.
  */
-export function orderedDocument(document: DocumentV2): Ordered {
+export function orderedDocument(document: DocumentV3): Ordered {
   return {
     schemaVersion: document.schemaVersion,
     id: document.id,
@@ -137,15 +140,16 @@ export function orderedDocument(document: DocumentV2): Ordered {
     nodes: Object.fromEntries(
       Object.keys(document.nodes)
         .sort(compareCodeUnits)
-        .map((key) => [key, nodeV2(document.nodes[key]!)]),
+        .map((key) => [key, nodeV3(document.nodes[key]!)]),
     ),
   };
 }
 
 /**
- * Emits canonical schema v2 JSON (M1 contract, section 2.1): two-space indentation, fixed key
- * order and a final newline.
+ * Emits canonical schema v3 JSON (M1 contract, section 2.1; M7 contract, section 2.1): two-space
+ * indentation, fixed key order and a final newline. A symbol's keys are in a frame's order, an
+ * instance's in the base order followed by `symbol`.
  */
-export function serializeDocument(document: DocumentV2): string {
+export function serializeDocument(document: DocumentV3): string {
   return `${JSON.stringify(orderedDocument(document), null, 2)}\n`;
 }

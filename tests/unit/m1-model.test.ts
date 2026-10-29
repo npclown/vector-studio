@@ -11,18 +11,23 @@ import {
   validateDocument,
   validateNode,
   type DocumentV1,
-  type DocumentV2,
+  type DocumentV3,
   type ParseResult,
+  type ParseResultV2,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 
 // MVP M1-U1 (M1 contract, section 2): schema v2, the v1 migration and the new codes
 // (M1-A01 model half, M1-A02). Since M1-U2 `parseDocument`, `validateDocument`,
-// `validateNode` and `serializeDocument` have the section 2.1 meaning.
+// `validateNode` and `serializeDocument` have the section 2.1 meaning. Since M7-U1 they return
+// and write schema v3, which differs from v2 in its version only for these fixtures (M7 contract,
+// section 2.1), so a v2 fixture reads as its committed v3 migration under `m7-symbols/migrated`.
 
 const root = path.resolve(import.meta.dirname, '../..');
 const p5 = path.join(root, 'tests/fixtures/p5-model');
 const m1 = path.join(root, 'tests/fixtures/m1-model');
+const m7 = path.join(root, 'tests/fixtures/m7-symbols/migrated');
+const v3Name = (name: string) => `${name.replace(/\.v2$/, '')}.v3`;
 // Every top-level v1 fixture has a migrated v2 fixture.
 const MIGRATED = (await readdir(p5, { withFileTypes: true }))
   .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
@@ -33,13 +38,13 @@ function read(dir: string, name: string): Promise<string> {
   return readFile(path.join(dir, `${name}.json`), 'utf8');
 }
 
-function parsed(text: string): DocumentV2 {
+function parsed(text: string): DocumentV3 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
 }
 
-function failure(result: ParseResult): { code: string; path: string } {
+function failure(result: ParseResult | ParseResultV2): { code: string; path: string } {
   expect(result.ok).toBe(false);
   expect(result).not.toHaveProperty('document');
   return result.ok ? { code: 'none', path: '' } : { code: result.code, path: result.path };
@@ -98,18 +103,18 @@ describe('M1-A01 migration and round trip', () => {
     async (name) => {
       const v1 = await read(p5, name);
       const v2 = await read(m1, `${name}.v2`);
-      expect(serializeDocument(parsed(v1))).toBe(v2);
+      expect(serializeDocument(parsed(v1))).toBe(await read(m7, v3Name(name)));
       const migrated = migrateV1toV2(JSON.parse(v1) as DocumentV1);
-      expect(migrated.ok && serializeDocument(migrated.document)).toBe(v2);
+      expect(migrated.ok && migrated.document).toEqual(JSON.parse(v2));
     },
   );
 
   it.each([...MIGRATED.map((name) => `${name}.v2`), 'containers'])(
-    'round-trips the v2 fixture %s',
+    'reads the v2 fixture %s as its v3 migration, which round-trips',
     async (name) => {
       const text = await read(m1, name);
       const document = parsed(text);
-      expect(serializeDocument(document)).toBe(text);
+      expect(serializeDocument(document)).toBe(await read(m7, v3Name(name)));
       expect(parsed(serializeDocument(document))).toEqual(document);
     },
   );
@@ -143,15 +148,18 @@ describe('M1-A01 migration and round trip', () => {
     }
   });
 
-  it('validates in-memory v2 only through validateDocument', async () => {
+  it('validates in-memory v3 only through validateDocument', async () => {
     const v1 = JSON.parse(await read(p5, 'shapes')) as unknown;
     const v2 = JSON.parse(await read(m1, 'shapes.v2')) as unknown;
-    expect(failure(validateDocument(v1))).toEqual({
-      code: 'document.unsupported-version',
-      path: '/schemaVersion',
-    });
-    const result = validateDocument(v2);
-    expect(result.ok && serializeDocument(result.document)).toBe(await read(m1, 'shapes.v2'));
+    const v3 = await read(m7, 'shapes.v3');
+    for (const old of [v1, v2]) {
+      expect(failure(validateDocument(old))).toEqual({
+        code: 'document.unsupported-version',
+        path: '/schemaVersion',
+      });
+    }
+    const result = validateDocument(JSON.parse(v3));
+    expect(result.ok && serializeDocument(result.document)).toBe(v3);
   });
 
   it('accepts in-memory v1 and v2 values through validateAnyDocument', async () => {

@@ -1,6 +1,6 @@
 import {
   normalizeRotation,
-  type DocumentV2,
+  type DocumentV3,
   type Frame,
   type PathNodeV2,
 } from '@vector-studio/model';
@@ -368,7 +368,7 @@ const CORNERS: readonly Handle[] = [HANDLES[0], HANDLES[2], HANDLES[4], HANDLES[
  * A node's page rotation `turn` (its parent chain's rotation `chain` plus its own, not
  * normalized), its stored frame and rotation, as the rotate gesture records them at press.
  */
-function singleOf(document: DocumentV2, id: string) {
+function singleOf(document: DocumentV3, id: string) {
   const node = document.nodes[id]!;
   const chain = spaceOf(documentTree(document), node.parent).rotation;
   return { turn: chain + node.rotation, chain, frame: node.frame, rotation: node.rotation };
@@ -379,7 +379,7 @@ function singleOf(document: DocumentV2, id: string) {
  * handles where the tool picks them, also for nested and rotated nodes.
  */
 export function selectionHandles(
-  document: DocumentV2,
+  document: DocumentV3,
   page: string,
   selection: readonly string[],
 ): SelectionHandles | null {
@@ -641,7 +641,13 @@ export function createSelectTool(custom: CustomGeometry): Tool {
       zoomOf(context),
       custom,
     ).filter((id) => scope === null || isAncestor(tree, scope, id));
-    const stack = [...new Set(hits.map((id) => selectionTarget(document, id, scope)))];
+    const stack = [
+      ...new Set(
+        hits
+          .map((id) => selectionTarget(document, id, scope))
+          .filter((id): id is string => id !== null),
+      ),
+    ];
     if (stack.length === 0) return;
     const before = current.selection;
     const index = before.length === 1 ? stack.indexOf(before[0]!) : -1;
@@ -660,6 +666,7 @@ export function createSelectTool(custom: CustomGeometry): Tool {
     if (deepest === null) return false;
     const document = context.query({ type: 'document' });
     const chain = targetChain(document, deepest, scope);
+    if (chain.length === 0) return false;
     const target = chain[chain.length - 1]!;
     // A path target enters path edit mode (M3 contract, section 4).
     if (document.nodes[target]?.type === 'path') {

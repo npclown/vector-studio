@@ -71,6 +71,8 @@ tests/fixtures/p5-model/**/*.json
 tests/fixtures/m1-model/**/*.json
 # M5 envelope fixtures are canonical serializeEnvelope output or malformed text, compared byte-for-byte.
 tests/fixtures/m5-persistence/**/*.json
+# M7 symbol fixtures are canonical serializeDocument output or malformed text, compared byte-for-byte.
+tests/fixtures/m7-symbols/**/*.json
 **/.next/**
 apps/next-host/next-env.d.ts
 

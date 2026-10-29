@@ -1,5 +1,5 @@
 import type { Command, Editor, EditorEvent } from '@vector-studio/editor-core';
-import type { DocumentV2, Frame } from '@vector-studio/model';
+import type { DocumentV3, Frame } from '@vector-studio/model';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 // M2-U8 (MVP M2 contract, section 8): M2-A13, the next-host page's M2 interactions through
@@ -151,11 +151,11 @@ async function build(page: Page): Promise<Ids> {
   return ids as Ids;
 }
 
-async function readDocument(page: Page): Promise<DocumentV2> {
+async function readDocument(page: Page): Promise<DocumentV3> {
   const text = await page.evaluate(() =>
     JSON.stringify(window.__p5Host!.editor.query({ type: 'document' })),
   );
-  return JSON.parse(text) as DocumentV2;
+  return JSON.parse(text) as DocumentV3;
 }
 
 async function snapshotOf(page: Page) {

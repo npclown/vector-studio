@@ -8,7 +8,7 @@ import type {
   ScenePathGeometry,
   ScenePathVerb,
 } from '@vector-studio/contracts';
-import type { DocumentV2, FrameNode, LineNode, NodeV2, PathData } from '@vector-studio/model';
+import type { DocumentV3, FrameNode, LineNode, NodeV3, PathData } from '@vector-studio/model';
 import { localTransform } from './geometry.js';
 import type { DiagnosticEvent } from './types.js';
 
@@ -22,7 +22,7 @@ import type { DiagnosticEvent } from './types.js';
 // the rejected ones out with their subtrees, until a change touches the subtree again.
 
 /** Frame-local path geometry for a custom node (its extension's `toScene`), or null. */
-export type CustomProjection = (node: NodeV2) => PathData | null;
+export type CustomProjection = (node: NodeV3) => PathData | null;
 
 /** Synthetic scene IDs of a frame (M1 contract, section 5); document IDs never hold U+0000. */
 export function frameContentId(frameId: string): string {
@@ -214,7 +214,7 @@ export function lineContent(node: LineNode): PathContent {
  * projected (an unowned custom type, or a container: containers project through `projectPage`).
  */
 export function projectNode(
-  node: NodeV2,
+  node: NodeV3,
   custom: CustomProjection,
   parentId: string | null = null,
 ): RenderNodeSnapshot | null {
@@ -348,7 +348,7 @@ export type PageProjection = Readonly<{
 export type ProjectionMemo = Map<
   string,
   Readonly<{
-    node: NodeV2;
+    node: NodeV3;
     parentId: string | null;
     children: readonly string[] | null;
     snapshots: readonly RenderNodeSnapshot[];
@@ -361,7 +361,7 @@ export type ProjectionMemo = Map<
  * snapshot objects, so a changed snapshot is always a new object.
  */
 export function projectPage(
-  document: DocumentV2,
+  document: DocumentV3,
   pageId: string,
   custom: CustomProjection,
   omit: ReadonlySet<string> = new Set(),
@@ -372,7 +372,7 @@ export function projectPage(
   const units: string[] = [];
   const unitIds = new Map<string, readonly string[]>();
 
-  const reused = (node: NodeV2, parentId: string | null, children: readonly string[] | null) => {
+  const reused = (node: NodeV3, parentId: string | null, children: readonly string[] | null) => {
     const entry = memo?.get(node.id);
     if (entry === undefined || entry.node !== node || entry.parentId !== parentId) return null;
     if (entry.children === null || children === null) {
@@ -528,7 +528,7 @@ export class SceneProjector {
    * excluded subtrees that `touched` reaches (the change that caused it) are projected again.
    */
   replace(
-    document: DocumentV2,
+    document: DocumentV3,
     page: string,
     touched: readonly string[] = [],
     retried = false,
@@ -567,7 +567,7 @@ export class SceneProjector {
   }
 
   /** Sends one change set for a document change on `page` that touched `touched`. */
-  change(document: DocumentV2, page: string, touched: readonly string[]): void {
+  change(document: DocumentV3, page: string, touched: readonly string[]): void {
     if (this.disposed) return;
     const retry = this.release(document, touched);
     if (this.identity === null || this.base === null || this.page !== page) {
@@ -606,7 +606,7 @@ export class SceneProjector {
    * rejection already known to be the projection's only unit's own.
    */
   private isolate(
-    document: DocumentV2,
+    document: DocumentV3,
     projection: PageProjection,
     only: Readonly<{ id: string; result: Rejection }> | null,
   ): void {
@@ -628,7 +628,7 @@ export class SceneProjector {
   }
 
   /** Retries the released subtrees from their roots, one unit per set. */
-  private retry(document: DocumentV2, roots: ReadonlySet<string>): void {
+  private retry(document: DocumentV3, roots: ReadonlySet<string>): void {
     if (roots.size > 0) this.addUnits(document, this.project(document), roots);
   }
 
@@ -638,7 +638,7 @@ export class SceneProjector {
    * out. Rejections are reported once per reason; any other failure ends in a full snapshot.
    */
   private addUnits(
-    document: DocumentV2,
+    document: DocumentV3,
     projection: PageProjection,
     roots: ReadonlySet<string> | null,
   ): void {
@@ -757,7 +757,7 @@ export class SceneProjector {
   }
 
   /** The root to leave out for a rejected node: its mask group when it is a mask source. */
-  private excludedRoot(document: DocumentV2, id: string): string {
+  private excludedRoot(document: DocumentV3, id: string): string {
     const node = Object.hasOwn(document.nodes, id) ? document.nodes[id]! : undefined;
     const parent =
       node !== undefined && Object.hasOwn(document.nodes, node.parent)
@@ -767,7 +767,7 @@ export class SceneProjector {
   }
 
   /** The document parent chain of `id`, itself first (bounded by the tree depth). */
-  private chain(document: DocumentV2, id: string): string[] {
+  private chain(document: DocumentV3, id: string): string[] {
     const ids: string[] = [];
     let cursor: string | undefined = id;
     for (let guard = 0; cursor !== undefined && guard < PARENT_WALK_LIMIT; guard += 1) {
@@ -782,7 +782,7 @@ export class SceneProjector {
    * with every excluded root inside them, and returns the outermost roots the document still
    * has; those are retried whole.
    */
-  private release(document: DocumentV2, touched: readonly string[]): Set<string> {
+  private release(document: DocumentV3, touched: readonly string[]): Set<string> {
     const roots = new Set<string>();
     if (this.excluded.size === 0) return roots;
     for (const id of touched) {
@@ -802,7 +802,7 @@ export class SceneProjector {
    * Forgets the renderer's state and sends a full snapshot, once per call chain: a renderer
    * that keeps failing is retried at the next document change, never in a loop.
    */
-  private resync(document: DocumentV2): void {
+  private resync(document: DocumentV3): void {
     this.identity = null;
     this.base = null;
     if (this.resyncing) return;
@@ -885,7 +885,7 @@ export class SceneProjector {
   }
 
   /** Reports a rejection of `ids` and leaves their subtrees out until a change touches them. */
-  private exclude(document: DocumentV2, result: Rejection, ids: readonly string[]): void {
+  private exclude(document: DocumentV3, result: Rejection, ids: readonly string[]): void {
     this.reportRejection(result.reason, ids);
     ids.forEach((id) => this.excluded.add(this.excludedRoot(document, id)));
   }
@@ -902,7 +902,7 @@ export class SceneProjector {
   }
 
   /** The projection of the active page minus the exclusions and `skip`. */
-  private project(document: DocumentV2, skip: ReadonlySet<string> = new Set()): PageProjection {
+  private project(document: DocumentV3, skip: ReadonlySet<string> = new Set()): PageProjection {
     const omit = skip.size === 0 ? this.excluded : new Set([...this.excluded, ...skip]);
     return projectPage(document, this.page, this.custom, omit, this.memo);
   }

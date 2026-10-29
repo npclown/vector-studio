@@ -6,8 +6,9 @@ import type {
   Constraints,
   DocumentV1,
   DocumentV2,
-  NodeV2,
-  PageV2,
+  DocumentV3,
+  NodeV3,
+  PageV3,
   FillRule,
   Frame,
   JsonValue,
@@ -22,8 +23,8 @@ import type {
 } from './types.js';
 
 /**
- * Section 3.3 codes, then the schema v2 codes. `unknown-custom-type` and `invalid-custom-data` are
- * checked by `editor-core` on load, never by the model.
+ * Section 3.3 codes, then the schema v2 and v3 codes. `unknown-custom-type` and
+ * `invalid-custom-data` are checked by `editor-core` on load, never by the model.
  */
 export const DOCUMENT_ERROR_CODES = [
   'document.malformed-json',
@@ -36,6 +37,8 @@ export const DOCUMENT_ERROR_CODES = [
   // Schema v2 (MVP M1 contract, section 2).
   'document.cyclic-parent',
   'document.invalid-mask-source',
+  // Schema v3 (MVP M7 contract, section 2).
+  'document.invalid-symbol',
 ] as const;
 
 export type DocumentErrorCode = (typeof DOCUMENT_ERROR_CODES)[number];
@@ -47,12 +50,20 @@ export type ModelErrorCode = Exclude<
 >;
 
 /** `path` is a JSON Pointer (RFC 6901) to the offending field; `''` is the whole document. */
-export type ParseResult =
-  | Readonly<{ ok: true; document: DocumentV2 }>
-  | Readonly<{ ok: false; code: ModelErrorCode; path: string }>;
+export type ModelFailure = Readonly<{ ok: false; code: ModelErrorCode; path: string }>;
+
+/** The latest schema version, which every validated document has (M7 contract, section 2). */
+export type ParseResult = Readonly<{ ok: true; document: DocumentV3 }> | ModelFailure;
+
+/** The result of `migrateV1toV2`, the first step of the migration chain. */
+export type ParseResultV2 = Readonly<{ ok: true; document: DocumentV2 }> | ModelFailure;
+
+/** The result of `validateFragmentTree`: a node map, never a document. */
+export type FragmentTreeResult =
+  Readonly<{ ok: true; nodes: Readonly<Record<string, NodeV3>> }> | ModelFailure;
 
 export type NodeResult =
-  | Readonly<{ ok: true; node: NodeV2 }>
+  | Readonly<{ ok: true; node: NodeV3 }>
   | Readonly<{ ok: false; code: 'document.invalid-field'; path: string }>;
 
 /** Deepest container nesting of the node tree (ancestors that are containers). */
@@ -67,8 +78,9 @@ export function isValidId(value: unknown): value is string {
 }
 
 /**
- * Parses JSON text of schema version 1 or 2 into a validated v2 document (M1 contract, section
- * 2.1); v1 is migrated by `migrateV1toV2`. No partial document is ever returned.
+ * Parses JSON text of schema version 1, 2 or 3 into a validated v3 document (M1 contract, section
+ * 2.1; M7 contract, section 2.1); older versions are migrated by `migrateV1toV2` and
+ * `migrateV2toV3`. No partial document is ever returned.
  */
 export function parseDocument(text: string): ParseResult {
   let value: unknown;
@@ -77,7 +89,7 @@ export function parseDocument(text: string): ParseResult {
   } catch {
     return { ok: false, code: 'document.malformed-json', path: '' };
   }
-  const version = checkVersion(value, [1, 2]);
+  const version = checkVersion(value, [1, 2, 3]);
   if (version !== null) return version;
   // JSON.parse keeps the last of two equal keys, which would silently drop an entity. The scan
   // also bounds nesting, so validation never recurses deeper than MAX_DEPTH.
@@ -95,43 +107,72 @@ export function parseDocument(text: string): ParseResult {
 }
 
 /**
- * Validates an in-memory v2 document value and returns a normalized copy: negative zero becomes
- * 0, rotations are normalized and nothing is shared with the input. A v1 value is
- * `document.unsupported-version`; `validateAnyDocument` accepts both.
+ * Validates an in-memory v3 document value and returns a normalized copy: negative zero becomes
+ * 0, rotations are normalized and nothing is shared with the input. A v1 or v2 value is
+ * `document.unsupported-version`; `validateAnyDocument` accepts every version.
  */
 export function validateDocument(value: unknown): ParseResult {
-  const version = checkVersion(value, [2]);
+  const version = checkVersion(value, [3]);
   if (version !== null) return version;
-  return guarded(() => readDocumentV2(value as Record<string, unknown>));
+  return guarded(() => readDocumentV3(value as Record<string, unknown>, V3_TYPES));
 }
 
-/** Validates an in-memory v1 or v2 value and returns a normalized v2 copy (v1 is migrated). */
+/**
+ * Validates an in-memory v1, v2 or v3 value and returns a normalized v3 copy (older versions are
+ * migrated).
+ */
 export function validateAnyDocument(value: unknown): ParseResult {
-  const version = checkVersion(value, [1, 2]);
+  const version = checkVersion(value, [1, 2, 3]);
   if (version !== null) return version;
-  if ((value as Record<string, unknown>).schemaVersion === 1) {
+  const record = value as Record<string, unknown>;
+  if (record.schemaVersion === 1) {
     let v1: DocumentV1;
     try {
-      v1 = readDocumentV1(value as Record<string, unknown>);
+      v1 = readDocumentV1(record);
     } catch (error) {
       if (error instanceof Failure) {
         return { ok: false, code: error.code, path: pointer(error.path) };
       }
       throw error;
     }
-    return migrateV1toV2(v1);
+    const v2 = migrateV1toV2(v1);
+    return v2.ok ? migrateV2toV3(v2.document) : v2;
   }
-  return guarded(() => readDocumentV2(value as Record<string, unknown>));
+  // A v2 value is read once with the v2 node types; the v3 result differs only in its version.
+  return guarded(() => readDocumentV3(record, record.schemaVersion === 2 ? V2_TYPES : V3_TYPES));
 }
 
 /**
- * Validates one v2 node with the field rules of `validateDocument`, so commands reject the values
+ * The model's tree rules for a clipboard fragment (M7 contract, section 6), on a holder document
+ * value of schema version 3 whose pages hold the fragment roots:
+ * `{ schemaVersion: 3, id, pages: [{ id, name, children: roots }], nodes }`, exactly the four keys
+ * of a document, with `id` and the page ID not keys of `nodes` and each root's `parent` the page
+ * ID (the caller rewrites the fragment's `""`). It runs every rule of
+ * `validateDocument` except two, which the fragment rules and the paste resolve instead: M7-S2
+ * (each instance names a `symbol` of the same document) and M7-S5 (the tree depth through an
+ * expansion). M7-S3 nesting and the base tree depth still run. Returns the normalized node map,
+ * never a document; no document entry point skips these rules.
+ */
+export function validateFragmentTree(value: unknown): FragmentTreeResult {
+  const version = checkVersion(value, [3]);
+  if (version !== null) return version;
+  try {
+    const tree = readTree(value as Record<string, unknown>, V3_TYPES, false);
+    return { ok: true, nodes: tree.nodes };
+  } catch (error) {
+    if (error instanceof Failure) return { ok: false, code: error.code, path: pointer(error.path) };
+    throw error;
+  }
+}
+
+/**
+ * Validates one v3 node with the field rules of `validateDocument`, so commands reject the values
  * a load would reject. `path` is relative to the node; references are not checked here.
  */
 export function validateNode(value: unknown): NodeResult {
   try {
     const id = isPlainObject(value) ? value.id : undefined;
-    return { ok: true, node: readNodeV2(typeof id === 'string' ? id : '', value, []) };
+    return { ok: true, node: readNodeV3(typeof id === 'string' ? id : '', value, [], V3_TYPES) };
   } catch (error) {
     if (error instanceof Failure) {
       return { ok: false, code: 'document.invalid-field', path: pointer(error.path) };
@@ -161,7 +202,7 @@ function pointer(path: Path): string {
     .join('');
 }
 
-function checkVersion(value: unknown, versions: readonly number[]): ParseResult | null {
+function checkVersion(value: unknown, versions: readonly number[]): ModelFailure | null {
   if (!isPlainObject(value)) return { ok: false, code: 'document.invalid-field', path: '' };
   if (!versions.includes(value.schemaVersion as number)) {
     return { ok: false, code: 'document.unsupported-version', path: '/schemaVersion' };
@@ -413,13 +454,14 @@ function readDocumentV1(value: Record<string, unknown>): DocumentV1 {
   return { schemaVersion: 1, id, pages: [page], nodes };
 }
 
-// Schema v2 (MVP M1 contract, section 2): the v1 migration and the v2 readers.
+// Schemas v2 and v3 (MVP M1 contract, section 2; M7 contract, section 2): the migrations and the
+// v2 and v3 readers.
 
 /**
  * Adds `rotation: 0`, start constraints on every node and zero corner radii on rectangles, and
  * changes nothing else; the result is validated with the v2 rules (U+0000 in an ID fails).
  */
-export function migrateV1toV2(document: DocumentV1): ParseResult {
+export function migrateV1toV2(document: DocumentV1): ParseResultV2 {
   const nodes = Object.fromEntries(
     Object.entries(document.nodes).map(([key, node]) => {
       const migrated: Record<string, unknown> = {
@@ -431,14 +473,31 @@ export function migrateV1toV2(document: DocumentV1): ParseResult {
       return [key, migrated];
     }),
   );
-  return guarded(() =>
-    readDocumentV2({
-      schemaVersion: 2,
-      id: document.id,
-      pages: document.pages.map((page) => ({ ...page, children: [...page.children] })),
-      nodes,
-    }),
-  );
+  try {
+    const tree = readTree(
+      {
+        schemaVersion: 2,
+        id: document.id,
+        pages: document.pages.map((page) => ({ ...page, children: [...page.children] })),
+        nodes,
+      },
+      V2_TYPES,
+      true,
+    );
+    // Read with the v2 node types only, so every node is a v2 node.
+    return { ok: true, document: { schemaVersion: 2, ...tree } as DocumentV2 };
+  } catch (error) {
+    if (error instanceof Failure) return { ok: false, code: error.code, path: pointer(error.path) };
+    throw error;
+  }
+}
+
+/**
+ * Changes `schemaVersion` to 3 and nothing else, since no v2 node changes (M7 contract, section
+ * 2.1, M7-Q12 (a)); the input is validated with the v2 rules, so it holds no v3 node type.
+ */
+export function migrateV2toV3(document: DocumentV2): ParseResult {
+  return guarded(() => readDocumentV3({ ...document, schemaVersion: 3 }, V2_TYPES));
 }
 
 /** Normalizes radians to (−π, π], negative zero to 0 (contract M1-S1). */
@@ -449,7 +508,7 @@ export function normalizeRotation(theta: number): number {
   return t === 0 ? 0 : t;
 }
 
-function guarded(read: () => DocumentV2): ParseResult {
+function guarded(read: () => DocumentV3): ParseResult {
   try {
     return { ok: true, document: read() };
   } catch (error) {
@@ -502,16 +561,29 @@ const NODE_KEYS_V2 = {
   group: [...BASE_KEYS_V2, 'children'],
   maskGroup: [...BASE_KEYS_V2, 'children'],
   frame: [...BASE_KEYS_V2, 'children', 'fill', 'stroke'],
+  // Schema v3 (M7 contract, section 2.1): a symbol's keys are a frame's, an instance's the base
+  // keys followed by `symbol`.
+  symbol: [...BASE_KEYS_V2, 'children', 'fill', 'stroke'],
+  instance: [...BASE_KEYS_V2, 'symbol'],
 } as const;
 type NodeTypeKey = keyof typeof NODE_KEYS_V2;
 
+/** The node types of each schema version; a v2 value with a v3 type fails at its `type`. */
+const V3_TYPES = Object.keys(NODE_KEYS_V2) as NodeTypeKey[];
+const V2_TYPES = V3_TYPES.filter((type) => type !== 'symbol' && type !== 'instance');
+
 function isContainerType(type: string): boolean {
-  return type === 'group' || type === 'maskGroup' || type === 'frame';
+  return type === 'group' || type === 'maskGroup' || type === 'frame' || type === 'symbol';
 }
 
-function readNodeV2(key: string, value: unknown, path: Path): NodeV2 {
+function readNodeV3(
+  key: string,
+  value: unknown,
+  path: Path,
+  types: readonly NodeTypeKey[],
+): NodeV3 {
   if (!isPlainObject(value)) invalid(path);
-  const type = readEnum(value.type, Object.keys(NODE_KEYS_V2) as NodeTypeKey[], [...path, 'type']);
+  const type = readEnum(value.type, types, [...path, 'type']);
   const record = readRecord(value, NODE_KEYS_V2[type], path);
   if (!isValidId(key) || record.id !== key) invalid([...path, 'id']);
   const base = {
@@ -524,8 +596,11 @@ function readNodeV2(key: string, value: unknown, path: Path): NodeV2 {
     opacity: readNumber(record.opacity, [...path, 'opacity'], 0, 1),
     visible: readBoolean(record.visible, [...path, 'visible']),
   };
-  // Container opacity other than 1 waits for isolated composition (M1-S5).
-  if (isContainerType(type) && base.opacity !== 1) invalid([...path, 'opacity']);
+  // Container opacity other than 1 waits for isolated composition (M1-S5); an instance projects
+  // as a container, so it follows the same rule (M7-S4).
+  if ((isContainerType(type) || type === 'instance') && base.opacity !== 1) {
+    invalid([...path, 'opacity']);
+  }
   const fill = () => readNullable(record.fill, [...path, 'fill'], readColor);
   const children = () =>
     readArray(record.children, [...path, 'children'], (entry, entryPath) =>
@@ -577,6 +652,7 @@ function readNodeV2(key: string, value: unknown, path: Path): NodeV2 {
     case 'maskGroup':
       return { ...base, type, children: children() };
     case 'frame':
+    case 'symbol':
       return {
         ...base,
         type,
@@ -584,10 +660,12 @@ function readNodeV2(key: string, value: unknown, path: Path): NodeV2 {
         fill: fill(),
         stroke: readNullable(record.stroke, [...path, 'stroke'], readRectStroke),
       };
+    case 'instance':
+      return { ...base, type, symbol: readIdV2(record.symbol, [...path, 'symbol']) };
   }
 }
 
-function readPageV2(value: unknown, path: Path): PageV2 {
+function readPageV3(value: unknown, path: Path): PageV3 {
   const record = readRecord(value, ['id', 'name', 'children'], path);
   return {
     id: readIdV2(record.id, [...path, 'id']),
@@ -598,16 +676,32 @@ function readPageV2(value: unknown, path: Path): PageV2 {
   };
 }
 
-function readDocumentV2(value: Record<string, unknown>): DocumentV2 {
+type Tree = Readonly<{ id: string; pages: PageV3[]; nodes: Record<string, NodeV3> }>;
+
+/** A v3 document read with the node types of its source version (`V2_TYPES` when migrating). */
+function readDocumentV3(value: Record<string, unknown>, types: readonly NodeTypeKey[]): DocumentV3 {
+  return { schemaVersion: 3, ...readTree(value, types, true) };
+}
+
+/**
+ * The document rules in the M7 contract's section 2 order: fields, ownership, M7-S2, the cycle
+ * walk with the base tree depth, M7-S3, the M7-S5 tree depth, then the group and mask rules.
+ * `references` false skips only M7-S2 and M7-S5, for `validateFragmentTree`.
+ */
+function readTree(
+  value: Record<string, unknown>,
+  types: readonly NodeTypeKey[],
+  references: boolean,
+): Tree {
   const record = readRecord(value, ['schemaVersion', 'id', 'pages', 'nodes'], []);
   const id = readIdV2(record.id, ['id']);
   if (!Array.isArray(record.pages) || record.pages.length === 0) invalid(['pages']);
-  const pages = readArray(record.pages, ['pages'], readPageV2);
+  const pages = readArray(record.pages, ['pages'], readPageV3);
   if (!isPlainObject(record.nodes)) invalid(['nodes']);
   const entries = Object.entries(record.nodes).map(
-    ([key, node]) => [key, readNodeV2(key, node, ['nodes', key])] as const,
+    ([key, node]) => [key, readNodeV3(key, node, ['nodes', key], types)] as const,
   );
-  const nodes: Record<string, NodeV2> = Object.fromEntries(entries);
+  const nodes: Record<string, NodeV3> = Object.fromEntries(entries);
 
   const pageIds = new Set<string>();
   pages.forEach((page, index) => {
@@ -640,20 +734,66 @@ function readDocumentV2(value: Record<string, unknown>): DocumentV2 {
     }
   }
 
+  // M7-S2: an instance names a symbol of this document, on any page.
+  if (references) {
+    for (const [key, node] of entries) {
+      if (node.type !== 'instance') continue;
+      const target = Object.hasOwn(nodes, node.symbol) ? nodes[node.symbol]! : undefined;
+      if (target === undefined) {
+        throw new Failure('document.dangling-reference', ['nodes', key, 'symbol']);
+      }
+      if (target.type !== 'symbol') {
+        throw new Failure('document.invalid-symbol', ['nodes', key, 'symbol']);
+      }
+    }
+  }
+
   // Walk down from the pages: a node never reached is on a parent cycle. The walk is iterative
-  // and bounds the container depth, so later tree algorithms are bounded too.
+  // and bounds the container depth, so later tree algorithms are bounded too. It also records
+  // each node's depth and its innermost symbol ancestor, for M7-S3 and M7-S5.
   const reached = new Set<string>();
-  const stack: [string, number][] = [];
-  for (const page of pages) for (const child of page.children) stack.push([child, 0]);
+  const depthOf = new Map<string, number>();
+  const symbolAbove = new Map<string, string>();
+  const stack: [string, number, string | null][] = [];
+  for (const page of pages) for (const child of page.children) stack.push([child, 0, null]);
   while (stack.length > 0) {
-    const [key, depth] = stack.pop()!;
+    const [key, depth, above] = stack.pop()!;
     reached.add(key);
+    depthOf.set(key, depth);
+    if (above !== null) symbolAbove.set(key, above);
     const node = nodes[key]!;
     if (depth > MAX_TREE_DEPTH) invalid(['nodes', key, 'parent']);
-    if ('children' in node) for (const child of node.children) stack.push([child, depth + 1]);
+    if ('children' in node) {
+      const inner = node.type === 'symbol' ? key : above;
+      for (const child of node.children) stack.push([child, depth + 1, inner]);
+    }
   }
   for (const [key] of entries) {
     if (!reached.has(key)) throw new Failure('document.cyclic-parent', ['nodes', key, 'parent']);
+  }
+
+  // M7-S3: no instance and no symbol inside a symbol.
+  for (const [key, node] of entries) {
+    if ((node.type === 'instance' || node.type === 'symbol') && symbolAbove.has(key)) {
+      throw new Failure('document.invalid-symbol', ['nodes', key, 'parent']);
+    }
+  }
+
+  // M7-S5 tree depth: an expanded node sits at the instance's depth plus its depth below the
+  // source, so the deepest one is the instance's depth plus the source subtree's height. After
+  // M7-S3 no symbol is inside another, so each node has at most one symbol ancestor.
+  if (references) {
+    const height = new Map<string, number>();
+    for (const [key, source] of symbolAbove) {
+      const below = depthOf.get(key)! - depthOf.get(source)!;
+      if (below > (height.get(source) ?? 0)) height.set(source, below);
+    }
+    for (const [key, node] of entries) {
+      if (node.type !== 'instance') continue;
+      if (depthOf.get(key)! + (height.get(node.symbol) ?? 0) > MAX_TREE_DEPTH) {
+        invalid(['nodes', key, 'parent']);
+      }
+    }
   }
 
   for (const [key, node] of entries) {
@@ -663,5 +803,5 @@ function readDocumentV2(value: Record<string, unknown>): DocumentV2 {
       throw new Failure('document.invalid-mask-source', ['nodes', key, 'children', 0]);
     }
   }
-  return { schemaVersion: 2, id, pages, nodes };
+  return { id, pages, nodes };
 }

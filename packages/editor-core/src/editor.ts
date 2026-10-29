@@ -2,7 +2,7 @@ import type { RenderCamera, RendererSceneSynchronization } from '@vector-studio/
 import {
   DOCUMENT_ERROR_CODES,
   validateAnyDocument,
-  type DocumentV2,
+  type DocumentV3,
   type ParseResult,
 } from '@vector-studio/model';
 import { copyFragment } from './clipboard.js';
@@ -157,13 +157,13 @@ export interface GestureControl {
 }
 
 type HistoryEntry = Readonly<{
-  before: DocumentV2;
-  after: DocumentV2;
+  before: DocumentV3;
+  after: DocumentV3;
   touched: readonly string[];
 }>;
 
 type Gesture = {
-  base: DocumentV2;
+  base: DocumentV3;
   touched: Set<string>;
   updated: boolean;
   /** The selection when the gesture began, restored on cancel (M2 contract, section 2). */
@@ -269,7 +269,7 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
  * A frozen copy of an extension command's result, or null when it is not a `CommandResult`
  * with a known code and, on success, IDs of nodes in `document`.
  */
-function extensionResult(value: unknown, document: DocumentV2): CommandResult | null {
+function extensionResult(value: unknown, document: DocumentV3): CommandResult | null {
   if (typeof value !== 'object' || value === null) return null;
   const record = value as Record<string, unknown>;
   if (record.ok === true) {
@@ -419,12 +419,12 @@ function structuredCopy(overlay: SnapOverlay): SnapOverlay {
 
 const clampZoom = (zoom: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom));
 
-function nodeIn(document: DocumentV2, id: string) {
+function nodeIn(document: DocumentV3, id: string) {
   return Object.hasOwn(document.nodes, id) ? document.nodes[id] : undefined;
 }
 
 /** Whether node `id` differs between two documents; a node in only one of them differs. */
-function nodeDiffers(a: DocumentV2, b: DocumentV2, id: string): boolean {
+function nodeDiffers(a: DocumentV3, b: DocumentV3, id: string): boolean {
   const x = nodeIn(a, id);
   const y = nodeIn(b, id);
   if (x === y) return false;
@@ -432,7 +432,7 @@ function nodeDiffers(a: DocumentV2, b: DocumentV2, id: string): boolean {
 }
 
 /** Whether two documents have the same pages, children orders included. */
-function samePages(a: DocumentV2, b: DocumentV2): boolean {
+function samePages(a: DocumentV3, b: DocumentV3): boolean {
   return a.pages === b.pages || JSON.stringify(a.pages) === JSON.stringify(b.pages);
 }
 
@@ -441,9 +441,9 @@ function sorted(ids: Iterable<string>): string[] {
 }
 
 /** Validated by the caller like any initial document, so a bad ID source fails at creation. */
-function emptyDocument(ids: IdSource): DocumentV2 {
+function emptyDocument(ids: IdSource): DocumentV3 {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: ids(),
     pages: [{ id: ids(), name: 'Page 1', children: [] }],
     nodes: {},
@@ -455,7 +455,7 @@ function emptyDocument(ids: IdSource): DocumentV2 {
  * whose ancestor is also listed is dropped (the ancestor wins).
  */
 function normalizeSelection(
-  document: DocumentV2,
+  document: DocumentV3,
   page: string,
   ids: readonly string[],
 ): string[] | null {
@@ -467,7 +467,7 @@ function normalizeSelection(
 }
 
 class EditorCore implements Editor {
-  private document: DocumentV2;
+  private document: DocumentV3;
   private activePage: string;
   private revision = 0;
   private selection: readonly string[] = Object.freeze([]);
@@ -1670,7 +1670,7 @@ class EditorCore implements Editor {
   }
 
   private changeDocument(
-    document: DocumentV2,
+    document: DocumentV3,
     cause: DocumentChangeCause,
     touched: Iterable<string>,
   ): void {
@@ -1800,7 +1800,7 @@ class EditorCore implements Editor {
    * After a document change from `previous` (null for a load, which always ends it), the anchor
    * selection is kept when the path's structure is unchanged, else cleared.
    */
-  private syncPathEdit(previous?: DocumentV2 | null): void {
+  private syncPathEdit(previous?: DocumentV3 | null): void {
     const edit = this.pathEdit;
     if (edit === null) return;
     const node = editablePath(this.document, this.activePage, edit.id);
