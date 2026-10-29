@@ -124,7 +124,7 @@ Notation follows P1 D2: a leaf's premultiplied contribution `P` blends source-ov
 
   So step 3 applies only when every entry in the atlas is drawn exactly by the frame, which is section 5's "this frame's clusters alone exceed the atlas"; a deferral whose fallback is drawn is then omitted only because that fallback is itself an exact entry of the frame. Each compaction frees one page with stale entries, so for an unchanging scene a fragmented atlas needs at most one compaction per page. A scene that changes while compacting can make new stale entries and start further compactions.
 
-  The cost is disclosed. While a compaction is pending, the misses it defers draw only their fallback. In the compacting frame, the clusters that were drawn from the evicted page are rasterized again. Those beyond the raster budget draw only their fallback, so text that was visible can disappear for a frame or more. U4's T8 shows this on a one-page atlas.
+  The cost is disclosed. While a compaction is pending, the misses it defers draw only their fallback. In the compacting frame, the clusters that were drawn from the evicted page are rasterized again. Those beyond the raster budget draw only their fallback, so text that was visible can disappear for a frame or more. A deferred cluster whose fallback was on the evicted page also draws nothing until it is rasterized, for example after a zoom on a full atlas. U4's T8 shows this on a one-page atlas, including a zoom on that atlas.
 - **Raster budget (E28-Q6 (a)).** At most `E28_RASTER_PER_FRAME = 256` port calls per prepared frame. A cluster still missing an entry after that:
   1. draws from an entry whose key differs only in bucket and phase, the nearest bucket to `b` (the smaller on a tie, then phase 0), by the general path scaled to `s`, if one exists;
   2. otherwise does not draw this frame.
@@ -328,6 +328,7 @@ U2 amendment, compaction (2026-10-29):
 - **Review** (R1 NOT READY):
   - The first version evicted every page, and suppressed compaction until a frame drew every cluster. That left the lock possible after a compaction that ended over the limit. It also blanked a large atlas.
   - The rule now evicts one page per compaction and has no suppression.
+  - R3 READY WITH FOLLOW-UPS: the cost paragraph now names fallbacks on the evicted page; a mixed budget-and-fragmentation frame is left to U4's T8 zoom check.
   - R2 NOT READY: an entry drawn only as a fallback counted as drawn, so after a subpixel move on a full atlas its stale space was hidden and the frame omitted with a false E28-D2. A fallback now keeps its page used but its entry stays stale.
 - **Tests:** `tests/unit/e28-u2-atlas-plan.test.ts`, "E28 section 4 compaction". They cover:
   - the deferral and the eviction;
