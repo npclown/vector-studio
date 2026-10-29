@@ -888,7 +888,11 @@ test('T8 atlas pressure: eviction, over-limit notice and convergence (E28-A06)',
         over.snapshot(),
         HOME,
       ] as const);
-    return { frames: frames + 1, notices: limits(await diagnosticsOf(page)) - before };
+    // Frames shown until the notice: the breaking frame counts; a loop that ran out showed `bound`.
+    return {
+      frames: Math.min(frames + 1, bound),
+      notices: limits(await diagnosticsOf(page)) - before,
+    };
   };
   const entered = await showOver(1);
   rows.overLimit = entered;
