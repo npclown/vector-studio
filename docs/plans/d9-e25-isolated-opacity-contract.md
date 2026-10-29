@@ -362,6 +362,10 @@ U4 (2026-10-29):
   
   Release on resize stays with U3's unit test.
 
+- **Reference-PC run (2026-10-29), at `d9652f4`:** the spec passed 24 of 24 in Chrome and Edge, the solid A08 captures are byte-identical to `0e12283`, and the full `pnpm test:gpu` passed 182 of 182. U4's gate is closed. The shared-edge measurement repeated on hardware: the layer path and the main pass agree exactly at opacity 1.
+
+U5 (2026-10-29): the [evidence index](../evidence/e25/README.md) records E25-A01 to A08 as PASS. On the reference PC the worst A03 difference was 1.0/255 (O3, tolerance 5) and the worst A05 seam difference 0.769/255 (tolerance 3). One hardware observation is disclosed under A05 and A08: U3's capture script, run three times on the GTX 1660 SUPER, is not byte-identical across its four configurations. At 4x the GPU is nondeterministic from run to run, `flat` included, and that explains every `isolated` difference; at 1x `isolated` equals `flat` in every row. Layer passes differ from the main pass by up to 1/255 at 1x, the same in every run, and by up to 7/255 at 4x on `wide` with 64-px tiles. A05 limits byte identity to SwiftShader, and A08's evidence column assigns the captures to U3 on SwiftShader with the full `pnpm test:gpu` as the hardware part; the hardware seam check against the oracle passed. Independent review READY WITH FOLLOW-UPS (2026-10-29): the run-to-run wording for `nested`, the A08 scope statement, the A04 zoom, builds and visibility wording, A06's recovered frame and resize release, the A08 test citations, O1's named probes, and O7's path calls; all applied. E25 is done, and MVP M4 may start its R-O half.
+
 ## 8. Risks
 
 - **Memory.** Bound-sized layers keep ordinary groups small. But full-screen groups at 4K and 4x admit only two nesting levels within 96 MiB (E25-Q3). Deeper full-screen stacks report instead of drawing. Two remedies are open if real documents hit this: re-rendering per tile together with the composite (no full layer texture), or a cache with eviction.
