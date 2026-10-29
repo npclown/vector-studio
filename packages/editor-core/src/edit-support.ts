@@ -53,6 +53,13 @@ export type EditContext = Readonly<{
    * the command has no `text`, and the scope and selection that pick its target parent.
    */
   clipboard?: string | null;
+  /**
+   * The carried source IDs by which `paste` may link an instance of `clipboard` alone (M7
+   * contract, section 6, rule (1)): those of the clipboard's fragment while it was copied in the
+   * editor's current clipboard generation, with the default ID source, less every ID a command
+   * has drawn since the copy. Absent or empty: rule (1) links nothing.
+   */
+  clipboardLinks?: ReadonlySet<string>;
   scope?: string | null;
   selection?: readonly string[];
   /**

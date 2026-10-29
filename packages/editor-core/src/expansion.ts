@@ -92,7 +92,8 @@ function sameObjects(a: readonly NodeV3[], b: readonly NodeV3[]): boolean {
  * Scene nodes an expanded subtree adds: one per node, and a frame's content, background and
  * border nodes (M1 contract, section 5) when present.
  */
-function sceneCount(objects: readonly NodeV3[]): number {
+/** Scene nodes the descendants `objects` of a source add to one instance (section 4.1). */
+export function sceneCount(objects: readonly NodeV3[]): number {
   let count = 0;
   for (const node of objects) {
     count += 1;
