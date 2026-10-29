@@ -1,8 +1,6 @@
 'use client';
 
 import {
-  createEditor,
-  starExtension,
   type Editor,
   type EditorEvent,
   type PathEditOverlay,
@@ -30,6 +28,14 @@ import {
   type PersistenceSession,
   type PersistStatus,
 } from '../src/m5-persistence';
+import {
+  runHostEffect,
+  textFixtureQuery,
+  textTestHook,
+  type HostCompositionState,
+  type TestFontStatus,
+  type TextTestHook,
+} from '../src/m6a-text-host';
 import { SelectionOverlay } from '../src/overlay';
 import { createWebGpuRenderer } from '../src/webgpu-renderer';
 
@@ -50,6 +56,11 @@ import { createWebGpuRenderer } from '../src/webgpu-renderer';
 // M7-U6 (M7 contract, M7-A11): "symbol", "instance" and "detach" buttons for the `createSymbol`,
 // `createInstance` and `detachInstances` commands beside the page switcher (no key is bound),
 // and the M7 symbols fixture with `?fixture=symbols`, shown at zoom 2.
+// M6a-U5 (M6a contract, section 5): the editor and its text-dom port are created together in a
+// client effect (src/m6a-text-host.ts), never during render or prerender, and the effect's
+// cleanup disposes the port, so the page prerenders a placeholder; `?fixture=text` registers the
+// committed test font, waits for it to settle and loads the M6a text fixture at zoom 2; the test
+// hook's `text` member exposes the port and the test font (M6a-A11).
 
 const WIDTH = 960;
 const HEIGHT = 640;
@@ -58,12 +69,18 @@ const TOOLS: readonly ToolName[] = ['select', 'rectangle', 'ellipse', 'line', 'f
 const FIXTURES: Readonly<
   Record<
     string,
-    Readonly<{ url: string; camera: { position: { x: number; y: number }; zoom: number } }>
+    Readonly<{
+      url: string;
+      camera: { position: { x: number; y: number }; zoom: number };
+      /** Waits for the test font registration before loading (M6a-U5). */
+      font?: true;
+    }>
   >
 > = {
   containers: { url: '/m1-containers.json', camera: { position: { x: -20, y: -20 }, zoom: 2 } },
   'path-edit': { url: '/m3-path-edit.json', camera: { position: { x: 0, y: 0 }, zoom: 1 } },
   symbols: { url: '/m7-symbols.json', camera: { position: { x: -20, y: -20 }, zoom: 2 } },
+  text: { url: '/m6a-text.json', camera: { position: { x: -20, y: -20 }, zoom: 2 }, font: true },
 };
 /** A rotate cursor (a circular arrow) with a standard fallback; the hotspot is its centre. */
 const ROTATE_CURSOR =
@@ -81,7 +98,7 @@ function hostPlatform(): Platform {
   return typeof navigator !== 'undefined' && /^Mac/u.test(navigator.platform) ? 'mac' : 'other';
 }
 
-/** Test hook for the headed P5, M1, M2, M3, M5 and M7 specs: present only with `?test=1`. */
+/** Test hook for the headed P5, M1, M2, M3, M5, M6a and M7 specs: present only with `?test=1`. */
 declare global {
   interface Window {
     __p5Host?: Readonly<{
@@ -89,6 +106,8 @@ declare global {
       events: readonly EditorEvent[];
       /** M5 contract, section 5.3; resolves at once without `?persist=1` or autosave. */
       persistence: Readonly<{ flush(): Promise<void> }>;
+      /** M6a contract, section 5: the editor's text-dom port and the test font. */
+      text: TextTestHook;
     }>;
   }
 }
@@ -395,12 +414,14 @@ function Status({
   fixture,
   file,
   persistence,
+  textFont,
 }: {
   errors: readonly string[];
   renderer: string;
   fixture: string;
   file: string;
   persistence: PersistenceView;
+  textFont: TestFontStatus;
 }) {
   const revision = useEditorSelector((snapshot) => snapshot.revision);
   const page = useEditorSelector((snapshot) => snapshot.activePage);
@@ -424,6 +445,7 @@ function Status({
       data-renderer={renderer}
       data-fixture={fixture}
       data-scope={scope ?? ''}
+      data-text-font={textFont}
       style={{ padding: 8 }}
     >
       revision {revision}, {count} nodes, {selected} selected
@@ -465,7 +487,15 @@ function Status({
   );
 }
 
-function Surface({ persistence }: { persistence: PersistenceView }) {
+function Surface({
+  persistence,
+  testFont,
+  textFont,
+}: {
+  persistence: PersistenceView;
+  testFont: Promise<'loaded' | 'error'> | null;
+  textFont: TestFontStatus;
+}) {
   const editor = useEditor();
   const execute = useEditorCommands();
   const snapshot = useEditorSelector((value) => value);
@@ -482,11 +512,15 @@ function Surface({ persistence }: { persistence: PersistenceView }) {
     const name = new URLSearchParams(window.location.search).get('fixture');
     const entry = name === null || !Object.hasOwn(FIXTURES, name) ? undefined : FIXTURES[name];
     if (entry === undefined) return;
-    const { url, camera } = entry;
+    const { url, camera, font } = entry;
     let live = true;
     setFixture('loading');
     void (async () => {
       try {
+        // M6a-U5: the fixture loads after the test font settles, loaded or not (the status shows
+        // which), so its first layouts see the registered face.
+        if (font === true && testFont !== null) await testFont;
+        if (!live) return;
         const response = await fetch(url, { cache: 'no-store' });
         if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
         const document: unknown = await response.json();
@@ -504,7 +538,7 @@ function Surface({ persistence }: { persistence: PersistenceView }) {
     return () => {
       live = false;
     };
-  }, [execute]);
+  }, [execute, testFont]);
   // The handle box follows the snapshot: this component re-renders on every editor change.
   const handles = editor.query({ type: 'handles' });
   const pathOverlay = usePathOverlay();
@@ -568,6 +602,7 @@ function Surface({ persistence }: { persistence: PersistenceView }) {
         fixture={fixture}
         file={file}
         persistence={persistence}
+        textFont={textFont}
       />
     </>
   );
@@ -605,12 +640,11 @@ function usePersistence(
   };
 }
 
-export default function Page() {
-  const [editor] = useState(() =>
-    createEditor({ extensions: [starExtension], platform: hostPlatform() }),
-  );
+/** The page once its editor exists: the persistence, the test hook and the surface. */
+function Host({ state, textFont }: { state: HostCompositionState; textFont: TestFontStatus }) {
+  const { editor } = state.composition;
   // The revision when the page loaded (section 5.3: the attach saves edits made during the read).
-  const [baseRevision] = useState(() => editor.getSnapshot().revision);
+  const baseRevision = useMemo(() => editor.getSnapshot().revision, [editor]);
   const persistence = usePersistence(editor, baseRevision);
   const { session } = persistence;
   useEffect(() => {
@@ -621,17 +655,65 @@ export default function Page() {
       editor,
       events,
       persistence: { flush: () => session.current?.flush() ?? Promise.resolve() },
+      text: textTestHook(state),
     };
     return () => {
       unsubscribe();
       delete window.__p5Host;
     };
-  }, [editor, session]);
+  }, [editor, session, state]);
   return (
     <EditorProvider editor={editor}>
       <main>
-        <Surface persistence={persistence} />
+        <Surface persistence={persistence} testFont={state.testFont} textFont={textFont} />
       </main>
     </EditorProvider>
   );
+}
+
+/**
+ * M6a contract, section 5: the editor and its text-dom port are created in a client effect, so
+ * the server and the first client render show a placeholder; the cleanup disposes the pair (under
+ * strict mode the first pair is disposed and the second kept).
+ */
+export default function Page() {
+  const [state, setState] = useState<HostCompositionState | null>(null);
+  const [textFont, setTextFont] = useState<TestFontStatus>('none');
+  const [hostError, setHostError] = useState<string | null>(null);
+  useEffect(() => {
+    let published: HostCompositionState | null = null;
+    const cleanup = runHostEffect(
+      {
+        document,
+        platform: hostPlatform(),
+        textFixture: textFixtureQuery(window.location.search),
+        publish: (value) => {
+          published = value;
+          setState(value);
+        },
+        onFontStatus: setTextFont,
+      },
+      setHostError,
+    );
+    return () => {
+      cleanup();
+      // No render keeps the disposed pair: a replacement published in the same flush wins.
+      setState((current) => (current === published ? null : current));
+    };
+  }, []);
+  if (state === null) {
+    return (
+      <main>
+        <p
+          data-testid="host-pending"
+          data-host-error={hostError ?? undefined}
+          style={{ padding: 8 }}
+        >
+          {hostError === null ? 'loading editor' : `editor failed: ${hostError}`}
+        </p>
+      </main>
+    );
+  }
+  // Keyed per composition, so a replaced editor (Fast Refresh) resets the surface's state.
+  return <Host key={state.id} state={state} textFont={textFont} />;
 }
