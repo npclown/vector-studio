@@ -40,6 +40,7 @@ import {
   decodeFrame,
   multiply,
   rotate,
+  scale,
   transformPoint,
   translate,
   type Affine,
@@ -415,12 +416,17 @@ type Fixture = Readonly<{
   layers: number;
   edges?: readonly Edge[];
   named?: readonly Named[];
+  /** Points inside a child but outside an enclosing mask: decided and black. */
+  masked?: readonly Named[];
+  /** The expected layer bound origin, when the fixture pins it (O8 (b)). */
+  origin?: Readonly<{ x: number; y: number }>;
 }>;
 
-function o1(): Scene {
+/** O1; the red rectangle's left edge lies on pixel centres. */
+function o1(dpr: number): Scene {
   const scene = new Scene();
   scene.group(scene.root(), 'o1', IDENTITY, 0.5, null, (inner) => {
-    scene.shape(inner, 'o1-red', translate(40, 40), rect(200, 120), RED);
+    scene.shape(inner, 'o1-red', translate(40 + half(dpr), 40), rect(200, 120), RED);
     scene.shape(inner, 'o1-blue', translate(160, 80), ellipse(200, 140), BLUE);
   });
   return scene;
@@ -504,7 +510,10 @@ function o5(): Scene {
   return scene;
 }
 
-/** O6: a layer inside a rect clip and a mask; the clip's left edge is on a pixel centre. */
+/**
+ * O6: a layer inside a rect clip and a mask; the clip's left edge is on pixel centres. The mask
+ * ellipse cuts both children inside the clip.
+ */
 function o6(dpr: number): { scene: Scene; clip: OracleRegion; edgeX: number } {
   const scene = new Scene();
   const edgeX = 100 + half(dpr);
@@ -520,7 +529,7 @@ function o6(dpr: number): { scene: Scene; clip: OracleRegion; edgeX: number } {
           ...rings(
             Array.from({ length: 64 }, (_, index) => {
               const angle = (index / 64) * 2 * Math.PI;
-              return [260 + 240 * Math.cos(angle), 160 + 150 * Math.sin(angle)];
+              return [260 + 180 * Math.cos(angle), 160 + 100 * Math.sin(angle)];
             }).flat(),
           ),
           fill: WHITE,
@@ -546,7 +555,26 @@ function o8(transform: Affine = IDENTITY): Scene {
   return scene;
 }
 
-/** Device-space edge probes on the vertical world line `wx`, which lies on pixel centres. */
+/**
+ * Edge probes on a shape's vertical edge `wx` (on pixel centres) inside a layer over black: where
+ * the left side is black, the composite is linear in the leaf, so the edge pixel is half the
+ * right side's value.
+ */
+function shapeEdgeProbes(scene: Scene, wx: number, y0: number, y1: number, dpr: number) {
+  const tree = scene.tree();
+  const edges: Edge[] = [];
+  const column = Math.round(wx * dpr - 0.5);
+  for (let row = Math.ceil(y0 * dpr); row < y1 * dpr; row += 5) {
+    const wy = (row + 0.5) / dpr;
+    const left = expectedLayeredAt(tree, wx - 3 / dpr, wy, 1 / dpr);
+    const right = expectedLayeredAt(tree, wx + 3 / dpr, wy, 1 / dpr);
+    if (left !== null && right !== null && left.every((value) => value === 0))
+      edges.push({ x: column, y: row, rgb: right.map((value) => value / 2) });
+  }
+  return edges;
+}
+
+/** Device-space edge probes on a rect clip's vertical edge `wx`, which lies on pixel centres. */
 function edgeProbes(
   scene: Scene,
   drop: OracleRegion,
@@ -574,9 +602,10 @@ function fixtures(dpr: number): Fixture[] {
   const list: Fixture[] = [
     {
       name: 'O1',
-      scene: o1(),
+      scene: o1(dpr),
       camera: HOME,
       layers: 1,
+      edges: shapeEdgeProbes(o1(dpr), 40 + half(dpr), 44, 156, dpr),
       named: [
         { name: 'overlap-a', wx: 200, wy: 130 },
         { name: 'overlap-b', wx: 220, wy: 120 },
@@ -595,18 +624,38 @@ function fixtures(dpr: number): Fixture[] {
     camera: HOME,
     layers: 1,
     edges: edgeProbes(six.scene, six.clip, six.edgeX, 44, 276, dpr),
+    masked: [
+      { name: 'red-outside-mask-a', wx: 110, wy: 70 },
+      { name: 'red-outside-mask-b', wx: 115, wy: 75 },
+    ],
   });
-  // O8 (a): half off the target's left edge at zoom 0.25 and 8.
-  for (const zoom of [0.25, 8]) {
+  // O8 (a): half off the target's left edge at zoom 0.25 and 8; at zoom 8 the group is scaled
+  // by 1/8 so that it still straddles the edge (its centre is the world point (150, 80) · s).
+  for (const [zoom, factor] of [
+    [0.25, 1],
+    [8, 0.125],
+  ] as const) {
     list.push({
       name: `O8 half off zoom ${zoom}`,
-      scene: o8(),
-      camera: { position: { x: 150, y: 80 - CSS.height / (2 * zoom) }, zoom },
+      scene: o8(scale(factor)),
+      camera: {
+        position: { x: 150 * factor, y: 80 * factor - CSS.height / (2 * zoom) },
+        zoom,
+      },
       layers: 1,
     });
   }
-  // O8 (b): an odd device offset.
-  list.push({ name: 'O8 odd offset', scene: o8(translate(37.3, 21.7)), camera: HOME, layers: 1 });
+  // O8 (b): an odd device offset. The widened bound's origin is odd, (38, 22) · dpr − 1, so
+  // E25-K5 step 4 moves it down to (38, 22) · dpr − 2. The red left edge lies on pixel centres.
+  const odd = o8(translate(38 + half(dpr), 22 + half(dpr)));
+  list.push({
+    name: 'O8 odd offset',
+    scene: odd,
+    camera: HOME,
+    layers: 1,
+    origin: { x: 38 * dpr - 2, y: 22 * dpr - 2 },
+    edges: shapeEdgeProbes(odd, 38 + half(dpr), 26, 138, dpr),
+  });
   return list;
 }
 
@@ -674,7 +723,8 @@ function compare(
   let count = 0;
   let worst = 0;
   const grid = function* (): Iterable<Probe> {
-    for (let y = 1; y < height; y += STRIDE) for (let x = 1; x < width; x += STRIDE) yield { x, y };
+    for (let y = 2; y < height - 2; y += STRIDE)
+      for (let x = 2; x < width - 2; x += STRIDE) yield { x, y };
   };
   for (const { x, y } of probes ?? grid()) {
     const wx = camera.position.x + (x + 0.5) / scaleFactor;
@@ -695,10 +745,19 @@ function compare(
 
 type Allowance = (diagnostic: RendererDiagnostic) => boolean;
 
-/** P3's fringe work cap on a wide stroke draws it without its fringe: interior probes hold. */
-const fringeCap: Allowance = (diagnostic) =>
-  diagnostic.code === 'render.path-mesh-failure' &&
-  (diagnostic.context as Record<string, unknown> | undefined)?.failureCode === 'fringe-work-cap';
+/**
+ * P3's fringe work cap on O2's strokes draws them without their fringe; interior probes hold.
+ * Only those two strokes may raise it.
+ */
+const fringeCap: Allowance = (diagnostic) => {
+  const context = diagnostic.context as Record<string, unknown> | undefined;
+  return (
+    diagnostic.code === 'render.path-mesh-failure' &&
+    context?.failureCode === 'fringe-work-cap' &&
+    context.paint === 'stroke' &&
+    (context.nodeId === 'o2-joint' || context.nodeId === 'o2-dash')
+  );
+};
 
 function unexpected(diagnostics: readonly RendererDiagnostic[], ...allowed: Allowance[]) {
   return diagnostics
@@ -814,7 +873,25 @@ for (const samples of [4, 1] as const) {
             [bound.x, bound.y, bound.width, bound.height].some((value) => value % 2 !== 0)
           )
             failures.push(`${fixture.name} bound not even ${JSON.stringify(bound)}`);
+          if (
+            fixture.origin !== undefined &&
+            (bound?.x !== fixture.origin.x || bound.y !== fixture.origin.y)
+          )
+            failures.push(
+              `${fixture.name} bound origin ${JSON.stringify(bound)}, expected ${JSON.stringify(fixture.origin)}`,
+            );
         }
+        const maskedRows = (fixture.masked ?? []).map((probe) => {
+          const x = Math.floor(probe.wx * dpr);
+          const y = Math.floor(probe.wy * dpr);
+          const expected = expectedLayeredAt(tree, (x + 0.5) / dpr, (y + 0.5) / dpr, 1 / dpr);
+          const got = pixelAt(rendered, x, y);
+          if (expected === null || worstLane(expected, [0, 0, 0]) !== 0)
+            failures.push(`${fixture.name} ${probe.name}: oracle ${JSON.stringify(expected)}`);
+          else if (worstLane(got, expected) > outcome.tolerance)
+            failures.push(`${fixture.name} ${probe.name}: ${got.join(',')} is not masked out`);
+          return { name: probe.name, x, y, got };
+        });
         rows.push({
           fixture: fixture.name,
           probes: outcome.probes,
@@ -822,6 +899,7 @@ for (const samples of [4, 1] as const) {
           tolerance: outcome.tolerance,
           edges: edgeRows,
           named: namedRows,
+          masked: maskedRows,
           packet,
         });
       }
@@ -1013,6 +1091,7 @@ test('E25-A07 O9 layer budget on a 3840 x 2160 surface at 4x', async ({ page }, 
   ) => {
     const before = limits(await page.evaluate(() => window.__vectorStudioE23.diagnostics())).length;
     const rendered = await render(page, scene.snapshot(), HOME);
+    if (rendered.result.status !== 'applied') failures.push(`${name}: ${rendered.result.status}`);
     const after = limits(await page.evaluate(() => window.__vectorStudioE23.diagnostics()));
     const fresh = after
       .slice(before)
@@ -1092,11 +1171,14 @@ test('E25-A04 opacity edits, visibility, pan and layer passes', async ({ page },
       camera,
     ] as const);
   /** A change set that updates only the scene's container (its first node). */
-  const edit = (scene: Scene) =>
-    page.evaluate(([identity, node]) => window.__vectorStudioE23.edit(identity, [node]), [
-      scene.snapshot().identity,
-      scene.nodes[0]!,
-    ] as const);
+  const edit = async (scene: Scene) => {
+    const edited = await page.evaluate(
+      ([identity, node]) => window.__vectorStudioE23.edit(identity, [node]),
+      [scene.snapshot().identity, scene.nodes[0]!] as const,
+    );
+    if (edited.status !== 'applied') failures.push(`edit ${scene.nodes[0]!.id}: ${edited.status}`);
+    return edited;
+  };
   type Counters = Awaited<ReturnType<typeof counters>>;
   const cost = (before: Counters, after: Counters) => ({
     portCalls: (after.pathMesh?.portCalls ?? 0) - (before.pathMesh?.portCalls ?? 0),
@@ -1207,10 +1289,30 @@ test('E25-A06 layer resources in accounting, after removal, device loss and disp
   const baseline = resources(baselineFrame.result.counters.statistics);
   const createdBefore =
     baselineFrame.result.counters.statistics.resources.byCategory.texture.created;
+  const baselineTextures = baselineFrame.result.counters.statistics.resources.byCategory.texture;
   const layered = await render(page, o3().snapshot(), HOME);
   const textures = layered.result.counters.statistics.resources.byCategory.texture;
-  if (textures.created < createdBefore + 3)
+  // The three layer textures and the tile set (colour, resolve and stencil at 4x) are accounted:
+  // the peak holds all of them at once, at section 4's sizes.
+  const bounds = layered.result.frame.packet?.layers?.layers.map((layer) => layer.bound) ?? [];
+  // Section 4: the tile set is min(T, widest layer) × min(T, tallest layer) × 24 bytes at 4x.
+  const tile = {
+    width: Math.min(1024, Math.max(0, ...bounds.map((bound) => bound.width))),
+    height: Math.min(1024, Math.max(0, ...bounds.map((bound) => bound.height))),
+  };
+  const layerBytes =
+    bounds.reduce((sum, bound) => sum + bound.width * bound.height * 4, 0) +
+    tile.width * tile.height * 24;
+  if (bounds.length !== 3) failures.push(`O3 drew ${bounds.length} layers`);
+  if (textures.created < createdBefore + 6)
     failures.push(`layer textures not in accounting: ${createdBefore} → ${textures.created}`);
+  if (textures.peakLiveBytes < baselineTextures.liveBytes + layerBytes)
+    failures.push(
+      `texture peak ${textures.peakLiveBytes} below ${baselineTextures.liveBytes} + ${layerBytes}`,
+    );
+  // Released after submission: the layered frame's own accounting is back at the baseline.
+  if (textures.live !== baselineTextures.live || textures.liveBytes !== baselineTextures.liveBytes)
+    failures.push(`layered frame live textures ${JSON.stringify({ textures, baselineTextures })}`);
   const afterRemoval = resources(
     (await render(page, plain.snapshot(), HOME)).result.counters.statistics,
   );
@@ -1238,6 +1340,9 @@ test('E25-A06 layer resources in accounting, after removal, device loss and disp
       {
         baseline,
         textures,
+        createdBefore,
+        layerBytes,
+        tile,
         afterRemoval,
         sameFrame,
         afterRecovery,
@@ -1293,13 +1398,17 @@ for (const dpr of [1, 2]) {
       );
     const { pageErrors } = await open(page, { dpr, samples: 4 });
     const isolatedPage = await context.newPage();
-    await open(isolatedPage, { dpr, samples: 4, isolate: true });
+    const isolated = await open(isolatedPage, { dpr, samples: 4, isolate: true });
     const results: Record<string, unknown> = {};
+    const failures: string[] = [];
+    const layersOf = (rendered: Rendered) =>
+      rendered.result.frame.packet?.layers?.layers.length ?? 0;
     for (const kind of ['rectangles', 'paths'] as const) {
       // At opacity 0.5 against the oracle's per-pixel model (coverages multiplied, as P1
       // composes) and the disjoint-samples model (the average of the two sides).
       const half5 = shared(0.5, kind);
       const rendered = await render(page, half5.scene.snapshot(), HOME);
+      if (layersOf(rendered) !== 1) failures.push(`${kind} at 0.5: ${layersOf(rendered)} layers`);
       const left = { perPixel: [159.375, 95.625, 95.625], disjoint: [191.25, 127.5, 127.5] };
       const right = { perPixel: [31.875, 127.5, 0], disjoint: [63.75, 127.5, 0] };
       const measured = rows(rendered, half5.columns).map((row) => {
@@ -1314,6 +1423,9 @@ for (const dpr of [1, 2]) {
       const unitScene = shared(1, kind);
       const mainPass = await render(page, unitScene.scene.snapshot(), HOME);
       const throughLayer = await render(isolatedPage, unitScene.scene.snapshot(), HOME);
+      // The comparison means something only if the main pass drew no layer and isolate=1 did.
+      if (layersOf(mainPass) !== 0 || layersOf(throughLayer) !== 1)
+        failures.push(`${kind} at 1: ${layersOf(mainPass)} / ${layersOf(throughLayer)} layers`);
       const layerVsMain = rows(throughLayer, unitScene.columns).map((row) => ({
         ...row,
         main: pixelAt(mainPass, row.x, row.y),
@@ -1330,7 +1442,21 @@ for (const dpr of [1, 2]) {
         layerVsMain,
       };
     }
-    report('report.json', JSON.stringify({ dpr, results, pageErrors }, null, 2));
+    for (const target of [page, isolatedPage])
+      failures.push(
+        ...unexpected(await target.evaluate(() => window.__vectorStudioE23.diagnostics())),
+      );
+    report(
+      'report.json',
+      JSON.stringify(
+        { dpr, results, pageErrors, isolatedPageErrors: isolated.pageErrors, failures },
+        null,
+        2,
+      ),
+    );
     expect(pageErrors).toEqual([]);
+    expect(isolated.pageErrors).toEqual([]);
+    // The measured differences are observations; only the setup checks above fail the test.
+    expect(failures).toEqual([]);
   });
 }

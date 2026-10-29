@@ -14,25 +14,34 @@ Contract: [d9-e25-isolated-opacity-contract.md](../../plans/d9-e25-isolated-opac
 
 Every test passed: 12 tests in all.
 
-**E25-A03.** O1 to O6 and O8 (a), (b) were run at 4x and 1x, at DPR 1 and 2. Every fixture drew the expected number of layers.
+**E25-A03.** O1 to O6 and O8 (a), (b) were run at 4x and 1x, at DPR 1 and 2. Every fixture drew the expected number of layers. The 4x and 1x figures are the same.
 
 | Fixture | Probes at DPR 1 / 2 | Worst difference | Tolerance |
 | --- | --- | --- | --- |
-| O1 | 17,538 / 71,120 | 0.50 | 3 |
-| O2 | 15,600 / 66,437 | 0.70 | 3 |
-| O3 | 16,126 / 68,154 | 1.00 | 5 |
-| O4 | 17,421 / 70,844 | 0.50 | 3 |
-| O5 | 16,730 / 69,469 | 0.50 | 3 |
-| O6 | 16,442 / 68,558 | 0.50 | 3 |
-| O8 half off, zoom 0.25 | 18,211 / 72,455 | 0.50 | 3 |
-| O8 half off, zoom 8 | 18,083 / 72,207 | 0.50 | 3 |
-| O8 odd offset | 17,564 / 71,420 | 0.50 | 3 |
+| O1 | 17,266 / 70,642 | 0.50 | 3 |
+| O2 | 15,305 / 65,876 | 0.69 | 3 |
+| O3 | 15,835 / 67,617 | 1.00 | 5 |
+| O4 | 17,148 / 70,291 | 0.50 | 3 |
+| O5 | 16,458 / 68,911 | 0.50 | 3 |
+| O6 | 16,377 / 69,068 | 0.50 | 3 |
+| O8 half off, zoom 0.25 | 17,933 / 71,901 | 0.50 | 3 |
+| O8 half off, zoom 8 | 17,662 / 71,348 | 0.50 | 3 |
+| O8 odd offset | 17,335 / 70,951 | 0.50 | 3 |
 
-- The 4x and 1x figures are the same.
-- O1's three named overlap probes are 63.75/255 from the descendant-multiplied oracle. The margin is 24.
-- O6 has 40 edge probes at DPR 1 and 86 at DPR 2. They are pixel centres on the rect clip's left edge, at coverage 0.5. Each is within 0.25 of E25-K2's per-leaf value, against a tolerance of 5. Where the two children overlap, SVG's group-clip model differs from the per-leaf value by up to 32/255.
-- O4's layer bound lies within the rotated clip's device bounds. Every O8 bound has an even origin and size.
-- Diagnostics: only P3's `fringe-work-cap` on O2's joint and dashed strokes. That code draws the stroke without its fringe, and the interior probes are unaffected.
+- **Interior probes** start 2 px inside the target, so a layer bound clamped to the target edge is respected.
+- **O1's named probes.** The three overlap probes are 63.75/255 from the descendant-multiplied oracle. The required margin is 24.
+- **Shape edge probes.**
+  - O1 has 23 probes at DPR 1 and 45 at DPR 2. They sit on the red rectangle's left edge inside the layer, on pixel centres.
+  - O8 (b) has the same counts on its group's red edge.
+  - Each probe is within 0.25 of half the leaf's composite, against a tolerance of 5.
+- **O6 edge probes.** There are 44 at DPR 1 and 90 at DPR 2, on the rect clip's left edge at coverage 0.5. Each is within 0.25 of E25-K2's per-leaf value. Where the two children overlap, SVG's group-clip model differs from that value by up to 32/255.
+- **O6's mask** (an ellipse with radii 180 × 100) cuts both children inside the clip. Two named points inside the red child and outside the mask are black in the oracle and in the frame.
+- **O4's layer bound** lies within the rotated clip's device bounds.
+- **O8 (a) and (b) bounds.**
+  - Every O8 bound is even.
+  - In O8 (a) the group straddles the left edge at both zooms; at zoom 8 the group is scaled by 1/8.
+  - O8 (b) places the group at (38, 22) + 0.5/dpr. The widened origin is odd, and the bound's origin is exactly (36, 20) at DPR 1 and (74, 42) at DPR 2, which is E25-K5 step 4.
+- **Diagnostics.** The only diagnostic was P3's `fringe-work-cap`. The spec allows it only on O2's joint and dashed strokes. It draws the stroke without its fringe, which the interior probes do not see.
 
 **O7.**
 
@@ -43,7 +52,7 @@ Every test passed: 12 tests in all.
 
 - Each edit cost 0 fill port calls, 0 stroke port calls and 0 geometry builds. The packet's layer opacity followed the edit.
 - An edit from 0 to 0.5 cost what making the same subtree visible cost: 1 fill call, 1 stroke call and 1 geometry build each.
-- Two camera moves (a pan, then a zoom to 1.5) cost the same with the container at 0.5 as at 1.
+- Two camera moves (a pan, then a zoom to 1.5) cost the same with the container at 0.5 as at 1. Each costs 1 fill call, 1 stroke call and 0 geometry builds, because the zoom changes the path tolerance.
 - O3 drew 9 layer passes over 3 submitted frames, which is 3 per frame.
 
 **E25-A05 on a large surface.** O8 (c) used a 2100 × 1300 CSS surface at DPR 2, at 4x and at 1x.
@@ -53,7 +62,9 @@ Every test passed: 12 tests in all.
 
 **E25-A06.**
 
-- The texture `created` count rose by the layer textures and the tile set.
+- **Accounting.** With O3's three layers, the texture `created` count rose by 12 over the frames of that capture (layer textures and the tile set are created per frame). The texture peak is at least the baseline plus the three layers and the 464 × 284 tile set at 24 bytes per pixel (4,219,776 bytes).
+- **Release after submission.** The layered frame's live texture count and bytes already equal the baseline.
+- **Release on resize** is covered by U3's unit test with the fake device, not by this spec.
 - After the isolated containers were removed, live counts and bytes in every category matched the baseline.
 - The frame recovered after device loss is byte-identical to the frame before it, and accounting returned to the baseline.
 - Nothing is live after dispose.
@@ -79,7 +90,7 @@ Every test passed: 12 tests in all.
 The scene was drawn twice, once as analytic rectangles and once as path fills.
 
 - At opacity 0.5, every probe on E and F is within 0.625 of the per-pixel model, where coverages multiply as P1 composes them. The disjoint-samples model, the average of the two sides, is 31.75 away.
-- At opacity 1, the layer path (`isolate=1`) and the main pass give identical pixels on both edges.
+- At opacity 1, the layer path (`isolate=1`) and the main pass give identical pixels on both edges. The test checks that the first draws one layer and the second none.
 - On SwiftShader, then, the U3 finding does not show on shared axis-aligned edges. The reference-PC run repeats the measurement on hardware.
 
 ## Remaining for the reference PC

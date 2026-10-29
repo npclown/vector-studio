@@ -319,6 +319,8 @@ const api = {
       removed: [],
       orders: [],
     });
+    // A rejected change set leaves the mirror at its revision.
+    if (result.status !== 'applied') revision -= 1;
     await submitted();
     return { status: result.status, result, counters: counters(), packet: lastPacket };
   },
