@@ -798,6 +798,119 @@ describe('M5-A08 restore failures load nothing and attach no autosave', () => {
   });
 });
 
+/** The fake factory, with `onTransaction` called for each transaction the adapter creates. */
+function hooked(
+  real: IDBFactory,
+  onTransaction: (mode: IDBTransactionMode, tx: IDBTransaction) => void,
+): IDBFactory {
+  return {
+    open(name: string, version?: number) {
+      const request = real.open(name, version);
+      // Registered before the adapter's `onsuccess`, so it runs first.
+      request.addEventListener('success', () => {
+        const database = request.result;
+        const original = database.transaction.bind(database);
+        database.transaction = ((stores: string | string[], mode?: IDBTransactionMode) => {
+          const tx = original(stores, mode);
+          onTransaction(mode ?? 'readonly', tx);
+          return tx;
+        }) as typeof database.transaction;
+      });
+      return request;
+    },
+  } as unknown as IDBFactory;
+}
+
+describe('M5-A08 discard failure, cleanup during the read and a throwing restore', () => {
+  it('a failed discard offers Discard again and attaches nothing', async () => {
+    const real = new IDBFactory();
+    const corrupt = read('malformed/malformed-json.json');
+    await rawPut(real, corrupt);
+    let failClears = true;
+    const factory = hooked(real, (mode, tx) => {
+      if (mode === 'readwrite' && failClears) queueMicrotask(() => tx.abort());
+    });
+    const h = await harness({ factory });
+    expect(h.session.status()).toMatchObject({ state: 'error', stage: 'restore' });
+    await h.session.discard();
+    const status = h.session.status();
+    expect(status).toEqual({
+      state: 'error',
+      stage: 'discard',
+      code: 'persistence.write-failed',
+      path: '',
+    });
+    expect(host.offersDiscard(status)).toBe(true);
+    expect(h.session.attached()).toBe(false);
+    rect(h, 10);
+    await expectNoWrite(h);
+    expect(await rawGet(real)).toBe(corrupt);
+    // Offered again: a discard that now succeeds attaches.
+    failClears = false;
+    await h.session.discard();
+    expect(h.session.attached()).toBe(true);
+    expect(h.session.status()).toEqual({ state: 'empty' });
+    h.session.dispose();
+  });
+
+  it('a cleanup between the open and the read loads nothing and closes the connection', async () => {
+    const real = new IDBFactory();
+    await store(real, twoPageEnvelope());
+    let session: Session | null = null;
+    const factory = hooked(real, (mode) => {
+      // The read's transaction: the page unmounts while the read is pending.
+      if (mode === 'readonly') session?.dispose();
+    });
+    const editor = busyEditor();
+    const before = editor.getSnapshot();
+    const statuses: PersistStatus[] = [];
+    const events: EditorEvent[] = [];
+    editor.subscribe((event) => events.push(event));
+    session = host.attachPersistence(editor, {
+      indexedDB: factory,
+      timers: clock(),
+      onStatus: (status) => statuses.push(status),
+    });
+    await session.ready;
+    await idle();
+    expect(editor.getSnapshot()).toBe(before);
+    expect(events).toEqual([]);
+    expect(statuses).toEqual([{ state: 'restoring' }]);
+    expect(session.attached()).toBe(false);
+    const deleting = real.deleteDatabase(DB);
+    let blocked = false;
+    deleting.onblocked = () => {
+      blocked = true;
+    };
+    await done(deleting);
+    expect(blocked).toBe(false);
+  });
+
+  it('a throw during the restore is a failed restore, not an unhandled rejection', async () => {
+    const factory = new IDBFactory();
+    await store(factory, twoPageEnvelope());
+    const editor = busyEditor();
+    const original = editor.execute.bind(editor);
+    editor.execute = (command) => {
+      if (command.type === 'loadDocument') throw new Error('editor failure');
+      return original(command);
+    };
+    const before = editor.getSnapshot();
+    const h = await harness({ factory, editor });
+    expect(h.session.status()).toEqual({
+      state: 'error',
+      stage: 'restore',
+      code: 'persistence.read-failed',
+      path: '',
+    });
+    expect(h.session.attached()).toBe(false);
+    expect(editor.getSnapshot()).toBe(before);
+    rect(h, 10);
+    await expectNoWrite(h);
+    h.session.dispose();
+  });
+});
+
 describe('M5-A08 composition: opt-in, strict-mode remount and the status', () => {
   it('is off by default, on with ?persist=1, and wins over ?fixture=', () => {
     expect(host.persistQuery('')).toEqual({ persist: false, fixtureIgnored: false });

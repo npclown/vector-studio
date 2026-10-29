@@ -237,16 +237,17 @@ function FileControls({ onFileStatus }: { onFileStatus: (status: string) => void
     link.href = url;
     link.download = SAVE_FILE_NAME;
     link.click();
-    // Revoke after the click has started the download.
-    setTimeout(() => URL.revokeObjectURL(url), 0);
+    // Revoke well after the click has started the download.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
     onFileStatus('saved');
   };
   const open = async (file: File) => {
     let text: string;
     try {
       text = await file.text();
-    } catch (error) {
-      onFileStatus(`error ${String(error)}`);
+    } catch {
+      // A host-local status in the `code path` style; not a persistence code.
+      onFileStatus('error file.read-failed');
       return;
     }
     const result = restoreEnvelope(editor, text);

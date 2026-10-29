@@ -76,7 +76,7 @@ export function loadEnvelope(editor: Editor, envelope: PersistenceEnvelope): Res
   // The editor's path points into the document; inside an envelope it gets the `/document`
   // prefix, as the parse codes of section 2.1 do.
   if (!loaded.ok) {
-    return { ok: false, code: loaded.code, path: loaded.path ? `/document${loaded.path}` : '' };
+    return { ok: false, code: loaded.code, path: `/document${loaded.path ?? ''}` };
   }
   // Neither can fail after a successful parse and load (section 5.2, step 5); a failure is
   // still reported rather than ignored.
@@ -246,8 +246,14 @@ export function attachPersistence(
     attach(store, false);
   };
 
+  // A throw from the adapter or the editor ends the restore as a failure, never as an unhandled
+  // rejection; autosave stays off as after any failed restore.
+  const ready = start().catch(() => {
+    failed('restore', { code: 'persistence.read-failed', path: '' });
+  });
+
   return {
-    ready: start(),
+    ready,
     status: () => current,
     attached: () => autosave !== null,
     flush: () => (autosave === null || disposed ? Promise.resolve() : autosave.flush()),
@@ -256,8 +262,14 @@ export function attachPersistence(
       if (disposed || discarding || target === null || autosave !== null) return;
       if (!offersDiscard(current)) return;
       discarding = true;
-      const cleared = await target.clear();
-      discarding = false;
+      let cleared: Awaited<ReturnType<DocumentStore['clear']>>;
+      try {
+        cleared = await target.clear();
+      } catch {
+        cleared = { ok: false, code: 'persistence.write-failed', path: '' };
+      } finally {
+        discarding = false;
+      }
       if (disposed) return;
       if (!cleared.ok) {
         failed('discard', cleared);
