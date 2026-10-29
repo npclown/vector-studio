@@ -231,6 +231,45 @@ function regionCoverage(region: OracleRegion, wx: number, wy: number, pixelSize:
 }
 
 /**
+ * One element's premultiplied source at world point `(wx, wy)` (its fill and stroke, under its
+ * regions, times its opacity): 'none' where it contributes nothing, null when a coverage is
+ * within 2 physical px of a boundary. E25 U4 composes these through isolated containers.
+ */
+export function elementSource(
+  element: OracleElement,
+  wx: number,
+  wy: number,
+  pixelSize: number,
+): Premultiplied | 'none' | null {
+  let gate = 1;
+  for (const region of element.under ?? []) {
+    const coverage = regionCoverage(region, wx, wy, pixelSize);
+    if (coverage === null) return null;
+    gate *= coverage;
+  }
+  const [x, y] = transformPoint(invert(element.world), wx, wy);
+  const margin = localMargin(element.world, 2, pixelSize);
+  const fillCoverage = element.fill === null ? 0 : areaCoverage(element.shape, x, y, margin);
+  const strokeCover =
+    element.stroke === null ? 0 : strokeCoverage(element.shape, element.stroke.width, x, y, margin);
+  if (gate === 0) return 'none';
+  if (fillCoverage === null || strokeCover === null) return null;
+  if (fillCoverage === 0 && strokeCover === 0) return 'none';
+  if (
+    (fillCoverage === 1 && nearDiscontinuity(element.fill!, element.world, wx, wy, pixelSize)) ||
+    (strokeCover === 1 &&
+      nearDiscontinuity(element.stroke!.paint, element.world, wx, wy, pixelSize))
+  ) {
+    return null;
+  }
+  const fill = fillCoverage === 0 ? [0, 0, 0, 0] : paintAt(element.fill!, x, y);
+  const stroke = strokeCover === 0 ? [0, 0, 0, 0] : paintAt(element.stroke!.paint, x, y);
+  return [0, 1, 2, 3].map(
+    (lane) => (stroke[lane]! + fill[lane]! * (1 - stroke[3])) * element.opacity,
+  ) as unknown as Premultiplied;
+}
+
+/**
  * The expected 8-bit-scale RGB at world point `(wx, wy)` over black, in element order, or null
  * when any coverage is within 2 physical px of a boundary. `pixelSize` is world units per
  * physical pixel, `1 / (zoom · DPR)`.
@@ -243,36 +282,11 @@ export function expectedAt(
 ): readonly [number, number, number] | null {
   let out: Premultiplied = [0, 0, 0, 1];
   for (const element of elements) {
-    let gate = 1;
-    for (const region of element.under ?? []) {
-      const coverage = regionCoverage(region, wx, wy, pixelSize);
-      if (coverage === null) return null;
-      gate *= coverage;
-    }
-    const [x, y] = transformPoint(invert(element.world), wx, wy);
-    const margin = localMargin(element.world, 2, pixelSize);
-    const fillCoverage = element.fill === null ? 0 : areaCoverage(element.shape, x, y, margin);
-    const strokeCover =
-      element.stroke === null
-        ? 0
-        : strokeCoverage(element.shape, element.stroke.width, x, y, margin);
-    if (gate === 0) continue;
-    if (fillCoverage === null || strokeCover === null) return null;
-    if (fillCoverage === 0 && strokeCover === 0) continue;
-    if (
-      (fillCoverage === 1 && nearDiscontinuity(element.fill!, element.world, wx, wy, pixelSize)) ||
-      (strokeCover === 1 &&
-        nearDiscontinuity(element.stroke!.paint, element.world, wx, wy, pixelSize))
-    ) {
-      return null;
-    }
-    const fill = fillCoverage === 0 ? [0, 0, 0, 0] : paintAt(element.fill!, x, y);
-    const stroke = strokeCover === 0 ? [0, 0, 0, 0] : paintAt(element.stroke!.paint, x, y);
-    const source = [0, 1, 2, 3].map(
-      (lane) => (stroke[lane]! + fill[lane]! * (1 - stroke[3])) * element.opacity,
-    );
+    const source = elementSource(element, wx, wy, pixelSize);
+    if (source === null) return null;
+    if (source === 'none') continue;
     out = [0, 1, 2, 3].map(
-      (lane) => source[lane]! + out[lane]! * (1 - source[3]!),
+      (lane) => source[lane]! + out[lane]! * (1 - source[3]),
     ) as unknown as Premultiplied;
   }
   return [out[0] * 255, out[1] * 255, out[2] * 255];
