@@ -43,6 +43,7 @@ import { nativeFixture, nativeScene, submitted } from '../support/p4-native-fixt
 import {
   ScriptedStrokeMeshPort,
   createStrokeHarness,
+  pathStroke,
   strokedNode,
 } from '../support/st-u6-stroke-harness.js';
 import { createCountingPort } from '../support/v3a-path-harness.js';
@@ -571,6 +572,128 @@ describe('E23 U3 paint buffers (E23-A05, A09 unit part)', () => {
         draws: [{ ...packet.draws[0]!, paint: 'x' as never }],
       }),
     ).toMatchObject({ reason: 'invalid-packet' });
+    creation.dispose();
+  });
+});
+
+/** Records the bytes of every queue write, by buffer label. */
+function captureWrites(fixture: ReturnType<typeof nativeFixture>) {
+  const bytes: { label: string; offset: number; words: number[] }[] = [];
+  const queue = fixture.device.queue as unknown as {
+    writeBuffer: ReturnType<
+      typeof vi.fn<(buffer: { label: string }, offset: number, data: Uint8Array) => void>
+    >;
+  };
+  const original = queue.writeBuffer.getMockImplementation()!;
+  queue.writeBuffer.mockImplementation((buffer, offset, data) => {
+    bytes.push({
+      label: buffer.label,
+      offset,
+      words: Array.from(new Uint32Array(data.slice().buffer)),
+    });
+    original(buffer, offset, data);
+  });
+  return (fragment: string) => bytes.filter((write) => write.label.includes(fragment));
+}
+
+const gradientStroke = (width = 2) => pathStroke({ color: linear, width });
+
+describe('E23 U3 index tables', () => {
+  it('a primitive pair holds its fill and stroke records at 2·slot and 2·slot + 1', async () => {
+    const fixture = nativeFixture();
+    const written = captureWrites(fixture);
+    const { scene, creation, target } = await nativeScene(fixture, allOptions);
+    const both = {
+      ...box('b', 40, linear),
+      style: { fill: linear, stroke: { color: linear, width: 2 } },
+    } as RenderNodeSnapshot;
+    const packet = harness([box('u', 0), both]).source.prepare(target)!;
+    const entry = packet.paint!.primitives[0]!;
+    expect([entry.fill, entry.stroke]).toEqual([1, 2]);
+    submitted(scene.submitPrimitivePacket(packet));
+    const [table] = written('paint-primitives');
+    expect(table!.words.slice(entry.slot * 2, entry.slot * 2 + 2)).toEqual([1, 2]);
+    // The solid primitive's pair is 0, 0.
+    expect(table!.words.filter((word) => word !== 0)).toEqual([1, 2]);
+    creation.dispose();
+  });
+
+  it('a joint fill instance holds its fill record and the stroke paint it reads at +1', async () => {
+    const fixture = nativeFixture();
+    const written = captureWrites(fixture);
+    const { scene, creation, target } = await nativeScene(fixture, allOptions);
+    // Solid fill, gradient stroke: the joint fill draw uses the paint variant for a_S.
+    const h = harness([strokedNode('a', 40, { opacity: 0.5, stroke: gradientStroke() })]);
+    const packet = h.source.prepare(target)!;
+    const [joint, stroke] = packet.mesh!.draws;
+    expect([joint!.composite, joint!.gradient, joint!.strokeGradient]).toEqual([
+      'joint-fill',
+      undefined,
+      1,
+    ]);
+    expect([stroke!.composite, stroke!.gradient]).toEqual([undefined, 1]);
+    submitted(scene.submitPrimitivePacket(packet));
+    const [table] = written('paint-meshes');
+    expect(table!.words.slice(joint!.instance * 2, joint!.instance * 2 + 2)).toEqual([0, 1]);
+    expect(table!.words.slice(stroke!.instance * 2, stroke!.instance * 2 + 2)).toEqual([1, 0]);
+    const pipelines = encoded(fixture.calls)
+      .filter((call) => call[0] === 'setPipeline')
+      .map((call) => call[1]);
+    expect(pipelines).toEqual([
+      'vector-studio/p1-analytic-primitive-stencil-4x',
+      'vector-studio/p3-mesh-joint-4x+paint-v0',
+      'vector-studio/p3-mesh-fill-4x+paint-v0',
+    ]);
+    creation.dispose();
+  });
+
+  it('rebinds group 2 between the primitive and mesh paint groups in paint order', async () => {
+    const fixture = nativeFixture();
+    const { scene, creation, target } = await nativeScene(fixture, allOptions);
+    const h = harness([
+      box('g1', 0, linear),
+      strokedNode('p', 40, { fill: linear, stroke: null }),
+      box('g2', 80, linear),
+    ]);
+    submitted(scene.submitPrimitivePacket(h.source.prepare(target)!));
+    const groups = encoded(fixture.calls)
+      .filter((call) => call[0] === 'setBindGroup' && call[1] === 2)
+      .map((call) => call[2]);
+    expect(groups).toEqual([
+      'primitive/1/paint-primitives-2/bind-group',
+      'primitive/1/paint-meshes-3/bind-group',
+      'primitive/1/paint-primitives-2/bind-group',
+    ]);
+    creation.dispose();
+  });
+
+  it('a growing record table moves to a new buffer, writes every record and releases the old one', async () => {
+    const fixture = nativeFixture();
+    const written = captureWrites(fixture);
+    const { scene, creation, target } = await nativeScene(fixture, allOptions);
+    const shifted = (index: number): SceneGradient => ({
+      ...linear,
+      transform: [10, 0, 0, 10, index, 0],
+    });
+    const h = harness([box('a', 0, shifted(0)), box('b', 20, shifted(1))]);
+    const submit = () => {
+      const receipt = submitted(scene.submitPrimitivePacket(h.source.prepare(target)!));
+      h.source.acknowledge(receipt);
+    };
+    submit();
+    h.replace(
+      Array.from({ length: 6 }, (_, index) => box(`n${index}`, index * 20, shifted(index))),
+    );
+    submit();
+    const second = written('paint-records-4');
+    expect(second.map((write) => write.offset)).toEqual([1, 2, 3, 4, 5, 6].map((i) => i * 368));
+    const createBuffer = vi.mocked(
+      (fixture.device as unknown as { createBuffer: () => unknown }).createBuffer,
+    );
+    const first = createBuffer.mock.results
+      .map((result) => result.value as { label: string; destroy: ReturnType<typeof vi.fn> })
+      .find((buffer) => buffer.label === 'primitive/1/paint-records-1')!;
+    expect(first.destroy).toHaveBeenCalledTimes(1);
     creation.dispose();
   });
 });
