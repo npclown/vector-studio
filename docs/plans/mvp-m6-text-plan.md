@@ -1,6 +1,6 @@
 # MVP M6 text plan
 
-Status: DRAFT 2026-10-29; independent review round 1 NOT READY (B1 to B3, should-fix 1 to 13, minor 1 to 8), applied; round 2 READY WITH FOLLOW-UPS (S-a to S-e, minor 1 to 4), applied. Full tier (new node type and schema version, a new port in `packages/contracts`, a new package, a glyph rendering route, product behavior). Visualization-track item [V-12](d9-visualization-track.md#status-index). It is the architecture's "Post-P5 text plan" design gate ([graphics-engine architecture](../graphics-engine-architecture.md#design-gates-before-later-implementation)) and the text plan that [MVP plan M6](mvp-editor-plan.md#m6-text) and MVP-Q10 require before M6. It is a plan, not a milestone contract: each milestone it proposes (section 8) gets its own contract with acceptance criteria IDs before product code.
+Status: APPROVED 2026-10-29 (M6-Q1, Q2, Q7, Q20 decided and Q11, Q12, Q14, Q23 confirmed as option (a), 추천안 자동 채택 2026-10-29 under the standing rule of 2026-10-24; a later user pick on the decision cards replaces it); independent review round 1 NOT READY (B1 to B3, should-fix 1 to 13, minor 1 to 8), applied; round 2 READY WITH FOLLOW-UPS (S-a to S-e, minor 1 to 4), applied. Full tier (new node type and schema version, a new port in `packages/contracts`, a new package, a glyph rendering route, product behavior). Visualization-track item [V-12](d9-visualization-track.md#status-index). It is the architecture's "Post-P5 text plan" design gate ([graphics-engine architecture](../graphics-engine-architecture.md#design-gates-before-later-implementation)) and the text plan that [MVP plan M6](mvp-editor-plan.md#m6-text) and MVP-Q10 require before M6. It is a plan, not a milestone contract: each milestone it proposes (section 8) gets its own contract with acceptance criteria IDs before product code.
 
 Owners: this file owns the M6 decisions listed in section 1, the milestone split, the plan-level exit criteria M6-A01 to M6-A13 and open questions M6-Q1 to M6-Q23. Product behavior stays in [`requirements.md`](../requirements.md#text) (Text), which this plan does not change; package boundaries in [`ARCHITECTURE.md`](../../ARCHITECTURE.md#dependency-direction); the migration policy in MVP-Q2; the glyph route's renderer contract in the rendering item R-T ([MVP plan, section 5](mvp-editor-plan.md#5-rendering-track-needs)). The P5 and M1 to M5 rules stay in force except where section 7 names an M2 change made by the M6b contract.
 
@@ -208,11 +208,13 @@ Documentation only: local links and anchors were checked. Markdown formatting is
 
 Independent review round 2 is READY WITH FOLLOW-UPS, applied. The plan then needs the user's decisions on M6-Q1, M6-Q2, M6-Q7 and M6-Q20 and confirmations on M6-Q11, M6-Q12, M6-Q14 and M6-Q23. On approval, M6-S0 (light tier) and M6-ADR may start; R-T is filed on the rendering track once the ADR is accepted, which is later than MVP plan section 5's "when the text plan is approved" (the MVP plan's M6 pointer says so); the M6a contract, a shared-surface change reviewed by both tracks, may be written. No M6 product code starts before the M6a contract is approved; M6 implementation entry follows the MVP plan's milestone order and the user's acceptance of the earlier exits.
 
+Decided 2026-10-29: M6-Q1, M6-Q2, M6-Q7 and M6-Q20 take option (a), and M6-Q11, M6-Q12, M6-Q14 and M6-Q23 are confirmed as reading (a), 추천안 자동 채택 under the standing rule of 2026-10-24, recorded while the user's decision cards were open; if the user picks differently on a card, that pick replaces the option here before the unit it affects starts. M6-S0 and M6-ADR may start.
+
 ## 15. Progress
 
 | Unit | State |
 | --- | --- |
-| Plan | Draft 2026-10-29; review round 1 NOT READY, applied; round 2 READY WITH FOLLOW-UPS, applied; user decisions pending |
+| Plan | APPROVED 2026-10-29: review round 1 NOT READY, applied; round 2 READY WITH FOLLOW-UPS, applied; user-level questions adopted as (a), 추천안 자동 채택 2026-10-29 (section 14) |
 | M6-S0 | Not started |
 | M6-ADR | Not started |
 | M6a | Not started |

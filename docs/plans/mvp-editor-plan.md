@@ -86,7 +86,7 @@ Each milestone is one visualization-track item with its own contract of 300 line
 - Requires its own **text plan** first (the architecture's "Post-P5 text plan" design gate, [graphics-engine-architecture](../graphics-engine-architecture.md#design-gates-before-later-implementation)): font loading and fallback, shaping ownership, DOM/GPU layout agreement, Korean IME composition as transactions, caret and selection fixtures. The text plan is Full tier and decides the glyph rendering route and any new runtime dependency (MVP-Q10), each with user approval.
 - MVP scope from requirements: styled runs (family, size, color), wrapping and auto width and height, letter spacing, line height, alignment, normal caret and selection, Korean IME, system and host web fonts, plain-text paste.
 - Exit gate: set by the text plan; at least a headed Korean IME composition spec in both browsers and committed caret and selection fixtures.
-- Text plan: [mvp-m6-text-plan.md](mvp-m6-text-plan.md) (V-12, draft 2026-10-29); it proposes splitting M6 into M6a, M6b and M6c (M6-Q1) and filing R-T once its glyph-route ADR is accepted, later than section 5's "when the text plan is approved".
+- Text plan: [mvp-m6-text-plan.md](mvp-m6-text-plan.md) (V-12, approved 2026-10-29); it proposes splitting M6 into M6a, M6b and M6c (M6-Q1) and filing R-T once its glyph-route ADR is accepted, later than section 5's "when the text plan is approved".
 
 ### M7: Symbols
 
