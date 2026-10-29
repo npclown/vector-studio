@@ -326,10 +326,13 @@ const BYTES = doc(
   ],
 );
 
-/** The fragment of `k`, `a` and `z` of BYTES, written out by hand. */
+/**
+ * The fragment of `k`, `a` and `z` of BYTES, written out by hand: fragment version 2 (M7
+ * contract, section 6), which carries no source here.
+ */
 const BYTES_FRAGMENT =
   MARKER +
-  '{"fragmentVersion":1,"schemaVersion":3,"roots":["z","a","k"],"nodes":{' +
+  '{"fragmentVersion":2,"schemaVersion":3,"roots":["z","a","k"],"nodes":{' +
   '"a":{"id":"a","name":"a","parent":"","frame":{"x":105,"y":55,"width":10,"height":10},' +
   `"rotation":0,${TAIL},"type":"rectangle","cornerRadii":[0,0,0,0],"fill":${BLACK},` +
   '"stroke":null},' +
@@ -339,7 +342,7 @@ const BYTES_FRAGMENT =
   `"rotation":0,${TAIL},"type":"ellipse","fill":null,"stroke":{"color":${BLACK},"width":2}},` +
   '"z":{"id":"z","name":"z","parent":"","frame":{"x":30,"y":20,"width":20,"height":10},' +
   `"rotation":0,${TAIL},"type":"rectangle","cornerRadii":[0,0,0,0],"fill":${BLACK},` +
-  '"stroke":null}}}';
+  '"stroke":null}},"sources":[],"sourceNodes":{}}';
 
 describe('M2-A10 copy', () => {
   it('writes the byte-exact fragment: roots in paint order, page-space roots, sorted nodes', () => {
@@ -768,9 +771,15 @@ describe('M2-A10 paste failures', () => {
       { type: 'paste', text: marked({ ...body({ a: leaf('a') }), extra: 1 }) },
       { ok: false, code: 'editor.invalid-clipboard', path: '/extra' },
     ],
+    // Fragment version 2 (M7 contract, section 6) has six keys: the four-key body misses one.
     [
-      'fragmentVersion 2',
+      'fragmentVersion 2 with the four keys',
       { type: 'paste', text: marked({ ...body({ a: leaf('a') }), fragmentVersion: 2 }) },
+      { ok: false, code: 'editor.invalid-clipboard', path: '/sources' },
+    ],
+    [
+      'fragmentVersion 3',
+      { type: 'paste', text: marked({ ...body({ a: leaf('a') }), fragmentVersion: 3 }) },
       { ok: false, code: 'editor.invalid-clipboard', path: '/fragmentVersion' },
     ],
     [
@@ -1049,10 +1058,11 @@ describe('M2-A10 copy and cut details', () => {
     ok(target, { type: 'copy', ids: ['rc'] });
     expect(clipboard(target)).toBe(
       MARKER +
-        '{"fragmentVersion":1,"schemaVersion":3,"roots":["rc"],"nodes":{' +
+        '{"fragmentVersion":2,"schemaVersion":3,"roots":["rc"],"nodes":{' +
         '"rc":{"id":"rc","name":"rc","parent":"","frame":{"x":40,"y":40,"width":20,"height":20},' +
         `"rotation":0.75,${TAIL},"type":"custom","customType":"ext.tally",` +
-        '"data":{"alpha":{"a":1,"b":2},"level":1,"zeta":1},"fill":null,"stroke":null}}}',
+        '"data":{"alpha":{"a":1,"b":2},"level":1,"zeta":1},"fill":null,"stroke":null}},' +
+        '"sources":[],"sourceNodes":{}}',
     );
   });
 
