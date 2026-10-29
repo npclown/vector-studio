@@ -1043,6 +1043,9 @@ class EditorCore implements Editor {
       switch (query.type) {
         case 'document':
           return this.document;
+        case 'committedDocument':
+          // The pre-gesture document during a gesture (M5 contract, M5-S3); both are frozen.
+          return this.gestureState?.base ?? this.document;
         case 'node':
           return Object.hasOwn(this.document.nodes, query.id)
             ? this.document.nodes[query.id]
