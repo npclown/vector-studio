@@ -37,3 +37,10 @@ export type {
 } from './path-mesh-pipeline.js';
 export { MESH_RESOURCE_ORDER, MESH_STRIDES } from './path-mesh-packet.js';
 export type { GradientPaintRecord } from './paint-records.js';
+export {
+  E25_LAYER_BYTES_MAX,
+  E25_LAYER_TILE_SIZE,
+  layerResourceLimitDiagnostic,
+  layerTileBytes,
+} from './layer-plan.js';
+export type { DeviceRect, LayerResourceNotice } from './layer-plan.js';

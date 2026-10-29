@@ -284,6 +284,19 @@ Order: U1, U2, U3, U4, U5. The WIP limit per track applies.
 - Tests: `tests/unit/e25-u1-group-opacity.test.ts`.
 - **Departure, as P4 U1 did with `clips`:** the service option `groups`, its `TypeError` with `clips: 'none'`, and `requiresLayerPipeline` move to U3. Until layers draw, no service sets the mirror's `groupOpacity` and no shipped consumer builds a mirror with it, so non-unit container opacity stays rejected in every product path. The option's comment marks it tests-only until U2 and U3, since `PrimitiveSceneSource` does not yet draw container opacity. E25-A01's option-wiring cases are checked in U3.
 
+U2 (2026-10-29):
+
+- `packages/renderer-core/src/layer-plan.ts` holds the pure parts: `layerBound` (E25-K5), `planLayerBudget` and `layerTileBytes` (section 4, Budget), `E25_LAYER_BYTES_MAX`, `E25_LAYER_TILE_SIZE` and `layerResourceLimitDiagnostic`.
+- `PrimitiveSceneSource` records a layer scope for every visible container with `0 < opacity < 1` during its traversal and treats opacity 0 as hidden, so the subtree makes no path request (E25-K3).
+- Layers are planned after clip culling and the path port, and before `MaskPlan`, as section 4's planning order states. A layer whose bound is empty, or whose parent is not drawn, is not drawn; nor is its content.
+- `interleaveLayerDraws` extends P3's interleaving to several targets. A run covers consecutive order-stream entries of one target only. A composite sits at its layer's first sequence, outer layers first, and closes its target's run.
+- Layer notices have their own queue and transition set (section 5); `getLayerNoticesDropped` counts the overflow.
+- The E10 draw record still lists every content mesh draw, with layer-local positions for layer draws; it matches `packet.mesh.draws` only on scenes without layers, which are the count pass's scope (section 4, Count pass).
+- Step 2 of E25-K5 is applied per clip level: each level's bound is widened by 1 px before the intersection, which is conservative.
+- Layers are planned before `MaskPlan` and before E23-K8's out-of-range gradient drop. Content those later steps remove leaves its layer drawn, possibly with no draws, a conservative cost the contract allows; U3 may skip the pass of an empty layer.
+- The over-budget set is the set of roots over budget in the current frame, as P4 U4a's is for masks. A root that fits for a frame, or draws nothing, raises a new notice when it is again over budget.
+- Tests: `tests/unit/e25-u2-layer-plan.test.ts` (E25-A02, the unit parts of A04 and A07).
+
 ## 8. Risks
 
 - **Memory.** Bound-sized layers keep ordinary groups small. But full-screen groups at 4K and 4x admit only two nesting levels within 96 MiB (E25-Q3). Deeper full-screen stacks report instead of drawing. Two remedies are open if real documents hit this: re-rendering per tile together with the composite (no full layer texture), or a cache with eviction.
