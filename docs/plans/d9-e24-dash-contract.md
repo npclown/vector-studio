@@ -1,6 +1,6 @@
 # E24 contract: dash pattern and phase for path strokes
 
-Status: DRAFT 2026-10-29, Full tier. It touches shared surface: the `packages/contracts` type `PathStroke`, scene validation, the path stroke request path, and a new renderer failure code.
+Status: APPROVED 2026-10-29 (recommended options auto-adopted, section 10), Full tier. It touches shared surface: the `packages/contracts` type `PathStroke`, scene validation, the path stroke request path, and a new renderer failure code.
 
 This is rendering-track item [E24](d9-rendering-track.md#status-index) and MVP rendering need R-D ([MVP plan, section 5](mvp-editor-plan.md#5-rendering-track-needs)), needed by MVP M4. It resolves the P3 design gate "dash units/phase" ([graphics architecture](../graphics-engine-architecture.md#design-gates-before-later-implementation)), which the [B2 stroke proposal, section 3.5](p3-b2-stroke-proposal.md#35-dashes) moved to the appearance plan.
 
@@ -76,7 +76,7 @@ Notation: `r = width / 2`. Lengths are node-local, in the space of `points` and 
   - A pattern with an odd number of entries is repeated once to make an even list (SVG `stroke-dasharray`).
   - Entries alternate on (a dash) and off (a gap), starting with on. On-entry k covers the closed interval `[a_k, a_k + d_k]` of pattern positions, where `a_k` is the sum of the preceding entries and `d_k` may be 0.
   - The period `P` is the sum of the entries, as in E24-S1.
-  - The phase is reduced once, in binary64: `φ = phase − P · floor(phase / P)`. If rounding makes `φ = P`, then φ is 0.
+  - The phase is reduced once, in binary64, with the exact remainder: `φ = phase % P` (IEEE fmod, as JavaScript's `%`). If `φ < 0`, P is added. If the sum rounds to `P`, φ is 0. So `0 ≤ φ < P`.
 - **E24-K2 arc length.** Each subpath is dashed on its own, and the pattern restarts at every MOVE.
   - Arc length `s` runs along the subpath's drawing segments after ST-S1: zero-length segments are removed, and for a subpath that ends in CLOSE, the closing line is included when its endpoints differ.
   - Lines are measured exactly in binary64, up to rounding. Cubics are measured by the integral of `|B′(t)|`, as in section 4.
@@ -99,12 +99,12 @@ Notation: `r = width / 2`. Lengths are node-local, in the space of `points` and 
   - The stroke paint, solid or an E23 gradient, is evaluated in node-local space, independent of the dash.
   - **Split tangents.** A cubic split at a dash end gets rounded control points. The kernel then applies ST-S2 and ST-S6 to the dashed path. Where a split piece meets a source vertex, its tangent can differ from the source cubic's tangent in the last bits. An exact reversal there can become a near-reversal, judged by the miter rules. The same applies to a cap's direction at a dash end close to a cusp. These are B2's rules applied to the path actually stroked, and are not a separate E24 rule. A08-style measurement of such cases is not part of E24 (section 8).
 - **E24-K7 precision and determinism.**
-  - The expansion follows the method pinned in section 4. It uses only `+`, `−`, `×`, `÷`, `sqrt` and `floor` in binary64, in a fixed order, so equal inputs give bit-identical dashed paths in every engine.
+  - The expansion follows the method pinned in section 4. It uses only `+`, `−`, `×`, `÷`, `%`, `sqrt` and `floor` in binary64, in a fixed order, so equal inputs give bit-identical dashed paths in every engine.
   - The expansion does not depend on the camera, zoom, DPR or tolerance exponent. Dash ends therefore stay at the same document points at every zoom; only the kernel's curve flattening varies, as for solid strokes.
   - The accuracy target is checked by E24-A02 against a double-double reference: dash boundaries on lines within `2^-40 · L` of exact, and on cubics within `2^-24 · L_seg + 2^-40 · L`, where `L_seg` is the segment's length.
 - **E24-K8 work limit (E24-Q4).** A stroke whose expansion has more than 4,096 dashes, summed over all subpaths, fails with the new renderer-scope code `dash-limit`.
   - The failure does not depend on tolerance, so it is a state failure of the stroke paint. The expansion fails before any request is made, so the stroke port is not called.
-  - It produces one notice on the `(node, 'stroke', 'dash-limit')` state transition, with `toleranceExponent: null` and `paint: 'stroke'`, under the V3 section d class table.
+  - It produces one notice on the `(node, 'stroke', 'dash-limit')` state transition, with `toleranceExponent: null` and `paint: 'stroke'`, under the V3 §d class table, with the §h outcome.
   - The outcome is E11-U4 **O1**: the whole path, fill and stroke, is not drawn, and every other node draws in order. This matches every other stroke failure. Hiding the fill when the stroke fails is B2 §9.6's chosen reading.
 - **E24-K9 invalidation.** The dashed path is cached once per node, keyed by the node's geometry revision and the dash (section 4).
   - A dash change (pattern, phase, or dashed to solid and back) makes stroke port requests for the node, 0 fill port calls and 0 primitive geometry builds.
@@ -120,7 +120,7 @@ Notation: `r = width / 2`. Lengths are node-local, in the space of `points` and 
 - **Dash cache.** It is one map per pipeline, from node to `{ revision, dash, result }`, separate from mesh entries and tolerance variants.
   - It is filled when a stroke request or state is first needed for that revision and dash, and replaced when either changes.
   - Its entry is removed when the node is removed or loses its dash.
-  - Its bytes (1 per verb, 16 per point) count against the existing path-mesh byte budget.
+  - Its bytes (1 per verb, 16 per point) are reported in `pathMeshMemoryBytes` and count against the existing path-mesh byte budget. Budget eviction never evicts it: an entry lives exactly as long as its node keeps that revision and dash, so E24-K9 does not depend on eviction.
 - **Arc length on cubics.** The method is pinned:
   - Cubics are integrated with 8-point Gauss–Legendre quadrature of `|B′(t)|`, with the nodes and weights as binary64 literals in U2.
   - Integration is adaptive bisection in `t`. A cell is split while `|I(cell) − (I(left) + I(right))| > 2^-30 · I(cell)`. The depth limit is 24; at that depth the cell's estimate is accepted. Cells are summed left to right.
@@ -202,6 +202,7 @@ Order: U1, U2, U3, U4. The WIP limit per track applies.
 ## 8. Risks
 
 - **Fringe cap (E24-Q6).** Many real dashed strokes draw region-only with MSAA, and each such path raises a `fringe-work-cap` warning. U3 records which fixtures hit the cap. Edge probes run only on stroke meshes under the cap.
+- **Overlay work cap.** A dashed stroke on a filled path at `0 < opacity < 1` gives the ST-U7 overlay many more stroke boundary edges. Its work cap can then trigger `overlay-unsupported` (E11-U4 O3, path hidden). U3 records whether D6 hits it.
 - **Kernel work.** Each dash is a subpath for the exact stroker. Dense patterns raise kernel work, and the E2 work limits (`work-limit` failures) can trigger before `dash-limit` does. Both fail closed with a diagnostic.
 - **Split tangents (E24-K6).** Rounded split control points can move a near-reversal or cusp case across a B2 miter or cap classification, compared with the solid stroke. A large-`miterLimit` near-reversal inside a dash can then fail with `numeric-range` where the solid stroke draws.
 - **Arc-length cost.** Expansion is linear in segments and dashes. Quadrature per cubic is bounded by the depth limit. Expansion runs once per geometry or dash change, not once per frame.
@@ -237,4 +238,14 @@ Order: U1, U2, U3, U4. The WIP limit per track applies.
 
 ## 10. Decisions
 
-(none yet)
+**Review record.** Independent review (fresh context, reviewer role), 2026-10-29.
+
+- **Round 1: NOT READY.** It found three blocking findings:
+  - The `dash-limit` outcome contradicted B2 §9.6 and E11-U4 O1.
+  - `dash-limit` is a new code, and its state-failure machinery was unspecified.
+  - The half-open on test dropped zero-length dashes and seam joins.
+
+  It also found seven further findings: the mask-source exemption, the copy and equality steps, the frozen-text amendments, the K7 method and phase precision, the cache location, split tangents, and the fringe cap. All were applied.
+- **Round 2: READY WITH FOLLOW-UPS.** The follow-ups were the exact phase remainder, the dash cache staying out of budget eviction, the overlay work-cap risk, and the K8 cross-reference. All were applied.
+
+- **2026-10-29, recommended options auto-adopted** under the user's standing instruction of 2026-10-24: E24-Q1 (a), E24-Q2 (a), E24-Q3 (a), E24-Q4 (a), E24-Q5 (a) and E24-Q6 (a). Q4 (a) and Q6 (a) are the visible product choices: a path over the dash limit is not drawn (O1), and dashed strokes above the fringe cap draw region-only with a notice. The user may reopen any of them before U1 merges. U1 makes the amendments of section 4.
