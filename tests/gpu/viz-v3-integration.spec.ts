@@ -19,6 +19,7 @@ import {
 } from '../../apps/playground/src/viz-v3-integration-scene.js';
 import { p1Source } from '../support/p1-evidence.js';
 import { oracleColor, separation, to8 } from '../support/viz-v3-oracle.js';
+import { solidColor } from '../support/scene-paint.js';
 
 declare global {
   interface Window {
@@ -426,8 +427,8 @@ for (const dpr of [1, 2]) {
         const joint = s0.nodes.find((node) => node.id === 'p-joint')!;
         if (joint.kind !== 'path') throw new Error('p-joint');
         const o = joint.opacity;
-        const fill = joint.style.fill!;
-        const stroke = joint.style.stroke!.color;
+        const fill = solidColor(joint.style.fill!);
+        const stroke = solidColor(joint.style.stroke!.color);
         const probe = VIZ_V3_ORDER_PROBES.find((p) => p.name === VIZ_V3_JOINT_BAND_PROBE)!;
         const base = oracleColor(s0, probe.x, probe.y);
         // The destination under p-joint is the opaque white r-jbase.

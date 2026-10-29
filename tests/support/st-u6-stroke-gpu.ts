@@ -6,6 +6,7 @@ import type {
   SceneAffine,
   SceneColor,
 } from '@vector-studio/contracts';
+import { solidColor } from './scene-paint.js';
 
 // B2 stroke contract, ST-A10 (unit ST-U6): the headed GPU stroke fixtures and their analytic
 // pixel oracle, drawn by the V3 smoke fixture page in its `?stroke=1` mode with static
@@ -199,7 +200,8 @@ export function inspectStrokeFixture(
             ? [0, 0, 0, 0]
             : [color.r * color.a, color.g * color.a, color.b * color.a, color.a];
         const f = premultiplied(inFill, shape.node.fill);
-        const s = premultiplied(inStroke, shape.node.stroke?.color ?? null);
+        const strokeColor = shape.node.stroke === null ? null : solidColor(shape.node.stroke.color);
+        const s = premultiplied(inStroke, strokeColor);
         const joint = s.map(
           (value, channel) => (value + f[channel]! * (1 - s[3]!)) * shape.node.opacity,
         );

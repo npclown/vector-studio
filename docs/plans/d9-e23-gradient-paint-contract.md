@@ -125,6 +125,8 @@ Evidence goes to `docs/evidence/e23/`. Headed runs use the reference PC (DESKTOP
 
 Order: U1, U2, U3, U4, U5. WIP limit per track applies.
 
+**Unit records.** U1 (2026-10-29): `ScenePaint`, `SceneGradient`, `SCENE_MAX_GRADIENT_STOPS` and `isSceneGradient` in `packages/contracts`; `DIAGNOSTIC_CODES.PAINT_UNAVAILABLE` reserved; `copyPaint` and `paintsSupported` in `scene-validation.ts`, paint-aware replay equality; mirror option `paints` (default `'solid'`); solid-only draw paths narrow through `solidPaint` (renderer-core) and tests and solid pages through `solidColor`; `tests/unit/e23-u1-scene-paint.test.ts` (A01).
+
 ## 8. Risks
 
 - **Fragment cost.** A 16-stop lookup is a bounded loop per paint per fragment; a gradient fill and stroke on a joint draw evaluates two. Solid draws pay nothing. No threshold; M9 measures the editor workload.
