@@ -6,7 +6,7 @@ import {
   type RetainedSceneMirrorOptions,
 } from '../../packages/renderer-core/src/scene-mirror.js';
 
-// E25 contract (docs/plans/d9-e25-isolated-opacity-contract.md), E25-A01 through the retained
+// E25 contract (docs/plans/d9-e25-isolated-opacity-contract.md), E25-A01 (validation half) through the retained
 // scene mirror: the E25-S1 gate on non-unit container opacity and the E25-S2 isolation depth,
 // including change sets that only reparent or only change an opacity. The service option
 // `groups` and its `clips` check land with the layer passes (U3; contract section 7, U1 record).
@@ -110,6 +110,18 @@ describe('E25-S1 gate', () => {
       orders: [],
     });
     expect(status(result)).toBe('unsupported-feature');
+    const isolated = new RetainedSceneMirror(undefined, ISOLATED);
+    expect(status(isolated.replaceSnapshot(snapshot([container('g', null, [])])))).toBe('applied');
+    const accepted = isolated.applyChanges({
+      identity,
+      revision: 2,
+      baseRevision: 1,
+      inserted: [],
+      updated: [container('g', null, [], 0.25)],
+      removed: [],
+      orders: [],
+    });
+    expect(status(accepted)).toBe('applied');
   });
 
   it('reserves the render.layer-resource-limit code', () => {

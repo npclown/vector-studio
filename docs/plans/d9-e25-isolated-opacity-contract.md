@@ -267,9 +267,9 @@ Evidence goes to `docs/evidence/e25/`.
 
 | Unit | Track | Scope | Gate |
 | --- | --- | --- | --- |
-| U1 | Rendering | E25-S1 gate (`groups` option, `groupOpacity` mirror, `requiresLayerPipeline`), E25-S2 depth, the diagnostic code, the architecture and E10 note amendments | E25-A01; CI |
+| U1 | Rendering | E25-S1 gate (`groupOpacity` mirror; the `groups` option and `requiresLayerPipeline` moved to U3, see the U1 record), E25-S2 depth, the diagnostic code, the architecture and E10 note amendments | E25-A01; CI |
 | U2 | Rendering | Layer plan in `renderer-core`: traversal, bounds, the `layers` part, composites, opacity 0, budget, notices | E25-A02; the unit parts of A04 and A07 |
-| U3 | Rendering | Layer passes, tile set, layer variants, composite pipeline, accounting and lifetime in `renderer-webgpu`; the test hooks `layerTileSizeForTesting` and `isolateUnitOpacityForTesting` (E10 naming rules) | E25-A05 and A08 on SwiftShader; the unit part of A06 |
+| U3 | Rendering | Layer passes, tile set, layer variants, composite pipeline, accounting and lifetime in `renderer-webgpu`; the `groups` option, its `clips: 'none'` `TypeError` and `requiresLayerPipeline` (moved from U1), with E25-A01's option-wiring cases; the test hooks `layerTileSizeForTesting` and `isolateUnitOpacityForTesting` (E10 naming rules) | E25-A05 and A08 on SwiftShader; the unit part of A06 |
 | U4 | Visualization | Headed page with `groups: 'isolated'` and a spec with the CPU oracle for O1 to O9 | E25-A03, the GPU parts of A04 to A08; headed run on the reference PC |
 | U5 | Rendering | Evidence index `docs/evidence/e25/` of E25-A01 to A08 | Index merged; MVP M4 may start its R-O half |
 
@@ -282,7 +282,7 @@ Order: U1, U2, U3, U4, U5. The WIP limit per track applies.
 - `render.layer-resource-limit` is reserved in `DIAGNOSTIC_CODES`.
 - The architecture's P1 paragraph and P4 design-gate row are amended, and E10 has its count-pass note.
 - Tests: `tests/unit/e25-u1-group-opacity.test.ts`.
-- **Departure, as P4 U1 did with `clips`:** the service option `groups`, its `TypeError` with `clips: 'none'`, and `requiresLayerPipeline` move to U3. Until layers draw, no service sets the mirror's `groupOpacity`, so non-unit container opacity stays rejected everywhere. E25-A01's option-wiring cases are checked in U3.
+- **Departure, as P4 U1 did with `clips`:** the service option `groups`, its `TypeError` with `clips: 'none'`, and `requiresLayerPipeline` move to U3. Until layers draw, no service sets the mirror's `groupOpacity` and no shipped consumer builds a mirror with it, so non-unit container opacity stays rejected in every product path. The option's comment marks it tests-only until U2 and U3, since `PrimitiveSceneSource` does not yet draw container opacity. E25-A01's option-wiring cases are checked in U3.
 
 ## 8. Risks
 
