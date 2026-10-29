@@ -36,6 +36,12 @@ export const DIAGNOSTIC_CODES = Object.freeze({
    * masked content is not drawn (E22 contract, E22-K4, docs/plans/d9-e22-clip-follow-ups-contract.md).
    */
   CLIP_UNAVAILABLE: 'render.clip-unavailable',
+  /**
+   * The source draws gradient paints but the renderer came up without its paint pipelines, so
+   * gradient-painted draws are not drawn (E23 contract, section 4,
+   * docs/plans/d9-e23-gradient-paint-contract.md); reserved by unit U1, reported from unit U3.
+   */
+  PAINT_UNAVAILABLE: 'render.paint-unavailable',
   DISPOSAL_COMPLETED: 'disposal.completed',
   DISPOSAL_FAILED: 'disposal.failed',
 } as const);

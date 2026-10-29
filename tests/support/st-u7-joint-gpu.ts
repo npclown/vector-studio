@@ -9,6 +9,7 @@ import type {
 } from '@vector-studio/contracts';
 import { STROKE_CONFORMANCE_PATHS } from './stroke-mesh-port-conformance.js';
 import { StrokeMeshPortDouble } from './stroke-mesh-port-double.js';
+import { solidColor } from './scene-paint.js';
 
 // P3 B2 ST-U7 addendum, unit ST-U7d: the headed GPU joint fixtures and their oracles, drawn by
 // the V3 smoke fixture page in its `?joint=1` mode with static test-double fill and stroke ports
@@ -610,7 +611,7 @@ export function inspectStA11(
         owner = path.node.id;
         pixelClass = inFill && inStroke ? 'overlap' : inFill ? 'fill-only' : 'stroke-only';
         const f = inFill ? premultiplied(path.node.fill, 1) : null;
-        const s = inStroke ? premultiplied(path.node.stroke!.color, 1) : null;
+        const s = inStroke ? premultiplied(solidColor(path.node.stroke!.color), 1) : null;
         if (pixelClass === 'overlap') double = composite(dst, f, s, path.node.opacity, true);
         dst = composite(dst, f, s, path.node.opacity);
       }

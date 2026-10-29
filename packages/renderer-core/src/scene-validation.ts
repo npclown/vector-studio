@@ -8,14 +8,17 @@ import type {
   SceneAffine,
   SceneClip,
   SceneColor,
+  SceneGradient,
+  SceneGradientStop,
   SceneIdentity,
+  ScenePaint,
   ScenePathGeometry,
   ScenePathVerb,
   ScenePoint,
   SceneRejectionReason,
   SceneStroke,
 } from '@vector-studio/contracts';
-import { SCENE_MAX_CLIP_DEPTH } from '@vector-studio/contracts';
+import { SCENE_MAX_CLIP_DEPTH, SCENE_MAX_GRADIENT_STOPS } from '@vector-studio/contracts';
 import { hasFiniteSceneArithmetic } from './scene-numeric.js';
 
 /** Port presence, fixed when a mirror is constructed (P3 V3 contract, section a). */
@@ -25,6 +28,11 @@ export type PathNodeSupport = 'supported' | 'unsupported';
  * rect clips (U3) and still reports a mask container as `unsupported-feature` until U4.
  */
 export type ClipSupport = 'supported' | 'rect' | 'unsupported';
+/**
+ * E23 contract, E23-S3: whether the renderer draws gradient paints. Under 'solid' a node with
+ * any gradient paint is reported as `unsupported-feature`.
+ */
+export type PaintSupport = 'solid' | 'gradient';
 
 /**
  * The port-presence facts of a mirror (V3 section a; B2 stroke contract, section 5 and the
@@ -37,6 +45,8 @@ export type PathSupport = Readonly<{
   pathFills: PathNodeSupport;
   pathStrokes: PathNodeSupport;
   clips: ClipSupport;
+  /** E23-S3; absent means 'solid'. */
+  paints?: PaintSupport;
 }>;
 
 const NO_PATH_SUPPORT: PathSupport = Object.freeze({
@@ -311,6 +321,7 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
     // width > 0 needs a stroke port and a fill needs a fill port; each is reported in the same
     // last slot as a path without any port. A width-0 stroke is accepted and draws nothing.
     const unsupported =
+      !paintsSupported([style.fill, style.stroke?.color ?? null], pathNodes) ||
       pathNodes.pathNodes !== 'supported' ||
       (style.fill !== null && pathNodes.pathFills !== 'supported') ||
       (style.stroke !== null && style.stroke.width > 0 && pathNodes.pathStrokes !== 'supported');
@@ -334,8 +345,24 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
   });
   return Object.freeze({
     node,
-    unsupported: geometry.kind === 'line' && style.fill !== null,
+    unsupported:
+      (geometry.kind === 'line' && style.fill !== null) ||
+      !paintsSupported([style.fill, style.stroke?.color ?? null], pathNodes),
   });
+}
+
+/**
+ * E23-S2 and S3: a gradient paint is unsupported under `paints: 'solid'`, and with more than
+ * SCENE_MAX_GRADIENT_STOPS stops. Both are reported after the graph checks.
+ */
+function paintsSupported(paints: readonly (ScenePaint | null)[], support: PathSupport): boolean {
+  for (const paint of paints) {
+    if (paint === null || !('kind' in paint)) continue;
+    if (support.paints !== 'gradient' || paint.stops.length > SCENE_MAX_GRADIENT_STOPS) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** P4-S1 and P4-S3: `undefined` marks an invalid clip, since `null` is a valid one. */
@@ -440,7 +467,7 @@ function copyPathStyle(value: unknown): PathStyle | null {
   // B2 stroke contract, section 5: exactly fill and stroke; stroke is required, null when absent.
   if (!hasExactFields(value, ['fill', 'stroke'])) return null;
   const record = value as Record<string, unknown>;
-  const fill = record.fill === null ? null : copyColor(record.fill);
+  const fill = record.fill === null ? null : copyPaint(record.fill);
   if (record.fill !== null && fill === null) return null;
   const stroke = record.stroke === null ? null : copyPathStroke(record.stroke);
   if (record.stroke !== null && stroke === null) return null;
@@ -451,7 +478,7 @@ function copyPathStyle(value: unknown): PathStyle | null {
 function copyPathStroke(value: unknown): PathStroke | null {
   if (!hasExactFields(value, ['color', 'width', 'cap', 'join', 'miterLimit'])) return null;
   const record = value as Record<string, unknown>;
-  const color = copyColor(record.color);
+  const color = copyPaint(record.color);
   const width = copyNonnegativeNumber(record.width);
   const cap =
     record.cap === 'butt' || record.cap === 'round' || record.cap === 'square' ? record.cap : null;
@@ -476,7 +503,7 @@ function copyPathStroke(value: unknown): PathStroke | null {
 function copyStyle(value: unknown): PrimitiveStyle | null {
   if (!hasExactFields(value, ['fill', 'stroke'])) return null;
   const record = value as Record<string, unknown>;
-  const fill = record.fill === null ? null : copyColor(record.fill);
+  const fill = record.fill === null ? null : copyPaint(record.fill);
   const stroke = record.stroke === null ? null : copyStroke(record.stroke);
   if ((record.fill !== null && fill === null) || (record.stroke !== null && stroke === null)) {
     return null;
@@ -487,9 +514,67 @@ function copyStyle(value: unknown): PrimitiveStyle | null {
 function copyStroke(value: unknown): SceneStroke | null {
   if (!hasExactFields(value, ['color', 'width'])) return null;
   const record = value as Record<string, unknown>;
-  const color = copyColor(record.color);
+  const color = copyPaint(record.color);
   const width = copyNonnegativeNumber(record.width);
   return color === null || width === null ? null : Object.freeze({ color, width });
+}
+
+/** E23-S1: exactly r, g, b, a is a solid colour; exactly the gradient fields is a gradient. */
+function copyPaint(value: unknown): ScenePaint | null {
+  return isRecord(value) && Object.hasOwn(value, 'kind') ? copyGradient(value) : copyColor(value);
+}
+
+/**
+ * E23-S2: every field is an input value (`invalid-value`), the stop count included up to any
+ * length; more than SCENE_MAX_GRADIENT_STOPS stops is reported by `paintsSupported`.
+ */
+function copyGradient(value: unknown): SceneGradient | null {
+  if (!hasExactFields(value, ['kind', 'transform', 'stops', 'spread'])) return null;
+  const record = value as Record<string, unknown>;
+  const kind = record.kind === 'linear' || record.kind === 'radial' ? record.kind : null;
+  const spread =
+    record.spread === 'pad' || record.spread === 'reflect' || record.spread === 'repeat'
+      ? record.spread
+      : null;
+  const transform = copyTuple(record.transform, 6, copyFiniteNumber) as SceneAffine | null;
+  const stops = copyArray(record.stops, copyGradientStop);
+  if (
+    kind === null ||
+    spread === null ||
+    transform === null ||
+    !hasFiniteInverse(transform) ||
+    stops === null ||
+    stops.length === 0
+  ) {
+    return null;
+  }
+  for (let index = 1; index < stops.length; index += 1) {
+    if (stops[index]!.offset < stops[index - 1]!.offset) return null;
+  }
+  return Object.freeze({ kind, transform, stops, spread });
+}
+
+function copyGradientStop(value: unknown): SceneGradientStop | null {
+  if (!hasExactFields(value, ['offset', 'color'])) return null;
+  const record = value as Record<string, unknown>;
+  const offset = copyUnitNumber(record.offset);
+  const color = copyColor(record.color);
+  return offset === null || color === null ? null : Object.freeze({ offset, color });
+}
+
+/** E23-S2: the binary64 determinant is non-zero and the binary64 inverse is finite. */
+function hasFiniteInverse([a, b, c, d, e, f]: SceneAffine): boolean {
+  const determinant = a * d - b * c;
+  if (determinant === 0 || !Number.isFinite(determinant)) return false;
+  const inverse = [
+    d / determinant,
+    -b / determinant,
+    -c / determinant,
+    a / determinant,
+    (c * f - d * e) / determinant,
+    (b * e - a * f) / determinant,
+  ];
+  return inverse.every(Number.isFinite);
 }
 
 function copyColor(value: unknown): SceneColor | null {
@@ -678,7 +763,7 @@ function nodeEquals(left: RenderNodeSnapshot, right: RenderNodeSnapshot): boolea
     return (
       pathDataEquals(left.geometry, right.geometry) &&
       left.geometry.fillRule === right.geometry.fillRule &&
-      nullableColorEquals(left.style.fill, right.style.fill) &&
+      nullablePaintEquals(left.style.fill, right.style.fill) &&
       nullablePathStrokeEquals(left.style.stroke, right.style.stroke)
     );
   }
@@ -713,14 +798,14 @@ function geometryEquals(left: PrimitiveGeometry, right: PrimitiveGeometry): bool
 
 function styleEquals(left: PrimitiveStyle, right: PrimitiveStyle): boolean {
   return (
-    nullableColorEquals(left.fill, right.fill) && nullableStrokeEquals(left.stroke, right.stroke)
+    nullablePaintEquals(left.fill, right.fill) && nullableStrokeEquals(left.stroke, right.stroke)
   );
 }
 
 function nullableStrokeEquals(left: SceneStroke | null, right: SceneStroke | null): boolean {
   return left === null || right === null
     ? left === right
-    : left.width === right.width && colorEquals(left.color, right.color);
+    : left.width === right.width && paintEquals(left.color, right.color);
 }
 
 /** B2 stroke contract, section 5: every stroke field with `===`, color channels included. */
@@ -731,11 +816,29 @@ function nullablePathStrokeEquals(left: PathStroke | null, right: PathStroke | n
         left.cap === right.cap &&
         left.join === right.join &&
         left.miterLimit === right.miterLimit &&
-        colorEquals(left.color, right.color);
+        paintEquals(left.color, right.color);
 }
 
-function nullableColorEquals(left: SceneColor | null, right: SceneColor | null): boolean {
-  return left === null || right === null ? left === right : colorEquals(left, right);
+function nullablePaintEquals(left: ScenePaint | null, right: ScenePaint | null): boolean {
+  return left === null || right === null ? left === right : paintEquals(left, right);
+}
+
+/** E23 contract: every paint field with `===` under the replay rule, stops in order. */
+function paintEquals(left: ScenePaint, right: ScenePaint): boolean {
+  if (!('kind' in left) || !('kind' in right)) {
+    return !('kind' in left) && !('kind' in right) && colorEquals(left, right);
+  }
+  return (
+    left.kind === right.kind &&
+    left.spread === right.spread &&
+    arraysEqual(left.transform, right.transform) &&
+    left.stops.length === right.stops.length &&
+    left.stops.every(
+      (stop, index) =>
+        stop.offset === right.stops[index]!.offset &&
+        colorEquals(stop.color, right.stops[index]!.color),
+    )
+  );
 }
 
 function colorEquals(left: SceneColor, right: SceneColor): boolean {

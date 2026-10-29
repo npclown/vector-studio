@@ -28,6 +28,7 @@ import {
   separation,
   to8,
 } from '../support/viz-v3-oracle.js';
+import { solidColor } from '../support/scene-paint.js';
 
 // Visualization track V-3 (docs/plans/viz-v3-a07-integration-contract.md), criterion VZ3-A2:
 // the scene module is valid and deterministic, every overlap of section 3.2 holds in S0 by the
@@ -372,8 +373,8 @@ describe('V-3 scene module (VZ3-A2)', () => {
       kind: 'path';
     };
     const o = joint.opacity;
-    const f = joint.style.fill!;
-    const s = joint.style.stroke!.color;
+    const f = solidColor(joint.style.fill!);
+    const s = solidColor(joint.style.stroke!.color);
     const base = { r: 1, g: 1, b: 1 };
     const single = to8(at(s0, probe(VIZ_V3_JOINT_BAND_PROBE)));
     const doubled = (['r', 'g', 'b'] as const).map((lane) =>
@@ -393,6 +394,8 @@ describe('V-3 scene module (VZ3-A2)', () => {
       '@vector-studio/contracts',
       './p3-b2-strokes-scene.js',
       './p3-v4-paths-scene.js',
+      // E23 U1: narrows ScenePaint; it imports only '@vector-studio/contracts'.
+      './scene-paint.js',
     ]);
     expect(source).toMatch(/^import type \{/);
     expect(source).not.toMatch(/\b(document|window|navigator)\.|WebAssembly|GPUDevice|HTMLElement/);

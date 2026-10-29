@@ -8,6 +8,7 @@ import type {
 } from '@vector-studio/contracts';
 import { B2_PATHS } from './p3-b2-strokes-scene.js';
 import { V4_PATHS } from './p3-v4-paths-scene.js';
+import { solidColor } from './scene-paint.js';
 
 // Visualization track V-1 (docs/plans/viz-v1-path-appearance-contract.md, section 3.1): the
 // scene of the path appearance page. It adds no geometry: every target's path data comes from the
@@ -61,9 +62,9 @@ const circle = b2('fill-stroke-circle');
 const star = v4('star-nonzero');
 
 /** The off-paint default fill: the red of the B2 fill-plus-stroke cells. */
-const DEFAULT_FILL: SceneColor = square.fill!;
+const DEFAULT_FILL: SceneColor = solidColor(square.fill!);
 const STROKE_FIELDS = (stroke: NonNullable<typeof square.stroke>): StrokeFields => ({
-  color: stroke.color,
+  color: solidColor(stroke.color),
   width: stroke.width,
   cap: stroke.cap,
   join: stroke.join,
