@@ -316,10 +316,15 @@ export function hitsNode(
   if (isContainer(node)) return false;
   // An instance is hit through its expansion in `visitHits` (M7 contract, section 4.3).
   if (node.type === 'instance') return false;
-  // Interim until M6a-U3 hits it in its rotated frame box (M6a contract, section 7).
-  if (node.type === 'text') return false;
   // Into the unrotated frame: a rigid map, so distances are unchanged (M1 contract, section 6).
   const point = intoFrame(node, parentPoint);
+  // Text is hit in its rotated frame box as a filled rectangle, or within the stroke tolerance
+  // of its edge, with no layout (M6a contract, section 7, M6a-Q7).
+  if (node.type === 'text') {
+    return (
+      insideBox(point, node.frame) || nearOutline(point, [rectangleOutline(node.frame)], 4 / zoom)
+    );
+  }
   const radius = Math.max((node.stroke?.width ?? 0) / 2, 4 / zoom);
   const tolerance = 0.25 / zoom;
   if (node.type === 'rectangle') {

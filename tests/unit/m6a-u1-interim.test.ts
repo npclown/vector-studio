@@ -8,15 +8,15 @@ import {
   type CommandResult,
   type Editor,
 } from '../../packages/editor-core/src/index.js';
-import { hitsNode } from '../../packages/editor-core/src/hit-test.js';
 import { projectPage } from '../../packages/editor-core/src/projector.js';
 
 // MVP M6a-U1 interim editor rules (M6a contract, section 16, M6a-U1 notes): editor-core reads
 // and writes schema v4 and holds text nodes it cannot lay out yet. Fragment version 2 is written
 // at schema v4 and read at 3 and 4, version 1 at 2, with a text node failing at its type below 4
 // and rejected inside a copied or carried symbol (section 8);
-// `editor.nested-symbol` covers text (M6a-S7); a text node projects nothing (section 7) and,
-// until M6a-U3, is never hit; `setNodeProps` takes the common props only (section 6.1).
+// `editor.nested-symbol` covers text (M6a-S7); a text node projects nothing (section 7);
+// `setNodeProps` takes the common props only (section 6.1). M6a-U3 replaced the interim hit
+// rule (tests/unit/m6a-u3-text-editor.test.ts).
 
 const root = path.resolve(import.meta.dirname, '../..');
 const TEXT = readFileSync(path.join(root, 'tests/fixtures/m6-text/text.v4.json'), 'utf8');
@@ -47,11 +47,6 @@ describe('M6a-U1 interim: editor-core at schema v4', () => {
     const projection = projectPage(document, 'page-1', none);
     for (const id of ['t1', 't2', 't3', 't4', 't5']) expect(projection.nodes.has(id)).toBe(false);
     expect(projection.nodes.has('g1')).toBe(true);
-  });
-
-  it('never hits a text node until M6a-U3', () => {
-    const node = loaded().query({ type: 'node', id: 't1' })!;
-    expect(hitsNode(node, { x: 20, y: 15 }, 1, none)).toBe(false);
   });
 
   it('takes the common props on a text node, and no fill', () => {

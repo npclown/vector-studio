@@ -3,6 +3,7 @@ import type {
   RendererSceneSynchronization,
   ScenePathGeometry,
   SceneRejectionReason,
+  TextLayoutResult,
 } from '@vector-studio/contracts';
 import type {
   Arrow,
@@ -20,6 +21,8 @@ import type {
   PathStroke,
   PathVerb,
   RectStroke,
+  TextNode,
+  TextRun,
 } from '@vector-studio/model';
 
 // Public command, query and event shapes (P5 plan, sections 4.1 to 4.3; MVP M1 contract,
@@ -334,6 +337,48 @@ export type DocumentCommand =
    * open subpath starts at the anchor after it.
    */
   | Readonly<{ type: 'openPathSubpath'; id: string; subpath: number; segment?: number }>
+  // Text commands (MVP M6a contract, section 6.1). Offsets are UTF-16 units into the node text
+  // and may not split a surrogate pair; a command on a node in an auto mode refits its auto
+  // dimensions with the growth anchor (section 6.2) and needs the editor's `textLayout` port.
+  /**
+   * Creates a text node at the page-space `frame` (M1 section 4.1) with canonical `runs`;
+   * defaults `autoWidth`, `left`, letter spacing 0, line height 1.2, name `Text`. Auto
+   * dimensions come from the layout, anchored on the given frame. Returns its ID.
+   */
+  | (Readonly<{
+      type: 'createText';
+      frame: Frame;
+      runs: readonly TextRun[];
+      sizing?: TextNode['sizing'];
+      align?: TextNode['align'];
+      letterSpacing?: number;
+      lineHeight?: number;
+    }> &
+      Placement)
+  /** Replaces `[start, end)` with `text` in the style of the character before `start`. */
+  | Readonly<{ type: 'setText'; id: string; start: number; end: number; text: string }>
+  /** Sets `family`, `size` or `color` over `[start, end)` (`0, 0` on an empty node only). */
+  | Readonly<{
+      type: 'setTextStyle';
+      id: string;
+      start: number;
+      end: number;
+      style: Readonly<Partial<Pick<TextRun, 'family' | 'size' | 'color'>>>;
+    }>
+  /** Sets at least one of the node's text props; `autoWidth` drops the stored width. */
+  | Readonly<{
+      type: 'setTextProps';
+      id: string;
+      sizing?: TextNode['sizing'];
+      align?: TextNode['align'];
+      letterSpacing?: number;
+      lineHeight?: number;
+    }>
+  /**
+   * Refits the auto dimensions of the listed text nodes, by default every text node of the
+   * document, as one step; with no frame change no step is recorded.
+   */
+  | Readonly<{ type: 'refitText'; ids?: readonly string[] }>
   | Readonly<{ type: 'addPage'; name?: string; index?: number }>
   | Readonly<{ type: 'removePage'; id: string }>
   | Readonly<{ type: 'renamePage'; id: string; name: string }>
@@ -441,7 +486,11 @@ export type EditorErrorCode =
   | 'editor.not-an-instance'
   | 'editor.nested-symbol'
   | 'editor.invalid-expansion'
-  | 'editor.expansion-limit';
+  | 'editor.expansion-limit'
+  // MVP M6a contract, sections 5 and 6.1.
+  | 'editor.not-a-text-node'
+  | 'editor.invalid-text-range'
+  | 'editor.no-text-layout';
 
 /**
  * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key
@@ -510,7 +559,12 @@ export type Query =
   /** Path edit mode, or null (M3 contract, section 4). */
   | Readonly<{ type: 'pathEdit' }>
   /** The edited path's anchors and visible handles in page space, or null (section 5.1). */
-  | Readonly<{ type: 'pathOverlay' }>;
+  | Readonly<{ type: 'pathOverlay' }>
+  /**
+   * The layout of a text node through the editor's cache (M6a contract, section 5), or null
+   * without a port or for an ID that names no text node.
+   */
+  | Readonly<{ type: 'textLayout'; id: string }>;
 
 /**
  * The select tool's resize handle box for the selection, in page space (M1 contract, section
@@ -568,7 +622,9 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'commi
                                   ? PathEditState | null
                                   : Q extends { type: 'pathOverlay' }
                                     ? PathEditOverlay | null
-                                    : number;
+                                    : Q extends { type: 'textLayout' }
+                                      ? TextLayoutResult | null
+                                      : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';
@@ -594,7 +650,9 @@ export type EditorEvent =
         | 'snap'
         | 'snapping'
         | 'scope'
-        | 'pathEdit';
+        | 'pathEdit'
+        /** The text layout port's generation changed (M6a contract, section 5). */
+        | 'textLayout';
     }>
   | DiagnosticEvent;
 

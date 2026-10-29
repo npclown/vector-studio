@@ -1,4 +1,8 @@
-import type { RenderCamera, RendererSceneSynchronization } from '@vector-studio/contracts';
+import type {
+  RenderCamera,
+  RendererSceneSynchronization,
+  TextLayoutPort,
+} from '@vector-studio/contracts';
 import {
   DOCUMENT_ERROR_CODES,
   isValidId,
@@ -42,6 +46,7 @@ import {
   type CanonicalBinding,
 } from './keymap.js';
 import { SceneProjector } from './projector.js';
+import { TextLayoutCache, type TextLayouter } from './text.js';
 import {
   createBoxTool,
   createLineTool,
@@ -104,6 +109,12 @@ export type EditorOptions = Readonly<{
   keymap?: readonly KeyBinding[];
   /** What `Mod` resolves to: `Meta` on `'mac'`, else `Ctrl`. Defaults to `'other'`. */
   platform?: Platform;
+  /**
+   * The text layout port (M6a contract, section 5), subscribed once for the editor's lifetime;
+   * a port whose `portVersion` is not 0 throws. Without it, edits that need a layout fail with
+   * `editor.no-text-layout` and `textLayout` is null.
+   */
+  textLayout?: TextLayoutPort;
 }>;
 
 /** A tool receives input and acts only through the editor's commands and the gesture API. */
@@ -224,6 +235,11 @@ const DOCUMENT_COMMANDS = new Set([
   'removePathAnchors',
   'closePathSubpath',
   'openPathSubpath',
+  'createText',
+  'setText',
+  'setTextStyle',
+  'setTextProps',
+  'refitText',
 ]);
 
 /**
@@ -284,6 +300,9 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.nested-symbol',
   'editor.invalid-expansion',
   'editor.expansion-limit',
+  'editor.not-a-text-node',
+  'editor.invalid-text-range',
+  'editor.no-text-layout',
 ]);
 
 /**
@@ -569,6 +588,12 @@ class EditorCore implements Editor {
    * checks, the projector and hit testing.
    */
   readonly expansions: ExpansionCache;
+  /**
+   * The text layout cache in front of the port (M6a contract, section 5), or null without one;
+   * `layout` lays a node out through it.
+   */
+  readonly textLayouts: TextLayoutCache | null;
+  private readonly layout: TextLayouter | undefined;
 
   /**
    * The IDs of `returned` that a draw on `drawnOn` accepted: `drawIds` and `freshId` skip only
@@ -629,6 +654,25 @@ class EditorCore implements Editor {
       throw new Error(`createEditor: invalid platform ${String(platform)}`);
     }
     this.platform = platform;
+    const port: unknown = options.textLayout;
+    if (port === undefined) {
+      this.textLayouts = null;
+    } else {
+      const candidate = (typeof port === 'object' ? port : null) as Partial<TextLayoutPort> | null;
+      if (
+        candidate === null ||
+        typeof candidate.layout !== 'function' ||
+        typeof candidate.subscribe !== 'function'
+      ) {
+        throw new Error('createEditor: invalid textLayout');
+      }
+      if (candidate.portVersion !== 0) {
+        throw new Error(`createEditor: textLayout portVersion ${String(candidate.portVersion)}`);
+      }
+      this.textLayouts = new TextLayoutCache(port as TextLayoutPort);
+    }
+    const cache = this.textLayouts;
+    this.layout = cache === null ? undefined : (node) => cache.layout(node);
     this.fixedLayers = this.extensionLayers(options.extensions ?? []);
     const host = validateLayer(
       options.keymap ?? [],
@@ -668,6 +712,11 @@ class EditorCore implements Editor {
       cancel: () => this.cancelGesture(),
     };
     for (const tool of this.extensions.tools) this.tools.set(tool.id, this.extensionTool(tool));
+    // One subscription for the editor's lifetime (M6a-Q20 (a)). A generation change drops the
+    // cache and raises one `textLayout` session event: no document event, step or frame change.
+    cache?.port.subscribe(() => {
+      if (cache.notify()) this.emit({ type: 'session', field: 'textLayout' });
+    });
   }
 
   /**
@@ -1145,6 +1194,7 @@ class EditorCore implements Editor {
       scope: this.scope,
       selection: this.selection,
       expansions: this.expansions,
+      layout: this.layout,
     };
   }
 
@@ -1197,6 +1247,14 @@ class EditorCore implements Editor {
           return this.pathEdit;
         case 'pathOverlay':
           return this.pathEdit === null ? null : pathEditOverlay(this.document, this.pathEdit);
+        case 'textLayout': {
+          const id: unknown = query.id;
+          const node =
+            typeof id === 'string' && Object.hasOwn(this.document.nodes, id)
+              ? this.document.nodes[id]
+              : undefined;
+          return this.layout === undefined || node?.type !== 'text' ? null : this.layout(node);
+        }
       }
     })();
     return value as QueryResult<Q>;
@@ -1685,6 +1743,7 @@ class EditorCore implements Editor {
       edit,
       this.extensions,
       this.expansions,
+      this.layout,
     );
     return this.applyGestureResult(gesture, result);
   }
@@ -2022,7 +2081,7 @@ export function createEditor(options: EditorOptions = {}): Editor {
 /** Package-internal access for tools (P5-U3) and tests; not exported from the package. */
 export function internalsOf(
   editor: Editor,
-): Pick<EditorCore, 'tools' | 'gesture' | 'expansions' | 'clipboardGeneration'> {
+): Pick<EditorCore, 'tools' | 'gesture' | 'expansions' | 'clipboardGeneration' | 'textLayouts'> {
   if (!(editor instanceof EditorCore)) throw new Error('not an editor-core editor');
   return editor;
 }

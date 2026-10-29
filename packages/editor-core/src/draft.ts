@@ -1,7 +1,14 @@
-import { validateNode, type DocumentV4, type NodeV4, type PageV2 } from '@vector-studio/model';
+import {
+  validateNode,
+  type DocumentV4,
+  type NodeV4,
+  type PageV2,
+  type TextNode,
+} from '@vector-studio/model';
 import type { ExpansionCache } from './expansion.js';
 import { deepFreeze } from './freeze.js';
 import { refitGroup, type WritableTree } from './resize.js';
+import { refitFrame, type TextLayouter } from './text.js';
 import { childrenOf, isContainer, isGroup, nodePath, treeDepth } from './tree.js';
 import type { CommandResult, EditorErrorCode } from './types.js';
 
@@ -41,6 +48,8 @@ export class Draft implements WritableTree {
   private readonly unchecked = new Set<string>();
   /** Custom nodes whose extension check the command already ran. */
   private readonly customChecked = new Set<string>();
+  /** Text nodes whose auto dimensions `finish` refits (M6a contract, sections 6.2 and 6.3). */
+  private readonly textRefits = new Set<string>();
   /**
    * The expansion cache `finish` was given: `success` (`edit-support.ts`) then checks the
    * expansions of the finished document after the structural rules (M7 contract, section 5.5),
@@ -94,6 +103,11 @@ export class Draft implements WritableTree {
     }
   }
 
+  /** Marks a text node for the refit step of `finish` (M6a contract, section 6.3). */
+  markTextRefit(id: string): void {
+    this.textRefits.add(id);
+  }
+
   remove(id: string): void {
     this.nodes.delete(id);
     this.touched.add(id);
@@ -120,10 +134,13 @@ export class Draft implements WritableTree {
   }
 
   /**
-   * Deletes groups and mask groups left without children (cascading upward), refits the groups
-   * whose children changed placement or membership against `placementBase` (innermost first),
-   * validates every derived node with the model's rules and every touched custom node with its
-   * extension, and returns the frozen document.
+   * Deletes groups and mask groups left without children (cascading upward), refits the auto
+   * dimensions of the marked text nodes through `layout` (M6a contract, section 6.3; each node
+   * is first checked with the model's rules, and without `layout` the edit fails with
+   * `editor.no-text-layout`), refits the groups whose children changed placement or membership
+   * against `placementBase` (innermost first), validates every derived node with the model's
+   * rules and every touched custom node with its extension, and returns the frozen document.
+   * The text refit runs whether or not groups refit, so a gesture update refits text too.
    */
   finish(
     check: CustomCheck,
@@ -131,10 +148,13 @@ export class Draft implements WritableTree {
       refit: boolean;
       placementBase?: DocumentV4;
       expansions?: ExpansionCache;
+      layout?: TextLayouter | undefined;
     }> = { refit: true },
   ): DocumentV4 | Failure {
     this.expansions = options.expansions;
     this.deleteEmptyGroups();
+    const text = this.refitText(options.layout);
+    if (text !== null) return text;
     if (options.refit) this.refit(options.placementBase ?? this.base);
     for (const id of this.unchecked) {
       const node = this.nodes.get(id);
@@ -162,6 +182,22 @@ export class Draft implements WritableTree {
       // fromEntries defines own properties, so a "__proto__" ID stays data.
       nodes: Object.fromEntries(this.nodes),
     });
+  }
+
+  private refitText(layout: TextLayouter | undefined): Failure | null {
+    for (const id of this.textRefits) {
+      const node = this.nodes.get(id);
+      if (node?.type !== 'text' || node.sizing === 'fixed') continue;
+      // A derived size above 4096 or of 0 fails here, before any layout (section 6.3, bounds).
+      const result = validateNode(node);
+      if (!result.ok) return fail(result.code, nodePath(id, result.path));
+      if (layout === undefined) return fail('editor.no-text-layout');
+      const valid = result.node as TextNode;
+      const frame = refitFrame(valid, layout(valid));
+      if (frame !== valid.frame) this.set({ ...valid, frame });
+    }
+    this.textRefits.clear();
+    return null;
   }
 
   private deleteEmptyGroups(): void {

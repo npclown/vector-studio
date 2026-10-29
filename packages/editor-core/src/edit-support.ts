@@ -2,6 +2,7 @@ import { isValidId, type DocumentV4, type NodeV4 } from '@vector-studio/model';
 import { fail, type Draft, type Failure } from './draft.js';
 import { expansionFailure, type ExpansionCache } from './expansion.js';
 import type { CustomDefaults, CustomFailure } from './extensions.js';
+import type { TextLayouter } from './text.js';
 import {
   clipDepthViolation,
   documentTree,
@@ -67,6 +68,11 @@ export type EditContext = Readonly<{
    * command use; without it a command uses a fresh cache with `custom`'s check.
    */
   expansions?: ExpansionCache;
+  /**
+   * The editor's text layout through its cache (M6a contract, section 5); absent without a port,
+   * so an edit that needs a layout fails with `editor.no-text-layout`.
+   */
+  layout?: TextLayouter | undefined;
 }>;
 
 export const ID_ATTEMPTS = 1000;
