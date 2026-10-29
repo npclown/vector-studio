@@ -868,26 +868,37 @@ test('T8 atlas pressure: eviction, over-limit notice and convergence (E28-A06)',
   if (moved.evictions <= regenerated.evictions)
     failures.push('the subpixel move compacted nothing');
   if (limits(await diagnosticsOf(page)) !== quiet) failures.push('the subpixel move raised E28-D2');
-  // 200 syllables cannot fit the page: E28-D2 once on entering the over-limit state.
+  // 200 syllables cannot fit the page: E28-D2 once on entering the over-limit state. The
+  // raster budget spreads the misses over frames, and a compaction may come first, so frames
+  // are shown until the notice appears (bounded), then a few more to see it is not repeated.
   const before = limits(await diagnosticsOf(page));
   const over = pressure('t8', syllables(800, 200, GRID_20), 20);
-  for (let frame = 0; frame < 4; frame += 1)
-    await page.evaluate(([scene, view]) => window.__vectorStudioE23.show(scene, view), [
-      over.snapshot(),
-      HOME,
-    ] as const);
-  const entered = limits(await diagnosticsOf(page)) - before;
-  rows.overLimit = { notices: entered };
-  if (entered !== 1) failures.push(`over-limit: ${entered} notices`);
+  const showOver = async (expected: number) => {
+    let frames = 0;
+    const bound = Math.ceil(200 / E28_RASTER_PER_FRAME) + 3;
+    for (; frames < bound; frames += 1) {
+      await page.evaluate(([scene, view]) => window.__vectorStudioE23.show(scene, view), [
+        over.snapshot(),
+        HOME,
+      ] as const);
+      if (limits(await diagnosticsOf(page)) - before >= expected) break;
+    }
+    for (let frame = 0; frame < 3; frame += 1)
+      await page.evaluate(([scene, view]) => window.__vectorStudioE23.show(scene, view), [
+        over.snapshot(),
+        HOME,
+      ] as const);
+    return { frames: frames + 1, notices: limits(await diagnosticsOf(page)) - before };
+  };
+  const entered = await showOver(1);
+  rows.overLimit = entered;
+  if (entered.notices !== 1) failures.push(`over-limit: ${JSON.stringify(entered)}`);
   // Back within the atlas: the state clears and the frame converges to the oracle again.
   await check('A again', pressure('t8', syllables(0, 60, GRID_20), 20));
-  for (let frame = 0; frame < 2; frame += 1)
-    await page.evaluate(([scene, view]) => window.__vectorStudioE23.show(scene, view), [
-      over.snapshot(),
-      HOME,
-    ] as const);
-  const reentered = limits(await diagnosticsOf(page)) - before;
-  if (reentered !== 2) failures.push(`re-entering over-limit: ${reentered} notices in all`);
+  const reentered = await showOver(2);
+  rows.overLimitAgain = reentered;
+  if (reentered.notices !== 2)
+    failures.push(`re-entering over-limit: ${JSON.stringify(reentered)} (notices in all)`);
   const diagnostics = await diagnosticsOf(page);
   failures.push(
     ...unexpected(

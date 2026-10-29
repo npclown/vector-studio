@@ -15,7 +15,7 @@ Contract: [d9-e28-text-glyph-atlas-contract.md](../../plans/d9-e28-text-glyph-at
 
 ## Results
 
-`pnpm test:gpu` passed 210 tests, with 0 failed, flaky, skipped or not run. All 14 E28 tests pass in both browsers. Ten report pairs are byte-identical between Chrome and Edge: the four A03 reports, A04, A07, A08, T8 eviction order and T9.
+`pnpm test:gpu` passed 210 tests, with 0 failed, flaky, skipped or not run. All 14 E28 tests pass in both browsers. Nine report pairs are byte-identical between Chrome and Edge: the four A03 reports, A04, A07, A08, T8 eviction order and T9. (The PC report says ten but lists these nine.)
 
 **E28-A03.**
 - Every row passes with the default tolerances, and there are no undecided probes anywhere.
@@ -59,7 +59,7 @@ Contract: [d9-e28-text-glyph-atlas-contract.md](../../plans/d9-e28-text-glyph-at
   | A gen 2 shifted | 103 | 3 |
   | A again | 63 | 5 |
 
-- E28-D2 was raised once on entering the over-limit state.
+- E28-D2 was raised once on entering the over-limit state and once more on re-entry (two warnings in all).
 - Budget test: 256 calls in the first frame, 300 in all.
 - 600 clusters at 256 px peaked at 8 pages and 33,554,432 bytes.
 - Eviction order: the older-generation page was evicted first.
@@ -76,13 +76,15 @@ Contract: [d9-e28-text-glyph-atlas-contract.md](../../plans/d9-e28-text-glyph-at
 
 **Raster cost (observation).**
 
-| Browser | Cold call, mean (ms) | Warm call, mean (ms) | 256 distinct calls, DPR 1 / DPR 2 (ms) |
-| --- | --- | --- | --- |
-| Chrome 156 | 0.13 to 0.16 | 0.024 to 0.028 | 24.0 / 27.9 |
-| Edge 156 | 0.13 to 0.16 | 0.024 to 0.028 | 19.4 / 25.6 |
+Across both browsers and both DPRs, a cold call averaged 0.13 to 0.16 ms (p95 0.2 to 0.3 ms) and a warm call 0.024 to 0.028 ms. A frame of 256 distinct calls:
+
+| Browser | DPR 1 (ms) | DPR 2 (ms) |
+| --- | --- | --- |
+| Chrome 156 | 24.0 | 27.9 |
+| Edge 156 | 19.4 | 25.6 |
 
 A 256-call frame does not fit a 60 Hz frame (16.7 ms) in any configuration. As section 6 provides, E28-Q6's figure is lowered to 64 (section 4, Raster budget, U4 amendment). The worst measured rate is 27.9 / 256 ≈ 0.11 ms per call, so a 64-call frame is about 7 ms. That figure is extrapolated: this run used 256.
 
 ## Not run
 
-- The lowered budget of 64 on hardware. The unit tests and a SwiftShader re-run check it: 14 of 14 E28 tests pass, and a 64-call frame took 7.8 and 5.0 ms there.
+- The lowered budget of 64 on hardware. The unit tests and a SwiftShader re-run check it ([u4-swiftshader.md](u4-swiftshader.md), budget 64 section).

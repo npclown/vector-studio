@@ -799,6 +799,7 @@ describe('E28 section 4 compaction', () => {
     let last = compacted;
     for (let index = 0; index < 16 && instanceCount(last) < 500; index += 1) {
       last = frame();
+      expect(instanceCount(last)).toBe(Math.min(500, (index + 2) * E28_RASTER_PER_FRAME));
       expect(last.text!.clears).toEqual([]);
       expect(takeInvalidations()).toBe(instanceCount(last) < 500 ? 1 : 0);
     }
@@ -905,11 +906,14 @@ describe('E28 section 4 raster budget', () => {
     expect(modes.filter((mode) => mode === 1)).toHaveLength(300 - budget);
     expect(instance(zoomed, 299).slice(2, 6)).toEqual([12, 0, 0, 18]);
     expect(takeInvalidations()).toBe(1);
-    for (let index = 0; index < 8; index += 1) frame();
+    // Each later frame rasterizes the budget; the frame that completes the set requests nothing.
+    for (let index = 0, done = budget; done < 300; index += 1) {
+      frame();
+      done = Math.min(300, done + budget);
+      expect(service.getGlyphRasterCallsForTesting()).toBe(300 + done);
+      expect(takeInvalidations()).toBe(done < 300 ? 1 : 0);
+    }
     expect(service.getGlyphRasterCallsForTesting()).toBe(600);
-    takeInvalidations();
-    frame();
-    expect(takeInvalidations()).toBe(0);
   });
 
   it('keeps the text part for a frame whose only text is deferred, so it is drawn later', () => {
