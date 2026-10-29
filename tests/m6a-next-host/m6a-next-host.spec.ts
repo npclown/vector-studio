@@ -15,6 +15,8 @@ import {
   FAMILY,
   GRAPHEME_40,
   SECOND,
+  TALL,
+  TALL_ASCENT,
   request,
   run,
   scaled,
@@ -83,12 +85,31 @@ async function open(page: Page) {
   return { errors, status };
 }
 
+/** Registers `SECOND` through the hook and `TALL` (the same bytes, `ascentOverride`). */
 async function registerSecond(page: Page) {
   const status = await page.evaluate(
     (family) => (window.__p5Host as unknown as TextHolder).text.registerTestFont(family),
     SECOND,
   );
   expect(status).toBe('loaded');
+  // The hook takes no descriptors, so `TALL` is a page `FontFace` from bytes, which fires no
+  // `loadingdone` and raises no generation; it is registered and loaded before any layout uses
+  // its family, so no layout in it exists to go stale.
+  const tall = await page.evaluate(
+    async ({ family, ascent, bytes }) => {
+      const binary = atob(bytes);
+      const buffer = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) buffer[i] = binary.charCodeAt(i);
+      const face = new FontFace(family, buffer.buffer, { ascentOverride: ascent });
+      document.fonts.add(face);
+      await face.load();
+      await document.fonts.ready;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return face.status;
+    },
+    { family: TALL, ascent: TALL_ASCENT, bytes: FONT_BYTES.toString('base64') },
+  );
+  expect(tall).toBe('loaded');
 }
 
 function layoutAll(page: Page, values: readonly TextLayoutRequest[]) {
@@ -102,13 +123,12 @@ const near = (a: number, b: number, tolerance = TOLERANCE) => Math.abs(a - b) <=
 const fixed = (value: number) => Number(value.toFixed(3));
 
 /** The reference comparison of one case, as a list of problems (empty when it agrees). */
-function referenceProblems(name: string, report: ProbeReport, disclosed: boolean): string[] {
+function referenceProblems(name: string, report: ProbeReport): string[] {
   const problems: string[] = [];
-  if (!disclosed && report.fallbacks !== 0) problems.push(`${name}: fallbacks ${report.fallbacks}`);
+  if (report.fallbacks !== 0) problems.push(`${name}: fallbacks ${report.fallbacks}`);
   if (report.inkOutside.length > 0) {
     problems.push(`${name}: ink outside E28-K9 ${JSON.stringify(report.inkOutside)}`);
   }
-  if (disclosed) return problems;
   if (!near(report.height, report.refHeight)) {
     problems.push(`${name}: height ${report.height} against the reference ${report.refHeight}`);
   }
@@ -399,9 +419,7 @@ test('M6a-A11: every fixture agrees with an unprobed reference block', async ({ 
   );
   const byName = new Map(cases.map((value, index) => [value.name, reports[index]!]));
   const get = (name: string) => byName.get(name)!.result;
-  const problems = cases.flatMap((value, index) =>
-    referenceProblems(value.name, reports[index]!, value.fallbackDisclosed === true),
-  );
+  const problems = cases.flatMap((value, index) => referenceProblems(value.name, reports[index]!));
   await test.info().attach('m6a-a11-reference.json', {
     contentType: 'application/json',
     body: JSON.stringify(
@@ -512,20 +530,33 @@ test('M6a-A11: every fixture agrees with an unprobed reference block', async ({ 
     for (const line of lines)
       expect(line.height).toBeGreaterThanOrEqual(lineHeight * 20 - TOLERANCE);
   }
-  const disclosed = byName.get('(d) disclosed fallback')!;
-  test.info().annotations.push(
-    { type: '(g) pitches', description: JSON.stringify(pitches) },
-    {
-      type: '(d) disclosed fallback',
-      description: JSON.stringify({
-        fallbacks: disclosed.fallbacks,
-        lines: disclosed.result.lines.length,
+  test.info().annotations.push({ type: '(g) pitches', description: JSON.stringify(pitches) });
+  // (U4b) the two families' ascents differ (otherwise the group checks nothing), and the
+  // one-line case stays one line.
+  const ascents = await page.evaluate(
+    ([a, b]) =>
+      [a, b].map((family) => {
+        const block = document.createElement('div');
+        block.style.cssText = 'position: fixed; font-size: 0; white-space: pre';
+        const span = document.createElement('span');
+        span.style.cssText = `font: 20px "${family}"`;
+        span.textContent = 'a';
+        const marker = document.createElement('span');
+        marker.style.cssText = 'display: inline-block; width: 0; height: 0';
+        span.append(marker);
+        block.append(span);
+        document.body.append(block);
+        const range = document.createRange();
+        range.selectNodeContents(span.firstChild!);
+        const value = marker.getBoundingClientRect().bottom - range.getClientRects()[0]!.top;
+        block.remove();
+        return value;
       }),
-    },
+    [FAMILY, TALL] as const,
   );
-  // The section 4 disclosure (U4 note 4): this case falls back once; if it stops, the
-  // disclosure is stale.
-  expect(disclosed.fallbacks).toBe(1);
+  test.info().annotations.push({ type: '(U4b) ascents', description: JSON.stringify(ascents) });
+  expect(Math.abs(ascents[0]! - ascents[1]!)).toBeGreaterThan(1);
+  expect(get('(U4b) other ascents on one line').lines).toHaveLength(1);
   expect(errors).toEqual([]);
 });
 

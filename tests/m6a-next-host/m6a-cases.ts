@@ -5,11 +5,18 @@ import type { TextLayoutRequest, TextLayoutRun } from '@vector-studio/contracts'
 // under another family by the spec, so the structure is the same on every machine; scripts the
 // subset does not map (Hebrew, emoji, U+200B) take a fallback face (U5 note 2). The (a) to (g)
 // groups are the M6a-U4 review r3 carry list (contract section 16), taken from the U4 review
-// probe scripts; the others are A11's fixtures.
+// probe scripts; the (U4b) group checks line detection by baseline (M6a-U4b, review N1) with
+// `TALL`; the others are A11's fixtures.
 
 export const FAMILY = 'Noto Sans KR';
 /** The test font registered again under another family, for runs split across families. */
 export const SECOND = 'M6a Second';
+/**
+ * The test font registered once more by the spec with `ascentOverride` `TALL_ASCENT`, so its runs
+ * have another ascent than `FAMILY`'s at the same size (M6a-U4b review N1), on every machine.
+ */
+export const TALL = 'M6a Tall';
+export const TALL_ASCENT = '80%';
 
 export const run = (text: string, size = 20, family = FAMILY): TextLayoutRun => ({
   text,
@@ -42,16 +49,13 @@ export const CJK_PUNCTUATION = '「한글」、가。a가（나）';
 export type Case = Readonly<{
   name: string;
   request: TextLayoutRequest;
-  /** A disclosed fallback (contract section 4, U4 note 4): the reference is not compared. */
-  fallbackDisclosed?: true;
 }>;
 
 const c = (
   name: string,
   runs: readonly TextLayoutRun[],
   extra: Partial<Omit<TextLayoutRequest, 'runs'>> = {},
-  flags: Partial<Pick<Case, 'fallbackDisclosed'>> = {},
-): Case => ({ name, request: request(runs, extra), ...flags });
+): Case => ({ name, request: request(runs, extra) });
 
 /** A11's fixtures. */
 export const A11_CASES: readonly Case[] = [
@@ -128,14 +132,8 @@ export const CARRY_CASES: readonly Case[] = [
     width: 5,
   }),
   c('(d) one-cluster negative run', [run('i', 40), run('ab', 10)], { letterSpacing: -0.5 }),
-  c(
-    '(d) disclosed fallback',
-    [run('il', 40), run('ab', 10)],
-    { letterSpacing: -1 },
-    {
-      fallbackDisclosed: true,
-    },
-  ),
+  // A disclosed fallback until M6a-U4b (U4 note 4, superseded): now compared in full.
+  c('(d) mixed sizes at -1 em', [run('il', 40), run('ab', 10)], { letterSpacing: -1 }),
   // (e) RTL across split spans.
   c('(e) RTL run broken by an LF', [run('אב\nגד', 20), run('הו', 30)]),
   c('(e) RTL over two runs', [run('אב', 20), run('גד', 30)]),
@@ -144,6 +142,13 @@ export const CARRY_CASES: readonly Case[] = [
   c('(g) lineHeight 0.1', [run('aaaa bbbb cccc dddd')], { width: 50, lineHeight: 0.1 }),
   c('(g) lineHeight 0.3', [run('aaaa bbbb cccc dddd')], { width: 50, lineHeight: 0.3 }),
   c('(g) lineHeight 0.5', [run('aaaa bbbb cccc dddd')], { width: 50, lineHeight: 0.5 }),
+  // (U4b) two families of one size with other ascents (review N1): one line shares a baseline,
+  // and at width 0 each line starts at the previous line's left.
+  c('(U4b) other ascents on one line', [run('ab'), run('cd', 20, TALL), run('ef')]),
+  c('(U4b) other ascents at width 0', [run('ab'), run('cd', 20, TALL), run('ef')], { width: 0 }),
+  c('(U4b) other ascents and sizes, wrapped', [run('ab cd', 40, TALL), run(' ef gh', 10)], {
+    width: 60,
+  }),
 ];
 
 /** Every case laid out at each DPR and checked for size linearity (A12). */
