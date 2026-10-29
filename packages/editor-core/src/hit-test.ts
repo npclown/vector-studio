@@ -14,6 +14,7 @@ import {
   childrenOf,
   documentTree,
   isContainer,
+  isFrameLike,
   isGroup,
   spaceOf,
   type TreeView,
@@ -376,8 +377,8 @@ function visitHits(
   const visit = (id: string, parentPoint: PagePoint, clip: Clip): boolean => {
     const node = tree.node(id);
     if (node === undefined || !node.visible) return false;
-    // Interim until M7-U2 and M7-U3 project symbols: a symbol is not drawn, so neither it nor
-    // anything inside it is hit (no background, border or children).
+    // Interim until M7-U3 projects symbols (kept by M7-U2): a symbol is not drawn, so neither
+    // it nor anything inside it is hit (no background, border or children).
     if (node.type === 'symbol') return false;
     if (!isContainer(node)) return hitsNode(node, parentPoint, zoom, custom) && clip() && take(id);
     const local = apply(
@@ -475,13 +476,14 @@ export function selectionTarget(
   scope: string | null = null,
 ): string | null {
   const tree = documentTree(document);
-  // Interim until M7-U2 and M7-U3 (see `visitHits`): a symbol and its descendants are no target.
+  // Interim until M7-U3 (see `visitHits`): a symbol and its descendants are no target.
   if (inSymbol(tree, id)) return null;
   const chain = [id, ...ancestors(tree, id).map((node) => node.id)];
   const index = scope === null ? -1 : chain.indexOf(scope);
   if (index > 0) return chain[index - 1]!;
   const top = tree.node(chain[chain.length - 1]!)!;
-  if (top.type === 'frame' && chain.length >= 2) return chain[chain.length - 2]!;
+  // A top-level frame or symbol acts as an artboard (M7 contract, section 1.2).
+  if (isFrameLike(top) && chain.length >= 2) return chain[chain.length - 2]!;
   return top.id;
 }
 
@@ -540,7 +542,7 @@ export function marqueeHits(
   scope: string | null = null,
 ): string[] {
   const tree = documentTree(document);
-  // Interim until M7-U2 and M7-U3 (see `visitHits`): no symbol, and nothing inside one.
+  // Interim until M7-U3 (see `visitHits`): no symbol, and nothing inside one.
   if (scope !== null && inSymbol(tree, scope)) return [];
   return childrenOf(tree, scope ?? page).filter((id) => {
     const node = tree.node(id);
@@ -553,7 +555,7 @@ export function marqueeHits(
           ? node.frame
           : rotatedBounds(node)
         : boundsOf(document, [id])!;
-    return node.type === 'frame' ? contains(box, frame) : intersects(frame, box);
+    return isFrameLike(node) ? contains(box, frame) : intersects(frame, box);
   });
 }
 

@@ -8,7 +8,7 @@ import {
   rotate,
   rotatedBounds,
 } from './geometry.js';
-import { ancestors, isGroup, type TreeView } from './tree.js';
+import { ancestors, isFrameLike, isGroup, type TreeView } from './tree.js';
 import type { PagePoint } from './types.js';
 
 // Resize rules (M1 contract, section 4.4) and the group refit (section 4.2), as functions over a
@@ -137,8 +137,9 @@ function parentPoints(node: Extract<NodeV3, { type: 'path' | 'line' }>): number[
  * Maps one node (in its parent's space) by `map`, top-down through its descendants (section 4.4,
  * group resize): a leaf keeps its rotation, its centre maps exactly and its size follows the
  * approximation; a path or line under a skewing map maps its points exactly and refits its frame
- * in its own axes; a frame maps like a leaf and its children then follow its constraints; a
- * group keeps its frame and its children are mapped in turn (the caller refits it afterwards).
+ * in its own axes; a frame or symbol maps like a leaf and its children then follow its
+ * constraints (M7 contract, section 1.2); a group keeps its frame and its children are mapped in
+ * turn (the caller refits it afterwards).
  * A pure translation moves the node rigidly.
  */
 export function mapNode(tree: WritableTree, id: string, map: ScaleMap): void {
@@ -196,7 +197,7 @@ export function mapNode(tree: WritableTree, id: string, map: ScaleMap): void {
     frame = { x: centre.x - size.width / 2, y: centre.y - size.height / 2, ...size };
   }
   tree.set({ ...node, frame });
-  if (node.type === 'frame') applyConstraints(tree, id, node.frame.width, node.frame.height);
+  if (isFrameLike(node)) applyConstraints(tree, id, node.frame.width, node.frame.height);
 }
 
 /** The per-axis map of one constraint (section 4.4, frame resize). */
@@ -225,8 +226,9 @@ function axisMap(
 }
 
 /**
- * Applies each child's constraints for a frame resized from `before` to its current size: per
- * axis on the child's bounds in the frame's space, then the child maps as `mapNode` does.
+ * Applies each child's constraints for a frame or symbol resized from `before` to its current
+ * size: per axis on the child's bounds in the frame's space, then the child maps as `mapNode`
+ * does.
  */
 export function applyConstraints(
   tree: WritableTree,
@@ -235,7 +237,7 @@ export function applyConstraints(
   beforeHeight: number,
 ): void {
   const frame = tree.node(frameId);
-  if (frame?.type !== 'frame') return;
+  if (!isFrameLike(frame)) return;
   const { width, height } = frame.frame;
   if (width === beforeWidth && height === beforeHeight) return;
   for (const id of frame.children) {
@@ -251,15 +253,15 @@ export function applyConstraints(
 /**
  * Applies the resize rules to the descendants of a container whose frame changed from `before`
  * to its current one: a group's children scale with it in its local space (an axis whose old
- * size is 0 is not scaled), a frame's children follow their constraints. Position and rotation
- * alone move the subtree rigidly, which needs no change to the children.
+ * size is 0 is not scaled), a frame's or symbol's children follow their constraints. Position
+ * and rotation alone move the subtree rigidly, which needs no change to the children.
  */
 export function resizeContainer(tree: WritableTree, id: string, before: Frame): void {
   const node = tree.node(id);
   if (node === undefined) return;
   const { width, height } = node.frame;
   if (width === before.width && height === before.height) return;
-  if (node.type === 'frame') {
+  if (isFrameLike(node)) {
     applyConstraints(tree, id, before.width, before.height);
   } else if (isGroup(node)) {
     const sx = before.width === 0 ? 1 : width / before.width;

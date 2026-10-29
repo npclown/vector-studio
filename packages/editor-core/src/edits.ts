@@ -16,12 +16,14 @@ import {
 } from './arrange.js';
 import { paste } from './clipboard.js';
 import { Draft, fail, type Failure } from './draft.js';
+import { ExpansionCache, expansionFailure } from './expansion.js';
 import {
   freshId,
   inserted,
   isPoint,
   nodeOf,
   PENDING_ID,
+  placeholderIds,
   success,
   uniqueIds,
   type CustomRules,
@@ -173,7 +175,9 @@ export function applyEdit(
 ): EditResult {
   const custom = context.custom ?? NO_CUSTOM;
   const refit = context.refit ?? true;
-  const finish = (draft: Draft) => draft.finish((node) => custom.check(node), { refit });
+  const expansions = context.expansions ?? new ExpansionCache((node) => custom.check(node));
+  const finish = (draft: Draft) =>
+    draft.finish((node) => custom.check(node), { refit, expansions });
   switch (command.type) {
     case 'createRectangle':
     case 'createEllipse':
@@ -384,11 +388,15 @@ export function refitGesture(
   current: DocumentV3,
   touched: Iterable<string>,
   custom: CustomRules = NO_CUSTOM,
+  expansions: ExpansionCache = new ExpansionCache((node) => custom.check(node)),
 ): EditResult {
   const draft = new Draft(current);
   draft.adopt(touched);
   const document = draft.finish((node) => custom.check(node), { refit: true, placementBase: base });
   if ('ok' in document) return document;
+  // The refit can change a group inside a source, so the expansions are checked again.
+  const expansion = expansionFailure(document, expansions);
+  if (expansion !== null) return expansion;
   return { ok: true, document, touched: [...draft.touched], created: [] };
 }
 
@@ -411,6 +419,7 @@ export function applyGestureEdit(
   base: DocumentV3,
   edit: GestureEdit,
   custom: CustomRules = NO_CUSTOM,
+  expansions: ExpansionCache = new ExpansionCache((node) => custom.check(node)),
 ): EditResult {
   const draft = new Draft(document);
   if (edit.kind === 'map') {
@@ -444,7 +453,7 @@ export function applyGestureEdit(
     draft.set({ ...node, frame, points: [unit[0]!, unit[1]!, unit[2]!, unit[3]!] });
   }
   return success(
-    draft.finish((node) => custom.check(node), { refit: false }),
+    draft.finish((node) => custom.check(node), { refit: false, expansions }),
     draft,
     [],
   );
@@ -621,46 +630,54 @@ function create(
   ) {
     return fail('editor.clip-depth', '/parent');
   }
-  const id = freshId(document, context.ids);
-  if (id === null) return fail('editor.duplicate-id');
-
-  // Into the parent's local space; on a page nothing changes.
-  let placed: NodeV3 = { ...result.node, id, parent };
-  if (!onPage) {
-    const space = spaceOf(tree, parent);
-    const local = normalizeRotation(result.node.rotation - space.rotation);
-    if (points !== null) {
-      const inverse = invertRigid(space.matrix);
-      const mapped: number[] = [];
-      for (let i = 0; i + 1 < points.length; i += 2) {
-        const p = apply(inverse, points[i]!, points[i + 1]!);
-        mapped.push(p.x, p.y);
-      }
-      const { frame, unit } = fitPoints(mapped, local);
-      if (placed.type === 'path') {
-        placed = { ...placed, frame, rotation: local, path: { ...placed.path, points: unit } };
-      } else if (placed.type === 'line') {
+  const build = (id: string): EditResult => {
+    // Into the parent's local space; on a page nothing changes.
+    let placed: NodeV3 = { ...result.node, id, parent };
+    if (!onPage) {
+      const space = spaceOf(tree, parent);
+      const local = normalizeRotation(result.node.rotation - space.rotation);
+      if (points !== null) {
+        const inverse = invertRigid(space.matrix);
+        const mapped: number[] = [];
+        for (let i = 0; i + 1 < points.length; i += 2) {
+          const p = apply(inverse, points[i]!, points[i + 1]!);
+          mapped.push(p.x, p.y);
+        }
+        const { frame, unit } = fitPoints(mapped, local);
+        if (placed.type === 'path') {
+          placed = { ...placed, frame, rotation: local, path: { ...placed.path, points: unit } };
+        } else if (placed.type === 'line') {
+          placed = {
+            ...placed,
+            frame,
+            rotation: local,
+            points: [unit[0]!, unit[1]!, unit[2]!, unit[3]!],
+          };
+        }
+      } else {
         placed = {
           ...placed,
-          frame,
-          rotation: local,
-          points: [unit[0]!, unit[1]!, unit[2]!, unit[3]!],
+          ...relocate(placed.frame, placed.rotation, IDENTITY, 0, space.matrix, space.rotation),
         };
       }
-    } else {
-      placed = {
-        ...placed,
-        ...relocate(placed.frame, placed.rotation, IDENTITY, 0, space.matrix, space.rotation),
-      };
+      const mapped = validateNode(placed);
+      if (!mapped.ok) return fail(mapped.code, mapped.path);
+      placed = mapped.node;
     }
-    const mapped = validateNode(placed);
-    if (!mapped.ok) return fail(mapped.code, mapped.path);
-    placed = mapped.node;
+    const draft = new Draft(document);
+    draft.setChecked(placed, true);
+    draft.setChildren(parent, inserted(siblings, index, [id]));
+    return success(finish(draft), draft, [id], [id]);
+  };
+  // A node created inside a source changes every instance of it, so the expansion checks run
+  // on a build with a placeholder ID first, and a failed command draws no ID (M7 section 5.5).
+  if (owner?.type === 'symbol' || ancestors(tree, parent).some((node) => node.type === 'symbol')) {
+    const trial = build(placeholderIds(document, 1)[0]!);
+    if (!trial.ok) return trial;
   }
-  const draft = new Draft(document);
-  draft.setChecked(placed, true);
-  draft.setChildren(parent, inserted(siblings, index, [id]));
-  return success(finish(draft), draft, [id], [id]);
+  const id = freshId(document, context.ids);
+  if (id === null) return fail('editor.duplicate-id');
+  return build(id);
 }
 
 /** `groupNodes` (section 4.3). */

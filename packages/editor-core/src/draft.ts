@@ -1,4 +1,5 @@
 import { validateNode, type DocumentV3, type NodeV3, type PageV2 } from '@vector-studio/model';
+import type { ExpansionCache } from './expansion.js';
 import { deepFreeze } from './freeze.js';
 import { refitGroup, type WritableTree } from './resize.js';
 import {
@@ -25,7 +26,8 @@ export type CustomCheck = (
   node: NodeV3,
 ) => Readonly<{ code: EditorErrorCode; path: string }> | null;
 
-function samePlacement(a: NodeV3, b: NodeV3): boolean {
+/** Whether two versions of a node have the same parent, frame and rotation. */
+export function samePlacement(a: NodeV3, b: NodeV3): boolean {
   return (
     a.parent === b.parent &&
     a.rotation === b.rotation &&
@@ -46,6 +48,11 @@ export class Draft implements WritableTree {
   private readonly unchecked = new Set<string>();
   /** Custom nodes whose extension check the command already ran. */
   private readonly customChecked = new Set<string>();
+  /**
+   * The expansion cache `finish` was given: `success` (`edit-support.ts`) then checks the
+   * expansions of the finished document after the structural rules (M7 contract, section 5.5).
+   */
+  expansions: ExpansionCache | undefined;
 
   constructor(base: DocumentV3) {
     this.base = base;
@@ -126,8 +133,13 @@ export class Draft implements WritableTree {
    */
   finish(
     check: CustomCheck,
-    options: Readonly<{ refit: boolean; placementBase?: DocumentV3 }> = { refit: true },
+    options: Readonly<{
+      refit: boolean;
+      placementBase?: DocumentV3;
+      expansions?: ExpansionCache;
+    }> = { refit: true },
   ): DocumentV3 | Failure {
+    this.expansions = options.expansions;
     this.deleteEmptyGroups();
     if (options.refit) this.refit(options.placementBase ?? this.base);
     for (const id of this.unchecked) {
