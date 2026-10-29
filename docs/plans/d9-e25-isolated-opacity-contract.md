@@ -121,6 +121,7 @@ type LayerPacketPart = Readonly<{
 - The E10 count pass replays `mesh.draws` only. E10-A5 holds because it compares count draws with main mesh draws.
 - `layers[i].opacity` is the *composite record* that E25-A04 counts.
 - `composites[j].position` and `meshOrder` together fix the composite's place against analytic runs and mesh draws. Batching splits at a composite and never reorders.
+- **Amendment (E28-U2, 2026-10-29).** `meshOrder` is renamed `order` and counts every non-analytic draw of the target at an equal `position` before the composite: mesh draws, composites and E28 text draws. At each position the backend fills slot `k` with the composite or text draw whose `order` is `k`, otherwise with the next mesh draw. Without text the merged draw sequence is unchanged; only the values of composites that share a position with an earlier composite differ ([E28 contract](d9-e28-text-glyph-atlas-contract.md), section 4).
 - Each layer has exactly one composite, and `composites[j].target` equals `layers[composites[j].layer].parent`. The scene rejects a packet that breaks either rule. A layer draw that is clipped carries its `clipState` into the packet's `clip` part as any clipped draw does; unclipped layer draws need no clip part.
 
 **Layer passes (renderer-webgpu).** Each layer renders into its own *layer texture*. The texture has size `B_g`, the target's format and `TEXTURE_BINDING | COPY_DST` usage, and is cleared to transparent black.

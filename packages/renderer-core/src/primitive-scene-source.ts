@@ -1,5 +1,10 @@
 import { isSceneGradient } from '@vector-studio/contracts';
-import type { RenderNodeSnapshot, SceneAffine, SceneVersion } from '@vector-studio/contracts';
+import type {
+  GlyphRasterPort,
+  RenderNodeSnapshot,
+  SceneAffine,
+  SceneVersion,
+} from '@vector-studio/contracts';
 import type {
   ClipMaskPacketLevel,
   MeshFillDraw,
@@ -15,6 +20,8 @@ import type {
   PrimitiveResourceId,
   PrimitiveTarget,
   PrimitiveWrite,
+  TextDraw,
+  TextPacketPart,
 } from './primitive-packet.js';
 import {
   PRIMITIVE_STRIDES,
@@ -59,6 +66,12 @@ import {
   type SceneBounds,
 } from './scene-numeric.js';
 import {
+  GlyphAtlasPlan,
+  getTextLocalBounds,
+  planTextFrame,
+  type AtlasFrame,
+} from './text-atlas.js';
+import {
   layerBound,
   planLayerBudget,
   type DeviceRect,
@@ -94,6 +107,19 @@ type DerivedPrimitive = Readonly<{
   /** E25 contract, U2: the innermost isolated container, or null outside layers. */
   layer: LayerScope | null;
 }>;
+/** E28 contract, U2: a text leaf of the traversal. */
+type DerivedText = Readonly<{
+  id: string;
+  node: Extract<RenderNodeSnapshot, { kind: 'text' }>;
+  world: SceneAffine;
+  /** E28-K9, in world units; null without a cluster. */
+  worldBounds: SceneBounds | null;
+  hidden: boolean;
+  clip: ClipChain | null;
+  sequence: number;
+  layer: LayerScope | null;
+}>;
+type DerivedTexts = { leaves: DerivedText[]; held: boolean };
 type VersionedRecords = {
   transforms: Array<symbol | undefined>;
   geometry: Array<symbol | undefined>;
@@ -105,6 +131,8 @@ type PendingPacket = Readonly<{
   packet: PrimitivePacket;
   expected: ReadonlyMap<PrimitiveResourceId, ReadonlyMap<number, symbol>>;
   meshExpected: ReadonlyMap<MeshResourceId, ReadonlyMap<number, symbol>> | null;
+  /** E28: the atlas frame the packet's text part carries; null without a text part. */
+  text: AtlasFrame | null;
 }>;
 type PackingKeys = Readonly<{
   transform: readonly number[];
@@ -194,15 +222,39 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   #layerNoticesDropped = 0;
   /** @internal Tests only (E25-A05): every visible container with opacity 1 is a layer too. */
   readonly #isolateUnitOpacity: boolean;
+  /** E28 contract, U2: the glyph atlas plan; null without `text: 'atlas'`. */
+  readonly #atlas: GlyphAtlasPlan | null;
+  readonly #onTextDeferred: (() => void) | undefined;
   /** P3 V3 section f: true exactly when this source consumes a fill-mesh or stroke-mesh port. */
   public readonly requiresMeshPipeline: boolean;
 
   public constructor(
     mirror: RetainedSceneMirror,
     pathMeshes?: PathMeshPipeline,
-    options: Readonly<{ isolateUnitOpacityForTesting?: boolean }> = {},
+    options: Readonly<{
+      isolateUnitOpacityForTesting?: boolean;
+      /**
+       * E28 contract, U2: the glyph raster port and the atlas size, and the callback the service
+       * invalidates through when a packet with deferred clusters is acknowledged.
+       */
+      text?: Readonly<{
+        port: GlyphRasterPort;
+        pages?: number;
+        pageSize?: number;
+        onDeferred?: () => void;
+      }>;
+    }> = {},
   ) {
     this.#isolateUnitOpacity = options.isolateUnitOpacityForTesting === true;
+    const text = options.text;
+    this.#atlas =
+      text === undefined
+        ? null
+        : new GlyphAtlasPlan(text.port, {
+            ...(text.pages === undefined ? {} : { pages: text.pages }),
+            ...(text.pageSize === undefined ? {} : { pageSize: text.pageSize }),
+          });
+    this.#onTextDeferred = text?.onDeferred;
     this.#mirror = mirror;
     this.#pathMeshes = pathMeshes;
     this.requiresMeshPipeline = pathMeshes !== undefined;
@@ -215,6 +267,14 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     const cameraState = this.#mirror.getCameraState();
     if (scene === null || cameraState === null) return null;
 
+    // E28 section 4, Lifetime: a packet replaced without acknowledgement may have written to
+    // the atlas pages it cleared or uploaded to.
+    const stale = this.#pending;
+    if (stale !== null && stale.text !== null && this.#atlas !== null) {
+      this.#atlas.replaced(stale.text);
+      this.#pending = null;
+    }
+
     const epochChanged = scene.sceneEpoch !== this.#sceneEpoch;
     if (epochChanged) this.#resetForSnapshot(scene);
     else this.#reconcileSlots(scene);
@@ -224,6 +284,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     const clipSeen = { value: false };
     const layerScopes: LayerScope[] = [];
     const pathLayers = new Map<string, LayerScope>();
+    const derivedTexts: DerivedTexts = { leaves: [], held: false };
     const derived = derivePrimitives(
       scene,
       this.#slots,
@@ -234,9 +295,16 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       layerScopes,
       pathLayers,
       this.#isolateUnitOpacity,
+      derivedTexts,
     );
     let visible = cullPrimitives(
       derived.filter((entry) => !entry.hidden && !entry.omitted && entry.clip?.empty !== true),
+      cameraState.camera,
+      target,
+    );
+    // E28-K9: text leaves cull by their node bound and clip chain as primitives do.
+    let texts = cullTexts(
+      derivedTexts.leaves.filter((text) => !text.hidden && text.clip?.empty !== true),
       cameraState.camera,
       target,
     );
@@ -280,6 +348,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       layerPlan = this.#planLayers(
         layerScopes,
         visible,
+        texts,
         pathDraws,
         new Map(paths.map((path) => [path.id, path] as const)),
         pathLayers,
@@ -290,6 +359,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       const inDrawn = (layer: LayerScope | null | undefined) =>
         layer === null || layer === undefined || drawn.has(layer);
       visible = visible.filter((primitive) => inDrawn(primitive.layer));
+      texts = texts.filter((text) => inDrawn(text.layer));
       pathDraws = pathDraws.filter(
         (draw) => draw.maskSource === true || inDrawn(pathLayers.get(draw.nodeId)),
       );
@@ -315,9 +385,11 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
             sequence: pathSequences.get(draw.nodeId)!,
             chain: pathClips.get(draw.nodeId) ?? null,
           })),
+        ...texts.map((text) => ({ sequence: text.sequence, chain: text.clip })),
       ].sort((left, right) => left.sequence - right.sequence);
       for (const entry of content) plan.admit(entry.chain);
       visible = visible.filter((primitive) => plan.admit(primitive.clip));
+      texts = texts.filter((text) => plan.admit(text.clip));
       const used = new Set(
         plan.levels.flatMap((level) => (level.source.kind === 'mesh' ? [level.source.nodeId] : [])),
       );
@@ -473,16 +545,35 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       contentPathDraws[index]!.composite === 'joint-fill' ? (meshGradients[index + 1] ?? 0) : 0,
     );
     const gradients = this.#gradients.end();
+    // E28 contract, U2: the atlas plan over the drawn text leaves, in paint order; each leaf's
+    // draws are items at its sequence, merged with the mesh draws.
+    const textFrame =
+      this.#atlas === null
+        ? null
+        : planTextFrame(this.#atlas, texts, derivedTexts.held, cameraState.camera, target);
+    const textItems =
+      textFrame === null
+        ? []
+        : texts.flatMap((text, leaf) => textFrame.draws[leaf]!.map((draw) => ({ text, draw })));
+    const items = mergeItems(
+      mesh?.draws.map((draw) => draw.sequence) ?? [],
+      textItems.map((item) => item.text.sequence),
+    );
     // P4 contract, U2: clip states are numbered in drawn paint order; a state change splits an
     // analytic run. An unclipped frame has no states and the P3 draws, unchanged.
     let clip: ClipStates = NO_CLIP_STATES;
     if (clipSeen.value) {
       // The mesh part's draws are the content path draws, in the same order.
-      const meshStates = (mesh?.draws ?? []).map((draw, index) => ({
-        sequence: draw.sequence,
-        clip: pathClips.get(contentPathDraws[index]!.nodeId) ?? null,
-      }));
-      clip = this.#assignClipStates(visible, meshStates);
+      clip = this.#assignClipStates(
+        visible,
+        items.map((item) => ({
+          sequence: item.sequence,
+          clip:
+            item.kind === 'mesh'
+              ? (pathClips.get(contentPathDraws[item.index]!.nodeId) ?? null)
+              : textItems[item.index]!.text.clip,
+        })),
+      );
     } else if (this.#clipStatesUsed) {
       // Releases the previous frame's states once the scene has no clip left; a mask that
       // returns over budget is reported again.
@@ -491,37 +582,68 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       this.#overBudget = new Set();
     }
     this.#clipStatesUsed = clipSeen.value;
-    const layered =
+    const meshStates: number[] = [];
+    const textStates: number[] = [];
+    items.forEach((item, index) => {
+      (item.kind === 'mesh' ? meshStates : textStates)[item.index] = clip.meshStates[index] ?? 0;
+    });
+    const itemTargets =
       layerPlan === null || layerPlan.order.length === 0
+        ? null
+        : items.map((item) =>
+            layerPlan.indexOf(
+              item.kind === 'mesh'
+                ? pathLayers.get(contentPathDraws[item.index]!.nodeId)
+                : textItems[item.index]!.text.layer,
+            ),
+          );
+    const layered =
+      itemTargets === null
         ? null
         : interleaveLayerDraws(
             visible,
-            visible.map((primitive) => layerPlan.indexOf(primitive.layer)),
-            mesh?.draws.map((draw) => draw.sequence) ?? [],
-            contentPathDraws.map((draw) => layerPlan.indexOf(pathLayers.get(draw.nodeId))),
-            layerPlan.order.map((layer, index) => ({
+            visible.map((primitive) => layerPlan!.indexOf(primitive.layer)),
+            items.map((item) => item.sequence),
+            itemTargets,
+            layerPlan!.order.map((layer, index) => ({
               layer: index,
-              target: layerPlan.indexOf(layer.parent),
+              target: layerPlan!.indexOf(layer.parent),
               sequence: layer.start,
               depth: layer.depth,
             })),
             clip.primitiveStates,
             primitivePaints.length === 0 ? [] : paintFlags,
-            layerPlan.order.length,
+            layerPlan!.order.length,
           );
-    const draws =
-      layered?.main ??
-      interleaveDraws(
-        visible,
-        mesh?.draws.map((draw) => draw.sequence) ?? [],
-        clip.primitiveStates,
-        primitivePaints.length === 0 ? [] : paintFlags,
-      );
+    const flat =
+      layered === null
+        ? interleaveDraws(
+            visible,
+            items.map((item) => item.sequence),
+            clip.primitiveStates,
+            primitivePaints.length === 0 ? [] : paintFlags,
+          )
+        : null;
+    const draws = layered?.main ?? flat!.analytic;
+    const itemPositions = layered?.positions ?? flat!.positions;
+    const itemOrders = layered?.orders ?? flatOrders(flat!.positions);
+    const meshPositions: number[] = [];
+    const textPlacements: { position: number; order: number; target: number }[] = [];
+    items.forEach((item, index) => {
+      if (item.kind === 'mesh') meshPositions[item.index] = itemPositions[index]!;
+      else {
+        textPlacements[item.index] = {
+          position: itemPositions[index]!,
+          order: itemOrders[index]!,
+          target: itemTargets?.[index] ?? -1,
+        };
+      }
+    });
     const meshFillDraws = (mesh?.draws ?? []).map((draw, index) =>
       Object.freeze({
-        position: layered === null ? draws.positions[index]! : layered.meshPositions[index]!,
+        position: meshPositions[index]!,
         ...draw.draw,
-        ...((clip.meshStates[index] ?? 0) === 0 ? {} : { clipState: clip.meshStates[index]! }),
+        ...((meshStates[index] ?? 0) === 0 ? {} : { clipState: meshStates[index]! }),
         ...(meshGradients[index] === 0 ? {} : { gradient: meshGradients[index]! }),
         ...(strokeGradients[index] === 0 ? {} : { strokeGradient: strokeGradients[index]! }),
       }),
@@ -557,6 +679,39 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
             composites: Object.freeze(layered?.composites ?? []),
             notices: Object.freeze(layerNotices),
           });
+    // E28 contract, section 4: the text part; present while text is drawn, the atlas holds or
+    // releases pages, or a notice is pending.
+    const textNotices = this.#atlas?.peekNotices() ?? [];
+    const atlasFrame = textFrame?.atlas ?? null;
+    const textDraws: TextDraw[] = textItems.map((item, index) => {
+      const placement = textPlacements[index]!;
+      return Object.freeze({
+        first: item.draw.first,
+        count: item.draw.count,
+        page: item.draw.page,
+        target: placement.target,
+        position: placement.position,
+        order: placement.order,
+        ...((textStates[index] ?? 0) === 0 ? {} : { clipState: textStates[index]! }),
+      });
+    });
+    const textPart: TextPacketPart | null =
+      atlasFrame === null ||
+      (textDraws.length === 0 &&
+        textNotices.length === 0 &&
+        atlasFrame.pageCount === 0 &&
+        this.#atlas!.committedPageCount === 0)
+        ? null
+        : Object.freeze({
+            layoutVersion: 0 as const,
+            pageSize: this.#atlas!.pageSize,
+            pageCount: atlasFrame.pageCount,
+            clears: atlasFrame.clears,
+            uploads: atlasFrame.uploads,
+            instances: textFrame!.instances,
+            draws: Object.freeze(textDraws),
+            notices: Object.freeze(textNotices),
+          });
     const packetId = Symbol('primitive-packet');
     const packet: PrimitivePacket = Object.freeze({
       layoutVersion: 1,
@@ -570,12 +725,13 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       mode: reconstruct ? 'reconstruct' : 'incremental',
       resources: Object.freeze(this.#resources()),
       writes: Object.freeze(writes),
-      draws: Object.freeze(draws.analytic),
+      draws: Object.freeze(draws),
       frame: Object.freeze({ ...target }),
       ...(this.#maskNotices.length === 0
         ? {}
         : { clipNotices: Object.freeze(this.#maskNotices.slice(0, MASK_NOTICES_PER_PACKET)) }),
       ...(layersPart === null ? {} : { layers: layersPart }),
+      ...(textPart === null ? {} : { text: textPart }),
       ...(clip.records.length === 0
         ? {}
         : {
@@ -623,10 +779,12 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     // Notices leave the queue only once the packet exists, so a throwing prepare keeps them.
     this.#maskNotices.splice(0, packet.clipNotices?.length ?? 0);
     this.#layerNotices.splice(0, packet.layers?.notices.length ?? 0);
+    this.#atlas?.consumeNotices(textPart?.notices.length ?? 0);
     this.#pending = Object.freeze({
       packet,
       expected: expectedRecords(writes),
       meshExpected: mesh?.expected ?? null,
+      text: textPart === null ? null : atlasFrame,
     });
     this.#prepareSerial += 1;
     if (this.#pathMeshes !== undefined) {
@@ -700,6 +858,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   #planLayers(
     scopes: readonly LayerScope[],
     visible: readonly DerivedPrimitive[],
+    texts: readonly DerivedText[],
     pathDraws: readonly PathMeshDraw[],
     paths: ReadonlyMap<string, DerivedPath>,
     pathLayers: ReadonlyMap<string, LayerScope>,
@@ -714,6 +873,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       else list.push(bounds);
     };
     for (const primitive of visible) add(primitive.layer, primitive.worldBounds);
+    // E28-K9: a text leaf's bound joins its layer as a leaf's does.
+    for (const text of texts) add(text.layer, text.worldBounds);
     for (const draw of pathDraws) {
       if (draw.maskSource === true) continue;
       const layer = pathLayers.get(draw.nodeId);
@@ -878,6 +1039,26 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     return this.#pathMeshes?.getDashExpansionCount() ?? 0;
   }
 
+  /** @internal Tests only (E28 section 4, Counters): glyph raster port calls so far. */
+  public getGlyphRasterCallsForTesting(): number {
+    return this.#atlas?.rasterCalls ?? 0;
+  }
+
+  /** @internal Tests only (E28 section 4, Counters): bitmaps written by acknowledged packets. */
+  public getGlyphUploadsForTesting(): number {
+    return this.#atlas?.uploads ?? 0;
+  }
+
+  /** @internal Tests only (E28 section 4, Counters): atlas pages evicted by acknowledged packets. */
+  public getAtlasEvictionsForTesting(): number {
+    return this.#atlas?.evictions ?? 0;
+  }
+
+  /** E28 section 5: text notices dropped because the queue was full. */
+  public getTextNoticesDropped(): number {
+    return this.#atlas?.noticesDropped ?? 0;
+  }
+
   public acknowledge(receipt: PrimitiveReceipt): void {
     const pending = this.#pending;
     if (pending === null || !receiptMatchesPacket(receipt, pending.packet)) return;
@@ -903,9 +1084,31 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
         return;
       }
     }
+    // E28 section 4, Lifetime: the receipt has a text part exactly when the packet has one, and
+    // the atlas frame commits only with the rest of the packet.
+    const textFrame = pending.text;
+    if ((pending.packet.text === undefined) !== (receipt.text === undefined)) return;
+    if (
+      textFrame !== null &&
+      (this.#atlas === null || !this.#atlas.validateReceipt(textFrame, receipt.text))
+    ) {
+      return;
+    }
     const received = validateReceiptResources(receipt, pending.expected, this.#incarnations);
     if (received === null) return;
     this.#pending = null;
+    if (textFrame !== null && this.#atlas !== null) {
+      const lost = this.#atlas.acknowledge(textFrame, receipt.text!);
+      // Deferred clusters invalidate once per acknowledged packet; so does a page whose entries
+      // were lost to a new incarnation.
+      if (textFrame.deferred > 0 || lost) {
+        try {
+          this.#onTextDeferred?.();
+        } catch {
+          // The invalidation target is the host's; a throw never fails the acknowledgement.
+        }
+      }
+    }
     // A skipped part acknowledges only the P1 part and leaves every mesh record dirty; the
     // source stops producing mesh draws and writes for the rest of that generation.
     if (meshSkipped) this.#meshStoppedGeneration = receipt.generation;
@@ -954,6 +1157,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     this.#packingKeys.clear();
     this.#pathMeshes?.dispose();
     this.#meshPacker.dispose();
+    this.#atlas?.reset();
   }
 
   /**
@@ -1323,6 +1527,7 @@ function derivePrimitives(
   layerScopes: LayerScope[],
   pathLayers: Map<string, LayerScope>,
   isolateUnitOpacity = false,
+  texts: DerivedTexts = { leaves: [], held: false },
 ): DerivedPrimitive[] {
   const result: DerivedPrimitive[] = [];
   const present = new Set<string>();
@@ -1466,10 +1671,41 @@ function derivePrimitives(
       sequence += 1;
       continue;
     }
-    // E28 contract, unit U1: text nodes are accepted under `text: 'atlas'`; U2 plans and draws
-    // them. Until then they draw nothing, take no paint position and keep no cache entry; U2 adds
-    // one with E28-K9 bounds.
-    if (node.kind === 'text') continue;
+    // E28 contract, U2: a text node is one leaf at its paint position, with E28-K9 bounds.
+    if (node.kind === 'text') {
+      texts.held = true;
+      const localBounds = getTextLocalBounds(node);
+      const worldBounds = localBounds === null ? null : transformSceneBounds(localBounds, world);
+      cache.set(
+        node.id,
+        Object.freeze({
+          transform: node.transform,
+          parentWorldVersion: item.parentWorldVersion,
+          worldVersion,
+          world,
+          hidden,
+          localKey: null,
+          localBounds,
+          worldBounds,
+          omitted: false,
+        }),
+      );
+      texts.leaves.push(
+        Object.freeze({
+          id: node.id,
+          node,
+          world,
+          worldBounds,
+          hidden: hidden || item.chain?.empty === true,
+          clip: item.chain,
+          sequence,
+          layer: item.layer,
+        }),
+      );
+      extendLayers(item.layer);
+      sequence += 1;
+      continue;
+    }
     const localKey = primitiveBoundsKey(node);
     const boundsChanged =
       worldChanged || previous === undefined || !numericArraysEqual(previous.localKey, localKey);
@@ -1624,6 +1860,50 @@ function interleaveDraws(
   return { analytic, positions };
 }
 
+/**
+ * E28 contract, U2: mesh draws and text draws merged by sequence, each list already in sequence
+ * order; distinct leaves never share a sequence.
+ */
+function mergeItems(
+  meshSequences: readonly number[],
+  textSequences: readonly number[],
+): Readonly<{ sequence: number; kind: 'mesh' | 'text'; index: number }>[] {
+  if (textSequences.length === 0) {
+    return meshSequences.map((sequence, index) => ({ sequence, kind: 'mesh', index }));
+  }
+  const items: { sequence: number; kind: 'mesh' | 'text'; index: number }[] = [];
+  let mesh = 0;
+  let text = 0;
+  while (mesh < meshSequences.length || text < textSequences.length) {
+    if (
+      text >= textSequences.length ||
+      (mesh < meshSequences.length && meshSequences[mesh]! < textSequences[text]!)
+    ) {
+      items.push({ sequence: meshSequences[mesh]!, kind: 'mesh', index: mesh });
+      mesh += 1;
+    } else {
+      items.push({ sequence: textSequences[text]!, kind: 'text', index: text });
+      text += 1;
+    }
+  }
+  return items;
+}
+
+/** E28 section 4: without layers, an item's order counts the items before it at its position. */
+function flatOrders(positions: readonly number[]): number[] {
+  return positions.map((position, index) => {
+    let order = 0;
+    for (
+      let previous = index - 1;
+      previous >= 0 && positions[previous] === position;
+      previous -= 1
+    ) {
+      order += 1;
+    }
+    return order;
+  });
+}
+
 /** E25 contract, U2: the frame's drawn layers, indexed in post-order. */
 type DrawnLayers = Readonly<{
   indices: ReadonlySet<LayerScope>;
@@ -1645,16 +1925,18 @@ type LayerComposite = LayerPacketPart['composites'][number];
 
 /**
  * E25 contract, section 4: `interleaveDraws` over several targets, the main pass (-1) and each
- * layer. Primitives, mesh draws and composites are merged in paint order; a composite sits at
- * its layer's first sequence, before that leaf, outer layers first. A run extends only over
- * consecutive order-stream entries of one target with equal clip state and paint; a mesh draw or
- * a composite closes its target's run.
+ * layer. Primitives, non-analytic items (mesh and text draws) and composites are merged in paint
+ * order; a composite sits at its layer's first sequence, before that leaf, outer layers first. A
+ * run extends only over consecutive order-stream entries of one target with equal clip state and
+ * paint; an item or a composite closes its target's run. E28 section 4: each item and composite
+ * gets its `order`, the number of its target's items and composites at an equal position before
+ * it.
  */
 function interleaveLayerDraws(
   visible: readonly DerivedPrimitive[],
   visibleTargets: readonly number[],
-  meshSequences: readonly number[],
-  meshTargets: readonly number[],
+  itemSequences: readonly number[],
+  itemTargets: readonly number[],
   composites: readonly Readonly<{
     layer: number;
     target: number;
@@ -1665,8 +1947,9 @@ function interleaveLayerDraws(
   paints: readonly boolean[],
   layerCount: number,
 ): Readonly<{
-  main: Readonly<{ analytic: PrimitiveDraw[]; positions: number[] }>;
-  meshPositions: number[];
+  main: PrimitiveDraw[];
+  positions: number[];
+  orders: number[];
   layers: PrimitiveDraw[][];
   composites: LayerComposite[];
 }> {
@@ -1702,9 +1985,16 @@ function interleaveLayerDraws(
   const ordered = [...composites].sort(
     (left, right) => left.sequence - right.sequence || left.depth - right.depth,
   );
-  const meshPositions: number[] = [];
-  const mainPositions: number[] = [];
+  const positions: number[] = [];
+  const orders: number[] = [];
   const placed: LayerComposite[] = [];
+  /** The order of the next non-analytic draw at the run's current position. */
+  const nextOrder = (run: Run, position: number) => {
+    const order = run.lastPosition === position ? run.atPosition : 0;
+    run.lastPosition = position;
+    run.atPosition = order + 1;
+    return order;
+  };
   let primitive = 0;
   let composite = 0;
   const advanceTo = (sequence: number, inclusive: boolean) => {
@@ -1725,7 +2015,7 @@ function interleaveLayerDraws(
             layer: nextComposite.layer,
             target: nextComposite.target,
             position,
-            meshOrder: run.lastPosition === position ? run.atPosition : 0,
+            order: nextOrder(run, position),
           }),
         );
         composite += 1;
@@ -1746,26 +2036,21 @@ function interleaveLayerDraws(
       primitive += 1;
     }
   };
-  meshSequences.forEach((sequence, index) => {
+  itemSequences.forEach((sequence, index) => {
     // Composites at the draw's own sequence precede it: they open the layers it is drawn in.
     advanceTo(sequence, true);
-    const target = meshTargets[index]!;
-    const run = runOf(target);
+    const run = runOf(itemTargets[index]!);
     close(run);
     const position = run.analytic.length;
-    if (run.lastPosition === position) run.atPosition += 1;
-    else {
-      run.lastPosition = position;
-      run.atPosition = 1;
-    }
-    meshPositions.push(position);
-    if (target === -1) mainPositions.push(position);
+    positions.push(position);
+    orders.push(nextOrder(run, position));
   });
   advanceTo(Infinity, true);
   for (const run of runs) close(run);
   return {
-    main: { analytic: runOf(-1).analytic, positions: mainPositions },
-    meshPositions,
+    main: runOf(-1).analytic,
+    positions,
+    orders,
     layers: runs.slice(1).map((run) => run.analytic),
     composites: placed,
   };
@@ -1923,6 +2208,30 @@ function cullPrimitives(
       worldBounds.minY <= viewport.maxY &&
       meetsClipChain(worldBounds, clip, guard),
   );
+}
+
+/** E28-K9: text leaves cull by their node bound and clip chain, with primitives' 2 px guard. */
+function cullTexts(
+  texts: readonly DerivedText[],
+  camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>,
+  target: PrimitiveTarget,
+): DerivedText[] {
+  const guard = 2 / (camera.zoom * target.devicePixelRatio);
+  const minX = camera.position.x - guard;
+  const minY = camera.position.y - guard;
+  const maxX = camera.position.x + target.width / target.devicePixelRatio / camera.zoom + guard;
+  const maxY = camera.position.y + target.height / target.devicePixelRatio / camera.zoom + guard;
+  return texts.filter((text) => {
+    const bounds = text.worldBounds;
+    return (
+      bounds !== null &&
+      bounds.maxX >= minX &&
+      bounds.minX <= maxX &&
+      bounds.maxY >= minY &&
+      bounds.minY <= maxY &&
+      meetsClipChain(bounds, text.clip, guard)
+    );
+  });
 }
 
 function authoritativeTraversal(scene: RetainedSceneView): RenderNodeSnapshot[] {

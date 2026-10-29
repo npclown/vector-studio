@@ -1,4 +1,9 @@
-import type { PathStroke, RenderNodeSnapshot, SceneAffine } from '@vector-studio/contracts';
+import type {
+  PathStroke,
+  RenderNodeSnapshot,
+  SceneAffine,
+  SceneTextCluster,
+} from '@vector-studio/contracts';
 import { multiplyAffine } from './camera.js';
 
 export type SceneBounds = Readonly<{
@@ -129,6 +134,43 @@ export function transformSceneBounds(
   return Object.freeze({ minX, minY, maxX, maxY });
 }
 
+/** E28-K9: a cluster's local bound. */
+export function clusterLocalBounds(cluster: SceneTextCluster, size: number): SceneBounds {
+  // The advance may be negative; the bound covers both ends of the pen box.
+  return {
+    minX: Math.min(cluster.x, cluster.x + cluster.advance) - size,
+    minY: cluster.y - 2 * size,
+    maxX: Math.max(cluster.x, cluster.x + cluster.advance) + size,
+    maxY: cluster.y + size,
+  };
+}
+
+/**
+ * E28-K9: a text node's local bound, the union of its clusters' bounds; null without a cluster
+ * or when the union is not finite.
+ */
+export function getTextLocalBounds(
+  node: Extract<RenderNodeSnapshot, { kind: 'text' }>,
+): SceneBounds | null {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const run of node.runs) {
+    for (const cluster of run.clusters) {
+      const bound = clusterLocalBounds(cluster, run.size);
+      minX = Math.min(minX, bound.minX);
+      maxX = Math.max(maxX, bound.maxX);
+      minY = Math.min(minY, bound.minY);
+      maxY = Math.max(maxY, bound.maxY);
+    }
+  }
+  if (minX === Number.POSITIVE_INFINITY) return null;
+  return [minX, minY, maxX, maxY].every(Number.isFinite)
+    ? Object.freeze({ minX, minY, maxX, maxY })
+    : null;
+}
+
 /** Validates world composition and conservative primitive bounds without recursion. */
 export function hasFiniteSceneArithmetic(nodes: ReadonlyMap<string, RenderNodeSnapshot>): boolean {
   const worldTransforms = new Map<string, SceneAffine>();
@@ -192,6 +234,14 @@ export function hasFiniteSceneArithmetic(nodes: ReadonlyMap<string, RenderNodeSn
       }
       worldTransforms.set(node.id, world);
       parentWorld = world;
+      if (node.kind === 'text') {
+        // E28 contract, U2: the E28-K9 bound of a node with a cluster is finite in the world, as
+        // P1's rule asks of other leaves; a node without a cluster has no bound.
+        if (!node.runs.some((run) => run.clusters.length > 0)) continue;
+        const textBounds = getTextLocalBounds(node);
+        if (textBounds === null || transformSceneBounds(textBounds, world) === null) return false;
+        continue;
+      }
       if (node.kind === 'path') {
         // P1's arithmetic rule on the point box; an empty path is exempt.
         const pathBounds = getPathLocalPointBounds(node.geometry.points);

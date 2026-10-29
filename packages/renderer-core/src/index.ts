@@ -44,3 +44,12 @@ export {
   layerTileBytes,
 } from './layer-plan.js';
 export type { DeviceRect, LayerResourceNotice } from './layer-plan.js';
+export {
+  E28_ATLAS_PAGES_MAX,
+  E28_ATLAS_PAGE_SIZE,
+  E28_RASTER_CAP,
+  E28_RASTER_PER_FRAME,
+  TEXT_INSTANCE_FLOATS,
+  textNoticeDiagnostic,
+} from './text-atlas.js';
+export type { TextClear, TextNotice, TextUpload } from './text-atlas.js';
