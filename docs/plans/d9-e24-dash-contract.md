@@ -102,7 +102,7 @@ Notation: `r = width / 2`. Lengths are node-local, in the space of `points` and 
   - The expansion follows the method pinned in section 4. It uses only `+`, `−`, `×`, `÷`, `%`, `sqrt` and `floor` in binary64, in a fixed order, so equal inputs give bit-identical dashed paths in every engine.
   - The expansion does not depend on the camera, zoom, DPR or tolerance exponent. Dash ends therefore stay at the same document points at every zoom; only the kernel's curve flattening varies, as for solid strokes.
   - The accuracy target is checked by E24-A02 against a double-double reference: dash boundaries on lines within `2^-40 · L` of exact, and on cubics within `2^-24 · L_seg + 2^-40 · L`, where `L_seg` is the segment's length.
-- **E24-K8 work limit (E24-Q4).** A stroke whose expansion has more than 4,096 dashes, summed over all subpaths, fails with the new renderer-scope code `dash-limit`.
+- **E24-K8 work limit (E24-Q4).** A stroke whose expansion has more than 4,096 dashes, summed over all subpaths, fails with the new renderer-scope code `dash-limit`. The count is that of exact arithmetic: gaps too short for binary64 to separate still count (U2 review, 2026-10-29).
   - The failure does not depend on tolerance, so it is a state failure of the stroke paint. The expansion fails before any request is made, so the stroke port is not called.
   - It produces one notice on the `(node, 'stroke', 'dash-limit')` state transition, with `toleranceExponent: null` and `paint: 'stroke'`, under the V3 §d class table, with the §h outcome.
   - The outcome is E11-U4 **O1**: the whole path, fill and stroke, is not drawn, and every other node draws in order. This matches every other stroke failure. Hiding the fill when the stroke fails is B2 §9.6's chosen reading.

@@ -488,7 +488,8 @@ describe('E24 section 4 pipeline: requests and keys', () => {
         cap: stroke.cap,
         join: stroke.join,
         miterLimit: stroke.miterLimit,
-        toleranceExponent: request.toleranceExponent,
+        // Identity transforms at zoom 1 and DPR 1: the B2 stroke bucket of the ST-U6 fixtures.
+        toleranceExponent: -3,
       });
     });
     expect(h.pipeline.getDashExpansionCount()).toBe(0);
