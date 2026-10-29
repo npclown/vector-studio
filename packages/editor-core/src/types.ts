@@ -455,6 +455,11 @@ export type EditorSnapshot = Readonly<{
 
 export type Query =
   | Readonly<{ type: 'document' }>
+  /**
+   * The committed document (M5 contract, M5-S3): the active gesture's pre-gesture document while
+   * a gesture is active, else the current document. Frozen; it raises no event.
+   */
+  | Readonly<{ type: 'committedDocument' }>
   | Readonly<{ type: 'node'; id: string }>
   | Readonly<{ type: 'selection' }>
   | Readonly<{ type: 'tool' }>
@@ -501,7 +506,7 @@ export type SelectionHandles = Readonly<{
   handles: readonly PagePoint[];
 }>;
 
-export type QueryResult<Q extends Query> = Q extends { type: 'document' }
+export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'committedDocument' }
   ? DocumentV2
   : Q extends { type: 'node' }
     ? NodeV2 | null
