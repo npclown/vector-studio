@@ -527,8 +527,8 @@ class EditorCore implements Editor {
   private readonly ids: IdSource;
   private readonly extensions: ExtensionRegistry;
   /**
-   * The editor's one expansion cache (M7 contract, M7-X4): the load and command checks use it,
-   * and the projector and hit testing share it from M7-U3.
+   * The editor's one expansion cache (M7 contract, M7-X4), shared by the load and command
+   * checks, the projector and hit testing.
    */
   readonly expansions: ExpansionCache;
   /** The built-in tools by name, then the extension tools by ID in registration order. */
@@ -568,7 +568,7 @@ class EditorCore implements Editor {
     this.snapshot = this.buildSnapshot();
     this.tools.set(
       'select',
-      createSelectTool((node) => this.extensions.geometry(node)),
+      createSelectTool((node) => this.extensions.geometry(node), this.expansions),
     );
     this.tools.set('rectangle', createBoxTool('createRectangle'));
     this.tools.set('ellipse', createBoxTool('createEllipse'));
@@ -1121,6 +1121,7 @@ class EditorCore implements Editor {
       renderer,
       (node) => this.extensions.geometry(node),
       (event) => (this.reportTo ?? this.pending).push(event),
+      this.expansions,
     );
     this.projector = projector;
     this.renderer = renderer;

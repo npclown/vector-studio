@@ -8,7 +8,16 @@ import type {
   ScenePathGeometry,
   ScenePathVerb,
 } from '@vector-studio/contracts';
-import type { DocumentV3, FrameNode, LineNode, NodeV3, PathData } from '@vector-studio/model';
+import type {
+  Color,
+  DocumentV3,
+  Frame,
+  LineNode,
+  NodeV3,
+  PathData,
+  RectStroke,
+} from '@vector-studio/model';
+import { ExpansionCache, type Expansion, type ExpansionResult } from './expansion.js';
 import { localTransform } from './geometry.js';
 import type { DiagnosticEvent } from './types.js';
 
@@ -20,6 +29,12 @@ import type { DiagnosticEvent } from './types.js';
 // one unit of two to four scene nodes with synthetic IDs (the frame ID, U+0000 and a role). After
 // a rejected set the projector isolates the units one per set in document pre-order and leaves
 // the rejected ones out with their subtrees, until a change touches the subtree again.
+//
+// A `symbol` projects exactly as a frame. An `instance` (MVP M7 contract, section 4) projects as
+// a frame unit with the instance's own placement and the source's fill and stroke, holding its
+// expansion from the editor's expansion cache; an expanded node gets the scene ID of the
+// instance, U+0000, `@` and its source node ID, so `documentIdOf` maps it to the instance, and
+// the instance with its whole expansion is one unit for isolation.
 
 /** Frame-local path geometry for a custom node (its extension's `toScene`), or null. */
 export type CustomProjection = (node: NodeV3) => PathData | null;
@@ -35,7 +50,18 @@ export function frameBorderId(frameId: string): string {
   return `${frameId}\u0000border`;
 }
 
-/** The document ID a scene ID stands for: synthetic frame IDs map back to the frame. */
+/**
+ * The scene ID of the expanded copy of source node `nodeId` inside instance `instanceId` (M7
+ * contract, section 4.1); an expanded frame's roles follow it (`frameContentId` of this ID).
+ */
+export function expandedId(instanceId: string, nodeId: string): string {
+  return `${instanceId}\u0000@${nodeId}`;
+}
+
+/**
+ * The document ID a scene ID stands for: synthetic frame IDs map back to the frame, and every
+ * scene ID of an instance's expansion to the instance.
+ */
 export function documentIdOf(sceneId: string): string {
   const index = sceneId.indexOf('\u0000');
   return index < 0 ? sceneId : sceneId.slice(0, index);
@@ -274,11 +300,25 @@ export function projectNode(
 type ContainerSnapshot = Extract<RenderNodeSnapshot, { kind: 'container' }>;
 
 /**
+ * What a frame unit draws: a frame's or symbol's own fields, or an instance's placement with its
+ * source's fill and stroke (M7 contract, section 4.1). `id` is the unit's scene ID.
+ */
+type FrameUnit = Readonly<{
+  id: string;
+  frame: Frame;
+  rotation: number;
+  visible: boolean;
+  opacity: number;
+  fill: Color | null;
+  stroke: RectStroke | null;
+}>;
+
+/**
  * The scene nodes of a frame (section 5), outer first: the outer container, its content
  * container (rect clip) holding the background and `children`, and the border.
  */
 function frameSnapshots(
-  node: FrameNode,
+  node: FrameUnit,
   parentId: string | null,
   children: readonly string[],
 ): RenderNodeSnapshot[] {
@@ -340,25 +380,134 @@ export type PageProjection = Readonly<{
   rootOrder: readonly string[];
   /** Projected document IDs in pre-order. */
   units: readonly string[];
-  /** The scene IDs of each unit: the node, or a frame's two to four nodes. */
+  /**
+   * The scene IDs of each unit: the node, a frame's two to four nodes, or an instance's frame
+   * nodes followed by its whole expansion in the source's pre-order.
+   */
   unitIds: ReadonlyMap<string, readonly string[]>;
+  /** Instances left out because their expansion is invalid (M7-X3), in pre-order. */
+  invalid: readonly string[];
 }>;
 
 /** A node's last snapshots, reused while the node, its scene parent and its children hold. */
-export type ProjectionMemo = Map<
-  string,
-  Readonly<{
-    node: NodeV3;
-    parentId: string | null;
-    children: readonly string[] | null;
-    snapshots: readonly RenderNodeSnapshot[];
-  }>
->;
+type MemoEntry = Readonly<{
+  node: NodeV3;
+  parentId: string | null;
+  children: readonly string[] | null;
+  snapshots: readonly RenderNodeSnapshot[];
+  /**
+   * For an instance: the expansion result and source node the snapshots were built from, and
+   * the entries of its expanded nodes keyed by source node ID.
+   */
+  instance?: Readonly<{
+    result: ExpansionResult;
+    source: NodeV3;
+    expanded: ReadonlyMap<string, MemoEntry>;
+  }>;
+}>;
+
+export type ProjectionMemo = Map<string, MemoEntry>;
+
+/** The snapshots of `entry` when its node, scene parent and projected children still hold. */
+function reusedFrom(
+  entry: MemoEntry | undefined,
+  node: NodeV3,
+  parentId: string | null,
+  children: readonly string[] | null,
+): readonly RenderNodeSnapshot[] | null {
+  if (entry === undefined || entry.node !== node || entry.parentId !== parentId) return null;
+  if (entry.children === null || children === null) {
+    return entry.children === children ? entry.snapshots : null;
+  }
+  return sameStrings(entry.children, children) ? entry.snapshots : null;
+}
+
+/** The container snapshot of a group or mask group under the scene ID `id`. */
+function groupSnapshot(
+  id: string,
+  node: NodeV3,
+  parentId: string | null,
+  children: readonly string[],
+): RenderNodeSnapshot {
+  return {
+    id,
+    parentId,
+    transform: localTransform(node.frame, node.rotation),
+    visible: node.visible,
+    opacity: node.opacity,
+    kind: 'container',
+    children,
+    clip: node.type === 'maskGroup' ? { kind: 'mask' } : null,
+  };
+}
+
+/**
+ * The scene nodes of the expansion of instance `instance` (M7 contract, section 4.1), appended
+ * to `out` in the source's pre-order, a container's own nodes before its children; returns the
+ * scene IDs of the projected roots. Every expanded node is projected as the document walk would
+ * project it, under its expanded scene ID. A node whose source node object, scene parent and
+ * projected children are unchanged keeps its previous snapshots (`previous`), and a rebuilt one
+ * equal by value to its previous one keeps the previous object; `next` receives the entries.
+ * The expansion's node map is shared by the cache's callers and is only read here.
+ */
+function projectExpanded(
+  instance: string,
+  expansion: Expansion,
+  custom: CustomProjection,
+  previous: ReadonlyMap<string, MemoEntry> | undefined,
+  next: Map<string, MemoEntry>,
+  out: RenderNodeSnapshot[],
+): string[] {
+  const walk = (ids: readonly string[], parentId: string): string[] => {
+    const projected: string[] = [];
+    for (const id of ids) {
+      const node = expansion.nodes.get(id);
+      if (node === undefined) continue;
+      const scene = expandedId(instance, id);
+      const old = previous?.get(id);
+      const at = out.length;
+      let children: string[] | null = null;
+      let snapshots: readonly RenderNodeSnapshot[];
+      if (node.type === 'group' || node.type === 'maskGroup' || node.type === 'frame') {
+        if (node.type === 'maskGroup') {
+          const source = node.children[0];
+          if (source === undefined || !expansion.nodes.has(source)) continue;
+        }
+        children = walk(node.children, node.type === 'frame' ? frameContentId(scene) : scene);
+        const sceneChildren = children.map((child) => expandedId(instance, child));
+        snapshots =
+          reusedFrom(old, node, parentId, children) ??
+          keepEqual(
+            node.type === 'frame'
+              ? frameSnapshots({ ...node, id: scene }, parentId, sceneChildren)
+              : [groupSnapshot(scene, node, parentId, sceneChildren)],
+            old?.snapshots,
+          );
+      } else {
+        const reuse = reusedFrom(old, node, parentId, null);
+        if (reuse !== null) {
+          snapshots = reuse;
+        } else {
+          const snapshot = projectNode(node, custom, parentId);
+          if (snapshot === null) continue;
+          snapshots = keepEqual([{ ...snapshot, id: scene }], old?.snapshots);
+        }
+      }
+      next.set(id, { node, parentId, children, snapshots });
+      out.splice(at, 0, ...snapshots);
+      projected.push(id);
+    }
+    return projected;
+  };
+  return walk(expansion.children, frameContentId(instance)).map((id) => expandedId(instance, id));
+}
 
 /**
  * Projects page `pageId` of `document`, leaving out the subtrees rooted at `omit` and a mask
  * group whose source is omitted. With `memo`, a node that did not change keeps the same
- * snapshot objects, so a changed snapshot is always a new object.
+ * snapshot objects, so a changed snapshot is always a new object. Instances take their content
+ * from `expansions` (M7-X4), the editor's cache shared with the checks and hit testing; one
+ * whose expansion is invalid is left out and listed in `invalid` (M7-X3).
  */
 export function projectPage(
   document: DocumentV3,
@@ -366,19 +515,69 @@ export function projectPage(
   custom: CustomProjection,
   omit: ReadonlySet<string> = new Set(),
   memo?: ProjectionMemo,
+  expansions: ExpansionCache = new ExpansionCache(),
 ): PageProjection {
   const built = new Map<string, RenderNodeSnapshot>();
   const order: string[] = [];
   const units: string[] = [];
   const unitIds = new Map<string, readonly string[]>();
+  const invalid: string[] = [];
 
-  const reused = (node: NodeV3, parentId: string | null, children: readonly string[] | null) => {
+  /** The snapshots of instance `node` and its expansion, or null when it is invalid. */
+  const instanceUnit = (
+    node: Extract<NodeV3, { type: 'instance' }>,
+    parentId: string | null,
+  ): MemoEntry | null => {
+    const result = expansions.expand(document, node.id);
+    const source = Object.hasOwn(document.nodes, node.symbol)
+      ? document.nodes[node.symbol]
+      : undefined;
+    if (result === null || !result.ok || source?.type !== 'symbol') return null;
     const entry = memo?.get(node.id);
-    if (entry === undefined || entry.node !== node || entry.parentId !== parentId) return null;
-    if (entry.children === null || children === null) {
-      return entry.children === children ? entry.snapshots : null;
+    const held = entry?.instance;
+    if (
+      held !== undefined &&
+      entry!.node === node &&
+      entry!.parentId === parentId &&
+      held.result === result &&
+      held.source === source
+    ) {
+      return entry!;
     }
-    return sameStrings(entry.children, children) ? entry.snapshots : null;
+    const content: RenderNodeSnapshot[] = [];
+    const expanded = new Map<string, MemoEntry>();
+    const roots = projectExpanded(
+      node.id,
+      result.expansion,
+      custom,
+      held?.expanded,
+      expanded,
+      content,
+    );
+    // The instance's own frame nodes: its placement, the source's fill and stroke.
+    const own = keepEqual(
+      frameSnapshots(
+        {
+          id: node.id,
+          frame: node.frame,
+          rotation: node.rotation,
+          visible: node.visible,
+          opacity: node.opacity,
+          fill: source.fill,
+          stroke: source.stroke,
+        },
+        parentId,
+        roots,
+      ),
+      entry?.snapshots.slice(0, 4),
+    );
+    return {
+      node,
+      parentId,
+      children: null,
+      snapshots: [...own, ...content],
+      instance: { result, source, expanded },
+    };
   };
 
   /** Projects `ids` under the scene parent `parentId`; returns the projected document IDs. */
@@ -388,45 +587,52 @@ export function projectPage(
       if (omit.has(id) || !Object.hasOwn(document.nodes, id)) continue;
       const node = document.nodes[id]!;
       const at = order.length;
-      let children: string[] | null = null;
-      let snapshots: readonly RenderNodeSnapshot[];
-      if (node.type === 'group' || node.type === 'maskGroup' || node.type === 'frame') {
+      let entry: MemoEntry;
+      if (
+        node.type === 'group' ||
+        node.type === 'maskGroup' ||
+        node.type === 'frame' ||
+        node.type === 'symbol'
+      ) {
         if (node.type === 'maskGroup') {
           const source = node.children[0];
           if (source === undefined || omit.has(source)) continue;
         }
         units.push(id);
-        children = walk(node.children, node.type === 'frame' ? frameContentId(id) : id);
-        snapshots =
-          reused(node, parentId, children) ??
-          (node.type === 'frame'
+        const frameLike = node.type === 'frame' || node.type === 'symbol';
+        const children = walk(node.children, frameLike ? frameContentId(id) : id);
+        const snapshots =
+          reusedFrom(memo?.get(id), node, parentId, children) ??
+          (frameLike
             ? keepEqual(frameSnapshots(node, parentId, children), memo?.get(id)?.snapshots)
-            : [
-                {
-                  id,
-                  parentId,
-                  transform: localTransform(node.frame, node.rotation),
-                  visible: node.visible,
-                  opacity: node.opacity,
-                  kind: 'container',
-                  children,
-                  clip: node.type === 'maskGroup' ? { kind: 'mask' } : null,
-                },
-              ]);
+            : [groupSnapshot(id, node, parentId, children)]);
+        entry = { node, parentId, children, snapshots };
+      } else if (node.type === 'instance') {
+        const unit = instanceUnit(node, parentId);
+        if (unit === null) {
+          invalid.push(id);
+          continue;
+        }
+        units.push(id);
+        entry = unit;
       } else {
-        const snapshot = reused(node, parentId, null)?.[0] ?? projectNode(node, custom, parentId);
+        const snapshot =
+          reusedFrom(memo?.get(id), node, parentId, null)?.[0] ??
+          projectNode(node, custom, parentId);
         if (snapshot === null) continue;
         units.push(id);
-        snapshots = [snapshot];
+        entry = { node, parentId, children: null, snapshots: [snapshot] };
       }
-      memo?.set(id, { node, parentId, children, snapshots });
-      snapshots.forEach((snapshot) => built.set(snapshot.id, snapshot));
-      // A container's own nodes go before its children, which the walk above already listed.
-      order.splice(at, 0, ...snapshots.map((snapshot) => snapshot.id));
-      unitIds.set(
-        id,
-        snapshots.map((snapshot) => snapshot.id),
-      );
+      memo?.set(id, entry);
+      const sceneIds = entry.snapshots.map((snapshot) => snapshot.id);
+      entry.snapshots.forEach((snapshot) => built.set(snapshot.id, snapshot));
+      // A container's own nodes go before its children, which the walk above already listed;
+      // an instance's unit lists its expansion after its own nodes.
+      // An instance unit can hold up to the page cap of scene IDs, too many for a spread into
+      // `splice`; only a container's two to four own nodes go before already listed children.
+      if (at === order.length) for (const sceneId of sceneIds) order.push(sceneId);
+      else order.splice(at, 0, ...sceneIds);
+      unitIds.set(id, sceneIds);
       out.push(id);
     }
     return out;
@@ -439,12 +645,13 @@ export function projectPage(
   }
   const nodes = new Map<string, RenderNodeSnapshot>();
   for (const id of order) nodes.set(id, built.get(id)!);
-  return { nodes, rootOrder, units, unitIds };
+  return { nodes, rootOrder, units, unitIds, invalid };
 }
 
 /**
  * Keeps the previous object of each synthetic frame node whose value did not change, so that a
- * frame change sends only the frame nodes it changes (leaves compare by identity).
+ * frame change sends only the frame nodes it changes (leaves compare by identity). An expanded
+ * node rebuilt equal by value keeps its previous object the same way (M7 contract, section 4.2).
  */
 function keepEqual(
   snapshots: RenderNodeSnapshot[],
@@ -503,19 +710,29 @@ export class SceneProjector {
   private readonly excluded = new Set<string>();
   /** Snapshots of the last projection, reused for nodes that did not change. */
   private readonly memo: ProjectionMemo = new Map();
+  /** The expansion cache the projection reads instances from (M7-X4). */
+  private readonly expansions: ExpansionCache;
+  /** Instances of the last projection left out for an invalid expansion, already reported. */
+  private invalid: ReadonlySet<string> = new Set();
   private disposed = false;
   private resyncing = false;
   /** The page the projection shows (M1 contract, section 3). */
   private page = '';
 
+  /**
+   * `expansions` is the editor's one expansion cache, shared with its checks and hit testing
+   * (M7 contract, M7-X4); by default the projector has its own.
+   */
   constructor(
     renderer: RendererSceneSynchronization,
     custom: CustomProjection,
     report: (event: DiagnosticEvent) => void,
+    expansions: ExpansionCache = new ExpansionCache(),
   ) {
     this.renderer = renderer;
     this.custom = custom;
     this.report = report;
+    this.expansions = expansions;
   }
 
   get active(): boolean {
@@ -785,7 +1002,7 @@ export class SceneProjector {
   private release(document: DocumentV3, touched: readonly string[]): Set<string> {
     const roots = new Set<string>();
     if (this.excluded.size === 0) return roots;
-    for (const id of touched) {
+    for (const id of [...touched, ...this.instancesOfSources(document, touched)]) {
       const top = this.chain(document, id)
         .reverse()
         .find((entry) => this.excluded.has(entry));
@@ -796,6 +1013,30 @@ export class SceneProjector {
     }
     for (const root of [...roots]) if (!Object.hasOwn(document.nodes, root)) roots.delete(root);
     return roots;
+  }
+
+  /**
+   * The instances of every `symbol` that `touched` reaches (a touched symbol, or a touched node
+   * with a symbol ancestor), so that a source change releases its excluded instances (M7
+   * contract, section 4.2). The reverse index from symbol to instances is one O(n) scan of the
+   * node map, made only when a touched node is in a source.
+   */
+  private instancesOfSources(document: DocumentV3, touched: readonly string[]): string[] {
+    const symbols = new Set<string>();
+    for (const id of touched) {
+      for (const entry of this.chain(document, id)) {
+        const node = Object.hasOwn(document.nodes, entry) ? document.nodes[entry] : undefined;
+        if (node?.type === 'symbol') symbols.add(entry);
+      }
+    }
+    if (symbols.size === 0) return [];
+    const instances: string[] = [];
+    for (const id in document.nodes) {
+      if (!Object.hasOwn(document.nodes, id)) continue;
+      const node = document.nodes[id]!;
+      if (node.type === 'instance' && symbols.has(node.symbol)) instances.push(id);
+    }
+    return instances;
   }
 
   /**
@@ -901,10 +1142,29 @@ export class SceneProjector {
     });
   }
 
-  /** The projection of the active page minus the exclusions and `skip`. */
+  /**
+   * The projection of the active page minus the exclusions and `skip`. Instances newly left out
+   * for an invalid expansion (M7-X3) are reported once, as a rejected scene value, until they
+   * project again.
+   */
   private project(document: DocumentV3, skip: ReadonlySet<string> = new Set()): PageProjection {
     const omit = skip.size === 0 ? this.excluded : new Set([...this.excluded, ...skip]);
-    return projectPage(document, this.page, this.custom, omit, this.memo);
+    const projection = projectPage(
+      document,
+      this.page,
+      this.custom,
+      omit,
+      this.memo,
+      this.expansions,
+    );
+    const fresh = projection.invalid.filter((id) => !this.invalid.has(id));
+    // An omitted instance was not expanded this time; it stays reported.
+    this.invalid = new Set([
+      ...projection.invalid,
+      ...[...this.invalid].filter((id) => omit.has(id)),
+    ]);
+    this.reportRejection('invalid-value', fresh);
+    return projection;
   }
 
   private raiseRevision(revision: number | undefined): void {
