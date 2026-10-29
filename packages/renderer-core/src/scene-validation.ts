@@ -8,6 +8,7 @@ import type {
   SceneAffine,
   SceneClip,
   SceneColor,
+  SceneDash,
   SceneGradient,
   SceneGradientStop,
   SceneIdentity,
@@ -18,7 +19,11 @@ import type {
   SceneRejectionReason,
   SceneStroke,
 } from '@vector-studio/contracts';
-import { SCENE_MAX_CLIP_DEPTH, SCENE_MAX_GRADIENT_STOPS } from '@vector-studio/contracts';
+import {
+  SCENE_MAX_CLIP_DEPTH,
+  SCENE_MAX_DASH_ENTRIES,
+  SCENE_MAX_GRADIENT_STOPS,
+} from '@vector-studio/contracts';
 import { hasFiniteSceneArithmetic } from './scene-numeric.js';
 
 /** Port presence, fixed when a mirror is constructed (P3 V3 contract, section a). */
@@ -33,6 +38,11 @@ export type ClipSupport = 'supported' | 'rect' | 'unsupported';
  * any gradient paint is reported as `unsupported-feature`.
  */
 export type PaintSupport = 'solid' | 'gradient';
+/**
+ * E24 contract, E24-S3: whether the renderer dashes path strokes. Unless 'supported', a node
+ * with a non-null dash on a stroke of width > 0 is reported as `unsupported-feature`.
+ */
+export type DashSupport = 'unsupported' | 'supported';
 
 /**
  * The port-presence facts of a mirror (V3 section a; B2 stroke contract, section 5 and the
@@ -47,6 +57,8 @@ export type PathSupport = Readonly<{
   clips: ClipSupport;
   /** E23-S3; absent means 'solid'. */
   paints?: PaintSupport;
+  /** E24-S3; absent means 'unsupported'. */
+  dashes?: DashSupport;
 }>;
 
 const NO_PATH_SUPPORT: PathSupport = Object.freeze({
@@ -322,6 +334,7 @@ function copyNode(value: unknown, pathNodes: PathSupport): ValidatedNode | null 
     // last slot as a path without any port. A width-0 stroke is accepted and draws nothing.
     const unsupported =
       !paintsSupported([style.fill, style.stroke?.color ?? null], pathNodes) ||
+      !dashSupported(style.stroke, pathNodes) ||
       pathNodes.pathNodes !== 'supported' ||
       (style.fill !== null && pathNodes.pathFills !== 'supported') ||
       (style.stroke !== null && style.stroke.width > 0 && pathNodes.pathStrokes !== 'supported');
@@ -363,6 +376,16 @@ function paintsSupported(paints: readonly (ScenePaint | null)[], support: PathSu
     }
   }
   return true;
+}
+
+/**
+ * E24-S1 and S3: a dash on a stroke of width > 0 is unsupported unless the renderer dashes, and
+ * with more than SCENE_MAX_DASH_ENTRIES entries. Both are reported after the graph checks.
+ */
+function dashSupported(stroke: PathStroke | null, support: PathSupport): boolean {
+  if (stroke === null || stroke.dash === undefined || stroke.dash === null) return true;
+  if (!(stroke.width > 0)) return true;
+  return support.dashes === 'supported' && stroke.dash.pattern.length <= SCENE_MAX_DASH_ENTRIES;
 }
 
 /** P4-S1 and P4-S3: `undefined` marks an invalid clip, since `null` is a valid one. */
@@ -476,7 +499,10 @@ function copyPathStyle(value: unknown): PathStyle | null {
 
 /** B2 stroke contract, section 5 validation rows; every failure here is invalid-value. */
 function copyPathStroke(value: unknown): PathStroke | null {
-  if (!hasExactFields(value, ['color', 'width', 'cap', 'join', 'miterLimit'])) return null;
+  // E24-S2: the five B2 fields and an optional `dash`, kept in the producer's form.
+  const hasDash = isRecord(value) && Object.hasOwn(value, 'dash');
+  const fields = ['color', 'width', 'cap', 'join', 'miterLimit'];
+  if (!hasExactFields(value, hasDash ? [...fields, 'dash'] : fields)) return null;
   const record = value as Record<string, unknown>;
   const color = copyPaint(record.color);
   const width = copyNonnegativeNumber(record.width);
@@ -497,7 +523,37 @@ function copyPathStroke(value: unknown): PathStroke | null {
   ) {
     return null;
   }
-  return Object.freeze({ color, width, cap, join, miterLimit });
+  if (!hasDash) return Object.freeze({ color, width, cap, join, miterLimit });
+  const dash = copyDash(record.dash);
+  if (dash === undefined) return null;
+  return Object.freeze({ color, width, cap, join, miterLimit, dash });
+}
+
+/**
+ * E24-S1: `null`, or exactly `{ pattern, phase }` with at least one entry, every entry finite
+ * and >= 0, at least one > 0, a finite period (the binary64 sum, left to right) and a finite
+ * phase. `undefined` marks an invalid dash, since `null` is a valid one. More than
+ * SCENE_MAX_DASH_ENTRIES entries is reported by `dashSupported`.
+ */
+function copyDash(value: unknown): SceneDash | null | undefined {
+  if (value === null) return null;
+  if (!hasExactFields(value, ['pattern', 'phase'])) return undefined;
+  const record = value as Record<string, unknown>;
+  if (!Array.isArray(record.pattern) || record.pattern.length === 0) return undefined;
+  const pattern: number[] = [];
+  let period = 0;
+  let positive = false;
+  for (let index = 0; index < record.pattern.length; index += 1) {
+    if (!Object.hasOwn(record.pattern, index)) return undefined;
+    const entry = copyNonnegativeNumber((record.pattern as unknown[])[index]);
+    if (entry === null) return undefined;
+    pattern.push(entry);
+    period += entry;
+    positive ||= entry > 0;
+  }
+  const phase = copyFiniteNumber(record.phase);
+  if (!positive || !Number.isFinite(period) || phase === null) return undefined;
+  return Object.freeze({ pattern: Object.freeze(pattern), phase });
 }
 
 function copyStyle(value: unknown): PrimitiveStyle | null {
@@ -816,7 +872,17 @@ function nullablePathStrokeEquals(left: PathStroke | null, right: PathStroke | n
         left.cap === right.cap &&
         left.join === right.join &&
         left.miterLimit === right.miterLimit &&
-        paintEquals(left.color, right.color);
+        paintEquals(left.color, right.color) &&
+        nullableDashEquals(left.dash ?? null, right.dash ?? null);
+}
+
+/** E24-S2: absent and null are equal; patterns entry by entry, and the phase, with `===`. */
+function nullableDashEquals(left: SceneDash | null, right: SceneDash | null): boolean {
+  return left === null || right === null
+    ? left === right
+    : left.phase === right.phase &&
+        left.pattern.length === right.pattern.length &&
+        left.pattern.every((entry, index) => entry === right.pattern[index]);
 }
 
 function nullablePaintEquals(left: ScenePaint | null, right: ScenePaint | null): boolean {

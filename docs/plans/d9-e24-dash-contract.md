@@ -199,6 +199,8 @@ Probe classes:
 
 Order: U1, U2, U3, U4. The WIP limit per track applies.
 
+**Unit records.** U1 (2026-10-29): `SceneDash`, `SCENE_MAX_DASH_ENTRIES` and `PathStroke.dash?` in `packages/contracts`; `copyDash` and the optional key in `copyPathStroke`, which keep the producer's form, frozen; `nullableDashEquals` with absent equal to `null`; `DashSupport`, `PathSupport.dashes?` and the mirror option `dashes` (default `'unsupported'`), gating a non-null dash on a stroke of width > 0 per node, with the entry count reported after the graph checks; `tests/unit/e24-u1-scene-dash.test.ts` (A01). The section 4 amendment pointers are in the B2 stroke contract (ST-S11, section 5, section 9.8), the E11-U4 addendum (section 3), `docs/requirements.md`, the graphics architecture's design-gate section and the MVP plan's R-D row. No consumer sets `dashes: 'supported'` before U2, so no dashed stroke reaches the stroke path until then.
+
 ## 8. Risks
 
 - **Fringe cap (E24-Q6).** Many real dashed strokes draw region-only with MSAA, and each such path raises a `fringe-work-cap` warning. U3 records which fixtures hit the cap. Edge probes run only on stroke meshes under the cap.

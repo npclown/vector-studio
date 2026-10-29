@@ -152,6 +152,8 @@ The fill's implicit closing edge of an open subpath is never stroked, and the fi
 | ST-S11 | Dashes                                 | Not representable in P3: `PathStroke` has no dash field (B2-Q5), so no dash intent can be expressed or silently ignored                                                                                                                                                 | Approved; B2-Q5 |
 | ST-S12 | Coordinate space                       | Scaling strokes: the region is node-local and mapped by the node's world affine, the camera and the DPR. A non-uniform map makes the screen width vary with direction. A singular world linear map draws nothing. No constant-screen-width stroke                       | Approved        |
 
+E24 pointer (ST-S11), 2026-10-29: `PathStroke` gains an optional `dash` ([E24 contract](d9-e24-dash-contract.md), E24-S1 to S3). ST-S11 now holds through the mirror's `dashes` gate: a renderer that cannot dash rejects a dashed stroke with `unsupported-feature`, so no dash intent is silently ignored. The stroke region of a dashed stroke is this contract's region of the dashed path (E24-K3 to K6).
+
 **Regular near-reversals and folds.** A regular curve near a reversal is refined as a regular curve; it is never snapped to a reversal by an epsilon (P3.0b-s1). Where the curvature radius is below `r`, the inner offset folds; the union definition covers the fold.
 
 **Composition with fill.** Unchanged from the approved invariant: `L = S + F·(1 − S.a)`, `P = L·opacity`, source-over, with fill and stroke attributed separately until composition. Section 9 states which draws satisfy it.
@@ -315,6 +317,8 @@ The pieces, in emission order, are the contours of one `tessellate` call under `
 Per subpath in source order: the start cap; then per remaining segment in order, its sweep pieces in parameter order with each cusp disk placed between the leaves it separates, then the join that follows the segment; for a closed subpath, the seam join last; for an open subpath, the end cap last. A zero-length open subpath emits its one ST-P7 piece. Each attempt resets all front-end and arrangement state, so a path's result does not depend on the batch (V1 rule 6). Equal requests give bit-identical results within one kernel revision, on native and WASM.
 
 ## 5. Scene field and validation
+
+E24 pointer (section 5), 2026-10-29: `PathStroke` also takes an optional `dash?: SceneDash | null`, validated by E24-S1 and compared by E24-S2 ([E24 contract](d9-e24-dash-contract.md)). The rows below that list exactly `color`, `width`, `cap`, `join` and `miterLimit` read "plus the optional `dash`".
 
 `packages/contracts/src/scene.ts` gains, in ST-U6:
 
@@ -627,6 +631,8 @@ V3's D8-interim notice context gains `paint: 'fill' | 'stroke' | null`: `'fill'`
 Amended 2026-10-21 by ST-U7: the failure-code table loses `composition-unsupported` and gains `overlay-unsupported` (renderer scope, `paint: null`, one notice per marked overlay variant). It is D8-interim and is removed with the TypeScript builder at the R2/K1 placement decision.
 
 E11-U4 pointer (section 9.8), 2026-10-24: the notices are now `render.path-mesh-failure` without the `interim` key; `overlay-unsupported` is O3 while its builder ships ([E11-U4 addendum](d9-e11-u4-failure-behavior-addendum.md)).
+
+E24 pointer (section 9.8), 2026-10-29: the failure-code table gains `dash-limit` (renderer scope, `paint: 'stroke'`, a state failure with `toleranceExponent: null`, outcome O1) for a stroke whose dash expansion exceeds 4,096 dashes ([E24 contract](d9-e24-dash-contract.md), E24-K8).
 
 ## 10. C04 items for the stroke transport and draw
 
