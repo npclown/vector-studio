@@ -1,7 +1,7 @@
 import {
   serializeDocument,
   validateDocument,
-  type DocumentV3,
+  type DocumentV4,
   type Frame,
   type PathNodeV2,
 } from '@vector-studio/model';
@@ -232,7 +232,7 @@ const text = (target: Editor) => serializeDocument(target.query({ type: 'documen
 const documentOf = (target: Editor) => target.query({ type: 'document' });
 const pathOf = (target: Editor, id: string) => target.query({ type: 'node', id }) as PathNodeV2;
 const undoDepth = (target: Editor) => target.query({ type: 'history' }).undoDepth;
-const stored = (document: DocumentV3, id: string) => document.nodes[id] as PathNodeV2;
+const stored = (document: DocumentV4, id: string) => document.nodes[id] as PathNodeV2;
 
 function move(id: string, anchors: [number, number][], dx: number, dy: number): DocumentCommand {
   return {
@@ -262,14 +262,14 @@ function handle(
 }
 
 /** The page point of a node-local point: `apply(C, x, y)` with the node's chain `C`. */
-function pagePoint(document: DocumentV3, id: string, x: number, y: number): PagePoint {
+function pagePoint(document: DocumentV4, id: string, x: number, y: number): PagePoint {
   const node = document.nodes[id]!;
   const space = spaceOf(documentTree(document), node.parent);
   return apply(multiply(space.matrix, localTransform(node.frame, node.rotation)), x, y);
 }
 
 /** Every stored point of a path node on the page, in point order. */
-function pagePoints(document: DocumentV3, id: string): PagePoint[] {
+function pagePoints(document: DocumentV4, id: string): PagePoint[] {
   const node = stored(document, id);
   const { width, height } = node.frame;
   const out: PagePoint[] = [];
@@ -325,7 +325,7 @@ function localPoints(node: PathNodeV2): PagePoint[] {
 }
 
 /** The document with `node` set and the M1 group refit, as text. */
-function refitText(document: DocumentV3, node: PathNodeV2): string {
+function refitText(document: DocumentV4, node: PathNodeV2): string {
   const draft = new Draft(document);
   draft.set(node);
   const result = draft.finish(() => null);
@@ -1858,7 +1858,7 @@ function seeded(seed: number): () => number {
  * (a page point or a retraction), insertions, removals that keep each touched subpath at 2 or
  * more anchors, closes and opens. A model without a fitting target falls back to a move.
  */
-function randomCommand(random: () => number, document: DocumentV3, id: string): DocumentCommand {
+function randomCommand(random: () => number, document: DocumentV4, id: string): DocumentCommand {
   const node = stored(document, id);
   const model = readAnchorModel(node.path);
   const pick = <T>(list: readonly T[]): T => list[Math.floor(random() * list.length)]!;

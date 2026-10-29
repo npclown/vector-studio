@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 4,
+  "id": "d",
+  "pages": [
+    {
+      "id": "p",
+      "name": "P",
+      "children": [
+        "t"
+      ]
+    }
+  ],
+  "nodes": {
+    "t": {
+      "id": "t",
+      "name": "t",
+      "parent": "p",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 10,
+        "height": 10
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "text",
+      "runs": [
+        {
+          "text": "a",
+          "family": "Inter",
+          "size": 4096.01,
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          }
+        }
+      ],
+      "sizing": "autoWidth",
+      "align": "left",
+      "letterSpacing": 0,
+      "lineHeight": 1.2
+    }
+  }
+}

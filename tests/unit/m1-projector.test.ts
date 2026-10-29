@@ -6,7 +6,7 @@ import type {
   SceneApplyResult,
   ScenePathGeometry,
 } from '@vector-studio/contracts';
-import type { DocumentV3, NodeV3 } from '@vector-studio/model';
+import type { DocumentV4, NodeV4 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   createCounterIdSource,
@@ -52,7 +52,7 @@ function ok(target: Editor, command: Command): readonly string[] {
   return result.ids;
 }
 
-function documentOf(target: Editor): DocumentV3 {
+function documentOf(target: Editor): DocumentV4 {
   return target.query({ type: 'document' });
 }
 
@@ -63,7 +63,7 @@ async function fixture(name: string): Promise<unknown> {
 type Fields = Record<string, unknown>;
 
 /** A v2 node with defaults; `extra` holds the type's fields. */
-function node(id: string, parent: string, type: NodeV3['type'], extra: Fields = {}): Fields {
+function node(id: string, parent: string, type: NodeV4['type'], extra: Fields = {}): Fields {
   return {
     id,
     name: id,
@@ -206,7 +206,7 @@ function line(
   endArrow: string,
   cap: 'butt' | 'round' | 'square' = 'butt',
   overrides: Fields = {},
-): NodeV3 {
+): NodeV4 {
   return node('l', 'p', 'line', {
     frame: { x: 0, y: 0, width: 100, height: 0 },
     points: [0, 0, 1, 0],
@@ -214,7 +214,7 @@ function line(
     startArrow,
     endArrow,
     ...overrides,
-  }) as unknown as NodeV3;
+  }) as unknown as NodeV4;
 }
 
 describe('M1-A09 projection of the v2 fixtures', () => {

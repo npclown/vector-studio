@@ -19,12 +19,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const m5 = path.join(root, 'tests/fixtures/m5-persistence');
-// Since M7-U1 the canonical envelope text holds schema v3: the committed v2 envelope fixtures read
-// as their v3 migrations, which differ in the document's version only (M7 contract, section 2.1).
-const m7 = path.join(root, 'tests/fixtures/m7-symbols/migrated');
+// Since M6a-U1 the canonical envelope text holds schema v4: the committed v2 envelope fixtures read
+// as their v4 migrations, which differ in the document's version only (M7 contract, section 2.1;
+// M6a contract, section 2.1).
+const m6 = path.join(root, 'tests/fixtures/m6-text/migrated');
 
 async function text(name: string): Promise<string> {
-  if (/^[a-z-]+\.envelope$/.test(name)) return readFile(path.join(m7, `${name}.v3.json`), 'utf8');
+  if (/^[a-z-]+\.envelope$/.test(name)) return readFile(path.join(m6, `${name}.v4.json`), 'utf8');
   return readFile(path.join(m5, `${name}.json`), 'utf8');
 }
 

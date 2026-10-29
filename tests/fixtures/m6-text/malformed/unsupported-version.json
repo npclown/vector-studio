@@ -1,0 +1,415 @@
+{
+  "schemaVersion": 5,
+  "id": "doc-text",
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Page 1",
+      "children": [
+        "t1",
+        "t2",
+        "t3",
+        "g1",
+        "f1"
+      ]
+    },
+    {
+      "id": "page-2",
+      "name": "Page 2",
+      "children": [
+        "s1",
+        "i1",
+        "t6"
+      ]
+    }
+  ],
+  "nodes": {
+    "f1": {
+      "id": "f1",
+      "name": "f1",
+      "parent": "page-1",
+      "frame": {
+        "x": 300,
+        "y": 200,
+        "width": 200,
+        "height": 100
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "frame",
+      "children": [
+        "t5"
+      ],
+      "fill": {
+        "r": 1,
+        "g": 1,
+        "b": 1,
+        "a": 1
+      },
+      "stroke": null
+    },
+    "g1": {
+      "id": "g1",
+      "name": "g1",
+      "parent": "page-1",
+      "frame": {
+        "x": 0,
+        "y": 200,
+        "width": 100,
+        "height": 40
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "group",
+      "children": [
+        "t4"
+      ]
+    },
+    "i1": {
+      "id": "i1",
+      "name": "i1",
+      "parent": "page-2",
+      "frame": {
+        "x": 100,
+        "y": 0,
+        "width": 50,
+        "height": 50
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "instance",
+      "symbol": "s1"
+    },
+    "s1": {
+      "id": "s1",
+      "name": "s1",
+      "parent": "page-2",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 50,
+        "height": 50
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "symbol",
+      "children": [
+        "s1-r"
+      ],
+      "fill": null,
+      "stroke": null
+    },
+    "s1-r": {
+      "id": "s1-r",
+      "name": "s1-r",
+      "parent": "s1",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 50,
+        "height": 50
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "rectangle",
+      "cornerRadii": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "fill": {
+        "r": 1,
+        "g": 0,
+        "b": 0,
+        "a": 1
+      },
+      "stroke": null
+    },
+    "t1": {
+      "id": "t1",
+      "name": "Text",
+      "parent": "page-1",
+      "frame": {
+        "x": 10,
+        "y": 10,
+        "width": 40,
+        "height": 19.2
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "text",
+      "runs": [
+        {
+          "text": "Hello",
+          "family": "Noto Sans KR",
+          "size": 16,
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          }
+        }
+      ],
+      "sizing": "autoWidth",
+      "align": "left",
+      "letterSpacing": 0,
+      "lineHeight": 1.2
+    },
+    "t2": {
+      "id": "t2",
+      "name": "t2",
+      "parent": "page-1",
+      "frame": {
+        "x": 10,
+        "y": 50,
+        "width": 120,
+        "height": 86.4
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "text",
+      "runs": [
+        {
+          "text": "안녕하세요 ",
+          "family": "Noto Sans KR",
+          "size": 16,
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          }
+        },
+        {
+          "text": "big",
+          "family": "Inter",
+          "size": 32,
+          "color": {
+            "r": 1,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          }
+        },
+        {
+          "text": "\nemoji 👩‍💻 soft­ hy",
+          "family": "Inter",
+          "size": 16,
+          "color": {
+            "r": 0,
+            "g": 0.25,
+            "b": 1,
+            "a": 0.5
+          }
+        }
+      ],
+      "sizing": "autoHeight",
+      "align": "center",
+      "letterSpacing": -0.05,
+      "lineHeight": 1.5
+    },
+    "t3": {
+      "id": "t3",
+      "name": "t3",
+      "parent": "page-1",
+      "frame": {
+        "x": 200,
+        "y": 10,
+        "width": 80,
+        "height": 40
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "text",
+      "runs": [
+        {
+          "text": "",
+          "family": "Noto Sans KR",
+          "size": 16,
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          }
+        }
+      ],
+      "sizing": "fixed",
+      "align": "right",
+      "letterSpacing": 10,
+      "lineHeight": 10
+    },
+    "t4": {
+      "id": "t4",
+      "name": "t4",
+      "parent": "g1",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 40
+      },
+      "rotation": 0.5,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 0.5,
+      "visible": true,
+      "type": "text",
+      "runs": [
+        {
+          "text": "rotated, ",
+          "family": "Noto Sans KR",
+          "size": 16,
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          }
+        },
+        {
+          "text": "half",
+          "family": "Noto Sans KR",
+          "size": 0.5,
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          }
+        },
+        {
+          "text": "\n\n",
+          "family": "Noto Sans KR",
+          "size": 4096,
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          }
+        }
+      ],
+      "sizing": "fixed",
+      "align": "left",
+      "letterSpacing": -1,
+      "lineHeight": 0.1
+    },
+    "t5": {
+      "id": "t5",
+      "name": "t5",
+      "parent": "f1",
+      "frame": {
+        "x": 20,
+        "y": 20,
+        "width": 160,
+        "height": 19.2
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "scale",
+        "vertical": "startEnd"
+      },
+      "opacity": 1,
+      "visible": false,
+      "type": "text",
+      "runs": [
+        {
+          "text": "Scaled with the frame",
+          "family": "Noto Sans KR",
+          "size": 16,
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          }
+        }
+      ],
+      "sizing": "autoHeight",
+      "align": "left",
+      "letterSpacing": 0,
+      "lineHeight": 1.2
+    },
+    "t6": {
+      "id": "t6",
+      "name": "t6",
+      "parent": "page-2",
+      "frame": {
+        "x": 0,
+        "y": 100,
+        "width": 64,
+        "height": 19.2
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "text",
+      "runs": [
+        {
+          "text": "Beside a symbol",
+          "family": "Noto Sans KR",
+          "size": 16,
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          }
+        }
+      ],
+      "sizing": "autoWidth",
+      "align": "left",
+      "letterSpacing": 0,
+      "lineHeight": 1.2
+    }
+  }
+}

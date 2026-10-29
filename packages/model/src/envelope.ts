@@ -1,7 +1,7 @@
 import { MAX_DEPTH, scanJson } from './json-scan.js';
 import { isValidId, validateAnyDocument, type ModelErrorCode } from './parse.js';
 import { orderedDocument } from './serialize.js';
-import type { DocumentV3 } from './types.js';
+import type { DocumentV4 } from './types.js';
 
 // MVP M5 contract, section 2: the persistence envelope wraps a document beside, not inside, it
 // (M5-E1). Its text form has its own version (M5-E2) and embeds the document as an object in the
@@ -20,7 +20,7 @@ export const ENVELOPE_ERROR_CODES = [
 
 export type EnvelopeErrorCode = (typeof ENVELOPE_ERROR_CODES)[number];
 
-export type PersistenceEnvelope = Readonly<{ document: DocumentV3; lastOpenPageId: string }>;
+export type PersistenceEnvelope = Readonly<{ document: DocumentV4; lastOpenPageId: string }>;
 
 /** `path` is a JSON Pointer (RFC 6901) into the envelope text; `''` is the whole envelope. */
 export type EnvelopeResult =
@@ -44,7 +44,7 @@ export function serializeEnvelope(envelope: PersistenceEnvelope): string {
 
 /**
  * Parses envelope text (M5-E4) in the order of section 2.1 and returns the first failure; no
- * partial envelope is ever returned. A v1 or v2 document inside is migrated to v3.
+ * partial envelope is ever returned. A v1, v2 or v3 document inside is migrated to v4.
  */
 export function parseEnvelope(text: string): EnvelopeResult {
   // (1) JSON.
@@ -92,7 +92,7 @@ export function parseEnvelope(text: string): EnvelopeResult {
   if (!isValidId(lastOpenPageId)) {
     return { ok: false, code: 'envelope.invalid-field', path: '/lastOpenPageId' };
   }
-  // (6) The document, v1, v2 or v3, with its path under `/document`.
+  // (6) The document, v1 to v4, with its path under `/document`.
   const result = validateAnyDocument(value.document);
   if (!result.ok) return { ok: false, code: result.code, path: `/document${result.path}` };
   // (7) The page.

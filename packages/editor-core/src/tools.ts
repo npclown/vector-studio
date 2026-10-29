@@ -1,6 +1,6 @@
 import {
   normalizeRotation,
-  type DocumentV3,
+  type DocumentV4,
   type Frame,
   type PathNodeV2,
 } from '@vector-studio/model';
@@ -369,7 +369,7 @@ const CORNERS: readonly Handle[] = [HANDLES[0], HANDLES[2], HANDLES[4], HANDLES[
  * A node's page rotation `turn` (its parent chain's rotation `chain` plus its own, not
  * normalized), its stored frame and rotation, as the rotate gesture records them at press.
  */
-function singleOf(document: DocumentV3, id: string) {
+function singleOf(document: DocumentV4, id: string) {
   const node = document.nodes[id]!;
   const chain = spaceOf(documentTree(document), node.parent).rotation;
   return { turn: chain + node.rotation, chain, frame: node.frame, rotation: node.rotation };
@@ -380,7 +380,7 @@ function singleOf(document: DocumentV3, id: string) {
  * handles where the tool picks them, also for nested and rotated nodes.
  */
 export function selectionHandles(
-  document: DocumentV3,
+  document: DocumentV4,
   page: string,
   selection: readonly string[],
 ): SelectionHandles | null {
