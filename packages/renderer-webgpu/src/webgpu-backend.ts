@@ -23,6 +23,7 @@ import {
   clipResourceLimitDiagnostic,
   layerResourceLimitDiagnostic,
   pathMeshNoticeDiagnostic,
+  textNoticeDiagnostic,
   type AnimationFrameClock,
   type DiagnosticClock,
   type PathMeshNotice,
@@ -161,6 +162,10 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   #paintPipelineRequired = false;
   /** E25 contract, U3: the attached source draws isolated container opacity. */
   #layerPipelineRequired = false;
+  /** E28 contract, U3: the attached source draws text through the glyph atlas. */
+  #textPipelineRequired = false;
+  /** E28-D1: the generation that last reported `render.text-unavailable`. */
+  #textUnavailableGeneration = 0;
   #primitiveMode = false;
   #primitiveCreation: WebGpuPrimitiveSceneCreationPort | undefined;
   #primitiveScene: WebGpuPrimitiveScenePort | undefined;
@@ -285,6 +290,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     this.#clipPipelineRequired = source.requiresClipPipeline === true;
     this.#paintPipelineRequired = source.requiresPaintPipeline === true;
     this.#layerPipelineRequired = source.requiresLayerPipeline === true;
+    this.#textPipelineRequired = source.requiresTextPipeline === true;
     let disposed = false;
     return {
       get disposed() {
@@ -299,6 +305,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
           this.#clipPipelineRequired = false;
           this.#paintPipelineRequired = false;
           this.#layerPipelineRequired = false;
+          this.#textPipelineRequired = false;
         }
       },
     };
@@ -782,12 +789,14 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
           this.#clipPipelineRequired ||
           this.#paintPipelineRequired ||
           this.#layerPipelineRequired ||
+          this.#textPipelineRequired ||
           Object.keys(hooks).length > 0
             ? device.createPrimitiveScene(context, format, generation, tracker, {
                 ...(this.#meshPipelineRequired ? { meshPipeline: true } : {}),
                 ...(this.#clipPipelineRequired ? { clipPipeline: true } : {}),
                 ...(this.#paintPipelineRequired ? { paintPipeline: true } : {}),
                 ...(this.#layerPipelineRequired ? { layerPipeline: true } : {}),
+                ...(this.#textPipelineRequired ? { textPipeline: true } : {}),
                 ...hooks,
               })
             : device.createPrimitiveScene(context, format, generation, tracker);
@@ -831,6 +840,16 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         ) {
           throw new TestHookCreationError('The layer pipeline is unavailable.', {
             layerPipeline: 'unavailable',
+          });
+        }
+        // E28 contract, U3: likewise for the text pipelines; otherwise text is not drawn.
+        if (
+          this.#hooksSet() &&
+          this.#textPipelineRequired &&
+          primitive.scene.textPipelineAvailable !== true
+        ) {
+          throw new TestHookCreationError('The text pipeline is unavailable.', {
+            textPipeline: 'unavailable',
           });
         }
       }
@@ -976,6 +995,23 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         'warning',
         generation,
       );
+      if (!this.#isCurrent(token)) {
+        releaseAttempt();
+        if (this.#pendingAttemptRelease === releaseAttempt) {
+          this.#pendingAttemptRelease = undefined;
+        }
+        return this.#stale(generation);
+      }
+    }
+
+    // E28-D1: once per generation, when the scene comes up without the text pipelines a source
+    // that draws text asked for; its text is not drawn (fail closed).
+    if (
+      primitive !== undefined &&
+      this.#textPipelineRequired &&
+      primitive.scene.textPipelineAvailable !== true
+    ) {
+      this.#emitTextUnavailable('pipeline', generation);
       if (!this.#isCurrent(token)) {
         releaseAttempt();
         if (this.#pendingAttemptRelease === releaseAttempt) {
@@ -1324,6 +1360,13 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
             this.#diagnostics.emit(layerResourceLimitDiagnostic(notice, generation));
           }
         }
+        // E28 contract, section 5: E28-D2 and D3, likewise CPU state.
+        const textNotices = packet.text?.notices;
+        if (textNotices !== undefined && isList(textNotices)) {
+          for (const notice of textNotices.slice(0, NOTICES_PER_PACKET)) {
+            this.#diagnostics.emit(textNoticeDiagnostic(notice, generation));
+          }
+        }
         if (
           this.#state !== 'ready' ||
           this.#primitiveScene !== scene ||
@@ -1334,6 +1377,10 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         }
         if (armed !== undefined) this.#handCapture(scene, armed);
         const submission = scene.submitPrimitivePacket(packet);
+        // E28-D1: a page that could not be created leaves text undrawn for the generation.
+        if (scene.textPageAllocationFailed === true && this.#generation === generation) {
+          this.#emitTextUnavailable('page-allocation', generation);
+        }
         if (submission.status !== 'submitted') {
           this.#reportPrimitiveSubmission(submission);
           return;
@@ -1411,6 +1458,21 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
             : error,
         ),
     });
+  }
+
+  /** E28-D1: reported once per renderer generation, whichever reason comes first. */
+  #emitTextUnavailable(reason: 'pipeline' | 'page-allocation', generation: number): void {
+    if (this.#textUnavailableGeneration === generation) return;
+    this.#textUnavailableGeneration = generation;
+    this.#emit(
+      DIAGNOSTIC_CODES.TEXT_UNAVAILABLE,
+      reason === 'pipeline'
+        ? 'The text pipelines are unavailable; text is not drawn.'
+        : 'A glyph atlas page could not be allocated; text is not drawn.',
+      'warning',
+      generation,
+      Object.freeze({ reason }),
+    );
   }
 
   #emitPathMeshNotices(notices: readonly PathMeshNotice[] | undefined, generation: number): void {

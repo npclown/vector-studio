@@ -16,8 +16,16 @@ import type {
   PrimitiveResourceId,
   PrimitiveSubmitResult,
   PrimitiveTarget,
+  TextDraw,
+  TextPacketPart,
+  TextReceiptPart,
 } from '@vector-studio/renderer-core';
-import { E25_LAYER_TILE_SIZE, maskTileSet } from '@vector-studio/renderer-core';
+import {
+  E25_LAYER_TILE_SIZE,
+  E28_ATLAS_PAGES_MAX,
+  E28_ATLAS_PAGE_SIZE,
+  maskTileSet,
+} from '@vector-studio/renderer-core';
 import {
   CLIP_BINDINGS,
   CLIP_BIND_GROUP_INDEX,
@@ -115,6 +123,20 @@ import {
 } from './primitive-pipeline.js';
 import { SharedBufferAllocator, type SharedBufferAllocation } from './shared-buffer-allocator.js';
 import { createPrimitiveUnitQuadData } from './primitive-unit-geometry.js';
+import {
+  TEXT_BINDINGS,
+  TEXT_INSTANCE_SIZE,
+  TEXT_PAGE_FORMAT,
+  TEXT_TARGET_SIZE,
+  TEXT_VARIANTS,
+  createTextBindGroupLayoutDescriptor,
+  createTextPipelineDescriptor,
+  createTextSamplerDescriptor,
+  packTextTarget,
+  textPipelineKey,
+  textVariantSource,
+  type TextVariant,
+} from './text-pipeline.js';
 import type {
   WebGpuCanvasContextPort,
   WebGpuPrimitiveSceneCreationPort,
@@ -158,6 +180,9 @@ const TEXTURE_BINDING_USAGE = 0x04;
 const TEXTURE_COPY_SOURCE_USAGE = 0x01;
 const TEXTURE_COPY_DESTINATION_USAGE = 0x02;
 const FRAGMENT_STAGE = 0x2;
+/** E28 U3: the zeros a page clear is written from, in bands of whole rows. */
+const TEXT_ZEROS_SIZE = 64 * 1024;
+const TEXT_ZEROS = new Uint8Array(TEXT_ZEROS_SIZE);
 
 interface NativeCanvasContextPort extends WebGpuCanvasContextPort {
   readonly native: GPUCanvasContext;
@@ -250,6 +275,8 @@ interface LayerPipelineState {
   readonly compositeBindGroupLayout: GPUBindGroupLayout;
   /** Bound at groups 1 and 2 of a layer variant without a clip or a paint. */
   readonly emptyBindGroup: GPUBindGroup;
+  /** E28 U3: the empty group's layout, for the text layer variants' layouts. */
+  readonly emptyLayout: GPUBindGroupLayout;
   readonly composite: GPURenderPipeline;
   readonly analyticClip: GPURenderPipeline | null;
   readonly analyticPaint: GPURenderPipeline | null;
@@ -263,6 +290,51 @@ interface LayerPipelineState {
   readonly meshPaintClip: GPURenderPipeline | null;
   readonly meshJointPaintClip: GPURenderPipeline | null;
 }
+
+/**
+ * E28 contract, U3: the text pipelines and the sampler created at initialization or recovery.
+ * The clip variants exist only with the clip variants, the layer ones only with the layer
+ * pipeline; any creation failure leaves text unavailable for the generation (E28-D1).
+ */
+interface TextPipelineState {
+  readonly bindGroupLayout: GPUBindGroupLayout;
+  readonly sampler: GPUSampler;
+  readonly plain: GPURenderPipeline;
+  readonly clip: GPURenderPipeline | null;
+  readonly layer: GPURenderPipeline | null;
+  readonly clipLayer: GPURenderPipeline | null;
+}
+
+/** E28 U3: an atlas page; a new texture is a new incarnation. */
+interface TextPage {
+  readonly id: string;
+  readonly texture: GPUTexture;
+  readonly view: GPUTextureView;
+  readonly size: number;
+  readonly incarnation: symbol;
+}
+
+/**
+ * E28 U3: the text buffer, the target uniform at offset 0 and the instance records from
+ * `instanceOffset`, with a group 0 bind group per page it was bound with.
+ */
+interface TextBufferState {
+  readonly id: string;
+  readonly buffer: GPUBuffer;
+  readonly size: number;
+  readonly instanceOffset: number;
+  readonly bindGroups: Map<TextPage, GPUBindGroup>;
+  target: Uint8Array | null;
+}
+
+/** E28 U3: the text part of a validated packet; null when the packet has none. */
+type ValidatedText = Readonly<{
+  part: TextPacketPart;
+  /** Bytes of the instance records. */
+  instanceBytes: number;
+  /** False when the records exceed the buffer limits; text is then unavailable (E28-D1). */
+  fits: boolean;
+}> | null;
 
 /** E23 U3: one paint buffer, the record table or an index table. */
 interface PaintTable {
@@ -361,7 +433,13 @@ type LayerTile = Readonly<{ x: number; y: number; width: number; height: number;
  * (its layer) or a text draw (`layer` null). At each position slot `order` holds it; the other
  * slots hold the mesh draws in array order.
  */
-type OrderSlot = Readonly<{ position: number; order: number; layer: number | null }>;
+type OrderSlot = Readonly<{
+  position: number;
+  order: number;
+  layer: number | null;
+  /** The index of a text draw in the text part's `draws`; null for a composite. */
+  text: number | null;
+}>;
 
 /**
  * E28 section 4: checks the `order` of composites and text draws per target and merges them in
@@ -390,7 +468,12 @@ function orderSlots(packet: PrimitivePacket): ReadonlyMap<number, readonly Order
   };
   const ofKind = new Map<string, OrderSlot>();
   for (const composite of packet.layers?.composites ?? []) {
-    const slot = { position: composite.position, order: composite.order, layer: composite.layer };
+    const slot = {
+      position: composite.position,
+      order: composite.order,
+      layer: composite.layer,
+      text: null,
+    };
     const previous = ofKind.get(`composite:${composite.target}`);
     if (previous !== undefined && compareSlots(previous, slot) >= 0) {
       throw new Error("A composite out of its target's paint order.");
@@ -401,9 +484,9 @@ function orderSlots(packet: PrimitivePacket): ReadonlyMap<number, readonly Order
   const textDraws: unknown = packet.text?.draws;
   if (packet.text !== undefined && !Array.isArray(textDraws))
     throw new Error('Invalid text draws.');
-  for (const draw of (textDraws ?? []) as NonNullable<PrimitivePacket['text']>['draws']) {
+  for (const [index, draw] of ((textDraws ?? []) as readonly TextDraw[]).entries()) {
     if (typeof draw !== 'object' || draw === null) throw new Error('Invalid text draw.');
-    const slot = { position: draw.position, order: draw.order, layer: null };
+    const slot = { position: draw.position, order: draw.order, layer: null, text: index };
     const previous = ofKind.get(`text:${draw.target}`);
     if (previous !== undefined && compareSlots(previous, slot) >= 0) {
       throw new Error("A text draw out of its target's paint order.");
@@ -657,6 +740,20 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   readonly #layerTileSize: number;
   #nextLayerFrame = 1;
   #layerPasses = 0;
+  readonly textPipelineAvailable: boolean;
+  readonly #text: TextPipelineState | null;
+  /** E28 section 4, Atlas pages: index i holds page i, as the packet's `pageCount` asks. */
+  #textPages: TextPage[] = [];
+  #nextTextPage = 1;
+  #textBuffer: TextBufferState | undefined;
+  #nextTextBuffer = 1;
+  /**
+   * E28-D1: set when a page or the text buffer could not be created, or the records exceed the
+   * buffer limits; text stays undrawn for the generation, and
+   * the text receipt reports the stable placeholder incarnations below so the plan settles.
+   */
+  #textPageAllocationFailed = false;
+  readonly #textPlaceholders: symbol[] = [];
   #paintBuffers: PaintBufferState | undefined;
   #nextPaintBuffer = 1;
   /** Packed bytes per record object; renderer-core keeps a record object while it is unchanged. */
@@ -696,7 +793,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     paint: PaintPipelineState | null = null,
     layer: LayerPipelineState | null = null,
     layerTileSize: number = E25_LAYER_TILE_SIZE,
+    text: TextPipelineState | null = null,
   ) {
+    this.#text = text;
+    this.textPipelineAvailable = text !== null;
     this.#layerTileSize = layerTileSize;
     this.#layer = layer;
     this.layerPipelineAvailable = layer !== null;
@@ -738,8 +838,22 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
             (pipeline) => pipeline !== null,
           ).length;
     const layerModules = layer === null ? 0 : 1 + analyticLayerModules + meshLayerModules;
+    // E28 contract, U3: one module and one pipeline per text variant (plain, and the clip,
+    // layer and combined ones the generation has); none without the textPipeline option.
+    const textVariants =
+      text === null
+        ? 0
+        : [text.plain, text.clip, text.layer, text.clipLayer].filter(
+            (pipeline) => pipeline !== null,
+          ).length;
     this.shaderModulesCreated =
-      1 + meshShaderModulesCreated + countModules + clipModules + paintModules + layerModules;
+      1 +
+      meshShaderModulesCreated +
+      countModules +
+      clipModules +
+      paintModules +
+      layerModules +
+      textVariants;
     this.pipelinesCreated =
       (mesh === null ? 1 : 4) +
       (count === null ? 0 : countModules + 2) +
@@ -747,7 +861,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       (paint === null
         ? 0
         : (1 + (paint.mesh === null ? 0 : 2)) * (paint.analyticClip === null ? 1 : 2)) +
-      (layer === null ? 0 : 1 + analyticLayerModules + 2 * meshLayerModules);
+      (layer === null ? 0 : 1 + analyticLayerModules + 2 * meshLayerModules) +
+      textVariants;
     this.#device = device;
     this.#context = context;
     this.#format = format;
@@ -943,12 +1058,21 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     let clip: ValidatedClip;
     let layers: ValidatedLayers;
     let slots: ReadonlyMap<number, readonly OrderSlot[]>;
+    let text: ValidatedText;
     try {
       // E23 U3: checks and packs only; the paint buffers are created and written below.
       paint = this.#preflightPaint(packet, analyticDraws, allMeshDraws, validated);
-      clip = this.#preflightClip(packet, analyticDraws, allMeshDraws, validated);
       // E28 section 4: composites and text draws by (position, order), per target.
       slots = orderSlots(packet);
+      // E28 U3: checks only; pages and the text buffer are created and written below.
+      text = this.#preflightText(packet);
+      // E28-K8: a text draw's clip state is checked as any draw's.
+      clip = this.#preflightClip(
+        packet,
+        [...analyticDraws, ...(text?.part.draws ?? [])],
+        allMeshDraws,
+        validated,
+      );
       layers = this.#preflightLayers(packet, layerEntries, layerMeshDraws, slots);
     } catch (error) {
       if (validated.createdArena) this.#releaseArena(arena);
@@ -963,6 +1087,9 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     const transients: Transient[] = [];
     // U4: once submitted, created mask entries belong to the cache and are not discarded.
     let submittedWork = false;
+    // E28 U3: the text receipt part, and whether the frame's text draws are encoded.
+    let textReceipt: TextReceiptPart | undefined;
+    let textDrawable = false;
     try {
       // E23 section 4, Resources: a frame without a drawn gradient draw releases the paint
       // buffers, so a scene whose gradients are all gone returns to the solid baseline.
@@ -972,6 +1099,15 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       // P4 section 4, Resources: a frame with no clip part releases the clip buffer, so a scene
       // whose clips are all gone returns to the unclipped accounting baseline.
       else if (packet.clip === undefined) this.#releaseClipBuffer();
+      // E28 section 4, Lifetime: pages follow `pageCount`; clears, then uploads, before the
+      // passes. A packet without a text part holds no page, so pages and buffer are released.
+      if (text !== null) {
+        textReceipt = this.#applyText(text);
+        textDrawable = this.#textBuffer !== undefined && !this.#textPageAllocationFailed;
+      } else {
+        this.#releaseTextPages();
+        this.#releaseTextBuffer();
+      }
       for (const write of packet.writes) {
         const allocation = arena.allocations[write.resourceId];
         this.#device.queue.writeBuffer(
@@ -1009,7 +1145,9 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       const layerFrame =
         layers === null
           ? null
-          : this.#encodeLayerPasses(encoder, layers, arena, meshArena, clip, paint, transients);
+          : this.#encodeLayerPasses(encoder, layers, arena, meshArena, clip, paint, transients, {
+              part: textDrawable ? text!.part : null,
+            });
       const stencilView = this.#stencilAttachment?.createView();
       const pass = encoder.beginRenderPass({
         label: 'vector-studio/primitive-pass',
@@ -1079,12 +1217,29 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       let bound: string | null = 'analytic';
       let nextMeshDraw = 0;
       // E28 section 4 (E25 U3): at each position, slot k holds the composite or text draw whose
-      // order is k, otherwise the next mesh draw. A composite binds its own groups, so the next
-      // draw binds its pipeline and groups again. Text draws are encoded from E28-U3; until then
-      // they hold their slot and draw nothing.
+      // order is k, otherwise the next mesh draw. A composite or text draw binds its own groups,
+      // so the next draw binds its pipeline and groups again.
       const mainSlots = slots.get(-1) ?? [];
       let nextSlot = 0;
       const drawSlot = (slot: OrderSlot) => {
+        if (slot.text !== null) {
+          if (!textDrawable) return;
+          const draw = text!.part.draws[slot.text]!;
+          const state = draw.clipState ?? 0;
+          const pipeline = state === 0 ? this.#text!.plain : this.#text!.clip;
+          if (pipeline === null || (state !== 0 && clipPipelines === null)) return;
+          pass.setPipeline(pipeline);
+          pass.setBindGroup(0, this.#textBindGroup(draw.page));
+          if (state !== 0) {
+            pass.setBindGroup(CLIP_BIND_GROUP_INDEX, this.#clipBindGroup(clip!, state), [
+              state * clip!.stride,
+            ]);
+          }
+          pass.draw(6, draw.count, 0, draw.first);
+          bound = null;
+          clipBoundState = 0;
+          return;
+        }
         if (slot.layer === null || layerFrame === null) return;
         this.#encodeComposite(pass, layerFrame, slot.layer, 0);
         bound = null;
@@ -1226,6 +1381,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           serial,
           validated.receiptResources,
           mesh === null ? undefined : meshReceipt(packet.mesh!, mesh),
+          textReceipt,
         ),
       });
     } catch (error) {
@@ -1272,6 +1428,8 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     release(() => this.#releaseClipBuffer());
     release(() => this.#releasePaintBuffers());
     release(() => this.#releaseMasks());
+    release(() => this.#releaseTextPages());
+    release(() => this.#releaseTextBuffer());
     if (this.#clip !== null) release(() => this.#clip!.defaultMask.destroy());
     release(() => this.#pipelineCache.dispose());
     release(() => this.#vertexBuffer.destroy());
@@ -1292,7 +1450,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
    */
   #preflightClip(
     packet: PrimitivePacket,
-    analyticDraws: readonly PrimitiveDraw[],
+    analyticDraws: readonly Readonly<{ clipState?: number }>[],
     meshDraws: readonly MeshFillDraw[],
     validated: ValidatedPacket,
   ): ValidatedClip {
@@ -1523,6 +1681,30 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     bytesPerTexel: number,
     usage = 0,
   ): GPUTexture {
+    return this.#createTrackedTextureWithUsage(
+      id,
+      width,
+      height,
+      format,
+      sampleCount,
+      bytesPerTexel,
+      RENDER_ATTACHMENT_USAGE | usage,
+    );
+  }
+
+  /**
+   * E28 U3: as `#createTrackedTexture`, with exactly the given usage; atlas pages are sampled
+   * and written by the queue, never rendered to.
+   */
+  #createTrackedTextureWithUsage(
+    id: string,
+    width: number,
+    height: number,
+    format: GPUTextureFormat,
+    sampleCount: number,
+    bytesPerTexel: number,
+    usage: number,
+  ): GPUTexture {
     const maximum = safeLimit(this.#device.limits.maxTextureDimension2D, 0);
     if (width > maximum || height > maximum) {
       throw new AllocationError();
@@ -1534,7 +1716,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         size: { width, height },
         sampleCount,
         format,
-        usage: RENDER_ATTACHMENT_USAGE | usage,
+        usage,
       });
     } catch (error) {
       throw new AllocationError(error);
@@ -1758,6 +1940,324 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
    * pass and composite records. Each layer is post-ordered, even-origined and inside its parent;
    * each has one composite on its parent's pass, in that target's paint order.
    */
+  /**
+   * E28 section 4: checks the text part: its page plan (at most 8 pages of one size, no larger
+   * than 2048 or the adapter's 2D texture limit), clears and uploads inside their pages, the
+   * instance records, and each draw's records and page. `orderSlots` has checked the draws'
+   * targets and order keys, `#preflightClip` their clip states. Throws on a violation
+   * (`invalid-packet`), or with `AllocationError` when the records exceed the buffer limits.
+   */
+  #preflightText(packet: PrimitivePacket): ValidatedText {
+    const part = packet.text;
+    if (part === undefined) return null;
+    const maximum = Math.min(
+      E28_ATLAS_PAGE_SIZE,
+      safeLimit(this.#device.limits.maxTextureDimension2D, E28_ATLAS_PAGE_SIZE),
+    );
+    if (
+      typeof part !== 'object' ||
+      part === null ||
+      part.layoutVersion !== 0 ||
+      !isPositiveSafeInteger(part.pageSize) ||
+      part.pageSize > maximum ||
+      !Number.isSafeInteger(part.pageCount) ||
+      part.pageCount < 0 ||
+      part.pageCount > E28_ATLAS_PAGES_MAX ||
+      !isArrayValue(part.clears) ||
+      !isArrayValue(part.uploads) ||
+      !isArrayValue(part.draws) ||
+      !isArrayValue(part.notices) ||
+      !(part.instances instanceof Float32Array) ||
+      part.instances.length % (TEXT_INSTANCE_SIZE / 4) !== 0
+    ) {
+      throw new Error('Invalid text part.');
+    }
+    const inPage = (area: TextPacketPart['clears'][number]) =>
+      typeof area === 'object' &&
+      area !== null &&
+      Number.isSafeInteger(area.page) &&
+      area.page >= 0 &&
+      area.page < part.pageCount &&
+      [area.x, area.y].every((value) => Number.isSafeInteger(value) && value >= 0) &&
+      isPositiveSafeInteger(area.width) &&
+      isPositiveSafeInteger(area.height) &&
+      area.x + area.width <= part.pageSize &&
+      area.y + area.height <= part.pageSize;
+    if (!part.clears.every(inPage)) throw new Error('Invalid text clear.');
+    for (const upload of part.uploads) {
+      if (
+        !inPage(upload) ||
+        !(upload.coverage instanceof Uint8Array) ||
+        upload.coverage.byteLength !== upload.width * upload.height
+      ) {
+        throw new Error('Invalid text upload.');
+      }
+    }
+    const records = part.instances.length / (TEXT_INSTANCE_SIZE / 4);
+    for (const draw of part.draws) {
+      if (
+        !Number.isSafeInteger(draw.first) ||
+        draw.first < 0 ||
+        !isPositiveSafeInteger(draw.count) ||
+        draw.first + draw.count > records ||
+        !Number.isSafeInteger(draw.page) ||
+        draw.page < 0 ||
+        draw.page >= part.pageCount
+      ) {
+        throw new Error('Invalid text draw.');
+      }
+    }
+    const instanceBytes = part.instances.byteLength;
+    const limits = this.#device.limits;
+    const fits =
+      instanceBytes <= safeLimit(limits.maxStorageBufferBindingSize, 0) &&
+      this.#textInstanceOffset() + instanceBytes <= safeLimit(limits.maxBufferSize, 0);
+    return Object.freeze({ part, instanceBytes, fits });
+  }
+
+  /** E28 U3: the instance records' offset in the text buffer, after the target uniform. */
+  #textInstanceOffset(): number {
+    const alignment = Math.max(
+      safeLimit(this.#device.limits.minStorageBufferOffsetAlignment, 256),
+      TEXT_TARGET_SIZE,
+    );
+    return align(TEXT_TARGET_SIZE, alignment);
+  }
+
+  /**
+   * E28 section 4, Lifetime: creates or releases pages to match `pageCount` (all pages again
+   * when the page size changed), zeroes the clears and writes the uploads, then the text
+   * buffer. Without the text pipeline, or once a page could not be created this generation
+   * (E28-D1, `'page-allocation'`), nothing is written: pages are released and the receipt
+   * names stable placeholder incarnations, so the plan settles while text stays undrawn.
+   */
+  #applyText(text: NonNullable<ValidatedText>): TextReceiptPart {
+    const { part } = text;
+    const receipt = (pages: readonly symbol[]) =>
+      Object.freeze({
+        pages: Object.freeze([...pages]),
+        clears: part.clears.length,
+        uploads: part.uploads.length,
+      });
+    const unavailable = () => {
+      this.#releaseTextPages();
+      this.#releaseTextBuffer();
+      while (this.#textPlaceholders.length < part.pageCount) {
+        this.#textPlaceholders.push(Symbol('text-page-unavailable'));
+      }
+      return receipt(this.#textPlaceholders.slice(0, part.pageCount));
+    };
+    if (this.#text === null || this.#textPageAllocationFailed) return unavailable();
+    if (!text.fits) {
+      this.#textPageAllocationFailed = true;
+      return unavailable();
+    }
+    if (this.#textPages.some((page) => page.size !== part.pageSize)) this.#releaseTextPages();
+    while (this.#textPages.length > part.pageCount) this.#releaseTextPage(this.#textPages.pop()!);
+    while (this.#textPages.length < part.pageCount) {
+      const page = this.#createTextPage(part.pageSize);
+      if (page === null) {
+        this.#textPageAllocationFailed = true;
+        return unavailable();
+      }
+      this.#textPages.push(page);
+    }
+    const queue = this.#device.queue;
+    for (const clear of part.clears) {
+      // In bands of whole rows from one small zero buffer, so a page clear holds no 4 MiB array.
+      const rows = Math.max(1, Math.floor(TEXT_ZEROS_SIZE / clear.width));
+      for (let y = 0; y < clear.height; y += rows) {
+        const height = Math.min(rows, clear.height - y);
+        queue.writeTexture(
+          {
+            texture: this.#textPages[clear.page]!.texture,
+            origin: { x: clear.x, y: clear.y + y },
+          },
+          TEXT_ZEROS,
+          { offset: 0, bytesPerRow: clear.width, rowsPerImage: height },
+          { width: clear.width, height },
+        );
+      }
+    }
+    for (const upload of part.uploads) {
+      queue.writeTexture(
+        { texture: this.#textPages[upload.page]!.texture, origin: { x: upload.x, y: upload.y } },
+        upload.coverage,
+        { offset: 0, bytesPerRow: upload.width, rowsPerImage: upload.height },
+        { width: upload.width, height: upload.height },
+      );
+    }
+    if (!this.#writeTextBuffer(text)) {
+      this.#textPageAllocationFailed = true;
+      return unavailable();
+    }
+    return receipt(this.#textPages.map((page) => page.incarnation));
+  }
+
+  /** E28 U3: a page texture, tracked; null when it cannot be created or tracked. */
+  #createTextPage(size: number): TextPage | null {
+    const id = `primitive/${this.#generation}/text-page-${this.#nextTextPage++}`;
+    let texture: GPUTexture;
+    try {
+      texture = this.#createTrackedTextureWithUsage(
+        id,
+        size,
+        size,
+        TEXT_PAGE_FORMAT,
+        1,
+        1,
+        TEXTURE_BINDING_USAGE | TEXTURE_COPY_DESTINATION_USAGE,
+      );
+    } catch {
+      return null;
+    }
+    try {
+      return Object.freeze({
+        id,
+        texture,
+        view: texture.createView(),
+        size,
+        incarnation: Symbol(id),
+      });
+    } catch {
+      try {
+        this.#destroyTrackedTexture(id, texture);
+      } catch {
+        // Accounting cleanup is best effort.
+      }
+      return null;
+    }
+  }
+
+  #releaseTextPage(page: TextPage): void {
+    this.#textBuffer?.bindGroups.delete(page);
+    this.#destroyTrackedTexture(page.id, page.texture);
+  }
+
+  /** E28 section 4, Release: on a frame without text, a page allocation failure and dispose. */
+  #releaseTextPages(): void {
+    const pages = this.#textPages;
+    this.#textPages = [];
+    let firstError: unknown;
+    for (const page of pages) {
+      try {
+        this.#releaseTextPage(page);
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    if (firstError !== undefined) throw asError(firstError, 'Text page release failed.');
+  }
+
+  /**
+   * E28 U3: writes the target uniform when it changed and the instance records, growing the
+   * buffer to a power of two; a frame without text draws releases it. False when the buffer
+   * cannot be created or tracked.
+   */
+  #writeTextBuffer(text: NonNullable<ValidatedText>): boolean {
+    if (text.part.draws.length === 0) {
+      this.#releaseTextBuffer();
+      return true;
+    }
+    const instanceOffset = this.#textInstanceOffset();
+    const size = instanceOffset + text.instanceBytes;
+    let state = this.#textBuffer;
+    if (state === undefined || state.size < size) {
+      this.#releaseTextBuffer();
+      const capacity = Math.min(
+        nextPowerOfTwo(size),
+        Math.max(size, safeLimit(this.#device.limits.maxBufferSize, 0)),
+      );
+      const id = `primitive/${this.#generation}/text-buffer-${this.#nextTextBuffer++}`;
+      let buffer: GPUBuffer;
+      try {
+        buffer = this.#device.createBuffer({
+          label: id,
+          size: capacity,
+          usage: STORAGE_BUFFER_USAGE | UNIFORM_BUFFER_USAGE | COPY_DESTINATION_USAGE,
+        });
+      } catch {
+        return false;
+      }
+      try {
+        this.#resources.track(id, { category: 'buffer', size: capacity });
+      } catch {
+        buffer.destroy();
+        return false;
+      }
+      state = { id, buffer, size: capacity, instanceOffset, bindGroups: new Map(), target: null };
+      this.#textBuffer = state;
+    }
+    const target = this.#target!;
+    const targetBytes = packTextTarget(target.width, target.height);
+    if (state.target === null || !bytesEqual(state.target, targetBytes)) {
+      this.#device.queue.writeBuffer(state.buffer, 0, targetBytes, 0, targetBytes.byteLength);
+      state.target = targetBytes;
+    }
+    const instances = text.part.instances;
+    this.#device.queue.writeBuffer(
+      state.buffer,
+      state.instanceOffset,
+      instances,
+      0,
+      instances.length,
+    );
+    return true;
+  }
+
+  #releaseTextBuffer(): void {
+    const state = this.#textBuffer;
+    if (state === undefined) return;
+    this.#textBuffer = undefined;
+    let releaseError: unknown;
+    try {
+      state.buffer.destroy();
+    } catch (error) {
+      releaseError = error;
+    }
+    this.#resources.release(state.id);
+    if (releaseError !== undefined) throw asError(releaseError, 'Text buffer release failed.');
+  }
+
+  /** E28 U3: group 0 for a page: the instance records, the page, the sampler, the target. */
+  #textBindGroup(index: number): GPUBindGroup {
+    const state = this.#textBuffer!;
+    const page = this.#textPages[index]!;
+    const cached = state.bindGroups.get(page);
+    if (cached !== undefined) return cached;
+    const group = this.#device.createBindGroup({
+      label: `${state.id}/${page.id.slice(page.id.lastIndexOf('/') + 1)}`,
+      layout: this.#text!.bindGroupLayout,
+      entries: [
+        {
+          binding: TEXT_BINDINGS.instances,
+          resource: {
+            buffer: state.buffer,
+            offset: state.instanceOffset,
+            // The records fit the binding limit (#preflightText); the grown buffer may not.
+            size: Math.min(
+              state.size - state.instanceOffset,
+              Math.floor(safeLimit(this.#device.limits.maxStorageBufferBindingSize, 0) / 4) * 4,
+            ),
+          },
+        },
+        { binding: TEXT_BINDINGS.page, resource: page.view },
+        { binding: TEXT_BINDINGS.sampler, resource: this.#text!.sampler },
+        {
+          binding: TEXT_BINDINGS.target,
+          resource: { buffer: state.buffer, offset: 0, size: TEXT_TARGET_SIZE },
+        },
+      ],
+    });
+    state.bindGroups.set(page, group);
+    return group;
+  }
+
+  /** E28-D1: true once a page or the text buffer could not be created this generation. */
+  get textPageAllocationFailed(): boolean {
+    return this.#textPageAllocationFailed;
+  }
+
   #preflightLayers(
     packet: PrimitivePacket,
     layers: LayerPacketPart['layers'],
@@ -1903,6 +2403,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     clip: ValidatedClip,
     paint: ValidatedPaint,
     transients: Transient[],
+    text: Readonly<{ part: TextPacketPart | null }>,
   ): LayerFrame {
     const pipelines = this.#layer!;
     const target = this.#target!;
@@ -2051,6 +2552,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           meshArena,
           clip,
           paint,
+          textPart: text.part,
         });
         pass.end();
         encoder.copyTextureToTexture(
@@ -2081,13 +2583,15 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       meshArena: MeshArenaState | null;
       clip: ValidatedClip;
       paint: ValidatedPaint;
+      /** E28 U3: the frame's text part when its draws are encoded, otherwise null. */
+      textPart: TextPacketPart | null;
     }>,
   ): void {
     const pipelines = this.#layer!;
     const draws = layers.layers[index]!.draws;
     const meshDraws = layers.meshDraws[index]!;
     const slots = layers.slots.get(index) ?? [];
-    const { arena, meshArena, clip, paint } = env;
+    const { arena, meshArena, clip, paint, textPart } = env;
     const paintBuffers = paint === null ? null : this.#paintBuffers!;
     let pipeline: GPURenderPipeline | null = null;
     let group0: string | null = null;
@@ -2133,9 +2637,24 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     };
     pass.setBindGroup(LAYER_BIND_GROUP_INDEX, frame.passGroup, [passOffset]);
     // E28 section 4: slot k at a position holds the composite or text draw whose order is k,
-    // otherwise the next mesh draw; text draws hold their slot until E28-U3.
+    // otherwise the next mesh draw. A text draw uses its layer variant, with the clip group or
+    // the empty group at 1 and the empty group at 2.
     let nextSlot = 0;
     const drawSlot = (slot: OrderSlot) => {
+      if (slot.text !== null) {
+        if (textPart === null) return;
+        const draw = textPart.draws[slot.text]!;
+        const state = draw.clipState ?? 0;
+        const variant = state === 0 ? this.#text!.layer : this.#text!.clipLayer;
+        if (variant === null || (state !== 0 && clip === null)) return;
+        usePipeline(variant);
+        pass.setBindGroup(0, this.#textBindGroup(draw.page));
+        group0 = null;
+        bind1(state);
+        bind2('empty');
+        pass.draw(6, draw.count, 0, draw.first);
+        return;
+      }
       if (slot.layer === null) return;
       this.#encodeComposite(pass, frame, slot.layer, passOffset);
       pipeline = pipelines.composite;
@@ -3517,6 +4036,7 @@ function createReceipt(
   submissionSerial: number,
   resources: PrimitiveReceipt['resources'],
   mesh?: MeshReceiptPart,
+  text?: TextReceiptPart,
 ): PrimitiveReceipt {
   return Object.freeze({
     scene: Object.freeze({
@@ -3532,6 +4052,7 @@ function createReceipt(
     submissionSerial,
     resources,
     ...(mesh === undefined ? {} : { mesh }),
+    ...(text === undefined ? {} : { text }),
   });
 }
 
@@ -4299,6 +4820,7 @@ export function createNativePrimitiveSceneCreation(
           bindGroupLayout: layerBindGroupLayout,
           compositeBindGroupLayout,
           emptyBindGroup,
+          emptyLayout,
           composite,
           analyticClip,
           analyticPaint,
@@ -4336,6 +4858,92 @@ export function createNativePrimitiveSceneCreation(
         layer = null;
       }
     }
+    // E28 contract, U3: the text pipelines and the sampler, created here like the layer
+    // variants and never on the frame path: the plain variant, the clip one with the clip
+    // variants, and the layer and combined ones with the layer pipeline. A failure leaves text
+    // unavailable for the generation; text is then not drawn (E28-D1, `'pipeline'`).
+    let text: TextPipelineState | null = null;
+    if (options.textPipeline === true && !disposed) {
+      const textTracked: string[] = [];
+      const trackText = (id: string, descriptor: ResourceDescriptor) => {
+        track(id, descriptor);
+        textTracked.push(id);
+      };
+      const variants = TEXT_VARIANTS.filter(
+        (variant) =>
+          (clip !== null || (variant !== 'clip' && variant !== 'clip-layer')) &&
+          (layer !== null || (variant !== 'layer' && variant !== 'clip-layer')),
+      );
+      try {
+        const textBindGroupLayout = device.createBindGroupLayout(
+          createTextBindGroupLayoutDescriptor(),
+        );
+        trackText(`${prefix}/text-bind-group-layout`, { category: 'bind-group-layout' });
+        const sampler = device.createSampler(createTextSamplerDescriptor());
+        trackText(`${prefix}/text-sampler`, { category: 'sampler' });
+        const created = new Map<TextVariant, GPURenderPipeline>();
+        for (const variant of variants) {
+          const clipped = variant === 'clip' || variant === 'clip-layer';
+          const layered = variant === 'layer' || variant === 'clip-layer';
+          const empty = layer?.emptyLayout;
+          const groups: GPUBindGroupLayout[] = [textBindGroupLayout];
+          if (clipped) groups.push(clip!.bindGroupLayout);
+          if (layered) {
+            if (!clipped) groups.push(empty!);
+            groups.push(empty!, layer!.bindGroupLayout);
+          }
+          const name = variant === 'plain' ? 'text' : `text-${variant}`;
+          const pipelineLayout = device.createPipelineLayout({
+            label: `${prefix}/${name}-pipeline-layout`,
+            bindGroupLayouts: groups,
+          });
+          trackText(`${prefix}/${name}-pipeline-layout`, { category: 'pipeline-layout' });
+          const shader = device.createShaderModule({
+            label: `${prefix}/${name}-shader`,
+            code: textVariantSource(variant),
+          });
+          trackText(`${prefix}/${name}-shader`, { category: 'shader-module' });
+          const pipeline = await pipelineCache.getOrCreate(
+            textPipelineKey(format, sampleCount, stencil, variant),
+            () =>
+              device.createRenderPipelineAsync(
+                createTextPipelineDescriptor(
+                  shader,
+                  pipelineLayout,
+                  format,
+                  sampleCount,
+                  stencil,
+                  variant,
+                ),
+              ),
+          );
+          trackText(`${prefix}/${name}-pipeline`, { category: 'render-pipeline' });
+          created.set(variant, pipeline);
+        }
+        text = Object.freeze({
+          bindGroupLayout: textBindGroupLayout,
+          sampler,
+          plain: created.get('plain')!,
+          clip: created.get('clip') ?? null,
+          layer: created.get('layer') ?? null,
+          clipLayer: created.get('clip-layer') ?? null,
+        });
+      } catch {
+        // The E22-K5 rule: no text pipeline this attempt cached outlives the failure.
+        for (const variant of TEXT_VARIANTS) {
+          pipelineCache.evict(textPipelineKey(format, sampleCount, stencil, variant));
+        }
+        for (const id of textTracked) {
+          tracked.delete(id);
+          try {
+            resources.release(id);
+          } catch {
+            // Accounting cleanup is best effort.
+          }
+        }
+        text = null;
+      }
+    }
     if (disposed || vertexBuffer === undefined || indexBuffer === undefined) {
       throw new Error('Primitive scene creation completed after disposal.');
     }
@@ -4361,6 +4969,7 @@ export function createNativePrimitiveSceneCreation(
       paint,
       layer,
       options.layerTileSizeForTesting,
+      text,
     );
     vertexBuffer = undefined;
     indexBuffer = undefined;
