@@ -6,7 +6,8 @@ import type { PagePoint } from './types.js';
 // parent's space, which a `createSymbol` wrap takes as the new source's frame so that its clip
 // does not cut strokes or arrowheads off. They are conservative for the geometric stroke (the
 // renderer's anti-aliasing fringe, about half a device pixel past an edge, is not included) and
-// never smaller than the node's rotated frame (the geometric bounds `groupNodes` keeps). editor-core cannot import renderer-core, so the path rule repeats the renderer's stroke
+// never smaller than the node's rotated frame (the geometric bounds `groupNodes` keeps).
+// editor-core cannot import renderer-core, so the path rule repeats the renderer's stroke
 // culling bound (`getPathLocalStrokeBounds`, B2 stroke contract, section 9.7): the points' box
 // grown by w/2 · max(1, miterLimit for a miter join, 1.5 for a square cap).
 
