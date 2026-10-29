@@ -489,6 +489,7 @@ const STATE_FAILURES = new Set([
   'fringe-range',
   'packing-range',
   'port-version',
+  'dash-limit',
 ]);
 
 type PaintRecord = {

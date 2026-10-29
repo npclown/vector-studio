@@ -108,11 +108,13 @@ export class PrimitiveRendererService
     this.requiresMeshPipeline = anyPort;
     // P3 V3 section a with the B2 section 9.1 amendment (S4): path nodes are supported when a
     // fill port, a stroke port or both are given; fills exactly when a fill port is given, and
-    // strokes with width > 0 exactly when a stroke port is given.
+    // strokes with width > 0 exactly when a stroke port is given. E24-S3: dashes with them, since
+    // the pipeline expands a dash ahead of the stroke port.
     this.#mirror = new RetainedSceneMirror(undefined, {
       pathNodes: anyPort ? 'supported' : 'unsupported',
       pathFills: port === undefined ? 'unsupported' : 'supported',
       pathStrokes: strokePort === undefined ? 'unsupported' : 'supported',
+      dashes: strokePort === undefined ? 'unsupported' : 'supported',
       clips: clips === 'all' ? 'supported' : clips === 'rect' ? 'rect' : 'unsupported',
       paints,
     });
