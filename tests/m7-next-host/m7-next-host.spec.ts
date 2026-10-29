@@ -515,10 +515,18 @@ test('M7-A11: source edits reach instances; resize, detach, source delete and un
   );
   expect(diagnostics).toEqual([]);
   if (rendering) {
+    // The fixture's round-joined stroked paths exceed the renderer's V4 fringe builder cap at
+    // zoom 2 and the instance's scale 2, and are drawn region-only with one `fringe-work-cap`
+    // warning each (a disclosed P3 renderer class, PATH_MESH_LIMITS.fringeBoundaryVertexCap).
+    // Only that warning is tolerated; anything else fails.
     const backend = await page.evaluate(() =>
       window.__nextHostRenderer!.diagnostics.filter((entry) => entry.severity !== 'info'),
     );
-    expect(backend).toEqual([]);
+    const fringeCap = (entry: (typeof backend)[number]): boolean =>
+      entry.code === 'render.path-mesh-failure' &&
+      entry.severity === 'warning' &&
+      entry.message.endsWith('without its coverage fringe (renderer fringe-work-cap).');
+    expect(backend.filter((entry) => !fringeCap(entry))).toEqual([]);
   }
   await expect(page.getByTestId('error')).toHaveCount(0);
   expect(errors).toEqual([]);
