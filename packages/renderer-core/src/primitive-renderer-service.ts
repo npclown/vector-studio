@@ -47,6 +47,12 @@ export type PrimitiveRendererServiceOptions = Readonly<{
    * reported as `unsupported-feature`, and nothing else changes.
    */
   clips?: 'none' | 'rect' | 'all';
+  /**
+   * E23 contract, U3: 'gradient' accepts gradient paints (E23-S3) and draws them through the
+   * paint pipeline variants, which the backend then creates. Default 'solid': a gradient paint
+   * is reported as `unsupported-feature`, and nothing else changes.
+   */
+  paints?: 'solid' | 'gradient';
 }>;
 
 /** Owns the CPU scene mirror and packet source while the backend owns scheduling and native state. */
@@ -64,6 +70,8 @@ export class PrimitiveRendererService
   public readonly requiresMeshPipeline: boolean;
   /** P4 contract, U3: true exactly when the `clips` option draws clips; read at attach. */
   public readonly requiresClipPipeline: boolean;
+  /** E23 contract, U3: true exactly when the `paints` option is 'gradient'; read at attach. */
+  public readonly requiresPaintPipeline: boolean;
 
   public constructor(
     invalidationTarget: RendererInvalidationTarget,
@@ -89,8 +97,13 @@ export class PrimitiveRendererService
     if (clips !== 'none' && clips !== 'rect' && clips !== 'all') {
       throw new TypeError("clips must be 'none', 'rect' or 'all'.");
     }
+    const paints = options.paints ?? 'solid';
+    if (paints !== 'solid' && paints !== 'gradient') {
+      throw new TypeError("paints must be 'solid' or 'gradient'.");
+    }
     this.#invalidationTarget = invalidationTarget;
     this.requiresClipPipeline = clips !== 'none';
+    this.requiresPaintPipeline = paints === 'gradient';
     const anyPort = port !== undefined || strokePort !== undefined;
     this.requiresMeshPipeline = anyPort;
     // P3 V3 section a with the B2 section 9.1 amendment (S4): path nodes are supported when a
@@ -101,6 +114,7 @@ export class PrimitiveRendererService
       pathFills: port === undefined ? 'unsupported' : 'supported',
       pathStrokes: strokePort === undefined ? 'unsupported' : 'supported',
       clips: clips === 'all' ? 'supported' : clips === 'rect' ? 'rect' : 'unsupported',
+      paints,
     });
     this.#source = new PrimitiveSceneSource(
       this.#mirror,

@@ -154,6 +154,8 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
   #meshPipelineRequired = false;
   /** P4 contract, U3: read once at attach, like the mesh flag. */
   #clipPipelineRequired = false;
+  /** E23 contract, U3: read once at attach, like the clip flag. */
+  #paintPipelineRequired = false;
   #primitiveMode = false;
   #primitiveCreation: WebGpuPrimitiveSceneCreationPort | undefined;
   #primitiveScene: WebGpuPrimitiveScenePort | undefined;
@@ -267,6 +269,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
     this.#primitiveFrameSource = source;
     this.#meshPipelineRequired = source.requiresMeshPipeline === true;
     this.#clipPipelineRequired = source.requiresClipPipeline === true;
+    this.#paintPipelineRequired = source.requiresPaintPipeline === true;
     let disposed = false;
     return {
       get disposed() {
@@ -279,6 +282,7 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
           this.#primitiveFrameSource = undefined;
           this.#meshPipelineRequired = false;
           this.#clipPipelineRequired = false;
+          this.#paintPipelineRequired = false;
         }
       },
     };
@@ -747,10 +751,14 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
           ...(this.#countPass && this.#meshPipelineRequired ? { countPass: true } : {}),
         };
         primitiveCreation =
-          this.#meshPipelineRequired || this.#clipPipelineRequired || Object.keys(hooks).length > 0
+          this.#meshPipelineRequired ||
+          this.#clipPipelineRequired ||
+          this.#paintPipelineRequired ||
+          Object.keys(hooks).length > 0
             ? device.createPrimitiveScene(context, format, generation, tracker, {
                 ...(this.#meshPipelineRequired ? { meshPipeline: true } : {}),
                 ...(this.#clipPipelineRequired ? { clipPipeline: true } : {}),
+                ...(this.#paintPipelineRequired ? { paintPipeline: true } : {}),
                 ...hooks,
               })
             : device.createPrimitiveScene(context, format, generation, tracker);
@@ -774,6 +782,16 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         ) {
           throw new TestHookCreationError('The clip pipeline is unavailable.', {
             clipPipeline: 'unavailable',
+          });
+        }
+        // E23 contract, U3: likewise for the paint variants; otherwise gradient draws fail closed.
+        if (
+          this.#hooksSet() &&
+          this.#paintPipelineRequired &&
+          primitive.scene.paintPipelineAvailable !== true
+        ) {
+          throw new TestHookCreationError('The paint pipeline is unavailable.', {
+            paintPipeline: 'unavailable',
           });
         }
       }
@@ -893,6 +911,29 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
       this.#emit(
         DIAGNOSTIC_CODES.CLIP_UNAVAILABLE,
         'The clip pipelines are unavailable; clipped and masked content is not drawn.',
+        'warning',
+        generation,
+      );
+      if (!this.#isCurrent(token)) {
+        releaseAttempt();
+        if (this.#pendingAttemptRelease === releaseAttempt) {
+          this.#pendingAttemptRelease = undefined;
+        }
+        return this.#stale(generation);
+      }
+    }
+
+    // E23 contract, section 5 (the E22-K4 rule): once per generation, when the scene comes up
+    // without the paint variants a source that draws gradients asked for; its gradient draws
+    // are not drawn (fail closed). A backend test hook has already failed the generation above.
+    if (
+      primitive !== undefined &&
+      this.#paintPipelineRequired &&
+      primitive.scene.paintPipelineAvailable !== true
+    ) {
+      this.#emit(
+        DIAGNOSTIC_CODES.PAINT_UNAVAILABLE,
+        'The paint pipelines are unavailable; content with a gradient paint is not drawn.',
         'warning',
         generation,
       );

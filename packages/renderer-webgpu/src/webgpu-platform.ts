@@ -70,6 +70,11 @@ export interface WebGpuPrimitiveScenePort extends PrimitivePacketConsumer {
    * or false: a draw with a clip state is not drawn.
    */
   readonly clipPipelineAvailable?: boolean;
+  /**
+   * E23 contract, U3: true when this generation created the gradient paint pipeline variants.
+   * Absent or false: a draw with a gradient paint is not drawn.
+   */
+  readonly paintPipelineAvailable?: boolean;
   /** P4 contract, U4 (Mask cache): the mask passes this generation has run. */
   readonly maskPasses?: number;
   setTarget(target: PrimitiveTarget): void;
@@ -131,6 +136,12 @@ export interface WebGpuPrimitiveSceneOptions {
    * ones with the mesh pipeline). Without them a clipped draw is not drawn (fail closed).
    */
   readonly clipPipeline?: boolean;
+  /**
+   * E23 contract, U3: creates the gradient paint pipeline variants (the analytic one, the mesh
+   * ones with the mesh pipeline, and each with the clip block with the clip variants). Without
+   * them a draw with a gradient paint is not drawn (fail closed).
+   */
+  readonly paintPipeline?: boolean;
   /**
    * @internal Tests only (E10 contract, section 3.2): a forced sample count. 4 fails creation
    * when a 4x pipeline is unavailable; 1 creates 1x only. Absent: try 4x, then fall back.
