@@ -17,7 +17,7 @@ Another evidence file in this folder: [u3-swiftshader.md](u3-swiftshader.md), U3
 | E24-A03 Work limit | PASS | Unit: `e24-u2-dash-expansion.test.ts`. The U3 note on the real kernel is informational: see below |
 | E24-A04 Invalidation | PASS | Unit: `e24-u2-dash-expansion.test.ts`. GPU counters: headed spec (below) |
 | E24-A05 Probes, D1 to D9 | PASS, one disclosed exception | Headed `tests/gpu/e24-stroke-dash.spec.ts`, Chrome and Edge, DPR 1 and 2 (below). D6 at DPR 2 takes O3 and is not drawn; the fix is backlog item E27. SwiftShader: [u3](u3-swiftshader.md) |
-| E24-A06 Identity | PASS | Unit part: `e24-u2-dash-expansion.test.ts` (undashed requests unchanged). E10-A1 golden log and shader hashes unchanged in CI. Solid captures: byte-identical on the reference PC (below). Full headed `pnpm test:gpu`: 158 of 158 (below) |
+| E24-A06 Identity | PASS | Unit part: `e24-u2-dash-expansion.test.ts` (undashed requests unchanged). The E10-A1 golden log (`tests/unit/e10-default-invariance.test.ts`) and the shader hashes are unchanged in CI. Nothing under `crates/` changed between `2d19b64` and `e313b96`, so the kernel, port and WASM identity tests are unchanged. Solid captures: byte-identical on the reference PC (below). Full headed `pnpm test:gpu`: 158 of 158 (below) |
 
 ## Headed spec: `tests/gpu/e24-stroke-dash.spec.ts`
 
@@ -41,7 +41,10 @@ The report files match across the two browsers:
 | Pan | 0 | 0 | 0 | 0 |
 | Zoom | 0 | 1 | 1 | 0 |
 
-**A05 at DPR 1.** No fixture took an E11-U4 outcome. For each fixture, the table gives the interior probes, the content probes and the worst difference in 1/255.
+**A05 at DPR 1.**
+
+- No fixture took O3: the report's `outcomes` is `{}`. The O2 fringe caps and D8 A's O1 are listed below the table.
+- For each fixture, the table gives the probes, the content probes and the worst difference over them, in 1/255. The probes are the interior probes plus D1's edge probes, which are checked at 4/255.
 
 | Fixture | Probes | Content | Worst |
 | --- | --- | --- | --- |
@@ -88,18 +91,21 @@ The report files match across the two browsers:
 
 **A05, D7 dash ends across zooms.**
 
-| DPR | Worst, spec units (limit) | Worst absolute (fine limit) |
+| DPR | Worst, local units (limit) | Worst absolute (fine limit) |
 | --- | --- | --- |
 | 1 | 1.01648 (2) | 0.000186 (0.0625) |
 | 2 | 0.16557 (1) | 0.0000930 (0.03125) |
 
-At DPR 1, 46 ends were compared, 23 of them absolutely.
+At DPR 1, 23 dash ends gave 46 comparisons: zoom 1 and zoom 8, each against zoom 0.25. All 23 ends were also measured absolutely at zoom 8.
 
-**A03 note (informational).** D8's geometry with 4,096 `[1, 1]` dashes was applied and drew no mesh. The real kernel reported one `render.path-mesh-failure` with `work-limit` (tolerance exponent −3), after 1 stroke port call, with `pathMeshMemoryBytes` 20,717,568. The contract's section 8 records this risk.
+- The limit is 0.5 physical px at zoom 0.25: 2 local units at DPR 1 and 1 at DPR 2. The worst values are 0.25 px and 0.08 px.
+- The fine limit is 0.5 physical px at zoom 8.
+
+**A03 note (informational).** D8's stroke (width 2, `[1, 1]`) was drawn over `M 0 0 L 8190 0`, which is exactly 4,096 dashes. The frame status was `applied`, with 0 mesh draws. The real kernel reported one `render.path-mesh-failure` with `work-limit` (tolerance exponent −3), after 1 stroke port call, with `pathMeshMemoryBytes` 20,717,568. The contract's section 8 records this risk.
 
 ## A06 solid captures (headed Chrome)
 
-The A06 captures used e313b96's `docs/evidence/e23/a08-solid-capture.mjs`, copied out of the repo unchanged (SHA-256 `AFCB55DB…E11C`). It ran on the real GPU at `2d19b64` (U1's merge base) and at `e313b96`. The two outputs, `a06-2d19b64.json` and `a06-e313b96.json`, are byte-identical. Both have SHA-256 `2664A1C271697387AD87FAD4EDF5BCC62223E78BD8FD272D7AC62FCAFFF55C0A`, the same hash as E23's A08 captures at `e96a034` and `d00af7c`.
+The A06 captures used e313b96's `docs/evidence/e23/a08-solid-capture.mjs`, copied out of the repo unchanged (SHA-256 `AFCB55DB…E11C`). It ran on the real GPU at `2d19b64` (U1's merge base) and at `e313b96` (U3's merge, which contains U2's `b38bb46`). The two outputs, `a06-2d19b64.json` and `a06-e313b96.json`, are byte-identical. Both have SHA-256 `2664A1C271697387AD87FAD4EDF5BCC62223E78BD8FD272D7AC62FCAFFF55C0A`, the same hash as E23's A08 captures at `e96a034` and `d00af7c`.
 
 ## Full headed suite (E24-A06)
 
