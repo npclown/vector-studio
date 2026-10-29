@@ -73,6 +73,19 @@ function path(id: string, fill: unknown, strokeColor: unknown = null): RenderNod
   } as RenderNodeSnapshot;
 }
 
+function container(id: string, parentId: string | null, children: string[]): RenderNodeSnapshot {
+  return {
+    id,
+    parentId,
+    transform: affine,
+    visible: true,
+    opacity: 1,
+    kind: 'container',
+    children,
+    clip: null,
+  };
+}
+
 function snapshot(nodes: readonly RenderNodeSnapshot[], revision = 1): RenderSceneSnapshot {
   return { identity, revision, nodes, rootOrder: nodes.map((node) => node.id) };
 }
@@ -139,8 +152,12 @@ describe('E23-A01 scene paint validation', () => {
       { transform: [1, 0, 0, 1, 0, Number.NaN] },
       { transform: [1, 2, 2, 4, 0, 0] },
       { transform: [0, 0, 0, 0, 0, 0] },
-      // Non-zero binary64 determinant with a non-finite inverse.
+      // A binary64 determinant that underflows to 0.
       { transform: [1e-200, 0, 0, 1e-200, 0, 0] },
+      // Non-zero (subnormal) binary64 determinant with a non-finite inverse.
+      { transform: [1e-310, 0, 0, 1, 0, 0] },
+      // A non-finite binary64 determinant.
+      { transform: [1e200, 0, 0, 1e200, 0, 0] },
       { stops: [] },
       { stops: 'red' },
       { stops: [{ offset: 0, color: red, extra: true }] },
@@ -183,6 +200,21 @@ describe('E23-A01 scene paint validation', () => {
       rootOrder: [],
     });
     expect(reason(result)).toBe('invalid-parent');
+  });
+
+  it('E23-S2: graph reasons precede the stop count and the support gate; values precede both', () => {
+    const cycle = (paint: unknown, options: RetainedSceneMirrorOptions = GRADIENTS) =>
+      reason(
+        new RetainedSceneMirror(undefined, options).replaceSnapshot({
+          identity,
+          revision: 1,
+          nodes: [container('c1', 'c2', ['c2']), container('c2', 'c1', ['c1']), rect('r', paint)],
+          rootOrder: ['r'],
+        }),
+      );
+    expect(cycle(withGradient({ stops: stops(SCENE_MAX_GRADIENT_STOPS + 1) }))).toBe('cycle');
+    expect(cycle(linear, SOLID)).toBe('cycle');
+    expect(cycle(withGradient({ stops: [] }))).toBe('invalid-value');
   });
 
   it("E23-S3: gradients are unsupported-feature under paints 'solid', the default", () => {
