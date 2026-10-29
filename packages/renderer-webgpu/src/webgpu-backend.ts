@@ -21,6 +21,7 @@ import {
   FrameScheduler,
   ResourceAccounting,
   clipResourceLimitDiagnostic,
+  layerResourceLimitDiagnostic,
   pathMeshNoticeDiagnostic,
   type AnimationFrameClock,
   type DiagnosticClock,
@@ -1314,6 +1315,13 @@ export class WebGpuBackend implements RendererLifecycle<WebGpuSurface>, Renderer
         if (packet.clipNotices !== undefined && isList(packet.clipNotices)) {
           for (const notice of packet.clipNotices.slice(0, NOTICES_PER_PACKET)) {
             this.#diagnostics.emit(clipResourceLimitDiagnostic(notice, generation));
+          }
+        }
+        // E25 contract, section 5: layer budget notices, likewise CPU state.
+        const layerNotices = packet.layers?.notices;
+        if (layerNotices !== undefined && isList(layerNotices)) {
+          for (const notice of layerNotices.slice(0, NOTICES_PER_PACKET)) {
+            this.#diagnostics.emit(layerResourceLimitDiagnostic(notice, generation));
           }
         }
         if (

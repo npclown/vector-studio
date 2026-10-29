@@ -327,6 +327,27 @@ U3 (2026-10-29):
   - The hook claim and the section 4 pointer were fixed.
   - Not added: a test with more than 255 mesh draws in a layer across tiles. The per-pass stencil restart is covered by the call order of the existing tests.
 
+U4 (2026-10-29):
+
+- The E23 check page takes three more query options: `groups=isolated`, `isolate=1` (`isolateUnitOpacityForTesting`) and `tile=N` (`layerTileSizeForTesting`).
+  - The page forwards `requiresLayerPipeline`.
+  - Its packet summary has a layers part, and its counters have `layerPasses`.
+  - Its `edit` call applies a change set that updates nodes in place.
+- `tests/support/e25-layer-oracle.ts` composes section 3 over leaf sources. The E23 and E24 oracles now export theirs: `elementSource` and `dashElementSource`. Their `expectedAt` and `expectedDashAt` are unchanged in behaviour.
+- `tests/gpu/e25-isolated-opacity.spec.ts` holds:
+  - O1 to O6 and O8 (a) and (b), at 4x and 1x and at DPR 1 and 2;
+  - O8 (c), the tile seams, on a 2100 × 1300 surface;
+  - O7 and O9;
+  - the GPU parts of A04 and A06;
+  - the shared-edge observation.
+- Evidence on SwiftShader: [u4-swiftshader.md](../evidence/e25/u4-swiftshader.md). The criteria evidence is the reference-PC run, which U5 indexes.
+- **Departure, notice emission:** U3 did not emit the layers part's notices; the backend dropped them. U4 emits them as `render.layer-resource-limit`, as it emits P4's clip notices: after a non-null prepare, up to 32 per packet. `tests/unit/e25-u4-layer-notices.test.ts` checks this at 3840 × 2160 and 4x.
+- **A04 through change sets:** the opacity edits are change sets, as in U2's unit test. A replaced snapshot rebuilt the rectangle's primitive record (one geometry build) even when only the container's opacity changed.
+- **Shared edges:** the section 8 risk is measured on axis-aligned edges on pixel centres. The scene is white under the layer, red in the layer and green over it, drawn as rectangles and as path fills. The stated tolerance is the edge tolerance at depth 1, 5/255.
+  - On SwiftShader at 4x, the layer path and the main pass agree exactly at opacity 1.
+  - At opacity 0.5 they match the per-pixel model within 0.625.
+  - The reference-PC run repeats the measurement.
+
 ## 8. Risks
 
 - **Memory.** Bound-sized layers keep ordinary groups small. But full-screen groups at 4K and 4x admit only two nesting levels within 96 MiB (E25-Q3). Deeper full-screen stacks report instead of drawing. Two remedies are open if real documents hit this: re-rendering per tile together with the composite (no full layer texture), or a cache with eviction.

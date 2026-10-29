@@ -1,5 +1,6 @@
 import type {
   RenderCamera,
+  RenderNodeSnapshot,
   RendererDiagnostic,
   RendererStatistics,
   RenderSceneSnapshot,
@@ -25,12 +26,18 @@ import { WebGpuBackend } from '@vector-studio/renderer-webgpu';
 // hooks from its query string (`samples=1|4`, `dpr`) and draws the scenes that
 // tests/gpu/e23-gradient-paint.spec.ts hands it; the spec owns the scenes, the CPU oracle and the
 // checks. The frame source is wrapped only to summarize each packet's draws and paint part.
+// E25 contract, unit U4: `groups=isolated` sets the service's `groups` option, `isolate=1` its
+// `isolateUnitOpacityForTesting` hook and `tile=N` the backend's `layerTileSizeForTesting`;
+// tests/gpu/e25-isolated-opacity.spec.ts uses them. Without them the page is as before.
 
 /** Served by the playground's Vite config from the local kernel build; see vite.config.mjs. */
 const WASM_URL = '/__vector-studio/geometry-kernel.wasm';
 
 const parameters = new URLSearchParams(window.location.search);
 const samples = parameters.get('samples') === '1' ? 1 : 4;
+const groups = parameters.get('groups') === 'isolated' ? 'isolated' : 'flat';
+const isolateUnit = parameters.get('isolate') === '1';
+const tileParameter = parameters.get('tile');
 const dpr = Number(parameters.get('dpr') ?? '1');
 /** CSS size of the canvas at load (the spec uses 512 × 320 at every DPR); `resize` changes it. */
 const CSS_SIZE = Object.freeze({ width: 512, height: 320 });
@@ -52,6 +59,19 @@ export type E23PacketSummary = Readonly<{
   clipStates: number;
   maskLevels: number;
   clipNotices: number;
+  /** E25: the layers part, null without one. */
+  layers: Readonly<{
+    layers: readonly Readonly<{
+      nodeId: string;
+      opacity: number;
+      bound: Readonly<{ x: number; y: number; width: number; height: number }>;
+      parent: number;
+      draws: number;
+      meshDraws: number;
+    }>[];
+    composites: number;
+    notices: readonly string[];
+  }> | null;
 }>;
 
 export type E23Frame = Readonly<{
@@ -72,6 +92,8 @@ export type E23Counters = Readonly<{
   /** E24 U3: dash expansions of the path-mesh pipeline (E24-A04). */
   dashExpansions: number;
   preparation: ReturnType<PrimitiveRendererService['getPreparationStatistics']>;
+  /** E25: layer passes of the current generation so far, one per layer (section 4, Lifetime). */
+  layerPasses: number;
 }>;
 
 declare global {
@@ -102,6 +124,21 @@ function summarize(packet: PrimitivePacket): E23PacketSummary {
     clipStates: packet.clip?.states.length ?? 0,
     maskLevels: packet.clip?.masks.length ?? 0,
     clipNotices: packet.clipNotices?.length ?? 0,
+    layers:
+      packet.layers === undefined
+        ? null
+        : {
+            layers: packet.layers.layers.map((layer) => ({
+              nodeId: layer.nodeId,
+              opacity: layer.opacity,
+              bound: { ...layer.bound },
+              parent: layer.parent,
+              draws: layer.draws.length,
+              meshDraws: layer.meshDraws.length,
+            })),
+            composites: packet.layers.composites.length,
+            notices: packet.layers.notices.map((notice) => notice.nodeId),
+          },
   };
 }
 
@@ -119,7 +156,11 @@ const canvas = document.createElement('canvas');
 canvas.style.display = 'block';
 document.body.append(canvas);
 const diagnostics: RendererDiagnostic[] = [];
-const backend = new WebGpuBackend({ sampleCountForTesting: samples, frameCaptureForTesting: true });
+const backend = new WebGpuBackend({
+  sampleCountForTesting: samples,
+  frameCaptureForTesting: true,
+  ...(tileParameter === null ? {} : { layerTileSizeForTesting: Number(tileParameter) }),
+});
 backend.subscribeDiagnostics((event) => diagnostics.push(event));
 let service: PrimitiveRendererService | null = null;
 let fillPort: FillMeshAdapter | null = null;
@@ -154,12 +195,15 @@ async function start() {
     strokeMeshMemoryBytes: () => strokes.linearMemoryBytes(),
     clips: 'all',
     paints: 'gradient',
+    groups,
+    ...(isolateUnit ? { isolateUnitOpacityForTesting: true } : {}),
   });
   service = product;
   const source: PrimitiveFrameSource = {
     requiresMeshPipeline: product.requiresMeshPipeline,
     requiresClipPipeline: product.requiresClipPipeline,
     requiresPaintPipeline: product.requiresPaintPipeline,
+    requiresLayerPipeline: product.requiresLayerPipeline,
     prepare(target) {
       const packet = product.prepare(target);
       if (packet !== null) lastPacket = summarize(packet);
@@ -184,6 +228,9 @@ async function start() {
     wasmSha256,
     samples,
     dpr,
+    groups,
+    isolateUnit,
+    tile: tileParameter === null ? null : Number(tileParameter),
   };
 }
 
@@ -215,6 +262,7 @@ function counters(): E23Counters {
     overlayBuilds: service!.getOverlayBuildCountForTesting(),
     dashExpansions: service!.getDashExpansionCountForTesting(),
     preparation: service!.getPreparationStatistics(),
+    layerPasses: backend.getLayerPassesForTesting(),
   };
 }
 
@@ -254,6 +302,25 @@ const api = {
     const result = apply(snapshot, camera);
     await submitted();
     return { status: result.status, counters: counters(), packet: lastPacket };
+  },
+  /**
+   * E25 U4: applies a change set that updates `updated` (same ids, same parents and children)
+   * and waits for a submitted frame, so that an edit keeps the scene's records.
+   */
+  async edit(identity: RenderSceneSnapshot['identity'], updated: readonly RenderNodeSnapshot[]) {
+    await ready;
+    revision += 1;
+    const result = service!.applyChanges({
+      identity,
+      baseRevision: revision - 1,
+      revision,
+      inserted: [],
+      updated,
+      removed: [],
+      orders: [],
+    });
+    await submitted();
+    return { status: result.status, result, counters: counters(), packet: lastPacket };
   },
   /** Moves the camera only (the scene is kept) and waits for a submitted frame. */
   async pan(camera: RenderCamera) {
