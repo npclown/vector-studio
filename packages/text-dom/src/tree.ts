@@ -78,20 +78,51 @@ export class RunText {
   }
 }
 
+/** A span in run `index`'s style: font list, size, letter spacing and line height. */
+export function runSpan(
+  document: Document,
+  request: TextLayoutRequest,
+  fontLists: readonly string[],
+  index: number,
+): HTMLElement {
+  const run = request.runs[index]!;
+  const span = document.createElement('span');
+  span.style.setProperty('font-family', fontLists[index]!);
+  span.style.setProperty('font-size', `${run.size}px`);
+  span.style.setProperty('letter-spacing', `${request.letterSpacing}em`);
+  span.style.setProperty('line-height', String(request.lineHeight));
+  return span;
+}
+
+/**
+ * The key of a run's ascent (M6a-U4b): its font list and size, the two styles a text rect's
+ * height depends on (letter spacing and line height do not move it).
+ */
+export function ascentKey(fontList: string, size: number): string {
+  return JSON.stringify([fontList, size]);
+}
+
+/** Each run's ascent key, and the first run of each distinct key, measured once per request. */
+export type AscentPlan = Readonly<{ keys: readonly string[]; firsts: readonly number[] }>;
+
+export function planAscents(request: TextLayoutRequest, fontLists: readonly string[]): AscentPlan {
+  const keys = request.runs.map((run, index) => ascentKey(fontLists[index]!, run.size));
+  const seen = new Set<string>();
+  const firsts: number[] = [];
+  keys.forEach((key, index) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    firsts.push(index);
+  });
+  return { keys, firsts };
+}
+
 export function buildRunTree(
   document: Document,
   request: TextLayoutRequest,
   fontLists: readonly string[],
 ): RunTree {
-  const styled = (index: number): HTMLElement => {
-    const run = request.runs[index]!;
-    const span = document.createElement('span');
-    span.style.setProperty('font-family', fontLists[index]!);
-    span.style.setProperty('font-size', `${run.size}px`);
-    span.style.setProperty('letter-spacing', `${request.letterSpacing}em`);
-    span.style.setProperty('line-height', String(request.lineHeight));
-    return span;
-  };
+  const styled = (index: number): HTMLElement => runSpan(document, request, fontLists, index);
   const elements: HTMLElement[] = [];
   const runLast: (HTMLElement | null)[] = [];
   const texts: RunText[] = [];

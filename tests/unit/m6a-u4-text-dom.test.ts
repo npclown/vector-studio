@@ -7,6 +7,7 @@ import {
   isHangingSpace,
   measurePens,
   startsNewLine,
+  startsNewLineAt,
   type Grapheme,
   type Rect,
 } from '../../packages/text-dom/src/assemble.js';
@@ -287,6 +288,106 @@ describe('M6a-U4 pass-1 lines', () => {
       { start: 5, end: 5, graphemes: [] },
     ]);
     expect(assignLines([], 0)).toEqual([{ start: 0, end: 0, graphemes: [] }]);
+  });
+});
+
+/** `grapheme` with a pass-1 baseline: the rect's top plus the run's ascent. */
+function based(start: number, text: string, rect: Rect, ascent: number, run = 0): Grapheme {
+  return { ...grapheme(start, text, rect, run), baseline: rect.top + ascent };
+}
+
+describe('M6a-U4b pass-1 lines by baseline', () => {
+  // The committed test font at 20 px in Chromium: text rects 29 px tall, 23 px of them above
+  // the baseline, on a 24 px pitch (lineHeight 1.2), so adjacent lines' rects overlap.
+  const tall = (left: number, line: number): Rect => ({
+    left,
+    top: line * 24 - 3,
+    width: 10,
+    height: 29,
+  });
+
+  it('starts a line when the baseline drops, whatever the rects overlap', () => {
+    const previous = { rect: tall(0, 0), baseline: 20 };
+    // The next line at the same left, its rect overlapping the previous one (one per line).
+    expect(startsNewLine(previous.rect, tall(0, 1))).toBe(false);
+    expect(startsNewLineAt(previous, { rect: tall(0, 1), baseline: 44 })).toBe(true);
+    // The same line: the same baseline, also for a run of another size with a lower top and,
+    // under negative letter spacing, a rect left of the previous one.
+    const small = { left: -10, top: 8, width: 5, height: 15 };
+    expect(startsNewLine(previous.rect, small)).toBe(true);
+    expect(startsNewLineAt(previous, { rect: small, baseline: 20 })).toBe(false);
+    expect(startsNewLineAt(previous, { rect: small, baseline: 20.005 })).toBe(false);
+    // Without both baselines, the rect rule.
+    expect(startsNewLineAt({ rect: previous.rect }, { rect: tall(0, 1), baseline: 44 })).toBe(
+      false,
+    );
+    expect(startsNewLineAt({ rect: previous.rect }, { rect: small })).toBe(true);
+  });
+
+  it('splits one grapheme per line at width 0 with tall rects (U6 "(b) width 0")', () => {
+    const rects = [...'abcd'].map((_, index) => tall(0, index));
+    const graphemes = rects.map((rect, index) => based(index, 'abcd'[index]!, rect, 23));
+    expect(assignLines(graphemes, 4).map((line) => [line.start, line.end])).toEqual([
+      [0, 1],
+      [1, 2],
+      [2, 3],
+      [3, 4],
+    ]);
+    // The rect rule alone merged them into one line (the M6a-U4b failure).
+    const unbased = rects.map((rect, index) => grapheme(index, 'abcd'[index]!, rect));
+    expect(assignLines(unbased, 4)).toHaveLength(1);
+  });
+
+  it('uses the rect rule wherever either neighbour has no baseline (review N1)', () => {
+    // A run whose ascent had no rect (`baseline` absent) between runs that have one: the rect
+    // rule decides at both of its edges, so with tall rects at one left the lines merge there,
+    // and only a pair of graphemes that both carry a baseline splits.
+    const graphemes = [
+      based(0, 'a', tall(0, 0), 23),
+      grapheme(1, 'b', tall(0, 1), 1),
+      based(2, 'c', tall(0, 2), 23, 2),
+      based(3, 'd', tall(0, 3), 23, 2),
+    ];
+    expect(assignLines(graphemes, 4).map((line) => [line.start, line.end])).toEqual([
+      [0, 3],
+      [3, 4],
+    ]);
+    // A grapheme without a rect is no neighbour: the baselines around it decide.
+    const gap = [
+      based(0, 'a', tall(0, 0), 23),
+      grapheme(1, 'b', null),
+      based(2, 'c', tall(0, 1), 23),
+    ];
+    expect(assignLines(gap, 3).map((line) => [line.start, line.end])).toEqual([
+      [0, 2],
+      [2, 3],
+    ]);
+  });
+
+  it('keeps runs of other sizes on one line and breaks after an LF and at a soft wrap', () => {
+    // `aa` at 10 px (ascent 12), `b\ncc` at 40 px (ascent 46), `d` at 10 px: the runs share a
+    // baseline of 46 on line 0, then 106 on line 1 after the LF and 166 on line 2 after a soft
+    // wrap, each line starting at left 0 with rects taller than the pitch.
+    const at = (left: number, baseline: number, ascent: number, height: number): Rect => ({
+      left,
+      top: baseline - ascent,
+      width: 5,
+      height,
+    });
+    const graphemes = [
+      based(0, 'a', at(0, 46, 12, 15), 12),
+      based(1, 'a', at(5, 46, 12, 15), 12),
+      based(2, 'b', at(10, 46, 46, 58), 46, 1),
+      grapheme(3, '\n', null, 1),
+      based(4, 'c', at(0, 106, 46, 58), 46, 1),
+      based(5, 'c', at(5, 106, 46, 58), 46, 1),
+      based(6, 'd', at(0, 166, 12, 15), 12, 2),
+    ];
+    expect(assignLines(graphemes, 7)).toEqual([
+      { start: 0, end: 3, graphemes: [0, 1, 2] },
+      { start: 4, end: 6, graphemes: [4, 5] },
+      { start: 6, end: 7, graphemes: [6] },
+    ]);
   });
 });
 

@@ -5,7 +5,13 @@ import {
   isHangingSpace,
   type Grapheme,
 } from '../../packages/text-dom/src/assemble.js';
-import { buildRunTree, planInsertions, RunText } from '../../packages/text-dom/src/tree.js';
+import {
+  ascentKey,
+  buildRunTree,
+  planAscents,
+  planInsertions,
+  RunText,
+} from '../../packages/text-dom/src/tree.js';
 
 // MVP M6a-U4 review r1 S3: where the measurement block's nodes go, over a small fake node tree
 // that records the structure. Covers the run tree (LF outside the bidi-override spans, S2), the
@@ -264,5 +270,36 @@ describe('M6a-U4 RunText', () => {
     expect(picture(span)).toBe('["ab" | P P "cd"]');
     expect(() => text.insertAt(0, [], 'end')).toThrow(Error);
     expect(() => text.locate(3, 5)).toThrow(Error);
+  });
+});
+
+describe('M6a-U4b ascent plan (review N1)', () => {
+  it('keys ascents by font list and size, measuring each key once per request', () => {
+    const runs = [
+      { text: 'a', family: 'A', size: 10 },
+      { text: 'b', family: 'A', size: 20 },
+      { text: 'c', family: 'B', size: 10 },
+      { text: 'd', family: 'A', size: 10 },
+      { text: 'e', family: 'B', size: 10 },
+    ];
+    const lists = [
+      '"A", sans-serif',
+      '"A", sans-serif',
+      '"B", sans-serif',
+      '"A", sans-serif',
+      '"B", sans-serif',
+    ];
+    const plan = planAscents(request(runs), lists);
+    expect(plan.keys).toEqual([
+      ascentKey('"A", sans-serif', 10),
+      ascentKey('"A", sans-serif', 20),
+      ascentKey('"B", sans-serif', 10),
+      ascentKey('"A", sans-serif', 10),
+      ascentKey('"B", sans-serif', 10),
+    ]);
+    expect(new Set(plan.keys).size).toBe(3);
+    expect(plan.firsts).toEqual([0, 1, 2]);
+    // The key cannot collide across the two fields.
+    expect(ascentKey('1', 20)).not.toBe(ascentKey('12', 0));
   });
 });
