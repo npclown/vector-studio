@@ -76,10 +76,21 @@ export function expandDash(
   if (phase < 0) phase += period;
   if (phase >= period) phase = 0;
 
+  // A pattern whose gaps are all 0 is on everywhere: each subpath is one dash, unchanged.
+  let solid = true;
+  for (let index = 1; index < pattern.length; index += 2) solid &&= pattern[index] === 0;
+
   const outVerbs: ScenePathVerb[] = [];
   const outPoints: number[] = [];
   let count = 0;
   for (const subpath of decode(verbs, points)) {
+    if (solid) {
+      count += 1;
+      if (count > limit) return Object.freeze({ status: 'dash-limit', dashes: count });
+      outVerbs.push(...subpath.verbs);
+      outPoints.push(...subpath.points);
+      continue;
+    }
     let length = 0;
     for (const segment of subpath.segments) length += segment.length;
     if (subpath.segments.length === 0 || length === 0) {
@@ -142,7 +153,7 @@ function isOnAt(s: number, pattern: readonly number[], period: number, phase: nu
 
 /**
  * E24-K3: the maximal on intervals of [0, L], left to right, merging closed intervals that
- * touch. Null when there are more than `budget` of them.
+ * touch. Null when there are more than `budget` of them. The pattern has a gap > 0.
  */
 function dashesOf(
   length: number,
@@ -156,16 +167,23 @@ function dashesOf(
   for (let m = -1; ; m += 1) {
     const base = m * period - phase;
     if (base > length) break;
+    // Every period after the first two lies inside [0, L] up to its last gap, and that period's
+    // gap > 0 ends a dash; so more periods than this means more dashes than the budget, even when
+    // binary64 cannot resolve the gaps. This bounds the work as well as the count.
+    if (m > budget + 3) return null;
     let offset = 0;
     for (let index = 0; index < pattern.length; index += 2) {
       const lo = base + offset;
       const hi = lo + pattern[index]!;
+      // A zero gap before this on-entry joins it to the previous one by structure: lo and the
+      // previous hi are rounded separately and can differ.
+      const joined = pattern[index === 0 ? pattern.length - 1 : index - 1] === 0;
       offset += pattern[index]! + pattern[index + 1]!;
       if (hi < 0 || lo > length) continue;
       const s0 = lo < 0 ? 0 : lo;
       const s1 = hi > length ? length : hi;
       const previous = dashes[dashes.length - 1];
-      if (previous !== undefined && s0 <= previous.s1) {
+      if (previous !== undefined && (joined || s0 <= previous.s1)) {
         if (s1 > previous.s1) previous.s1 = s1;
         continue;
       }
@@ -286,8 +304,8 @@ function refine(
   const left = gauss(speed, a, middle);
   const right = gauss(speed, middle, b);
   if (depth >= MAX_DEPTH || Math.abs(whole - (left + right)) <= SPLIT_TOLERANCE * whole) {
-    cells.push(Object.freeze({ a, b: middle, value: left }));
-    cells.push(Object.freeze({ a: middle, b, value: right }));
+    // Section 4: an accepted cell keeps its own estimate I(cell).
+    cells.push(Object.freeze({ a, b, value: whole }));
     return;
   }
   refine(speed, a, middle, left, depth + 1, cells);
@@ -343,8 +361,14 @@ function emitDash(
     before = segmentEnd;
     if (segmentEnd < dash.s0) continue;
     if (!started) {
-      // The dash starts in this segment, or at its end when the dash starts at a vertex.
-      const start = pointAt(segment, dash.s0 - segmentStart);
+      // The dash starts in this segment, or at its end when the dash starts at a vertex. Source
+      // vertices are copied exactly (E24-K3).
+      const start =
+        dash.s0 >= segmentEnd
+          ? endOf(segment)
+          : dash.s0 <= segmentStart
+            ? segment.p0
+            : pointAt(segment, dash.s0 - segmentStart);
       verbs.push('move');
       points.push(start.x, start.y);
       started = true;
@@ -358,9 +382,14 @@ function emitDash(
     const from = Math.max(dash.s0, segmentStart) - segmentStart;
     const to = Math.min(dash.s1, segmentEnd) - segmentStart;
     // A dash starting at a segment's end has no piece there; it continues in the next segment.
-    if (to > from) emitPiece(segment, from, to, verbs, points);
+    // A piece reaching the segment's end ends exactly at its source vertex.
+    if (to > from) emitPiece(segment, from, to, dash.s1 >= segmentEnd, verbs, points);
     if (dash.s1 <= segmentEnd) return;
   }
+}
+
+function endOf(segment: Segment): Point {
+  return segment.kind === 'line' ? segment.p1 : segment.p3;
 }
 
 function pointAt(segment: Segment, s: number): Point {
@@ -382,17 +411,18 @@ function emitPiece(
   segment: Segment,
   from: number,
   to: number,
+  toEnd: boolean,
   verbs: ScenePathVerb[],
   points: number[],
 ): void {
   if (segment.kind === 'line') {
-    const end = pointAt(segment, to);
+    const end = toEnd ? segment.p1 : pointAt(segment, to);
     verbs.push('line');
     points.push(end.x, end.y);
     return;
   }
   const t0 = cubicParameter(segment, from);
-  const t1 = cubicParameter(segment, to);
+  const t1 = toEnd ? 1 : cubicParameter(segment, to);
   const [, c1, c2, c3] = subCubic(segment, t0, t1);
   verbs.push('cubic');
   points.push(c1.x, c1.y, c2.x, c2.y, c3.x, c3.y);

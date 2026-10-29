@@ -138,14 +138,20 @@ function checkCubic(c: Cubic, value: SceneDash, breaks: readonly number[] = []) 
   const pattern =
     value.pattern.length % 2 === 1 ? [...value.pattern, ...value.pattern] : value.pattern;
   const period = pattern.reduce((sum, entry) => sum + entry, 0);
-  // Expected intervals: phase 0, so dash k of period m is [mP + a_k, mP + a_k + d_k] ∩ [0, L].
+  // Expected intervals: dash k of period m is [mP − φ + a_k, mP − φ + a_k + d_k] ∩ [0, L], with
+  // touching intervals merged (the fixtures have no zero gaps and no closed subpath).
+  const phase = ((value.phase % period) + period) % period;
   const expected: Array<[number, number]> = [];
-  for (let m = 0; m * period <= length; m += 1) {
+  for (let m = -1; m * period - phase <= length; m += 1) {
     let offset = 0;
     for (let k = 0; k < pattern.length; k += 2) {
-      const s0 = m * period + offset;
-      if (s0 <= length) expected.push([s0, Math.min(s0 + pattern[k]!, length)]);
+      const lo = m * period - phase + offset;
+      const hi = lo + pattern[k]!;
       offset += pattern[k]! + pattern[k + 1]!;
+      if (hi < 0 || lo > length) continue;
+      const last = expected[expected.length - 1];
+      if (last !== undefined && Math.max(lo, 0) <= last[1]) last[1] = Math.min(hi, length);
+      else expected.push([Math.max(lo, 0), Math.min(hi, length)]);
     }
   }
   const actual = ends(out);
@@ -303,6 +309,65 @@ describe('E24-A02 dash geometry (stroke-dash.ts)', () => {
     expect(out.points.slice(-2)).toEqual([300, 0]);
   });
 
+  it('K1/K3: zero gaps join dashes by structure, and all-zero gaps are solid', () => {
+    const long: Path = { verbs: ['move', 'line'], points: [0, 0, 10000, 0] };
+    // 0.1 is not dyadic: the periods' ends and starts round apart, yet the path is on throughout.
+    expect(expand(long, dash([0.1, 0]))).toEqual({ status: 'ok', path: long, dashes: 1 });
+    expect(expand(RECT, dash([7, 0, 3, 0], 1.5))).toEqual({ status: 'ok', path: RECT, dashes: 1 });
+    // A zero gap inside a pattern with a positive gap: [3, 0, 0.1, 2] is [3.1, 2] structurally.
+    expect(ends(ok(long, dash([3, 0, 0.1, 2]))).length).toBe(ends(ok(long, dash([3.1, 2]))).length);
+    const joined = ends(ok(LINE, dash([0.3, 0, 0.7, 1])));
+    expect(joined).toHaveLength(151);
+  });
+
+  it('K8: the work is bounded by the dash limit, even for gaps binary64 cannot resolve', () => {
+    const far: Path = { verbs: ['move', 'line'], points: [0, 0, 1e9, 0] };
+    const started = performance.now();
+    expect(expand(far, dash([0.25, 1e-20])).status).toBe('dash-limit');
+    expect(expand(far, dash([0.25, 0]))).toMatchObject({ status: 'ok', dashes: 1 });
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it('K3: source vertices and path ends are copied exactly at non-integer coordinates', () => {
+    const polyline: Path = {
+      verbs: ['move', 'line', 'line', 'line', 'line'],
+      points: [
+        5.970560554414988, 2.992647886276245, 5.422919988632202, 9.870918989181519,
+        6.721854209899902, 5.29202938079834, 8.698935508728027, 9.153265953063965,
+        0.7455968856811523, 9.973731338977814,
+      ],
+    };
+    const fullyInside = ok(polyline, dash([1000, 1], 1000.5));
+    // One dash from s = 0.5 to the end: every later vertex and the end point are the source's.
+    expect(fullyInside.points.slice(2)).toEqual(polyline.points.slice(2));
+    // Many short dashes: every emitted point that equals a source vertex up to 1e-9 is exact.
+    const random = (seed: number) => () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 10;
+    for (const seed of [1, 7, 42]) {
+      const next = random(seed);
+      const points = Array.from({ length: 24 }, next);
+      const verbs: ScenePathVerb[] = ['move', 'line', 'cubic', 'line', 'cubic', 'line', 'line'];
+      const path: Path = { verbs: [...verbs, 'close'], points: points.slice(0, 22) };
+      const out = ok(path, dash([1.7, 0.3], 0.2));
+      for (let i = 0; i < out.points.length; i += 2) {
+        for (let j = 0; j < path.points.length; j += 2) {
+          const close =
+            Math.abs(out.points[i]! - path.points[j]!) < 1e-9 &&
+            Math.abs(out.points[i + 1]! - path.points[j + 1]!) < 1e-9;
+          if (close)
+            expect([out.points[i], out.points[i + 1]]).toEqual([
+              path.points[j],
+              path.points[j + 1],
+            ]);
+        }
+      }
+    }
+  });
+
+  it('K7: a cubic with a non-zero phase meets the cubic bound', () => {
+    checkCubic([0, 0, 100, 100, 200, -100, 300, 0], dash([30, 20], 20));
+    checkCubic(cuspCubic(0.3, [500, -150], [100, 700]), dash([11, 4], -7.25), [0.3]);
+  });
+
   it('K7: equal inputs give bit-identical output', () => {
     const c = [0, 0, 100, 100, 200, -100, 300, 0];
     const first = ok(
@@ -411,12 +476,20 @@ describe('E24 section 4 pipeline: requests and keys', () => {
     const h = createStrokeHarness({ fillPort: createCountingPort(), strokePort: port, nodes });
     h.prepare();
     expect(requests).toHaveLength(4);
+    // Every request field, exactly the B2 request built from the node as before E24.
     requests.forEach((request, index) => {
-      const geometry = nodes[index]!.geometry;
-      expect(request.verbs).toEqual(
-        Uint8Array.from(geometry.verbs, (verb) => PATH_VERB_CODES[verb]),
-      );
-      expect(request.points).toEqual(Float64Array.from(geometry.points));
+      const { geometry, style } = nodes[index]!;
+      const stroke = style.stroke!;
+      expect(request).toStrictEqual({
+        requestId: index,
+        verbs: Uint8Array.from(geometry.verbs, (verb) => PATH_VERB_CODES[verb]),
+        points: Float64Array.from(geometry.points),
+        width: stroke.width,
+        cap: stroke.cap,
+        join: stroke.join,
+        miterLimit: stroke.miterLimit,
+        toleranceExponent: request.toleranceExponent,
+      });
     });
     expect(h.pipeline.getDashExpansionCount()).toBe(0);
   });

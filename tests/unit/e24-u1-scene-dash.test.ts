@@ -102,6 +102,8 @@ describe('E24-A01 scene dash validation', () => {
       { pattern: [Number.POSITIVE_INFINITY], phase: 0 },
       { pattern: [0, 0], phase: 0 },
       { pattern: [Number.MAX_VALUE, Number.MAX_VALUE], phase: 0 },
+      // E24-S1 as amended by the U2 review: an odd pattern's doubled period must be finite.
+      { pattern: [1.5e308], phase: 0 },
       { pattern: [30, '20'], phase: 0 },
       { pattern: [30, 20], phase: Number.NaN },
       { pattern: [30, 20], phase: Number.POSITIVE_INFINITY },
