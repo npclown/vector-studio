@@ -52,8 +52,11 @@ describe('P5-A11 imports without browser globals', () => {
     const module = (await import(page)) as { default: ComponentType };
     expect(typeof window).toBe('undefined');
     const html = renderToString(createElement(module.default));
-    expect(html).toContain('<canvas');
-    expect(html).toContain('data-testid="tool-select"');
+    // Since M6a-U5 the editor and its text-dom port are created in a client effect (M6a
+    // contract, section 5), so the prerender is the placeholder; the canvas and the toolbar
+    // follow on the client.
+    expect(html).toContain('data-testid="host-pending"');
+    expect(html).not.toContain('<canvas');
   });
 });
 

@@ -38,6 +38,9 @@
     },
     {
       "path": "../../packages/renderer-webgpu"
+    },
+    {
+      "path": "../../packages/text-dom"
     }
   ]
 }

@@ -98,6 +98,9 @@ importers:
       '@vector-studio/renderer-webgpu':
         specifier: workspace:*
         version: link:../../packages/renderer-webgpu
+      '@vector-studio/text-dom':
+        specifier: workspace:*
+        version: link:../../packages/text-dom
       next:
         specifier: 16.4.3
         version: 16.4.3(@playwright/test@1.62.1)(@types/node@26.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
