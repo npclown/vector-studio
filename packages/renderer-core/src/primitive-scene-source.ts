@@ -5,6 +5,7 @@ import type {
   MeshFillDraw,
   MeshPacketPart,
   MeshResourceId,
+  LayerPacketPart,
   PrimitiveDraw,
   PrimitiveFrameSource,
   PrimitivePacket,
@@ -51,10 +52,19 @@ import {
 } from './clip-resolution.js';
 import {
   composeSceneAffine,
+  getPathLocalPointBounds,
+  getPathLocalStrokeBounds,
   getPrimitiveLocalStrokeBounds,
   transformSceneBounds,
   type SceneBounds,
 } from './scene-numeric.js';
+import {
+  layerBound,
+  planLayerBudget,
+  type DeviceRect,
+  type LayerResourceNotice,
+  type LayerScope,
+} from './layer-plan.js';
 
 type InstanceResource = 'transforms' | 'geometry' | 'styles';
 type PrimitivePreparationStatistics = Readonly<{
@@ -81,6 +91,8 @@ type DerivedPrimitive = Readonly<{
   clip: ClipChain | null;
   /** Position in the authoritative depth-first order of primitive and path leaves. */
   sequence: number;
+  /** E25 contract, U2: the innermost isolated container, or null outside layers. */
+  layer: LayerScope | null;
 }>;
 type VersionedRecords = {
   transforms: Array<symbol | undefined>;
@@ -115,6 +127,9 @@ const RESOURCE_ORDER = ['transforms', 'geometry', 'styles', 'order', 'frame'] as
 /** P4 contract, section 5: the queue limits of `render.clip-resource-limit`, as for path-mesh failures. */
 const MASK_NOTICES_QUEUED = 4096;
 const MASK_NOTICES_PER_PACKET = 32;
+/** E25 contract, section 5: the queue limits of `render.layer-resource-limit`, as for masks. */
+const LAYER_NOTICES_QUEUED = 4096;
+const LAYER_NOTICES_PER_PACKET = 32;
 const IDENTITY: SceneAffine = [1, 0, 0, 1, 0, 0];
 
 export class PrimitiveSceneSource implements PrimitiveFrameSource {
@@ -173,6 +188,10 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   #overBudget = new Set<string>();
   #maskNotices: MaskBudgetNotice[] = [];
   #maskNoticesDropped = 0;
+  /** E25 contract, section 5: the layer budget's notices, queued as the mask notices are. */
+  #layersOverBudget = new Set<string>();
+  #layerNotices: LayerResourceNotice[] = [];
+  #layerNoticesDropped = 0;
   /** P3 V3 section f: true exactly when this source consumes a fill-mesh or stroke-mesh port. */
   public readonly requiresMeshPipeline: boolean;
 
@@ -196,6 +215,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     const paths: DerivedPath[] = [];
     const pathSequences = new Map<string, number>();
     const clipSeen = { value: false };
+    const layerScopes: LayerScope[] = [];
+    const pathLayers = new Map<string, LayerScope>();
     const derived = derivePrimitives(
       scene,
       this.#slots,
@@ -203,6 +224,8 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       paths,
       pathSequences,
       clipSeen,
+      layerScopes,
+      pathLayers,
     );
     let visible = cullPrimitives(
       derived.filter((entry) => !entry.hidden && !entry.omitted && entry.clip?.empty !== true),
@@ -242,6 +265,29 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
           frameFinite: meshFrame !== null,
         },
       }) ?? [];
+    // E25 contract, section 4: layer bounds and the layer budget come before the mask plan, so
+    // content of a layer tree that is not drawn spends no mask budget.
+    let layerPlan: DrawnLayers | null = null;
+    if (layerScopes.length > 0) {
+      layerPlan = this.#planLayers(
+        layerScopes,
+        visible,
+        pathDraws,
+        new Map(paths.map((path) => [path.id, path] as const)),
+        pathLayers,
+        cameraState.camera,
+        target,
+      );
+      const drawn = layerPlan.indices;
+      const inDrawn = (layer: LayerScope | null | undefined) =>
+        layer === null || layer === undefined || drawn.has(layer);
+      visible = visible.filter((primitive) => inDrawn(primitive.layer));
+      pathDraws = pathDraws.filter(
+        (draw) => draw.maskSource === true || inDrawn(pathLayers.get(draw.nodeId)),
+      );
+    } else if (this.#layersOverBudget.size > 0) {
+      this.#layersOverBudget = new Set();
+    }
     // P4 contract, U4: mask levels are planned over the drawn content in paint order; content
     // under an undrawable level (empty bound, a source covering nothing, over the budget) is
     // not drawn, and mask source draws never paint.
@@ -437,12 +483,72 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       this.#overBudget = new Set();
     }
     this.#clipStatesUsed = clipSeen.value;
-    const draws = interleaveDraws(
-      visible,
-      mesh?.draws.map((draw) => draw.sequence) ?? [],
-      clip.primitiveStates,
-      primitivePaints.length === 0 ? [] : paintFlags,
+    const layered =
+      layerPlan === null || layerPlan.order.length === 0
+        ? null
+        : interleaveLayerDraws(
+            visible,
+            visible.map((primitive) => layerPlan.indexOf(primitive.layer)),
+            mesh?.draws.map((draw) => draw.sequence) ?? [],
+            contentPathDraws.map((draw) => layerPlan.indexOf(pathLayers.get(draw.nodeId))),
+            layerPlan.order.map((layer, index) => ({
+              layer: index,
+              target: layerPlan.indexOf(layer.parent),
+              sequence: layer.start,
+              depth: layer.depth,
+            })),
+            clip.primitiveStates,
+            primitivePaints.length === 0 ? [] : paintFlags,
+            layerPlan.order.length,
+          );
+    const draws =
+      layered?.main ??
+      interleaveDraws(
+        visible,
+        mesh?.draws.map((draw) => draw.sequence) ?? [],
+        clip.primitiveStates,
+        primitivePaints.length === 0 ? [] : paintFlags,
+      );
+    const meshFillDraws = (mesh?.draws ?? []).map((draw, index) =>
+      Object.freeze({
+        position: layered === null ? draws.positions[index]! : layered.meshPositions[index]!,
+        ...draw.draw,
+        ...((clip.meshStates[index] ?? 0) === 0 ? {} : { clipState: clip.meshStates[index]! }),
+        ...(meshGradients[index] === 0 ? {} : { gradient: meshGradients[index]! }),
+        ...(strokeGradients[index] === 0 ? {} : { strokeGradient: strokeGradients[index]! }),
+      }),
     );
+    const meshTargets =
+      layered === null
+        ? null
+        : contentPathDraws.map((draw) => layerPlan!.indexOf(pathLayers.get(draw.nodeId)));
+    const mainMeshDraws =
+      meshTargets === null
+        ? meshFillDraws
+        : meshFillDraws.filter((_, index) => meshTargets[index] === -1);
+    const layerNotices = this.#layerNotices.slice(0, LAYER_NOTICES_PER_PACKET);
+    const layersPart: LayerPacketPart | null =
+      layered === null && layerNotices.length === 0
+        ? null
+        : Object.freeze({
+            layoutVersion: 0 as const,
+            layers: Object.freeze(
+              (layerPlan?.order ?? []).map((layer, index) =>
+                Object.freeze({
+                  nodeId: layer.nodeId,
+                  opacity: layer.opacity,
+                  bound: layerPlan!.bounds.get(layer)!,
+                  parent: layerPlan!.indexOf(layer.parent),
+                  draws: Object.freeze(layered?.layers[index] ?? []),
+                  meshDraws: Object.freeze(
+                    meshFillDraws.filter((_, draw) => meshTargets?.[draw] === index),
+                  ),
+                }),
+              ),
+            ),
+            composites: Object.freeze(layered?.composites ?? []),
+            notices: Object.freeze(layerNotices),
+          });
     const packetId = Symbol('primitive-packet');
     const packet: PrimitivePacket = Object.freeze({
       layoutVersion: 1,
@@ -461,6 +567,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       ...(this.#maskNotices.length === 0
         ? {}
         : { clipNotices: Object.freeze(this.#maskNotices.slice(0, MASK_NOTICES_PER_PACKET)) }),
+      ...(layersPart === null ? {} : { layers: layersPart }),
       ...(clip.records.length === 0
         ? {}
         : {
@@ -500,27 +607,14 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
               originRevision: mesh.part.originRevision,
               resources: mesh.part.resources,
               writes: mesh.part.writes,
-              draws: Object.freeze(
-                mesh.draws.map((draw, index) =>
-                  Object.freeze({
-                    position: draws.positions[index]!,
-                    ...draw.draw,
-                    ...((clip.meshStates[index] ?? 0) === 0
-                      ? {}
-                      : { clipState: clip.meshStates[index]! }),
-                    ...(meshGradients[index] === 0 ? {} : { gradient: meshGradients[index]! }),
-                    ...(strokeGradients[index] === 0
-                      ? {}
-                      : { strokeGradient: strokeGradients[index]! }),
-                  }),
-                ),
-              ),
+              draws: Object.freeze(mainMeshDraws),
               notices: mesh.part.notices,
             }),
           }),
     });
     // Notices leave the queue only once the packet exists, so a throwing prepare keeps them.
     this.#maskNotices.splice(0, packet.clipNotices?.length ?? 0);
+    this.#layerNotices.splice(0, packet.layers?.notices.length ?? 0);
     this.#pending = Object.freeze({
       packet,
       expected: expectedRecords(writes),
@@ -531,7 +625,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       this.#drawRecord = drawRecord(
         this.#prepareSerial,
         contentPathDraws,
-        packet.mesh?.draws ?? [],
+        meshFillDraws,
         this.#pathMeshes.hasFringeBuilder,
       );
     }
@@ -586,6 +680,128 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       camera: { x: camera.position.x, y: camera.position.y, zoom: camera.zoom },
       target,
     });
+  }
+
+  /**
+   * E25 contract, section 4: the frame's drawn layers. Bounds (E25-K5) are built bottom-up over
+   * the drawn content, then clamped top-down to the parent's bound; a layer with an empty bound,
+   * or inside one, is not drawn. Layer trees then pass the budget in paint order.
+   */
+  #planLayers(
+    scopes: readonly LayerScope[],
+    visible: readonly DerivedPrimitive[],
+    pathDraws: readonly PathMeshDraw[],
+    paths: ReadonlyMap<string, DerivedPath>,
+    pathLayers: ReadonlyMap<string, LayerScope>,
+    camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>,
+    target: PrimitiveTarget,
+  ): DrawnLayers {
+    const content = new Map<LayerScope, SceneBounds[]>();
+    const add = (layer: LayerScope | null | undefined, bounds: SceneBounds | null) => {
+      if (layer === null || layer === undefined || bounds === null) return;
+      const list = content.get(layer);
+      if (list === undefined) content.set(layer, [bounds]);
+      else list.push(bounds);
+    };
+    for (const primitive of visible) add(primitive.layer, primitive.worldBounds);
+    for (const draw of pathDraws) {
+      if (draw.maskSource === true) continue;
+      const layer = pathLayers.get(draw.nodeId);
+      if (layer === undefined) continue;
+      const path = paths.get(draw.nodeId)!;
+      const points = path.node.geometry.points;
+      const local = draw.paint === 'stroke' ? null : getPathLocalPointBounds(points);
+      if (local !== null) add(layer, transformSceneBounds(local, path.world));
+      // A joint fill draw also covers its stroke (ST-U7 addendum).
+      if (draw.paint === 'stroke' || draw.composite === 'joint-fill') {
+        const stroke = getPathLocalStrokeBounds(points, path.node.style.stroke);
+        if (stroke !== null) add(layer, transformSceneBounds(stroke, path.world));
+      }
+    }
+    const view = { x: camera.position.x, y: camera.position.y, zoom: camera.zoom };
+    // Scopes are in pre-order, so the reverse visits every layer after the layers nested in it.
+    const unclamped = new Map<LayerScope, DeviceRect>();
+    const nested = new Map<LayerScope, DeviceRect[]>();
+    for (let index = scopes.length - 1; index >= 0; index -= 1) {
+      const scope = scopes[index]!;
+      const bound = layerBound(
+        content.get(scope) ?? [],
+        nested.get(scope) ?? [],
+        scope.chain,
+        view,
+        target,
+        null,
+      );
+      if (bound === null || scope.parent === null) {
+        if (bound !== null) unclamped.set(scope, bound);
+        continue;
+      }
+      unclamped.set(scope, bound);
+      const siblings = nested.get(scope.parent);
+      if (siblings === undefined) nested.set(scope.parent, [bound]);
+      else siblings.push(bound);
+    }
+    const bounds = new Map<LayerScope, DeviceRect>();
+    for (const scope of scopes) {
+      const own = unclamped.get(scope);
+      if (own === undefined) continue;
+      if (scope.parent === null) {
+        bounds.set(scope, own);
+        continue;
+      }
+      const parent = bounds.get(scope.parent);
+      const clamped = parent === undefined ? null : intersectRects(own, parent);
+      if (clamped !== null) bounds.set(scope, clamped);
+    }
+    // Section 4, Budget: trees in paint order, each with its drawn layers.
+    const trees = new Map<LayerScope, { width: number; height: number }[]>();
+    for (const scope of scopes) {
+      const bound = bounds.get(scope);
+      if (bound === undefined) continue;
+      let root = scope;
+      while (root.parent !== null) root = root.parent;
+      const list = trees.get(root);
+      if (list === undefined) trees.set(root, [bound]);
+      else list.push(bound);
+    }
+    const budget = planLayerBudget(
+      [...trees].map(([root, layers]) => ({ rootId: root.nodeId, layers })),
+      target.sampleCount,
+    );
+    this.#queueLayerNotices(budget.notices);
+    const order = scopes
+      .filter((scope) => {
+        if (!bounds.has(scope)) return false;
+        let root = scope;
+        while (root.parent !== null) root = root.parent;
+        return budget.admitted.has(root.nodeId);
+      })
+      .sort(
+        (left, right) =>
+          left.end - right.end || right.start - left.start || right.depth - left.depth,
+      );
+    const indices = new Map(order.map((scope, index) => [scope, index] as const));
+    return {
+      indices: new Set(order),
+      order,
+      bounds,
+      indexOf: (layer) => (layer === null || layer === undefined ? -1 : (indices.get(layer) ?? -1)),
+    };
+  }
+
+  #queueLayerNotices(notices: readonly LayerResourceNotice[]): void {
+    const current = new Set(notices.map((notice) => notice.nodeId));
+    for (const notice of notices) {
+      if (this.#layersOverBudget.has(notice.nodeId)) continue;
+      if (this.#layerNotices.length < LAYER_NOTICES_QUEUED) this.#layerNotices.push(notice);
+      else this.#layerNoticesDropped += 1;
+    }
+    this.#layersOverBudget = current;
+  }
+
+  /** E25 contract, section 5: layer budget notices dropped because the queue was full. */
+  public getLayerNoticesDropped(): number {
+    return this.#layerNoticesDropped;
   }
 
   #queueMaskNotices(notices: readonly MaskBudgetNotice[]): void {
@@ -1094,6 +1310,8 @@ function derivePrimitives(
   paths: DerivedPath[],
   pathSequences: Map<string, number>,
   clipSeen: { value: boolean },
+  layerScopes: LayerScope[],
+  pathLayers: Map<string, LayerScope>,
 ): DerivedPrimitive[] {
   const result: DerivedPrimitive[] = [];
   const present = new Set<string>();
@@ -1108,6 +1326,8 @@ function derivePrimitives(
     maskSource: boolean;
     /** For a mask source: the mask container's own chain, which its fill draw is clipped by. */
     sourceChain: ClipChain | null;
+    /** E25 contract, U2: the innermost isolated container above the node. */
+    layer: LayerScope | null;
   }[] = [...scene.rootOrder].reverse().map((id) => ({
     id,
     parentWorld: IDENTITY,
@@ -1116,7 +1336,12 @@ function derivePrimitives(
     chain: null,
     maskSource: false,
     sourceChain: null,
+    layer: null,
   }));
+  // E25 contract, U2: a leaf extends every enclosing layer's sequence range.
+  const extendLayers = (layer: LayerScope | null) => {
+    for (let scope = layer; scope !== null; scope = scope.parent) scope.end = sequence + 1;
+  };
   while (stack.length > 0) {
     const item = stack.pop()!;
     const node = scene.getNode(item.id)!;
@@ -1143,6 +1368,22 @@ function derivePrimitives(
         source,
         source === undefined ? null : composeSceneAffine(world, source.transform),
       );
+      // E25-K3: opacity 0 draws nothing of the subtree, as `visible: false` does (P4-K2b); E25-K1:
+      // a visible container with 0 < opacity < 1 is a layer.
+      const subtreeHidden = hidden || node.opacity === 0;
+      let layer = item.layer;
+      if (!subtreeHidden && node.opacity < 1) {
+        layer = {
+          nodeId: node.id,
+          opacity: node.opacity,
+          parent: item.layer,
+          depth: item.layer === null ? 0 : item.layer.depth + 1,
+          chain,
+          start: sequence,
+          end: sequence,
+        };
+        layerScopes.push(layer);
+      }
       cache.set(
         node.id,
         Object.freeze({
@@ -1162,10 +1403,11 @@ function derivePrimitives(
           id: node.children[index]!,
           parentWorld: world,
           parentWorldVersion: worldVersion,
-          parentHidden: hidden,
+          parentHidden: subtreeHidden,
           chain,
           maskSource: isMask && index === 0,
           sourceChain: item.chain,
+          layer,
         });
       }
       continue;
@@ -1208,6 +1450,8 @@ function derivePrimitives(
         ),
       );
       pathSequences.set(node.id, sequence);
+      if (item.layer !== null) pathLayers.set(node.id, item.layer);
+      extendLayers(item.layer);
       sequence += 1;
       continue;
     }
@@ -1247,8 +1491,10 @@ function derivePrimitives(
         omitted,
         clip: item.chain,
         sequence,
+        layer: item.layer,
       }),
     );
+    extendLayers(item.layer);
     sequence += 1;
   }
   for (const id of cache.keys()) if (!present.has(id)) cache.delete(id);
@@ -1361,6 +1607,153 @@ function interleaveDraws(
   advanceTo(visible.length);
   close();
   return { analytic, positions };
+}
+
+/** E25 contract, U2: the frame's drawn layers, indexed in post-order. */
+type DrawnLayers = Readonly<{
+  indices: ReadonlySet<LayerScope>;
+  order: readonly LayerScope[];
+  bounds: ReadonlyMap<LayerScope, DeviceRect>;
+  /** The layer's index in `order`, or -1 for the main pass. */
+  indexOf(layer: LayerScope | null | undefined): number;
+}>;
+
+function intersectRects(left: DeviceRect, right: DeviceRect): DeviceRect | null {
+  const x = Math.max(left.x, right.x);
+  const y = Math.max(left.y, right.y);
+  const width = Math.min(left.x + left.width, right.x + right.width) - x;
+  const height = Math.min(left.y + left.height, right.y + right.height) - y;
+  return width > 0 && height > 0 ? Object.freeze({ x, y, width, height }) : null;
+}
+
+type LayerComposite = LayerPacketPart['composites'][number];
+
+/**
+ * E25 contract, section 4: `interleaveDraws` over several targets, the main pass (-1) and each
+ * layer. Primitives, mesh draws and composites are merged in paint order; a composite sits at
+ * its layer's first sequence, before that leaf, outer layers first. A run extends only over
+ * consecutive order-stream entries of one target with equal clip state and paint; a mesh draw or
+ * a composite closes its target's run.
+ */
+function interleaveLayerDraws(
+  visible: readonly DerivedPrimitive[],
+  visibleTargets: readonly number[],
+  meshSequences: readonly number[],
+  meshTargets: readonly number[],
+  composites: readonly Readonly<{
+    layer: number;
+    target: number;
+    sequence: number;
+    depth: number;
+  }>[],
+  states: readonly number[],
+  paints: readonly boolean[],
+  layerCount: number,
+): Readonly<{
+  main: Readonly<{ analytic: PrimitiveDraw[]; positions: number[] }>;
+  meshPositions: number[];
+  layers: PrimitiveDraw[][];
+  composites: LayerComposite[];
+}> {
+  type Run = {
+    analytic: PrimitiveDraw[];
+    start: number;
+    next: number;
+    lastPosition: number;
+    atPosition: number;
+  };
+  const runs: Run[] = Array.from({ length: layerCount + 1 }, () => ({
+    analytic: [],
+    start: -1,
+    next: -1,
+    lastPosition: -1,
+    atPosition: 0,
+  }));
+  const runOf = (target: number) => runs[target + 1]!;
+  const close = (run: Run) => {
+    if (run.start < 0) return;
+    const state = states[run.start] ?? 0;
+    run.analytic.push(
+      Object.freeze({
+        first: run.start,
+        count: run.next - run.start,
+        variant: 'analytic-v1' as const,
+        ...(state === 0 ? {} : { clipState: state }),
+        ...(paints[run.start] === true ? { paint: 'gradient' as const } : {}),
+      }),
+    );
+    run.start = -1;
+  };
+  const ordered = [...composites].sort(
+    (left, right) => left.sequence - right.sequence || left.depth - right.depth,
+  );
+  const meshPositions: number[] = [];
+  const mainPositions: number[] = [];
+  const placed: LayerComposite[] = [];
+  let primitive = 0;
+  let composite = 0;
+  const advanceTo = (sequence: number, inclusive: boolean) => {
+    for (;;) {
+      const nextComposite = ordered[composite];
+      const nextPrimitive = visible[primitive];
+      const compositeDue =
+        nextComposite !== undefined &&
+        (inclusive ? nextComposite.sequence <= sequence : nextComposite.sequence < sequence);
+      const primitiveDue = nextPrimitive !== undefined && nextPrimitive.sequence < sequence;
+      if (!compositeDue && !primitiveDue) return;
+      if (compositeDue && (!primitiveDue || nextComposite.sequence <= nextPrimitive.sequence)) {
+        const run = runOf(nextComposite.target);
+        close(run);
+        const position = run.analytic.length;
+        placed.push(
+          Object.freeze({
+            layer: nextComposite.layer,
+            target: nextComposite.target,
+            position,
+            meshOrder: run.lastPosition === position ? run.atPosition : 0,
+          }),
+        );
+        composite += 1;
+        continue;
+      }
+      const index = primitive;
+      const run = runOf(visibleTargets[index]!);
+      if (
+        run.start < 0 ||
+        run.next !== index ||
+        (states[index] ?? 0) !== (states[run.start] ?? 0) ||
+        (paints[index] ?? false) !== (paints[run.start] ?? false)
+      ) {
+        close(run);
+        run.start = index;
+      }
+      run.next = index + 1;
+      primitive += 1;
+    }
+  };
+  meshSequences.forEach((sequence, index) => {
+    // Composites at the draw's own sequence precede it: they open the layers it is drawn in.
+    advanceTo(sequence, true);
+    const target = meshTargets[index]!;
+    const run = runOf(target);
+    close(run);
+    const position = run.analytic.length;
+    if (run.lastPosition === position) run.atPosition += 1;
+    else {
+      run.lastPosition = position;
+      run.atPosition = 1;
+    }
+    meshPositions.push(position);
+    if (target === -1) mainPositions.push(position);
+  });
+  advanceTo(Infinity, true);
+  for (const run of runs) close(run);
+  return {
+    main: { analytic: runOf(-1).analytic, positions: mainPositions },
+    meshPositions,
+    layers: runs.slice(1).map((run) => run.analytic),
+    composites: placed,
+  };
 }
 
 function primitiveBoundsKey(

@@ -57,8 +57,8 @@ export type RetainedSceneMirrorOptions = Readonly<{
   dashes?: DashSupport;
   /**
    * E25 contract, E25-S1: whether isolated container opacity is drawn; default 'unsupported'.
-   * Tests only until E25 U2 and U3: `PrimitiveSceneSource` does not yet draw container opacity,
-   * and no service sets this option before then.
+   * Tests only until E25 U3: `PrimitiveSceneSource` plans layers (U2), but no renderer draws
+   * them yet, and no service sets this option before then.
    */
   groupOpacity?: GroupOpacitySupport;
 }>;

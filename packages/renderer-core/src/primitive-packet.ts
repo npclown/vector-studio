@@ -1,5 +1,6 @@
 import type { SceneVersion } from '@vector-studio/contracts';
 import type { ClipStateRecord, MaskBudgetNotice, MaskLevelRecord } from './clip-resolution.js';
+import type { DeviceRect, LayerResourceNotice } from './layer-plan.js';
 import type { GradientPaintRecord } from './paint-records.js';
 import type { PathMeshNotice } from './path-mesh-pipeline.js';
 
@@ -162,6 +163,38 @@ export type MeshReceiptPart =
       resources: readonly MeshReceiptResource[];
     }>
   | Readonly<{ status: 'skipped' }>;
+/**
+ * E25 contract, section 4: the frame's isolated layers, absent when no layer is drawn and no
+ * notice is pending. The packet's `draws` and `mesh.draws` hold only main-pass draws; a layer's
+ * own draws sit in its entry, with mesh positions counted within the layer.
+ */
+export type LayerPacketPart = Readonly<{
+  layoutVersion: 0;
+  /** Post-order: every layer comes after the layers nested in it. */
+  layers: readonly Readonly<{
+    nodeId: string;
+    /** The composite record of E25-A04. */
+    opacity: number;
+    /** E25-K5, in target pixels; x and y even, width and height even unless clamped. */
+    bound: DeviceRect;
+    /** Index of the enclosing layer in `layers`, or -1 for the main pass. */
+    parent: number;
+    draws: readonly PrimitiveDraw[];
+    meshDraws: readonly MeshFillDraw[];
+  }>[];
+  /** One per layer, each in its target's paint order. */
+  composites: readonly Readonly<{
+    layer: number;
+    /** -1: the main pass; otherwise the index of the parent layer. */
+    target: number;
+    /** Number of the target's analytic draws that precede it, as `MeshFillDraw.position`. */
+    position: number;
+    /** Number of the target's mesh draws with an equal position that precede it. */
+    meshOrder: number;
+  }>[];
+  /** Layer trees newly over the budget, at most 32. Emitted as `render.layer-resource-limit`. */
+  notices: readonly LayerResourceNotice[];
+}>;
 export type PrimitivePacket = Readonly<{
   layoutVersion: 1;
   scene: SceneVersion;
@@ -187,6 +220,8 @@ export type PrimitivePacket = Readonly<{
    * absent when none. Emitted as `render.clip-resource-limit`.
    */
   clipNotices?: readonly MaskBudgetNotice[];
+  /** Absent for every frame without a drawn layer or a pending layer notice (E25 contract, U2). */
+  layers?: LayerPacketPart;
 }>;
 export type PrimitiveReceipt = Readonly<{
   scene: SceneVersion;
