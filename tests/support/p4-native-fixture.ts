@@ -163,6 +163,7 @@ export async function nativeScene(
     paintPipeline?: boolean;
     layerPipeline?: boolean;
     layerTileSizeForTesting?: number;
+    sampleCount?: 1 | 4;
   }> = {
     meshPipeline: true,
     clipPipeline: true,

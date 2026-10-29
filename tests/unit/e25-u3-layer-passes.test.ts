@@ -8,6 +8,8 @@ import type {
 } from '@vector-studio/contracts';
 import {
   PrimitiveRendererService,
+  PrimitiveSceneSource,
+  RetainedSceneMirror,
   type PrimitivePacket,
   type ResourceAccounting,
 } from '@vector-studio/renderer-core';
@@ -754,22 +756,234 @@ describe('E25 U3 fail-closed layers, identity and lifetime', () => {
     expect(accounting.snapshot().live).toBe(0);
   });
 
-  it('refuses a malformed layers part', async () => {
+  it('a failed submission releases the layer transients and counts no layer pass', async () => {
+    const fixture = nativeFixture();
+    const { scene, creation, target, accounting } = await nativeScene(fixture, allOptions);
+    const ids = layerFrameIds(accounting);
+    const { queue } = fixture.device;
+    vi.spyOn(queue, 'submit').mockImplementationOnce(() => {
+      throw new Error('submit failed');
+    });
+    expect(scene.submitPrimitivePacket(prepared(harness(nodes()), target))).toMatchObject({
+      status: 'failed',
+    });
+    expect(ids.tracked.length).toBeGreaterThan(0);
+    expect(ids.live()).toEqual([]);
+    expect(scene.layerPasses).toBe(0);
+    creation.dispose();
+    expect(accounting.snapshot().live).toBe(0);
+  });
+
+  const nestedNodes = () => [
+    group('g', 0.5, ['b', 'h']),
+    box('b', 20, 'g'),
+    group('h', 0.5, ['d'], 'g'),
+    box('d', 30, 'h'),
+  ];
+
+  it.each([true, false])(
+    'refuses a malformed layers part (layer pipeline available: %s)',
+    async (available) => {
+      const { scene, creation, target } = await nativeScene(
+        nativeFixture(),
+        available ? allOptions : withoutLayer,
+      );
+      const packet = prepared(harness(nodes()), target);
+      const part = packet.layers!;
+      const layer = part.layers[0]!;
+      const nested = prepared(harness(nestedNodes()), target);
+      const two = nested.layers!;
+      const [inner, outer] = two.layers as [typeof layer, typeof layer];
+      const broken = [
+        ['no composite', packet, { ...part, composites: [] }],
+        [
+          'odd origin',
+          packet,
+          { ...part, layers: [{ ...layer, bound: { ...layer.bound, x: 17 } }] },
+        ],
+        ['opacity 0', packet, { ...part, layers: [{ ...layer, opacity: 0 }] }],
+        ['wrong target', packet, { ...part, composites: [{ ...part.composites[0]!, target: 0 }] }],
+        ['composites without layers', packet, { ...part, layers: [] }],
+        [
+          'duplicate composite',
+          packet,
+          { ...part, composites: [part.composites[0]!, part.composites[0]!] },
+        ],
+        [
+          'position past the runs',
+          packet,
+          { ...part, composites: [{ ...part.composites[0]!, position: 3 }] },
+        ],
+        [
+          'meshOrder past the mesh draws',
+          packet,
+          { ...part, composites: [{ ...part.composites[0]!, meshOrder: 1 }] },
+        ],
+        [
+          'parent before the child',
+          nested,
+          {
+            ...two,
+            layers: [
+              { ...inner, parent: -1 },
+              { ...outer, parent: 0 },
+            ],
+          },
+        ],
+        [
+          'child outside its parent',
+          nested,
+          { ...two, layers: [{ ...inner, bound: { ...inner.bound, x: 0 } }, outer] },
+        ],
+        [
+          'composites out of order',
+          packet,
+          {
+            ...part,
+            layers: [layer, { ...layer, nodeId: 'x' }],
+            composites: [
+              { layer: 0, target: -1, position: 1, meshOrder: 0 },
+              { layer: 1, target: -1, position: 0, meshOrder: 0 },
+            ],
+          },
+        ],
+      ] as const;
+      for (const [name, base, layers] of broken) {
+        expect(scene.submitPrimitivePacket({ ...base, layers }), name).toEqual({
+          status: 'failed',
+          reason: 'invalid-packet',
+        });
+      }
+      creation.dispose();
+    },
+  );
+
+  it('refuses layer mesh draws without a mesh part', async () => {
     const { scene, creation, target } = await nativeScene(nativeFixture(), allOptions);
     const packet = prepared(harness(nodes()), target);
-    const part = packet.layers!;
-    const broken = [
-      { ...part, composites: [] },
-      { ...part, layers: [{ ...part.layers[0]!, bound: { x: 17, y: 0, width: 38, height: 32 } }] },
-      { ...part, layers: [{ ...part.layers[0]!, opacity: 0 }] },
-      { ...part, composites: [{ ...part.composites[0]!, target: 0 }] },
-    ];
-    for (const layers of broken) {
-      expect(scene.submitPrimitivePacket({ ...packet, layers })).toEqual({
-        status: 'failed',
-        reason: 'invalid-packet',
-      });
-    }
+    expect(packet.layers!.layers[0]!.meshDraws.length).toBeGreaterThan(0);
+    expect(
+      scene.submitPrimitivePacket({ ...packet, mesh: undefined } as unknown as PrimitivePacket),
+    ).toEqual({
+      status: 'failed',
+      reason: 'invalid-packet',
+    });
+    creation.dispose();
+  });
+});
+
+describe('E25 U3 sample counts, stencil and state after composites', () => {
+  it('at 1x the colour tile is stored and copied, with no resolve tile', async () => {
+    const fixture = nativeFixture();
+    const { scene, creation, target } = await nativeScene(fixture, {
+      ...allOptions,
+      sampleCount: 1,
+    });
+    expect(scene.sampleCount).toBe(1);
+    fixture.calls.length = 0;
+    submitted(
+      scene.submitPrimitivePacket(
+        prepared(harness([group('g', 0.5, ['b']), box('b', 20, 'g')]), target),
+      ),
+    );
+    expect(fixture.calls[0]).toEqual([
+      'beginRenderPass',
+      'vector-studio/layer-pass/0',
+      `${frame}/tile-color`,
+      null,
+      `${frame}/tile-stencil`,
+    ]);
+    expect(fixture.calls).toContainEqual([
+      'copyTextureToTexture',
+      `${frame}/tile-color`,
+      `${frame}/layer-0`,
+      0,
+      0,
+      14,
+      14,
+    ]);
+    const tiles = fixture.textures.filter((texture) => texture.label.startsWith(`${frame}/tile-`));
+    expect(tiles.map(({ label, sampleCount, usage }) => [label, sampleCount, usage & 1])).toEqual([
+      [`${frame}/tile-color`, 1, 1],
+      [`${frame}/tile-stencil`, 1, 0],
+    ]);
+    expect(fixture.calls).toContainEqual([
+      'setPipeline',
+      'vector-studio/e25-layer-composite-stencil-1x',
+    ]);
+    creation.dispose();
+  });
+
+  it('without a stencil the tile has no depth-stencil attachment and the composite none', async () => {
+    const fixture = nativeFixture();
+    const { scene, creation, target } = await nativeScene(fixture, {
+      clipPipeline: true,
+      layerPipeline: true,
+    });
+    const mirror = new RetainedSceneMirror(undefined, {
+      pathNodes: 'unsupported',
+      clips: 'rect',
+      groupOpacity: 'supported',
+    });
+    const nodes = [group('g', 0.5, ['b']), box('b', 20, 'g')];
+    mirror.replaceSnapshot({
+      identity: { documentId: 'e25-u3', pageId: 'page' },
+      revision: 1,
+      nodes,
+      rootOrder: ['g'],
+    });
+    fixture.calls.length = 0;
+    submitted(scene.submitPrimitivePacket(new PrimitiveSceneSource(mirror).prepare(target)!));
+    expect(fixture.calls[0]).toEqual([
+      'beginRenderPass',
+      'vector-studio/layer-pass/0',
+      `${frame}/tile-color`,
+      `${frame}/tile-resolve`,
+      null,
+    ]);
+    expect(fixture.textures.some((texture) => texture.label.endsWith('tile-stencil'))).toBe(false);
+    expect(fixture.calls).toContainEqual(['setPipeline', 'vector-studio/e25-layer-composite-4x']);
+    creation.dispose();
+  });
+
+  it('rebinds the pipeline and groups for each draw after a composite in a layer pass', async () => {
+    const fixture = nativeFixture();
+    const { scene, creation, target } = await nativeScene(fixture, allOptions);
+    const h = harness([
+      group('g', 0.5, ['h', 'b', 'e', 'c']),
+      group('h', 0.5, ['d'], 'g'),
+      box('d', 20, 'h'),
+      box('b', 40, 'g'),
+      box('e', 60, 'g', linear),
+      group('c', 1, ['f'], 'g', { kind: 'rect', x: 75, y: 0, width: 100, height: 100 }),
+      box('f', 80, 'c'),
+    ]);
+    fixture.calls.length = 0;
+    submitted(scene.submitPrimitivePacket(prepared(h, target)));
+    const start = fixture.calls.findIndex((call) => call[1] === 'vector-studio/layer-pass/1');
+    const end = fixture.calls.findIndex((call, index) => index > start && call[0] === 'end');
+    expect(
+      fixture.calls
+        .slice(start + 3, end)
+        .filter((call) => call[0] !== 'setVertexBuffer' && call[0] !== 'setIndexBuffer'),
+    ).toEqual([
+      ['setPipeline', composite],
+      ['setBindGroup', 0, `${frame}/composite-0`],
+      ['setBindGroup', 1, layerEmpty],
+      ['setBindGroup', 2, layerEmpty],
+      ['setBindGroup', 3, `${frame}/pass-bind-group`, 512],
+      ['draw', 6],
+      ['setPipeline', stencilP1],
+      ['setBindGroup', 0, 'primitive/1/arena-1/bind-group'],
+      ['drawIndexed', 6, 1, 0, 0, 1],
+      ['setPipeline', `${stencilP1}+paint-v0+layer-v0`],
+      ['setBindGroup', 2, 'primitive/1/paint-primitives-2/bind-group'],
+      ['drawIndexed', 6, 1, 0, 0, 2],
+      ['setPipeline', `${stencilP1}+clip-v0+layer-v0`],
+      ['setBindGroup', 1, 'primitive/1/clip-states-1/bind-group', 1280],
+      ['setBindGroup', 2, layerEmpty],
+      ['drawIndexed', 6, 1, 0, 0, 3],
+    ]);
     creation.dispose();
   });
 });

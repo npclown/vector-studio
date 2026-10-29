@@ -1682,9 +1682,6 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       }
       return null;
     }
-    // Without the layer pipeline the layers' content is not drawn (fail closed), as E23's
-    // gradient draws are without the paint variants.
-    if (this.#layer === null) return null;
     const target = this.#target!;
     const count = layers.length;
     layers.forEach((layer, index) => {
@@ -1758,14 +1755,17 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       seen.add(composite.layer);
     }
     if (seen.size !== count) throw new Error('A layer without its composite.');
+    // Without the layer pipeline the layers' content is not drawn (fail closed), as E23's
+    // gradient draws are without the paint variants; the part is still checked.
+    if (this.#layer === null) return null;
     // Section 4: the tile set covers the largest layer, at most T on each side.
     const tileWidth = Math.min(
       this.#layerTileSize,
-      Math.max(...layers.map((layer) => layer.bound.width)),
+      layers.reduce((widest, layer) => Math.max(widest, layer.bound.width), 0),
     );
     const tileHeight = Math.min(
       this.#layerTileSize,
-      Math.max(...layers.map((layer) => layer.bound.height)),
+      layers.reduce((tallest, layer) => Math.max(tallest, layer.bound.height), 0),
     );
     const alignment = this.#device.limits.minUniformBufferOffsetAlignment;
     if (typeof alignment !== 'number' || !isPowerOfTwo(alignment)) throw new AllocationError();
@@ -4041,7 +4041,8 @@ export function createNativePrimitiveSceneCreation(
     }
     // E25 contract, U3: the layer variants and the composite pipeline, created here like the
     // paint variants and never on the frame path. A failure, or an adapter with fewer than 4
-    // bind groups, leaves them unavailable; the service then keeps rejecting container opacity.
+    // bind groups, leaves them unavailable, and the content of isolated containers is then not
+    // drawn (fail closed; the U3 record's departure).
     let layer: LayerPipelineState | null = null;
     if (
       options.layerPipeline === true &&

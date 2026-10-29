@@ -38,9 +38,9 @@ At DPR 2 the `wide` layer spans nearly the whole 1024 × 640 target, so at tile 
 **`under` and `over`.** Both differ from `flat` by at most 1/255 in any channel. `layer` and `tiled` are identical to each other.
 
 - `under` differs at both sample counts. A layer composited over earlier content rounds its premultiplied value once more: E25-K4's one rounding per isolation level.
-- `over` is identical at 1x and differs only at 4x. Content drawn over a composite in the same parent pass blends per sample with the layer's resolved pixel, as the contract specifies ("every sample of a pixel receives the pixel's value"). The main pass instead blends per sample before one resolve, so edge pixels where both shapes have partial coverage can differ by one 8-bit step.
+- `over` is identical at 1x and differs only at 4x. Content drawn over a composite in the same parent pass blends per sample with the layer's resolved pixel, as the contract specifies ("every sample of a pixel receives the pixel's value"). The main pass instead blends per sample before one resolve. In a pixel where a shape inside the layer and a shape outside it both have partial coverage, the two paths differ by the opacity times the covariance of the two coverages over the samples.
 
-Both cases are within section 6's allowance of 1/255 per isolation level. U4's oracle tolerances already include it.
+The 1/255 figure holds for these scenes only, because their edges do not coincide. Edges that coincide can differ by much more: up to about a quarter of a channel value. The contract's U3 record and section 8 record this, and U4 measures a shared-edge probe.
 
 **E25-A08, capture part.**
 
