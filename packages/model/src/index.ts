@@ -13,6 +13,15 @@ export {
   type NodeResult,
   type ParseResult,
 } from './parse.js';
-export { MAX_DEPTH, scanJson, type ScanFinding } from './json-scan.js';
+export {
+  ENVELOPE_ERROR_CODES,
+  ENVELOPE_VERSION,
+  parseEnvelope,
+  serializeEnvelope,
+  type EnvelopeErrorCode,
+  type EnvelopeResult,
+  type PersistenceEnvelope,
+} from './envelope.js';
+export { MAX_DEPTH, scanJson, type ScanFinding, type ScanOptions } from './json-scan.js';
 export { serializeDocument } from './serialize.js';
 export type * from './types.js';

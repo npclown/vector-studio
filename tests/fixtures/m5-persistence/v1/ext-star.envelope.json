@@ -1,0 +1,78 @@
+{
+  "envelopeVersion": 1,
+  "lastOpenPageId": "page-1",
+  "document": {
+    "schemaVersion": 1,
+    "id": "doc-star",
+    "pages": [
+      {
+        "id": "page-1",
+        "name": "Page 1",
+        "children": [
+          "n10",
+          "n2"
+        ]
+      }
+    ],
+    "nodes": {
+      "n10": {
+        "id": "n10",
+        "name": "n10",
+        "parent": "page-1",
+        "frame": {
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 200
+        },
+        "opacity": 1,
+        "visible": true,
+        "type": "rectangle",
+        "fill": {
+          "r": 1,
+          "g": 1,
+          "b": 1,
+          "a": 1
+        },
+        "stroke": null
+      },
+      "n2": {
+        "id": "n2",
+        "name": "Star",
+        "parent": "page-1",
+        "frame": {
+          "x": 50,
+          "y": 50,
+          "width": 100,
+          "height": 100
+        },
+        "opacity": 1,
+        "visible": true,
+        "type": "custom",
+        "customType": "ext.star",
+        "data": {
+          "innerRatio": 0.5,
+          "points": 5
+        },
+        "fill": {
+          "r": 1,
+          "g": 0.8,
+          "b": 0,
+          "a": 1
+        },
+        "stroke": {
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          },
+          "width": 2,
+          "cap": "butt",
+          "join": "round",
+          "miterLimit": 4
+        }
+      }
+    }
+  }
+}
