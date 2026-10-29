@@ -53,6 +53,18 @@ export type PrimitiveRendererServiceOptions = Readonly<{
    * is reported as `unsupported-feature`, and nothing else changes.
    */
   paints?: 'solid' | 'gradient';
+  /**
+   * E25 contract, E25-S1: 'isolated' accepts container opacity other than 1 and draws each
+   * visible container with 0 < opacity < 1 as an isolated layer, through the layer pipeline,
+   * which the backend then creates. It needs `clips` other than 'none'. Default 'flat': such a
+   * container is reported as `unsupported-feature`, and nothing else changes.
+   */
+  groups?: 'flat' | 'isolated';
+  /**
+   * @internal Tests only (E25-A05): with `groups: 'isolated'`, every visible container with
+   * opacity 1 is drawn as a layer too, so its layer variants can be compared with the main pass.
+   */
+  isolateUnitOpacityForTesting?: boolean;
 }>;
 
 /** Owns the CPU scene mirror and packet source while the backend owns scheduling and native state. */
@@ -72,6 +84,8 @@ export class PrimitiveRendererService
   public readonly requiresClipPipeline: boolean;
   /** E23 contract, U3: true exactly when the `paints` option is 'gradient'; read at attach. */
   public readonly requiresPaintPipeline: boolean;
+  /** E25 contract, U3: true exactly when the `groups` option is 'isolated'; read at attach. */
+  public readonly requiresLayerPipeline: boolean;
 
   public constructor(
     invalidationTarget: RendererInvalidationTarget,
@@ -101,9 +115,22 @@ export class PrimitiveRendererService
     if (paints !== 'solid' && paints !== 'gradient') {
       throw new TypeError("paints must be 'solid' or 'gradient'.");
     }
+    const groups = options.groups ?? 'flat';
+    if (groups !== 'flat' && groups !== 'isolated') {
+      throw new TypeError("groups must be 'flat' or 'isolated'.");
+    }
+    // E25-Q2 (a): clips inside a layer apply per leaf, through the clip variants.
+    if (groups === 'isolated' && clips === 'none') {
+      throw new TypeError("groups: 'isolated' needs clips other than 'none'.");
+    }
+    const isolateUnit = options.isolateUnitOpacityForTesting ?? false;
+    if (typeof isolateUnit !== 'boolean' || (isolateUnit && groups !== 'isolated')) {
+      throw new TypeError("isolateUnitOpacityForTesting needs groups: 'isolated'.");
+    }
     this.#invalidationTarget = invalidationTarget;
     this.requiresClipPipeline = clips !== 'none';
     this.requiresPaintPipeline = paints === 'gradient';
+    this.requiresLayerPipeline = groups === 'isolated';
     const anyPort = port !== undefined || strokePort !== undefined;
     this.requiresMeshPipeline = anyPort;
     // P3 V3 section a with the B2 section 9.1 amendment (S4): path nodes are supported when a
@@ -117,6 +144,7 @@ export class PrimitiveRendererService
       dashes: strokePort === undefined ? 'unsupported' : 'supported',
       clips: clips === 'all' ? 'supported' : clips === 'rect' ? 'rect' : 'unsupported',
       paints,
+      groupOpacity: groups === 'isolated' ? 'supported' : 'unsupported',
     });
     this.#source = new PrimitiveSceneSource(
       this.#mirror,
@@ -131,6 +159,7 @@ export class PrimitiveRendererService
             // stroke mesh uses it unchanged (B2 section 9.5). E10: no builder when 'off'.
             ...(fringe === 'on' ? { fringeBuilder: buildPathFringe } : {}),
           }),
+      isolateUnit ? { isolateUnitOpacityForTesting: true } : {},
     );
   }
 

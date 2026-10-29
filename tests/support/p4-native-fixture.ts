@@ -157,7 +157,13 @@ export function nativeFixture(options: Readonly<{ failPipeline?: string }> = {})
 
 export async function nativeScene(
   fixture: ReturnType<typeof nativeFixture>,
-  options: Readonly<{ meshPipeline?: boolean; clipPipeline?: boolean; paintPipeline?: boolean }> = {
+  options: Readonly<{
+    meshPipeline?: boolean;
+    clipPipeline?: boolean;
+    paintPipeline?: boolean;
+    layerPipeline?: boolean;
+    layerTileSizeForTesting?: number;
+  }> = {
     meshPipeline: true,
     clipPipeline: true,
   },

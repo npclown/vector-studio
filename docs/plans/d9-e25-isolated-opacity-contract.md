@@ -297,6 +297,26 @@ U2 (2026-10-29):
 - The over-budget set is the set of roots over budget in the current frame, as P4 U4a's is for masks. A root that fits for a frame, or draws nothing, raises a new notice when it is again over budget.
 - Tests: `tests/unit/e25-u2-layer-plan.test.ts` (E25-A02, the unit parts of A04 and A07).
 
+U3 (2026-10-29):
+
+- `packages/renderer-webgpu/src/layer-pipeline.ts` holds the layer block, `layerVariantSource` and the seven `+layer-v0` modules, which are generated from the existing modules. The file also holds the variant keys (layout key part `e25-layer-v0`), the composite pipeline `e25-layer-composite-v0` with and without the stencil keep state, and the pass and composite record packing.
+- The native scene creates the composite pipeline and the variants of the variants this generation has, after the paint variants and never on the frame path. That is up to 11 variants: analytic clip, paint and paint-clip; mesh fill and joint, each plain, clip, paint and paint-clip.
+  - Layouts are `[group 0, clip or empty, paint or empty, layer]`.
+  - A failure, or `maxBindGroups < 4`, caches and tracks nothing and leaves the layer pipeline unavailable (the E22-K5 rule).
+- Each frame with layers builds one transient records buffer: the main pass record (shift 0), the tile pass records, then one composite record per layer, at the uniform offset alignment. It also builds the layer textures and the tile set.
+  - Layers render in post-order after the mask passes, tile by tile. The viewport is moved by −(bound origin + tile offset), as E22 does, and each tile is copied into its layer texture.
+  - Composites draw at their position and `meshOrder` in the main pass and in parent tiles, with the target pass's record.
+  - Every frame resource is released after submission, or when the submission fails. `layerPasses` counts one per layer.
+- A scene without layers encodes exactly as before, and the E10-A1 golden log is unchanged.
+- The service option `groups` (`'flat'` by default), its `TypeError` with `clips: 'none'`, `requiresLayerPipeline` (backend option `layerPipeline`), and the test hooks `isolateUnitOpacityForTesting` (service) and `layerTileSizeForTesting` (backend and scene) are added. A test hook that is set makes an unavailable layer pipeline fail creation, as for the other pipelines.
+- Tests: `tests/unit/e25-u3-layer-passes.test.ts` covers creation, failure, encoding, nesting, tiles, `meshOrder`, fail-closed layers, identity, the unit part of A06, and A01's option wiring. Evidence: [u3-swiftshader.md](../evidence/e25/u3-swiftshader.md) (A05; A08 capture part).
+- **Departure, unavailable layer pipeline:** section 4 says non-unit container opacity "stays rejected" when the layer pipeline is unavailable. The mirror's `groupOpacity` is fixed when the service is constructed, before the adapter is known. So U3 accepts the scene and does not draw the content of isolated containers (fail closed), and the rest of the scene draws. This is how E23 handles gradients without the paint variants. No diagnostic is reserved for this case, so none is emitted. `layerPipelineAvailable` reports it, and the test hooks turn it into a creation failure.
+- **Departure, empty layers:** U3 does not skip the pass of a layer with no draws (U2 record). Such a layer renders a cleared tile and composites transparent pixels, which changes nothing.
+- **Finding, A05's setup at 4x:** A05 needs content neither under nor over a layer in its parent.
+  - Content under a layer adds E25-K4's rounding.
+  - At 4x, content drawn over a composite blends per sample with the layer's resolved pixel. The main pass instead resolves once after per-sample blending, so shared edge pixels can differ by one 8-bit step.
+  - Both cases were measured at 1/255 or less ([u3-swiftshader.md](../evidence/e25/u3-swiftshader.md)), within section 6's allowance per isolation level.
+
 ## 8. Risks
 
 - **Memory.** Bound-sized layers keep ordinary groups small. But full-screen groups at 4K and 4x admit only two nesting levels within 96 MiB (E25-Q3). Deeper full-screen stacks report instead of drawing. Two remedies are open if real documents hit this: re-rendering per tile together with the composite (no full layer texture), or a cache with eviction.
