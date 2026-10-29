@@ -23,7 +23,7 @@ export { clusterLocalBounds, getTextLocalBounds } from './scene-numeric.js';
 export const E28_ATLAS_PAGES_MAX = 8;
 export const E28_ATLAS_PAGE_SIZE = 2048;
 /** Section 4, Raster budget (E28-Q6 (a)): port calls per prepared frame. */
-export const E28_RASTER_PER_FRAME = 256;
+export const E28_RASTER_PER_FRAME = 64;
 /** E28-K4: the raster cap C, in device px. */
 export const E28_RASTER_CAP = 256;
 /** The port's largest bitmap edge (section 2); larger results are `too-large`. */

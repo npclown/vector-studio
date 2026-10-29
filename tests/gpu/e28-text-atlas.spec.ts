@@ -20,6 +20,7 @@ import {
   type LayerTree,
   type LeafSource,
 } from '../support/e25-layer-oracle.js';
+import { E28_RASTER_PER_FRAME } from '../../packages/renderer-core/src/text-atlas.js';
 import { Scene, gate, rect, rings, square, type Ctx } from '../support/e25-scene.js';
 import {
   checkPlacements,
@@ -409,7 +410,7 @@ async function converge(
       camera,
     ] as const);
     const next = (await counters(page)).glyphRasterCalls;
-    // A frame with deferred clusters always makes a call: a budget deferral follows 256 calls,
+    // A frame with deferred clusters always makes a call: a budget deferral follows the budget's calls,
     // and the miss that finds the atlas fragmented is rasterized before it is deferred.
     if (next === calls && frames > 0) break;
     calls = next;
@@ -867,26 +868,41 @@ test('T8 atlas pressure: eviction, over-limit notice and convergence (E28-A06)',
   if (moved.evictions <= regenerated.evictions)
     failures.push('the subpixel move compacted nothing');
   if (limits(await diagnosticsOf(page)) !== quiet) failures.push('the subpixel move raised E28-D2');
-  // 200 syllables cannot fit the page: E28-D2 once on entering the over-limit state.
+  // 200 syllables cannot fit the page: E28-D2 once on entering the over-limit state. The
+  // raster budget spreads the misses over frames, and a compaction may come first, so frames
+  // are shown until the notice appears (bounded), then a few more to see it is not repeated.
   const before = limits(await diagnosticsOf(page));
   const over = pressure('t8', syllables(800, 200, GRID_20), 20);
-  for (let frame = 0; frame < 4; frame += 1)
-    await page.evaluate(([scene, view]) => window.__vectorStudioE23.show(scene, view), [
-      over.snapshot(),
-      HOME,
-    ] as const);
-  const entered = limits(await diagnosticsOf(page)) - before;
-  rows.overLimit = { notices: entered };
-  if (entered !== 1) failures.push(`over-limit: ${entered} notices`);
+  const showOver = async (expected: number) => {
+    let frames = 0;
+    const bound = Math.ceil(200 / E28_RASTER_PER_FRAME) + 3;
+    for (; frames < bound; frames += 1) {
+      await page.evaluate(([scene, view]) => window.__vectorStudioE23.show(scene, view), [
+        over.snapshot(),
+        HOME,
+      ] as const);
+      if (limits(await diagnosticsOf(page)) - before >= expected) break;
+    }
+    for (let frame = 0; frame < 3; frame += 1)
+      await page.evaluate(([scene, view]) => window.__vectorStudioE23.show(scene, view), [
+        over.snapshot(),
+        HOME,
+      ] as const);
+    // Frames shown until the notice: the breaking frame counts; a loop that ran out showed `bound`.
+    return {
+      frames: Math.min(frames + 1, bound),
+      notices: limits(await diagnosticsOf(page)) - before,
+    };
+  };
+  const entered = await showOver(1);
+  rows.overLimit = entered;
+  if (entered.notices !== 1) failures.push(`over-limit: ${JSON.stringify(entered)}`);
   // Back within the atlas: the state clears and the frame converges to the oracle again.
   await check('A again', pressure('t8', syllables(0, 60, GRID_20), 20));
-  for (let frame = 0; frame < 2; frame += 1)
-    await page.evaluate(([scene, view]) => window.__vectorStudioE23.show(scene, view), [
-      over.snapshot(),
-      HOME,
-    ] as const);
-  const reentered = limits(await diagnosticsOf(page)) - before;
-  if (reentered !== 2) failures.push(`re-entering over-limit: ${reentered} notices in all`);
+  const reentered = await showOver(2);
+  rows.overLimitAgain = reentered;
+  if (reentered.notices !== 2)
+    failures.push(`re-entering over-limit: ${JSON.stringify(reentered)} (notices in all)`);
   const diagnostics = await diagnosticsOf(page);
   failures.push(
     ...unexpected(
@@ -907,7 +923,7 @@ test('T8 raster budget convergence and the 32 MiB atlas bound (E28-A06)', async 
   const { pageErrors } = await open(page, { dpr: 1 });
   const failures: string[] = [];
   const rows: Record<string, unknown> = {};
-  // 300 distinct clusters: 256 rasters in the first frame, the rest in the next.
+  // 300 distinct clusters: the budget's rasters in the first frame, the rest in later frames.
   const budget = pressure('t8-budget', syllables(0, 300, GRID_12), 12);
   await budget.prepare(page, HOME, 1);
   const callsBefore = (await counters(page)).glyphRasterCalls;
@@ -921,7 +937,7 @@ test('T8 raster budget convergence and the 32 MiB atlas bound (E28-A06)', async 
   const outcome = compare(converged, 'budget', budget.tree(), HOME, 1, SNAPPED_TOLERANCE);
   failures.push(...outcome.failures);
   rows.budget = { firstFrameCalls: firstCalls, totalCalls, worst: outcome.worst };
-  if (firstCalls !== 256) failures.push(`first frame: ${firstCalls} raster calls`);
+  if (firstCalls !== E28_RASTER_PER_FRAME) failures.push(`first frame: ${firstCalls} raster calls`);
   if (totalCalls !== 300) failures.push(`budget: ${totalCalls} calls for 300 keys`);
   // 600 distinct 256 px clusters on one spot exceed eight pages: never more than 32 MiB.
   const baseline = (await counters(page)).statistics.resources.byCategory.texture.liveBytes;
@@ -929,7 +945,7 @@ test('T8 raster budget convergence and the 32 MiB atlas bound (E28-A06)', async 
   const huge = pressure('t8-huge', syllables(2000, 600, null), 256);
   let peakPages = 0;
   let peakBytes = 0;
-  for (let frame = 0; frame < 6; frame += 1) {
+  for (let frame = 0; frame < 12; frame += 1) {
     const step = await page.evaluate(
       ([scene, view]) => window.__vectorStudioE23.show(scene, view),
       [huge.snapshot(), HOME] as const,
@@ -1263,7 +1279,8 @@ for (const dpr of [1, 2]) {
       }
       rows.push({ cluster, placement: read.placement, rect: read.rect, worst, stray });
     }
-    // Raster cost at T1's sizes: per call, and one frame of 256 distinct calls (60 Hz is 16.7 ms).
+    // Raster cost at T1's sizes: per call, and one frame's budget of distinct calls (60 Hz is
+    // 16.7 ms).
     const t1Requests = uniqueRequests(
       await page.evaluate(([scene, view]) => window.__vectorStudioE23.placements(scene, view), [
         t1().snapshot(),
@@ -1274,7 +1291,8 @@ for (const dpr of [1, 2]) {
       (requests) => window.__vectorStudioE23.rasterCost(requests, 5),
       t1Requests,
     );
-    if (cost.frameDistinct !== 256) failures.push(`raster frame: ${cost.frameDistinct} distinct`);
+    if (cost.frameDistinct !== E28_RASTER_PER_FRAME)
+      failures.push(`raster frame: ${cost.frameDistinct} distinct`);
     const diagnostics = await diagnosticsOf(page);
     failures.push(...unexpected(diagnostics));
     report(
@@ -1284,7 +1302,7 @@ for (const dpr of [1, 2]) {
           dpr,
           rows,
           cost,
-          fitsFrame: cost.frame256Ms <= 1000 / 60,
+          fitsFrame: cost.frameMs <= 1000 / 60,
           diagnostics,
           pageErrors,
           failures,

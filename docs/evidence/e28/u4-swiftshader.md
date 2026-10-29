@@ -59,6 +59,14 @@ Every step converges to the oracle exactly (worst 0). The over-limit scene raise
 
 Cold is the first call of each request, warm the four repeats (the browser's glyph cache). The 256-call frame uses 256 distinct requests at sizes not timed before. It is at the 16.7 ms budget at DPR 1 and above it at DPR 2 on this host. The reference PC's figure decides whether E28-Q6's 256 is lowered before U5 (contract section 6).
 
+## Budget 64 re-run (2026-10-29)
+
+After the reference PC (see [u4-main-pc.md](u4-main-pc.md)), `E28_RASTER_PER_FRAME` became 64. The spec was re-run on SwiftShader on branch `claude/eng-e28-u4b-raster-budget` (on main at 0eb4dc4), with the same setup and `E28_GENERAL_TOLERANCE=16`. All 14 tests pass.
+
+- T8 budget: 64 calls in the first frame and 300 in all, worst 0. 600 clusters at 256 px peaked at 8 pages and 33,554,432 bytes.
+- T8 pressure: every step converged with worst 0. E28-D2 appeared on the second over-limit frame on entry and on re-entry, two notices in all, none repeated in the three frames after.
+- Raster cost: a frame of 64 distinct calls took 4.2 ms at DPR 1 and 5.1 ms at DPR 2. An earlier run of the same commit gave 7.8 and 5.0 ms, so single samples on this host vary by about a factor of two.
+
 ## Not run
 
 - The reference-PC run: the full `pnpm test:gpu` on Chrome and Edge, hardware GPU, real fonts, default tolerance. It is queued through the coordinator.
