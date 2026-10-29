@@ -7,6 +7,7 @@ import {
   type NodeV4,
   type PageV2,
   type SymbolNode,
+  type TextNode,
 } from '@vector-studio/model';
 import {
   alignNodes,
@@ -51,6 +52,14 @@ import {
   setPathHandle,
 } from './paths.js';
 import { mapNodeInPageSpace, resizeContainer, type ScaleMap } from './resize.js';
+import {
+  frameRule,
+  isAuto,
+  MIN_AUTHORED_TEXT_SIZE,
+  refitFrame,
+  type TextLayouter,
+} from './text.js';
+import { refitText, setText, setTextProps, setTextStyle } from './text-edits.js';
 import { boundsOf } from './hit-test.js';
 import { detachInstances, orphanedInstances, withDetach } from './symbols.js';
 import { visualBounds } from './visual-bounds.js';
@@ -97,6 +106,8 @@ export const DEFAULT_PATH_STROKE = deepFreeze({
 } as const);
 export const DEFAULT_FRAME_FILL = deepFreeze({ r: 1, g: 1, b: 1, a: 1 } as const);
 const START = deepFreeze({ horizontal: 'start', vertical: 'start' } as const);
+/** `createText` defaults (M6a contract, section 6.1, M6a-Q16). */
+const TEXT_LINE_HEIGHT = 1.2;
 
 const NO_CUSTOM: CustomRules = {
   check: (node) =>
@@ -168,7 +179,7 @@ export function applyEdit(
   const refit = context.refit ?? true;
   const expansions = context.expansions ?? new ExpansionCache((node) => custom.check(node));
   const finish = (draft: Draft) =>
-    draft.finish((node) => custom.check(node), { refit, expansions });
+    draft.finish((node) => custom.check(node), { refit, expansions, layout: context.layout });
   switch (command.type) {
     case 'createRectangle':
     case 'createEllipse':
@@ -176,7 +187,16 @@ export function applyEdit(
     case 'createLine':
     case 'createPath':
     case 'createCustomNode':
+    case 'createText':
       return create(document, command, context, custom, finish);
+    case 'setText':
+      return setText(document, command, context, finish);
+    case 'setTextStyle':
+      return setTextStyle(document, command, context, finish);
+    case 'setTextProps':
+      return setTextProps(document, command, context, finish);
+    case 'refitText':
+      return refitText(document, command, context, finish);
     case 'setFrames': {
       const frames: unknown = command.frames;
       if (!Array.isArray(frames)) return fail('editor.invalid-command', '/frames');
@@ -195,6 +215,7 @@ export function applyEdit(
         return fail('editor.invalid-command', '/frames');
       }
       const next: NodeV4[] = [];
+      const refits = new Set<string>();
       for (const entry of entries) {
         const node = document.nodes[entry.id]!;
         const rotation = entry.rotation === undefined ? node.rotation : entry.rotation;
@@ -202,12 +223,25 @@ export function applyEdit(
         if (!result.ok) return fail(result.code, nodePath(entry.id, result.path));
         const rejected = custom.check(deepFreeze(result.node));
         if (rejected !== null) return fail(rejected.code, nodePath(entry.id, rejected.path));
+        if (result.node.type === 'text') {
+          // The `setFrames` row of M6a section 6.3, against the pre-gesture node during a
+          // gesture, so updates do not compound.
+          const base = context.resizeBase;
+          const origin =
+            base !== undefined && Object.hasOwn(base.nodes, entry.id) ? base.nodes[entry.id] : node;
+          const before = (origin?.type === 'text' ? origin : node) as TextNode;
+          const rule = frameRule(before, result.node.frame);
+          if (rule.refit) refits.add(entry.id);
+          next.push({ ...result.node, sizing: rule.sizing });
+          continue;
+        }
         next.push(result.node);
       }
       const draft = new Draft(document);
       for (const node of next) {
         let before = draft.node(node.id)!.frame;
         draft.setChecked(node, true);
+        if (refits.has(node.id)) draft.markTextRefit(node.id);
         if (!isContainer(node)) continue;
         const base = context.resizeBase;
         if (base !== undefined) {
@@ -432,6 +466,7 @@ export function applyGestureEdit(
   edit: GestureEdit,
   custom: CustomRules = NO_CUSTOM,
   expansions: ExpansionCache = new ExpansionCache((node) => custom.check(node)),
+  layout?: TextLayouter,
 ): EditResult {
   const draft = new Draft(document);
   if (edit.kind === 'map') {
@@ -464,8 +499,9 @@ export function applyGestureEdit(
     const { frame, unit } = fitPoints([start.x, start.y, end.x, end.y], node.rotation);
     draft.set({ ...node, frame, points: [unit[0]!, unit[1]!, unit[2]!, unit[3]!] });
   }
+  // Text mapped by a uniform scale refits on every update (M6a contract, section 6.3).
   return success(
-    draft.finish((node) => custom.check(node), { refit: false, expansions }),
+    draft.finish((node) => custom.check(node), { refit: false, expansions, layout }),
     draft,
     [],
   );
@@ -481,7 +517,8 @@ type CreateCommand = Extract<
       | 'createLine'
       | 'createPath'
       | 'createCustomNode'
-      | 'createInstance';
+      | 'createInstance'
+      | 'createText';
   }
 >;
 
@@ -492,7 +529,10 @@ type CreateCommand = Extract<
  * `unknown-*` codes (`editor.not-a-symbol`), the M7-S5 tree depth with the parent's, nesting
  * (`editor.nested-symbol`) before the clip depth, and the clip depth through its expansion; its
  * other checks (validity, caps) run on a build with a placeholder ID, and a failure at the new
- * instance has a path relative to it, as every creation failure.
+ * instance has a path relative to it, as every creation failure. `createText` (M6a contract,
+ * section 6.1) checks after the model's rules the authored size floor, `editor.no-text-layout`
+ * for an auto mode without a port, then `editor.nested-symbol` (M6a-S7), and lays out its auto
+ * dimensions in page space with the growth anchor on the given frame before placement.
  */
 function create(
   document: DocumentV4,
@@ -633,6 +673,19 @@ function create(
       };
       break;
     }
+    case 'createText':
+      candidate = {
+        ...base,
+        name: 'Text',
+        frame: command.frame,
+        type: 'text',
+        runs: command.runs,
+        sizing: command.sizing ?? 'autoWidth',
+        align: command.align ?? 'left',
+        letterSpacing: command.letterSpacing ?? 0,
+        lineHeight: command.lineHeight ?? TEXT_LINE_HEIGHT,
+      };
+      break;
     case 'createInstance': {
       // By default the source's size, beside its page bounds (section 5.1), on the active page.
       const bounds = boundsOf(document, [source!.id])!;
@@ -663,6 +716,13 @@ function create(
     return fail('document.invalid-custom-data', '/data');
   }
   if (!result.ok) return fail(result.code, result.path);
+  const inSymbol =
+    owner?.type === 'symbol' || ancestors(tree, parent).some((node) => node.type === 'symbol');
+  if (result.node.type === 'text') {
+    const text = textChecks(result.node, context.layout, inSymbol);
+    if ('ok' in text) return text;
+    result = { ok: true, node: text };
+  }
   const depth = onPage ? 0 : treeDepth(tree, parent) + 1;
   // An instance's expanded nodes sit below it by its source's height (M7-S5).
   const height = source === null ? 0 : sourceHeight(tree, source.id);
@@ -673,8 +733,6 @@ function create(
   if (owner?.type === 'maskGroup' && index === 0 && result.node.type !== 'path') {
     return fail('editor.invalid-mask-source', '/index');
   }
-  const inSymbol =
-    owner?.type === 'symbol' || ancestors(tree, parent).some((node) => node.type === 'symbol');
   if (source !== null && inSymbol) return fail('editor.nested-symbol', '/parent');
   const clips = childClipDepth(tree, parent);
   if (
@@ -734,6 +792,28 @@ function create(
   const id = freshId(document, context.ids);
   if (id === null) return fail('editor.duplicate-id');
   return build(id);
+}
+
+/**
+ * The `createText` checks after the model's rules (M6a contract, section 6.1): the authored size
+ * floor at `/runs/<k>/size`, `editor.no-text-layout` for an auto mode without a port, then the
+ * M6a-S7 nesting rule; on success the node in page space with its auto dimensions laid out, the
+ * growth anchor `(x + a·width, y)` of the given frame kept (section 6.2).
+ */
+function textChecks(
+  node: TextNode,
+  layout: TextLayouter | undefined,
+  inSymbol: boolean,
+): TextNode | Failure {
+  const small = node.runs.findIndex((run) => run.size < MIN_AUTHORED_TEXT_SIZE);
+  if (small >= 0) return fail('editor.invalid-command', `/runs/${small}/size`);
+  if (isAuto(node) && layout === undefined) return fail('editor.no-text-layout');
+  if (inSymbol) return fail('editor.nested-symbol', '/parent');
+  if (layout === undefined || !isAuto(node)) return node;
+  const frame = refitFrame(node, layout(node));
+  if (frame === node.frame) return node;
+  const laid = validateNode({ ...node, frame });
+  return laid.ok ? (laid.node as TextNode) : fail(laid.code, laid.path);
 }
 
 /**

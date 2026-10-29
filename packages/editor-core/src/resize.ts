@@ -1,4 +1,10 @@
-import { normalizeRotation, type Constraint, type Frame, type NodeV4 } from '@vector-studio/model';
+import {
+  normalizeRotation,
+  type Constraint,
+  type Frame,
+  type NodeV4,
+  type TextNode,
+} from '@vector-studio/model';
 import {
   apply,
   boundsOfPoints,
@@ -8,6 +14,7 @@ import {
   rotate,
   rotatedBounds,
 } from './geometry.js';
+import { frameRule, scaledRuns } from './text.js';
 import { ancestors, isFrameLike, isGroup, type TreeView } from './tree.js';
 import type { PagePoint } from './types.js';
 
@@ -18,7 +25,20 @@ import type { PagePoint } from './types.js';
 /** A tree whose nodes can be replaced, such as the edit draft. */
 export interface WritableTree extends TreeView {
   set(node: NodeV4): void;
+  /**
+   * Marks a text node whose auto dimensions are refit after the tree edit (M6a contract, section
+   * 6.3); a tree without it, such as an instance expansion (M7-T2), keeps the mapped frame.
+   */
+  markTextRefit?(id: string): void;
 }
+
+/**
+ * Which axes of a map scale text sizes (M6a contract, section 6.3): both for a group, `map`
+ * handles and an expansion; for a frame child, the axes whose constraint is `scale`.
+ */
+export type ScaleAxes = Readonly<{ x: boolean; y: boolean }>;
+
+const BOTH_AXES: ScaleAxes = { x: true, y: true };
 
 /**
  * An axis-aligned scale in a **scale space** whose axes are turned by `psi` against the current
@@ -139,10 +159,16 @@ function parentPoints(node: Extract<NodeV4, { type: 'path' | 'line' }>): number[
  * approximation; a path or line under a skewing map maps its points exactly and refits its frame
  * in its own axes; a frame or symbol maps like a leaf and its children then follow its
  * constraints (M7 contract, section 1.2); a group keeps its frame and its children are mapped in
- * turn (the caller refits it afterwards).
+ * turn (the caller refits it afterwards); a text node maps like a leaf and its sizes and sizing
+ * mode follow `mapText` (M6a contract, section 6.3), with `axes` the axes that scale sizes.
  * A pure translation moves the node rigidly.
  */
-export function mapNode(tree: WritableTree, id: string, map: ScaleMap): void {
+export function mapNode(
+  tree: WritableTree,
+  id: string,
+  map: ScaleMap,
+  axes: ScaleAxes = BOTH_AXES,
+): void {
   const node = tree.node(id);
   if (node === undefined) return;
   if (map.sx === 1 && map.sy === 1) {
@@ -196,8 +222,74 @@ export function mapNode(tree: WritableTree, id: string, map: ScaleMap): void {
     );
     frame = { x: centre.x - size.width / 2, y: centre.y - size.height / 2, ...size };
   }
+  if (node.type === 'text') {
+    mapText(tree, node, frame, theta, map, axes);
+    return;
+  }
   tree.set({ ...node, frame });
   if (isFrameLike(node)) applyConstraints(tree, id, node.frame.width, node.frame.height);
+}
+
+/**
+ * The relative tolerance of a uniform text scale (M6a contract, section 6.3, U3 review S2):
+ * `|kx − ky| ≤ 1e-9 · max(|kx|, |ky|)`.
+ */
+export const UNIFORM_TOLERANCE = 1e-9;
+
+function nearlyEqual(a: number, b: number): boolean {
+  return Math.abs(a - b) <= UNIFORM_TOLERANCE * Math.max(Math.abs(a), Math.abs(b));
+}
+
+/**
+ * A text node mapped to `frame` (M6a contract, section 6.3). With no scaling axis (a frame child
+ * whose constraints are all `start`, `end`, `center` or `startEnd`), sizes stay and the
+ * `setFrames` rule applies to the mapped frame. Otherwise sizes scale by `s = √(kx·ky)`, the
+ * node's own-axis scale `(kx, ky)` taken from the map's factors on the scaling axes (1 on the
+ * others): the factors themselves for a uniform map, else by the node's angle `theta` to the
+ * map (swapped at ±π/2, else the ratios of `approximateSize`'s result to the old size, an axis
+ * of old size 0 counting 1). A uniform scale (factors on two scaling axes equal within
+ * `UNIFORM_TOLERANCE`, so a proportional resize stays uniform under binary64 noise) keeps the mode
+ * and marks auto nodes for a refit; any other makes auto modes `fixed` with the mapped frame.
+ */
+function mapText(
+  tree: WritableTree,
+  node: TextNode,
+  frame: Frame,
+  theta: number,
+  map: ScaleMap,
+  axes: ScaleAxes,
+): void {
+  if (!axes.x && !axes.y) {
+    const rule = frameRule(node, frame);
+    tree.set({ ...node, frame, sizing: rule.sizing });
+    if (rule.refit) tree.markTextRefit?.(node.id);
+    return;
+  }
+  const fx = axes.x ? map.sx : 1;
+  const fy = axes.y ? map.sy : 1;
+  const uniform = axes.x && axes.y && nearlyEqual(fx, fy);
+  let s: number;
+  if (uniform) {
+    s = fx === fy ? fx : Math.sqrt(fx * fy);
+  } else {
+    let kx: number;
+    let ky: number;
+    if (theta === 0 || theta === Math.PI) {
+      [kx, ky] = [fx, fy];
+    } else if (Math.abs(theta) === Math.PI / 2) {
+      [kx, ky] = [fy, fx];
+    } else {
+      const size = approximateSize(node.frame.width, node.frame.height, theta, fx, fy);
+      kx = node.frame.width === 0 ? 1 : size.width / node.frame.width;
+      ky = node.frame.height === 0 ? 1 : size.height / node.frame.height;
+    }
+    if (node.frame.width === 0) kx = 1;
+    if (node.frame.height === 0) ky = 1;
+    s = Math.sqrt(kx * ky);
+  }
+  const sizing = uniform ? node.sizing : 'fixed';
+  tree.set({ ...node, frame, runs: scaledRuns(node.runs, s), sizing });
+  if (sizing !== 'fixed') tree.markTextRefit?.(node.id);
 }
 
 /** The per-axis map of one constraint (section 4.4, frame resize). */
@@ -246,7 +338,12 @@ export function applyConstraints(
     const b = rotatedBounds(child);
     const h = axisMap(child.constraints.horizontal, b.x, b.width, beforeWidth, width);
     const v = axisMap(child.constraints.vertical, b.y, b.height, beforeHeight, height);
-    mapNode(tree, id, { sx: h.s, sy: v.s, ox: h.o, oy: v.o, tx: h.t, ty: v.t, psi: 0 });
+    // Only `scale` axes scale a text child's sizes (M6a contract, section 6.3).
+    const axes = {
+      x: child.constraints.horizontal === 'scale',
+      y: child.constraints.vertical === 'scale',
+    };
+    mapNode(tree, id, { sx: h.s, sy: v.s, ox: h.o, oy: v.o, tx: h.t, ty: v.t, psi: 0 }, axes);
   }
 }
 
