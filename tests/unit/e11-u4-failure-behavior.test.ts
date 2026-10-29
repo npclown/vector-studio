@@ -30,6 +30,7 @@ const OUTCOME: Record<PathMeshFailureCode, 'O1' | 'O2' | 'O3'> = {
   'invalid-mesh': 'O1',
   'port-version': 'O1',
   'mesh-pipeline-unavailable': 'O1',
+  'dash-limit': 'O1',
   'fringe-work-cap': 'O2',
   'overlay-unsupported': 'O3',
 };

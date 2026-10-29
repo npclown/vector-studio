@@ -553,6 +553,8 @@ function copyDash(value: unknown): SceneDash | null | undefined {
     period += entry;
     positive ||= entry > 0;
   }
+  // E24-S1: the period is that of the list after E24-K1 doubles an odd pattern.
+  if (pattern.length % 2 === 1) for (const entry of pattern) period += entry;
   const phase = copyFiniteNumber(record.phase);
   if (!positive || !Number.isFinite(period) || phase === null) return undefined;
   return Object.freeze({ pattern: Object.freeze(pattern), phase });

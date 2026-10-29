@@ -10,6 +10,7 @@ import {
   type RenderNodeSnapshot,
   type SceneAffine,
   type SceneColor,
+  type SceneDash,
   type SceneFillRule,
   type SceneStrokeCap,
   type SceneStrokeJoin,
@@ -45,6 +46,7 @@ import {
   type SceneBounds,
 } from './scene-numeric.js';
 import { paintColorLanes } from './paint-records.js';
+import { expandDash, type DashedPath, type DashExpansion } from './stroke-dash.js';
 
 // CPU path-mesh pipeline of the P3 V3 contract: port consumption, batch isolation, exact
 // buckets, the mesh cache, the failure memo and the failure notice queue (unit V3a), plus the
@@ -100,7 +102,8 @@ export type PathMeshRendererFailureCode =
   | 'fringe-work-cap'
   | 'packing-range'
   | 'mesh-pipeline-unavailable'
-  | 'overlay-unsupported';
+  | 'overlay-unsupported'
+  | 'dash-limit';
 export type PathMeshFailureCode =
   StrokeMeshFailureCode | PathMeshBatchFailureCode | PathMeshRendererFailureCode;
 
@@ -253,7 +256,8 @@ export type PathMeshPrepareInput = Readonly<{
 
 /**
  * The paint-specific key fields (B2 section 9.3). The fill key is V3's with the tag 'fill'; the
- * stroke key adds every mesh-affecting stroke value. Fields are compared with `===`.
+ * stroke key adds every mesh-affecting stroke value, including the dash (E24 section 4). Fields
+ * are compared with `===`.
  */
 type PaintKey =
   | Readonly<{ paint: 'fill'; fillRule: SceneFillRule }>
@@ -263,6 +267,7 @@ type PaintKey =
       cap: SceneStrokeCap;
       join: SceneStrokeJoin;
       miterLimit: number;
+      dash: SceneDash | null;
     }>;
 
 type FringeVariant = Readonly<{ id: symbol; f: number; fringe: PathFringe; bytes: number }>;
@@ -318,6 +323,15 @@ type PendingRequest = Readonly<{
   e: number;
   operationId: string;
   node: PathNode;
+  /** E24 section 4: the dashed path a dashed stroke request strokes; null without a dash. */
+  dashed: DashedPath | null;
+}>;
+/** E24 section 4: one node's dash expansion for one geometry revision and dash. */
+type DashCacheEntry = Readonly<{
+  revision: number;
+  dash: SceneDash;
+  result: DashExpansion;
+  bytes: number;
 }>;
 type Evaluated = Readonly<{
   path: DerivedPath;
@@ -398,10 +412,13 @@ export class PathMeshPipeline {
   readonly #fringeBuilder: PathFringeBuilder | undefined;
   readonly #seededDefect: PathMeshSeededDefect | undefined;
   #overlayBuilds = 0;
+  #dashExpansions = 0;
   #prepareCount = 0;
   #disposed = false;
   #cache: Record<PathPaint, Map<string, NodeCache>> = { fill: new Map(), stroke: new Map() };
   #memo = new Map<string, MemoEntry>();
+  /** E24 section 4: never evicted; its entries count against the byte budget. */
+  #dashes = new Map<string, DashCacheEntry>();
   #buckets = new Map<string, BucketCacheEntry>();
   #bounds: Record<PathPaint, Map<string, BoundsCacheEntry>> = {
     fill: new Map(),
@@ -527,7 +544,13 @@ export class PathMeshPipeline {
         const channel = this.#channels[paint]!;
         const port = readings[paint] as Extract<PortReading, { ok: true }>;
         // One state code per node, paint and prepare, in a fixed order: the exact bucket ranges
-        // of section c, then the f32 orientation check of the packed lanes.
+        // of section c, the f32 orientation check of the packed lanes, then the stroke's dash
+        // expansion (E24-K8), which does not depend on the camera.
+        const key = pathPaintKey(path, paint)!;
+        const expansion =
+          key.paint === 'stroke' && key.dash !== null
+            ? this.#dashExpansion(path.id, revision, node, key.dash)
+            : null;
         const code: PathMeshRendererFailureCode | null =
           buckets.e < channel.eMin
             ? 'tolerance-range'
@@ -535,7 +558,9 @@ export class PathMeshPipeline {
               ? 'fringe-range'
               : buckets.f32OrientationMismatch
                 ? 'packing-range'
-                : null;
+                : expansion?.status === 'dash-limit'
+                  ? 'dash-limit'
+                  : null;
         frameStates.set(
           stateKey(path.id, paint),
           code === null ? null : Object.freeze({ nodeId: path.id, paint, code }),
@@ -546,7 +571,6 @@ export class PathMeshPipeline {
         }
 
         const e = Math.min(buckets.e, E_MAX);
-        const key = pathPaintKey(path, paint)!;
         this.#currentE[paint].set(path.id, e);
         items.push(
           Object.freeze({
@@ -566,9 +590,20 @@ export class PathMeshPipeline {
           failed = true;
           continue;
         }
-        requests.push(
-          Object.freeze({ nodeId: path.id, revision, key, e, operationId: port.operationId, node }),
-        );
+        const dashed = expansion?.status === 'ok' ? expansion.path : null;
+        const request: PendingRequest = Object.freeze({
+          nodeId: path.id,
+          revision,
+          key,
+          e,
+          operationId: port.operationId,
+          node,
+          dashed,
+        });
+        // A dash pattern that is off over the whole path strokes to nothing: the empty entry is
+        // published without a port call, as an `empty` result would be.
+        if (dashed !== null && dashed.verbs.length === 0) this.#publish(request, null);
+        else requests.push(request);
       }
       if (failed) continue;
       for (const request of requests) missing[request.key.paint].push(request);
@@ -695,6 +730,14 @@ export class PathMeshPipeline {
   }
 
   /**
+   * @internal Tests only (E24-A04): the number of dash expansions so far. It is not a field of
+   * the exported PathMeshStatistics.
+   */
+  public getDashExpansionCount(): number {
+    return this.#dashExpansions;
+  }
+
+  /**
    * @internal Tests only (E10 contract, section 3.1): false when the pipeline was built
    * without a fringe builder; it classifies the draw record's region-only draws.
    */
@@ -752,6 +795,7 @@ export class PathMeshPipeline {
       if (channel !== undefined) channel.stack = [];
     }
     this.#memo.clear();
+    this.#dashes.clear();
     this.#buckets.clear();
     this.#states.clear();
     this.#slots.clear();
@@ -801,6 +845,19 @@ export class PathMeshPipeline {
         this.#memo.delete(key);
       }
     }
+    // E24 section 4: a dash entry lives while its node keeps that revision and dash.
+    for (const [nodeId, entry] of this.#dashes) {
+      const node = present.get(nodeId);
+      const key = node === undefined ? null : paintKeyOf(node, 'stroke');
+      if (
+        key?.paint !== 'stroke' ||
+        key.dash === null ||
+        revisions.get(nodeId) !== entry.revision ||
+        !dashesEqual(key.dash, entry.dash)
+      ) {
+        this.#dashes.delete(nodeId);
+      }
+    }
     for (const map of [
       this.#buckets,
       this.#bounds.fill,
@@ -831,6 +888,21 @@ export class PathMeshPipeline {
         this.#strokeSlots.set(path.id, this.#allocateSlot(path.id));
       }
     }
+  }
+
+  /** E24 section 4: the node's cached dash expansion, expanded on first need. */
+  #dashExpansion(nodeId: string, revision: number, node: PathNode, dash: SceneDash): DashExpansion {
+    const cached = this.#dashes.get(nodeId);
+    if (cached !== undefined && cached.revision === revision && dashesEqual(cached.dash, dash)) {
+      return cached.result;
+    }
+    this.#dashExpansions += 1;
+    const result = expandDash(node.geometry.verbs, node.geometry.points, dash);
+    // Section 4: 1 byte per verb and 16 per point, as the request buffers hold them.
+    const bytes =
+      result.status === 'ok' ? result.path.verbs.length + 8 * result.path.points.length : 0;
+    this.#dashes.set(nodeId, Object.freeze({ revision, dash, result, bytes }));
+    return result;
   }
 
   #wantsStrokeSlot(node: PathNode): boolean {
@@ -1315,6 +1387,7 @@ export class PathMeshPipeline {
         for (const entry of nodeCache.entries.values()) bytes += entryBytes(entry);
       }
     }
+    for (const entry of this.#dashes.values()) bytes += entry.bytes;
     return bytes;
   }
 
@@ -1472,12 +1545,14 @@ function fillRequest(request: PendingRequest, requestId: number): FillMeshReques
   });
 }
 
+/** E24 section 4: a dashed request strokes the dashed path; the other fields are unchanged. */
 function strokeRequest(request: PendingRequest, requestId: number): StrokeMeshRequest {
   const key = request.key as Extract<PaintKey, { paint: 'stroke' }>;
+  const geometry = request.dashed ?? request.node.geometry;
   return Object.freeze({
     requestId,
-    verbs: Uint8Array.from(request.node.geometry.verbs, (verb) => PATH_VERB_CODES[verb]),
-    points: Float64Array.from(request.node.geometry.points),
+    verbs: Uint8Array.from(geometry.verbs, (verb) => PATH_VERB_CODES[verb]),
+    points: Float64Array.from(geometry.points),
     width: key.width,
     cap: key.cap,
     join: key.join,
@@ -1515,6 +1590,7 @@ function paintKeyOf(node: PathNode, paint: PathPaint): PaintKey | null {
     cap: stroke.cap,
     join: stroke.join,
     miterLimit: stroke.miterLimit,
+    dash: stroke.dash ?? null,
   });
 }
 
@@ -1525,7 +1601,18 @@ function paintKeysEqual(left: PaintKey, right: PaintKey): boolean {
     left.width === right.width &&
     left.cap === right.cap &&
     left.join === right.join &&
-    left.miterLimit === right.miterLimit
+    left.miterLimit === right.miterLimit &&
+    (left.dash === null || right.dash === null
+      ? left.dash === right.dash
+      : dashesEqual(left.dash, right.dash))
+  );
+}
+
+function dashesEqual(left: SceneDash, right: SceneDash): boolean {
+  return (
+    left.phase === right.phase &&
+    left.pattern.length === right.pattern.length &&
+    left.pattern.every((entry, index) => entry === right.pattern[index])
   );
 }
 
@@ -1693,8 +1780,8 @@ function entryBytes(entry: MeshEntry): number {
 }
 
 /**
- * The memo key: the paint tag, then V3's fields, then the stroke's key fields. Every entry also
- * stores its fields, which reachability compares with `===` (no hash is trusted).
+ * The memo key: the paint tag, then V3's fields, then the stroke's key fields with the dash.
+ * Every entry also stores its fields, which reachability compares with `===` (no hash is trusted).
  */
 function memoKey(
   operationId: string,
@@ -1704,7 +1791,9 @@ function memoKey(
   e: number | null,
 ): string {
   const fields =
-    key.paint === 'fill' ? [key.fillRule] : [key.width, key.cap, key.join, key.miterLimit];
+    key.paint === 'fill'
+      ? [key.fillRule]
+      : [key.width, key.cap, key.join, key.miterLimit, key.dash?.pattern ?? null, key.dash?.phase];
   return JSON.stringify([key.paint, 0, operationId, nodeId, revision, ...fields, e]);
 }
 
