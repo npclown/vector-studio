@@ -4,7 +4,7 @@ import {
   parseEnvelope,
   serializeDocument,
   serializeEnvelope,
-  type DocumentV3,
+  type DocumentV4,
 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
 
@@ -44,8 +44,8 @@ const AFTER_AUTOSAVE_MS = 2_500;
  * The editor's empty document. `node-1` and `node-2` follow editor-core's default counter ID
  * source (`createCounterIdSource('node-')`, used by `emptyDocument`, editor.ts:444).
  */
-const DEFAULT_DOCUMENT: DocumentV3 = {
-  schemaVersion: 3,
+const DEFAULT_DOCUMENT: DocumentV4 = {
+  schemaVersion: 4,
   id: 'node-1',
   pages: [{ id: 'node-2', name: 'Page 1', children: [] }],
   nodes: {},
@@ -109,11 +109,11 @@ async function persistState(page: Page, state: string) {
   });
 }
 
-async function documentOf(page: Page): Promise<DocumentV3> {
+async function documentOf(page: Page): Promise<DocumentV4> {
   const text = await page.evaluate(() =>
     JSON.stringify(window.__p5Host!.editor.query({ type: 'document' })),
   );
-  return JSON.parse(text) as DocumentV3;
+  return JSON.parse(text) as DocumentV4;
 }
 
 /** The canonical document text (`serializeDocument`), compared byte for byte. */

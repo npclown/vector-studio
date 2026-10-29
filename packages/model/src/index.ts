@@ -1,9 +1,11 @@
 export {
   DOCUMENT_ERROR_CODES,
   isValidId,
+  MAX_TEXT_LENGTH,
   MAX_TREE_DEPTH,
   migrateV1toV2,
   migrateV2toV3,
+  migrateV3toV4,
   normalizeRotation,
   parseDocument,
   validateAnyDocument,
@@ -17,6 +19,7 @@ export {
   type NodeResult,
   type ParseResult,
   type ParseResultV2,
+  type ParseResultV3,
 } from './parse.js';
 export {
   ENVELOPE_ERROR_CODES,

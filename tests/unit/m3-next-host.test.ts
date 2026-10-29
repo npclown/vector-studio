@@ -21,7 +21,7 @@ import {
   validateAnyDocument,
   validateDocument,
   type DocumentV2,
-  type DocumentV3,
+  type DocumentV4,
 } from '../../packages/model/src/index.js';
 import { RecordingRenderer } from '../support/p5-recording-renderer.js';
 
@@ -94,7 +94,7 @@ function pathsDocument(
     verbs: Extract<Command, { type: 'createPath' }>['verbs'];
     points: readonly number[];
   }>[],
-): DocumentV3 {
+): DocumentV4 {
   const target = createEditor({ ids: createCounterIdSource('p') });
   for (const entry of paths) ok(target, { type: 'createPath', ...entry });
   return target.query({ type: 'document' });
@@ -128,9 +128,9 @@ describe('M3-U4 path-edit fixture', () => {
     ok(target, { type: 'enterPathEdit', id: 'open' });
     const nested = target.query({ type: 'pathOverlay' })!;
     expect(nested.subpaths.map((s) => [s.closed, s.anchors.length])).toEqual([[false, 4]]);
-    // Loading it in the editor keeps it byte for byte, up to the v3 version (M7-U1).
+    // Loading it in the editor keeps it byte for byte, up to the v4 version (M6a-U1).
     expect(JSON.stringify(target.query({ type: 'document' }))).toBe(
-      JSON.stringify({ ...FIXTURE, schemaVersion: 3 }),
+      JSON.stringify({ ...FIXTURE, schemaVersion: 4 }),
     );
   });
 });

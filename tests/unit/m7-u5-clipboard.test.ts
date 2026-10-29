@@ -3,8 +3,8 @@ import path from 'node:path';
 import {
   serializeDocument,
   validateDocument,
-  type DocumentV3,
-  type NodeV3,
+  type DocumentV4,
+  type NodeV4,
 } from '@vector-studio/model';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -27,8 +27,17 @@ import { ExpansionCache } from '../../packages/editor-core/src/expansion.js';
 // accepts; a failed command changes nothing, keeps the clipboard and draws no ID.
 
 const root = path.resolve(import.meta.dirname, '../..');
+// Since M6a-U1 the model returns schema v4, so each M7 fixture is read as its committed v4
+// migration under tests/fixtures/m6-text/migrated (M6a contract, section 2.1).
 const fixture = (name: string) =>
-  readFileSync(path.join(root, 'tests/fixtures/m7-symbols', name), 'utf8');
+  readFileSync(
+    path.join(
+      root,
+      'tests/fixtures/m6-text/migrated',
+      `${path.basename(name).replace(/(\.v3)?\.json$/, '')}.v4.json`,
+    ),
+    'utf8',
+  );
 const SYMBOLS = fixture('symbols.v3.json');
 const MARKER = 'vector-studio/fragment\n';
 const START = { horizontal: 'start', vertical: 'start' } as const;
@@ -89,7 +98,7 @@ const instance = (id: string, parent: string, frame: Frame, symbol: string) => (
  */
 function small(): Json {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: 'd',
     pages: [{ id: 'p', name: 'P', children: ['F', 'I', 'X'] }],
     nodes: {
@@ -102,7 +111,7 @@ function small(): Json {
   };
 }
 const emptyDocument = (): Json => ({
-  schemaVersion: 3,
+  schemaVersion: 4,
   id: 'e',
   pages: [{ id: 'q', name: 'Q', children: [] }],
   nodes: {},
@@ -180,7 +189,7 @@ const marked = (body: unknown) => MARKER + JSON.stringify(body);
 /** The literal text of `copy { ids: ['I'] }` on `small()`. */
 const I_FRAGMENT =
   MARKER +
-  '{"fragmentVersion":2,"schemaVersion":3,"roots":["I"],"nodes":{' +
+  '{"fragmentVersion":2,"schemaVersion":4,"roots":["I"],"nodes":{' +
   '"I":{"id":"I","name":"I","parent":"","frame":{"x":100,"y":0,"width":80,"height":40},' +
   `"rotation":0,${TAIL},"type":"instance","symbol":"S"}},` +
   '"sources":["S"],"sourceNodes":{' +
@@ -604,7 +613,7 @@ describe('paste of an instance alone (M7-Q9 (a))', () => {
     expect(oneStep(target, { type: 'paste', text: fragment })).toEqual(['n1', 'n3']);
     expect(drawn()).toBe(3);
     expect(documentOf(target)).toEqual({
-      schemaVersion: 3,
+      schemaVersion: 4,
       id: 'e',
       pages: [{ id: 'q', name: 'Q', children: ['n1', 'n3'] }],
       nodes: {
@@ -903,13 +912,13 @@ describe('expansion validity and caps through paste (M7-X3, section 4.1)', () =>
     };
     let drawn = 0;
     const custom = {
-      check: (node: NodeV3) =>
+      check: (node: NodeV4) =>
         node.type === 'custom' && node.frame.width > 50
           ? { code: 'document.invalid-custom-data' as const, path: '/data' }
           : null,
       defaults: () => ({ data: {} }),
     };
-    const document = JSON.parse(JSON.stringify(emptyDocument())) as DocumentV3;
+    const document = JSON.parse(JSON.stringify(emptyDocument())) as DocumentV4;
     const context = { ids: () => `n${++drawn}`, activePage: 'q', custom };
     expect(applyEdit(document, { type: 'paste', text: marked(body) }, context)).toEqual({
       ok: false,
@@ -937,7 +946,7 @@ describe('expansion validity and caps through paste (M7-X3, section 4.1)', () =>
       for (const id of ids) nodes[id] = instance(id, page, f(0, 0, 10, 10), 's');
       return { id: page, name: page, children: k === 0 ? ['s', ...ids] : ids };
     });
-    return { schemaVersion: 3, id: 'cap', pages, nodes };
+    return { schemaVersion: 4, id: 'cap', pages, nodes };
   }
 
   it('a paste over the page cap is editor.expansion-limit at its fragment path', () => {
@@ -1031,7 +1040,7 @@ describe('expansion validity and caps through paste (M7-X3, section 4.1)', () =>
 describe('rule (1) review follow-ups (B1, S1, S2)', () => {
   /** Page `p` holding source `node-3` (with `c`) and its instance `I`. */
   const reused = (): Json => ({
-    schemaVersion: 3,
+    schemaVersion: 4,
     id: 'd',
     pages: [{ id: 'p', name: 'P', children: ['node-3', 'I'] }],
     nodes: {

@@ -1,4 +1,4 @@
-import type { DocumentV3, Frame, NodeV3, PathData } from '@vector-studio/model';
+import type { DocumentV4, Frame, NodeV4, PathData } from '@vector-studio/model';
 import {
   apply,
   boundsOfPoints,
@@ -30,7 +30,7 @@ import type { PagePoint } from './types.js';
 // editor's expansion cache, would be hit inside its content clip, and the hit names the instance.
 
 /** Frame-local path geometry for a custom node (its extension's `toScene`), or null. */
-export type CustomGeometry = (node: NodeV3) => PathData | null;
+export type CustomGeometry = (node: NodeV4) => PathData | null;
 
 export type Polyline = { points: PagePoint[]; closed: boolean };
 
@@ -266,7 +266,7 @@ function insideEllipse(p: PagePoint, frame: Frame): boolean {
  * each arrowhead as an open polyline (`line`) or a closed triangle (`triangle`). A line without
  * a stroke, of stroke width 0 or of zero length has no arrowheads.
  */
-function lineOutline(node: Extract<NodeV3, { type: 'line' }>): {
+function lineOutline(node: Extract<NodeV4, { type: 'line' }>): {
   lines: Polyline[];
   triangles: Polyline[];
 } {
@@ -294,7 +294,7 @@ function lineOutline(node: Extract<NodeV3, { type: 'line' }>): {
 }
 
 /** A point in a node's parent space, turned into its unrotated frame (a rigid map). */
-function intoFrame(node: NodeV3, parentPoint: PagePoint): PagePoint {
+function intoFrame(node: NodeV4, parentPoint: PagePoint): PagePoint {
   if (node.rotation === 0) return parentPoint;
   const cx = node.frame.x + node.frame.width / 2;
   const cy = node.frame.y + node.frame.height / 2;
@@ -307,7 +307,7 @@ function intoFrame(node: NodeV3, parentPoint: PagePoint): PagePoint {
  * 4.4; M1 contract, section 6). Containers never hit here; `visible` of the node itself counts.
  */
 export function hitsNode(
-  node: NodeV3,
+  node: NodeV4,
   parentPoint: PagePoint,
   zoom: number,
   custom: CustomGeometry,
@@ -316,6 +316,8 @@ export function hitsNode(
   if (isContainer(node)) return false;
   // An instance is hit through its expansion in `visitHits` (M7 contract, section 4.3).
   if (node.type === 'instance') return false;
+  // Interim until M6a-U3 hits it in its rotated frame box (M6a contract, section 7).
+  if (node.type === 'text') return false;
   // Into the unrotated frame: a rigid map, so distances are unchanged (M1 contract, section 6).
   const point = intoFrame(node, parentPoint);
   const radius = Math.max((node.stroke?.width ?? 0) / 2, 4 / zoom);
@@ -346,7 +348,7 @@ export function hitsNode(
 }
 
 /** Whether `point`, in a mask group's local space, is inside its source's fill region. */
-function insideMask(source: NodeV3 | undefined, point: PagePoint, zoom: number): boolean {
+function insideMask(source: NodeV4 | undefined, point: PagePoint, zoom: number): boolean {
   if (source?.type !== 'path') return false;
   // Fill, opacity and visibility of the source are ignored; its fill rule applies.
   const lines = flatten(source.path, source.frame, true, 0.25 / zoom);
@@ -375,7 +377,7 @@ function expansionTree(expansion: Expansion): TreeView {
  * A frame hit on both its border and its background is visited twice.
  */
 function visitHits(
-  document: DocumentV3,
+  document: DocumentV4,
   page: string,
   point: PagePoint,
   zoom: number,
@@ -432,7 +434,7 @@ function visitHits(
     // A frame paints its background, its children inside its rect, then its border; an
     // instance paints its source's background and border around its expansion.
     let fill: boolean;
-    let stroke: Extract<NodeV3, { type: 'frame' }>['stroke'];
+    let stroke: Extract<NodeV4, { type: 'frame' }>['stroke'];
     let content: readonly string[] = [];
     let within = view;
     let as = owner;
@@ -483,7 +485,7 @@ function visitHits(
  * `expansions` is the editor's expansion cache, shared with the projector (M7-X4).
  */
 export function deepestHit(
-  document: DocumentV3,
+  document: DocumentV4,
   page: string,
   point: PagePoint,
   zoom: number,
@@ -511,7 +513,7 @@ export function deepestHit(
  * stack of M2 contract, section 5, before its selection targets are taken).
  */
 export function hitsAt(
-  document: DocumentV3,
+  document: DocumentV4,
   page: string,
   point: PagePoint,
   zoom: number,
@@ -543,7 +545,7 @@ export function hitsAt(
  * passes a scope only for a hit strictly inside its subtree; otherwise the page rule applies.
  */
 export function selectionTarget(
-  document: DocumentV3,
+  document: DocumentV4,
   id: string,
   scope: string | null = null,
 ): string | null {
@@ -559,7 +561,7 @@ export function selectionTarget(
 
 /** The chain from a hit node up to its selection target, innermost first; empty for no target. */
 export function targetChain(
-  document: DocumentV3,
+  document: DocumentV4,
   id: string,
   scope: string | null = null,
 ): string[] {
@@ -600,7 +602,7 @@ function contains(box: Frame, frame: Frame): boolean {
  * candidate as a leaf. Children of other containers are not candidates.
  */
 export function marqueeHits(
-  document: DocumentV3,
+  document: DocumentV4,
   page: string,
   box: Frame,
   scope: string | null = null,
@@ -625,7 +627,7 @@ export function marqueeHits(
  * The page-aligned bounds of the rotated frames of `ids` in page space, at any depth (M1
  * contract, section 6), or null when there are none.
  */
-export function boundsOf(document: DocumentV3, ids: readonly string[]): Frame | null {
+export function boundsOf(document: DocumentV4, ids: readonly string[]): Frame | null {
   const tree = documentTree(document);
   const points: PagePoint[] = [];
   for (const id of ids) {

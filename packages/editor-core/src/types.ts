@@ -10,12 +10,12 @@ import type {
   Constraints,
   CornerRadii,
   DocumentErrorCode,
-  DocumentV3,
+  DocumentV4,
   FillRule,
   Frame,
   JsonValue,
   ModelErrorCode,
-  NodeV3,
+  NodeV4,
   PageV2,
   PathStroke,
   PathVerb,
@@ -454,7 +454,7 @@ export type CommandResult =
 export type HistoryState = Readonly<{ undoDepth: number; redoDepth: number }>;
 
 export type EditorSnapshot = Readonly<{
-  document: DocumentV3;
+  document: DocumentV4;
   /** The page tools, hit testing and the projector work on (M1 contract, section 3). */
   activePage: string;
   /** Increases by one for every document change, including gesture updates, undo and redo. */
@@ -533,9 +533,9 @@ export type SelectionHandles = Readonly<{
 }>;
 
 export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'committedDocument' }
-  ? DocumentV3
+  ? DocumentV4
   : Q extends { type: 'node' }
-    ? NodeV3 | null
+    ? NodeV4 | null
     : Q extends { type: 'selection' }
       ? readonly string[]
       : Q extends { type: 'tool' }

@@ -1,4 +1,4 @@
-import { validateNode, type DocumentV3, type NodeV3, type PageV2 } from '@vector-studio/model';
+import { validateNode, type DocumentV4, type NodeV4, type PageV2 } from '@vector-studio/model';
 import type { ExpansionCache } from './expansion.js';
 import { deepFreeze } from './freeze.js';
 import { refitGroup, type WritableTree } from './resize.js';
@@ -16,11 +16,11 @@ export function fail(code: EditorErrorCode, path?: string): Failure {
 
 /** The extension check of a custom node; other nodes pass. `path` is relative to the node. */
 export type CustomCheck = (
-  node: NodeV3,
+  node: NodeV4,
 ) => Readonly<{ code: EditorErrorCode; path: string }> | null;
 
 /** Whether two versions of a node have the same parent, frame and rotation. */
-export function samePlacement(a: NodeV3, b: NodeV3): boolean {
+export function samePlacement(a: NodeV4, b: NodeV4): boolean {
   return (
     a.parent === b.parent &&
     a.rotation === b.rotation &&
@@ -32,8 +32,8 @@ export function samePlacement(a: NodeV3, b: NodeV3): boolean {
 }
 
 export class Draft implements WritableTree {
-  readonly base: DocumentV3;
-  private readonly nodes: Map<string, NodeV3>;
+  readonly base: DocumentV4;
+  private readonly nodes: Map<string, NodeV4>;
   private pages: PageV2[];
   /** Nodes created, changed or removed. */
   readonly touched = new Set<string>();
@@ -48,13 +48,13 @@ export class Draft implements WritableTree {
    */
   expansions: ExpansionCache | undefined;
 
-  constructor(base: DocumentV3) {
+  constructor(base: DocumentV4) {
     this.base = base;
     this.nodes = new Map(Object.entries(base.nodes));
     this.pages = [...base.pages];
   }
 
-  node(id: string): NodeV3 | undefined {
+  node(id: string): NodeV4 | undefined {
     return this.nodes.get(id);
   }
 
@@ -67,7 +67,7 @@ export class Draft implements WritableTree {
   }
 
   /** Replaces or adds a node; `finish` validates it with the model's field rules. */
-  set(node: NodeV3): void {
+  set(node: NodeV4): void {
     this.nodes.set(node.id, node);
     this.touched.add(node.id);
     this.unchecked.add(node.id);
@@ -78,7 +78,7 @@ export class Draft implements WritableTree {
    * Replaces or adds a node the command has already validated with the model's rules, and with
    * its extension when `custom` is true.
    */
-  setChecked(node: NodeV3, custom = false): void {
+  setChecked(node: NodeV4, custom = false): void {
     this.nodes.set(node.id, node);
     this.touched.add(node.id);
     this.unchecked.delete(node.id);
@@ -129,10 +129,10 @@ export class Draft implements WritableTree {
     check: CustomCheck,
     options: Readonly<{
       refit: boolean;
-      placementBase?: DocumentV3;
+      placementBase?: DocumentV4;
       expansions?: ExpansionCache;
     }> = { refit: true },
-  ): DocumentV3 | Failure {
+  ): DocumentV4 | Failure {
     this.expansions = options.expansions;
     this.deleteEmptyGroups();
     if (options.refit) this.refit(options.placementBase ?? this.base);
@@ -154,9 +154,9 @@ export class Draft implements WritableTree {
   }
 
   /** The current state as a frozen document, without the `finish` rules. */
-  document(): DocumentV3 {
+  document(): DocumentV4 {
     return deepFreeze({
-      schemaVersion: 3,
+      schemaVersion: 4,
       id: this.base.id,
       pages: this.pages,
       // fromEntries defines own properties, so a "__proto__" ID stays data.
@@ -183,7 +183,7 @@ export class Draft implements WritableTree {
     }
   }
 
-  private refit(placementBase: DocumentV3): void {
+  private refit(placementBase: DocumentV4): void {
     const pending = new Set<string>();
     const consider = (owner: string | undefined) => {
       if (owner !== undefined && isGroup(this.nodes.get(owner))) pending.add(owner);

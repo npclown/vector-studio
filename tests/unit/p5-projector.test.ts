@@ -1,4 +1,4 @@
-import { serializeDocument, type DocumentV3 } from '@vector-studio/model';
+import { serializeDocument, type DocumentV4 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   createCounterIdSource,
@@ -66,7 +66,7 @@ function drag(target: Editor, from: [number, number], to: [number, number]) {
   pointer(target, 'pointerup', to[0], to[1]);
 }
 
-function documentOf(target: Editor): DocumentV3 {
+function documentOf(target: Editor): DocumentV4 {
   return target.query({ type: 'document' });
 }
 

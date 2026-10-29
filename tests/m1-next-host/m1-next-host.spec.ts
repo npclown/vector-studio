@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Command, Editor, EditorEvent, SelectionHandles } from '@vector-studio/editor-core';
-import type { DocumentV3, NodeV3 } from '@vector-studio/model';
+import type { DocumentV4, NodeV4 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
 
 // M1-U5 (MVP M1 contract, section 8): M1-A12, the next-host page renders the M1 containers
@@ -32,17 +32,17 @@ type Point = Readonly<{ x: number; y: number }>;
 type Rgb = readonly [number, number, number];
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-// The page loads the v2 fixture `m1-model/containers.json`; since M7-U1 the editor holds its
-// committed v3 migration, which differs in the version only (M7 contract, section 2.1).
+// The page loads the v2 fixture `m1-model/containers.json`; since M6a-U1 the editor holds its
+// committed v4 migration, which differs in the version only (M6a contract, section 2.1).
 const FIXTURE = JSON.parse(
-  readFileSync(path.join(root, 'tests/fixtures/m7-symbols/migrated/containers.v3.json'), 'utf8'),
-) as DocumentV3;
-const FIXTURE_LINE_STROKE = (FIXTURE.nodes.l1 as Extract<NodeV3, { type: 'line' }>).stroke!;
+  readFileSync(path.join(root, 'tests/fixtures/m6-text/migrated/containers.v4.json'), 'utf8'),
+) as DocumentV4;
+const FIXTURE_LINE_STROKE = (FIXTURE.nodes.l1 as Extract<NodeV4, { type: 'line' }>).stroke!;
 /** The page's fixture camera (apps/next-host/app/page.tsx): css = (page - position) * zoom. */
 const CAMERA = { x: -20, y: -20, zoom: 2 };
 
 /** A node's local point in its parent's space (M1 contract, section 5 transform). */
-function place(node: NodeV3, x: number, y: number): Point {
+function place(node: NodeV4, x: number, y: number): Point {
   const { frame, rotation } = node;
   const cos = Math.cos(rotation);
   const sin = Math.sin(rotation);
@@ -115,11 +115,11 @@ async function open(page: Page) {
   return { errors, status, screen };
 }
 
-async function readDocument(page: Page): Promise<DocumentV3> {
+async function readDocument(page: Page): Promise<DocumentV4> {
   const text = await page.evaluate(() =>
     JSON.stringify(window.__p5Host!.editor.query({ type: 'document' })),
   );
-  return JSON.parse(text) as DocumentV3;
+  return JSON.parse(text) as DocumentV4;
 }
 
 async function readHandles(page: Page): Promise<SelectionHandles | null> {
@@ -186,7 +186,7 @@ const RECOLOURED = (() => {
     if (command.type !== 'setNodeProps') continue;
     Object.assign(document.nodes[command.id]!, command.props);
   }
-  return document as unknown as DocumentV3;
+  return document as unknown as DocumentV4;
 })();
 /** Reference colours in bytes; `canvas` and `white` are measured per check. */
 const PAINTS: Readonly<Record<string, Rgb>> = {
@@ -266,7 +266,7 @@ async function click(page: Page, at: Point, shift = false) {
 }
 
 /** The IDs `after` adds to page-1's children. */
-function added(before: DocumentV3, after: DocumentV3): string[] {
+function added(before: DocumentV4, after: DocumentV4): string[] {
   const old = new Set(before.pages[0]!.children);
   return after.pages[0]!.children.filter((id) => !old.has(id));
 }
