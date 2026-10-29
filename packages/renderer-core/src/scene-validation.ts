@@ -379,13 +379,15 @@ function paintsSupported(paints: readonly (ScenePaint | null)[], support: PathSu
 }
 
 /**
- * E24-S1 and S3: a dash on a stroke of width > 0 is unsupported unless the renderer dashes, and
- * with more than SCENE_MAX_DASH_ENTRIES entries. Both are reported after the graph checks.
+ * E24-S1 and S3: a dash with more than SCENE_MAX_DASH_ENTRIES entries is unsupported, and so is
+ * a dash on a stroke of width > 0 unless the renderer dashes. Both are reported after the graph
+ * checks.
  */
 function dashSupported(stroke: PathStroke | null, support: PathSupport): boolean {
   if (stroke === null || stroke.dash === undefined || stroke.dash === null) return true;
-  if (!(stroke.width > 0)) return true;
-  return support.dashes === 'supported' && stroke.dash.pattern.length <= SCENE_MAX_DASH_ENTRIES;
+  if (stroke.dash.pattern.length > SCENE_MAX_DASH_ENTRIES) return false;
+  // A stroke of width 0 draws nothing, so only the support gate exempts it.
+  return !(stroke.width > 0) || support.dashes === 'supported';
 }
 
 /** P4-S1 and P4-S3: `undefined` marks an invalid clip, since `null` is a valid one. */

@@ -123,6 +123,13 @@ describe('E24-A01 scene dash validation', () => {
     const many = Array<number>(SCENE_MAX_DASH_ENTRIES + 1).fill(1);
     expect(withDash({ pattern: many, phase: 0 })).toBe('unsupported-feature');
     expect(withDash({ pattern: [...many.slice(1), -1], phase: 0 })).toBe('invalid-value');
+    // The entry count is structural: width 0 does not exempt it, under either support.
+    expect(replace([path('p', stroke({ pattern: many, phase: 0 }, 0))])).toBe(
+      'unsupported-feature',
+    );
+    expect(replace([path('p', stroke({ pattern: many, phase: 0 }, 0))], SOLID)).toBe(
+      'unsupported-feature',
+    );
   });
 
   it('E24-S1: graph reasons precede the entry count and the support gate; values precede both', () => {

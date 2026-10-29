@@ -36,7 +36,7 @@ E11-Q3 (a), quoted: "Adopt the three D8-interim outcomes as P3's product behavio
 
 ## 3. Classes that reach each outcome
 
-Codes are those of `PathMeshFailureCode` (20: 6 path, 4 batch, 10 renderer).
+Codes are those of `PathMeshFailureCode` (20: 6 path, 4 batch, 10 renderer; 21 with 11 renderer once E24-U2 adds `dash-limit`).
 
 | Scope | Code | Outcome | Known classes of input |
 | --- | --- | --- | --- |
