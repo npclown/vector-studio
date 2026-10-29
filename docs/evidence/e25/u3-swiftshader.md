@@ -11,7 +11,7 @@ Contract: [d9-e25-isolated-opacity-contract.md](../../plans/d9-e25-isolated-opac
   - `isolate=1`, `isolateUnitOpacityForTesting`;
   - `tile=N`, the backend's `layerTileSizeForTesting`.
   
-  The page forwards `requiresLayerPipeline` from the service and exposes `layerPasses()`, from `getLayerPassesForTesting()`.
+  The page forwards `requiresLayerPipeline` from the service and exposes `layerPasses()`, from `getLayerPassesForTesting()`. The committed page (U4, #349) exposes it as `counters().layerPasses` instead, and the script reads that since #354.
 - Script: [u3-swiftshader-captures.mjs](u3-swiftshader-captures.mjs), run with `SWIFTSHADER=1`. The camera is at home and the CSS surface is 512 × 320. The script runs at sample counts 4 and 1, at DPR 1 and 2, in four configurations:
   - `flat`: `groups: 'flat'`;
   - `isolated`: `groups: 'isolated'`, where no container draws a layer;
