@@ -29,6 +29,12 @@ export type Grapheme = Readonly<{
    * fragment there (Chromium clamps an inline box's width at 0, see `measurePens`).
    */
   anchor?: number;
+  /**
+   * The grapheme's baseline in pass 1: its rect's top plus its run's ascent (the distance from a
+   * text rect's top to its baseline, the same for every grapheme of a run, measured on its own;
+   * section 16, M6a-U4b). Absent when the ascent could not be measured.
+   */
+  baseline?: number;
 }>;
 
 /** One line of pass 1: its text offsets and the indices of its graphemes (never an LF). */
@@ -54,10 +60,12 @@ export function isHangingSpace(segment: string): boolean {
 }
 
 /**
- * Pass-1 line rule: a grapheme starts a new line when its rect's top is at or below the previous
- * rect's bottom, or when it starts left of the previous rect while also lower than it. Requiring
- * "lower" for the leftward case keeps clusters that negative letter spacing moves left on their
- * line (section 16, M6a-U4 notes).
+ * Pass-1 line rule from rects alone, for graphemes without a baseline: a grapheme starts a new
+ * line when its rect's top is at or below the previous rect's bottom, or when it starts left of
+ * the previous rect while also lower than it. Requiring "lower" for the leftward case keeps
+ * clusters that negative letter spacing moves left on their line (section 16, M6a-U4 notes). It
+ * misses a line whose glyph rects are taller than the line pitch when the line starts at the
+ * previous line's left (M6a-U4b), which `startsNewLineAt` decides by baselines.
  */
 export function startsNewLine(previous: Rect, rect: Rect): boolean {
   if (previous.height > EPSILON && rect.top >= previous.top + previous.height - EPSILON) {
@@ -66,9 +74,27 @@ export function startsNewLine(previous: Rect, rect: Rect): boolean {
   return rect.top > previous.top + EPSILON && rect.left < previous.left - EPSILON;
 }
 
+/** A grapheme as `startsNewLineAt` sees it: its rect and, when measured, its baseline. */
+export type Placed = Readonly<{ rect: Rect; baseline?: number }>;
+
+/**
+ * Pass-1 line rule (M6a-U4b): every cluster of a line sits on the line's baseline, whatever its
+ * run's size or font, and a later line's baseline is lower, so a grapheme starts a new line when
+ * its baseline is lower than the previous grapheme's. Unlike rect edges, this holds when glyph
+ * rects are taller than the line pitch (a font whose ascent and descent pass `lineHeight`, so
+ * adjacent lines' rects overlap) and when a line starts at the previous line's left (one
+ * grapheme per line). Without both baselines it is `startsNewLine`.
+ */
+export function startsNewLineAt(previous: Placed, current: Placed): boolean {
+  if (previous.baseline !== undefined && current.baseline !== undefined) {
+    return current.baseline > previous.baseline + EPSILON;
+  }
+  return startsNewLine(previous.rect, current.rect);
+}
+
 /**
  * Lines of pass 1. An LF ends its line and starts the next; within a paragraph, the first
- * grapheme starts a line and every later one starts a new line when `startsNewLine` says so.
+ * grapheme starts a line and every later one starts a new line when `startsNewLineAt` says so.
  * Lines tile the text, an LF excluded from both its neighbours; an empty paragraph is one empty
  * line, so an empty text or a text ending in LF ends with an empty line.
  */
@@ -76,7 +102,7 @@ export function assignLines(graphemes: readonly Grapheme[], textLength: number):
   const lines: LineSlot[] = [];
   let start = 0;
   let members: number[] = [];
-  let previous: Rect | null = null;
+  let previous: Placed | null = null;
   graphemes.forEach((grapheme, index) => {
     if (grapheme.lf) {
       lines.push({ start, end: grapheme.start, graphemes: members });
@@ -86,13 +112,19 @@ export function assignLines(graphemes: readonly Grapheme[], textLength: number):
       return;
     }
     const rect = grapheme.rect;
-    if (previous !== null && rect !== null && startsNewLine(previous, rect)) {
+    const placed: Placed | null =
+      rect === null
+        ? null
+        : grapheme.baseline === undefined
+          ? { rect }
+          : { rect, baseline: grapheme.baseline };
+    if (previous !== null && placed !== null && startsNewLineAt(previous, placed)) {
       lines.push({ start, end: grapheme.start, graphemes: members });
       start = grapheme.start;
       members = [];
     }
     members.push(index);
-    if (rect !== null) previous = rect;
+    if (placed !== null) previous = placed;
   });
   lines.push({ start, end: textLength, graphemes: members });
   return lines;

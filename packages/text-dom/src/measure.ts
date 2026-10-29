@@ -8,7 +8,7 @@ import {
   type LineSlot,
   type Rect,
 } from './assemble.js';
-import { buildRunTree, planInsertions } from './tree.js';
+import { buildRunTree, planAscents, planInsertions, runSpan, SENTINEL } from './tree.js';
 
 // The measurement element of the M6a contract (docs/plans/mvp-m6a-text-model-contract.md,
 // section 4, M6-L1): a hidden host holding a shadow root with one block, one span per run, read
@@ -124,17 +124,58 @@ export function createMeasurer(document: Document, lang: string): Measurer {
     return element;
   }
 
+  /**
+   * Each run's ascent: from the top of a text rect in its style to its baseline (M6a-U4b). In
+   * Chromium a text rect spans the run's primary font's ascent and descent, the same for every
+   * grapheme of the run, a fallback face's glyph included, so one U+200B per distinct font list
+   * and size, each on a line of its own with a baseline probe after it, gives it. Measured on
+   * every request: a cache would go stale when a face becomes active without a generation bump
+   * (section 16, M6a-U4b review r2). Null where the U+200B has no rect.
+   */
+  function measureAscents(
+    target: HTMLElement,
+    range: Range,
+    request: TextLayoutRequest,
+    fontLists: readonly string[],
+  ): (number | null)[] {
+    const { keys, firsts } = planAscents(request, fontLists);
+    target.style.setProperty('white-space', 'pre');
+    const samples = firsts.map((index) => {
+      const span = runSpan(document, request, fontLists, index);
+      const text = document.createTextNode(SENTINEL);
+      const marker = probe('baseline');
+      span.append(text, marker);
+      target.append(span, document.createElement('br'));
+      return [keys[index]!, text, marker] as const;
+    });
+    const ascents = new Map<string, number>();
+    for (const [key, text, marker] of samples) {
+      range.setStart(text, 0);
+      range.setEnd(text, text.data.length);
+      const rect = range.getClientRects()[0];
+      if (rect !== undefined) ascents.set(key, marker.getBoundingClientRect().bottom - rect.top);
+    }
+    target.replaceChildren();
+    return keys.map((key) => ascents.get(key) ?? null);
+  }
+
   return {
     measure(request, fontLists) {
       const target = ensureBlock();
       const width = request.width === null ? 'max-content' : `${request.width}px`;
       target.style.cssText = `${BLOCK_STYLE}; width: ${width}`;
-      const tree = buildRunTree(document, request, fontLists);
-      const { texts, runStarts, textLength } = tree;
-      target.replaceChildren(...tree.elements, ...(tree.sentinel === null ? [] : [tree.sentinel]));
 
       try {
         const range = document.createRange();
+        const ascents = measureAscents(target, range, request, fontLists);
+        // Pass 1 restores the block style that the ascents' `white-space: pre` replaced.
+        target.style.cssText = `${BLOCK_STYLE}; width: ${width}`;
+        const tree = buildRunTree(document, request, fontLists);
+        const { texts, runStarts, textLength } = tree;
+        target.replaceChildren(
+          ...tree.elements,
+          ...(tree.sentinel === null ? [] : [tree.sentinel]),
+        );
         const read = (origin: DOMRect): Grapheme[] => {
           const graphemes: Grapheme[] = [];
           request.runs.forEach((run, index) => {
@@ -149,14 +190,20 @@ export function createMeasurer(document: Document, lang: string): Measurer {
                 const first = range.getClientRects()[0];
                 rect = first === undefined ? null : relative(first, origin);
               }
-              graphemes.push({
+              const ascent = ascents[index]!;
+              const grapheme: Grapheme = {
                 start: runStart + local,
                 end: runStart + local + segment.length,
                 run: index,
                 lf,
                 space: isHangingSpace(segment),
                 rect,
-              });
+              };
+              graphemes.push(
+                rect === null || ascent === null
+                  ? grapheme
+                  : { ...grapheme, baseline: rect.top + ascent },
+              );
             }
           });
           return graphemes;
