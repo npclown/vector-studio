@@ -2,7 +2,15 @@ import { isValidId, type DocumentV3, type NodeV3 } from '@vector-studio/model';
 import { fail, type Draft, type Failure } from './draft.js';
 import { expansionFailure, type ExpansionCache } from './expansion.js';
 import type { CustomDefaults, CustomFailure } from './extensions.js';
-import { clipDepthViolation, documentTree, nodePath } from './tree.js';
+import {
+  clipDepthViolation,
+  documentTree,
+  instanceClipViolation,
+  instanceTreeViolation,
+  nestedSymbolViolation,
+  nodePath,
+  symbolChange,
+} from './tree.js';
 import type { IdSource, PagePoint } from './types.js';
 
 // Shared support for the document edits (`edits.ts`) and the arrange commands (`arrange.ts`):
@@ -93,13 +101,15 @@ export function inserted<T>(list: readonly T[], index: number, items: readonly T
 
 /**
  * The structural rules checked after a command's document is built, in the section 4.3.1 table
- * order: every touched mask group keeps a path as its first child, then the clip depth of the
- * subtrees whose ancestry changed.
+ * order: every touched mask group keeps a path as its first child, then no `symbol` or
+ * `instance` lands inside a `symbol` (M7 contract, section 5.3, `editor.nested-symbol` at the
+ * first such node's `/parent`), then the clip depth of the subtrees whose ancestry changed.
  */
 export function structural(
   document: DocumentV3,
   touched: Iterable<string>,
   clipRoots: readonly string[],
+  nestingRoots: readonly string[] = [],
 ): Failure | null {
   for (const id of touched) {
     const node = nodeOf(document, id);
@@ -108,10 +118,23 @@ export function structural(
       return fail('editor.invalid-mask-source', nodePath(id, '/children/0'));
     }
   }
-  const deep = clipDepthViolation(documentTree(document), clipRoots);
+  const nested = nestingRoots.length === 0 ? null : nestedSymbolViolation(document, nestingRoots);
+  if (nested !== null) return fail('editor.nested-symbol', nodePath(nested, '/parent'));
+  // The M7-S5 clip depth of instances follows, in page order, in `success`.
+  const deep = clipDepthViolation(documentTree(document), clipRoots, false);
   return deep === null ? null : fail('editor.clip-depth', nodePath(deep, '/parent'));
 }
 
+/**
+ * The rules every command's result passes after `Draft.finish`, in the M1 section 4.3.1 order
+ * extended by the M7 contract, section 5.5: the M7-S5 tree depth of the instances the change can
+ * deepen (`document.invalid-field`), the structural rules (mask source, nesting, the clip depth
+ * of the changed subtrees), the M7-S5 clip depth of the instances the change can deepen
+ * (`editor.clip-depth`), then every expansion's validity and the caps. The depth checks visit
+ * only the instances of `symbolChange` (section 5.3): those in a created, reparented or retyped
+ * subtree and every instance of a source that holds one, so a change that adds nothing to a
+ * source and moves no instance checks none.
+ */
 export function success(
   document: DocumentV3 | Failure,
   draft: Draft,
@@ -119,8 +142,14 @@ export function success(
   clipRoots: readonly string[] = [],
 ): EditResult {
   if ('ok' in document) return document;
-  const rejected = structural(document, draft.touched, clipRoots);
+  const change = symbolChange(draft.base, document, draft.touched);
+  const tree = documentTree(document);
+  const tall = instanceTreeViolation(tree, change.instances);
+  if (tall !== null) return fail('document.invalid-field', nodePath(tall, '/parent'));
+  const rejected = structural(document, draft.touched, clipRoots, change.roots);
   if (rejected !== null) return rejected;
+  const deep = instanceClipViolation(tree, change.instances);
+  if (deep !== null) return fail('editor.clip-depth', nodePath(deep, '/parent'));
   // Then the expansions of every instance (M7 contract, sections 3 and 4.1, order of 5.5).
   const expansion =
     draft.expansions === undefined ? null : expansionFailure(document, draft.expansions);

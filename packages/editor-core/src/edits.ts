@@ -6,6 +6,7 @@ import {
   type Frame,
   type NodeV3,
   type PageV2,
+  type SymbolNode,
 } from '@vector-studio/model';
 import {
   alignNodes,
@@ -50,6 +51,8 @@ import {
   setPathHandle,
 } from './paths.js';
 import { mapNodeInPageSpace, resizeContainer, type ScaleMap } from './resize.js';
+import { boundsOf } from './hit-test.js';
+import { detachInstances, orphanedInstances, withDetach } from './symbols.js';
 import { handleBoxOf, handleCentre } from './handles.js';
 import {
   ancestors,
@@ -64,6 +67,9 @@ import {
   pageOf,
   spaceOf,
   subtree,
+  instanceClipBreaks,
+  sourceClipLevels,
+  sourceHeight,
   treeDepth,
   treeDepthViolation,
   type TreeView,
@@ -113,29 +119,10 @@ const PROPS: Readonly<Record<NodeV3['type'], readonly string[]>> = {
   maskGroup: COMMON_PROPS,
   frame: [...COMMON_PROPS, 'fill', 'stroke'],
   // M7 contract: a symbol has a frame's props (section 1.2), an instance only the common ones
-  // (section 5.1). Their commands and tests come with M7-U4.
+  // (section 5.1; its opacity stays 1 by M7-S4).
   symbol: [...COMMON_PROPS, 'fill', 'stroke'],
   instance: COMMON_PROPS,
 };
-
-/**
- * Whether removing `removed` would leave an instance outside it naming a symbol inside it. Interim
- * until M7-U4 adds the source deletion rule (M7 contract, section 5.4): until then `deleteNodes`,
- * `cut` and `removePage` fail with `editor.invalid-command` and change nothing.
- */
-function strandsInstances(document: DocumentV3, removed: ReadonlySet<string>): boolean {
-  return Object.values(document.nodes).some(
-    (node) => node.type === 'instance' && !removed.has(node.id) && removed.has(node.symbol),
-  );
-}
-
-/** Whether the subtree of `id` holds a `symbol` or an `instance`. */
-function holdsSymbolNode(tree: TreeView, id: string): boolean {
-  return subtree(tree, id).some((entry) => {
-    const type = tree.node(entry)?.type;
-    return type === 'symbol' || type === 'instance';
-  });
-}
 
 function isIndex(value: unknown, max: number): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= max;
@@ -255,20 +242,34 @@ export function applyEdit(
       // A listed descendant of a listed node goes with its ancestor.
       const roots = ids.filter((id) => !ancestors(tree, id).some((node) => listed.has(node.id)));
       const removed = new Set(roots.flatMap((id) => subtree(tree, id)));
-      if (strandsInstances(document, removed)) return fail('editor.invalid-command', '/ids');
-      const draft = new Draft(document);
-      for (const id of roots) {
-        const owner = document.nodes[id]!.parent;
-        draft.setChildren(
-          owner,
-          childrenOf(draft, owner).filter((child) => child !== id),
-        );
-        for (const removed of subtree(tree, id)) draft.remove(removed);
-      }
-      return success(finish(draft), draft, []);
+      // The source deletion rule (M7 contract, section 5.4): every remaining instance of a
+      // removed source is detached in the same transaction.
+      return withDetach(
+        document,
+        orphanedInstances(document, removed),
+        context.ids,
+        expansions,
+        (draft) => {
+          for (const id of roots) {
+            const owner = document.nodes[id]!.parent;
+            draft.setChildren(
+              owner,
+              childrenOf(draft, owner).filter((child) => child !== id),
+            );
+            for (const member of subtree(tree, id)) draft.remove(member);
+          }
+        },
+        (draft) => success(finish(draft), draft, []),
+      );
     }
     case 'groupNodes':
       return group(document, command, context, finish);
+    case 'createSymbol':
+      return createSymbol(document, command, context, finish);
+    case 'createInstance':
+      return create(document, command, context, custom, finish);
+    case 'detachInstances':
+      return detachInstances(document, command, context, expansions, finish);
     case 'ungroupNodes': {
       if (typeof command.id !== 'string') return fail('editor.invalid-command', '/id');
       const node = nodeOf(document, command.id);
@@ -346,11 +347,18 @@ export function applyEdit(
       if (document.pages.length === 1) return fail('editor.last-page');
       const tree = documentTree(document);
       const removed = new Set(page.children.flatMap((child) => subtree(tree, child)));
-      if (strandsInstances(document, removed)) return fail('editor.invalid-command', '/id');
-      const draft = new Draft(document);
-      for (const id of removed) draft.remove(id);
-      draft.setPages(document.pages.filter((entry) => entry !== page));
-      return success(finish(draft), draft, []);
+      // The source deletion rule (M7 contract, section 5.4), as for `deleteNodes`.
+      return withDetach(
+        document,
+        orphanedInstances(document, removed),
+        context.ids,
+        expansions,
+        (draft) => {
+          for (const id of removed) draft.remove(id);
+          draft.setPages(document.pages.filter((entry) => entry !== page));
+        },
+        (draft) => success(finish(draft), draft, []),
+      );
     }
     case 'renamePage': {
       if (typeof command.id !== 'string') return fail('editor.invalid-command', '/id');
@@ -468,14 +476,19 @@ type CreateCommand = Extract<
       | 'createFrame'
       | 'createLine'
       | 'createPath'
-      | 'createCustomNode';
+      | 'createCustomNode'
+      | 'createInstance';
   }
 >;
 
 /**
  * Creation (section 4.1): the command's frame or points are in page space and are mapped into
  * the parent's local space. A failed create draws no ID (P5-U2), so `editor.duplicate-id` is the
- * last check here.
+ * last check here. `createInstance` (M7 contract, section 5.1) checks its `symbol` after the
+ * `unknown-*` codes (`editor.not-a-symbol`), the M7-S5 tree depth with the parent's, nesting
+ * (`editor.nested-symbol`) before the clip depth, and the clip depth through its expansion; its
+ * other checks (validity, caps) run on a build with a placeholder ID, and a failure at the new
+ * instance has a path relative to it, as every creation failure.
  */
 function create(
   document: DocumentV3,
@@ -503,11 +516,21 @@ function create(
     if (!isPoint(command.end)) return fail('editor.invalid-command', '/end');
     points = [command.start.x, command.start.y, command.end.x, command.end.y];
   }
+  if (command.type === 'createInstance' && typeof command.symbol !== 'string') {
+    return fail('editor.invalid-command', '/symbol');
+  }
   const tree = documentTree(document);
   const parent = command.parent ?? context.activePage;
   const onPage = tree.page(parent) !== undefined;
   const owner = tree.node(parent);
   if (!onPage && owner === undefined) return fail('editor.unknown-node');
+  let source: SymbolNode | null = null;
+  if (command.type === 'createInstance') {
+    const named = nodeOf(document, command.symbol);
+    if (named === undefined) return fail('editor.unknown-node');
+    if (named.type !== 'symbol') return fail('editor.not-a-symbol');
+    source = named;
+  }
   const siblings = childrenOf(tree, parent);
   const index = command.index ?? siblings.length;
   if (!isIndex(index, siblings.length)) return fail('editor.invalid-index');
@@ -606,6 +629,27 @@ function create(
       };
       break;
     }
+    case 'createInstance': {
+      // By default the source's size, beside its page bounds (section 5.1), on the active page.
+      const bounds = boundsOf(document, [source!.id])!;
+      candidate = {
+        ...base,
+        name: source!.name,
+        // A given frame, `null` included, is checked by the model's field rules as for others.
+        frame:
+          command.frame !== undefined
+            ? command.frame
+            : {
+                x: bounds.x + bounds.width + 40,
+                y: bounds.y,
+                width: source!.frame.width,
+                height: source!.frame.height,
+              },
+        type: 'instance',
+        symbol: source!.id,
+      };
+      break;
+    }
   }
   let result: ReturnType<typeof validateNode>;
   try {
@@ -616,17 +660,23 @@ function create(
   }
   if (!result.ok) return fail(result.code, result.path);
   const depth = onPage ? 0 : treeDepth(tree, parent) + 1;
-  if (depth > MAX_TREE_DEPTH) return fail('document.invalid-field', '/parent');
+  // An instance's expanded nodes sit below it by its source's height (M7-S5).
+  const height = source === null ? 0 : sourceHeight(tree, source.id);
+  if (depth + height > MAX_TREE_DEPTH) return fail('document.invalid-field', '/parent');
   const rejected = custom.check(deepFreeze(result.node));
   if (rejected !== null) return fail(rejected.code, rejected.path);
   if (!onPage && !isContainer(owner)) return fail('editor.invalid-parent', '/parent');
   if (owner?.type === 'maskGroup' && index === 0 && result.node.type !== 'path') {
     return fail('editor.invalid-mask-source', '/index');
   }
+  const inSymbol =
+    owner?.type === 'symbol' || ancestors(tree, parent).some((node) => node.type === 'symbol');
+  if (source !== null && inSymbol) return fail('editor.nested-symbol', '/parent');
   const clips = childClipDepth(tree, parent);
   if (
     clips > MAX_CLIP_DEPTH ||
-    (result.node.type === 'frame' && clips > MAX_CLIP_CONTAINER_DEPTH)
+    (result.node.type === 'frame' && clips > MAX_CLIP_CONTAINER_DEPTH) ||
+    (source !== null && instanceClipBreaks(clips, sourceClipLevels(tree, source.id)))
   ) {
     return fail('editor.clip-depth', '/parent');
   }
@@ -669,15 +719,57 @@ function create(
     draft.setChildren(parent, inserted(siblings, index, [id]));
     return success(finish(draft), draft, [id], [id]);
   };
-  // A node created inside a source changes every instance of it, so the expansion checks run
-  // on a build with a placeholder ID first, and a failed command draws no ID (M7 section 5.5).
-  if (owner?.type === 'symbol' || ancestors(tree, parent).some((node) => node.type === 'symbol')) {
-    const trial = build(placeholderIds(document, 1)[0]!);
-    if (!trial.ok) return trial;
+  // A node created inside a source changes every instance of it, and a new instance adds an
+  // expansion, so the expansion checks run on a build with a placeholder ID first, and a failed
+  // command draws no ID (M7 section 5.5).
+  if (inSymbol || source !== null) {
+    const placeholder = placeholderIds(document, 1)[0]!;
+    const trial = build(placeholder);
+    if (!trial.ok) return relativeToNew(trial, nodePath(placeholder));
   }
   const id = freshId(document, context.ids);
   if (id === null) return fail('editor.duplicate-id');
   return build(id);
+}
+
+/**
+ * `createSymbol` (M7 contract, section 5.1): sibling nodes of the active page, checked as
+ * `groupNodes` checks them (`ids` shape, `editor.unknown-node`, `editor.not-siblings`). One
+ * `frame` becomes a `symbol` in place (same ID, fields and children); otherwise a new `symbol`
+ * wraps the nodes as `groupNodes` does, named `Symbol`, with fill and stroke null. A source
+ * that would hold or sit in a source fails with `editor.nested-symbol` (section 5.3).
+ */
+function createSymbol(
+  document: DocumentV3,
+  command: Extract<DocumentCommand, { type: 'createSymbol' }>,
+  context: EditContext,
+  finish: (draft: Draft) => DocumentV3 | Failure,
+): EditResult {
+  const ids = uniqueIds(command.ids);
+  if (ids === null) return fail('editor.invalid-command', '/ids');
+  const tree = documentTree(document);
+  if (
+    ids.some((id) => nodeOf(document, id) === undefined || pageOf(tree, id) !== context.activePage)
+  ) {
+    return fail('editor.unknown-node');
+  }
+  const owner = ids.length === 0 ? undefined : document.nodes[ids[0]!]!.parent;
+  if (owner === undefined || ids.some((member) => document.nodes[member]!.parent !== owner)) {
+    return fail('editor.not-siblings');
+  }
+  const only = document.nodes[ids[0]!]!;
+  if (ids.length === 1 && only.type === 'frame') {
+    const draft = new Draft(document);
+    draft.set({ ...only, type: 'symbol' });
+    const result = success(finish(draft), draft, []);
+    return result.ok ? { ...result, ids: [only.id] } : result;
+  }
+  const placeholder = placeholderId(document);
+  const trial = buildGroup(document, 'symbol', ids, owner, placeholder, finish);
+  if (!trial.ok) return relativeToNew(trial, nodePath(placeholder));
+  const id = freshId(document, context.ids);
+  if (id === null) return fail('editor.duplicate-id');
+  return buildGroup(document, 'symbol', ids, owner, id, finish);
 }
 
 /** `groupNodes` (section 4.3). */
@@ -729,7 +821,7 @@ function placeholderId(document: DocumentV3): string {
 
 function buildGroup(
   document: DocumentV3,
-  kind: 'group' | 'maskGroup',
+  kind: 'group' | 'maskGroup' | 'symbol',
   ids: readonly string[],
   owner: string,
   id: string,
@@ -750,18 +842,21 @@ function buildGroup(
     maxX = Math.max(maxX, b.x + b.width);
     maxY = Math.max(maxY, b.y + b.height);
   }
-  const container: NodeV3 = {
+  const shared = {
     id,
-    name: kind === 'group' ? 'Group' : 'Mask group',
     parent: owner,
     frame: { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
     rotation: 0,
     constraints: START,
     opacity: 1,
     visible: true,
-    type: kind,
     children: members,
   };
+  // A source wraps the nodes as a group does, with no fill or stroke (M7 contract, section 5.1).
+  const container: NodeV3 =
+    kind === 'symbol'
+      ? { ...shared, name: 'Symbol', type: 'symbol', fill: null, stroke: null }
+      : { ...shared, name: kind === 'group' ? 'Group' : 'Mask group', type: kind };
   const draft = new Draft(document);
   draft.set(container);
   for (const node of nodes) {
@@ -811,13 +906,6 @@ function move(
       (id) => id === target || isAncestor(tree, id, target) || pageOf(tree, id) !== targetPage,
     )
   ) {
-    return fail('editor.invalid-parent', '/parent');
-  }
-  // Interim until M7-U4's `editor.nested-symbol` (M7 contract, section 5.3): no symbol or instance
-  // moves into a symbol (M7-S3).
-  const intoSymbol =
-    targetNode?.type === 'symbol' || ancestors(tree, target).some((node) => node.type === 'symbol');
-  if (intoSymbol && roots.some((id) => holdsSymbolNode(tree, id))) {
     return fail('editor.invalid-parent', '/parent');
   }
   // The moved nodes keep their document pre-order.

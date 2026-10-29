@@ -169,7 +169,7 @@ export function sourceClipLevels(tree: TreeView, source: string): SourceClipLeve
  * (M7-S5): it projects as a frame, so it may sit at 31 at most, and an expanded node sits at the
  * instance's depth plus one plus its source clip levels.
  */
-function instanceClipBreaks(depth: number, levels: SourceClipLevels): boolean {
+export function instanceClipBreaks(depth: number, levels: SourceClipLevels): boolean {
   return (
     depth > MAX_CLIP_CONTAINER_DEPTH ||
     depth + 1 + levels.node > MAX_CLIP_DEPTH ||
@@ -194,9 +194,14 @@ function clipLevelsMemo(tree: TreeView): (source: string) => SourceClipLevels {
  * The first node of the subtrees of `roots` (pre-order) that breaks the clip-depth rule: a frame
  * or mask group at clip depth 32 or more, or a node at 33 or more (a frame's background sits at
  * the frame's depth plus one, so a frame at 31 is the deepest), or an instance whose expansion
- * breaks it (M7-S5). Null when all fit.
+ * breaks it (M7-S5); with `instances` false the instances are left to `instanceClipViolation`
+ * (the command checks of section 5.3). Null when all fit.
  */
-export function clipDepthViolation(tree: TreeView, roots: readonly string[]): string | null {
+export function clipDepthViolation(
+  tree: TreeView,
+  roots: readonly string[],
+  instances = true,
+): string | null {
   const levelsOf = clipLevelsMemo(tree);
   for (const root of roots) {
     const stack: [string, number][] = [[root, clipDepth(tree, root)]];
@@ -206,7 +211,13 @@ export function clipDepthViolation(tree: TreeView, roots: readonly string[]): st
       if (node === undefined) continue;
       const clips = clipsChildren(node);
       if (depth > MAX_CLIP_DEPTH || (clips && depth > MAX_CLIP_CONTAINER_DEPTH)) return id;
-      if (node.type === 'instance' && instanceClipBreaks(depth, levelsOf(node.symbol))) return id;
+      if (
+        instances &&
+        node.type === 'instance' &&
+        instanceClipBreaks(depth, levelsOf(node.symbol))
+      ) {
+        return id;
+      }
       if (isContainer(node)) {
         const next = clips ? depth + 1 : depth;
         for (let i = node.children.length - 1; i >= 0; i -= 1)
@@ -263,17 +274,10 @@ export function documentClipViolation(document: DocumentV3): string | null {
   return null;
 }
 
-/**
- * The first instance, in `pages` order then page-tree pre-order, whose deepest expanded node
- * breaks the M7-S5 tree depth (M7 contract, section 2): the instance's depth plus its source
- * subtree's height above `MAX_TREE_DEPTH`. Null when none does, or the document holds no instance.
- */
-export function expansionDepthViolation(document: DocumentV3): string | null {
-  const nodes = Object.values(document.nodes);
-  if (!nodes.some((node) => node.type === 'instance')) return null;
-  const tree = documentTree(document);
+/** The height of each source's subtree (0 for an empty source), once per source in one check. */
+function heightMemo(tree: TreeView): (source: string) => number {
   const heights = new Map<string, number>();
-  const heightOf = (source: string): number => {
+  return (source) => {
     let height = heights.get(source);
     if (height !== undefined) return height;
     height = 0;
@@ -286,13 +290,110 @@ export function expansionDepthViolation(document: DocumentV3): string | null {
     heights.set(source, height);
     return height;
   };
+}
+
+/**
+ * The first instance of `instances` whose deepest expanded node breaks the M7-S5 tree depth (M7
+ * contract, section 2): the instance's depth plus its source subtree's height above
+ * `MAX_TREE_DEPTH`. Null when none does.
+ */
+export function instanceTreeViolation(tree: TreeView, instances: readonly string[]): string | null {
+  const heightOf = heightMemo(tree);
+  for (const id of instances) {
+    const node = tree.node(id);
+    if (node?.type !== 'instance') continue;
+    if (treeDepth(tree, id) + heightOf(node.symbol) > MAX_TREE_DEPTH) return id;
+  }
+  return null;
+}
+
+/** The height of a source's subtree, for the depth check of a new instance (section 5.3). */
+export function sourceHeight(tree: TreeView, source: string): number {
+  return heightMemo(tree)(source);
+}
+
+/**
+ * What one change can break of the M7 nesting and depth rules (M7 contract, section 5.3).
+ * `roots` are the nodes the change created, reparented or retyped (in `touched` order, each
+ * listed once and no descendant of another root), the only places a `symbol` or `instance` can
+ * newly sit inside a source. `instances` are the instances whose M7-S5 depth may have changed,
+ * in `pages` order then page-tree pre-order: those in the subtrees of `roots`, and every instance,
+ * on any page, of each source that holds a root. A change that creates, reparents or retypes
+ * nothing finds no root and costs one lookup per touched node.
+ */
+export type SymbolChange = Readonly<{ roots: readonly string[]; instances: readonly string[] }>;
+
+export function symbolChange(
+  base: DocumentV3,
+  document: DocumentV3,
+  touched: Iterable<string>,
+): SymbolChange {
+  const tree = documentTree(document);
+  const moved: string[] = [];
+  for (const id of touched) {
+    if (!Object.hasOwn(document.nodes, id)) continue;
+    const node = document.nodes[id]!;
+    const before = Object.hasOwn(base.nodes, id) ? base.nodes[id] : undefined;
+    if (before !== undefined && before.parent === node.parent && before.type === node.type) {
+      continue;
+    }
+    moved.push(id);
+  }
+  if (moved.length === 0) return { roots: [], instances: [] };
+  const movedSet = new Set(moved);
+  const roots = moved.filter((id) => !ancestors(tree, id).some((node) => movedSet.has(node.id)));
+  const sources = new Set<string>();
+  const found = new Set<string>();
+  for (const root of roots) {
+    const source = ancestors(tree, root).find((node) => node.type === 'symbol');
+    if (source !== undefined) sources.add(source.id);
+    for (const id of subtree(tree, root)) {
+      if (tree.node(id)?.type === 'instance') found.add(id);
+    }
+  }
+  if (sources.size > 0) {
+    for (const id in document.nodes) {
+      if (!Object.hasOwn(document.nodes, id)) continue;
+      const node = document.nodes[id]!;
+      if (node.type === 'instance' && sources.has(node.symbol)) found.add(id);
+    }
+  }
+  if (found.size === 0) return { roots, instances: [] };
+  return {
+    roots,
+    instances: pageInstances(document).flatMap((page) => page.filter((id) => found.has(id))),
+  };
+}
+
+/**
+ * The first `symbol` or `instance` in the subtrees of `roots` that has a `symbol` ancestor (M7-S3,
+ * section 5.3: `editor.nested-symbol`), in `pages` order then page-tree pre-order, or null.
+ */
+export function nestedSymbolViolation(
+  document: DocumentV3,
+  roots: readonly string[],
+): string | null {
+  const tree = documentTree(document);
+  const found = new Set<string>();
+  for (const root of roots) {
+    const stack: [string, boolean][] = [
+      [root, ancestors(tree, root).some((node) => node.type === 'symbol')],
+    ];
+    while (stack.length > 0) {
+      const [id, inSymbol] = stack.pop()!;
+      const node = tree.node(id);
+      if (node === undefined) continue;
+      if (inSymbol && (node.type === 'symbol' || node.type === 'instance')) found.add(id);
+      if (isContainer(node)) {
+        const below = inSymbol || node.type === 'symbol';
+        for (const child of node.children) stack.push([child, below]);
+      }
+    }
+  }
+  if (found.size === 0) return null;
   for (const page of document.pages) {
     for (const root of page.children) {
-      for (const id of subtree(tree, root)) {
-        const node = tree.node(id);
-        if (node?.type !== 'instance') continue;
-        if (treeDepth(tree, id) + heightOf(node.symbol) > MAX_TREE_DEPTH) return id;
-      }
+      for (const id of subtree(tree, root)) if (found.has(id)) return id;
     }
   }
   return null;

@@ -9,12 +9,12 @@ import {
   type Editor,
 } from '../../packages/editor-core/src/index.js';
 
-// MVP M7-U1 interim editor rules (M7 contract, section 16, M7-U1 notes (5) and (6)): until M7-U4
-// and M7-U5, no command commits a document that breaks M7-S2 or M7-S3. A symbol is a container
-// (section 1.2); deleting a source that still has instances elsewhere fails; nothing moves a
-// symbol or instance into a symbol; fragment version 1 carries no symbol or instance. The
-// interim hit-test guards (round 2, S3) are lifted by M7-U3, whose behaviour
-// `m7-u3-projection.test.ts` tests.
+// MVP M7-U1 interim editor rules (M7 contract, section 16, M7-U1 notes (5) and (6)) that still
+// hold: a symbol is a container (section 1.2) and adds a clip level as a frame; fragment version
+// 1 carries no symbol or instance until M7-U5. The interim hit-test guards (round 2, S3) were
+// lifted by M7-U3 (`m7-u3-projection.test.ts`); the interim delete, move and tree-depth guards
+// were replaced by M7-U4's source deletion rule and section 5.3 checks
+// (`m7-u4-commands.test.ts`).
 
 const root = path.resolve(import.meta.dirname, '../..');
 const SYMBOLS = readFileSync(path.join(root, 'tests/fixtures/m7-symbols/symbols.v3.json'), 'utf8');
@@ -35,94 +35,19 @@ function run(target: Editor, command: Command): CommandResult {
 }
 
 describe('M7-U1 interim: a symbol is a container', () => {
-  it('deletes a source child with its subtree, and fails a source whose instance is on another page', () => {
+  it('deletes a source child with its subtree', () => {
     const target = loaded();
     expect(run(target, { type: 'deleteNodes', ids: ['s1-g'] }).ok).toBe(true);
     const after = target.query({ type: 'document' });
     expect(after.nodes['s1-e']).toBeUndefined();
     expect(after.nodes.s1).toMatchObject({ children: ['s1-r', 's1-f'] });
-    // s2 is on page 2 and its only instance, i3, on page 1.
-    const both = loaded();
-    expect(run(both, { type: 'setActivePage', id: 'page-2' }).ok).toBe(true);
-    expect(run(both, { type: 'deleteNodes', ids: ['s2'] })).toEqual({
-      ok: false,
-      code: 'editor.invalid-command',
-      path: '/ids',
-    });
+    // Deleting a source whose instance is on another page detaches it (M7-U4, section 5.4):
+    // `m7-u4-commands.test.ts`.
   });
 
   it('enters a symbol as a scope', () => {
     const target = loaded();
     expect(run(target, { type: 'setScope', id: 's1' })).toEqual({ ok: true, ids: [] });
-  });
-});
-
-describe('M7-U1 interim: source deletion fails while instances remain elsewhere', () => {
-  it.each<[string, (target: Editor) => Command[], string]>([
-    ['deleteNodes of the source', () => [{ type: 'deleteNodes', ids: ['s1'] }], '/ids'],
-    [
-      'deleteNodes of the source with one of its instances',
-      () => [{ type: 'deleteNodes', ids: ['s1', 'i1'] }],
-      '/ids',
-    ],
-    ['cut of the source', () => [{ type: 'cut', ids: ['s1'] }], '/ids'],
-    ['removePage of the source page', () => [{ type: 'removePage', id: 'page-1' }], '/id'],
-    [
-      'removePage of a page whose source has an instance on page 1',
-      () => [{ type: 'removePage', id: 'page-2' }],
-      '/id',
-    ],
-  ])('%s fails with editor.invalid-command and changes nothing', (_name, commands, at) => {
-    const target = loaded();
-    const before = text(target);
-    for (const command of commands(target)) {
-      expect(run(target, command)).toEqual({ ok: false, code: 'editor.invalid-command', path: at });
-    }
-    expect(text(target)).toBe(before);
-    expect(target.query({ type: 'clipboard' })).toBeNull();
-  });
-
-  it('deletes instances and a symbol whose instances are all deleted with it', () => {
-    const target = loaded();
-    expect(run(target, { type: 'deleteNodes', ids: ['i1', 'i3'] }).ok).toBe(true);
-    expect(run(target, { type: 'setActivePage', id: 'page-2' }).ok).toBe(true);
-    expect(run(target, { type: 'deleteNodes', ids: ['s2'] }).ok).toBe(true);
-    expect(run(target, { type: 'deleteNodes', ids: ['g1', 'f2'] }).ok).toBe(true);
-    expect(run(target, { type: 'removePage', id: 'page-1' }).ok).toBe(true);
-    const after = target.query({ type: 'document' });
-    expect(Object.values(after.nodes).filter((node) => node.type === 'instance')).toEqual([]);
-    expect(after.nodes.s1).toBeUndefined();
-  });
-});
-
-describe('M7-U1 interim: nothing moves a symbol or an instance into a symbol', () => {
-  it('fails moveNodes of an instance into a source with editor.invalid-parent', () => {
-    const target = loaded();
-    const before = text(target);
-    expect(run(target, { type: 'moveNodes', ids: ['i1'], parent: 's1', index: 0 })).toEqual({
-      ok: false,
-      code: 'editor.invalid-parent',
-      path: '/parent',
-    });
-    expect(run(target, { type: 'moveNodes', ids: ['i1'], parent: 's1-g', index: 0 })).toEqual({
-      ok: false,
-      code: 'editor.invalid-parent',
-      path: '/parent',
-    });
-    expect(text(target)).toBe(before);
-  });
-
-  it('moves a plain node into a source', () => {
-    const target = loaded();
-    expect(
-      run(target, { type: 'createRectangle', frame: { x: 0, y: 0, width: 5, height: 5 } }).ok,
-    ).toBe(true);
-    const document = target.query({ type: 'document' });
-    const created = document.pages[0]!.children.at(-1)!;
-    expect(run(target, { type: 'moveNodes', ids: [created], parent: 's1', index: 0 }).ok).toBe(
-      true,
-    );
-    expect(target.query({ type: 'document' }).nodes[created]!.parent).toBe('s1');
   });
 });
 
@@ -192,41 +117,6 @@ describe('M7-U1 interim: fragment version 1 carries no symbol or instance', () =
     // A source child alone copies and pastes.
     expect(run(target, { type: 'copy', ids: ['s1-r'] }).ok).toBe(true);
     expect(run(target, { type: 'paste' }).ok).toBe(true);
-  });
-});
-
-describe('M7-U1 interim: commands keep the M7-S5 tree depth through an expansion (round 2, S2)', () => {
-  const DEEP = readFileSync(
-    path.join(root, 'tests/fixtures/m7-symbols/depth/tree-256.json'),
-    'utf8',
-  );
-
-  it('fails the command that deepens a source past 256 with the model code, changing nothing', () => {
-    const target = createEditor({ document: JSON.parse(DEEP) as unknown });
-    const frame = run(target, {
-      type: 'createFrame',
-      frame: { x: 0, y: 0, width: 5, height: 5 },
-      parent: 'a126',
-    });
-    expect(frame.ok).toBe(true);
-    const id = frame.ok ? frame.ids[0]! : '';
-    const before = text(target);
-    expect(
-      run(target, {
-        type: 'createRectangle',
-        frame: { x: 0, y: 0, width: 1, height: 1 },
-        parent: id,
-      }),
-    ).toEqual({ ok: false, code: 'document.invalid-field', path: '/nodes/i/parent' });
-    expect(text(target)).toBe(before);
-    // The same rectangle under a frame that is not in the source is within the bound.
-    expect(
-      run(target, {
-        type: 'createRectangle',
-        frame: { x: 0, y: 0, width: 1, height: 1 },
-        parent: 'b0',
-      }).ok,
-    ).toBe(true);
   });
 });
 

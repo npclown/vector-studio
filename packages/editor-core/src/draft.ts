@@ -2,14 +2,7 @@ import { validateNode, type DocumentV3, type NodeV3, type PageV2 } from '@vector
 import type { ExpansionCache } from './expansion.js';
 import { deepFreeze } from './freeze.js';
 import { refitGroup, type WritableTree } from './resize.js';
-import {
-  childrenOf,
-  expansionDepthViolation,
-  isContainer,
-  isGroup,
-  nodePath,
-  treeDepth,
-} from './tree.js';
+import { childrenOf, isContainer, isGroup, nodePath, treeDepth } from './tree.js';
 import type { CommandResult, EditorErrorCode } from './types.js';
 
 // The edit draft: a mutable copy of a document that one command changes, then validates and
@@ -50,7 +43,8 @@ export class Draft implements WritableTree {
   private readonly customChecked = new Set<string>();
   /**
    * The expansion cache `finish` was given: `success` (`edit-support.ts`) then checks the
-   * expansions of the finished document after the structural rules (M7 contract, section 5.5).
+   * expansions of the finished document after the structural rules (M7 contract, section 5.5),
+   * and the M7 nesting and depth rules of the change against `base` (section 5.3).
    */
   expansions: ExpansionCache | undefined;
 
@@ -156,11 +150,7 @@ export class Draft implements WritableTree {
       if (rejected !== null) return fail(rejected.code, nodePath(id, rejected.path));
     }
     this.unchecked.clear();
-    const document = this.document();
-    // Interim until M7-U4's command checks (M7 contract, section 5.3): no command commits a
-    // document whose expansions break the M7-S5 tree depth; the model's code and path.
-    const deep = expansionDepthViolation(document);
-    return deep === null ? document : fail('document.invalid-field', nodePath(deep, '/parent'));
+    return this.document();
   }
 
   /** The current state as a frozen document, without the `finish` rules. */

@@ -2,14 +2,7 @@ import { validateNode, type DocumentV3, type NodeV3, type SymbolNode } from '@ve
 import { fail, samePlacement, type CustomCheck, type Failure } from './draft.js';
 import { deepFreeze } from './freeze.js';
 import { mapNode, refitGroup, scaleAbout, type WritableTree } from './resize.js';
-import {
-  documentTree,
-  instanceClipViolation,
-  isContainer,
-  isGroup,
-  nodePath,
-  pageInstances,
-} from './tree.js';
+import { isContainer, isGroup, nodePath, pageInstances } from './tree.js';
 
 // Instance expansion (MVP M7 contract, section 3): the content of an instance is derived from
 // its source, never stored. Under M7-Q4 (c) the copies of the source's descendants map by the
@@ -319,27 +312,21 @@ export function expandInstance(
 }
 
 /**
- * The expansion rules of a finished document, in the section 5.5 order: the clip depth through
- * each expansion (`editor.clip-depth`, M7-S5; skipped with `clip` false, as the load check has
- * run it), then every expansion's validity (`editor.invalid-expansion`, M7-X3), then the caps
- * (`editor.expansion-limit`, section 4.1), each naming the first failing instance in `pages`
- * order, then page-tree pre-order. Validity is checked up to the instance that crosses a cap, so
- * the work stays bounded by the caps. Null when the document passes.
+ * The expansion rules of a finished document, in the section 5.5 order: every expansion's
+ * validity (`editor.invalid-expansion`, M7-X3), then the caps (`editor.expansion-limit`, section
+ * 4.1), each naming the first failing instance in `pages` order, then page-tree pre-order.
+ * Validity is checked up to the instance that crosses a cap, so the work stays bounded by the
+ * caps; the cache makes an unchanged instance's check one lookup. The clip and tree depth through
+ * an expansion are checked before this: per command for the instances a change can deepen
+ * (section 5.3, `success` in `edit-support.ts`), and on load for the whole document. Null when
+ * the document passes.
  */
-export function expansionFailure(
-  document: DocumentV3,
-  cache: ExpansionCache,
-  clip = true,
-): Failure | null {
+export function expansionFailure(document: DocumentV3, cache: ExpansionCache): Failure | null {
   // A document without instances pays one scan of its node map, not the page walks.
   if (!hasInstance(document)) return null;
   const pages = pageInstances(document);
   const instances = pages.flat();
   if (instances.length === 0) return null;
-  if (clip) {
-    const deep = instanceClipViolation(documentTree(document), instances);
-    if (deep !== null) return fail('editor.clip-depth', nodePath(deep, '/parent'));
-  }
   let crossing: string | null = null;
   let total = 0;
   let last = instances.length - 1;
