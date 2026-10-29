@@ -1,4 +1,4 @@
-import type { DocumentV3, InstanceNode, NodeV3, SymbolNode } from '@vector-studio/model';
+import type { DocumentV4, InstanceNode, NodeV4, SymbolNode } from '@vector-studio/model';
 import { Draft, fail, type Failure } from './draft.js';
 import {
   drawIds,
@@ -28,7 +28,7 @@ type Plan = Readonly<{
 }>;
 
 function plan(
-  document: DocumentV3,
+  document: DocumentV4,
   instances: readonly string[],
   cache: ExpansionCache,
 ): Plan | Failure {
@@ -46,7 +46,7 @@ function plan(
 }
 
 /** Turns each planned instance into its detached frame in `draft`, the copies taking `ids`. */
-function detach(draft: Draft, document: DocumentV3, planned: Plan, ids: readonly string[]): void {
+function detach(draft: Draft, document: DocumentV4, planned: Plan, ids: readonly string[]): void {
   let next = 0;
   planned.instances.forEach((id, i) => {
     const instance = document.nodes[id] as InstanceNode;
@@ -62,7 +62,7 @@ function detach(draft: Draft, document: DocumentV3, planned: Plan, ids: readonly
         parent: node.parent === source.id ? id : copyOf.get(node.parent)!,
       };
       if (isContainer(node)) copy.children = node.children.map((child) => copyOf.get(child)!);
-      draft.set(copy as NodeV3);
+      draft.set(copy as NodeV4);
     }
     draft.set({
       id,
@@ -89,7 +89,7 @@ function detach(draft: Draft, document: DocumentV3, planned: Plan, ids: readonly
  * is built with placeholder IDs, and only then are IDs drawn (`editor.duplicate-id` last).
  */
 export function withDetach(
-  document: DocumentV3,
+  document: DocumentV4,
   instances: readonly string[],
   ids: IdSource,
   cache: ExpansionCache,
@@ -122,7 +122,7 @@ export function withDetach(
  * document (section 5.4): every instance outside `removed`, on any page, of a `symbol` inside it,
  * in `pages` order then page-tree pre-order. An instance removed too is deleted, not detached.
  */
-export function orphanedInstances(document: DocumentV3, removed: ReadonlySet<string>): string[] {
+export function orphanedInstances(document: DocumentV4, removed: ReadonlySet<string>): string[] {
   const sources = new Set<string>();
   for (const id of removed) {
     if (nodeOf(document, id)?.type === 'symbol') sources.add(id);
@@ -139,11 +139,11 @@ export function orphanedInstances(document: DocumentV3, removed: ReadonlySet<str
  * the detached document, then `editor.duplicate-id`. Returns empty `ids`.
  */
 export function detachInstances(
-  document: DocumentV3,
+  document: DocumentV4,
   command: Extract<DocumentCommand, { type: 'detachInstances' }>,
   context: EditContext,
   cache: ExpansionCache,
-  finish: (draft: Draft) => DocumentV3 | Failure,
+  finish: (draft: Draft) => DocumentV4 | Failure,
 ): EditResult {
   const ids = uniqueIds(command.ids);
   if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');

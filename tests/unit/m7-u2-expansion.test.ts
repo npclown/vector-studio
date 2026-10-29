@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { validateDocument, type DocumentV3, type NodeV3 } from '@vector-studio/model';
+import { validateDocument, type DocumentV4, type NodeV4 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   createEditor,
@@ -25,8 +25,17 @@ import { apply, localTransform } from '../../packages/editor-core/src/geometry.j
 // M7-A01.
 
 const root = path.resolve(import.meta.dirname, '../..');
+// Since M6a-U1 the model returns schema v4, so each M7 fixture is read as its committed v4
+// migration under tests/fixtures/m6-text/migrated (M6a contract, section 2.1).
 const fixture = (name: string) =>
-  readFileSync(path.join(root, 'tests/fixtures/m7-symbols', name), 'utf8');
+  readFileSync(
+    path.join(
+      root,
+      'tests/fixtures/m6-text/migrated',
+      `${path.basename(name).replace(/(\.v3)?\.json$/, '')}.v4.json`,
+    ),
+    'utf8',
+  );
 const SYMBOLS = fixture('symbols.v3.json');
 const START = { horizontal: 'start', vertical: 'start' } as const;
 const none = { shift: false, alt: false, meta: false, ctrl: false };
@@ -44,7 +53,7 @@ type JsonNode = {
 type Json = { pages: { id: string; children: string[] }[]; nodes: Record<string, JsonNode> };
 
 /** The symbols fixture after `edit`, read by the model. */
-function symbols(edit: (value: Json) => void = () => {}): DocumentV3 {
+function symbols(edit: (value: Json) => void = () => {}): DocumentV4 {
   const value = JSON.parse(SYMBOLS) as Json;
   edit(value);
   const result = validateDocument(value);
@@ -52,7 +61,7 @@ function symbols(edit: (value: Json) => void = () => {}): DocumentV3 {
   return result.document;
 }
 
-function expanded(document: DocumentV3, id: string): Expansion {
+function expanded(document: DocumentV4, id: string): Expansion {
   const result = expandInstance(document, id);
   if (result === null || !result.ok) throw new Error(`no expansion of ${id}`);
   return result.expansion;
@@ -62,7 +71,7 @@ const frameOf = (expansion: Expansion, id: string) => expansion.nodes.get(id)!.f
 
 /** A rotated node's frame under the approximation: centre exact, size by MVP-Q3 (a). */
 function approximated(
-  node: NodeV3,
+  node: NodeV4,
   sx: number,
   sy: number,
 ): { x: number; y: number; width: number; height: number } {
@@ -175,7 +184,7 @@ describe('M7-A02 expandInstance', () => {
     });
     const expansion = expanded(document, 'i2');
     /** The path's points in the source's local space. */
-    const points = (group: NodeV3, node: NodeV3) => {
+    const points = (group: NodeV4, node: NodeV4) => {
       if (node.type !== 'path') throw new Error('not a path');
       const out: number[] = [];
       const inGroup = localTransform(node.frame, node.rotation);
@@ -258,7 +267,7 @@ describe('M7-X3 expansion validity', () => {
       } as unknown as JsonNode;
       value.nodes.s1!.children.push('s1-c');
     });
-    const wide = (node: NodeV3) =>
+    const wide = (node: NodeV4) =>
       node.type === 'custom' && node.frame.width > 50
         ? { code: 'document.invalid-custom-data' as const, path: '/data' }
         : null;
@@ -352,7 +361,7 @@ function capDocument(perPage: readonly number[], rects: number): Json {
     for (const id of ids) nodes[id] = { ...base(id, page), type: 'instance', symbol: 's' };
     return { id: page, name: page, children: k === 0 ? ['s', ...ids] : ids };
   });
-  return { schemaVersion: 3, id: 'cap', pages, nodes } as unknown as Json;
+  return { schemaVersion: 4, id: 'cap', pages, nodes } as unknown as Json;
 }
 
 describe('M7 section 4.1 expansion caps', () => {
@@ -531,7 +540,7 @@ describe('M7-X4 the expansion cache', () => {
   it('reuses results by node identity, and subtrees while their nodes and scale hold', () => {
     const target = createEditor({ document: symbols() });
     /** Runs `command` and returns the editor's new document. */
-    const after = (_document: DocumentV3, command: Command): DocumentV3 => {
+    const after = (_document: DocumentV4, command: Command): DocumentV4 => {
       expect(target.execute(command).ok).toBe(true);
       return target.query({ type: 'document' });
     };
@@ -581,7 +590,7 @@ describe('M7-X4 the expansion cache', () => {
 
 describe('M7-A06 a symbol follows the frame rules', () => {
   /** s1's children after a resize from 100 × 80 to 200 × 160 by their constraints. */
-  const resizedChildren = (document: DocumentV3) => {
+  const resizedChildren = (document: DocumentV4) => {
     const nodes = document.nodes;
     expect(nodes['s1-r']).toEqual(symbols().nodes['s1-r']);
     expect(nodes['s1-g']).toEqual(symbols().nodes['s1-g']);

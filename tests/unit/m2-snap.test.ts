@@ -1,7 +1,7 @@
 import {
   normalizeRotation,
   serializeDocument,
-  type DocumentV3,
+  type DocumentV4,
   type Frame,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
@@ -548,7 +548,7 @@ describe('M2-A04 snapping: candidates', () => {
       rect('fc', 'fr', f(30, 30, 10, 10)),
       rect('m', 'p1', f(0, 500, 10, 10)),
     ]);
-    const k = boundsOf(document as unknown as DocumentV3, ['fc'])!;
+    const k = boundsOf(document as unknown as DocumentV4, ['fc'])!;
     const right = k.x + k.width;
     const mx = right + 2 - 1;
     const moved = {
@@ -603,7 +603,7 @@ describe('M2-A04 snapping: candidates', () => {
       rect('k', 'p1', f(4, 400, 10, 10)),
     ]);
     // The joint box of `r` and `c1` (left 0) moves by 1; its left edge snaps to k.left = 4.
-    const joint = boundsOf(document as unknown as DocumentV3, ['r', 'c1'])!;
+    const joint = boundsOf(document as unknown as DocumentV4, ['r', 'c1'])!;
     expect(joint.x).toBe(0);
     const target = selected(document, ['r', 'c1']);
     press(target, at(5, 205), at(6, 205));
@@ -631,7 +631,7 @@ describe('M2-A04 snapping: candidate set and scope (snap module)', () => {
     container('frame', 'fr', 'p1', ['fc'], f(200, 0, 100, 100)),
     rect('fc', 'fr', f(0, 0, 10, 10)),
     rect('last', 'p1', f(400, 0, 10, 10)),
-  ]) as unknown as DocumentV3;
+  ]) as unknown as DocumentV4;
   const ids = (scope: string | null, moving: string[]) =>
     snapSet(DOC, 'p1', scope, moving).candidates.map((candidate) => candidate.id);
 
@@ -854,7 +854,7 @@ describe('M2-A04 snapping: rotation angles', () => {
     const q = at(start.x - 40, start.y + 300);
     input(several, 'pointermove', q, shift);
     // The pivot is the handle-box centre fixed at press; `a` is the sweep from the press to q.
-    const box = boundsOf(DOC as unknown as DocumentV3, ['r', 'k'])!;
+    const box = boundsOf(DOC as unknown as DocumentV4, ['r', 'k'])!;
     const pivot = at(box.x + box.width / 2, box.y + box.height / 2);
     const a = normalizeRotation(
       Math.atan2(q.y - pivot.y, q.x - pivot.x) - Math.atan2(start.y - pivot.y, start.x - pivot.x),
@@ -871,7 +871,7 @@ describe('M2-A04 snapping: rotation angles', () => {
         rect('a', 'p1', f(0, 0, 10, 10), 0.25),
         rect('b', 'p1', f(0, 0, 10, 10), 0.75),
         rect('c', 'p1', f(0, 0, 10, 10), -0.25),
-      ]) as unknown as DocumentV3,
+      ]) as unknown as DocumentV4,
       'p1',
       null,
       [],

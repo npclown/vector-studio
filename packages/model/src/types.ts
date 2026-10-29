@@ -1,7 +1,8 @@
 // Document schemas (P5 editor-slice plan, section 3; MVP M1 contract, section 2). The model imports
 // nothing, so these types mirror the matching `contracts` scene fields instead of importing them.
-// Schema v3 (MVP M7 contract, section 2) is the document the model returns and writes; the v1
-// and v2 types describe the input of `migrateV1toV2` and `migrateV2toV3` only.
+// Schema v4 (MVP M6a contract, section 2) is the document the model returns and writes; the v1,
+// v2 and v3 types describe the input of `migrateV1toV2`, `migrateV2toV3` and `migrateV3toV4`
+// only.
 
 export type JsonValue =
   null | boolean | number | string | readonly JsonValue[] | { readonly [key: string]: JsonValue };
@@ -191,4 +192,44 @@ export type DocumentV3 = Readonly<{
   /** One or more pages. */
   pages: readonly PageV3[];
   nodes: Readonly<Record<string, NodeV3>>;
+}>;
+
+// Document schema v4 (MVP M6a contract, section 2): v3 plus the text leaf.
+
+/**
+ * A style run (M6a-S1 to S3): `size` in page units in `(0, 4096]`, `color` straight alpha. The
+ * node text is the concatenation of its runs' `text`.
+ */
+export type TextRun = Readonly<{ text: string; family: string; size: number; color: Color }>;
+
+/**
+ * A text leaf (M6a-S1 to S5): canonical runs (at least one; adjacent runs differ in style), at
+ * most `MAX_TEXT_LENGTH` UTF-16 units in all. No layout is stored (M6a-S6); `frame` is stored
+ * for every sizing mode.
+ */
+export type TextNode = NodeBaseV2 &
+  Readonly<{
+    type: 'text';
+    runs: readonly TextRun[];
+    sizing: 'autoWidth' | 'autoHeight' | 'fixed';
+    align: 'left' | 'center' | 'right';
+    /** In em of each run's size. */
+    letterSpacing: number;
+    /** A multiple of each run's size (CSS unitless). */
+    lineHeight: number;
+  }>;
+
+export type LeafNodeV4 = LeafNodeV3 | TextNode;
+export type ContainerNodeV4 = ContainerNodeV3;
+export type NodeV4 = LeafNodeV4 | ContainerNodeV4;
+export type NodeTypeV4 = NodeV4['type'];
+
+export type PageV4 = PageV3;
+
+export type DocumentV4 = Readonly<{
+  schemaVersion: 4;
+  id: string;
+  /** One or more pages. */
+  pages: readonly PageV4[];
+  nodes: Readonly<Record<string, NodeV4>>;
 }>;

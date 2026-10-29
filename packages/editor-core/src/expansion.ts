@@ -1,4 +1,4 @@
-import { validateNode, type DocumentV3, type NodeV3, type SymbolNode } from '@vector-studio/model';
+import { validateNode, type DocumentV4, type NodeV4, type SymbolNode } from '@vector-studio/model';
 import { fail, samePlacement, type CustomCheck, type Failure } from './draft.js';
 import { deepFreeze } from './freeze.js';
 import { mapNode, refitGroup, scaleAbout, type WritableTree } from './resize.js';
@@ -26,7 +26,7 @@ export type Expansion = Readonly<{
    * source node's `id` and `parent` (the source's direct children name the source), and frames
    * are in the space of the instance's content (`0, 0, width, height`).
    */
-  nodes: ReadonlyMap<string, NodeV3>;
+  nodes: ReadonlyMap<string, NodeV4>;
 }>;
 
 export type ExpansionResult =
@@ -41,7 +41,7 @@ export type ExpansionResult =
     }>;
 
 /** One direct child of a source: the node objects of its subtree, in pre-order. */
-type ChildState = Readonly<{ id: string; objects: readonly NodeV3[]; count: number }>;
+type ChildState = Readonly<{ id: string; objects: readonly NodeV4[]; count: number }>;
 
 /** A source as one document holds it; reused while every node object is the same. */
 type SourceState = Readonly<{
@@ -56,11 +56,11 @@ type Subtree = Readonly<{
   child: ChildState;
   sx: number;
   sy: number;
-  nodes: readonly NodeV3[] | Readonly<{ failed: string }>;
+  nodes: readonly NodeV4[] | Readonly<{ failed: string }>;
 }>;
 
 type Entry = Readonly<{
-  instance: NodeV3;
+  instance: NodeV4;
   source: SourceState;
   subtrees: readonly Subtree[];
   result: ExpansionResult;
@@ -69,8 +69,8 @@ type Entry = Readonly<{
 const PASS: CustomCheck = () => null;
 
 /** The node objects of the subtree of `id` in `document`, in pre-order. */
-function subtreeObjects(document: DocumentV3, id: string): NodeV3[] {
-  const out: NodeV3[] = [];
+function subtreeObjects(document: DocumentV4, id: string): NodeV4[] {
+  const out: NodeV4[] = [];
   const stack = [id];
   while (stack.length > 0) {
     const next = stack.pop()!;
@@ -84,7 +84,7 @@ function subtreeObjects(document: DocumentV3, id: string): NodeV3[] {
   return out;
 }
 
-function sameObjects(a: readonly NodeV3[], b: readonly NodeV3[]): boolean {
+function sameObjects(a: readonly NodeV4[], b: readonly NodeV4[]): boolean {
   return a.length === b.length && a.every((node, i) => node === b[i]);
 }
 
@@ -93,7 +93,7 @@ function sameObjects(a: readonly NodeV3[], b: readonly NodeV3[]): boolean {
  * border nodes (M1 contract, section 5) when present.
  */
 /** Scene nodes the descendants `objects` of a source add to one instance (section 4.1). */
-export function sceneCount(objects: readonly NodeV3[]): number {
+export function sceneCount(objects: readonly NodeV4[]): number {
   let count = 0;
   for (const node of objects) {
     count += 1;
@@ -105,7 +105,7 @@ export function sceneCount(objects: readonly NodeV3[]): number {
 }
 
 /** The instance's scale per axis: an axis whose source size is 0 is not scaled (M7-X1). */
-function scaleOf(instance: NodeV3, source: SymbolNode): { sx: number; sy: number } {
+function scaleOf(instance: NodeV4, source: SymbolNode): { sx: number; sy: number } {
   const { width, height } = source.frame;
   return {
     sx: width === 0 ? 1 : instance.frame.width / width,
@@ -121,7 +121,7 @@ function scaleOf(instance: NodeV3, source: SymbolNode): { sx: number; sy: number
 function refitChanged(
   tree: WritableTree,
   id: string,
-  original: ReadonlyMap<string, NodeV3>,
+  original: ReadonlyMap<string, NodeV4>,
 ): boolean {
   const node = tree.node(id)!;
   if (isContainer(node)) {
@@ -158,7 +158,7 @@ function expandSubtree(
   // About the source's local origin, as a group resize maps its children (M7-X1).
   mapNode(tree, child.id, scaleAbout(sx, sy));
   refitChanged(tree, child.id, original);
-  const out: NodeV3[] = [];
+  const out: NodeV4[] = [];
   for (const source of child.objects) {
     const node = local.get(source.id)!;
     if (node === source) {
@@ -183,7 +183,7 @@ function expandSubtree(
  */
 export class ExpansionCache {
   private readonly check: CustomCheck;
-  private document: DocumentV3 | null = null;
+  private document: DocumentV4 | null = null;
   /** Source states compared against `document`. */
   private checked = new Map<string, SourceState>();
   private readonly sources = new Map<string, SourceState>();
@@ -197,7 +197,7 @@ export class ExpansionCache {
   }
 
   /** The expansion of instance `id` in `document`, or null when `id` is not an instance. */
-  expand(document: DocumentV3, id: string): ExpansionResult | null {
+  expand(document: DocumentV4, id: string): ExpansionResult | null {
     this.use(document);
     const instance = Object.hasOwn(document.nodes, id) ? document.nodes[id]! : undefined;
     if (instance?.type !== 'instance') return null;
@@ -216,7 +216,7 @@ export class ExpansionCache {
       if (subtree.sx === sx && subtree.sy === sy) reusable.set(subtree.child, subtree);
     }
     const subtrees: Subtree[] = [];
-    const nodes = new Map<string, NodeV3>();
+    const nodes = new Map<string, NodeV4>();
     let failed: string | null = null;
     for (const child of source.children) {
       let subtree = reusable.get(child);
@@ -241,23 +241,23 @@ export class ExpansionCache {
   }
 
   /** Scene nodes one instance of `symbol` adds in `document` (section 4.1), or 0. */
-  count(document: DocumentV3, symbol: string): number {
+  count(document: DocumentV4, symbol: string): number {
     this.use(document);
     return this.source(document, symbol)?.count ?? 0;
   }
 
   /** Starts a new document: drops the entries of nodes it no longer holds. */
-  private use(document: DocumentV3): void {
+  private use(document: DocumentV4): void {
     if (document === this.document) return;
     this.document = document;
     this.checked = new Map();
-    const holds = (id: string, type: NodeV3['type']) =>
+    const holds = (id: string, type: NodeV4['type']) =>
       Object.hasOwn(document.nodes, id) && document.nodes[id]!.type === type;
     for (const id of this.entries.keys()) if (!holds(id, 'instance')) this.entries.delete(id);
     for (const id of this.sources.keys()) if (!holds(id, 'symbol')) this.sources.delete(id);
   }
 
-  private source(document: DocumentV3, id: string): SourceState | null {
+  private source(document: DocumentV4, id: string): SourceState | null {
     const known = this.checked.get(id);
     if (known !== undefined) return known;
     const node = Object.hasOwn(document.nodes, id) ? document.nodes[id]! : undefined;
@@ -293,7 +293,7 @@ export class ExpansionCache {
   }
 }
 
-function hasInstance(document: DocumentV3): boolean {
+function hasInstance(document: DocumentV4): boolean {
   for (const id in document.nodes) {
     if (Object.hasOwn(document.nodes, id) && document.nodes[id]!.type === 'instance') return true;
   }
@@ -305,7 +305,7 @@ function hasInstance(document: DocumentV3): boolean {
  * is not an instance of a source in it. `check` is the extension check of custom nodes (M7-X3).
  */
 export function expandInstance(
-  document: DocumentV3,
+  document: DocumentV4,
   id: string,
   check: CustomCheck = PASS,
 ): ExpansionResult | null {
@@ -322,7 +322,7 @@ export function expandInstance(
  * (section 5.3, `success` in `edit-support.ts`), and on load for the whole document. Null when
  * the document passes.
  */
-export function expansionFailure(document: DocumentV3, cache: ExpansionCache): Failure | null {
+export function expansionFailure(document: DocumentV4, cache: ExpansionCache): Failure | null {
   // A document without instances pays one scan of its node map, not the page walks.
   if (!hasInstance(document)) return null;
   const pages = pageInstances(document);

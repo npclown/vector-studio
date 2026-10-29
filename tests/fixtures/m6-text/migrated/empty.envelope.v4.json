@@ -1,0 +1,16 @@
+{
+  "envelopeVersion": 1,
+  "lastOpenPageId": "page-1",
+  "document": {
+    "schemaVersion": 4,
+    "id": "doc-empty",
+    "pages": [
+      {
+        "id": "page-1",
+        "name": "Page 1",
+        "children": []
+      }
+    ],
+    "nodes": {}
+  }
+}

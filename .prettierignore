@@ -73,6 +73,8 @@ tests/fixtures/m1-model/**/*.json
 tests/fixtures/m5-persistence/**/*.json
 # M7 symbol fixtures are canonical serializeDocument output or malformed text, compared byte-for-byte.
 tests/fixtures/m7-symbols/**/*.json
+# M6a text fixtures are canonical serializeDocument output or malformed text, compared byte-for-byte.
+tests/fixtures/m6-text/**/*.json
 **/.next/**
 apps/next-host/next-env.d.ts
 
