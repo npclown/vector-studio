@@ -3,6 +3,9 @@ import type { ClipStateRecord, MaskBudgetNotice, MaskLevelRecord } from './clip-
 import type { DeviceRect, LayerResourceNotice } from './layer-plan.js';
 import type { GradientPaintRecord } from './paint-records.js';
 import type { PathMeshNotice } from './path-mesh-pipeline.js';
+import type { TextClear, TextNotice, TextReceiptPart, TextUpload } from './text-atlas.js';
+
+export type { TextReceiptPart } from './text-atlas.js';
 
 export type PrimitiveResourceId = 'transforms' | 'geometry' | 'styles' | 'order' | 'frame';
 export type PrimitiveTarget = Readonly<{
@@ -189,11 +192,53 @@ export type LayerPacketPart = Readonly<{
     target: number;
     /** Number of the target's analytic draws that precede it, as `MeshFillDraw.position`. */
     position: number;
-    /** Number of the target's mesh draws with an equal position that precede it. */
-    meshOrder: number;
+    /**
+     * E28 contract, section 4 (renamed from E25's `meshOrder`): the number of the target's
+     * non-analytic draws (mesh draws, composites and text draws) with an equal position that
+     * precede it.
+     */
+    order: number;
   }>[];
   /** Layer trees newly over the budget, at most 32. Emitted as `render.layer-resource-limit`. */
   notices: readonly LayerResourceNotice[];
+}>;
+/** E28 contract, section 4: a text draw, ordered against its target's draws as a composite. */
+export type TextDraw = Readonly<{
+  /** First instance record and record count. */
+  first: number;
+  count: number;
+  page: number;
+  /** -1: the main pass; otherwise an index into the layer part's `layers`. */
+  target: number;
+  /** Number of the target's analytic draws that precede it, as `MeshFillDraw.position`. */
+  position: number;
+  /** Number of the target's non-analytic draws with an equal position that precede it. */
+  order: number;
+  /** P4: the 1-based clip state of a clipped draw; absent when unclipped. */
+  clipState?: number;
+}>;
+/**
+ * E28 contract, section 4: the frame's text, absent when no text is drawn, the atlas holds no
+ * page and no notice is pending. While the atlas holds pages the part is present, so
+ * `pageCount` keeps them for culled text; the frame after the scene's last text node goes
+ * carries `pageCount` 0, which releases them.
+ */
+export type TextPacketPart = Readonly<{
+  layoutVersion: 0;
+  pageSize: number;
+  pageCount: number;
+  /** Areas zeroed this frame, before uploads. */
+  clears: readonly TextClear[];
+  uploads: readonly TextUpload[];
+  /**
+   * 16 floats per instance: device quad origin (2), the quad's x and y axis vectors (4), the
+   * texel rect x, y, width, height (4), page, mode (0 snapped, 1 general) and the premultiplied
+   * colour (4), in target pixels.
+   */
+  instances: Float32Array;
+  draws: readonly TextDraw[];
+  /** E28-D2 and D3, at most 32. */
+  notices: readonly TextNotice[];
 }>;
 export type PrimitivePacket = Readonly<{
   layoutVersion: 1;
@@ -222,6 +267,8 @@ export type PrimitivePacket = Readonly<{
   clipNotices?: readonly MaskBudgetNotice[];
   /** Absent for every frame without a drawn layer or a pending layer notice (E25 contract, U2). */
   layers?: LayerPacketPart;
+  /** Absent for every scene without text (E28 contract, section 4). */
+  text?: TextPacketPart;
 }>;
 export type PrimitiveReceipt = Readonly<{
   scene: SceneVersion;
@@ -239,6 +286,8 @@ export type PrimitiveReceipt = Readonly<{
   }>[];
   /** Present exactly when the packet has a mesh part. */
   mesh?: MeshReceiptPart;
+  /** Present exactly when the packet has a text part (E28 contract, section 4, Lifetime). */
+  text?: TextReceiptPart;
 }>;
 export type PrimitiveSubmitResult =
   | Readonly<{ status: 'submitted'; receipt: PrimitiveReceipt }>
@@ -271,6 +320,11 @@ export interface PrimitiveFrameSource {
    * pipeline at initialization and recovery. Optional; absent means false.
    */
   readonly requiresLayerPipeline?: boolean;
+  /**
+   * E28 contract, E28-S3: true when the backend must create the text pipeline and its variants
+   * at initialization and recovery. Optional; absent means false.
+   */
+  readonly requiresTextPipeline?: boolean;
   prepare(target: PrimitiveTarget): PrimitivePacket | null;
   acknowledge(receipt: PrimitiveReceipt): void;
 }
