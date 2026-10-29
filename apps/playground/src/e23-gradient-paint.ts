@@ -18,6 +18,7 @@ import {
 } from '@vector-studio/geometry-wasm';
 import {
   E28_RASTER_CAP,
+  E28_RASTER_PER_FRAME,
   PrimitiveRendererService,
   isUniformScale,
   sizeBucket,
@@ -588,7 +589,7 @@ const api = {
   },
   /**
    * E28 U4, raster cost: times `repeat` passes over `requests` through the page's port, and
-   * one pass of 256 distinct requests built from them at new sizes.
+   * one frame's budget (`E28_RASTER_PER_FRAME`) of distinct requests built from them at new sizes.
    */
   rasterCost(requests: readonly GlyphRasterRequest[], repeat: number) {
     // The first pass meets each request once (cold); later passes repeat it (warm).
@@ -601,11 +602,11 @@ const api = {
         (pass === 0 ? cold : warm).push(performance.now() - start);
       }
     }
-    // One frame of 256 distinct requests at sizes not timed above: each base request steps up
+    // One frame's budget of distinct requests at sizes not timed above: each base request steps up
     // by a quarter pixel per round.
     const frame: GlyphRasterRequest[] = [];
     const seen = new Set<string>();
-    for (let index = 0; frame.length < 256; index += 1) {
+    for (let index = 0; frame.length < E28_RASTER_PER_FRAME; index += 1) {
       const base = requests[index % requests.length]!;
       const request = {
         ...base,
@@ -640,7 +641,8 @@ const api = {
       cold: summary(cold),
       warm: summary(warm),
       frameDistinct: seen.size,
-      frame256Ms: frameMs,
+      frameCalls: E28_RASTER_PER_FRAME,
+      frameMs,
     };
   },
   counters() {

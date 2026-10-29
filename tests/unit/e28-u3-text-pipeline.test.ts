@@ -28,7 +28,10 @@ import type {
   TextPacketPart,
 } from '../../packages/renderer-core/src/primitive-packet.js';
 import { PrimitiveRendererService } from '../../packages/renderer-core/src/primitive-renderer-service.js';
-import { TEXT_INSTANCE_FLOATS } from '../../packages/renderer-core/src/text-atlas.js';
+import {
+  E28_RASTER_PER_FRAME,
+  TEXT_INSTANCE_FLOATS,
+} from '../../packages/renderer-core/src/text-atlas.js';
 import {
   CANVAS_GLYPH_RASTER_OPERATION_ID,
   createCanvasGlyphRaster,
@@ -665,14 +668,16 @@ describe('E28 U3 text unavailable (E28-D1, fail closed)', () => {
   });
 
   it('instances past the storage binding limit fail closed instead of failing the frame', async () => {
-    const { frame, fixture, scene } = await setup([textNode('t', many(80))]);
+    // One key at 80 whole-pixel positions: one raster call, 80 records.
+    const same = Array.from({ length: 80 }, (_, index) => ['X', index] as [string, number]);
+    const { frame, fixture, scene } = await setup([textNode('t', same)]);
     // 80 records need 5,120 bytes; every other storage binding of this frame fits in 4 KiB.
     (fixture.device.limits as { maxStorageBufferBindingSize: number }).maxStorageBufferBindingSize =
       4096;
     fixture.calls.length = 0;
     const { result } = frame();
     expect(result.status).toBe('submitted');
-    expect(receiptOf(result).text).toMatchObject({ pages: [expect.any(Symbol)], uploads: 80 });
+    expect(receiptOf(result).text).toMatchObject({ pages: [expect.any(Symbol)], uploads: 1 });
     expect(scene.textPageAllocationFailed).toBe(true);
     expect(fixture.textureWrites).toEqual([]);
     expect(fixture.calls.some((call) => call[0] === 'draw' && call[1] === 6)).toBe(false);
@@ -736,7 +741,9 @@ describe('E28 U3 carried from U2 (section 4)', () => {
       textNode('b', [['X', 0.25]], { size: 12, y: 60 }),
     ]);
     frame();
-    const filler = many(256, 100).map(([text, x]) => [text, x * 0.01] as [string, number]);
+    const filler = many(E28_RASTER_PER_FRAME, 100).map(
+      ([text, x]) => [text, x * 0.01] as [string, number],
+    );
     replace([
       textNode('a', [['X', 0.25]], { size: 8 }),
       textNode('b', [['X', 0.25]], { size: 12, y: 60 }),
@@ -744,7 +751,7 @@ describe('E28 U3 carried from U2 (section 4)', () => {
       textNode('c', [['X', 0.25]], { size: 10, y: 140 }),
     ]);
     const { packet } = frame();
-    expect(service.getGlyphRasterCallsForTesting()).toBe(2 + 256);
+    expect(service.getGlyphRasterCallsForTesting()).toBe(2 + E28_RASTER_PER_FRAME);
     const last = packet.text!.instances.subarray(-TEXT_INSTANCE_FLOATS);
     // General mode, axes scaled by 10/8, entry phase 0.25 kept in the origin.
     expect(last[11]).toBe(1);

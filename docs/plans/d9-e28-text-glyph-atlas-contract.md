@@ -125,7 +125,7 @@ Notation follows P1 D2: a leaf's premultiplied contribution `P` blends source-ov
   So step 3 applies only when every entry in the atlas is drawn exactly by the frame, which is section 5's "this frame's clusters alone exceed the atlas"; a deferral whose fallback is drawn is then omitted only because that fallback is itself an exact entry of the frame. Each compaction frees one page with stale entries, so for an unchanging scene a fragmented atlas needs at most one compaction per page. A scene that changes while compacting can make new stale entries and start further compactions.
 
   The cost is disclosed. While a compaction is pending, the misses it defers draw only their fallback. In the compacting frame, the clusters that were drawn from the evicted page are rasterized again. Those beyond the raster budget draw only their fallback, so text that was visible can disappear for a frame or more. A deferred cluster whose fallback was on the evicted page also draws nothing until it is rasterized, for example after a zoom on a full atlas. U4's T8 shows this on a one-page atlas, including a subpixel move of its text.
-- **Raster budget (E28-Q6 (a)).** At most `E28_RASTER_PER_FRAME = 256` port calls per prepared frame. A cluster still missing an entry after that:
+- **Raster budget (E28-Q6 (a), lowered by U4).** At most `E28_RASTER_PER_FRAME = 64` port calls per prepared frame. **U4 amendment (2026-10-29):** the figure was 256; on the reference PC a frame of 256 distinct calls took 19.4 to 27.9 ms (section 7, U4 record), over a 60 Hz frame, so it is lowered to 64 (about 7 ms at the worst measured rate, 0.11 ms per call). A cluster still missing an entry after that:
   1. draws from an entry whose key differs only in bucket and phase, the nearest bucket to `b` (the smaller on a tie, then phase 0), by the general path scaled to `s`, if one exists;
   2. otherwise does not draw this frame.
 
@@ -348,12 +348,17 @@ U4 record, headed spec (2026-10-29):
 - **Out-of-memory, disclosed:** the spec does not force a real `createTexture` failure. A05 and the 32 MiB bound check that page allocations raise no uncaptured device error. A real out-of-memory would surface as an uncaptured device-error diagnostic, not as E28-D1, because `createTexture` reports it asynchronously (U3's known limit).
 - **E28-K9:** amended for negative advances (above), with a unit test; U2's code already used both ends of the pen box.
 - **Review** (READY WITH FOLLOW-UPS, all applied): the raster-cost frame now has 256 distinct requests (it had 84), and cold and warm calls are reported apart; the spec checks the page's placements against K1 to K3 computed apart from renderer-core; T8 gains an eviction-order test on two pages; A08's bearing check fails on a non-`ok` result and requires a real negative bearing; undecided probes are bounded; the general-tolerance override fails on a hardware adapter.
-- **Raster cost:** on SwiftShader's host a 256-call frame takes 16.3 ms at DPR 1 and 21.8 ms at DPR 2. The reference-PC figure decides E28-Q6 before U5.
-- **Reference-PC run:** pending, through the coordinator (`pnpm test:gpu` on Chrome and Edge).
+- **Raster cost:** on SwiftShader's host a 256-call frame takes 16.3 ms at DPR 1 and 21.8 ms at DPR 2.
+- **Reference-PC run** (2026-10-29, [../evidence/e28/u4-main-pc.md](../evidence/e28/u4-main-pc.md)): full `pnpm test:gpu` at 9bbee7f (tree of ae1d7ab), headed Chrome 156 and Edge 156 on a GTX 1660 SUPER, 210 passed, 0 failed; all 14 E28 tests pass in both browsers with the default general tolerance 3 (worst general 1.42/255, no undecided probe). A 256-call frame took 24.0 and 27.9 ms in Chrome and 19.4 and 25.6 ms in Edge (DPR 1 and 2), so E28-Q6's figure is lowered to 64 before U5 (section 4, Raster budget). The PC ran with 256; the lowered budget changes only how many frames a large miss set takes, checked by the unit tests and the SwiftShader re-run (64 calls in 7.8 and 5.0 ms there), and U5's index records that the hardware cost of a 64-call frame is extrapolated from the 256-call figure.
+
+U4 amendment, raster budget (2026-10-29):
+
+- `E28_RASTER_PER_FRAME` is 64. Unit tests that assumed 256 now converge over the frames the budget needs (A06's page bound, the budget, fallback and compaction tests), and U3's storage-limit test reaches 80 records with one key. The headed spec's budget and raster-cost checks use the constant.
+- Cost: a frame with more misses than 64 defers the rest, drawing nearest-bucket fallbacks; 600 new visible clusters take 10 frames instead of 3, and a generation change of 256 visible clusters 4 frames instead of 1.
 
 ## 8. Risks
 
-- **Main-thread cost.** Rasterization runs on the main thread and competes with M9's pointer priority. E28's raster budget bounds it per frame (`E28_RASTER_PER_FRAME`), which U4 measures; a zoom gesture over much text draws scaled fallbacks for a few frames.
+- **Main-thread cost.** Rasterization runs on the main thread and competes with M9's pointer priority. E28's raster budget bounds it per frame (`E28_RASTER_PER_FRAME`, 64 after U4's measurement, about 7 ms on the reference PC); a zoom gesture over much text draws scaled fallbacks for a few frames.
 - **Browser raster changes.** Canvas text rasterization follows Chrome and Edge and can change with updates. E28's oracle uses the same browser's bitmaps, so it is not affected; M6c's DOM agreement is.
 - **Grayscale coverage.** The atlas holds grayscale coverage, so text may look lighter than ClearType DOM text (ADR 0003).
 - **Snapped bucket error.** Drawing an unscaled bucket changes size by up to half a step, and rounding the baseline moves a glyph by up to 0.5 px vertically. M6c measures whether this explains M6-S0's 1.0 px offset, with U4's hook.
@@ -378,7 +383,7 @@ U4 record, headed spec (2026-10-29):
 - **E28-Q5 thread.** (a) Main-thread rasterization. (b) A worker with faces registered by M6a.
 
   Recommended: (a). M6-S0 shows a worker does not see `document.fonts` faces, and (a) needs nothing from M6a. A worker is the remedy if M9 measures the cost.
-- **E28-Q6 raster budget.** (a) 256 port calls per frame, with nearest-bucket fallback and follow-up frames. (b) No budget.
+- **E28-Q6 raster budget.** (a) 256 port calls per frame (lowered to 64 by U4's measurement), with nearest-bucket fallback and follow-up frames. (b) No budget.
 
   Recommended: (a). It bounds the worst frame, and the scene converges to the unbudgeted frame.
 - **E28-Q7 device loss.** (a) Re-rasterize after loss. (b) Keep CPU copies of every page and re-upload them.
