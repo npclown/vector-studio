@@ -42,6 +42,11 @@ export const DIAGNOSTIC_CODES = Object.freeze({
    * docs/plans/d9-e23-gradient-paint-contract.md); reserved by unit U1, reported from unit U3.
    */
   PAINT_UNAVAILABLE: 'render.paint-unavailable',
+  /**
+   * Isolated layer trees beyond the layer budget are not drawn (E25 contract, section 4,
+   * docs/plans/d9-e25-isolated-opacity-contract.md); reserved by unit U1, reported from unit U2.
+   */
+  LAYER_RESOURCE_LIMIT: 'render.layer-resource-limit',
   DISPOSAL_COMPLETED: 'disposal.completed',
   DISPOSAL_FAILED: 'disposal.failed',
 } as const);

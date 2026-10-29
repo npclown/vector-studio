@@ -22,6 +22,7 @@ import {
   pathDataEquals,
   type ClipSupport,
   type DashSupport,
+  type GroupOpacitySupport,
   type PaintSupport,
   type PathNodeSupport,
   type PathSupport,
@@ -54,6 +55,12 @@ export type RetainedSceneMirrorOptions = Readonly<{
   paints?: PaintSupport;
   /** E24 contract, E24-S3: whether path stroke dashes are drawn; default 'unsupported'. */
   dashes?: DashSupport;
+  /**
+   * E25 contract, E25-S1: whether isolated container opacity is drawn; default 'unsupported'.
+   * Tests only until E25 U2 and U3: `PrimitiveSceneSource` does not yet draw container opacity,
+   * and no service sets this option before then.
+   */
+  groupOpacity?: GroupOpacitySupport;
 }>;
 
 export type ScenePendingChangeState = Readonly<{
@@ -116,7 +123,17 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       options.clips === 'supported' || options.clips === 'rect' ? options.clips : 'unsupported';
     const paints: PaintSupport = options.paints === 'gradient' ? 'gradient' : 'solid';
     const dashes: DashSupport = options.dashes === 'supported' ? 'supported' : 'unsupported';
-    this.#pathNodes = Object.freeze({ pathNodes, pathFills, pathStrokes, clips, paints, dashes });
+    const groupOpacity: GroupOpacitySupport =
+      options.groupOpacity === 'supported' ? 'supported' : 'unsupported';
+    this.#pathNodes = Object.freeze({
+      pathNodes,
+      pathFills,
+      pathStrokes,
+      clips,
+      paints,
+      dashes,
+      groupOpacity,
+    });
   }
 
   public replaceSnapshot(snapshot: RenderSceneSnapshot): SceneApplyResult {

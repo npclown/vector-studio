@@ -87,6 +87,11 @@ export type SceneClip =
   | Readonly<{ kind: 'mask' }>;
 /** P4 contract, section 2: the deepest supported clip depth of a node. */
 export const SCENE_MAX_CLIP_DEPTH = 32;
+/**
+ * E25 contract (docs/plans/d9-e25-isolated-opacity-contract.md), E25-S2: the deepest supported
+ * isolation depth of a node, the number of its visible proper ancestors with 0 < opacity < 1.
+ */
+export const SCENE_MAX_ISOLATION_DEPTH = 32;
 export type SceneNodeBase = Readonly<{
   id: string;
   parentId: string | null;
