@@ -2,6 +2,7 @@ import type { ResourceDescriptor } from '@vector-studio/contracts';
 import type {
   ClipMaskPacketLevel,
   ClipPacketPart,
+  GradientPaintRecord,
   MeshFillDraw,
   MeshPacketPart,
   MeshReceiptPart,
@@ -38,6 +39,20 @@ import {
   MESH_COUNT_SHADER,
 } from './mesh-count-shader.js';
 import { MESH_FILL_SHADER, MESH_JOINT_VERTEX_ENTRY_POINT } from './mesh-fill-shader.js';
+import {
+  GRADIENT_RECORD_SIZE,
+  MESH_FILL_PAINT_CLIP_SHADER,
+  MESH_FILL_PAINT_SHADER,
+  PAINT_BINDINGS,
+  PAINT_BIND_GROUP_INDEX,
+  PRIMITIVE_ANALYTIC_PAINT_CLIP_SHADER,
+  PRIMITIVE_ANALYTIC_PAINT_SHADER,
+  createPaintBindGroupLayoutDescriptor,
+  packGradientRecord,
+  packPaintIndices,
+  paintClipVariantKey,
+  paintVariantKey,
+} from './paint-pipeline.js';
 import {
   MESH_FRAME_SIZE,
   MESH_PACKET_BINDINGS,
@@ -182,6 +197,54 @@ interface ClipPipelineState {
   /** U4: the 1 × 1 texture bound for states without a mask level, never read. */
   readonly defaultMask: GPUTexture;
 }
+
+/**
+ * E23 contract, U3: the gradient paint variants created at initialization or recovery. The
+ * clipped ones exist only with the clip variants, the mesh ones only with the mesh path.
+ */
+interface PaintPipelineState {
+  readonly bindGroupLayout: GPUBindGroupLayout;
+  /** Bound at group 1 for a paint variant without a clip; its layout has no entry. */
+  readonly emptyBindGroup: GPUBindGroup;
+  readonly analytic: GPURenderPipeline;
+  readonly analyticClip: GPURenderPipeline | null;
+  readonly mesh: GPURenderPipeline | null;
+  readonly meshJoint: GPURenderPipeline | null;
+  readonly meshClip: GPURenderPipeline | null;
+  readonly meshJointClip: GPURenderPipeline | null;
+}
+
+/** E23 U3: one paint buffer, the record table or an index table. */
+interface PaintTable {
+  readonly id: string;
+  readonly buffer: GPUBuffer;
+  readonly size: number;
+}
+
+/**
+ * E23 U3: the paint buffers. Record i (1-based) is at i * GRADIENT_RECORD_SIZE; record 0 is
+ * never read. The index tables hold a pair per primitive slot and per mesh instance.
+ */
+interface PaintBufferState {
+  readonly records: PaintTable;
+  readonly primitives: PaintTable;
+  readonly meshes: PaintTable;
+  /** Group 2 for analytic draws (binding 1 over the primitive table) and for mesh draws. */
+  readonly primitiveBindGroup: GPUBindGroup;
+  readonly meshBindGroup: GPUBindGroup;
+  /** The bytes last written per record index and per index table; for change-only writes. */
+  readonly written: Map<number, Uint8Array>;
+  primitiveBytes: Uint8Array | null;
+  meshBytes: Uint8Array | null;
+}
+
+/** E23 U3: the paint writes of a validated packet; null when it draws no gradient draw. */
+type ValidatedPaint = Readonly<{
+  /** Per record, index i at position i - 1. */
+  records: readonly Uint8Array[];
+  primitives: Uint8Array;
+  meshes: Uint8Array;
+}> | null;
 
 /** U4: a mask level's coverage texture, kept across frames under the level's key. */
 interface MaskEntry {
@@ -401,6 +464,14 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
   #nextClipBuffer = 1;
   /** @internal Tests only (P4-A06): state records written to the clip buffer so far. */
   public clipStateWritesForTesting = 0;
+  readonly paintPipelineAvailable: boolean;
+  readonly #paint: PaintPipelineState | null;
+  #paintBuffers: PaintBufferState | undefined;
+  #nextPaintBuffer = 1;
+  /** Packed bytes per record object; renderer-core keeps a record object while it is unchanged. */
+  #paintRecordBytes = new WeakMap<GradientPaintRecord, Uint8Array>();
+  /** @internal Tests only (E23-A05): gradient records written to the record table so far. */
+  public paintRecordWritesForTesting = 0;
   /** U4 (Mask cache): the mask textures, by mask container id. */
   readonly #masks = new Map<string, MaskEntry>();
   #nextMask = 1;
@@ -431,10 +502,13 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     count: CountPipelineState | null = null,
     stencil = false,
     clip: ClipPipelineState | null = null,
+    paint: PaintPipelineState | null = null,
   ) {
     this.#mesh = mesh;
     this.#clip = clip;
     this.clipPipelineAvailable = clip !== null;
+    this.#paint = paint;
+    this.paintPipelineAvailable = paint !== null;
     this.#count = count;
     this.#stencil = stencil;
     this.meshPipelineAvailable = mesh !== null;
@@ -445,11 +519,22 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     // P4 contract, U3 and U4: the clip and mask modules (two, four with the mesh path) and
     // pipelines (two, five with the mesh path); none without the clipPipeline option.
     const clipModules = clip === null ? 0 : clip.mesh === null ? 2 : 4;
-    this.shaderModulesCreated = 1 + meshShaderModulesCreated + countModules + clipModules;
+    // E23 contract, U3: the paint modules (analytic and mesh, each also with the clip block)
+    // and pipelines (analytic, and fill and joint for the mesh module); none without the
+    // paintPipeline option.
+    const paintModules =
+      paint === null
+        ? 0
+        : (1 + (paint.mesh === null ? 0 : 1)) * (paint.analyticClip === null ? 1 : 2);
+    this.shaderModulesCreated =
+      1 + meshShaderModulesCreated + countModules + clipModules + paintModules;
     this.pipelinesCreated =
       (mesh === null ? 1 : 4) +
       (count === null ? 0 : countModules + 2) +
-      (clip === null ? 0 : clip.mesh === null ? 2 : 5);
+      (clip === null ? 0 : clip.mesh === null ? 2 : 5) +
+      (paint === null
+        ? 0
+        : (1 + (paint.mesh === null ? 0 : 2)) * (paint.analyticClip === null ? 1 : 2));
     this.#device = device;
     this.#context = context;
     this.#format = format;
@@ -621,8 +706,11 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     }
     const meshArena = mesh !== null && !mesh.skipped ? mesh.arena : null;
     const meshDraws = mesh !== null && !mesh.skipped ? mesh.draws : [];
+    let paint: ValidatedPaint;
     let clip: ValidatedClip;
     try {
+      // E23 U3: checks and packs only; the paint buffers are created and written below.
+      paint = this.#preflightPaint(packet, meshDraws, validated);
       clip = this.#preflightClip(packet, meshDraws, validated);
     } catch (error) {
       if (validated.createdArena) this.#releaseArena(arena);
@@ -638,6 +726,10 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     // U4: once submitted, created mask entries belong to the cache and are not discarded.
     let submittedWork = false;
     try {
+      // E23 section 4, Resources: a frame without a drawn gradient draw releases the paint
+      // buffers, so a scene whose gradients are all gone returns to the solid baseline.
+      if (paint !== null) this.#writePaint(paint);
+      else this.#releasePaintBuffers();
       if (clip !== null) this.#writeClip(clip);
       // P4 section 4, Resources: a frame with no clip part releases the clip buffer, so a scene
       // whose clips are all gone returns to the unclipped accounting baseline.
@@ -704,6 +796,12 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       // before. Without the clip variants a clipped draw is not drawn (fail closed).
       // U4: a state under a mask level binds that level's bind group, which holds its texture.
       const clipPipelines = clip === null ? null : this.#clip;
+      // E23 contract, U3: a draw with a gradient paint uses its pipeline's paint variant; each
+      // switch to a paint variant binds group 2 (the analytic or mesh paint group) and, without
+      // a clip, the empty group 1. Without the paint variants a gradient draw is not drawn
+      // (fail closed); a draw with only solid paints is encoded exactly as before.
+      const paintPipelines = paint === null ? null : this.#paint;
+      const paintBuffers = paint === null ? null : this.#paintBuffers!;
       let clipBoundState = 0;
       const bindClip = (state: number) => {
         if (state === clipBoundState) return;
@@ -712,14 +810,21 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         ]);
         clipBoundState = state;
       };
-      const bindAnalytic = (clipped: boolean) => {
-        pass.setPipeline(clipped ? clipPipelines!.analytic : this.#pipeline);
+      const bindPaint = (group: GPUBindGroup, clipped: boolean) => {
+        if (!clipped) {
+          pass.setBindGroup(CLIP_BIND_GROUP_INDEX, paintPipelines!.emptyBindGroup);
+          clipBoundState = 0;
+        }
+        pass.setBindGroup(PAINT_BIND_GROUP_INDEX, group);
+      };
+      const bindAnalytic = (pipeline: GPURenderPipeline) => {
+        pass.setPipeline(pipeline);
         pass.setBindGroup(0, arena.bindGroup);
         pass.setVertexBuffer(0, this.#vertexBuffer, 0, 32);
         pass.setIndexBuffer(this.#indexBuffer, 'uint16', 0, 12);
         clipBoundState = 0;
       };
-      bindAnalytic(false);
+      bindAnalytic(this.#pipeline);
       // P3 V3 section g: draws are encoded in merged paint order; the pipeline and bind group
       // switch only at a variant change.
       // ST-U7 addendum, section 4.5: a joint fill draw switches to the joint pipeline and the
@@ -743,15 +848,28 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
             bound = null;
           }
           if (state !== 0 && (clipPipelines?.mesh ?? null) === null) continue;
-          const kind = `${joint ? 'joint' : 'fill'}${state !== 0 ? '+clip' : ''}`;
+          const painted = draw.gradient !== undefined || draw.strokeGradient !== undefined;
+          const paintPipeline = !painted
+            ? null
+            : state === 0
+              ? joint
+                ? (paintPipelines?.meshJoint ?? null)
+                : (paintPipelines?.mesh ?? null)
+              : joint
+                ? (paintPipelines?.meshJointClip ?? null)
+                : (paintPipelines?.meshClip ?? null);
+          if (painted && paintPipeline === null) continue;
+          const kind = `${joint ? 'joint' : 'fill'}${painted ? '+paint' : ''}${state !== 0 ? '+clip' : ''}`;
           const pipeline =
-            state === 0
+            paintPipeline ??
+            (state === 0
               ? joint
                 ? this.#mesh!.jointPipeline
                 : this.#mesh!.pipeline
               : joint
                 ? clipPipelines!.meshJoint!
-                : clipPipelines!.mesh!;
+                : clipPipelines!.mesh!);
+          const switched = bound !== kind;
           if (bound === null || bound.startsWith('analytic')) {
             pass.setPipeline(pipeline);
             pass.setBindGroup(0, meshArena!.bindGroup);
@@ -759,6 +877,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           } else if (bound !== kind) {
             pass.setPipeline(pipeline);
           }
+          if (painted && switched) bindPaint(paintBuffers!.meshBindGroup, state !== 0);
           bound = kind;
           if (state !== 0) bindClip(state);
           pass.setStencilReference(step.reference);
@@ -769,12 +888,22 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
         drawMeshesAt(index);
         const state = draw.clipState ?? 0;
         if (state !== 0 && clipPipelines === null) return;
-        const kind = state === 0 ? 'analytic' : 'analytic+clip';
+        const painted = draw.paint === 'gradient';
+        const paintPipeline = !painted
+          ? null
+          : state === 0
+            ? (paintPipelines?.analytic ?? null)
+            : (paintPipelines?.analyticClip ?? null);
+        if (painted && paintPipeline === null) return;
+        const kind = `analytic${painted ? '+paint' : ''}${state !== 0 ? '+clip' : ''}`;
+        const pipeline = paintPipeline ?? (state === 0 ? this.#pipeline : clipPipelines!.analytic);
+        const switched = bound !== kind;
         if (bound === null || !bound.startsWith('analytic')) {
-          bindAnalytic(state !== 0);
+          bindAnalytic(pipeline);
         } else if (bound !== kind) {
-          pass.setPipeline(state === 0 ? this.#pipeline : clipPipelines!.analytic);
+          pass.setPipeline(pipeline);
         }
+        if (painted && switched) bindPaint(paintBuffers!.primitiveBindGroup, state !== 0);
         bound = kind;
         if (state !== 0) bindClip(state);
         pass.drawIndexed(6, draw.count, 0, 0, draw.first);
@@ -873,6 +1002,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
     for (const arena of this.#retiredArenas) release(() => this.#releaseArena(arena));
     this.#retiredArenas = [];
     release(() => this.#releaseClipBuffer());
+    release(() => this.#releasePaintBuffers());
     release(() => this.#releaseMasks());
     if (this.#clip !== null) release(() => this.#clip!.defaultMask.destroy());
     release(() => this.#pipelineCache.dispose());
@@ -1481,6 +1611,250 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       target.written.set(index, bytes);
       this.clipStateWritesForTesting += 1;
     }
+  }
+
+  /**
+   * E23 contract, U3: checks the paint part against the draws that will be encoded and packs
+   * the records and index tables; creates nothing. A primitive run marked `paint` or a mesh
+   * draw with `gradient` or `strokeGradient` needs the part; every index must name a record of
+   * it (or be 0 in an index table), each primitive entry a written slot, and a `strokeGradient`
+   * only a joint fill draw. A part without a gradient draw, or a scene without the paint
+   * variants, is checked and writes nothing: its gradient draws are not drawn.
+   */
+  #preflightPaint(
+    packet: PrimitivePacket,
+    meshDraws: readonly MeshFillDraw[],
+    validated: ValidatedPacket,
+  ): ValidatedPaint {
+    let used = false;
+    for (const draw of packet.draws) {
+      const flag: unknown = draw.paint;
+      if (flag === undefined) continue;
+      if (flag !== 'gradient') throw new Error('Invalid paint flag.');
+      used = true;
+    }
+    const isIndex = (value: unknown): value is number =>
+      typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+    for (const draw of meshDraws) {
+      const fill: unknown = draw.gradient;
+      const stroke: unknown = draw.strokeGradient;
+      if (fill === undefined && stroke === undefined) continue;
+      if (
+        (fill !== undefined && !(isIndex(fill) && fill > 0)) ||
+        (stroke !== undefined && !(isIndex(stroke) && stroke > 0)) ||
+        (stroke !== undefined && draw.composite !== 'joint-fill')
+      ) {
+        throw new Error('Invalid mesh paint index.');
+      }
+      used = true;
+    }
+    const part = packet.paint;
+    if (part === undefined) {
+      if (used) throw new Error('A gradient draw without a paint part.');
+      return null;
+    }
+    if (
+      typeof part !== 'object' ||
+      part === null ||
+      part.layoutVersion !== 0 ||
+      !isArrayValue(part.records) ||
+      !isArrayValue(part.primitives)
+    ) {
+      throw new Error('Invalid paint part.');
+    }
+    const count = part.records.length;
+    const primitives = new Map<number, readonly [number, number]>();
+    for (const entry of part.primitives as readonly unknown[]) {
+      const value = entry as Partial<{ slot: unknown; fill: unknown; stroke: unknown }> | null;
+      if (
+        typeof value !== 'object' ||
+        value === null ||
+        !isIndex(value.slot) ||
+        !isIndex(value.fill) ||
+        !isIndex(value.stroke) ||
+        value.fill > count ||
+        value.stroke > count ||
+        primitives.has(value.slot) ||
+        !validated.initialized.styles.has(value.slot)
+      ) {
+        throw new Error('Invalid primitive paint entry.');
+      }
+      primitives.set(value.slot, [value.fill, value.stroke]);
+    }
+    const meshes = new Map<number, readonly [number, number]>();
+    for (const draw of meshDraws) {
+      if (draw.gradient === undefined && draw.strokeGradient === undefined) continue;
+      const pair = [draw.gradient ?? 0, draw.strokeGradient ?? 0] as const;
+      const previous = meshes.get(draw.instance);
+      if (
+        pair[0] > count ||
+        pair[1] > count ||
+        (previous !== undefined && (previous[0] !== pair[0] || previous[1] !== pair[1]))
+      ) {
+        throw new Error('Invalid mesh paint index.');
+      }
+      meshes.set(draw.instance, pair);
+    }
+    const records = part.records.map((record) => {
+      const cached =
+        typeof record === 'object' && record !== null
+          ? this.#paintRecordBytes.get(record)
+          : undefined;
+      if (cached !== undefined) return cached;
+      const bytes = packGradientRecord(record);
+      if (bytes === null) throw new Error('Unsupported gradient record.');
+      this.#paintRecordBytes.set(record, bytes);
+      return bytes;
+    });
+    if (this.#paint === null || !used) return null;
+    return Object.freeze({
+      records,
+      primitives: packPaintIndices(primitives),
+      meshes: packPaintIndices(meshes),
+    });
+  }
+
+  /**
+   * E23 U3: grows a paint table that is too small (a new buffer, the old one released; queue
+   * order keeps earlier submissions' contents), then writes the records and index tables whose
+   * bytes changed, so a frame that rebuilt no record writes none (E23-A05).
+   */
+  #writePaint(paint: NonNullable<ValidatedPaint>): void {
+    const current = this.#paintBuffers;
+    const recordsSize = (paint.records.length + 1) * GRADIENT_RECORD_SIZE;
+    const fits = (table: PaintTable | undefined, size: number) =>
+      table !== undefined && table.size >= size;
+    let state = current;
+    if (
+      state === undefined ||
+      !fits(state.records, recordsSize) ||
+      !fits(state.primitives, paint.primitives.byteLength) ||
+      !fits(state.meshes, paint.meshes.byteLength)
+    ) {
+      const created: PaintTable[] = [];
+      try {
+        const table = (name: string, previous: PaintTable | undefined, size: number) => {
+          if (fits(previous, size)) return previous!;
+          const next = this.#createPaintTable(name, size);
+          created.push(next);
+          return next;
+        };
+        const records = table('paint-records', current?.records, recordsSize);
+        const primitives = table(
+          'paint-primitives',
+          current?.primitives,
+          paint.primitives.byteLength,
+        );
+        const meshes = table('paint-meshes', current?.meshes, paint.meshes.byteLength);
+        const group = (indices: PaintTable, name: string) =>
+          this.#device.createBindGroup({
+            label: `${indices.id}/${name}`,
+            layout: this.#paint!.bindGroupLayout,
+            entries: [
+              { binding: PAINT_BINDINGS.gradients, resource: { buffer: records.buffer } },
+              { binding: PAINT_BINDINGS.indices, resource: { buffer: indices.buffer } },
+            ],
+          });
+        state = {
+          records,
+          primitives,
+          meshes,
+          primitiveBindGroup: group(primitives, 'bind-group'),
+          meshBindGroup: group(meshes, 'bind-group'),
+          written: records === current?.records ? current.written : new Map<number, Uint8Array>(),
+          primitiveBytes: primitives === current?.primitives ? current.primitiveBytes : null,
+          meshBytes: meshes === current?.meshes ? current.meshBytes : null,
+        };
+      } catch (error) {
+        for (const table of created) this.#releasePaintTable(table);
+        throw error instanceof AllocationError ? error : new AllocationError(error);
+      }
+      this.#paintBuffers = state;
+      for (const table of [current?.records, current?.primitives, current?.meshes]) {
+        if (table !== undefined && !this.#paintTableInUse(table)) {
+          this.#releasePaintTable(table);
+        }
+      }
+    }
+    for (const [position, bytes] of paint.records.entries()) {
+      const index = position + 1;
+      if (state.written.get(index) === bytes) continue;
+      this.#device.queue.writeBuffer(
+        state.records.buffer,
+        index * GRADIENT_RECORD_SIZE,
+        bytes,
+        0,
+        bytes.byteLength,
+      );
+      state.written.set(index, bytes);
+      this.paintRecordWritesForTesting += 1;
+    }
+    if (state.primitiveBytes === null || !bytesEqual(state.primitiveBytes, paint.primitives)) {
+      this.#device.queue.writeBuffer(state.primitives.buffer, 0, paint.primitives);
+      state.primitiveBytes = paint.primitives;
+    }
+    if (state.meshBytes === null || !bytesEqual(state.meshBytes, paint.meshes)) {
+      this.#device.queue.writeBuffer(state.meshes.buffer, 0, paint.meshes);
+      state.meshBytes = paint.meshes;
+    }
+  }
+
+  #paintTableInUse(table: PaintTable): boolean {
+    const state = this.#paintBuffers;
+    return (
+      state !== undefined &&
+      (state.records === table || state.primitives === table || state.meshes === table)
+    );
+  }
+
+  #createPaintTable(name: string, minimum: number): PaintTable {
+    const size = nextPowerOfTwo(minimum);
+    if (size > safeLimit(this.#device.limits.maxBufferSize, 0)) throw new AllocationError();
+    if (size > safeLimit(this.#device.limits.maxStorageBufferBindingSize, 0)) {
+      throw new AllocationError();
+    }
+    const id = `primitive/${this.#generation}/${name}-${this.#nextPaintBuffer++}`;
+    let buffer: GPUBuffer;
+    try {
+      buffer = this.#device.createBuffer({
+        label: id,
+        size,
+        usage: STORAGE_BUFFER_USAGE | COPY_DESTINATION_USAGE,
+      });
+    } catch (error) {
+      throw new AllocationError(error);
+    }
+    try {
+      this.#resources.track(id, { category: 'buffer', size });
+    } catch (error) {
+      buffer.destroy();
+      throw new AllocationError(error);
+    }
+    return { id, buffer, size };
+  }
+
+  #releasePaintTable(table: PaintTable): void {
+    try {
+      table.buffer.destroy();
+    } finally {
+      this.#resources.release(table.id);
+    }
+  }
+
+  /** Destroys the paint buffers and their accounting entries; a later gradient frame creates them. */
+  #releasePaintBuffers(): void {
+    const state = this.#paintBuffers;
+    if (state === undefined) return;
+    this.#paintBuffers = undefined;
+    let firstError: unknown;
+    for (const table of [state.records, state.primitives, state.meshes]) {
+      try {
+        this.#releasePaintTable(table);
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    if (firstError !== undefined) throw asError(firstError, 'Paint buffer release failed.');
   }
 
   #preflight(packet: PrimitivePacket): ValidatedPacket {
@@ -2778,6 +3152,176 @@ export function createNativePrimitiveSceneCreation(
         clip = null;
       }
     }
+    // E23 contract, U3: the paint variants, created here like the clip variants and never on
+    // the frame path. A failure leaves them unavailable: solid draws are unaffected, and a
+    // gradient draw is not drawn.
+    let paint: PaintPipelineState | null = null;
+    if (options.paintPipeline === true && !disposed) {
+      const paintTracked: string[] = [];
+      const trackPaint = (id: string, descriptor: ResourceDescriptor) => {
+        track(id, descriptor);
+        paintTracked.push(id);
+      };
+      const analyticKey = primitivePipelineKey(format, sampleCount, stencil);
+      try {
+        // The mesh variants bind the paint group's two storage buffers next to the mesh group's.
+        if (
+          mesh !== null &&
+          safeLimit(device.limits.maxStorageBuffersPerShaderStage, 0) <
+            MESH_REQUIRED_STORAGE_BUFFERS_PER_STAGE + 2
+        ) {
+          throw new Error('Too few storage buffers per stage for the mesh paint variants.');
+        }
+        const paintBindGroupLayout = device.createBindGroupLayout(
+          createPaintBindGroupLayoutDescriptor(),
+        );
+        trackPaint(`${prefix}/paint-bind-group-layout`, { category: 'bind-group-layout' });
+        const emptyLayout = device.createBindGroupLayout({
+          label: `${prefix}/paint-empty-bind-group-layout`,
+          entries: [],
+        });
+        trackPaint(`${prefix}/paint-empty-bind-group-layout`, { category: 'bind-group-layout' });
+        const emptyBindGroup = device.createBindGroup({
+          label: `${prefix}/paint-empty-bind-group`,
+          layout: emptyLayout,
+          entries: [],
+        });
+        const layout = (name: string, groups: GPUBindGroupLayout[]) => {
+          const created = device.createPipelineLayout({
+            label: `${prefix}/${name}`,
+            bindGroupLayouts: groups,
+          });
+          trackPaint(`${prefix}/${name}`, { category: 'pipeline-layout' });
+          return created;
+        };
+        const module = (name: string, code: string) => {
+          const created = device.createShaderModule({ label: `${prefix}/${name}`, code });
+          trackPaint(`${prefix}/${name}`, { category: 'shader-module' });
+          return created;
+        };
+        const analyticShader = module('paint-shader', PRIMITIVE_ANALYTIC_PAINT_SHADER);
+        const analyticLayout = layout('paint-pipeline-layout', [
+          bindGroupLayout,
+          emptyLayout,
+          paintBindGroupLayout,
+        ]);
+        const analytic = await pipelineCache.getOrCreate(paintVariantKey(analyticKey), () =>
+          device.createRenderPipelineAsync(
+            variantDescriptor(
+              createPrimitivePipelineDescriptor(
+                analyticShader,
+                analyticLayout,
+                format,
+                sampleCount,
+                stencil,
+              ),
+              '+paint-v0',
+            ),
+          ),
+        );
+        trackPaint(`${prefix}/paint-pipeline`, { category: 'render-pipeline' });
+        let analyticClip: GPURenderPipeline | null = null;
+        if (clip !== null) {
+          const clipShader = module('paint-clip-shader', PRIMITIVE_ANALYTIC_PAINT_CLIP_SHADER);
+          const clipLayout = layout('paint-clip-pipeline-layout', [
+            bindGroupLayout,
+            clip.bindGroupLayout,
+            paintBindGroupLayout,
+          ]);
+          analyticClip = await pipelineCache.getOrCreate(paintClipVariantKey(analyticKey), () =>
+            device.createRenderPipelineAsync(
+              variantDescriptor(
+                createPrimitivePipelineDescriptor(
+                  clipShader,
+                  clipLayout,
+                  format,
+                  sampleCount,
+                  stencil,
+                ),
+                '+paint-v0+clip-v0',
+              ),
+            ),
+          );
+          trackPaint(`${prefix}/paint-clip-pipeline`, { category: 'render-pipeline' });
+        }
+        const meshVariants = async (
+          shader: GPUShaderModule,
+          pipelineLayout: GPUPipelineLayout,
+          clipped: boolean,
+        ) => {
+          const variant = (kind: 'fill' | 'joint') => {
+            const base = meshPipelineKey(format, sampleCount, kind);
+            return pipelineCache!.getOrCreate(
+              clipped ? paintClipVariantKey(base) : paintVariantKey(base),
+              () =>
+                device.createRenderPipelineAsync(
+                  variantDescriptor(
+                    createMeshPipelineDescriptor(shader, pipelineLayout, format, sampleCount, kind),
+                    clipped ? '+paint-v0+clip-v0' : '+paint-v0',
+                  ),
+                ),
+            );
+          };
+          const suffix = clipped ? 'paint-clip' : 'paint';
+          const fill = await variant('fill');
+          trackPaint(`${prefix}/mesh-${suffix}-pipeline`, { category: 'render-pipeline' });
+          const joint = await variant('joint');
+          trackPaint(`${prefix}/mesh-joint-${suffix}-pipeline`, { category: 'render-pipeline' });
+          return [fill, joint] as const;
+        };
+        let meshPaint: readonly [GPURenderPipeline, GPURenderPipeline] | null = null;
+        let meshPaintClip: readonly [GPURenderPipeline, GPURenderPipeline] | null = null;
+        if (mesh !== null) {
+          meshPaint = await meshVariants(
+            module('mesh-paint-shader', MESH_FILL_PAINT_SHADER),
+            layout('mesh-paint-pipeline-layout', [
+              mesh.bindGroupLayout,
+              emptyLayout,
+              paintBindGroupLayout,
+            ]),
+            false,
+          );
+          if (clip !== null) {
+            meshPaintClip = await meshVariants(
+              module('mesh-paint-clip-shader', MESH_FILL_PAINT_CLIP_SHADER),
+              layout('mesh-paint-clip-pipeline-layout', [
+                mesh.bindGroupLayout,
+                clip.bindGroupLayout,
+                paintBindGroupLayout,
+              ]),
+              true,
+            );
+          }
+        }
+        paint = Object.freeze({
+          bindGroupLayout: paintBindGroupLayout,
+          emptyBindGroup,
+          analytic,
+          analyticClip,
+          mesh: meshPaint?.[0] ?? null,
+          meshJoint: meshPaint?.[1] ?? null,
+          meshClip: meshPaintClip?.[0] ?? null,
+          meshJointClip: meshPaintClip?.[1] ?? null,
+        });
+      } catch {
+        // The E22-K5 rule: no paint variant this attempt cached outlives the failure.
+        pipelineCache.evict(paintVariantKey(analyticKey));
+        pipelineCache.evict(paintClipVariantKey(analyticKey));
+        for (const kind of ['fill', 'joint'] as const) {
+          pipelineCache.evict(paintVariantKey(meshPipelineKey(format, sampleCount, kind)));
+          pipelineCache.evict(paintClipVariantKey(meshPipelineKey(format, sampleCount, kind)));
+        }
+        for (const id of paintTracked) {
+          tracked.delete(id);
+          try {
+            resources.release(id);
+          } catch {
+            // Accounting cleanup is best effort.
+          }
+        }
+        paint = null;
+      }
+    }
     if (disposed || vertexBuffer === undefined || indexBuffer === undefined) {
       throw new Error('Primitive scene creation completed after disposal.');
     }
@@ -2800,6 +3344,7 @@ export function createNativePrimitiveSceneCreation(
       count,
       stencil,
       clip,
+      paint,
     );
     vertexBuffer = undefined;
     indexBuffer = undefined;
@@ -2830,6 +3375,14 @@ function maskDescriptor(base: GPURenderPipelineDescriptor): GPURenderPipelineDes
       targets: [...fragment.targets].map((target) => ({ ...target!, format: CLIP_MASK_FORMAT })),
     },
   };
+}
+
+/** E23 contract, U3: a paint variant's descriptor, labelled apart from its base pipeline. */
+function variantDescriptor(
+  base: GPURenderPipelineDescriptor,
+  suffix: string,
+): GPURenderPipelineDescriptor {
+  return { ...base, label: `${base.label ?? 'vector-studio/pipeline'}${suffix}` };
 }
 
 /** P4 contract, U3: a clip variant's descriptor, labelled apart from its base pipeline. */
