@@ -275,6 +275,15 @@ Evidence goes to `docs/evidence/e25/`.
 
 Order: U1, U2, U3, U4, U5. The WIP limit per track applies.
 
+**Unit records.** U1 (2026-10-29):
+
+- The mirror option `groupOpacity` (`'unsupported'` by default) carries E25-S1 into validation. A container with opacity other than 1 is `unsupported-feature` unless the option is `'supported'`.
+- E25-S2 runs in P4's clip-depth walk, against `SCENE_MAX_ISOLATION_DEPTH = 32` (a `packages/contracts` export).
+- `render.layer-resource-limit` is reserved in `DIAGNOSTIC_CODES`.
+- The architecture's P1 paragraph and P4 design-gate row are amended, and E10 has its count-pass note.
+- Tests: `tests/unit/e25-u1-group-opacity.test.ts`.
+- **Departure, as P4 U1 did with `clips`:** the service option `groups`, its `TypeError` with `clips: 'none'`, and `requiresLayerPipeline` move to U3. Until layers draw, no service sets the mirror's `groupOpacity`, so non-unit container opacity stays rejected everywhere. E25-A01's option-wiring cases are checked in U3.
+
 ## 8. Risks
 
 - **Memory.** Bound-sized layers keep ordinary groups small. But full-screen groups at 4K and 4x admit only two nesting levels within 96 MiB (E25-Q3). Deeper full-screen stacks report instead of drawing. Two remedies are open if real documents hit this: re-rendering per tile together with the composite (no full layer texture), or a cache with eviction.

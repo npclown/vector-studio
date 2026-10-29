@@ -278,6 +278,8 @@ On 2026-09-09 the user approved [P1 D2](plans/p1-instanced-primitives.md#d2--app
 
 P1 structural containers support transform/visibility and require opacity 1. Non-unit container opacity rejects the transaction; descendant alpha multiplication is not a substitute. Future non-unit container opacity requires isolated composition and its own implementation plan. This does not remove the MVP appearance requirement or add offscreen composition to P1.
 
+**Isolated container opacity (E25, 2026-10-29, [contract](plans/d9-e25-isolated-opacity-contract.md)).** Since E25, a container with `0 < opacity < 1` is drawn as an isolated layer composited once with its opacity (E25-K1). Clips inside the layer apply per leaf as in P4 (E25-K2). Opacity 0 draws nothing. Descendant alpha multiplication is still not a substitute. The renderer accepts such containers only when it draws layers (E25-S1); until then they are rejected as above.
+
 ## Design gates before later implementation
 
 On 2026-09-29 the user approved the [P3 visible path semantics](plans/p3-visible-semantics-proposal.md), including fill-only implicit closure, cap/closed-seam rules, miter fallback and degenerate/reversal cases. Their exact table owns those details. This resolves those visible choices but not the [P3 private mesh](plans/p3-private-contract.md) numeric/coverage/ABI gates. The [test-only line-membership slice](plans/p3-line-oracle-contract.md) may establish independent expected fill regions before the remaining mesh implementation contracts are ready.
@@ -293,6 +295,8 @@ The remaining decisions below must be resolved with acceptance fixtures in the o
 | Post-P5 text plan | Font loading/fallback and shaping ownership, matching DOM/GPU layout, Korean IME composition transactions, and selection/caret fixtures                                                              |
 
 The P3 row's "dash units/phase" was resolved on 2026-10-29 by [E24](plans/d9-e24-dash-contract.md): dash lengths and phase are in node-local units, the units of the stroke width; the pattern restarts at each subpath; dashes meeting at a closed seam are joined (E24-K4); and dashes are expanded in `renderer-core` ahead of the unchanged stroke port.
+
+The P4 row's "interaction with container opacity" was resolved on 2026-10-29 by [E25](plans/d9-e25-isolated-opacity-contract.md): inside an isolated layer each leaf keeps its full clip coverage, and the layer's composite is not clipped again (E25-K2).
 
 ## Failure and capability behavior
 
