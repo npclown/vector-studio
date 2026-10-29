@@ -285,9 +285,10 @@ describe('createSymbol (M7-A07)', () => {
     );
   });
 
-  it('wraps a horizontal line in a 0-high symbol by its geometric bounds (disclosed, S3)', () => {
-    // Section 5.1: the wrap takes `groupNodes`' geometric bounds, not stroke-inclusive ones, so
-    // the symbol is 0 high and clips its line away; pinned so that a change is deliberate.
+  it('wraps a horizontal line in a symbol as high as its stroke (visual bounds)', () => {
+    // Section 5.1 since the M7-U6 hands-on check: the wrap takes the nodes' visual bounds, so a
+    // 0-high line of the default stroke (width 1, butt caps) gives a 1-high symbol that keeps it
+    // painted, and the line keeps its page placement half a unit below the symbol's top.
     const setup = counted({
       schemaVersion: 4,
       id: 'doc',
@@ -310,7 +311,7 @@ describe('createSymbol (M7-A07)', () => {
             id: 'n2',
             name: 'Symbol',
             parent: 'p',
-            frame: { x: 10, y: 20, width: 100, height: 0 },
+            frame: { x: 10, y: 19.5, width: 100, height: 1 },
             rotation: 0,
             constraints: START,
             opacity: 1,
@@ -323,7 +324,7 @@ describe('createSymbol (M7-A07)', () => {
           [line!]: {
             ...before.nodes[line!]!,
             parent: 'n2',
-            frame: { x: 0, y: 0, width: 100, height: 0 },
+            frame: { x: 0, y: 0.5, width: 100, height: 0 },
           },
         },
         [],

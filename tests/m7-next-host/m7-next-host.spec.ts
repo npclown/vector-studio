@@ -88,6 +88,9 @@ const ELLIPSE_LEFT = { x: 54, y: 15 };
 const ELLIPSE_RIGHT = { x: 73, y: 15 };
 /** `s1-g`'s page drag: 8 page units right (16 CSS px at zoom 2). */
 const GROUP_SHIFT = 8;
+/** The hands-on line of the wrap check (section 5.1), clear of every fixture node. */
+const LINE_START = { x: 300, y: 220 };
+const LINE_END = { x: 420, y: 220 };
 /** `i1`'s frame in the fixture, and the frame its bottom-right handle drag gives it. */
 const I1_FRAME = { x: 140, y: 0, width: 100, height: 80 };
 const I1_RESIZED = { x: 140, y: 0, width: 200, height: 160 };
@@ -508,6 +511,50 @@ test('M7-A11: source edits reach instances; resize, detach, source delete and un
   await page.getByTestId('detach').click();
   expect((await readDocument(page)).nodes[instance!]!.type).toBe('frame');
   for (let i = 0; i < 4; i += 1) await page.getByTestId('undo').click();
+  expect(await serialized(page)).toBe(FIXTURE_SERIALIZED);
+
+  // The wrap's visual bounds (section 5.1, the M7-U6 hands-on check): a horizontal line with a
+  // white 8-wide stroke wrapped by the symbol button gives a source 8 high whose clip keeps the
+  // stroke painted (with geometric bounds it was 0 high and the stroke vanished).
+  await page.getByTestId('tool-line').click();
+  await drag(page, await screen(page, LINE_START), await screen(page, LINE_END));
+  const lined = await readDocument(page);
+  const addedLine = lined.pages[0]!.children.filter(
+    (id) => !FIXTURE.pages[0]!.children.includes(id),
+  );
+  expect(addedLine).toHaveLength(1);
+  const [line] = addedLine;
+  const length = LINE_END.x - LINE_START.x;
+  expect(lined.nodes[line!]).toMatchObject({
+    type: 'line',
+    frame: { x: LINE_START.x, y: LINE_START.y, width: length, height: 0 },
+  });
+  const lineStroke = (lined.nodes[line!] as Extract<NodeV4, { type: 'line' }>).stroke!;
+  await run(page, {
+    type: 'setNodeProps',
+    id: line!,
+    props: { stroke: { ...lineStroke, color: { r: 1, g: 1, b: 1, a: 1 }, width: 8 } },
+  });
+  await page.getByTestId('tool-select').click();
+  await run(page, { type: 'setSelection', ids: [line!] });
+  await page.getByTestId('create-symbol').click();
+  const lineSymbol = await readDocument(page);
+  const [lineSource] = (await session(page)).selection;
+  expect(lineSymbol.nodes[lineSource!]).toMatchObject({
+    type: 'symbol',
+    children: [line],
+    frame: { x: LINE_START.x, y: LINE_START.y - 4, width: length, height: 8 },
+  });
+  expect(lineSymbol.nodes[line!]!.frame).toEqual({ x: 0, y: 4, width: length, height: 0 });
+  if (rendering) {
+    await expectPaints(page, {
+      lineAxis: [{ x: 360, y: LINE_START.y }, 'white'],
+      lineEdge: [{ x: 360, y: LINE_START.y + 2.5 }, 'white'],
+      aboveLine: [{ x: 360, y: LINE_START.y - 7 }, 'canvas'],
+    });
+  }
+  // The draw, the stroke and the wrap, undone back to the fixture.
+  for (let i = 0; i < 3; i += 1) await page.getByTestId('undo').click();
   expect(await serialized(page)).toBe(FIXTURE_SERIALIZED);
 
   const diagnostics = await page.evaluate(() =>
