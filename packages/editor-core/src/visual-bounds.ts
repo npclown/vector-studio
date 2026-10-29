@@ -1,12 +1,12 @@
-import type { DocumentV4, Frame, NodeV4 } from '@vector-studio/model';
+import type { DocumentV4, Frame, NodeV4, PathStroke } from '@vector-studio/model';
 import { apply, boundsOfPoints, localTransform } from './geometry.js';
 import type { PagePoint } from './types.js';
 
 // M7 contract, section 5.1 (M7-U6 hands-on check, 2026-10-30): the visual bounds of a node in its
 // parent's space, which a `createSymbol` wrap takes as the new source's frame so that its clip
-// does not cut strokes or arrowheads off. They are conservative: never smaller than the drawn
-// pixels, and never smaller than the node's rotated frame (the geometric bounds `groupNodes`
-// keeps). editor-core cannot import renderer-core, so the path rule repeats the renderer's stroke
+// does not cut strokes or arrowheads off. They are conservative for the geometric stroke (the
+// renderer's anti-aliasing fringe, about half a device pixel past an edge, is not included) and
+// never smaller than the node's rotated frame (the geometric bounds `groupNodes` keeps). editor-core cannot import renderer-core, so the path rule repeats the renderer's stroke
 // culling bound (`getPathLocalStrokeBounds`, B2 stroke contract, section 9.7): the points' box
 // grown by w/2 · max(1, miterLimit for a miter join, 1.5 for a square cap).
 
@@ -54,19 +54,30 @@ function pathBox(node: Extract<NodeV4, { type: 'path' }>): Box {
     });
   }
   if (stroke === null || !(stroke.width > 0) || points.length === 0) return box;
+  return grow(box, strokeGrowth(stroke));
+}
+
+/** The renderer's growth of a stroked outline's point box: w/2 · k (see above). */
+function strokeGrowth(stroke: PathStroke): number {
   const k = Math.max(
     1,
     stroke.join === 'miter' ? Math.min(stroke.miterLimit, MITER_CAP) : 1,
     stroke.cap === 'square' ? 1.5 : 1,
   );
-  return grow(box, (stroke.width / 2) * k);
+  return (stroke.width / 2) * k;
 }
 
 /**
- * A line in its unrotated frame, with the projector's geometry (`lineContent`, M1 section 5):
- * the shaft is w wide (w/2 each side of the axis), a square cap adds w/2 beyond a plain end, a
- * round cap is a half circle of radius w/2, and a head has its tip at the end and its base
- * corners at T − 4w·u ± 2w·n, a `line` head being two w-wide bars (so its corners grow by w/2).
+ * A line in its unrotated frame, with the projector's geometry (`lineContent`, M1 section 5).
+ * A head has its tip T at the end and its base corners at T − 4w·u ± 2w·n.
+ * - No head: one stroked segment, bounded exactly: the shaft w wide (w/2 each side of the axis),
+ *   a square cap's corners w/2 beyond the end, a round cap's circle of radius w/2.
+ * - `line` heads and no `triangle` (stroke mode): the renderer strokes the open polyline
+ *   corner → tip → corner with the line's cap and join, so the outline's points (the ends and
+ *   each head's corners) take the path rule, w/2 · max(1, miter limit, 1.5 for a square cap),
+ *   which covers the miter at the tip and the diagonal caps at the corners.
+ * - A `triangle` end (fill mode): one filled outline, the shaft and caps as above, triangle heads
+ *   exactly, a `line` head as two w-wide bars (so its points grow by w/2).
  */
 function lineBox(node: Extract<NodeV4, { type: 'line' }>): Box {
   const { frame, stroke } = node;
@@ -88,6 +99,15 @@ function lineBox(node: Extract<NodeV4, { type: 'line' }>): Box {
     [node.startArrow, p0, { x: -d.x, y: -d.y }],
     [node.endArrow, p1, d],
   ];
+  if (ends.some(([arrow]) => arrow === 'line') && ends.every(([arrow]) => arrow !== 'triangle')) {
+    let outline = include(box, p0);
+    for (const [arrow, tip, u] of ends) {
+      if (arrow !== 'line') continue;
+      outline = include(outline, at(tip, u, -4 * w, 2 * w));
+      outline = include(outline, at(tip, u, -4 * w, -2 * w));
+    }
+    return grow(outline, strokeGrowth(stroke));
+  }
   for (const [arrow, tip, u] of ends) {
     // The shaft's corners at this end (a square cap moves them w/2 outward).
     const out = arrow === 'none' && stroke.cap === 'square' ? w / 2 : 0;
@@ -140,8 +160,14 @@ function ownBox(document: DocumentV4, node: NodeV4): Box {
       }
       return box;
     }
+    case 'custom':
+      // The extension's outline is assumed to stay inside the frame (its geometry is not known
+      // here); the projector strokes it as a path, so a stroke grows the frame by the path rule.
+      return node.stroke === null || !(node.stroke.width > 0)
+        ? boxOf(node.frame)
+        : grow(boxOf(node.frame), strokeGrowth(node.stroke));
     default:
-      // Text and custom nodes draw inside their frame here.
+      // Text draws inside its frame here.
       return boxOf(node.frame);
   }
 }

@@ -2,6 +2,7 @@ import {
   serializeDocument,
   validateDocument,
   type DocumentV4,
+  type NodeV4,
   type PathStroke,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
@@ -109,7 +110,7 @@ describe('createSymbol wraps by visual bounds (M7 section 5.1)', () => {
     }
   });
 
-  it('includes arrowheads: a triangle head 4w long and 4w wide, a line head grown by w/2', () => {
+  it('includes arrowheads: a triangle head exactly, a line head by the path rule', () => {
     const target = editor();
     const [triangle] = ok(target, {
       type: 'createLine',
@@ -132,15 +133,69 @@ describe('createSymbol wraps by visual bounds (M7 section 5.1)', () => {
       stroke: stroke(2),
       startArrow: 'line',
     });
-    // Corners at x = 8, y = 50 ± 4 grown by 1; the tip at x = 0 grown by 1.
+    // Stroke mode (no triangle): the polyline's points (the ends and the head's corners at
+    // x = 8, y = 50 ± 4) grow by w/2 · 4 (miter join, limit 4).
     expect(visualBounds(documentOf(target), documentOf(target).nodes[open!]!)).toEqual({
-      x: -1,
-      y: 45,
-      width: 101,
-      height: 10,
+      x: -4,
+      y: 42,
+      width: 108,
+      height: 16,
     });
     const { document, symbol } = wrap(target, [triangle!, open!]);
-    expect(document.nodes[symbol]!.frame).toEqual({ x: -1, y: -4, width: 101, height: 59 });
+    expect(document.nodes[symbol]!.frame).toEqual({ x: -4, y: -4, width: 108, height: 62 });
+  });
+
+  it('covers the miter at a line head tip and the diagonal square caps of its corners', () => {
+    const target = editor();
+    const [miter] = ok(target, {
+      type: 'createLine',
+      start: { x: 0, y: 0 },
+      end: { x: 100, y: 0 },
+      stroke: stroke(2, 'butt', 'miter', 4),
+      endArrow: 'line',
+    });
+    // The head's half angle is atan(2w / 4w), so the miter tip lies (w/2) / sin(atan(0.5)) past
+    // the tip: 102.236 for w = 2.
+    const tip = 100 + 1 / Math.sin(Math.atan(0.5));
+    const bounds = visualBounds(documentOf(target), documentOf(target).nodes[miter!]!);
+    expect(bounds.x + bounds.width).toBeGreaterThanOrEqual(tip);
+    expect(bounds).toEqual({ x: -4, y: -8, width: 108, height: 16 });
+
+    const [diagonal] = ok(target, {
+      type: 'createLine',
+      start: { x: 0, y: 0 },
+      end: { x: 100, y: 100 },
+      stroke: stroke(2, 'square', 'bevel'),
+      endArrow: 'line',
+    });
+    // A square cap on a corner of the turned head reaches (w/2)·√2 past it; the bound grows the
+    // points by 1.5 · w/2.
+    const turned = visualBounds(documentOf(target), documentOf(target).nodes[diagonal!]!);
+    expect(turned.x + turned.width).toBeGreaterThanOrEqual(100 + Math.SQRT2);
+    expect(turned.y + turned.height).toBeGreaterThanOrEqual(100 + Math.SQRT2);
+    expect(turned).toEqual({ x: -1.5, y: -1.5, width: 103, height: 103 });
+  });
+
+  it('grows a stroked custom node by the path rule, its geometry assumed inside its frame', () => {
+    const star = {
+      id: 's',
+      name: 's',
+      parent: 'p',
+      frame: { x: 0, y: 0, width: 100, height: 100 },
+      rotation: 0,
+      constraints: { horizontal: 'start', vertical: 'start' },
+      opacity: 1,
+      visible: true,
+      type: 'custom',
+      customType: 'ext.star',
+      data: { points: 5, innerRatio: 0.5 },
+      fill: null,
+      stroke: stroke(10, 'butt', 'miter', 4),
+    } as unknown as NodeV4;
+    const document = { nodes: { s: star } } as unknown as DocumentV4;
+    // 10 / 2 · 4 = 20 on every side.
+    expect(visualBounds(document, star)).toEqual({ x: -20, y: -20, width: 140, height: 140 });
+    expect(visualBounds(document, { ...star, stroke: null } as NodeV4)).toEqual(star.frame);
   });
 
   it('grows a stroked rectangle by half its stroke and leaves an unstroked one as is', () => {
