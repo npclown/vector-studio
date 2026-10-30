@@ -729,7 +729,7 @@ describe('V3b primitive-only identity (V3-A16) and the source flag', () => {
         write.resourceId,
         write.byteOffset,
         Buffer.from(write.bytes).toString('hex'),
-        recordIndices(write.records),
+        write.records.map((record) => record.index),
       ]),
       draws: packet.draws,
       frame: packet.frame,
