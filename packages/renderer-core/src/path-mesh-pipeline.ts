@@ -357,8 +357,6 @@ type PathFrame = Readonly<{
   path: DerivedPath;
   revision: number;
   frameKey: string;
-  /** The states the evaluation recorded, all null for a clean outcome. */
-  states: readonly string[];
   /** Null for a culled path. */
   drawn: Readonly<{
     items: readonly Evaluated[];
@@ -581,10 +579,7 @@ export class PathMeshPipeline {
     ].join('|');
     const culled = (path: DerivedPath, revision: number) => {
       if (this.#reuse) {
-        this.#pathFrames.set(
-          path.id,
-          Object.freeze({ path, revision, frameKey, states: [], drawn: null }),
-        );
+        this.#pathFrames.set(path.id, Object.freeze({ path, revision, frameKey, drawn: null }));
       }
     };
     for (const path of input.paths) {
@@ -599,9 +594,12 @@ export class PathMeshPipeline {
         kept.frameKey === frameKey &&
         (kept.drawn === null || this.#resident(path.id, kept.drawn))
       ) {
+        // A drawn outcome records the null states its evaluation recorded, which clear a state a
+        // frame under other inputs set since (a port-version, say); a culled one records none.
         this.#reusedPaths += 1;
-        for (const key of kept.states) frameStates.set(key, null);
         if (kept.drawn !== null) {
+          frameStates.set(stateKey(path.id, null), null);
+          for (const item of kept.drawn.items) frameStates.set(stateKey(path.id, item.paint), null);
           for (const item of kept.drawn.items) this.#currentE[item.paint].set(path.id, item.e);
           evaluated.push(Object.freeze({ path, items: kept.drawn.items, kept }));
         }
@@ -733,7 +731,7 @@ export class PathMeshPipeline {
     const working = new Set<MeshEntry>();
     const { origin, frameFinite } = input.packing;
     for (const { path, items, kept } of evaluated) {
-      if (kept?.drawn != null) {
+      if (kept !== undefined && kept.drawn !== null) {
         for (const entry of kept.drawn.entries) {
           entry.lastServed = now;
           working.add(entry);
@@ -789,7 +787,6 @@ export class PathMeshPipeline {
             path,
             revision: revisions.get(path.id)!,
             frameKey,
-            states: [stateKey(path.id, null), ...items.map((item) => stateKey(path.id, item.paint))],
             drawn: Object.freeze({
               items,
               entries: entries as MeshEntry[],

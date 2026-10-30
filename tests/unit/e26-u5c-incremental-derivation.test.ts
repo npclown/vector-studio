@@ -9,7 +9,9 @@ import * as packing from '../../packages/renderer-core/src/primitive-packing.js'
 import { buildPathFringe } from '../../packages/renderer-core/src/path-fringe.js';
 import {
   PathMeshPipeline,
+  reusedPathsForTesting,
   type PathMeshDraw,
+  type PathMeshLimits,
 } from '../../packages/renderer-core/src/path-mesh-pipeline.js';
 import type {
   PrimitivePacket,
@@ -150,7 +152,7 @@ function leaf(rng: Rng, id: string, parentId: string | null): RenderNodeSnapshot
   }
   if (pick < 0.88) {
     // The counting fill port serves a 10 x 10 square tagged by the first point.
-    const tag = Math.round(rng() * 1000);
+    const tag = Math.round(rng() * 60);
     return {
       ...base,
       kind: 'path',
@@ -302,9 +304,10 @@ type Twin = Readonly<{
   mirror: RetainedSceneMirror;
   source: PrimitiveSceneSource;
   served: () => readonly PathMeshDraw[];
+  pipeline: PathMeshPipeline;
 }>;
 
-function twin(full: boolean): Twin {
+function twin(full: boolean, limits?: Partial<PathMeshLimits>): Twin {
   const mirror = new RetainedSceneMirror(undefined, {
     pathNodes: 'supported',
     pathFills: 'supported',
@@ -319,6 +322,7 @@ function twin(full: boolean): Twin {
     port: createCountingPort(),
     strokePort: new ScriptedStrokeMeshPort(),
     fringeBuilder: buildPathFringe,
+    ...(limits === undefined ? {} : { limits }),
   });
   let served: readonly PathMeshDraw[] = [];
   const prepare = pipeline.prepare.bind(pipeline);
@@ -328,7 +332,7 @@ function twin(full: boolean): Twin {
   };
   const source = new PrimitiveSceneSource(mirror, pipeline, { text: { port: new FakeRaster() } });
   if (full) useFullDerivationForTesting(source);
-  return { mirror, source, served: () => served };
+  return { mirror, source, served: () => served, pipeline };
 }
 
 /** A packet as plain data: symbols numbered by first appearance in this twin's packets. */
@@ -511,12 +515,12 @@ function drawn(twinState: Twin, packet: PrimitivePacket | null) {
   };
 }
 
-function runDifferential(seed: number, frames: number) {
+function runDifferential(seed: number, frames: number, limits?: Partial<PathMeshLimits>) {
   const rng = random(seed);
   const model = new Model();
   randomScene(rng, model, 60 + Math.floor(rng() * 60));
-  const incremental = twin(false);
-  const oracle = twin(true);
+  const incremental = twin(false, limits);
+  const oracle = twin(true, limits);
   const normalize = { incremental: normalizer(), oracle: normalizer() };
   for (const { mirror } of [incremental, oracle]) {
     expect(mirror.replaceSnapshot(model.snapshot()).status).toBe('applied');
@@ -552,14 +556,21 @@ function runDifferential(seed: number, frames: number) {
       const before = camera;
       const move = rng();
       camera =
-        move < 0.6
+        move < 0.3
           ? { ...camera, x: camera.x + (rng() - 0.5) * 60, y: camera.y + (rng() - 0.5) * 60 }
-          : move < 0.85
-            ? {
-                ...camera,
-                zoom: Math.min(8, Math.max(0.125, camera.zoom * (rng() < 0.5 ? 0.7 : 1.4))),
-              }
-            : { ...camera, x: (rng() - 0.5) * 4000, y: (rng() - 0.5) * 4000 };
+          : move < 0.45
+            ? { ...camera, x: camera.x + (rng() - 0.5) * 60 }
+            : move < 0.6
+              ? { ...camera, y: camera.y + (rng() - 0.5) * 60 }
+              : move < 0.85
+                ? {
+                    ...camera,
+                    zoom: Math.min(8, Math.max(0.125, camera.zoom * (rng() < 0.5 ? 0.7 : 1.4))),
+                  }
+                : // A far jump and back, so the scene is in view about half of the time.
+                  Math.abs(camera.x) > 1000
+                  ? { ...camera, x: (rng() - 0.5) * 200, y: (rng() - 0.5) * 200 }
+                  : { ...camera, x: rng() < 0.5 ? -3000 : 3000, y: (rng() - 0.5) * 4000 };
       // The new camera's assessments fail on some frames; both sources must throw the same. A
       // zoom at its bound leaves the camera, and so the memo's inputs, unchanged: the injected
       // failure would then break the assessment's purity, which the memo relies on.
@@ -611,6 +622,8 @@ function runDifferential(seed: number, frames: number) {
     errors,
     unacknowledged,
     counts: derivationCountsForTesting(incremental.source),
+    pipeline: incremental.pipeline.getStatistics(),
+    reusedPaths: reusedPathsForTesting(incremental.pipeline),
   };
 }
 
@@ -621,8 +634,15 @@ describe('E26-U5c kept and patched derivation', () => {
     let errors = 0;
     let unacknowledged = 0;
     const counts = { reused: 0, patched: 0, full: 0 };
+    const stats: { evictions: number; reused: number }[] = [];
+    // Seeds 3 and 4 run the path mesh pipeline under a small byte budget and memo, so entries
+    // are evicted and trimmed between frames.
     for (const seed of [1, 2, 3, 4]) {
-      const result = runDifferential(seed, 300);
+      const result = runDifferential(
+        seed,
+        300,
+        seed < 3 ? undefined : { byteBudget: 24_576, memoCapacity: 8 },
+      );
       compared += result.compared;
       fresh += result.fresh;
       errors += result.errors;
@@ -630,6 +650,7 @@ describe('E26-U5c kept and patched derivation', () => {
       counts.reused += result.counts.reused;
       counts.patched += result.counts.patched;
       counts.full += result.counts.full;
+      stats.push({ evictions: result.pipeline.evictions, reused: result.reusedPaths });
     }
     expect(compared).toBe(1200);
     expect(fresh).toBeGreaterThanOrEqual(20);
@@ -640,6 +661,9 @@ describe('E26-U5c kept and patched derivation', () => {
     expect(counts.reused).toBeGreaterThan(300);
     expect(counts.patched).toBeGreaterThan(100);
     expect(counts.full).toBeGreaterThan(100);
+    // The pipeline serves kept path outcomes, and evicts under the small budget.
+    expect(stats.every((entry) => entry.reused > 1000)).toBe(true);
+    expect(stats[2]!.evictions + stats[3]!.evictions).toBeGreaterThan(20);
   }, 120_000);
 });
 
