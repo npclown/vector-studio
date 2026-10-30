@@ -847,7 +847,8 @@ export function projectPage(
           frame: node.frame,
           rotation: node.rotation,
           visible: node.visible,
-          opacity: node.opacity,
+          // The effective opacity, instance × source (MVP M4 contract, M4-P6, M4-Q15 (a)).
+          opacity: node.opacity * source.opacity,
           fill: source.fill,
           stroke: source.stroke,
         },

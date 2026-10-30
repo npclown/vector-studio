@@ -274,6 +274,205 @@ export function documentClipViolation(document: DocumentV6): string | null {
   return null;
 }
 
+// The isolation count (MVP M4 contract, section 4.3, M4-Q8 (a)): a node's proper ancestors that
+// are containers or instances with opacity below 1, hidden ones and opacity 0 included, counted
+// through expansions as M7-S5 counts clip levels.
+
+/** Isolation levels a node may sit at; a frame unit below opacity 1 one fewer (section 4.3). */
+const MAX_ISOLATION_COUNT = 32;
+const MAX_ISOLATED_UNIT_COUNT = 31;
+
+/**
+ * A node's effective opacity (M4-P6, M4-Q15 (a)): an instance's opacity times its source's, any
+ * other node's own opacity. An instance whose source is missing takes its own.
+ */
+export function effectiveOpacity(tree: TreeView, node: NodeV6): number {
+  if (node.type !== 'instance') return node.opacity;
+  const source = tree.node(node.symbol);
+  return source?.type === 'symbol' ? node.opacity * source.opacity : node.opacity;
+}
+
+/** The isolation count of `id`: its container ancestors with opacity below 1. */
+export function isolationCount(tree: TreeView, id: string): number {
+  return ancestors(tree, id).filter((node) => node.opacity < 1).length;
+}
+
+/** The isolation count a new child of `owner` (a page or container) has. */
+export function childIsolationCount(tree: TreeView, owner: string): number {
+  const node = tree.node(owner);
+  if (!isContainer(node)) return 0;
+  return isolationCount(tree, owner) + (node.opacity < 1 ? 1 : 0);
+}
+
+/**
+ * The isolation levels the containers strictly between a source and its descendants add: the
+ * most below any descendant (`node`) and below any `frame` descendant at opacity below 1
+ * (`unit`); -1 when there is none.
+ */
+export type SourceIsolationLevels = Readonly<{ node: number; unit: number }>;
+
+function sourceIsolationLevels(tree: TreeView, source: string): SourceIsolationLevels {
+  let node = -1;
+  let unit = -1;
+  const stack: [string, number][] = childrenOf(tree, source).map((id) => [id, 0]);
+  while (stack.length > 0) {
+    const [id, level] = stack.pop()!;
+    const entry = tree.node(id);
+    if (entry === undefined) continue;
+    if (level > node) node = level;
+    if (entry.type === 'frame' && entry.opacity < 1 && level > unit) unit = level;
+    if (isContainer(entry)) {
+      const next = entry.opacity < 1 ? level + 1 : level;
+      for (const child of entry.children) stack.push([child, next]);
+    }
+  }
+  return { node, unit };
+}
+
+function isolationLevelsMemo(tree: TreeView): (source: string) => SourceIsolationLevels {
+  const memo = new Map<string, SourceIsolationLevels>();
+  return (source) => {
+    let levels = memo.get(source);
+    if (levels === undefined) {
+      levels = sourceIsolationLevels(tree, source);
+      memo.set(source, levels);
+    }
+    return levels;
+  };
+}
+
+/**
+ * Whether `node` at isolation count `count` breaks the rule of section 4.3: a count of 33 or
+ * more; a `frame`, `symbol` or `instance` whose own (effective) opacity is below 1 at 32 or more,
+ * since its frame unit puts its content one level below it; or, for an instance, a node of its
+ * expansion that does, counted from the instance's count, one more when the instance isolates,
+ * plus the levels inside its source. `node` need not be in `tree` (a node being created).
+ */
+export function isolationBreaks(
+  tree: TreeView,
+  node: NodeV6,
+  count: number,
+  levelsOf: (source: string) => SourceIsolationLevels = isolationLevelsMemo(tree),
+): boolean {
+  if (count > MAX_ISOLATION_COUNT) return true;
+  const opacity = effectiveOpacity(tree, node);
+  const unit = node.type === 'frame' || node.type === 'symbol' || node.type === 'instance';
+  if (unit && opacity < 1 && count > MAX_ISOLATED_UNIT_COUNT) return true;
+  if (node.type !== 'instance') return false;
+  const levels = levelsOf(node.symbol);
+  const below = count + (opacity < 1 ? 1 : 0);
+  return (
+    (levels.node >= 0 && below + levels.node > MAX_ISOLATION_COUNT) ||
+    (levels.unit >= 0 && below + levels.unit > MAX_ISOLATED_UNIT_COUNT)
+  );
+}
+
+/** The nodes of the subtrees of `roots` and of `instances` that break the isolation rule. */
+function isolationViolators(
+  tree: TreeView,
+  roots: readonly string[],
+  instances: Iterable<string>,
+): Set<string> {
+  const levelsOf = isolationLevelsMemo(tree);
+  const found = new Set<string>();
+  for (const root of roots) {
+    const stack: [string, number][] = [[root, isolationCount(tree, root)]];
+    while (stack.length > 0) {
+      const [id, count] = stack.pop()!;
+      const node = tree.node(id);
+      if (node === undefined) continue;
+      if (isolationBreaks(tree, node, count, levelsOf)) found.add(id);
+      if (isContainer(node)) {
+        const next = node.opacity < 1 ? count + 1 : count;
+        for (const child of node.children) stack.push([child, next]);
+      }
+    }
+  }
+  for (const id of instances) {
+    const node = tree.node(id);
+    if (node?.type !== 'instance' || found.has(id)) continue;
+    if (isolationBreaks(tree, node, isolationCount(tree, id), levelsOf)) found.add(id);
+  }
+  return found;
+}
+
+/** The first of `found` in `pages` order then page-tree pre-order, or null. */
+function firstInDocument(document: DocumentV6, found: ReadonlySet<string>): string | null {
+  if (found.size === 0) return null;
+  const tree = documentTree(document);
+  for (const page of document.pages) {
+    for (const root of page.children) {
+      for (const id of subtree(tree, root)) if (found.has(id)) return id;
+    }
+  }
+  return null;
+}
+
+/**
+ * The first node of a document that breaks the isolation rule (section 4.3), in `pages` order
+ * then page-tree pre-order, an instance standing for the nodes of its expansion; the load check
+ * after the clip depth. Null when all fit.
+ */
+export function documentIsolationViolation(document: DocumentV6): string | null {
+  const tree = documentTree(document);
+  return firstInDocument(
+    document,
+    isolationViolators(
+      tree,
+      document.pages.flatMap((page) => page.children),
+      [],
+    ),
+  );
+}
+
+/**
+ * The first node a change from `base` to `document` makes break the isolation rule (section
+ * 4.3), or null. Only these can: the subtrees of the nodes the change created, reparented or
+ * retyped, of an instance whose source changed, and of a container or instance whose opacity it
+ * lowered from 1, and every instance of each source that holds such a node or is one. Reported
+ * in `pages` order then page-tree pre-order.
+ */
+export function isolationViolation(
+  base: DocumentV6,
+  document: DocumentV6,
+  touched: Iterable<string>,
+): string | null {
+  const tree = documentTree(document);
+  const changed: string[] = [];
+  for (const id of touched) {
+    if (!Object.hasOwn(document.nodes, id)) continue;
+    const node = document.nodes[id]!;
+    const before = Object.hasOwn(base.nodes, id) ? base.nodes[id] : undefined;
+    if (
+      before === undefined ||
+      before.parent !== node.parent ||
+      before.type !== node.type ||
+      (before.type === 'instance' && node.type === 'instance' && before.symbol !== node.symbol) ||
+      ((isContainer(node) || node.type === 'instance') && before.opacity === 1 && node.opacity < 1)
+    ) {
+      changed.push(id);
+    }
+  }
+  if (changed.length === 0) return null;
+  const set = new Set(changed);
+  const roots = changed.filter((id) => !ancestors(tree, id).some((node) => set.has(node.id)));
+  const sources = new Set<string>();
+  for (const id of changed) {
+    if (document.nodes[id]!.type === 'symbol') sources.add(id);
+    const source = ancestors(tree, id).find((node) => node.type === 'symbol');
+    if (source !== undefined) sources.add(source.id);
+  }
+  const instances: string[] = [];
+  if (sources.size > 0) {
+    for (const id in document.nodes) {
+      if (!Object.hasOwn(document.nodes, id)) continue;
+      const node = document.nodes[id]!;
+      if (node.type === 'instance' && sources.has(node.symbol)) instances.push(id);
+    }
+  }
+  return firstInDocument(document, isolationViolators(tree, roots, instances));
+}
+
 /** The height of each source's subtree (0 for an empty source), once per source in one check. */
 function heightMemo(tree: TreeView): (source: string) => number {
   const heights = new Map<string, number>();

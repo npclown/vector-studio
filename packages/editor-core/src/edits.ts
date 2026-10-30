@@ -6,6 +6,7 @@ import {
   type Frame,
   type NodeV6,
   type PageV2,
+  type Stroke,
   type SymbolNodeV6,
   type TextNode,
 } from '@vector-studio/model';
@@ -67,6 +68,7 @@ import { visualBounds } from './visual-bounds.js';
 import { handleBoxOf, handleCentre } from './handles.js';
 import {
   ancestors,
+  childIsolationCount,
   childrenOf,
   clipDepth,
   clipsChildren,
@@ -74,6 +76,7 @@ import {
   isAncestor,
   isContainer,
   isGroup,
+  isolationBreaks,
   nodePath,
   pageOf,
   spaceOf,
@@ -145,7 +148,7 @@ const PROPS: Readonly<Record<NodeV6['type'], readonly string[]>> = {
   maskGroup: COMMON_PROPS,
   frame: [...COMMON_PROPS, 'fill', 'stroke'],
   // M7 contract: a symbol has a frame's props (section 1.2), an instance only the common ones
-  // (section 5.1; its opacity stays 1 by M7-S4).
+  // (section 5.1; its opacity any in `[0, 1]` since M4-U3, M4 contract, section 5).
   symbol: [...COMMON_PROPS, 'fill', 'stroke'],
   instance: COMMON_PROPS,
   // M6a contract, section 6.1: a text node takes the common props only; its own props are
@@ -285,6 +288,8 @@ export function applyEdit(
       draft.setChecked(result.node, true);
       return success(finish(draft), draft, []);
     }
+    case 'setStyle':
+      return setStyle(document, command, context, custom, finish);
     case 'deleteNodes': {
       const ids = uniqueIds(command.ids);
       if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');
@@ -762,6 +767,11 @@ function create(
   ) {
     return fail('editor.clip-depth', '/parent');
   }
+  // Then the isolation count of the new node (MVP M4 contract, section 4.3): a new instance of a
+  // translucent source isolates by its effective opacity.
+  if (isolationBreaks(tree, result.node, childIsolationCount(tree, parent))) {
+    return fail('editor.isolation-depth', '/parent');
+  }
   const build = (id: string): EditResult => {
     // Into the parent's local space; on a page nothing changes.
     let placed: NodeV6 = { ...result.node, id, parent };
@@ -812,6 +822,102 @@ function create(
   const id = freshId(document, context.ids);
   if (id === null) return fail('editor.duplicate-id');
   return build(id);
+}
+
+/** The keys of `setStyle`'s `style` and of a stroke patch (MVP M4 contract, section 4.2). */
+const STYLE_KEYS = ['fill', 'stroke', 'opacity', 'cornerRadii'];
+const STROKE_KEYS = ['color', 'width', 'cap', 'join', 'miterLimit', 'dash'];
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * `setStyle` (MVP M4 contract, section 4.2): `ids` a non-empty list of distinct strings, each a
+ * node of the active page at any depth; `style` an object with at least one of `fill`, `stroke`,
+ * `opacity` and `cornerRadii`, each applying to at least one listed node (`PROPS`); a stroke
+ * patch an object with known keys or `null`. Each node with a changed value is merged and
+ * validated in `ids` order, then the document's checks run as for every command (`success`:
+ * the isolation count, the expansions and caps). With no value changed the base document is
+ * returned, which the editor records as no step.
+ */
+function setStyle(
+  document: DocumentV6,
+  command: Extract<DocumentCommand, { type: 'setStyle' }>,
+  context: EditContext,
+  custom: CustomRules,
+  finish: (draft: Draft) => DocumentV6 | Failure,
+): EditResult {
+  const ids = uniqueIds(command.ids);
+  if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');
+  const tree = documentTree(document);
+  if (
+    ids.some((id) => nodeOf(document, id) === undefined || pageOf(tree, id) !== context.activePage)
+  ) {
+    return fail('editor.unknown-node');
+  }
+  const style: unknown = command.style;
+  if (!isPlainRecord(style) || Object.keys(style).length === 0) {
+    return fail('editor.invalid-command', '/style');
+  }
+  const keys = Object.keys(style);
+  for (const key of keys) {
+    if (!STYLE_KEYS.includes(key)) return fail('editor.invalid-command', pointerTo('/style', key));
+  }
+  const nodes = ids.map((id) => document.nodes[id]!);
+  for (const key of keys) {
+    if (!nodes.some((node) => PROPS[node.type].includes(key))) {
+      return fail('editor.invalid-command', `/style/${key}`);
+    }
+  }
+  const patch = style.stroke;
+  if (patch !== undefined && patch !== null) {
+    if (!isPlainRecord(patch)) return fail('editor.invalid-command', '/style/stroke');
+    for (const key of Object.keys(patch)) {
+      if (!STROKE_KEYS.includes(key)) {
+        return fail('editor.invalid-command', pointerTo('/style/stroke', key));
+      }
+    }
+  }
+  const changed: NodeV6[] = [];
+  for (const node of nodes) {
+    const props: Record<string, unknown> = {};
+    for (const key of keys) {
+      if (!PROPS[node.type].includes(key)) continue;
+      if (key !== 'stroke' || patch === null) {
+        props[key] = style[key];
+        continue;
+      }
+      const own = (node as { stroke: Stroke | null }).stroke;
+      const fallback =
+        node.type === 'line' || node.type === 'path' || node.type === 'custom'
+          ? DEFAULT_PATH_STROKE
+          : DEFAULT_SHAPE_STROKE;
+      props.stroke = { ...(own ?? fallback), ...(patch as Record<string, unknown>) };
+    }
+    if (Object.keys(props).length === 0) continue;
+    const result = validateNode({ ...node, ...props });
+    if (!result.ok) return fail(result.code, nodePath(node.id, result.path));
+    const rejected = custom.check(deepFreeze(result.node));
+    if (rejected !== null) return fail(rejected.code, nodePath(node.id, rejected.path));
+    const next = result.node as Record<string, unknown>;
+    const before = node as Record<string, unknown>;
+    if (
+      Object.keys(props).every((key) => JSON.stringify(next[key]) === JSON.stringify(before[key]))
+    ) {
+      continue;
+    }
+    changed.push(result.node);
+  }
+  if (changed.length === 0) return { ok: true, document, touched: [], created: [] };
+  const draft = new Draft(document);
+  for (const node of changed) draft.setChecked(node, true);
+  return success(finish(draft), draft, []);
+}
+
+/** A JSON Pointer to `key` below `prefix`. */
+function pointerTo(prefix: string, key: string): string {
+  return `${prefix}/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`;
 }
 
 /**

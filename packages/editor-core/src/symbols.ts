@@ -15,10 +15,11 @@ import { documentTree, isContainer, nodePath, pageInstances, pageOf } from './tr
 import type { DocumentCommand, IdSource } from './types.js';
 
 // Detach and the source deletion rule (MVP M7 contract, sections 5.2 and 5.4). An instance
-// becomes a `frame` with its own ID and placement, its source's fill and stroke, and copies of
-// its expansion with fresh IDs. Every check runs on a build with placeholder IDs first, so a
-// failed command draws no ID; IDs follow the instances in `pages` order, then page-tree
-// pre-order, each expansion in the source's pre-order.
+// becomes a `frame` with its own ID and placement, its effective opacity (instance × source, MVP
+// M4 contract, section 5), its source's fill and stroke, and copies of its expansion with fresh
+// IDs. Every check runs on a build with placeholder IDs first, so a failed command draws no ID;
+// IDs follow the instances in `pages` order, then page-tree pre-order, each expansion in the
+// source's pre-order.
 
 type Plan = Readonly<{
   instances: readonly string[];
@@ -71,7 +72,9 @@ function detach(draft: Draft, document: DocumentV6, planned: Plan, ids: readonly
       frame: instance.frame,
       rotation: instance.rotation,
       constraints: instance.constraints,
-      opacity: instance.opacity,
+      // The effective opacity, instance × source, so detach keeps the pixels (MVP M4 contract,
+      // section 5, M4-Q15 (a)).
+      opacity: instance.opacity * source.opacity,
       visible: instance.visible,
       type: 'frame',
       children: children.map((child) => copyOf.get(child)!),

@@ -8,6 +8,7 @@ import {
   type InstanceNodeV5,
   type NodeV6,
   type SymbolNodeV6,
+  type ValidateNodeOptions,
 } from '@vector-studio/model';
 import { arranged, preorder, type Finish } from './arrange.js';
 import { Draft, fail, type Failure } from './draft.js';
@@ -224,6 +225,7 @@ function keyFailure(value: unknown, keys: readonly string[], path: string): stri
 function olderAppearance(
   raw: Record<string, unknown>,
   candidate: Record<string, unknown>,
+  options: ValidateNodeOptions,
 ):
   | Readonly<{ candidate: Record<string, unknown> }>
   | Readonly<{ code: 'document.invalid-field'; path: string }> {
@@ -237,12 +239,12 @@ function olderAppearance(
     for (const key of ['startArrow', 'endArrow'])
       if (Object.hasOwn(raw, key)) neutral[key] = 'none';
   }
-  const probe = validateNode(neutral);
+  const probe = validateNode(neutral, options);
   if (!probe.ok) return probe;
   if (Object.hasOwn(raw, 'fill') && raw.fill !== null) {
     const keys = keyFailure(raw.fill, COLOR_KEYS, '/fill');
     if (keys !== null) return { code: 'document.invalid-field', path: keys };
-    const values = validateNode({ ...neutral, fill: raw.fill });
+    const values = validateNode({ ...neutral, fill: raw.fill }, options);
     if (!values.ok) return values;
   }
   if (!Object.hasOwn(raw, 'stroke') || raw.stroke === null) return { candidate };
@@ -272,6 +274,8 @@ function readFields(
   const read: [string, NodeV6][] = [];
   // Nodes whose parent is written as `""`: only these may be roots, whatever the holder is.
   const unparented = new Set<string>();
+  // Below schema v6 a container or instance opacity other than 1 still fails (M4-M2).
+  const options: ValidateNodeOptions = { olderInput: schemaVersion < 6 };
   for (const [key, raw] of Object.entries(map)) {
     // Fragment version 1 holds v2 node types only (schema v2 has no `symbol` or `instance`),
     // reported as the model's field rule reports an unknown type, before the node's other fields.
@@ -294,7 +298,7 @@ function readFields(
       candidate = { ...rest, textOverrides: {} };
       if (Object.hasOwn(raw, 'textOverrides')) {
         // As a v4 document reads it: a missing key comes before the unknown `textOverrides`.
-        const probe = validateNode(candidate);
+        const probe = validateNode(candidate, options);
         if (!probe.ok) {
           const field = probe.path.slice(1);
           if (field !== '' && !field.includes('/') && !Object.hasOwn(raw, field)) {
@@ -306,13 +310,13 @@ function readFields(
     }
     // Below schema v6 the v5 fills and strokes, migrated (M4 contract, section 7, M4-M1).
     if (schemaVersion < 6 && isRecord(raw)) {
-      const migrated = olderAppearance(raw, candidate as Record<string, unknown>);
+      const migrated = olderAppearance(raw, candidate as Record<string, unknown>, options);
       if (!('candidate' in migrated)) {
         return fail(migrated.code, mapPath(name, key, migrated.path));
       }
       candidate = migrated.candidate;
     }
-    const result = validateNode(candidate);
+    const result = validateNode(candidate, options);
     if (!result.ok) return fail(result.code, mapPath(name, key, result.path));
     if (result.node.id !== key) return fail('document.invalid-field', mapPath(name, key, '/id'));
     read.push([key, result.node]);
@@ -874,6 +878,8 @@ export function paste(
         delete copy.textOverrides;
         Object.assign(copy, {
           type: 'frame',
+          // The effective opacity, as `detachInstances` writes it (MVP M4 contract, section 5).
+          opacity: node.opacity * how.source.opacity,
           children: (how.expansion?.children ?? []).map((child) => map.get(child)!),
           fill: how.source.fill,
           stroke: how.source.stroke,
