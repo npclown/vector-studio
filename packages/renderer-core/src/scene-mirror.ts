@@ -128,6 +128,12 @@ let injectNextGeometryRevision: (mirror: RetainedSceneMirror, next: number) => v
 let injectFullValidation: (mirror: RetainedSceneMirror) => void;
 let readLastSetVisits: (mirror: RetainedSceneMirror) => number;
 
+/** E26-U5b: a removed path's data and revision, kept until the next view or snapshot. */
+type RetiredPath = Readonly<{
+  geometry: Extract<RenderNodeSnapshot, { kind: 'path' }>['geometry'];
+  revision: number;
+}>;
+
 export class RetainedSceneMirror implements RendererSceneSynchronization {
   #scene: OwnedScene | null = null;
   #synchronizationStatus: SceneSynchronizationState['status'] = 'awaiting-snapshot';
@@ -145,6 +151,12 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
   /** Test seam: validate and publish change sets with the full pre-E26 pipeline (the oracle). */
   #fullValidation = false;
   #lastSetVisits = 0;
+  /**
+   * E26 contract, U5b (section 4.4.1): the geometry and revision of each path removed by a set
+   * since the last view was built. A path inserted again with equal path data before the next
+   * view keeps its revision; building a view or publishing a snapshot clears the map.
+   */
+  #retired = new Map<string, RetiredPath>();
 
   static {
     injectNextGeometryRevision = (mirror, next) => {
@@ -403,6 +415,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
   public readRetainedScene(): RetainedSceneView | null {
     const scene = this.#scene;
     if (scene === null || this.#synchronizationStatus === 'disposed') return null;
+    this.#retired.clear();
     // Once per version, on the frame path: the list and the view's own maps (E26 section 4.1).
     if (scene.view === null) mergePendingIds(this.#indexes);
     scene.view ??= Object.freeze({
@@ -438,6 +451,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     this.#invalidationToken = null;
     this.#onInvalidate = () => undefined;
     this.#indexes = emptyIndexes();
+    this.#retired.clear();
     this.#synchronizationStatus = 'disposed';
   }
 
@@ -446,12 +460,31 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     revision: number,
     nodes: ReadonlyMap<string, RenderNodeSnapshot>,
     rootOrder: readonly string[],
-    sceneEpoch: symbol = Symbol('scene-epoch'),
+    sceneEpoch?: symbol,
   ): OwnedScene | null {
     const ownedNodes = new Map(nodes);
-    const revisions = assignGeometryRevisions(this.#scene, ownedNodes, this.#nextGeometryRevision);
+    // A snapshot (no epoch given) clears the retired paths; a set (the full oracle) reuses them.
+    const retired = sceneEpoch === undefined ? null : this.#retired;
+    const revisions = assignGeometryRevisions(
+      this.#scene,
+      ownedNodes,
+      this.#nextGeometryRevision,
+      retired,
+    );
     // Overflow publishes nothing (P3 V3 contract, section b).
     if (revisions === null) return null;
+    if (retired === null) {
+      this.#retired.clear();
+    } else {
+      const previous = this.#scene!;
+      for (const [id, node] of previous.nodes) {
+        const revision = previous.geometryRevisions.get(id);
+        if (node.kind === 'path' && revision !== undefined && !ownedNodes.has(id)) {
+          this.#retired.set(id, { geometry: node.geometry, revision });
+        }
+      }
+      for (const id of ownedNodes.keys()) this.#retired.delete(id);
+    }
     const childrenByParent = new Map<string | null, Set<string>>();
     for (const node of ownedNodes.values()) addChild(childrenByParent, node.parentId, node.id);
     this.#indexes = {
@@ -461,7 +494,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       pendingDeleted: new Set(),
     };
     const published: OwnedScene = {
-      sceneEpoch,
+      sceneEpoch: sceneEpoch ?? Symbol('scene-epoch'),
       identity,
       revision,
       nodes: ownedNodes,
@@ -500,6 +533,11 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       ) {
         continue;
       }
+      const held = previous === undefined ? this.#retired.get(id) : undefined;
+      if (held !== undefined && pathDataEquals(held.geometry, node.geometry)) {
+        assigned.set(id, held.revision);
+        continue;
+      }
       if (next > Number.MAX_SAFE_INTEGER) return null;
       assigned.set(id, next);
       next += 1;
@@ -512,12 +550,17 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       const after = candidate.writes.get(id)!;
       if (before !== undefined) removeChild(childrenByParent, before.parentId, id);
       if (after === null) {
+        const revision = geometryRevisions.get(id);
+        if (before?.kind === 'path' && revision !== undefined) {
+          this.#retired.set(id, { geometry: before.geometry, revision });
+        }
         nodes.delete(id);
         geometryRevisions.delete(id);
         if (!pendingAdded.delete(id)) pendingDeleted.add(id);
         continue;
       }
       if (before === undefined && !pendingDeleted.delete(id)) pendingAdded.add(id);
+      this.#retired.delete(id);
       nodes.set(id, after);
       addChild(childrenByParent, after.parentId, id);
       const revision = assigned.get(id);
@@ -581,6 +624,7 @@ function assignGeometryRevisions(
   resident: OwnedScene | null,
   nodes: ReadonlyMap<string, RenderNodeSnapshot>,
   nextRevision: number,
+  retired: ReadonlyMap<string, RetiredPath> | null,
 ): Readonly<{ revisions: ReadonlyMap<string, number>; next: number }> | null {
   const revisions = new Map<string, number>();
   let next = nextRevision;
@@ -595,6 +639,11 @@ function assignGeometryRevisions(
       pathDataEquals(previous.geometry, node.geometry)
     ) {
       revisions.set(id, previousRevision);
+      continue;
+    }
+    const held = previous === undefined ? retired?.get(id) : undefined;
+    if (held !== undefined && pathDataEquals(held.geometry, node.geometry)) {
+      revisions.set(id, held.revision);
       continue;
     }
     if (next > Number.MAX_SAFE_INTEGER) return null;
