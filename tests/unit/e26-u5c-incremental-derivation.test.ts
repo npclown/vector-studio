@@ -9,7 +9,10 @@ import * as packing from '../../packages/renderer-core/src/primitive-packing.js'
 import { buildPathFringe } from '../../packages/renderer-core/src/path-fringe.js';
 import {
   PathMeshPipeline,
+  disablePathReuseForTesting,
+  reusedPathsForTesting,
   type PathMeshDraw,
+  type PathMeshLimits,
 } from '../../packages/renderer-core/src/path-mesh-pipeline.js';
 import type {
   PrimitivePacket,
@@ -23,7 +26,19 @@ import {
 import { RetainedSceneMirror } from '../../packages/renderer-core/src/scene-mirror.js';
 import { FakeRaster } from '../support/e28-text-harness.js';
 import { ScriptedStrokeMeshPort } from '../support/st-u6-stroke-harness.js';
-import { createCountingPort } from '../support/v3a-path-harness.js';
+import { selectMeshOrigin } from '../../packages/renderer-core/src/path-mesh-packet.js';
+import {
+  ScriptedFillMeshPort,
+  createCountingPort,
+  createPathHarness,
+  failedResult,
+  identity as pathIdentity,
+  meshBytes,
+  okResult,
+  pathNode,
+  squareMesh,
+  target as pathTarget,
+} from '../support/v3a-path-harness.js';
 import { receiptOf } from '../support/v3b-mesh-harness.js';
 
 // E26 contract, U5c (section 4.4.1): the primitive source keeps its derivation between frames,
@@ -150,7 +165,7 @@ function leaf(rng: Rng, id: string, parentId: string | null): RenderNodeSnapshot
   }
   if (pick < 0.88) {
     // The counting fill port serves a 10 x 10 square tagged by the first point.
-    const tag = Math.round(rng() * 1000);
+    const tag = Math.round(rng() * 60);
     return {
       ...base,
       kind: 'path',
@@ -302,9 +317,10 @@ type Twin = Readonly<{
   mirror: RetainedSceneMirror;
   source: PrimitiveSceneSource;
   served: () => readonly PathMeshDraw[];
+  pipeline: PathMeshPipeline;
 }>;
 
-function twin(full: boolean): Twin {
+function twin(full: boolean, limits?: Partial<PathMeshLimits>): Twin {
   const mirror = new RetainedSceneMirror(undefined, {
     pathNodes: 'supported',
     pathFills: 'supported',
@@ -319,6 +335,7 @@ function twin(full: boolean): Twin {
     port: createCountingPort(),
     strokePort: new ScriptedStrokeMeshPort(),
     fringeBuilder: buildPathFringe,
+    ...(limits === undefined ? {} : { limits }),
   });
   let served: readonly PathMeshDraw[] = [];
   const prepare = pipeline.prepare.bind(pipeline);
@@ -328,7 +345,7 @@ function twin(full: boolean): Twin {
   };
   const source = new PrimitiveSceneSource(mirror, pipeline, { text: { port: new FakeRaster() } });
   if (full) useFullDerivationForTesting(source);
-  return { mirror, source, served: () => served };
+  return { mirror, source, served: () => served, pipeline };
 }
 
 /** A packet as plain data: symbols numbered by first appearance in this twin's packets. */
@@ -511,12 +528,12 @@ function drawn(twinState: Twin, packet: PrimitivePacket | null) {
   };
 }
 
-function runDifferential(seed: number, frames: number) {
+function runDifferential(seed: number, frames: number, limits?: Partial<PathMeshLimits>) {
   const rng = random(seed);
   const model = new Model();
   randomScene(rng, model, 60 + Math.floor(rng() * 60));
-  const incremental = twin(false);
-  const oracle = twin(true);
+  const incremental = twin(false, limits);
+  const oracle = twin(true, limits);
   const normalize = { incremental: normalizer(), oracle: normalizer() };
   for (const { mirror } of [incremental, oracle]) {
     expect(mirror.replaceSnapshot(model.snapshot()).status).toBe('applied');
@@ -552,14 +569,21 @@ function runDifferential(seed: number, frames: number) {
       const before = camera;
       const move = rng();
       camera =
-        move < 0.6
+        move < 0.3
           ? { ...camera, x: camera.x + (rng() - 0.5) * 60, y: camera.y + (rng() - 0.5) * 60 }
-          : move < 0.85
-            ? {
-                ...camera,
-                zoom: Math.min(8, Math.max(0.125, camera.zoom * (rng() < 0.5 ? 0.7 : 1.4))),
-              }
-            : { ...camera, x: (rng() - 0.5) * 4000, y: (rng() - 0.5) * 4000 };
+          : move < 0.45
+            ? { ...camera, x: camera.x + (rng() - 0.5) * 60 }
+            : move < 0.6
+              ? { ...camera, y: camera.y + (rng() - 0.5) * 60 }
+              : move < 0.85
+                ? {
+                    ...camera,
+                    zoom: Math.min(8, Math.max(0.125, camera.zoom * (rng() < 0.5 ? 0.7 : 1.4))),
+                  }
+                : // A far jump and back, so the scene is in view about half of the time.
+                  Math.abs(camera.x) > 1000
+                  ? { ...camera, x: (rng() - 0.5) * 200, y: (rng() - 0.5) * 200 }
+                  : { ...camera, x: rng() < 0.5 ? -3000 : 3000, y: (rng() - 0.5) * 4000 };
       // The new camera's assessments fail on some frames; both sources must throw the same. A
       // zoom at its bound leaves the camera, and so the memo's inputs, unchanged: the injected
       // failure would then break the assessment's purity, which the memo relies on.
@@ -590,6 +614,11 @@ function runDifferential(seed: number, frames: number) {
       normalize.oracle(right.packet),
     );
     compared += 1;
+    // The pipelines' statistics match too: entries, bytes, evictions and port calls. Bucket
+    // computations are left out, since a kept outcome does not look its buckets up.
+    expect(comparable(incremental.pipeline), `frame ${frame} statistics`).toEqual(
+      comparable(oracle.pipeline),
+    );
     // Some packets are replaced without a receipt.
     if (left.packet !== null && rng() < 0.1) unacknowledged += 1;
     else if (left.packet !== null) {
@@ -611,7 +640,16 @@ function runDifferential(seed: number, frames: number) {
     errors,
     unacknowledged,
     counts: derivationCountsForTesting(incremental.source),
+    pipeline: incremental.pipeline.getStatistics(),
+    reusedPaths: reusedPathsForTesting(incremental.pipeline),
   };
+}
+
+/** A pipeline's statistics without bucket computations, which a kept outcome skips. */
+function comparable(pipeline: PathMeshPipeline): Record<string, number> {
+  const statistics: Record<string, number> = { ...pipeline.getStatistics() };
+  delete statistics.bucketComputations;
+  return statistics;
 }
 
 describe('E26-U5c kept and patched derivation', () => {
@@ -621,8 +659,15 @@ describe('E26-U5c kept and patched derivation', () => {
     let errors = 0;
     let unacknowledged = 0;
     const counts = { reused: 0, patched: 0, full: 0 };
+    const stats: { evictions: number; reused: number }[] = [];
+    // Seeds 3 and 4 run the path mesh pipeline under a small byte budget and memo, so entries
+    // are evicted and trimmed between frames.
     for (const seed of [1, 2, 3, 4]) {
-      const result = runDifferential(seed, 300);
+      const result = runDifferential(
+        seed,
+        300,
+        seed < 3 ? undefined : { byteBudget: 24_576, memoCapacity: 8 },
+      );
       compared += result.compared;
       fresh += result.fresh;
       errors += result.errors;
@@ -630,6 +675,7 @@ describe('E26-U5c kept and patched derivation', () => {
       counts.reused += result.counts.reused;
       counts.patched += result.counts.patched;
       counts.full += result.counts.full;
+      stats.push({ evictions: result.pipeline.evictions, reused: result.reusedPaths });
     }
     expect(compared).toBe(1200);
     expect(fresh).toBeGreaterThanOrEqual(20);
@@ -640,6 +686,9 @@ describe('E26-U5c kept and patched derivation', () => {
     expect(counts.reused).toBeGreaterThan(300);
     expect(counts.patched).toBeGreaterThan(100);
     expect(counts.full).toBeGreaterThan(100);
+    // The pipeline serves kept path outcomes, and evicts under the small budget.
+    expect(stats.every((entry) => entry.reused > 1000)).toBe(true);
+    expect(stats[2]!.evictions + stats[3]!.evictions).toBeGreaterThan(20);
   }, 120_000);
 });
 
@@ -703,6 +752,120 @@ function update(revision: number, updated: RenderNodeSnapshot[]): RenderChangeSe
     orders: [],
   };
 }
+
+describe('E26-U5c kept path outcomes across a frame that is not clean', () => {
+  // A path evaluated afresh drops its kept outcome, so neither its evicted entries nor the mesh
+  // origin of an earlier frame under the same camera are served again (U5c-2 review S1 to S3).
+  // Each scenario runs with the pipeline's reuse on and off; the draws and statistics match.
+  const both = <T>(scenario: (reuse: boolean) => T): T => {
+    const kept = scenario(true);
+    expect(kept).toEqual(scenario(false));
+    return kept;
+  };
+  const view = (draws: readonly PathMeshDraw[]) =>
+    draws.map((draw) => ({
+      nodeId: draw.nodeId,
+      offsets: Array.from(draw.offsets ?? []),
+      linear: Array.from(draw.linear ?? []),
+      anchor: draw.anchor,
+    }));
+  const statistics = (harness: ReturnType<typeof createPathHarness>) =>
+    comparable(harness.pipeline);
+
+  it('does not serve a kept outcome whose entry a failing frame evicted', () => {
+    const frames = both((reuse) => {
+      let fail = false;
+      const port = new ScriptedFillMeshPort({
+        request: (request) => (fail ? failedResult(request, 'invalid-path') : okResult(request)),
+      });
+      const harness = createPathHarness({
+        port,
+        nodes: [pathNode('a', 0)],
+        limits: { byteBudget: 1 },
+      });
+      if (!reuse) disablePathReuseForTesting(harness.pipeline);
+      harness.setZoom(1);
+      const first = [harness.drawnIds(), harness.drawnIds()];
+      fail = true;
+      harness.setZoom(8);
+      const failing = harness.drawnIds();
+      harness.setZoom(1);
+      const back = harness.drawnIds();
+      fail = false;
+      const recovered = harness.drawnIds();
+      return { first, failing, back, recovered, statistics: statistics(harness) };
+    });
+    expect(frames.first).toEqual([['a'], ['a']]);
+    expect(frames.failing).toEqual([]);
+    expect(frames.back).toEqual([]);
+    expect(frames.statistics.evictions).toBeGreaterThan(0);
+  });
+
+  it('stamps the entries of a kept outcome as served, for the eviction order of the budget', () => {
+    // a is drawn on frame 1 and kept on frames 2 and 3; b is drawn on frame 2 and hidden on
+    // frame 3. Panning to c evicts the least recently served entry: b's, not a's.
+    const frames = both((reuse) => {
+      const port = createCountingPort();
+      const nodes = [pathNode('a', 0), pathNode('b', 20, { visible: false }), pathNode('c', 5000)];
+      const harness = createPathHarness({
+        port,
+        nodes,
+        limits: { byteBudget: 2 * meshBytes(squareMesh()) },
+      });
+      if (!reuse) disablePathReuseForTesting(harness.pipeline);
+      let revision = 1;
+      const update = (node: RenderNodeSnapshot) => {
+        revision += 1;
+        const result = harness.mirror.applyChanges({
+          identity: pathIdentity,
+          revision,
+          baseRevision: revision - 1,
+          inserted: [],
+          updated: [node],
+          removed: [],
+          orders: [],
+        });
+        expect(result.status).toBe('applied');
+      };
+      harness.setZoom(1);
+      const drawn = [harness.drawnIds()];
+      update(pathNode('b', 20));
+      drawn.push(harness.drawnIds());
+      update(pathNode('b', 20, { visible: false }));
+      drawn.push(harness.drawnIds());
+      harness.setZoom(1, { x: 4900, y: 0 });
+      drawn.push(harness.drawnIds());
+      harness.setZoom(1);
+      drawn.push(harness.drawnIds());
+      return { drawn, statistics: statistics(harness) };
+    });
+    expect(frames.drawn).toEqual([['a'], ['a', 'b'], ['a'], ['c'], ['a']]);
+    expect(frames.statistics.evictions).toBeGreaterThan(0);
+  });
+
+  it('serves the mesh origin of the frame, not of a kept outcome under the same camera', () => {
+    const g = selectMeshOrigin({ x: 0, y: 0 }, 1, pathTarget.devicePixelRatio, null)!.g;
+    const frames = both((reuse) => {
+      const port = createCountingPort();
+      const harness = createPathHarness({
+        port,
+        nodes: [pathNode('a', 0, { points: [0, 0, 1000, 0, 1000, 300] })],
+      });
+      if (!reuse) disablePathReuseForTesting(harness.pipeline);
+      harness.setZoom(1, { x: 0, y: 0 });
+      const first = [view(harness.prepare().draws), view(harness.prepare().draws)];
+      port.setPortVersion(1);
+      harness.setZoom(1, { x: 2.5 * g, y: 0 });
+      const unclean = harness.drawnIds();
+      port.setPortVersion(0);
+      harness.setZoom(1, { x: 0, y: 0 });
+      return { first, unclean, back: view(harness.prepare().draws) };
+    });
+    expect(frames.unclean).toEqual([]);
+    // The origin moved during the unclean frame, so the same camera now packs other lanes.
+    expect(frames.back).not.toEqual(frames.first[0]);
+  });
+});
 
 describe('E26-U5c derivation paths', () => {
   it('keeps the derivation on a frame without a set and patches one written leaf', () => {
