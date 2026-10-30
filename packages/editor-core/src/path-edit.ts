@@ -1,4 +1,4 @@
-import type { DocumentV6, PathData, PathNodeV6 } from '@vector-studio/model';
+import type { DocumentV6, NodeV6, PathData, PathNodeV6 } from '@vector-studio/model';
 import { deepFreeze } from './freeze.js';
 import { apply, invertRigid, localTransform, multiply, type Matrix } from './geometry.js';
 import {
@@ -74,12 +74,19 @@ export function editablePath(
   return pageOf(documentTree(document), id) === page ? node : undefined;
 }
 
+/** A node's node-local to page mapping and its inverse (section 5.1). */
+export type NodePlacement = Readonly<{
+  toPage(point: PagePoint): PagePoint;
+  toLocal(point: PagePoint): PagePoint;
+}>;
+
 /**
- * The page-space anchor model of `node` (section 5.1): a node-local point `L` maps by
- * `apply(C, L.x, L.y)` with `C = spaceOf(parent).matrix · localTransform(frame, θ)`, and exactly
- * to `(x + u·W, y + v·H)` for a page-root node with `θ = 0`, as `flatten` does.
+ * The placement of `node` (section 5.1; MVP M6b contract, section 4.5 uses it for text): a
+ * node-local point `L` maps by `apply(C, L.x, L.y)` with `C = spaceOf(parent).matrix ·
+ * localTransform(frame, θ)`, and exactly to `(x + L.x, y + L.y)` for a page-root node with
+ * `θ = 0`.
  */
-export function pathGeometry(document: DocumentV6, node: PathNodeV6): PathGeometry {
+export function nodePlacement(document: DocumentV6, node: NodeV6): NodePlacement {
   const tree = documentTree(document);
   const { frame, rotation } = node;
   const pageRoot = tree.page(node.parent) !== undefined && rotation === 0;
@@ -88,10 +95,20 @@ export function pathGeometry(document: DocumentV6, node: PathNodeV6): PathGeomet
     localTransform(frame, rotation),
   );
   const inverse = invertRigid(matrix);
-  const toPage = (l: PagePoint): PagePoint =>
-    pageRoot ? { x: frame.x + l.x, y: frame.y + l.y } : apply(matrix, l.x, l.y);
-  const toLocal = (p: PagePoint): PagePoint =>
-    pageRoot ? { x: p.x - frame.x, y: p.y - frame.y } : apply(inverse, p.x, p.y);
+  return {
+    toPage: (l) => (pageRoot ? { x: frame.x + l.x, y: frame.y + l.y } : apply(matrix, l.x, l.y)),
+    toLocal: (p) => (pageRoot ? { x: p.x - frame.x, y: p.y - frame.y } : apply(inverse, p.x, p.y)),
+  };
+}
+
+/**
+ * The page-space anchor model of `node` (section 5.1): a node-local point `L` maps by
+ * `apply(C, L.x, L.y)` with `C = spaceOf(parent).matrix · localTransform(frame, θ)`, and exactly
+ * to `(x + u·W, y + v·H)` for a page-root node with `θ = 0`, as `flatten` does.
+ */
+export function pathGeometry(document: DocumentV6, node: PathNodeV6): PathGeometry {
+  const { frame } = node;
+  const { toPage, toLocal } = nodePlacement(document, node);
   const page = (point: EditPoint) => toPage(localOf(point, frame.width, frame.height));
   const subpaths = readAnchorModel(node.path).map((model): PageSubpath => ({
     closed: model.closed,
