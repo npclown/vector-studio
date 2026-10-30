@@ -321,8 +321,10 @@ for (const { scenario, variant } of runs) {
         ]);
         await page.waitForTimeout(scenario.setFillBeforeDownMs ?? 0);
       }
-      await page.mouse.down();
+      // Taken just before the press, so its handling and every later move fall after it and the
+      // hover move to the start point falls before it (#403 review N5).
       const downMs = await now();
+      await page.mouse.down();
       const started = Date.now();
       let armed = !busy;
       let moves = 0;
@@ -352,9 +354,9 @@ for (const { scenario, variant } of runs) {
           const history = hook.editor()!.query({ type: 'history' }) as { undoDepth: number };
           return {
             latencies: hook.latencies.filter(
-              (entry) => entry.inputMs >= downMs - 50 && entry.inputMs <= upMs,
+              (entry) => entry.inputMs >= downMs && entry.inputMs <= upMs,
             ),
-            noChangeMoves: hook.noChangeMoves.filter((time) => time >= downMs - 50 && time <= upMs),
+            noChangeMoves: hook.noChangeMoves.filter((time) => time >= downMs && time <= upMs),
             writes: hook.writes,
             longTasksAvailable: hook.longTasksAvailable,
             longTasks: hook.longTasks.filter(
