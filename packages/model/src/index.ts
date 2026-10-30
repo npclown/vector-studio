@@ -1,6 +1,8 @@
 export {
   DOCUMENT_ERROR_CODES,
+  isRejectedRunTextUnit,
   isValidId,
+  isValidRunText,
   MAX_DASH_ENTRIES,
   MAX_GRADIENT_STOPS,
   MAX_TEXT_LENGTH,

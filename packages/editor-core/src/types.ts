@@ -60,6 +60,11 @@ export type InputEvent =
       repeat?: boolean;
       /** `KeyboardEvent.isComposing`. */
       composing?: boolean;
+      /**
+       * Set by the host from `KeyboardEvent.keyCode === 229` (MVP M6b contract, section 5.1,
+       * rule 1): an IME is processing the key. Read in text edit mode only.
+       */
+      ime?: boolean;
       modifiers: Modifiers;
     }>
   | Readonly<{ kind: 'keyup'; key: string; code?: string; modifiers: Modifiers }>
@@ -72,7 +77,12 @@ export type InputEvent =
       modifiers: Modifiers;
     }>
   | Readonly<{ kind: 'doubleclick'; point: PagePoint; modifiers: Modifiers }>
-  | Readonly<{ kind: 'pointercancel'; modifiers: Modifiers }>;
+  | Readonly<{ kind: 'pointercancel'; modifiers: Modifiers }>
+  /**
+   * Text from `beforeinput` `insertText` (MVP M6b contract, section 5.3, M6b-Q3 (a)), valid in
+   * text edit mode only; outside it fails with `editor.no-text-edit`. It never reaches a tool.
+   */
+  | Readonly<{ kind: 'textinput'; text: string }>;
 
 /** Which `EditorOptions.platform` `Mod` resolves for: `Meta` on `mac`, else `Ctrl`. */
 export type Platform = 'mac' | 'other';
@@ -596,10 +606,13 @@ export type EditorErrorCode =
 
 /**
  * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key
- * binding acted on the event, so a host calls `preventDefault` only then.
+ * binding acted on the event, so a host calls `preventDefault` only then. `passThrough` (MVP
+ * M6b contract, section 5.2, M6b-Q2 (a)) comes only with `consumed: false` on a text edit mode
+ * keydown the editor leaves to text input: the host neither prevents it nor runs its own
+ * shortcut for it.
  */
 export type CommandResult =
-  | Readonly<{ ok: true; ids: readonly string[]; consumed?: boolean }>
+  | Readonly<{ ok: true; ids: readonly string[]; consumed?: boolean; passThrough?: true }>
   | Readonly<{ ok: false; code: EditorErrorCode; path?: string; consumed?: boolean }>;
 
 export type HistoryState = Readonly<{ undoDepth: number; redoDepth: number }>;

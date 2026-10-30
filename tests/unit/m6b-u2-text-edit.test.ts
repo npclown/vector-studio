@@ -476,17 +476,15 @@ describe('M6b-A03 exit (section 3.3) with the event order', () => {
     return target;
   }
 
-  it('other bindings are consumed no-ops until the key routing of section 5', () => {
+  // M6b-U4 replaced the U2 interim keymap: the rest of section 5 is in m6b-u4-text-input.
+  it('other bound chords are consumed no-ops (section 5, rule 6)', () => {
     const target = entered();
     const before = target.getSnapshot();
     const ctrl = { ...none, ctrl: true };
     const keys: [string, Modifiers, string?][] = [
-      ['Delete', none],
-      ['Backspace', none],
-      ['ArrowRight', none],
-      ['a', ctrl, 'KeyA'],
-      ['r', none, 'KeyR'],
       ['d', ctrl, 'KeyD'],
+      ['g', ctrl, 'KeyG'],
+      ['G', { ...ctrl, shift: true }, 'KeyG'],
     ];
     for (const [value, modifiers, code] of keys) {
       expect(key(target, value, modifiers, code)).toEqual({ ok: true, ids: [], consumed: true });

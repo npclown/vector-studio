@@ -48,7 +48,17 @@ import {
 } from './keymap.js';
 import { SceneProjector } from './projector.js';
 import { TextLayoutCache, layoutRequest, type TextLayouter } from './text.js';
-import { clampCaret, createCaretModel, textStops, type CaretModel } from './text-caret.js';
+import {
+  caretAfterInsertion,
+  clampCaret,
+  createCaretModel,
+  deletionRange,
+  moveCaret,
+  selectAll,
+  textStops,
+  type CaretModel,
+  type TextEditKeyAction,
+} from './text-caret.js';
 import {
   DEFAULT_TEXT_STYLE,
   checkTextStyle,
@@ -61,6 +71,7 @@ import {
   type TextEditSupport,
   type TextEditTarget,
 } from './text-edit.js';
+import { normalizeInputText, textKeyRoute } from './text-input.js';
 import {
   createBoxTool,
   createLineTool,
@@ -391,6 +402,8 @@ const optional = (value: unknown, type: 'string' | 'boolean') =>
 function isInputEvent(value: unknown): value is InputEvent {
   const event = value as Record<string, unknown> | null;
   if (typeof event !== 'object' || event === null) return false;
+  // Text input carries no modifiers (MVP M6b contract, section 5.3).
+  if (event.kind === 'textinput') return typeof event.text === 'string';
   const modifiers = event.modifiers as Record<string, unknown> | null;
   if (
     typeof modifiers !== 'object' ||
@@ -405,7 +418,8 @@ function isInputEvent(value: unknown): value is InputEvent {
         typeof event.key === 'string' &&
         optional(event.code, 'string') &&
         optional(event.repeat, 'boolean') &&
-        optional(event.composing, 'boolean')
+        optional(event.composing, 'boolean') &&
+        optional(event.ime, 'boolean')
       );
     case 'keyup':
       return typeof event.key === 'string' && optional(event.code, 'string');
@@ -426,6 +440,7 @@ function isInputEvent(value: unknown): value is InputEvent {
 
 /** A frozen copy with only the fields of its kind, never the host's objects. */
 function copyInput(event: InputEvent): InputEvent {
+  if (event.kind === 'textinput') return deepFreeze({ kind: event.kind, text: `${event.text}` });
   const { shift, alt, meta, ctrl } = event.modifiers;
   const modifiers = { shift, alt, meta, ctrl };
   const point = (at: PagePoint) => ({ x: at.x + 0, y: at.y + 0 });
@@ -438,6 +453,7 @@ function copyInput(event: InputEvent): InputEvent {
           ...(event.code === undefined ? {} : { code: event.code }),
           repeat: event.repeat ?? false,
           composing: event.composing ?? false,
+          ...(event.ime === undefined ? {} : { ime: event.ime }),
           modifiers,
         };
       case 'keyup':
@@ -621,6 +637,17 @@ class EditorCore implements Editor {
    * changes (a text change, or a generation change dropping the cache).
    */
   private caretCache: { layout: object; model: CaretModel } | null = null;
+  /**
+   * The goal x of M6b-S3 (node-local), kept across consecutive Up and Down keys; every other
+   * caret change, and leaving or entering edit mode, clears it. Internal: no snapshot field.
+   */
+  private goalX: number | null = null;
+  /**
+   * The caret an edit of edit mode leaves (section 4.1), read by `syncTextEdit` while that
+   * edit's `setText` changes the document: the end of an insertion moved up to a stop, or a
+   * deletion's start moved down to one, in place of the clamp of any other change.
+   */
+  private textCaretAfter: Readonly<{ id: string; offset: number; up: boolean }> | null = null;
   private extensionDepth = 0;
   private readonly ids: IdSource;
   private readonly extensions: ExtensionRegistry;
@@ -920,6 +947,15 @@ class EditorCore implements Editor {
 
   private run(command: Command): CommandResult {
     if (typeof command !== 'object' || command === null) return failure('editor.invalid-command');
+    // Until the edit-mode clipboard of M6b section 9.2 (M6b-U8): in text edit mode `copy`,
+    // `cut` and `paste` do nothing and return no IDs, the collapsed-caret result of 9.2, so the
+    // host leaves the DOM event alone and the edited node is never copied, cut or pasted over.
+    if (
+      this.textEdit !== null &&
+      (command.type === 'copy' || command.type === 'cut' || command.type === 'paste')
+    ) {
+      return { ok: true, ids: [] };
+    }
     if (DOCUMENT_COMMANDS.has(command.type)) {
       // A host command during a drag would leave the gesture's base stale, so it applies to the
       // pre-gesture document and, only if it succeeds, cancels the drag first.
@@ -1391,6 +1427,11 @@ class EditorCore implements Editor {
    */
   private dispatch(event: InputEvent): CommandResult {
     const done = (consumed: boolean): CommandResult => ({ ok: true, ids: [], consumed });
+    // Text input, and keys in text edit mode, before everything else (M6b section 5).
+    if (event.kind === 'textinput') return this.textInput(event);
+    if (this.textEdit !== null && (event.kind === 'keydown' || event.kind === 'keyup')) {
+      return this.textKey(event);
+    }
     // (1) Navigation: wheel, Space, middle-button drags and drags begun while Space is held.
     switch (event.kind) {
       case 'wheel':
@@ -1486,16 +1527,6 @@ class EditorCore implements Editor {
     if (edit !== null) {
       const result = this.runPathEditAction(binding, edit);
       if (result !== null) return result;
-    }
-    // Until the key routing of M6b section 5 (M6b-U4): in text edit mode `exitScope` (Escape)
-    // ends edit mode with the node still selected and `undo` and `redo` run (rule 4); every
-    // other binding is a consumed no-op (rule 6), so no key acts on the node or the tool.
-    if (this.textEdit !== null) {
-      if (binding.action === 'exitScope') {
-        this.setTextEditState(null);
-        return nothing;
-      }
-      if (binding.action !== 'undo' && binding.action !== 'redo') return nothing;
     }
     switch (binding.action) {
       case 'setTool':
@@ -2193,6 +2224,7 @@ class EditorCore implements Editor {
     if (this.tool !== 'select') this.run({ type: 'setTool', tool: 'select' });
     // Set first, so the selection change to `[id]` keeps it; the event follows the selection's.
     this.textEdit = deepFreeze({ id, pending: null, ...caret, composition: null });
+    this.goalX = null;
     this.textScopeExit = false;
     this.setSelectionState([id]);
     this.refresh({ type: 'session', field: 'textEdit' });
@@ -2221,7 +2253,7 @@ class EditorCore implements Editor {
         return failure('editor.invalid-text-range', `/${key}`);
       }
     }
-    // M6b-U4 and U5: the goal x clears and the merge ends here.
+    // The goal x clears (in `setTextEditState`); M6b-U5: the merge ends here.
     this.setTextEditState({
       ...edit,
       anchor: (anchor as number) + 0,
@@ -2231,9 +2263,171 @@ class EditorCore implements Editor {
     return { ok: true, ids: [] };
   }
 
-  /** A text edit state equal to the current one raises no event (M6b-S1). */
-  private setTextEditState(next: TextEditState | null): void {
+  /**
+   * A keydown or keyup in text edit mode (M6b contract, section 5.1), before navigation, the
+   * tool and the keymap. A keydown follows the first matching rule of 1 to 6; a keyup goes to
+   * the tool only and is never consumed, except a Space keyup that releases a pan navigation
+   * began before edit mode; a keydown repeat of that held Space is consumed before the rules.
+   */
+  private textKey(event: Extract<InputEvent, { kind: 'keydown' | 'keyup' }>): CommandResult {
+    const done = (consumed: boolean): CommandResult => ({ ok: true, ids: [], consumed });
+    if (event.kind === 'keyup') {
+      if (this.spaceHeld && isSpaceKey(event)) {
+        this.spaceHeld = false;
+        return done(true);
+      }
+      this.tools.get(this.tool)?.input(event, {
+        execute: (next) => this.execute(next),
+        query: (query) => this.query(query),
+        gesture: this.gesture,
+        snap: (overlay) => this.setSnap(overlay),
+      });
+      return done(false);
+    }
+    // A repeat of a Space held from before edit mode stays with navigation (section 5.1, as its
+    // keyup does), so it neither types nor reaches the browser.
+    if (this.spaceHeld && isSpaceKey(event)) return done(true);
+    const route = textKeyRoute(
+      event,
+      this.platform,
+      (chord) => this.bindings.get(chord)?.action ?? undefined,
+    );
+    switch (route.type) {
+      case 'passThrough':
+        return { ok: true, ids: [], consumed: false, passThrough: true };
+      case 'ignore':
+        return done(false);
+      case 'consume':
+        return done(true);
+      case 'exit':
+        // Escape: edit mode ends, the node stays selected (section 3.3).
+        this.run({ type: 'exitTextEdit' });
+        return done(true);
+      case 'undo':
+      case 'redo':
+        // M6b-U5: the caret restore of section 8.3.
+        return { ...this.run({ type: route.type }), consumed: true };
+      case 'caret':
+        this.textCaretAction(route.action);
+        return done(true);
+      case 'edit':
+        return { ...this.textEditAction(route.action), consumed: true };
+    }
+  }
+
+  /**
+   * A movement or Mod+A (section 4.2, rule 4) on the caret. Up and Down pass and keep the goal
+   * x (M6b-S3); every other action clears it. A movement that changes nothing is a no-op.
+   */
+  private textCaretAction(action: Extract<TextEditKeyAction, { type: 'move' | 'selectAll' }>) {
+    const edit = this.textEdit!;
+    const target = this.textTarget();
+    if (target === null) return;
+    if (action.type === 'selectAll') {
+      this.setTextEditState({ ...edit, ...selectAll(target.model) });
+      return;
+    }
+    const vertical = action.movement === 'up' || action.movement === 'down';
+    const { caret, goalX } = moveCaret(
+      target.model,
+      edit,
+      action.movement,
+      action.extend,
+      vertical ? this.goalX : null,
+    );
+    this.setTextEditState({ ...edit, ...caret }, goalX);
+  }
+
+  /**
+   * An edit action (section 4.2, rule 3): Enter replaces the selection with LF; a deletion
+   * removes the selection or the range to its target, and at 0 (Backspace) or the length
+   * (Delete) is a no-op. A failure (the length bound) changes nothing.
+   */
+  private textEditAction(
+    action: Extract<TextEditKeyAction, { type: 'delete' | 'lineBreak' }>,
+  ): CommandResult {
+    const edit = this.textEdit!;
+    const target = this.textTarget();
+    // M6b-U3: on a pending node an LF runs `createText`; a deletion has nothing to remove.
+    if (edit.id === null || target === null) return { ok: true, ids: [] };
+    if (action.type === 'lineBreak') {
+      const start = Math.min(edit.anchor, edit.focus);
+      return this.editText(edit.id, start, Math.max(edit.anchor, edit.focus), '\n');
+    }
+    const range = deletionRange(target.model, edit, action.movement);
+    if (range === null) return { ok: true, ids: [] };
+    return this.editText(edit.id, range.start, range.end, '');
+  }
+
+  /**
+   * `textinput` (section 5.3): the normalized text (section 9.1) replaces the selection in the
+   * style before its start (M6a `styleBefore`, through `setText`); empty after normalization it
+   * is a consumed no-op. Without a port it fails with `editor.no-text-layout` (M6b section 2),
+   * outside edit mode with `editor.no-text-edit`; a failure is not consumed.
+   */
+  private textInput(event: Extract<InputEvent, { kind: 'textinput' }>): CommandResult {
+    if (this.textLayouts === null) return { ...failure('editor.no-text-layout'), consumed: false };
+    const edit = this.textEdit;
+    if (edit === null) return { ...failure('editor.no-text-edit'), consumed: false };
+    const text = normalizeInputText(event.text);
+    // M6b-U3: on a pending node the first text runs `createText` as one command.
+    if (text.length === 0 || edit.id === null) return { ok: true, ids: [], consumed: true };
+    const start = Math.min(edit.anchor, edit.focus);
+    const result = this.editText(edit.id, start, Math.max(edit.anchor, edit.focus), text);
+    return { ...result, consumed: result.ok };
+  }
+
+  /**
+   * One edit of edit mode: `setText` over `[start, end)` as one document command and one
+   * history step, the caret then at the insertion's end moved up to a stop, or for a deletion
+   * at its start moved down to one (section 4.1), and the goal x cleared. A failing `setText`
+   * (`document.invalid-field` over `MAX_TEXT_LENGTH`) changes nothing.
+   *
+   * M6b-U5: each edit is its own step here; the caret entry (section 8.1) and the merge of
+   * section 8.2 attach to this one path, whose callers know the step's kind (an insertion by
+   * `textinput`, an LF, a Backspace or Delete of a cluster, a word deletion, a selection
+   * deletion or replacement).
+   */
+  private editText(id: string, start: number, end: number, text: string): CommandResult {
+    const after = { id, offset: start + text.length, up: text.length > 0 };
+    this.textCaretAfter = after;
+    let result: CommandResult;
+    try {
+      result = this.run({ type: 'setText', id, start, end, text });
+    } finally {
+      this.textCaretAfter = null;
+    }
+    if (!result.ok) return result;
+    // The caret is set here too, after `run`: a no-op when `syncTextEdit` already placed it,
+    // and the placement for any `setText` that left the document as it was (M6a's `setText`
+    // writes even a text replaced by itself, which is still a step).
+    const edit = this.textEdit;
+    const target = this.textTarget();
+    if (edit !== null && edit.id === id && target !== null) {
+      this.setTextEditState({ ...edit, ...this.editCaret(target.model, after) });
+    } else {
+      this.goalX = null;
+    }
+    return result;
+  }
+
+  /** The collapsed caret an edit leaves (section 4.1), on `model` of the edited text. */
+  private editCaret(
+    model: CaretModel,
+    after: Readonly<{ offset: number; up: boolean }>,
+  ): Pick<TextEditState, 'anchor' | 'focus' | 'affinity'> {
+    if (after.up) return caretAfterInsertion(model, after.offset);
+    const offset = model.stopAtOrBefore(Math.min(after.offset, model.length));
+    return { anchor: offset, focus: offset, affinity: 'downstream' };
+  }
+
+  /**
+   * A text edit state equal to the current one raises no event (M6b-S1). Every call sets the
+   * goal x (M6b-S3): `goalX` from a vertical move, else null, which clears it.
+   */
+  private setTextEditState(next: TextEditState | null, goalX: number | null = null): void {
     const current = this.textEdit;
+    this.goalX = next === null ? null : goalX;
     if (next === null) this.textScopeExit = false;
     if (JSON.stringify(next) === JSON.stringify(current)) return;
     this.textEdit =
@@ -2283,6 +2477,13 @@ class EditorCore implements Editor {
     if (previous === undefined) return;
     const target = this.textTarget();
     if (target === null) return;
+    const after = this.textCaretAfter;
+    if (after !== null && after.id === edit.id) {
+      // The editor's own edit (section 4.1): an insertion's end moved up, a deletion's start
+      // moved down, to a stop of the new text.
+      this.setTextEditState({ ...edit, ...this.editCaret(target.model, after) });
+      return;
+    }
     const caret = clampCaret(target.model, edit);
     if (caret !== edit) {
       const { anchor, focus, affinity } = caret;
