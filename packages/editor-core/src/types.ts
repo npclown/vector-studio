@@ -7,20 +7,19 @@ import type {
 } from '@vector-studio/contracts';
 import type {
   Arrow,
-  Color,
   Constraints,
   CornerRadii,
   DocumentErrorCode,
-  DocumentV5,
+  DocumentV6,
   FillRule,
   Frame,
   JsonValue,
   ModelErrorCode,
-  NodeV5,
+  NodeV6,
   PageV2,
-  PathStroke,
+  Paint,
   PathVerb,
-  RectStroke,
+  Stroke,
   TextNode,
   TextRun,
 } from '@vector-studio/model';
@@ -149,8 +148,8 @@ export type SnapOverlay = Readonly<{
 /** A prop that the node's type does not have is `editor.invalid-command`. */
 export type NodeProps = Readonly<{
   name?: string;
-  fill?: Color | null;
-  stroke?: RectStroke | PathStroke | null;
+  fill?: Paint | null;
+  stroke?: Stroke | null;
   opacity?: number;
   visible?: boolean;
   /** Custom nodes only. */
@@ -182,8 +181,8 @@ export type DocumentCommand =
       type: 'createRectangle';
       frame: Frame;
       name?: string;
-      fill?: Color | null;
-      stroke?: RectStroke | null;
+      fill?: Paint | null;
+      stroke?: Stroke | null;
       cornerRadii?: CornerRadii;
     }> &
       Placement)
@@ -191,8 +190,8 @@ export type DocumentCommand =
       type: 'createEllipse';
       frame: Frame;
       name?: string;
-      fill?: Color | null;
-      stroke?: RectStroke | null;
+      fill?: Paint | null;
+      stroke?: Stroke | null;
     }> &
       Placement)
   | (Readonly<{
@@ -201,7 +200,7 @@ export type DocumentCommand =
       start: PagePoint;
       end: PagePoint;
       name?: string;
-      stroke?: PathStroke | null;
+      stroke?: Stroke | null;
       startArrow?: Arrow;
       endArrow?: Arrow;
     }> &
@@ -210,8 +209,8 @@ export type DocumentCommand =
       type: 'createFrame';
       frame: Frame;
       name?: string;
-      fill?: Color | null;
-      stroke?: RectStroke | null;
+      fill?: Paint | null;
+      stroke?: Stroke | null;
     }> &
       Placement)
   | (Readonly<{
@@ -221,8 +220,8 @@ export type DocumentCommand =
       points: readonly number[];
       fillRule?: FillRule;
       name?: string;
-      fill?: Color | null;
-      stroke?: PathStroke | null;
+      fill?: Paint | null;
+      stroke?: Stroke | null;
     }> &
       Placement)
   | (Readonly<{
@@ -232,8 +231,8 @@ export type DocumentCommand =
       /** Defaults to the extension's `defaults()`. */
       data?: JsonValue;
       name?: string;
-      fill?: Color | null;
-      stroke?: PathStroke | null;
+      fill?: Paint | null;
+      stroke?: Stroke | null;
     }> &
       Placement)
   | Readonly<{
@@ -511,7 +510,7 @@ export type CommandResult =
 export type HistoryState = Readonly<{ undoDepth: number; redoDepth: number }>;
 
 export type EditorSnapshot = Readonly<{
-  document: DocumentV5;
+  document: DocumentV6;
   /** The page tools, hit testing and the projector work on (M1 contract, section 3). */
   activePage: string;
   /** Increases by one for every document change, including gesture updates, undo and redo. */
@@ -595,9 +594,9 @@ export type SelectionHandles = Readonly<{
 }>;
 
 export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'committedDocument' }
-  ? DocumentV5
+  ? DocumentV6
   : Q extends { type: 'node' }
-    ? NodeV5 | null
+    ? NodeV6 | null
     : Q extends { type: 'selection' }
       ? readonly string[]
       : Q extends { type: 'tool' }

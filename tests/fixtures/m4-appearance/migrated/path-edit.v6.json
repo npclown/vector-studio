@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 6,
+  "id": "doc-path-edit",
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Page 1",
+      "children": [
+        "closed",
+        "g1"
+      ]
+    }
+  ],
+  "nodes": {
+    "closed": {
+      "id": "closed",
+      "name": "closed",
+      "parent": "page-1",
+      "frame": {
+        "x": 80,
+        "y": 120,
+        "width": 256,
+        "height": 256
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "path",
+      "path": {
+        "verbs": [
+          "move",
+          "cubic",
+          "cubic",
+          "cubic",
+          "cubic",
+          "close"
+        ],
+        "points": [
+          0.5,
+          0,
+          0.75,
+          0,
+          1,
+          0.25,
+          1,
+          0.5,
+          1,
+          0.75,
+          0.75,
+          1,
+          0.5,
+          1,
+          0.25,
+          1,
+          0,
+          0.75,
+          0,
+          0.5,
+          0,
+          0.25,
+          0.25,
+          0,
+          0.5,
+          0
+        ],
+        "fillRule": "nonzero"
+      },
+      "fill": {
+        "r": 0.55,
+        "g": 0.75,
+        "b": 1,
+        "a": 1
+      },
+      "stroke": {
+        "color": {
+          "r": 0.1,
+          "g": 0.1,
+          "b": 0.2,
+          "a": 1
+        },
+        "width": 2,
+        "cap": "round",
+        "join": "round",
+        "miterLimit": 4,
+        "dash": null
+      }
+    },
+    "g1": {
+      "id": "g1",
+      "name": "g1",
+      "parent": "page-1",
+      "frame": {
+        "x": 480,
+        "y": 200,
+        "width": 256,
+        "height": 128
+      },
+      "rotation": 0.375,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "group",
+      "children": [
+        "open"
+      ]
+    },
+    "open": {
+      "id": "open",
+      "name": "open",
+      "parent": "g1",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 256,
+        "height": 128
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "path",
+      "path": {
+        "verbs": [
+          "move",
+          "line",
+          "line",
+          "line"
+        ],
+        "points": [
+          0,
+          1,
+          0.25,
+          0,
+          0.75,
+          0,
+          1,
+          1
+        ],
+        "fillRule": "nonzero"
+      },
+      "fill": null,
+      "stroke": {
+        "color": {
+          "r": 0.1,
+          "g": 0.1,
+          "b": 0.2,
+          "a": 1
+        },
+        "width": 2,
+        "cap": "round",
+        "join": "round",
+        "miterLimit": 4,
+        "dash": null
+      }
+    }
+  }
+}

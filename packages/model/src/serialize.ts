@@ -1,4 +1,4 @@
-import type { DocumentV5, JsonValue, NodeV5, PathStroke, RectStroke, TextRun } from './types.js';
+import type { Dash, DocumentV6, JsonValue, NodeV6, Paint, Stroke, TextRun } from './types.js';
 
 // Fixed key order (plan section 3.3). Node and custom-data keys are inserted in code-unit order,
 // so the text does not depend on the order nodes were created, deleted or restored in. (Object
@@ -14,17 +14,29 @@ function nullable<T>(value: T | null, map: (value: T) => Ordered): Ordered | nul
   return value === null ? null : map(value);
 }
 
-function rectStroke(value: RectStroke): Ordered {
-  return { color: color(value.color), width: value.width };
+/** A colour as `r, g, b, a`; a gradient as `kind, transform, stops, spread` (M4 section 2). */
+function paint(value: Paint): Ordered {
+  if (!('kind' in value)) return color(value);
+  return {
+    kind: value.kind,
+    transform: [...value.transform],
+    stops: value.stops.map((stop) => ({ offset: stop.offset, color: color(stop.color) })),
+    spread: value.spread,
+  };
 }
 
-function pathStroke(value: PathStroke): Ordered {
+function dash(value: Dash): Ordered {
+  return { pattern: [...value.pattern], phase: value.phase };
+}
+
+function stroke(value: Stroke): Ordered {
   return {
-    color: color(value.color),
+    color: paint(value.color),
     width: value.width,
     cap: value.cap,
     join: value.join,
     miterLimit: value.miterLimit,
+    dash: nullable(value.dash, dash),
   };
 }
 
@@ -40,7 +52,7 @@ function json(value: JsonValue): unknown {
 }
 
 /** Fields after `type` of path and custom nodes. */
-function pathFields(value: Extract<NodeV5, { type: 'path' | 'custom' }>): Ordered {
+function pathFields(value: Extract<NodeV6, { type: 'path' | 'custom' }>): Ordered {
   if (value.type === 'path') {
     return {
       path: {
@@ -48,15 +60,15 @@ function pathFields(value: Extract<NodeV5, { type: 'path' | 'custom' }>): Ordere
         points: [...value.path.points],
         fillRule: value.path.fillRule,
       },
-      fill: nullable(value.fill, color),
-      stroke: nullable(value.stroke, pathStroke),
+      fill: nullable(value.fill, paint),
+      stroke: nullable(value.stroke, stroke),
     };
   }
   return {
     customType: value.customType,
     data: json(value.data),
-    fill: nullable(value.fill, color),
-    stroke: nullable(value.stroke, pathStroke),
+    fill: nullable(value.fill, paint),
+    stroke: nullable(value.stroke, stroke),
   };
 }
 
@@ -77,7 +89,7 @@ function compareCodeUnits(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-function nodeV5(value: NodeV5): Ordered {
+function nodeV6(value: NodeV6): Ordered {
   const base = {
     id: value.id,
     name: value.name,
@@ -97,20 +109,20 @@ function nodeV5(value: NodeV5): Ordered {
       return {
         ...base,
         cornerRadii: [...value.cornerRadii],
-        fill: nullable(value.fill, color),
-        stroke: nullable(value.stroke, rectStroke),
+        fill: nullable(value.fill, paint),
+        stroke: nullable(value.stroke, stroke),
       };
     case 'ellipse':
       return {
         ...base,
-        fill: nullable(value.fill, color),
-        stroke: nullable(value.stroke, rectStroke),
+        fill: nullable(value.fill, paint),
+        stroke: nullable(value.stroke, stroke),
       };
     case 'line':
       return {
         ...base,
         points: [...value.points],
-        stroke: nullable(value.stroke, pathStroke),
+        stroke: nullable(value.stroke, stroke),
         startArrow: value.startArrow,
         endArrow: value.endArrow,
       };
@@ -125,8 +137,8 @@ function nodeV5(value: NodeV5): Ordered {
       return {
         ...base,
         children: [...value.children],
-        fill: nullable(value.fill, color),
-        stroke: nullable(value.stroke, rectStroke),
+        fill: nullable(value.fill, paint),
+        stroke: nullable(value.stroke, stroke),
       };
     case 'instance':
       return {
@@ -155,7 +167,7 @@ function nodeV5(value: NodeV5): Ordered {
  * The document as a plain object in canonical key order, for `serializeDocument` and the
  * persistence envelope (MVP M5 contract, M5-E3). Not exported from the package.
  */
-export function orderedDocument(document: DocumentV5): Ordered {
+export function orderedDocument(document: DocumentV6): Ordered {
   return {
     schemaVersion: document.schemaVersion,
     id: document.id,
@@ -167,19 +179,22 @@ export function orderedDocument(document: DocumentV5): Ordered {
     nodes: Object.fromEntries(
       Object.keys(document.nodes)
         .sort(compareCodeUnits)
-        .map((key) => [key, nodeV5(document.nodes[key]!)]),
+        .map((key) => [key, nodeV6(document.nodes[key]!)]),
     ),
   };
 }
 
 /**
- * Emits canonical schema v5 JSON (M1 contract, section 2.1; M7 contract, section 2.1; M6a
- * contract, sections 2 and 9): two-space indentation, fixed key order and a final newline. A
+ * Emits canonical schema v6 JSON (M1 contract, section 2.1; M7 contract, section 2.1; M6a
+ * contract, sections 2 and 9; M4 contract, section 2): two-space indentation, fixed key order and
+ * a final newline. A paint is written as a colour (`r, g, b, a`) or a gradient (`kind`,
+ * `transform`, `stops`, each `offset`, `color`, then `spread`), a stroke as `color`, `width`,
+ * `cap`, `join`, `miterLimit`, `dash` (`null` or `pattern`, `phase`). A
  * symbol's keys are in a frame's order, an instance's in the base order followed by `symbol` and
  * `textOverrides` (its keys in code unit order, each value `{ runs }`), a text
  * node's in the base order followed by `runs` (each `text`, `family`, `size`, `color`),
  * `sizing`, `align`, `letterSpacing`, `lineHeight`.
  */
-export function serializeDocument(document: DocumentV5): string {
+export function serializeDocument(document: DocumentV6): string {
   return `${JSON.stringify(orderedDocument(document), null, 2)}\n`;
 }

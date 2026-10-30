@@ -1,8 +1,7 @@
-import { serializeDocument, type DocumentV5, type Frame, type NodeV5 } from '@vector-studio/model';
+import { serializeDocument, type DocumentV6, type Frame, type NodeV6 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_FRAME_FILL,
-  DEFAULT_PATH_STROKE,
   createEditor,
   type Command,
   type CommandResult,
@@ -29,6 +28,8 @@ import { documentTree, spaceOf } from '../../packages/editor-core/src/tree.js';
 
 const START = { horizontal: 'start', vertical: 'start' } as const;
 const black = { r: 0, g: 0, b: 0, a: 1 };
+/** The default path stroke in its v2 form, without the v6 `dash` (M4 contract, section 2.1). */
+const V2_PATH_STROKE = { color: black, width: 1, cap: 'butt', join: 'miter', miterLimit: 4 };
 const none: Modifiers = { shift: false, alt: false, meta: false, ctrl: false };
 const alt: Modifiers = { ...none, alt: true };
 const ctrl: Modifiers = { ...none, ctrl: true };
@@ -72,7 +73,7 @@ function tally(id: string, parent: string, frame: Frame, level = 1): Loose {
     customType: 'ext.tally',
     data: { level },
     fill: null,
-    stroke: DEFAULT_PATH_STROKE,
+    stroke: V2_PATH_STROKE,
   };
 }
 
@@ -215,7 +216,7 @@ const childrenOf = (target: Editor, owner: string): readonly string[] => {
 };
 
 /** The node's frame moved by the page vector `(dx, dy)` turned into its parent space. */
-function translated(document: DocumentV5, id: string, dx: number, dy: number): Frame {
+function translated(document: DocumentV6, id: string, dx: number, dy: number): Frame {
   const node = document.nodes[id]!;
   const chain = spaceOf(documentTree(document), node.parent).rotation;
   if (chain === 0) return { ...node.frame, x: node.frame.x + dx, y: node.frame.y + dy };
@@ -229,7 +230,7 @@ function translated(document: DocumentV5, id: string, dx: number, dy: number): F
 }
 
 /** A copy of `node` with ID `id` and, optionally, its parent and frame replaced. */
-function copyOf(node: NodeV5, id: string, changes: Partial<Record<string, unknown>> = {}) {
+function copyOf(node: NodeV6, id: string, changes: Partial<Record<string, unknown>> = {}) {
   return { ...node, id, ...changes };
 }
 
@@ -499,7 +500,7 @@ describe('M2-A08 duplicateNodes', () => {
 });
 
 /** The page point of a node's local point. */
-function pagePoint(document: DocumentV5, id: string, x: number, y: number): PagePoint {
+function pagePoint(document: DocumentV6, id: string, x: number, y: number): PagePoint {
   const node = document.nodes[id]!;
   const { matrix } = spaceOf(documentTree(document), node.parent);
   const local = apply(localTransform(node.frame, node.rotation), x, y);

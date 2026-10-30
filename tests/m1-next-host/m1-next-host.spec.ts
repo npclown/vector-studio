@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Command, Editor, EditorEvent, SelectionHandles } from '@vector-studio/editor-core';
-import type { DocumentV5, NodeV5 } from '@vector-studio/model';
+import type { DocumentV6, NodeV6 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
 
 // M1-U5 (MVP M1 contract, section 8): M1-A12, the next-host page renders the M1 containers
@@ -32,17 +32,18 @@ type Point = Readonly<{ x: number; y: number }>;
 type Rgb = readonly [number, number, number];
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-// The page loads the v2 fixture `m1-model/containers.json`; since M7-U7 the editor holds its
-// committed v5 migration, which differs in the version only (M6a contract, sections 2.1 and 9).
+// The page loads the v2 fixture `m1-model/containers.json`; since M4-U1 the editor holds its
+// committed v6 migration, which differs in the version and the M4-M1 stroke keys (M6a contract,
+// sections 2.1 and 9; M4 contract, section 2.1).
 const FIXTURE = JSON.parse(
-  readFileSync(path.join(root, 'tests/fixtures/m7-symbols/migrated/containers.v5.json'), 'utf8'),
-) as DocumentV5;
-const FIXTURE_LINE_STROKE = (FIXTURE.nodes.l1 as Extract<NodeV5, { type: 'line' }>).stroke!;
+  readFileSync(path.join(root, 'tests/fixtures/m4-appearance/migrated/containers.v6.json'), 'utf8'),
+) as DocumentV6;
+const FIXTURE_LINE_STROKE = (FIXTURE.nodes.l1 as Extract<NodeV6, { type: 'line' }>).stroke!;
 /** The page's fixture camera (apps/next-host/app/page.tsx): css = (page - position) * zoom. */
 const CAMERA = { x: -20, y: -20, zoom: 2 };
 
 /** A node's local point in its parent's space (M1 contract, section 5 transform). */
-function place(node: NodeV5, x: number, y: number): Point {
+function place(node: NodeV6, x: number, y: number): Point {
   const { frame, rotation } = node;
   const cos = Math.cos(rotation);
   const sin = Math.sin(rotation);
@@ -115,11 +116,11 @@ async function open(page: Page) {
   return { errors, status, screen };
 }
 
-async function readDocument(page: Page): Promise<DocumentV5> {
+async function readDocument(page: Page): Promise<DocumentV6> {
   const text = await page.evaluate(() =>
     JSON.stringify(window.__p5Host!.editor.query({ type: 'document' })),
   );
-  return JSON.parse(text) as DocumentV5;
+  return JSON.parse(text) as DocumentV6;
 }
 
 async function readHandles(page: Page): Promise<SelectionHandles | null> {
@@ -173,7 +174,13 @@ const GREEN = { r: 0, g: 1, b: 0, a: 1 };
 const ORANGE = { r: 1, g: 0.5, b: 0, a: 1 };
 const RECOLOURS: readonly Command[] = [
   { type: 'setNodeProps', id: 'l1', props: { stroke: { ...FIXTURE_LINE_STROKE, color: MAGENTA } } },
-  { type: 'setNodeProps', id: 'f1', props: { stroke: { color: GREEN, width: 1 } } },
+  {
+    type: 'setNodeProps',
+    id: 'f1',
+    props: {
+      stroke: { color: GREEN, width: 1, cap: 'butt', join: 'round', miterLimit: 4, dash: null },
+    },
+  },
   // r2 is on page 2, which is not active: setNodeProps takes a node of any page by ID.
   { type: 'setNodeProps', id: 'r2', props: { fill: ORANGE } },
 ];
@@ -186,7 +193,7 @@ const RECOLOURED = (() => {
     if (command.type !== 'setNodeProps') continue;
     Object.assign(document.nodes[command.id]!, command.props);
   }
-  return document as unknown as DocumentV5;
+  return document as unknown as DocumentV6;
 })();
 /** Reference colours in bytes; `canvas` and `white` are measured per check. */
 const PAINTS: Readonly<Record<string, Rgb>> = {
@@ -266,7 +273,7 @@ async function click(page: Page, at: Point, shift = false) {
 }
 
 /** The IDs `after` adds to page-1's children. */
-function added(before: DocumentV5, after: DocumentV5): string[] {
+function added(before: DocumentV6, after: DocumentV6): string[] {
   const old = new Set(before.pages[0]!.children);
   return after.pages[0]!.children.filter((id) => !old.has(id));
 }

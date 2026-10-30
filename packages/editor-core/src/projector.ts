@@ -1,4 +1,5 @@
 import type {
+  PathStroke,
   RenderChangeSet,
   RenderNodeSnapshot,
   RendererSceneSynchronization,
@@ -7,15 +8,16 @@ import type {
   SceneRejectionReason,
   ScenePathGeometry,
   ScenePathVerb,
+  SceneStroke,
 } from '@vector-studio/contracts';
 import type {
-  Color,
-  DocumentV5,
+  DocumentV6,
   Frame,
-  LineNode,
-  NodeV5,
+  LineNodeV6,
+  NodeV6,
+  Paint,
   PathData,
-  RectStroke,
+  Stroke,
 } from '@vector-studio/model';
 import { ExpansionCache, type Expansion, type ExpansionResult } from './expansion.js';
 import { localTransform } from './geometry.js';
@@ -37,7 +39,7 @@ import type { DiagnosticEvent } from './types.js';
 // the instance with its whole expansion is one unit for isolation.
 
 /** Frame-local path geometry for a custom node (its extension's `toScene`), or null. */
-export type CustomProjection = (node: NodeV5) => PathData | null;
+export type CustomProjection = (node: NodeV6) => PathData | null;
 
 /** Synthetic scene IDs of a frame (M1 contract, section 5); document IDs never hold U+0000. */
 export function frameContentId(frameId: string): string {
@@ -163,10 +165,30 @@ class Outline {
 type PathContent = Pick<Extract<RenderNodeSnapshot, { kind: 'path' }>, 'geometry' | 'style'>;
 
 /**
+ * M4-P2 (MVP M4 contract, section 3): a primitive stroke is exactly `{ color, width }`, the only
+ * shape the renderer's `copyStroke` accepts, so cap, join, miter limit and dash are left out.
+ */
+function primitiveStroke(stroke: Stroke | null): SceneStroke | null {
+  return stroke === null ? null : { color: stroke.color, width: stroke.width };
+}
+
+/**
+ * M4-P2: a path stroke carries color, width, cap, join and miter limit, and `dash` only when it
+ * is not null (M4-Q14 (a)), so a solid stroke's snapshot is the pre-M4 one (E24-S2).
+ */
+function pathStroke(stroke: Stroke | null): PathStroke | null {
+  if (stroke === null) return null;
+  const { color, width, cap, join, miterLimit, dash } = stroke;
+  return dash === null
+    ? { color, width, cap, join, miterLimit }
+    : { color, width, cap, join, miterLimit, dash };
+}
+
+/**
  * The scene content of a line (section 5): stroke mode (no `triangle` end) keeps the line's
  * stroke; fill mode is one filled outline in the stroke colour, with the literal vertex lists.
  */
-export function lineContent(node: LineNode): PathContent {
+export function lineContent(node: LineNodeV6): PathContent {
   const { width: fw, height: fh } = node.frame;
   const [x0, y0, x1, y1] = node.points;
   const p0 = { x: x0 * fw, y: y0 * fh };
@@ -176,7 +198,7 @@ export function lineContent(node: LineNode): PathContent {
   const length = Math.hypot(p1.x - p0.x, p1.y - p0.y);
   const plain = new Outline().move(p0).line(p1);
   if (stroke === null || w === 0 || length === 0) {
-    return { geometry: plain.geometry(), style: { fill: null, stroke } };
+    return { geometry: plain.geometry(), style: { fill: null, stroke: pathStroke(stroke) } };
   }
   const d = { x: (p1.x - p0.x) / length, y: (p1.y - p0.y) / length };
   const n = { x: -d.y, y: d.x };
@@ -195,7 +217,7 @@ export function lineContent(node: LineNode): PathContent {
     for (const end of ends) {
       if (end.arrow === 'line') plain.move(end.plus).line(end.tip).line(end.minus);
     }
-    return { geometry: plain.geometry(), style: { fill: null, stroke } };
+    return { geometry: plain.geometry(), style: { fill: null, stroke: pathStroke(stroke) } };
   }
   const outline = new Outline();
   const [start, end] = [ends[0]!, ends[1]!];
@@ -240,7 +262,7 @@ export function lineContent(node: LineNode): PathContent {
  * projected (an unowned custom type, or a container: containers project through `projectPage`).
  */
 export function projectNode(
-  node: NodeV5,
+  node: NodeV6,
   custom: CustomProjection,
   parentId: string | null = null,
 ): RenderNodeSnapshot | null {
@@ -263,14 +285,14 @@ export function projectNode(
           height: node.frame.height,
           cornerRadii: clampedRadii(node.cornerRadii, node.frame.width, node.frame.height),
         },
-        style: { fill: node.fill, stroke: node.stroke },
+        style: { fill: node.fill, stroke: primitiveStroke(node.stroke) },
       };
     case 'ellipse':
       return {
         ...base,
         kind: 'primitive',
         geometry: { kind: 'ellipse', width: node.frame.width, height: node.frame.height },
-        style: { fill: node.fill, stroke: node.stroke },
+        style: { fill: node.fill, stroke: primitiveStroke(node.stroke) },
       };
     case 'line':
       return { ...base, kind: 'path', ...lineContent(node) };
@@ -280,7 +302,7 @@ export function projectNode(
         ...base,
         kind: 'path',
         geometry: pathGeometry(node.path, node.frame.width, node.frame.height),
-        style: { fill: node.fill, stroke: node.stroke },
+        style: { fill: node.fill, stroke: pathStroke(node.stroke) },
       };
     case 'custom': {
       const geometry = custom(node);
@@ -289,7 +311,7 @@ export function projectNode(
         ...base,
         kind: 'path',
         geometry: pathGeometry(geometry, 1, 1),
-        style: { fill: node.fill, stroke: node.stroke },
+        style: { fill: node.fill, stroke: pathStroke(node.stroke) },
       };
     }
     default:
@@ -309,8 +331,8 @@ type FrameUnit = Readonly<{
   rotation: number;
   visible: boolean;
   opacity: number;
-  fill: Color | null;
-  stroke: RectStroke | null;
+  fill: Paint | null;
+  stroke: Stroke | null;
 }>;
 
 /**
@@ -346,7 +368,7 @@ function frameSnapshots(
           ...inner,
           kind: 'primitive',
           geometry: rectangle,
-          style: { fill: null, stroke: node.stroke },
+          style: { fill: null, stroke: primitiveStroke(node.stroke) },
         };
   const snapshots: RenderNodeSnapshot[] = [
     {
@@ -391,7 +413,7 @@ export type PageProjection = Readonly<{
 
 /** A node's last snapshots, reused while the node, its scene parent and its children hold. */
 type MemoEntry = Readonly<{
-  node: NodeV5;
+  node: NodeV6;
   parentId: string | null;
   children: readonly string[] | null;
   snapshots: readonly RenderNodeSnapshot[];
@@ -401,7 +423,7 @@ type MemoEntry = Readonly<{
    */
   instance?: Readonly<{
     result: ExpansionResult;
-    source: NodeV5;
+    source: NodeV6;
     expanded: ReadonlyMap<string, MemoEntry>;
   }>;
 }>;
@@ -411,7 +433,7 @@ export type ProjectionMemo = Map<string, MemoEntry>;
 /** The snapshots of `entry` when its node, scene parent and projected children still hold. */
 function reusedFrom(
   entry: MemoEntry | undefined,
-  node: NodeV5,
+  node: NodeV6,
   parentId: string | null,
   children: readonly string[] | null,
 ): readonly RenderNodeSnapshot[] | null {
@@ -425,7 +447,7 @@ function reusedFrom(
 /** The container snapshot of a group or mask group under the scene ID `id`. */
 function groupSnapshot(
   id: string,
-  node: NodeV5,
+  node: NodeV6,
   parentId: string | null,
   children: readonly string[],
 ): RenderNodeSnapshot {
@@ -510,7 +532,7 @@ function projectExpanded(
  * whose expansion is invalid is left out and listed in `invalid` (M7-X3).
  */
 export function projectPage(
-  document: DocumentV5,
+  document: DocumentV6,
   pageId: string,
   custom: CustomProjection,
   omit: ReadonlySet<string> = new Set(),
@@ -525,7 +547,7 @@ export function projectPage(
 
   /** The snapshots of instance `node` and its expansion, or null when it is invalid. */
   const instanceUnit = (
-    node: Extract<NodeV5, { type: 'instance' }>,
+    node: Extract<NodeV6, { type: 'instance' }>,
     parentId: string | null,
   ): MemoEntry | null => {
     const result = expansions.expand(document, node.id);
@@ -745,7 +767,7 @@ export class SceneProjector {
    * excluded subtrees that `touched` reaches (the change that caused it) are projected again.
    */
   replace(
-    document: DocumentV5,
+    document: DocumentV6,
     page: string,
     touched: readonly string[] = [],
     retried = false,
@@ -784,7 +806,7 @@ export class SceneProjector {
   }
 
   /** Sends one change set for a document change on `page` that touched `touched`. */
-  change(document: DocumentV5, page: string, touched: readonly string[]): void {
+  change(document: DocumentV6, page: string, touched: readonly string[]): void {
     if (this.disposed) return;
     const retry = this.release(document, touched);
     if (this.identity === null || this.base === null || this.page !== page) {
@@ -823,7 +845,7 @@ export class SceneProjector {
    * rejection already known to be the projection's only unit's own.
    */
   private isolate(
-    document: DocumentV5,
+    document: DocumentV6,
     projection: PageProjection,
     only: Readonly<{ id: string; result: Rejection }> | null,
   ): void {
@@ -845,7 +867,7 @@ export class SceneProjector {
   }
 
   /** Retries the released subtrees from their roots, one unit per set. */
-  private retry(document: DocumentV5, roots: ReadonlySet<string>): void {
+  private retry(document: DocumentV6, roots: ReadonlySet<string>): void {
     if (roots.size > 0) this.addUnits(document, this.project(document), roots);
   }
 
@@ -855,7 +877,7 @@ export class SceneProjector {
    * out. Rejections are reported once per reason; any other failure ends in a full snapshot.
    */
   private addUnits(
-    document: DocumentV5,
+    document: DocumentV6,
     projection: PageProjection,
     roots: ReadonlySet<string> | null,
   ): void {
@@ -974,7 +996,7 @@ export class SceneProjector {
   }
 
   /** The root to leave out for a rejected node: its mask group when it is a mask source. */
-  private excludedRoot(document: DocumentV5, id: string): string {
+  private excludedRoot(document: DocumentV6, id: string): string {
     const node = Object.hasOwn(document.nodes, id) ? document.nodes[id]! : undefined;
     const parent =
       node !== undefined && Object.hasOwn(document.nodes, node.parent)
@@ -984,7 +1006,7 @@ export class SceneProjector {
   }
 
   /** The document parent chain of `id`, itself first (bounded by the tree depth). */
-  private chain(document: DocumentV5, id: string): string[] {
+  private chain(document: DocumentV6, id: string): string[] {
     const ids: string[] = [];
     let cursor: string | undefined = id;
     for (let guard = 0; cursor !== undefined && guard < PARENT_WALK_LIMIT; guard += 1) {
@@ -999,7 +1021,7 @@ export class SceneProjector {
    * with every excluded root inside them, and returns the outermost roots the document still
    * has; those are retried whole.
    */
-  private release(document: DocumentV5, touched: readonly string[]): Set<string> {
+  private release(document: DocumentV6, touched: readonly string[]): Set<string> {
     const roots = new Set<string>();
     if (this.excluded.size === 0) return roots;
     for (const id of [...touched, ...this.instancesOfSources(document, touched)]) {
@@ -1021,7 +1043,7 @@ export class SceneProjector {
    * contract, section 4.2). The reverse index from symbol to instances is one O(n) scan of the
    * node map, made only when a touched node is in a source.
    */
-  private instancesOfSources(document: DocumentV5, touched: readonly string[]): string[] {
+  private instancesOfSources(document: DocumentV6, touched: readonly string[]): string[] {
     const symbols = new Set<string>();
     for (const id of touched) {
       for (const entry of this.chain(document, id)) {
@@ -1043,7 +1065,7 @@ export class SceneProjector {
    * Forgets the renderer's state and sends a full snapshot, once per call chain: a renderer
    * that keeps failing is retried at the next document change, never in a loop.
    */
-  private resync(document: DocumentV5): void {
+  private resync(document: DocumentV6): void {
     this.identity = null;
     this.base = null;
     if (this.resyncing) return;
@@ -1126,7 +1148,7 @@ export class SceneProjector {
   }
 
   /** Reports a rejection of `ids` and leaves their subtrees out until a change touches them. */
-  private exclude(document: DocumentV5, result: Rejection, ids: readonly string[]): void {
+  private exclude(document: DocumentV6, result: Rejection, ids: readonly string[]): void {
     this.reportRejection(result.reason, ids);
     ids.forEach((id) => this.excluded.add(this.excludedRoot(document, id)));
   }
@@ -1147,7 +1169,7 @@ export class SceneProjector {
    * for an invalid expansion (M7-X3) are reported once, as a rejected scene value, until they
    * project again.
    */
-  private project(document: DocumentV5, skip: ReadonlySet<string> = new Set()): PageProjection {
+  private project(document: DocumentV6, skip: ReadonlySet<string> = new Set()): PageProjection {
     const omit = skip.size === 0 ? this.excluded : new Set([...this.excluded, ...skip]);
     const projection = projectPage(
       document,

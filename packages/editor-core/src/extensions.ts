@@ -1,4 +1,4 @@
-import type { DocumentV5, JsonValue, NodeV5, PathData } from '@vector-studio/model';
+import type { DocumentV6, JsonValue, NodeV6, PathData } from '@vector-studio/model';
 import { TOOL_NAMES } from './keymap.js';
 import type {
   CustomNodeType,
@@ -204,7 +204,7 @@ export class ExtensionRegistry {
   }
 
   /** Checks a custom node against its extension; other nodes always pass. */
-  check(node: NodeV5): CustomFailure | null {
+  check(node: NodeV6): CustomFailure | null {
     if (node.type !== 'custom') return null;
     const type = this.types.get(node.customType);
     if (type === undefined) return { code: 'document.unknown-custom-type', path: '/customType' };
@@ -221,7 +221,7 @@ export class ExtensionRegistry {
    * The first custom node of the document that fails its check, with a document path. Every node
    * is checked wherever it is nested (M1 contract, section 2.1), in sorted ID order.
    */
-  checkDocument(document: DocumentV5): CustomFailure | null {
+  checkDocument(document: DocumentV6): CustomFailure | null {
     for (const id of Object.keys(document.nodes).sort()) {
       const failure = this.check(document.nodes[id]!);
       if (failure !== null) {
@@ -233,7 +233,7 @@ export class ExtensionRegistry {
   }
 
   /** Frame-local geometry of a custom node through its extension's `toScene`, or null. */
-  geometry(node: NodeV5): PathData | null {
+  geometry(node: NodeV6): PathData | null {
     if (node.type !== 'custom') return null;
     const type = this.types.get(node.customType);
     if (type === undefined) return null;

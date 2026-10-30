@@ -1,4 +1,4 @@
-import { serializeDocument, type DocumentV5 } from '@vector-studio/model';
+import { serializeDocument, type DocumentV6 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   createCounterIdSource,
@@ -40,7 +40,7 @@ function triangle(target: Editor, x: number, y: number) {
     type: 'createPath',
     verbs: ['move', 'line', 'line', 'close'],
     points: [x, y, x + 60, y, x + 30, y + 40],
-    stroke: { color: black, width: 3, cap: 'butt', join: 'miter', miterLimit: 4 },
+    stroke: { color: black, width: 3, cap: 'butt', join: 'miter', miterLimit: 4, dash: null },
   })[0]!;
 }
 
@@ -66,7 +66,7 @@ function drag(target: Editor, from: [number, number], to: [number, number]) {
   pointer(target, 'pointerup', to[0], to[1]);
 }
 
-function documentOf(target: Editor): DocumentV5 {
+function documentOf(target: Editor): DocumentV6 {
   return target.query({ type: 'document' });
 }
 

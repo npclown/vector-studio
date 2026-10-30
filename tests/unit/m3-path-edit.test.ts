@@ -1,8 +1,7 @@
-import { serializeDocument, type DocumentV5, type Frame } from '@vector-studio/model';
+import { serializeDocument, type DocumentV6, type Frame } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_FRAME_FILL,
-  DEFAULT_PATH_STROKE,
   createCounterIdSource,
   createEditor,
   type Command,
@@ -31,6 +30,8 @@ import { documentTree, spaceOf } from '../../packages/editor-core/src/tree.js';
 
 const START = { horizontal: 'start', vertical: 'start' } as const;
 const black = { r: 0, g: 0, b: 0, a: 1 };
+/** The default path stroke in its v2 form, without the v6 `dash` (M4 contract, section 2.1). */
+const V2_PATH_STROKE = { color: black, width: 1, cap: 'butt', join: 'miter', miterLimit: 4 };
 const none: Modifiers = { shift: false, alt: false, meta: false, ctrl: false };
 const shift: Modifiers = { ...none, shift: true };
 const alt: Modifiers = { ...none, alt: true };
@@ -250,7 +251,7 @@ function expectOneStep(target: Editor, before: string, steps = 1) {
 }
 
 /** The page point of a node-local point through the node's chain `C`. */
-function pagePoint(document: DocumentV5, id: string, x: number, y: number): PagePoint {
+function pagePoint(document: DocumentV6, id: string, x: number, y: number): PagePoint {
   const node = document.nodes[id]!;
   const space = spaceOf(documentTree(document), node.parent);
   return apply(multiply(space.matrix, localTransform(node.frame, node.rotation)), x, y);
@@ -823,7 +824,7 @@ describe('M3-A09 targets and anchor selection through input', () => {
         [
           {
             ...path('w', 'p1', f(100, 100, 100, 100), TRIANGLE),
-            stroke: { ...DEFAULT_PATH_STROKE, width: 20 },
+            stroke: { ...V2_PATH_STROKE, width: 20 },
           },
         ],
       ),
@@ -1185,7 +1186,7 @@ describe('M3-A09 segment double-click, Delete and togglePathClosed', () => {
             ],
             { fill: false },
           ),
-          stroke: { ...DEFAULT_PATH_STROKE, width: 40 },
+          stroke: { ...V2_PATH_STROKE, width: 40 },
         },
       ],
     );

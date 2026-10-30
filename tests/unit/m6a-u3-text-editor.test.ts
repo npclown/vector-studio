@@ -3,7 +3,7 @@ import {
   serializeDocument,
   validateDocument,
   type Color,
-  type DocumentV5,
+  type DocumentV6,
   type Frame,
   type TextNode,
   type TextRun,
@@ -43,9 +43,9 @@ import { createFakeTextLayout, fakeLayout } from '../support/fake-text-layout.js
 
 const root = path.resolve(import.meta.dirname, '../..');
 const TEXT_FIXTURE = readFileSync(path.join(root, 'tests/fixtures/m6-text/text.v4.json'), 'utf8');
-/** Its v5 migration (M6a contract, section 9), which the editor holds and writes. */
-const TEXT_FIXTURE_V5 = readFileSync(
-  path.join(root, 'tests/fixtures/m7-symbols/migrated/text.v5.json'),
+/** Its v6 migration (M6a section 9, M4 section 2.1), which the editor holds and writes. */
+const TEXT_FIXTURE_V6 = readFileSync(
+  path.join(root, 'tests/fixtures/m4-appearance/migrated/text.v6.json'),
   'utf8',
 );
 const START = { horizontal: 'start', vertical: 'start' } as const;
@@ -107,13 +107,13 @@ function container(
   return { ...base(id, parent, frame), type, children, ...extra };
 }
 
-function doc(nodes: Loose[], children: string[]): DocumentV5 {
+function doc(nodes: Loose[], children: string[]): DocumentV6 {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     id: 'doc',
     pages: [{ id: 'p1', name: 'Page 1', children }],
     nodes: Object.fromEntries(nodes.map((node) => [node.id, node])),
-  } as unknown as DocumentV5;
+  } as unknown as DocumentV6;
 }
 
 /** An ID source that counts its calls. */
@@ -130,7 +130,7 @@ function counted(prefix = 'n'): IdSource & { calls: number } {
 }
 
 function editor(
-  document?: DocumentV5,
+  document?: DocumentV6,
   port: TextLayoutPort | null = createFakeTextLayout(),
   ids: IdSource = createCounterIdSource('n'),
 ): Editor {
@@ -789,7 +789,7 @@ describe('M6a-A07: map handles (section 6.3, M6a-Q18 (a))', () => {
 describe('M6a-A08: without a port', () => {
   it('loads, round-trips and accepts the commands that need no layout', () => {
     const target = createEditor({ document: JSON.parse(TEXT_FIXTURE) as unknown });
-    expect(serialized(target)).toBe(TEXT_FIXTURE_V5);
+    expect(serialized(target)).toBe(TEXT_FIXTURE_V6);
     expect(target.query({ type: 'textLayout', id: 't1' })).toBeNull();
     step(target, { type: 'nudgeNodes', ids: ['t1', 't2'], dx: 1, dy: 2 });
     step(target, {
@@ -1006,7 +1006,7 @@ describe('M6a-A03: fragments with text (section 8)', () => {
     run_(target, { type: 'copy', ids: ['t1'] });
     expect(target.query({ type: 'clipboard' })).toBe(
       MARKER +
-        '{"fragmentVersion":2,"schemaVersion":5,"roots":["t1"],"nodes":{"t1":{"id":"t1","name":"t1","parent":"","frame":{"x":1,"y":2,"width":0,"height":0},"rotation":0,"constraints":{"horizontal":"start","vertical":"start"},"opacity":1,"visible":true,"type":"text","runs":[{"text":"ab","family":"Test","size":10,"color":{"r":0,"g":0,"b":0,"a":1}},{"text":"가","family":"Test","size":20,"color":{"r":1,"g":0,"b":0,"a":1}}],"sizing":"autoWidth","align":"center","letterSpacing":0,"lineHeight":1.2}},"sources":[],"sourceNodes":{}}',
+        '{"fragmentVersion":2,"schemaVersion":6,"roots":["t1"],"nodes":{"t1":{"id":"t1","name":"t1","parent":"","frame":{"x":1,"y":2,"width":0,"height":0},"rotation":0,"constraints":{"horizontal":"start","vertical":"start"},"opacity":1,"visible":true,"type":"text","runs":[{"text":"ab","family":"Test","size":10,"color":{"r":0,"g":0,"b":0,"a":1}},{"text":"가","family":"Test","size":20,"color":{"r":1,"g":0,"b":0,"a":1}}],"sizing":"autoWidth","align":"center","letterSpacing":0,"lineHeight":1.2}},"sources":[],"sourceNodes":{}}',
     );
     const pasted = step(target, { type: 'paste' });
     const id = pasted.ok ? pasted.ids[0]! : '';

@@ -1,4 +1,4 @@
-import { type DocumentV5, type Frame, type NodeV5 } from '@vector-studio/model';
+import { type DocumentV6, type Frame, type NodeV6 } from '@vector-studio/model';
 import { Draft, fail, type Failure } from './draft.js';
 import {
   drawIds,
@@ -36,7 +36,7 @@ import type { AlignEdge, DocumentCommand, PagePoint, ReorderOp } from './types.j
 // vector turned into its parent space, so nodes of different parents mix freely. A command that
 // changes nothing returns the document itself, which the editor records as no step.
 
-export type Finish = (draft: Draft) => DocumentV5 | Failure;
+export type Finish = (draft: Draft) => DocumentV6 | Failure;
 type Arranged = Readonly<{ tree: TreeView; roots: readonly string[] }>;
 
 const EDGES: readonly AlignEdge[] = ['left', 'hcenter', 'right', 'top', 'vcenter', 'bottom'];
@@ -48,7 +48,7 @@ const OPS: readonly ReorderOp[] = ['forward', 'backward', 'front', 'back'];
  * must be on the active page. Returns the listed roots in listed order.
  */
 export function arranged(
-  document: DocumentV5,
+  document: DocumentV6,
   rawIds: unknown,
   context: Pick<EditContext, 'activePage'>,
   fields: () => Failure | null,
@@ -68,27 +68,27 @@ export function arranged(
 }
 
 /** The frame of `node` moved by the page vector `(dx, dy)` turned into its parent space. */
-function translated(tree: TreeView, node: NodeV5, dx: number, dy: number): Frame {
+function translated(tree: TreeView, node: NodeV6, dx: number, dy: number): Frame {
   const d = rotate(-spaceOf(tree, node.parent).rotation, dx, dy);
   return { ...node.frame, x: node.frame.x + d.x, y: node.frame.y + d.y };
 }
 
 /** Sets `frame` on `node` when its position differs; true when it did. */
-function place(draft: Draft, node: NodeV5, frame: Frame): boolean {
+function place(draft: Draft, node: NodeV6, frame: Frame): boolean {
   if (frame.x === node.frame.x && frame.y === node.frame.y) return false;
   draft.set({ ...node, frame });
   return true;
 }
 
 /** Each node's position in the document pre-order of `page`. */
-export function preorder(document: DocumentV5, tree: TreeView, page: string): Map<string, number> {
+export function preorder(document: DocumentV6, tree: TreeView, page: string): Map<string, number> {
   const roots = document.pages.find((entry) => entry.id === page)?.children ?? [];
   return new Map(
     roots.flatMap((child) => subtree(tree, child)).map((id, position) => [id, position] as const),
   );
 }
 
-function unchangedResult(document: DocumentV5): EditResult {
+function unchangedResult(document: DocumentV6): EditResult {
   return { ok: true, document, touched: [], created: [] };
 }
 
@@ -99,7 +99,7 @@ function unchangedResult(document: DocumentV5): EditResult {
  * other node moves by the difference of its box's value from the target's.
  */
 export function alignNodes(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'alignNodes' }>,
   context: EditContext,
   finish: Finish,
@@ -152,7 +152,7 @@ export function alignNodes(
  * that min exactly; any other node moves by the difference from its box's min.
  */
 export function distributeNodes(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'distributeNodes' }>,
   context: EditContext,
   finish: Finish,
@@ -238,7 +238,7 @@ function reordered(children: readonly string[], listed: ReadonlySet<string>, op:
  * leaves a mask group with a non-path first child fails with `editor.invalid-mask-source`.
  */
 export function reorderNodes(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'reorderNodes' }>,
   context: EditContext,
   finish: Finish,
@@ -276,7 +276,7 @@ export function reorderNodes(
  * page-root node sets `x + dx` and `y + dy` exactly.
  */
 export function nudgeNodes(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'nudgeNodes' }>,
   context: EditContext,
   finish: Finish,
@@ -312,7 +312,7 @@ export function nudgeNodes(
  * section 6).
  */
 export function duplicateNodes(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'duplicateNodes' }>,
   context: EditContext,
   finish: Finish,
@@ -357,7 +357,7 @@ type Duplicate =
  * roots in the result's paint order.
  */
 function buildDuplicate(
-  document: DocumentV5,
+  document: DocumentV6,
   tree: TreeView,
   page: string,
   roots: readonly string[],
@@ -385,7 +385,7 @@ function buildDuplicate(
       copy.textOverrides = remappedOverrides(node.textOverrides, copyOf);
     }
     if (rootSet.has(id)) copy.frame = translated(tree, node, offset.x, offset.y);
-    draft.set(copy as NodeV5);
+    draft.set(copy as NodeV6);
   }
   const parents = [...new Set(roots.map((id) => document.nodes[id]!.parent))];
   for (const parent of parents) {

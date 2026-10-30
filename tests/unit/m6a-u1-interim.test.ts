@@ -19,12 +19,14 @@ import { projectPage } from '../../packages/editor-core/src/projector.js';
 // rule (tests/unit/m6a-u3-text-editor.test.ts). M7-U7 (section 9) moved the editor to schema v5,
 // with fragment version 2 written at v5 and read at 3 to 5, and lifted M6a-S7 (M7-T1): the
 // nesting cases below now succeed (tests/unit/m7-u7-text-symbols.test.ts covers the rest).
+// M4-U1 (M4 contract, sections 2.1 and 7) moved it to schema v6, with fragment version 2 written
+// at v6 and read at 3 to 6.
 
 const root = path.resolve(import.meta.dirname, '../..');
 const TEXT = readFileSync(path.join(root, 'tests/fixtures/m6-text/text.v4.json'), 'utf8');
-/** Its v5 migration (M6a contract, section 9). */
-const TEXT_V5 = readFileSync(
-  path.join(root, 'tests/fixtures/m7-symbols/migrated/text.v5.json'),
+/** Its v6 migration (M6a contract, section 9; M4 contract, section 2.1). */
+const TEXT_V6 = readFileSync(
+  path.join(root, 'tests/fixtures/m4-appearance/migrated/text.v6.json'),
   'utf8',
 );
 const MARKER = 'vector-studio/fragment\n';
@@ -43,10 +45,10 @@ function run(target: Editor, command: Command): CommandResult {
   return result;
 }
 
-describe('M6a-U1 interim: editor-core at schema v4, v5 since M7-U7', () => {
-  it('loads the text fixture as its v5 migration and creates empty documents at v5', () => {
-    expect(text(loaded())).toBe(TEXT_V5);
-    expect(createEditor().query({ type: 'document' }).schemaVersion).toBe(5);
+describe('M6a-U1 interim: editor-core at schema v4, v6 since M4-U1', () => {
+  it('loads the text fixture as its v6 migration and creates empty documents at v6', () => {
+    expect(text(loaded())).toBe(TEXT_V6);
+    expect(createEditor().query({ type: 'document' }).schemaVersion).toBe(6);
   });
 
   it('projects nothing for a text node and reports no diagnostic', () => {
@@ -99,7 +101,7 @@ describe('M6a-U1 interim lifted by M7-U7: text may enter a symbol (M7-T1)', () =
   });
 });
 
-describe('M6a-U1 interim: fragments at schema v4, v5 since M7-U7 (section 8)', () => {
+describe('M6a-U1 interim: fragments at schema v4, v6 since M4-U1 (section 8)', () => {
   type Body = {
     fragmentVersion: number;
     schemaVersion: number;
@@ -123,11 +125,11 @@ describe('M6a-U1 interim: fragments at schema v4, v5 since M7-U7 (section 8)', (
     return bodyOf(target.query({ type: 'clipboard' })!);
   }
 
-  it('copies a text node as fragment version 2 at schemaVersion 5 and pastes its runs and props', () => {
+  it('copies a text node as fragment version 2 at schemaVersion 6 and pastes its runs and props', () => {
     const target = loaded();
     run(target, { type: 'copy', ids: ['t2'] });
     const fragment = target.query({ type: 'clipboard' })!;
-    expect(fragment.startsWith(`${MARKER}{"fragmentVersion":2,"schemaVersion":5,`)).toBe(true);
+    expect(fragment.startsWith(`${MARKER}{"fragmentVersion":2,"schemaVersion":6,`)).toBe(true);
     const pasted = run(target, { type: 'paste' });
     expect(pasted.ok).toBe(true);
     const id = pasted.ok ? pasted.ids[0]! : '';
@@ -136,7 +138,7 @@ describe('M6a-U1 interim: fragments at schema v4, v5 since M7-U7 (section 8)', (
     );
   });
 
-  it('fails a text node below schema v4 at its type, and versions 2 and 6 of fragment version 2', () => {
+  it('fails a text node below schema v4 at its type, and versions 2 and 7 of fragment version 2', () => {
     const target = loaded();
     const body = copied(target, ['t1']);
     const before = text(target);
@@ -145,7 +147,7 @@ describe('M6a-U1 interim: fragments at schema v4, v5 since M7-U7 (section 8)', (
       typeFailure,
     );
     expect(run(target, { type: 'paste', text: marked(versionOne(body, 2)) })).toEqual(typeFailure);
-    for (const schemaVersion of [2, 6]) {
+    for (const schemaVersion of [2, 7]) {
       expect(run(target, { type: 'paste', text: marked({ ...body, schemaVersion }) })).toEqual({
         ok: false,
         code: 'document.unsupported-version',

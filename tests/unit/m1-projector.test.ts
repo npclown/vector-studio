@@ -6,7 +6,7 @@ import type {
   SceneApplyResult,
   ScenePathGeometry,
 } from '@vector-studio/contracts';
-import type { DocumentV5, NodeV5 } from '@vector-studio/model';
+import type { DocumentV6, NodeV6 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   createCounterIdSource,
@@ -27,6 +27,8 @@ import { RecordingRenderer } from '../support/p5-recording-renderer.js';
 // lines onto the scene surface, keeps page identity and isolates rejected subtrees. M1-A09.
 
 const root = path.resolve(import.meta.dirname, '../..');
+/** The v6 keys a rectangle, ellipse or frame stroke adds to `{ color, width }` (M4-M1). */
+const SHAPE = { cap: 'butt', join: 'round', miterLimit: 4, dash: null } as const;
 const START = { horizontal: 'start', vertical: 'start' } as const;
 const black = { r: 0, g: 0, b: 0, a: 1 };
 const white = { r: 1, g: 1, b: 1, a: 1 };
@@ -52,7 +54,7 @@ function ok(target: Editor, command: Command): readonly string[] {
   return result.ids;
 }
 
-function documentOf(target: Editor): DocumentV5 {
+function documentOf(target: Editor): DocumentV6 {
   return target.query({ type: 'document' });
 }
 
@@ -63,7 +65,7 @@ async function fixture(name: string): Promise<unknown> {
 type Fields = Record<string, unknown>;
 
 /** A v2 node with defaults; `extra` holds the type's fields. */
-function node(id: string, parent: string, type: NodeV5['type'], extra: Fields = {}): Fields {
+function node(id: string, parent: string, type: NodeV6['type'], extra: Fields = {}): Fields {
   return {
     id,
     name: id,
@@ -206,7 +208,7 @@ function line(
   endArrow: string,
   cap: 'butt' | 'round' | 'square' = 'butt',
   overrides: Fields = {},
-): NodeV5 {
+): NodeV6 {
   return node('l', 'p', 'line', {
     frame: { x: 0, y: 0, width: 100, height: 0 },
     points: [0, 0, 1, 0],
@@ -214,7 +216,7 @@ function line(
     startArrow,
     endArrow,
     ...overrides,
-  }) as unknown as NodeV5;
+  }) as unknown as NodeV6;
 }
 
 describe('M1-A09 projection of the v2 fixtures', () => {
@@ -611,7 +613,7 @@ describe('M1-A09 synchronization', () => {
 
   it('a frame stroke toggle with a visibility change in one command is one accepted set', async () => {
     const { target, renderer } = attached(await fixture('containers.json'));
-    const stroke = { color: black, width: 1 };
+    const stroke = { color: black, width: 1, ...SHAPE };
     let from = renderer.calls.length;
     ok(target, { type: 'setNodeProps', id: 'f1', props: { stroke: null, visible: false } });
     let [call] = sceneCalls(renderer, from);
@@ -875,7 +877,7 @@ describe('M1-A09 synchronization', () => {
       {
         type: 'createFrame',
         frame: { x: 400, y: 0, width: 100, height: 100 },
-        stroke: { color: black, width: 1 },
+        stroke: { color: black, width: 1, ...SHAPE },
       },
       {
         type: 'createRectangle',
