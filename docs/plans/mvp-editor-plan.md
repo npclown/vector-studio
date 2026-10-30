@@ -74,6 +74,7 @@ Each milestone is one visualization-track item with its own contract of 300 line
 - **Isolated container opacity** for groups, frames and mask groups (MVP-Q9), including its interaction with masks (the P4 design gate).
 - Needs rendering items R-G, R-D and R-O (section 5) merged first; the editor half is model fields, commands, projection and panel controls.
 - Exit gate: each appearance field round-trips and projects; headed pixel probes for gradient, dash and isolated group opacity against references written in the rendering items' contracts.
+- Contract: [mvp-m4-appearance-contract.md](mvp-m4-appearance-contract.md) (V-14, accepted 2026-10-29); it lifts the M1 rejection of container opacity other than 1 in M4-U3, model and commands together.
 
 ### M5: Persistence
 
@@ -86,6 +87,7 @@ Each milestone is one visualization-track item with its own contract of 300 line
 - Requires its own **text plan** first (the architecture's "Post-P5 text plan" design gate, [graphics-engine-architecture](../graphics-engine-architecture.md#design-gates-before-later-implementation)): font loading and fallback, shaping ownership, DOM/GPU layout agreement, Korean IME composition as transactions, caret and selection fixtures. The text plan is Full tier and decides the glyph rendering route and any new runtime dependency (MVP-Q10), each with user approval.
 - MVP scope from requirements: styled runs (family, size, color), wrapping and auto width and height, letter spacing, line height, alignment, normal caret and selection, Korean IME, system and host web fonts, plain-text paste.
 - Exit gate: set by the text plan; at least a headed Korean IME composition spec in both browsers and committed caret and selection fixtures.
+- Text plan: [mvp-m6-text-plan.md](mvp-m6-text-plan.md) (V-12, approved 2026-10-29); it proposes splitting M6 into M6a, M6b and M6c (M6-Q1) and filing R-T once its glyph-route ADR is accepted, later than section 5's "when the text plan is approved".
 
 ### M7: Symbols
 
@@ -111,9 +113,9 @@ The visualization track files these on the [rendering track](d9-rendering-track.
 | Label | Need | Needed by | Note |
 | --- | --- | --- | --- |
 | R-G | Linear and radial gradient paint for primitives and paths (one gradient per paint) | M4 | New `ScenePaint` variant beside `SceneColor` |
-| R-D | Dash pattern and phase for path strokes (`PathStroke`; dashed shapes project as paths) | M4 | Kernel stroke work (Rust); dash units and phase are a P3 design gate item |
+| R-D | Dash pattern and phase for path strokes (`PathStroke`; dashed shapes project as paths) | M4 | Dash expansion in `renderer-core` ahead of the unchanged stroke port, kernel unchanged ([E24](d9-e24-dash-contract.md), E24-Q1 (a), 2026-10-29); this resolves the P3 design-gate item on dash units and phase |
 | R-O | Isolated container opacity (offscreen group composite) | M4 | Lifts the P1 rejection, which requires isolated composition ([architecture](../graphics-engine-architecture.md#approved-p1-visual-behavior)); states the interaction with masks; uses the reserved offscreen textures |
-| R-T | Glyph rendering route chosen by the text plan | M6 | Atlas or outline-as-path, decided in the text plan |
+| R-T | Glyph rendering route chosen by the text plan | M6 | Browser-rasterized cluster atlas, [ADR 0003](../decisions/0003-browser-text-and-glyph-atlas.md), M6-Q7 (a) |
 | R-P | Pointer-priority scheduling and a mixed 10,000-node benchmark workload | M9 | Benchmark methodology change only if needed |
 
 Under the M1 projection rule, line and arrow nodes, caps and joins on any shape, frame background and border, and selection overlays (a DOM overlay in next-host) need no renderer change: the projector emits existing primitives and paths. E22 (P4 follow-ups) is not a dependency but lowers the risk of large masks in M1 and M4.

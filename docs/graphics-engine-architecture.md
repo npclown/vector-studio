@@ -270,11 +270,19 @@ Text is not part of the first graphics-kernel milestone. The architecture reserv
 
 Committed text will eventually render through GPU glyph atlases, while active editing uses a DOM overlay. No DOM or browser font object enters persistent document data.
 
+Decided 2026-10-29: browser-rasterized cluster atlas and browser-owned layout ([ADR 0003](decisions/0003-browser-text-and-glyph-atlas.md)); recommended option auto-adopted, user card open.
+
+Since E28 (2026-10-29), committed text draws as `text` scene leaves through a browser-rasterized grapheme-cluster atlas ([E28 contract](plans/d9-e28-text-glyph-atlas-contract.md)).
+
 ## Approved P1 visual behavior
 
 On 2026-09-09 the user approved [P1 D2](plans/p1-instanced-primitives.md#d2--approved-p1-visual-behavior): straight-alpha sRGB input, encoded-sRGB premultiplied source-over on a non-sRGB unorm target/view, and primitive opacity applied once after local fill/stroke composition. The linked contract fixes canvas configuration, blend factors, coverage and compositing formulas, local-space stroke transforms, radius normalization and degenerate-input behavior.
 
+**Gradient paint (E23, 2026-10-29, [contract](plans/d9-e23-gradient-paint-contract.md)).** A fill or stroke paint is a solid colour or one linear or radial gradient. The gradient is evaluated per pixel in the node's local space, through one gradient affine, and its stops are interpolated premultiplied in encoded sRGB. The paint replaces the constant colour in every coverage and composition formula above and in P3's mesh and joint formulas; nothing else in compositing changes. Solid-only draws keep their pipelines; gradient draws use paint variants.
+
 P1 structural containers support transform/visibility and require opacity 1. Non-unit container opacity rejects the transaction; descendant alpha multiplication is not a substitute. Future non-unit container opacity requires isolated composition and its own implementation plan. This does not remove the MVP appearance requirement or add offscreen composition to P1.
+
+**Isolated container opacity (E25, 2026-10-29, [contract](plans/d9-e25-isolated-opacity-contract.md)).** Since E25, a container with `0 < opacity < 1` is drawn as an isolated layer composited once with its opacity (E25-K1). Clips inside the layer apply per leaf as in P4 (E25-K2). Opacity 0 draws nothing. Descendant alpha multiplication is still not a substitute. The renderer accepts such containers only when it draws layers (E25-S1); until then they are rejected as above.
 
 ## Design gates before later implementation
 
@@ -289,6 +297,10 @@ The remaining decisions below must be resolved with acceptance fixtures in the o
 | P3                | Dash units/phase, miter limit, zero-length segments, coincident edges, self-intersections, and independent reference fixtures for both fill rules                                                    |
 | P4                | Mask coverage semantics, stencil push/pop and sibling restoration, attachment format, antialiasing of mask edges, and interaction with container opacity; validate depths 0, 1, 32, and rejected 33  |
 | Post-P5 text plan | Font loading/fallback and shaping ownership, matching DOM/GPU layout, Korean IME composition transactions, and selection/caret fixtures                                                              |
+
+The P3 row's "dash units/phase" was resolved on 2026-10-29 by [E24](plans/d9-e24-dash-contract.md): dash lengths and phase are in node-local units, the units of the stroke width; the pattern restarts at each subpath; dashes meeting at a closed seam are joined (E24-K4); and dashes are expanded in `renderer-core` ahead of the unchanged stroke port.
+
+The P4 row's "interaction with container opacity" was resolved on 2026-10-29 by [E25](plans/d9-e25-isolated-opacity-contract.md): inside an isolated layer each leaf keeps its full clip coverage, and the layer's composite is not clipped again (E25-K2).
 
 ## Failure and capability behavior
 
