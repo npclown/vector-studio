@@ -213,6 +213,8 @@ it('M1-A13 observation: load, projection, one move commit and one forced isolati
     if (run < ISOLATION_RUNS) {
       // The next change set is rejected once; isolation then rebuilds the page.
       const first = renderer.calls.length;
+      const heldScene = renderer.mirror.readRetainedScene()!;
+      const held = heldScene.nodes.map((node) => node.id).sort();
       renderer.overrides.applyChanges = {
         status: 'invalid-scene',
         reason: 'invalid-value',
@@ -235,7 +237,12 @@ it('M1-A13 observation: load, projection, one move commit and one forced isolati
       // E26-U5b: one set removes the held page, keeping the renderer's scene epoch.
       expect(calls[1]).toMatchObject({
         method: 'applyChanges',
-        input: { inserted: [], updated: [], orders: [{ parentId: null, children: [] }] },
+        input: {
+          inserted: [],
+          updated: [],
+          removed: held,
+          orders: [{ parentId: null, children: [] }],
+        },
         result: { status: 'applied' },
       });
       for (const call of calls.slice(2)) {
@@ -248,6 +255,7 @@ it('M1-A13 observation: load, projection, one move commit and one forced isolati
       // E26-U3: a one-time rejection is isolated in one batched set of every unit.
       expect(isolationSets).toBe(1);
       expectSynchronized(target, renderer);
+      expect(renderer.mirror.readRetainedScene()!.sceneEpoch).toBe(heldScene.sceneEpoch);
       steps.isolation!.push(isolationMs);
       steps.isolationRenderer!.push(renderer.sceneMs - beforeIsolation);
     }

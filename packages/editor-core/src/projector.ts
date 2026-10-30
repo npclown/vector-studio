@@ -1186,8 +1186,9 @@ export class SceneProjector {
   }
 
   /**
-   * Isolation (section 5): an empty snapshot, then the units in batched sets. `only` is a
-   * rejection already known to be the projection's only unit's own.
+   * Isolation (section 5): a removal set of the held nodes (or the empty snapshot as fallback),
+   * then the units in batched sets. `only` is a rejection already known to be the projection's
+   * only unit's own.
    */
   private isolate(
     document: DocumentV6,
