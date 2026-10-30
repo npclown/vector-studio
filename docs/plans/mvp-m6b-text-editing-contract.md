@@ -1,6 +1,6 @@
 # MVP M6b contract: text editing
 
-Status: DRAFT 2026-10-30; independent review r1 NOT READY (B1 edit-mode pointer rules, B2 forced end on every cancel path, B3 host ordering; should-fix 1 to 12; minors), applied. Full tier (input model and key routing, public commands, session state and codes, history semantics, a host-side input sink, product behavior, an architecture paragraph). Not a shared-surface change under D9: `contracts`, the scene projection and the renderer are untouched (M6b projects nothing new). Visualization-track item [V-16](d9-visualization-track.md#status-index), milestone M6b of the [M6 text plan](mvp-m6-text-plan.md#8-milestone-split-and-units-m6-q1) and of [MVP plan M6](mvp-editor-plan.md#m6-text). Open questions M6b-Q1 to M6b-Q16 are in section 13; appendix A lists the synthetic traces and the CDP limits.
+Status: APPROVED 2026-10-30 (#392, 09d8a2a; review r1 NOT READY applied, r2 READY WITH FOLLOW-UPS applied). Review r1 NOT READY: B1 edit-mode pointer rules, B2 forced end on every cancel path, B3 host ordering; should-fix 1 to 12; minors. Full tier (input model and key routing, public commands, session state and codes, history semantics, a host-side input sink, product behavior, an architecture paragraph). Not a shared-surface change under D9: `contracts`, the scene projection and the renderer are untouched (M6b projects nothing new). Visualization-track item [V-16](d9-visualization-track.md#status-index), milestone M6b of the [M6 text plan](mvp-m6-text-plan.md#8-milestone-split-and-units-m6-q1) and of [MVP plan M6](mvp-editor-plan.md#m6-text). Open questions M6b-Q1 to M6b-Q16 are in section 13; appendix A lists the synthetic traces and the CDP limits.
 
 Owners: this file owns M6b scope; the `textEdit` session state, the edit-mode commands, the `text` tool, the `textinput` and composition input kinds, the edit-mode key routing (the M2 change the plan's M6-E3 names), the hidden textarea's host protocol, the `textEditOverlay` query, the caret and selection rules, the text gesture and the forced end, the undo merge, plain-text paste and edit-mode copy and cut, their codes, acceptance criteria M6b-A01 to M6b-A15, the units and the synthetic trace list (appendix A). Product behavior stays in [`requirements.md`](../requirements.md#text) (Text, and "Continuous pointer movement and text input are merged into useful history steps"), which this contract does not change; the M6 plan keeps M6-E1 to M6-E8 and the decisions of its [section 12](mvp-m6-text-plan.md#12-open-questions) (all adopted as (a), its section 14), which this contract makes concrete; the model, `TextLayoutPort`, text-dom and the text commands stay in the [M6a contract](mvp-m6a-text-model-contract.md); GPU text stays in E28 and M6c; package boundaries in [`ARCHITECTURE.md`](../../ARCHITECTURE.md#dependency-direction). The P5, M1 to M5, M6a and M7 rules stay in force except as section 1.2 lists.
 
@@ -76,7 +76,7 @@ Edit mode ends, with the selection as the cause leaves it, on: `exitTextEdit`; E
 
 ### 4.1 Offsets and stops
 
-Offsets are UTF-16 into the node text. **Stops** are grapheme-cluster boundaries by `Intl.Segmenter('ko', { granularity: 'grapheme' })` plus the run boundaries (M6a-L1 makes them cluster boundaries), and only a long cluster's start and end (M6a-L1's 32-unit pieces are not stops). LF is its own stop pair. **Words** are `Intl.Segmenter('ko', { granularity: 'word' })` segments with `isWordLike` (M6b-Q10). Every command and input keeps `anchor` and `focus` on stops; after the editor's own insertion the caret is the insertion's end moved **up** to the next stop (typing `e` before an existing U+0301 puts the caret after the accent, since `é` is now one cluster; disclosed); after any other document change in edit mode (undo, a host `setText`) each offset is clamped to the new length and moved **down** to the nearest stop.
+Offsets are UTF-16 into the node text. **Stops** are the grapheme boundaries of each run, segmented per run as M6a-L1 does, by `Intl.Segmenter('ko', { granularity: 'grapheme' })`, so the run boundaries are stops (M6a-L1 makes them cluster boundaries) and no stop falls inside a cluster the layout reports; only a long cluster's start and end (M6a-L1's 32-unit pieces are not stops). LF is its own stop pair. **Words** are `Intl.Segmenter('ko', { granularity: 'word' })` segments with `isWordLike` (M6b-Q10). The word at an offset (double-click, 4.4) is the segment holding it, except that an offset at a word-like segment's end, where a non-word segment starts, picks that word; at the length it is the last segment. Every command and input keeps `anchor` and `focus` on stops; after the editor's own insertion the caret is the insertion's end moved **up** to the next stop (typing `e` before an existing U+0301 puts the caret after the accent, since `é` is now one cluster; disclosed); after any other document change in edit mode (undo, a host `setText`) each offset is clamped to the new length and moved **down** to the nearest stop.
 
 ### 4.2 Movement and deletion
 
@@ -93,17 +93,17 @@ Offsets are UTF-16 into the node text. **Stops** are grapheme-cluster boundaries
 | Mod+Backspace, Mod+Delete | deletes to the previous word start or the next word start | deletes the selection |
 | Enter, Shift+Enter | inserts LF | replaces the selection with LF |
 
-At 0 Backspace, and at the length Delete, are consumed no-ops. A movement key that changes nothing is a consumed no-op.
+Shift+Backspace deletes as Backspace on both platforms; Shift+Delete is not an edit action (it is cut on Windows). At 0 Backspace, and at the length Delete, are consumed no-ops. A movement key that changes nothing is a consumed no-op.
 
 ### 4.3 Geometry (fake and real port alike)
 
 From the node's `TextLayoutResult` `R` (the editor's cache, M6a section 5), node-local, y down:
 
-- **Caret x at offset `o` on line `L`.** The `x` of the first cluster on `L` with `start = o`; else the `x + advance` of the last cluster on `L` with `end = o`; else (an empty line) `L.left`. Hanging spaces count, so a caret after trailing spaces may lie past the box width; for wrapping modes it is clamped to `R.width` (disclosed; Chrome does the same in a textarea).
+- **Caret x at offset `o` on line `L`.** Over `L`'s clusters with M6a-L1's long-cluster pieces joined into their grapheme (so a long grapheme's end takes its whole advance): the `x` of the first cluster on `L` with `start = o`; else the `x + advance` of the last cluster on `L` with `end = o`; else (an empty line) `L.left`. Hanging spaces count, so a caret after trailing spaces may lie past the box width; for wrapping modes it is clamped to `R.width` (disclosed; Chrome does the same in a textarea).
 - **Line of `o`.** The line with `start ≤ o ≤ end`; at a soft wrap (`o` is both `L.end` and `L+1.start`) the affinity picks: downstream `L+1`, upstream `L`. The caret is the segment from `(x, L.top)` to `(x, L.top + L.height)`.
 - **Point to offset.** The point is mapped into the node's own axes (inverse of the frame transform with rotation about the centre, M1). Its line is the first whose `top + height` is greater than its y, clamped to the first and last lines. On that line, the candidate stops are its clusters' starts and the line end; the offset is the stop whose caret x is nearest to the point's x, ties to the earlier stop; a stop at a soft-wrapped line's end gets affinity upstream. Negative advances (M6a-S3 allows letter spacing −1) can make caret x non-monotonic; the nearest rule still gives one answer (disclosed).
-- **Selection rectangles.** Per line meeting `[min, max)`: from the caret x of `max(min, L.start)` to that of `min(max, L.end)` over the line's `top` and `height`; a line whose LF is inside the selection extends by `0.25 ×` the size of the run at its LF, so selected empty lines show (M6b-Q11).
-- **Composition underline.** The composition range's selection rectangles, drawn as segments at `baseline + 0.1 × size`.
+- **Selection rectangles.** Per line meeting `[min, max)`: from the least to the greatest of the caret xs of `max(min, L.start)` and `min(max, L.end)` and the `[x, x + advance]` of every cluster of the line inside the range (so a selection over negative advances still covers its glyphs; a cluster of advance 0 alone stays 0 wide), over the line's `top` and `height`; a line whose LF is inside the selection extends by `0.25 ×` the size of the run at its LF, so selected empty lines show (M6b-Q11).
+- **Composition underline.** The composition range's selection rectangles, drawn as segments at `baseline + 0.1 × size`, `size` that of the run at the segment's first offset.
 - **Pending node.** An empty layout of `pending` (one empty run in its style) through the port.
 
 ### 4.4 Pointer in edit mode
@@ -268,13 +268,15 @@ Order: U0 any time; U1, U2, U4, then U3 and U5, then U6, then U7 and U8, then U9
 | M6b-Q9 | Editing an instance's text on the canvas (**user confirmation** recommended: it is user-visible, though "Instance text content may differ from the source" is met by M7's `setInstanceText`) | (a) not in M6b: double-click on an instance keeps M7-Q14 (a), overrides stay host commands; a backlog item. (b) in M6b, edit mode on an expanded text writing `textOverrides` (a second edit target and a larger contract) |
 | M6b-Q10 | Word rule | (a) `Intl.Segmenter` word segments with `isWordLike`; Hangul words are space-delimited runs. (b) an own rule on spaces and punctuation |
 | M6b-Q11 | Geometry edge rules | (a) as 4.3: caret clamp at the box width for wrapping modes, 0.25 em for a selected LF, Up on the first line to 0. (b) no clamp, no LF width |
-| M6b-Q12 | macOS keys | (a) Alt+Left to the previous word start and Alt+Right to the next word end (macOS convention), Meta+Left and Right line ends, Meta+Up and Down text ends, Alt+Backspace and Alt+Delete by word; untested (the main PC is Windows), disclosed. (b) the Windows table with `Mod` only |
+| M6b-Q12 | macOS keys | (a) Alt+Left to the previous word start and Alt+Right to the next word end (macOS convention), Meta+Left and Right line ends, Meta+Up and Down text ends, Alt+Backspace and Alt+Delete by word (to the previous word start and the next word end), Meta+Backspace to the line start; untested (the main PC is Windows), disclosed. (b) the Windows table with `Mod` only |
 | M6b-Q13 | Deletion merge | (a) Backspace runs and Delete runs merge; word and selection deletions never do. (b) every deletion its own step |
 | M6b-Q14 | Keymap in edit mode | (a) no action runs; a bound chord other than `copy`, `cut` and `paste` is a consumed no-op (rule 6), so Mod+D or Mod+G neither act nor reach the browser. (b) host and extension bindings run after rule 6 |
 | M6b-Q15 | Typing cost | (a) one headed observation (typing into a 16,384-unit node on the main PC) in the exit record, no gate, no claim. (b) a benchmark under `docs/benchmarks/` |
 | M6b-Q16 | Press inside the edited node | (a) places the caret and drag-selects only; moving the node needs leaving edit mode (Figma). (b) a drag from the box edge moves it |
 
-No question needs a new dependency or changes a requirement. **Needs the user:** M6b-Q9 (confirmation of the reading). M6b-Q1 follows the plan's M6-Q21 (a) and, like the others, may be adopted as recommended under the user's standing rule of 2026-10-24 once the contract is reviewed; the recordings themselves are a user action (section 15).
+2026-10-30 추천안 자동 채택 (user's standing rule): M6b-Q1 to Q16 adopted as (a), including Q9 (canvas editing of instance text stays out of M6b; user confirmation card open, a different pick replaces it).
+
+No question needs a new dependency or changes a requirement. **Needs the user:** M6b-Q9 was adopted as (a) with the user's confirmation card still open; a different pick replaces it. M6b-Q1 follows the plan's M6-Q21 (a); the recordings themselves are a user action (section 15).
 
 ## 14. Validation of this contract
 
@@ -282,14 +284,18 @@ Documentation only: `npx prettier --check` on the changed files (the repository'
 
 ## 15. Gate
 
-Independent review (full tier, visualization track) before approval. M6b implementation starts at M6b-U1 only after this contract is approved and the user has accepted the [M6a exit record](../evidence/m6a-exit-2026-10-30.md) (MVP plan milestone order; plan section 14); **User action:** the M6-S0 Korean IME recordings on the main PC (both Microsoft IME versions, Chrome and Edge, the recorder's cases), which M6b-U10 and A14 need before the exit record. R-T (E28) is done, so M6c follows M6b's exit. The M6b exit is the user's acceptance of the M6b-U11 record.
+Independent review (full tier, visualization track) before approval. M6b implementation starts at M6b-U1 only after this contract is approved and the user has accepted the [M6a exit record](../evidence/m6a-exit-2026-10-30.md) (MVP plan milestone order; plan section 14); **User action:** the M6-S0 Korean IME recordings on the main PC (both Microsoft IME versions, Chrome and Edge, the recorder's cases), which M6b-U10 and A14 need before the exit record. R-T (E28) is done, so M6c follows M6b's exit. The M6b exit is the user's acceptance of the M6b-U11 record. On 2026-10-30 M6b-U1 started at the project coordinator's direction while the user's M6a exit acceptance was still pending; that acceptance (including the A12 manual DPR half) is required before the M6b exit record, and if the user's decision changes M6a, the started units are re-checked against it.
 
 ## 16. Progress
 
 | Unit | State |
 | --- | --- |
-| Contract | DRAFT 2026-10-30; review r1 NOT READY, applied |
-| M6b-U0 to U11 | Not started |
+| Contract | APPROVED 2026-10-30 (#392, 09d8a2a; review r1 NOT READY applied, r2 READY WITH FOLLOW-UPS applied) |
+| M6b-U0 | Not started |
+| M6b-U1 | In review |
+| M6b-U2 to U11 | Not started |
+
+**M6b-U1 notes** (`packages/editor-core/src/text-caret.ts`, caret scripts under `tests/fixtures/m6-text/edit/`). Readings the unit took, now in sections 4.1 to 4.3 where they are rules: (1) stops are segmented per run, as the layout's clusters are (a whole-text segmentation would put a stop inside a cluster for regional indicators split across runs); (2) caret x joins M6a-L1's long-cluster pieces into their grapheme, so its end takes the whole advance; (3) a selection rectangle spans both end carets and the selected clusters' `[x, x + advance]`, and a line meets the range when its content overlaps it or its LF is selected; (4) the composition underline takes the size of the run at each segment's first offset; (5) the word at an offset prefers the word-like segment ending there over a non-word one starting there; (6) key-table edges: Shift extends movements and is ignored on Backspace; Shift+Delete, Shift+Mod+A and Shift with the word deletions are not edit actions; on `mac` Alt+Delete deletes to the next word end, Meta+Backspace to the line start, Home and End stay line keys and Meta+Home and Meta+End go to the text ends; modifier sets match exactly (Ctrl+Alt is none); Mod+A matches the keymap token `KeyA` (`eventToken`), so a non-Latin layout selects all; (7) the key-to-action table of 4.2 (`textEditKeyAction`) is in U1 so that A02 runs by key; rules 1 to 6 of section 5 stay in U4; (8) a clamp keeps the affinity only when no offset moved, else downstream.
 
 ## Appendix A. Synthetic traces and CDP limits
 

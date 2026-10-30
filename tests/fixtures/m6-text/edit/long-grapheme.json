@@ -1,0 +1,52 @@
+{
+  "description": "A 40-unit grapheme (a and 39 U+0301) cut by the layout into 32- and 8-unit pieces, then an LF and b: only the grapheme's start and end are stops, and its end on its line takes the whole advance.",
+  "request": {
+    "runs": [
+      {
+        "text": "á́́́́́́́́́́́́́́́́́́́́́́́́́́́́́́́́́́́́́́\nb",
+        "family": "Fake",
+        "size": 10
+      }
+    ],
+    "width": null,
+    "align": "left",
+    "letterSpacing": 0,
+    "lineHeight": 1
+  },
+  "stops": [0, 40, 41, 42],
+  "carets": [
+    { "offset": 0, "affinity": "downstream", "line": 0, "segment": [[0, 0], [0, 10]] },
+    { "offset": 40, "affinity": "downstream", "line": 0, "segment": [[5, 0], [5, 10]] },
+    { "offset": 41, "affinity": "downstream", "line": 1, "segment": [[0, 10], [0, 20]] },
+    { "offset": 42, "affinity": "downstream", "line": 1, "segment": [[5, 10], [5, 20]] }
+  ],
+  "selections": [
+    { "range": [0, 42], "rects": [[0, 0, 7.5, 10], [0, 10, 5, 10]] },
+    { "range": [0, 40], "rects": [[0, 0, 5, 10]] }
+  ],
+  "points": [
+    { "point": [2.5, 5], "offset": 0, "affinity": "downstream" },
+    { "point": [4, 5], "offset": 40, "affinity": "downstream" },
+    { "point": [4, 15], "offset": 42, "affinity": "downstream" }
+  ],
+  "scripts": [
+    {
+      "platform": "other",
+      "caret": [0, 0],
+      "steps": [
+        { "key": "ArrowRight", "caret": [40, 40] },
+        { "key": "ArrowRight", "caret": [41, 41] },
+        { "key": "ArrowLeft", "caret": [40, 40] },
+        { "key": "ArrowLeft", "caret": [0, 0] },
+        { "key": "ArrowDown", "caret": [41, 41], "goalX": 0 },
+        { "key": "End", "caret": [42, 42], "goalX": null },
+        { "key": "ArrowUp", "caret": [40, 40], "goalX": 5 }
+      ]
+    }
+  ],
+  "deletions": [
+    { "platform": "other", "caret": [40, 40], "key": "Backspace", "range": [0, 40] },
+    { "platform": "other", "caret": [0, 0], "key": "Delete", "range": [0, 40] },
+    { "platform": "other", "caret": [40, 40], "key": "Delete", "range": [40, 41] }
+  ]
+}

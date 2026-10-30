@@ -1,0 +1,34 @@
+{
+  "description": "Right alignment with an empty line between two lines of different widths (autoWidth, width 20).",
+  "request": {
+    "runs": [{ "text": "ab\n\nabcd", "family": "Fake", "size": 10 }],
+    "width": null,
+    "align": "right",
+    "letterSpacing": 0,
+    "lineHeight": 1
+  },
+  "stops": [0, 1, 2, 3, 4, 5, 6, 7, 8],
+  "carets": [
+    { "offset": 0, "affinity": "downstream", "line": 0, "segment": [[10, 0], [10, 10]] },
+    { "offset": 2, "affinity": "downstream", "line": 0, "segment": [[20, 0], [20, 10]] },
+    { "offset": 3, "affinity": "downstream", "line": 1, "segment": [[20, 10], [20, 20]] },
+    { "offset": 4, "affinity": "downstream", "line": 2, "segment": [[0, 20], [0, 30]] }
+  ],
+  "selections": [{ "range": [2, 4], "rects": [[20, 0, 2.5, 10], [20, 10, 2.5, 10]] }],
+  "points": [
+    { "point": [0, 5], "offset": 0, "affinity": "downstream" },
+    { "point": [0, 15], "offset": 3, "affinity": "downstream" }
+  ],
+  "scripts": [
+    {
+      "platform": "other",
+      "caret": [0, 0],
+      "steps": [
+        { "key": "ArrowDown", "caret": [3, 3], "goalX": 10 },
+        { "key": "ArrowDown", "caret": [6, 6], "goalX": 10 },
+        { "key": "ArrowUp", "caret": [3, 3], "goalX": 10 },
+        { "key": "ArrowUp", "caret": [0, 0], "goalX": 10 }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "description": "An empty layout (a pending node or an emptied one) in a 20-wide centred box: one empty line, the caret at its aligned left, every movement and deletion a no-op.",
+  "request": {
+    "runs": [{ "text": "", "family": "Fake", "size": 10 }],
+    "width": 20,
+    "align": "center",
+    "letterSpacing": 0,
+    "lineHeight": 1
+  },
+  "stops": [0],
+  "words": [],
+  "wordAt": [{ "offset": 0, "range": [0, 0] }],
+  "carets": [{ "offset": 0, "affinity": "downstream", "line": 0, "segment": [[10, 0], [10, 10]] }],
+  "selections": [{ "range": [0, 0], "rects": [] }],
+  "points": [{ "point": [-5, 40], "offset": 0, "affinity": "downstream" }],
+  "scripts": [
+    {
+      "platform": "other",
+      "caret": [0, 0],
+      "steps": [
+        { "key": "ArrowLeft", "caret": [0, 0] },
+        { "key": "ArrowRight", "caret": [0, 0] },
+        { "key": "ArrowUp", "caret": [0, 0], "goalX": 10 },
+        { "key": "ArrowDown", "caret": [0, 0], "goalX": 10 },
+        { "key": "Home", "caret": [0, 0], "goalX": null },
+        { "key": "End", "caret": [0, 0] },
+        { "key": "Ctrl+ArrowLeft", "caret": [0, 0] },
+        { "key": "Ctrl+ArrowRight", "caret": [0, 0] },
+        { "key": "Ctrl+A", "caret": [0, 0] }
+      ]
+    }
+  ],
+  "deletions": [
+    { "platform": "other", "caret": [0, 0], "key": "Backspace", "range": null },
+    { "platform": "other", "caret": [0, 0], "key": "Delete", "range": null },
+    { "platform": "other", "caret": [0, 0], "key": "Ctrl+Backspace", "range": null },
+    { "platform": "other", "caret": [0, 0], "key": "Ctrl+Delete", "range": null }
+  ]
+}

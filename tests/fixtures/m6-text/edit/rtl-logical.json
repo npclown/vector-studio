@@ -1,0 +1,33 @@
+{
+  "description": "Hebrew after Latin: M6a lays RTL out in logical order, left to right (bidi-override), so stops, caret x and movement follow text order.",
+  "request": {
+    "runs": [{ "text": "ab שלום", "family": "Fake", "size": 10 }],
+    "width": null,
+    "align": "left",
+    "letterSpacing": 0,
+    "lineHeight": 1
+  },
+  "stops": [0, 1, 2, 3, 4, 5, 6, 7],
+  "words": [
+    [0, 2, true],
+    [2, 3, false],
+    [3, 7, true]
+  ],
+  "carets": [
+    { "offset": 4, "affinity": "downstream", "line": 0, "segment": [[17.5, 0], [17.5, 10]] },
+    { "offset": 7, "affinity": "downstream", "line": 0, "segment": [[32.5, 0], [32.5, 10]] }
+  ],
+  "selections": [{ "range": [3, 5], "rects": [[12.5, 0, 10, 10]] }],
+  "points": [{ "point": [20, 5], "offset": 4, "affinity": "downstream" }],
+  "scripts": [
+    {
+      "platform": "other",
+      "caret": [3, 3],
+      "steps": [
+        { "key": "ArrowRight", "caret": [4, 4] },
+        { "key": "Ctrl+ArrowRight", "caret": [7, 7] },
+        { "key": "Ctrl+ArrowLeft", "caret": [3, 3] }
+      ]
+    }
+  ]
+}

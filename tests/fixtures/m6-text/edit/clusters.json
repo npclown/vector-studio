@@ -1,0 +1,67 @@
+{
+  "description": "Grapheme stops: a combining mark, a surrogate-pair emoji, a ZWJ family sequence (one grapheme in Node and Chrome) and a decomposed Hangul syllable (L V T jamo, one grapheme).",
+  "request": {
+    "runs": [
+      {
+        "text": "é😀👨‍👩‍👧x한",
+        "family": "Fake",
+        "size": 10
+      }
+    ],
+    "width": null,
+    "align": "left",
+    "letterSpacing": 0,
+    "lineHeight": 1
+  },
+  "stops": [0, 2, 4, 12, 13, 16],
+  "words": [
+    [0, 2, true],
+    [2, 4, false],
+    [4, 12, false],
+    [12, 16, true]
+  ],
+  "carets": [
+    { "offset": 2, "affinity": "downstream", "line": 0, "segment": [[5, 0], [5, 10]] },
+    { "offset": 4, "affinity": "downstream", "line": 0, "segment": [[15, 0], [15, 10]] },
+    { "offset": 12, "affinity": "downstream", "line": 0, "segment": [[45, 0], [45, 10]] },
+    { "offset": 13, "affinity": "downstream", "line": 0, "segment": [[50, 0], [50, 10]] },
+    { "offset": 16, "affinity": "downstream", "line": 0, "segment": [[80, 0], [80, 10]] }
+  ],
+  "selections": [{ "range": [2, 12], "rects": [[5, 0, 40, 10]] }],
+  "points": [
+    { "point": [6, 5], "offset": 2, "affinity": "downstream" },
+    { "point": [30, 5], "offset": 4, "affinity": "downstream" },
+    { "point": [31, 5], "offset": 12, "affinity": "downstream" },
+    { "point": [66, 5], "offset": 16, "affinity": "downstream" }
+  ],
+  "scripts": [
+    {
+      "platform": "other",
+      "caret": [0, 0],
+      "steps": [
+        { "key": "ArrowRight", "caret": [2, 2] },
+        { "key": "ArrowRight", "caret": [4, 4] },
+        { "key": "ArrowRight", "caret": [12, 12] },
+        { "key": "ArrowRight", "caret": [13, 13] },
+        { "key": "ArrowRight", "caret": [16, 16] },
+        { "key": "ArrowRight", "caret": [16, 16] },
+        { "key": "ArrowLeft", "caret": [13, 13] },
+        { "key": "ArrowLeft", "caret": [12, 12] },
+        { "key": "Shift+ArrowLeft", "caret": [12, 4] },
+        { "key": "Shift+ArrowLeft", "caret": [12, 2] },
+        { "key": "ArrowRight", "caret": [12, 12] },
+        { "key": "Ctrl+ArrowLeft", "caret": [0, 0] },
+        { "key": "Ctrl+ArrowRight", "caret": [12, 12] },
+        { "key": "Ctrl+ArrowRight", "caret": [16, 16] }
+      ]
+    }
+  ],
+  "deletions": [
+    { "platform": "other", "caret": [12, 12], "key": "Backspace", "range": [4, 12] },
+    { "platform": "other", "caret": [4, 4], "key": "Delete", "range": [4, 12] },
+    { "platform": "other", "caret": [4, 4], "key": "Backspace", "range": [2, 4] },
+    { "platform": "other", "caret": [2, 2], "key": "Backspace", "range": [0, 2] },
+    { "platform": "other", "caret": [16, 16], "key": "Backspace", "range": [13, 16] },
+    { "platform": "other", "caret": [16, 16], "key": "Ctrl+Backspace", "range": [12, 16] }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "description": "Hangul syllables with a soft wrap after a hanging space; width 21, so the upstream caret after the space is clamped to the box width (M6b-Q11 (a)).",
+  "request": {
+    "runs": [{ "text": "안녕 세상", "family": "Fake", "size": 10 }],
+    "width": 21,
+    "align": "left",
+    "letterSpacing": 0,
+    "lineHeight": 1
+  },
+  "stops": [0, 1, 2, 3, 4, 5],
+  "carets": [
+    { "offset": 0, "affinity": "downstream", "line": 0, "segment": [[0, 0], [0, 10]] },
+    { "offset": 2, "affinity": "downstream", "line": 0, "segment": [[20, 0], [20, 10]] },
+    { "offset": 3, "affinity": "upstream", "line": 0, "segment": [[21, 0], [21, 10]] },
+    { "offset": 3, "affinity": "downstream", "line": 1, "segment": [[0, 10], [0, 20]] },
+    { "offset": 5, "affinity": "downstream", "line": 1, "segment": [[20, 10], [20, 20]] }
+  ],
+  "selections": [
+    { "range": [1, 4], "rects": [[10, 0, 11, 10], [0, 10, 10, 10]] },
+    { "range": [4, 1], "rects": [[10, 0, 11, 10], [0, 10, 10, 10]] },
+    { "range": [3, 5], "rects": [[0, 10, 20, 10]] },
+    { "range": [2, 2], "rects": [] }
+  ],
+  "composition": [{ "range": [3, 5], "segments": [[[0, 19], [20, 19]]] }],
+  "points": [
+    { "point": [15, 5], "offset": 1, "affinity": "downstream" },
+    { "point": [24, 5], "offset": 3, "affinity": "upstream" },
+    { "point": [16, 12], "offset": 5, "affinity": "downstream" },
+    { "point": [4, 19.5], "offset": 3, "affinity": "downstream" },
+    { "point": [-3, -5], "offset": 0, "affinity": "downstream" },
+    { "point": [100, 50], "offset": 5, "affinity": "downstream" }
+  ],
+  "scripts": [
+    {
+      "platform": "other",
+      "caret": [0, 0],
+      "steps": [
+        { "key": "ArrowRight", "caret": [1, 1] },
+        { "key": "End", "caret": [3, 3, "upstream"], "goalX": null },
+        { "key": "ArrowDown", "caret": [5, 5], "goalX": 21 },
+        { "key": "ArrowUp", "caret": [3, 3, "upstream"], "goalX": 21 },
+        { "key": "ArrowUp", "caret": [0, 0], "goalX": 21 },
+        { "key": "ArrowUp", "caret": [0, 0], "goalX": 21 },
+        { "key": "ArrowDown", "caret": [5, 5], "goalX": 21 },
+        { "key": "ArrowDown", "caret": [5, 5], "goalX": 21 },
+        { "key": "Home", "caret": [3, 3], "goalX": null },
+        { "key": "ArrowLeft", "caret": [2, 2] },
+        { "key": "ArrowRight", "caret": [3, 3] },
+        { "key": "ArrowLeft", "caret": [2, 2] },
+        { "key": "Shift+ArrowRight", "caret": [2, 3] },
+        { "key": "Shift+End", "caret": [2, 5] },
+        { "key": "ArrowLeft", "caret": [2, 2] },
+        { "key": "Shift+ArrowDown", "caret": [2, 5], "goalX": 20 },
+        { "key": "ArrowUp", "caret": [0, 0], "goalX": 20 },
+        { "key": "Ctrl+A", "caret": [0, 5], "goalX": null },
+        { "key": "ArrowRight", "caret": [5, 5] },
+        { "key": "Shift+Home", "caret": [5, 3] },
+        { "key": "Shift+ArrowUp", "caret": [5, 0], "goalX": 0 }
+      ]
+    }
+  ],
+  "deletions": [
+    { "platform": "other", "caret": [3, 3], "key": "Backspace", "range": [2, 3] },
+    { "platform": "other", "caret": [3, 3], "key": "Delete", "range": [3, 4] },
+    { "platform": "other", "caret": [0, 0], "key": "Backspace", "range": null },
+    { "platform": "other", "caret": [5, 5], "key": "Delete", "range": null },
+    { "platform": "other", "caret": [4, 1], "key": "Delete", "range": [1, 4] }
+  ]
+}

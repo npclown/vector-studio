@@ -1,0 +1,59 @@
+{
+  "description": "LF and an empty line: LF is its own stop pair, a selected LF widens its line's rectangle by 0.25 of its run size (M6b-Q11 (a)), so the selected empty line shows.",
+  "request": {
+    "runs": [{ "text": "ab\n\ncd", "family": "Fake", "size": 10 }],
+    "width": null,
+    "align": "left",
+    "letterSpacing": 0,
+    "lineHeight": 1
+  },
+  "stops": [0, 1, 2, 3, 4, 5, 6],
+  "carets": [
+    { "offset": 2, "affinity": "downstream", "line": 0, "segment": [[10, 0], [10, 10]] },
+    { "offset": 2, "affinity": "upstream", "line": 0, "segment": [[10, 0], [10, 10]] },
+    { "offset": 3, "affinity": "downstream", "line": 1, "segment": [[0, 10], [0, 20]] },
+    { "offset": 4, "affinity": "downstream", "line": 2, "segment": [[0, 20], [0, 30]] }
+  ],
+  "selections": [
+    { "range": [1, 5], "rects": [[5, 0, 7.5, 10], [0, 10, 2.5, 10], [0, 20, 5, 10]] },
+    { "range": [2, 3], "rects": [[10, 0, 2.5, 10]] },
+    { "range": [3, 4], "rects": [[0, 10, 2.5, 10]] },
+    { "range": [0, 6], "rects": [[0, 0, 12.5, 10], [0, 10, 2.5, 10], [0, 20, 10, 10]] }
+  ],
+  "composition": [{ "range": [0, 2], "segments": [[[0, 9], [10, 9]]] }],
+  "points": [
+    { "point": [100, 15], "offset": 3, "affinity": "downstream" },
+    { "point": [100, 5], "offset": 2, "affinity": "downstream" },
+    { "point": [7, 25], "offset": 5, "affinity": "downstream" }
+  ],
+  "scripts": [
+    {
+      "platform": "other",
+      "caret": [2, 2],
+      "steps": [
+        { "key": "ArrowDown", "caret": [3, 3], "goalX": 10 },
+        { "key": "ArrowDown", "caret": [6, 6], "goalX": 10 },
+        { "key": "ArrowUp", "caret": [3, 3], "goalX": 10 },
+        { "key": "ArrowUp", "caret": [2, 2], "goalX": 10 },
+        { "key": "ArrowRight", "caret": [3, 3], "goalX": null },
+        { "key": "ArrowRight", "caret": [4, 4] },
+        { "key": "End", "caret": [6, 6] },
+        { "key": "Home", "caret": [4, 4] },
+        { "key": "ArrowLeft", "caret": [3, 3] },
+        { "key": "Home", "caret": [3, 3] },
+        { "key": "End", "caret": [3, 3] },
+        { "key": "Ctrl+End", "caret": [6, 6] },
+        { "key": "Ctrl+Home", "caret": [0, 0] },
+        { "key": "Shift+Ctrl+End", "caret": [0, 6] },
+        { "key": "Ctrl+Home", "caret": [0, 0] }
+      ]
+    }
+  ],
+  "deletions": [
+    { "platform": "other", "caret": [3, 3], "key": "Backspace", "range": [2, 3] },
+    { "platform": "other", "caret": [3, 3], "key": "Delete", "range": [3, 4] },
+    { "platform": "other", "caret": [1, 5], "key": "Backspace", "range": [1, 5] },
+    { "platform": "other", "caret": [1, 5], "key": "Ctrl+Backspace", "range": [1, 5] },
+    { "platform": "other", "caret": [1, 5], "key": "Ctrl+Delete", "range": [1, 5] }
+  ]
+}
