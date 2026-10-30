@@ -5,7 +5,9 @@ import type { TextLayoutRequest, TextLayoutResult } from '@vector-studio/contrac
 // serialized and must not reference anything outside its own body.
 //
 // For a request, `compare` lays it out through the page's text-dom port (`window.__p5Host.text`)
-// and builds an unprobed `white-space: pre-wrap` reference block of the same runs: the block
+// and builds an unprobed `white-space: pre-wrap` reference block of the same runs at text-dom's
+// measurement scale (M6-Q3 (b), contract section 3.2: sizes and width times the scale, every
+// reference length divided by it, the scale passed in by the spec from text-dom's constants): the block
 // styles of section 4 (zero-size strut, `keep-all`, `overflow-wrap: anywhere`, no ligatures,
 // `text-spacing-trim: space-all`, `text-autospace: no-autospace`, `lang`), one span per run with
 // the result's font list, size, letter spacing in em and unitless line height, no bidi override,
@@ -58,8 +60,37 @@ declare global {
   }
 }
 
-export function installProbe(): void {
+/** text-dom's scale constants (packages/text-dom/src/scale.ts), passed in by the spec. */
+export type ProbeScale = Readonly<{
+  referenceScale: number;
+  maxMeasuredSize: number;
+  maxMeasuredExtent: number;
+}>;
+
+export function installProbe({
+  referenceScale,
+  maxMeasuredSize,
+  maxMeasuredExtent,
+}: ProbeScale): void {
   type Run = TextLayoutRequest['runs'][number];
+
+  /** text-dom's `measurementScale` and `scaleRequest`, repeated: the probe is serialized. */
+  const scaleOf = (request: TextLayoutRequest): number => {
+    const largest = Math.max(...request.runs.map((r) => r.size));
+    const units = request.runs.reduce((sum, r) => sum + r.text.length, 0) + 1;
+    const emPerUnit = Math.max(request.lineHeight, 2 + Math.max(0, request.letterSpacing));
+    const extent = largest * units * emPerUnit;
+    let scale = referenceScale;
+    while (scale > 1 && (largest * scale > maxMeasuredSize || extent * scale > maxMeasuredExtent)) {
+      scale /= 2;
+    }
+    return scale;
+  };
+  const scaled = (request: TextLayoutRequest, scale: number): TextLayoutRequest => ({
+    ...request,
+    runs: request.runs.map((r) => ({ ...r, size: r.size * scale })),
+    width: request.width === null ? null : Math.min(request.width * scale, Number.MAX_VALUE),
+  });
   const port = (
     window as unknown as {
       __p5Host: {
@@ -190,19 +221,23 @@ export function installProbe(): void {
     return canvas.measureText(text).width;
   }
 
-  function compare(request: TextLayoutRequest): ProbeReport {
+  function compare(original: TextLayoutRequest): ProbeReport {
     const before = port.fallbacks;
-    const result = port.layout(request);
+    const result = port.layout(original);
     const fallbacks = port.fallbacks - before;
+    // The reference is built at text-dom's scale; its lengths are divided back below.
+    const scale = scaleOf(original);
+    const request = scaled(original, scale);
     lang = result.lang;
     const text = request.runs.map((run) => run.text).join('');
     const sentinel = text.length === 0 || text.endsWith('\n');
     const { fontLists, lines } = result;
 
-    const bottoms = lines.map((_, index) =>
-      index < lines.length - 1
-        ? heightOf(request, fontLists, lines[index + 1]!.start, false)
-        : heightOf(request, fontLists, text.length, sentinel),
+    const bottoms = lines.map(
+      (_, index) =>
+        (index < lines.length - 1
+          ? heightOf(request, fontLists, lines[index + 1]!.start, false)
+          : heightOf(request, fontLists, text.length, sentinel)) / scale,
     );
     const probeLines = lines.map((line, index) => {
       const refTop = index === 0 ? 0 : bottoms[index - 1]!;
@@ -220,7 +255,7 @@ export function installProbe(): void {
     });
     const { block, spans } = build(request, fontLists, text.length, sentinel);
     const origin = block.getBoundingClientRect();
-    const refHeight = origin.height;
+    const refHeight = origin.height / scale;
     const range = document.createRange();
     const baselineDeltas = result.clusters.map((cluster, index) => {
       const runStart = request.runs
@@ -231,15 +266,16 @@ export function installProbe(): void {
       range.setEnd(node, cluster.end - runStart);
       const rect = range.getClientRects()[0];
       if (rect === undefined) return Number.NaN;
-      const refBaseline = rect.top - origin.top + ascents[index]!;
+      const refBaseline = (rect.top - origin.top + ascents[index]!) / scale;
       return lines[cluster.line]!.baseline - refBaseline;
     });
     root.replaceChildren();
 
     const inkOutside: { index: number; ink: [number, number]; bound: [number, number] }[] = [];
+    // Ink in page units, against the original request.
     result.clusters.forEach((cluster, index) => {
-      const run = request.runs[cluster.run]!;
-      const runStart = request.runs
+      const run = original.runs[cluster.run]!;
+      const runStart = original.runs
         .slice(0, cluster.run)
         .reduce((sum, previous) => sum + previous.text.length, 0);
       const piece = run.text.slice(cluster.start - runStart, cluster.end - runStart);

@@ -23,6 +23,12 @@ import {
   type Case,
 } from './m6a-cases';
 import { installProbe, type ProbeReport } from './m6a-probe';
+import {
+  MAX_MEASURED_EXTENT,
+  MAX_MEASURED_SIZE,
+  measurementScale,
+  REFERENCE_SCALE,
+} from '../../packages/text-dom/src/scale.js';
 
 // M6a-U6 (MVP M6a contract, sections 10 and 16): M6a-A11 and the emulated part of M6a-A12, the
 // text-dom port of the next-host page on `?fixture=text` (the committed `text.v4.json` with the
@@ -81,7 +87,11 @@ async function open(page: Page) {
   const status = page.getByTestId('status');
   await expect(status).toHaveAttribute('data-fixture', 'loaded', { timeout: 30_000 });
   await expect(status).toHaveAttribute('data-text-font', 'loaded');
-  await page.evaluate(installProbe);
+  await page.evaluate(installProbe, {
+    referenceScale: REFERENCE_SCALE,
+    maxMeasuredSize: MAX_MEASURED_SIZE,
+    maxMeasuredExtent: MAX_MEASURED_EXTENT,
+  });
   return { errors, status };
 }
 
@@ -400,12 +410,31 @@ test('M6a-A11: a missing family and Hangul in a Latin-only family fall back', as
   test.info().annotations.push({ type: 'latin-only family', description: String(result.latin) });
   expect(result.latin, 'a Latin-only family is installed').not.toBeNull();
   // Latin from the Latin-only face (the first Hangul cluster starts where the Latin face's
-  // canvas width ends); each Hangul cluster from the same face as the tail's.
+  // canvas width ends); each Hangul cluster from the same face as the tail's, within one layout
+  // unit: a cluster's advance is the width of its rect, whose edges Chromium snaps to 1/64 px of
+  // the measured block, so the same glyph read at another pen phase (after the Latin face's
+  // fractional width) can be one unit wider (main PC run at d628caa, unscaled: 20.015625 against
+  // 20). Each read is within one unit of the true width and both are whole units, so two reads
+  // of one glyph differ by at most one unit: 1/(64 s) px of the result at text-dom's scale `s`,
+  // far below a different face's advance (contract section 16, M6a-U4c notes).
   const latinOnly = result.latinOnly!;
   expect(latinOnly.clusters[7]!.x).toBeCloseTo(result.canvas!, 1);
-  expect(latinOnly.clusters.slice(7).map((c) => c.advance)).toEqual(
-    result.tailHangul.clusters.slice(7).map((c) => c.advance),
-  );
+  const unit =
+    1 /
+    (64 *
+      measurementScale({
+        runs: [{ text: 'Vector 한글', family: 'Latin', size: 20 }],
+        width: null,
+        align: 'left',
+        letterSpacing: 0,
+        lineHeight: 1.2,
+      }));
+  const tailAdvances = result.tailHangul.clusters.slice(7).map((c) => c.advance);
+  const advanceDeltas = latinOnly.clusters
+    .slice(7)
+    .map((c, index) => Math.abs(c.advance - tailAdvances[index]!));
+  expect(advanceDeltas).toHaveLength(tailAdvances.length);
+  expect(Math.max(...advanceDeltas)).toBeLessThanOrEqual(unit + 1e-9);
   expect(errors).toEqual([]);
 });
 
