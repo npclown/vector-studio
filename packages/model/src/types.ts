@@ -174,7 +174,7 @@ export type SymbolNode = NodeBaseV2 &
 
 /**
  * An instance (M7-S2): a leaf whose content is the expansion of the `symbol` node it names, on
- * any page of the same document; never inside a symbol (M7-S3); opacity 1 (M7-S4).
+ * any page of the same document; never inside a symbol (M7-S3); opacity 1 below v6 (M7-S4), any in `[0, 1]` from v6 (M4-L1).
  */
 export type InstanceNode = NodeBaseV2 & Readonly<{ type: 'instance'; symbol: string }>;
 

@@ -499,8 +499,9 @@ describe('M7-A01 malformed v3 documents (M7-S1 to M7-S5)', () => {
       '/nodes/r/parent',
     ],
     [
-      'a symbol with opacity other than 1',
-      { s: { ...symbol('s', 'p'), opacity: 0.5 } },
+      // Any opacity in [0, 1] at v6 (MVP M4 contract, M4-L1); M7-S4 holds below v6.
+      'a symbol with opacity above 1',
+      { s: { ...symbol('s', 'p'), opacity: 1.5 } },
       ['s'],
       'document.invalid-field',
       '/nodes/s/opacity',
@@ -550,8 +551,9 @@ describe('M7-A01 check order (section 2)', () => {
 
   it.each<[string, Record<string, unknown>, string[], Failed]>([
     [
-      'M7-S4 (a field rule) before M7-S2',
-      { i: { ...instance('i', 'p', 'nope'), opacity: 0.5 } },
+      // M7-S4 itself is lifted at v6 (MVP M4 contract, M4-L1); M4-S5's range is the field rule.
+      'M4-S5 (a field rule) before M7-S2',
+      { i: { ...instance('i', 'p', 'nope'), opacity: 1.5 } },
       ['i'],
       { code: 'document.invalid-field', path: '/nodes/i/opacity' },
     ],
@@ -644,11 +646,15 @@ describe('M7-A01 validateFragmentTree (section 6)', () => {
   it.each<[string, string, string, string]>([
     ['instance-in-symbol', 'M7-S3', 'document.invalid-symbol', '/nodes/i/parent'],
     ['symbol-in-symbol', 'M7-S3', 'document.invalid-symbol', '/nodes/t/parent'],
-    ['instance-opacity', 'M7-S4', 'document.invalid-field', '/nodes/i/opacity'],
     ['unsupported-version', 'the version', 'document.unsupported-version', '/schemaVersion'],
   ])('still rejects %s (%s)', async (name, _rule, code, at) => {
     const value = await holder(`m7-symbols/malformed/${name}.json`);
     expect(failure(validateFragmentTree(value))).toEqual({ code, path: at });
+  });
+
+  it('accepts instance-opacity on its v6 holder (M7-S4 ends at v6, MVP M4 contract, M4-L1)', async () => {
+    const value = await holder('m7-symbols/malformed/instance-opacity.json');
+    expect(validateFragmentTree(value).ok).toBe(true);
   });
 
   it('still runs the base tree depth, the group rules, ownership and the v2 and v3 version check', () => {
@@ -682,13 +688,15 @@ describe('M7-A01 validateFragmentTree (section 6)', () => {
 });
 
 describe('M7-A01 validateNode on v3 nodes', () => {
-  it('accepts a symbol and an instance and applies M7-S4', () => {
+  it('accepts a symbol and an instance and applies M7-S4 to older inputs only', () => {
     expect(validateNode(symbol('s', 'p')).ok).toBe(true);
     expect(validateNode(instance('i', 'p', 's'))).toEqual({
       ok: true,
       node: instance('i', 'p', 's'),
     });
-    expect(validateNode({ ...instance('i', 'p', 's'), opacity: 0 })).toEqual({
+    // M7-S4 ends at v6 (MVP M4 contract, M4-L1) and holds for older inputs (M4-M2).
+    expect(validateNode({ ...instance('i', 'p', 's'), opacity: 0 }).ok).toBe(true);
+    expect(validateNode({ ...instance('i', 'p', 's'), opacity: 0 }, { olderInput: true })).toEqual({
       ok: false,
       code: 'document.invalid-field',
       path: '/opacity',

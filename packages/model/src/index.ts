@@ -26,6 +26,7 @@ export {
   type ParseResultV3,
   type ParseResultV4,
   type ParseResultV5,
+  type ValidateNodeOptions,
 } from './parse.js';
 export {
   ENVELOPE_ERROR_CODES,

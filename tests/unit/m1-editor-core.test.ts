@@ -1549,9 +1549,10 @@ describe('M1 node props and failure precedence', () => {
       'editor.invalid-command',
       '/props/fill',
     );
+    // A group takes any opacity in [0, 1] since M4-U3 (MVP M4 contract, M4-L1); 1.5 still fails.
     expectFailure(
       target,
-      { type: 'setNodeProps', id: g!, props: { opacity: 0.5 } },
+      { type: 'setNodeProps', id: g!, props: { opacity: 1.5 } },
       'document.invalid-field',
       `/nodes/${g!}/opacity`,
     );

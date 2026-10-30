@@ -163,6 +163,24 @@ export type NodeProps = Readonly<{
 }>;
 
 /**
+ * A stroke patch of `setStyle` (MVP M4 contract, section 4.2): any subset of the stroke keys,
+ * merged over the node's stroke, or over `DEFAULT_PATH_STROKE` (line, path, custom) or
+ * `DEFAULT_SHAPE_STROKE` (other types) when it has none.
+ */
+export type StrokePatch = Readonly<Partial<Stroke>>;
+
+/**
+ * The appearance `setStyle` sets (section 4.2): at least one key. A key applies to each listed
+ * node whose type has that prop, and other nodes are left unchanged; `stroke: null` removes it.
+ */
+export type StyleProps = Readonly<{
+  fill?: Paint | null;
+  stroke?: StrokePatch | null;
+  opacity?: number;
+  cornerRadii?: CornerRadii;
+}>;
+
+/**
  * Optional placement of a new node (M1 contract, section 4.1). The command's frames and points
  * are in page space and are mapped into the parent's local space; `rotation` is the node's page
  * rotation (radians, clockwise), so its stored rotation is this minus the parent chain's.
@@ -241,6 +259,11 @@ export type DocumentCommand =
       frames: readonly Readonly<{ id: string; frame: Frame; rotation?: number }>[];
     }>
   | Readonly<{ type: 'setNodeProps'; id: string; props: NodeProps }>
+  /**
+   * Sets appearance on nodes of the active page at any depth in one transaction (MVP M4
+   * contract, section 4.2); returns empty `ids`, and a change of no value records no step.
+   */
+  | Readonly<{ type: 'setStyle'; ids: readonly string[]; style: StyleProps }>
   | Readonly<{ type: 'deleteNodes'; ids: readonly string[] }>
   | Readonly<{ type: 'groupNodes'; ids: readonly string[]; kind: 'group' | 'maskGroup' }>
   | Readonly<{ type: 'ungroupNodes'; id: string }>
@@ -474,6 +497,8 @@ export type EditorErrorCode =
   | 'editor.not-a-group'
   | 'editor.invalid-mask-source'
   | 'editor.clip-depth'
+  // MVP M4 contract, section 4.4: right after `editor.clip-depth` in precedence.
+  | 'editor.isolation-depth'
   // MVP M2 contract, section 4.4.
   | 'editor.no-viewport-size'
   | 'editor.too-few-nodes'

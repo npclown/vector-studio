@@ -58,6 +58,7 @@ import {
   ancestors,
   childrenOf,
   documentClipViolation,
+  documentIsolationViolation,
   documentTree,
   isContainer,
   isFrameLike,
@@ -211,6 +212,7 @@ const DOCUMENT_COMMANDS = new Set([
   'createCustomNode',
   'setFrames',
   'setNodeProps',
+  'setStyle',
   'deleteNodes',
   'groupNodes',
   'ungroupNodes',
@@ -285,6 +287,7 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.not-a-group',
   'editor.invalid-mask-source',
   'editor.clip-depth',
+  'editor.isolation-depth',
   'editor.no-viewport-size',
   'editor.too-few-nodes',
   'editor.invalid-scope',
@@ -1167,7 +1170,8 @@ class EditorCore implements Editor {
   /**
    * The model's rules (a v1 value is migrated), then each custom node against its extension
    * wherever it is nested (plan section 3.3), then the clip depth (M1 contract, section 4.3;
-   * through each expansion, M7-S5), then each expansion's validity and the expansion caps (M7
+   * through each expansion, M7-S5), then the isolation count (MVP M4 contract, section 4.3),
+   * then each expansion's validity and the expansion caps (M7
    * contract, M7-X3 and section 4.1).
    */
   private validate(value: unknown): ParseResult | CommandFailure {
@@ -1179,6 +1183,10 @@ class EditorCore implements Editor {
     const deep = documentClipViolation(result.document);
     if (deep !== null) {
       return { ok: false, code: 'editor.clip-depth', path: nodePath(deep, '/parent') };
+    }
+    const isolated = documentIsolationViolation(result.document);
+    if (isolated !== null) {
+      return { ok: false, code: 'editor.isolation-depth', path: nodePath(isolated, '/parent') };
     }
     const expansion = expansionFailure(result.document, this.expansions);
     return expansion === null ? result : { ok: false, code: expansion.code, path: expansion.path! };
