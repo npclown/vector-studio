@@ -609,8 +609,8 @@ function subtreeOf(nodes: Readonly<Record<string, NodeV6>>, root: string): NodeV
 
 /**
  * The content of a source for the content match of section 6, rule (2), as canonical text: its
- * size, `fill`, `stroke`, children and every descendant; its placement, name, constraints,
- * opacity and visibility do not count.
+ * size, `fill`, `stroke`, `opacity` (M4-Q18 (a): it reaches every instance under M4-Q15 (a)),
+ * children and every descendant; its placement, name, constraints and visibility do not count.
  */
 function contentText(nodes: readonly NodeV6[]): string {
   const [root, ...rest] = nodes as [SymbolNodeV6, ...NodeV6[]];
@@ -621,7 +621,6 @@ function contentText(nodes: readonly NodeV6[]): string {
     frame: { x: 0, y: 0, width: root.frame.width, height: root.frame.height },
     rotation: 0,
     constraints: START,
-    opacity: 1,
     visible: true,
   };
   return JSON.stringify(canonicalNodes(new Map([normalized, ...rest].map((n) => [n.id, n]))));

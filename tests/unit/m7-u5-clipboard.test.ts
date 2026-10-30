@@ -581,10 +581,20 @@ describe('paste of an instance alone (M7-Q9 (a))', () => {
   it('links by content match in another editor: size, fill, stroke and descendants', () => {
     const from = own();
     const fragment = copied(from, ['I']);
-    // Placement, name, constraints, opacity and visibility of the source do not count.
+    // Placement, name, constraints and visibility of the source do not count (its opacity does,
+    // M4-Q18 (a)).
     const moved = small();
     Object.assign(moved.nodes.S!, { name: 'renamed', frame: f(0, 0, 40, 20), visible: false });
     const { target } = counted(moved);
+    expect(oneStep(target, { type: 'paste', text: fragment })).toEqual(['n1']);
+    expect(nodeOf(target, 'n1')).toMatchObject({ type: 'instance', symbol: 'S' });
+  });
+
+  it('links by content match when both sources have the same opacity below 1 (M4-Q18 (a))', () => {
+    const translucent = small();
+    translucent.nodes.S!.opacity = 0.5;
+    const fragment = copied(own(translucent), ['I']);
+    const { target } = counted(translucent);
     expect(oneStep(target, { type: 'paste', text: fragment })).toEqual(['n1']);
     expect(nodeOf(target, 'n1')).toMatchObject({ type: 'instance', symbol: 'S' });
   });
@@ -606,6 +616,8 @@ describe('paste of an instance alone (M7-Q9 (a))', () => {
     ],
     ['a descendant', (value) => (value.nodes.r!.frame = f(6, 5, 10, 10))],
     ['a descendant’s name', (value) => (value.nodes.r!.name = 'other')],
+    // M4-Q18 (a): the source's opacity reaches its instances (M4-Q15 (a)), so it counts.
+    ['its opacity', (value) => (value.nodes.S!.opacity = 0.5)],
   ])('pastes detached when the target source differs in %s', (_, edit) => {
     const fragment = copied(own(), ['I']);
     const value = small();
