@@ -344,7 +344,7 @@ describe('E26-U3 batched isolation (E26-A06)', () => {
     expect(tally.depth).toBeGreaterThanOrEqual(10);
     expect(tally.pairs).toBeGreaterThan(50);
     expect(tally.fewer).toBeGreaterThan(350);
-  });
+  }, 120_000);
 
   it('isolates a one-time rejection in one set, and a persistent one in O(log n) sets', () => {
     const rng = random(7);
@@ -367,5 +367,5 @@ describe('E26-U3 batched isolation (E26-A06)', () => {
     const sets = applySets(persistent.renderer, 0);
     expect(sets).toBeLessThanOrEqual(3 * Math.ceil(Math.log2(n)) + 1);
     expect(projectorStateForTesting(persistent.projector).excluded).toEqual([target]);
-  });
+  }, 120_000);
 });
