@@ -954,7 +954,9 @@ export function projectPage(
 
   const page = document.pages.find((entry) => entry.id === pageId);
   const rootOrder = walk(page?.children ?? [], null);
-  // A scoped walk drops the entries of the units it removes (SceneProjector).
+  // A scoped walk drops the entries of the units it removes (SceneProjector); entries of deleted
+  // units it never reaches (another page, an invalid instance) stay until the next whole-page
+  // walk, bounded by the units the projector has seen.
   if (memo !== undefined && scope === undefined) {
     for (const id of memo.keys()) if (!Object.hasOwn(document.nodes, id)) memo.delete(id);
   }
@@ -1078,6 +1080,7 @@ export class SceneProjector {
     if (this.disposed) return;
     this.page = page;
     this.release(document, touched);
+    this.scoped = false;
     // A renderer may already hold a scene from an earlier attach; start above its revision.
     this.raiseRevision(this.renderer.getSynchronizationState().current?.revision);
     const projection = this.project(document);
@@ -1108,6 +1111,38 @@ export class SceneProjector {
     // A projection of one unit was rejected on its own (P5-U4); otherwise isolate.
     const only = projection.units.length === 1 ? projection.units[0]! : null;
     this.isolate(document, projection, only === null ? null : { id: only, result });
+  }
+
+  /**
+   * The text layout entry point (E26 contract, section 4.3): after a layout generation change,
+   * re-projects every text unit of the active page and every instance whose expansion holds
+   * text, past the identity-keyed memo (whose entries, and the instances' kept results, do not
+   * see the generation), in one whole-page set. M6c calls it from the editor's `textLayout`
+   * subscription.
+   */
+  relayout(document: DocumentV6): void {
+    if (this.disposed) return;
+    const holdsText = new Map<string, boolean>();
+    const hasText = (id: string): boolean => {
+      const known = holdsText.get(id);
+      if (known !== undefined) return known;
+      holdsText.set(id, false);
+      const node = Object.hasOwn(document.nodes, id) ? document.nodes[id]! : undefined;
+      const found =
+        node !== undefined &&
+        (node.type === 'text' ||
+          (node.type === 'instance' && hasText(node.symbol)) ||
+          ('children' in node && node.children.some(hasText)));
+      holdsText.set(id, found);
+      return found;
+    };
+    for (const [id, entry] of this.memo) {
+      if (entry.node.type === 'text' || (entry.node.type === 'instance' && hasText(id))) {
+        this.memo.delete(id);
+      }
+    }
+    this.scoped = false;
+    this.change(document, this.page, []);
   }
 
   /** Sends one change set for a document change on `page` that touched `touched`. */
@@ -1401,14 +1436,14 @@ export class SceneProjector {
   private sync(projection: PageProjection): (SceneApplyResult & { changes: Changes }) | null {
     const changes = this.differences(projection, this.goneFrom(projection));
     if (changes === null) return null;
+    // Not scoped until the set is accepted, also when the renderer throws.
+    this.scoped = false;
     const result = this.apply(changes);
     if (result === null) return null;
     if (this.accepted(result)) {
       this.sent = new Map(projection.nodes);
       this.sentOrder = projection.rootOrder;
       this.scoped = true;
-    } else {
-      this.scoped = false;
     }
     return { ...result, changes };
   }
@@ -1425,7 +1460,7 @@ export class SceneProjector {
       if (held === undefined) inserted.push(snapshot);
       else if (!sameSnapshot(held, snapshot)) updated.push(snapshot);
     }
-    removed.sort(compareOrdinal);
+    removed.sort(compareOrdinal); // In place: callers pass a fresh array.
     const reordered = !sameStrings(projection.rootOrder, this.sentOrder);
     if (inserted.length === 0 && updated.length === 0 && removed.length === 0 && !reordered) {
       return null;
@@ -1448,6 +1483,9 @@ export class SceneProjector {
     document: DocumentV6,
     touched: readonly string[],
   ): (SceneApplyResult & { changes: Changes }) | null {
+    // Not scoped until the set is accepted, also when a custom projection or the renderer throws
+    // (the memo may then hold entries of a walk whose set was never sent).
+    this.scoped = false;
     const path = new Set<string>();
     const addChain = (id: string) => {
       for (const entry of this.chain(document, id)) {
@@ -1528,15 +1566,17 @@ export class SceneProjector {
 
     const changes = this.differences(projection, [...removed]);
     if (oracleMemo !== null) this.checkScoped(document, oracleMemo, changes, met);
-    if (changes === null) return null;
+    if (changes === null) {
+      this.scoped = true;
+      return null;
+    }
     const result = this.apply(changes);
     if (result === null) return null;
     if (this.accepted(result)) {
       for (const id of removed) this.sent.delete(id);
       for (const [id, snapshot] of projection.nodes) this.sent.set(id, snapshot);
       this.sentOrder = projection.rootOrder;
-    } else {
-      this.scoped = false;
+      this.scoped = true;
     }
     return { ...result, changes };
   }

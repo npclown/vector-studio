@@ -15,6 +15,7 @@ import {
   type Editor,
   type EditorEvent,
 } from '../../packages/editor-core/src/index.js';
+import { internalsOf } from '../../packages/editor-core/src/editor.js';
 import {
   SceneProjector,
   projectorStateForTesting,
@@ -108,7 +109,8 @@ function randomCommand(rng: Rng, editor: Editor): Command {
   };
   const parent = () => (rng() < 0.4 ? active : (pick(rng, containers) ?? active));
   const one = pick(rng, here) ?? '';
-  const op = Math.floor(rng() * 24);
+  const paths = here.filter((id) => document.nodes[id]!.type === 'path');
+  const op = Math.floor(rng() * 30);
   switch (op) {
     case 0:
       return { type: 'createRectangle', frame: frame(rng), fill: color(rng), parent: parent() };
@@ -202,6 +204,42 @@ function randomCommand(rng: Rng, editor: Editor): Command {
         ? { type: 'createRectangle', frame: frame(rng), parent: source ?? active }
         : { type: 'setFrames', frames: [{ id: target, frame: frame(rng) }] };
     }
+    case 23: {
+      const x = Math.round(rng() * 300);
+      const y = Math.round(rng() * 300);
+      return {
+        type: 'createPath',
+        verbs: ['move', 'line', 'line', 'close'],
+        points: [x, y, x + 60, y, x + 30, y + 40],
+        fill: color(rng),
+        parent: parent(),
+      };
+    }
+    case 24: {
+      // A mask group of a path (its source, bottom-most in paint order) and a later sibling.
+      const source = pick(rng, paths) ?? one;
+      const parentId = document.nodes[source]?.parent ?? active;
+      const siblings =
+        document.pages.find((page) => page.id === parentId)?.children ??
+        (document.nodes[parentId] as { children?: readonly string[] } | undefined)?.children ??
+        [];
+      const above = siblings.slice(siblings.indexOf(source) + 1);
+      return {
+        type: 'groupNodes',
+        ids: [source, ...[pick(rng, above)].filter((id) => id !== undefined)],
+        kind: 'maskGroup',
+      };
+    }
+    case 25:
+      return { type: 'copy', ids: some(1 + Math.floor(rng() * 2)) };
+    case 26:
+      return rng() < 0.7 ? { type: 'paste' } : { type: 'cut', ids: some(1) };
+    case 27: {
+      const pages = document.pages.map((page) => page.id);
+      return rng() < 0.5
+        ? { type: 'addPage', name: 'more' }
+        : { type: 'removePage', id: pick(rng, pages)! };
+    }
     default: {
       const pages = document.pages.map((page) => page.id);
       return { type: 'setActivePage', id: pick(rng, pages)! };
@@ -234,6 +272,8 @@ describe('E26-U4 change-scoped projection (E26-A09)', () => {
     let steps = 0;
     let scopedSets = 0;
     let rejections = 0;
+    let gestures = 0;
+    let masks = 0;
     for (let seed = 1; steps < 1_200; seed += 1) {
       const rng = random(seed * 2654435761);
       const scoped = side(false);
@@ -246,6 +286,9 @@ describe('E26-U4 change-scoped projection (E26-A09)', () => {
         const fromWhole = { calls: whole.renderer.calls.length, events: whole.events.length };
         const a = scoped.editor.execute(command);
         const b = whole.editor.execute(command);
+        if (command.type === 'groupNodes' && command.kind === 'maskGroup') {
+          if (a.ok) masks += 1;
+        }
         expect(JSON.stringify(a), `seed ${seed} ${command.type}`).toBe(JSON.stringify(b));
         expect(record(scoped, from), `seed ${seed} step ${steps} ${JSON.stringify(command)}`).toBe(
           record(whole, fromWhole),
@@ -253,6 +296,46 @@ describe('E26-U4 change-scoped projection (E26-A09)', () => {
         scopedSets += scoped.renderer.calls
           .slice(from.calls)
           .filter((call) => call.method === 'applyChanges').length;
+      };
+      // A gesture on both sides: setFrames updates, sometimes back to the start (a node moved
+      // away and back is a new object of the same value), a replace, then commit or cancel.
+      const gesture = (rng: Rng) => {
+        const document = scoped.editor.query({ type: 'document' });
+        const page = scoped.editor.query({ type: 'activePage' });
+        const ids = Object.keys(document.nodes).filter(
+          (id) => document.nodes[id]!.parent === page || rng() < 0.3,
+        );
+        const moved = [pick(rng, ids), pick(rng, ids)].filter(
+          (id, index, all): id is string => id !== undefined && all.indexOf(id) === index,
+        );
+        const start = moved.map((id) => ({ id, frame: document.nodes[id]!.frame }));
+        const away = moved.map((id) => ({ id, frame: frame(rng) }));
+        const act = (
+          name: string,
+          run: (api: ReturnType<typeof internalsOf>['gesture']) => unknown,
+        ) => {
+          const from = { calls: scoped.renderer.calls.length, events: scoped.events.length };
+          const fromWhole = { calls: whole.renderer.calls.length, events: whole.events.length };
+          const a = run(internalsOf(scoped.editor).gesture);
+          const b = run(internalsOf(whole.editor).gesture);
+          expect(JSON.stringify(a), `seed ${seed} gesture ${name}`).toBe(JSON.stringify(b));
+          expect(record(scoped, from), `seed ${seed} gesture ${name}`).toBe(
+            record(whole, fromWhole),
+          );
+        };
+        act('begin', (api) => api.begin());
+        act('away', (api) => api.update({ type: 'setFrames', frames: away }));
+        if (rng() < 0.5) act('back', (api) => api.update({ type: 'setFrames', frames: start }));
+        if (rng() < 0.3) {
+          act('replace', (api) => api.replace([{ type: 'setFrames', frames: away.slice(0, 1) }]));
+        }
+        if (moved.length > 1) {
+          const other = [{ id: moved[1]!, frame: frame(rng) }];
+          act('other', (api) => api.update({ type: 'setFrames', frames: other }));
+        }
+        if (rng() < 0.8) act('commit', (api) => api.commit());
+        else act('cancel', (api) => api.cancel());
+        gestures += 1;
       };
       // A second page holding a source, so that instances on the first page follow a source
       // on another page (M7-S1).
@@ -287,7 +370,8 @@ describe('E26-U4 change-scoped projection (E26-A09)', () => {
           whole.renderer.overrides.applyChanges = rejection;
           rejections += 1;
         }
-        both(randomCommand(rng, scoped.editor));
+        if (rng() < 0.1) gesture(rng);
+        else both(randomCommand(rng, scoped.editor));
         steps += 1;
       }
       delete scoped.renderer.overrides.applyChanges;
@@ -295,6 +379,8 @@ describe('E26-U4 change-scoped projection (E26-A09)', () => {
     }
     expect(scopedSets).toBeGreaterThan(600);
     expect(rejections).toBeGreaterThan(20);
+    expect(gestures).toBeGreaterThan(80);
+    expect(masks).toBeGreaterThan(5);
   }, 120_000);
 });
 
@@ -369,6 +455,41 @@ function lastSet(renderer: RecordingRenderer): RenderChangeSet {
 const changeSets = (renderer: RecordingRenderer) =>
   JSON.stringify(renderer.calls.map((call) => [call.method, call.input]));
 
+describe('E26-U4 gesture history', () => {
+  it('undoes a gesture that moved a node away and back (identity, not value)', () => {
+    const scoped = side(false);
+    const whole = side(true);
+    const run = (target: Side) => {
+      const { editor } = target;
+      const ok = (command: Command) => {
+        const result = editor.execute(command);
+        if (!result.ok) throw new Error(`${command.type}: ${result.code}`);
+        return result.ids;
+      };
+      const [r] = ok({ type: 'createRectangle', frame: { x: 0, y: 0, width: 20, height: 20 } });
+      const [r2] = ok({ type: 'createRectangle', frame: { x: 40, y: 0, width: 20, height: 20 } });
+      const [s] = ok({ type: 'createRectangle', frame: { x: 0, y: 60, width: 20, height: 20 } });
+      ok({ type: 'groupNodes', ids: [r!, r2!], kind: 'group' });
+      const start = editor.query({ type: 'document' }).nodes[r!]!.frame;
+      const { gesture } = internalsOf(editor);
+      gesture.begin();
+      gesture.update({ type: 'setFrames', frames: [{ id: r!, frame: { ...start, x: 10 } }] });
+      gesture.update({ type: 'setFrames', frames: [{ id: r!, frame: start }] });
+      gesture.update({
+        type: 'setFrames',
+        frames: [{ id: s!, frame: { x: 5, y: 60, width: 20, height: 20 } }],
+      });
+      gesture.commit();
+      const from = { calls: target.renderer.calls.length, events: target.events.length };
+      // With the oracle of the setup check on, a scoped walk that kept r would throw here.
+      ok({ type: 'undo' });
+      ok({ type: 'redo' });
+      return record(target, from);
+    };
+    expect(run(scoped)).toBe(run(whole));
+  });
+});
+
 describe('E26-U4 projector cases outside the editor', () => {
   it('drops a moved node from its former parent when `touched` names only the node', () => {
     const [scoped, whole] = projectors();
@@ -410,6 +531,38 @@ describe('E26-U4 projector cases outside the editor', () => {
     const after = derive(before, { r2: { visible: false } });
     scoped.projector.replace(before, 'page-2');
     expect(() => scoped.projector.change(after, 'page-2', ['d1'])).toThrow(/E26-A09/);
+  });
+
+  it('leaves the scoped path when the renderer throws, so the next change resends it', () => {
+    const [scoped, whole] = projectors();
+    const before = read();
+    const moved = derive(before, { r2: { visible: false } });
+    const next = derive(moved, { 'd1-r': { visible: false } });
+    for (const { projector, renderer } of [scoped, whole]) {
+      projector.replace(before, 'page-2');
+      const apply = renderer.applyChanges.bind(renderer);
+      renderer.applyChanges = () => {
+        renderer.applyChanges = apply;
+        throw new Error('renderer fault');
+      };
+      expect(() => projector.change(moved, 'page-2', ['r2'])).toThrow('renderer fault');
+      projector.change(next, 'page-2', ['d1-r']);
+    }
+    expect(changeSets(scoped.renderer)).toBe(changeSets(whole.renderer));
+    expect(lastSet(scoped.renderer).updated.map((node) => node.id)).toEqual(['r2', 'd1-r']);
+  });
+
+  it('re-projects the whole page past the memo on a text layout generation change', () => {
+    const [scoped] = projectors();
+    const before = read();
+    scoped.projector.replace(before, 'page-2');
+    const calls = scoped.renderer.calls.length;
+    // The fixture holds no text: no memo entry is dropped, nothing differs, nothing is sent.
+    scoped.projector.relayout(before);
+    expect(scoped.renderer.calls.length).toBe(calls);
+    const after = derive(before, { r2: { visible: false } });
+    scoped.projector.change(after, 'page-2', ['r2']);
+    expect(lastSet(scoped.renderer).updated.map((node) => node.id)).toEqual(['r2']);
   });
 
   it('removes a deleted subtree when `touched` names only its root', () => {
