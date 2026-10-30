@@ -8,7 +8,7 @@
 //   - move: one select-tool drag of a nested selection (down, five moves, up), the up being the
 //     commit, through `input`,
 //   - isolation: one `setFrames` of two leaves whose change set the renderer rejects once, so the
-//     projector isolates the whole active page one unit per set (contract section 5).
+//     projector isolates the whole active page (contract section 5, E26-U3 batching).
 // After each step the scene mirror must hold exactly the projection. Manual, never CI:
 //
 //   pnpm observe:m1-a13
@@ -148,6 +148,7 @@ it('M1-A13 observation: load, projection, one move commit and one forced isolati
   };
   let sceneNodes = 0;
   let isolationSets = 0;
+  let isolationUnits = 0;
 
   for (let run = 0; run < Math.max(RUNS, ISOLATION_RUNS); run += 1) {
     const [parsed, parseMs] = timed(() => parseDocument(text));
@@ -210,7 +211,7 @@ it('M1-A13 observation: load, projection, one move commit and one forced isolati
     }
 
     if (run < ISOLATION_RUNS) {
-      // The next change set is rejected once; isolation then rebuilds the page unit by unit.
+      // The next change set is rejected once; isolation then rebuilds the page.
       const first = renderer.calls.length;
       renderer.overrides.applyChanges = {
         status: 'invalid-scene',
@@ -242,7 +243,9 @@ it('M1-A13 observation: load, projection, one move commit and one forced isolati
       }
       isolationSets = calls.length - 2;
       const document = target.query({ type: 'document' });
-      expect(isolationSets).toBe(pageUnitCount(document, target.query({ type: 'activePage' })));
+      isolationUnits = pageUnitCount(document, target.query({ type: 'activePage' }));
+      // E26-U3: a one-time rejection is isolated in one batched set of every unit.
+      expect(isolationSets).toBe(1);
       expectSynchronized(target, renderer);
       steps.isolation!.push(isolationMs);
       steps.isolationRenderer!.push(renderer.sceneMs - beforeIsolation);
@@ -271,7 +274,8 @@ it('M1-A13 observation: load, projection, one move commit and one forced isolati
       pageRoots: generated.pages.map((page) => page.children.length),
       activePageSceneNodes: sceneNodes,
       moveSelection: selection.ids,
-      isolationUnitSets: isolationSets,
+      isolationUnits,
+      isolationSets,
     },
     runs: RUNS,
     isolationRuns: ISOLATION_RUNS,

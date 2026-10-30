@@ -367,7 +367,10 @@ describe('P5-U4 scene projector', () => {
     const a = rect(target, 0, 0);
     const b = rect(target, 50, 0);
     const current = () => renderer.getSynchronizationState().current;
+    // The main set, the batched set of both units (E26-U3: not reported) and a's own set are
+    // rejected; b's set then asks for a resync.
     const results = [
+      { status: 'invalid-scene' as const, reason: 'invalid-value' as const, current: current() },
       { status: 'invalid-scene' as const, reason: 'invalid-value' as const, current: current() },
       { status: 'invalid-scene' as const, reason: 'invalid-value' as const, current: current() },
       { status: 'resync-required' as const, current: null },
