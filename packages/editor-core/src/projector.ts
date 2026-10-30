@@ -1235,7 +1235,7 @@ export class SceneProjector {
       this.apply({
         inserted: [],
         updated: [],
-        removed: [...this.sent.keys()].sort(),
+        removed: [...this.sent.keys()].sort(compareOrdinal),
         orders: [{ parentId: null, children: [] }],
       });
     let result = removal();
