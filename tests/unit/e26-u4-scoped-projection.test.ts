@@ -404,6 +404,14 @@ describe('E26-U4 projector cases outside the editor', () => {
     expect(lastSet(scoped.renderer).updated.map((node) => node.id)).toContain('s1-g');
   });
 
+  it('throws E26-A09 when `touched` leaves out a changed node (the setup check is on)', () => {
+    const [scoped] = projectors();
+    const before = read();
+    const after = derive(before, { r2: { visible: false } });
+    scoped.projector.replace(before, 'page-2');
+    expect(() => scoped.projector.change(after, 'page-2', ['d1'])).toThrow(/E26-A09/);
+  });
+
   it('removes a deleted subtree when `touched` names only its root', () => {
     const [scoped, whole] = projectors();
     const before = read();

@@ -1399,7 +1399,7 @@ export class SceneProjector {
    * nothing to send or after `disposed`; state is updated only on success.
    */
   private sync(projection: PageProjection): (SceneApplyResult & { changes: Changes }) | null {
-    const changes = this.differences(projection, (id) => !projection.nodes.has(id));
+    const changes = this.differences(projection, this.goneFrom(projection));
     if (changes === null) return null;
     const result = this.apply(changes);
     if (result === null) return null;
@@ -1415,9 +1415,9 @@ export class SceneProjector {
 
   /**
    * The change set from what the renderer holds to `projection`, in the projection's pre-order,
-   * removing the held nodes `gone` names, in ordinal order; null when there is nothing to send.
+   * removing the held nodes `removed` names, in ordinal order; null when there is nothing to send.
    */
-  private differences(projection: PageProjection, gone: (id: string) => boolean): Changes | null {
+  private differences(projection: PageProjection, removed: string[]): Changes | null {
     const inserted: RenderNodeSnapshot[] = [];
     const updated: RenderNodeSnapshot[] = [];
     for (const [id, snapshot] of projection.nodes) {
@@ -1425,8 +1425,6 @@ export class SceneProjector {
       if (held === undefined) inserted.push(snapshot);
       else if (!sameSnapshot(held, snapshot)) updated.push(snapshot);
     }
-    const removed: string[] = [];
-    for (const id of this.sent.keys()) if (gone(id)) removed.push(id);
     removed.sort(compareOrdinal);
     const reordered = !sameStrings(projection.rootOrder, this.sentOrder);
     if (inserted.length === 0 && updated.length === 0 && removed.length === 0 && !reordered) {
@@ -1491,13 +1489,14 @@ export class SceneProjector {
     );
 
     // Removals: scene IDs a walked unit no longer has, and the held subtrees of units that left
-    // a walked child list without being projected elsewhere.
+    // a walked child list without being projected elsewhere. Memo entries of deleted units go
+    // too, held or not.
     const present = (unit: string) => projection.unitIds.has(unit) || scope.kept.has(unit);
     const removed = new Set<string>();
     const drop = (unit: string) => {
       if (present(unit)) return;
       const entry = scope.replaced.get(unit) ?? this.memo.get(unit);
-      if (entry === undefined || !this.sent.has(unit)) return;
+      if (entry === undefined) return;
       for (const snapshot of entry.snapshots) {
         if (this.sent.has(snapshot.id)) removed.add(snapshot.id);
       }
@@ -1527,7 +1526,7 @@ export class SceneProjector {
     }
     this.noteInvalid(met, this.excluded);
 
-    const changes = this.differences(projection, (id) => removed.has(id));
+    const changes = this.differences(projection, [...removed]);
     if (oracleMemo !== null) this.checkScoped(document, oracleMemo, changes, met);
     if (changes === null) return null;
     const result = this.apply(changes);
@@ -1540,6 +1539,13 @@ export class SceneProjector {
       this.scoped = false;
     }
     return { ...result, changes };
+  }
+
+  /** The held scene IDs a whole-page projection no longer has. */
+  private goneFrom(projection: PageProjection): string[] {
+    const gone: string[] = [];
+    for (const id of this.sent.keys()) if (!projection.nodes.has(id)) gone.push(id);
+    return gone;
   }
 
   /** The document ID of the scene parent the renderer holds unit `id` under; null at the root. */
@@ -1567,7 +1573,7 @@ export class SceneProjector {
       memo,
       this.expansions,
     );
-    const expected = this.differences(oracle, (id) => !oracle.nodes.has(id));
+    const expected = this.differences(oracle, this.goneFrom(oracle));
     const expectedMet = [...oracle.invalid].sort();
     if (
       JSON.stringify(changes) !== JSON.stringify(expected) ||
