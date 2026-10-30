@@ -1,6 +1,6 @@
 import type { TextLayoutLine, TextLayoutRequest, TextLayoutResult } from '@vector-studio/contracts';
 import { eventToken } from './keymap.js';
-import type { Modifiers, Platform } from './types.js';
+import type { Modifiers, Platform, TextAffinity, TextCaret } from './types.js';
 
 // The caret model of text edit mode (MVP M6b contract, section 4): stops, words, caret
 // geometry, point to offset, selection rectangles and the composition underline, and the
@@ -8,10 +8,8 @@ import type { Modifiers, Platform } from './types.js';
 // Pure: no DOM, no editor state. Offsets are UTF-16 into the node text and coordinates are
 // node-local page units, y down (M6a-L1); mapping to and from the page is the caller's.
 
-export type TextAffinity = 'downstream' | 'upstream';
-
-/** The caret of section 2: `anchor` and `focus` on stops, `affinity` for a soft wrap. */
-export type TextCaret = Readonly<{ anchor: number; focus: number; affinity: TextAffinity }>;
+/** The caret of section 2, public from `types.ts` since M6b-U2. */
+export type { TextAffinity, TextCaret };
 
 /** A node-local point. */
 export type CaretPoint = Readonly<{ x: number; y: number }>;
@@ -74,6 +72,22 @@ export const COMPOSITION_UNDERLINE_OFFSET = 0.1;
 const graphemes = new Intl.Segmenter('ko', { granularity: 'grapheme' });
 const wordSegmenter = new Intl.Segmenter('ko', { granularity: 'word' });
 
+/**
+ * The stops of runs (section 4.1): 0, the length, every run boundary and the grapheme
+ * boundaries of each run, segmented per run. Needs no layout, so edit-mode commands check
+ * offsets against it before the port is consulted.
+ */
+export function textStops(runs: readonly Readonly<{ text: string }>[]): ReadonlySet<number> {
+  let offset = 0;
+  const stops = new Set<number>([0]);
+  for (const run of runs) {
+    for (const { index } of graphemes.segment(run.text)) stops.add(offset + index);
+    offset += run.text.length;
+    stops.add(offset);
+  }
+  return stops;
+}
+
 /** A cluster of one line with the long-cluster pieces of M6a-L1 joined into their grapheme. */
 type Glyph = Readonly<{ start: number; end: number; x: number; advance: number }>;
 
@@ -121,13 +135,11 @@ class CaretModel {
     this.length = this.text.length;
     // Stops: grapheme boundaries of each run, so run boundaries are stops and a stop never
     // falls inside a cluster the layout reports (M6a-L1 segments per run as well).
-    const stops = new Set<number>([0, this.length]);
+    const stops = textStops(request.runs);
     const runEnds: number[] = [];
     let offset = 0;
     for (const run of request.runs) {
-      for (const { index } of graphemes.segment(run.text)) stops.add(offset + index);
       offset += run.text.length;
-      stops.add(offset);
       runEnds.push(offset);
     }
     this.stopSet = stops;

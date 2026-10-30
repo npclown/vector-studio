@@ -28,6 +28,12 @@ import {
 } from './hit-test.js';
 import { canonicalRefs, hasRef, pathTargetAt, segmentParameter } from './path-edit.js';
 import { inSegment, outSegment, readAnchorModel } from './paths.js';
+import {
+  caretAtPoint,
+  insideTarget,
+  type TextEditSupport,
+  type TextEditTarget,
+} from './text-edit.js';
 import { resizeInOwnAxes, scaleAbout } from './resize.js';
 import {
   SNAP_PX,
@@ -71,7 +77,9 @@ export {
 // node's own axes for any other single node, and the page-space box mapped node by node (as a
 // group resize, from the pre-gesture state) for any other multi-selection. In path edit mode
 // (MVP M3 contract, section 5) the select tool picks anchors, handles, segments and the fill of
-// the edited path instead, and drags them through the path commands in `replace`.
+// the edited path instead, and drags them through the path commands in `replace`. In text edit
+// mode (MVP M6b contract, section 4.4) a press inside the edited node's box places the caret and
+// drag-selects, with no gesture; a press outside ends edit mode and acts by the M2 rules.
 
 type Pointer = Extract<InputEvent, { kind: 'pointerdown' | 'pointermove' | 'pointerup' }>;
 
@@ -469,6 +477,12 @@ type SelectState =
       } | null;
     }
   | { kind: 'marquee'; start: PagePoint; current: PagePoint; additive: boolean }
+  /**
+   * A selection drag in text edit mode (M6b contract, section 4.4): tool state, not a gesture;
+   * each move sets the focus to the point's offset, keeping the live anchor, while node `id`
+   * (null for a pending node) is still the edited one.
+   */
+  | { kind: 'textDrag'; id: string | null }
   // Path edit mode (M3 contract, section 5).
   | {
       /** An anchor or segment drag: `movePathAnchors` on `anchors`, the anchor selection. */
@@ -542,6 +556,7 @@ function axis(fraction: number, origin: number, size: number, delta: number) {
 export function createSelectTool(
   custom: CustomGeometry,
   expansions: ExpansionCache = new ExpansionCache(),
+  text: TextEditSupport | null = null,
 ): Tool {
   let state: SelectState = { kind: 'idle' };
 
@@ -683,6 +698,14 @@ export function createSelectTool(
       context.execute({ type: 'enterPathEdit', id: target });
       return true;
     }
+    // A text target enters text edit mode with the word at the point selected (M6b section
+    // 3.2, M6-E6); without a port the command fails and the double-click is not consumed.
+    if (document.nodes[target]?.type === 'text') {
+      const node = text?.of(target) ?? null;
+      const word = node === null ? null : node.model.wordAt(caretAtPoint(node, point).offset);
+      const range = word === null ? {} : { anchor: word.start, focus: word.end };
+      return context.execute({ type: 'enterTextEdit', id: target, ...range }).ok;
+    }
     if (!isContainer(document.nodes[target])) return false;
     context.execute({ type: 'setScope', id: target });
     const next = chain.length >= 2 ? [chain[chain.length - 2]!] : [];
@@ -812,6 +835,51 @@ export function createSelectTool(
       // The edited path is the moving node (section 5).
       candidates: lazySnapSet(context, [id]),
     };
+  }
+
+  /** Whether `point` is inside the edited box, a pending node's grown by the handle radius. */
+  function insideEdited(target: TextEditTarget, point: PagePoint, context: ToolContext): boolean {
+    return insideTarget(target, point, target.pending ? HANDLE_RADIUS / zoomOf(context) : 0);
+  }
+
+  /**
+   * A press in text edit mode (M6b contract, section 4.4): inside the edited node's rotated box
+   * (a pending node's grown by `HANDLE_RADIUS / zoom`) it places the caret at the point, or with
+   * Shift moves the focus only, and starts a selection drag; it never moves, resizes or rotates
+   * the node. Outside it ends edit mode and runs the M2 rules in the same input, with the
+   * handles off, as a press that ends path edit mode.
+   */
+  function textDown(event: Pointer, context: ToolContext): void {
+    const target = text?.current() ?? null;
+    if (target === null || !insideEdited(target, event.point, context)) {
+      context.execute({ type: 'exitTextEdit' });
+      pointerDown(event, context, true);
+      return;
+    }
+    const edit = context.query({ type: 'textEdit' })!;
+    const { offset, affinity } = caretAtPoint(target, event.point);
+    const anchor = event.modifiers.shift ? edit.anchor : offset;
+    context.execute({ type: 'setTextSelection', anchor, focus: offset, affinity });
+    state = { kind: 'textDrag', id: edit.id };
+  }
+
+  /**
+   * A selection-drag move or release: the focus follows the point from the live anchor, which a
+   * host change may have clamped; a drag whose node is no longer the edited one stops.
+   */
+  function textDrag(
+    current: Extract<SelectState, { kind: 'textDrag' }>,
+    point: PagePoint,
+    context: ToolContext,
+  ): void {
+    const edit = context.query({ type: 'textEdit' });
+    const target = text?.current() ?? null;
+    if (edit === null || edit.id !== current.id || target === null) {
+      state = { kind: 'idle' };
+      return;
+    }
+    const { offset, affinity } = caretAtPoint(target, point);
+    context.execute({ type: 'setTextSelection', anchor: edit.anchor, focus: offset, affinity });
   }
 
   /** `handlesOff`: a press that just ended path edit mode on another node gets no handles. */
@@ -1085,7 +1153,7 @@ export function createSelectTool(
       state.current = event.point;
       return;
     }
-    if (state.kind === 'idle' || state.kind === 'held') return;
+    if (state.kind === 'idle' || state.kind === 'held' || state.kind === 'textDrag') return;
     const dx = event.point.x - state.start.x;
     const dy = event.point.y - state.start.y;
     if (!state.moved && dx === 0 && dy === 0) return;
@@ -1325,7 +1393,7 @@ export function createSelectTool(
 
   /** States with no gesture of their own. */
   const passive = (kind: SelectState['kind']) =>
-    kind === 'marquee' || kind === 'anchorMarquee' || kind === 'held';
+    kind === 'marquee' || kind === 'anchorMarquee' || kind === 'held' || kind === 'textDrag';
 
   return {
     input(event, context) {
@@ -1340,12 +1408,20 @@ export function createSelectTool(
       if (event.kind === 'pointerdown') {
         if (state.kind !== 'idle') return false;
         const edit = context.query({ type: 'pathEdit' });
-        if (edit === null) pointerDown(event, context);
+        if (context.query({ type: 'textEdit' }) !== null) textDown(event, context);
+        else if (edit === null) pointerDown(event, context);
         else editDown(event, context, edit);
         return true;
       }
       if (event.kind === 'doubleclick') {
         if (state.kind !== 'idle') return false;
+        // In text edit mode a double-click inside the box selects the word at the point.
+        const target = text?.current() ?? null;
+        if (target !== null && insideEdited(target, event.point, context)) {
+          const word = target.model.wordAt(caretAtPoint(target, event.point).offset);
+          context.execute({ type: 'setTextSelection', anchor: word.start, focus: word.end });
+          return true;
+        }
         const edit = context.query({ type: 'pathEdit' });
         if (edit !== null) {
           // A double-click on a segment inserts an anchor there; on an anchor, a handle or the
@@ -1359,6 +1435,12 @@ export function createSelectTool(
         return doubleClick(event.point, context);
       }
       if (!isMoveOrUp(event) || state.kind === 'idle') return false;
+      if (state.kind === 'textDrag') {
+        const current = state;
+        if (event.kind === 'pointerup') state = { kind: 'idle' };
+        textDrag(current, event.point, context);
+        return true;
+      }
       if (event.kind === 'pointermove') pointerMove(event, context);
       else pointerUp(event, context);
       return true;

@@ -7,6 +7,7 @@ import type {
 } from '@vector-studio/contracts';
 import type {
   Arrow,
+  Color,
   Constraints,
   CornerRadii,
   DocumentErrorCode,
@@ -59,6 +60,11 @@ export type InputEvent =
       repeat?: boolean;
       /** `KeyboardEvent.isComposing`. */
       composing?: boolean;
+      /**
+       * Set by the host from `KeyboardEvent.keyCode === 229` (MVP M6b contract, section 5.1,
+       * rule 1): an IME is processing the key. Read in text edit mode only.
+       */
+      ime?: boolean;
       modifiers: Modifiers;
     }>
   | Readonly<{ kind: 'keyup'; key: string; code?: string; modifiers: Modifiers }>
@@ -71,7 +77,12 @@ export type InputEvent =
       modifiers: Modifiers;
     }>
   | Readonly<{ kind: 'doubleclick'; point: PagePoint; modifiers: Modifiers }>
-  | Readonly<{ kind: 'pointercancel'; modifiers: Modifiers }>;
+  | Readonly<{ kind: 'pointercancel'; modifiers: Modifiers }>
+  /**
+   * Text from `beforeinput` `insertText` (MVP M6b contract, section 5.3, M6b-Q3 (a)), valid in
+   * text edit mode only; outside it fails with `editor.no-text-edit`. It never reaches a tool.
+   */
+  | Readonly<{ kind: 'textinput'; text: string }>;
 
 /** Which `EditorOptions.platform` `Mod` resolves for: `Meta` on `mac`, else `Ctrl`. */
 export type Platform = 'mac' | 'other';
@@ -120,6 +131,57 @@ export type PathEditAnchor = PathAnchor & Readonly<{ selected: boolean; mirrored
 export type PathEditOverlay = Readonly<{
   id: string;
   subpaths: readonly Readonly<{ closed: boolean; anchors: readonly PathEditAnchor[] }>[];
+}>;
+
+/** Which line a caret at a soft wrap is drawn on (MVP M6b contract, section 2). */
+export type TextAffinity = 'downstream' | 'upstream';
+
+/**
+ * A text caret (M6b contract, section 2): `anchor` and `focus` are UTF-16 offsets on stops
+ * (section 4.1); `affinity` matters only when collapsed at a soft wrap.
+ */
+export type TextCaret = Readonly<{ anchor: number; focus: number; affinity: TextAffinity }>;
+
+/** The style a new text node takes (M6b-S2): one run's family, size and colour. */
+export type TextStyle = Readonly<{ family: string; size: number; color: Color }>;
+
+/** A text node the text tool placed but nothing created yet (M6b contract, section 3.2). */
+export type TextEditPending = Readonly<{
+  parent: string;
+  index: number;
+  /** Page space, rotation 0. */
+  frame: Frame;
+  sizing: 'autoWidth' | 'autoHeight';
+  style: TextStyle;
+}>;
+
+/**
+ * Text edit mode (M6b-S1): session state, never history. Exactly one of `id` and `pending` is
+ * null; `anchor` and `focus` are on stops of the edited text.
+ */
+export type TextEditState = Readonly<{
+  id: string | null;
+  pending: TextEditPending | null;
+  anchor: number;
+  focus: number;
+  affinity: TextAffinity;
+  composition: Readonly<{ start: number; end: number }> | null;
+}>;
+
+/** Four page points in order: a box's top-left, top-right, bottom-right and bottom-left. */
+export type Quad = readonly [PagePoint, PagePoint, PagePoint, PagePoint];
+
+/**
+ * The `textEditOverlay` query (M6b contract, section 4.5), in page space: the collapsed caret
+ * (null for a non-empty selection), the selection's quads per line, the composition underline
+ * segments, and `inputRect`, the axis-aligned top-left and height of the focus caret's segment.
+ */
+export type TextEditOverlay = Readonly<{
+  id: string | null;
+  caret: readonly [PagePoint, PagePoint] | null;
+  selection: readonly Quad[];
+  composition: readonly (readonly [PagePoint, PagePoint])[];
+  inputRect: Readonly<{ x: number; y: number; height: number }>;
 }>;
 
 /** Tool state the host UI draws over the canvas; it is never document content. */
@@ -456,7 +518,23 @@ export type SessionCommand =
   /** Ends edit mode and keeps the selection; a no-op outside edit mode. */
   | Readonly<{ type: 'exitPathEdit' }>
   /** Sets the anchor selection of the edited path, stored canonical. */
-  | Readonly<{ type: 'setPathSelection'; anchors: readonly PathAnchorRef[] }>;
+  | Readonly<{ type: 'setPathSelection'; anchors: readonly PathAnchorRef[] }>
+  // Text edit mode (MVP M6b contract, sections 2 and 3.1).
+  /**
+   * Enters text edit mode on a text node of the active page at any depth: ends an active
+   * gesture, activates the select tool, selects `[id]` and sets the caret (default: all text
+   * selected; one offset given sets a collapsed caret there). On the node already in edit mode
+   * it only sets the caret.
+   */
+  | Readonly<{ type: 'enterTextEdit'; id: string; anchor?: number; focus?: number }>
+  /** Ends text edit mode and keeps the selection; a no-op outside edit mode. */
+  | Readonly<{ type: 'exitTextEdit' }>
+  /** Sets the caret of the edited node; `affinity` defaults to `downstream`. */
+  | Readonly<{ type: 'setTextSelection'; anchor: number; focus: number; affinity?: TextAffinity }>
+  /** Commits an active composition (section 7.3); a no-op without one. */
+  | Readonly<{ type: 'endComposition' }>
+  /** Sets the text tool style (M6b-S2), a full `TextStyle`. */
+  | Readonly<{ type: 'setTextToolStyle'; style: TextStyle }>;
 
 export type Command =
   | DocumentCommand
@@ -522,14 +600,19 @@ export type EditorErrorCode =
   // MVP M6a contract, sections 5 and 6.1.
   | 'editor.not-a-text-node'
   | 'editor.invalid-text-range'
-  | 'editor.no-text-layout';
+  | 'editor.no-text-layout'
+  // MVP M6b contract, section 3.1.
+  | 'editor.no-text-edit';
 
 /**
  * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key
- * binding acted on the event, so a host calls `preventDefault` only then.
+ * binding acted on the event, so a host calls `preventDefault` only then. `passThrough` (MVP
+ * M6b contract, section 5.2, M6b-Q2 (a)) comes only with `consumed: false` on a text edit mode
+ * keydown the editor leaves to text input: the host neither prevents it nor runs its own
+ * shortcut for it.
  */
 export type CommandResult =
-  | Readonly<{ ok: true; ids: readonly string[]; consumed?: boolean }>
+  | Readonly<{ ok: true; ids: readonly string[]; consumed?: boolean; passThrough?: true }>
   | Readonly<{ ok: false; code: EditorErrorCode; path?: string; consumed?: boolean }>;
 
 export type HistoryState = Readonly<{ undoDepth: number; redoDepth: number }>;
@@ -558,6 +641,10 @@ export type EditorSnapshot = Readonly<{
   scope: string | null;
   /** Path edit mode (M3 contract, section 4), or null. */
   pathEdit: PathEditState | null;
+  /** Text edit mode (M6b contract, M6b-S1), or null. */
+  textEdit: TextEditState | null;
+  /** The style the text tool gives a new node (M6b-S2). */
+  textStyle: TextStyle;
 }>;
 
 export type Query =
@@ -596,7 +683,11 @@ export type Query =
    * The layout of a text node through the editor's cache (M6a contract, section 5), or null
    * without a port or for an ID that names no text node.
    */
-  | Readonly<{ type: 'textLayout'; id: string }>;
+  | Readonly<{ type: 'textLayout'; id: string }>
+  /** Text edit mode, or null (M6b contract, M6b-S1). */
+  | Readonly<{ type: 'textEdit' }>
+  /** The caret, selection and composition of text edit mode in page space, or null (4.5). */
+  | Readonly<{ type: 'textEditOverlay' }>;
 
 /**
  * The select tool's resize handle box for the selection, in page space (M1 contract, section
@@ -656,7 +747,11 @@ export type QueryResult<Q extends Query> = Q extends { type: 'document' | 'commi
                                     ? PathEditOverlay | null
                                     : Q extends { type: 'textLayout' }
                                       ? TextLayoutResult | null
-                                      : number;
+                                      : Q extends { type: 'textEdit' }
+                                        ? TextEditState | null
+                                        : Q extends { type: 'textEditOverlay' }
+                                          ? TextEditOverlay | null
+                                          : number;
 
 export type DocumentChangeCause =
   'command' | 'gesture-update' | 'gesture-commit' | 'gesture-cancel' | 'undo' | 'redo' | 'load';
@@ -684,7 +779,10 @@ export type EditorEvent =
         | 'scope'
         | 'pathEdit'
         /** The text layout port's generation changed (M6a contract, section 5). */
-        | 'textLayout';
+        | 'textLayout'
+        /** Text edit mode and the text tool style (M6b contract, M6b-S1 and S2). */
+        | 'textEdit'
+        | 'textStyle';
     }>
   | DiagnosticEvent;
 
