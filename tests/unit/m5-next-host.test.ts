@@ -13,7 +13,7 @@ import {
 import {
   parseEnvelope,
   serializeDocument,
-  type DocumentV5,
+  type DocumentV6,
   type PersistenceEnvelope,
 } from '@vector-studio/model';
 import { openDocumentStore } from '@vector-studio/persistence-idb';
@@ -279,7 +279,7 @@ function rect(h: Harness, x = 0): string {
   return ok(h.editor, { type: 'createRectangle', frame: { x, y: 0, width: 100, height: 100 } })[0]!;
 }
 
-function committed(target: Editor): DocumentV5 {
+function committed(target: Editor): DocumentV6 {
   return target.query({ type: 'committedDocument' });
 }
 

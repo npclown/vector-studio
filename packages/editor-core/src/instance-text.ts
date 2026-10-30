@@ -1,6 +1,6 @@
 import {
   validateNode,
-  type DocumentV5,
+  type DocumentV6,
   type InstanceNodeV5,
   type TextOverride,
 } from '@vector-studio/model';
@@ -16,7 +16,7 @@ import type { DocumentCommand } from './types.js';
 // An override holds runs only, in the source's space; the expansion applies it (`expansion.ts`)
 // and `Draft.finish` drops keys left without their text node. No port is needed.
 
-type Finish = (draft: Draft) => DocumentV5 | Failure;
+type Finish = (draft: Draft) => DocumentV6 | Failure;
 type InstanceTextCommand<T extends 'setInstanceText' | 'clearInstanceText'> = Extract<
   DocumentCommand,
   { type: T }
@@ -55,7 +55,7 @@ function withKey(
 }
 
 /** `id` names an instance: `editor.unknown-node`, then `editor.not-an-instance` (no path). */
-function instanceOf(document: DocumentV5, id: string): InstanceNodeV5 | Failure {
+function instanceOf(document: DocumentV6, id: string): InstanceNodeV5 | Failure {
   const node = nodeOf(document, id);
   if (node === undefined) return fail('editor.unknown-node');
   if (node.type !== 'instance') return fail('editor.not-an-instance');
@@ -63,7 +63,7 @@ function instanceOf(document: DocumentV5, id: string): InstanceNodeV5 | Failure 
 }
 
 /** Whether `id` is a text node of the subtree of the instance's source. */
-function isSourceText(document: DocumentV5, instance: InstanceNodeV5, id: string): boolean {
+function isSourceText(document: DocumentV6, instance: InstanceNodeV5, id: string): boolean {
   const node = nodeOf(document, id);
   if (node?.type !== 'text') return false;
   return ancestors(documentTree(document), id).some((up) => up.id === instance.symbol);
@@ -75,7 +75,7 @@ function isFailure(value: object): value is Failure {
 
 /** The command's document with `instance` replaced, as one step; unchanged gives no step. */
 function written(
-  document: DocumentV5,
+  document: DocumentV6,
   instance: InstanceNodeV5,
   textOverrides: Record<string, TextOverride>,
   finish: Finish,
@@ -102,7 +102,7 @@ function written(
  * a command that changes nothing records no step.
  */
 export function setInstanceText(
-  document: DocumentV5,
+  document: DocumentV6,
   command: InstanceTextCommand<'setInstanceText'>,
   _context: EditContext,
   finish: Finish,
@@ -146,7 +146,7 @@ export function setInstanceText(
  * subtree (`editor.not-a-text-node` at `/node`). A command that changes nothing records no step.
  */
 export function clearInstanceText(
-  document: DocumentV5,
+  document: DocumentV6,
   command: InstanceTextCommand<'clearInstanceText'>,
   _context: EditContext,
   finish: Finish,

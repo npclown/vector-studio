@@ -1,9 +1,9 @@
 import {
   serializeDocument,
   validateDocument,
-  type DocumentV5,
+  type DocumentV6,
   type Frame,
-  type PathNodeV2,
+  type PathNodeV6,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
@@ -230,9 +230,9 @@ function ok(target: Editor, command: Command): readonly string[] {
 
 const text = (target: Editor) => serializeDocument(target.query({ type: 'document' }));
 const documentOf = (target: Editor) => target.query({ type: 'document' });
-const pathOf = (target: Editor, id: string) => target.query({ type: 'node', id }) as PathNodeV2;
+const pathOf = (target: Editor, id: string) => target.query({ type: 'node', id }) as PathNodeV6;
 const undoDepth = (target: Editor) => target.query({ type: 'history' }).undoDepth;
-const stored = (document: DocumentV5, id: string) => document.nodes[id] as PathNodeV2;
+const stored = (document: DocumentV6, id: string) => document.nodes[id] as PathNodeV6;
 
 function move(id: string, anchors: [number, number][], dx: number, dy: number): DocumentCommand {
   return {
@@ -262,14 +262,14 @@ function handle(
 }
 
 /** The page point of a node-local point: `apply(C, x, y)` with the node's chain `C`. */
-function pagePoint(document: DocumentV5, id: string, x: number, y: number): PagePoint {
+function pagePoint(document: DocumentV6, id: string, x: number, y: number): PagePoint {
   const node = document.nodes[id]!;
   const space = spaceOf(documentTree(document), node.parent);
   return apply(multiply(space.matrix, localTransform(node.frame, node.rotation)), x, y);
 }
 
 /** Every stored point of a path node on the page, in point order. */
-function pagePoints(document: DocumentV5, id: string): PagePoint[] {
+function pagePoints(document: DocumentV6, id: string): PagePoint[] {
   const node = stored(document, id);
   const { width, height } = node.frame;
   const out: PagePoint[] = [];
@@ -293,7 +293,7 @@ function expectNear(actual: PagePoint, expected: PagePoint, label: string) {
  * Section 3.1, box changed, in the test's own terms: every node-local point `L` becomes
  * `(L − min) / w′`; the frame is `(w′, h′)` about the node's own axes.
  */
-function refitBox(node: PathNodeV2, local: readonly PagePoint[]) {
+function refitBox(node: PathNodeV6, local: readonly PagePoint[]) {
   const xs = local.map((p) => p.x);
   const ys = local.map((p) => p.y);
   const minX = Math.min(...xs);
@@ -314,7 +314,7 @@ function refitBox(node: PathNodeV2, local: readonly PagePoint[]) {
 }
 
 /** A path node's node-local points `(u·W, v·H)`. */
-function localPoints(node: PathNodeV2): PagePoint[] {
+function localPoints(node: PathNodeV6): PagePoint[] {
   const out: PagePoint[] = [];
   for (let i = 0; i < node.path.points.length; i += 2) {
     out.push(
@@ -325,7 +325,7 @@ function localPoints(node: PathNodeV2): PagePoint[] {
 }
 
 /** The document with `node` set and the M1 group refit, as text. */
-function refitText(document: DocumentV5, node: PathNodeV2): string {
+function refitText(document: DocumentV6, node: PathNodeV6): string {
   const draft = new Draft(document);
   draft.set(node);
   const result = draft.finish(() => null);
@@ -334,7 +334,7 @@ function refitText(document: DocumentV5, node: PathNodeV2): string {
 }
 
 describe('M3-A01 anchor model and serializer', () => {
-  const nodes = FIXTURE.nodes as unknown as Record<string, PathNodeV2>;
+  const nodes = FIXTURE.nodes as unknown as Record<string, PathNodeV6>;
   const model = (id: string) => readAnchorModel(nodes[id]!.path);
 
   it('reads an open subpath: anchors, segments and handles', () => {
@@ -1858,7 +1858,7 @@ function seeded(seed: number): () => number {
  * (a page point or a retraction), insertions, removals that keep each touched subpath at 2 or
  * more anchors, closes and opens. A model without a fitting target falls back to a move.
  */
-function randomCommand(random: () => number, document: DocumentV5, id: string): DocumentCommand {
+function randomCommand(random: () => number, document: DocumentV6, id: string): DocumentCommand {
   const node = stored(document, id);
   const model = readAnchorModel(node.path);
   const pick = <T>(list: readonly T[]): T => list[Math.floor(random() * list.length)]!;
@@ -1949,7 +1949,7 @@ function randomCommand(random: () => number, document: DocumentV5, id: string): 
 
 describe('M3-A07 grammar and history under seeded path commands', () => {
   const shapes = ['open', 'closed', 'tri', 'loop', 'dot', 'moves', 'multi'];
-  const nodes = FIXTURE.nodes as unknown as Record<string, PathNodeV2>;
+  const nodes = FIXTURE.nodes as unknown as Record<string, PathNodeV6>;
   /** One A01 shape page-root (`a`), rotated (`b`) and in a rotated group in a rotated frame (`c`). */
   const placed = (shape: string) => {
     const { verbs, points } = nodes[shape]!.path;

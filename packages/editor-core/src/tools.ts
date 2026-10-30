@@ -1,8 +1,8 @@
 import {
   normalizeRotation,
-  type DocumentV5,
+  type DocumentV6,
   type Frame,
-  type PathNodeV2,
+  type PathNodeV6,
 } from '@vector-studio/model';
 import type { Tool, ToolContext } from './editor.js';
 import { ExpansionCache } from './expansion.js';
@@ -369,7 +369,7 @@ const CORNERS: readonly Handle[] = [HANDLES[0], HANDLES[2], HANDLES[4], HANDLES[
  * A node's page rotation `turn` (its parent chain's rotation `chain` plus its own, not
  * normalized), its stored frame and rotation, as the rotate gesture records them at press.
  */
-function singleOf(document: DocumentV5, id: string) {
+function singleOf(document: DocumentV6, id: string) {
   const node = document.nodes[id]!;
   const chain = spaceOf(documentTree(document), node.parent).rotation;
   return { turn: chain + node.rotation, chain, frame: node.frame, rotation: node.rotation };
@@ -380,7 +380,7 @@ function singleOf(document: DocumentV5, id: string) {
  * handles where the tool picks them, also for nested and rotated nodes.
  */
 export function selectionHandles(
-  document: DocumentV5,
+  document: DocumentV6,
   page: string,
   selection: readonly string[],
 ): SelectionHandles | null {
@@ -774,7 +774,7 @@ export function createSelectTool(
       // Alt pulls mirrored handles on the `out` side, or `in` at the end of an open subpath;
       // an anchor without segments does nothing.
       const { ref } = target;
-      const model = readAnchorModel((document.nodes[id] as PathNodeV2).path)[ref.subpath]!;
+      const model = readAnchorModel((document.nodes[id] as PathNodeV6).path)[ref.subpath]!;
       const side =
         outSegment(model, ref.anchor) !== null
           ? 'out'
@@ -1313,7 +1313,7 @@ export function createSelectTool(
   ): void {
     const edit = context.query({ type: 'pathEdit' })!;
     const document = context.query({ type: 'document' });
-    const node = document.nodes[edit.id] as PathNodeV2;
+    const node = document.nodes[edit.id] as PathNodeV6;
     const { subpath, segment } = target;
     const t = segmentParameter(document, node, subpath, segment, point, zoomOf(context));
     if (!(t > 0 && t < 1)) return;

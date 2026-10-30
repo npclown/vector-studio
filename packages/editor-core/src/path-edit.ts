@@ -1,4 +1,4 @@
-import type { DocumentV5, PathData, PathNodeV2 } from '@vector-studio/model';
+import type { DocumentV6, PathData, PathNodeV6 } from '@vector-studio/model';
 import { deepFreeze } from './freeze.js';
 import { apply, invertRigid, localTransform, multiply, type Matrix } from './geometry.js';
 import {
@@ -48,7 +48,7 @@ export type PageSubpath = Readonly<{
 
 /** The edited path in page space, with its node-to-page placement. */
 export type PathGeometry = Readonly<{
-  node: PathNodeV2;
+  node: PathNodeV6;
   subpaths: readonly PageSubpath[];
   /** Node-local point to page point (section 5.1). */
   toPage(point: PagePoint): PagePoint;
@@ -65,10 +65,10 @@ export type PathTarget =
 
 /** The `path` node `id` of `page`, or undefined. */
 export function editablePath(
-  document: DocumentV5,
+  document: DocumentV6,
   page: string,
   id: string,
-): PathNodeV2 | undefined {
+): PathNodeV6 | undefined {
   const node = Object.hasOwn(document.nodes, id) ? document.nodes[id] : undefined;
   if (node?.type !== 'path') return undefined;
   return pageOf(documentTree(document), id) === page ? node : undefined;
@@ -79,7 +79,7 @@ export function editablePath(
  * `apply(C, L.x, L.y)` with `C = spaceOf(parent).matrix · localTransform(frame, θ)`, and exactly
  * to `(x + u·W, y + v·H)` for a page-root node with `θ = 0`, as `flatten` does.
  */
-export function pathGeometry(document: DocumentV5, node: PathNodeV2): PathGeometry {
+export function pathGeometry(document: DocumentV6, node: PathNodeV6): PathGeometry {
   const tree = documentTree(document);
   const { frame, rotation } = node;
   const pageRoot = tree.page(node.parent) !== undefined && rotation === 0;
@@ -197,8 +197,8 @@ function selectedTest(state: PathEditState) {
 }
 
 /** The `pathOverlay` query value (section 5.1): frozen, in page space. */
-export function pathEditOverlay(document: DocumentV5, state: PathEditState): PathEditOverlay {
-  const node = document.nodes[state.id] as PathNodeV2;
+export function pathEditOverlay(document: DocumentV6, state: PathEditState): PathEditOverlay {
+  const node = document.nodes[state.id] as PathNodeV6;
   const geometry = pathGeometry(document, node);
   const selected = selectedTest(state);
   return deepFreeze({
@@ -235,8 +235,8 @@ export function segmentPolyline(subpath: PageSubpath, k: number, tolerance: numb
  * chord `j` (ties to the lower `j`) with clamped projection parameter `σ`, `t = (j + σ) / N`.
  */
 export function segmentParameter(
-  document: DocumentV5,
-  node: PathNodeV2,
+  document: DocumentV6,
+  node: PathNodeV6,
   s: number,
   k: number,
   point: PagePoint,
@@ -270,13 +270,13 @@ function insidePathFill(geometry: PathGeometry, point: PagePoint, tolerance: num
  * the path has one; else null (the M2 hit rules apply).
  */
 export function pathTargetAt(
-  document: DocumentV5,
+  document: DocumentV6,
   state: PathEditState,
   point: PagePoint,
   zoom: number,
   radius: number,
 ): PathTarget | null {
-  const node = document.nodes[state.id] as PathNodeV2;
+  const node = document.nodes[state.id] as PathNodeV6;
   const geometry = pathGeometry(document, node);
   const distance = (p: PagePoint) => Math.hypot(point.x - p.x, point.y - p.y);
   const { subpaths } = geometry;

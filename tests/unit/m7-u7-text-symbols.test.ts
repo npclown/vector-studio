@@ -11,9 +11,9 @@ import {
   validateFragmentTree,
   validateNode,
   type DocumentV4,
-  type DocumentV5,
+  type DocumentV6,
   type InstanceNodeV5,
-  type NodeV5,
+  type NodeV6,
   type TextNode,
   type TextRun,
 } from '@vector-studio/model';
@@ -41,12 +41,16 @@ import { createFakeTextLayout } from '../support/fake-text-layout.js';
 // 2, `t2` overridden), `i3` (150 x 40, none) and a page text `tp` on page 1; source `s2`
 // (autoHeight text `t3`), `i4` of `s1` (both texts overridden) and `i5` of `s2` on page 2. Every
 // command leaves a document `validateDocument` accepts; a failed one changes nothing and draws no
-// ID; each success is one undo step whose undo and redo are byte-identical.
+// ID; each success is one undo step whose undo and redo are byte-identical. Since M4-U1 the model
+// reads and writes schema v6 (M4 contract, section 2.1): the tests work on the fixture's committed
+// v6 migration `m4-appearance/migrated/text-symbols.v6.json`, which differs from it in the version
+// only (it has no stroke), and copy writes fragments at v6.
 
 const root = path.resolve(import.meta.dirname, '../..');
 const fixtures = path.join(root, 'tests/fixtures');
 const read = (file: string) => readFileSync(path.join(fixtures, file), 'utf8');
-const TEXT_SYMBOLS = read('m7-symbols/text-symbols.v5.json');
+const TEXT_SYMBOLS_V5 = read('m7-symbols/text-symbols.v5.json');
+const TEXT_SYMBOLS = read('m4-appearance/migrated/text-symbols.v6.json');
 const black = { r: 0, g: 0, b: 0, a: 1 };
 const red = { r: 1, g: 0, b: 0, a: 1 };
 const blue = { r: 0, g: 0, b: 1, a: 1 };
@@ -58,7 +62,7 @@ const run = (text: string, size = 10, color = black, family = 'Test'): TextRun =
   color,
 });
 
-function parsed(text: string): DocumentV5 {
+function parsed(text: string): DocumentV6 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -141,16 +145,21 @@ function oneStep(target: Editor, command: Command): string {
   return after;
 }
 
-function expanded(document: DocumentV5, id: string): Expansion {
+function expanded(document: DocumentV6, id: string): Expansion {
   const result = expandInstance(document, id);
   if (result === null || !result.ok) throw new Error(`no expansion of ${id}`);
   return result.expansion;
 }
-const expandedText = (document: DocumentV5, instance: string, node: string) =>
+const expandedText = (document: DocumentV6, instance: string, node: string) =>
   expanded(document, instance).nodes.get(node) as TextNode;
 
 describe('M7-T3 schema v5: the instance override field (M6a contract, section 9)', () => {
   it('round-trips the text-symbols fixture byte for byte, also through the envelope', () => {
+    // The v5 fixture reads as its v6 migration, the version changed only (M4 section 2.1).
+    expect(TEXT_SYMBOLS).toBe(
+      TEXT_SYMBOLS_V5.replace('"schemaVersion": 5,', '"schemaVersion": 6,'),
+    );
+    expect(serializeDocument(parsed(TEXT_SYMBOLS_V5))).toBe(TEXT_SYMBOLS);
     const value = parsed(TEXT_SYMBOLS);
     expect(serializeDocument(value)).toBe(TEXT_SYMBOLS);
     expect(parsed(serializeDocument(value))).toEqual(value);
@@ -187,7 +196,7 @@ describe('M7-T3 schema v5: the instance override field (M6a contract, section 9)
           symbol,
         },
       },
-    } as DocumentV5;
+    } as DocumentV6;
     expect(serializeDocument(shuffled)).toBe(TEXT_SYMBOLS);
     // A read sorts the keys too.
     const reversed = json();
@@ -254,7 +263,10 @@ describe('M7-T3 schema v5: the instance override field (M6a contract, section 9)
         JSON.stringify({ envelopeVersion: 1, lastOpenPageId: 'page-1', document: value }),
       );
       expect(envelope).toEqual({ ok: false, code, path: `/document${at}` });
-      if (value.schemaVersion === 5) expect(validateDocument(value)).toEqual(expected);
+      // The v5 fixtures hold no stroke, so at v6 they differ in the version only (M4-M1).
+      if (value.schemaVersion === 5) {
+        expect(validateDocument({ ...value, schemaVersion: 6 })).toEqual(expected);
+      }
       // The editor refuses it on load.
       expect(() => createEditor({ document: value })).toThrow(`${code} at ${at}`);
     },
@@ -344,6 +356,9 @@ describe('M7-T3 migration v4 to v5 (M7-Q11 (a))', () => {
   })();
   const v5Of = (file: string) =>
     `m7-symbols/migrated/${path.basename(file).replace(/\.v4\.json$/, '')}.v5.json`;
+  /** What the model now writes for it, through `migrateV5toV6` (M4 contract, section 2.1). */
+  const v6Of = (file: string) =>
+    `m4-appearance/migrated/${path.basename(file).replace(/\.v4\.json$/, '')}.v6.json`;
 
   it('finds the v4 text fixtures, their migrations and envelopes', () => {
     expect(v4Fixtures).toContain('m6-text/text.v4.json');
@@ -356,13 +371,17 @@ describe('M7-T3 migration v4 to v5 (M7-Q11 (a))', () => {
   it.each(v4Fixtures)('migrates %s byte for byte to its committed v5 text', (file) => {
     const v4 = read(file);
     const v5 = read(v5Of(file));
+    const v6 = read(v6Of(file));
     if (file.includes('.envelope.')) {
       const result = parseEnvelope(v4);
-      expect(result.ok && serializeEnvelope(result.envelope)).toBe(v5);
+      expect(result.ok && serializeEnvelope(result.envelope)).toBe(v6);
+      expect(parseEnvelope(v5)).toEqual(result);
     } else {
-      expect(serializeDocument(parsed(v4))).toBe(v5);
+      expect(serializeDocument(parsed(v4))).toBe(v6);
+      expect(parsed(v5)).toEqual(parsed(v4));
       const migrated = migrateV4toV5(JSON.parse(v4) as DocumentV4);
-      expect(migrated.ok && serializeDocument(migrated.document)).toBe(v5);
+      // The model writes v6 only, so the v5 result is compared as a value.
+      expect(migrated.ok && migrated.document).toEqual(JSON.parse(v5));
     }
     // Only the version changes and every instance gains an empty override map.
     const indent = file.includes('.envelope.') ? '    ' : '  ';
@@ -387,7 +406,7 @@ describe('M7-T3 migration v4 to v5 (M7-Q11 (a))', () => {
     }
   });
 
-  it('rejects textOverrides on a v4 instance, also through migrateV4toV5, and accepts no v6', () => {
+  it('rejects textOverrides on a v4 instance, also through migrateV4toV5, and accepts no v7', () => {
     const value = JSON.parse(read('m7-symbols/malformed/override-in-v4.json')) as DocumentV4;
     const at = { ok: false, code: 'document.invalid-field', path: '/nodes/i1/textOverrides' };
     expect(migrateV4toV5(value)).toEqual(at);
@@ -396,7 +415,7 @@ describe('M7-T3 migration v4 to v5 (M7-Q11 (a))', () => {
       code: 'document.unsupported-version',
       path: '/schemaVersion',
     });
-    expect(parseDocument(JSON.stringify({ ...json(), schemaVersion: 6 }))).toEqual({
+    expect(parseDocument(JSON.stringify({ ...json(), schemaVersion: 7 }))).toEqual({
       ok: false,
       code: 'document.unsupported-version',
       path: '/schemaVersion',
@@ -405,7 +424,7 @@ describe('M7-T3 migration v4 to v5 (M7-Q11 (a))', () => {
 
   it('loads a v4 document with text in a symbol (M7-T1), migrated', () => {
     const { target } = counted(JSON.parse(read('m6-text/text-in-symbol.v4.json')));
-    expect(text(target)).toBe(read('m7-symbols/migrated/text-in-symbol.v5.json'));
+    expect(text(target)).toBe(read('m4-appearance/migrated/text-in-symbol.v6.json'));
   });
 });
 
@@ -761,13 +780,13 @@ describe('M7-T3 detach copies the override runs', () => {
 describe('M7-T3 the M7-X4 cache with overrides', () => {
   it('recomputes only the source child whose override changed, and reuses the rest', () => {
     const { target } = counted();
-    const after = (command: Command): DocumentV5 => {
+    const after = (command: Command): DocumentV6 => {
       ok(target, command);
       return documentOf(target);
     };
     const cache = new ExpansionCache();
     const nodesOf = (result: ReturnType<ExpansionCache['expand']>) =>
-      result?.ok ? result.expansion.nodes : new Map<string, NodeV5>();
+      result?.ok ? result.expansion.nodes : new Map<string, NodeV6>();
     // s1 has two direct children, t1 and g1 (holding t2 and r1): one subtree each. i2 is at
     // scale 2, so every copy is a new object and reuse shows as object identity.
     const first = cache.expand(documentOf(target), 'i2');
@@ -841,10 +860,10 @@ describe('M7-T3 paste and duplicate', () => {
   };
   const marked = (body: Body) => MARKER + JSON.stringify(body);
 
-  it('writes the overrides into the fragment at schema v5', () => {
+  it('writes the overrides into the fragment at schema v6 (since M4-U1)', () => {
     const { target } = counted();
     const body = copied(target, ['i1']);
-    expect(body.schemaVersion).toBe(5);
+    expect(body.schemaVersion).toBe(6);
     expect(body.nodes.i1!.textOverrides).toEqual({ t1: { runs: [run('xy', 10, red)] } });
     expect(body.sources).toEqual(['s1']);
   });
@@ -1045,7 +1064,7 @@ describe('M7-T1 text in sources through the commands', () => {
     const document = parsed(TEXT_SYMBOLS);
     expect(expandedText(document, 'i4', 't2').runs).toEqual([run('')]);
     expect(expandedText(document, 'i5', 't3').runs).toEqual([run('gh\nij')]);
-    const node: NodeV5 = document.nodes.i5!;
+    const node: NodeV6 = document.nodes.i5!;
     expect(node.type).toBe('instance');
   });
 });

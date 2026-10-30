@@ -1,4 +1,4 @@
-import type { DocumentV5, Frame, PathData, PathNodeV2, PathVerb } from '@vector-studio/model';
+import type { DocumentV6, Frame, PathData, PathNodeV6, PathVerb } from '@vector-studio/model';
 import { Draft, fail, type Failure } from './draft.js';
 import { isPoint, nodeOf, success, type EditContext, type EditResult } from './edit-support.js';
 import { apply, invertRigid, localTransform, multiply, rotate } from './geometry.js';
@@ -230,9 +230,9 @@ export function renormalize(
   return { frame: { x: x === 0 ? 0 : x, y: y === 0 ? 0 : y, width: w, height: h }, unit };
 }
 
-type Finish = (draft: Draft) => DocumentV5 | Failure;
+type Finish = (draft: Draft) => DocumentV6 | Failure;
 type PathTarget = Readonly<{
-  node: PathNodeV2;
+  node: PathNodeV6;
   model: ModelSubpath[];
   /** Page point to node-local point, and page vector to node-local vector (section 3). */
   toLocal(point: PagePoint): PagePoint;
@@ -297,7 +297,7 @@ export function inRange(model: readonly ModelSubpath[], ref: PathAnchorRef): boo
  * (a node of the active page), then `editor.not-a-path`.
  */
 function pathTarget(
-  document: DocumentV5,
+  document: DocumentV6,
   id: string,
   context: Pick<EditContext, 'activePage'>,
 ): PathTarget | Failure {
@@ -321,7 +321,7 @@ function pathTarget(
 }
 
 /** A no-op: the document itself, no step, no event, no IDs (section 3). */
-function unchanged(document: DocumentV5): EditResult {
+function unchanged(document: DocumentV6): EditResult {
   return { ok: true, document, touched: [], created: [] };
 }
 
@@ -331,8 +331,8 @@ function unchanged(document: DocumentV5): EditResult {
  * touched (no step, no event, no IDs).
  */
 function written(
-  document: DocumentV5,
-  node: PathNodeV2,
+  document: DocumentV6,
+  node: PathNodeV6,
   model: readonly ModelSubpath[],
   finish: Finish,
 ): EditResult {
@@ -369,7 +369,7 @@ function plus(point: EditPoint, d: PagePoint, width: number, height: number): Ed
  * vector `(dx, dy)` turned into the node's local axes. A relative command (S1).
  */
 export function movePathAnchors(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'movePathAnchors' }>,
   context: EditContext,
   finish: Finish,
@@ -437,7 +437,7 @@ function setControl(subpath: ModelSubpath, k: number, start: boolean, value: Edi
  * becomes a line). A relative command (S1).
  */
 export function setPathHandle(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'setPathHandle' }>,
   context: EditContext,
   finish: Finish,
@@ -511,7 +511,7 @@ const computed = (p: PagePoint): EditPoint => localPoint(p.x, p.y);
  * two cubics by de Casteljau; `P0` and `P3` stay copied. A relative command (S1).
  */
 export function insertPathAnchor(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'insertPathAnchor' }>,
   context: EditContext,
   finish: Finish,
@@ -606,7 +606,7 @@ function withoutAnchors(subpath: ModelSubpath, removed: ReadonlySet<number>): Mo
  * a result without subpaths fails with `editor.empty-path` (M3-Q4).
  */
 export function removePathAnchors(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'removePathAnchors' }>,
   context: EditContext,
   finish: Finish,
@@ -643,7 +643,7 @@ function subpathOf(model: readonly ModelSubpath[], s: number): ModelSubpath | Fa
  * which that anchor then merges into. Closing a closed subpath is a no-op.
  */
 export function closePathSubpath(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'closePathSubpath' }>,
   context: EditContext,
   finish: Finish,
@@ -676,7 +676,7 @@ export function closePathSubpath(
  * `close` only. Opening an open subpath is a no-op.
  */
 export function openPathSubpath(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'openPathSubpath' }>,
   context: EditContext,
   finish: Finish,

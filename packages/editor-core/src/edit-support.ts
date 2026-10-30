@@ -1,4 +1,4 @@
-import { isValidId, type DocumentV5, type NodeV5 } from '@vector-studio/model';
+import { isValidId, type DocumentV6, type NodeV6 } from '@vector-studio/model';
 import { fail, type Draft, type Failure } from './draft.js';
 import { expansionFailure, type ExpansionCache } from './expansion.js';
 import type { CustomDefaults, CustomFailure } from './extensions.js';
@@ -21,7 +21,7 @@ import type { IdSource, PagePoint } from './types.js';
 export type EditResult =
   | Readonly<{
       ok: true;
-      document: DocumentV5;
+      document: DocumentV6;
       /** Nodes created, changed or removed. */
       touched: readonly string[];
       /** Nodes or pages the command created. */
@@ -33,7 +33,7 @@ export type EditResult =
 
 /** The extension checks edits need (an `ExtensionRegistry`). */
 export type CustomRules = Readonly<{
-  check(node: NodeV5): CustomFailure | null;
+  check(node: NodeV6): CustomFailure | null;
   defaults(customType: string): CustomDefaults;
 }>;
 
@@ -48,7 +48,7 @@ export type EditContext = Readonly<{
    * A gesture's pre-gesture document. A container resized during the gesture applies the resize
    * rules from its state there, so each update is independent of the ones before it.
    */
-  resizeBase?: DocumentV5;
+  resizeBase?: DocumentV6;
   /**
    * The session state `paste` reads (M2 contract, section 6): the in-memory clipboard, used when
    * the command has no `text`, and the scope and selection that pick its target parent.
@@ -78,7 +78,7 @@ export type EditContext = Readonly<{
 export const ID_ATTEMPTS = 1000;
 export const PENDING_ID = 'pending';
 
-export function freshId(document: DocumentV5, ids: IdSource): string | null {
+export function freshId(document: DocumentV6, ids: IdSource): string | null {
   for (let attempt = 0; attempt < ID_ATTEMPTS; attempt += 1) {
     const id = ids();
     if (
@@ -102,7 +102,7 @@ export function uniqueIds(ids: unknown): readonly string[] | null {
   return [...seen];
 }
 
-export function nodeOf(document: DocumentV5, id: unknown): NodeV5 | undefined {
+export function nodeOf(document: DocumentV6, id: unknown): NodeV6 | undefined {
   return typeof id === 'string' && Object.hasOwn(document.nodes, id)
     ? document.nodes[id]
     : undefined;
@@ -119,7 +119,7 @@ export function inserted<T>(list: readonly T[], index: number, items: readonly T
  * first such node's `/parent`), then the clip depth of the subtrees whose ancestry changed.
  */
 export function structural(
-  document: DocumentV5,
+  document: DocumentV6,
   touched: Iterable<string>,
   clipRoots: readonly string[],
   nestingRoots: readonly string[] = [],
@@ -149,7 +149,7 @@ export function structural(
  * source and moves no instance checks none.
  */
 export function success(
-  document: DocumentV5 | Failure,
+  document: DocumentV6 | Failure,
   draft: Draft,
   created: readonly string[],
   clipRoots: readonly string[] = [],
@@ -186,7 +186,7 @@ export function isPoint(value: unknown): value is PagePoint {
  * `count` placeholder IDs (`pending-1`, `pending-2`, ...) that no page or node of `document` has,
  * for the trial build a creating command checks before it draws any ID (M2 contract, S8).
  */
-export function placeholderIds(document: DocumentV5, count: number): string[] {
+export function placeholderIds(document: DocumentV6, count: number): string[] {
   const placeholders: string[] = [];
   for (let n = 1; placeholders.length < count; n += 1) {
     const id = `${PENDING_ID}-${n}`;
@@ -222,7 +222,7 @@ export function remapFailure(
  * ID. Null when an ID cannot be drawn (`editor.duplicate-id`). Callers run every other check
  * first, so a failed command draws no ID.
  */
-export function drawIds(document: DocumentV5, ids: IdSource, count: number): string[] | null {
+export function drawIds(document: DocumentV6, ids: IdSource, count: number): string[] | null {
   const drawn: string[] = [];
   const seen = new Set<string>();
   for (let i = 0; i < count; i += 1) {

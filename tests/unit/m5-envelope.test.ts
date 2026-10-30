@@ -12,7 +12,7 @@ import {
   scanJson,
   serializeDocument,
   serializeEnvelope,
-  type DocumentV5,
+  type DocumentV6,
   type EnvelopeResult,
   type PersistenceEnvelope,
 } from '@vector-studio/model';
@@ -23,17 +23,18 @@ import { boundaries } from '../../tooling/boundary-policy.mjs';
 // MVP M5-U1 (M5 contract, section 2): the persistence envelope, its text form and codes, and the
 // `scanJson` `maxDepth` option (M5-A01 to M5-A03). The committed envelope fixtures under
 // tests/fixtures/m5-persistence were built from the committed M1 v2 fixtures (three header lines,
-// then the document text indented by two spaces), not by `serializeEnvelope`. Since M7-U7 the
-// model returns and writes schema v5, so they read as their committed v5 migrations under
-// tests/fixtures/m7-symbols/migrated, which differ from them in the document's version only (M7
-// contract, section 2.1; M6a contract, section 2.1).
+// then the document text indented by two spaces), not by `serializeEnvelope`. Since M4-U1 the
+// model returns and writes schema v6, so they read as their committed v6 migrations under
+// tests/fixtures/m4-appearance/migrated, which differ from them in the document's version and the
+// M4-M1 stroke keys (M7 contract, section 2.1; M6a contract, section 2.1; M4 contract, section
+// 2.1).
 
 const root = path.resolve(import.meta.dirname, '../..');
 const m5 = path.join(root, 'tests/fixtures/m5-persistence');
 const m1 = path.join(root, 'tests/fixtures/m1-model');
 const p5 = path.join(root, 'tests/fixtures/p5-model');
-const m7 = path.join(root, 'tests/fixtures/m7-symbols/migrated');
-const v5Name = (name: string) => `${name.replace(/\.v2$/, '')}.v5`;
+const m4 = path.join(root, 'tests/fixtures/m4-appearance/migrated');
+const v6Name = (name: string) => `${name.replace(/\.v2$/, '')}.v6`;
 
 /** Each committed envelope fixture, its M1 v2 document fixture and its last open page. */
 const ENVELOPES = [
@@ -48,7 +49,7 @@ function read(dir: string, name: string): Promise<string> {
   return readFile(path.join(dir, `${name}.json`), 'utf8');
 }
 
-function parsedDocument(text: string): DocumentV5 {
+function parsedDocument(text: string): DocumentV6 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -114,11 +115,11 @@ describe('M5-A01 envelope text and round trip', () => {
     'serializes the %s envelope byte for byte to its committed fixture',
     async (name, documentName, page) => {
       const text = await read(m5, `${name}.envelope`);
-      const v5 = await read(m7, `${name}.envelope.v5`);
-      const document = parsedDocument(await read(m7, v5Name(documentName)));
-      expect(serializeEnvelope({ document, lastOpenPageId: page })).toBe(v5);
-      expect(serializeEnvelope(parsed(text))).toBe(v5);
-      expect(serializeEnvelope(parsed(v5))).toBe(v5);
+      const v6 = await read(m4, `${name}.envelope.v6`);
+      const document = parsedDocument(await read(m4, v6Name(documentName)));
+      expect(serializeEnvelope({ document, lastOpenPageId: page })).toBe(v6);
+      expect(serializeEnvelope(parsed(text))).toBe(v6);
+      expect(serializeEnvelope(parsed(v6))).toBe(v6);
     },
   );
 
@@ -129,7 +130,7 @@ describe('M5-A01 envelope text and round trip', () => {
     });
     expect(
       text.startsWith(
-        '{\n  "envelopeVersion": 1,\n  "lastOpenPageId": "page-1",\n  "document": {\n    "schemaVersion": 5,\n',
+        '{\n  "envelopeVersion": 1,\n  "lastOpenPageId": "page-1",\n  "document": {\n    "schemaVersion": 6,\n',
       ),
     ).toBe(true);
     expect(Object.keys(JSON.parse(text) as object)).toEqual([
@@ -143,7 +144,7 @@ describe('M5-A01 envelope text and round trip', () => {
   it.each(ENVELOPES.map(([, documentName]) => documentName))(
     'round-trips the M1 fixture %s with each page as lastOpenPageId',
     async (documentName) => {
-      const documentText = await read(m7, v5Name(documentName));
+      const documentText = await read(m4, v6Name(documentName));
       const document = parsedDocument(await read(m1, documentName));
       expect(document.pages.length).toBeGreaterThan(0);
       for (const page of document.pages) {
@@ -161,16 +162,16 @@ describe('M5-A01 envelope text and round trip', () => {
   });
 
   it.each(V1)(
-    'migrates the v1 document inside the %s envelope to the committed v5 text',
+    'migrates the v1 document inside the %s envelope to the committed v6 text',
     async (name) => {
       const v1 = await read(path.join(m5, 'v1'), `${name}.envelope`);
       expect(
         (JSON.parse(v1) as { document: { schemaVersion: number } }).document.schemaVersion,
       ).toBe(1);
       const envelope = parsed(v1);
-      expect(envelope.document.schemaVersion).toBe(5);
-      expect(serializeEnvelope(envelope)).toBe(await read(m7, `${name}.envelope.v5`));
-      expect(serializeDocument(envelope.document)).toBe(await read(m7, `${name}.v5`));
+      expect(envelope.document.schemaVersion).toBe(6);
+      expect(serializeEnvelope(envelope)).toBe(await read(m4, `${name}.envelope.v6`));
+      expect(serializeDocument(envelope.document)).toBe(await read(m4, `${name}.v6`));
     },
   );
 
@@ -440,8 +441,9 @@ describe('M5-A03 model stays unchanged and import-free', () => {
       'e6dc522209f7a492e37072be17090bb2431bf86909ce24445522b28b1e2431d4',
     'm1-model/malformed/unsupported-version.json':
       // Moved from schemaVersion 3 to 4 by M7-U1 (M7 contract, section 2.1), to 5 by M6a-U1 (M6a
-      // contract, section 2.1), to 6 by M7-U7 (M6a contract, section 9).
-      '9a808406fe89bd827fa0dba179d07b65d85cb14f14d7aa74a484473e485a0d72',
+      // contract, section 2.1), to 6 by M7-U7 (M6a contract, section 9), to 7 by M4-U1 (M4
+      // contract, section 2.1).
+      '19443ac30ab86707a7d7a98507177617a364fa817ac8a3419eb548a3f585971f',
     'm1-model/shapes.v2.json': '7d03fa27cb8ce892150eea79aba402a596a9dfd0f26a8115efc9c5fd90226948',
     'p5-model/empty.json': '5935aafb5604fd7847dfe5c1a6e843f021aaa523bfb26ff50fdf3c4d13b5dc7f',
     'p5-model/ext-star.json': '942ad8c439902aaf1c30bce6b0e8cf0690eeff2613c899372ab250a9f43b9246',
@@ -459,8 +461,9 @@ describe('M5-A03 model stays unchanged and import-free', () => {
       '9677e620c8f60b085efd1cab642a751c49565d8d86fb8fa99f662f5efd158ee9',
     'p5-model/malformed/unsupported-version.json':
       // Moved from schemaVersion 3 to 4 by M7-U1 (M7 contract, section 2.1), to 5 by M6a-U1 (M6a
-      // contract, section 2.1), to 6 by M7-U7 (M6a contract, section 9).
-      'b01ec6b160488c9eae6c81df6aea3a13890c45a81080e6889acf9e22c002c748',
+      // contract, section 2.1), to 6 by M7-U7 (M6a contract, section 9), to 7 by M4-U1 (M4
+      // contract, section 2.1).
+      '542c036673bb62925bf2aba70a9ae7d73930f4f36c06a5ab8591e1f5a94eef84',
     'p5-model/shapes.json': '82f2172b30188618e5e925cba612bc72ac439eeed189bdd0eae2eba63a9f0474',
   };
 
@@ -489,11 +492,11 @@ describe('M5-A03 model stays unchanged and import-free', () => {
   it('keeps parseDocument and serializeDocument on the M1 fixtures', async () => {
     for (const name of ['empty.v2', 'shapes.v2', 'ext-star.v2', 'containers']) {
       const text = await read(m1, name);
-      expect(serializeDocument(parsedDocument(text))).toBe(await read(m7, v5Name(name)));
+      expect(serializeDocument(parsedDocument(text))).toBe(await read(m4, v6Name(name)));
     }
     for (const name of V1) {
       expect(serializeDocument(parsedDocument(await read(p5, name)))).toBe(
-        await read(m7, `${name}.v5`),
+        await read(m4, `${name}.v6`),
       );
     }
     // parseDocument still scans at MAX_DEPTH, not MAX_DEPTH + 1, and does not accept an envelope.

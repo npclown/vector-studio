@@ -1,12 +1,12 @@
 import {
   MAX_TREE_DEPTH,
-  type ContainerNodeV5,
-  type DocumentV5,
-  type FrameNode,
+  type ContainerNodeV6,
+  type DocumentV6,
+  type FrameNodeV6,
   type GroupNode,
-  type NodeV5,
+  type NodeV6,
   type PageV2,
-  type SymbolNode,
+  type SymbolNodeV6,
 } from '@vector-studio/model';
 import { IDENTITY, localTransform, multiply, type Matrix } from './geometry.js';
 
@@ -15,11 +15,11 @@ import { IDENTITY, localTransform, multiply, type Matrix } from './geometry.js';
 
 /** Read access to a document tree, shared by documents and the edit draft. */
 export interface TreeView {
-  node(id: string): NodeV5 | undefined;
+  node(id: string): NodeV6 | undefined;
   page(id: string): PageV2 | undefined;
 }
 
-export function documentTree(document: DocumentV5): TreeView {
+export function documentTree(document: DocumentV6): TreeView {
   return {
     node: (id) => (Object.hasOwn(document.nodes, id) ? document.nodes[id] : undefined),
     page: (id) => document.pages.find((page) => page.id === id),
@@ -30,7 +30,7 @@ export function documentTree(document: DocumentV5): TreeView {
  * A node with children: a group, mask group, frame or symbol. A symbol is a container as a frame
  * is (M7 contract, section 1.2).
  */
-export function isContainer(node: NodeV5 | undefined): node is ContainerNodeV5 {
+export function isContainer(node: NodeV6 | undefined): node is ContainerNodeV6 {
   return (
     node !== undefined &&
     (node.type === 'group' ||
@@ -44,18 +44,18 @@ export function isContainer(node: NodeV5 | undefined): node is ContainerNodeV5 {
  * A `frame` or a `symbol`: the containers the frame rules apply to (M7 contract, section 1.2):
  * constraints when resized, the mapping inside a resized group, the top-level artboard target.
  */
-export function isFrameLike(node: NodeV5 | undefined): node is FrameNode | SymbolNode {
+export function isFrameLike(node: NodeV6 | undefined): node is FrameNodeV6 | SymbolNodeV6 {
   return node?.type === 'frame' || node?.type === 'symbol';
 }
 
 /** A `group` or `maskGroup`: the containers that refit to their children. */
-export function isGroup(node: NodeV5 | undefined): node is GroupNode {
+export function isGroup(node: NodeV6 | undefined): node is GroupNode {
   return node !== undefined && (node.type === 'group' || node.type === 'maskGroup');
 }
 
 /** Container ancestors of `id`, innermost first. */
-export function ancestors(tree: TreeView, id: string): ContainerNodeV5[] {
-  const chain: ContainerNodeV5[] = [];
+export function ancestors(tree: TreeView, id: string): ContainerNodeV6[] {
+  const chain: ContainerNodeV6[] = [];
   let parent = tree.node(id)?.parent;
   for (let guard = 0; parent !== undefined && guard <= MAX_TREE_DEPTH + 1; guard += 1) {
     const node = tree.node(parent);
@@ -126,7 +126,7 @@ export function treeDepth(tree: TreeView, id: string): number {
  * Whether a container adds a clip level: a `frame`, a `maskGroup` (section 4.3) or a `symbol`,
  * which clips as a frame (M7 contract, section 1.2).
  */
-export function clipsChildren(node: NodeV5 | undefined): boolean {
+export function clipsChildren(node: NodeV6 | undefined): boolean {
   return node?.type === 'frame' || node?.type === 'maskGroup' || node?.type === 'symbol';
 }
 
@@ -265,7 +265,7 @@ export function treeDepthViolation(tree: TreeView, roots: readonly string[]): st
  * The first node of a document that breaks the clip-depth rule, in page and pre-order, an
  * instance whose expansion breaks it included (M7-S5).
  */
-export function documentClipViolation(document: DocumentV5): string | null {
+export function documentClipViolation(document: DocumentV6): string | null {
   const tree = documentTree(document);
   for (const page of document.pages) {
     const found = clipDepthViolation(tree, page.children);
@@ -324,8 +324,8 @@ export function sourceHeight(tree: TreeView, source: string): number {
 export type SymbolChange = Readonly<{ roots: readonly string[]; instances: readonly string[] }>;
 
 export function symbolChange(
-  base: DocumentV5,
-  document: DocumentV5,
+  base: DocumentV6,
+  document: DocumentV6,
   touched: Iterable<string>,
 ): SymbolChange {
   const tree = documentTree(document);
@@ -371,7 +371,7 @@ export function symbolChange(
  * `text` node does not count (M6a contract, section 9, M7-T1).
  */
 export function nestedSymbolViolation(
-  document: DocumentV5,
+  document: DocumentV6,
   roots: readonly string[],
 ): string | null {
   const tree = documentTree(document);
@@ -405,7 +405,7 @@ export function nestedSymbolViolation(
  * The instances of each page of `document`, in `pages` order, each in page-tree pre-order (the
  * reporting order of the M7 contract, sections 3 and 4.1); empty lists when there is none.
  */
-export function pageInstances(document: DocumentV5): string[][] {
+export function pageInstances(document: DocumentV6): string[][] {
   const tree = documentTree(document);
   return document.pages.map((page) =>
     page.children.flatMap((root) =>

@@ -2,11 +2,11 @@ import {
   MAX_TREE_DEPTH,
   normalizeRotation,
   validateNode,
-  type DocumentV5,
+  type DocumentV6,
   type Frame,
-  type NodeV5,
+  type NodeV6,
   type PageV2,
-  type SymbolNode,
+  type SymbolNodeV6,
   type TextNode,
 } from '@vector-studio/model';
 import {
@@ -104,6 +104,19 @@ export const DEFAULT_PATH_STROKE = deepFreeze({
   cap: 'butt',
   join: 'miter',
   miterLimit: 4,
+  dash: null,
+} as const);
+/**
+ * The stroke a rectangle, ellipse, frame or symbol gets when one is added (MVP M4 contract,
+ * section 4.1, M4-Q4 (a)): a `round` join, which the analytic primitive draws.
+ */
+export const DEFAULT_SHAPE_STROKE = deepFreeze({
+  color: { r: 0, g: 0, b: 0, a: 1 },
+  width: 1,
+  cap: 'butt',
+  join: 'round',
+  miterLimit: 4,
+  dash: null,
 } as const);
 export const DEFAULT_FRAME_FILL = deepFreeze({ r: 1, g: 1, b: 1, a: 1 } as const);
 const START = deepFreeze({ horizontal: 'start', vertical: 'start' } as const);
@@ -122,7 +135,7 @@ const MAX_CLIP_DEPTH = 32;
 
 /** The props each node type has (section 4.2); any other prop is `editor.invalid-command`. */
 const COMMON_PROPS = ['name', 'opacity', 'visible', 'constraints'];
-const PROPS: Readonly<Record<NodeV5['type'], readonly string[]>> = {
+const PROPS: Readonly<Record<NodeV6['type'], readonly string[]>> = {
   rectangle: [...COMMON_PROPS, 'fill', 'stroke', 'cornerRadii'],
   ellipse: [...COMMON_PROPS, 'fill', 'stroke'],
   line: [...COMMON_PROPS, 'stroke', 'startArrow', 'endArrow'],
@@ -155,7 +168,7 @@ function childClipDepth(tree: TreeView, owner: string): number {
  * Restores the descendants of container `id` to their state in `base` when its subtree there has
  * the same members, and returns the container's frame in `base`; null leaves the draft as is.
  */
-function restoreSubtree(draft: Draft, base: DocumentV5, id: string): Frame | null {
+function restoreSubtree(draft: Draft, base: DocumentV6, id: string): Frame | null {
   const baseTree = documentTree(base);
   const origin = baseTree.node(id);
   if (origin === undefined) return null;
@@ -172,7 +185,7 @@ function restoreSubtree(draft: Draft, base: DocumentV5, id: string): Frame | nul
 }
 
 export function applyEdit(
-  document: DocumentV5,
+  document: DocumentV6,
   command: DocumentCommand,
   context: EditContext,
 ): EditResult {
@@ -215,7 +228,7 @@ export function applyEdit(
         // A container and its descendant in one call (section 4.2).
         return fail('editor.invalid-command', '/frames');
       }
-      const next: NodeV5[] = [];
+      const next: NodeV6[] = [];
       const refits = new Set<string>();
       for (const entry of entries) {
         const node = document.nodes[entry.id]!;
@@ -435,8 +448,8 @@ export function applyEdit(
  * between the gesture's `base` and `current` refit, innermost first.
  */
 export function refitGesture(
-  base: DocumentV5,
-  current: DocumentV5,
+  base: DocumentV6,
+  current: DocumentV6,
   touched: Iterable<string>,
   custom: CustomRules = NO_CUSTOM,
   expansions: ExpansionCache = new ExpansionCache((node) => custom.check(node)),
@@ -466,8 +479,8 @@ export type GestureEdit =
  * `base`. Groups do not refit (that happens at commit, section 4.2).
  */
 export function applyGestureEdit(
-  document: DocumentV5,
-  base: DocumentV5,
+  document: DocumentV6,
+  base: DocumentV6,
   edit: GestureEdit,
   custom: CustomRules = NO_CUSTOM,
   expansions: ExpansionCache = new ExpansionCache((node) => custom.check(node)),
@@ -541,11 +554,11 @@ type CreateCommand = Extract<
  * placement.
  */
 function create(
-  document: DocumentV5,
+  document: DocumentV6,
   command: CreateCommand,
   context: EditContext,
   custom: CustomRules,
-  finish: (draft: Draft) => DocumentV5 | Failure,
+  finish: (draft: Draft) => DocumentV6 | Failure,
 ): EditResult {
   if (command.parent !== undefined && typeof command.parent !== 'string') {
     return fail('editor.invalid-command', '/parent');
@@ -574,7 +587,7 @@ function create(
   const onPage = tree.page(parent) !== undefined;
   const owner = tree.node(parent);
   if (!onPage && owner === undefined) return fail('editor.unknown-node');
-  let source: SymbolNode | null = null;
+  let source: SymbolNodeV6 | null = null;
   if (command.type === 'createInstance') {
     const named = nodeOf(document, command.symbol);
     if (named === undefined) return fail('editor.unknown-node');
@@ -751,7 +764,7 @@ function create(
   }
   const build = (id: string): EditResult => {
     // Into the parent's local space; on a page nothing changes.
-    let placed: NodeV5 = { ...result.node, id, parent };
+    let placed: NodeV6 = { ...result.node, id, parent };
     if (!onPage) {
       const space = spaceOf(tree, parent);
       const local = normalizeRotation(result.node.rotation - space.rotation);
@@ -827,10 +840,10 @@ function textChecks(node: TextNode, layout: TextLayouter | undefined): TextNode 
  * that would hold or sit in a source fails with `editor.nested-symbol` (section 5.3).
  */
 function createSymbol(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'createSymbol' }>,
   context: EditContext,
-  finish: (draft: Draft) => DocumentV5 | Failure,
+  finish: (draft: Draft) => DocumentV6 | Failure,
 ): EditResult {
   const ids = uniqueIds(command.ids);
   if (ids === null) return fail('editor.invalid-command', '/ids');
@@ -861,10 +874,10 @@ function createSymbol(
 
 /** `groupNodes` (section 4.3). */
 function group(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'groupNodes' }>,
   context: EditContext,
-  finish: (draft: Draft) => DocumentV5 | Failure,
+  finish: (draft: Draft) => DocumentV6 | Failure,
 ): EditResult {
   const ids = uniqueIds(command.ids);
   if (ids === null) return fail('editor.invalid-command', '/ids');
@@ -894,7 +907,7 @@ function relativeToNew(failure: Failure, prefix: string): Failure {
 }
 
 /** An ID that no page or node of `document` has, for checks that run before the ID is drawn. */
-function placeholderId(document: DocumentV5): string {
+function placeholderId(document: DocumentV6): string {
   let id = PENDING_ID;
   for (
     let n = 1;
@@ -907,12 +920,12 @@ function placeholderId(document: DocumentV5): string {
 }
 
 function buildGroup(
-  document: DocumentV5,
+  document: DocumentV6,
   kind: 'group' | 'maskGroup' | 'symbol',
   ids: readonly string[],
   owner: string,
   id: string,
-  finish: (draft: Draft) => DocumentV5 | Failure,
+  finish: (draft: Draft) => DocumentV6 | Failure,
 ): EditResult {
   const siblings = childrenOf(documentTree(document), owner);
   const members = siblings.filter((child) => ids.includes(child));
@@ -942,7 +955,7 @@ function buildGroup(
     children: members,
   };
   // A source wraps the nodes as a group does, with no fill or stroke (M7 contract, section 5.1).
-  const container: NodeV5 =
+  const container: NodeV6 =
     kind === 'symbol'
       ? { ...shared, name: 'Symbol', type: 'symbol', fill: null, stroke: null }
       : { ...shared, name: kind === 'group' ? 'Group' : 'Mask group', type: kind };
@@ -972,9 +985,9 @@ function buildGroup(
 
 /** `moveNodes` (section 4.3): reparenting within one page, keeping page placement. */
 function move(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'moveNodes' }>,
-  finish: (draft: Draft) => DocumentV5 | Failure,
+  finish: (draft: Draft) => DocumentV6 | Failure,
 ): EditResult {
   const ids = uniqueIds(command.ids);
   if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');
@@ -1048,10 +1061,10 @@ function move(
  * itself with nothing touched, which the editor records as no step.
  */
 function rotateNodes(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'rotateNodes' }>,
   context: EditContext,
-  finish: (draft: Draft) => DocumentV5 | Failure,
+  finish: (draft: Draft) => DocumentV6 | Failure,
 ): EditResult {
   const ids = uniqueIds(command.ids);
   if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');
