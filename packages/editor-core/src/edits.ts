@@ -124,7 +124,7 @@ export const DEFAULT_SHAPE_STROKE = deepFreeze({
 export const DEFAULT_FRAME_FILL = deepFreeze({ r: 1, g: 1, b: 1, a: 1 } as const);
 const START = deepFreeze({ horizontal: 'start', vertical: 'start' } as const);
 /** `createText` defaults (M6a contract, section 6.1, M6a-Q16). */
-const TEXT_LINE_HEIGHT = 1.2;
+export const TEXT_LINE_HEIGHT = 1.2;
 
 const NO_CUSTOM: CustomRules = {
   check: (node) =>
