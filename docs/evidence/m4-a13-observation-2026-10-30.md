@@ -52,3 +52,25 @@ Each `setStyle` sent one change set updating 10,000 scene nodes.
 
 - **Frame time: NOT RUN in the container.** The headed spec's `M4-A13: frame time of 10,000 stroked rectangles (observation)` test (`pnpm test:m4-next-host`) loads both documents in next-host, captures the first frame and five re-presented frames, and attaches the times; in this container SwiftShader's WebGPU device is lost right after the renderer starts, so no frame could be captured (M4-U4 note 7); the smoke run recorded only the in-page `loadDocument` plus `zoomTo` fit, one run each: 414 ms for `round` and 361 ms for `miter`. The frame time is to be taken on the main PC in Chrome and Edge.
 - No GPU and no pixels; one shared 4-vCPU container, no pinned frequency, the Node version not the pinned one; the first run is the slowest in most steps (JIT warm-up).
+
+## Main PC (added in M4-U5)
+
+`pnpm observe:m4-a13` and the headed frame-time test were also run on the user's main PC, as reported by the user (M4-U5, [exit record](m4-exit-2026-10-30.md)). The harness is the same; the report gives medians only, with no ranges, run count, Node version or renderer split, so those are not recorded here.
+
+| Step | round (primitives) | miter (paths) |
+| --- | ---: | ---: |
+| parse | 140 | 137 |
+| construct | 77 | 58 |
+| project (no renderer) | 9.5 | 8.7 |
+| attach | 91 | 110 |
+| setStyle width | 159 | 191 |
+| setStyle join (switches every kind) | 186 | 156 |
+
+**Frame time** (`pnpm test:m4-next-host`, the `M4-A13` test, in the user's headed runs of #389, whose spec harness for this test is unchanged from `d84a424` to `0b4ad10`; DPR 1; median of five re-presented frames, ms):
+
+| Browser | round | miter |
+| --- | ---: | ---: |
+| Chrome 156 | 261.3 | 330.9 |
+| Edge 156 | 252.3 | 300.1 |
+
+The **first frame** took about 0.5 to 0.7 s for `round` and about 20 s for `miter` (Chrome 20,272 ms, Edge 19,796 ms). The CPU steps above stay well under a second for both joins, so the miter first frame is most likely spent in the WebGPU renderer building path meshes for the 10,000 M4-P4 outlines (contract section 11, "Path projection cost"); this is not profiled and is a follow-up in the exit record. Each step on the main PC took 0.3 to 0.55 times the container's median. No claim.
