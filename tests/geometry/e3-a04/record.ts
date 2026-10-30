@@ -352,6 +352,16 @@ export function reviveRow(row: HarnessRow): HarnessRow {
 }
 
 /**
+ * JSON with non-finite numbers as strings (E20-K8), so that a computed aggregate (`maxU = +∞`)
+ * compares equal to the same aggregate read back from a record.
+ */
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_, v: unknown) =>
+    typeof v === 'number' && !Number.isFinite(v) ? String(v) : v,
+  );
+}
+
+/**
  * E3-A7: the validator. It reconciles the rows with the corpus ids (by index), recomputes the
  * aggregates, the coverage and the verdict, and checks each row's status against its bounds.
  * `corpusIds` is the corpus's id list in generation order. Returns the problems found.
@@ -402,9 +412,9 @@ export function validateRecord(input: A04Record, corpusIds: readonly string[]): 
     if (overall.pass + overall.fail + overall.undecided !== overall.measured)
       problems.push('measured ≠ pass + fail + undecided');
   }
-  if (JSON.stringify(aggregates(record.rows)) !== JSON.stringify(record.aggregates))
+  if (canonical(aggregates(record.rows)) !== canonical(record.aggregates))
     problems.push('aggregates differ from the rows');
-  if (JSON.stringify(uncoveredCells(record.rows)) !== JSON.stringify(record.uncoveredCells))
+  if (canonical(uncoveredCells(record.rows)) !== canonical(record.uncoveredCells))
     problems.push('coverage differs from the rows');
   const v = verdictOf(record);
   if (v.verdict !== record.verdict) problems.push(`verdict ${record.verdict} ≠ ${v.verdict}`);
