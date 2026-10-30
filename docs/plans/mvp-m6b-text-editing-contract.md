@@ -287,22 +287,27 @@ Documentation only: `npx prettier --check` on the changed files (the repository'
 
 Independent review (full tier, visualization track) before approval. M6b implementation starts at M6b-U1 only after this contract is approved and the user has accepted the [M6a exit record](../evidence/m6a-exit-2026-10-30.md) (MVP plan milestone order; plan section 14); **User action:** the M6-S0 Korean IME recordings on the main PC (both Microsoft IME versions, Chrome and Edge, the recorder's cases), which M6b-U10 and A14 need before the exit record. R-T (E28) is done, so M6c follows M6b's exit. The M6b exit is the user's acceptance of the M6b-U11 record. On 2026-10-30 M6b-U1 started at the project coordinator's direction while the user's M6a exit acceptance was still pending; that acceptance (including the A12 manual DPR half) is required before the M6b exit record, and if the user's decision changes M6a, the started units are re-checked against it.
 
+**2026-10-30 (M6b-U10 and U11).** The user accepted the M6a exit record on 2026-10-30, with the A12 zoom-125 % failure disclosed. That acceptance changed nothing in M6a, so the started units needed no re-check. The same day, the user tried Korean typing in the editor on the main PC, found that it works normally, and decided not to make the M6-S0 recordings. M6b-U10 closes without them, and M6b-A14 is NOT RUN in the [exit record](../evidence/m6b-exit-2026-10-30.md), which discloses what A14 rests on instead and what is left untested on a real IME (M6b-H4, the previous-version Microsoft IME). The M6b exit is still the user's acceptance of that record.
+
 ## 16. Progress
 
 | Unit | State |
 | --- | --- |
 | Contract | APPROVED 2026-10-30 (#392, 09d8a2a; review r1 NOT READY applied, r2 READY WITH FOLLOW-UPS applied) |
-| M6b-U0 | In review |
-| M6b-U1 | In review |
-| M6b-U2 | In review |
-| M6b-U3 | In review |
-| M6b-U4 | In review |
+| M6b-U0 | Done (#411, 4a40d2a) |
+| M6b-U1 | Done (#393, 478d4b0) |
+| M6b-U2 | Done (#396, 05e52ca) |
+| M6b-U3 | Done (#402, e66ae55) |
+| M6b-U4 | Done (#400, 2045923) |
 | M6b-U5 | Done (#404, b501e92) |
-| M6b-U6 | In review |
-| M6b-U7 | In review |
-| M6b-U8 | In review |
-| M6b-U9 | In review |
-| M6b-U10 and U11 | Not started |
+| M6b-U6 | Done (#408, b6d1699) |
+| M6b-U7 | Done (#409, d03ad1c) |
+| M6b-U8 | Done (#410, 3d7a9a8) |
+| M6b-U9 | Done (#411, 4a40d2a); headed `pnpm test:m6b-next-host` 38 of 38 on the main PC at f72d061, Chrome 156 and Edge 156 |
+| M6b-U10 | Closed without recordings (user decision 2026-10-30) |
+| M6b-U11 | In review ([exit record](../evidence/m6b-exit-2026-10-30.md)) |
+
+**Exit record (2026-10-30).** The [M6b exit record](../evidence/m6b-exit-2026-10-30.md) lists A01 to A15. A01 to A13 PASS, with A12 and A13 headed on the main PC at f72d061. A14 is NOT RUN: no recorded traces exist, by the user's decision of 2026-10-30 (section 15). A15 is PARTIAL: the earlier headed specs were not run at an M6b commit, and the user's acceptance is pending. The record also lists what is owed to M6c.
 
 **M6b-U0 notes** (`docs/graphics-engine-architecture.md`, text reservation; `docs/decisions/0003-browser-text-and-glyph-atlas.md`). Readings the unit took: (1) the text-reservation paragraph takes section 1.2's sentence word for word, with a dated amendment line naming this contract, M6-Q14 (a) and what it replaced; the E28 paragraph after it is unchanged; (2) the ADR 0003 follow-up of the [M6a exit record](../evidence/m6a-exit-2026-10-30.md#follow-ups) (item 4) is a dated sentence after the decision bullet that cites M6-Q3 (a): the plan's M6-Q3 (a) (the port in `contracts`, implemented by text-dom) still holds, and the sentence adds that text-dom measures at a reference scale since #388 (M6a contract section 3.2, M6a-Q3 (b)); the ADR's status, decision and alternatives are unchanged. Section 11 makes the ADR sentence subject to the U0 reviewer's agreement; if the reviewer disagrees, it is dropped and the follow-up stays open.
 
