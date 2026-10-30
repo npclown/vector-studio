@@ -1,13 +1,16 @@
 // E26-U1a (E26 contract, section 3): the scenario definitions, the stress document, the fitted
 // and typical-view cameras, the per-frame drivers and the configuration hash. Pure data and
-// arithmetic: no editor, renderer or browser runs here, so the headed harness (U1c) and the
-// host's bench option (U1b) share one source of truth.
+// arithmetic: no renderer or browser runs here, so the headed harness (U1c) and the host's bench
+// option (U1b) share one source of truth.
 //
-// Visibility is counted over leaf scene nodes (primitives, paths and text), from their world
-// stroke bounds, with clips ignored (conservative, as P1 culling). A container has no bounds of
-// its own, so "every scene node visible" means every leaf's bounds lie inside the viewport.
+// Visibility is counted over drawn leaf scene nodes (primitives, paths and text that are visible
+// with their whole ancestry and are not inside a mask source), from the renderer's conservative
+// draw bounds, widened by its 2-physical-pixel cull guard, with clips ignored. Clip culling is
+// counted separately (section 3.3: the edit drag moves the selection out of its frame's clip).
 import { createHash } from 'node:crypto';
 import type { RenderNodeSnapshot, SceneAffine } from '@vector-studio/contracts';
+import { parseDocument, type DocumentV5 } from '@vector-studio/model';
+import { projectPage, type PageProjection } from '../../packages/editor-core/src/projector.js';
 import {
   composeSceneAffine,
   getPathLocalPointBounds,
@@ -17,23 +20,47 @@ import {
   transformSceneBounds,
   type SceneBounds,
 } from '../../packages/renderer-core/src/scene-numeric.js';
-import { M1_A13_SEED } from '../m1-a13/document.js';
+import { generateM1A13Document, M1_A13_SEED } from '../m1-a13/document.js';
 
 /** The CSS viewport of every E26 run (section 3.5); DPR varies per run, not per scenario. */
 export const E26_VIEWPORT = Object.freeze({ width: 1280, height: 720 });
 /** The fitted camera's margin, a fraction of the viewport on each side (section 3.1). */
 export const E26_FIT_MARGIN = 0.1;
-/** The typical view's visible leaf count (section 3.1, as P1 Scene 3). */
-export const E26_TYPICAL_VISIBLE = Object.freeze({ min: 900, max: 1100 });
-/** The typical view's top-left inset from the page content, in CSS px: more than the edit drag's 60. */
+/** The typical view's drawn leaf count (section 3.1, as P1 Scene 3): range and bisection aim. */
+export const E26_TYPICAL_VISIBLE = Object.freeze({ min: 900, max: 1100, target: 1000 });
+/** The typical view's top-left inset from the content, in CSS px: more than the drag's 60. */
 export const E26_TYPICAL_INSET_CSS = 80;
-/** P1's trajectory period (P1 measurement contract): theta(t) = 2·pi·((t mod 10000) / 10000). */
-export const E26_THETA_PERIOD_MS = 10_000;
-/** P1's warm-up and half-open measured window, in ms from the common start (section 3.3). */
-export const E26_WINDOW_MS = Object.freeze({ warmUp: 5_000, end: 15_000 });
-/** The stress scene's seed: P1's LCG constant (P1 measurement contract). */
-export const E26_STRESS_SEED = 0x5031_0001;
-export const E26_STRESS_NODE_COUNT = 10_000;
+/** The renderer's cull guard, in physical px (P1 measurement contract). */
+export const E26_CULL_GUARD_PX = 2;
+/** The drivers' constants (section 3.3); all of them enter the configuration hash. */
+export const E26_DRIVERS = Object.freeze({
+  /** P1's theta(t) = 2·pi·((t mod period) / period), t in ms from the common start. */
+  thetaPeriodMs: 10_000,
+  /** P1's warm-up and half-open measured window, in ms. */
+  warmUpMs: 5_000,
+  windowEndMs: 15_000,
+  /** Edit drag p(t) = start + (dragX·sin θ, dragY·(cos θ − 1)) CSS px. */
+  dragX: 40,
+  dragY: 30,
+  /** Pan: position F + pan·viewport·(sin θ, cos θ − 1); zoom F·(zoomBase + zoomSwing·cos θ). */
+  pan: 0.05,
+  zoomBase: 0.95,
+  zoomSwing: 0.05,
+  /** The latency drag's real input (section 3.3). */
+  latencyCadenceMs: 8,
+  latencyDurationMs: 4_000,
+});
+/** The stress scene's seed and LCG: P1's (P1 measurement contract). */
+export const E26_STRESS = Object.freeze({
+  seed: 0x5031_0001,
+  multiplier: 1664525,
+  increment: 1013904223,
+  count: 10_000,
+  columns: 100,
+  rows: 100,
+  origin: Object.freeze({ x: 180, y: 160 }),
+  span: Object.freeze({ x: 900, y: 400 }),
+});
 
 export type E26Camera = Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>;
 
@@ -58,7 +85,7 @@ export type E26Scenario = Readonly<{
   persist: boolean;
   /** The injected rejection, or null (section 3.4). */
   reject: Readonly<{ mode: 'once'; armedAtMs: number; target: 'moved-leaf' }> | null;
-  /** The `setFill` before pointer down, in ms relative to it, or null. */
+  /** The `setFill` before pointer down, in ms before it, or null. */
   setFillBeforeDownMs: number | null;
 }>;
 
@@ -72,7 +99,7 @@ const frame = (
   Object.freeze({
     id,
     document,
-    seed: document === 'm1-a13' ? M1_A13_SEED : E26_STRESS_SEED,
+    seed: document === 'm1-a13' ? M1_A13_SEED : E26_STRESS.seed,
     camera,
     interaction,
     frameCeilingMs,
@@ -107,42 +134,48 @@ export const E26_SCENARIOS: readonly E26Scenario[] = Object.freeze([
 // ---------------------------------------------------------------------------------------------
 // The stress document (section 3.1): P1's positions, sizes and seed, reduced styles.
 
-type StressNode = Record<string, unknown> & { id: string };
+/** P1's unsigned word u of node i. */
+function p1Word(i: number): number {
+  return (
+    (Math.imul(E26_STRESS.multiplier, (E26_STRESS.seed ^ i) >>> 0) + E26_STRESS.increment) >>> 0
+  );
+}
 
-/**
- * P1's `p1-pan-zoom-10k/v1` centres (P1 measurement contract, "Reproduce workload arithmetic"):
- * 100 columns and rows over 900 × 400 with the LCG jitter of ±1.
- */
+/** P1's qj = ((u >>> 8j) & 255) / 255. */
+export function p1Q(i: number, j: 0 | 1 | 2 | 3): number {
+  return ((p1Word(i) >>> (8 * j)) & 255) / 255;
+}
+
+/** P1's `p1-pan-zoom-10k/v1` centre of node i: a 100 × 100 grid over 900 × 400, jitter ±1. */
 export function stressCenter(i: number): { x: number; y: number } {
-  const u = (Math.imul(1664525, (E26_STRESS_SEED ^ i) >>> 0) + 1013904223) >>> 0;
+  const { columns, rows, origin, span } = E26_STRESS;
   return {
-    x: 180 + (900 * (i % 100)) / 99 + (2 * (u & 255)) / 255 - 1,
-    y: 160 + (400 * Math.floor(i / 100)) / 99 + (2 * ((u >>> 8) & 255)) / 255 - 1,
+    x: origin.x + (span.x * (i % columns)) / (columns - 1) + 2 * p1Q(i, 0) - 1,
+    y: origin.y + (span.y * Math.floor(i / columns)) / (rows - 1) + 2 * p1Q(i, 1) - 1,
   };
 }
 
 /** P1's fill colour of node i: `0.2 + 0.6·qj` per channel, alpha `0.45 + 0.4·q3`. */
-function stressFill(i: number) {
-  const u = (Math.imul(1664525, (E26_STRESS_SEED ^ i) >>> 0) + 1013904223) >>> 0;
-  const q = [0, 8, 16, 24].map((shift) => ((u >>> shift) & 255) / 255);
+export function stressFill(i: number) {
   return {
-    r: 0.2 + 0.6 * q[0]!,
-    g: 0.2 + 0.6 * q[1]!,
-    b: 0.2 + 0.6 * q[2]!,
-    a: 0.45 + 0.4 * q[3]!,
+    r: 0.2 + 0.6 * p1Q(i, 0),
+    g: 0.2 + 0.6 * p1Q(i, 1),
+    b: 0.2 + 0.6 * p1Q(i, 2),
+    a: 0.45 + 0.4 * p1Q(i, 3),
   };
 }
 
 /**
- * The 10,000-node stress document as a schema-v2 document, which `parseDocument` migrates to the
- * current version on load, as the M1-A13 generator does; the configuration hash names the
- * version it was loaded as. Node i keeps P1's centre, size and opacity `0.5 + 0.25·(i % 3)`;
- * P1's lines (`i % 4 = 3`) become 3.5 × 1 rectangles on the line; no node has a stroke.
+ * The 10,000-node stress document, generated as a schema-v2 document and migrated to the current
+ * version on load, as M1-A13 is; the configuration records the loaded version and a digest of
+ * the generated document. Node i keeps P1's centre, size, opacity `0.5 + 0.25·(i % 3)` and fill
+ * formula; P1's lines (`i % 4 = 3`, which have no fill in P1) become 3.5 × 1 rectangles on the
+ * line with that fill formula; no node has a stroke.
  */
 export function generateStressDocument() {
-  const nodes: Record<string, StressNode> = {};
+  const nodes: Record<string, Record<string, unknown>> = {};
   const children: string[] = [];
-  for (let i = 0; i < E26_STRESS_NODE_COUNT; i += 1) {
+  for (let i = 0; i < E26_STRESS.count; i += 1) {
     const id = `s${String(i).padStart(5, '0')}`;
     const { x, y } = stressCenter(i);
     const kind = i % 4;
@@ -173,34 +206,66 @@ export function generateStressDocument() {
 }
 
 // ---------------------------------------------------------------------------------------------
-// World bounds, the fitted camera and the typical view.
+// World bounds, drawn leaves, the fitted camera and the typical view.
 
-/** The world stroke bounds of every leaf scene node, by scene ID; null for a leaf with none. */
-export function leafWorldBounds(
+/** The world transform of every scene node. */
+export function worldTransforms(
   nodes: ReadonlyMap<string, RenderNodeSnapshot>,
-): Map<string, SceneBounds | null> {
+): Map<string, SceneAffine> {
   const world = new Map<string, SceneAffine>();
-  const worldOf = (node: RenderNodeSnapshot): SceneAffine => {
+  const of = (node: RenderNodeSnapshot): SceneAffine => {
     const known = world.get(node.id);
     if (known !== undefined) return known;
     const parent: SceneAffine =
-      node.parentId === null ? [1, 0, 0, 1, 0, 0] : worldOf(nodes.get(node.parentId)!);
+      node.parentId === null ? [1, 0, 0, 1, 0, 0] : of(nodes.get(node.parentId)!);
     const own = composeSceneAffine(parent, node.transform);
     if (own === null) throw new Error(`non-finite world transform at ${node.id}`);
     world.set(node.id, own);
     return own;
   };
+  for (const node of nodes.values()) of(node);
+  return world;
+}
+
+/**
+ * Whether the renderer draws a leaf: it and every ancestor are visible, and no ancestor is a
+ * mask source (the first child of a mask container), which feeds coverage instead.
+ */
+function drawn(nodes: ReadonlyMap<string, RenderNodeSnapshot>, node: RenderNodeSnapshot): boolean {
+  let cursor: RenderNodeSnapshot | undefined = node;
+  while (cursor !== undefined) {
+    if (!cursor.visible) return false;
+    if (cursor.parentId === null) return true;
+    const parent: RenderNodeSnapshot = nodes.get(cursor.parentId)!;
+    if (parent.kind === 'container' && parent.clip?.kind === 'mask') {
+      if (parent.children[0] === cursor.id) return false;
+    }
+    cursor = parent;
+  }
+  return true;
+}
+
+/**
+ * The world draw bounds of every drawn leaf, by scene ID: the renderer's conservative bounds
+ * (stroke-inclusive for primitives, the stroke box or else the point box for paths, which always
+ * contains it, and the E28-K9 bound for text); null for a drawn leaf without bounds.
+ */
+export function leafWorldBounds(
+  nodes: ReadonlyMap<string, RenderNodeSnapshot>,
+): Map<string, SceneBounds | null> {
+  const world = worldTransforms(nodes);
   const result = new Map<string, SceneBounds | null>();
   for (const node of nodes.values()) {
     let local: SceneBounds | null | undefined;
     if (node.kind === 'primitive') local = getPrimitiveLocalStrokeBounds(node);
     else if (node.kind === 'path') {
-      const points = getPathLocalPointBounds(node.geometry.points);
-      const stroke = getPathLocalStrokeBounds(node.geometry.points, node.style.stroke);
-      local = stroke === null ? points : points === null ? stroke : union(points, stroke);
+      local =
+        getPathLocalStrokeBounds(node.geometry.points, node.style.stroke) ??
+        getPathLocalPointBounds(node.geometry.points);
     } else if (node.kind === 'text') local = getTextLocalBounds(node);
     else continue;
-    result.set(node.id, local == null ? null : transformSceneBounds(local, worldOf(node)));
+    if (!drawn(nodes, node)) continue;
+    result.set(node.id, local == null ? null : transformSceneBounds(local, world.get(node.id)!));
   }
   return result;
 }
@@ -214,7 +279,7 @@ function union(a: SceneBounds, b: SceneBounds): SceneBounds {
   };
 }
 
-/** The union of all leaf bounds. */
+/** The union of all drawn leaf bounds. */
 export function contentBounds(bounds: ReadonlyMap<string, SceneBounds | null>): SceneBounds {
   let all: SceneBounds | null = null;
   for (const box of bounds.values()) if (box !== null) all = all === null ? box : union(all, box);
@@ -234,23 +299,37 @@ export function worldViewport(camera: E26Camera): SceneBounds {
 
 const intersects = (a: SceneBounds, b: SceneBounds) =>
   a.maxX >= b.minX && a.minX <= b.maxX && a.maxY >= b.minY && a.minY <= b.maxY;
-const inside = (a: SceneBounds, b: SceneBounds) =>
-  a.minX >= b.minX && a.maxX <= b.maxX && a.minY >= b.minY && a.maxY <= b.maxY;
+export const contains = (outer: SceneBounds, inner: SceneBounds) =>
+  inner.minX >= outer.minX &&
+  inner.maxX <= outer.maxX &&
+  inner.minY >= outer.minY &&
+  inner.maxY <= outer.maxY;
 
-/** Leaves whose bounds meet the viewport, and leaves wholly inside it. */
+/**
+ * Drawn leaves whose guarded bounds meet the viewport (the renderer's viewport cull keeps
+ * them), and drawn leaves wholly inside the unguarded viewport.
+ */
 export function visibility(
   bounds: ReadonlyMap<string, SceneBounds | null>,
   camera: E26Camera,
+  devicePixelRatio = 1,
 ): { visible: number; inside: number; leaves: number } {
   const view = worldViewport(camera);
+  const guard = E26_CULL_GUARD_PX / (camera.zoom * devicePixelRatio);
   let visible = 0;
   let within = 0;
   let leaves = 0;
   for (const box of bounds.values()) {
     if (box === null) continue;
     leaves += 1;
-    if (intersects(box, view)) visible += 1;
-    if (inside(box, view)) within += 1;
+    const guarded = {
+      minX: box.minX - guard,
+      minY: box.minY - guard,
+      maxX: box.maxX + guard,
+      maxY: box.maxY + guard,
+    };
+    if (intersects(guarded, view)) visible += 1;
+    if (contains(view, box)) within += 1;
   }
   return { visible, inside: within, leaves };
 }
@@ -274,9 +353,10 @@ export function fittedCamera(content: SceneBounds): E26Camera {
 }
 
 /**
- * The typical view (section 3.1): the viewport's top-left at the content's top-left less
- * `E26_TYPICAL_INSET_CSS`, and the zoom found by bisection so that 900 to 1,100 leaves are
- * visible. Moving the top-left fixed, the visible count only falls as the zoom rises.
+ * The typical view (section 3.1): the viewport's top-left `E26_TYPICAL_INSET_CSS` above and left
+ * of the content, and the zoom found by bisection toward 1,000 drawn leaves visible at DPR 1. With
+ * the top-left fixed, the visible count only falls as the zoom rises. The result must hold
+ * 900 to 1,100 at every DPR the runs use, which the unit test checks for DPR 1 and 2.
  */
 export function typicalCamera(bounds: ReadonlyMap<string, SceneBounds | null>): E26Camera {
   const content = contentBounds(bounds);
@@ -289,14 +369,12 @@ export function typicalCamera(bounds: ReadonlyMap<string, SceneBounds | null>): 
   });
   let low = 1 / 64;
   let high = 64;
-  for (let step = 0; step < 80; step += 1) {
+  for (let step = 0; step < 60; step += 1) {
     const zoom = Math.sqrt(low * high);
-    const { visible } = visibility(bounds, at(zoom));
-    if (visible >= E26_TYPICAL_VISIBLE.min && visible <= E26_TYPICAL_VISIBLE.max) return at(zoom);
-    if (visible > E26_TYPICAL_VISIBLE.max) low = zoom;
+    if (visibility(bounds, at(zoom)).visible > E26_TYPICAL_VISIBLE.target) low = zoom;
     else high = zoom;
   }
-  throw new Error('no zoom gives a typical view');
+  return at(high);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -304,13 +382,14 @@ export function typicalCamera(bounds: ReadonlyMap<string, SceneBounds | null>): 
 
 /** P1's theta(t) for t in ms from the common start. */
 export function theta(tMs: number): number {
-  return (2 * Math.PI * (tMs % E26_THETA_PERIOD_MS)) / E26_THETA_PERIOD_MS;
+  const period = E26_DRIVERS.thetaPeriodMs;
+  return (2 * Math.PI * (tMs % period)) / period;
 }
 
 /** The edit drag's pointer offset from its start, in CSS px. */
 export function editDragOffset(tMs: number): { x: number; y: number } {
   const angle = theta(tMs);
-  return { x: 40 * Math.sin(angle), y: 30 * (Math.cos(angle) - 1) };
+  return { x: E26_DRIVERS.dragX * Math.sin(angle), y: E26_DRIVERS.dragY * (Math.cos(angle) - 1) };
 }
 
 /** The pan and zoom path's camera at t, from the fitted camera F. */
@@ -321,44 +400,110 @@ export function panZoomCamera(fitted: E26Camera, tMs: number): E26Camera {
   const viewH = E26_VIEWPORT.height / fitted.zoom;
   return {
     position: {
-      x: fitted.position.x + 0.05 * viewW * Math.sin(angle),
-      y: fitted.position.y + 0.05 * viewH * (c - 1),
+      x: fitted.position.x + E26_DRIVERS.pan * viewW * Math.sin(angle),
+      y: fitted.position.y + E26_DRIVERS.pan * viewH * (c - 1),
     },
-    zoom: fitted.zoom * (0.95 + 0.05 * c),
+    zoom: fitted.zoom * (E26_DRIVERS.zoomBase + E26_DRIVERS.zoomSwing * c),
   };
 }
 
 // ---------------------------------------------------------------------------------------------
-// Configuration hash (benchmarks README, Scenario identity).
+// Loading and the configuration (benchmarks README, Scenario identity).
 
-/** JSON with object keys sorted at every level: the defined serialization of the hash. */
+/** JSON with object keys sorted at every level; undefined and non-finite numbers are refused. */
 export function canonicalJson(value: unknown): string {
+  if (value === undefined) throw new TypeError('canonicalJson: undefined');
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    throw new TypeError(`canonicalJson: ${value}`);
+  }
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
   if (value !== null && typeof value === 'object') {
-    const entries = Object.keys(value)
+    const record = value as Record<string, unknown>;
+    const entries = Object.keys(record)
       .sort()
-      .map(
-        (key) => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`,
-      );
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`);
     return `{${entries.join(',')}}`;
   }
   return JSON.stringify(value);
 }
 
+export function sha256(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+export type E26Loaded = Readonly<{
+  /** The generated document as JSON data, before migration. */
+  generated: unknown;
+  document: DocumentV5;
+  pageId: string;
+  projection: PageProjection;
+  bounds: ReadonlyMap<string, SceneBounds | null>;
+}>;
+
+/** Generates, parses (migrating to the current version) and projects a scenario document. */
+export function loadScenarioDocument(document: E26Scenario['document']): E26Loaded {
+  const generated = document === 'm1-a13' ? generateM1A13Document() : generateStressDocument();
+  const parsed = parseDocument(JSON.stringify(generated));
+  if (!parsed.ok) throw new Error(`parse: ${parsed.code} ${parsed.path}`);
+  const pageId = document === 'm1-a13' ? 'page-1' : 'stress-page';
+  const projection = projectPage(parsed.document, pageId, () => null);
+  return {
+    generated,
+    document: parsed.document,
+    pageId,
+    projection,
+    bounds: leafWorldBounds(projection.nodes),
+  };
+}
+
 export type E26Configuration = Readonly<{
   scenario: E26Scenario;
+  documentSha256: string;
   /** The schema version the generated document was loaded as. */
   schemaVersion: number;
   viewport: typeof E26_VIEWPORT;
   devicePixelRatio: number;
   camera: E26Camera;
+  fitMargin: number;
+  typical: Readonly<{ insetCss: number; visible: typeof E26_TYPICAL_VISIBLE }>;
+  cullGuardPx: number;
+  drivers: typeof E26_DRIVERS;
+  stress: typeof E26_STRESS;
   sceneNodes: number;
-  leaves: number;
-  window: typeof E26_WINDOW_MS;
+  drawnLeaves: number;
   repetitions: number;
 }>;
 
+/** The full configuration of one scenario run set, derived from the scenario alone. */
+export function e26Configuration(
+  scenario: E26Scenario,
+  devicePixelRatio: number,
+  repetitions: number,
+  loaded: E26Loaded = loadScenarioDocument(scenario.document),
+): E26Configuration {
+  const camera =
+    scenario.camera === 'typical'
+      ? typicalCamera(loaded.bounds)
+      : fittedCamera(contentBounds(loaded.bounds));
+  return {
+    scenario,
+    documentSha256: sha256(canonicalJson(loaded.generated)),
+    schemaVersion: loaded.document.schemaVersion,
+    viewport: E26_VIEWPORT,
+    devicePixelRatio,
+    camera,
+    fitMargin: E26_FIT_MARGIN,
+    typical: { insetCss: E26_TYPICAL_INSET_CSS, visible: E26_TYPICAL_VISIBLE },
+    cullGuardPx: E26_CULL_GUARD_PX,
+    drivers: E26_DRIVERS,
+    stress: E26_STRESS,
+    sceneNodes: loaded.projection.nodes.size,
+    drawnLeaves: [...loaded.bounds.values()].filter((box) => box !== null).length,
+    repetitions,
+  };
+}
+
 /** The SHA-256 of the canonical JSON of a configuration, as lowercase hex. */
 export function configurationHash(configuration: E26Configuration): string {
-  return createHash('sha256').update(canonicalJson(configuration)).digest('hex');
+  return sha256(canonicalJson(configuration));
 }
