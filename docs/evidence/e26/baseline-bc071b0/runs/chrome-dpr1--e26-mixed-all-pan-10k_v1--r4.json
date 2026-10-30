@@ -1,0 +1,173 @@
+{
+  "scenario": "e26-mixed-all-pan-10k/v1",
+  "variant": "frame",
+  "repetition": 4,
+  "project": "chrome-dpr1",
+  "browser": "chromium 156.0.8078.74",
+  "devicePixelRatio": 1,
+  "commit": "bc071b0fd7321133f7bc24f151c3614ca82143c6",
+  "dirty": false,
+  "configurationHash": "ed884b4faf2246f02946a3ce40f1113941a448521fd315561bde47eb08a77345",
+  "configuration": {
+    "scenario": {
+      "id": "e26-mixed-all-pan-10k/v1",
+      "document": "m1-a13",
+      "seed": 114498067,
+      "camera": "fitted",
+      "interaction": "pan-zoom",
+      "frameCeilingMs": 33.3,
+      "latencyBoundMs": null,
+      "renderMode": "continuous",
+      "persist": false,
+      "reject": null,
+      "setFillBeforeDownMs": null
+    },
+    "documentSha256": "d8658b14694ca1e6bbcff734e35575222511df96281720068fa4efe2cb9ef974",
+    "schemaVersion": 6,
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    },
+    "devicePixelRatio": 1,
+    "camera": {
+      "position": {
+        "x": -3612.1049750134653,
+        "y": -707.4354156747013
+      },
+      "zoom": 0.10318065907456798
+    },
+    "fitMargin": 0.1,
+    "typical": {
+      "insetCss": 80,
+      "visible": {
+        "min": 900,
+        "max": 1100,
+        "target": 1000
+      }
+    },
+    "cullGuardPx": 2,
+    "drivers": {
+      "thetaPeriodMs": 10000,
+      "warmUpMs": 5000,
+      "windowEndMs": 15000,
+      "dragX": 40,
+      "dragY": 30,
+      "pan": 0.05,
+      "zoomBase": 0.95,
+      "zoomSwing": 0.05,
+      "latencyCadenceMs": 8,
+      "latencyDurationMs": 4000
+    },
+    "stress": {
+      "seed": 1345388545,
+      "multiplier": 1664525,
+      "increment": 1013904223,
+      "count": 10000,
+      "columns": 100,
+      "rows": 100,
+      "origin": {
+        "x": 180,
+        "y": 160
+      },
+      "span": {
+        "x": 900,
+        "y": 400
+      }
+    },
+    "sceneNodes": 10634,
+    "drawnLeaves": 6494,
+    "repetitions": 5
+  },
+  "visibility": {
+    "visible": 6494,
+    "inside": 6494,
+    "leaves": 6494
+  },
+  "environment": {
+    "devicePixelRatio": 1,
+    "canvas": {
+      "width": 1280,
+      "height": 720
+    },
+    "screen": {
+      "width": 1400,
+      "height": 1000
+    },
+    "idleRafMedianMs": 16.69999999999709,
+    "adapter": {
+      "vendor": "nvidia",
+      "architecture": "turing",
+      "device": "",
+      "description": ""
+    },
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.34 Safari/537.36"
+  },
+  "presence": {
+    "start": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    },
+    "end": {
+      "visibilityState": "visible",
+      "hasFocus": true,
+      "visibilityChanges": 0,
+      "blurs": 0
+    }
+  },
+  "errors": [],
+  "consoleErrors": [],
+  "rafCallbackIntervalMs": {
+    "count": 2,
+    "median": 6000.0999999999985,
+    "p95": 6499.9000000000015,
+    "p99": 6499.9000000000015,
+    "max": 6499.9000000000015
+  },
+  "encodeAndSubmitMs": {
+    "count": 0,
+    "median": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+  },
+  "ceilingMs": 33.3,
+  "intervalsPlusOne": 3,
+  "run": {
+    "t0": 47667.19999999553,
+    "windowStartMs": 53798,
+    "windowEndMs": 72956.5,
+    "driverSteps": 3,
+    "revisedMoves": 0,
+    "framesSubmitted": 0,
+    "lifecycle": "ready",
+    "recoveryAttempts": 0,
+    "measurements": {
+      "active": false,
+      "capacity": 8192,
+      "encodeAndSubmitMs": [],
+      "frameIntervalsMs": [
+        6499.9000000000015,
+        6000.0999999999985
+      ],
+      "droppedSamples": {
+        "encodeAndSubmitMs": 0,
+        "frameIntervalsMs": 0
+      },
+      "startedAtMs": 53798.29999999702,
+      "endedAtMs": 72956.39999999851
+    },
+    "longTasksAvailable": true,
+    "longTasks": [
+      {
+        "startMs": 53798.29999999702,
+        "durationMs": 6509
+      },
+      {
+        "startMs": 60307.89999999851,
+        "durationMs": 6003
+      }
+    ]
+  }
+}

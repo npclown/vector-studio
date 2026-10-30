@@ -37,7 +37,8 @@ import { m1A13MoveSelection } from '../m1-a13/document';
 // GPU adapter, visibility and focus) and the page errors. A run is invalid, kept and failed, when
 // the device was lost or recovered, the page was hidden or lost focus, its DPR differs from the
 // project's, a page error was thrown, or the interaction did not happen (section 3.5). Non-smoke
-// runs refuse a dirty working tree, so the recorded commit is what ran. Do not touch the mouse
+// runs refuse modified tracked files, so the recorded commit is what ran (untracked files
+// are not checked: the reference PC keeps standing untracked entries). Do not touch the mouse
 // during a run: the real pointer is captured on the canvas.
 //
 // The harness checks that each run completed and recorded its metrics; it does not assert the
@@ -60,7 +61,7 @@ const git = (command: string): string | null => {
   }
 };
 const commit = git('git rev-parse HEAD') ?? 'unknown';
-const dirty = (git('git status --porcelain') ?? 'unknown') !== '';
+const dirty = (git('git status --porcelain --untracked-files=no') ?? 'unknown') !== '';
 
 type Variant = 'frame' | 'busy' | 'plain';
 const runs: { scenario: E26Scenario; variant: Variant }[] = E26_SCENARIOS.filter(

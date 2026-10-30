@@ -95,3 +95,5 @@ docs/evidence/viz-v4-a08/**/*.json
 tests/visual/viz-v4/a08-expected-status.json
 # M6-S0 spike reports: written by docs/evidence/m6-s0/*.mjs, kept byte-for-byte.
 docs/evidence/m6-s0/**/*.json
+# Preserve E26 PC baseline run records byte-for-byte.
+docs/evidence/e26/**/*.json
