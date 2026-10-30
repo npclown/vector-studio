@@ -2,8 +2,8 @@ import type {
   MeshReceiptResource,
   MeshResource,
   MeshResourceId,
+  MeshRecordRange,
   MeshWrite,
-  PrimitiveRecordVersion,
 } from './primitive-packet.js';
 import { toDyadic } from './path-buckets.js';
 import type { PathFringe } from './path-fringe.js';
@@ -240,6 +240,9 @@ class RangeList {
   }
 }
 
+/** E26 contract, U5a: a packet's mesh ranges per resource, in increasing index order. */
+export type MeshExpectedRecords = ReadonlyMap<MeshResourceId, readonly MeshRecordRange[]>;
+
 /**
  * A served variant placed in the arena: a fringe variant (V3c: port vertices then the four frame
  * corners, region and exterior triangle records, lists and features) or, without a fringe
@@ -287,7 +290,7 @@ export type MeshPartOutput = Readonly<{
   placements: ReadonlyMap<string, Readonly<{ firstTriangle: number; triangleCount: number }>>;
   /** The same for the stroke draws of this packet (B2 section 9.5). */
   strokePlacements: ReadonlyMap<string, Readonly<{ firstTriangle: number; triangleCount: number }>>;
-  expected: ReadonlyMap<MeshResourceId, ReadonlyMap<number, symbol>>;
+  expected: MeshExpectedRecords;
 }>;
 
 /** @internal Tests only: the packet seeded defects of the ST-U7 addendum, section 5.6. */
@@ -456,7 +459,7 @@ export class PathMeshPacker {
    */
   public validateReceipt(
     resources: readonly MeshReceiptResource[],
-    expected: ReadonlyMap<MeshResourceId, ReadonlyMap<number, symbol>>,
+    expected: MeshExpectedRecords,
     resourceCount: number,
   ): readonly MeshReceiptResource[] | null {
     if (!isList(resources) || resources.length !== resourceCount) return null;
@@ -466,12 +469,16 @@ export class PathMeshPacker {
       if (resource.resourceId !== id || resource.incarnation !== this.#incarnations[id]) {
         return null;
       }
-      const records = expected.get(id);
-      if (resource.records.length !== (records?.size ?? 0)) return null;
-      const seen = new Set<number>();
-      for (const record of resource.records) {
-        if (seen.has(record.index) || records?.get(record.index) !== record.version) return null;
-        seen.add(record.index);
+      // E26 contract, U5a: exactly the expected ranges, in any order.
+      const ranges = expected.get(id) ?? [];
+      if (!isList(resource.records) || resource.records.length !== ranges.length) return null;
+      const received = [...resource.records].sort((a, b) => a.index - b.index);
+      for (let range = 0; range < ranges.length; range += 1) {
+        const want = ranges[range]!;
+        const got = received[range]!;
+        if (got.index !== want.index || got.count !== want.count || got.version !== want.version) {
+          return null;
+        }
       }
     }
     return resources;
@@ -479,9 +486,11 @@ export class PathMeshPacker {
 
   public acknowledge(resources: readonly MeshReceiptResource[]): void {
     for (const resource of resources) {
-      for (const record of resource.records) {
-        if (this.#versions[resource.resourceId][record.index] === record.version) {
-          this.#setVersion(resource.resourceId, record.index, undefined);
+      const versions = this.#versions[resource.resourceId];
+      for (const range of resource.records) {
+        for (let index = range.index; index < range.index + range.count; index += 1) {
+          if (versions[index] === range.version)
+            this.#setVersion(resource.resourceId, index, undefined);
         }
       }
     }
@@ -788,9 +797,15 @@ export class PathMeshPacker {
       let first = -1;
       const flush = (end: number) => {
         if (first < 0) return;
-        const records: PrimitiveRecordVersion[] = [];
-        for (let index = first; index < end; index += 1) {
-          records.push(Object.freeze({ index, version: versions[index]! }));
+        // E26 contract, U5a: one range per run of records with one version.
+        const records: MeshRecordRange[] = [];
+        let start = first;
+        for (let index = first + 1; index <= end; index += 1) {
+          if (index < end && versions[index] === versions[start]) continue;
+          records.push(
+            Object.freeze({ index: start, count: index - start, version: versions[start]! }),
+          );
+          start = index;
         }
         writes.push(
           Object.freeze({
@@ -848,17 +863,16 @@ function instanceWords(
   return words;
 }
 
-function expectedRecords(
-  writes: readonly MeshWrite[],
-): ReadonlyMap<MeshResourceId, ReadonlyMap<number, symbol>> {
-  const expected = new Map<MeshResourceId, Map<number, symbol>>();
+function expectedRecords(writes: readonly MeshWrite[]): MeshExpectedRecords {
+  const expected = new Map<MeshResourceId, MeshRecordRange[]>();
   for (const write of writes) {
-    let records = expected.get(write.resourceId);
-    if (records === undefined) {
-      records = new Map();
-      expected.set(write.resourceId, records);
+    let ranges = expected.get(write.resourceId);
+    if (ranges === undefined) {
+      ranges = [];
+      expected.set(write.resourceId, ranges);
     }
-    for (const record of write.records) records.set(record.index, record.version);
+    // Writes come in increasing byte order per resource, so the ranges stay sorted.
+    for (const range of write.records) ranges.push(range);
   }
   return expected;
 }

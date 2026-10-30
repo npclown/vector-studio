@@ -40,7 +40,7 @@ import {
   target,
   type PathMeshFrame,
 } from '../support/v3a-path-harness.js';
-import { MeshShadow, receiptOf, words } from '../support/v3b-mesh-harness.js';
+import { MeshShadow, receiptOf, recordIndices, words } from '../support/v3b-mesh-harness.js';
 
 // P3 B2 ST-U7 addendum, unit ST-U7c, acceptance rows ST-A15 and ST-A17 (unit form): the joint
 // condition, the joint fill draw and its overlay variant in the path-mesh pipeline, the joint
@@ -129,7 +129,7 @@ function instanceRecord(packet: PrimitivePacket, slot: number): number[] | undef
     if (write.resourceId !== 'meshInstances') continue;
     const first = write.byteOffset / 64;
     const index = slot - first;
-    if (index < 0 || index >= write.records.length) continue;
+    if (index < 0 || index >= write.bytes.byteLength / 64) continue;
     return words(write.bytes.subarray(64 * index, 64 * index + 64), 'u32');
   }
   return undefined;
@@ -142,7 +142,7 @@ function serialize(packet: PrimitivePacket): string {
       write.resourceId,
       write.byteOffset,
       Buffer.from(write.bytes).toString('hex'),
-      write.records.map((record) => record.index),
+      recordIndices(write.records),
     ]),
     draws: packet.mesh!.draws,
     analytic: packet.draws,
@@ -621,7 +621,7 @@ describe('ST-U7 device loss (ST-A17, unit form)', () => {
         before.subarray(write.byteOffset, write.byteOffset + write.bytes.byteLength),
       );
       const indices = covered.get(write.resourceId) ?? new Set<number>();
-      for (const record of write.records) indices.add(record.index);
+      for (const index of recordIndices(write.records)) indices.add(index);
       covered.set(write.resourceId, indices);
     }
     // Every triangle the joint draws read is rewritten.
