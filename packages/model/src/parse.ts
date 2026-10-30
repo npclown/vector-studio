@@ -883,17 +883,25 @@ function loneSurrogate(text: string): number {
 }
 
 /**
+ * Whether M6a-S1 rejects the UTF-16 code unit `unit` in run text on its own: a control other
+ * than LF, a line or paragraph separator, or a bidi control. Surrogates are not judged here,
+ * since only a lone one is rejected (`isValidRunText`).
+ */
+export function isRejectedRunTextUnit(unit: number): boolean {
+  if (unit === 0x0a) return false;
+  if (isControl(unit)) return true;
+  if (unit === 0x2028 || unit === 0x2029) return true;
+  if (unit === 0x200e || unit === 0x200f || unit === 0x061c) return true;
+  return (unit >= 0x202a && unit <= 0x202e) || (unit >= 0x2066 && unit <= 0x2069);
+}
+
+/**
  * M6a-S1: LF is the only control; no line or paragraph separator, no bidi control and no lone
  * surrogate.
  */
-function isValidRunText(text: string): boolean {
+export function isValidRunText(text: string): boolean {
   for (let i = 0; i < text.length; i += 1) {
-    const unit = text.charCodeAt(i);
-    if (unit === 0x0a) continue;
-    if (isControl(unit)) return false;
-    if (unit === 0x2028 || unit === 0x2029) return false;
-    if (unit === 0x200e || unit === 0x200f || unit === 0x061c) return false;
-    if ((unit >= 0x202a && unit <= 0x202e) || (unit >= 0x2066 && unit <= 0x2069)) return false;
+    if (isRejectedRunTextUnit(text.charCodeAt(i))) return false;
   }
   return loneSurrogate(text) === -1;
 }
