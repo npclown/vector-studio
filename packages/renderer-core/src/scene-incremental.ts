@@ -75,6 +75,12 @@ export class CandidateScene {
     return this.resident.nodes.get(id);
   }
 
+  /** The resident node of `id`, before the set's writes. */
+  residentNode(id: string): RenderNodeSnapshot | undefined {
+    this.visits += 1;
+    return this.resident.nodes.get(id);
+  }
+
   has(id: string): boolean {
     return this.get(id) !== undefined;
   }
@@ -116,14 +122,15 @@ const IDENTITY: SceneAffine = [1, 0, 0, 1, 0, 0];
  */
 function worldOf(
   candidate: CandidateScene,
-  id: string,
+  node: RenderNodeSnapshot,
   memo: Map<string, SceneAffine | null>,
 ): SceneAffine | null | 'overflow' {
+  const id = node.id;
   const known = memo.get(id);
   if (known !== undefined) return known;
   const path: RenderNodeSnapshot[] = [];
   const onPath = new Set<string>();
-  let cursor = candidate.get(id);
+  let cursor: RenderNodeSnapshot | undefined = node;
   let parentWorld: SceneAffine | null = IDENTITY;
   while (cursor !== undefined) {
     const memoized = memo.get(cursor.id);
@@ -139,6 +146,12 @@ function worldOf(
     path.push(cursor);
     if (cursor.parentId === null) {
       parentWorld = IDENTITY;
+      break;
+    }
+    // A memoized parent needs no lookup.
+    const parentMemo = memo.get(cursor.parentId);
+    if (parentMemo !== undefined) {
+      parentWorld = parentMemo;
       break;
     }
     const parent = candidate.get(cursor.parentId);
@@ -232,7 +245,7 @@ export function candidateArithmeticFinite(candidate: CandidateScene): boolean {
   const pending: string[] = [];
   for (const node of candidate.writtenNodes()) {
     check.add(node.id);
-    if (shiftsSubtreeWorld(candidate.resident.nodes.get(node.id), node)) pending.push(node.id);
+    if (shiftsSubtreeWorld(candidate.residentNode(node.id), node)) pending.push(node.id);
   }
   const expanded = new Set<string>();
   while (pending.length > 0) {
@@ -248,7 +261,7 @@ export function candidateArithmeticFinite(candidate: CandidateScene): boolean {
   for (const id of check) {
     const node = candidate.get(id);
     if (node === undefined) continue;
-    const world = worldOf(candidate, id, memo);
+    const world = worldOf(candidate, node, memo);
     if (world === 'overflow') return false;
     if (world !== null && !boundsFinite(node, world)) return false;
   }
@@ -343,9 +356,10 @@ export function candidateGraphReason(
   const placed: RenderNodeSnapshot[] = [];
   if (candidate.rootOrderWritten) owners.add(null);
   for (const [id, node] of candidate.writes) {
-    const before = resident.nodes.get(id);
+    const before = candidate.residentNode(id);
     if (node !== null && node.kind === 'container') {
       const old = before?.kind === 'container' ? before.children : undefined;
+      if (old !== undefined) candidate.visits += old.length;
       if (old === undefined || !arraysEqual(old, node.children)) owners.add(id);
     }
     if (node === null || before === undefined || before.parentId !== node.parentId) {
@@ -411,7 +425,9 @@ export function candidateGraphReason(
   // moved away.
   if (listOrderBroken) return { unknown: false, reason: 'invalid-order' };
   for (const [owner, local] of listed) {
-    for (const childId of residentListOf(resident, owner)) {
+    const residentList = residentListOf(resident, owner);
+    candidate.visits += residentList.length;
+    for (const childId of residentList) {
       if (local.has(childId)) continue;
       const child = candidate.get(childId);
       if (child !== undefined && child.parentId === owner) {
@@ -463,7 +479,9 @@ export function candidateGraphReason(
     if (at.depth > SCENE_MAX_CLIP_DEPTH || at.isolation > SCENE_MAX_ISOLATION_DEPTH) {
       return { unknown: false, reason: 'unsupported-feature' };
     }
-    if (shiftsSubtreeDepth(resident.nodes.get(node.id), node)) pending.push({ id: node.id, ...at });
+    if (shiftsSubtreeDepth(candidate.residentNode(node.id), node)) {
+      pending.push({ id: node.id, ...at });
+    }
   }
   while (pending.length > 0) {
     const { id, depth, isolation } = pending.pop()!;

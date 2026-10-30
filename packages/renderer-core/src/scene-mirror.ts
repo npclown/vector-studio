@@ -84,9 +84,9 @@ type CameraTransition =
   | Readonly<{ status: 'invalid-camera'; reason: 'invalid-value' | 'revision-overflow' }>;
 
 /**
- * A published scene version. Its maps are shared with the next version until a view of this one
- * is handed out (`exposed`); after that the next set copies them first (E26 contract, section
- * 4.1: copy-on-write, so a published view stays immutable). `nodeList` is built when first read.
+ * A published scene version. Its maps are the mirror's live maps, which the next accepted set
+ * updates in place (E26 contract, section 4.1). A view takes its own copies when it is first read
+ * for this version (`view`), so a published view stays immutable and no set copies a whole map.
  */
 type OwnedScene = {
   readonly sceneEpoch: symbol;
@@ -95,8 +95,11 @@ type OwnedScene = {
   readonly nodes: Map<string, RenderNodeSnapshot>;
   readonly rootOrder: readonly string[];
   readonly geometryRevisions: Map<string, number>;
-  exposed: boolean;
-  nodeList: readonly RenderNodeSnapshot[] | null;
+  view: Readonly<{
+    nodeList: readonly RenderNodeSnapshot[];
+    nodes: ReadonlyMap<string, RenderNodeSnapshot>;
+    geometryRevisions: ReadonlyMap<string, number>;
+  }> | null;
 };
 
 /** The mirror's indexes of the current scene, mutated in place by each publish. */
@@ -385,15 +388,17 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
   public readRetainedScene(): RetainedSceneView | null {
     const scene = this.#scene;
     if (scene === null || this.#synchronizationStatus === 'disposed') return null;
-    if (scene.nodeList === null) {
-      scene.nodeList = Object.freeze(this.#indexes.sortedIds.map((id) => scene.nodes.get(id)!));
-    }
-    scene.exposed = true;
-    const { nodes, geometryRevisions } = scene;
+    // Once per version, on the frame path: the list and the view's own maps (E26 section 4.1).
+    scene.view ??= Object.freeze({
+      nodeList: Object.freeze(this.#indexes.sortedIds.map((id) => scene.nodes.get(id)!)),
+      nodes: new Map(scene.nodes),
+      geometryRevisions: new Map(scene.geometryRevisions),
+    });
+    const { nodes, geometryRevisions, nodeList } = scene.view;
     return Object.freeze({
       sceneEpoch: scene.sceneEpoch,
       version: copyVersion(scene),
-      nodes: scene.nodeList,
+      nodes: nodeList,
       rootOrder: scene.rootOrder,
       getNode: (id: string) => nodes.get(id),
       getGeometryRevision: (id: string) => geometryRevisions.get(id),
@@ -416,6 +421,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     this.#cameraChanged = false;
     this.#invalidationToken = null;
     this.#onInvalidate = () => undefined;
+    this.#indexes = { childrenByParent: new Map(), sortedIds: [] };
     this.#synchronizationStatus = 'disposed';
   }
 
@@ -443,8 +449,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       nodes: ownedNodes,
       rootOrder,
       geometryRevisions: new Map(revisions.revisions),
-      exposed: false,
-      nodeList: null,
+      view: null,
     };
     this.#nextGeometryRevision = revisions.next;
     this.#scene = published;
@@ -456,9 +461,9 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
 
   /**
    * Publishes an accepted set's writes over the current scene (E26 contract, section 4.1): the
-   * maps are copied only if a view of the current version was handed out, geometry revisions are
-   * assigned to the written path nodes only, in ordinal order, and the indexes are updated in
-   * place. Revision overflow publishes nothing, as #publishScene.
+   * live maps and the indexes are updated in place, and geometry revisions are assigned to the
+   * written path nodes only, in ordinal order. Revision overflow publishes nothing, as
+   * #publishScene.
    */
   #publishWrites(input: ValidatedChangesInput, candidate: CandidateScene): OwnedScene | null {
     const current = this.#scene!;
@@ -482,11 +487,10 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       next += 1;
     }
 
-    const nodes = current.exposed ? new Map(current.nodes) : current.nodes;
-    const geometryRevisions = current.exposed
-      ? new Map(current.geometryRevisions)
-      : current.geometryRevisions;
-    const { childrenByParent, sortedIds } = this.#indexes;
+    const { nodes, geometryRevisions } = current;
+    const { childrenByParent } = this.#indexes;
+    const added: string[] = [];
+    const deleted: string[] = [];
     for (const id of writtenIds) {
       const before = nodes.get(id);
       const after = candidate.writes.get(id)!;
@@ -494,16 +498,17 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       if (after === null) {
         nodes.delete(id);
         geometryRevisions.delete(id);
-        sortedIds.splice(sortedIndex(sortedIds, id), 1);
+        deleted.push(id);
         continue;
       }
-      if (before === undefined) sortedIds.splice(sortedIndex(sortedIds, id), 0, id);
+      if (before === undefined) added.push(id);
       nodes.set(id, after);
       addChild(childrenByParent, after.parentId, id);
       const revision = assigned.get(id);
       if (revision !== undefined) geometryRevisions.set(id, revision);
       else if (after.kind !== 'path') geometryRevisions.delete(id);
     }
+    this.#indexes.sortedIds = updateSortedIds(this.#indexes.sortedIds, added, deleted);
     const published: OwnedScene = {
       sceneEpoch: current.sceneEpoch,
       identity: input.identity,
@@ -511,8 +516,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       nodes,
       rootOrder: candidate.rootOrder,
       geometryRevisions,
-      exposed: false,
-      nodeList: null,
+      view: null,
     };
     this.#nextGeometryRevision = next;
     this.#scene = published;
@@ -793,6 +797,28 @@ function removeChild(index: Map<string | null, Set<string>>, parent: string | nu
   if (set === undefined) return;
   set.delete(id);
   if (set.size === 0) index.delete(parent);
+}
+
+/**
+ * The ordinal-sorted IDs after adding `added` and deleting `deleted` (both sorted, disjoint):
+ * splices for a few, one merge pass for many, so a set never costs more than O(n) here.
+ */
+function updateSortedIds(ids: string[], added: readonly string[], deleted: readonly string[]) {
+  if (added.length + deleted.length <= 16) {
+    for (const id of deleted) ids.splice(sortedIndex(ids, id), 1);
+    for (const id of added) ids.splice(sortedIndex(ids, id), 0, id);
+    return ids;
+  }
+  const gone = new Set(deleted);
+  const merged: string[] = [];
+  let next = 0;
+  for (const id of ids) {
+    if (gone.has(id)) continue;
+    while (next < added.length && added[next]! < id) merged.push(added[next++]!);
+    merged.push(id);
+  }
+  while (next < added.length) merged.push(added[next++]!);
+  return merged;
 }
 
 /** The index of `id` in the ordinal-sorted `ids`, or where it would be inserted. */

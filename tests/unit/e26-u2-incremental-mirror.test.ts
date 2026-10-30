@@ -14,6 +14,7 @@ import { describe, expect, it } from 'vitest';
 import {
   lastSceneSetVisitsForTesting,
   RetainedSceneMirror,
+  setNextGeometryRevisionForTesting,
   useFullChangeValidationForTesting,
   type RetainedSceneMirrorOptions,
 } from '../../packages/renderer-core/src/scene-mirror.js';
@@ -46,6 +47,20 @@ const FULL_SUPPORT: RetainedSceneMirrorOptions = {
   textNodes: 'supported',
 };
 const NO_SUPPORT: RetainedSceneMirrorOptions = { pathNodes: 'unsupported' };
+/** Clips without path fills: a path mask source is unsupported (P4-S2). */
+const CLIPS_WITHOUT_PATH_FILLS: RetainedSceneMirrorOptions = {
+  ...FULL_SUPPORT,
+  pathFills: 'unsupported',
+};
+
+/** What a random scene may hold, so that the profile's mirror accepts most scenes. */
+type SceneMode = 'any' | 'simple' | 'no-path-fill';
+
+function sceneModeOf(options: RetainedSceneMirrorOptions): SceneMode {
+  if (options === NO_SUPPORT) return 'simple';
+  if (options === CLIPS_WITHOUT_PATH_FILLS) return 'no-path-fill';
+  return 'any';
+}
 
 function transform(rng: Rng): SceneAffine {
   if (rng() < 0.5) return [1, 0, 0, 1, Math.round(rng() * 100), Math.round(rng() * 100)];
@@ -142,11 +157,18 @@ function containerNode(
 }
 
 /**
- * A random scene of about `size` nodes; mask containers start with a primitive source. A `simple`
- * scene holds only containers without clip or group opacity and primitive leaves, so a mirror
- * without optional support accepts it.
+ * A random scene of about `size` nodes; mask containers start with a supported source. A
+ * `simple` scene holds only containers without clip or group opacity and primitive leaves, so a
+ * mirror without optional support accepts it; a `no-path-fill` scene has no path fills and no
+ * path mask sources.
  */
-function randomScene(rng: Rng, size: number, prefix = 'n', simple = false): RenderSceneSnapshot {
+function randomScene(
+  rng: Rng,
+  size: number,
+  prefix = 'n',
+  mode: SceneMode = 'any',
+): RenderSceneSnapshot {
+  const simple = mode === 'simple';
   const nodes = new Map<string, RenderNodeSnapshot>();
   const rootOrder: string[] = [];
   const containers: string[] = [];
@@ -184,13 +206,25 @@ function randomScene(rng: Rng, size: number, prefix = 'n', simple = false): Rend
       containers.push(node.id);
       if (clip?.kind === 'mask') {
         const source = leaf(rng, nextId(), node.id);
-        attach(source.kind === 'text' ? { ...leafPrimitive(source) } : source);
+        const unsupported =
+          source.kind === 'text' || (source.kind === 'path' && mode === 'no-path-fill');
+        attach(unsupported ? leafPrimitive(source) : source);
       }
     } else {
-      attach(leaf(rng, nextId(), parentId));
+      const node = leaf(rng, nextId(), parentId);
+      attach(
+        node.kind === 'path' && mode === 'no-path-fill'
+          ? { ...node, style: { ...node.style, fill: null } }
+          : node,
+      );
     }
   }
   return { identity, revision: 0, nodes: [...nodes.values()], rootOrder };
+}
+
+/** Whether a node isolates its children (E25-S2). */
+function isolates(node: RenderNodeSnapshot): boolean {
+  return node.kind === 'container' && node.visible && node.opacity > 0 && node.opacity < 1;
 }
 
 function leafPrimitive(node: RenderNodeSnapshot): RenderNodeSnapshot {
@@ -343,10 +377,46 @@ function breakChange(
   fresh: () => string,
 ): void {
   if (rng() < 0.45) return;
-  const pick = Math.floor(rng() * 22);
+  const pick = Math.floor(rng() * 32);
   const id = pickId();
   const node = byId.get(id)!;
   const containers = scene.nodes.filter((entry) => entry.kind === 'container');
+  const leaves = scene.nodes.filter((entry) => entry.kind !== 'container');
+  const listOf = (owner: string | null): string[] => {
+    const written = set.orders.find((order) => order.parentId === owner);
+    if (written !== undefined) return written.children;
+    return owner === null ? [...scene.rootOrder] : [...(byId.get(owner) as Container).children];
+  };
+  const writeOrder = (owner: string | null, children: string[]) => {
+    const existing = set.orders.find((order) => order.parentId === owner);
+    if (existing !== undefined) existing.children = children;
+    else set.orders.push({ parentId: owner, children });
+  };
+  /** A chain of `length` fresh containers under the root; returns the chain. */
+  const chain = (length: number, link: (chainId: string, parent: string | null) => Container) => {
+    let parent: string | null = null;
+    const nodes: Container[] = [];
+    for (let level = 0; level < length; level += 1) {
+      const chainId = fresh();
+      nodes.push(link(chainId, parent));
+      if (level > 0) nodes[level - 1] = { ...nodes[level - 1]!, children: [chainId] };
+      parent = chainId;
+    }
+    set.inserted.push(...nodes);
+    writeOrder(null, [...listOf(null), nodes[0]!.id]);
+    return nodes;
+  };
+  /** A chain link that clips, below a head that does not (so a later set can toggle it). */
+  const clipLink = (chainId: string, parent: string | null): Container => ({
+    ...containerNode(
+      rng,
+      chainId,
+      parent,
+      parent === null ? null : { kind: 'rect', x: 0, y: 0, width: 9, height: 9 },
+    ),
+    visible: true,
+    opacity: 1,
+  });
   switch (pick) {
     case 0: // stale base
       set.baseRevision -= 1;
@@ -418,38 +488,16 @@ function breakChange(
         }
       }
       break;
-    case 17: {
-      // clip depth past SCENE_MAX_CLIP_DEPTH: a chain of 33 clipping containers under the root
-      let parent: string | null = null;
-      const chain: RenderNodeSnapshot[] = [];
-      for (let level = 0; level < 34; level += 1) {
-        const chainId = fresh();
-        chain.push({
-          ...containerNode(rng, chainId, parent, { kind: 'rect', x: 0, y: 0, width: 9, height: 9 }),
-          visible: true,
-          opacity: 1,
-        });
-        if (level > 0) (chain[level - 1] as unknown as { children: string[] }).children = [chainId];
-        parent = chainId;
-      }
-      set.inserted.push(...chain);
-      set.orders.push({ parentId: null, children: [...scene.rootOrder, chain[0]!.id] });
+    case 17: // clip depth at and past SCENE_MAX_CLIP_DEPTH: a plain head over 32 or 33 clips (the bottom clip at or past the limit)
+      chain(33 + Math.floor(rng() * 2), clipLink);
       break;
-    }
-    case 18: {
-      // isolation depth: the same with opacity 0.5 and no clip
-      let parent: string | null = null;
-      const chain: RenderNodeSnapshot[] = [];
-      for (let level = 0; level < 34; level += 1) {
-        const chainId = fresh();
-        chain.push({ ...containerNode(rng, chainId, parent, null), visible: true, opacity: 0.5 });
-        if (level > 0) (chain[level - 1] as unknown as { children: string[] }).children = [chainId];
-        parent = chainId;
-      }
-      set.inserted.push(...chain);
-      set.orders.push({ parentId: null, children: [...scene.rootOrder, chain[0]!.id] });
+    case 18: // isolation depth: the same with opacity 0.5 and no clip
+      chain(33 + Math.floor(rng() * 2), (chainId, parent) => ({
+        ...containerNode(rng, chainId, parent, null),
+        visible: true,
+        opacity: parent === null ? 1 : 0.5,
+      }));
       break;
-    }
     case 19: // shape garbage
       (set.updated as unknown[]).push({ id: 'x' });
       break;
@@ -459,6 +507,132 @@ function breakChange(
         set.orders.push({ parentId: id, children: [...node.children] });
       }
       break;
+    case 21: // kind change: a leaf becomes an empty container, a container a leaf
+      set.updated.push(
+        node.kind === 'container'
+          ? leafPrimitive(node)
+          : { ...containerNode(rng, id, node.parentId, null), transform: node.transform },
+      );
+      break;
+    case 22: // a node made its own parent
+      set.updated.push({ ...node, parentId: id });
+      break;
+    case 23: {
+      // a node moved under a leaf, both lists written
+      const target = leaves[Math.floor(rng() * leaves.length)];
+      if (target === undefined || target.id === id) break;
+      set.updated.push({ ...node, parentId: target.id });
+      writeOrder(
+        node.parentId,
+        listOf(node.parentId).filter((child) => child !== id),
+      );
+      break;
+    }
+    case 24: // a node moved under an unknown parent
+      set.updated.push({ ...node, parentId: fresh() });
+      writeOrder(
+        node.parentId,
+        listOf(node.parentId).filter((child) => child !== id),
+      );
+      break;
+    case 25: {
+      // an inserted container adopts an existing node (consistent)
+      const adopter = { ...containerNode(rng, fresh(), null, null), children: [id] };
+      set.inserted.push(adopter);
+      set.updated.push({ ...node, parentId: adopter.id });
+      writeOrder(
+        node.parentId,
+        listOf(node.parentId).filter((child) => child !== id),
+      );
+      writeOrder(null, [...listOf(null), adopter.id]);
+      break;
+    }
+    case 26: {
+      // a container removed with its whole subtree (consistent)
+      const target = containers[Math.floor(rng() * containers.length)];
+      if (target === undefined) break;
+      const pending = [target.id];
+      while (pending.length > 0) {
+        const next = pending.pop()!;
+        set.removed.push(next);
+        const entry = byId.get(next)!;
+        if (entry.kind === 'container') pending.push(...entry.children);
+      }
+      writeOrder(
+        target.parentId,
+        listOf(target.parentId).filter((child) => child !== target.id),
+      );
+      break;
+    }
+    case 27: {
+      // composition overflow: each scale is finite, the product is not
+      const parent = containers.find((entry) => entry.children.length > 0);
+      if (parent === undefined) break;
+      const child = byId.get(parent.children[0]!)!;
+      set.updated.push(
+        { ...parent, transform: [1e155, 0, 0, 1e155, 0, 0] },
+        { ...child, transform: [1e155, 0, 0, 1e155, 0, 0] },
+      );
+      break;
+    }
+    case 28: {
+      // clip or isolation depth reached by a toggle: the plain container above the deepest chain
+      // starts clipping or isolating
+      const isolation = rng() < 0.5;
+      const counts = (entry: Container) => (isolation ? isolates(entry) : entry.clip !== null);
+      const height = new Map<string, number>();
+      const heightOf = (entryId: string): number => {
+        const known = height.get(entryId);
+        if (known !== undefined) return known;
+        const entry = byId.get(entryId)!;
+        let result = 0;
+        if (entry.kind === 'container') {
+          for (const childId of entry.children) result = Math.max(result, heightOf(childId));
+          if (counts(entry)) result += 1;
+        }
+        height.set(entryId, result);
+        return result;
+      };
+      let best: Container | undefined;
+      for (const entry of containers) {
+        if (counts(entry)) continue;
+        if (best === undefined || heightOf(entry.id) > heightOf(best.id)) best = entry;
+      }
+      if (best !== undefined) {
+        set.updated.push(
+          isolation
+            ? { ...best, visible: true, opacity: 0.5 }
+            : { ...best, clip: { kind: 'rect', x: 0, y: 0, width: 9, height: 9 } },
+        );
+      }
+      break;
+    }
+    case 29: {
+      // clip depth reached by a move: a node moves to the bottom of a fresh chain of 30 to 32
+      // clips
+      const links = chain(31 + Math.floor(rng() * 3), clipLink);
+      const bottom = links.length - 1;
+      links[bottom] = { ...links[bottom]!, children: [id] };
+      set.inserted.splice(set.inserted.length - links.length, links.length, ...links);
+      set.updated.push({ ...node, parentId: links[bottom].id });
+      writeOrder(
+        node.parentId,
+        listOf(node.parentId).filter((child) => child !== id),
+      );
+      break;
+    }
+    case 30: {
+      // non-finite arithmetic below a re-transformed container, two levels down
+      const target = containers.find((entry) =>
+        entry.children.some((childId) => {
+          const child = byId.get(childId)!;
+          return child.kind === 'container' && child.children.length > 0;
+        }),
+      );
+      if (target !== undefined)
+        set.updated.push({ ...target, transform: [1e307, 0, 0, 1e307, 0, 0] });
+      break;
+    }
     default: // remove a container but not its children
       for (const entry of containers) {
         const children = entry.children;
@@ -483,6 +657,7 @@ describe('E26-U2 incremental scene-set validation (E26-A07)', () => {
   for (const [label, options] of [
     ['full support', FULL_SUPPORT],
     ['no support', NO_SUPPORT],
+    ['clips without path fills', CLIPS_WITHOUT_PATH_FILLS],
   ] as const) {
     it(`equals the full pipeline on seeded random sets (${label})`, () => {
       const outcomes = new Map<string, number>();
@@ -494,12 +669,8 @@ describe('E26-U2 incremental scene-set validation (E26-A07)', () => {
         const incremental = new RetainedSceneMirror(() => undefined, options);
         const oracle = new RetainedSceneMirror(() => undefined, options);
         useFullChangeValidationForTesting(oracle);
-        const snapshot = randomScene(
-          rng,
-          10 + Math.floor(rng() * 40),
-          `s${seed}-`,
-          options === NO_SUPPORT,
-        );
+        const mode = sceneModeOf(options);
+        const snapshot = randomScene(rng, 10 + Math.floor(rng() * 40), `s${seed}-`, mode);
         const first = incremental.replaceSnapshot(snapshot);
         expect(oracle.replaceSnapshot(snapshot)).toEqual(first);
         scenes += 1;
@@ -508,12 +679,29 @@ describe('E26-U2 incremental scene-set validation (E26-A07)', () => {
         let counter = 0;
         const fresh = () => `f${seed}-${counter++}`;
         for (let step = 0; step < 20; step += 1) {
-          const scene = sceneOf(incremental)!;
-          const change = randomChange(rng, scene, fresh);
+          if (rng() < 0.02) {
+            // The geometry revision counter at its end (P3 V3, section b).
+            const next = Number.MAX_SAFE_INTEGER - Math.floor(rng() * 3);
+            setNextGeometryRevisionForTesting(incremental, next);
+            setNextGeometryRevisionForTesting(oracle, next);
+          }
+          if (rng() < 0.04) {
+            // A snapshot between sets.
+            const replacement = {
+              ...randomScene(rng, 10 + Math.floor(rng() * 40), `r${seed}-${step}-`, mode),
+              revision: sceneOf(oracle)!.version.revision + 1,
+            };
+            expect(incremental.replaceSnapshot(replacement)).toEqual(
+              oracle.replaceSnapshot(replacement),
+            );
+          }
+          // The set is drawn from the oracle's view, and the incremental view is read on about
+          // half of the steps, so that sets also apply to a scene no reader has copied.
+          const change = randomChange(rng, sceneOf(oracle)!, fresh);
           const expected = oracle.applyChanges(change);
           const actual = incremental.applyChanges(change);
           expect(actual, `seed ${seed} step ${step}`).toEqual(expected);
-          expect(sceneOf(incremental)).toEqual(sceneOf(oracle));
+          if (rng() < 0.5) expect(sceneOf(incremental)).toEqual(sceneOf(oracle));
           sets += 1;
           const key = describeResult(actual);
           outcomes.set(key, (outcomes.get(key) ?? 0) + 1);
@@ -522,6 +710,7 @@ describe('E26-U2 incremental scene-set validation (E26-A07)', () => {
             break;
           }
         }
+        expect(sceneOf(incremental)).toEqual(sceneOf(oracle));
       }
       // Most random scenes are valid, so the sets start from varied scenes.
       expect(accepted / scenes).toBeGreaterThan(0.8);
@@ -546,10 +735,106 @@ describe('E26-U2 incremental scene-set validation (E26-A07)', () => {
     }, 60_000);
   }
 
+  it('equals the full pipeline when a toggle or a move reaches the depth limits', () => {
+    // A plain head over `count` clipping (or isolating) containers, then a set that does not
+    // write the chain: the head starts clipping (or isolating), or a clipping node moves under
+    // the bottom, or the chain moves under that node. Counts 32 and 33 put the bottom at and past the limit after the change.
+    for (const isolation of [false, true]) {
+      for (const count of [31, 32, 33]) {
+        for (const change of ['toggle', 'move', 'move-chain'] as const) {
+          const rng = random(count * 2 + (isolation ? 1 : 0));
+          const link = (id: string, parentId: string | null, child: string | null): Container => ({
+            ...containerNode(rng, id, parentId, null),
+            visible: true,
+            opacity: isolation && parentId !== null ? 0.5 : 1,
+            clip:
+              !isolation && parentId !== null
+                ? { kind: 'rect', x: 0, y: 0, width: 9, height: 9 }
+                : null,
+            children: child === null ? [] : [child],
+          });
+          const nodes: RenderNodeSnapshot[] = [];
+          for (let level = 0; level <= count; level += 1) {
+            nodes.push(
+              link(
+                `c${level}`,
+                level === 0 ? null : `c${level - 1}`,
+                level === count ? null : `c${level + 1}`,
+              ),
+            );
+          }
+          const mover = {
+            ...link('m', null, null),
+            opacity: isolation ? 0.5 : 1,
+            clip: isolation ? null : ({ kind: 'rect', x: 0, y: 0, width: 9, height: 9 } as const),
+          };
+          nodes.push(mover);
+          const snapshot = { identity, revision: 0, nodes, rootOrder: ['c0', 'm'] };
+          const set: RenderChangeSet =
+            change === 'toggle'
+              ? {
+                  identity,
+                  baseRevision: 0,
+                  revision: 1,
+                  inserted: [],
+                  updated: [
+                    isolation
+                      ? { ...nodes[0]!, opacity: 0.5 }
+                      : {
+                          ...(nodes[0] as Container),
+                          clip: { kind: 'rect', x: 0, y: 0, width: 9, height: 9 },
+                        },
+                  ],
+                  removed: [],
+                  orders: [],
+                }
+              : change === 'move-chain'
+                ? {
+                    identity,
+                    baseRevision: 0,
+                    revision: 1,
+                    inserted: [],
+                    updated: [{ ...nodes[1]!, parentId: 'm' }],
+                    removed: [],
+                    orders: [
+                      { parentId: 'c0', children: [] },
+                      { parentId: 'm', children: ['c1'] },
+                    ],
+                  }
+                : {
+                    identity,
+                    baseRevision: 0,
+                    revision: 1,
+                    inserted: [],
+                    updated: [{ ...mover, parentId: `c${count}` }],
+                    removed: [],
+                    orders: [
+                      { parentId: null, children: ['c0'] },
+                      { parentId: `c${count}`, children: ['m'] },
+                    ],
+                  };
+          const incremental = new RetainedSceneMirror(() => undefined, FULL_SUPPORT);
+          const oracle = new RetainedSceneMirror(() => undefined, FULL_SUPPORT);
+          useFullChangeValidationForTesting(oracle);
+          const first = incremental.replaceSnapshot(snapshot);
+          expect(oracle.replaceSnapshot(snapshot)).toEqual(first);
+          const label = `${isolation ? 'isolation' : 'clip'} ${count} ${change}`;
+          expect(first.status, label).toBe(count <= 33 ? 'applied' : 'invalid-scene');
+          const expected = oracle.applyChanges(set);
+          expect(incremental.applyChanges(set), label).toEqual(expected);
+          expect(describeResult(expected), label).toBe(
+            count + 1 > 33 ? 'unsupported-feature' : 'applied',
+          );
+          expect(sceneOf(incremental)).toEqual(sceneOf(oracle));
+        }
+      }
+    }
+  });
+
   it('keeps a published view unchanged after later sets', () => {
     const rng = random(42);
     const mirror = new RetainedSceneMirror(() => undefined, FULL_SUPPORT);
-    expect(mirror.replaceSnapshot(randomScene(rng, 30, 'n', true)).status).toBe('applied');
+    expect(mirror.replaceSnapshot(randomScene(rng, 30, 'n', 'simple')).status).toBe('applied');
     let counter = 0;
     for (let step = 0; step < 50; step += 1) {
       const view = mirror.readRetainedScene()!;
@@ -624,6 +909,7 @@ describe('E26-U2 incremental scene-set validation (E26-A07)', () => {
     const bound = (k: number, d: number, s: number) =>
       U2_VISIT_CONSTANT * (k * (d + Math.log2(n)) + s);
     let revision = 0;
+    const visits: number[] = [];
     const apply = (fields: Partial<RenderChangeSet>) => {
       const result = mirror.applyChanges({
         identity,
@@ -637,7 +923,9 @@ describe('E26-U2 incremental scene-set validation (E26-A07)', () => {
       });
       expect(result.status).toBe('applied');
       revision += 1;
-      return lastSceneSetVisitsForTesting(mirror);
+      const count = lastSceneSetVisitsForTesting(mirror);
+      visits.push(count);
+      return count;
     };
 
     // A leaf restyle at depth 22: k = 1, S = 0.
@@ -659,6 +947,34 @@ describe('E26-U2 incremental scene-set validation (E26-A07)', () => {
         orders: [{ parentId: 'g9', children: [...g9.children, 'new'] }],
       }),
     ).toBeLessThanOrEqual(bound(102, 1, 0));
+    // A removal from a group of 100: the removed node and the written order of 99 entries.
+    const g20 = nodes.find((node) => node.id === 'g20') as Container;
+    expect(
+      apply({
+        removed: ['l20-5'],
+        orders: [{ parentId: 'g20', children: g20.children.filter((id) => id !== 'l20-5') }],
+      }),
+    ).toBeLessThanOrEqual(bound(100, 1, 0));
+    // A reparent between two groups of 100: the node and both written orders.
+    const g30 = nodes.find((node) => node.id === 'g30') as Container;
+    const g31 = nodes.find((node) => node.id === 'g31') as Container;
+    const movedLeaf = nodes.find((node) => node.id === 'l30-0')!;
+    expect(
+      apply({
+        updated: [{ ...movedLeaf, parentId: 'g31' }],
+        orders: [
+          { parentId: 'g30', children: g30.children.filter((id) => id !== 'l30-0') },
+          { parentId: 'g31', children: [...g31.children, 'l30-0'] },
+        ],
+      }),
+    ).toBeLessThanOrEqual(bound(201, 1, 0));
+    // A clip toggled on a group of 100: its leaves are the subtree whose depth inputs change.
+    const g40 = nodes.find((node) => node.id === 'g40') as Container;
+    expect(
+      apply({ updated: [{ ...g40, clip: { kind: 'rect', x: 0, y: 0, width: 9, height: 9 } }] }),
+    ).toBeLessThanOrEqual(bound(1, 0, 100));
+    // None of these sets comes near the size of the scene.
+    expect(Math.max(...visits)).toBeLessThan(n / 10);
   });
 });
 
