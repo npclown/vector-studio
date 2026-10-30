@@ -6,6 +6,9 @@
 // against its exclusive bound and A05's inputs (long tasks over 50 ms outside the isolation
 // measure, autosave writes started during the press, the first write after the release).
 //
+// It trusts each record's p95 fields, and records carry no validity flag: an invalid run is
+// failed by the harness after its record is written, so check the Playwright result alongside.
+//
 //   node tooling/e26-summarize.mjs <runs directory> [--json <out.json>] [--markdown <out.md>]
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -17,7 +20,9 @@ if (directory === undefined) {
 }
 const option = (name) => {
   const index = rest.indexOf(name);
-  return index === -1 ? null : rest[index + 1];
+  if (index === -1) return null;
+  if (rest[index + 1] === undefined) throw new Error(`${name} needs a file`);
+  return rest[index + 1];
 };
 
 const records = readdirSync(directory)
