@@ -102,6 +102,22 @@ describe('E26-U5a mesh record ranges', () => {
       [0, 10],
       [10, 7],
     ]);
+    const ranges = (resourceId: string) =>
+      output.writes
+        .filter((write) => write.resourceId === resourceId)
+        .flatMap((write) => write.records.map(({ index, count }) => [index, count]));
+    expect(ranges('meshPositions')).toEqual([
+      [0, 9],
+      [9, 8],
+    ]);
+    expect(ranges('meshTriangles')).toEqual([
+      [0, 3],
+      [3, 2],
+    ]);
+    expect(ranges('meshFeatures')).toEqual([
+      [0, 1],
+      [1, 1],
+    ]);
     // One version per variant region, a new one per slot's instance record.
     const instances = output.writes.find((write) => write.resourceId === 'meshInstances')!;
     expect(instances.records.map(({ index, count }) => [index, count])).toEqual([
@@ -126,6 +142,8 @@ describe('E26-U5a mesh record ranges', () => {
       swap([a!, b!, b!]),
       swap([{ ...a!, count: a!.count - 1 }, b!]),
       swap([{ ...a!, version: Symbol('other') }, b!]),
+      swap([{ ...a!, count: a!.count + 0.5 }, b!]),
+      swap([null as never, b!]),
       swap([
         { index: a!.index, count: 5, version: a!.version },
         { index: a!.index + 5, count: a!.count - 5, version: a!.version },
@@ -143,6 +161,9 @@ describe('E26-U5a mesh record ranges', () => {
         .flatMap((write) => write.records.map(({ index, count }) => [index, count]));
     expect(listRanges(draws)).toEqual([[0, 10]]);
     packer.acknowledge(good);
+    expect(
+      prepare(packer, draws).writes.filter((write) => write.resourceId !== 'meshFrame'),
+    ).toEqual([]);
   });
 
   it('a packet with more than 2^24 list entries validates and acknowledges (baseline B3)', () => {

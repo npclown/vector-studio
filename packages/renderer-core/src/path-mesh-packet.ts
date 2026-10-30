@@ -471,7 +471,13 @@ export class PathMeshPacker {
       }
       // E26 contract, U5a: exactly the expected ranges, in any order.
       const ranges = expected.get(id) ?? [];
-      if (!isList(resource.records) || resource.records.length !== ranges.length) return null;
+      if (
+        !isList(resource.records) ||
+        resource.records.length !== ranges.length ||
+        resource.records.some((range) => typeof range !== 'object' || range === null)
+      ) {
+        return null;
+      }
       const received = [...resource.records].sort((a, b) => a.index - b.index);
       for (let range = 0; range < ranges.length; range += 1) {
         const want = ranges[range]!;
@@ -871,7 +877,8 @@ function expectedRecords(writes: readonly MeshWrite[]): MeshExpectedRecords {
       ranges = [];
       expected.set(write.resourceId, ranges);
     }
-    // Writes come in increasing byte order per resource, so the ranges stay sorted.
+    // `#makeWrites` emits writes in MESH_RESOURCE_ORDER with ascending indices per resource, so
+    // the ranges stay sorted.
     for (const range of write.records) ranges.push(range);
   }
   return expected;

@@ -3495,7 +3495,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           range.index + range.count > end ||
           typeof range.version !== 'symbol'
         ) {
-          throw new TypeError('Invalid mesh record receipt.');
+          throw new TypeError('Invalid mesh record range.');
         }
         next += range.count;
         writeRecords.get(write.resourceId)!.push(Object.freeze({ ...range }));
