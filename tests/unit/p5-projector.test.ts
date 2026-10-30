@@ -346,6 +346,8 @@ describe('P5-U4 scene projector', () => {
         reason: 'invalid-value' as const,
         current: renderer.getSynchronizationState().current,
       },
+      // E26-U5b: isolation's removal set reaches the renderer.
+      null,
       { status: 'resync-required' as const, current: null },
     ];
     const apply = renderer.applyChanges.bind(renderer);
@@ -368,9 +370,10 @@ describe('P5-U4 scene projector', () => {
     const b = rect(target, 50, 0);
     const current = () => renderer.getSynchronizationState().current;
     // The main set, the batched set of both units (E26-U3: not reported) and a's own set are
-    // rejected; b's set then asks for a resync.
+    // rejected; b's set then asks for a resync. Isolation's removal set (E26-U5b) is applied.
     const results = [
       { status: 'invalid-scene' as const, reason: 'invalid-value' as const, current: current() },
+      null,
       { status: 'invalid-scene' as const, reason: 'invalid-value' as const, current: current() },
       { status: 'invalid-scene' as const, reason: 'invalid-value' as const, current: current() },
       { status: 'resync-required' as const, current: null },
@@ -493,5 +496,137 @@ describe('P5-U4 scene projector', () => {
     if (node.kind !== 'path') throw new Error('expected a path node');
     expect(node.geometry.points).toEqual([0, 0, 120, 0, 60, 20]);
     expect(node.style.stroke?.width).toBe(3);
+  });
+});
+
+describe('E26-U5b isolation removes the held page in one set', () => {
+  type Scripted = Parameters<RecordingRenderer['applyChanges']>[0] extends never
+    ? never
+    : ReturnType<RecordingRenderer['applyChanges']> | null;
+
+  /** Answers the next sets from `results` (null lets one through), recording every call. */
+  function script(renderer: RecordingRenderer, results: Scripted[]) {
+    const apply = renderer.applyChanges.bind(renderer);
+    renderer.applyChanges = (changes) => {
+      const next = results.shift();
+      if (next === undefined || next === null) return apply(changes);
+      renderer.calls.push({ method: 'applyChanges', input: changes, result: next });
+      return next;
+    };
+  }
+
+  function rejectedEdit(answer: Scripted) {
+    const { target, renderer, events } = attached();
+    const a = rect(target, 0, 0);
+    const b = rect(target, 50, 0);
+    const held = [...renderer.mirror.readRetainedScene()!.nodes.map((node) => node.id)].sort();
+    const current = renderer.getSynchronizationState().current;
+    const from = renderer.calls.length;
+    script(renderer, [{ status: 'invalid-scene', reason: 'invalid-value', current }, answer]);
+    ok(target, {
+      type: 'setFrames',
+      frames: [
+        { id: a, frame: { x: 1, y: 1, width: 40, height: 30 } },
+        { id: b, frame: { x: 51, y: 1, width: 40, height: 30 } },
+      ],
+    });
+    const calls = renderer.calls.slice(from).filter((call) => call.method !== 'setCamera');
+    return { target, renderer, events, held, calls };
+  }
+
+  it('removes every held node, sorted, with an empty root order', () => {
+    const { calls, held } = rejectedEdit(null);
+    expect(calls.map((call) => call.method)).toEqual([
+      'applyChanges',
+      'applyChanges',
+      'applyChanges',
+    ]);
+    expect(calls[1]!.input).toMatchObject({
+      inserted: [],
+      updated: [],
+      removed: held,
+      orders: [{ parentId: null, children: [] }],
+    });
+  });
+
+  it('keeps the renderer scene epoch through isolation', () => {
+    const { target, renderer } = attached();
+    const a = rect(target, 0, 0);
+    const b = rect(target, 50, 0);
+    const epoch = renderer.mirror.readRetainedScene()!.sceneEpoch;
+    renderer.overrides.applyChanges = {
+      status: 'invalid-scene',
+      reason: 'invalid-value',
+      current: renderer.getSynchronizationState().current,
+    };
+    ok(target, {
+      type: 'setFrames',
+      frames: [
+        { id: a, frame: { x: 1, y: 1, width: 40, height: 30 } },
+        { id: b, frame: { x: 51, y: 1, width: 40, height: 30 } },
+      ],
+    });
+    expect(renderer.mirror.readRetainedScene()!.sceneEpoch).toBe(epoch);
+    expectSynchronized(target, renderer);
+  });
+
+  for (const [label, answer] of [
+    [
+      'an unknown-node rejection',
+      { status: 'invalid-scene', reason: 'unknown-node', current: null },
+    ],
+    ['resync-required', { status: 'resync-required', current: null }],
+  ] as const) {
+    it(`falls back to the empty snapshot after ${label} of the removal set`, () => {
+      const { target, renderer, calls, events } = rejectedEdit(answer);
+      expect(calls[1]!.method).toBe('applyChanges');
+      expect(calls[2]).toMatchObject({
+        method: 'replaceSnapshot',
+        input: { nodes: [], rootOrder: [] },
+        result: { status: 'applied' },
+      });
+      expectSynchronized(target, renderer);
+      expect(diagnostics(events)).toEqual([]);
+    });
+  }
+
+  it('retries a bookkeeping rejection of the removal set once, at a higher revision', () => {
+    const { target, renderer, calls, held } = rejectedEdit({
+      status: 'invalid-scene',
+      reason: 'revision-conflict',
+      current: null,
+    });
+    const [, first, second] = calls;
+    if (first?.method !== 'applyChanges' || second?.method !== 'applyChanges') {
+      throw new Error('expected two removal sets');
+    }
+    expect(second.input.removed).toEqual(held);
+    expect(second.input.revision).toBeGreaterThan(first.input.revision);
+    expect(second.result.status).toBe('applied');
+    expect(calls.some((call) => call.method === 'replaceSnapshot')).toBe(false);
+    expectSynchronized(target, renderer);
+  });
+
+  it('sends nothing more when the renderer is disposed by the removal set', () => {
+    const { calls } = rejectedEdit({ status: 'disposed' });
+    expect(calls).toHaveLength(2);
+  });
+
+  it('still sends the empty snapshot when a rejected snapshot of several units is isolated', () => {
+    const target = editor();
+    rect(target, 0, 0);
+    rect(target, 50, 0);
+    const renderer = new RecordingRenderer();
+    renderer.overrides.replaceSnapshot = {
+      status: 'invalid-scene',
+      reason: 'invalid-value',
+      current: null,
+    };
+    target.attachRenderer(renderer);
+    expect(renderer.calls.filter((call) => call.method !== 'setCamera')[1]).toMatchObject({
+      method: 'replaceSnapshot',
+      input: { nodes: [], rootOrder: [] },
+    });
+    expectSynchronized(target, renderer);
   });
 });
