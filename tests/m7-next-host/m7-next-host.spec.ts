@@ -5,8 +5,8 @@ import type { Command, Editor, EditorEvent, SelectionHandles } from '@vector-stu
 import {
   parseEnvelope,
   serializeDocument,
-  type DocumentV5,
-  type NodeV5,
+  type DocumentV6,
+  type NodeV6,
 } from '@vector-studio/model';
 import { expect, test, type Page } from '@playwright/test';
 
@@ -51,14 +51,15 @@ type Point = Readonly<{ x: number; y: number }>;
 type Rgb = readonly [number, number, number];
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-// The page serves the v3 fixture `m7-symbols/symbols.v3.json`; since M7-U7 the editor holds its
-// committed v5 migration, which differs in the version and the empty `textOverrides` of each
-// instance (M6a contract, sections 2.1 and 9).
+// The page serves the v3 fixture `m7-symbols/symbols.v3.json`; since M4-U1 the editor holds its
+// committed v6 migration, which differs in the version, the empty `textOverrides` of each
+// instance and the M4-M1 stroke keys (M6a contract, sections 2.1 and 9; M4 contract, section
+// 2.1).
 const FIXTURE_TEXT = readFileSync(
-  path.join(root, 'tests/fixtures/m7-symbols/migrated/symbols.v5.json'),
+  path.join(root, 'tests/fixtures/m4-appearance/migrated/symbols.v6.json'),
   'utf8',
 );
-const FIXTURE = JSON.parse(FIXTURE_TEXT) as DocumentV5;
+const FIXTURE = JSON.parse(FIXTURE_TEXT) as DocumentV6;
 /** The canonical text of the fixture, as the editor's document serializes. */
 const FIXTURE_SERIALIZED = serializeDocument(FIXTURE);
 /** `s1`'s descendants in its pre-order: the order of a detached copy (section 5.2). */
@@ -145,11 +146,11 @@ async function screen(page: Page, p: Point): Promise<Point> {
   return { x: origin.x + (p.x - position.x) * zoom, y: origin.y + (p.y - position.y) * zoom };
 }
 
-async function readDocument(page: Page): Promise<DocumentV5> {
+async function readDocument(page: Page): Promise<DocumentV6> {
   const text = await page.evaluate(() =>
     JSON.stringify(window.__p5Host!.editor.query({ type: 'document' })),
   );
-  return JSON.parse(text) as DocumentV5;
+  return JSON.parse(text) as DocumentV6;
 }
 
 async function serialized(page: Page): Promise<string> {
@@ -270,8 +271,8 @@ async function expectPaints(
 }
 
 /** A node's descendants in pre-order (the node excluded). */
-function descendants(document: DocumentV5, id: string): NodeV5[] {
-  const out: NodeV5[] = [];
+function descendants(document: DocumentV6, id: string): NodeV6[] {
+  const out: NodeV6[] = [];
   const visit = (current: string) => {
     const node = document.nodes[current]!;
     if (current !== id) out.push(node);
@@ -282,10 +283,10 @@ function descendants(document: DocumentV5, id: string): NodeV5[] {
 }
 
 /** A detached instance (section 5.2): a frame with the source's fill and stroke and copies. */
-function expectDetached(document: DocumentV5, id: string, before: DocumentV5) {
+function expectDetached(document: DocumentV6, id: string, before: DocumentV6) {
   const node = document.nodes[id]!;
   const original = before.nodes[id]!;
-  const source = before.nodes.s1 as Extract<NodeV5, { type: 'symbol' }>;
+  const source = before.nodes.s1 as Extract<NodeV6, { type: 'symbol' }>;
   expect(node).toMatchObject({
     type: 'frame',
     name: original.name,
@@ -530,7 +531,7 @@ test('M7-A11: source edits reach instances; resize, detach, source delete and un
     type: 'line',
     frame: { x: LINE_START.x, y: LINE_START.y, width: length, height: 0 },
   });
-  const lineStroke = (lined.nodes[line!] as Extract<NodeV5, { type: 'line' }>).stroke!;
+  const lineStroke = (lined.nodes[line!] as Extract<NodeV6, { type: 'line' }>).stroke!;
   await run(page, {
     type: 'setNodeProps',
     id: line!,

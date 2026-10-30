@@ -21,7 +21,7 @@ import {
   validateAnyDocument,
   validateDocument,
   type DocumentV2,
-  type DocumentV5,
+  type DocumentV6,
 } from '../../packages/model/src/index.js';
 import { RecordingRenderer } from '../support/p5-recording-renderer.js';
 
@@ -94,7 +94,7 @@ function pathsDocument(
     verbs: Extract<Command, { type: 'createPath' }>['verbs'];
     points: readonly number[];
   }>[],
-): DocumentV5 {
+): DocumentV6 {
   const target = createEditor({ ids: createCounterIdSource('p') });
   for (const entry of paths) ok(target, { type: 'createPath', ...entry });
   return target.query({ type: 'document' });
@@ -128,10 +128,21 @@ describe('M3-U4 path-edit fixture', () => {
     ok(target, { type: 'enterPathEdit', id: 'open' });
     const nested = target.query({ type: 'pathOverlay' })!;
     expect(nested.subpaths.map((s) => [s.closed, s.anchors.length])).toEqual([[false, 4]]);
-    // Loading it in the editor keeps it byte for byte, up to the v5 version (M7-U7).
-    expect(JSON.stringify(target.query({ type: 'document' }))).toBe(
-      JSON.stringify({ ...FIXTURE, schemaVersion: 5 }),
-    );
+    // Loading it in the editor keeps it byte for byte, up to the v6 version and the `dash: null`
+    // its path strokes gain (M4-U1, M4-M1).
+    const migrated = {
+      ...FIXTURE,
+      schemaVersion: 6,
+      nodes: Object.fromEntries(
+        Object.entries(FIXTURE.nodes).map(([id, node]) => [
+          id,
+          'stroke' in node && node.stroke !== null
+            ? { ...node, stroke: { ...node.stroke, dash: null } }
+            : node,
+        ]),
+      ),
+    };
+    expect(JSON.stringify(target.query({ type: 'document' }))).toBe(JSON.stringify(migrated));
   });
 });
 

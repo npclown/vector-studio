@@ -75,6 +75,8 @@ tests/fixtures/m5-persistence/**/*.json
 tests/fixtures/m7-symbols/**/*.json
 # M6a text fixtures are canonical serializeDocument output or malformed text, compared byte-for-byte.
 tests/fixtures/m6-text/**/*.json
+# M4 appearance fixtures are canonical serializeDocument output or malformed text, compared byte-for-byte.
+tests/fixtures/m4-appearance/**/*.json
 **/.next/**
 apps/next-host/next-env.d.ts
 

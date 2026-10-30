@@ -11,7 +11,7 @@ import {
   validateDocument,
   validateNode,
   type DocumentV1,
-  type DocumentV5,
+  type DocumentV6,
   type ParseResult,
   type ParseResultV2,
 } from '@vector-studio/model';
@@ -22,15 +22,18 @@ import { describe, expect, it } from 'vitest';
 // `validateNode` and `serializeDocument` have the section 2.1 meaning. Since M7-U1 they return
 // and write schema v3, since M6a-U1 schema v4 and since M7-U7 schema v5, which differs from v2 in
 // its version only for these fixtures, which hold no instance (M7 contract, section 2.1; M6a
-// contract, sections 2.1 and 9), so a v2 fixture reads as its committed v5 migration under
-// `m7-symbols/migrated`.
+// contract, sections 2.1 and 9), so a v2 fixture read as its committed v5 migration under
+// `m7-symbols/migrated`. Since M4-U1 they return and write schema v6, whose strokes gain the
+// M4-M1 keys (M4 contract, section 2.1), so a v2 fixture reads as its committed v6 migration
+// under `m4-appearance/migrated`.
 
 const root = path.resolve(import.meta.dirname, '../..');
 const p5 = path.join(root, 'tests/fixtures/p5-model');
 const m1 = path.join(root, 'tests/fixtures/m1-model');
 const m7 = path.join(root, 'tests/fixtures/m7-symbols/migrated');
 const m6 = path.join(root, 'tests/fixtures/m6-text/migrated');
-const v5Name = (name: string) => `${name.replace(/\.v2$/, '')}.v5`;
+const m4 = path.join(root, 'tests/fixtures/m4-appearance/migrated');
+const v6Name = (name: string) => `${name.replace(/\.v2$/, '')}.v6`;
 // Every top-level v1 fixture has a migrated v2 fixture.
 const MIGRATED = (await readdir(p5, { withFileTypes: true }))
   .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
@@ -41,7 +44,7 @@ function read(dir: string, name: string): Promise<string> {
   return readFile(path.join(dir, `${name}.json`), 'utf8');
 }
 
-function parsed(text: string): DocumentV5 {
+function parsed(text: string): DocumentV6 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -106,18 +109,18 @@ describe('M1-A01 migration and round trip', () => {
     async (name) => {
       const v1 = await read(p5, name);
       const v2 = await read(m1, `${name}.v2`);
-      expect(serializeDocument(parsed(v1))).toBe(await read(m7, v5Name(name)));
+      expect(serializeDocument(parsed(v1))).toBe(await read(m4, v6Name(name)));
       const migrated = migrateV1toV2(JSON.parse(v1) as DocumentV1);
       expect(migrated.ok && migrated.document).toEqual(JSON.parse(v2));
     },
   );
 
   it.each([...MIGRATED.map((name) => `${name}.v2`), 'containers'])(
-    'reads the v2 fixture %s as its v5 migration, which round-trips',
+    'reads the v2 fixture %s as its v6 migration, which round-trips',
     async (name) => {
       const text = await read(m1, name);
       const document = parsed(text);
-      expect(serializeDocument(document)).toBe(await read(m7, v5Name(name)));
+      expect(serializeDocument(document)).toBe(await read(m4, v6Name(name)));
       expect(parsed(serializeDocument(document))).toEqual(document);
     },
   );
@@ -151,20 +154,21 @@ describe('M1-A01 migration and round trip', () => {
     }
   });
 
-  it('validates in-memory v5 only through validateDocument', async () => {
+  it('validates in-memory v6 only through validateDocument', async () => {
     const v1 = JSON.parse(await read(p5, 'shapes')) as unknown;
     const v2 = JSON.parse(await read(m1, 'shapes.v2')) as unknown;
     const v3 = JSON.parse(await read(m7, 'shapes.v3')) as unknown;
     const v4 = JSON.parse(await read(m6, 'shapes.v4')) as unknown;
-    const v5 = await read(m7, 'shapes.v5');
-    for (const old of [v1, v2, v3, v4]) {
+    const v5 = JSON.parse(await read(m7, 'shapes.v5')) as unknown;
+    const v6 = await read(m4, 'shapes.v6');
+    for (const old of [v1, v2, v3, v4, v5]) {
       expect(failure(validateDocument(old))).toEqual({
         code: 'document.unsupported-version',
         path: '/schemaVersion',
       });
     }
-    const result = validateDocument(JSON.parse(v5));
-    expect(result.ok && serializeDocument(result.document)).toBe(v5);
+    const result = validateDocument(JSON.parse(v6));
+    expect(result.ok && serializeDocument(result.document)).toBe(v6);
   });
 
   it('accepts in-memory v1 and v2 values through validateAnyDocument', async () => {

@@ -1,9 +1,9 @@
 import {
   validateNode,
-  type DocumentV5,
+  type DocumentV6,
   type InstanceNodeV5,
-  type NodeV5,
-  type SymbolNode,
+  type NodeV6,
+  type SymbolNodeV6,
   type TextOverride,
   type TextRun,
 } from '@vector-studio/model';
@@ -38,7 +38,7 @@ export type Expansion = Readonly<{
    * source node's `id` and `parent` (the source's direct children name the source), and frames
    * are in the space of the instance's content (`0, 0, width, height`).
    */
-  nodes: ReadonlyMap<string, NodeV5>;
+  nodes: ReadonlyMap<string, NodeV6>;
 }>;
 
 export type ExpansionResult =
@@ -53,11 +53,11 @@ export type ExpansionResult =
     }>;
 
 /** One direct child of a source: the node objects of its subtree, in pre-order. */
-type ChildState = Readonly<{ id: string; objects: readonly NodeV5[]; count: number }>;
+type ChildState = Readonly<{ id: string; objects: readonly NodeV6[]; count: number }>;
 
 /** A source as one document holds it; reused while every node object is the same. */
 type SourceState = Readonly<{
-  node: SymbolNode;
+  node: SymbolNodeV6;
   children: readonly ChildState[];
   /** The direct child whose subtree holds each text node of the source (M7-T3). */
   textChild: ReadonlyMap<string, ChildState>;
@@ -75,11 +75,11 @@ type Subtree = Readonly<{
   sx: number;
   sy: number;
   overrides: Overrides;
-  nodes: readonly NodeV5[] | Readonly<{ failed: string }>;
+  nodes: readonly NodeV6[] | Readonly<{ failed: string }>;
 }>;
 
 type Entry = Readonly<{
-  instance: NodeV5;
+  instance: NodeV6;
   source: SourceState;
   subtrees: readonly Subtree[];
   result: ExpansionResult;
@@ -88,8 +88,8 @@ type Entry = Readonly<{
 const PASS: CustomCheck = () => null;
 
 /** The node objects of the subtree of `id` in `document`, in pre-order. */
-function subtreeObjects(document: DocumentV5, id: string): NodeV5[] {
-  const out: NodeV5[] = [];
+function subtreeObjects(document: DocumentV6, id: string): NodeV6[] {
+  const out: NodeV6[] = [];
   const stack = [id];
   while (stack.length > 0) {
     const next = stack.pop()!;
@@ -103,7 +103,7 @@ function subtreeObjects(document: DocumentV5, id: string): NodeV5[] {
   return out;
 }
 
-function sameObjects(a: readonly NodeV5[], b: readonly NodeV5[]): boolean {
+function sameObjects(a: readonly NodeV6[], b: readonly NodeV6[]): boolean {
   return a.length === b.length && a.every((node, i) => node === b[i]);
 }
 
@@ -145,7 +145,7 @@ function sameOverrides(a: Overrides, b: Overrides): boolean {
  * border nodes (M1 contract, section 5) when present.
  */
 /** Scene nodes the descendants `objects` of a source add to one instance (section 4.1). */
-export function sceneCount(objects: readonly NodeV5[]): number {
+export function sceneCount(objects: readonly NodeV6[]): number {
   let count = 0;
   for (const node of objects) {
     count += 1;
@@ -157,7 +157,7 @@ export function sceneCount(objects: readonly NodeV5[]): number {
 }
 
 /** The instance's scale per axis: an axis whose source size is 0 is not scaled (M7-X1). */
-function scaleOf(instance: NodeV5, source: SymbolNode): { sx: number; sy: number } {
+function scaleOf(instance: NodeV6, source: SymbolNodeV6): { sx: number; sy: number } {
   const { width, height } = source.frame;
   return {
     sx: width === 0 ? 1 : instance.frame.width / width,
@@ -173,7 +173,7 @@ function scaleOf(instance: NodeV5, source: SymbolNode): { sx: number; sy: number
 function refitChanged(
   tree: WritableTree,
   id: string,
-  original: ReadonlyMap<string, NodeV5>,
+  original: ReadonlyMap<string, NodeV6>,
 ): boolean {
   const node = tree.node(id)!;
   if (isContainer(node)) {
@@ -222,7 +222,7 @@ function expandSubtree(
   // About the source's local origin, as a group resize maps its children (M7-X1).
   mapNode(tree, child.id, scaleAbout(sx, sy));
   refitChanged(tree, child.id, original);
-  const out: NodeV5[] = [];
+  const out: NodeV6[] = [];
   for (const source of objects) {
     const node = local.get(source.id)!;
     if (node === source) {
@@ -247,7 +247,7 @@ function expandSubtree(
  */
 export class ExpansionCache {
   private readonly check: CustomCheck;
-  private document: DocumentV5 | null = null;
+  private document: DocumentV6 | null = null;
   /** Source states compared against `document`. */
   private checked = new Map<string, SourceState>();
   private readonly sources = new Map<string, SourceState>();
@@ -261,7 +261,7 @@ export class ExpansionCache {
   }
 
   /** The expansion of instance `id` in `document`, or null when `id` is not an instance. */
-  expand(document: DocumentV5, id: string): ExpansionResult | null {
+  expand(document: DocumentV6, id: string): ExpansionResult | null {
     this.use(document);
     const instance = Object.hasOwn(document.nodes, id) ? document.nodes[id]! : undefined;
     if (instance?.type !== 'instance') return null;
@@ -287,7 +287,7 @@ export class ExpansionCache {
       }
     }
     const subtrees: Subtree[] = [];
-    const nodes = new Map<string, NodeV5>();
+    const nodes = new Map<string, NodeV6>();
     let failed: string | null = null;
     for (const child of source.children) {
       let subtree = reusable.get(child);
@@ -319,23 +319,23 @@ export class ExpansionCache {
   }
 
   /** Scene nodes one instance of `symbol` adds in `document` (section 4.1), or 0. */
-  count(document: DocumentV5, symbol: string): number {
+  count(document: DocumentV6, symbol: string): number {
     this.use(document);
     return this.source(document, symbol)?.count ?? 0;
   }
 
   /** Starts a new document: drops the entries of nodes it no longer holds. */
-  private use(document: DocumentV5): void {
+  private use(document: DocumentV6): void {
     if (document === this.document) return;
     this.document = document;
     this.checked = new Map();
-    const holds = (id: string, type: NodeV5['type']) =>
+    const holds = (id: string, type: NodeV6['type']) =>
       Object.hasOwn(document.nodes, id) && document.nodes[id]!.type === type;
     for (const id of this.entries.keys()) if (!holds(id, 'instance')) this.entries.delete(id);
     for (const id of this.sources.keys()) if (!holds(id, 'symbol')) this.sources.delete(id);
   }
 
-  private source(document: DocumentV5, id: string): SourceState | null {
+  private source(document: DocumentV6, id: string): SourceState | null {
     const known = this.checked.get(id);
     if (known !== undefined) return known;
     const node = Object.hasOwn(document.nodes, id) ? document.nodes[id]! : undefined;
@@ -397,7 +397,7 @@ function overridesByChild(
   return out;
 }
 
-function hasInstance(document: DocumentV5): boolean {
+function hasInstance(document: DocumentV6): boolean {
   for (const id in document.nodes) {
     if (Object.hasOwn(document.nodes, id) && document.nodes[id]!.type === 'instance') return true;
   }
@@ -409,7 +409,7 @@ function hasInstance(document: DocumentV5): boolean {
  * is not an instance of a source in it. `check` is the extension check of custom nodes (M7-X3).
  */
 export function expandInstance(
-  document: DocumentV5,
+  document: DocumentV6,
   id: string,
   check: CustomCheck = PASS,
 ): ExpansionResult | null {
@@ -426,7 +426,7 @@ export function expandInstance(
  * (section 5.3, `success` in `edit-support.ts`), and on load for the whole document. Null when
  * the document passes.
  */
-export function expansionFailure(document: DocumentV5, cache: ExpansionCache): Failure | null {
+export function expansionFailure(document: DocumentV6, cache: ExpansionCache): Failure | null {
   // A document without instances pays one scan of its node map, not the page walks.
   if (!hasInstance(document)) return null;
   const pages = pageInstances(document);

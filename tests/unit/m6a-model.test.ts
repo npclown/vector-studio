@@ -14,7 +14,7 @@ import {
   validateFragmentTree,
   validateNode,
   type DocumentV3,
-  type DocumentV5,
+  type DocumentV6,
   type EnvelopeResult,
   type FragmentTreeResult,
   type NodeResult,
@@ -29,7 +29,10 @@ import { describe, expect, it } from 'vitest';
 // section 9) the model reads and writes schema v5, so a v4 value reads as its committed v5
 // migration under `m7-symbols/migrated`, the v4 values built here are written at v5 (they hold no
 // instance, or one with `textOverrides: {}`), the unsupported version is 6, and M6a-S7 is lifted
-// (M7-T1): a text node inside a symbol loads.
+// (M7-T1): a text node inside a symbol loads. Since M4-U1 (M4 contract, section 2.1) the model
+// reads and writes schema v6, so an older value reads as its committed v6 migration under
+// `m4-appearance/migrated`, the values built here are v6 values (a text node has no paint, so they
+// are v5 values with the version changed), and the unsupported version is 7.
 
 const root = path.resolve(import.meta.dirname, '../..');
 const fixtures = path.join(root, 'tests/fixtures');
@@ -39,7 +42,7 @@ function read(file: string): Promise<string> {
   return readFile(path.join(fixtures, file), 'utf8');
 }
 
-function parsed(text: string): DocumentV5 {
+function parsed(text: string): DocumentV6 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -80,14 +83,17 @@ const OLDER = [
   ['m3-path-edit/path-edit.json', 'path-edit'],
 ] as const;
 const ENVELOPES = ['empty', 'shapes', 'ext-star', 'containers'] as const;
-/** Every committed valid v4 document fixture and the name of its committed v5 migration. */
+/** Every committed valid v4 document fixture and the name of its committed v5 and v6 migrations. */
 const V4_FIXTURES = [
   ['m6-text/text.v4.json', 'text'],
   ['m6-text/text-in-symbol.v4.json', 'text-in-symbol'],
   ...MIGRATIONS.map(([, name]) => [`m6-text/migrated/${name}.v4.json`, name] as const),
 ] as const;
-/** The committed v5 migration of a v4 fixture (M6a contract, section 9). */
-const v5 = (name: string) => read(`m7-symbols/migrated/${name}.v5.json`);
+/**
+ * The committed v6 migration of a v4 fixture (M6a contract, section 9, then M4 contract, section
+ * 2.1), what the model now writes for it.
+ */
+const v6 = (name: string) => read(`m4-appearance/migrated/${name}.v6.json`);
 
 const START = { horizontal: 'start', vertical: 'start' } as const;
 const black = { r: 0, g: 0, b: 0, a: 1 };
@@ -148,7 +154,7 @@ type Loose = {
   nodes: Record<string, unknown>;
 };
 
-function document(nodes: Record<string, unknown>, children: string[], version = 5): Loose {
+function document(nodes: Record<string, unknown>, children: string[], version = 6): Loose {
   return { schemaVersion: version, id: 'd', pages: [{ id: 'p', name: 'P', children }], nodes };
 }
 
@@ -183,8 +189,8 @@ describe('M6a-A02 migration v3 to v4 (section 2.1)', () => {
     async (file, name) => {
       const v3 = await read(file);
       const v4 = await read(`m6-text/migrated/${name}.v4.json`);
-      // The model now writes v5, through `migrateV4toV5` (M6a contract, section 9).
-      expect(serializeDocument(parsed(v3))).toBe(await v5(name));
+      // The model now writes v6, through `migrateV4toV5` and `migrateV5toV6` (M4 contract).
+      expect(serializeDocument(parsed(v3))).toBe(await v6(name));
       const migrated = migrateV3toV4(JSON.parse(v3) as DocumentV3);
       expect(migrated.ok && migrated.document).toEqual(JSON.parse(v4));
       // Only the version changes.
@@ -192,8 +198,8 @@ describe('M6a-A02 migration v3 to v4 (section 2.1)', () => {
     },
   );
 
-  it.each(OLDER)('migrates the older fixture %s to the committed v5 text', async (file, name) => {
-    expect(serializeDocument(parsed(await read(file)))).toBe(await v5(name));
+  it.each(OLDER)('migrates the older fixture %s to the committed v6 text', async (file, name) => {
+    expect(serializeDocument(parsed(await read(file)))).toBe(await v6(name));
   });
 
   it('lists every committed v3 document fixture outside malformed/ directories', async () => {
@@ -226,7 +232,7 @@ describe('M6a-A02 migration v3 to v4 (section 2.1)', () => {
       `m6-text/migrated/${name}.envelope.v4.json`,
     ]) {
       const result = parseEnvelope(await read(source));
-      expect(result.ok && serializeEnvelope(result.envelope)).toBe(await v5(`${name}.envelope`));
+      expect(result.ok && serializeEnvelope(result.envelope)).toBe(await v6(`${name}.envelope`));
     }
     const v3 = await read(`m7-symbols/migrated/${name}.envelope.v3.json`);
     expect(v4).toBe(v3.replace('"schemaVersion": 3,', '"schemaVersion": 4,'));
@@ -250,9 +256,9 @@ describe('M6a-A02 migration v3 to v4 (section 2.1)', () => {
     'm1-model/malformed/unsupported-version.json',
     'm7-symbols/malformed/unsupported-version.json',
     'm6-text/malformed/unsupported-version.json',
-  ])('fails %s at schemaVersion 6', async (file) => {
+  ])('fails %s at schemaVersion 7', async (file) => {
     const text = await read(file);
-    expect((JSON.parse(text) as { schemaVersion: number }).schemaVersion).toBe(6);
+    expect((JSON.parse(text) as { schemaVersion: number }).schemaVersion).toBe(7);
     expect(failure(parseDocument(text))).toEqual({
       code: 'document.unsupported-version',
       path: '/schemaVersion',
@@ -261,12 +267,12 @@ describe('M6a-A02 migration v3 to v4 (section 2.1)', () => {
 
   // `order-5-6` holds an unknown key as well, so its step 5 failure is checked in M5's tests.
   it.each(['document-unsupported-version', 'order-5-6'])(
-    'holds document schemaVersion 6 in the M5 envelope %s',
+    'holds document schemaVersion 7 in the M5 envelope %s',
     async (name) => {
       const text = await read(`m5-persistence/malformed/${name}.json`);
       expect(
         (JSON.parse(text) as { document: { schemaVersion: number } }).document.schemaVersion,
-      ).toBe(6);
+      ).toBe(7);
     },
   );
 
@@ -278,12 +284,13 @@ describe('M6a-A02 migration v3 to v4 (section 2.1)', () => {
     });
   });
 
-  it('accepts versions 1 to 5, validateDocument only 5', () => {
+  it('accepts versions 1 to 6, validateDocument only 6', () => {
     const value = single();
     expect(validateDocument(value).ok).toBe(true);
     expect(validateAnyDocument(value).ok).toBe(true);
     expect(validateAnyDocument({ ...value, schemaVersion: 4 }).ok).toBe(true);
-    for (const version of [1, 2, 3, 4, 6]) {
+    expect(validateAnyDocument({ ...value, schemaVersion: 5 }).ok).toBe(true);
+    for (const version of [1, 2, 3, 4, 5, 7]) {
       expect(failure(validateDocument({ ...value, schemaVersion: version }))).toEqual({
         code: 'document.unsupported-version',
         path: '/schemaVersion',
@@ -294,9 +301,9 @@ describe('M6a-A02 migration v3 to v4 (section 2.1)', () => {
 
 describe('M6a-A02 round trip and serialize order (section 2)', () => {
   it.each(V4_FIXTURES)(
-    'reads %s as its v5 migration, which round-trips byte for byte, also through the envelope',
+    'reads %s as its v6 migration, which round-trips byte for byte, also through the envelope',
     async (file, name) => {
-      const text = await v5(name);
+      const text = await v6(name);
       expect(serializeDocument(parsed(await read(file)))).toBe(text);
       const value = parsed(text);
       expect(serializeDocument(value)).toBe(text);
@@ -312,8 +319,8 @@ describe('M6a-A02 round trip and serialize order (section 2)', () => {
     },
   );
 
-  it.each(ENVELOPES)('round-trips the v5 envelope fixture %s byte for byte', async (name) => {
-    const text = await v5(`${name}.envelope`);
+  it.each(ENVELOPES)('round-trips the v6 envelope fixture %s byte for byte', async (name) => {
+    const text = await v6(`${name}.envelope`);
     const result = parseEnvelope(text);
     expect(result.ok && serializeEnvelope(result.envelope)).toBe(text);
   });
@@ -367,7 +374,7 @@ describe('M6a-A02 round trip and serialize order (section 2)', () => {
     }
     // The order holds for an in-memory value built in another key order.
     const value = parsed(text);
-    const node = value.nodes.t2 as Extract<DocumentV5['nodes'][string], { type: 'text' }>;
+    const node = value.nodes.t2 as Extract<DocumentV6['nodes'][string], { type: 'text' }>;
     const { runs, lineHeight, ...rest } = node;
     const shuffled = {
       ...value,
@@ -384,8 +391,8 @@ describe('M6a-A02 round trip and serialize order (section 2)', () => {
           ...rest,
         },
       },
-    } as DocumentV5;
-    expect(serializeDocument(shuffled)).toBe(await v5('text'));
+    } as DocumentV6;
+    expect(serializeDocument(shuffled)).toBe(await v6('text'));
   });
 });
 
@@ -440,7 +447,7 @@ describe('M6a-A01 malformed text documents (M6a-S1 to M6a-S4)', () => {
   it.each(atV4)('enforces %s at every entry point', async (name) => {
     const value = JSON.parse(await read(`m6-text/malformed/${name}.json`)) as Loose;
     const [code, p] = expected[name]!;
-    fails({ ...value, schemaVersion: 5 }, p, code);
+    fails({ ...value, schemaVersion: 6 }, p, code);
   });
 
   it('holds 16,385 units in the over-long fixtures and adds no code', async () => {

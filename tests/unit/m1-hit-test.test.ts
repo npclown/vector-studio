@@ -1,7 +1,6 @@
 import type { Frame } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
-  DEFAULT_PATH_STROKE,
   createCounterIdSource,
   createEditor,
   type Command,
@@ -20,6 +19,8 @@ import {
 
 const START = { horizontal: 'start', vertical: 'start' } as const;
 const black = { r: 0, g: 0, b: 0, a: 1 };
+/** The default path stroke in its v2 form, without the v6 `dash` (M4 contract, section 2.1). */
+const V2_PATH_STROKE = { color: black, width: 1, cap: 'butt', join: 'miter', miterLimit: 4 };
 const white = { r: 1, g: 1, b: 1, a: 1 };
 const none = { shift: false, alt: false, meta: false, ctrl: false };
 const f = (x: number, y: number, width: number, height: number): Frame => ({ x, y, width, height });
@@ -50,7 +51,7 @@ function line(id: string, parent: string, frame: Frame, extra: object = {}): Loo
     ...base(id, parent, frame),
     type: 'line',
     points: [0, 0, 1, 1],
-    stroke: DEFAULT_PATH_STROKE,
+    stroke: V2_PATH_STROKE,
     startArrow: 'none',
     endArrow: 'none',
     ...extra,
@@ -194,7 +195,7 @@ describe('M1-A10 leaf geometry in local space', () => {
   it('hits a line near its segment and arrowheads, and inside a triangle head', () => {
     // From (0, 0) to (100, 0), stroke width 4: radius max(2, 4 / 10). The head at (100, 0)
     // has its base centre at (84, 0) and base corners (84, ±8).
-    const stroke = { ...DEFAULT_PATH_STROKE, width: 4 };
+    const stroke = { ...V2_PATH_STROKE, width: 4 };
     const make = (extra: object) =>
       editor(
         doc(
@@ -227,7 +228,7 @@ describe('M1-A10 leaf geometry in local space', () => {
   });
 
   it('hits a line in either mode at the same places, through rotation', () => {
-    const stroke = { ...DEFAULT_PATH_STROKE, width: 2 };
+    const stroke = { ...V2_PATH_STROKE, width: 2 };
     for (const endArrow of ['line', 'triangle']) {
       // A diagonal (0, 0) to (100, 100) turned by π/2 about (50, 50): it runs (100, 0) to (0, 100).
       const target = editor(
@@ -435,7 +436,7 @@ describe('M1-A10 selection targets', () => {
   it('hits a line and its triangle head inside a rotated group', () => {
     // G turns by π about (50, 5): L runs page (100, 5) to (0, 5) with its tip at (0, 5), base
     // centre (20, 5) and base corners (20, -5) and (20, 15); radius max(5 / 2, 4 / 10).
-    const stroke = { ...DEFAULT_PATH_STROKE, width: 5 };
+    const stroke = { ...V2_PATH_STROKE, width: 5 };
     const target = editor(
       doc(
         [['p', ['G']]],

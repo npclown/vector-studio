@@ -1,0 +1,1092 @@
+{
+  "envelopeVersion": 1,
+  "lastOpenPageId": "page-2",
+  "document": {
+    "schemaVersion": 6,
+    "id": "doc-appearance",
+    "pages": [
+      {
+        "id": "page-1",
+        "name": "Page 1",
+        "children": [
+          "r1",
+          "e1",
+          "l1",
+          "p1",
+          "c1",
+          "f1",
+          "g1",
+          "i1"
+        ]
+      },
+      {
+        "id": "page-2",
+        "name": "Page 2",
+        "children": [
+          "s1"
+        ]
+      }
+    ],
+    "nodes": {
+      "c1": {
+        "id": "c1",
+        "name": "c1",
+        "parent": "page-1",
+        "frame": {
+          "x": 400,
+          "y": 140,
+          "width": 60,
+          "height": 60
+        },
+        "rotation": 0,
+        "constraints": {
+          "horizontal": "start",
+          "vertical": "start"
+        },
+        "opacity": 1,
+        "visible": true,
+        "type": "custom",
+        "customType": "ext.star",
+        "data": {
+          "innerRatio": 0.5,
+          "points": 5
+        },
+        "fill": {
+          "r": 0.5,
+          "g": 0.5,
+          "b": 0.5,
+          "a": 0.75
+        },
+        "stroke": {
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          },
+          "width": 1,
+          "cap": "butt",
+          "join": "miter",
+          "miterLimit": 4,
+          "dash": {
+            "pattern": [
+              4
+            ],
+            "phase": 2
+          }
+        }
+      },
+      "e1": {
+        "id": "e1",
+        "name": "e1",
+        "parent": "page-1",
+        "frame": {
+          "x": 260,
+          "y": 20,
+          "width": 120,
+          "height": 80
+        },
+        "rotation": 0.25,
+        "constraints": {
+          "horizontal": "start",
+          "vertical": "start"
+        },
+        "opacity": 1,
+        "visible": true,
+        "type": "ellipse",
+        "fill": {
+          "kind": "radial",
+          "transform": [
+            0.5,
+            0,
+            0,
+            0.5,
+            0.5,
+            0.5
+          ],
+          "stops": [
+            {
+              "offset": 0,
+              "color": {
+                "r": 1,
+                "g": 0,
+                "b": 0,
+                "a": 1
+              }
+            },
+            {
+              "offset": 0.5,
+              "color": {
+                "r": 0,
+                "g": 0.5,
+                "b": 0,
+                "a": 1
+              }
+            },
+            {
+              "offset": 0.5,
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 1,
+                "a": 1
+              }
+            }
+          ],
+          "spread": "reflect"
+        },
+        "stroke": {
+          "color": {
+            "kind": "linear",
+            "transform": [
+              1,
+              0,
+              0,
+              1,
+              0,
+              0
+            ],
+            "stops": [
+              {
+                "offset": 0,
+                "color": {
+                  "r": 1,
+                  "g": 0,
+                  "b": 0,
+                  "a": 1
+                }
+              },
+              {
+                "offset": 1,
+                "color": {
+                  "r": 0,
+                  "g": 0,
+                  "b": 1,
+                  "a": 1
+                }
+              }
+            ],
+            "spread": "pad"
+          },
+          "width": 2,
+          "cap": "round",
+          "join": "round",
+          "miterLimit": 4,
+          "dash": null
+        }
+      },
+      "e2": {
+        "id": "e2",
+        "name": "e2",
+        "parent": "g1",
+        "frame": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 60
+        },
+        "rotation": 0,
+        "constraints": {
+          "horizontal": "start",
+          "vertical": "start"
+        },
+        "opacity": 1,
+        "visible": true,
+        "type": "ellipse",
+        "fill": {
+          "kind": "linear",
+          "transform": [
+            2,
+            0.5,
+            -0.25,
+            1,
+            -0.5,
+            0
+          ],
+          "stops": [
+            {
+              "offset": 0,
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 1
+              }
+            },
+            {
+              "offset": 1,
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 1,
+                "a": 0
+              }
+            }
+          ],
+          "spread": "reflect"
+        },
+        "stroke": null
+      },
+      "f1": {
+        "id": "f1",
+        "name": "f1",
+        "parent": "page-1",
+        "frame": {
+          "x": 20,
+          "y": 260,
+          "width": 200,
+          "height": 150
+        },
+        "rotation": 0,
+        "constraints": {
+          "horizontal": "start",
+          "vertical": "start"
+        },
+        "opacity": 1,
+        "visible": true,
+        "type": "frame",
+        "children": [
+          "r2",
+          "t1"
+        ],
+        "fill": {
+          "kind": "radial",
+          "transform": [
+            1,
+            0,
+            0,
+            1,
+            0.5,
+            0.5
+          ],
+          "stops": [
+            {
+              "offset": 0.25,
+              "color": {
+                "r": 0,
+                "g": 0.5,
+                "b": 0,
+                "a": 1
+              }
+            }
+          ],
+          "spread": "pad"
+        },
+        "stroke": {
+          "color": {
+            "r": 1,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          },
+          "width": 2,
+          "cap": "butt",
+          "join": "round",
+          "miterLimit": 4,
+          "dash": {
+            "pattern": [
+              5,
+              5
+            ],
+            "phase": 0
+          }
+        }
+      },
+      "g1": {
+        "id": "g1",
+        "name": "g1",
+        "parent": "page-1",
+        "frame": {
+          "x": 260,
+          "y": 280,
+          "width": 100,
+          "height": 60
+        },
+        "rotation": 0,
+        "constraints": {
+          "horizontal": "start",
+          "vertical": "start"
+        },
+        "opacity": 1,
+        "visible": true,
+        "type": "group",
+        "children": [
+          "e2"
+        ]
+      },
+      "i1": {
+        "id": "i1",
+        "name": "i1",
+        "parent": "page-1",
+        "frame": {
+          "x": 400,
+          "y": 280,
+          "width": 160,
+          "height": 80
+        },
+        "rotation": 0,
+        "constraints": {
+          "horizontal": "start",
+          "vertical": "start"
+        },
+        "opacity": 1,
+        "visible": true,
+        "type": "instance",
+        "symbol": "s1",
+        "textOverrides": {}
+      },
+      "l1": {
+        "id": "l1",
+        "name": "l1",
+        "parent": "page-1",
+        "frame": {
+          "x": 20,
+          "y": 180,
+          "width": 200,
+          "height": 0
+        },
+        "rotation": 0,
+        "constraints": {
+          "horizontal": "start",
+          "vertical": "start"
+        },
+        "opacity": 1,
+        "visible": true,
+        "type": "line",
+        "points": [
+          0,
+          0,
+          1,
+          0
+        ],
+        "stroke": {
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 1,
+            "a": 1
+          },
+          "width": 6,
+          "cap": "round",
+          "join": "miter",
+          "miterLimit": 10,
+          "dash": {
+            "pattern": [
+              12,
+              18,
+              6
+            ],
+            "phase": -3.5
+          }
+        },
+        "startArrow": "none",
+        "endArrow": "triangle"
+      },
+      "p1": {
+        "id": "p1",
+        "name": "p1",
+        "parent": "page-1",
+        "frame": {
+          "x": 260,
+          "y": 140,
+          "width": 100,
+          "height": 100
+        },
+        "rotation": 0,
+        "constraints": {
+          "horizontal": "start",
+          "vertical": "start"
+        },
+        "opacity": 1,
+        "visible": true,
+        "type": "path",
+        "path": {
+          "verbs": [
+            "move",
+            "line",
+            "line",
+            "close"
+          ],
+          "points": [
+            0,
+            0,
+            1,
+            0,
+            0.5,
+            1
+          ],
+          "fillRule": "evenodd"
+        },
+        "fill": {
+          "kind": "linear",
+          "transform": [
+            0.25,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "stops": [
+            {
+              "offset": 0,
+              "color": {
+                "r": 0.5,
+                "g": 0.5,
+                "b": 0.5,
+                "a": 0.75
+              }
+            },
+            {
+              "offset": 0.06666666666666667,
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 1,
+                "a": 0
+              }
+            },
+            {
+              "offset": 0.13333333333333333,
+              "color": {
+                "r": 0.5,
+                "g": 0.5,
+                "b": 0.5,
+                "a": 0.75
+              }
+            },
+            {
+              "offset": 0.2,
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 1,
+                "a": 0
+              }
+            },
+            {
+              "offset": 0.26666666666666666,
+              "color": {
+                "r": 0.5,
+                "g": 0.5,
+                "b": 0.5,
+                "a": 0.75
+              }
+            },
+            {
+              "offset": 0.3333333333333333,
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 1,
+                "a": 0
+              }
+            },
+            {
+              "offset": 0.4,
+              "color": {
+                "r": 0.5,
+                "g": 0.5,
+                "b": 0.5,
+                "a": 0.75
+              }
+            },
+            {
+              "offset": 0.4666666666666667,
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 1,
+                "a": 0
+              }
+            },
+            {
+              "offset": 0.5333333333333333,
+              "color": {
+                "r": 0.5,
+                "g": 0.5,
+                "b": 0.5,
+                "a": 0.75
+              }
+            },
+            {
+              "offset": 0.6,
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 1,
+                "a": 0
+              }
+            },
+            {
+              "offset": 0.6666666666666666,
+              "color": {
+                "r": 0.5,
+                "g": 0.5,
+                "b": 0.5,
+                "a": 0.75
+              }
+            },
+            {
+              "offset": 0.7333333333333333,
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 1,
+                "a": 0
+              }
+            },
+            {
+              "offset": 0.8,
+              "color": {
+                "r": 0.5,
+                "g": 0.5,
+                "b": 0.5,
+                "a": 0.75
+              }
+            },
+            {
+              "offset": 0.8666666666666667,
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 1,
+                "a": 0
+              }
+            },
+            {
+              "offset": 0.9333333333333333,
+              "color": {
+                "r": 0.5,
+                "g": 0.5,
+                "b": 0.5,
+                "a": 0.75
+              }
+            },
+            {
+              "offset": 1,
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 1,
+                "a": 0
+              }
+            }
+          ],
+          "spread": "repeat"
+        },
+        "stroke": {
+          "color": {
+            "kind": "radial",
+            "transform": [
+              0.5,
+              0,
+              0,
+              0.5,
+              0.5,
+              0.5
+            ],
+            "stops": [
+              {
+                "offset": 0,
+                "color": {
+                  "r": 1,
+                  "g": 0,
+                  "b": 0,
+                  "a": 1
+                }
+              },
+              {
+                "offset": 0.5,
+                "color": {
+                  "r": 0,
+                  "g": 0.5,
+                  "b": 0,
+                  "a": 1
+                }
+              },
+              {
+                "offset": 0.5,
+                "color": {
+                  "r": 0,
+                  "g": 0,
+                  "b": 1,
+                  "a": 1
+                }
+              }
+            ],
+            "spread": "reflect"
+          },
+          "width": 3,
+          "cap": "square",
+          "join": "bevel",
+          "miterLimit": 1,
+          "dash": {
+            "pattern": [
+              0,
+              8
+            ],
+            "phase": 100
+          }
+        }
+      },
+      "r1": {
+        "id": "r1",
+        "name": "r1",
+        "parent": "page-1",
+        "frame": {
+          "x": 20,
+          "y": 20,
+          "width": 200,
+          "height": 120
+        },
+        "rotation": 0,
+        "constraints": {
+          "horizontal": "start",
+          "vertical": "start"
+        },
+        "opacity": 1,
+        "visible": true,
+        "type": "rectangle",
+        "cornerRadii": [
+          8,
+          0,
+          8,
+          0
+        ],
+        "fill": {
+          "kind": "linear",
+          "transform": [
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "stops": [
+            {
+              "offset": 0,
+              "color": {
+                "r": 1,
+                "g": 0,
+                "b": 0,
+                "a": 1
+              }
+            },
+            {
+              "offset": 1,
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 1,
+                "a": 1
+              }
+            }
+          ],
+          "spread": "pad"
+        },
+        "stroke": {
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          },
+          "width": 4,
+          "cap": "butt",
+          "join": "miter",
+          "miterLimit": 4,
+          "dash": {
+            "pattern": [
+              12,
+              6
+            ],
+            "phase": 0
+          }
+        }
+      },
+      "r2": {
+        "id": "r2",
+        "name": "r2",
+        "parent": "f1",
+        "frame": {
+          "x": 10,
+          "y": 10,
+          "width": 40,
+          "height": 40
+        },
+        "rotation": 0,
+        "constraints": {
+          "horizontal": "start",
+          "vertical": "start"
+        },
+        "opacity": 1,
+        "visible": true,
+        "type": "rectangle",
+        "cornerRadii": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "fill": {
+          "r": 1,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "stroke": {
+          "color": {
+            "r": 0,
+            "g": 0,
+            "b": 0,
+            "a": 1
+          },
+          "width": 1,
+          "cap": "butt",
+          "join": "round",
+          "miterLimit": 4,
+          "dash": null
+        }
+      },
+      "r3": {
+        "id": "r3",
+        "name": "r3",
+        "parent": "s1",
+        "frame": {
+          "x": 10,
+          "y": 10,
+          "width": 60,
+          "height": 20
+        },
+        "rotation": 0,
+        "constraints": {
+          "horizontal": "start",
+          "vertical": "start"
+        },
+        "opacity": 1,
+        "visible": true,
+        "type": "rectangle",
+        "cornerRadii": [
+          4,
+          4,
+          4,
+          4
+        ],
+        "fill": {
+          "kind": "linear",
+          "transform": [
+            2,
+            0.5,
+            -0.25,
+            1,
+            -0.5,
+            0
+          ],
+          "stops": [
+            {
+              "offset": 0,
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 0,
+                "a": 1
+              }
+            },
+            {
+              "offset": 1,
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 1,
+                "a": 0
+              }
+            }
+          ],
+          "spread": "reflect"
+        },
+        "stroke": {
+          "color": {
+            "kind": "linear",
+            "transform": [
+              0.25,
+              0,
+              0,
+              1,
+              0,
+              0
+            ],
+            "stops": [
+              {
+                "offset": 0,
+                "color": {
+                  "r": 0.5,
+                  "g": 0.5,
+                  "b": 0.5,
+                  "a": 0.75
+                }
+              },
+              {
+                "offset": 0.06666666666666667,
+                "color": {
+                  "r": 0,
+                  "g": 0,
+                  "b": 1,
+                  "a": 0
+                }
+              },
+              {
+                "offset": 0.13333333333333333,
+                "color": {
+                  "r": 0.5,
+                  "g": 0.5,
+                  "b": 0.5,
+                  "a": 0.75
+                }
+              },
+              {
+                "offset": 0.2,
+                "color": {
+                  "r": 0,
+                  "g": 0,
+                  "b": 1,
+                  "a": 0
+                }
+              },
+              {
+                "offset": 0.26666666666666666,
+                "color": {
+                  "r": 0.5,
+                  "g": 0.5,
+                  "b": 0.5,
+                  "a": 0.75
+                }
+              },
+              {
+                "offset": 0.3333333333333333,
+                "color": {
+                  "r": 0,
+                  "g": 0,
+                  "b": 1,
+                  "a": 0
+                }
+              },
+              {
+                "offset": 0.4,
+                "color": {
+                  "r": 0.5,
+                  "g": 0.5,
+                  "b": 0.5,
+                  "a": 0.75
+                }
+              },
+              {
+                "offset": 0.4666666666666667,
+                "color": {
+                  "r": 0,
+                  "g": 0,
+                  "b": 1,
+                  "a": 0
+                }
+              },
+              {
+                "offset": 0.5333333333333333,
+                "color": {
+                  "r": 0.5,
+                  "g": 0.5,
+                  "b": 0.5,
+                  "a": 0.75
+                }
+              },
+              {
+                "offset": 0.6,
+                "color": {
+                  "r": 0,
+                  "g": 0,
+                  "b": 1,
+                  "a": 0
+                }
+              },
+              {
+                "offset": 0.6666666666666666,
+                "color": {
+                  "r": 0.5,
+                  "g": 0.5,
+                  "b": 0.5,
+                  "a": 0.75
+                }
+              },
+              {
+                "offset": 0.7333333333333333,
+                "color": {
+                  "r": 0,
+                  "g": 0,
+                  "b": 1,
+                  "a": 0
+                }
+              },
+              {
+                "offset": 0.8,
+                "color": {
+                  "r": 0.5,
+                  "g": 0.5,
+                  "b": 0.5,
+                  "a": 0.75
+                }
+              },
+              {
+                "offset": 0.8666666666666667,
+                "color": {
+                  "r": 0,
+                  "g": 0,
+                  "b": 1,
+                  "a": 0
+                }
+              },
+              {
+                "offset": 0.9333333333333333,
+                "color": {
+                  "r": 0.5,
+                  "g": 0.5,
+                  "b": 0.5,
+                  "a": 0.75
+                }
+              },
+              {
+                "offset": 1,
+                "color": {
+                  "r": 0,
+                  "g": 0,
+                  "b": 1,
+                  "a": 0
+                }
+              }
+            ],
+            "spread": "repeat"
+          },
+          "width": 2,
+          "cap": "butt",
+          "join": "round",
+          "miterLimit": 4,
+          "dash": {
+            "pattern": [
+              3,
+              1
+            ],
+            "phase": 0
+          }
+        }
+      },
+      "s1": {
+        "id": "s1",
+        "name": "s1",
+        "parent": "page-2",
+        "frame": {
+          "x": 20,
+          "y": 20,
+          "width": 80,
+          "height": 40
+        },
+        "rotation": 0,
+        "constraints": {
+          "horizontal": "start",
+          "vertical": "start"
+        },
+        "opacity": 1,
+        "visible": true,
+        "type": "symbol",
+        "children": [
+          "r3"
+        ],
+        "fill": {
+          "kind": "linear",
+          "transform": [
+            1,
+            0,
+            0,
+            1,
+            0,
+            0
+          ],
+          "stops": [
+            {
+              "offset": 0,
+              "color": {
+                "r": 1,
+                "g": 0,
+                "b": 0,
+                "a": 1
+              }
+            },
+            {
+              "offset": 1,
+              "color": {
+                "r": 0,
+                "g": 0,
+                "b": 1,
+                "a": 1
+              }
+            }
+          ],
+          "spread": "pad"
+        },
+        "stroke": {
+          "color": {
+            "r": 0,
+            "g": 0.5,
+            "b": 0,
+            "a": 1
+          },
+          "width": 3,
+          "cap": "butt",
+          "join": "miter",
+          "miterLimit": 4,
+          "dash": {
+            "pattern": [
+              6,
+              3
+            ],
+            "phase": 1.5
+          }
+        }
+      },
+      "t1": {
+        "id": "t1",
+        "name": "t1",
+        "parent": "f1",
+        "frame": {
+          "x": 60,
+          "y": 10,
+          "width": 80,
+          "height": 20
+        },
+        "rotation": 0,
+        "constraints": {
+          "horizontal": "start",
+          "vertical": "start"
+        },
+        "opacity": 1,
+        "visible": true,
+        "type": "text",
+        "runs": [
+          {
+            "text": "Paint",
+            "family": "Inter",
+            "size": 16,
+            "color": {
+              "r": 0,
+              "g": 0,
+              "b": 1,
+              "a": 1
+            }
+          }
+        ],
+        "sizing": "autoWidth",
+        "align": "left",
+        "letterSpacing": 0,
+        "lineHeight": 1.2
+      }
+    }
+  }
+}

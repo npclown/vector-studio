@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 6,
+  "id": "d",
+  "pages": [
+    {
+      "id": "p",
+      "name": "P",
+      "children": [
+        "r"
+      ]
+    }
+  ],
+  "nodes": {
+    "r": {
+      "id": "r",
+      "name": "r",
+      "parent": "p",
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 50
+      },
+      "rotation": 0,
+      "constraints": {
+        "horizontal": "start",
+        "vertical": "start"
+      },
+      "opacity": 1,
+      "visible": true,
+      "type": "rectangle",
+      "cornerRadii": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "fill": {
+        "kind": "linear",
+        "transform": [
+          1,
+          0,
+          0,
+          1,
+          0,
+          0
+        ],
+        "stops": [
+          {
+            "offset": 0.5,
+            "color": {
+              "r": 0,
+              "g": 0,
+              "b": 0,
+              "a": 1
+            }
+          },
+          {
+            "offset": 0.25,
+            "color": {
+              "r": 0,
+              "g": 0,
+              "b": 1,
+              "a": 1
+            }
+          }
+        ],
+        "spread": "pad"
+      },
+      "stroke": {
+        "color": {
+          "r": 0,
+          "g": 0,
+          "b": 0,
+          "a": 1
+        },
+        "width": 2,
+        "cap": "butt",
+        "join": "round",
+        "miterLimit": 4,
+        "dash": {
+          "pattern": [
+            4,
+            2
+          ],
+          "phase": 0
+        }
+      }
+    }
+  }
+}
