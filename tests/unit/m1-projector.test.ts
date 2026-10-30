@@ -684,13 +684,16 @@ describe('M1-A09 synchronization', () => {
       reason: 'unsupported-feature',
       nodeIds: [shapes[0]],
     });
-    // Every set after the empty snapshot is accepted, except the source's own.
+    // After the empty snapshot, only batched sets holding the source are rejected (E26-U3), the
+    // last one the source's own.
     const calls = sceneCalls(renderer, from);
-    const rejected = calls.filter((call) => call.result.status !== 'applied');
-    expect(rejected).toHaveLength(2);
-    expect(
-      rejected[1]!.method === 'applyChanges' && rejected[1]!.input.inserted.map((n) => n.id),
-    ).toEqual([shapes[0]]);
+    const rejected = calls.filter((call) => call.result.status !== 'applied').slice(1);
+    const inserted = rejected.map((call) =>
+      call.method === 'applyChanges' ? call.input.inserted.map((n) => n.id) : [],
+    );
+    expect(inserted.length).toBeGreaterThan(1);
+    expect(inserted.every((ids) => ids.includes(shapes[0]!))).toBe(true);
+    expect(inserted.at(-1)).toEqual([shapes[0]]);
   });
 
   it('synthetic IDs map back to the frame in diagnostics', async () => {
@@ -707,7 +710,7 @@ describe('M1-A09 synchronization', () => {
     expect(renderer.mirror.readRetainedScene()!.rootOrder).toEqual(['g1', 'e1', 'l1']);
   });
 
-  it('isolation sends an empty snapshot, then one unit per set in pre-order with its scene parent order', async () => {
+  it('isolation sends an empty snapshot, then the page in one batched set after a one-time rejection', async () => {
     const { target, renderer } = attached(await fixture('containers.json'));
     const from = renderer.calls.length;
     renderer.overrides.applyChanges = {
@@ -729,15 +732,18 @@ describe('M1-A09 synchronization', () => {
       method: 'replaceSnapshot',
       input: { nodes: [], rootOrder: [] },
     });
-    const units = calls.slice(2).map((call) => {
-      if (call.method !== 'applyChanges') throw new Error('expected change sets');
-      expect(call.result.status).toBe('applied');
-      expect(call.input.updated).toEqual([]);
-      expect(call.input.orders).toHaveLength(1);
-      return { ids: call.input.inserted.map((n) => n.id), order: call.input.orders[0]! };
-    });
-    expect(units.map((unit) => unit.ids[0])).toEqual([
+    // E26-U3: one segment of every unit in pre-order, each container carrying its children and
+    // one order entry for the page root.
+    expect(calls).toHaveLength(3);
+    const set = calls[2]!;
+    if (set.method !== 'applyChanges') throw new Error('expected a change set');
+    expect(set.result.status).toBe('applied');
+    expect(set.input.updated).toEqual([]);
+    expect(set.input.inserted.map((n) => n.id)).toEqual([
       'f1',
+      `f1${C}`,
+      `f1${BG}`,
+      `f1${BD}`,
       'r1',
       'mg1',
       'm-src',
@@ -750,10 +756,10 @@ describe('M1-A09 synchronization', () => {
       'e1',
       'l1',
     ]);
-    expect(units[0]!.ids).toEqual(['f1', `f1${C}`, `f1${BG}`, `f1${BD}`]);
-    expect(units[0]!.order).toEqual({ parentId: null, children: ['f1'] });
-    expect(units[1]!.order).toEqual({ parentId: `f1${C}`, children: [`f1${BG}`, 'r1'] });
-    expect(units[3]!.order).toEqual({ parentId: 'mg1', children: ['m-src'] });
+    expect(set.input.orders).toEqual([{ parentId: null, children: ['f1', 'g1', 'e1', 'l1'] }]);
+    expect(set.input.inserted.find((n) => n.id === `f1${C}`)).toMatchObject({
+      children: [`f1${BG}`, 'r1', 'mg1', 'g2'],
+    });
     expectSynchronized(target, renderer);
   });
 
@@ -792,21 +798,26 @@ describe('M1-A09 synchronization', () => {
     ]);
 
     // An edit inside the excluded subtree while the renderer still rejects: excluded again, no
-    // new isolation (no snapshot).
+    // new isolation (no snapshot). The retry halves [g, a, b] to [g, a], then to g's own set.
     let from = renderer.calls.length;
     ok(target, { type: 'setNodeProps', id: 'a', props: { opacity: 0.5 } });
-    expect(sceneCalls(renderer, from).map((call) => call.method)).toEqual(['applyChanges']);
+    expect(
+      sceneCalls(renderer, from).map(
+        (call) => call.method === 'applyChanges' && call.input.inserted.map((n) => n.id),
+      ),
+    ).toEqual([['g', 'a', 'b'], ['g', 'a'], ['g']]);
     expectSynchronized(target, renderer, ['g']);
     expect(diagnostics(events)).toHaveLength(2);
 
-    // Once the renderer accepts it, the next edit inside retries the subtree whole, in pre-order.
+    // Once the renderer accepts it, the next edit inside retries the subtree whole, in pre-order,
+    // in one set.
     gate.block = false;
     from = renderer.calls.length;
     ok(target, { type: 'setNodeProps', id: 'b', props: { opacity: 0.5 } });
     const calls = sceneCalls(renderer, from);
     expect(
       calls.map((call) => call.method === 'applyChanges' && call.input.inserted.map((n) => n.id)),
-    ).toEqual([['g'], ['a'], ['b']]);
+    ).toEqual([['g', 'a', 'b']]);
     expect(calls[0]!.method === 'applyChanges' && calls[0]!.input.orders).toEqual([
       { parentId: 'm', children: ['s', 'g', 'r1'] },
     ]);

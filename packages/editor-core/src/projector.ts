@@ -1155,7 +1155,7 @@ export class SceneProjector {
       this.replace(document, page);
       return;
     }
-    // Released subtrees are retried one unit per set after the main set.
+    // Released subtrees are retried after the main set.
     const result =
       this.scoped && !this.wholePage
         ? this.scopedSync(document, touched)
@@ -1186,7 +1186,7 @@ export class SceneProjector {
   }
 
   /**
-   * Isolation (section 5): an empty snapshot, then one set per unit in pre-order. `only` is a
+   * Isolation (section 5): an empty snapshot, then the units in batched sets. `only` is a
    * rejection already known to be the projection's only unit's own.
    */
   private isolate(
@@ -1212,15 +1212,17 @@ export class SceneProjector {
     else this.addUnits(document, projection, null);
   }
 
-  /** Retries the released subtrees from their roots, one unit per set. */
+  /** Retries the released subtrees from their roots, in batched sets. */
   private retry(document: DocumentV6, roots: ReadonlySet<string>): void {
     if (roots.size > 0) this.addUnits(document, this.project(document), roots);
   }
 
   /**
-   * Sends each unit of `projection` under `roots` (or every unit) in its own set, in pre-order.
-   * A rejected unit is left out with its subtree; a rejected mask source takes its mask group
-   * out. Rejections are reported once per reason; any other failure ends in a full snapshot.
+   * Sends the units of `projection` under `roots` (or every unit) in pre-order, by batched
+   * isolation (E26 contract, section 4.2): contiguous segments, split in halves on a rejection,
+   * reach the result of one set per unit. A rejected one-unit segment is that unit's rejection:
+   * the unit is left out with its subtree, and a rejected mask source takes its mask group out.
+   * Rejections are reported once per reason; any other failure ends in a full snapshot.
    */
   private addUnits(
     document: DocumentV6,
@@ -1230,20 +1232,20 @@ export class SceneProjector {
     this.scoped = false;
     const rejected = new Map<SceneRejectionReason, string[]>();
     const inScope = new Set<string>();
+    for (const id of projection.units) {
+      if (roots !== null && !roots.has(id) && !inScope.has(document.nodes[id]!.parent)) continue;
+      inScope.add(id);
+    }
+    const units = [...inScope];
+    const queue: string[][] = oneUnitIsolation.has(this) ? units.map((id) => [id]) : [units];
     const dead = new Set<string>();
     let failed = false;
-    for (const id of projection.units) {
-      const node = document.nodes[id]!;
-      if (roots !== null && !roots.has(id) && !inScope.has(node.parent)) continue;
-      inScope.add(id);
-      if (dead.has(node.parent)) {
-        dead.add(id);
-        continue;
-      }
-      const result = this.addUnit(projection, id);
+    while (queue.length > 0) {
+      const segment = this.liveUnits(document, projection, queue.shift()!, dead);
+      if (segment.length === 0) continue;
+      const result = this.addSegment(projection, segment);
       if (result === null) {
         if (this.disposed) return;
-        dead.add(id);
         continue;
       }
       if (this.accepted(result)) continue;
@@ -1251,6 +1253,12 @@ export class SceneProjector {
         failed = true;
         break;
       }
+      if (segment.length > 1) {
+        const half = Math.ceil(segment.length / 2);
+        queue.unshift(segment.slice(0, half), segment.slice(half));
+        continue;
+      }
+      const id = segment[0]!;
       rejected.set(result.reason, [...(rejected.get(result.reason) ?? []), id]);
       dead.add(id);
       const root = this.excludedRoot(document, id);
@@ -1270,33 +1278,74 @@ export class SceneProjector {
   }
 
   /**
-   * Inserts one unit: the node (a frame with its synthetic nodes), with its containers'
-   * children limited to nodes held or inserted here, and an order entry for its scene parent.
-   * Returns null when its scene parent is not held, or after `disposed`.
+   * The units of `segment` that can be sent now, in pre-order: a unit whose parent unit is dead,
+   * or whose scene parent is neither held nor sent with it, is dead itself.
    */
-  private addUnit(projection: PageProjection, id: string): SceneApplyResult | null {
-    const ids = projection.unitIds.get(id)!;
-    const own = new Set(ids);
-    const held = (scene: string) => this.sent.has(scene) || own.has(scene);
-    const snapshots = ids.map((scene) => limited(projection.nodes.get(scene)!, held));
-    const parentId = snapshots[0]!.parentId;
-    let children: readonly string[];
-    if (parentId === null) {
-      children = projection.rootOrder.filter(held);
-    } else {
-      const parent = projection.nodes.get(parentId);
-      if (parent?.kind !== 'container' || !this.sent.has(parentId)) return null;
-      children = parent.children.filter(held);
+  private liveUnits(
+    document: DocumentV6,
+    projection: PageProjection,
+    segment: readonly string[],
+    dead: Set<string>,
+  ): string[] {
+    const live: string[] = [];
+    const own = new Set<string>();
+    for (const id of segment) {
+      if (dead.has(document.nodes[id]!.parent)) {
+        dead.add(id);
+        continue;
+      }
+      const ids = projection.unitIds.get(id)!;
+      const parentId = projection.nodes.get(ids[0]!)!.parentId;
+      // A guard, as one-per-unit isolation has it: a live parent unit is held or sent here.
+      if (parentId !== null && !own.has(parentId)) {
+        const parent = projection.nodes.get(parentId);
+        if (parent?.kind !== 'container' || !this.sent.has(parentId)) {
+          dead.add(id);
+          continue;
+        }
+      }
+      live.push(id);
+      for (const scene of ids) own.add(scene);
     }
+    return live;
+  }
+
+  /**
+   * Inserts the units of a segment in one set: their nodes (a frame with its synthetic nodes),
+   * with containers' children limited to nodes held or inserted here, and one order entry per
+   * scene parent the set does not hold, in projection order. Null after `disposed`.
+   */
+  private addSegment(
+    projection: PageProjection,
+    segment: readonly string[],
+  ): SceneApplyResult | null {
+    const own = new Set(segment.flatMap((id) => projection.unitIds.get(id)!));
+    const held = (scene: string) => this.sent.has(scene) || own.has(scene);
+    const snapshots: RenderNodeSnapshot[] = [];
+    const parents = new Set<string | null>();
+    for (const id of segment) {
+      const ids = projection.unitIds.get(id)!;
+      for (const scene of ids) snapshots.push(limited(projection.nodes.get(scene)!, held));
+      const parentId = projection.nodes.get(ids[0]!)!.parentId;
+      if (parentId === null || !own.has(parentId)) parents.add(parentId);
+    }
+    const orders = [...parents].map((parentId) => {
+      const siblings =
+        parentId === null
+          ? projection.rootOrder
+          : (projection.nodes.get(parentId) as Extract<RenderNodeSnapshot, { kind: 'container' }>)
+              .children;
+      return { parentId, children: siblings.filter(held) };
+    });
     const result = this.apply({
       inserted: snapshots.filter((snapshot) => !this.sent.has(snapshot.id)),
       updated: snapshots.filter((snapshot) => this.sent.has(snapshot.id)),
       removed: [],
-      orders: [{ parentId, children }],
+      orders,
     });
     if (result !== null && this.accepted(result)) {
       snapshots.forEach((snapshot) => this.sent.set(snapshot.id, snapshot));
-      this.setHeldChildren(parentId, children);
+      for (const { parentId, children } of orders) this.setHeldChildren(parentId, children);
     }
     return result;
   }
@@ -1727,6 +1776,7 @@ function compareOrdinal(left: string, right: string): number {
 }
 
 let checkScoped = false;
+const oneUnitIsolation = new WeakSet<SceneProjector>();
 
 /**
  * Test seam (E26-A09): every scoped change also runs the whole-page path from the same state
@@ -1740,6 +1790,14 @@ export function checkScopedProjectionForTesting(enabled: boolean): void {
 /** Test seam (E26-A09): `projector` always projects the whole page. Not in the package index. */
 export function useWholePageProjectionForTesting(projector: SceneProjector): void {
   (projector as unknown as { wholePage: boolean }).wholePage = true;
+}
+
+/**
+ * Test seam (E26-A06): `projector` isolates one unit per set, the M1 section 5 procedure that
+ * batched isolation must match. Not in the package index.
+ */
+export function useOneUnitIsolationForTesting(projector: SceneProjector): void {
+  oneUnitIsolation.add(projector);
 }
 
 /** Test seam (E26-A09): the projector's exclusion and invalid-expansion state. */
