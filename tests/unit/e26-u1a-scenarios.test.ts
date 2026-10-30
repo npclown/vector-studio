@@ -39,6 +39,13 @@ const stress = loadScenarioDocument('stress');
 const MIXED_SHA256 = 'd8658b14694ca1e6bbcff734e35575222511df96281720068fa4efe2cb9ef974';
 const STRESS_SHA256 = 'dc5cf1a75b00e460fa638ec2197024287671beced964522a03d093ded541fae1';
 
+/** The typical view (U1a amendment), pinned. */
+const TYPICAL_ZOOM = 0.44287156211454926;
+const TYPICAL_VISIBLE = 995;
+const TYPICAL_VISIBLE_DPR2 = 987;
+/** The configuration hash of `e26-mixed-view-edit-10k/v1` at DPR 1, five repetitions. */
+const VIEW_EDIT_HASH = 'a14e5afccb5a3dc92d34a9be8a222a37b5be9876f66216baa86153950da96873';
+
 function allInside(bounds: typeof mixed.bounds, camera: E26Camera) {
   const { inside, leaves } = visibility(bounds, camera);
   return inside === leaves;
@@ -186,7 +193,7 @@ describe('E26-U1a scenarios', () => {
     const configuration = e26Configuration(E26_SCENARIOS[0]!, 1, 5, mixed);
     expect(configuration.drawnLeaves).toBe(6_494);
     const hash = configurationHash(configuration);
-    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(hash).toBe(VIEW_EDIT_HASH);
     expect(
       configurationHash(JSON.parse(JSON.stringify(configuration)) as typeof configuration),
     ).toBe(hash);
@@ -200,7 +207,3 @@ describe('E26-U1a scenarios', () => {
     expect(() => canonicalJson({ a: Number.NaN })).toThrow(TypeError);
   });
 });
-
-const TYPICAL_ZOOM = 0.44287156211454926;
-const TYPICAL_VISIBLE = 995;
-const TYPICAL_VISIBLE_DPR2 = 987;

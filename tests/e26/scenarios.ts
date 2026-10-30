@@ -228,13 +228,15 @@ export function worldTransforms(
 }
 
 /**
- * Whether the renderer draws a leaf: it and every ancestor are visible, and no ancestor is a
- * mask source (the first child of a mask container), which feeds coverage instead.
+ * Whether the renderer draws a leaf: it and every ancestor are visible, no container on the way
+ * has opacity 0, and no ancestor is a mask source (the first child of a mask container), which feeds coverage instead.
  */
 function drawn(nodes: ReadonlyMap<string, RenderNodeSnapshot>, node: RenderNodeSnapshot): boolean {
   let cursor: RenderNodeSnapshot | undefined = node;
   while (cursor !== undefined) {
     if (!cursor.visible) return false;
+    // E25-K3: a container with opacity 0 hides its whole subtree.
+    if (cursor.kind === 'container' && cursor.opacity === 0) return false;
     if (cursor.parentId === null) return true;
     const parent: RenderNodeSnapshot = nodes.get(cursor.parentId)!;
     if (parent.kind === 'container' && parent.clip?.kind === 'mask') {
