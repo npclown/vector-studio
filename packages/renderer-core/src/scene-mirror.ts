@@ -106,9 +106,23 @@ type OwnedScene = {
 type SceneIndexes = {
   /** Node IDs by `parentId`. */
   childrenByParent: Map<string | null, Set<string>>;
-  /** Every node ID in ordinal order, the order of `RetainedSceneView.nodes`. */
+  /**
+   * Every node ID in ordinal order, the order of `RetainedSceneView.nodes`, as of the last read;
+   * the IDs added and deleted since then are merged into it on the next read.
+   */
   sortedIds: string[];
+  pendingAdded: Set<string>;
+  pendingDeleted: Set<string>;
 };
+
+function emptyIndexes(): SceneIndexes {
+  return {
+    childrenByParent: new Map(),
+    sortedIds: [],
+    pendingAdded: new Set(),
+    pendingDeleted: new Set(),
+  };
+}
 
 let injectNextGeometryRevision: (mirror: RetainedSceneMirror, next: number) => void;
 let injectFullValidation: (mirror: RetainedSceneMirror) => void;
@@ -127,7 +141,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
   #onInvalidate: () => void;
   readonly #pathNodes: PathSupport;
   #nextGeometryRevision = 1;
-  #indexes: SceneIndexes = { childrenByParent: new Map(), sortedIds: [] };
+  #indexes: SceneIndexes = emptyIndexes();
   /** Test seam: validate and publish change sets with the full pre-E26 pipeline (the oracle). */
   #fullValidation = false;
   #lastSetVisits = 0;
@@ -233,6 +247,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
 
   public applyChanges(changes: RenderChangeSet): SceneApplyResult {
     if (this.#fullValidation) return this.#applyChangesFull(changes);
+    this.#lastSetVisits = 0;
     if (this.#synchronizationStatus === 'disposed') return disposedResult();
     if (this.#synchronizationStatus !== 'synchronized' || this.#scene === null) {
       this.#synchronizationStatus = 'resync-required';
@@ -389,6 +404,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     const scene = this.#scene;
     if (scene === null || this.#synchronizationStatus === 'disposed') return null;
     // Once per version, on the frame path: the list and the view's own maps (E26 section 4.1).
+    if (scene.view === null) mergePendingIds(this.#indexes);
     scene.view ??= Object.freeze({
       nodeList: Object.freeze(this.#indexes.sortedIds.map((id) => scene.nodes.get(id)!)),
       nodes: new Map(scene.nodes),
@@ -421,7 +437,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     this.#cameraChanged = false;
     this.#invalidationToken = null;
     this.#onInvalidate = () => undefined;
-    this.#indexes = { childrenByParent: new Map(), sortedIds: [] };
+    this.#indexes = emptyIndexes();
     this.#synchronizationStatus = 'disposed';
   }
 
@@ -441,6 +457,8 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     this.#indexes = {
       childrenByParent,
       sortedIds: [...ownedNodes.keys()].sort(compareOrdinal),
+      pendingAdded: new Set(),
+      pendingDeleted: new Set(),
     };
     const published: OwnedScene = {
       sceneEpoch,
@@ -488,9 +506,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     }
 
     const { nodes, geometryRevisions } = current;
-    const { childrenByParent } = this.#indexes;
-    const added: string[] = [];
-    const deleted: string[] = [];
+    const { childrenByParent, pendingAdded, pendingDeleted } = this.#indexes;
     for (const id of writtenIds) {
       const before = nodes.get(id);
       const after = candidate.writes.get(id)!;
@@ -498,17 +514,16 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       if (after === null) {
         nodes.delete(id);
         geometryRevisions.delete(id);
-        deleted.push(id);
+        if (!pendingAdded.delete(id)) pendingDeleted.add(id);
         continue;
       }
-      if (before === undefined) added.push(id);
+      if (before === undefined && !pendingDeleted.delete(id)) pendingAdded.add(id);
       nodes.set(id, after);
       addChild(childrenByParent, after.parentId, id);
       const revision = assigned.get(id);
       if (revision !== undefined) geometryRevisions.set(id, revision);
       else if (after.kind !== 'path') geometryRevisions.delete(id);
     }
-    this.#indexes.sortedIds = updateSortedIds(this.#indexes.sortedIds, added, deleted);
     const published: OwnedScene = {
       sceneEpoch: current.sceneEpoch,
       identity: input.identity,
@@ -800,35 +815,22 @@ function removeChild(index: Map<string | null, Set<string>>, parent: string | nu
 }
 
 /**
- * The ordinal-sorted IDs after adding `added` and deleting `deleted` (both sorted, disjoint):
- * splices for a few, one merge pass for many, so a set never costs more than O(n) here.
+ * Merges the IDs added and deleted since the last read into the ordinal-sorted IDs: one pass,
+ * on the frame path with the view's copy (E26 contract, section 4.1).
  */
-function updateSortedIds(ids: string[], added: readonly string[], deleted: readonly string[]) {
-  if (added.length + deleted.length <= 16) {
-    for (const id of deleted) ids.splice(sortedIndex(ids, id), 1);
-    for (const id of added) ids.splice(sortedIndex(ids, id), 0, id);
-    return ids;
-  }
-  const gone = new Set(deleted);
+function mergePendingIds(indexes: SceneIndexes): void {
+  const { pendingAdded, pendingDeleted } = indexes;
+  if (pendingAdded.size === 0 && pendingDeleted.size === 0) return;
+  const added = [...pendingAdded].sort(compareOrdinal);
   const merged: string[] = [];
   let next = 0;
-  for (const id of ids) {
-    if (gone.has(id)) continue;
-    while (next < added.length && added[next]! < id) merged.push(added[next++]!);
+  for (const id of indexes.sortedIds) {
+    if (pendingDeleted.has(id)) continue;
+    while (next < added.length && compareOrdinal(added[next]!, id) < 0) merged.push(added[next++]!);
     merged.push(id);
   }
   while (next < added.length) merged.push(added[next++]!);
-  return merged;
-}
-
-/** The index of `id` in the ordinal-sorted `ids`, or where it would be inserted. */
-function sortedIndex(ids: readonly string[], id: string): number {
-  let low = 0;
-  let high = ids.length;
-  while (low < high) {
-    const middle = (low + high) >>> 1;
-    if (ids[middle]! < id) low = middle + 1;
-    else high = middle;
-  }
-  return low;
+  indexes.sortedIds = merged;
+  pendingAdded.clear();
+  pendingDeleted.clear();
 }

@@ -355,7 +355,32 @@ function randomChange(
       );
     }
   }
-  breakChange(rng, set, scene, byId, pickId, fresh);
+  if (rng() < 0.08) {
+    // A bulk set: more than 16 IDs added and deleted, so the sorted ID list takes a merge pass.
+    const bulk = 17 + Math.floor(rng() * 10);
+    const added: string[] = [];
+    for (let index = 0; index < bulk; index += 1) {
+      const bulkId = fresh();
+      set.inserted.push(leaf(rng, bulkId, null));
+      added.push(bulkId);
+    }
+    writeOrder(null, [...listOf(null), ...added]);
+    for (const entry of scene.nodes) {
+      if (set.removed.length >= 10) break;
+      if (entry.kind === 'container' || entry.parentId !== null || touched.has(entry.id)) continue;
+      touched.add(entry.id);
+      set.removed.push(entry.id);
+      writeOrder(
+        null,
+        listOf(null).filter((child) => child !== entry.id),
+      );
+    }
+  }
+  // Most sets break in at most one way; some stack breaks, so the category order decides.
+  const breaks = rng() < 0.25 ? 2 + Math.floor(rng() * 3) : 1;
+  for (let index = 0; index < breaks; index += 1) {
+    breakChange(rng, set, scene, byId, pickId, fresh);
+  }
   return set;
 }
 
@@ -831,12 +856,13 @@ describe('E26-U2 incremental scene-set validation (E26-A07)', () => {
     }
   });
 
-  it('keeps a published view unchanged after later sets', () => {
+  it('keeps a published view unchanged after later sets and snapshots', () => {
     const rng = random(42);
     const mirror = new RetainedSceneMirror(() => undefined, FULL_SUPPORT);
     expect(mirror.replaceSnapshot(randomScene(rng, 30, 'n', 'simple')).status).toBe('applied');
     let counter = 0;
-    for (let step = 0; step < 50; step += 1) {
+    let bulkSets = 0;
+    for (let step = 0; step < 200; step += 1) {
       const view = mirror.readRetainedScene()!;
       const frozen = JSON.stringify({
         nodes: view.nodes,
@@ -844,7 +870,15 @@ describe('E26-U2 incremental scene-set validation (E26-A07)', () => {
         rootOrder: view.rootOrder,
       });
       const ids = view.nodes.map((node) => node.id);
-      mirror.applyChanges(randomChange(rng, sceneOf(mirror)!, () => `v${counter++}`));
+      if (step % 25 === 24) {
+        // A snapshot of a larger scene with any feature.
+        const revision = view.version.revision + 1;
+        mirror.replaceSnapshot({ ...randomScene(rng, 120, `r${step}-`), revision });
+      } else {
+        const change = randomChange(rng, sceneOf(mirror)!, () => `v${counter++}`);
+        if (change.inserted.length + change.removed.length > 16) bulkSets += 1;
+        mirror.applyChanges(change);
+      }
       expect(
         JSON.stringify({
           nodes: view.nodes,
@@ -853,6 +887,7 @@ describe('E26-U2 incremental scene-set validation (E26-A07)', () => {
         }),
       ).toBe(frozen);
     }
+    expect(bulkSets).toBeGreaterThan(0);
   });
 
   it('bounds the node lookups of a set by its size, depth and moved subtrees', () => {
@@ -906,8 +941,9 @@ describe('E26-U2 incremental scene-set validation (E26-A07)', () => {
       'applied',
     );
     const n = nodes.length;
-    const bound = (k: number, d: number, s: number) =>
-      U2_VISIT_CONSTANT * (k * (d + Math.log2(n)) + s);
+    /** Section 4.1 bound; `l` sums the old and new lengths of the lists the set writes. */
+    const bound = (k: number, d: number, s: number, l = 0) =>
+      U2_VISIT_CONSTANT * (k * (d + Math.log2(n)) + l + s);
     let revision = 0;
     const visits: number[] = [];
     const apply = (fields: Partial<RenderChangeSet>) => {
@@ -939,23 +975,23 @@ describe('E26-U2 incremental scene-set validation (E26-A07)', () => {
     expect(apply({ updated: [{ ...moved, transform: [1, 0, 0, 1, 5, 5] }] })).toBeLessThanOrEqual(
       bound(1, 0, 100),
     );
-    // An insertion into a group of 100: the written order of 101 entries is part of k.
+    // An insertion into a group of 100: the written list, 100 entries before and 101 after.
     const g9 = nodes.find((node) => node.id === 'g9') as Container;
     expect(
       apply({
         inserted: [leafAt('new', 'g9')],
         orders: [{ parentId: 'g9', children: [...g9.children, 'new'] }],
       }),
-    ).toBeLessThanOrEqual(bound(102, 1, 0));
-    // A removal from a group of 100: the removed node and the written order of 99 entries.
+    ).toBeLessThanOrEqual(bound(1, 1, 0, 201));
+    // A removal from a group of 100: the written list, 100 entries before and 99 after.
     const g20 = nodes.find((node) => node.id === 'g20') as Container;
     expect(
       apply({
         removed: ['l20-5'],
         orders: [{ parentId: 'g20', children: g20.children.filter((id) => id !== 'l20-5') }],
       }),
-    ).toBeLessThanOrEqual(bound(100, 1, 0));
-    // A reparent between two groups of 100: the node and both written orders.
+    ).toBeLessThanOrEqual(bound(1, 1, 0, 199));
+    // A reparent between two groups of 100: both written lists, before and after.
     const g30 = nodes.find((node) => node.id === 'g30') as Container;
     const g31 = nodes.find((node) => node.id === 'g31') as Container;
     const movedLeaf = nodes.find((node) => node.id === 'l30-0')!;
@@ -967,12 +1003,25 @@ describe('E26-U2 incremental scene-set validation (E26-A07)', () => {
           { parentId: 'g31', children: [...g31.children, 'l30-0'] },
         ],
       }),
-    ).toBeLessThanOrEqual(bound(201, 1, 0));
+    ).toBeLessThanOrEqual(bound(1, 1, 0, 400));
     // A clip toggled on a group of 100: its leaves are the subtree whose depth inputs change.
     const g40 = nodes.find((node) => node.id === 'g40') as Container;
     expect(
       apply({ updated: [{ ...g40, clip: { kind: 'rect', x: 0, y: 0, width: 9, height: 9 } }] }),
     ).toBeLessThanOrEqual(bound(1, 0, 100));
+    // A set rejected before its candidate is built counts no lookups.
+    expect(
+      mirror.applyChanges({
+        identity,
+        baseRevision: revision,
+        revision,
+        inserted: [],
+        updated: [],
+        removed: [],
+        orders: [],
+      }).status,
+    ).toBe('invalid-scene');
+    expect(lastSceneSetVisitsForTesting(mirror)).toBe(0);
     // None of these sets comes near the size of the scene.
     expect(Math.max(...visits)).toBeLessThan(n / 10);
   });
