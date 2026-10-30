@@ -1186,8 +1186,9 @@ export class SceneProjector {
   }
 
   /**
-   * Isolation (section 5): an empty snapshot, then the units in batched sets. `only` is a
-   * rejection already known to be the projection's only unit's own.
+   * Isolation (section 5): a removal set of the held nodes (or the empty snapshot as fallback),
+   * then the units in batched sets. `only` is a rejection already known to be the projection's
+   * only unit's own.
    */
   private isolate(
     document: DocumentV6,
@@ -1196,20 +1197,54 @@ export class SceneProjector {
   ): void {
     this.scoped = false;
     const identity = { documentId: document.id, pageId: this.page };
-    let empty = this.sendEmpty(identity);
-    if (empty.status === 'invalid-scene' && isBookkeeping(empty)) {
-      this.raiseRevision(empty.current?.revision);
-      empty = this.sendEmpty(identity);
-    }
-    if (!this.accepted(empty)) {
-      if (empty.status !== 'disposed') this.resync(document);
-      return;
+    if (!this.removeHeld(identity)) {
+      if (this.disposed) return;
+      let empty = this.sendEmpty(identity);
+      if (empty.status === 'invalid-scene' && isBookkeeping(empty)) {
+        this.raiseRevision(empty.current?.revision);
+        empty = this.sendEmpty(identity);
+      }
+      if (!this.accepted(empty)) {
+        if (empty.status !== 'disposed') this.resync(document);
+        return;
+      }
     }
     this.identity = identity;
     this.sent = new Map();
     this.sentOrder = [];
     if (only !== null) this.exclude(document, only.result, [only.id]);
     else this.addUnits(document, projection, null);
+  }
+
+  /**
+   * Isolation's first step (E26 contract, section 4.4.1, U5b): while the renderer holds an
+   * accepted scene of this page, one set removes every held node, so the renderer keeps its
+   * scene epoch and prepared records for the units sent again. A bookkeeping rejection raises the
+   * revision and retries once. False when no such scene is held or the set is not accepted, and
+   * isolation then sends the empty snapshot, as before.
+   */
+  private removeHeld(identity: SceneIdentity): boolean {
+    if (
+      this.identity === null ||
+      this.base === null ||
+      this.identity.documentId !== identity.documentId ||
+      this.identity.pageId !== identity.pageId
+    ) {
+      return false;
+    }
+    const removal = () =>
+      this.apply({
+        inserted: [],
+        updated: [],
+        removed: [...this.sent.keys()].sort(compareOrdinal),
+        orders: [{ parentId: null, children: [] }],
+      });
+    let result = removal();
+    if (result?.status === 'invalid-scene' && isBookkeeping(result)) {
+      this.raiseRevision(result.current?.revision);
+      result = removal();
+    }
+    return result !== null && this.accepted(result);
   }
 
   /** Retries the released subtrees from their roots, in batched sets. */
