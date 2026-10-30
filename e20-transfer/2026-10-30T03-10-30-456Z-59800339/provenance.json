@@ -1,0 +1,21 @@
+{
+  "commit": "9ce110448b22dd3e64e0f57dad14806d06f5c068",
+  "dirty": false,
+  "contractSha256": "56b31f3dc3aa704f7504212160d1b19a13ca77bbdb82f40386a9d3c049668408",
+  "corpusSha256": "7f4bb1c97b2358ef45d23fdcab31aadc35fe4e7d3d5de25ce1bea7a8203d721c",
+  "generatorSha256": "3c4f12991f0554cad2dde1d96eb549cb343b6ecee3e24539e8083320e7e0d438",
+  "oracleSha256": "5b2fafc3708a08ceb6ed5c5e0ce498ac6c23720f8a8d718425a94a7e17724e80",
+  "oracleCertified": true,
+  "wasmSha256": "58f26517603d0d599f187481c967832e3f6abea2eb53c738e5540b6200b4fd35",
+  "shards": 96,
+  "stride": 1,
+  "startResolution": 2,
+  "runId": "59800339",
+  "node": "v24.22.1",
+  "os": "Windows_NT 10.0.26200 x64",
+  "cpus": 20,
+  "heap": 30000,
+  "retryCases": [
+    19215
+  ]
+}
