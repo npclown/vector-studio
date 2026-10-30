@@ -813,35 +813,8 @@ describe('M6b-A07 nothing reaches navigation, the tool or the keymap (M6-A08)', 
   });
 });
 
-describe('the clipboard commands in edit mode (interim until M6b-U8)', () => {
-  it('copy, cut and paste return no IDs and change nothing', () => {
-    const target = editor();
-    target.execute({ type: 'setSelection', ids: ['r'] });
-    // An earlier copy outside edit mode fills the in-memory clipboard.
-    expect(target.execute({ type: 'copy' })).toEqual({ ok: true, ids: ['r'] });
-    const clipboard = target.query({ type: 'clipboard' });
-    target.execute({ type: 'enterTextEdit', id: 't', anchor: 1, focus: 3 });
-    const before = target.getSnapshot();
-    const commands: Command[] = [
-      { type: 'copy' },
-      { type: 'cut' },
-      { type: 'copy', ids: ['t'] },
-      { type: 'cut', ids: ['r'] },
-      { type: 'paste' },
-      { type: 'paste', text: 'xyz' },
-    ];
-    for (const command of commands) {
-      expect(target.execute(command)).toEqual({ ok: true, ids: [] });
-    }
-    const after = target.getSnapshot();
-    expect(after).toBe(before);
-    expect(after.textEdit).toEqual(caret('t', 1, 3));
-    expect(after.history).toEqual({ undoDepth: 0, redoDepth: 0 });
-    expect(textOf(target, 't')).toBe('ab cd');
-    expect(target.query({ type: 'node', id: 'r' })).not.toBeNull();
-    expect(target.query({ type: 'clipboard' })).toEqual(clipboard);
-  });
-});
+// The clipboard commands in edit mode (section 9.2) replaced U4's interim no-ops in M6b-U8:
+// tests/unit/m6b-u8-clipboard.test.ts.
 
 describe('M6b-S3 goal x', () => {
   // "abcd" LF "ab" LF "abcd": caret x 15 at offset 3; line 1 ends at 7 (x 10).

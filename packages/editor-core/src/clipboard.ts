@@ -749,6 +749,60 @@ function resolveInstances(
 }
 
 /**
+ * The text a `paste` reads (M2 contract, section 6; MVP M6b contract, sections 9.3 and 9.4)
+ * after its shape checks in field order (`/text` a string, `/at` and `/pointer` points): `text`
+ * when given, else the in-memory clipboard (fragment or plain text), else
+ * `editor.empty-clipboard`.
+ */
+export function pasteSource(
+  command: Extract<DocumentCommand, { type: 'paste' }>,
+  clipboard: string | null | undefined,
+): string | Failure {
+  const { text, at, pointer } = command as { text?: unknown; at?: unknown; pointer?: unknown };
+  if (text !== undefined && typeof text !== 'string') {
+    return fail('editor.invalid-command', '/text');
+  }
+  if (at !== undefined && !isPoint(at)) return fail('editor.invalid-command', '/at');
+  if (pointer !== undefined && !isPoint(pointer)) {
+    return fail('editor.invalid-command', '/pointer');
+  }
+  const source = text ?? clipboard ?? null;
+  return source === null ? fail('editor.empty-clipboard') : source;
+}
+
+/** Whether `text` is fragment text (it starts with the marker line's marker, section 6). */
+export function isFragmentText(text: string): boolean {
+  return text.startsWith(FRAGMENT_MARKER);
+}
+
+/**
+ * The plain text of a fragment pasted in text edit mode (MVP M6b contract, section 9.2,
+ * M6b-Q8 (a)): the texts of its `text` nodes in paint order (the roots in fragment order, each
+ * subtree in pre-order) joined by LF. The carried sources' nodes (`sourceNodes`) and instance
+ * overrides are not read. A fragment that fails `parseFragment` fails with its code; one with no
+ * text node fails with `editor.unsupported-clipboard`.
+ */
+export function fragmentPlainText(text: string, custom: CustomRules): string | Failure {
+  const fragment = parseFragment(text, custom);
+  if ('ok' in fragment) return fragment;
+  const texts: string[] = [];
+  for (const root of fragment.roots) {
+    for (const node of subtreeOf(fragment.nodes, root)) {
+      if (node.type === 'text') texts.push(node.runs.map((run) => run.text).join(''));
+    }
+  }
+  return texts.length === 0 ? fail('editor.unsupported-clipboard') : texts.join('\n');
+}
+
+/**
+ * The paste target (section 6) of `context`: the scope, else a single selected frame or symbol,
+ * else the active page; also the parent of a plain-text paste (MVP M6b contract, section 9.3).
+ */
+export function pasteTargetOf(document: DocumentV6, context: EditContext): string {
+  return pasteTarget(documentTree(document), context);
+}
+
+/**
  * `paste` (section 6): the fragment from `text`, else the in-memory clipboard. Its roots go on
  * top of the target in fragment order, each at its page placement mapped into the target's
  * space, moved first by the page vector that brings the roots' joint page bounds centre to `at`.
@@ -767,13 +821,9 @@ export function paste(
   custom: CustomRules,
   finish: Finish,
 ): EditResult {
-  const { text, at } = command as { text?: unknown; at?: unknown };
-  if (text !== undefined && typeof text !== 'string') {
-    return fail('editor.invalid-command', '/text');
-  }
-  if (at !== undefined && !isPoint(at)) return fail('editor.invalid-command', '/at');
-  const source = text ?? context.clipboard ?? null;
-  if (source === null) return fail('editor.empty-clipboard');
+  const source = pasteSource(command, context.clipboard);
+  if (typeof source !== 'string') return source;
+  const { at } = command;
   const fragment = parseFragment(source, custom);
   if ('ok' in fragment) return fragment;
   const fragmentTree = documentTree({

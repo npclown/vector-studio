@@ -13,6 +13,7 @@ import type { BeforeInputLike, TextInputHost } from './text-input.js';
 // M6b-U7 (MVP M6b contract, section 6): the hidden textarea joins the focus target; keydown sets
 // `ime` from `keyCode` 229 and honours `passThrough`; a press that leaves text edit mode set keeps
 // focus on the textarea; the blur listeners run the M6b-H2 edit-mode end (text-input.ts).
+// M6b-U8 (section 9): a DOM paste carries `pointer`, the last hover point over the canvas.
 
 /** Pixels per line for a wheel event in line mode (M2-I1). */
 export const WHEEL_LINE_PX = 16;
@@ -100,6 +101,11 @@ export class CanvasInput {
    * the reset runs once for both; with nothing forwarded, nothing can be held.
    */
   private armed = false;
+  /**
+   * The client point of the last `pointermove` over the canvas, cleared on `pointerleave`: the
+   * `pointer` of a DOM paste (MVP M6b contract, section 9.3), mapped at paste time.
+   */
+  private hover: Readonly<{ clientX: number; clientY: number }> | null = null;
   /** The hidden textarea's host (M6b-H1 to H5), when the component renders one. */
   text: TextInputHost | null = null;
 
@@ -168,14 +174,23 @@ export class CanvasInput {
     if (this.text !== null && this.text.active) event.preventDefault();
   }
 
-  /** Moves without a press are hover, and a release without one is not ours. */
+  /**
+   * Moves without a press are hover, and a release without one is not ours. Every move records
+   * the paste `pointer` (section 9.3).
+   */
   pointerMove(event: MouseLike): void {
+    this.hover = { clientX: event.clientX, clientY: event.clientY };
     if (!this.dragging) return;
     this.send({
       kind: 'pointermove',
       point: this.toPage(event.currentTarget, event.clientX, event.clientY),
       modifiers: modifiersOf(event),
     });
+  }
+
+  /** The pointer left the canvas: a paste then has no `pointer` (section 9.3). */
+  pointerLeave(): void {
+    this.hover = null;
   }
 
   pointerUp(event: MouseLike): void {
@@ -266,9 +281,11 @@ export class CanvasInput {
   }
 
   /**
-   * A DOM `copy` or `cut` on the focused canvas (section 6): the command runs on the selection;
-   * when it copied nothing (an empty selection, or a failure) the event is left to the browser,
-   * otherwise it is prevented and carries the fragment as `text/plain`.
+   * A DOM `copy` or `cut` on the focused canvas or textarea (section 6): the command runs on the
+   * selection; when it copied nothing (an empty selection, a collapsed text caret, or a
+   * failure) the event is left to the browser, otherwise it is prevented and carries the
+   * in-memory text as `text/plain`: the fragment, or in text edit mode the selected plain text
+   * (MVP M6b contract, section 9.2).
    */
   clipboardCopy(type: 'copy' | 'cut', event: ClipboardEventLike): void {
     const result = this.editor.execute({ type });
@@ -277,11 +294,19 @@ export class CanvasInput {
     event.clipboardData?.setData('text/plain', this.editor.query({ type: 'clipboard' }) ?? '');
   }
 
-  /** A DOM `paste`: always `paste { text }`, the empty string without `text/plain`; prevented. */
+  /**
+   * A DOM `paste`: always `paste { text }`, the empty string without `text/plain`; prevented.
+   * With a recorded hover point it carries `pointer`, that point in page space by the editor's
+   * camera at paste time (M6b contract, section 9.3; M2-I4).
+   */
   clipboardPaste(event: ClipboardEventLike): void {
     event.preventDefault();
     const text = event.clipboardData?.getData('text/plain') ?? '';
-    this.editor.execute({ type: 'paste', text });
+    const canvas = this.canvas();
+    const hover = this.hover;
+    const pointer =
+      hover === null || canvas === null ? null : this.toPage(canvas, hover.clientX, hover.clientY);
+    this.editor.execute({ type: 'paste', text, ...(pointer === null ? {} : { pointer }) });
   }
 
   keyUp(event: KeyLike): void {
