@@ -243,6 +243,11 @@ export type PathMeshPipelineOptions = Readonly<{
 }>;
 
 export type PathMeshPrepareInput = Readonly<{
+  /**
+   * E26-U5c: passing the same array object as the last prepare says that no path was written
+   * since, and `geometryRevision` is then not read again; a caller must pass a new array when a
+   * path or its geometry revision changed.
+   */
   paths: readonly DerivedPath[];
   geometryRevision: (id: string) => number | undefined;
   camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>;
@@ -351,7 +356,9 @@ type EvaluatedPath = Readonly<{
  * E26 contract, U5c: one path's outcome in the last prepare, kept while the path object, its
  * geometry revision and the frame inputs (`frameKey`) stay the same. Only a clean outcome is
  * kept: culled, or drawn from resident entries with no state failure, no pending request and no
- * joint fill draw.
+ * joint fill draw. A path that is hidden or evaluated afresh drops its kept outcome, so a kept
+ * outcome never outlives a frame in which its path was not kept, and its entries stay in each
+ * frame's working set.
  */
 type PathFrame = Readonly<{
   path: DerivedPath;
@@ -584,7 +591,10 @@ export class PathMeshPipeline {
     };
     for (const path of input.paths) {
       const node = path.node;
-      if (path.hidden || node.geometry.verbs.length === 0) continue;
+      if (path.hidden || node.geometry.verbs.length === 0) {
+        this.#pathFrames.delete(path.id);
+        continue;
+      }
       const revision = revisions.get(path.id)!;
       const kept = this.#reuse ? this.#pathFrames.get(path.id) : undefined;
       if (
@@ -605,6 +615,9 @@ export class PathMeshPipeline {
         }
         continue;
       }
+      // Evaluated afresh: the kept outcome goes, so it holds no entry the budget has evicted. A
+      // clean outcome of this evaluation is kept again below.
+      this.#pathFrames.delete(path.id);
       // B2 section 9.2: the fill is V3's drawable paint; the stroke is drawable with a stroke,
       // width > 0 and stroke world bounds meeting the viewport. A path is culled only when
       // neither paint's bounds meet it.
