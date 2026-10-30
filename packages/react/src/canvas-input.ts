@@ -38,7 +38,11 @@ export type PointerLike = ModifierKeys &
     clientX: number;
     clientY: number;
     pointerId: number;
-    currentTarget: CanvasLike & Readonly<{ setPointerCapture(id: number): void; focus(): void }>;
+    currentTarget: CanvasLike &
+      Readonly<{
+        setPointerCapture(id: number): void;
+        focus(options?: Readonly<{ preventScroll?: boolean }>): void;
+      }>;
     preventDefault(): void;
   }>;
 
@@ -146,8 +150,12 @@ export class CanvasInput {
     if (event.button === 1) event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     // In text edit mode focus stays on the textarea (M6b-H1, section 7.2), so a press during a
-    // composition does not blur it before the editor's forced end.
-    if (this.text === null || !this.text.active) event.currentTarget.focus();
+    // composition does not blur it before the editor's forced end. The focus never scrolls: a
+    // canvas partly outside the viewport (under a horizontal scrollbar, say) would otherwise move
+    // under the pointer before the press point is read, shifting the gesture by the scroll.
+    if (this.text === null || !this.text.active) {
+      event.currentTarget.focus({ preventScroll: true });
+    }
     this.dragging = true;
     this.send({
       kind: 'pointerdown',
