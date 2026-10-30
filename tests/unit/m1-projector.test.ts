@@ -684,8 +684,8 @@ describe('M1-A09 synchronization', () => {
       reason: 'unsupported-feature',
       nodeIds: [shapes[0]],
     });
-    // After the empty snapshot, only batched sets holding the source are rejected (E26-U3), the
-    // last one the source's own.
+    // After the removal set, only batched sets holding the source are rejected (E26-U3), the last
+    // one the source's own.
     const calls = sceneCalls(renderer, from);
     const rejected = calls.filter((call) => call.result.status !== 'applied').slice(1);
     const inserted = rejected.map((call) =>
@@ -710,9 +710,11 @@ describe('M1-A09 synchronization', () => {
     expect(renderer.mirror.readRetainedScene()!.rootOrder).toEqual(['g1', 'e1', 'l1']);
   });
 
-  it('isolation sends an empty snapshot, then the page in one batched set after a one-time rejection', async () => {
+  it('isolation removes the held nodes in one set, then sends the page in one batched set after a one-time rejection', async () => {
     const { target, renderer } = attached(await fixture('containers.json'));
     const from = renderer.calls.length;
+    const heldScene = renderer.mirror.readRetainedScene()!;
+    const held = heldScene.nodes.map((node) => node.id).sort();
     renderer.overrides.applyChanges = {
       status: 'invalid-scene',
       reason: 'invalid-value',
@@ -728,10 +730,18 @@ describe('M1-A09 synchronization', () => {
     });
     const calls = sceneCalls(renderer, from);
     expect(calls[0]!.method).toBe('applyChanges');
+    // E26-U5b: the held page is removed by one set, which keeps the renderer's scene epoch.
     expect(calls[1]).toMatchObject({
-      method: 'replaceSnapshot',
-      input: { nodes: [], rootOrder: [] },
+      method: 'applyChanges',
+      input: {
+        inserted: [],
+        updated: [],
+        removed: held,
+        orders: [{ parentId: null, children: [] }],
+      },
+      result: { status: 'applied' },
     });
+    expect(renderer.mirror.readRetainedScene()!.sceneEpoch).toBe(heldScene.sceneEpoch);
     // E26-U3: one segment of every unit in pre-order, each container carrying its children and
     // one order entry for the page root.
     expect(calls).toHaveLength(3);
