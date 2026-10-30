@@ -12,6 +12,13 @@ import type {
   SceneSynchronizationState,
   SceneVersion,
 } from '@vector-studio/contracts';
+import {
+  CandidateScene,
+  candidateArithmeticFinite,
+  candidateGraphReason,
+  operationReason,
+  type ResidentScene,
+} from './scene-incremental.js';
 import { hasFiniteSceneArithmetic } from './scene-numeric.js';
 import {
   firstDuplicateNodeId,
@@ -76,17 +83,33 @@ type CameraTransition =
   | Readonly<{ status: 'applied' | 'unchanged'; state: RenderCameraState }>
   | Readonly<{ status: 'invalid-camera'; reason: 'invalid-value' | 'revision-overflow' }>;
 
-type OwnedScene = Readonly<{
-  sceneEpoch: symbol;
-  identity: SceneIdentity;
-  revision: number;
-  nodes: ReadonlyMap<string, RenderNodeSnapshot>;
-  nodeList: readonly RenderNodeSnapshot[];
-  rootOrder: readonly string[];
-  geometryRevisions: ReadonlyMap<string, number>;
-}>;
+/**
+ * A published scene version. Its maps are shared with the next version until a view of this one
+ * is handed out (`exposed`); after that the next set copies them first (E26 contract, section
+ * 4.1: copy-on-write, so a published view stays immutable). `nodeList` is built when first read.
+ */
+type OwnedScene = {
+  readonly sceneEpoch: symbol;
+  readonly identity: SceneIdentity;
+  readonly revision: number;
+  readonly nodes: Map<string, RenderNodeSnapshot>;
+  readonly rootOrder: readonly string[];
+  readonly geometryRevisions: Map<string, number>;
+  exposed: boolean;
+  nodeList: readonly RenderNodeSnapshot[] | null;
+};
+
+/** The mirror's indexes of the current scene, mutated in place by each publish. */
+type SceneIndexes = {
+  /** Node IDs by `parentId`. */
+  childrenByParent: Map<string | null, Set<string>>;
+  /** Every node ID in ordinal order, the order of `RetainedSceneView.nodes`. */
+  sortedIds: string[];
+};
 
 let injectNextGeometryRevision: (mirror: RetainedSceneMirror, next: number) => void;
+let injectFullValidation: (mirror: RetainedSceneMirror) => void;
+let readLastSetVisits: (mirror: RetainedSceneMirror) => number;
 
 export class RetainedSceneMirror implements RendererSceneSynchronization {
   #scene: OwnedScene | null = null;
@@ -101,11 +124,19 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
   #onInvalidate: () => void;
   readonly #pathNodes: PathSupport;
   #nextGeometryRevision = 1;
+  #indexes: SceneIndexes = { childrenByParent: new Map(), sortedIds: [] };
+  /** Test seam: validate and publish change sets with the full pre-E26 pipeline (the oracle). */
+  #fullValidation = false;
+  #lastSetVisits = 0;
 
   static {
     injectNextGeometryRevision = (mirror, next) => {
       mirror.#nextGeometryRevision = next;
     };
+    injectFullValidation = (mirror) => {
+      mirror.#fullValidation = true;
+    };
+    readLastSetVisits = (mirror) => mirror.#lastSetVisits;
   }
 
   public constructor(
@@ -198,6 +229,70 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
   }
 
   public applyChanges(changes: RenderChangeSet): SceneApplyResult {
+    if (this.#fullValidation) return this.#applyChangesFull(changes);
+    if (this.#synchronizationStatus === 'disposed') return disposedResult();
+    if (this.#synchronizationStatus !== 'synchronized' || this.#scene === null) {
+      this.#synchronizationStatus = 'resync-required';
+      return resyncResult(this.#scene);
+    }
+
+    let input: ValidatedChangesInput | null;
+    try {
+      input = validateChangesShape(changes, this.#pathNodes);
+    } catch {
+      input = null;
+    }
+    if (input === null || input.revision <= input.baseRevision) {
+      return this.#invalidScene('invalid-value');
+    }
+
+    // E26 contract, section 4.1: the same verdicts as #applyChangesFull, in the same order, in
+    // work proportional to the change.
+    const scene = this.#scene;
+    const resident: ResidentScene = {
+      nodes: scene.nodes,
+      rootOrder: scene.rootOrder,
+      childrenByParent: this.#indexes.childrenByParent,
+    };
+    const candidate = new CandidateScene(resident, input);
+    try {
+      if (!candidateArithmeticFinite(candidate)) return this.#invalidScene('invalid-value');
+
+      if (
+        !identitiesEqual(scene.identity, input.identity) ||
+        input.baseRevision !== scene.revision
+      ) {
+        this.#synchronizationStatus = 'resync-required';
+        return resyncResult(scene);
+      }
+
+      const operation = operationReason(candidate, input);
+      if (operation !== null) return this.#invalidScene(operation);
+
+      const hasInvalidOrderParent = input.orders.some(
+        (order) => order.parentId !== null && candidate.get(order.parentId)?.kind !== 'container',
+      );
+      const graph = candidateGraphReason(candidate, this.#pathNodes);
+      if (graph.unknown) return this.#invalidScene('unknown-node');
+      if (hasInvalidOrderParent) return this.#invalidScene('invalid-parent');
+      if (graph.reason !== null) return this.#invalidScene(graph.reason);
+      if (
+        input.inserted.some((entry) => entry.unsupported) ||
+        input.updated.some((entry) => entry.unsupported)
+      ) {
+        return this.#invalidScene('unsupported-feature');
+      }
+
+      const published = this.#publishWrites(input, candidate);
+      if (published === null) return this.#invalidScene('invalid-value');
+      return appliedResult(published);
+    } finally {
+      this.#lastSetVisits = candidate.visits;
+    }
+  }
+
+  /** The pre-E26 pipeline over the whole candidate: the oracle of the incremental one. */
+  #applyChangesFull(changes: RenderChangeSet): SceneApplyResult {
     if (this.#synchronizationStatus === 'disposed') return disposedResult();
     if (this.#synchronizationStatus !== 'synchronized' || this.#scene === null) {
       this.#synchronizationStatus = 'resync-required';
@@ -290,13 +385,18 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
   public readRetainedScene(): RetainedSceneView | null {
     const scene = this.#scene;
     if (scene === null || this.#synchronizationStatus === 'disposed') return null;
+    if (scene.nodeList === null) {
+      scene.nodeList = Object.freeze(this.#indexes.sortedIds.map((id) => scene.nodes.get(id)!));
+    }
+    scene.exposed = true;
+    const { nodes, geometryRevisions } = scene;
     return Object.freeze({
       sceneEpoch: scene.sceneEpoch,
       version: copyVersion(scene),
       nodes: scene.nodeList,
       rootOrder: scene.rootOrder,
-      getNode: (id: string) => scene.nodes.get(id),
-      getGeometryRevision: (id: string) => scene.geometryRevisions.get(id),
+      getNode: (id: string) => nodes.get(id),
+      getGeometryRevision: (id: string) => geometryRevisions.get(id),
     });
   }
 
@@ -330,17 +430,91 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     const revisions = assignGeometryRevisions(this.#scene, ownedNodes, this.#nextGeometryRevision);
     // Overflow publishes nothing (P3 V3 contract, section b).
     if (revisions === null) return null;
-    const nodeList = Object.freeze([...ownedNodes.values()].sort(compareNodes));
-    const published = Object.freeze({
+    const childrenByParent = new Map<string | null, Set<string>>();
+    for (const node of ownedNodes.values()) addChild(childrenByParent, node.parentId, node.id);
+    this.#indexes = {
+      childrenByParent,
+      sortedIds: [...ownedNodes.keys()].sort(compareOrdinal),
+    };
+    const published: OwnedScene = {
       sceneEpoch,
       identity,
       revision,
       nodes: ownedNodes,
-      nodeList,
       rootOrder,
-      geometryRevisions: revisions.revisions,
-    });
+      geometryRevisions: new Map(revisions.revisions),
+      exposed: false,
+      nodeList: null,
+    };
     this.#nextGeometryRevision = revisions.next;
+    this.#scene = published;
+    this.#synchronizationStatus = 'synchronized';
+    this.#sceneChanged = true;
+    this.#invalidate();
+    return published;
+  }
+
+  /**
+   * Publishes an accepted set's writes over the current scene (E26 contract, section 4.1): the
+   * maps are copied only if a view of the current version was handed out, geometry revisions are
+   * assigned to the written path nodes only, in ordinal order, and the indexes are updated in
+   * place. Revision overflow publishes nothing, as #publishScene.
+   */
+  #publishWrites(input: ValidatedChangesInput, candidate: CandidateScene): OwnedScene | null {
+    const current = this.#scene!;
+    const writtenIds = [...candidate.writes.keys()].sort(compareOrdinal);
+    const assigned = new Map<string, number>();
+    let next = this.#nextGeometryRevision;
+    for (const id of writtenIds) {
+      const node = candidate.writes.get(id);
+      if (node === null || node === undefined || node.kind !== 'path') continue;
+      const previous = current.nodes.get(id);
+      const previousRevision = current.geometryRevisions.get(id);
+      if (
+        previous?.kind === 'path' &&
+        previousRevision !== undefined &&
+        pathDataEquals(previous.geometry, node.geometry)
+      ) {
+        continue;
+      }
+      if (next > Number.MAX_SAFE_INTEGER) return null;
+      assigned.set(id, next);
+      next += 1;
+    }
+
+    const nodes = current.exposed ? new Map(current.nodes) : current.nodes;
+    const geometryRevisions = current.exposed
+      ? new Map(current.geometryRevisions)
+      : current.geometryRevisions;
+    const { childrenByParent, sortedIds } = this.#indexes;
+    for (const id of writtenIds) {
+      const before = nodes.get(id);
+      const after = candidate.writes.get(id)!;
+      if (before !== undefined) removeChild(childrenByParent, before.parentId, id);
+      if (after === null) {
+        nodes.delete(id);
+        geometryRevisions.delete(id);
+        sortedIds.splice(sortedIndex(sortedIds, id), 1);
+        continue;
+      }
+      if (before === undefined) sortedIds.splice(sortedIndex(sortedIds, id), 0, id);
+      nodes.set(id, after);
+      addChild(childrenByParent, after.parentId, id);
+      const revision = assigned.get(id);
+      if (revision !== undefined) geometryRevisions.set(id, revision);
+      else if (after.kind !== 'path') geometryRevisions.delete(id);
+    }
+    const published: OwnedScene = {
+      sceneEpoch: current.sceneEpoch,
+      identity: input.identity,
+      revision: input.revision,
+      nodes,
+      rootOrder: candidate.rootOrder,
+      geometryRevisions,
+      exposed: false,
+      nodeList: null,
+    };
+    this.#nextGeometryRevision = next;
     this.#scene = published;
     this.#synchronizationStatus = 'synchronized';
     this.#sceneChanged = true;
@@ -356,6 +530,22 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
   #invalidScene(reason: SceneRejectionReason): SceneApplyResult {
     return invalidSceneResult(reason, this.#scene);
   }
+}
+
+/**
+ * Test seam (E26-A07): validate and publish this mirror's change sets with the full pre-E26
+ * pipeline, the oracle of the incremental one. Not exported from the package index.
+ */
+export function useFullChangeValidationForTesting(mirror: RetainedSceneMirror): void {
+  injectFullValidation(mirror);
+}
+
+/**
+ * Test seam (E26-A07): the node lookups the last incremental change set made, from its
+ * candidate's construction to its verdict. Not exported from the package index.
+ */
+export function lastSceneSetVisitsForTesting(mirror: RetainedSceneMirror): number {
+  return readLastSetVisits(mirror);
 }
 
 /** Test seam for the V3-A2 overflow fixture; not exported from the package index. */
@@ -589,6 +779,30 @@ function compareOrdinal(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
-function compareNodes(left: RenderNodeSnapshot, right: RenderNodeSnapshot): number {
-  return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
+function addChild(index: Map<string | null, Set<string>>, parent: string | null, id: string) {
+  let set = index.get(parent);
+  if (set === undefined) {
+    set = new Set();
+    index.set(parent, set);
+  }
+  set.add(id);
+}
+
+function removeChild(index: Map<string | null, Set<string>>, parent: string | null, id: string) {
+  const set = index.get(parent);
+  if (set === undefined) return;
+  set.delete(id);
+  if (set.size === 0) index.delete(parent);
+}
+
+/** The index of `id` in the ordinal-sorted `ids`, or where it would be inserted. */
+function sortedIndex(ids: readonly string[], id: string): number {
+  let low = 0;
+  let high = ids.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (ids[middle]! < id) low = middle + 1;
+    else high = middle;
+  }
+  return low;
 }
