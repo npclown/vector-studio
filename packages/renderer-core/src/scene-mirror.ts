@@ -46,6 +46,18 @@ export type RetainedSceneView = Readonly<{
   getNode(id: string): RenderNodeSnapshot | undefined;
   /** The mirror-derived geometry revision of a path node; never carried by the scene contract. */
   getGeometryRevision(id: string): number | undefined;
+  /**
+   * E26 contract, U5c (section 4.4.1): this view's position in the mirror's change log. Pass it
+   * to a later view's `changedSince`.
+   */
+  changeSerial: number;
+  /**
+   * The IDs written (inserted, updated or removed) after the view at `serial` and up to this
+   * view, unsorted and possibly repeated, or null when the mirror no longer knows them: a
+   * snapshot, a set published by the full oracle, a log over its cap, or a serial from another
+   * epoch. Root order changes are not in the list; compare `rootOrder`.
+   */
+  changedSince(serial: number): readonly string[] | null;
 }>;
 
 /**
@@ -133,6 +145,8 @@ let readLastSetVisits: (mirror: RetainedSceneMirror) => number;
  * hidden tab) the mirror forgets them all; that costs mesh cache hits, never correctness.
  */
 const RETIRED_PATHS_MAX = 131_072;
+/** E26-U5c: the change log's cap; past it, readers get null and derive in full. */
+const CHANGE_LOG_MAX = 65_536;
 
 /** E26-U5b: a removed path's data and revision, kept until the next view or snapshot. */
 type RetiredPath = Readonly<{
@@ -163,6 +177,13 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
    * view keeps its revision; building a view or publishing a snapshot clears the map.
    */
   #retired = new Map<string, RetiredPath>();
+  /**
+   * E26 contract, U5c: the IDs written by sets since `#changeFloor`, in publication order. A
+   * serial is `#changeFloor + i` for the log's first i entries; anything before the floor is
+   * unknown.
+   */
+  #changeLog: string[] = [];
+  #changeFloor = 0;
 
   static {
     injectNextGeometryRevision = (mirror, next) => {
@@ -430,6 +451,9 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       geometryRevisions: new Map(scene.geometryRevisions),
     });
     const { nodes, geometryRevisions, nodeList } = scene.view;
+    const floor = this.#changeFloor;
+    const log = this.#changeLog;
+    const changeSerial = floor + log.length;
     return Object.freeze({
       sceneEpoch: scene.sceneEpoch,
       version: copyVersion(scene),
@@ -437,6 +461,14 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       rootOrder: scene.rootOrder,
       getNode: (id: string) => nodes.get(id),
       getGeometryRevision: (id: string) => geometryRevisions.get(id),
+      changeSerial,
+      // The log is replaced, never truncated, when the floor moves, so a stale view answers null.
+      changedSince: (serial: number) =>
+        log !== this.#changeLog || !Number.isSafeInteger(serial) || serial < floor
+          ? null
+          : serial > changeSerial
+            ? null
+            : log.slice(serial - floor, changeSerial - floor),
     });
   }
 
@@ -458,6 +490,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     this.#onInvalidate = () => undefined;
     this.#indexes = emptyIndexes();
     this.#retired.clear();
+    this.#resetChangeLog();
     this.#synchronizationStatus = 'disposed';
   }
 
@@ -510,6 +543,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       view: null,
     };
     this.#nextGeometryRevision = revisions.next;
+    this.#resetChangeLog();
     this.#scene = published;
     this.#synchronizationStatus = 'synchronized';
     this.#sceneChanged = true;
@@ -575,6 +609,8 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       else if (after.kind !== 'path') geometryRevisions.delete(id);
     }
     if (this.#retired.size > RETIRED_PATHS_MAX) this.#retired.clear();
+    if (this.#changeLog.length + writtenIds.length > CHANGE_LOG_MAX) this.#resetChangeLog();
+    else for (const id of writtenIds) this.#changeLog.push(id);
     const published: OwnedScene = {
       sceneEpoch: current.sceneEpoch,
       identity: input.identity,
@@ -590,6 +626,12 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
     this.#sceneChanged = true;
     this.#invalidate();
     return published;
+  }
+
+  /** Forgets the logged IDs: every earlier serial now reads as unknown. */
+  #resetChangeLog(): void {
+    this.#changeFloor += this.#changeLog.length + 1;
+    this.#changeLog = [];
   }
 
   #invalidate(): void {
