@@ -9,7 +9,7 @@
 // counted separately (section 3.3: the edit drag moves the selection out of its frame's clip).
 import { createHash } from 'node:crypto';
 import type { RenderNodeSnapshot, SceneAffine } from '@vector-studio/contracts';
-import { parseDocument, type DocumentV5 } from '@vector-studio/model';
+import { parseDocument } from '@vector-studio/model';
 import { projectPage, type PageProjection } from '../../packages/editor-core/src/projector.js';
 import {
   composeSceneAffine,
@@ -433,10 +433,13 @@ export function sha256(text: string): string {
   return createHash('sha256').update(text).digest('hex');
 }
 
+/** The current schema's document, whatever its version (it follows `parseDocument`). */
+type CurrentDocument = Extract<ReturnType<typeof parseDocument>, { ok: true }>['document'];
+
 export type E26Loaded = Readonly<{
   /** The generated document as JSON data, before migration. */
   generated: unknown;
-  document: DocumentV5;
+  document: CurrentDocument;
   pageId: string;
   projection: PageProjection;
   bounds: ReadonlyMap<string, SceneBounds | null>;

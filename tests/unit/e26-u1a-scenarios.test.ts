@@ -44,7 +44,7 @@ const TYPICAL_ZOOM = 0.44287156211454926;
 const TYPICAL_VISIBLE = 995;
 const TYPICAL_VISIBLE_DPR2 = 987;
 /** The configuration hash of `e26-mixed-view-edit-10k/v1` at DPR 1, five repetitions. */
-const VIEW_EDIT_HASH = 'a14e5afccb5a3dc92d34a9be8a222a37b5be9876f66216baa86153950da96873';
+const VIEW_EDIT_HASH = 'fbacd41cb86ccb66be4dbae73c827cd57934963b741761db21d7e317d777d4a6';
 
 function allInside(bounds: typeof mixed.bounds, camera: E26Camera) {
   const { inside, leaves } = visibility(bounds, camera);
