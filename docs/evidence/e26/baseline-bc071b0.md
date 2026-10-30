@@ -63,14 +63,14 @@ Per-run p95, in ms, by nearest rank. Max is the maximum per-run p95. No result h
   - The stress scene has only rectangles and ellipses, with no stroke, clip or text, so even plain primitives cost about 12 µs each per frame.
 - **B3. At DPR 1, the all-visible scenarios submit nothing.**
   - In `e26-mixed-all-edit-10k/v1` and `e26-mixed-all-pan-10k/v1` at DPR 1, each render callback takes about 6 s.
-  - The window holds one or two intervals and two long tasks of 5.86 to 6.75 s. The backend records no `encodeAndSubmitMs` sample and `framesSubmitted` does not advance, so each frame fails before submission.
+  - The window holds one or two intervals and two long tasks of 5.86 to 6.74 s. The backend records no `encodeAndSubmitMs` sample and `framesSubmitted` does not advance, so no frame reaches submission.
   - The same camera at DPR 2 submits every frame in about 150 ms.
   - The harness does not record backend diagnostics, so the cause is not known. The backend has three ways to skip a submission that fit the data: `prepare` returns a null packet (no diagnostic, `webgpu-backend.ts` `#renderFrame`), `prepare` throws (`RENDER_SUBMISSION_FAILED`), or the submission returns a status other than `submitted`. Why only DPR 1 is affected is a hypothesis until diagnosed.
   - It is filed for diagnosis first (last section).
 - **B4. A multi-second task follows or contains each isolation.**
   - In all 20 busy runs, the one-time rejection's `e26-isolation` measure takes 97 to 103 ms (A06's single one-time case, diagnostic here).
   - In 18 of 20 runs, a 4.1 to 4.6 s long task starts 16 to 34 ms after the measure ends, outside it. In the other 2 (edge-dpr1 r2, edge-dpr2 r3), the isolation runs inside one 4.5 to 4.9 s long task, which the harness marks as overlapping the isolation and A05 therefore exempts. Either way it drives the busy runs' 4.3 to 5.1 s p95.
-  - Its timing points to the first frame after isolation re-preparing most of the page, for example because the isolation's sets replace the prepared records of every unit they resend. At 10,634 nodes such a rebuild takes seconds, as E23 saw when a re-anchored primitive origin rebuilt every record. The profile in section 13 confirms or rejects this.
+  - Its timing points to the first frame after isolation re-preparing most of the page, for example because the isolation's sets replace the prepared records of every unit they resend. At 10,634 nodes such a rebuild takes seconds, as E23 saw when a re-anchored primitive origin rebuilt every record. The profile (last section) confirms or rejects this.
   - The marked isolation is quick. In most runs the cost lands in the next frame, outside the A05 exemption.
 - **B5. Pointer latency without background work is 240 to 350 ms.**
   - The plain variant has 127 to 153 samples per run, a per-run p95 of 243 to 352 ms, and long tasks of 60 to 94 ms during the drag.
