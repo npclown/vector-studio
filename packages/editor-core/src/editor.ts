@@ -180,7 +180,10 @@ export interface ToolContext {
  * A pointer drag (plan section 4.2). Updates change the live document without history; commit
  * records one undo step from the pre-gesture state; cancel restores that state. Events are held
  * during `input`, so a tool's drag cannot end under it; a caller outside `input` checks `active`
- * after `update`, because a listener's command can end the drag.
+ * after `update`, because a listener's command can end the drag. While an IME composition (the
+ * text gesture, MVP M6b contract, section 7.1) is active, `active` is true and the methods are
+ * inert: `begin` returns false, `update`, `replace` and `edit` fail with
+ * `editor.gesture-active`, and `commit` and `cancel` do nothing.
  */
 export interface GestureControl {
   readonly active: boolean;
@@ -258,7 +261,23 @@ type Gesture = {
    * draw ran on (M7 contract, section 6), discarded steps included.
    */
   accepted: string[];
+  /** The composition when this is the text gesture (M6b contract, section 7.1), else null. */
+  text: TextGesture | null;
 };
+
+/**
+ * The text gesture's record (M6b contract, section 7.1): text edit mode when the composition
+ * began (its `composition` null), restored on cancel; the replaced range `[start, end)` of the
+ * pre-gesture text (the selection then, possibly empty); and the open merge then, which the
+ * commit merges into by section 8.2 (the gesture's own updates are document changes, which
+ * clear `textMerge`).
+ */
+type TextGesture = Readonly<{
+  edit: TextEditState;
+  start: number;
+  end: number;
+  merge: TextMerge | null;
+}>;
 
 /** The zoom range (M2-Q2). */
 export const ZOOM_MIN = 1 / 64;
@@ -328,6 +347,28 @@ const RELATIVE_COMMANDS: ReadonlySet<string> = new Set([
   'openPathSubpath',
 ]);
 
+/**
+ * The commands that commit an active text gesture first by the forced end (M6b contract,
+ * section 7.3), then run on the committed document: every document command, `undo`, `redo`,
+ * `loadDocument`, `setTool`, `setSelection`, `setScope`, `enterTextEdit`, `enterPathEdit`,
+ * `exitTextEdit`, `endComposition` and `setActivePage` (also to the current page). The input
+ * paths (`pointercancel`, a press, an acting edit-mode key) end it in `dispatch`.
+ */
+const FORCED_END_COMMANDS: ReadonlySet<string> = new Set([
+  ...DOCUMENT_COMMANDS,
+  'undo',
+  'redo',
+  'loadDocument',
+  'setTool',
+  'setSelection',
+  'setScope',
+  'enterTextEdit',
+  'enterPathEdit',
+  'exitTextEdit',
+  'endComposition',
+  'setActivePage',
+]);
+
 /** Extension commands may nest this deep through `runCommand` (P5-U5). */
 const MAX_EXTENSION_DEPTH = 16;
 
@@ -372,6 +413,7 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.invalid-text-range',
   'editor.no-text-layout',
   'editor.no-text-edit',
+  'editor.gesture-active',
 ]);
 
 /**
@@ -433,8 +475,12 @@ const optional = (value: unknown, type: 'string' | 'boolean') =>
 function isInputEvent(value: unknown): value is InputEvent {
   const event = value as Record<string, unknown> | null;
   if (typeof event !== 'object' || event === null) return false;
-  // Text input carries no modifiers (MVP M6b contract, section 5.3).
+  // Text input and composition carry no modifiers (MVP M6b contract, section 5.3).
   if (event.kind === 'textinput') return typeof event.text === 'string';
+  if (event.kind === 'compositionstart') return true;
+  if (event.kind === 'compositionupdate' || event.kind === 'compositionend') {
+    return typeof event.data === 'string';
+  }
   const modifiers = event.modifiers as Record<string, unknown> | null;
   if (
     typeof modifiers !== 'object' ||
@@ -472,6 +518,10 @@ function isInputEvent(value: unknown): value is InputEvent {
 /** A frozen copy with only the fields of its kind, never the host's objects. */
 function copyInput(event: InputEvent): InputEvent {
   if (event.kind === 'textinput') return deepFreeze({ kind: event.kind, text: `${event.text}` });
+  if (event.kind === 'compositionstart') return deepFreeze({ kind: event.kind });
+  if (event.kind === 'compositionupdate' || event.kind === 'compositionend') {
+    return deepFreeze({ kind: event.kind, data: `${event.data}` });
+  }
   const { shift, alt, meta, ctrl } = event.modifiers;
   const modifiers = { shift, alt, meta, ctrl };
   const point = (at: PagePoint) => ({ x: at.x + 0, y: at.y + 0 });
@@ -565,6 +615,25 @@ function emptyDocument(ids: IdSource): DocumentV6 {
     pages: [{ id: ids(), name: 'Page 1', children: [] }],
     nodes: {},
   };
+}
+
+/** A frozen plain copy of a text edit state. */
+function freezeTextEdit(next: TextEditState): TextEditState {
+  return deepFreeze({
+    id: next.id,
+    pending:
+      next.pending === null
+        ? null
+        : {
+            ...next.pending,
+            frame: { ...next.pending.frame },
+            style: { ...next.pending.style, color: { ...next.pending.style.color } },
+          },
+    anchor: next.anchor,
+    focus: next.focus,
+    affinity: next.affinity,
+    composition: next.composition === null ? null : { ...next.composition },
+  });
 }
 
 /**
@@ -814,16 +883,24 @@ class EditorCore implements Editor {
       createTextTool((node) => this.extensions.geometry(node), this.expansions, this.textSupport),
     );
     const isActive = () => this.gestureState !== null;
+    // While composing, the public gesture API is inert (M6b contract, section 7.1): `begin`
+    // returns false (a gesture is active) and the others change nothing.
+    const composing = () => this.gestureState?.text != null;
+    const inert = () => failure('editor.gesture-active');
     this.gesture = {
       get active() {
         return isActive();
       },
       begin: () => this.beginGesture(),
-      update: (command) => this.updateGesture(command),
-      replace: (commands) => this.replaceGesture(commands),
-      edit: (edit) => this.editGesture(edit),
-      commit: () => this.commitGesture(),
-      cancel: () => this.cancelGesture(),
+      update: (command) => (composing() ? inert() : this.updateGesture(command)),
+      replace: (commands) => (composing() ? inert() : this.replaceGesture(commands)),
+      edit: (edit) => (composing() ? inert() : this.editGesture(edit)),
+      commit: () => {
+        if (!composing()) this.commitGesture();
+      },
+      cancel: () => {
+        if (!composing()) this.cancelGesture();
+      },
     };
     for (const tool of this.extensions.tools) this.tools.set(tool.id, this.extensionTool(tool));
     // One subscription for the editor's lifetime (M6a-Q20 (a)). A generation change drops the
@@ -998,6 +1075,9 @@ class EditorCore implements Editor {
     ) {
       return { ok: true, ids: [] };
     }
+    // An active text gesture commits first (section 7.3), whatever the command then does; a
+    // command that then fails leaves the commit in place.
+    if (FORCED_END_COMMANDS.has(command.type)) this.endTextGesture();
     if (DOCUMENT_COMMANDS.has(command.type)) {
       // A host command during a drag would leave the gesture's base stale, so it applies to the
       // pre-gesture document and, only if it succeeds, cancels the drag first.
@@ -1281,13 +1361,13 @@ class EditorCore implements Editor {
       case 'enterTextEdit':
         return this.enterTextEdit(command);
       case 'exitTextEdit':
-        // M6b-U6: an active composition ends by the forced end (section 7.3) first.
+        // An active composition has ended by the forced end (section 7.3) above.
         this.setTextEditState(null);
         return { ok: true, ids: [] };
       case 'setTextSelection':
         return this.setTextSelection(command);
       case 'endComposition':
-        // M6b-U6: commits an active composition (section 7.3); no composition exists before it.
+        // The forced end above committed an active composition (M6b-H2); else a no-op.
         return { ok: true, ids: [] };
       case 'setTextToolStyle': {
         const style = checkTextStyle(command.style);
@@ -1485,8 +1565,24 @@ class EditorCore implements Editor {
    */
   private dispatch(event: InputEvent): CommandResult {
     const done = (consumed: boolean): CommandResult => ({ ok: true, ids: [], consumed });
-    // Text input, and keys in text edit mode, before everything else (M6b section 5).
+    // Text input, composition, and keys in text edit mode, before everything else (M6b
+    // sections 5 and 7).
     if (event.kind === 'textinput') return this.textInput(event);
+    if (
+      event.kind === 'compositionstart' ||
+      event.kind === 'compositionupdate' ||
+      event.kind === 'compositionend'
+    ) {
+      return this.composition(event);
+    }
+    // A press (primary or middle) or a double-click during a composition commits it first by
+    // the forced end (section 7.2), then acts on the committed document.
+    if (
+      (event.kind === 'pointerdown' && (event.button === 0 || event.button === 1)) ||
+      event.kind === 'doubleclick'
+    ) {
+      this.endTextGesture();
+    }
     if (this.textEdit !== null && (event.kind === 'keydown' || event.kind === 'keyup')) {
       return this.textKey(event);
     }
@@ -1852,7 +1948,7 @@ class EditorCore implements Editor {
     return { ok: true, ids: [] };
   }
 
-  private beginGesture(): boolean {
+  private beginGesture(text: TextGesture | null = null): boolean {
     if (this.gestureState !== null) return false;
     this.gestureState = {
       base: this.document,
@@ -1861,6 +1957,7 @@ class EditorCore implements Editor {
       accepted: [],
       selection: this.selection,
       pathEdit: this.pathEdit,
+      text,
     };
     return true;
   }
@@ -2014,8 +2111,8 @@ class EditorCore implements Editor {
       touched,
       drawn,
       ...(projected.length === touched.length ? {} : { projected }),
-      // M6b-U6: a composition commit is an insertion step; it gets its caret entry and merges
-      // by section 8.2 through `recordTextStep`, as `editText` does.
+      // A composition commit gets its caret entry and merges by section 8.2 through
+      // `recordTextStep` right after (`endTextGesture`), as `editText` does.
       caret: null,
     });
     this.redoStack = [];
@@ -2035,11 +2132,18 @@ class EditorCore implements Editor {
 
   /**
    * Restores the pre-gesture document and the selection recorded at `begin`, filtered to nodes
-   * of the active page (M2 contract, section 2).
+   * of the active page (M2 contract, section 2). The text gesture is never cancelled here: it
+   * commits by the forced end (M6b contract, section 7.3), so every path that ends a gesture
+   * through `interrupt` (a page switch, `loadDocument`, `setTool`, `pointercancel`, an
+   * extension tool's throw, `startPending`) commits the composing text.
    */
   private cancelGesture(): void {
     const gesture = this.gestureState;
     if (gesture === null) return;
+    if (gesture.text !== null) {
+      this.endTextGesture();
+      return;
+    }
     this.gestureState = null;
     if (gesture.updated && this.document !== gesture.base) {
       this.changeDocument(gesture.base, 'gesture-cancel', gesture.touched);
@@ -2244,7 +2348,8 @@ class EditorCore implements Editor {
   private startPending(origin: PagePoint, width: number | null): boolean {
     const cache = this.textLayouts;
     if (cache === null) return false;
-    // M6b-U6: an active text gesture commits by section 7.3 instead of being cancelled.
+    // An active text gesture commits by section 7.3 (through `cancelGesture`), any other is
+    // cancelled.
     this.interrupt();
     if (this.tool !== 'select') this.run({ type: 'setTool', tool: 'select' });
     const parent = this.scope ?? this.activePage;
@@ -2288,9 +2393,8 @@ class EditorCore implements Editor {
    * The step is an insertion whose caret entry (section 8.1) holds the new ID, from the pending
    * caret 0 to the caret after the text, and following insertions merge into it (section 8.2,
    * "the pending node's creating step merges"); an LF (Enter, or a text holding one) is its own
-   * step.
-   * M6b-U6: a first composition on a pending node creates it through `replace` instead
-   * (section 7.1, appendix A case 9); a `textinput` keeps this one command.
+   * step. A first composition on a pending node creates it through the text gesture instead
+   * (section 7.1, appendix A case 9, `compositionStep`).
    */
   private createPendingText(pending: TextEditPending, text: string): CommandResult {
     const { parent, frame, sizing, style } = pending;
@@ -2396,7 +2500,7 @@ class EditorCore implements Editor {
       this.setTextEditState({ ...this.textEdit, ...caret });
       return { ok: true, ids: [] };
     }
-    // M6b-U6: an active text gesture commits by section 7.3 instead of being cancelled.
+    // `run` has already committed an active text gesture (section 7.3); any other is cancelled.
     this.interrupt();
     if (this.tool !== 'select') this.run({ type: 'setTool', tool: 'select' });
     // Set first, so the selection change to `[id]` keeps it; the event follows the selection's.
@@ -2421,7 +2525,8 @@ class EditorCore implements Editor {
     }
     const edit = this.textEdit;
     if (edit === null) return failure('editor.no-text-edit');
-    // M6b-U6: `editor.gesture-active` during a composition comes here.
+    // The caret is the composition's while composing (section 7.1).
+    if (this.gestureState?.text != null) return failure('editor.gesture-active');
     const target = this.textTarget()!;
     for (const [key, value] of [
       ['anchor', anchor],
@@ -2472,6 +2577,9 @@ class EditorCore implements Editor {
       this.platform,
       (chord) => this.bindings.get(chord)?.action ?? undefined,
     );
+    // A key that acts (rules 3 and 4) during a composition commits it first (section 7.3):
+    // Escape, undo and redo through `run`, a movement or an edit action here.
+    if (route.type === 'caret' || route.type === 'edit') this.endTextGesture();
     switch (route.type) {
       case 'passThrough':
         return { ok: true, ids: [], consumed: false, passThrough: true };
@@ -2563,7 +2671,11 @@ class EditorCore implements Editor {
    */
   private textInput(event: Extract<InputEvent, { kind: 'textinput' }>): CommandResult {
     if (this.textLayouts === null) return { ...failure('editor.no-text-layout'), consumed: false };
+    if (this.textEdit === null) return { ...failure('editor.no-text-edit'), consumed: false };
+    // A `textinput` during a composition (no browser sends one) commits it first (section 7.3).
+    this.endTextGesture();
     const edit = this.textEdit;
+    // Defensive: the forced end keeps edit mode (its commit holds the node), so this never fires.
     if (edit === null) return { ...failure('editor.no-text-edit'), consumed: false };
     const text = normalizeInputText(event.text);
     if (text.length === 0) return { ok: true, ids: [], consumed: true };
@@ -2582,6 +2694,243 @@ class EditorCore implements Editor {
         : 'insert';
     const result = this.editText(edit.id, start, Math.max(edit.anchor, edit.focus), text, kind);
     return { ...result, consumed: result.ok };
+  }
+
+  /**
+   * A composition input (sections 5.3 and 7.1). Without a port each fails with
+   * `editor.no-text-layout` (section 2), outside edit mode with `editor.no-text-edit`; a failure
+   * is `consumed: false` and the host ends the composition by M6b-H5.
+   *
+   * - `compositionstart` begins the text gesture over the selection (the replaced range,
+   *   possibly empty), which `composition` becomes; a selection drag ends at its caret first.
+   *   During another document gesture it fails with `editor.gesture-active`; during an active
+   *   composition (a missed `compositionend`) that one commits first by the forced end.
+   * - `compositionupdate` replaces the composing text with its normalized `data`; one over the
+   *   bound fails, and the last accepted state commits by the forced end (section 7.1).
+   * - `compositionend` replaces with its own `data`, then commits (or cancels, section 7.1).
+   *
+   * An update or end with no active composition fails with `editor.gesture-active`.
+   */
+  private composition(
+    event: Extract<
+      InputEvent,
+      { kind: 'compositionstart' | 'compositionupdate' | 'compositionend' }
+    >,
+  ): CommandResult {
+    const refused = (code: EditorErrorCode): CommandResult => ({
+      ...failure(code),
+      consumed: false,
+    });
+    if (this.textLayouts === null) return refused('editor.no-text-layout');
+    if (this.textEdit === null) return refused('editor.no-text-edit');
+    if (event.kind === 'compositionstart') {
+      // A start inside a composition means its end was missed: that one commits first.
+      this.endTextGesture();
+      if (this.gestureState !== null) return refused('editor.gesture-active');
+      const edit = this.textEdit;
+      if (edit === null) return refused('editor.no-text-edit');
+      // A selection drag (section 4.4) ends at its current caret.
+      this.tools.get(this.tool)?.reset();
+      const start = Math.min(edit.anchor, edit.focus);
+      const end = Math.max(edit.anchor, edit.focus);
+      // The open merge is kept in the record: setting `composition` below ends `textMerge`.
+      this.beginGesture({ edit, start, end, merge: this.textMerge });
+      this.setTextEditState({ ...edit, composition: { start, end } });
+      return { ok: true, ids: [], consumed: true };
+    }
+    const gesture = this.gestureState;
+    if (gesture?.text == null) return refused('editor.gesture-active');
+    const data = normalizeInputText(event.data);
+    // An empty end over an empty replaced range cancels at once (section 7.1).
+    if (
+      event.kind === 'compositionend' &&
+      data.length === 0 &&
+      gesture.text.start === gesture.text.end
+    ) {
+      this.cancelTextGesture(gesture, gesture.text);
+      return { ok: true, ids: [], consumed: true };
+    }
+    const step = this.compositionStep(data);
+    // An end commits whatever its replace did; a refused update or end commits the last
+    // accepted state (section 7.1), and the host runs M6b-H5.
+    if (event.kind === 'compositionend' || !step.ok) this.endTextGesture();
+    return step.ok ? { ok: true, ids: [], consumed: true } : { ...step, consumed: false };
+  }
+
+  /**
+   * One replace of the text gesture (section 7.1): from the pre-gesture document, `setText` of
+   * `text` over the replaced range, or on a pending node `createText` with `text` as its one run
+   * in the pending style (nothing for an empty text, so the pending node is back). The
+   * composition becomes `[start, start + n)` and the caret its end moved up to a stop (section
+   * 4.1); on a pending node `textEdit.id` and the selection follow the ID this replace drew.
+   * Cause `gesture-update`, so M5 autosave writes nothing. A failing command (the length bound)
+   * changes nothing.
+   */
+  private compositionStep(text: string): CommandResult {
+    const gesture = this.gestureState!;
+    const record = gesture.text!;
+    const { base } = gesture;
+    const pending = record.edit.pending;
+    let command: DocumentCommand | null = null;
+    if (pending === null) {
+      const { start, end } = record;
+      command = { type: 'setText', id: record.edit.id!, start, end, text };
+    } else if (text.length > 0) {
+      const { parent, frame, sizing, style } = pending;
+      command = {
+        type: 'createText',
+        frame,
+        runs: [{ text, family: style.family, size: style.size, color: style.color }],
+        sizing,
+        parent,
+        // Clamped as `createPendingText` clamps it.
+        index: Math.min(pending.index, childrenOf(documentTree(base), parent).length),
+      };
+    }
+    let document = base;
+    const touched = new Set<string>();
+    let created: readonly string[] = [];
+    if (command !== null) {
+      const step = command;
+      const result = this.gestureStep(gesture, base, () =>
+        applyEdit(base, step, { ...this.context(false), resizeBase: base }),
+      );
+      if (!result.ok) return result;
+      document = result.document;
+      result.touched.forEach((id) => touched.add(id));
+      created = result.created;
+    }
+    // As `replaceGesture`: nodes an earlier step changed return to their pre-gesture state.
+    gesture.touched.forEach((id) => touched.add(id));
+    touched.forEach((id) => gesture.touched.add(id));
+    gesture.updated = true;
+    const id = pending === null ? record.edit.id! : (created[0] ?? null);
+    let next: TextEditState;
+    if (id === null) {
+      next = { ...record.edit, composition: { start: 0, end: 0 } };
+    } else {
+      const node = document.nodes[id] as TextNode;
+      const model = this.caretModel(this.textLayouts!.layout(node), () => layoutRequest(node));
+      const end = record.start + text.length;
+      next = {
+        id,
+        pending: null,
+        ...caretAfterInsertion(model, end),
+        composition: { start: record.start, end },
+      };
+    }
+    const live = this.document;
+    const changed = [...touched].filter((key) => nodeIn(live, key) !== nodeIn(document, key));
+    this.changeTextGestureDocument(
+      document,
+      'gesture-update',
+      changed,
+      next,
+      id === null ? [] : [id],
+    );
+    return { ok: true, ids: [] };
+  }
+
+  /**
+   * A document change of the text gesture with the text edit state and selection it leaves:
+   * both are set before the change, so `syncTextEdit` judges edit mode on the node the change
+   * draws (a pending node's composing node has a new ID on each replace) and the selection
+   * keeps it; `selection` and `textEdit` events then follow the `document` event, each when it
+   * changed. A document equal to the live one changes only the state.
+   */
+  private changeTextGestureDocument(
+    document: DocumentV6,
+    cause: DocumentChangeCause,
+    touched: readonly string[],
+    edit: TextEditState,
+    selection: readonly string[],
+  ): void {
+    if (document === this.document) {
+      this.setSelectionState(selection);
+      this.setTextEditState(edit);
+      return;
+    }
+    const previousEdit = this.textEdit;
+    const previousSelection = this.selection;
+    const set = freezeTextEdit(edit);
+    this.textEdit = set;
+    this.goalX = null;
+    this.selection = Object.freeze([...selection]);
+    this.changeDocument(document, cause, touched);
+    const selectionChanged =
+      previousSelection.length !== this.selection.length ||
+      previousSelection.some((id, i) => id !== this.selection[i]);
+    if (selectionChanged) this.emit({ type: 'session', field: 'selection' });
+    // `syncTextEdit` raised its own event when it changed the state set here.
+    if (this.textEdit === set && JSON.stringify(set) !== JSON.stringify(previousEdit)) {
+      this.emit({ type: 'session', field: 'textEdit' });
+    }
+  }
+
+  /**
+   * The forced end (section 7.3), and the commit of `compositionend`: commits an active text
+   * gesture with the composing text as it stands, by the 7.1 commit rule (an empty composing
+   * text over an empty replaced range cancels, recording nothing and restoring the state the
+   * composition began in, a pending node included), then sets `composition` null (raising
+   * `textEdit`). The commit's step gets its caret entry and merges by section 8.2: an insertion
+   * (into an open insertion merge), a replacement over a non-empty replaced range (a new step
+   * that later insertions merge into), or its own step for a deletion of the replaced range or
+   * a text holding an LF. A no-op without a text gesture.
+   */
+  private endTextGesture(): void {
+    const gesture = this.gestureState;
+    const record = gesture?.text ?? null;
+    if (gesture === null || record === null) return;
+    const composition = this.textEdit?.composition ?? null;
+    if (
+      (composition === null || composition.start === composition.end) &&
+      record.start === record.end
+    ) {
+      this.cancelTextGesture(gesture, record);
+      return;
+    }
+    const id = this.textEdit?.id ?? null;
+    const node = id === null ? undefined : this.document.nodes[id];
+    const full = node?.type === 'text' ? node.runs.map((run) => run.text).join('') : '';
+    const inserted = composition === null ? '' : full.slice(composition.start, composition.end);
+    const kind: TextStepKind =
+      inserted.length === 0 || inserted.includes('\n')
+        ? 'own'
+        : record.start === record.end
+          ? 'insert'
+          : 'replace';
+    const { anchor, focus, affinity } = record.edit;
+    const before = { anchor, focus, affinity };
+    // The merge open when the composition began (the gesture's own updates cleared it).
+    this.textMerge = record.merge;
+    const merge = id !== null && this.mergesInto(id, kind, before, record.start, inserted);
+    this.textMerge = null;
+    const depth = this.undoStack.length;
+    this.commitGesture();
+    const current = this.textEdit;
+    if (current !== null && current.composition !== null) {
+      this.setTextEditState({ ...current, composition: null });
+    }
+    if (id !== null) this.recordTextStep(depth, id, kind, before, merge);
+  }
+
+  /**
+   * Cancels the text gesture (section 7.1, the only cancel: an empty composing text over an
+   * empty replaced range): the pre-gesture document, selection and text edit state come back,
+   * a pending node included, with cause `gesture-cancel` when the document changed. Nothing
+   * was inserted, so the merge open when the composition began stays open (section 8.2).
+   */
+  private cancelTextGesture(gesture: Gesture, record: TextGesture): void {
+    this.gestureState = null;
+    this.changeTextGestureDocument(
+      gesture.base,
+      'gesture-cancel',
+      sorted(gesture.touched),
+      record.edit,
+      gesture.selection,
+    );
+    this.setSnap(null);
+    this.textMerge = record.merge;
   }
 
   /**
@@ -2737,24 +3086,7 @@ class EditorCore implements Editor {
     // A caret or selection change, and leaving edit mode, break the merge (section 8.2); a text
     // step's own caret change is followed by `recordTextStep`, which records its merge.
     this.textMerge = null;
-    this.textEdit =
-      next === null
-        ? null
-        : deepFreeze({
-            id: next.id,
-            pending:
-              next.pending === null
-                ? null
-                : {
-                    ...next.pending,
-                    frame: { ...next.pending.frame },
-                    style: { ...next.pending.style, color: { ...next.pending.style.color } },
-                  },
-            anchor: next.anchor,
-            focus: next.focus,
-            affinity: next.affinity,
-            composition: next.composition === null ? null : { ...next.composition },
-          });
+    this.textEdit = next === null ? null : freezeTextEdit(next);
     this.refresh({ type: 'session', field: 'textEdit' });
   }
 
@@ -2798,6 +3130,10 @@ class EditorCore implements Editor {
       this.setTextEditState({ ...edit, ...restore.caret });
       return;
     }
+    // The composition range needs no clamp: while composing, no document change other than
+    // the text gesture's own steps reaches here (every host command, undo, redo, load and input
+    // path commits the composition first, section 7.3, and the public gesture API is inert), and
+    // those steps set the composition and caret themselves (`changeTextGestureDocument`).
     const caret = clampCaret(target.model, edit);
     if (caret !== edit) {
       const { anchor, focus, affinity } = caret;

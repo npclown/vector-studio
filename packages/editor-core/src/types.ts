@@ -82,7 +82,17 @@ export type InputEvent =
    * Text from `beforeinput` `insertText` (MVP M6b contract, section 5.3, M6b-Q3 (a)), valid in
    * text edit mode only; outside it fails with `editor.no-text-edit`. It never reaches a tool.
    */
-  | Readonly<{ kind: 'textinput'; text: string }>;
+  | Readonly<{ kind: 'textinput'; text: string }>
+  /**
+   * IME composition (MVP M6b contract, sections 5.3 and 7), valid in text edit mode only:
+   * `compositionstart` begins the text gesture over the selection, each `compositionupdate`
+   * replaces the composing text with its normalized `data` (cause `gesture-update`), and
+   * `compositionend` replaces with its own `data`, then commits. Outside edit mode each fails
+   * with `editor.no-text-edit`; none reaches a tool.
+   */
+  | Readonly<{ kind: 'compositionstart' }>
+  | Readonly<{ kind: 'compositionupdate'; data: string }>
+  | Readonly<{ kind: 'compositionend'; data: string }>;
 
 /** Which `EditorOptions.platform` `Mod` resolves for: `Meta` on `mac`, else `Ctrl`. */
 export type Platform = 'mac' | 'other';
@@ -529,7 +539,10 @@ export type SessionCommand =
   | Readonly<{ type: 'enterTextEdit'; id: string; anchor?: number; focus?: number }>
   /** Ends text edit mode and keeps the selection; a no-op outside edit mode. */
   | Readonly<{ type: 'exitTextEdit' }>
-  /** Sets the caret of the edited node; `affinity` defaults to `downstream`. */
+  /**
+   * Sets the caret of the edited node; `affinity` defaults to `downstream`. Fails with
+   * `editor.gesture-active` during a composition (section 7.1).
+   */
   | Readonly<{ type: 'setTextSelection'; anchor: number; focus: number; affinity?: TextAffinity }>
   /** Commits an active composition (section 7.3); a no-op without one. */
   | Readonly<{ type: 'endComposition' }>
@@ -601,8 +614,9 @@ export type EditorErrorCode =
   | 'editor.not-a-text-node'
   | 'editor.invalid-text-range'
   | 'editor.no-text-layout'
-  // MVP M6b contract, section 3.1.
-  | 'editor.no-text-edit';
+  // MVP M6b contract, sections 3.1 and 7.1.
+  | 'editor.no-text-edit'
+  | 'editor.gesture-active';
 
 /**
  * `consumed` is present on `input` results only (M2-I3): whether navigation, the tool or a key
