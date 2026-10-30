@@ -122,6 +122,8 @@ Amended 2026-10-21 by [ST-U6](p3-fill-stroke-meshes.md#b2-st-u6-renderer-stroke)
 - the resident node's revision, when a resident node with the same id is a path with `verbs` and `points` equal under the replay rule;
 - otherwise the next counter value. This covers a new node, a node reinserted after removal, a kind change and any path-data change.
 
+Amended 2026-10-30 by E26-U5b under the [E26 contract, section 4.4.1](d9-e26-pointer-priority-contract.md#441-u5-amendment-2026-10-30): a path removed by a set and inserted again by a later set with equal path data, before the next `RetainedSceneView` is built from the mirror, takes the revision it had when removed. Building a view or publishing a snapshot ends that window, so a reinsertion after either still takes the next counter value (V3-A2); an equal-revision snapshot replay publishes nothing and leaves the window open, and past 131,072 held paths the mirror forgets them all, which costs cache hits only. The incremental publication and the full change path both carry the rule (`tests/unit/e26-u5b-revision-reuse.test.ts`), and E26-A07's differential re-inserts removed paths inside the window.
+
 `fillRule` is not part of the revision; it is its own key field. `renderer-core` reads the revision through `RetainedSceneView.getGeometryRevision(id): number | undefined`; the scene contract never carries it.
 
 **Overflow.** If publishing would need a value above `Number.MAX_SAFE_INTEGER`, the call returns `{ status: 'invalid-scene', reason: 'invalid-value', current }` with the previous version, and publishes nothing. No new public result variant is added. At one new revision per microsecond this needs about 285 years.

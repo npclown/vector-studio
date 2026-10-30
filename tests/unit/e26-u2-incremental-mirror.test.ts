@@ -689,15 +689,23 @@ describe('E26-U2 incremental scene-set validation (E26-A07)', () => {
       let sets = 0;
       let scenes = 0;
       let accepted = 0;
+      let reinserts = 0;
       for (let seed = 1; sets < 2_000; seed += 1) {
         const rng = random(seed * 7919);
         const incremental = new RetainedSceneMirror(() => undefined, options);
         const oracle = new RetainedSceneMirror(() => undefined, options);
         useFullChangeValidationForTesting(oracle);
+        // E26-U5b: sets are drawn from a third mirror, so that reading it never ends the
+        // geometry-revision reuse window of the two compared mirrors, which are read together.
+        const model = new RetainedSceneMirror(() => undefined, options);
+        useFullChangeValidationForTesting(model);
         const mode = sceneModeOf(options);
         const snapshot = randomScene(rng, 10 + Math.floor(rng() * 40), `s${seed}-`, mode);
         const first = incremental.replaceSnapshot(snapshot);
         expect(oracle.replaceSnapshot(snapshot)).toEqual(first);
+        model.replaceSnapshot(snapshot);
+        // Root nodes removed by an applied set, for re-insertion (E26-U5b revision reuse).
+        const removedRoots: RenderNodeSnapshot[] = [];
         scenes += 1;
         if (first.status !== 'applied') continue;
         accepted += 1;
@@ -709,23 +717,48 @@ describe('E26-U2 incremental scene-set validation (E26-A07)', () => {
             const next = Number.MAX_SAFE_INTEGER - Math.floor(rng() * 3);
             setNextGeometryRevisionForTesting(incremental, next);
             setNextGeometryRevisionForTesting(oracle, next);
+            setNextGeometryRevisionForTesting(model, next);
           }
           if (rng() < 0.04) {
             // A snapshot between sets.
             const replacement = {
               ...randomScene(rng, 10 + Math.floor(rng() * 40), `r${seed}-${step}-`, mode),
-              revision: sceneOf(oracle)!.version.revision + 1,
+              revision: sceneOf(model)!.version.revision + 1,
             };
             expect(incremental.replaceSnapshot(replacement)).toEqual(
               oracle.replaceSnapshot(replacement),
             );
+            model.replaceSnapshot(replacement);
+            removedRoots.length = 0;
           }
-          // The set is drawn from the oracle's view, and the incremental view is read on about
-          // half of the steps, so that sets also apply to a scene no reader has copied.
-          const change = randomChange(rng, sceneOf(oracle)!, fresh);
+          // The set is drawn from the model's view, and the compared views are read on about
+          // half of the steps, so that sets also apply to a scene no reader has copied and
+          // removed paths come back inside the reuse window.
+          const current = sceneOf(model)!;
+          const back = removedRoots.find((node) => !current.nodes.some((n) => n.id === node.id));
+          const change =
+            back !== undefined && rng() < 0.3
+              ? {
+                  identity,
+                  baseRevision: current.version.revision,
+                  revision: current.version.revision + 1,
+                  inserted: [back],
+                  updated: [],
+                  removed: [],
+                  orders: [{ parentId: null, children: [...current.rootOrder, back.id] }],
+                }
+              : randomChange(rng, current, fresh);
           const expected = oracle.applyChanges(change);
           const actual = incremental.applyChanges(change);
+          model.applyChanges(change);
           expect(actual, `seed ${seed} step ${step}`).toEqual(expected);
+          if (actual.status === 'applied') {
+            for (const id of change.removed) {
+              const node = current.nodes.find((n) => n.id === id);
+              if (node !== undefined && node.parentId === null) removedRoots.push(node);
+            }
+            if (change.inserted.length === 1 && change.inserted[0] === back) reinserts += 1;
+          }
           if (rng() < 0.5) expect(sceneOf(incremental)).toEqual(sceneOf(oracle));
           sets += 1;
           const key = describeResult(actual);
@@ -739,6 +772,8 @@ describe('E26-U2 incremental scene-set validation (E26-A07)', () => {
       }
       // Most random scenes are valid, so the sets start from varied scenes.
       expect(accepted / scenes).toBeGreaterThan(0.8);
+      // Removed root nodes come back inside the reuse window (E26-U5b).
+      expect(reinserts).toBeGreaterThan(20);
       const reasons = [...outcomes.keys()].sort();
       if (options === FULL_SUPPORT) {
         expect(reasons).toEqual([
