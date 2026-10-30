@@ -268,7 +268,9 @@ For P2 flattening, the geometric target is 0.25 **physical display pixel**, acco
 
 Text is not part of the first graphics-kernel milestone. The architecture reserves separate font, shaping, layout, glyph-atlas, and text-input services.
 
-Committed text will eventually render through GPU glyph atlases, while active editing uses a DOM overlay. No DOM or browser font object enters persistent document data.
+Committed text will eventually render through GPU glyph atlases. Active editing draws text through the same GPU route from live layout; a DOM overlay draws only the caret, selection and composition underline, and a hidden textarea receives input. No DOM or browser font object enters persistent document data.
+
+Amended 2026-10-30 ([M6b contract, section 1.2](plans/mvp-m6b-text-editing-contract.md#12-changes-to-earlier-rules), M6-Q14 (a), unit M6b-U0): before it, active editing was to use a DOM overlay for the text itself.
 
 Decided 2026-10-29: browser-rasterized cluster atlas and browser-owned layout ([ADR 0003](decisions/0003-browser-text-and-glyph-atlas.md)); recommended option auto-adopted, user card open.
 

@@ -143,13 +143,12 @@ export function textTestHook(state: HostCompositionState): TextTestHook {
 }
 
 /**
- * `?fixture=text` asks for the test font; with `?persist=1` the fixture is ignored (M5 contract,
- * section 5.3), and so is the font.
+ * `?fixture=text` and `?fixture=text-edit` (M6b-U9) ask for the test font; with `?persist=1` the
+ * fixture is ignored (M5 contract, section 5.3), and so is the font.
  */
 export function textFixtureQuery(search: string): boolean {
-  return (
-    new URLSearchParams(search).get('fixture') === 'text' && !persistQuery(search).fixtureIgnored
-  );
+  const fixture = new URLSearchParams(search).get('fixture');
+  return (fixture === 'text' || fixture === 'text-edit') && !persistQuery(search).fixtureIgnored;
 }
 
 /**

@@ -5,6 +5,7 @@ import {
   type EditorEvent,
   type PathEditOverlay,
   type Platform,
+  type TextStyle,
   type ToolName,
 } from '@vector-studio/editor-core';
 import {
@@ -37,6 +38,13 @@ import {
   type TestFontStatus,
   type TextTestHook,
 } from '../src/m6a-text-host';
+import {
+  createTextEditLog,
+  TEXT_EDIT_TOOL_STYLE,
+  textEditMarkers,
+  type TextEditMarkers,
+  type TextEditTestHook,
+} from '../src/m6b-text-edit';
 import { BENCH_CANVAS, benchDatabaseName, pageBench } from '../src/e26-bench';
 import { AppearancePanel } from '../src/m4-appearance-panel';
 import { SelectionOverlay } from '../src/overlay';
@@ -72,10 +80,24 @@ import { createWebGpuRenderer } from '../src/webgpu-renderer';
 // viewport, `doc=` loads a scenario document from `/e26-bench-doc.json` (exempt from the "persistence
 // wins" rule), `persist=1` restores from a fresh per-run database and records every autosave
 // write, and `window.__e26Bench` drives and measures the run. Without `?bench=1` none of it exists.
+// M6b-U9 (M6b contract, sections 3.2, 4.5 and M6b-A12, A13): a "text" tool button (the `text`
+// tool, `T`), the text edit caret, selection and composition underline drawn from the
+// `textEditOverlay` query (src/m6b-text-edit.ts), re-read on every snapshot change and on each
+// `textLayout` session event; `?fixture=text-edit` registers the test font, loads the M6b edit
+// fixture at zoom 2 and sets the text tool style to the test font (M6b-Q7 (a)); the test hook's
+// `textEdit` member logs DOM focus, prevention, key, input, composition and clipboard events.
 
 const WIDTH = 960;
 const HEIGHT = 640;
-const TOOLS: readonly ToolName[] = ['select', 'rectangle', 'ellipse', 'line', 'frame', 'path'];
+const TOOLS: readonly ToolName[] = [
+  'select',
+  'rectangle',
+  'ellipse',
+  'line',
+  'frame',
+  'path',
+  'text',
+];
 /** The `?fixture=` documents and the camera each is shown at. */
 const FIXTURES: Readonly<
   Record<
@@ -85,6 +107,8 @@ const FIXTURES: Readonly<
       camera: { position: { x: number; y: number }; zoom: number };
       /** Waits for the test font registration before loading (M6a-U5). */
       font?: true;
+      /** The text tool style set after loading (M6b-U9). */
+      textStyle?: TextStyle;
     }>
   >
 > = {
@@ -92,6 +116,12 @@ const FIXTURES: Readonly<
   'path-edit': { url: '/m3-path-edit.json', camera: { position: { x: 0, y: 0 }, zoom: 1 } },
   symbols: { url: '/m7-symbols.json', camera: { position: { x: -20, y: -20 }, zoom: 2 } },
   text: { url: '/m6a-text.json', camera: { position: { x: -20, y: -20 }, zoom: 2 }, font: true },
+  'text-edit': {
+    url: '/m6b-text-edit.json',
+    camera: { position: { x: 0, y: 0 }, zoom: 2 },
+    font: true,
+    textStyle: TEXT_EDIT_TOOL_STYLE,
+  },
   appearance: { url: '/m4-appearance.json', camera: { position: { x: 0, y: 0 }, zoom: 1 } },
 };
 /** A rotate cursor (a circular arrow) with a standard fallback; the hotspot is its centre. */
@@ -110,7 +140,10 @@ function hostPlatform(): Platform {
   return typeof navigator !== 'undefined' && /^Mac/u.test(navigator.platform) ? 'mac' : 'other';
 }
 
-/** Test hook for the headed P5, M1, M2, M3, M4, M5, M6a and M7 specs: present only with `?test=1`. */
+/**
+ * Test hook for the headed P5, M1, M2, M3, M4, M5, M6a, M6b and M7 specs: present only with
+ * `?test=1`.
+ */
 declare global {
   interface Window {
     __p5Host?: Readonly<{
@@ -120,6 +153,8 @@ declare global {
       persistence: Readonly<{ flush(): Promise<void> }>;
       /** M6a contract, section 5: the editor's text-dom port and the test font. */
       text: TextTestHook;
+      /** M6b-U9: the DOM event log of text edit mode. */
+      textEdit: TextEditTestHook;
     }>;
   }
 }
@@ -145,6 +180,32 @@ function usePathOverlay(): PathEditOverlay | null {
     () => (pathEdit === null ? null : editor.query({ type: 'pathOverlay' })),
     // The query reads the editor's current state, which these values identify.
     [editor, pathEdit, content, page],
+  );
+}
+
+/**
+ * The `textEditOverlay` query in CSS px, recomputed on every snapshot change and on each
+ * `textLayout` session event: a font load moves the caret with no snapshot change (M6b
+ * contract, section 4.5), so the generation is counted from the editor's events.
+ */
+function useTextEditMarkers(): TextEditMarkers | null {
+  const editor = useEditor();
+  const snapshot = useEditorSelector((value) => value);
+  const [layouts, setLayouts] = useState(0);
+  useEffect(
+    () =>
+      editor.subscribe((event) => {
+        if (event.type === 'session' && event.field === 'textLayout') setLayouts((n) => n + 1);
+      }),
+    [editor],
+  );
+  return useMemo(
+    () =>
+      snapshot.textEdit === null
+        ? null
+        : textEditMarkers(editor.query({ type: 'textEditOverlay' }), snapshot.viewport),
+    // The query reads the editor's current state, which the snapshot and the count identify.
+    [editor, snapshot, layouts],
   );
 }
 
@@ -554,7 +615,7 @@ function Surface({
     const name = new URLSearchParams(window.location.search).get('fixture');
     const entry = name === null || !Object.hasOwn(FIXTURES, name) ? undefined : FIXTURES[name];
     if (entry === undefined) return;
-    const { url, camera, font } = entry;
+    const { url, camera, font, textStyle } = entry;
     let live = true;
     setFixture('loading');
     void (async () => {
@@ -570,6 +631,7 @@ function Surface({
         const result = execute({ type: 'loadDocument', document });
         if (!result.ok) throw new Error(`loadDocument: ${result.code} ${result.path ?? ''}`);
         execute({ type: 'setViewport', camera });
+        if (textStyle !== undefined) execute({ type: 'setTextToolStyle', style: textStyle });
         setFixture('loaded');
       } catch (error) {
         if (!live) return;
@@ -584,6 +646,7 @@ function Surface({
   // The handle box follows the snapshot: this component re-renders on every editor change.
   const handles = editor.query({ type: 'handles' });
   const pathOverlay = usePathOverlay();
+  const textEdit = useTextEditMarkers();
   // The rotate cursor over the select tool's rotate zone while no button is held (hover only:
   // EditorCanvas forwards no move without a press). Set only when it changes.
   const [rotating, setRotating] = useState(false);
@@ -634,6 +697,7 @@ function Surface({
               snapshot={snapshot}
               handles={handles}
               pathOverlay={pathOverlay}
+              textEdit={textEdit}
               width={width}
               height={height}
             />
@@ -713,14 +777,17 @@ function Host({ state, textFont }: { state: HostCompositionState; textFont: Test
     if (new URLSearchParams(window.location.search).get('test') !== '1') return;
     const events: EditorEvent[] = [];
     const unsubscribe = editor.subscribe((event) => events.push(event));
+    const textEdit = createTextEditLog(window, () => document.activeElement);
     window.__p5Host = {
       editor,
       events,
       persistence: { flush: () => session.current?.flush() ?? Promise.resolve() },
       text: textTestHook(state),
+      textEdit: textEdit.hook,
     };
     return () => {
       unsubscribe();
+      textEdit.dispose();
       delete window.__p5Host;
     };
   }, [editor, session, state]);
