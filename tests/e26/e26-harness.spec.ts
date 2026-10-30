@@ -60,7 +60,7 @@ const git = (command: string): string | null => {
   }
 };
 const commit = git('git rev-parse HEAD') ?? 'unknown';
-const dirty = (git('git status --porcelain') ?? 'unknown') !== '';
+const dirty = (git('git status --porcelain --untracked-files=no') ?? 'unknown') !== '';
 
 type Variant = 'frame' | 'busy' | 'plain';
 const runs: { scenario: E26Scenario; variant: Variant }[] = E26_SCENARIOS.filter(
