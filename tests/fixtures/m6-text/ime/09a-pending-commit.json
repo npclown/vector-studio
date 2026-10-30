@@ -1,0 +1,221 @@
+{
+  "kind": "vector-studio/m6-s0-ime-trace",
+  "version": 1,
+  "synthetic": true,
+  "source": "Hand-authored for M6b-U7 from docs/plans/mvp-m6b-text-editing-contract.md, appendix A case (9); not recorded on the main PC and not made by a real IME.",
+  "appendixCase": 9,
+  "title": "A first composition on a pending node, committed",
+  "assumes": "The text tool's click makes a pending node; the composition's commit creates the node in one step, and the space starts a new step (section 8.2).",
+  "replay": {
+    "start": {
+      "pending": {
+        "x": 200,
+        "y": 100
+      }
+    },
+    "expect": {
+      "node": "created",
+      "text": "한 ",
+      "anchor": 2,
+      "focus": 2,
+      "undoDepth": 2,
+      "textEdit": true,
+      "focused": "textarea",
+      "textarea": ""
+    }
+  },
+  "events": [
+    {
+      "seq": 1,
+      "beforeMessage": 1,
+      "type": "keydown",
+      "target": "#sink",
+      "key": "Process",
+      "code": "KeyG",
+      "keyCode": 229,
+      "isComposing": false,
+      "repeat": false,
+      "mods": {
+        "alt": false,
+        "ctrl": false,
+        "meta": false,
+        "shift": false
+      },
+      "cancelable": true,
+      "expectPrevented": false
+    },
+    {
+      "seq": 2,
+      "beforeMessage": 1,
+      "type": "compositionstart",
+      "target": "#sink",
+      "data": "",
+      "cancelable": false
+    },
+    {
+      "seq": 3,
+      "beforeMessage": 1,
+      "type": "compositionupdate",
+      "target": "#sink",
+      "data": "ㅎ",
+      "cancelable": false,
+      "value": "ㅎ"
+    },
+    {
+      "seq": 4,
+      "beforeMessage": 1,
+      "type": "beforeinput",
+      "target": "#sink",
+      "inputType": "insertCompositionText",
+      "data": "ㅎ",
+      "isComposing": true,
+      "cancelable": false,
+      "expectPrevented": false
+    },
+    {
+      "seq": 5,
+      "beforeMessage": 1,
+      "type": "input",
+      "target": "#sink",
+      "inputType": "insertCompositionText",
+      "data": "ㅎ",
+      "isComposing": true,
+      "cancelable": false
+    },
+    {
+      "seq": 6,
+      "beforeMessage": 1,
+      "type": "keyup",
+      "target": "#sink",
+      "key": "g",
+      "code": "KeyG",
+      "keyCode": 71,
+      "isComposing": true,
+      "repeat": false,
+      "mods": {
+        "alt": false,
+        "ctrl": false,
+        "meta": false,
+        "shift": false
+      },
+      "cancelable": true
+    },
+    {
+      "seq": 7,
+      "beforeMessage": 2,
+      "type": "keydown",
+      "target": "#sink",
+      "key": "Process",
+      "code": "KeyK",
+      "keyCode": 229,
+      "isComposing": true,
+      "repeat": false,
+      "mods": {
+        "alt": false,
+        "ctrl": false,
+        "meta": false,
+        "shift": false
+      },
+      "cancelable": true,
+      "expectPrevented": false
+    },
+    {
+      "seq": 8,
+      "beforeMessage": 2,
+      "type": "compositionupdate",
+      "target": "#sink",
+      "data": "하",
+      "cancelable": false,
+      "value": "하"
+    },
+    {
+      "seq": 9,
+      "beforeMessage": 2,
+      "type": "beforeinput",
+      "target": "#sink",
+      "inputType": "insertCompositionText",
+      "data": "하",
+      "isComposing": true,
+      "cancelable": false,
+      "expectPrevented": false
+    },
+    {
+      "seq": 10,
+      "beforeMessage": 3,
+      "type": "keydown",
+      "target": "#sink",
+      "key": "Process",
+      "code": "KeyS",
+      "keyCode": 229,
+      "isComposing": true,
+      "repeat": false,
+      "mods": {
+        "alt": false,
+        "ctrl": false,
+        "meta": false,
+        "shift": false
+      },
+      "cancelable": true,
+      "expectPrevented": false
+    },
+    {
+      "seq": 11,
+      "beforeMessage": 3,
+      "type": "compositionupdate",
+      "target": "#sink",
+      "data": "한",
+      "cancelable": false,
+      "value": "한"
+    },
+    {
+      "seq": 12,
+      "beforeMessage": 3,
+      "type": "beforeinput",
+      "target": "#sink",
+      "inputType": "insertCompositionText",
+      "data": "한",
+      "isComposing": true,
+      "cancelable": false,
+      "expectPrevented": false
+    },
+    {
+      "seq": 13,
+      "beforeMessage": 4,
+      "type": "keydown",
+      "target": "#sink",
+      "key": "Process",
+      "code": "Space",
+      "keyCode": 229,
+      "isComposing": true,
+      "repeat": false,
+      "mods": {
+        "alt": false,
+        "ctrl": false,
+        "meta": false,
+        "shift": false
+      },
+      "cancelable": true,
+      "expectPrevented": false
+    },
+    {
+      "seq": 14,
+      "beforeMessage": 4,
+      "type": "compositionend",
+      "target": "#sink",
+      "data": "한",
+      "cancelable": false,
+      "value": "한"
+    },
+    {
+      "seq": 15,
+      "beforeMessage": 4,
+      "type": "beforeinput",
+      "target": "#sink",
+      "inputType": "insertText",
+      "data": " ",
+      "isComposing": false,
+      "cancelable": true,
+      "expectPrevented": true
+    }
+  ]
+}

@@ -6,9 +6,13 @@ import {
   type Modifiers,
   type PagePoint,
 } from '@vector-studio/editor-core';
+import type { BeforeInputLike, TextInputHost } from './text-input.js';
 
 // MVP M2 contract, M2-I4: how `EditorCanvas` turns DOM input into editor `input` commands. Kept
 // apart from the component, over structural event types, so it runs and is tested without a DOM.
+// M6b-U7 (MVP M6b contract, section 6): the hidden textarea joins the focus target; keydown sets
+// `ime` from `keyCode` 229 and honours `passThrough`; a press that leaves text edit mode set keeps
+// focus on the textarea; the blur listeners run the M6b-H2 edit-mode end (text-input.ts).
 
 /** Pixels per line for a wheel event in line mode (M2-I1). */
 export const WHEEL_LINE_PX = 16;
@@ -57,6 +61,8 @@ export type KeyLike = ModifierKeys &
     code: string;
     repeat: boolean;
     isComposing: boolean;
+    /** `KeyboardEvent.keyCode`: 229 while an IME processes the key (M6b contract, 5.1 rule 1). */
+    keyCode?: number;
     preventDefault(): void;
   }>;
 
@@ -94,6 +100,8 @@ export class CanvasInput {
    * the reset runs once for both; with nothing forwarded, nothing can be held.
    */
   private armed = false;
+  /** The hidden textarea's host (M6b-H1 to H5), when the component renders one. */
+  text: TextInputHost | null = null;
 
   /**
    * `height` is the canvas height in CSS px, the size of a wheel page; `canvas` returns the
@@ -131,7 +139,9 @@ export class CanvasInput {
     if (event.button !== 0 && event.button !== 1) return;
     if (event.button === 1) event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
-    event.currentTarget.focus();
+    // In text edit mode focus stays on the textarea (M6b-H1, section 7.2), so a press during a
+    // composition does not blur it before the editor's forced end.
+    if (this.text === null || !this.text.active) event.currentTarget.focus();
     this.dragging = true;
     this.send({
       kind: 'pointerdown',
@@ -139,6 +149,23 @@ export class CanvasInput {
       button: event.button,
       modifiers: modifiersOf(event),
     });
+    // A press inside the edited box, or one that entered edit mode: its default (the canvas
+    // taking focus) is prevented and the textarea keeps or takes focus. A press that left edit
+    // mode is not prevented; the exit has moved focus to the canvas.
+    if (this.text !== null && this.text.active) {
+      event.preventDefault();
+      this.text.focusInput();
+    }
+  }
+
+  /**
+   * A `mousedown` on the canvas while text edit mode is set is prevented too: a fallback, should
+   * a prevented `pointerdown` alone not keep the browser from focusing the canvas (its default
+   * focus change belongs to `mousedown`), so focus stays on the textarea (M6b-H1, section 7.2).
+   * M6b-U9's headed check must show that focus stays on the textarea.
+   */
+  mouseDown(event: Readonly<{ preventDefault(): void }>): void {
+    if (this.text !== null && this.text.active) event.preventDefault();
   }
 
   /** Moves without a press are hover, and a release without one is not ours. */
@@ -198,6 +225,7 @@ export class CanvasInput {
       code: event.code,
       repeat: event.repeat,
       composing: event.isComposing,
+      ...(event.keyCode === 229 ? { ime: true } : {}),
       modifiers: modifiersOf(event),
     } as const;
     // The binding the keymap would run, looked up before the action can change the keymap.
@@ -206,6 +234,9 @@ export class CanvasInput {
       .getSnapshot()
       .keymap.find((binding) => binding.chord === chord)?.action;
     const result = this.send(keydown);
+    this.text?.keyResult(keydown, result);
+    // A passed-through key goes to text input: neither prevented nor a host shortcut (5.2).
+    if (result.ok && result.passThrough === true) return;
     if (result.consumed === true) event.preventDefault();
     // A bound copy or cut works on the in-memory clipboard; its text also goes to the system
     // clipboard when the page has one (M2 contract, section 6). The consumed keydown is
@@ -303,14 +334,25 @@ export function attachCanvasListeners(
   view: ListenerTarget,
   input: CanvasInput,
   isFocusTarget: (node: unknown) => boolean,
+  textarea: ListenerTarget | null = null,
 ): () => void {
   const onWheel = (event: Event) => input.wheel(event as WheelEvent);
+  // M6b-H2: the canvas and the textarea are one focus target; M6b-H5's own blur is neither a
+  // reset nor an exit. A blur that leaves the target ends the host's composition (before the
+  // reset, whose pointercancel would otherwise end it as the editor's own forced end), resets
+  // input, then exits edit mode when it is an element blur (text-input.ts).
   const onBlur = (event: Event) => {
+    if (input.text?.hostBlurring === true) return;
     const next = (event as FocusEvent).relatedTarget;
     if (next !== null && next !== undefined && isFocusTarget(next)) return;
+    input.text?.endForBlur();
+    input.reset();
+    input.text?.exitForBlur();
+  };
+  const onWindowBlur = () => {
+    input.text?.endForBlur();
     input.reset();
   };
-  const onWindowBlur = () => input.reset();
   // Clipboard events target the focused element, so these run only while the canvas has focus
   // (the M2-U6 headed probe: Chrome and Edge fire them on a focused canvas).
   const onCopy = (event: Event) => input.clipboardCopy('copy', event as ClipboardEvent);
@@ -322,6 +364,13 @@ export function attachCanvasListeners(
   canvas.addEventListener('cut', onCut);
   canvas.addEventListener('paste', onPaste);
   view.addEventListener('blur', onWindowBlur);
+  // M6b-H2 and H3: the textarea's blur and clipboard listeners, `beforeinput` and composition.
+  const text = textarea === null ? [] : textareaListeners(input);
+  for (const [type, listener] of text) textarea?.addEventListener(type, listener);
+  textarea?.addEventListener('blur', onBlur);
+  textarea?.addEventListener('copy', onCopy);
+  textarea?.addEventListener('cut', onCut);
+  textarea?.addEventListener('paste', onPaste);
   return () => {
     canvas.removeEventListener('wheel', onWheel);
     canvas.removeEventListener('blur', onBlur);
@@ -329,5 +378,20 @@ export function attachCanvasListeners(
     canvas.removeEventListener('cut', onCut);
     canvas.removeEventListener('paste', onPaste);
     view.removeEventListener('blur', onWindowBlur);
+    for (const [type, listener] of text) textarea?.removeEventListener(type, listener);
+    textarea?.removeEventListener('blur', onBlur);
+    textarea?.removeEventListener('copy', onCopy);
+    textarea?.removeEventListener('cut', onCut);
+    textarea?.removeEventListener('paste', onPaste);
   };
+}
+
+/** The textarea's `beforeinput` and composition listeners, forwarded to `input.text`. */
+function textareaListeners(input: CanvasInput): [string, (event: Event) => void][] {
+  return [
+    ['beforeinput', (event) => input.text?.beforeInput(event as unknown as BeforeInputLike)],
+    ['compositionstart', () => input.text?.compositionStart()],
+    ['compositionupdate', (event) => input.text?.compositionUpdate(event as CompositionEvent)],
+    ['compositionend', (event) => input.text?.compositionEnd(event as CompositionEvent)],
+  ];
 }
