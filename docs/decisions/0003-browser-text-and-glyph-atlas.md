@@ -23,7 +23,7 @@ The [dependency policy](../graphics-engine-architecture.md#dependency-policy) ne
 
 **M6-Q2 (a): the browser owns shaping, line breaking and fallback.**
 
-- Text is laid out by DOM layout in a hidden measurement element (plan section 4.1), behind a synchronous plain-data `TextLayoutPort` in `contracts` that `@vector-studio/text-dom` implements (M6-Q3 (a), plan section 4.2; the M6a contract fixes it).
+- Text is laid out by DOM layout in a hidden measurement element (plan section 4.1), behind a synchronous plain-data `TextLayoutPort` in `contracts` that `@vector-studio/text-dom` implements (M6-Q3 (a), plan section 4.2; the M6a contract fixes it). Since 2026-10-30 text-dom measures at a fixed reference scale and divides the result ([M6a contract, section 3.2](../plans/mvp-m6a-text-model-contract.md#32-measurement-scale-m6-q3), M6a-Q3 (b), #388); the port and its interface are unchanged.
 - Per-character fallback is the browser's font matching over a CSS font list (M6-F2). Metrics are what browser layout reports (M6-F3).
 - No font bytes are shipped and no shaping or font-parsing dependency is added. The one test font of M6-Q20 (a) is a test fixture asset, not a runtime dependency.
 

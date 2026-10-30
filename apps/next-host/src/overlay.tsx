@@ -8,6 +8,7 @@ import type {
 } from '@vector-studio/editor-core';
 import { degreesLabel, nodePageCorners } from './m2-geometry';
 import { pathMarkers } from './m3-path-overlay';
+import type { TextEditMarkers } from './m6b-text-edit';
 
 // P5-U6: the host's selection and tool overlay (P5 plan, section 4.5). It is drawn in CSS pixels
 // over the canvas and is never document content. M1-U5: the selection box and its active handles
@@ -19,6 +20,9 @@ import { pathMarkers } from './m3-path-overlay';
 // M3-U4: the anchor markers of path edit mode from the `pathOverlay` query (M3 contract,
 // section 5.1), the value the select tool picks its edit-mode targets from: every anchor, filled
 // when selected, and the visible handles with their lines.
+// M6b-U9: the text edit caret, selection and composition underline from the `textEditOverlay`
+// query (M6b contract, section 4.5), drawn in DOM over the canvas; the text itself is GPU work
+// (M6-Q14 (a), M6c), so in M6b the edited box shows no glyphs. The caret does not blink.
 
 type Props = Readonly<{
   snapshot: EditorSnapshot;
@@ -27,6 +31,8 @@ type Props = Readonly<{
   height: number;
   /** The `pathOverlay` query result for `snapshot` (null outside path edit mode). */
   pathOverlay?: PathEditOverlay | null;
+  /** The `textEditOverlay` query result in CSS px (null outside text edit mode). */
+  textEdit?: TextEditMarkers | null;
 }>;
 
 type ToScreen = (x: number, y: number) => [number, number];
@@ -67,6 +73,45 @@ function ToolShape({ overlay, toScreen }: { overlay: ToolOverlay; toScreen: ToSc
 }
 
 const SNAP_COLOUR = '#e0218a';
+const TEXT_COLOUR = '#1e78ff';
+
+function TextEditShapes({ markers }: { markers: TextEditMarkers }) {
+  return (
+    <g data-testid="text-edit" data-id={markers.id ?? ''}>
+      {markers.selection.map((points, index) => (
+        <polygon
+          key={`s-${index}`}
+          data-testid="text-selection"
+          data-points={JSON.stringify(points)}
+          points={points.map(([x, y]) => `${x},${y}`).join(' ')}
+          fill="rgba(30, 120, 255, 0.3)"
+          stroke="none"
+        />
+      ))}
+      {markers.composition.map((segment, index) => (
+        <line
+          key={`c-${index}`}
+          data-testid="text-composition"
+          {...segment}
+          stroke={TEXT_COLOUR}
+          strokeWidth={2}
+        />
+      ))}
+      {markers.caret === null ? null : (
+        <line
+          data-testid="text-caret"
+          data-x1={markers.caret.x1}
+          data-y1={markers.caret.y1}
+          data-x2={markers.caret.x2}
+          data-y2={markers.caret.y2}
+          {...markers.caret}
+          stroke="#000"
+          strokeWidth={1}
+        />
+      )}
+    </g>
+  );
+}
 const PATH_COLOUR = '#1e78ff';
 
 function PathShapes({ overlay, snapshot }: { overlay: PathEditOverlay; snapshot: EditorSnapshot }) {
@@ -180,7 +225,14 @@ function SnapShapes({
   );
 }
 
-export function SelectionOverlay({ snapshot, handles, width, height, pathOverlay = null }: Props) {
+export function SelectionOverlay({
+  snapshot,
+  handles,
+  width,
+  height,
+  pathOverlay = null,
+  textEdit = null,
+}: Props) {
   const { position, zoom } = snapshot.viewport;
   const toScreen = (x: number, y: number): [number, number] => [
     (x - position.x) * zoom,
@@ -232,6 +284,7 @@ export function SelectionOverlay({ snapshot, handles, width, height, pathOverlay
         />
       ))}
       {pathOverlay === null ? null : <PathShapes overlay={pathOverlay} snapshot={snapshot} />}
+      {textEdit === null ? null : <TextEditShapes markers={textEdit} />}
       {snapshot.overlay === null ? null : (
         <ToolShape overlay={snapshot.overlay} toScreen={toScreen} />
       )}
