@@ -303,15 +303,17 @@ async function comparePage(page: Page, pageId: string, dpr: number) {
 type RendererDiagnostic = Readonly<{ code: string; severity: string; message: string }>;
 
 /**
- * E23 G3's exception, as the E23 spec applies it: P3's fringe work cap on H3's path (G3) draws
- * that paint region-only, outside the 2 px interior margin. Every other renderer diagnostic is a
- * failure, a fringe cap on any other node included.
+ * The two fringe-cap exceptions: E23 G3's, as the E23 spec applies it (P3's fringe work cap on
+ * H3's path draws that paint region-only, outside the 2 px interior margin), and E24-Q6's for the
+ * dashed arrow line H6 in fill mode (region-only with a notice; the main PC run at d84a424 showed
+ * it on H6, whose probes are interior only). Every other renderer diagnostic is a failure, a
+ * fringe cap on any other node included.
  */
 function rendererDiagnostics(diagnostics: readonly RendererDiagnostic[]) {
   const caps = diagnostics.filter(
     (diagnostic) =>
       diagnostic.code === 'render.path-mesh-failure' &&
-      /^Path (?:\S*:)?h3 is drawn without its coverage fringe \(renderer fringe-work-cap\)\.$/u.test(
+      /^Path (?:\S*:)?h[36] is drawn without its coverage fringe \(renderer fringe-work-cap\)\.$/u.test(
         diagnostic.message,
       ),
   );
