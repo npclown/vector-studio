@@ -292,7 +292,7 @@ Independent review (full tier, visualization track) before approval. M6b impleme
 | Unit | State |
 | --- | --- |
 | Contract | APPROVED 2026-10-30 (#392, 09d8a2a; review r1 NOT READY applied, r2 READY WITH FOLLOW-UPS applied) |
-| M6b-U0 | Not started |
+| M6b-U0 | In review |
 | M6b-U1 | In review |
 | M6b-U2 | In review |
 | M6b-U3 | In review |
@@ -302,6 +302,8 @@ Independent review (full tier, visualization track) before approval. M6b impleme
 | M6b-U7 | In review |
 | M6b-U8 | In review |
 | M6b-U9 to U11 | Not started |
+
+**M6b-U0 notes** (`docs/graphics-engine-architecture.md`, text reservation; `docs/decisions/0003-browser-text-and-glyph-atlas.md`). Readings the unit took: (1) the text-reservation paragraph takes section 1.2's sentence word for word, with a dated amendment line naming this contract, M6-Q14 (a) and what it replaced; the E28 paragraph after it is unchanged; (2) the ADR 0003 follow-up of the [M6a exit record](../evidence/m6a-exit-2026-10-30.md#follow-ups) (item 4) is a dated sentence after the decision bullet that cites M6-Q3 (a): the plan's M6-Q3 (a) (the port in `contracts`, implemented by text-dom) still holds, and the sentence adds that text-dom measures at a reference scale since #388 (M6a contract section 3.2, M6a-Q3 (b)); the ADR's status, decision and alternatives are unchanged. Section 11 makes the ADR sentence subject to the U0 reviewer's agreement; if the reviewer disagrees, it is dropped and the follow-up stays open.
 
 **M6b-U1 notes** (`packages/editor-core/src/text-caret.ts`, caret scripts under `tests/fixtures/m6-text/edit/`). Readings the unit took, now in sections 4.1 to 4.3 where they are rules: (1) stops are segmented per run, as the layout's clusters are (a whole-text segmentation would put a stop inside a cluster for regional indicators split across runs); (2) caret x joins M6a-L1's long-cluster pieces into their grapheme, so its end takes the whole advance; (3) a selection rectangle spans both end carets and the selected clusters' `[x, x + advance]`, and a line meets the range when its content overlaps it or its LF is selected; (4) the composition underline takes the size of the run at each segment's first offset; (5) the word at an offset prefers the word-like segment ending there over a non-word one starting there; (6) key-table edges: Shift extends movements and is ignored on Backspace; Shift+Delete, Shift+Mod+A and Shift with the word deletions are not edit actions; on `mac` Alt+Delete deletes to the next word end, Meta+Backspace to the line start, Home and End stay line keys and Meta+Home and Meta+End go to the text ends; modifier sets match exactly (Ctrl+Alt is none); Mod+A matches the keymap token `KeyA` (`eventToken`), so a non-Latin layout selects all; (7) the key-to-action table of 4.2 (`textEditKeyAction`) is in U1 so that A02 runs by key; rules 1 to 6 of section 5 stay in U4; (8) a clamp keeps the affinity only when no offset moved, else downstream.
 
