@@ -1,0 +1,175 @@
+{
+  "acceptance": "M4-A13",
+  "kind": "observation (no claim)",
+  "revision": "045fcf9 + M4-U4 (the code tree of this commit; measured at a pre-amend local commit with the same code tree)",
+  "worktree": "clean",
+  "environment": {
+    "node": "v22.22.0",
+    "platform": "linux",
+    "logicalCpus": 4
+  },
+  "rectangles": 10000,
+  "runs": 5,
+  "variants": [
+    {
+      "join": "round",
+      "jsonBytes": 4040887,
+      "sceneKinds": {
+        "primitive": 10000
+      },
+      "sceneKindsAfterJoin": {
+        "path": 10000
+      },
+      "changes": {
+        "setStyleWidth": {
+          "sets": 1,
+          "inserted": 0,
+          "updated": 10000,
+          "removed": 0
+        },
+        "setStyleJoin": {
+          "sets": 1,
+          "inserted": 0,
+          "updated": 10000,
+          "removed": 0
+        }
+      },
+      "steps": {
+        "parse": {
+          "medianMs": 300.33,
+          "minMs": 247.17,
+          "maxMs": 397.68,
+          "runsMs": [397.68, 261.74, 300.33, 302.29, 247.17]
+        },
+        "construct": {
+          "medianMs": 140.47,
+          "minMs": 110.95,
+          "maxMs": 190.03,
+          "runsMs": [167.46, 140.47, 190.03, 111.08, 110.95]
+        },
+        "project": {
+          "medianMs": 20.07,
+          "minMs": 17.58,
+          "maxMs": 45.79,
+          "runsMs": [45.79, 20.07, 24.59, 18.34, 17.58]
+        },
+        "attach": {
+          "medianMs": 186.13,
+          "minMs": 173.45,
+          "maxMs": 331.82,
+          "runsMs": [253.94, 331.82, 182.12, 173.45, 186.13]
+        },
+        "attachRenderer": {
+          "medianMs": 151.19,
+          "minMs": 143.7,
+          "maxMs": 299.89,
+          "runsMs": [213.59, 299.89, 151.19, 143.7, 150.97]
+        },
+        "setStyleWidth": {
+          "medianMs": 339.75,
+          "minMs": 309.5,
+          "maxMs": 478.64,
+          "runsMs": [478.64, 387.13, 309.5, 337.08, 339.75]
+        },
+        "setStyleWidthRenderer": {
+          "medianMs": 180.76,
+          "minMs": 148.02,
+          "maxMs": 207.05,
+          "runsMs": [207.05, 203.47, 148.02, 165.93, 180.76]
+        },
+        "setStyleJoin": {
+          "medianMs": 445.04,
+          "minMs": 337.9,
+          "maxMs": 466.74,
+          "runsMs": [466.74, 393.59, 445.04, 446.51, 337.9]
+        },
+        "setStyleJoinRenderer": {
+          "medianMs": 201.05,
+          "minMs": 169.95,
+          "maxMs": 246.43,
+          "runsMs": [246.43, 225.56, 201.05, 197.87, 169.95]
+        }
+      }
+    },
+    {
+      "join": "miter",
+      "jsonBytes": 4040887,
+      "sceneKinds": {
+        "path": 10000
+      },
+      "sceneKindsAfterJoin": {
+        "primitive": 10000
+      },
+      "changes": {
+        "setStyleWidth": {
+          "sets": 1,
+          "inserted": 0,
+          "updated": 10000,
+          "removed": 0
+        },
+        "setStyleJoin": {
+          "sets": 1,
+          "inserted": 0,
+          "updated": 10000,
+          "removed": 0
+        }
+      },
+      "steps": {
+        "parse": {
+          "medianMs": 289.25,
+          "minMs": 250.03,
+          "maxMs": 377.75,
+          "runsMs": [260.17, 303.48, 289.25, 250.03, 377.75]
+        },
+        "construct": {
+          "medianMs": 126.16,
+          "minMs": 108.74,
+          "maxMs": 142.05,
+          "runsMs": [125.88, 126.16, 132.89, 142.05, 108.74]
+        },
+        "project": {
+          "medianMs": 27.64,
+          "minMs": 23.67,
+          "maxMs": 34.67,
+          "runsMs": [27.64, 23.67, 34.67, 25.86, 28.29]
+        },
+        "attach": {
+          "medianMs": 236.15,
+          "minMs": 221.77,
+          "maxMs": 303.3,
+          "runsMs": [221.77, 303.3, 236.15, 231.59, 260.28]
+        },
+        "attachRenderer": {
+          "medianMs": 190.04,
+          "minMs": 174.59,
+          "maxMs": 253.44,
+          "runsMs": [190.04, 253.44, 174.59, 189.48, 213.5]
+        },
+        "setStyleWidth": {
+          "medianMs": 389.18,
+          "minMs": 372.63,
+          "maxMs": 487.9,
+          "runsMs": [487.9, 399.88, 372.63, 379.05, 389.18]
+        },
+        "setStyleWidthRenderer": {
+          "medianMs": 203.87,
+          "minMs": 176.14,
+          "maxMs": 229.38,
+          "runsMs": [229.38, 176.14, 191.37, 217.4, 203.87]
+        },
+        "setStyleJoin": {
+          "medianMs": 319.04,
+          "minMs": 288.61,
+          "maxMs": 341.92,
+          "runsMs": [319.04, 315.89, 341.92, 288.61, 330.65]
+        },
+        "setStyleJoinRenderer": {
+          "medianMs": 152.99,
+          "minMs": 138.22,
+          "maxMs": 167.45,
+          "runsMs": [143.37, 152.99, 167.45, 138.22, 157.05]
+        }
+      }
+    }
+  ]
+}

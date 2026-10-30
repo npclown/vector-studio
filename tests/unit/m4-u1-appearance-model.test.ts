@@ -393,11 +393,13 @@ describe('M4-A02 migration v5 to v6, versions and round trips (section 2.1)', ()
     expect(v5Fixtures).toHaveLength(16);
     const migrated = readdirSync(path.join(fixtures, 'm4-appearance/migrated'));
     expect(migrated.sort()).toEqual(v5Fixtures.map((file) => path.basename(v6Of(file))).sort());
-    // The only v6 fixtures are the migrations and the appearance fixture with its envelope.
+    // The only v6 fixtures are the migrations, the appearance fixture with its envelope and
+    // M4-U4's next-host fixture.
     expect(fixturesAt(6)).toEqual(
       [
         'm4-appearance/appearance.envelope.v6.json',
         'm4-appearance/appearance.v6.json',
+        'm4-appearance/host.v6.json',
         ...v5Fixtures.map(v6Of),
       ].sort(),
     );
