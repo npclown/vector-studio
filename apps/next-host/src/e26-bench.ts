@@ -20,8 +20,11 @@ type SceneApplyResult = ReturnType<RendererSceneSynchronization['applyChanges']>
 //     to the resolution of `onSubmittedWorkDone` (the backend's `waitForSubmittedWork`) after the
 //     first submission at or after the scene revision that input produced;
 //   - long tasks come from a `PerformanceObserver`, and isolation is bracketed by the
-//     injected-rejection wrapper as the `e26-isolation` measure, from the rejection to a
-//     microtask queued at it, which runs after the command and its subscribers;
+//     injected-rejection wrapper as the `e26-isolation` measure, from the first rejection of a
+//     command to a microtask queued at it, which runs after the command and its subscribers
+//     (one measure per command, however many sets a persistent rejection refuses). Under the
+//     edit-drag driver the command runs inside the render callback, so the measure also holds
+//     that frame's prepare and submit; pan-zoom commands and section 3.4's U1c runs do not;
 //   - every autosave write's start and end come from a store wrapper (the write-start hook).
 //
 // The drivers' formulas restate `tests/e26/scenarios.ts` (the host cannot import `tests/`); a
@@ -127,7 +130,13 @@ export type BenchDriver =
   | Readonly<{ kind: 'pan-zoom'; fitted: BenchCamera; t0: number }>;
 
 export type BenchWrite = { startMs: number; endMs: number | null; ok: boolean | null };
-export type BenchLatency = { inputMs: number; revision: number; doneMs: number | null };
+/** `doneMs` is NaN while claimed by a submission and stays NaN with `failed` if the wait rejects. */
+export type BenchLatency = {
+  inputMs: number;
+  revision: number;
+  doneMs: number | null;
+  failed?: true;
+};
 export type BenchLongTask = Readonly<{ startMs: number; durationMs: number }>;
 
 export type BenchHook = Readonly<{
@@ -142,7 +151,8 @@ export type BenchHook = Readonly<{
   armReject(): void;
   rejections: () => number;
   latencies: readonly BenchLatency[];
-  noChangeMoves: () => number;
+  /** The input timestamps of dispatched moves that produced no new scene revision. */
+  noChangeMoves: readonly number[];
   writes: readonly BenchWrite[];
   longTasks: readonly BenchLongTask[];
   longTasksAvailable: boolean;
@@ -180,10 +190,10 @@ export class Bench {
   private steps = 0;
   private armed = false;
   private rejected = 0;
-  private noChange = 0;
   private lastSubmitted = 0;
-  private lastRevision = 0;
-  private pendingInput: number | null = null;
+  private pendingInput: Readonly<{ inputMs: number; revision: number }> | null = null;
+  private isolationStart: number | null = null;
+  readonly noChangeMoves: number[] = [];
   private readonly cleanups: (() => void)[] = [];
 
   constructor(query: BenchQuery) {
@@ -210,17 +220,16 @@ export class Bench {
       const move = event as PointerEvent;
       const first =
         typeof move.getCoalescedEvents === 'function' ? move.getCoalescedEvents()[0] : undefined;
-      this.pendingInput = (first ?? move).timeStamp;
+      this.pendingInput = { inputMs: (first ?? move).timeStamp, revision: this.revision() };
     };
     const after = () => {
       const input = this.pendingInput;
       this.pendingInput = null;
       if (input === null || this.rendererRef === null) return;
-      const revision = this.rendererRef.getSynchronizationState().current?.revision ?? 0;
-      if (revision > this.lastRevision) {
-        this.lastRevision = revision;
-        this.latencies.push({ inputMs: input, revision, doneMs: null });
-      } else this.noChange += 1;
+      const revision = this.revision();
+      if (revision > input.revision) {
+        this.latencies.push({ inputMs: input.inputMs, revision, doneMs: null });
+      } else this.noChangeMoves.push(input.inputMs);
     };
     window.addEventListener('pointermove', before, { capture: true });
     window.addEventListener('pointermove', after);
@@ -240,6 +249,10 @@ export class Bench {
       }),
     cancel: (handle: number): void => cancelAnimationFrame(handle),
   };
+
+  private revision(): number {
+    return this.rendererRef?.getSynchronizationState().current?.revision ?? 0;
+  }
 
   attach(backend: BenchBackend, canvas: HTMLCanvasElement): void {
     this.backendRef = backend;
@@ -266,9 +279,16 @@ export class Bench {
       if (!this.armed || !holds(nodes, target)) return null;
       if (this.query.rejectMode === 'once') this.armed = false;
       this.rejected += 1;
-      // Isolation runs inside the command that sent this set; the microtask runs after it.
-      performance.mark('e26-isolation-start');
-      queueMicrotask(() => performance.measure('e26-isolation', 'e26-isolation-start'));
+      // Isolation runs inside the command that sent this set; the microtask runs after it. Later
+      // rejections in the same command (persistent mode) keep the first start.
+      if (this.isolationStart === null) {
+        const start = performance.now();
+        this.isolationStart = start;
+        queueMicrotask(() => {
+          this.isolationStart = null;
+          performance.measure('e26-isolation', { start, end: performance.now() });
+        });
+      }
       return {
         status: 'invalid-scene',
         reason: 'invalid-value',
@@ -355,10 +375,15 @@ export class Bench {
     if (waiting.length === 0) return;
     // Claimed now, so a later submission does not resolve them again.
     for (const entry of waiting) entry.doneMs = Number.NaN;
-    void backend.waitForSubmittedWork().then(() => {
-      const now = performance.now();
-      for (const entry of waiting) entry.doneMs = now;
-    });
+    backend.waitForSubmittedWork().then(
+      () => {
+        const now = performance.now();
+        for (const entry of waiting) entry.doneMs = now;
+      },
+      () => {
+        for (const entry of waiting) entry.failed = true;
+      },
+    );
   }
 
   hook(): BenchHook {
@@ -375,7 +400,7 @@ export class Bench {
       },
       rejections: () => this.rejected,
       latencies: this.latencies,
-      noChangeMoves: () => this.noChange,
+      noChangeMoves: this.noChangeMoves,
       writes: this.writes,
       longTasks: this.longTasks,
       longTasksAvailable: this.longTasksAvailable,

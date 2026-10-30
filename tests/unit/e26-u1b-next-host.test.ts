@@ -25,7 +25,12 @@ type Query = Readonly<{
 type Write = { startMs: number; endMs: number | null; ok: boolean | null };
 type BenchInstance = {
   readonly writes: readonly Write[];
-  readonly latencies: readonly { inputMs: number; revision: number; doneMs: number | null }[];
+  readonly latencies: readonly {
+    inputMs: number;
+    revision: number;
+    doneMs: number | null;
+    failed?: true;
+  }[];
   readonly clock: { request(callback: (timestampMs: number) => void): number };
   wrapRenderer(renderer: Sync): Sync;
   wrapStore(store: Store): Store;
@@ -34,8 +39,8 @@ type BenchInstance = {
   hook(): {
     armReject(): void;
     rejections(): number;
-    isolations(): readonly unknown[];
-    noChangeMoves(): number;
+    isolations(): readonly { startMs: number; durationMs: number }[];
+    noChangeMoves: readonly number[];
     driverSteps(): number;
     setDriver(driver: unknown): void;
   };
@@ -117,6 +122,10 @@ function accepting() {
       return { status: 'applied', current: current() };
     },
     getSynchronizationState: () => ({ current: current() }),
+    /** Sets the current revision directly (a submission behind an input's revision). */
+    setRevision: (value: number) => {
+      revision = value;
+    },
     setCamera: () => ({ status: 'applied' }),
     getCameraState: () => null,
     dispose: () => {},
@@ -200,7 +209,7 @@ describe('E26-U1b next-host bench option', () => {
     state.dispose();
   });
 
-  it('rejects every set holding the target in persistent mode, snapshots included', () => {
+  it('rejects every set holding the target in persistent mode, snapshots included', async () => {
     stubWindow('?bench=1&reject=b&reject-mode=persistent');
     const state = new bench.Bench(bench.benchQuery('?bench=1&reject=b&reject-mode=persistent')!);
     const inner = accepting();
@@ -219,6 +228,16 @@ describe('E26-U1b next-host bench option', () => {
     expect(renderer.applyChanges(set(['a'])).status).toBe('applied');
     expect(inner.seen).toEqual(['apply:a']);
     expect(state.hook().rejections()).toBe(4);
+    // One measure for the command, from the first of its rejections.
+    const before = performance.now();
+    await Promise.resolve();
+    const isolations = state.hook().isolations();
+    expect(isolations).toHaveLength(1);
+    expect(isolations[0]!.startMs).toBeLessThan(before);
+    // A later command's rejections get their own measure.
+    expect(renderer.applyChanges(set(['b'])).status).toBe('invalid-scene');
+    await Promise.resolve();
+    expect(state.hook().isolations()).toHaveLength(2);
     state.dispose();
   });
 
@@ -269,7 +288,7 @@ describe('E26-U1b next-host bench option', () => {
     move(500, 480, true);
     move(510, 505, false);
     expect(state.latencies).toEqual([{ inputMs: 480, revision: 2, doneMs: null }]);
-    expect(state.hook().noChangeMoves()).toBe(1);
+    expect(state.hook().noChangeMoves).toEqual([505]);
     state.clock.request(() => {
       order.push('backend');
       submitted += 1;
@@ -282,6 +301,56 @@ describe('E26-U1b next-host bench option', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(state.latencies[0]!.doneMs).toBeGreaterThan(0);
+    state.dispose();
+  });
+
+  it('leaves inputs ahead of the submitted revision open, and marks a failed wait', async () => {
+    const listeners = stubWindow('?bench=1');
+    const frames: ((timestampMs: number) => void)[] = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: (timestampMs: number) => void) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    const state = new bench.Bench(bench.benchQuery('?bench=1')!);
+    const inner = accepting();
+    state.wrapRenderer(asSync(inner));
+    let submitted = 0;
+    let fail: (error: Error) => void = () => {};
+    state.attach(
+      {
+        setMode: () => {},
+        startFrameMeasurements: () => {},
+        stopFrameMeasurements: () => null,
+        getFrameMeasurements: () => null,
+        getStatistics: () => ({ framesSubmitted: submitted }),
+        waitForSubmittedWork: () => new Promise<void>((_, reject) => (fail = reject)),
+      },
+      {},
+    );
+    const [before, after] = listeners.get('pointermove') ?? [];
+    const event = { timeStamp: 700, getCoalescedEvents: () => [{ timeStamp: 690 }] };
+    before!(event);
+    inner.applyChanges({ inserted: [] });
+    after!(event);
+    expect(state.latencies).toEqual([{ inputMs: 690, revision: 2, doneMs: null }]);
+    // A submission whose scene is behind the input's revision does not end it.
+    inner.setRevision(1);
+    state.clock.request(() => {
+      submitted += 1;
+    });
+    frames.shift()!(800);
+    expect(state.latencies[0]!.doneMs).toBeNull();
+    // The next submission at its revision claims it; a rejected wait marks it failed.
+    inner.setRevision(2);
+    state.clock.request(() => {
+      submitted += 1;
+    });
+    frames.shift()!(816);
+    expect(state.latencies[0]!.doneMs).toBeNaN();
+    fail(new Error('device lost'));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(state.latencies[0]).toMatchObject({ doneMs: Number.NaN, failed: true });
     state.dispose();
   });
 
