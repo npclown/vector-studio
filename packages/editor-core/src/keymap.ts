@@ -13,6 +13,7 @@ export const TOOL_NAMES: readonly ToolName[] = [
   'line',
   'frame',
   'path',
+  'text',
 ];
 
 /**
@@ -59,6 +60,7 @@ export const DEFAULT_KEYMAP: readonly KeyBinding[] = deepFreeze([
   { chord: 'L', action: 'setTool', args: { tool: 'line' } },
   { chord: 'F', action: 'setTool', args: { tool: 'frame' } },
   { chord: 'P', action: 'setTool', args: { tool: 'path' } },
+  { chord: 'T', action: 'setTool', args: { tool: 'text' } },
   { chord: 'Delete', action: 'delete' },
   { chord: 'Backspace', action: 'delete' },
   { chord: 'Mod+Z', action: 'undo' },

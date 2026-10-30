@@ -279,6 +279,7 @@ describe('M2-A11 default bindings run their actions through input', () => {
       'KeyO',
       'KeyP',
       'KeyR',
+      'KeyT',
       'KeyV',
       'Shift+!',
       'Shift+)',
@@ -756,6 +757,8 @@ describe('M2-A11 rest (M2-U7): every default binding through input, and host-bou
     { chord: 'L', key: 'l', check: tool('line') },
     { chord: 'F', key: 'f', check: tool('frame') },
     { chord: 'P', key: 'p', check: tool('path') },
+    // M6b-U3 (M6b contract, section 1.2).
+    { chord: 'T', key: 't', check: tool('text') },
     { chord: 'Delete', key: 'Delete', check: order(['a', 'c']) },
     { chord: 'Backspace', key: 'Backspace', check: order(['a', 'c']) },
     { chord: 'Mod+Z', key: 'z', modifiers: mods('ctrl'), check: order(['a', 'b']) },
