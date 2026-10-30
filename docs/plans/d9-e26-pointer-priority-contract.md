@@ -97,7 +97,7 @@ A valid document never makes the real renderer reject a set, so the scenarios an
 ### 3.5 Runs
 
 - **Reference PC.** Headed Chrome and Edge on the main PC (DESKTOP-DKVUSAV), refresh rate recorded, 1280×720 CSS at DPR 1 and 2, five repetitions per scenario, browser and DPR. Runs go through the coordinator's PC queue. Hidden, occluded or throttled runs are kept and investigated, never replaced silently.
-- **Baseline.** The baseline is pinned to U1c's merge commit, before any remedy. It runs on the reference PC when the PC is free; U2 and U4 do not wait for it, because their acceptance is the CPU counters and differentials of section 6, and their timing is reported against the pinned baseline afterwards.
+- **Baseline.** The baseline is pinned to U1c's merge commit. It runs on the reference PC when the PC is free; U2 and U4 do not wait for it, because their acceptance is the CPU counters and differentials of section 6, and their timing is reported against the pinned baseline afterwards. (Amended 2026-10-30 by U1c: U2, U4 and U3 merged before the harness existed, so no headed run before any remedy is possible without back-porting U1b and U1c onto U1a's commit `d628caa`. The baseline is the post-U2/U3/U4 state at U1c's merge commit; the before-and-after evidence for those remedies stays the container observation and their counters, and the baseline decides U5 and U6 from the state they will ship on.)
 - **CPU observation.** `pnpm observe:m1-a13` keeps running in a container and gains the counters: node visits per set and full-path fallbacks with U2, sets per isolation with U3. U3 updates its isolation assertions (section 4.2). It stays an observation: only the reference PC makes performance claims.
 
 ## 4. Cost rules
@@ -196,7 +196,7 @@ Under the [D9 conflict rule](d9-post-mvp1-tracks-proposal.md) ("the PR is split,
 | --- | --- | --- | --- |
 | U1a | Scenario definitions and generators, the stress document, cameras, drivers and the configuration builder and hash (`tests/e26/scenarios.ts`) | `tests/` | Rendering |
 | U1b | The `?bench=1` host option: driver, metric hooks, bench loader, write-start hook, injected rejection and isolation marks; tests that the flags are inert without `?bench=1` and that frame capture (`COPY_SRC`) stays off | `apps/next-host` | Visualization |
-| U1c | The headed harness spec; then the pinned baseline on the reference PC | `tests/gpu/`, `docs/evidence/e26/` | Rendering |
+| U1c | The headed harness spec; then the pinned baseline on the reference PC | `tests/e26/`, `playwright.e26.config.ts`, `docs/evidence/e26/` (amended by U1c: its own config, so `pnpm test:gpu` does not run a 40-minute benchmark) | Rendering |
 | U2 | Incremental mirror validation and publication (4.1), oracle, A07 differential; one-per-unit isolation timing (4.2); node-visit and fallback counters in the CPU observation | `renderer-core` | Rendering |
 | U3 | Batched isolation (4.2), only if U2's timing misses A06; M1 section 5 amendment; observation update with the sets-per-isolation counter. If U3 is dropped, a one-line M1 section 5 change instead, so its cost sentences match U2 | `editor-core`, `docs/plans`, `tests/m1-a13` | Visualization |
 | U4 | Change-scoped projection (4.3) with A09; M7 sections 4.2 and 9 amendment | `editor-core`, `docs/plans` | Visualization |

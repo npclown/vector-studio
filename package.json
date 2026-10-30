@@ -42,6 +42,7 @@
     "test:m5-next-host": "playwright test --config playwright.m5-next-host.config.ts",
     "test:m6a-next-host": "playwright test --config playwright.m6a-next-host.config.ts",
     "test:m7-next-host": "playwright test --config playwright.m7-next-host.config.ts",
+    "test:e26": "playwright test --config playwright.e26.config.ts",
     "test:geometry": "node tooling/test-geometry.mjs",
     "test:geometry:browser": "node tooling/test-geometry-browser.mjs",
     "test:e3-a04": "vitest run --config vitest.e3-a04.config.ts",
