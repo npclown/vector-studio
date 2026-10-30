@@ -137,7 +137,15 @@ type PageHook = {
   isolations(): readonly { startMs: number; durationMs: number }[];
 };
 /** Installed before the page loads (`installProbe`): press and release times, focus, visibility. */
-type Probe = { downs: number[]; ups: number[]; visibilityChanges: number; blurs: number };
+type Probe = {
+  /** Event timestamps (when the browser received the input) and handling times. */
+  downs: number[];
+  ups: number[];
+  downsHandled: number[];
+  upsHandled: number[];
+  visibilityChanges: number;
+  blurs: number;
+};
 declare global {
   interface Window {
     __e26Bench?: PageHook;
@@ -154,16 +162,37 @@ async function installProbe(page: Page) {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
   await page.addInitScript(() => {
-    const probe: Probe = { downs: [], ups: [], visibilityChanges: 0, blurs: 0 };
+    const probe: Probe = {
+      downs: [],
+      ups: [],
+      downsHandled: [],
+      upsHandled: [],
+      visibilityChanges: 0,
+      blurs: 0,
+    };
     window.__e26Probe = probe;
     // Capture listeners on the window run before the canvas handles the event, so these are
     // the events' own timestamps, not a later evaluate (U1c review S1).
-    window.addEventListener('pointerdown', (event) => probe.downs.push(event.timeStamp), {
-      capture: true,
-    });
-    window.addEventListener('pointerup', (event) => probe.ups.push(event.timeStamp), {
-      capture: true,
-    });
+    window.addEventListener(
+      'pointerdown',
+      (event) => {
+        probe.downs.push(event.timeStamp);
+        probe.downsHandled.push(performance.now());
+      },
+      {
+        capture: true,
+      },
+    );
+    window.addEventListener(
+      'pointerup',
+      (event) => {
+        probe.ups.push(event.timeStamp);
+        probe.upsHandled.push(performance.now());
+      },
+      {
+        capture: true,
+      },
+    );
     window.addEventListener('blur', () => (probe.blurs += 1));
     document.addEventListener('visibilitychange', () => (probe.visibilityChanges += 1));
   });
@@ -456,7 +485,8 @@ for (const { scenario, variant } of runs) {
         undefined,
         { timeout: 30_000 },
       );
-      expect(await page.evaluate(() => window.__e26Bench!.writes[0]!.ok)).toBe(true);
+      // Checked with the others after the record is written (section 3.5: kept).
+      const loadWriteOk = await page.evaluate(() => window.__e26Bench!.writes[0]!.ok);
       await execute(page, [
         { type: 'setViewport', camera },
         { type: 'setSnapping', enabled: false },
@@ -509,17 +539,18 @@ for (const { scenario, variant } of runs) {
       await arming;
       const moves = sent.length;
       const probe = await page.evaluate(() => window.__e26Probe!);
-      expect(probe.downs.length, 'one press').toBe(1);
-      expect(probe.ups.length, 'one release').toBe(1);
-      // The events' own timestamps: the press's handling and every move fall inside, the hover
-      // move to the start point before it, and a write started by the release after it.
-      const downMs = probe.downs[0]!;
-      const upMs = probe.ups[0]!;
+      // Latency samples are windowed by the events' own timestamps (the clock of `inputMs`): the
+      // hover move to the start point falls before the press. Long tasks and writes are windowed
+      // until the release was handled, because moves queued behind a busy main thread are still
+      // handled, with the press on, after the release's timestamp (U1c review r2 S1).
+      const downMs = probe.downs[0] ?? Number.NaN;
+      const upMs = probe.ups[0] ?? Number.NaN;
+      const upHandledMs = probe.upsHandled[0] ?? Number.NaN;
       // The due write after pointer up, the last samples' submitted work and the isolation
       // measure settle; then the run is read.
       await page.waitForTimeout(1_500);
       const state = await page.evaluate(
-        ({ downMs, upMs }) => {
+        ({ downMs, upMs, upHandledMs }) => {
           const hook = window.__e26Bench!;
           const history = hook.editor()!.query({ type: 'history' }) as { undoDepth: number };
           return {
@@ -530,7 +561,7 @@ for (const { scenario, variant } of runs) {
             writes: hook.writes,
             longTasksAvailable: hook.longTasksAvailable,
             longTasks: hook.longTasks.filter(
-              (task) => task.startMs >= downMs && task.startMs <= upMs,
+              (task) => task.startMs >= downMs && task.startMs <= upHandledMs,
             ),
             isolations: hook.isolations(),
             rejections: hook.rejections(),
@@ -540,7 +571,7 @@ for (const { scenario, variant } of runs) {
             recoveryAttempts: hook.backend()!.getStatistics().recoveryAttempts,
           };
         },
-        { downMs, upMs },
+        { downMs, upMs, upHandledMs },
       );
       const samples = state.latencies
         .filter((entry) => entry.doneMs !== null && Number.isFinite(entry.doneMs))
@@ -553,9 +584,9 @@ for (const { scenario, variant } of runs) {
         );
       const longOver50 = state.longTasks.filter((task) => task.durationMs > 50);
       const writesDuringPress = state.writes.filter(
-        (write) => write.startMs > downMs && write.startMs < upMs,
+        (write) => write.startMs > downMs && write.startMs < upHandledMs,
       );
-      const firstAfterUp = state.writes.find((write) => write.startMs >= upMs) ?? null;
+      const firstAfterUp = state.writes.find((write) => write.startMs >= upHandledMs) ?? null;
       const presenceEnd = await presence(page);
       const open_ = (entry: (typeof state.latencies)[number]) =>
         entry.failed !== true && (entry.doneMs === null || Number.isNaN(entry.doneMs));
@@ -567,6 +598,9 @@ for (const { scenario, variant } of runs) {
         consoleErrors,
         downMs,
         upMs,
+        upHandledMs,
+        probe,
+        loadWriteOk,
         moves,
         expectedMoves: E26_DRIVERS.latencyDurationMs / E26_DRIVERS.latencyCadenceMs,
         sentAtMs,
@@ -582,7 +616,7 @@ for (const { scenario, variant } of runs) {
         isolations: state.isolations,
         rejections: state.rejections,
         writesDuringPress,
-        firstWriteAfterUpMs: firstAfterUp === null ? null : firstAfterUp.startMs - upMs,
+        firstWriteAfterUpMs: firstAfterUp === null ? null : firstAfterUp.startMs - upHandledMs,
         // setStyle (busy only) and the move, each one undo step: the pointer up was applied.
         undoDepth: state.undoDepth,
         expectedUndoDepth: busy ? 2 : 1,
@@ -596,6 +630,9 @@ for (const { scenario, variant } of runs) {
         start: presenceStart,
         end: presenceEnd,
       });
+      expect(loadWriteOk, 'the load write succeeded').toBe(true);
+      expect(probe.downs.length, 'one press').toBe(1);
+      expect(probe.ups.length, 'one release').toBe(1);
       expect(state.mode).toBe('on-demand');
       expect(result.failed).toBe(0);
       expect(result.unresolved).toBe(0);
