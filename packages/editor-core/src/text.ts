@@ -77,13 +77,25 @@ export class TextLayoutCache {
   }
 
   layout(node: TextNode): TextLayoutResult {
-    const generation = this.port.generation;
-    this.sync(generation);
     let key = this.keys.get(node);
     if (key === undefined) {
       key = JSON.stringify(layoutRequest(node));
       this.keys.set(node, key);
     }
+    return this.lookup(key, () => layoutRequest(node));
+  }
+
+  /**
+   * A request that names no node (a pending node's empty layout, MVP M6b contract, section
+   * 4.3), through the same cache.
+   */
+  layoutRequest(request: TextLayoutRequest): TextLayoutResult {
+    return this.lookup(JSON.stringify(request), () => request);
+  }
+
+  private lookup(key: string, request: () => TextLayoutRequest): TextLayoutResult {
+    const generation = this.port.generation;
+    this.sync(generation);
     const cached = this.results.get(key);
     if (cached !== undefined) {
       // Most recently used last.
@@ -91,7 +103,7 @@ export class TextLayoutCache {
       this.results.set(key, cached);
       return cached;
     }
-    const result = frozenCopy(this.port.layout(layoutRequest(node)));
+    const result = frozenCopy(this.port.layout(request()));
     // A port that bumped during the call gave a result of a generation the cache no longer
     // holds; it is returned but not stored.
     if (this.port.generation !== generation) return result;

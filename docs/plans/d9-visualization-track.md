@@ -25,7 +25,7 @@ One line per item since [D10](d10-roadmap-reset.md): state and a link. Dated det
 | V-13 | MVP M7: symbols | Full | R5 | Contract APPROVED 2026-10-29 (independent review r1, r2 NOT READY applied, r3 READY WITH FOLLOW-UPS applied); M7-Q4 (c), Q9, Q10, Q13 (a) adopted (추천안 자동 채택 2026-10-29); M7-U1 to U7 merged (#355 to #375), M7-U8 exit record awaiting user acceptance ([contract](mvp-m7-symbols-contract.md), [exit record](../evidence/m7-exit-2026-10-30.md)) |
 | V-14 | MVP M4: appearance | Full | R5 | Contract Accepted 2026-10-29 (independent review r1 NOT READY, r2 READY WITH FOLLOW-UPS, applied); questions adopted as (a) (추천안 자동 채택 2026-10-29); M4-U1 to U5 done (#383, #385, #387, #389, #391); M4 exit accepted by the user 2026-10-30 ([contract](mvp-m4-appearance-contract.md), [exit record](../evidence/m4-exit-2026-10-30.md)) |
 | V-15 | MVP M6a: text model and layout port | Full | R5 | Contract DRAFT 2026-10-29, review r1 NOT READY, r2 READY WITH FOLLOW-UPS, applied, merged #364; questions adopted as (a) (추천안 자동 채택 2026-10-29), M6a-Q3 then (b) by the U4c amendment (2026-10-30); M6a-U1 to U6, U4b and U4c merged (#367 to #388), M6a-U7 exit record awaiting user acceptance ([contract](mvp-m6a-text-model-contract.md), [exit record](../evidence/m6a-exit-2026-10-30.md)) |
-| V-16 | MVP M6b: text editing | Full | R5 | Contract APPROVED 2026-10-30 (#392, 09d8a2a; review r1 NOT READY applied, r2 READY WITH FOLLOW-UPS applied); M6b-U1 in review ([contract](mvp-m6b-text-editing-contract.md)) |
+| V-16 | MVP M6b: text editing | Full | R5 | Contract APPROVED 2026-10-30 (#392, 09d8a2a; review r1 NOT READY applied, r2 READY WITH FOLLOW-UPS applied); M6b-U1 and U2 in review ([contract](mvp-m6b-text-editing-contract.md)) |
 
 ## V-1: path appearance editing
 
