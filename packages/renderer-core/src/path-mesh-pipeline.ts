@@ -341,7 +341,31 @@ type Evaluated = Readonly<{
   orientation: 1 | -1;
   color: SceneColor;
 }>;
-type EvaluatedPath = Readonly<{ path: DerivedPath; items: readonly Evaluated[] }>;
+type EvaluatedPath = Readonly<{
+  path: DerivedPath;
+  items: readonly Evaluated[];
+  /** E26-U5c: the path's kept outcome, served again without evaluation. */
+  kept?: PathFrame;
+}>;
+/**
+ * E26 contract, U5c: one path's outcome in the last prepare, kept while the path object, its
+ * geometry revision and the frame inputs (`frameKey`) stay the same. Only a clean outcome is
+ * kept: culled, or drawn from resident entries with no state failure, no pending request and no
+ * joint fill draw.
+ */
+type PathFrame = Readonly<{
+  path: DerivedPath;
+  revision: number;
+  frameKey: string;
+  /** The states the evaluation recorded, all null for a clean outcome. */
+  states: readonly string[];
+  /** Null for a culled path. */
+  drawn: Readonly<{
+    items: readonly Evaluated[];
+    entries: readonly MeshEntry[];
+    draws: readonly PathMeshDraw[];
+  }> | null;
+}>;
 type BucketCacheEntry = Readonly<{
   lanes: PathLinearMap;
   zoom: number;
@@ -406,6 +430,22 @@ const BATCH_CODES: ReadonlySet<string> = new Set([
 ]);
 const PAINTS: readonly PathPaint[] = ['fill', 'stroke'];
 
+let injectNoReuse: (pipeline: PathMeshPipeline) => void;
+let readReusedPaths: (pipeline: PathMeshPipeline) => number;
+
+/**
+ * Test seam (E26-U5c): evaluate every path on every prepare, the oracle of the kept per-path
+ * outcomes. Not exported from the package index.
+ */
+export function disablePathReuseForTesting(pipeline: PathMeshPipeline): void {
+  injectNoReuse(pipeline);
+}
+
+/** Test seam (E26-U5c): the paths served from a kept outcome so far. */
+export function reusedPathsForTesting(pipeline: PathMeshPipeline): number {
+  return readReusedPaths(pipeline);
+}
+
 export class PathMeshPipeline {
   readonly #channels: Readonly<Record<PathPaint, PortChannel | undefined>>;
   readonly #limits: PathMeshLimits;
@@ -436,6 +476,20 @@ export class PathMeshPipeline {
   #overBudgetFrames = 0;
   #memoOverCapFrames = 0;
   #bucketComputations = 0;
+  /** E26 contract, U5c: per-path outcomes of the last prepare, and its paths and readings. */
+  #pathFrames = new Map<string, PathFrame>();
+  #lastPaths: readonly DerivedPath[] | null = null;
+  #lastReadings: string | null = null;
+  #lastRevisions: ReadonlyMap<string, number> = new Map();
+  #reuse = true;
+  #reusedPaths = 0;
+
+  static {
+    injectNoReuse = (pipeline) => {
+      pipeline.#reuse = false;
+    };
+    readReusedPaths = (pipeline) => pipeline.#reusedPaths;
+  }
 
   public constructor(options: PathMeshPipelineOptions) {
     const fill = options.port;
@@ -484,12 +538,25 @@ export class PathMeshPipeline {
       channel.linearMemoryBytes = readMemoryBytes(channel.memoryBytes);
     }
 
-    // Step 1: reconcile slots, caches and memo against the published path nodes.
-    const revisions = new Map<string, number>();
-    for (const path of input.paths) {
-      revisions.set(path.id, input.geometryRevision(path.id) ?? 0);
+    // Step 1: reconcile slots, caches and memo against the published path nodes. E26-U5c: the
+    // caller passes the same paths array again only when no path was written, so the same
+    // array and port readings leave the last reconcile current.
+    const readingsKey = PAINTS.map((paint) => {
+      const reading = readings[paint];
+      return reading === undefined ? '-' : reading.ok ? `+${reading.operationId}` : '!';
+    }).join('|');
+    let revisions = this.#lastRevisions;
+    if (!this.#reuse || input.paths !== this.#lastPaths || readingsKey !== this.#lastReadings) {
+      const fresh = new Map<string, number>();
+      for (const path of input.paths) {
+        fresh.set(path.id, input.geometryRevision(path.id) ?? 0);
+      }
+      revisions = fresh;
+      this.#reconcile(input.paths, revisions, readings);
+      this.#lastPaths = input.paths;
+      this.#lastReadings = readingsKey;
+      this.#lastRevisions = revisions;
     }
-    this.#reconcile(input.paths, revisions, readings);
 
     // Steps 2-4: drawability, buckets, state checks, mesh lookup, then the memo.
     const { zoom } = input.camera;
@@ -500,10 +567,46 @@ export class PathMeshPipeline {
     const evaluated: EvaluatedPath[] = [];
     const missing: Record<PathPaint, PendingRequest[]> = { fill: [], stroke: [] };
     const frameStates = new Map<string, StateFailure | null>();
+    const frameKey = [
+      zoom,
+      devicePixelRatio,
+      input.target.width,
+      input.target.height,
+      input.camera.position.x,
+      input.camera.position.y,
+      input.packing.origin.x,
+      input.packing.origin.y,
+      input.packing.frameFinite,
+      readingsKey,
+    ].join('|');
+    const culled = (path: DerivedPath, revision: number) => {
+      if (this.#reuse) {
+        this.#pathFrames.set(
+          path.id,
+          Object.freeze({ path, revision, frameKey, states: [], drawn: null }),
+        );
+      }
+    };
     for (const path of input.paths) {
       const node = path.node;
       if (path.hidden || node.geometry.verbs.length === 0) continue;
       const revision = revisions.get(path.id)!;
+      const kept = this.#reuse ? this.#pathFrames.get(path.id) : undefined;
+      if (
+        kept !== undefined &&
+        kept.path === path &&
+        kept.revision === revision &&
+        kept.frameKey === frameKey &&
+        (kept.drawn === null || this.#resident(path.id, kept.drawn))
+      ) {
+        this.#reusedPaths += 1;
+        for (const key of kept.states) frameStates.set(key, null);
+        if (kept.drawn !== null) {
+          for (const item of kept.drawn.items) this.#currentE[item.paint].set(path.id, item.e);
+          evaluated.push(Object.freeze({ path, items: kept.drawn.items, kept }));
+        }
+        continue;
+      }
       // B2 section 9.2: the fill is V3's drawable paint; the stroke is drawable with a stroke,
       // width > 0 and stroke world bounds meeting the viewport. A path is culled only when
       // neither paint's bounds meet it.
@@ -516,9 +619,15 @@ export class PathMeshPipeline {
           meetsClipChain(worldBounds, path.clip ?? null, clipGuard)
         );
       });
-      if (drawable.length === 0) continue;
+      if (drawable.length === 0) {
+        culled(path, revision);
+        continue;
+      }
       const buckets = this.#bucketsFor(path, zoom, devicePixelRatio);
-      if (buckets.singular) continue;
+      if (buckets.singular) {
+        culled(path, revision);
+        continue;
+      }
 
       // The node-level state, one key per node: port-version of either drawable paint's port.
       // It notifies once per (node, code) transition. ST-U7 removed the interim composition state:
@@ -623,7 +732,15 @@ export class PathMeshPipeline {
     const draws: PathMeshDraw[] = [];
     const working = new Set<MeshEntry>();
     const { origin, frameFinite } = input.packing;
-    for (const { path, items } of evaluated) {
+    for (const { path, items, kept } of evaluated) {
+      if (kept?.drawn != null) {
+        for (const entry of kept.drawn.entries) {
+          entry.lastServed = now;
+          working.add(entry);
+        }
+        draws.push(...kept.drawn.draws);
+        continue;
+      }
       const entries = items.map((item) => this.#lookup(item.paint, path.id, item.e));
       // A paint that is still missing or memoized as failed hides the whole path this frame.
       if (entries.some((entry) => entry === undefined)) {
@@ -664,6 +781,23 @@ export class PathMeshPipeline {
         continue;
       }
       draws.push(...pathDraws);
+      // E26-U5c: a clean outcome without a joint fill draw is kept for the next prepare.
+      if (this.#reuse) {
+        this.#pathFrames.set(
+          path.id,
+          Object.freeze({
+            path,
+            revision: revisions.get(path.id)!,
+            frameKey,
+            states: [stateKey(path.id, null), ...items.map((item) => stateKey(path.id, item.paint))],
+            drawn: Object.freeze({
+              items,
+              entries: entries as MeshEntry[],
+              draws: Object.freeze(pathDraws),
+            }),
+          }),
+        );
+      }
     }
 
     // State-failure notices on (node, paint, code) transitions only.
@@ -687,6 +821,33 @@ export class PathMeshPipeline {
     this.#sweepOverlays();
     this.#evictMemo(now);
     return Object.freeze(draws);
+  }
+
+  /**
+   * E26-U5c: whether a kept outcome's entries and fringe variants are still the ones its paints
+   * would be served from, in the same slots.
+   */
+  #resident(nodeId: string, drawn: NonNullable<PathFrame['drawn']>): boolean {
+    for (let index = 0; index < drawn.items.length; index += 1) {
+      const item = drawn.items[index]!;
+      if (this.#lookup(item.paint, nodeId, item.e) !== drawn.entries[index]) return false;
+    }
+    for (const draw of drawn.draws) {
+      const slot =
+        draw.paint === 'stroke' ? this.#strokeSlots.get(nodeId) : this.#slots.get(nodeId);
+      if (slot !== draw.slot) return false;
+      if (draw.fringe === null) continue;
+      // #serveFringe serves f, else f + 1: the kept variant must still be the first one found.
+      const index = drawn.items.findIndex((item) => item.paint === (draw.paint ?? 'fill'));
+      const { f } = drawn.items[index]!;
+      const variants = drawn.entries[index]!.variants;
+      const atF = variants.get(f);
+      const served = atF !== undefined && atF !== 'unsupported' ? atF : variants.get(f + 1);
+      if (served === undefined || served === 'unsupported' || served.id !== draw.fringe.id) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /** Occupied fill path slots by node id, including hidden and culled path nodes. */
@@ -802,6 +963,10 @@ export class PathMeshPipeline {
     this.#strokeSlots.clear();
     this.#slotIds = [];
     this.#notices = [];
+    this.#pathFrames.clear();
+    this.#lastPaths = null;
+    this.#lastReadings = null;
+    this.#lastRevisions = new Map();
   }
 
   #reconcile(
@@ -869,6 +1034,9 @@ export class PathMeshPipeline {
     }
     for (const [key, state] of this.#states) {
       if (!present.has(state.nodeId)) this.#states.delete(key);
+    }
+    for (const nodeId of this.#pathFrames.keys()) {
+      if (!present.has(nodeId)) this.#pathFrames.delete(nodeId);
     }
     for (const [nodeId, slot] of this.#slots) {
       if (present.has(nodeId)) continue;

@@ -37,6 +37,7 @@ import type {
   PathMeshPipeline,
   PathMeshStatistics,
 } from './path-mesh-pipeline.js';
+import { disablePathReuseForTesting } from './path-mesh-pipeline.js';
 import {
   PathMeshPacker,
   meshFrameLanes,
@@ -220,6 +221,15 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   #slotSerial: number | null = null;
   #fullDerivation = false;
   #derivationCounts = { reused: 0, patched: 0, full: 0, leaves: 0 };
+  #culled: Readonly<{
+    primitives: readonly DerivedPrimitive[];
+    leaves: readonly DerivedText[];
+    key: readonly number[];
+    visible: DerivedPrimitive[];
+    texts: DerivedText[];
+  }> | null = null;
+  #pathMaps = new WeakMap<readonly DerivedPath[], ReadonlyMap<string, DerivedPath>>();
+  #pathClipMaps = new WeakMap<readonly DerivedPath[], ReadonlyMap<string, ClipChain | null>>();
   /** The inputs the primitives in `#assessed` passed the packing budget under. */
   #assessedKey: readonly number[] | null = null;
   #assessed = new WeakSet<DerivedPrimitive>();
@@ -227,6 +237,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   static {
     injectFullDerivation = (source) => {
       source.#fullDerivation = true;
+      if (source.#pathMeshes !== undefined) disablePathReuseForTesting(source.#pathMeshes);
     };
     readDerivationCounts = (source) => Object.freeze({ ...source.#derivationCounts });
   }
@@ -339,17 +350,9 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     const layerScopes = derivation.layerScopes;
     const pathLayers = derivation.pathLayers;
     const derivedTexts = derivation.texts;
-    let visible = cullPrimitives(
-      derived.filter((entry) => !entry.hidden && !entry.omitted && entry.clip?.empty !== true),
-      cameraState.camera,
-      target,
-    );
-    // E28-K9: text leaves cull by their node bound and clip chain as primitives do.
-    let texts = cullTexts(
-      derivedTexts.leaves.filter((text) => !text.hidden && text.clip?.empty !== true),
-      cameraState.camera,
-      target,
-    );
+    const culled = this.#cull(derivation, cameraState.camera, target);
+    let visible = culled.visible;
+    let texts = culled.texts;
     // P3 V3 section f: the per-view mesh origin O_m, separate from the primitive origin.
     let meshFrame: readonly number[] | null = null;
     if (this.#pathMeshes !== undefined) {
@@ -392,7 +395,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
         visible,
         texts,
         pathDraws,
-        new Map(paths.map((path) => [path.id, path] as const)),
+        this.#pathsById(paths),
         pathLayers,
         cameraState.camera,
         target,
@@ -415,7 +418,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     // U4: the primitive mask sources are packed and drawn by their slots, so they join the
     // visible primitives in the origin choice and the packing budget.
     let assessed = visible;
-    const pathClips = new Map(paths.map((path) => [path.id, path.clip ?? null] as const));
+    const pathClips = this.#pathClips(paths);
     if (clipSeen.value) {
       masks = this.#planMasks(scene, derived, pathDraws, cameraState.camera, target);
       const plan = masks;
@@ -475,7 +478,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     this.#gradients.begin();
     const meshRecords = new Map<PathMeshDraw, GradientPaintRecord>();
     if (pathDraws.length > 0) {
-      const pathById = new Map(paths.map((path) => [path.id, path] as const));
+      const pathById = this.#pathsById(paths);
       const meshOrigin = this.#meshOrigin ?? { x: 0, y: 0 };
       const outOfRange = new Set<string>();
       for (const draw of pathDraws) {
@@ -1279,6 +1282,76 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       ),
       expected: output.expected,
     });
+  }
+
+  /**
+   * The visible primitives and text leaves. E26 contract, U5c: kept while the derivation's leaves,
+   * the camera and the target size stay the same.
+   */
+  #cull(
+    derivation: Derivation,
+    camera: Readonly<{ position: Readonly<{ x: number; y: number }>; zoom: number }>,
+    target: PrimitiveTarget,
+  ): Readonly<{ visible: DerivedPrimitive[]; texts: DerivedText[] }> {
+    const key = [
+      camera.position.x,
+      camera.position.y,
+      camera.zoom,
+      target.width,
+      target.height,
+      target.devicePixelRatio,
+    ];
+    const kept = this.#culled;
+    if (
+      !this.#fullDerivation &&
+      kept !== null &&
+      kept.primitives === derivation.primitives &&
+      kept.leaves === derivation.texts.leaves &&
+      numericArraysEqual(kept.key, key)
+    ) {
+      return kept;
+    }
+    const visible = cullPrimitives(
+      derivation.primitives.filter(
+        (entry) => !entry.hidden && !entry.omitted && entry.clip?.empty !== true,
+      ),
+      camera,
+      target,
+    );
+    // E28-K9: text leaves cull by their node bound and clip chain as primitives do.
+    const texts = cullTexts(
+      derivation.texts.leaves.filter((text) => !text.hidden && text.clip?.empty !== true),
+      camera,
+      target,
+    );
+    this.#culled = Object.freeze({
+      primitives: derivation.primitives,
+      leaves: derivation.texts.leaves,
+      key,
+      visible,
+      texts,
+    });
+    return this.#culled;
+  }
+
+  /** The derived paths by ID, built once per paths array (E26-U5c). */
+  #pathsById(paths: readonly DerivedPath[]): ReadonlyMap<string, DerivedPath> {
+    let byId = this.#pathMaps.get(paths);
+    if (byId === undefined || this.#fullDerivation) {
+      byId = new Map(paths.map((path) => [path.id, path] as const));
+      this.#pathMaps.set(paths, byId);
+    }
+    return byId;
+  }
+
+  /** The derived paths' clip chains by ID, built once per paths array (E26-U5c). */
+  #pathClips(paths: readonly DerivedPath[]): ReadonlyMap<string, ClipChain | null> {
+    let clips = this.#pathClipMaps.get(paths);
+    if (clips === undefined || this.#fullDerivation) {
+      clips = new Map(paths.map((path) => [path.id, path.clip ?? null] as const));
+      this.#pathClipMaps.set(paths, clips);
+    }
+    return clips;
   }
 
   /**
