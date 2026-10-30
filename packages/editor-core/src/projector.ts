@@ -1,4 +1,5 @@
 import type {
+  PathStroke,
   RenderChangeSet,
   RenderNodeSnapshot,
   RendererSceneSynchronization,
@@ -6,19 +7,22 @@ import type {
   SceneIdentity,
   SceneRejectionReason,
   ScenePathGeometry,
+  ScenePaint,
   ScenePathVerb,
+  SceneStroke,
 } from '@vector-studio/contracts';
 import type {
-  Color,
-  DocumentV5,
+  DocumentV6,
   Frame,
-  LineNode,
-  NodeV5,
+  LineNodeV6,
+  NodeV6,
+  Paint,
   PathData,
-  RectStroke,
+  Stroke,
 } from '@vector-studio/model';
 import { ExpansionCache, type Expansion, type ExpansionResult } from './expansion.js';
 import { localTransform } from './geometry.js';
+import { lineDashes, type LineDash } from './line-dash.js';
 import type { DiagnosticEvent } from './types.js';
 
 // The scene projector (P5 plan, section 4.5; MVP M1 contract, section 5): maps the active page of
@@ -37,7 +41,7 @@ import type { DiagnosticEvent } from './types.js';
 // the instance with its whole expansion is one unit for isolation.
 
 /** Frame-local path geometry for a custom node (its extension's `toScene`), or null. */
-export type CustomProjection = (node: NodeV5) => PathData | null;
+export type CustomProjection = (node: NodeV6) => PathData | null;
 
 /** Synthetic scene IDs of a frame (M1 contract, section 5); document IDs never hold U+0000. */
 export function frameContentId(frameId: string): string {
@@ -136,6 +140,10 @@ class Outline {
     return this.push('line', [p]);
   }
 
+  cubic(c1: Vec, c2: Vec, p: Vec): this {
+    return this.push('cubic', [c1, c2, p]);
+  }
+
   close(): this {
     return this.push('close', []);
   }
@@ -146,10 +154,16 @@ class Outline {
     return this.close();
   }
 
-  /** The closed quad of width `w` along `from → to`: the shaft and line-head rectangle form. */
-  bar(from: Vec, to: Vec, w: number): this {
-    const length = Math.hypot(to.x - from.x, to.y - from.y);
-    const m = { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
+  /**
+   * The closed quad of width `w` along `from → to`: the shaft and line-head rectangle form;
+   * `direction`, when given, is the unit direction (a dash piece takes the line's).
+   */
+  bar(from: Vec, to: Vec, w: number, direction?: Vec): this {
+    // E24-K7's line length, as renderer-core measures it.
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const m = direction ?? { x: dx / length, y: dy / length };
     const q = { x: -m.y, y: m.x };
     const h = w / 2;
     return this.polygon([add(from, q, -h), add(to, q, -h), add(to, q, h), add(from, q, h)]);
@@ -163,22 +177,169 @@ class Outline {
 type PathContent = Pick<Extract<RenderNodeSnapshot, { kind: 'path' }>, 'geometry' | 'style'>;
 
 /**
- * The scene content of a line (section 5): stroke mode (no `triangle` end) keeps the line's
- * stroke; fill mode is one filled outline in the stroke colour, with the literal vertex lists.
+ * M4-P1 (MVP M4 contract, section 3): a colour passes through unchanged; a gradient, stored in
+ * the unit box of the node's frame, is composed into the box `w × h` of node-local space,
+ * `transform = diag(w*, h*) · T` with an axis of size 0 folded as 1 (E23, gradient space).
  */
-export function lineContent(node: LineNode): PathContent {
+export function composePaint(paint: Paint, width: number, height: number): ScenePaint {
+  if (!('kind' in paint)) return paint;
+  const sx = width > 0 ? width : 1;
+  const sy = height > 0 ? height : 1;
+  const [a, b, c, d, e, f] = paint.transform;
+  return {
+    kind: paint.kind,
+    transform: [sx * a + 0, sy * b + 0, sx * c + 0, sy * d + 0, sx * e + 0, sy * f + 0],
+    stops: paint.stops.map((stop) => ({ offset: stop.offset, color: stop.color })),
+    spread: paint.spread,
+  };
+}
+
+function composeFill(fill: Paint | null, width: number, height: number): ScenePaint | null {
+  return fill === null ? null : composePaint(fill, width, height);
+}
+
+/**
+ * M4-P2: a primitive stroke is exactly `{ color, width }`, the only shape the renderer's
+ * `copyStroke` accepts, so cap, join, miter limit and dash are left out; its paint is composed
+ * in the box `w × h` (M4-P1).
+ */
+function primitiveStroke(stroke: Stroke | null, width: number, height: number): SceneStroke | null {
+  return stroke === null
+    ? null
+    : { color: composePaint(stroke.color, width, height), width: stroke.width };
+}
+
+/**
+ * M4-P2: a path stroke carries color, width, cap, join and miter limit, and `dash` only when it
+ * is not null (M4-Q14 (a)), so a solid stroke's snapshot is the pre-M4 one (E24-S2); its paint
+ * is composed in the box `w × h` (M4-P1).
+ */
+function pathStroke(stroke: Stroke | null, width: number, height: number): PathStroke | null {
+  if (stroke === null) return null;
+  const { cap, join, miterLimit, dash } = stroke;
+  const color = composePaint(stroke.color, width, height);
+  return dash === null
+    ? { color, width: stroke.width, cap, join, miterLimit }
+    : { color, width: stroke.width, cap, join, miterLimit, dash };
+}
+
+/** `4(√2 − 1)/3`, the cubic handle length of a quarter circle of radius 1 (M4-P4). */
+export const QUARTER_ARC_HANDLE = 0.5522847498307936;
+
+/**
+ * M4-P4: the outline of a `w × h` rectangle with clamped radii `[tl, tr, br, bl]`, from
+ * `(tl, 0)` clockwise on screen; a zero radius has no cubic and a zero-length line is omitted.
+ */
+export function rectangleOutline(
+  width: number,
+  height: number,
+  radii: readonly [number, number, number, number],
+): ScenePathGeometry {
+  const [tl, tr, br, bl] = radii;
+  const k = QUARTER_ARC_HANDLE;
+  const w = width;
+  const h = height;
+  const outline = new Outline().move({ x: tl, y: 0 });
+  let at: Vec = { x: tl, y: 0 };
+  const line = (p: Vec) => {
+    if (p.x !== at.x || p.y !== at.y) outline.line(p);
+    at = p;
+  };
+  const cubic = (c1: Vec, c2: Vec, p: Vec) => {
+    outline.cubic(c1, c2, p);
+    at = p;
+  };
+  line({ x: w - tr, y: 0 });
+  if (tr > 0) cubic({ x: w - tr + k * tr, y: 0 }, { x: w, y: tr - k * tr }, { x: w, y: tr });
+  line({ x: w, y: h - br });
+  if (br > 0)
+    cubic({ x: w, y: h - br + k * br }, { x: w - br + k * br, y: h }, { x: w - br, y: h });
+  line({ x: bl, y: h });
+  if (bl > 0) cubic({ x: bl - k * bl, y: h }, { x: 0, y: h - bl + k * bl }, { x: 0, y: h - bl });
+  if (tl > 0) {
+    line({ x: 0, y: tl });
+    cubic({ x: 0, y: tl - k * tl }, { x: tl - k * tl, y: 0 }, { x: tl, y: 0 });
+  }
+  return outline.close().geometry();
+}
+
+/**
+ * M4-P4: the outline of a `w × h` ellipse, from `(w, h/2)` through `(w/2, h)`, `(0, h/2)` and
+ * `(w/2, 0)` as four cubics, clockwise on screen.
+ */
+export function ellipseOutline(width: number, height: number): ScenePathGeometry {
+  const k = QUARTER_ARC_HANDLE;
+  const rx = width / 2;
+  const ry = height / 2;
+  const kx = k * rx;
+  const ky = k * ry;
+  return new Outline()
+    .move({ x: width, y: ry })
+    .cubic({ x: width, y: ry + ky }, { x: rx + kx, y: height }, { x: rx, y: height })
+    .cubic({ x: rx - kx, y: height }, { x: 0, y: ry + ky }, { x: 0, y: ry })
+    .cubic({ x: 0, y: ry - ky }, { x: rx - kx, y: 0 }, { x: rx, y: 0 })
+    .cubic({ x: rx + kx, y: 0 }, { x: width, y: ry - ky }, { x: width, y: ry })
+    .close()
+    .geometry();
+}
+
+/**
+ * M4-P3: whether a rectangle-shaped stroke (a rectangle, or a frame, symbol or instance border)
+ * stays a P1 primitive: no stroke, a round join with no dash, or an empty box, which draws
+ * nothing as a primitive (P1 degenerate rule) and would draw a line as a path.
+ */
+function rectanglePrimitive(stroke: Stroke | null, width: number, height: number): boolean {
+  return (
+    stroke === null ||
+    (stroke.join === 'round' && stroke.dash === null) ||
+    width === 0 ||
+    height === 0
+  );
+}
+
+/** M4-P3: an ellipse stays a primitive with no stroke, no dash or an empty box. */
+function ellipsePrimitive(stroke: Stroke | null, width: number, height: number): boolean {
+  return stroke === null || stroke.dash === null || width === 0 || height === 0;
+}
+
+/**
+ * A fill-mode round cap at end `e` with outward direction `u` and cap side `s`: the half disc
+ * from `e + (w/2)s` through `e + (w/2)u` to `e − (w/2)s` in 16 chords, both ends exact.
+ */
+function halfDisc(outline: Outline, e: Vec, u: Vec, s: Vec, h: number): void {
+  outline.move(add(e, s, h));
+  for (let k = 1; k < ROUND_CAP_SEGMENTS; k += 1) {
+    const angle = (k * Math.PI) / ROUND_CAP_SEGMENTS;
+    const c = Math.cos(angle);
+    const t = Math.sin(angle);
+    outline.line(add(e, { x: c * s.x + t * u.x, y: c * s.y + t * u.y }, h));
+  }
+  outline.line(add(e, s, -h)).close();
+}
+
+/**
+ * The scene content of a line (section 5, M4-P5): stroke mode (no `triangle` end and no dash,
+ * or a dash and no head) keeps the line's stroke; fill mode is one filled outline in the stroke
+ * paint, with the literal vertex lists, the shaft dashed in editor-core when the stroke is.
+ */
+export function lineContent(node: LineNodeV6): PathContent {
   const { width: fw, height: fh } = node.frame;
   const [x0, y0, x1, y1] = node.points;
   const p0 = { x: x0 * fw, y: y0 * fh };
   const p1 = { x: x1 * fw, y: y1 * fh };
   const stroke = node.stroke;
   const w = stroke?.width ?? 0;
-  const length = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+  // E24-K7's line length, as renderer-core's `expandDash` measures it, bit for bit.
+  const dx = p1.x - p0.x;
+  const dy = p1.y - p0.y;
+  const length = Math.sqrt(dx * dx + dy * dy);
   const plain = new Outline().move(p0).line(p1);
-  if (stroke === null || w === 0 || length === 0) {
-    return { geometry: plain.geometry(), style: { fill: null, stroke } };
-  }
-  const d = { x: (p1.x - p0.x) / length, y: (p1.y - p0.y) / length };
+  const strokeMode = (outline: Outline): PathContent => ({
+    geometry: outline.geometry(),
+    style: { fill: null, stroke: pathStroke(stroke, fw, fh) },
+  });
+  if (stroke === null || w === 0 || length === 0) return strokeMode(plain);
+  const d = { x: dx / length, y: dy / length };
   const n = { x: -d.y, y: d.x };
   // Each end: tip T, outward direction u, base centre B = T − 4w·u, base corners B ± 2w·n, and
   // the cap side N (n at P0, −n at P1).
@@ -191,36 +352,40 @@ export function lineContent(node: LineNode): PathContent {
     const base = add(tip, out, -4 * w);
     return { arrow, tip, out, side, base, plus: add(base, n, 2 * w), minus: add(base, n, -2 * w) };
   });
-  if (ends.every((end) => end.arrow !== 'triangle')) {
+  const dash = stroke.dash;
+  if (
+    dash === null
+      ? ends.every((end) => end.arrow !== 'triangle')
+      : ends.every((end) => end.arrow === 'none')
+  ) {
+    // A dashed line here has no head; `line` heads join the stroke only when it is solid.
     for (const end of ends) {
       if (end.arrow === 'line') plain.move(end.plus).line(end.tip).line(end.minus);
     }
-    return { geometry: plain.geometry(), style: { fill: null, stroke } };
+    return strokeMode(plain);
   }
+  // M4-P5: the dashes of the whole segment; past E24-K8's limit the line goes to stroke mode
+  // with the dash and no heads, so the renderer reports `dash-limit` and draws nothing.
+  const dashes = dash === null ? null : lineDashes(length, dash);
+  if (dash !== null && dashes === null) return strokeMode(plain);
   const outline = new Outline();
   const [start, end] = [ends[0]!, ends[1]!];
   const s0 = start.arrow === 'triangle' ? start.base : start.tip;
   const s1 = end.arrow === 'triangle' ? end.base : end.tip;
   // The shaft and its cap pieces, unless the heads leave no shaft (tested before extension).
   if ((s1.x - s0.x) * d.x + (s1.y - s0.y) * d.y > 0) {
-    const square = stroke.cap === 'square';
-    const a0 = square && start.arrow !== 'triangle' ? add(s0, d, -w / 2) : s0;
-    const a1 = square && end.arrow !== 'triangle' ? add(s1, d, w / 2) : s1;
-    outline.bar(a0, a1, w);
-    if (stroke.cap === 'round') {
-      const h = w / 2;
-      for (const { arrow, tip: e, out: u, side: s } of ends) {
-        if (arrow === 'triangle') continue;
-        // From E + (w/2)N through E + (w/2)u to E − (w/2)N; both ends exact.
-        outline.move(add(e, s, h));
-        for (let k = 1; k < ROUND_CAP_SEGMENTS; k += 1) {
-          const angle = (k * Math.PI) / ROUND_CAP_SEGMENTS;
-          const c = Math.cos(angle);
-          const t = Math.sin(angle);
-          outline.line(add(e, { x: c * s.x + t * u.x, y: c * s.y + t * u.y }, h));
+    if (dashes === null) {
+      const square = stroke.cap === 'square';
+      const a0 = square && start.arrow !== 'triangle' ? add(s0, d, -w / 2) : s0;
+      const a1 = square && end.arrow !== 'triangle' ? add(s1, d, w / 2) : s1;
+      outline.bar(a0, a1, w);
+      if (stroke.cap === 'round') {
+        for (const { arrow, tip: e, out: u, side: s } of ends) {
+          if (arrow !== 'triangle') halfDisc(outline, e, u, s, w / 2);
         }
-        outline.line(add(e, s, -h)).close();
       }
+    } else {
+      dashedShaft(outline, dashes, { p0, p1, d, n, length, w, cap: stroke.cap }, start, end);
     }
   }
   ends.forEach((head, index) => {
@@ -232,7 +397,92 @@ export function lineContent(node: LineNode): PathContent {
       outline.bar(head.tip, head.plus, w).bar(head.tip, head.minus, w);
     }
   });
-  return { geometry: outline.geometry(), style: { fill: stroke.color, stroke: null } };
+  return {
+    geometry: outline.geometry(),
+    style: { fill: composePaint(stroke.color, fw, fh), stroke: null },
+  };
+}
+
+type LineEnd = Readonly<{ arrow: string; base: Vec }>;
+type Shaft = Readonly<{
+  p0: Vec;
+  p1: Vec;
+  d: Vec;
+  n: Vec;
+  length: number;
+  w: number;
+  cap: Stroke['cap'];
+}>;
+
+/**
+ * M4-P5: the dashes of the segment clipped to the shaft (from a triangle base, or the tip, to
+ * the other), each a bar of width `w` with the stroke's cap at its ends, no cap at an end on a
+ * triangle base; a zero-length dash is a disc, a local-axis-aligned `w × w` square (E24-K5) or
+ * nothing for `butt`. Every piece winds as the solid shaft does, so the nonzero union holds.
+ */
+function dashedShaft(
+  outline: Outline,
+  dashes: readonly LineDash[],
+  shaft: Shaft,
+  start: LineEnd,
+  end: LineEnd,
+): void {
+  const { p0, p1, d, n, length, w, cap } = shaft;
+  const h = w / 2;
+  const startCut = start.arrow === 'triangle';
+  const endCut = end.arrow === 'triangle';
+  const from = startCut ? 4 * w : 0;
+  const to = endCut ? length - 4 * w : length;
+  const minusD = { x: -d.x, y: -d.y };
+  const minusN = { x: -n.x, y: -n.y };
+  const at = (s: number): Vec => {
+    if (startCut && s === from) return start.base;
+    if (endCut && s === to) return end.base;
+    if (s === 0) return p0;
+    if (s === length) return p1;
+    return add(p0, d, s);
+  };
+  for (const piece of dashes) {
+    if (piece.s1 < from || piece.s0 > to) continue;
+    const c0 = piece.s0 < from ? from : piece.s0;
+    const c1 = piece.s1 > to ? to : piece.s1;
+    const cut0 = startCut && c0 === from;
+    const cut1 = endCut && c1 === to;
+    const e0 = at(c0);
+    if (c0 === c1) {
+      if (cut0 || cut1) continue;
+      if (cap === 'round') {
+        // The full disc: the end cap's half disc and its continuation, both axis points exact.
+        outline.move(add(e0, minusN, h));
+        for (let k = 1; k < 2 * ROUND_CAP_SEGMENTS; k += 1) {
+          if (k === ROUND_CAP_SEGMENTS) {
+            outline.line(add(e0, minusN, -h));
+            continue;
+          }
+          const angle = (k * Math.PI) / ROUND_CAP_SEGMENTS;
+          const c = Math.cos(angle);
+          const t = Math.sin(angle);
+          outline.line(add(e0, { x: c * minusN.x + t * d.x, y: c * minusN.y + t * d.y }, h));
+        }
+        outline.close();
+      } else if (cap === 'square') {
+        outline.polygon([
+          { x: e0.x - h, y: e0.y - h },
+          { x: e0.x + h, y: e0.y - h },
+          { x: e0.x + h, y: e0.y + h },
+          { x: e0.x - h, y: e0.y + h },
+        ]);
+      }
+      continue;
+    }
+    const e1 = at(c1);
+    const square = cap === 'square';
+    outline.bar(square && !cut0 ? add(e0, d, -h) : e0, square && !cut1 ? add(e1, d, h) : e1, w, d);
+    if (cap === 'round') {
+      if (!cut0) halfDisc(outline, e0, minusD, n, h);
+      if (!cut1) halfDisc(outline, e1, d, minusN, h);
+    }
+  }
 }
 
 /**
@@ -240,7 +490,7 @@ export function lineContent(node: LineNode): PathContent {
  * projected (an unowned custom type, or a container: containers project through `projectPage`).
  */
 export function projectNode(
-  node: NodeV5,
+  node: NodeV6,
   custom: CustomProjection,
   parentId: string | null = null,
 ): RenderNodeSnapshot | null {
@@ -252,26 +502,44 @@ export function projectNode(
     visible: node.visible,
     opacity: node.opacity,
   };
+  const { width, height } = node.frame;
   switch (node.type) {
-    case 'rectangle':
+    case 'rectangle': {
+      const radii = clampedRadii(node.cornerRadii, width, height);
+      const fill = composeFill(node.fill, width, height);
+      // M4-P3: a stroke with a miter or bevel join or a dash draws as the M4-P4 outline.
+      if (!rectanglePrimitive(node.stroke, width, height)) {
+        return {
+          ...base,
+          kind: 'path',
+          geometry: rectangleOutline(width, height, radii),
+          style: { fill, stroke: pathStroke(node.stroke, width, height) },
+        };
+      }
       return {
         ...base,
         kind: 'primitive',
-        geometry: {
-          kind: 'rectangle',
-          width: node.frame.width,
-          height: node.frame.height,
-          cornerRadii: clampedRadii(node.cornerRadii, node.frame.width, node.frame.height),
-        },
-        style: { fill: node.fill, stroke: node.stroke },
+        geometry: { kind: 'rectangle', width, height, cornerRadii: radii },
+        style: { fill, stroke: primitiveStroke(node.stroke, width, height) },
       };
-    case 'ellipse':
+    }
+    case 'ellipse': {
+      const fill = composeFill(node.fill, width, height);
+      if (!ellipsePrimitive(node.stroke, width, height)) {
+        return {
+          ...base,
+          kind: 'path',
+          geometry: ellipseOutline(width, height),
+          style: { fill, stroke: pathStroke(node.stroke, width, height) },
+        };
+      }
       return {
         ...base,
         kind: 'primitive',
-        geometry: { kind: 'ellipse', width: node.frame.width, height: node.frame.height },
-        style: { fill: node.fill, stroke: node.stroke },
+        geometry: { kind: 'ellipse', width, height },
+        style: { fill, stroke: primitiveStroke(node.stroke, width, height) },
       };
+    }
     case 'line':
       return { ...base, kind: 'path', ...lineContent(node) };
     case 'path':
@@ -279,8 +547,11 @@ export function projectNode(
       return {
         ...base,
         kind: 'path',
-        geometry: pathGeometry(node.path, node.frame.width, node.frame.height),
-        style: { fill: node.fill, stroke: node.stroke },
+        geometry: pathGeometry(node.path, width, height),
+        style: {
+          fill: composeFill(node.fill, width, height),
+          stroke: pathStroke(node.stroke, width, height),
+        },
       };
     case 'custom': {
       const geometry = custom(node);
@@ -289,7 +560,10 @@ export function projectNode(
         ...base,
         kind: 'path',
         geometry: pathGeometry(geometry, 1, 1),
-        style: { fill: node.fill, stroke: node.stroke },
+        style: {
+          fill: composeFill(node.fill, width, height),
+          stroke: pathStroke(node.stroke, width, height),
+        },
       };
     }
     default:
@@ -309,13 +583,14 @@ type FrameUnit = Readonly<{
   rotation: number;
   visible: boolean;
   opacity: number;
-  fill: Color | null;
-  stroke: RectStroke | null;
+  fill: Paint | null;
+  stroke: Stroke | null;
 }>;
 
 /**
  * The scene nodes of a frame (section 5), outer first: the outer container, its content
- * container (rect clip) holding the background and `children`, and the border.
+ * container (rect clip) holding the background and `children`, and the border. The paints are
+ * composed in the unit's own box (M4-P1): an instance's in the instance's frame, not the source's.
  */
 function frameSnapshots(
   node: FrameUnit,
@@ -335,19 +610,29 @@ function frameSnapshots(
           ...inner,
           kind: 'primitive',
           geometry: rectangle,
-          style: { fill: node.fill, stroke: null },
+          style: { fill: composePaint(node.fill, width, height), stroke: null },
         };
+  // M4-P3: the border is a primitive as a rectangle is, else the M4-P4 outline with no fill.
   const border: RenderNodeSnapshot | null =
     node.stroke === null
       ? null
-      : {
-          id: frameBorderId(node.id),
-          parentId: node.id,
-          ...inner,
-          kind: 'primitive',
-          geometry: rectangle,
-          style: { fill: null, stroke: node.stroke },
-        };
+      : rectanglePrimitive(node.stroke, width, height)
+        ? {
+            id: frameBorderId(node.id),
+            parentId: node.id,
+            ...inner,
+            kind: 'primitive',
+            geometry: rectangle,
+            style: { fill: null, stroke: primitiveStroke(node.stroke, width, height) },
+          }
+        : {
+            id: frameBorderId(node.id),
+            parentId: node.id,
+            ...inner,
+            kind: 'path',
+            geometry: rectangleOutline(width, height, ZERO_RADII),
+            style: { fill: null, stroke: pathStroke(node.stroke, width, height) },
+          };
   const snapshots: RenderNodeSnapshot[] = [
     {
       id: node.id,
@@ -391,7 +676,7 @@ export type PageProjection = Readonly<{
 
 /** A node's last snapshots, reused while the node, its scene parent and its children hold. */
 type MemoEntry = Readonly<{
-  node: NodeV5;
+  node: NodeV6;
   parentId: string | null;
   children: readonly string[] | null;
   snapshots: readonly RenderNodeSnapshot[];
@@ -401,7 +686,7 @@ type MemoEntry = Readonly<{
    */
   instance?: Readonly<{
     result: ExpansionResult;
-    source: NodeV5;
+    source: NodeV6;
     expanded: ReadonlyMap<string, MemoEntry>;
   }>;
 }>;
@@ -411,7 +696,7 @@ export type ProjectionMemo = Map<string, MemoEntry>;
 /** The snapshots of `entry` when its node, scene parent and projected children still hold. */
 function reusedFrom(
   entry: MemoEntry | undefined,
-  node: NodeV5,
+  node: NodeV6,
   parentId: string | null,
   children: readonly string[] | null,
 ): readonly RenderNodeSnapshot[] | null {
@@ -425,7 +710,7 @@ function reusedFrom(
 /** The container snapshot of a group or mask group under the scene ID `id`. */
 function groupSnapshot(
   id: string,
-  node: NodeV5,
+  node: NodeV6,
   parentId: string | null,
   children: readonly string[],
 ): RenderNodeSnapshot {
@@ -510,7 +795,7 @@ function projectExpanded(
  * whose expansion is invalid is left out and listed in `invalid` (M7-X3).
  */
 export function projectPage(
-  document: DocumentV5,
+  document: DocumentV6,
   pageId: string,
   custom: CustomProjection,
   omit: ReadonlySet<string> = new Set(),
@@ -525,7 +810,7 @@ export function projectPage(
 
   /** The snapshots of instance `node` and its expansion, or null when it is invalid. */
   const instanceUnit = (
-    node: Extract<NodeV5, { type: 'instance' }>,
+    node: Extract<NodeV6, { type: 'instance' }>,
     parentId: string | null,
   ): MemoEntry | null => {
     const result = expansions.expand(document, node.id);
@@ -562,7 +847,8 @@ export function projectPage(
           frame: node.frame,
           rotation: node.rotation,
           visible: node.visible,
-          opacity: node.opacity,
+          // The effective opacity, instance × source (MVP M4 contract, M4-P6, M4-Q15 (a)).
+          opacity: node.opacity * source.opacity,
           fill: source.fill,
           stroke: source.stroke,
         },
@@ -745,7 +1031,7 @@ export class SceneProjector {
    * excluded subtrees that `touched` reaches (the change that caused it) are projected again.
    */
   replace(
-    document: DocumentV5,
+    document: DocumentV6,
     page: string,
     touched: readonly string[] = [],
     retried = false,
@@ -784,7 +1070,7 @@ export class SceneProjector {
   }
 
   /** Sends one change set for a document change on `page` that touched `touched`. */
-  change(document: DocumentV5, page: string, touched: readonly string[]): void {
+  change(document: DocumentV6, page: string, touched: readonly string[]): void {
     if (this.disposed) return;
     const retry = this.release(document, touched);
     if (this.identity === null || this.base === null || this.page !== page) {
@@ -823,7 +1109,7 @@ export class SceneProjector {
    * rejection already known to be the projection's only unit's own.
    */
   private isolate(
-    document: DocumentV5,
+    document: DocumentV6,
     projection: PageProjection,
     only: Readonly<{ id: string; result: Rejection }> | null,
   ): void {
@@ -845,7 +1131,7 @@ export class SceneProjector {
   }
 
   /** Retries the released subtrees from their roots, one unit per set. */
-  private retry(document: DocumentV5, roots: ReadonlySet<string>): void {
+  private retry(document: DocumentV6, roots: ReadonlySet<string>): void {
     if (roots.size > 0) this.addUnits(document, this.project(document), roots);
   }
 
@@ -855,7 +1141,7 @@ export class SceneProjector {
    * out. Rejections are reported once per reason; any other failure ends in a full snapshot.
    */
   private addUnits(
-    document: DocumentV5,
+    document: DocumentV6,
     projection: PageProjection,
     roots: ReadonlySet<string> | null,
   ): void {
@@ -974,7 +1260,7 @@ export class SceneProjector {
   }
 
   /** The root to leave out for a rejected node: its mask group when it is a mask source. */
-  private excludedRoot(document: DocumentV5, id: string): string {
+  private excludedRoot(document: DocumentV6, id: string): string {
     const node = Object.hasOwn(document.nodes, id) ? document.nodes[id]! : undefined;
     const parent =
       node !== undefined && Object.hasOwn(document.nodes, node.parent)
@@ -984,7 +1270,7 @@ export class SceneProjector {
   }
 
   /** The document parent chain of `id`, itself first (bounded by the tree depth). */
-  private chain(document: DocumentV5, id: string): string[] {
+  private chain(document: DocumentV6, id: string): string[] {
     const ids: string[] = [];
     let cursor: string | undefined = id;
     for (let guard = 0; cursor !== undefined && guard < PARENT_WALK_LIMIT; guard += 1) {
@@ -999,7 +1285,7 @@ export class SceneProjector {
    * with every excluded root inside them, and returns the outermost roots the document still
    * has; those are retried whole.
    */
-  private release(document: DocumentV5, touched: readonly string[]): Set<string> {
+  private release(document: DocumentV6, touched: readonly string[]): Set<string> {
     const roots = new Set<string>();
     if (this.excluded.size === 0) return roots;
     for (const id of [...touched, ...this.instancesOfSources(document, touched)]) {
@@ -1021,7 +1307,7 @@ export class SceneProjector {
    * contract, section 4.2). The reverse index from symbol to instances is one O(n) scan of the
    * node map, made only when a touched node is in a source.
    */
-  private instancesOfSources(document: DocumentV5, touched: readonly string[]): string[] {
+  private instancesOfSources(document: DocumentV6, touched: readonly string[]): string[] {
     const symbols = new Set<string>();
     for (const id of touched) {
       for (const entry of this.chain(document, id)) {
@@ -1043,7 +1329,7 @@ export class SceneProjector {
    * Forgets the renderer's state and sends a full snapshot, once per call chain: a renderer
    * that keeps failing is retried at the next document change, never in a loop.
    */
-  private resync(document: DocumentV5): void {
+  private resync(document: DocumentV6): void {
     this.identity = null;
     this.base = null;
     if (this.resyncing) return;
@@ -1126,7 +1412,7 @@ export class SceneProjector {
   }
 
   /** Reports a rejection of `ids` and leaves their subtrees out until a change touches them. */
-  private exclude(document: DocumentV5, result: Rejection, ids: readonly string[]): void {
+  private exclude(document: DocumentV6, result: Rejection, ids: readonly string[]): void {
     this.reportRejection(result.reason, ids);
     ids.forEach((id) => this.excluded.add(this.excludedRoot(document, id)));
   }
@@ -1147,7 +1433,7 @@ export class SceneProjector {
    * for an invalid expansion (M7-X3) are reported once, as a rejected scene value, until they
    * project again.
    */
-  private project(document: DocumentV5, skip: ReadonlySet<string> = new Set()): PageProjection {
+  private project(document: DocumentV6, skip: ReadonlySet<string> = new Set()): PageProjection {
     const omit = skip.size === 0 ? this.excluded : new Set([...this.excluded, ...skip]);
     const projection = projectPage(
       document,

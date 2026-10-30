@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { PATH_VERB_CODES } from '@vector-studio/contracts';
-import type { LineNode } from '../../packages/model/src/index.js';
+import type { LineNodeV6 } from '../../packages/model/src/index.js';
 import { lineContent } from '../../packages/editor-core/src/projector.js';
 import { createFillMeshPort } from '../../packages/geometry-wasm/src/index.js';
 // Source import: the path-mesh limits are package-internal.
@@ -17,14 +17,16 @@ import { PATH_MESH_LIMITS } from '../../packages/renderer-core/src/path-mesh-pip
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 let module: WebAssembly.Module;
-let l1: LineNode;
+let l1: LineNodeV6;
 beforeAll(async () => {
   if (!process.env.P2_WASM_PATH) throw new Error('Run through pnpm test:geometry');
   module = await WebAssembly.compile(new Uint8Array(await readFile(process.env.P2_WASM_PATH)));
   const fixture = JSON.parse(
     await readFile(path.join(root, 'tests/fixtures/m1-model/containers.json'), 'utf8'),
-  ) as { nodes: Record<string, LineNode> };
-  l1 = fixture.nodes.l1!;
+  ) as { nodes: Record<string, LineNodeV6> };
+  // The fixture is v2: its stroke reaches v6 with `dash: null` (M4-M1).
+  const raw = fixture.nodes.l1!;
+  l1 = { ...raw, stroke: raw.stroke === null ? null : { ...raw.stroke, dash: null } };
 });
 
 /** Distinct boundary vertices, the renderer's fringe work measure. */
@@ -35,7 +37,7 @@ function boundaryVertices(edges: Uint32Array): number {
 describe('M1-U5 fill-mode round caps mesh in the fill kernel', () => {
   // Tolerance exponents the renderer picks at zoom 1, 2 and 8 (DPR 1).
   it.each([2, 5])('fixture l1 at stroke width %d meshes at zoom 1, 2 and 8', async (width) => {
-    const line = { ...l1, stroke: { ...l1.stroke!, width } } as LineNode;
+    const line = { ...l1, stroke: { ...l1.stroke!, width } } as LineNodeV6;
     const { geometry, style } = lineContent(line);
     // Fill mode: shaft, the P0 cap, the two line-head rectangles and the triangle.
     expect(style.stroke).toBeNull();

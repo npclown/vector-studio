@@ -1,4 +1,4 @@
-import type { DocumentV5, Frame, NodeV5, PathStroke } from '@vector-studio/model';
+import type { DocumentV6, Frame, NodeV6, Stroke } from '@vector-studio/model';
 import { apply, boundsOfPoints, localTransform } from './geometry.js';
 import type { PagePoint } from './types.js';
 
@@ -44,7 +44,7 @@ function include(box: Box, p: PagePoint, by = 0): Box {
 }
 
 /** The path rule above, in the node's unrotated frame. */
-function pathBox(node: Extract<NodeV5, { type: 'path' }>): Box {
+function pathBox(node: Extract<NodeV6, { type: 'path' }>): Box {
   const { frame, stroke } = node;
   let box = boxOf(frame);
   const points = node.path.points;
@@ -59,7 +59,7 @@ function pathBox(node: Extract<NodeV5, { type: 'path' }>): Box {
 }
 
 /** The renderer's growth of a stroked outline's point box: w/2 · k (see above). */
-function strokeGrowth(stroke: PathStroke): number {
+function strokeGrowth(stroke: Stroke): number {
   const k = Math.max(
     1,
     stroke.join === 'miter' ? Math.min(stroke.miterLimit, MITER_CAP) : 1,
@@ -80,7 +80,7 @@ function strokeGrowth(stroke: PathStroke): number {
  * - A `triangle` end (fill mode): one filled outline, the shaft and caps as above, triangle heads
  *   exactly, a `line` head as two w-wide bars (so its points grow by w/2).
  */
-function lineBox(node: Extract<NodeV5, { type: 'line' }>): Box {
+function lineBox(node: Extract<NodeV6, { type: 'line' }>): Box {
   const { frame, stroke } = node;
   const [x0, y0, x1, y1] = node.points;
   const p0 = { x: frame.x + x0 * frame.width, y: frame.y + y0 * frame.height };
@@ -110,8 +110,9 @@ function lineBox(node: Extract<NodeV5, { type: 'line' }>): Box {
     return grow(outline, strokeGrowth(stroke));
   }
   for (const [arrow, tip, u] of ends) {
-    // The shaft's corners at this end (a square cap moves them w/2 outward).
-    const out = arrow === 'none' && stroke.cap === 'square' ? w / 2 : 0;
+    // The shaft's corners at this end: a square cap moves them w/2 outward at every end but a
+    // triangle's base, a `line` head's tip included (M4-U2 review, N5).
+    const out = arrow !== 'triangle' && stroke.cap === 'square' ? w / 2 : 0;
     box = include(box, at(tip, u, out, w / 2));
     box = include(box, at(tip, u, out, -w / 2));
     if (arrow === 'none' && stroke.cap === 'round') box = include(box, tip, w / 2);
@@ -125,11 +126,18 @@ function lineBox(node: Extract<NodeV5, { type: 'line' }>): Box {
 }
 
 /** A node's visual box in its own unrotated frame (coordinates of its parent's space). */
-function ownBox(document: DocumentV5, node: NodeV5): Box {
+function ownBox(document: DocumentV6, node: NodeV6): Box {
   switch (node.type) {
     case 'rectangle':
-    case 'ellipse':
-      return grow(boxOf(node.frame), node.stroke === null ? 0 : node.stroke.width / 2);
+    case 'ellipse': {
+      // A dash end on a curve (an ellipse, a rounded corner) turns a square cap's corner up to
+      // w/2·√2 from the outline (M4-U2 review, S1); otherwise the stroke reaches w/2 past the
+      // box, a sharp corner's miter tip included.
+      const stroke = node.stroke;
+      if (stroke === null) return boxOf(node.frame);
+      const square = stroke.dash !== null && stroke.cap === 'square';
+      return grow(boxOf(node.frame), (stroke.width / 2) * (square ? Math.SQRT2 : 1));
+    }
     case 'path':
       return pathBox(node);
     case 'line':
@@ -177,7 +185,7 @@ function ownBox(document: DocumentV5, node: NodeV5): Box {
  * The visual bounds of `node` in its parent's space: its own visual box turned by its rotation
  * about its frame's centre. Contains `rotatedBounds(node)`.
  */
-export function visualBounds(document: DocumentV5, node: NodeV5): Frame {
+export function visualBounds(document: DocumentV6, node: NodeV6): Frame {
   const box = ownBox(document, node);
   if (node.rotation === 0) {
     return { x: box.minX, y: box.minY, width: box.maxX - box.minX, height: box.maxY - box.minY };

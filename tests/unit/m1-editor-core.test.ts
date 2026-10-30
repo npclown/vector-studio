@@ -3,9 +3,9 @@ import path from 'node:path';
 import {
   parseDocument,
   serializeDocument,
-  type DocumentV5,
+  type DocumentV6,
   type Frame,
-  type NodeV5,
+  type NodeV6,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
@@ -39,6 +39,8 @@ const root = path.resolve(import.meta.dirname, '../..');
 const START = { horizontal: 'start', vertical: 'start' } as const;
 const black = { r: 0, g: 0, b: 0, a: 1 };
 const none = { shift: false, alt: false, meta: false, ctrl: false };
+/** The default path stroke in its v2 form, without the v6 `dash` (M4 contract, section 2.1). */
+const V2_PATH_STROKE = { color: black, width: 1, cap: 'butt', join: 'miter', miterLimit: 4 };
 
 function editor(document?: unknown, extensions: readonly Extension[] = [starExtension]): Editor {
   return createEditor({ ids: createCounterIdSource('n'), document, extensions });
@@ -54,11 +56,11 @@ function text(target: Editor): string {
   return serializeDocument(target.query({ type: 'document' }));
 }
 
-function documentOf(target: Editor): DocumentV5 {
+function documentOf(target: Editor): DocumentV6 {
   return target.query({ type: 'document' });
 }
 
-function nodeOf(target: Editor, id: string): NodeV5 {
+function nodeOf(target: Editor, id: string): NodeV6 {
   const node = target.query({ type: 'node', id });
   if (node === null) throw new Error(`no node ${id}`);
   return node;
@@ -131,7 +133,8 @@ function lineNode(id: string, parent: string, frame: Frame, rotation = 0): Loose
     ...base(id, parent, frame, rotation),
     type: 'line',
     points: [0, 0, 1, 1],
-    stroke: DEFAULT_PATH_STROKE,
+    // The document is v2; the editor holds it migrated to v6, with `dash: null` (M4-M1).
+    stroke: V2_PATH_STROKE,
     startArrow: 'none',
     endArrow: 'triangle',
   };
@@ -164,7 +167,7 @@ const f = (x: number, y: number, width: number, height: number): Frame => ({ x, 
 
 type M = [number, number, number, number, number, number];
 
-function local(node: NodeV5): M {
+function local(node: NodeV6): M {
   const { x, y, width: w, height: h } = node.frame;
   const t = node.rotation;
   if (t === 0) return [1, 0, 0, 1, x, y];
@@ -191,8 +194,8 @@ function mul(m: M, n: M): M {
   ];
 }
 
-function pageMatrix(document: DocumentV5, id: string): { m: M; rotation: number } {
-  const chain: NodeV5[] = [];
+function pageMatrix(document: DocumentV6, id: string): { m: M; rotation: number } {
+  const chain: NodeV6[] = [];
   for (let node = document.nodes[id]; node !== undefined; node = document.nodes[node.parent]) {
     chain.unshift(node);
   }
@@ -210,7 +213,7 @@ function at(m: M, x: number, y: number) {
 }
 
 /** Page centre, page rotation (normalized), size and page points of a path or line. */
-function placement(document: DocumentV5, id: string) {
+function placement(document: DocumentV6, id: string) {
   const node = document.nodes[id]!;
   const { m, rotation } = pageMatrix(document, id);
   const unit =
@@ -241,7 +244,7 @@ function angleNear(actual: number, expected: number) {
 }
 
 /** M1-A05: every listed node keeps its page placement within the contract's tolerance. */
-function expectSamePlacement(before: DocumentV5, after: DocumentV5, ids: readonly string[]) {
+function expectSamePlacement(before: DocumentV6, after: DocumentV6, ids: readonly string[]) {
   for (const id of ids) {
     const a = placement(before, id);
     const b = placement(after, id);
@@ -272,8 +275,8 @@ describe('M1-A01 editor half: a migrated ext.star node nested in a group and a f
       await readFile(path.join(root, 'tests/fixtures/p5-model/ext-star.json'), 'utf8'),
     ) as unknown;
     const target = editor(v1);
-    // Migrated through v2, v3 and v4 to the latest schema, v5 since M7-U7.
-    expect(documentOf(target).schemaVersion).toBe(5);
+    // Migrated through v2 to v5 to the latest schema, v6 since M4-U1.
+    expect(documentOf(target).schemaVersion).toBe(6);
     const [group] = ok(target, { type: 'groupNodes', ids: ['n2'], kind: 'group' });
     const [frame] = ok(target, {
       type: 'createFrame',
@@ -326,10 +329,10 @@ describe('M1-A01 editor half: a migrated ext.star node nested in a group and a f
   it('loads the containers fixture and checks its nested star', async () => {
     const text = await readFile(path.join(root, 'tests/fixtures/m1-model/containers.json'), 'utf8');
     const target = editor(JSON.parse(text));
-    // Since M7-U7 the editor holds the v5 migration of the v2 fixture (M6a contract, section 9).
+    // Since M4-U1 the editor holds the v6 migration of the v2 fixture (M4 contract, section 2.1).
     expect(serializeDocument(documentOf(target))).toBe(
       await readFile(
-        path.join(root, 'tests/fixtures/m7-symbols/migrated/containers.v5.json'),
+        path.join(root, 'tests/fixtures/m4-appearance/migrated/containers.v6.json'),
         'utf8',
       ),
     );
@@ -574,8 +577,8 @@ describe('M1-A04 creation commands', () => {
       stroke: null,
       name: 'Arrow',
     });
-    const expected: DocumentV5 = {
-      schemaVersion: 5,
+    const expected: DocumentV6 = {
+      schemaVersion: 6,
       id: 'n1',
       pages: [{ id: 'n2', name: 'Page 1', children: ['n3', 'n4', 'n5', 'n8', 'n9'] }],
       nodes: {
@@ -1329,7 +1332,7 @@ describe('M1-A08 resize rules', () => {
     const target = editor(doc([['p', ['a']]], [rect('a', 'p', frame, Math.PI / 2)]));
     const before = documentOf(target);
     ok(target, { type: 'setFrames', frames: [{ id: 'a', frame: turned }] });
-    const anchor = (document: DocumentV5) => at(pageMatrix(document, 'a').m, 0, 0);
+    const anchor = (document: DocumentV6) => at(pageMatrix(document, 'a').m, 0, 0);
     near(anchor(documentOf(target)).x, anchor(before).x);
     near(anchor(documentOf(target)).y, anchor(before).y);
     expect(nodeOf(target, 'a').rotation).toBe(Math.PI / 2);
@@ -1546,9 +1549,10 @@ describe('M1 node props and failure precedence', () => {
       'editor.invalid-command',
       '/props/fill',
     );
+    // A group takes any opacity in [0, 1] since M4-U3 (MVP M4 contract, M4-L1); 1.5 still fails.
     expectFailure(
       target,
-      { type: 'setNodeProps', id: g!, props: { opacity: 0.5 } },
+      { type: 'setNodeProps', id: g!, props: { opacity: 1.5 } },
       'document.invalid-field',
       `/nodes/${g!}/opacity`,
     );

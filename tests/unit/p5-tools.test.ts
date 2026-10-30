@@ -11,6 +11,8 @@ import {
 // P5-U3 (P5 editor-slice plan, section 4.4): P5-A02 and P5-A03, driven through `input`.
 
 const black = { r: 0, g: 0, b: 0, a: 1 };
+/** The v6 keys a rectangle, ellipse or frame stroke adds to `{ color, width }` (M4-M1). */
+const SHAPE = { cap: 'butt', join: 'round', miterLimit: 4, dash: null } as const;
 const red = { r: 1, g: 0, b: 0, a: 1 };
 const none = { shift: false, alt: false, meta: false, ctrl: false };
 const shift = { ...none, shift: true };
@@ -30,7 +32,7 @@ function rect(target: Editor, x: number, y: number, w: number, h: number, filled
     type: 'createRectangle',
     frame: { x, y, width: w, height: h },
     fill: filled ? red : null,
-    stroke: filled ? null : { color: black, width: 1 },
+    stroke: filled ? null : { color: black, width: 1, ...SHAPE },
   })[0]!;
 }
 
@@ -121,7 +123,11 @@ describe('P5-A02 click selection', () => {
     ok(target, { type: 'setViewport', camera: { position: { x: 0, y: 0 }, zoom: 2 } });
     expect(probe(50, 2.5)).toEqual([]);
     expect(probe(50, 2)).toEqual([a]);
-    ok(target, { type: 'setNodeProps', id: a, props: { stroke: { color: black, width: 20 } } });
+    ok(target, {
+      type: 'setNodeProps',
+      id: a,
+      props: { stroke: { color: black, width: 20, ...SHAPE } },
+    });
     expect(probe(50, 10)).toEqual([a]);
     expect(probe(50, 10.5)).toEqual([]);
   });

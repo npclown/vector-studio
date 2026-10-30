@@ -1,12 +1,15 @@
 export {
   DOCUMENT_ERROR_CODES,
   isValidId,
+  MAX_DASH_ENTRIES,
+  MAX_GRADIENT_STOPS,
   MAX_TEXT_LENGTH,
   MAX_TREE_DEPTH,
   migrateV1toV2,
   migrateV2toV3,
   migrateV3toV4,
   migrateV4toV5,
+  migrateV5toV6,
   normalizeRotation,
   parseDocument,
   validateAnyDocument,
@@ -22,6 +25,8 @@ export {
   type ParseResultV2,
   type ParseResultV3,
   type ParseResultV4,
+  type ParseResultV5,
+  type ValidateNodeOptions,
 } from './parse.js';
 export {
   ENVELOPE_ERROR_CODES,

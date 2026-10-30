@@ -2,11 +2,12 @@ import {
   MAX_TREE_DEPTH,
   normalizeRotation,
   validateNode,
-  type DocumentV5,
+  type DocumentV6,
   type Frame,
-  type NodeV5,
+  type NodeV6,
   type PageV2,
-  type SymbolNode,
+  type Stroke,
+  type SymbolNodeV6,
   type TextNode,
 } from '@vector-studio/model';
 import {
@@ -67,6 +68,7 @@ import { visualBounds } from './visual-bounds.js';
 import { handleBoxOf, handleCentre } from './handles.js';
 import {
   ancestors,
+  childIsolationCount,
   childrenOf,
   clipDepth,
   clipsChildren,
@@ -74,6 +76,7 @@ import {
   isAncestor,
   isContainer,
   isGroup,
+  isolationBreaks,
   nodePath,
   pageOf,
   spaceOf,
@@ -104,6 +107,19 @@ export const DEFAULT_PATH_STROKE = deepFreeze({
   cap: 'butt',
   join: 'miter',
   miterLimit: 4,
+  dash: null,
+} as const);
+/**
+ * The stroke a rectangle, ellipse, frame or symbol gets when one is added (MVP M4 contract,
+ * section 4.1, M4-Q4 (a)): a `round` join, which the analytic primitive draws.
+ */
+export const DEFAULT_SHAPE_STROKE = deepFreeze({
+  color: { r: 0, g: 0, b: 0, a: 1 },
+  width: 1,
+  cap: 'butt',
+  join: 'round',
+  miterLimit: 4,
+  dash: null,
 } as const);
 export const DEFAULT_FRAME_FILL = deepFreeze({ r: 1, g: 1, b: 1, a: 1 } as const);
 const START = deepFreeze({ horizontal: 'start', vertical: 'start' } as const);
@@ -122,7 +138,7 @@ const MAX_CLIP_DEPTH = 32;
 
 /** The props each node type has (section 4.2); any other prop is `editor.invalid-command`. */
 const COMMON_PROPS = ['name', 'opacity', 'visible', 'constraints'];
-const PROPS: Readonly<Record<NodeV5['type'], readonly string[]>> = {
+const PROPS: Readonly<Record<NodeV6['type'], readonly string[]>> = {
   rectangle: [...COMMON_PROPS, 'fill', 'stroke', 'cornerRadii'],
   ellipse: [...COMMON_PROPS, 'fill', 'stroke'],
   line: [...COMMON_PROPS, 'stroke', 'startArrow', 'endArrow'],
@@ -132,7 +148,7 @@ const PROPS: Readonly<Record<NodeV5['type'], readonly string[]>> = {
   maskGroup: COMMON_PROPS,
   frame: [...COMMON_PROPS, 'fill', 'stroke'],
   // M7 contract: a symbol has a frame's props (section 1.2), an instance only the common ones
-  // (section 5.1; its opacity stays 1 by M7-S4).
+  // (section 5.1; its opacity any in `[0, 1]` since M4-U3, M4 contract, section 5).
   symbol: [...COMMON_PROPS, 'fill', 'stroke'],
   instance: COMMON_PROPS,
   // M6a contract, section 6.1: a text node takes the common props only; its own props are
@@ -155,7 +171,7 @@ function childClipDepth(tree: TreeView, owner: string): number {
  * Restores the descendants of container `id` to their state in `base` when its subtree there has
  * the same members, and returns the container's frame in `base`; null leaves the draft as is.
  */
-function restoreSubtree(draft: Draft, base: DocumentV5, id: string): Frame | null {
+function restoreSubtree(draft: Draft, base: DocumentV6, id: string): Frame | null {
   const baseTree = documentTree(base);
   const origin = baseTree.node(id);
   if (origin === undefined) return null;
@@ -172,7 +188,7 @@ function restoreSubtree(draft: Draft, base: DocumentV5, id: string): Frame | nul
 }
 
 export function applyEdit(
-  document: DocumentV5,
+  document: DocumentV6,
   command: DocumentCommand,
   context: EditContext,
 ): EditResult {
@@ -215,7 +231,7 @@ export function applyEdit(
         // A container and its descendant in one call (section 4.2).
         return fail('editor.invalid-command', '/frames');
       }
-      const next: NodeV5[] = [];
+      const next: NodeV6[] = [];
       const refits = new Set<string>();
       for (const entry of entries) {
         const node = document.nodes[entry.id]!;
@@ -272,6 +288,8 @@ export function applyEdit(
       draft.setChecked(result.node, true);
       return success(finish(draft), draft, []);
     }
+    case 'setStyle':
+      return setStyle(document, command, context, custom, finish);
     case 'deleteNodes': {
       const ids = uniqueIds(command.ids);
       if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');
@@ -323,11 +341,14 @@ export function applyEdit(
       const siblings = childrenOf(draft, owner);
       const at = siblings.indexOf(node.id);
       // Each child keeps its page placement: the container's transform is composed into it.
+      // M4-Q17 (a) (MVP M4 contract, section 12): the group's opacity is multiplied into each
+      // child's (binary64 product), so pixels stay the same where the children do not overlap.
       const space = localTransform(node.frame, node.rotation);
       for (const id of node.children) {
         const child = document.nodes[id]!;
         const moved = relocate(child.frame, child.rotation, space, node.rotation, IDENTITY, 0);
-        draft.set({ ...child, parent: owner, ...moved });
+        const opacity = node.opacity === 1 ? child.opacity : child.opacity * node.opacity;
+        draft.set({ ...child, parent: owner, ...moved, opacity });
       }
       draft.setChildren(owner, [
         ...siblings.slice(0, at),
@@ -435,8 +456,8 @@ export function applyEdit(
  * between the gesture's `base` and `current` refit, innermost first.
  */
 export function refitGesture(
-  base: DocumentV5,
-  current: DocumentV5,
+  base: DocumentV6,
+  current: DocumentV6,
   touched: Iterable<string>,
   custom: CustomRules = NO_CUSTOM,
   expansions: ExpansionCache = new ExpansionCache((node) => custom.check(node)),
@@ -466,8 +487,8 @@ export type GestureEdit =
  * `base`. Groups do not refit (that happens at commit, section 4.2).
  */
 export function applyGestureEdit(
-  document: DocumentV5,
-  base: DocumentV5,
+  document: DocumentV6,
+  base: DocumentV6,
   edit: GestureEdit,
   custom: CustomRules = NO_CUSTOM,
   expansions: ExpansionCache = new ExpansionCache((node) => custom.check(node)),
@@ -541,11 +562,11 @@ type CreateCommand = Extract<
  * placement.
  */
 function create(
-  document: DocumentV5,
+  document: DocumentV6,
   command: CreateCommand,
   context: EditContext,
   custom: CustomRules,
-  finish: (draft: Draft) => DocumentV5 | Failure,
+  finish: (draft: Draft) => DocumentV6 | Failure,
 ): EditResult {
   if (command.parent !== undefined && typeof command.parent !== 'string') {
     return fail('editor.invalid-command', '/parent');
@@ -574,7 +595,7 @@ function create(
   const onPage = tree.page(parent) !== undefined;
   const owner = tree.node(parent);
   if (!onPage && owner === undefined) return fail('editor.unknown-node');
-  let source: SymbolNode | null = null;
+  let source: SymbolNodeV6 | null = null;
   if (command.type === 'createInstance') {
     const named = nodeOf(document, command.symbol);
     if (named === undefined) return fail('editor.unknown-node');
@@ -749,9 +770,14 @@ function create(
   ) {
     return fail('editor.clip-depth', '/parent');
   }
+  // Then the isolation count of the new node (MVP M4 contract, section 4.3): a new instance of a
+  // translucent source isolates by its effective opacity.
+  if (isolationBreaks(tree, result.node, childIsolationCount(tree, parent))) {
+    return fail('editor.isolation-depth', '/parent');
+  }
   const build = (id: string): EditResult => {
     // Into the parent's local space; on a page nothing changes.
-    let placed: NodeV5 = { ...result.node, id, parent };
+    let placed: NodeV6 = { ...result.node, id, parent };
     if (!onPage) {
       const space = spaceOf(tree, parent);
       const local = normalizeRotation(result.node.rotation - space.rotation);
@@ -801,6 +827,102 @@ function create(
   return build(id);
 }
 
+/** The keys of `setStyle`'s `style` and of a stroke patch (MVP M4 contract, section 4.2). */
+const STYLE_KEYS = ['fill', 'stroke', 'opacity', 'cornerRadii'];
+const STROKE_KEYS = ['color', 'width', 'cap', 'join', 'miterLimit', 'dash'];
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * `setStyle` (MVP M4 contract, section 4.2): `ids` a non-empty list of distinct strings, each a
+ * node of the active page at any depth; `style` an object with at least one of `fill`, `stroke`,
+ * `opacity` and `cornerRadii`, each applying to at least one listed node (`PROPS`); a stroke
+ * patch an object with known keys or `null`. Each node with a changed value is merged and
+ * validated in `ids` order, then the document's checks run as for every command (`success`:
+ * the isolation count, the expansions and caps). With no value changed the base document is
+ * returned, which the editor records as no step.
+ */
+function setStyle(
+  document: DocumentV6,
+  command: Extract<DocumentCommand, { type: 'setStyle' }>,
+  context: EditContext,
+  custom: CustomRules,
+  finish: (draft: Draft) => DocumentV6 | Failure,
+): EditResult {
+  const ids = uniqueIds(command.ids);
+  if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');
+  const tree = documentTree(document);
+  if (
+    ids.some((id) => nodeOf(document, id) === undefined || pageOf(tree, id) !== context.activePage)
+  ) {
+    return fail('editor.unknown-node');
+  }
+  const style: unknown = command.style;
+  if (!isPlainRecord(style) || Object.keys(style).length === 0) {
+    return fail('editor.invalid-command', '/style');
+  }
+  const keys = Object.keys(style);
+  for (const key of keys) {
+    if (!STYLE_KEYS.includes(key)) return fail('editor.invalid-command', pointerTo('/style', key));
+  }
+  const nodes = ids.map((id) => document.nodes[id]!);
+  for (const key of keys) {
+    if (!nodes.some((node) => PROPS[node.type].includes(key))) {
+      return fail('editor.invalid-command', `/style/${key}`);
+    }
+  }
+  const patch = style.stroke;
+  if (patch !== undefined && patch !== null) {
+    if (!isPlainRecord(patch)) return fail('editor.invalid-command', '/style/stroke');
+    for (const key of Object.keys(patch)) {
+      if (!STROKE_KEYS.includes(key)) {
+        return fail('editor.invalid-command', pointerTo('/style/stroke', key));
+      }
+    }
+  }
+  const changed: NodeV6[] = [];
+  for (const node of nodes) {
+    const props: Record<string, unknown> = {};
+    for (const key of keys) {
+      if (!PROPS[node.type].includes(key)) continue;
+      if (key !== 'stroke' || patch === null) {
+        props[key] = style[key];
+        continue;
+      }
+      const own = (node as { stroke: Stroke | null }).stroke;
+      const fallback =
+        node.type === 'line' || node.type === 'path' || node.type === 'custom'
+          ? DEFAULT_PATH_STROKE
+          : DEFAULT_SHAPE_STROKE;
+      props.stroke = { ...(own ?? fallback), ...(patch as Record<string, unknown>) };
+    }
+    if (Object.keys(props).length === 0) continue;
+    const result = validateNode({ ...node, ...props });
+    if (!result.ok) return fail(result.code, nodePath(node.id, result.path));
+    const rejected = custom.check(deepFreeze(result.node));
+    if (rejected !== null) return fail(rejected.code, nodePath(node.id, rejected.path));
+    const next = result.node as Record<string, unknown>;
+    const before = node as Record<string, unknown>;
+    if (
+      Object.keys(props).every((key) => JSON.stringify(next[key]) === JSON.stringify(before[key]))
+    ) {
+      continue;
+    }
+    changed.push(result.node);
+  }
+  if (changed.length === 0) return { ok: true, document, touched: [], created: [] };
+  const draft = new Draft(document);
+  for (const node of changed) draft.setChecked(node, true);
+  return success(finish(draft), draft, []);
+}
+
+/** A JSON Pointer to `key` below `prefix`. */
+function pointerTo(prefix: string, key: string): string {
+  return `${prefix}/${key.replaceAll('~', '~0').replaceAll('/', '~1')}`;
+}
+
 /**
  * The `createText` checks after the model's rules (M6a contract, section 6.1): the authored size
  * floor at `/runs/<k>/size`, then `editor.no-text-layout` for an auto mode without a port; a text
@@ -827,10 +949,10 @@ function textChecks(node: TextNode, layout: TextLayouter | undefined): TextNode 
  * that would hold or sit in a source fails with `editor.nested-symbol` (section 5.3).
  */
 function createSymbol(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'createSymbol' }>,
   context: EditContext,
-  finish: (draft: Draft) => DocumentV5 | Failure,
+  finish: (draft: Draft) => DocumentV6 | Failure,
 ): EditResult {
   const ids = uniqueIds(command.ids);
   if (ids === null) return fail('editor.invalid-command', '/ids');
@@ -861,10 +983,10 @@ function createSymbol(
 
 /** `groupNodes` (section 4.3). */
 function group(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'groupNodes' }>,
   context: EditContext,
-  finish: (draft: Draft) => DocumentV5 | Failure,
+  finish: (draft: Draft) => DocumentV6 | Failure,
 ): EditResult {
   const ids = uniqueIds(command.ids);
   if (ids === null) return fail('editor.invalid-command', '/ids');
@@ -894,7 +1016,7 @@ function relativeToNew(failure: Failure, prefix: string): Failure {
 }
 
 /** An ID that no page or node of `document` has, for checks that run before the ID is drawn. */
-function placeholderId(document: DocumentV5): string {
+function placeholderId(document: DocumentV6): string {
   let id = PENDING_ID;
   for (
     let n = 1;
@@ -907,12 +1029,12 @@ function placeholderId(document: DocumentV5): string {
 }
 
 function buildGroup(
-  document: DocumentV5,
+  document: DocumentV6,
   kind: 'group' | 'maskGroup' | 'symbol',
   ids: readonly string[],
   owner: string,
   id: string,
-  finish: (draft: Draft) => DocumentV5 | Failure,
+  finish: (draft: Draft) => DocumentV6 | Failure,
 ): EditResult {
   const siblings = childrenOf(documentTree(document), owner);
   const members = siblings.filter((child) => ids.includes(child));
@@ -942,7 +1064,7 @@ function buildGroup(
     children: members,
   };
   // A source wraps the nodes as a group does, with no fill or stroke (M7 contract, section 5.1).
-  const container: NodeV5 =
+  const container: NodeV6 =
     kind === 'symbol'
       ? { ...shared, name: 'Symbol', type: 'symbol', fill: null, stroke: null }
       : { ...shared, name: kind === 'group' ? 'Group' : 'Mask group', type: kind };
@@ -972,9 +1094,9 @@ function buildGroup(
 
 /** `moveNodes` (section 4.3): reparenting within one page, keeping page placement. */
 function move(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'moveNodes' }>,
-  finish: (draft: Draft) => DocumentV5 | Failure,
+  finish: (draft: Draft) => DocumentV6 | Failure,
 ): EditResult {
   const ids = uniqueIds(command.ids);
   if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');
@@ -1048,10 +1170,10 @@ function move(
  * itself with nothing touched, which the editor records as no step.
  */
 function rotateNodes(
-  document: DocumentV5,
+  document: DocumentV6,
   command: Extract<DocumentCommand, { type: 'rotateNodes' }>,
   context: EditContext,
-  finish: (draft: Draft) => DocumentV5 | Failure,
+  finish: (draft: Draft) => DocumentV6 | Failure,
 ): EditResult {
   const ids = uniqueIds(command.ids);
   if (ids === null || ids.length === 0) return fail('editor.invalid-command', '/ids');

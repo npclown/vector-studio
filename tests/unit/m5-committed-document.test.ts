@@ -1,4 +1,4 @@
-import { serializeDocument, type DocumentV5, type Frame } from '@vector-studio/model';
+import { serializeDocument, type DocumentV6, type Frame } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   createCounterIdSource,
@@ -119,11 +119,11 @@ function pointer(
   ok(target, { type: 'input', event: { kind, point, modifiers: none } });
 }
 
-function committed(target: Editor): DocumentV5 {
+function committed(target: Editor): DocumentV6 {
   return target.query({ type: 'committedDocument' });
 }
 
-function frameOf(document: DocumentV5, id: string): Frame {
+function frameOf(document: DocumentV6, id: string): Frame {
   return document.nodes[id]!.frame;
 }
 
@@ -307,7 +307,7 @@ describe('M5-A07 committedDocument during a gesture', () => {
 
 describe('M5-A07 committedDocument when other commands end or skip a drag', () => {
   /** An editor with `a` dragged by (30, 40); returns the pre-gesture document. */
-  function dragging(target: Editor): DocumentV5 {
+  function dragging(target: Editor): DocumentV6 {
     const before = target.query({ type: 'document' });
     pointer(target, 'pointerdown', at(50, 50));
     pointer(target, 'pointermove', at(80, 90));

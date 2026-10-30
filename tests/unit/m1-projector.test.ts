@@ -6,7 +6,7 @@ import type {
   SceneApplyResult,
   ScenePathGeometry,
 } from '@vector-studio/contracts';
-import type { DocumentV5, NodeV5 } from '@vector-studio/model';
+import type { DocumentV6, NodeV6 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
   createCounterIdSource,
@@ -27,6 +27,8 @@ import { RecordingRenderer } from '../support/p5-recording-renderer.js';
 // lines onto the scene surface, keeps page identity and isolates rejected subtrees. M1-A09.
 
 const root = path.resolve(import.meta.dirname, '../..');
+/** The v6 keys a rectangle, ellipse or frame stroke adds to `{ color, width }` (M4-M1). */
+const SHAPE = { cap: 'butt', join: 'round', miterLimit: 4, dash: null } as const;
 const START = { horizontal: 'start', vertical: 'start' } as const;
 const black = { r: 0, g: 0, b: 0, a: 1 };
 const white = { r: 1, g: 1, b: 1, a: 1 };
@@ -52,7 +54,7 @@ function ok(target: Editor, command: Command): readonly string[] {
   return result.ids;
 }
 
-function documentOf(target: Editor): DocumentV5 {
+function documentOf(target: Editor): DocumentV6 {
   return target.query({ type: 'document' });
 }
 
@@ -63,7 +65,7 @@ async function fixture(name: string): Promise<unknown> {
 type Fields = Record<string, unknown>;
 
 /** A v2 node with defaults; `extra` holds the type's fields. */
-function node(id: string, parent: string, type: NodeV5['type'], extra: Fields = {}): Fields {
+function node(id: string, parent: string, type: NodeV6['type'], extra: Fields = {}): Fields {
   return {
     id,
     name: id,
@@ -206,7 +208,7 @@ function line(
   endArrow: string,
   cap: 'butt' | 'round' | 'square' = 'butt',
   overrides: Fields = {},
-): NodeV5 {
+): NodeV6 {
   return node('l', 'p', 'line', {
     frame: { x: 0, y: 0, width: 100, height: 0 },
     points: [0, 0, 1, 0],
@@ -214,7 +216,14 @@ function line(
     startArrow,
     endArrow,
     ...overrides,
-  }) as unknown as NodeV5;
+  }) as unknown as NodeV6;
+}
+
+/** `lineContent` of a test line, its stroke at v6 (M4-M1 adds `dash: null`). */
+function lineContentOf(value: unknown): ReturnType<typeof lineContent> {
+  const node = value as { stroke: object | null };
+  const stroke = node.stroke === null ? null : { ...node.stroke, dash: null };
+  return lineContent({ ...node, stroke } as never);
 }
 
 describe('M1-A09 projection of the v2 fixtures', () => {
@@ -394,7 +403,7 @@ describe('M1-A09 projection of the v2 fixtures', () => {
 
 describe('M1-A09 line projection', () => {
   it('stroke mode: the segment, then each line arrow as an open polyline, P0 end first', () => {
-    const content = lineContent(line('line', 'line') as never);
+    const content = lineContentOf(line('line', 'line'));
     expect(content.style).toEqual({
       fill: null,
       stroke: { color: black, width: 2, cap: 'butt', join: 'miter', miterLimit: 4 },
@@ -405,14 +414,14 @@ describe('M1-A09 line projection', () => {
       points: [0, 0, 100, 0, 8, 4, 0, 0, 8, -4, 92, 4, 100, 0, 92, -4],
       fillRule: 'nonzero',
     });
-    expect(lineContent(line('none', 'line') as never).geometry.points).toEqual([
+    expect(lineContentOf(line('none', 'line') as never).geometry.points).toEqual([
       0, 0, 100, 0, 92, 4, 100, 0, 92, -4,
     ]);
   });
 
   it('no stroke, width 0 or zero length: stroke mode without arrowheads', () => {
     const plain = (overrides: Fields) =>
-      lineContent(line('triangle', 'triangle', 'butt', overrides) as never);
+      lineContentOf(line('triangle', 'triangle', 'butt', overrides));
     const segment = {
       kind: 'path',
       verbs: ['move', 'line'],
@@ -435,7 +444,7 @@ describe('M1-A09 line projection', () => {
   });
 
   it('fill mode: square cap shaft, line-head rectangles, then the triangle head', () => {
-    const content = lineContent(line('line', 'triangle', 'square') as never);
+    const content = lineContentOf(line('line', 'triangle', 'square'));
     expect(content.style).toEqual({ fill: black, stroke: null });
     const g = content.geometry;
     expect(g.fillRule).toBe('nonzero');
@@ -471,7 +480,7 @@ describe('M1-A09 line projection', () => {
   });
 
   it('fill mode: triangle at P0, round cap at P1 as a 16-segment half circle', () => {
-    const g = lineContent(line('triangle', 'none', 'round') as never).geometry;
+    const g = lineContentOf(line('triangle', 'none', 'round')).geometry;
     expect(g.verbs).toEqual([
       'move',
       'line',
@@ -511,11 +520,11 @@ describe('M1-A09 line projection', () => {
   });
 
   it('a line head alone stays in stroke mode; with a triangle end, P0 gets a round half circle', () => {
-    const g = lineContent(line('none', 'line', 'round') as never).geometry;
+    const g = lineContentOf(line('none', 'line', 'round')).geometry;
     // Stroke mode: a line head alone keeps the stroke.
     expect(g.verbs).toEqual(['move', 'line', 'move', 'line', 'line']);
-    const both = lineContent(
-      line('none', 'triangle', 'round', { points: [0, 0, 1, 0] }) as never,
+    const both = lineContentOf(
+      line('none', 'triangle', 'round', { points: [0, 0, 1, 0] }),
     ).geometry;
     // Shaft, then the P0 half circle (N = n = (0, 1), u = (−1, 0)), then the P1 triangle.
     expect(both.verbs.slice(5, 23)).toEqual(['move', ...Array<string>(16).fill('line'), 'close']);
@@ -540,10 +549,10 @@ describe('M1-A09 line projection', () => {
   it('a diagonal line pins the sign of the normal in both modes', () => {
     // P0 = (0, 0), P1 = (30, 40): d = (0.6, 0.8), n = (−0.8, 0.6); B1 = (25.2, 33.6).
     const diagonal = { frame: { x: 0, y: 0, width: 30, height: 40 }, points: [0, 0, 1, 1] };
-    const stroked = lineContent(line('none', 'line', 'butt', diagonal) as never).geometry;
+    const stroked = lineContentOf(line('none', 'line', 'butt', diagonal)).geometry;
     expect(stroked.verbs).toEqual(['move', 'line', 'move', 'line', 'line']);
     expectPoints(stroked.points, [0, 0, 30, 40, 22, 36, 30, 40, 28.4, 31.2]);
-    const filled = lineContent(line('none', 'triangle', 'butt', diagonal) as never).geometry;
+    const filled = lineContentOf(line('none', 'triangle', 'butt', diagonal)).geometry;
     expect(filled.verbs).toEqual([
       'move',
       'line',
@@ -563,10 +572,10 @@ describe('M1-A09 line projection', () => {
   });
 
   it('fill mode omits the shaft and its caps when the heads overlap', () => {
-    const g = lineContent(
+    const g = lineContentOf(
       line('triangle', 'triangle', 'round', {
         frame: { x: 0, y: 0, width: 10, height: 0 },
-      }) as never,
+      }),
     ).geometry;
     expect(g.verbs).toEqual(['move', 'line', 'line', 'close', 'move', 'line', 'line', 'close']);
     expect(g.points).toEqual([0, 0, 8, -4, 8, 4, 10, 0, 2, 4, 2, -4]);
@@ -611,7 +620,7 @@ describe('M1-A09 synchronization', () => {
 
   it('a frame stroke toggle with a visibility change in one command is one accepted set', async () => {
     const { target, renderer } = attached(await fixture('containers.json'));
-    const stroke = { color: black, width: 1 };
+    const stroke = { color: black, width: 1, ...SHAPE };
     let from = renderer.calls.length;
     ok(target, { type: 'setNodeProps', id: 'f1', props: { stroke: null, visible: false } });
     let [call] = sceneCalls(renderer, from);
@@ -875,7 +884,7 @@ describe('M1-A09 synchronization', () => {
       {
         type: 'createFrame',
         frame: { x: 400, y: 0, width: 100, height: 100 },
-        stroke: { color: black, width: 1 },
+        stroke: { color: black, width: 1, ...SHAPE },
       },
       {
         type: 'createRectangle',

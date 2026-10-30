@@ -1,9 +1,9 @@
 import {
   serializeDocument,
   validateDocument,
-  type DocumentV5,
-  type NodeV5,
-  type PathStroke,
+  type DocumentV6,
+  type NodeV6,
+  type Stroke,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 import {
@@ -27,12 +27,16 @@ const noCustom = () => null;
 
 function stroke(
   width: number,
-  cap: PathStroke['cap'] = 'butt',
-  join: PathStroke['join'] = 'miter',
+  cap: Stroke['cap'] = 'butt',
+  join: Stroke['join'] = 'miter',
   miterLimit = 4,
-): PathStroke {
-  return { color: WHITE, width, cap, join, miterLimit };
+): Stroke {
+  return { color: WHITE, width, cap, join, miterLimit, dash: null };
 }
+
+/** A rectangle or ellipse stroke at v6 (M4-M1's keys for `{ color, width }`). */
+const shapeStroke = (width: number) =>
+  ({ color: BLACK, width, cap: 'butt', join: 'round', miterLimit: 4, dash: null }) as const;
 
 function editor(): Editor {
   let count = 0;
@@ -56,7 +60,7 @@ function ok(target: Editor, command: Command): readonly string[] {
   return result.ids;
 }
 
-const documentOf = (target: Editor): DocumentV5 => target.query({ type: 'document' });
+const documentOf = (target: Editor): DocumentV6 => target.query({ type: 'document' });
 
 /** Wraps `ids` in a symbol and returns the document and the symbol's ID. */
 function wrap(target: Editor, ids: readonly string[]) {
@@ -65,7 +69,7 @@ function wrap(target: Editor, ids: readonly string[]) {
 }
 
 /** A child's frame in page space (the symbol is at the page root, rotation 0). */
-function pageFrame(document: DocumentV5, id: string) {
+function pageFrame(document: DocumentV6, id: string) {
   const node = document.nodes[id]!;
   const parent = document.nodes[node.parent]!;
   return { ...node.frame, x: parent.frame.x + node.frame.x, y: parent.frame.y + node.frame.y };
@@ -191,11 +195,11 @@ describe('createSymbol wraps by visual bounds (M7 section 5.1)', () => {
       data: { points: 5, innerRatio: 0.5 },
       fill: null,
       stroke: stroke(10, 'butt', 'miter', 4),
-    } as unknown as NodeV5;
-    const document = { nodes: { s: star } } as unknown as DocumentV5;
+    } as unknown as NodeV6;
+    const document = { nodes: { s: star } } as unknown as DocumentV6;
     // 10 / 2 · 4 = 20 on every side.
     expect(visualBounds(document, star)).toEqual({ x: -20, y: -20, width: 140, height: 140 });
-    expect(visualBounds(document, { ...star, stroke: null } as NodeV5)).toEqual(star.frame);
+    expect(visualBounds(document, { ...star, stroke: null } as NodeV6)).toEqual(star.frame);
   });
 
   it('grows a stroked rectangle by half its stroke and leaves an unstroked one as is', () => {
@@ -203,7 +207,7 @@ describe('createSymbol wraps by visual bounds (M7 section 5.1)', () => {
     const [stroked] = ok(target, {
       type: 'createRectangle',
       frame: { x: 10, y: 10, width: 40, height: 20 },
-      stroke: { color: BLACK, width: 4 },
+      stroke: shapeStroke(4),
     });
     const { document, symbol } = wrap(target, [stroked!]);
     expect(document.nodes[symbol]!.frame).toEqual({ x: 8, y: 8, width: 44, height: 24 });
@@ -245,7 +249,7 @@ describe('createSymbol wraps by visual bounds (M7 section 5.1)', () => {
     const [stroked] = ok(target, {
       type: 'createRectangle',
       frame: { x: 0, y: 0, width: 20, height: 20 },
-      stroke: { color: BLACK, width: 2 },
+      stroke: shapeStroke(2),
     });
     const [ellipse] = ok(target, {
       type: 'createEllipse',
@@ -256,7 +260,7 @@ describe('createSymbol wraps by visual bounds (M7 section 5.1)', () => {
       type: 'createRectangle',
       frame: { x: 80, y: 0, width: 20, height: 20 },
       rotation: Math.PI / 4,
-      stroke: { color: BLACK, width: 2 },
+      stroke: shapeStroke(2),
     });
     const [line] = ok(target, {
       type: 'createLine',

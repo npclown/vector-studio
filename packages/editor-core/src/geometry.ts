@@ -1,4 +1,4 @@
-import { normalizeRotation, type Frame, type NodeV5 } from '@vector-studio/model';
+import { normalizeRotation, type Frame, type NodeV6 } from '@vector-studio/model';
 import type { PagePoint } from './types.js';
 
 // Placement geometry of schema v2 (M1 contract, M1-S1 and section 5): a node's frame is in its
@@ -91,7 +91,7 @@ export function boundsOfPoints(points: readonly PagePoint[]): Frame | null {
 }
 
 /** Bounds of a node's rotated frame in its parent's space. */
-export function rotatedBounds(node: Pick<NodeV5, 'frame' | 'rotation'>): Frame {
+export function rotatedBounds(node: Pick<NodeV6, 'frame' | 'rotation'>): Frame {
   return boundsOfPoints(corners(node.frame, node.rotation))!;
 }
 

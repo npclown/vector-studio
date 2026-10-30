@@ -2,7 +2,7 @@
 
 **Status: TEMPLATE, not filled.** The user fills it on the main PC. Until then, the manual half of M6a-A12 is NOT RUN.
 
-[M6a-A12](../plans/mvp-m6a-text-model-contract.md#10-acceptance-criteria) asks for identical line breaks and positions within 1/64 px across DPR 1, 1.25, 1.5 and 2. It also asks for the same across browser zoom 100 % and 125 % and across monitor scale 100 % and 150 %, plus a generation bump on each DPR change. The headed spec `tests/m6a-next-host/m6a-next-host.spec.ts` covers DPR 1 to 2 by CDP emulation and size linearity (`pnpm test:m6a-next-host`). This record covers the two cases emulation cannot reach (section 3.2, handed over from M6-S0). If any case below fails, contract section 3.2 applies: M6-Q3 switches to (b), a fixed reference scale, by an amendment before M6c.
+[M6a-A12](../plans/mvp-m6a-text-model-contract.md#10-acceptance-criteria) asks for identical line breaks and positions within 1/64 px across DPR 1, 1.25, 1.5 and 2. It also asks for the same across browser zoom 100 % and 125 % and across monitor scale 100 % and 150 %, plus a generation bump on each DPR change. The headed spec `tests/m6a-next-host/m6a-next-host.spec.ts` covers DPR 1 to 2 by CDP emulation and size linearity (`pnpm test:m6a-next-host`). This record covers the two cases emulation cannot reach (section 3.2, handed over from M6-S0). M6-Q3 is already (b) (U4c, #388); a failure here needs a contract amendment before M6c.
 
 ## Setup
 

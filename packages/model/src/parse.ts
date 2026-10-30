@@ -9,17 +9,23 @@ import type {
   DocumentV3,
   DocumentV4,
   DocumentV5,
-  NodeV5,
-  PageV5,
+  DocumentV6,
+  NodeV6,
+  PageV6,
+  Dash,
   FillRule,
   Frame,
+  Gradient,
+  GradientStop,
   JsonValue,
   NodeV1,
+  Paint,
   PageV1,
   PathData,
   PathStroke,
   PathVerb,
   RectStroke,
+  Stroke,
   StrokeCap,
   StrokeJoin,
   TextNode,
@@ -57,11 +63,8 @@ export type ModelErrorCode = Exclude<
 /** `path` is a JSON Pointer (RFC 6901) to the offending field; `''` is the whole document. */
 export type ModelFailure = Readonly<{ ok: false; code: ModelErrorCode; path: string }>;
 
-/**
- * The latest schema version, which every validated document has (M6a contract, section 9,
- * M7-T3).
- */
-export type ParseResult = Readonly<{ ok: true; document: DocumentV5 }> | ModelFailure;
+/** The latest schema version, which every validated document has (M4 contract, section 2). */
+export type ParseResult = Readonly<{ ok: true; document: DocumentV6 }> | ModelFailure;
 
 /** The result of `migrateV1toV2`, the first step of the migration chain. */
 export type ParseResultV2 = Readonly<{ ok: true; document: DocumentV2 }> | ModelFailure;
@@ -72,12 +75,15 @@ export type ParseResultV3 = Readonly<{ ok: true; document: DocumentV3 }> | Model
 /** The result of `migrateV3toV4`, the third step of the migration chain. */
 export type ParseResultV4 = Readonly<{ ok: true; document: DocumentV4 }> | ModelFailure;
 
+/** The result of `migrateV4toV5`, the fourth step of the migration chain. */
+export type ParseResultV5 = Readonly<{ ok: true; document: DocumentV5 }> | ModelFailure;
+
 /** The result of `validateFragmentTree`: a node map, never a document. */
 export type FragmentTreeResult =
-  Readonly<{ ok: true; nodes: Readonly<Record<string, NodeV5>> }> | ModelFailure;
+  Readonly<{ ok: true; nodes: Readonly<Record<string, NodeV6>> }> | ModelFailure;
 
 export type NodeResult =
-  | Readonly<{ ok: true; node: NodeV5 }>
+  | Readonly<{ ok: true; node: NodeV6 }>
   | Readonly<{ ok: false; code: 'document.invalid-field'; path: string }>;
 
 /** Deepest container nesting of the node tree (ancestors that are containers). */
@@ -85,6 +91,12 @@ export const MAX_TREE_DEPTH = 256;
 
 /** The most UTF-16 units of one text node's runs together (M6a-S4). */
 export const MAX_TEXT_LENGTH = 16_384;
+
+/** The most stops of one gradient (M4-S2); mirrors the contracts `SCENE_MAX_GRADIENT_STOPS`. */
+export const MAX_GRADIENT_STOPS = 16;
+
+/** The most entries of one dash pattern (M4-S4); mirrors the contracts `SCENE_MAX_DASH_ENTRIES`. */
+export const MAX_DASH_ENTRIES = 16;
 
 /**
  * IDs are opaque non-empty strings, unique across the document's pages and nodes, without
@@ -95,10 +107,10 @@ export function isValidId(value: unknown): value is string {
 }
 
 /**
- * Parses JSON text of schema version 1 to 5 into a validated v5 document (M1 contract, section
- * 2.1; M7 contract, section 2.1; M6a contract, sections 2.1 and 9); older versions are migrated
- * by `migrateV1toV2`, `migrateV2toV3`, `migrateV3toV4` and `migrateV4toV5`. No partial document
- * is ever returned.
+ * Parses JSON text of schema version 1 to 6 into a validated v6 document (M1 contract, section
+ * 2.1; M7 contract, section 2.1; M6a contract, sections 2.1 and 9; M4 contract, section 2.1);
+ * older versions are migrated by `migrateV1toV2` to `migrateV5toV6`. No partial document is ever
+ * returned.
  */
 export function parseDocument(text: string): ParseResult {
   let value: unknown;
@@ -107,7 +119,7 @@ export function parseDocument(text: string): ParseResult {
   } catch {
     return { ok: false, code: 'document.malformed-json', path: '' };
   }
-  const version = checkVersion(value, [1, 2, 3, 4, 5]);
+  const version = checkVersion(value, [1, 2, 3, 4, 5, 6]);
   if (version !== null) return version;
   // JSON.parse keeps the last of two equal keys, which would silently drop an entity. The scan
   // also bounds nesting, so validation never recurses deeper than MAX_DEPTH.
@@ -125,23 +137,23 @@ export function parseDocument(text: string): ParseResult {
 }
 
 /**
- * Validates an in-memory v5 document value and returns a normalized copy: negative zero becomes
+ * Validates an in-memory v6 document value and returns a normalized copy: negative zero becomes
  * 0, rotations are normalized, text override keys are in code unit order and nothing is shared
- * with the input. A v1 to v4 value is `document.unsupported-version`; `validateAnyDocument`
+ * with the input. A v1 to v5 value is `document.unsupported-version`; `validateAnyDocument`
  * accepts every version.
  */
 export function validateDocument(value: unknown): ParseResult {
-  const version = checkVersion(value, [5]);
+  const version = checkVersion(value, [6]);
   if (version !== null) return version;
-  return guarded(() => readDocumentV5(value as Record<string, unknown>, V5));
+  return guarded(() => readDocumentV6(value as Record<string, unknown>, V6));
 }
 
 /**
- * Validates an in-memory v1 to v5 value and returns a normalized v5 copy (older versions are
+ * Validates an in-memory v1 to v6 value and returns a normalized v6 copy (older versions are
  * migrated).
  */
 export function validateAnyDocument(value: unknown): ParseResult {
-  const version = checkVersion(value, [1, 2, 3, 4, 5]);
+  const version = checkVersion(value, [1, 2, 3, 4, 5, 6]);
   if (version !== null) return version;
   const record = value as Record<string, unknown>;
   if (record.schemaVersion === 1) {
@@ -159,25 +171,30 @@ export function validateAnyDocument(value: unknown): ParseResult {
     const v3 = migrateV2toV3(v2.document);
     if (!v3.ok) return v3;
     const v4 = migrateV3toV4(v3.document);
-    return v4.ok ? migrateV4toV5(v4.document) : v4;
+    if (!v4.ok) return v4;
+    const v5 = migrateV4toV5(v4.document);
+    return v5.ok ? migrateV5toV6(v5.document) : v5;
   }
-  // A v2 to v4 value is read once with its version's node types; the v5 result differs only in
-  // its version and the empty `textOverrides` of every instance (`migrateV4toV5`).
+  // A v2 to v5 value is read once with its version's node types; the v6 result differs only in
+  // its version, the empty `textOverrides` of every instance below v5 (`migrateV4toV5`) and the
+  // v6 strokes (`migrateV5toV6`).
   const schema =
     record.schemaVersion === 2
-      ? V2_TO_V5
+      ? V2_TO_V6
       : record.schemaVersion === 3
-        ? V3_TO_V5
+        ? V3_TO_V6
         : record.schemaVersion === 4
-          ? V4_TO_V5
-          : V5;
-  return guarded(() => readDocumentV5(record, schema));
+          ? V4_TO_V6
+          : record.schemaVersion === 5
+            ? V5_TO_V6
+            : V6;
+  return guarded(() => readDocumentV6(record, schema));
 }
 
 /**
  * The model's tree rules for a clipboard fragment (M7 contract, section 6), on a holder document
- * value of the latest schema version, 5 (M6a contract, sections 8 and 9), whose pages hold the
- * fragment roots: `{ schemaVersion: 5, id, pages: [{ id, name, children: roots }], nodes }`, exactly the
+ * value of the latest schema version, 6 (M4 contract, section 7), whose pages hold the fragment
+ * roots: `{ schemaVersion: 6, id, pages: [{ id, name, children: roots }], nodes }`, exactly the
  * four keys of a document, with `id` and the page ID not keys of `nodes` and each root's `parent`
  * the page ID (the caller rewrites the fragment's `""`). It runs every rule of `validateDocument`
  * except two, which the fragment rules and the paste resolve instead: M7-S2 (each instance names
@@ -187,10 +204,10 @@ export function validateAnyDocument(value: unknown): ParseResult {
  * no document entry point skips these rules.
  */
 export function validateFragmentTree(value: unknown): FragmentTreeResult {
-  const version = checkVersion(value, [5]);
+  const version = checkVersion(value, [6]);
   if (version !== null) return version;
   try {
-    const tree = readTree(value as Record<string, unknown>, V5, false);
+    const tree = readTree(value as Record<string, unknown>, V6, false);
     return { ok: true, nodes: tree.nodes };
   } catch (error) {
     if (error instanceof Failure) return { ok: false, code: error.code, path: pointer(error.path) };
@@ -198,15 +215,26 @@ export function validateFragmentTree(value: unknown): FragmentTreeResult {
   }
 }
 
+/** Options of `validateNode`. */
+export type ValidateNodeOptions = Readonly<{
+  /**
+   * The node comes from an input below v6 (an older clipboard fragment), already given the v6
+   * fields: a container or instance opacity other than 1 fails at `/opacity`, in the field order
+   * of an older document (M4 contract, M4-M2 and section 7).
+   */
+  olderInput?: boolean;
+}>;
+
 /**
- * Validates one v5 node with the field rules of `validateDocument`, so commands reject the values
+ * Validates one v6 node with the field rules of `validateDocument`, so commands reject the values
  * a load would reject. `path` is relative to the node; references (M7-S2 and the M7-T3 override
  * keys among them) are not checked here.
  */
-export function validateNode(value: unknown): NodeResult {
+export function validateNode(value: unknown, options: ValidateNodeOptions = {}): NodeResult {
+  const schema = options.olderInput === true ? V6_OLDER_OPACITY : V6;
   try {
     const id = isPlainObject(value) ? value.id : undefined;
-    return { ok: true, node: readNodeV5(typeof id === 'string' ? id : '', value, [], V5) };
+    return { ok: true, node: readNode(typeof id === 'string' ? id : '', value, [], schema) };
   } catch (error) {
     if (error instanceof Failure) {
       return { ok: false, code: 'document.invalid-field', path: pointer(error.path) };
@@ -488,8 +516,8 @@ function readDocumentV1(value: Record<string, unknown>): DocumentV1 {
   return { schemaVersion: 1, id, pages: [page], nodes };
 }
 
-// Schemas v2 to v5 (MVP M1 contract, section 2; M7 contract, section 2; M6a contract, sections 2
-// and 9): the migrations and the v2 to v5 readers.
+// Schemas v2 to v6 (MVP M1 contract, section 2; M7 contract, section 2; M6a contract, sections 2
+// and 9; M4 contract, section 2): the migrations and the v2 to v6 readers.
 
 /**
  * Adds `rotation: 0`, start constraints on every node and zero corner radii on rectangles, and
@@ -549,7 +577,7 @@ export function migrateV3toV4(document: DocumentV3): ParseResultV4 {
   try {
     // Read with the v3 node types only, so every node is a v4 node without a text node.
     const tree = readTree({ ...document, schemaVersion: 4 }, V3, true);
-    return { ok: true, document: { schemaVersion: 4, ...tree } };
+    return { ok: true, document: { schemaVersion: 4, ...tree } as DocumentV4 };
   } catch (error) {
     if (error instanceof Failure) return { ok: false, code: error.code, path: pointer(error.path) };
     throw error;
@@ -561,8 +589,24 @@ export function migrateV3toV4(document: DocumentV3): ParseResultV4 {
  * (M6a contract, section 9, M7-T3, M7-Q11 (a)); the input is validated with the v4 rules, so an
  * instance holding `textOverrides` fails at that key.
  */
-export function migrateV4toV5(document: DocumentV4): ParseResult {
-  return guarded(() => readDocumentV5({ ...document, schemaVersion: 5 }, V4_TO_V5));
+export function migrateV4toV5(document: DocumentV4): ParseResultV5 {
+  return guarded(() => ({
+    schemaVersion: 5,
+    // Read with the v4 node types and strokes, so every node is a v5 node.
+    ...(readTree({ ...document, schemaVersion: 5 }, V4_TO_V5, true) as Tree<DocumentV5>),
+  }));
+}
+
+/**
+ * Changes `schemaVersion` to 6 and rewrites every stroke, and nothing else (M4 contract, section
+ * 2.1, M4-M1): a `{ color, width }` stroke of a rectangle, ellipse, frame or symbol becomes
+ * `{ color, width, cap: 'butt', join: 'round', miterLimit: 4, dash: null }`, and a line, path or
+ * custom stroke gains `dash: null`. The input is validated with the v5 rules, so a v6 stroke or
+ * a gradient in it fails at its first v6 key, and a container or instance opacity other than 1
+ * still fails (M4-M2).
+ */
+export function migrateV5toV6(document: DocumentV5): ParseResult {
+  return guarded(() => readDocumentV6({ ...document, schemaVersion: 6 }, V5_TO_V6));
 }
 
 /** Normalizes radians to (−π, π], negative zero to 0 (contract M1-S1). */
@@ -573,7 +617,7 @@ export function normalizeRotation(theta: number): number {
   return t === 0 ? 0 : t;
 }
 
-function guarded(read: () => DocumentV5): ParseResult {
+function guarded<D>(read: () => D): Readonly<{ ok: true; document: D }> | ModelFailure {
   try {
     return { ok: true, document: read() };
   } catch (error) {
@@ -639,21 +683,177 @@ const INSTANCE_KEYS_V5 = [...NODE_KEYS_V2.instance, 'textOverrides'] as const;
 
 /**
  * How one read treats its input: the node types of its schema version (a value with a type of a
- * later version fails at its `type`), and the instance's `textOverrides` (M7-T3): `none` before
- * v5 (the key is unknown and none is added), `added` when an older input is read into v5 (the
- * key is unknown and an empty one is added, as `migrateV4toV5` does), `read` at v5.
+ * later version fails at its `type`); the instance's `textOverrides` (M7-T3): `none` before v5
+ * (the key is unknown and none is added), `added` when an older input is read into v5 or later
+ * (the key is unknown and an empty one is added, as `migrateV4toV5` does), `read` from v5; and
+ * the appearance fields (M4 contract, section 2): `none` before v6 (fills are colours, strokes the
+ * v5 `RectStroke` and `PathStroke`), `added` when an older input is read into v6 (read as before
+ * v6, then each stroke rewritten as `migrateV5toV6` does, M4-M1), `read` at v6 (paints and the
+ * one `Stroke`, M4-S1 to S4).
  */
-type Schema = Readonly<{ types: readonly NodeTypeKey[]; overrides: 'none' | 'added' | 'read' }>;
+type Schema = Readonly<{
+  types: readonly NodeTypeKey[];
+  overrides: 'none' | 'added' | 'read';
+  appearance: 'none' | 'added' | 'read';
+  /**
+   * The opacity of a container or instance: `one` below v6 (M1-S5, M7-S4, kept for older inputs
+   * by M4-M2), `any` at v6 (M4-L1), where M4-S5's `[0, 1]` applies as to every node.
+   */
+  containerOpacity: 'one' | 'any';
+}>;
 
 const V4_TYPES = Object.keys(NODE_KEYS_V2) as NodeTypeKey[];
 const V3_TYPES = V4_TYPES.filter((type) => type !== 'text');
 const V2_TYPES = V3_TYPES.filter((type) => type !== 'symbol' && type !== 'instance');
-const V2: Schema = { types: V2_TYPES, overrides: 'none' };
-const V3: Schema = { types: V3_TYPES, overrides: 'none' };
-const V2_TO_V5: Schema = { types: V2_TYPES, overrides: 'added' };
-const V3_TO_V5: Schema = { types: V3_TYPES, overrides: 'added' };
-const V4_TO_V5: Schema = { types: V4_TYPES, overrides: 'added' };
-const V5: Schema = { types: V4_TYPES, overrides: 'read' };
+const OLDER = { containerOpacity: 'one' } as const;
+const V2: Schema = { types: V2_TYPES, overrides: 'none', appearance: 'none', ...OLDER };
+const V3: Schema = { types: V3_TYPES, overrides: 'none', appearance: 'none', ...OLDER };
+const V4_TO_V5: Schema = { types: V4_TYPES, overrides: 'added', appearance: 'none', ...OLDER };
+const V2_TO_V6: Schema = { types: V2_TYPES, overrides: 'added', appearance: 'added', ...OLDER };
+const V3_TO_V6: Schema = { types: V3_TYPES, overrides: 'added', appearance: 'added', ...OLDER };
+const V4_TO_V6: Schema = { types: V4_TYPES, overrides: 'added', appearance: 'added', ...OLDER };
+const V5_TO_V6: Schema = { types: V4_TYPES, overrides: 'read', appearance: 'added', ...OLDER };
+const V6: Schema = {
+  types: V4_TYPES,
+  overrides: 'read',
+  appearance: 'read',
+  containerOpacity: 'any',
+};
+/** v6 nodes of an input below v6, already migrated: v6 fields, the older opacity rule. */
+const V6_OLDER_OPACITY: Schema = { ...V6, ...OLDER };
+
+const GRADIENT_KINDS: readonly Gradient['kind'][] = ['linear', 'radial'];
+const SPREADS: readonly Gradient['spread'][] = ['pad', 'reflect', 'repeat'];
+const COLOR_KEYS = ['r', 'g', 'b', 'a'] as const;
+const GRADIENT_KEYS = ['kind', 'transform', 'stops', 'spread'] as const;
+
+/** Whether `value` is a plain object with exactly `keys`, in any order. */
+function hasExactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  if (!isPlainObject(value)) return false;
+  const own = Object.keys(value);
+  return own.length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+}
+
+/**
+ * M4-S1: exactly `r, g, b, a` is a colour, exactly `kind, transform, stops, spread` a gradient;
+ * anything else fails at the paint's own path.
+ */
+function readPaint(value: unknown, path: Path): Paint {
+  if (hasExactKeys(value, COLOR_KEYS)) return readColor(value, path);
+  if (hasExactKeys(value, GRADIENT_KEYS)) return readGradient(value, path);
+  invalid(path);
+}
+
+/**
+ * M4-S2, mirroring E23-S2, in key order: `kind`; `transform` (six finite numbers, then the
+ * binary64 determinant finite and non-zero and the binary64 inverse finite, at `transform`);
+ * `stops` (1 to MAX_GRADIENT_STOPS entries at `stops`, then each `{ offset, color }` in order, an
+ * offset in `[0, 1]` and not below the previous one); `spread`.
+ */
+function readGradient(record: Record<string, unknown>, path: Path): Gradient {
+  const kind = readEnum(record.kind, GRADIENT_KINDS, [...path, 'kind']);
+  const transformPath = [...path, 'transform'];
+  if (!Array.isArray(record.transform) || record.transform.length !== 6) invalid(transformPath);
+  const t = readArray(record.transform, transformPath, (entry, entryPath) =>
+    readNumber(entry, entryPath),
+  );
+  const [a, b, c, d, e, f] = [t[0]!, t[1]!, t[2]!, t[3]!, t[4]!, t[5]!];
+  const determinant = a * d - b * c;
+  if (determinant === 0 || !Number.isFinite(determinant)) invalid(transformPath);
+  const inverse = [
+    d / determinant,
+    -b / determinant,
+    -c / determinant,
+    a / determinant,
+    (c * f - d * e) / determinant,
+    (b * e - a * f) / determinant,
+  ];
+  if (!inverse.every(Number.isFinite)) invalid(transformPath);
+  const stopsPath = [...path, 'stops'];
+  if (
+    !Array.isArray(record.stops) ||
+    record.stops.length === 0 ||
+    record.stops.length > MAX_GRADIENT_STOPS
+  ) {
+    invalid(stopsPath);
+  }
+  let previous = 0;
+  const stops = readArray(record.stops, stopsPath, (entry, entryPath): GradientStop => {
+    const stop = readRecord(entry, ['offset', 'color'], entryPath);
+    const offset = readNumber(stop.offset, [...entryPath, 'offset'], previous, 1);
+    previous = offset;
+    return { offset, color: readColor(stop.color, [...entryPath, 'color']) };
+  });
+  const spread = readEnum(record.spread, SPREADS, [...path, 'spread']);
+  return { kind, transform: [a, b, c, d, e, f], stops, spread };
+}
+
+/**
+ * M4-S4, mirroring E24-S1: `pattern` holds 1 to MAX_DASH_ENTRIES entries (at `pattern`), each
+ * finite and at least 0 (at its index), at least one above 0 and a finite binary64 period summed
+ * left to right, doubled for an odd count (at `pattern`); `phase` finite.
+ */
+function readDash(value: unknown, path: Path): Dash {
+  const record = readRecord(value, ['pattern', 'phase'], path);
+  const patternPath = [...path, 'pattern'];
+  if (
+    !Array.isArray(record.pattern) ||
+    record.pattern.length === 0 ||
+    record.pattern.length > MAX_DASH_ENTRIES
+  ) {
+    invalid(patternPath);
+  }
+  const pattern = readArray(record.pattern, patternPath, (entry, entryPath) =>
+    readNumber(entry, entryPath, 0),
+  );
+  let period = 0;
+  for (const entry of pattern) period += entry;
+  if (pattern.length % 2 === 1) for (const entry of pattern) period += entry;
+  if (!pattern.some((entry) => entry > 0) || !Number.isFinite(period)) invalid(patternPath);
+  return { pattern, phase: readNumber(record.phase, [...path, 'phase']) };
+}
+
+/** M4-S3: the one v6 stroke, in the key order `color, width, cap, join, miterLimit, dash`. */
+function readStroke(value: unknown, path: Path): Stroke {
+  const record = readRecord(value, ['color', 'width', 'cap', 'join', 'miterLimit', 'dash'], path);
+  return {
+    color: readPaint(record.color, [...path, 'color']),
+    width: readNumber(record.width, [...path, 'width'], 0),
+    cap: readEnum(record.cap, CAPS, [...path, 'cap']),
+    join: readEnum(record.join, JOINS, [...path, 'join']),
+    miterLimit: readNumber(record.miterLimit, [...path, 'miterLimit'], 1),
+    dash: readNullable(record.dash, [...path, 'dash'], readDash),
+  };
+}
+
+type Readers = Readonly<{
+  shape: (value: unknown, path: Path) => Stroke | RectStroke;
+  path: (value: unknown, path: Path) => Stroke | PathStroke;
+  fill: (value: unknown, path: Path) => Paint;
+}>;
+
+/** The fill and stroke readers at v6: paints and the one stroke (M4-S1 to S4). */
+const READ_V6: Readers = { shape: readStroke, path: readStroke, fill: readPaint };
+/** Before v6: colours and the v5 `RectStroke` and `PathStroke`. */
+const READ_V5: Readers = { shape: readRectStroke, path: readPathStroke, fill: readColor };
+/** The v5 readers, each stroke given the keys `migrateV5toV6` adds (M4-M1). */
+const READ_V5_TO_V6: Readers = {
+  shape: (value, path) => ({
+    ...readRectStroke(value, path),
+    cap: 'butt',
+    join: 'round',
+    miterLimit: 4,
+    dash: null,
+  }),
+  path: (value, path) => ({ ...readPathStroke(value, path), dash: null }),
+  fill: readColor,
+};
+
+/** The fill and stroke readers of one schema. */
+function strokeReaders(schema: Schema): Readers {
+  if (schema.appearance === 'read') return READ_V6;
+  return schema.appearance === 'none' ? READ_V5 : READ_V5_TO_V6;
+}
 
 function isContainerType(type: string): boolean {
   return type === 'group' || type === 'maskGroup' || type === 'frame' || type === 'symbol';
@@ -764,7 +964,11 @@ function readOverrides(value: unknown, path: Path): Record<string, TextOverride>
   );
 }
 
-function readNodeV5(key: string, value: unknown, path: Path, schema: Schema): NodeV5 {
+/**
+ * One node of any schema from v2 on, read with `schema`; the result is a v6 node when
+ * `schema.appearance` is not `none`, else typed by the caller's version.
+ */
+function readNode(key: string, value: unknown, path: Path, schema: Schema): NodeV6 {
   if (!isPlainObject(value)) invalid(path);
   const type = readEnum(value.type, schema.types, [...path, 'type']);
   const keys =
@@ -781,12 +985,21 @@ function readNodeV5(key: string, value: unknown, path: Path, schema: Schema): No
     opacity: readNumber(record.opacity, [...path, 'opacity'], 0, 1),
     visible: readBoolean(record.visible, [...path, 'visible']),
   };
-  // Container opacity other than 1 waits for isolated composition (M1-S5); an instance projects
-  // as a container, so it follows the same rule (M7-S4).
-  if ((isContainerType(type) || type === 'instance') && base.opacity !== 1) {
+  // Container opacity other than 1 (M1-S5, and M7-S4 for an instance) is lifted at v6 (M4
+  // contract, M4-L1 and M4-S5); an input below v6 still fails, since no build wrote one (M4-M2).
+  if (
+    schema.containerOpacity === 'one' &&
+    (isContainerType(type) || type === 'instance') &&
+    base.opacity !== 1
+  ) {
     invalid([...path, 'opacity']);
   }
-  const fill = () => readNullable(record.fill, [...path, 'fill'], readColor);
+  const readers = strokeReaders(schema);
+  const fill = () => readNullable(record.fill, [...path, 'fill'], readers.fill);
+  const shapeStroke = () =>
+    readNullable(record.stroke, [...path, 'stroke'], readers.shape) as Stroke | null;
+  const pathStroke = () =>
+    readNullable(record.stroke, [...path, 'stroke'], readers.path) as Stroke | null;
   const children = () =>
     readArray(record.children, [...path, 'children'], (entry, entryPath) =>
       readIdV2(entry, entryPath),
@@ -798,21 +1011,21 @@ function readNodeV5(key: string, value: unknown, path: Path, schema: Schema): No
         type,
         cornerRadii: readTuple4(record.cornerRadii, [...path, 'cornerRadii'], 0, Infinity),
         fill: fill(),
-        stroke: readNullable(record.stroke, [...path, 'stroke'], readRectStroke),
+        stroke: shapeStroke(),
       };
     case 'ellipse':
       return {
         ...base,
         type,
         fill: fill(),
-        stroke: readNullable(record.stroke, [...path, 'stroke'], readRectStroke),
+        stroke: shapeStroke(),
       };
     case 'line':
       return {
         ...base,
         type,
         points: readTuple4(record.points, [...path, 'points'], 0, 1),
-        stroke: readNullable(record.stroke, [...path, 'stroke'], readPathStroke),
+        stroke: pathStroke(),
         startArrow: readEnum(record.startArrow, ARROWS, [...path, 'startArrow']),
         endArrow: readEnum(record.endArrow, ARROWS, [...path, 'endArrow']),
       };
@@ -822,7 +1035,7 @@ function readNodeV5(key: string, value: unknown, path: Path, schema: Schema): No
         type,
         path: readPathData(record.path, [...path, 'path']),
         fill: fill(),
-        stroke: readNullable(record.stroke, [...path, 'stroke'], readPathStroke),
+        stroke: pathStroke(),
       };
     case 'custom':
       return {
@@ -831,7 +1044,7 @@ function readNodeV5(key: string, value: unknown, path: Path, schema: Schema): No
         customType: readId(record.customType, [...path, 'customType']),
         data: readJson(record.data, [...path, 'data']),
         fill: fill(),
-        stroke: readNullable(record.stroke, [...path, 'stroke'], readPathStroke),
+        stroke: pathStroke(),
       };
     case 'group':
     case 'maskGroup':
@@ -843,12 +1056,12 @@ function readNodeV5(key: string, value: unknown, path: Path, schema: Schema): No
         type,
         children: children(),
         fill: fill(),
-        stroke: readNullable(record.stroke, [...path, 'stroke'], readRectStroke),
+        stroke: shapeStroke(),
       };
     case 'instance': {
       const symbol = readIdV2(record.symbol, [...path, 'symbol']);
       // Before v5 the node has no overrides; the result is typed by the caller's version.
-      if (schema.overrides === 'none') return { ...base, type, symbol } as unknown as NodeV5;
+      if (schema.overrides === 'none') return { ...base, type, symbol } as unknown as NodeV6;
       const textOverrides =
         schema.overrides === 'read'
           ? readOverrides(record.textOverrides, [...path, 'textOverrides'])
@@ -868,7 +1081,7 @@ function readNodeV5(key: string, value: unknown, path: Path, schema: Schema): No
   }
 }
 
-function readPage(value: unknown, path: Path): PageV5 {
+function readPage(value: unknown, path: Path): PageV6 {
   const record = readRecord(value, ['id', 'name', 'children'], path);
   return {
     id: readIdV2(record.id, [...path, 'id']),
@@ -879,11 +1092,16 @@ function readPage(value: unknown, path: Path): PageV5 {
   };
 }
 
-type Tree = Readonly<{ id: string; pages: PageV5[]; nodes: Record<string, NodeV5> }>;
+/** A document's `id`, `pages` and `nodes`, typed as those of `D` (v6 unless migrating). */
+type Tree<D extends { pages: unknown; nodes: unknown } = DocumentV6> = Readonly<{
+  id: string;
+  pages: D['pages'];
+  nodes: D['nodes'];
+}>;
 
-/** A v5 document read with the schema of its source version (an older one when migrating). */
-function readDocumentV5(value: Record<string, unknown>, schema: Schema): DocumentV5 {
-  return { schemaVersion: 5, ...readTree(value, schema, true) };
+/** A v6 document read with the schema of its source version (an older one when migrating). */
+function readDocumentV6(value: Record<string, unknown>, schema: Schema): DocumentV6 {
+  return { schemaVersion: 6, ...readTree(value, schema, true) };
 }
 
 /**
@@ -899,9 +1117,9 @@ function readTree(value: Record<string, unknown>, schema: Schema, references: bo
   const pages = readArray(record.pages, ['pages'], readPage);
   if (!isPlainObject(record.nodes)) invalid(['nodes']);
   const entries = Object.entries(record.nodes).map(
-    ([key, node]) => [key, readNodeV5(key, node, ['nodes', key], schema)] as const,
+    ([key, node]) => [key, readNode(key, node, ['nodes', key], schema)] as const,
   );
-  const nodes: Record<string, NodeV5> = Object.fromEntries(entries);
+  const nodes: Record<string, NodeV6> = Object.fromEntries(entries);
 
   const pageIds = new Set<string>();
   pages.forEach((page, index) => {

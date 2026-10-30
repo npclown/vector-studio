@@ -8,7 +8,7 @@ import {
   serializeDocument,
   validateAnyDocument,
   validateNode,
-  type DocumentV5,
+  type DocumentV6,
   type ParseResult,
 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
@@ -22,20 +22,20 @@ import { boundaries, evaluatePackageBoundaries } from '../../tooling/boundary-po
 
 const root = path.resolve(import.meta.dirname, '../..');
 const fixtures = path.join(root, 'tests/fixtures/p5-model');
-const migrated = path.join(root, 'tests/fixtures/m7-symbols/migrated');
+const migrated = path.join(root, 'tests/fixtures/m4-appearance/migrated');
 const VALID = ['empty', 'shapes', 'ext-star'] as const;
 
 async function fixture(name: string): Promise<string> {
   return readFile(path.join(fixtures, `${name}.json`), 'utf8');
 }
 
-// Since M7-U7 a v1 document migrates through v2, v3 and v4 to the committed v5 fixture (M7
-// contract, section 2.1; M6a contract, sections 2.1 and 9).
+// Since M4-U1 a v1 document migrates through v2 to v5 to the committed v6 fixture (M7 contract,
+// section 2.1; M6a contract, sections 2.1 and 9; M4 contract, section 2.1).
 async function migratedFixture(name: string): Promise<string> {
-  return readFile(path.join(migrated, `${name}.v5.json`), 'utf8');
+  return readFile(path.join(migrated, `${name}.v6.json`), 'utf8');
 }
 
-function parsed(text: string): DocumentV5 {
+function parsed(text: string): DocumentV6 {
   const result = parseDocument(text);
   if (!result.ok) throw new Error(`${result.code} at ${result.path}`);
   return result.document;
@@ -129,13 +129,13 @@ function edited(...edits: readonly Edit[]): Record<string, unknown> {
 
 describe('P5-A06 JSON round trip', () => {
   it.each(VALID)(
-    'serialize(parse(t)) is the committed v5 fixture and parse(serialize(d)) deep-equals d for %s',
+    'serialize(parse(t)) is the committed v6 fixture and parse(serialize(d)) deep-equals d for %s',
     async (name) => {
       const text = await fixture(name);
       const document = parsed(text);
-      const v5 = await migratedFixture(name);
-      expect(serializeDocument(document)).toBe(v5);
-      expect(serializeDocument(parsed(v5))).toBe(v5);
+      const v6 = await migratedFixture(name);
+      expect(serializeDocument(document)).toBe(v6);
+      expect(serializeDocument(parsed(v6))).toBe(v6);
       expect(parsed(serializeDocument(document))).toEqual(document);
     },
   );
@@ -570,8 +570,9 @@ describe('P5-A08 no session state in the document', () => {
     const text = serializeDocument(parsed(await fixture(name)));
     const found = [...keys(JSON.parse(text), new Set())];
     expect(found.filter((key) => FORBIDDEN.test(key))).toEqual([]);
+    // `dash` since M4-U1 (M4-M1: every migrated stroke has `dash: null`).
     const schema = new Set(
-      'schemaVersion id pages nodes name children parent frame x y width height rotation constraints horizontal vertical opacity visible type cornerRadii fill stroke color r g b a cap join miterLimit path verbs points fillRule customType data'.split(
+      'schemaVersion id pages nodes name children parent frame x y width height rotation constraints horizontal vertical opacity visible type cornerRadii fill stroke color r g b a cap join miterLimit dash path verbs points fillRule customType data'.split(
         ' ',
       ),
     );

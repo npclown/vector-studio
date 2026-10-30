@@ -4,6 +4,7 @@ import { buildFontList, fallbackPart, MAX_FALLBACK_PART, fontUrlSource } from '.
 import { nextGeneration } from './generation.js';
 import { createListeners } from './listeners.js';
 import { createMeasurer } from './measure.js';
+import { measurementScale, scaleRequest, unscaleResult } from './scale.js';
 import { checkRequest, isValidFamily, isValidLang } from './validate.js';
 
 // `@vector-studio/text-dom` (docs/plans/mvp-m6a-text-model-contract.md, section 4): the browser
@@ -141,9 +142,19 @@ export function createTextDom(options: TextDomOptions): TextDom {
       if (disposed) throw new Error('text-dom: layout after dispose');
       checkRequest(request);
       const fontLists = fontListsOf(request);
-      const measurement = measurer.measure(request, fontLists);
+      // M6-Q3 (b): measured and assembled at the reference scale, divided back (section 3.2).
+      const scale = measurementScale(request);
+      const measured = scaleRequest(request, scale);
+      const measurement = measurer.measure(measured, fontLists);
       if (measurement.metrics === null) fallbacks += 1;
-      return assembleLayout({ request, generation, lang, fontLists, ...measurement });
+      const result = assembleLayout({
+        request: measured,
+        generation,
+        lang,
+        fontLists,
+        ...measurement,
+      });
+      return unscaleResult(result, request, scale);
     },
     subscribe(listener: () => void): () => void {
       if (typeof listener !== 'function')

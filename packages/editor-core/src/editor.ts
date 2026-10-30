@@ -7,7 +7,7 @@ import {
   DOCUMENT_ERROR_CODES,
   isValidId,
   validateAnyDocument,
-  type DocumentV5,
+  type DocumentV6,
   type ParseResult,
 } from '@vector-studio/model';
 import { copyFragment } from './clipboard.js';
@@ -58,6 +58,7 @@ import {
   ancestors,
   childrenOf,
   documentClipViolation,
+  documentIsolationViolation,
   documentTree,
   isContainer,
   isFrameLike,
@@ -171,8 +172,8 @@ export interface GestureControl {
 }
 
 type HistoryEntry = Readonly<{
-  before: DocumentV5;
-  after: DocumentV5;
+  before: DocumentV6;
+  after: DocumentV6;
   touched: readonly string[];
   /**
    * The IDs the ID source returned for the step (M7 contract, section 6): an undo or redo
@@ -182,7 +183,7 @@ type HistoryEntry = Readonly<{
 }>;
 
 type Gesture = {
-  base: DocumentV5;
+  base: DocumentV6;
   touched: Set<string>;
   updated: boolean;
   /** The selection when the gesture began, restored on cancel (M2 contract, section 2). */
@@ -211,6 +212,7 @@ const DOCUMENT_COMMANDS = new Set([
   'createCustomNode',
   'setFrames',
   'setNodeProps',
+  'setStyle',
   'deleteNodes',
   'groupNodes',
   'ungroupNodes',
@@ -285,6 +287,7 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
   'editor.not-a-group',
   'editor.invalid-mask-source',
   'editor.clip-depth',
+  'editor.isolation-depth',
   'editor.no-viewport-size',
   'editor.too-few-nodes',
   'editor.invalid-scope',
@@ -311,7 +314,7 @@ const ERROR_CODES: ReadonlySet<string> = new Set<EditorErrorCode>([
  * A frozen copy of an extension command's result, or null when it is not a `CommandResult`
  * with a known code and, on success, IDs of nodes in `document`.
  */
-function extensionResult(value: unknown, document: DocumentV5): CommandResult | null {
+function extensionResult(value: unknown, document: DocumentV6): CommandResult | null {
   if (typeof value !== 'object' || value === null) return null;
   const record = value as Record<string, unknown>;
   if (record.ok === true) {
@@ -461,12 +464,12 @@ function structuredCopy(overlay: SnapOverlay): SnapOverlay {
 
 const clampZoom = (zoom: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom));
 
-function nodeIn(document: DocumentV5, id: string) {
+function nodeIn(document: DocumentV6, id: string) {
   return Object.hasOwn(document.nodes, id) ? document.nodes[id] : undefined;
 }
 
 /** Whether node `id` differs between two documents; a node in only one of them differs. */
-function nodeDiffers(a: DocumentV5, b: DocumentV5, id: string): boolean {
+function nodeDiffers(a: DocumentV6, b: DocumentV6, id: string): boolean {
   const x = nodeIn(a, id);
   const y = nodeIn(b, id);
   if (x === y) return false;
@@ -474,7 +477,7 @@ function nodeDiffers(a: DocumentV5, b: DocumentV5, id: string): boolean {
 }
 
 /** Whether two documents have the same pages, children orders included. */
-function samePages(a: DocumentV5, b: DocumentV5): boolean {
+function samePages(a: DocumentV6, b: DocumentV6): boolean {
   return a.pages === b.pages || JSON.stringify(a.pages) === JSON.stringify(b.pages);
 }
 
@@ -486,9 +489,9 @@ function sorted(ids: Iterable<string>): string[] {
 }
 
 /** Validated by the caller like any initial document, so a bad ID source fails at creation. */
-function emptyDocument(ids: IdSource): DocumentV5 {
+function emptyDocument(ids: IdSource): DocumentV6 {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     id: ids(),
     pages: [{ id: ids(), name: 'Page 1', children: [] }],
     nodes: {},
@@ -500,7 +503,7 @@ function emptyDocument(ids: IdSource): DocumentV5 {
  * whose ancestor is also listed is dropped (the ancestor wins).
  */
 function normalizeSelection(
-  document: DocumentV5,
+  document: DocumentV6,
   page: string,
   ids: readonly string[],
 ): string[] | null {
@@ -512,7 +515,7 @@ function normalizeSelection(
 }
 
 class EditorCore implements Editor {
-  private document: DocumentV5;
+  private document: DocumentV6;
   private activePage: string;
   private revision = 0;
   private selection: readonly string[] = Object.freeze([]);
@@ -602,7 +605,7 @@ class EditorCore implements Editor {
    * IDs that the document they draw on holds (or that are invalid), so an ID `drawnOn` does not
    * hold was taken (M7 contract, section 6).
    */
-  private static taken(returned: readonly string[], drawnOn: DocumentV5): string[] {
+  private static taken(returned: readonly string[], drawnOn: DocumentV6): string[] {
     return returned.filter(
       (id) =>
         isValidId(id) &&
@@ -618,7 +621,7 @@ class EditorCore implements Editor {
   }
 
   /** Runs one gesture step drawing on `drawnOn`, recording the IDs it accepted. */
-  private gestureStep<T>(gesture: Gesture, drawnOn: DocumentV5, step: () => T): T {
+  private gestureStep<T>(gesture: Gesture, drawnOn: DocumentV6, step: () => T): T {
     this.drawing = [];
     const result = step();
     gesture.accepted.push(...EditorCore.taken(this.drawing, drawnOn));
@@ -1167,7 +1170,8 @@ class EditorCore implements Editor {
   /**
    * The model's rules (a v1 value is migrated), then each custom node against its extension
    * wherever it is nested (plan section 3.3), then the clip depth (M1 contract, section 4.3;
-   * through each expansion, M7-S5), then each expansion's validity and the expansion caps (M7
+   * through each expansion, M7-S5), then the isolation count (MVP M4 contract, section 4.3),
+   * then each expansion's validity and the expansion caps (M7
    * contract, M7-X3 and section 4.1).
    */
   private validate(value: unknown): ParseResult | CommandFailure {
@@ -1179,6 +1183,10 @@ class EditorCore implements Editor {
     const deep = documentClipViolation(result.document);
     if (deep !== null) {
       return { ok: false, code: 'editor.clip-depth', path: nodePath(deep, '/parent') };
+    }
+    const isolated = documentIsolationViolation(result.document);
+    if (isolated !== null) {
+      return { ok: false, code: 'editor.isolation-depth', path: nodePath(isolated, '/parent') };
     }
     const expansion = expansionFailure(result.document, this.expansions);
     return expansion === null ? result : { ok: false, code: expansion.code, path: expansion.path! };
@@ -1858,7 +1866,7 @@ class EditorCore implements Editor {
   }
 
   private changeDocument(
-    document: DocumentV5,
+    document: DocumentV6,
     cause: DocumentChangeCause,
     touched: Iterable<string>,
   ): void {
@@ -1988,7 +1996,7 @@ class EditorCore implements Editor {
    * After a document change from `previous` (null for a load, which always ends it), the anchor
    * selection is kept when the path's structure is unchanged, else cleared.
    */
-  private syncPathEdit(previous?: DocumentV5 | null): void {
+  private syncPathEdit(previous?: DocumentV6 | null): void {
     const edit = this.pathEdit;
     if (edit === null) return;
     const node = editablePath(this.document, this.activePage, edit.id);

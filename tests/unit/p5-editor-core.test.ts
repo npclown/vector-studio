@@ -9,7 +9,7 @@ import {
   type EditorEvent,
 } from '../../packages/editor-core/src/index.js';
 import { createEditor as createPackagedEditor } from '@vector-studio/editor-core';
-import { serializeDocument, type DocumentV5 } from '@vector-studio/model';
+import { serializeDocument, type DocumentV6 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
 // Source imports: the gesture API is package-internal, so the test shares the source module.
 import { internalsOf } from '../../packages/editor-core/src/editor.js';
@@ -19,6 +19,8 @@ import { boundaries, evaluatePackageBoundaries } from '../../tooling/boundary-po
 // P5-U2 (P5 editor-slice plan, sections 4.1 to 4.3): P5-A01, P5-A04 and P5-A05.
 
 const black = { r: 0, g: 0, b: 0, a: 1 };
+/** The v6 keys a rectangle, ellipse or frame stroke adds to `{ color, width }` (M4-M1). */
+const SHAPE = { cap: 'butt', join: 'round', miterLimit: 4, dash: null } as const;
 const noModifiers = { shift: false, alt: false, meta: false, ctrl: false };
 
 function editor(): Editor {
@@ -60,11 +62,11 @@ describe('P5-A01 creation through execute', () => {
       type: 'createRectangle',
       frame: { x: 10, y: 20, width: 30, height: 40 },
       fill: { r: 1, g: 0, b: 0, a: 1 },
-      stroke: { color: black, width: 2 },
+      stroke: { color: black, width: 2, ...SHAPE },
     });
     expect(ids).toEqual(['n3']);
-    const expected: DocumentV5 = {
-      schemaVersion: 5,
+    const expected: DocumentV6 = {
+      schemaVersion: 6,
       id: 'n1',
       pages: [{ id: 'n2', name: 'Page 1', children: ['n3'] }],
       nodes: {
@@ -80,7 +82,7 @@ describe('P5-A01 creation through execute', () => {
           type: 'rectangle',
           cornerRadii: [0, 0, 0, 0],
           fill: { r: 1, g: 0, b: 0, a: 1 },
-          stroke: { color: black, width: 2 },
+          stroke: { color: black, width: 2, ...SHAPE },
         },
       },
     };
@@ -108,7 +110,7 @@ describe('P5-A01 creation through execute', () => {
     expect(document.nodes[line!]).toMatchObject({
       name: 'Path',
       fill: null,
-      stroke: { color: black, width: 1, cap: 'butt', join: 'miter', miterLimit: 4 },
+      stroke: { color: black, width: 1, cap: 'butt', join: 'miter', miterLimit: 4, dash: null },
     });
     expect(document.pages[0]!.children).toEqual([rect, line]);
   });
@@ -379,7 +381,11 @@ describe('P5-A04 gestures and history', () => {
     texts.push(text(target));
     ok(target, { type: 'createPath', verbs: ['move', 'line'], points: [0, 0, 3, 4] });
     texts.push(text(target));
-    ok(target, { type: 'setNodeProps', id: a!, props: { stroke: { color: black, width: 3 } } });
+    ok(target, {
+      type: 'setNodeProps',
+      id: a!,
+      props: { stroke: { color: black, width: 3, ...SHAPE } },
+    });
     texts.push(text(target));
     ok(target, { type: 'deleteNodes', ids: [a!] });
     texts.push(text(target));
@@ -444,12 +450,14 @@ describe('P5-A05 failed commands and session state', () => {
       'document.invalid-field',
     ],
     [
-      'a path stroke on a rectangle',
-      (id) => ({
-        type: 'setNodeProps',
-        id,
-        props: { stroke: { color: black, width: 1, cap: 'butt', join: 'miter', miterLimit: 4 } },
-      }),
+      // A v5 path stroke, without the v6 `dash` (M4 contract, section 4.1).
+      'a v5 path stroke on a rectangle',
+      (id) =>
+        ({
+          type: 'setNodeProps',
+          id,
+          props: { stroke: { color: black, width: 1, cap: 'butt', join: 'miter', miterLimit: 4 } },
+        }) as never,
       'document.invalid-field',
     ],
     [
@@ -480,7 +488,7 @@ describe('P5-A05 failed commands and session state', () => {
     ['deleting nothing', () => ({ type: 'deleteNodes', ids: [] }), 'editor.invalid-command'],
     [
       'an invalid document',
-      () => ({ type: 'loadDocument', document: { schemaVersion: 6 } }),
+      () => ({ type: 'loadDocument', document: { schemaVersion: 7 } }),
       'document.unsupported-version',
     ],
     ['an unknown command', () => ({ type: 'rotate' }) as never, 'editor.invalid-command'],
