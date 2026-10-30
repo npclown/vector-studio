@@ -1666,7 +1666,9 @@ type DerivedLeaf = Readonly<{
 
 /**
  * The scene's derivation (E26 contract, U5c): kept between frames and replaced only when the
- * scene changes. Nothing in it depends on the camera or the target.
+ * scene changes. Nothing in it depends on the camera or the target. Its arrays, maps and layer
+ * scopes are shared by later frames, so nothing after `derivePrimitives` may mutate them (a
+ * `LayerScope`'s `end` is written only while deriving).
  */
 type Derivation = Readonly<{
   /** The view's `changeSerial` this derivation is current at. */
