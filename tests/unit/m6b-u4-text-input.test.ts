@@ -190,10 +190,10 @@ describe('M6b-A05 textinput (section 5.3)', () => {
     type(target, 'yz');
     expect(textOf(target, 't')).toBe('abxyz cd');
     expect(target.getSnapshot().textEdit).toEqual(caret('t', 5));
-    // M6b-U5 merges these; until then each edit is its own step.
-    expect(target.getSnapshot().history).toEqual({ undoDepth: 2, redoDepth: 0 });
+    // The second insertion merges into the first (M6b-U5, section 8.2).
+    expect(target.getSnapshot().history).toEqual({ undoDepth: 1, redoDepth: 0 });
     target.execute({ type: 'undo' });
-    expect(textOf(target, 't')).toBe('abx cd');
+    expect(textOf(target, 't')).toBe('ab cd');
   });
 
   it('replaces a selection, in either direction, with the caret at its end', () => {
