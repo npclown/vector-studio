@@ -31,8 +31,10 @@ import { inSegment, outSegment, readAnchorModel } from './paths.js';
 import {
   caretAtPoint,
   insideTarget,
+  samePending,
   type TextEditSupport,
   type TextEditTarget,
+  type TextToolSupport,
 } from './text-edit.js';
 import { resizeInOwnAxes, scaleAbout } from './resize.js';
 import {
@@ -57,6 +59,7 @@ import type {
   PathEditState,
   SelectionHandles,
   SnapOverlay,
+  TextEditPending,
   ToolOverlay,
 } from './types.js';
 
@@ -79,7 +82,8 @@ export {
 // (MVP M3 contract, section 5) the select tool picks anchors, handles, segments and the fill of
 // the edited path instead, and drags them through the path commands in `replace`. In text edit
 // mode (MVP M6b contract, section 4.4) a press inside the edited node's box places the caret and
-// drag-selects, with no gesture; a press outside ends edit mode and acts by the M2 rules.
+// drag-selects, with no gesture; a press outside ends edit mode and acts by the M2 rules. The
+// text tool (section 3.2) enters a text node or starts a pending one, and is one-shot.
 
 type Pointer = Extract<InputEvent, { kind: 'pointerdown' | 'pointermove' | 'pointerup' }>;
 
@@ -268,6 +272,132 @@ export function createLineTool(): Tool {
         drag = null;
         context.gesture.commit();
         if (id !== null) context.execute({ type: 'setSelection', ids: [id] });
+      }
+      return true;
+    },
+    reset() {
+      drag = null;
+    },
+    overlay: () => null,
+  };
+}
+
+/**
+ * The page point `point` clamped into the target's box, so that it passes the select tool's
+ * own inside test (`insideTarget` with no margin): clamped in the node's axes into the box
+ * shrunk by a relative epsilon, then moved toward the centre while the page round trip of a
+ * rotated node still lands it a rounding error outside.
+ */
+function clampedInto(target: TextEditTarget, point: PagePoint): PagePoint {
+  const { width, height } = target;
+  const e = 1e-9 * Math.max(1, width, height);
+  const local = target.toLocal(point);
+  const clamp = (value: number, size: number) => {
+    const margin = Math.min(e, size / 2);
+    return Math.min(Math.max(value, margin), size - margin);
+  };
+  let x = clamp(local.x, width);
+  let y = clamp(local.y, height);
+  let page = target.toPage({ x, y });
+  for (let step = 0; step < 64 && !insideTarget(target, page, 0); step += 1) {
+    x = (x + width / 2) / 2;
+    y = (y + height / 2) / 2;
+    page = target.toPage({ x, y });
+  }
+  return page;
+}
+
+/**
+ * The text tool (MVP M6b contract, section 3.2). A press on a hittable text node (the deepest
+ * hit, at any depth, leaving a scope it is outside of) enters edit mode on it with the caret at
+ * the point, then hands the press to the select tool, which edit mode makes active (M6b-Q5 (a)):
+ * it places the caret with the point's affinity and starts the selection drag (section 4.4). A
+ * hit within the stroke tolerance outside the node's box is handed over clamped into the box,
+ * so the select tool never sees it as a press outside. Any other press is a gesture that
+ * changes nothing, so the press is held as the box tools hold theirs: Escape or `pointercancel`
+ * drops it. It is a click while the raw pointer has moved less than the click threshold
+ * `SNAP_PX / zoom` from the press point (section 3.2), else a drag, whose corner snaps
+ * (M2 section 4.2). At release a click, or a drag whose snapped box has width 0, makes a pending
+ * `autoWidth` node at the press point, and any other drag a pending `autoHeight` node of the
+ * snapped box's width at its top-left; the tool becomes `select` there too.
+ */
+export function createTextTool(
+  custom: CustomGeometry,
+  expansions: ExpansionCache,
+  text: TextToolSupport,
+): Tool {
+  let drag: { start: PagePoint; dragging: boolean; candidates: () => SnapSet } | null = null;
+
+  /** The text node hit at `point`, entered at the point; false when nothing was entered. */
+  function enter(event: Pointer, context: ToolContext): boolean {
+    const document = context.query({ type: 'document' });
+    const hit = deepestHit(
+      document,
+      context.query({ type: 'activePage' }),
+      event.point,
+      zoomOf(context),
+      custom,
+      expansions,
+    );
+    if (hit === null || document.nodes[hit]?.type !== 'text') return false;
+    const target = text.of(hit);
+    if (target === null) return false;
+    // A press outside the scope leaves it (M2 section 5) before edit mode starts, since a scope
+    // change would end edit mode.
+    const scope = context.query({ type: 'scope' });
+    if (scope !== null && !isAncestor(documentTree(document), scope, hit)) {
+      context.execute({ type: 'setScope', id: null });
+    }
+    const { offset } = caretAtPoint(target, event.point);
+    const entered = context.execute({
+      type: 'enterTextEdit',
+      id: hit,
+      anchor: offset,
+      focus: offset,
+    });
+    if (!entered.ok) return false;
+    // The select tool is active now; the rest of the press is its selection drag. A hit in the
+    // stroke tolerance outside the box goes over clamped into it, so it stays inside.
+    const point = insideTarget(target, event.point, 0)
+      ? event.point
+      : clampedInto(target, event.point);
+    context.execute({ type: 'input', event: { ...event, point } });
+    return true;
+  }
+
+  return {
+    input(event, context) {
+      if (event.kind === 'keydown') {
+        if (event.key === 'Escape' && drag !== null) {
+          context.gesture.cancel();
+          drag = null;
+          return true;
+        }
+        return false;
+      }
+      if (event.kind === 'pointerdown') {
+        if (drag !== null) return false;
+        if (enter(event, context)) return true;
+        if (!context.gesture.begin()) return false;
+        drag = { start: event.point, dragging: false, candidates: lazySnapSet(context, []) };
+        return true;
+      }
+      if (!isMoveOrUp(event) || drag === null) return false;
+      // Click or drag from the raw movement: once past the threshold the press is a drag.
+      if (distance(event.point, drag.start) >= thresholdOf(context)) drag.dragging = true;
+      // The up point is the drag's end, so it snaps like a move first.
+      const end = drag.dragging
+        ? snappedPoint(context, event.point, event.modifiers, drag.candidates)
+        : null;
+      if (end !== null) context.snap(end.overlay);
+      if (event.kind === 'pointerup') {
+        const box = end === null ? null : boxOf(drag.start, end.point);
+        const start = drag.start;
+        drag = null;
+        // The gesture made no update, so its commit records nothing and clears the snap.
+        context.gesture.commit();
+        if (box !== null && box.width > 0) text.startPending({ x: box.x, y: box.y }, box.width);
+        else text.startPending(start, null);
       }
       return true;
     },
@@ -480,9 +610,9 @@ type SelectState =
   /**
    * A selection drag in text edit mode (M6b contract, section 4.4): tool state, not a gesture;
    * each move sets the focus to the point's offset, keeping the live anchor, while node `id`
-   * (null for a pending node) is still the edited one.
+   * (null for a pending node, then `pending` names it) is still the edited one.
    */
-  | { kind: 'textDrag'; id: string | null }
+  | { kind: 'textDrag'; id: string | null; pending: TextEditPending | null }
   // Path edit mode (M3 contract, section 5).
   | {
       /** An anchor or segment drag: `movePathAnchors` on `anchors`, the anchor selection. */
@@ -860,12 +990,13 @@ export function createSelectTool(
     const { offset, affinity } = caretAtPoint(target, event.point);
     const anchor = event.modifiers.shift ? edit.anchor : offset;
     context.execute({ type: 'setTextSelection', anchor, focus: offset, affinity });
-    state = { kind: 'textDrag', id: edit.id };
+    state = { kind: 'textDrag', id: edit.id, pending: edit.pending };
   }
 
   /**
    * A selection-drag move or release: the focus follows the point from the live anchor, which a
-   * host change may have clamped; a drag whose node is no longer the edited one stops.
+   * host change may have clamped; a drag whose node is no longer the edited one stops, also
+   * when edit mode moved from one pending node to another (both have the ID null).
    */
   function textDrag(
     current: Extract<SelectState, { kind: 'textDrag' }>,
@@ -874,7 +1005,12 @@ export function createSelectTool(
   ): void {
     const edit = context.query({ type: 'textEdit' });
     const target = text?.current() ?? null;
-    if (edit === null || edit.id !== current.id || target === null) {
+    if (
+      edit === null ||
+      edit.id !== current.id ||
+      !samePending(edit.pending, current.pending) ||
+      target === null
+    ) {
       state = { kind: 'idle' };
       return;
     }

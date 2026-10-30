@@ -44,6 +44,26 @@ export interface TextEditSupport {
   of(id: string): TextEditTarget | null;
 }
 
+/**
+ * What the text tool reads and starts of text edit mode (section 3.2): the select tool's view,
+ * plus the start of a pending node, which no public command expresses (a pending node is session
+ * state the text tool alone creates).
+ */
+export interface TextToolSupport extends TextEditSupport {
+  /**
+   * Starts edit mode on a pending node with its top-left at the page point `origin`: `autoWidth`
+   * with a zero-width frame when `width` is null, else `autoHeight` of that width; its height is
+   * its empty layout's. The parent is the scope if set, else the active page; the index on top;
+   * the style the session `textStyle`. The tool becomes `select`. False without a port.
+   */
+  startPending(origin: PagePoint, width: number | null): boolean;
+}
+
+/** Whether two pending nodes are the same one: equal fields, since a pending node has no ID. */
+export function samePending(a: TextEditPending | null, b: TextEditPending | null): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 /** The text node `id` of `page`, or undefined. */
 export function editableText(document: DocumentV6, page: string, id: string): TextNode | undefined {
   const node = Object.hasOwn(document.nodes, id) ? document.nodes[id] : undefined;
