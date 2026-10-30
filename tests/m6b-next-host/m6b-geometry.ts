@@ -18,6 +18,8 @@ export class Reference {
     readonly layout: TextLayoutResult,
     /** The box width caret x is clamped to in the wrapping modes, else null (M6b-Q11 (a)). */
     readonly clampWidth: number | null,
+    /** The size of the node's one run, for a selected LF's width (the fixture has one run). */
+    readonly size: number,
   ) {}
 
   get lines() {
@@ -96,23 +98,24 @@ export class Reference {
     return this.nearestOnLine(index, point.x);
   }
 
-  /** Selection rectangles of `[min, max)` over lines whose content meets it (no LF selected). */
+  /**
+   * Selection rectangles of `[min, max)` over lines whose content meets it or whose LF it holds;
+   * a line whose LF is selected extends by 0.25 × the run size (an empty line from its `left`).
+   */
   selection(min: number, max: number): { x: number; y: number; width: number; height: number }[] {
     const out: { x: number; y: number; width: number; height: number }[] = [];
     this.lines.forEach((line, index) => {
       const a = Math.max(min, line.start);
       const b = Math.min(max, line.end);
-      if (!(a < b)) return;
-      if (this.text.charCodeAt(line.end) === 10 && min <= line.end && line.end < max) {
-        throw new Error('the reference does not cover a selected LF');
-      }
+      const lfSelected = this.text.charCodeAt(line.end) === 10 && min <= line.end && line.end < max;
+      if (!(a < b) && !lfSelected) return;
       const xs = [this.caretX(a, index), this.caretX(b, index)];
       for (const cluster of this.layout.clusters) {
         if (cluster.line !== index || cluster.start < a || cluster.end > b) continue;
         xs.push(this.clamp(cluster.x), this.clamp(cluster.x + cluster.advance));
       }
       const left = Math.min(...xs);
-      const right = Math.max(...xs);
+      const right = Math.max(...xs) + (lfSelected ? 0.25 * this.size : 0);
       out.push({ x: left, y: line.top, width: right - left, height: line.height });
     });
     return out;

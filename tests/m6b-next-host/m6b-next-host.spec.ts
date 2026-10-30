@@ -165,6 +165,7 @@ async function nodeOf(page: Page, id: string): Promise<Node> {
       rotation: node.rotation,
       text: node.runs.map((r) => r.text).join(''),
       sizing: node.sizing,
+      size: node.runs[0]!.size,
       layout: editor.query({ type: 'textLayout', id: nodeId })!,
     };
   }, id);
@@ -176,6 +177,7 @@ async function nodeOf(page: Page, id: string): Promise<Node> {
       value.text,
       value.layout,
       value.sizing === 'autoWidth' ? null : value.layout.width,
+      value.size,
     ),
   };
 }
@@ -269,9 +271,11 @@ test('M6b-A12: caret segments and selection rectangles match the measured cluste
         }
       }
     }
-    // Selection: everything up to the first LF, and a range over a soft wrap when there is one.
+    // Selection: everything up to the first LF, a range over a soft wrap when there is one, and
+    // for `w` the whole text, whose selected LFs widen their lines (section 4.3, M6b-Q11 (a)).
     const lf = node.text.indexOf('\n');
     const ranges: [number, number][] = [[0, lf === -1 ? node.text.length : lf]];
+    if (id === 'w') ranges.push([0, node.text.length]);
     const wrap = node.layout.lines.findIndex((_, index) => node.reference.softWrapAfter(index));
     if (wrap !== -1) {
       const at = node.layout.lines[wrap]!.end;
@@ -726,9 +730,10 @@ test('M6b-A13: presses in edit mode keep focus on the textarea, which sits at th
   // The rotated node: the textarea at the top-left of the caret's axis-aligned box.
   await enter(page, 'r', 3);
   {
-    const { at, box } = await placement('r');
+    const { at, box, height } = await placement('r');
     expect(Math.abs(box.left - at.x)).toBeLessThanOrEqual(PLACEMENT_TOLERANCE);
     expect(Math.abs(box.top - at.y)).toBeLessThanOrEqual(PLACEMENT_TOLERANCE);
+    expect(Math.abs(box.height - Math.max(height, 1))).toBeLessThanOrEqual(PLACEMENT_TOLERANCE);
   }
   await enter(page, 't', 5);
   // A press inside: prevented, focus stays on the textarea (section 7.2, M6b-U7 note 4).
@@ -813,9 +818,10 @@ test('M6b-A13: presses in edit mode keep focus on the textarea, which sits at th
     });
     expect(after.tool).toBe('select');
     expect(after.textEdit?.pending).not.toBeNull();
-    const { at, box } = await placement('pending');
+    const { at, box, height } = await placement('pending');
     expect(Math.abs(box.left - at.x)).toBeLessThanOrEqual(PLACEMENT_TOLERANCE);
     expect(Math.abs(box.top - at.y)).toBeLessThanOrEqual(PLACEMENT_TOLERANCE);
+    expect(Math.abs(box.height - Math.max(height, 1))).toBeLessThanOrEqual(PLACEMENT_TOLERANCE);
   }
   await report(testInfo, 'm6b-a13-presses.json', readings);
   expect(errors).toEqual([]);
@@ -844,6 +850,12 @@ type Trace = Readonly<{
   appendixCase: number;
   title: string;
   replay: Readonly<{
+    /**
+     * Where a trace's press lands at this page's geometry (the trace's client points are the
+     * unit test's); without it, inside when the trace ends in edit mode, else outside.
+     * Recorded traces (M6b-U10) set it.
+     */
+    press?: 'inside' | 'outside';
     start: Readonly<{ edit: string; anchor: number; focus: number }> | Readonly<{ pending: Point }>;
     expect: Readonly<{
       node: string;
@@ -984,7 +996,8 @@ async function replayTrace(
         }
         break;
       case 'pointerdown': {
-        const target = toClient(v, trace.replay.expect.textEdit ? points.inside : points.outside);
+        const side = trace.replay.press ?? (trace.replay.expect.textEdit ? 'inside' : 'outside');
+        const target = toClient(v, side === 'inside' ? points.inside : points.outside);
         await page.mouse.click(target.x, target.y);
         browserEnds = true;
         break;
