@@ -20,6 +20,7 @@ import { toggleClosedCommand } from '../src/m3-path-overlay';
 import {
   attachPersistence,
   offersDiscard,
+  PERSIST_DATABASE_NAME,
   persistQuery,
   persistStatusLabel,
   restoreEnvelope,
@@ -36,6 +37,7 @@ import {
   type TestFontStatus,
   type TextTestHook,
 } from '../src/m6a-text-host';
+import { BENCH_CANVAS, benchDatabaseName, pageBench } from '../src/e26-bench';
 import { AppearancePanel } from '../src/m4-appearance-panel';
 import { SelectionOverlay } from '../src/overlay';
 import { createWebGpuRenderer } from '../src/webgpu-renderer';
@@ -66,6 +68,10 @@ import { createWebGpuRenderer } from '../src/webgpu-renderer';
 // of the canvas, so the toolbar rows and the canvas keep their place; one committed edit is one
 // `setStyle` command. `?fixture=appearance` loads the M4 host fixture (H1 to H9, M4-A12) at zoom
 // 1; the headed spec sets the camera to its pixel-centre position per DPR.
+// E26-U1b (E26 contract, section 3.3): with `?bench=1` (src/e26-bench.ts) the canvas is the E26
+// viewport, `doc=` loads a scenario document from `/e26-bench-doc.json` (exempt from the "persistence
+// wins" rule), `persist=1` restores from a fresh per-run database and records every autosave
+// write, and `window.__e26Bench` drives and measures the run. Without `?bench=1` none of it exists.
 
 const WIDTH = 960;
 const HEIGHT = 640;
@@ -509,7 +515,37 @@ function Surface({
   const [renderer, setRenderer] = useState('pending');
   const [fixture, setFixture] = useState('none');
   const [file, setFile] = useState('');
+  const bench = useMemo(() => pageBench(), []);
+  const width = bench === null ? WIDTH : BENCH_CANVAS.width;
+  const height = bench === null ? HEIGHT : BENCH_CANVAS.height;
   useEffect(() => {
+    // E26-U1b: the bench loader, for `?bench=1&doc=` only; persistence does not win over it.
+    const doc = bench?.query.doc ?? null;
+    if (doc === null) return;
+    let live = true;
+    setFixture('loading');
+    void (async () => {
+      try {
+        const url = `/e26-bench-doc.json?doc=${doc}`;
+        const response = await fetch(url, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
+        const document: unknown = await response.json();
+        if (!live) return;
+        const result = execute({ type: 'loadDocument', document });
+        if (!result.ok) throw new Error(`loadDocument: ${result.code} ${result.path ?? ''}`);
+        setFixture('bench-loaded');
+      } catch (error) {
+        if (!live) return;
+        setFixture('error');
+        setErrors((list) => [...list, String(error)]);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [bench, execute]);
+  useEffect(() => {
+    if (bench !== null) return;
     // Section 5.3: with `?persist=1` the fixture is ignored, and the status says so.
     if (persistQuery(window.location.search).fixtureIgnored) {
       setFixture('ignored');
@@ -544,7 +580,7 @@ function Surface({
     return () => {
       live = false;
     };
-  }, [execute, testFont]);
+  }, [bench, execute, testFont]);
   // The handle box follows the snapshot: this component re-renders on every editor change.
   const handles = editor.query({ type: 'handles' });
   const pathOverlay = usePathOverlay();
@@ -579,13 +615,13 @@ function Surface({
         <div
           data-testid="canvas-host"
           data-cursor={rotating ? 'rotate' : 'default'}
-          style={{ width: WIDTH, cursor: rotating ? ROTATE_CURSOR : undefined }}
+          style={{ width, cursor: rotating ? ROTATE_CURSOR : undefined }}
           onPointerMove={hover}
           onPointerLeave={() => setRotating(false)}
         >
           <EditorCanvas
-            width={WIDTH}
-            height={HEIGHT}
+            width={width}
+            height={height}
             createRenderer={createWebGpuRenderer}
             onRendererError={(error) => {
               setRenderer('error');
@@ -598,8 +634,8 @@ function Surface({
               snapshot={snapshot}
               handles={handles}
               pathOverlay={pathOverlay}
-              width={WIDTH}
-              height={HEIGHT}
+              width={width}
+              height={height}
             />
           </EditorCanvas>
         </div>
@@ -630,7 +666,18 @@ function usePersistence(
   const session = useRef<PersistenceSession | null>(null);
   useEffect(() => {
     if (!persistQuery(window.location.search).persist) return;
-    const current = attachPersistence(editor, { baseRevision, onStatus: setStatus });
+    // E26-U1b: a bench run restores from its own empty database and records its writes.
+    const bench = pageBench();
+    const current = attachPersistence(editor, {
+      baseRevision,
+      onStatus: setStatus,
+      ...(bench === null
+        ? {}
+        : {
+            databaseName: benchDatabaseName(PERSIST_DATABASE_NAME),
+            wrapStore: (store) => bench.wrapStore(store),
+          }),
+    });
     session.current = current;
     const hidden = () => {
       if (document.visibilityState === 'hidden') void current.flush();
@@ -656,6 +703,12 @@ function Host({ state, textFont }: { state: HostCompositionState; textFont: Test
   const baseRevision = useMemo(() => editor.getSnapshot().revision, [editor]);
   const persistence = usePersistence(editor, baseRevision);
   const { session } = persistence;
+  useEffect(() => {
+    const bench = pageBench();
+    if (bench === null) return;
+    bench.setEditor(editor);
+    return () => bench.setEditor(null);
+  }, [editor]);
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get('test') !== '1') return;
     const events: EditorEvent[] = [];
