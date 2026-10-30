@@ -28,7 +28,7 @@ import type {
 // Public command, query and event shapes (P5 plan, sections 4.1 to 4.3; MVP M1 contract,
 // sections 3 and 4).
 
-export type ToolName = 'select' | 'rectangle' | 'ellipse' | 'line' | 'frame' | 'path';
+export type ToolName = 'select' | 'rectangle' | 'ellipse' | 'line' | 'frame' | 'path' | 'text';
 
 /**
  * A built-in tool name or a registered extension tool ID (MVP M2 contract, section 7; M2-Q13).

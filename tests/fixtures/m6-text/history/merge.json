@@ -1,0 +1,326 @@
+{
+  "description": "History scripts (M6b-A06, section 8.2 and M6b-Q13 (a)): each script runs in edit mode on node t \"ab cd\" (family Test, size 10, at (10, 20)) or h \"안녕\" from its caret; then the committed undo depth, and the text and caret after each undo down to depth 0 and after each redo back up. Steps: type (textinput), key with optional mods, select (setTextSelection), press (a primary click at a page point), exit (exitTextEdit) and enter (enterTextEdit at a caret).",
+  "scripts": [
+    {
+      "name": "an insertion run merges",
+      "node": "t",
+      "caret": [5, 5],
+      "steps": [{ "type": "x" }, { "type": "y" }, { "type": "z" }],
+      "text": "ab cdxyz",
+      "depth": 1,
+      "undo": [{ "text": "ab cd", "caret": [5, 5] }],
+      "redo": [{ "text": "ab cdxyz", "caret": [8, 8] }]
+    },
+    {
+      "name": "a space after a non-space starts a step; a space after a space merges",
+      "node": "t",
+      "caret": [5, 5],
+      "steps": [
+        { "type": "x" },
+        { "type": " " },
+        { "type": "y" },
+        { "type": " " },
+        { "type": " " },
+        { "type": "z" }
+      ],
+      "text": "ab cdx y  z",
+      "depth": 3,
+      "undo": [
+        { "text": "ab cdx y", "caret": [8, 8] },
+        { "text": "ab cdx", "caret": [6, 6] },
+        { "text": "ab cd", "caret": [5, 5] }
+      ],
+      "redo": [
+        { "text": "ab cdx", "caret": [6, 6] },
+        { "text": "ab cdx y", "caret": [8, 8] },
+        { "text": "ab cdx y  z", "caret": [11, 11] }
+      ]
+    },
+    {
+      "name": "an LF is its own step and the next insertion starts anew",
+      "node": "t",
+      "caret": [5, 5],
+      "steps": [{ "type": "a" }, { "key": "Enter" }, { "type": "b" }, { "type": "c" }],
+      "text": "ab cda\nbc",
+      "depth": 3,
+      "undo": [
+        { "text": "ab cda\n", "caret": [7, 7] },
+        { "text": "ab cda", "caret": [6, 6] },
+        { "text": "ab cd", "caret": [5, 5] }
+      ],
+      "redo": [
+        { "text": "ab cda", "caret": [6, 6] },
+        { "text": "ab cda\n", "caret": [7, 7] },
+        { "text": "ab cda\nbc", "caret": [9, 9] }
+      ]
+    },
+    {
+      "name": "a textinput holding an LF is its own step",
+      "node": "t",
+      "caret": [5, 5],
+      "steps": [{ "type": "x" }, { "type": "a\nb" }, { "type": "c" }],
+      "text": "ab cdxa\nbc",
+      "depth": 3,
+      "undo": [
+        { "text": "ab cdxa\nb", "caret": [9, 9] },
+        { "text": "ab cdx", "caret": [6, 6] },
+        { "text": "ab cd", "caret": [5, 5] }
+      ],
+      "redo": [
+        { "text": "ab cdx", "caret": [6, 6] },
+        { "text": "ab cdxa\nb", "caret": [9, 9] },
+        { "text": "ab cdxa\nbc", "caret": [10, 10] }
+      ]
+    },
+    {
+      "name": "a Backspace run merges",
+      "node": "t",
+      "caret": [5, 5],
+      "steps": [{ "key": "Backspace" }, { "key": "Backspace" }, { "key": "Backspace" }],
+      "text": "ab",
+      "depth": 1,
+      "undo": [{ "text": "ab cd", "caret": [5, 5] }],
+      "redo": [{ "text": "ab", "caret": [2, 2] }]
+    },
+    {
+      "name": "a Delete run merges",
+      "node": "t",
+      "caret": [0, 0],
+      "steps": [{ "key": "Delete" }, { "key": "Delete" }],
+      "text": " cd",
+      "depth": 1,
+      "undo": [{ "text": "ab cd", "caret": [0, 0] }],
+      "redo": [{ "text": " cd", "caret": [0, 0] }]
+    },
+    {
+      "name": "Backspace and Delete are different kinds",
+      "node": "t",
+      "caret": [3, 3],
+      "steps": [{ "key": "Backspace" }, { "key": "Delete" }],
+      "text": "abd",
+      "depth": 2,
+      "undo": [
+        { "text": "abcd", "caret": [2, 2] },
+        { "text": "ab cd", "caret": [3, 3] }
+      ],
+      "redo": [
+        { "text": "abcd", "caret": [2, 2] },
+        { "text": "abd", "caret": [2, 2] }
+      ]
+    },
+    {
+      "name": "an insertion and a Backspace are different kinds",
+      "node": "t",
+      "caret": [5, 5],
+      "steps": [{ "type": "x" }, { "type": "y" }, { "key": "Backspace" }],
+      "text": "ab cdx",
+      "depth": 2,
+      "undo": [
+        { "text": "ab cdxy", "caret": [7, 7] },
+        { "text": "ab cd", "caret": [5, 5] }
+      ],
+      "redo": [
+        { "text": "ab cdxy", "caret": [7, 7] },
+        { "text": "ab cdx", "caret": [6, 6] }
+      ]
+    },
+    {
+      "name": "a word deletion is its own step; a Backspace after it starts a run",
+      "node": "t",
+      "caret": [5, 5],
+      "steps": [
+        { "key": "Backspace", "mods": ["ctrl"] },
+        { "key": "Backspace" },
+        { "key": "Backspace" }
+      ],
+      "text": "a",
+      "depth": 2,
+      "undo": [
+        { "text": "ab ", "caret": [3, 3] },
+        { "text": "ab cd", "caret": [5, 5] }
+      ],
+      "redo": [
+        { "text": "ab ", "caret": [3, 3] },
+        { "text": "a", "caret": [1, 1] }
+      ]
+    },
+    {
+      "name": "word deletions never merge, forward or backward",
+      "node": "t",
+      "caret": [0, 0],
+      "steps": [
+        { "key": "Delete", "mods": ["ctrl"] },
+        { "key": "Delete", "mods": ["ctrl"] }
+      ],
+      "text": "",
+      "depth": 2,
+      "undo": [
+        { "text": "cd", "caret": [0, 0] },
+        { "text": "ab cd", "caret": [0, 0] }
+      ],
+      "redo": [
+        { "text": "cd", "caret": [0, 0] },
+        { "text": "", "caret": [0, 0] }
+      ]
+    },
+    {
+      "name": "a Backspace run does not merge into a word deletion",
+      "node": "t",
+      "caret": [5, 5],
+      "steps": [{ "key": "Backspace" }, { "key": "Backspace", "mods": ["ctrl"] }],
+      "text": "ab ",
+      "depth": 2,
+      "undo": [
+        { "text": "ab c", "caret": [4, 4] },
+        { "text": "ab cd", "caret": [5, 5] }
+      ],
+      "redo": [
+        { "text": "ab c", "caret": [4, 4] },
+        { "text": "ab ", "caret": [3, 3] }
+      ]
+    },
+    {
+      "name": "a selection deletion is its own step",
+      "node": "t",
+      "caret": [1, 4],
+      "steps": [{ "key": "Backspace" }, { "key": "Backspace" }],
+      "text": "d",
+      "depth": 2,
+      "undo": [
+        { "text": "ad", "caret": [1, 1] },
+        { "text": "ab cd", "caret": [1, 4] }
+      ],
+      "redo": [
+        { "text": "ad", "caret": [1, 1] },
+        { "text": "d", "caret": [0, 0] }
+      ]
+    },
+    {
+      "name": "a selection deletion does not merge into a Delete run",
+      "node": "t",
+      "caret": [0, 0],
+      "steps": [{ "key": "Delete" }, { "select": [0, 2] }, { "key": "Delete" }],
+      "text": "cd",
+      "depth": 2,
+      "undo": [
+        { "text": "b cd", "caret": [0, 2] },
+        { "text": "ab cd", "caret": [0, 0] }
+      ],
+      "redo": [
+        { "text": "b cd", "caret": [0, 0] },
+        { "text": "cd", "caret": [0, 0] }
+      ]
+    },
+    {
+      "name": "a replacement of a selection starts a step that later insertions merge into",
+      "node": "t",
+      "caret": [5, 5],
+      "steps": [{ "type": "x" }, { "select": [0, 2] }, { "type": "Q" }, { "type": "R" }],
+      "text": "QR cdx",
+      "depth": 2,
+      "undo": [
+        { "text": "ab cdx", "caret": [0, 2] },
+        { "text": "ab cd", "caret": [5, 5] }
+      ],
+      "redo": [
+        { "text": "ab cdx", "caret": [6, 6] },
+        { "text": "QR cdx", "caret": [2, 2] }
+      ]
+    },
+    {
+      "name": "a caret move breaks the merge, also when it comes back",
+      "node": "t",
+      "caret": [5, 5],
+      "steps": [
+        { "type": "x" },
+        { "key": "ArrowLeft" },
+        { "key": "ArrowRight" },
+        { "type": "y" }
+      ],
+      "text": "ab cdxy",
+      "depth": 2,
+      "undo": [
+        { "text": "ab cdx", "caret": [6, 6] },
+        { "text": "ab cd", "caret": [5, 5] }
+      ],
+      "redo": [
+        { "text": "ab cdx", "caret": [6, 6] },
+        { "text": "ab cdxy", "caret": [7, 7] }
+      ]
+    },
+    {
+      "name": "a movement key that changes nothing keeps the merge",
+      "node": "t",
+      "caret": [5, 5],
+      "steps": [{ "type": "x" }, { "key": "ArrowRight" }, { "key": "End" }, { "type": "y" }],
+      "text": "ab cdxy",
+      "depth": 1,
+      "undo": [{ "text": "ab cd", "caret": [5, 5] }],
+      "redo": [{ "text": "ab cdxy", "caret": [7, 7] }]
+    },
+    {
+      "name": "setTextSelection breaks the merge, also to the same caret",
+      "node": "t",
+      "caret": [5, 5],
+      "steps": [{ "type": "x" }, { "select": [6, 6] }, { "type": "y" }],
+      "text": "ab cdxy",
+      "depth": 2,
+      "undo": [
+        { "text": "ab cdx", "caret": [6, 6] },
+        { "text": "ab cd", "caret": [5, 5] }
+      ],
+      "redo": [
+        { "text": "ab cdx", "caret": [6, 6] },
+        { "text": "ab cdxy", "caret": [7, 7] }
+      ]
+    },
+    {
+      "name": "a press inside breaks the merge, also at the same caret",
+      "node": "t",
+      "caret": [0, 0],
+      "steps": [{ "type": "x" }, { "press": [15, 25] }, { "type": "y" }],
+      "text": "xyab cd",
+      "depth": 2,
+      "undo": [
+        { "text": "xab cd", "caret": [1, 1] },
+        { "text": "ab cd", "caret": [0, 0] }
+      ],
+      "redo": [
+        { "text": "xab cd", "caret": [1, 1] },
+        { "text": "xyab cd", "caret": [2, 2] }
+      ]
+    },
+    {
+      "name": "leaving edit mode breaks the merge",
+      "node": "t",
+      "caret": [5, 5],
+      "steps": [{ "type": "x" }, { "exit": true }, { "enter": [6, 6] }, { "type": "y" }],
+      "text": "ab cdxy",
+      "depth": 2,
+      "undo": [
+        { "text": "ab cdx", "caret": [6, 6] },
+        { "text": "ab cd", "caret": [5, 5] }
+      ],
+      "redo": [
+        { "text": "ab cdx", "caret": [6, 6] },
+        { "text": "ab cdxy", "caret": [7, 7] }
+      ]
+    },
+    {
+      "name": "Hangul syllables merge, and a Backspace of a syllable is a new step",
+      "node": "h",
+      "caret": [2, 2],
+      "steps": [{ "type": "하" }, { "type": "세" }, { "type": "요" }, { "key": "Backspace" }],
+      "text": "안녕하세",
+      "depth": 2,
+      "undo": [
+        { "text": "안녕하세요", "caret": [5, 5] },
+        { "text": "안녕", "caret": [2, 2] }
+      ],
+      "redo": [
+        { "text": "안녕하세요", "caret": [5, 5] },
+        { "text": "안녕하세", "caret": [4, 4] }
+      ]
+    }
+  ]
+}
