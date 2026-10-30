@@ -1,4 +1,5 @@
 import type { RendererFactory, RendererHandle } from '@vector-studio/react';
+import { benchBackendOptions, pageBench } from './e26-bench';
 
 // P5-U6 (P5 plan, section 6 and P5-Q8): the host's renderer, composed as the V-1 playground page
 // composes it: the P1 primitive and P3 path renderer service on the WebGPU backend, with the
@@ -11,6 +12,9 @@ import type { RendererFactory, RendererHandle } from '@vector-studio/react';
 // M4-U4 (M4 contract, M4-P7): the service also takes `paints: 'gradient'` (E23) and
 // `groups: 'isolated'` (E25) beside `clips: 'all'`, so gradient paints and translucent
 // containers and instances draw instead of being isolated as `editor.renderer-unsupported`.
+// E26-U1b (E26 contract, section 3.3): with `?bench=1` the backend's clock runs the bench driver
+// and the service is wrapped for the injected rejection (src/e26-bench.ts); frame capture stays
+// off unless `?test=1` is also given, which the harness never does.
 
 const WASM_URL = '/geometry-kernel.wasm';
 
@@ -66,7 +70,10 @@ export const createWebGpuRenderer: RendererFactory = async (canvas, size) => {
     const stroke = await geometry.createStrokeMeshPort(bytes);
     releases.push(() => stroke.dispose());
     const testing = new URLSearchParams(window.location.search).get('test') === '1';
-    const backend = new webgpu.WebGpuBackend(testing ? { frameCaptureForTesting: true } : {});
+    const bench = pageBench();
+    const backend = new webgpu.WebGpuBackend(
+      benchBackendOptions(window.location.search, bench?.clock ?? null),
+    );
     releases.push(() => backend.dispose());
     if (testing) {
       const diagnostics: NextHostDiagnostic[] = [];
@@ -115,7 +122,13 @@ export const createWebGpuRenderer: RendererFactory = async (canvas, size) => {
     if (!capability.supported) {
       throw new Error(`WebGPU is not available: ${capability.diagnostic.message}`);
     }
-    const handle: RendererHandle = { renderer: service, dispose };
+    let renderer: RendererHandle['renderer'] = service;
+    if (bench !== null) {
+      bench.attach(backend, canvas);
+      releases.push(() => bench.detach());
+      renderer = bench.wrapRenderer(service);
+    }
+    const handle: RendererHandle = { renderer, dispose };
     return handle;
   } catch (error) {
     dispose();

@@ -145,6 +145,8 @@ export type PersistenceOptions = {
   /** The revision when the page loaded; defaults to the revision at the call. */
   baseRevision?: number;
   onStatus?: (status: PersistStatus) => void;
+  /** E26-U1b: the bench's write-start hook wraps the opened store (`?bench=1` only). */
+  wrapStore?: (store: DocumentStore) => DocumentStore;
 };
 
 export type PersistenceSession = Readonly<{
@@ -225,7 +227,7 @@ export function attachPersistence(
       failed('open', opened);
       return;
     }
-    store = opened.store;
+    store = options.wrapStore === undefined ? opened.store : options.wrapStore(opened.store);
     const read = await store.read();
     if (disposed) return;
     if (!read.ok) {
