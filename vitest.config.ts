@@ -8,5 +8,6 @@ export default defineConfig({
       enabled: false,
     },
     include: ['tests/unit/**/*.test.ts'],
+    setupFiles: ['tests/setup/e26-scoped-projection-check.ts'],
   },
 });

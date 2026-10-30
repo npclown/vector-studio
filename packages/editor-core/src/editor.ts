@@ -208,6 +208,11 @@ type HistoryEntry = Readonly<{
   after: DocumentV6;
   touched: readonly string[];
   /**
+   * For the scene projector only (E26-U4): the IDs whose node object differs between `before`
+   * and `after`, a superset of `touched`, which a gesture filters by value; absent when equal.
+   */
+  projected?: readonly string[];
+  /**
    * The IDs the ID source returned for the step (M7 contract, section 6): an undo or redo
    * replaces the nodes under them, so they leave the rule (1) link set as a new draw does.
    */
@@ -997,7 +1002,7 @@ class EditorCore implements Editor {
         // The step's IDs now name other nodes, or none (section 6, rule (1)).
         for (const id of entry.drawn) this.clipboardLinks.delete(id);
         const target = command.type === 'undo' ? entry.before : entry.after;
-        this.changeDocument(target, command.type, entry.touched);
+        this.changeDocument(target, command.type, entry.touched, entry.projected);
         return { ok: true, ids: [] };
       }
       case 'loadDocument': {
@@ -1941,7 +1946,18 @@ class EditorCore implements Editor {
     }
     // Including IDs of updates the commit discarded, which errs on the safe side.
     const drawn = this.unlink([...new Set(gesture.accepted)]);
-    this.undoStack.push({ before: gesture.base, after, touched, drawn });
+    // A node moved away and back is a new object of the same value: the projector, which keeps
+    // nodes by identity (E26-U4), is given it on undo and redo.
+    const projected = sorted(
+      candidates.filter((id) => nodeIn(gesture.base, id) !== nodeIn(after, id)),
+    );
+    this.undoStack.push({
+      before: gesture.base,
+      after,
+      touched,
+      drawn,
+      ...(projected.length === touched.length ? {} : { projected }),
+    });
     this.redoStack = [];
     this.changeDocument(after, 'gesture-commit', changed);
   }
@@ -1983,11 +1999,13 @@ class EditorCore implements Editor {
     document: DocumentV6,
     cause: DocumentChangeCause,
     touched: Iterable<string>,
+    projected?: Iterable<string>,
   ): void {
     const previous = this.document;
     this.document = document;
     this.revision += 1;
     const ids = sorted(touched);
+    const scene = projected === undefined ? ids : sorted(projected);
     // A load activates the first page; removing or undoing away the active page activates the
     // page now at its index, else the last one (M1 contract, section 3).
     const index = previous.pages.findIndex((page) => page.id === this.activePage);
@@ -2022,8 +2040,8 @@ class EditorCore implements Editor {
     // The renderer follows before any listener runs; its diagnostics follow the change event.
     const diagnostics: EditorEvent[] = [];
     this.withProjector((projector) => {
-      if (cause === 'load' || pageChanged) projector.replace(document, page, ids);
-      else projector.change(document, page, ids);
+      if (cause === 'load' || pageChanged) projector.replace(document, page, scene);
+      else projector.change(document, page, scene);
     }, diagnostics);
     this.refresh({ type: 'document', cause, revision: this.revision, touched: ids });
     if (selectionChanged) this.emit({ type: 'session', field: 'selection' });
