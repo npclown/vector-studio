@@ -693,6 +693,22 @@ type MemoEntry = Readonly<{
 
 export type ProjectionMemo = Map<string, MemoEntry>;
 
+/**
+ * A change-scoped walk (E26 contract, section 4.3): the units on `path` are projected again;
+ * any other unit whose memo entry still holds (same node object and scene parent) and that the
+ * renderer holds is kept whole, without a walk of its subtree.
+ */
+export type ProjectionScope = Readonly<{
+  /** The changed units and every document ancestor of one. */
+  path: ReadonlySet<string>;
+  /** Whether the renderer holds unit `id` as its memo entry has it. */
+  held: (id: string) => boolean;
+  /** Receives, for each unit the walk sets in the memo, its entry before the walk. */
+  replaced: Map<string, MemoEntry | undefined>;
+  /** Receives the units kept whole. */
+  kept: Set<string>;
+}>;
+
 /** The snapshots of `entry` when its node, scene parent and projected children still hold. */
 function reusedFrom(
   entry: MemoEntry | undefined,
@@ -792,7 +808,9 @@ function projectExpanded(
  * group whose source is omitted. With `memo`, a node that did not change keeps the same
  * snapshot objects, so a changed snapshot is always a new object. Instances take their content
  * from `expansions` (M7-X4), the editor's cache shared with the checks and hit testing; one
- * whose expansion is invalid is left out and listed in `invalid` (M7-X3).
+ * whose expansion is invalid is left out and listed in `invalid` (M7-X3). With `scope` (and a
+ * memo), only the units it names are walked: the result lists those units and the invalid
+ * instances among their children, with the full `rootOrder` (E26 contract, section 4.3).
  */
 export function projectPage(
   document: DocumentV6,
@@ -801,6 +819,7 @@ export function projectPage(
   omit: ReadonlySet<string> = new Set(),
   memo?: ProjectionMemo,
   expansions: ExpansionCache = new ExpansionCache(),
+  scope?: ProjectionScope,
 ): PageProjection {
   const built = new Map<string, RenderNodeSnapshot>();
   const order: string[] = [];
@@ -872,6 +891,14 @@ export function projectPage(
     for (const id of ids) {
       if (omit.has(id) || !Object.hasOwn(document.nodes, id)) continue;
       const node = document.nodes[id]!;
+      if (scope !== undefined && !scope.path.has(id)) {
+        const held = memo?.get(id);
+        if (held?.node === node && held.parentId === parentId && scope.held(id)) {
+          scope.kept.add(id);
+          out.push(id);
+          continue;
+        }
+      }
       const at = order.length;
       let entry: MemoEntry;
       if (
@@ -909,6 +936,7 @@ export function projectPage(
         units.push(id);
         entry = { node, parentId, children: null, snapshots: [snapshot] };
       }
+      if (scope !== undefined && !scope.replaced.has(id)) scope.replaced.set(id, memo?.get(id));
       memo?.set(id, entry);
       const sceneIds = entry.snapshots.map((snapshot) => snapshot.id);
       entry.snapshots.forEach((snapshot) => built.set(snapshot.id, snapshot));
@@ -926,7 +954,8 @@ export function projectPage(
 
   const page = document.pages.find((entry) => entry.id === pageId);
   const rootOrder = walk(page?.children ?? [], null);
-  if (memo !== undefined) {
+  // A scoped walk drops the entries of the units it removes (SceneProjector).
+  if (memo !== undefined && scope === undefined) {
     for (const id of memo.keys()) if (!Object.hasOwn(document.nodes, id)) memo.delete(id);
   }
   const nodes = new Map<string, RenderNodeSnapshot>();
@@ -1000,6 +1029,16 @@ export class SceneProjector {
   private readonly expansions: ExpansionCache;
   /** Instances of the last projection left out for an invalid expansion, already reported. */
   private invalid: ReadonlySet<string> = new Set();
+  /** The invalid instances the last projection met (`invalid` also keeps omitted ones). */
+  private met: ReadonlySet<string> = new Set();
+  /**
+   * Whether the renderer holds the last projection through `memo` under the current
+   * exclusions, so that the next change can project only what it touched (E26 contract,
+   * section 4.3). Isolation, retries, exclusions and failures clear it.
+   */
+  private scoped = false;
+  /** Test seam: every change projects the whole page (the oracle of the scoped path). */
+  private wholePage = false;
   private disposed = false;
   private resyncing = false;
   /** The page the projection shows (M1 contract, section 3). */
@@ -1053,10 +1092,12 @@ export class SceneProjector {
       this.identity = identity;
       this.sent = new Map(projection.nodes);
       this.sentOrder = projection.rootOrder;
+      this.scoped = true;
       return;
     }
     this.identity = null;
     this.base = null;
+    this.scoped = false;
     if (result.status !== 'invalid-scene') return;
     if (isBookkeeping(result)) {
       // Revision bookkeeping, not a node rejection: move above the renderer and send once more.
@@ -1072,13 +1113,18 @@ export class SceneProjector {
   /** Sends one change set for a document change on `page` that touched `touched`. */
   change(document: DocumentV6, page: string, touched: readonly string[]): void {
     if (this.disposed) return;
+    const excluded = this.excluded.size;
     const retry = this.release(document, touched);
+    if (this.excluded.size !== excluded) this.scoped = false;
     if (this.identity === null || this.base === null || this.page !== page) {
       this.replace(document, page);
       return;
     }
     // Released subtrees are retried one unit per set after the main set.
-    const result = this.sync(this.project(document, retry));
+    const result =
+      this.scoped && !this.wholePage
+        ? this.scopedSync(document, touched)
+        : this.sync(this.project(document, retry));
     if (result === null || this.accepted(result)) {
       this.retry(document, retry);
       return;
@@ -1113,6 +1159,7 @@ export class SceneProjector {
     projection: PageProjection,
     only: Readonly<{ id: string; result: Rejection }> | null,
   ): void {
+    this.scoped = false;
     const identity = { documentId: document.id, pageId: this.page };
     let empty = this.sendEmpty(identity);
     if (empty.status === 'invalid-scene' && isBookkeeping(empty)) {
@@ -1145,6 +1192,7 @@ export class SceneProjector {
     projection: PageProjection,
     roots: ReadonlySet<string> | null,
   ): void {
+    this.scoped = false;
     const rejected = new Map<SceneRejectionReason, string[]>();
     const inScope = new Set<string>();
     const dead = new Set<string>();
@@ -1304,8 +1352,10 @@ export class SceneProjector {
   /**
    * The instances of every `symbol` that `touched` reaches (a touched symbol, or a touched node
    * with a symbol ancestor), so that a source change releases its excluded instances (M7
-   * contract, section 4.2). The reverse index from symbol to instances is one O(n) scan of the
-   * node map, made only when a touched node is in a source.
+   * contract, section 4.2) and re-expands them in a scoped change (E26 contract, section 4.3; a
+   * source holds no instance, M7 section 5.3, so none follows further). The reverse index from
+   * symbol to instances is one O(n) scan of the node map, made only when a touched node is in a
+   * source.
    */
   private instancesOfSources(document: DocumentV6, touched: readonly string[]): string[] {
     const symbols = new Set<string>();
@@ -1332,6 +1382,7 @@ export class SceneProjector {
   private resync(document: DocumentV6): void {
     this.identity = null;
     this.base = null;
+    this.scoped = false;
     if (this.resyncing) return;
     this.resyncing = true;
     try {
@@ -1348,6 +1399,25 @@ export class SceneProjector {
    * nothing to send or after `disposed`; state is updated only on success.
    */
   private sync(projection: PageProjection): (SceneApplyResult & { changes: Changes }) | null {
+    const changes = this.differences(projection, (id) => !projection.nodes.has(id));
+    if (changes === null) return null;
+    const result = this.apply(changes);
+    if (result === null) return null;
+    if (this.accepted(result)) {
+      this.sent = new Map(projection.nodes);
+      this.sentOrder = projection.rootOrder;
+      this.scoped = true;
+    } else {
+      this.scoped = false;
+    }
+    return { ...result, changes };
+  }
+
+  /**
+   * The change set from what the renderer holds to `projection`, in the projection's pre-order,
+   * removing the held nodes `gone` names, in ordinal order; null when there is nothing to send.
+   */
+  private differences(projection: PageProjection, gone: (id: string) => boolean): Changes | null {
     const inserted: RenderNodeSnapshot[] = [];
     const updated: RenderNodeSnapshot[] = [];
     for (const [id, snapshot] of projection.nodes) {
@@ -1355,24 +1425,161 @@ export class SceneProjector {
       if (held === undefined) inserted.push(snapshot);
       else if (!sameSnapshot(held, snapshot)) updated.push(snapshot);
     }
-    const removed = [...this.sent.keys()].filter((id) => !projection.nodes.has(id));
+    const removed: string[] = [];
+    for (const id of this.sent.keys()) if (gone(id)) removed.push(id);
+    removed.sort(compareOrdinal);
     const reordered = !sameStrings(projection.rootOrder, this.sentOrder);
     if (inserted.length === 0 && updated.length === 0 && removed.length === 0 && !reordered) {
       return null;
     }
-    const changes: Changes = {
+    return {
       inserted,
       updated,
       removed,
       orders: reordered ? [{ parentId: null, children: projection.rootOrder }] : [],
     };
+  }
+
+  /**
+   * The change-scoped `sync` (E26 contract, section 4.3), valid while `scoped` holds: it walks
+   * the touched units, the instances whose expansion they change and every ancestor's child list,
+   * keeps every other unit whole, and sends the same change set as the whole-page path, whose
+   * walk stays the test oracle (`checkScopedProjectionForTesting`).
+   */
+  private scopedSync(
+    document: DocumentV6,
+    touched: readonly string[],
+  ): (SceneApplyResult & { changes: Changes }) | null {
+    const path = new Set<string>();
+    const addChain = (id: string) => {
+      for (const entry of this.chain(document, id)) {
+        if (path.has(entry)) return;
+        path.add(entry);
+      }
+    };
+    // Each touched unit's held parent, which may lose it, or the nearest held ancestor the
+    // document still has. The editor lists former parents in `touched` too (M7-U3 note 4); this
+    // also covers a caller that does not, while the parent is held.
+    const formerParents: string[] = [];
+    for (const id of touched) {
+      let before = this.heldParent(id);
+      while (before !== null && !Object.hasOwn(document.nodes, before)) {
+        before = this.heldParent(before);
+      }
+      if (before !== null) formerParents.push(before);
+    }
+    const changed = [...touched, ...formerParents];
+    for (const id of [...changed, ...this.instancesOfSources(document, changed)]) {
+      if (Object.hasOwn(document.nodes, id)) addChain(id);
+    }
+
+    const oracleMemo = checkScoped ? new Map(this.memo) : null;
+    const scope: ProjectionScope = {
+      path,
+      held: (id) => this.sent.has(id),
+      replaced: new Map(),
+      kept: new Set(),
+    };
+    const projection = projectPage(
+      document,
+      this.page,
+      this.custom,
+      this.excluded,
+      this.memo,
+      this.expansions,
+      scope,
+    );
+
+    // Removals: scene IDs a walked unit no longer has, and the held subtrees of units that left
+    // a walked child list without being projected elsewhere.
+    const present = (unit: string) => projection.unitIds.has(unit) || scope.kept.has(unit);
+    const removed = new Set<string>();
+    const drop = (unit: string) => {
+      if (present(unit)) return;
+      const entry = scope.replaced.get(unit) ?? this.memo.get(unit);
+      if (entry === undefined || !this.sent.has(unit)) return;
+      for (const snapshot of entry.snapshots) {
+        if (this.sent.has(snapshot.id)) removed.add(snapshot.id);
+      }
+      for (const child of entry.children ?? []) drop(child);
+      if (!Object.hasOwn(document.nodes, unit)) this.memo.delete(unit);
+    };
+    for (const [unit, before] of scope.replaced) {
+      if (before === undefined || !this.sent.has(unit)) continue;
+      const now = this.memo.get(unit)!;
+      const ids = new Set(now.snapshots.map((snapshot) => snapshot.id));
+      for (const snapshot of before.snapshots) {
+        if (!ids.has(snapshot.id) && this.sent.has(snapshot.id)) removed.add(snapshot.id);
+      }
+      const children = new Set(now.children ?? []);
+      for (const child of before.children ?? []) if (!children.has(child)) drop(child);
+    }
+    const roots = new Set(projection.rootOrder);
+    for (const root of this.sentOrder) if (!roots.has(root)) drop(root);
+
+    // The invalid instances met: those of the walk, and those outside it whose parent is kept.
+    const met = new Set(projection.invalid);
+    for (const id of this.met) {
+      if (met.has(id) || path.has(id) || !Object.hasOwn(document.nodes, id)) continue;
+      const parent = document.nodes[id]!.parent;
+      if (path.has(parent) || !this.sent.has(parent) || removed.has(parent)) continue;
+      met.add(id);
+    }
+    this.noteInvalid(met, this.excluded);
+
+    const changes = this.differences(projection, (id) => removed.has(id));
+    if (oracleMemo !== null) this.checkScoped(document, oracleMemo, changes, met);
+    if (changes === null) return null;
     const result = this.apply(changes);
     if (result === null) return null;
     if (this.accepted(result)) {
-      this.sent = new Map(projection.nodes);
+      for (const id of removed) this.sent.delete(id);
+      for (const [id, snapshot] of projection.nodes) this.sent.set(id, snapshot);
       this.sentOrder = projection.rootOrder;
+    } else {
+      this.scoped = false;
     }
     return { ...result, changes };
+  }
+
+  /** The document ID of the scene parent the renderer holds unit `id` under; null at the root. */
+  private heldParent(id: string): string | null {
+    if (!this.sent.has(id)) return null;
+    const parentId = this.memo.get(id)?.parentId ?? null;
+    return parentId === null ? null : documentIdOf(parentId);
+  }
+
+  /**
+   * Test seam (E26-A09): the whole-page path from the same state must give the same change set
+   * and the same invalid instances as the scoped one.
+   */
+  private checkScoped(
+    document: DocumentV6,
+    memo: ProjectionMemo,
+    changes: Changes | null,
+    met: ReadonlySet<string>,
+  ): void {
+    const oracle = projectPage(
+      document,
+      this.page,
+      this.custom,
+      this.excluded,
+      memo,
+      this.expansions,
+    );
+    const expected = this.differences(oracle, (id) => !oracle.nodes.has(id));
+    const expectedMet = [...oracle.invalid].sort();
+    if (
+      JSON.stringify(changes) !== JSON.stringify(expected) ||
+      JSON.stringify([...met].sort()) !== JSON.stringify(expectedMet)
+    ) {
+      throw new Error(
+        `E26-A09: the scoped projection differs from the whole page: ${JSON.stringify({
+          scoped: { changes, met: [...met].sort() },
+          wholePage: { changes: expected, met: expectedMet },
+        })}`,
+      );
+    }
   }
 
   /** Sends one change set on the current base; null when not synchronized or after `disposed`. */
@@ -1413,6 +1620,7 @@ export class SceneProjector {
 
   /** Reports a rejection of `ids` and leaves their subtrees out until a change touches them. */
   private exclude(document: DocumentV6, result: Rejection, ids: readonly string[]): void {
+    this.scoped = false;
     this.reportRejection(result.reason, ids);
     ids.forEach((id) => this.excluded.add(this.excludedRoot(document, id)));
   }
@@ -1443,14 +1651,19 @@ export class SceneProjector {
       this.memo,
       this.expansions,
     );
-    const fresh = projection.invalid.filter((id) => !this.invalid.has(id));
-    // An omitted instance was not expanded this time; it stays reported.
-    this.invalid = new Set([
-      ...projection.invalid,
-      ...[...this.invalid].filter((id) => omit.has(id)),
-    ]);
-    this.reportRejection('invalid-value', fresh);
+    this.noteInvalid(new Set(projection.invalid), omit);
     return projection;
+  }
+
+  /**
+   * Records the invalid instances a projection met; reports those not reported yet. An omitted
+   * instance was not expanded this time; it stays reported.
+   */
+  private noteInvalid(met: ReadonlySet<string>, omit: ReadonlySet<string>): void {
+    this.met = met;
+    const fresh = [...met].filter((id) => !this.invalid.has(id));
+    this.invalid = new Set([...met, ...[...this.invalid].filter((id) => omit.has(id))]);
+    this.reportRejection('invalid-value', fresh);
   }
 
   private raiseRevision(revision: number | undefined): void {
@@ -1461,6 +1674,35 @@ export class SceneProjector {
     this.sceneRevision = Math.max(this.sceneRevision, this.base ?? 0) + 1;
     return this.sceneRevision;
   }
+}
+
+function compareOrdinal(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+let checkScoped = false;
+
+/**
+ * Test seam (E26-A09): every scoped change also runs the whole-page path from the same state
+ * and throws when the change set or the invalid instances differ. Not exported from the
+ * package index.
+ */
+export function checkScopedProjectionForTesting(enabled: boolean): void {
+  checkScoped = enabled;
+}
+
+/** Test seam (E26-A09): `projector` always projects the whole page. Not in the package index. */
+export function useWholePageProjectionForTesting(projector: SceneProjector): void {
+  (projector as unknown as { wholePage: boolean }).wholePage = true;
+}
+
+/** Test seam (E26-A09): the projector's exclusion and invalid-expansion state. */
+export function projectorStateForTesting(projector: SceneProjector): {
+  excluded: string[];
+  invalid: string[];
+} {
+  const state = projector as unknown as { excluded: Set<string>; invalid: ReadonlySet<string> };
+  return { excluded: [...state.excluded].sort(), invalid: [...state.invalid].sort() };
 }
 
 function isBookkeeping(result: Rejection): boolean {
