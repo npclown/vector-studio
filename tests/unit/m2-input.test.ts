@@ -331,7 +331,8 @@ function fakeCanvas() {
     clientLeft: 1,
     clientTop: 1,
     setPointerCapture: (id: number) => calls.push(`capture:${id}`),
-    focus: () => calls.push('focus'),
+    focus: (options?: { preventScroll?: boolean }) =>
+      calls.push(options?.preventScroll === true ? 'focus:preventScroll' : 'focus'),
   };
   return { canvas, calls };
 }
@@ -400,7 +401,8 @@ describe('M2-A01 EditorCanvas input (M2-I4)', () => {
     expect(sent).toEqual([
       { kind: 'pointerdown', point: { x: 110, y: 60 }, button: 0, modifiers: none },
     ]);
-    expect(calls).toEqual(['capture:7', 'focus']);
+    // The press focuses the canvas without scrolling it, so the press point stays put.
+    expect(calls).toEqual(['capture:7', 'focus:preventScroll']);
     // The camera changes between events (no re-render in between); the next move reads it.
     ok(target, { type: 'setViewport', camera: { position: { x: 0, y: 0 }, zoom: 4 } });
     canvasInput.pointerMove(mouse(31, 41));
