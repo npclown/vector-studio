@@ -1261,6 +1261,7 @@ export class SceneProjector {
       }
       const ids = projection.unitIds.get(id)!;
       const parentId = projection.nodes.get(ids[0]!)!.parentId;
+      // A guard, as one-per-unit isolation has it: a live parent unit is held or sent here.
       if (parentId !== null && !own.has(parentId)) {
         const parent = projection.nodes.get(parentId);
         if (parent?.kind !== 'container' || !this.sent.has(parentId)) {

@@ -6,6 +6,8 @@
 // or an opacity that takes a chain past its depth limit, a transform whose world bounds are not
 // finite, and a renderer without a path fill port. A pure predicate (one-time and persistent
 // rejection of chosen nodes) is run as well; it cannot test batch closure on its own.
+// Both projectors share the handling of a unit's own rejection (exclusion, mask group removal),
+// so this differential cannot see a fault there; the M1 projector tests check it.
 import type { RenderNodeSnapshot, RenderSceneSnapshot } from '@vector-studio/contracts';
 import type { DocumentV6 } from '@vector-studio/model';
 import { describe, expect, it } from 'vitest';
@@ -258,7 +260,16 @@ const applySets = (renderer: RecordingRenderer, from: number) =>
 describe('E26-U3 batched isolation (E26-A06)', () => {
   it('reaches the one-unit-per-set result on 600 seeded cases against the real mirror', () => {
     const rng = random(0xe26_03);
-    const tally = { cases: 0, isolated: 0, fewer: 0, rejected: 0, masks: 0, chains: 0, depth: 0 };
+    const tally = {
+      cases: 0,
+      isolated: 0,
+      fewer: 0,
+      rejected: 0,
+      masks: 0,
+      chains: 0,
+      depth: 0,
+      pairs: 0,
+    };
     for (let index = 0; index < 600; index += 1) {
       const document = generate(rng);
       const projection = projectPage(document, 'p', () => null, new Set());
@@ -304,11 +315,16 @@ describe('E26-U3 batched isolation (E26-A06)', () => {
       }
       if (excluded.length > 0) {
         tally.rejected += 1;
-        const root = excluded[Math.floor(rng() * excluded.length)]!;
+        // One excluded root, or two, so one retry segment writes several scene parents.
+        const roots = [excluded[Math.floor(rng() * excluded.length)]!];
+        if (excluded.length > 1 && rng() < 0.5) {
+          roots.push(excluded.find((id) => id !== roots[0])!);
+          tally.pairs += 1;
+        }
         const lift = rng() < 0.5;
         for (const side of [batched, single]) {
           side.renderer.armed = !lift && side.renderer.armed;
-          side.projector.change(document, 'p', [root]);
+          side.projector.change(document, 'p', roots);
         }
         expect(outcome(batched), `case ${index} retry`).toEqual(outcome(single));
       }
@@ -326,6 +342,7 @@ describe('E26-U3 batched isolation (E26-A06)', () => {
     expect(tally.masks).toBeGreaterThan(400);
     expect(tally.chains).toBeGreaterThan(200);
     expect(tally.depth).toBeGreaterThanOrEqual(10);
+    expect(tally.pairs).toBeGreaterThan(50);
     expect(tally.fewer).toBeGreaterThan(350);
   });
 
