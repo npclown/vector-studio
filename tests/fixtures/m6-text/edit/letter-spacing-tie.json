@@ -1,0 +1,23 @@
+{
+  "description": "Letter spacing -0.75: caret x is not monotonic (0, -2.5, 0, -2.5), and the nearest rule breaks ties to the earlier stop (section 4.3, disclosed).",
+  "request": {
+    "runs": [{ "text": "a가a", "family": "Fake", "size": 10 }],
+    "width": null,
+    "align": "left",
+    "letterSpacing": -0.75,
+    "lineHeight": 1
+  },
+  "stops": [0, 1, 2, 3],
+  "carets": [
+    { "offset": 1, "affinity": "downstream", "line": 0, "segment": [[-2.5, 0], [-2.5, 10]] },
+    { "offset": 2, "affinity": "downstream", "line": 0, "segment": [[0, 0], [0, 10]] },
+    { "offset": 3, "affinity": "downstream", "line": 0, "segment": [[-2.5, 0], [-2.5, 10]] }
+  ],
+  "selections": [{ "range": [1, 3], "rects": [[-2.5, 0, 2.5, 10]] }],
+  "points": [
+    { "point": [0, 5], "offset": 0, "affinity": "downstream" },
+    { "point": [-1, 5], "offset": 0, "affinity": "downstream" },
+    { "point": [-2, 5], "offset": 1, "affinity": "downstream" },
+    { "point": [-9, 5], "offset": 1, "affinity": "downstream" }
+  ]
+}

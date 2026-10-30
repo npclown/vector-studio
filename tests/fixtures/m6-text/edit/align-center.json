@@ -1,0 +1,35 @@
+{
+  "description": "Centre alignment in a 30-wide box: both lines start at their aligned left, and the goal x carries across lines of different lefts.",
+  "request": {
+    "runs": [{ "text": "ab cd\nefgh", "family": "Fake", "size": 10 }],
+    "width": 30,
+    "align": "center",
+    "letterSpacing": 0,
+    "lineHeight": 1
+  },
+  "stops": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  "carets": [
+    { "offset": 0, "affinity": "downstream", "line": 0, "segment": [[3.75, 0], [3.75, 10]] },
+    { "offset": 5, "affinity": "downstream", "line": 0, "segment": [[26.25, 0], [26.25, 10]] },
+    { "offset": 6, "affinity": "downstream", "line": 1, "segment": [[5, 10], [5, 20]] },
+    { "offset": 10, "affinity": "downstream", "line": 1, "segment": [[25, 10], [25, 20]] }
+  ],
+  "selections": [{ "range": [3, 8], "rects": [[16.25, 0, 12.5, 10], [5, 10, 10, 10]] }],
+  "points": [
+    { "point": [0, 5], "offset": 0, "affinity": "downstream" },
+    { "point": [29, 5], "offset": 5, "affinity": "downstream" },
+    { "point": [12, 15], "offset": 7, "affinity": "downstream" }
+  ],
+  "scripts": [
+    {
+      "platform": "other",
+      "caret": [4, 4],
+      "steps": [
+        { "key": "ArrowDown", "caret": [9, 9], "goalX": 21.25 },
+        { "key": "ArrowUp", "caret": [4, 4], "goalX": 21.25 },
+        { "key": "Home", "caret": [0, 0], "goalX": null },
+        { "key": "ArrowDown", "caret": [6, 6], "goalX": 3.75 }
+      ]
+    }
+  ]
+}
