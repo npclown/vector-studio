@@ -54,11 +54,11 @@ Out of scope:
 
 ### 3.1 Scenarios
 
-Each scenario has a stable ID and version, a seed and a configuration hash ([benchmarks README, Scenario identity](../benchmarks/README.md#scenario-identity)). The fitted camera `F` of a page is the camera whose viewport holds the world bounds of every scene node of the page with a 10% margin on each side.
+Each scenario has a stable ID and version, a seed and a configuration hash ([benchmarks README, Scenario identity](../benchmarks/README.md#scenario-identity)). The fitted camera `F` of a page is the camera whose viewport holds the world bounds of every scene node of the page with a 10% margin on each side. Visibility is counted over leaf scene nodes (primitives, paths and text) from their world stroke bounds, clips ignored; a container has no bounds of its own, so "every scene node visible" means every leaf inside the viewport (U1a amendment).
 
 | ID | Document and camera | Interaction | Target |
 | --- | --- | --- | --- |
-| `e26-mixed-view-edit-10k/v1` | The M1-A13 document (seed `0x6d31a13`), page 1, a fixed camera at zoom 1 over a region chosen by U1 that contains the M1-A13 move selection and in which 900 to 1,100 scene nodes are visible (the typical view, as P1 Scene 3) | The edit drag (section 3.3) of the M1-A13 move selection | `rafCallbackIntervalMs` ≤ 16.7 ms (E26-A02) |
+| `e26-mixed-view-edit-10k/v1` | The M1-A13 document (seed `0x6d31a13`), page 1, a fixed camera chosen by U1a that contains the M1-A13 move selection and in which 900 to 1,100 leaf scene nodes are visible (the typical view, as P1 Scene 3): its top-left 80 CSS px above and left of the content, its zoom found by bisection (U1a amendment: 0.4585, 1,028 of 7,324 leaves visible) | The edit drag (section 3.3) of the M1-A13 move selection | `rafCallbackIntervalMs` ≤ 16.7 ms (E26-A02) |
 | `e26-mixed-all-edit-10k/v1` | As above, camera `F`: all 10,634 scene nodes visible (the worst case) | The edit drag | ≤ 33.3 ms (E26-A03) |
 | `e26-mixed-all-pan-10k/v1` | As above, camera `F` | The pan and zoom path (section 3.3) | ≤ 33.3 ms (E26-A03) |
 | `e26-simple-stress-10k/v1` | 10,000 nodes at `p1-pan-zoom-10k/v1`'s positions, sizes and seed as a document of the current schema version (v5 today; the generator tracks the current version and the configuration hash includes it), one page, through the editor and `apps/next-host`, with reduced styles: P1's lines (`i % 4 = 3`) become 3.5 × 1 rectangles centred on the line, every node keeps P1's opacity `0.5 + 0.25·(i % 3)` and fill colour, and no node has a stroke, clip or text | The pan and zoom path | ≤ 33.3 ms (E26-A03) |
