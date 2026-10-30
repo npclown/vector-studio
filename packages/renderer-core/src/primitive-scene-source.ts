@@ -1365,7 +1365,9 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     if (kept !== null && changed !== null) {
       if (changed.length === 0 && sameIds(kept.rootOrder, scene.rootOrder)) {
         derivation =
-          kept.serial === scene.changeSerial ? kept : { ...kept, serial: scene.changeSerial };
+          kept.serial === scene.changeSerial
+            ? kept
+            : Object.freeze({ ...kept, serial: scene.changeSerial });
         this.#derivationCounts.reused += 1;
       } else {
         derivation = patchDerivation(kept, scene, changed, this.#derivedCache, this.#slots);
@@ -1429,19 +1431,15 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
    * (E26-U5c), only those are visited; null visits the whole scene.
    */
   #reconcileSlots(scene: RetainedSceneView, changed: readonly string[] | null): void {
-    const primitiveIds = new Set(
-      (changed === null ? scene.nodes : changed.map((id) => scene.getNode(id)))
-        .filter((node) => node?.kind === 'primitive')
-        .map((node) => node.id),
-    );
-    for (const [id, slot] of changed === null
-      ? this.#slots
-      : changed.flatMap((id) => {
-          const slot = this.#slots.get(id);
-          return slot === undefined ? [] : [[id, slot] as const];
-        })) {
-      if (primitiveIds.has(id)) continue;
-      if (this.#slots.get(id) !== slot) continue;
+    const visited = changed === null ? scene.nodes.map((node) => node.id) : changed;
+    const primitiveIds = new Set<string>();
+    for (const id of visited) {
+      if (scene.getNode(id)?.kind === 'primitive') primitiveIds.add(id);
+    }
+    const freed = changed === null ? [...this.#slots.keys()] : changed;
+    for (const id of freed) {
+      const slot = this.#slots.get(id);
+      if (slot === undefined || primitiveIds.has(id)) continue;
       this.#slots.delete(id);
       this.#slotIds[slot] = undefined;
       this.#values.transforms[slot] = undefined;
@@ -1555,9 +1553,19 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   ): void {
     for (const primitive of primitives) {
       const previous = this.#packingKeys.get(primitive.id);
-      // E26 contract, U5c: the keys are functions of the derived primitive and the origin, and a
-      // new origin forces the transforms, so a kept primitive otherwise writes nothing.
-      if (!forceTransforms && !this.#fullDerivation && previous?.primitive === primitive) continue;
+      // E26 contract, U5c: the keys are functions of the derived primitive and the origin, so a
+      // kept primitive whose keys were taken under this origin writes nothing. The origin is
+      // compared with the keys' own, not with the last frame's: a frame that selected a new origin
+      // may have thrown before it wrote any record.
+      if (
+        !forceTransforms &&
+        !this.#fullDerivation &&
+        previous?.primitive === primitive &&
+        previous.transform[6] === origin.x &&
+        previous.transform[7] === origin.y
+      ) {
+        continue;
+      }
       const transformKey = [...primitive.world, origin.x, origin.y];
       const geometryKey = primitiveGeometryKey(primitive.node);
       const styleKey = primitiveStyleKey(primitive.node);

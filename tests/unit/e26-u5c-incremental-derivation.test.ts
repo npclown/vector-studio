@@ -35,11 +35,20 @@ import { receiptOf } from '../support/v3b-mesh-harness.js';
 
 const identity = { documentId: 'e26-u5c', pageId: 'page' } as const;
 
-// Counts the packing assessments while keeping the real function.
+// Counts the packing assessments while keeping the real function; `failing.on` makes every
+// assessment exceed the budget, so a frame throws as a far jump at a high zoom would.
+const failing = vi.hoisted(() => ({ on: false }));
 vi.mock('../../packages/renderer-core/src/primitive-packing.js', async (original) => {
   const actual =
     await original<typeof import('../../packages/renderer-core/src/primitive-packing.js')>();
-  return { ...actual, assessPrimitivePacking: vi.fn(actual.assessPrimitivePacking) };
+  return {
+    ...actual,
+    assessPrimitivePacking: vi.fn((...args: Parameters<typeof actual.assessPrimitivePacking>) =>
+      failing.on
+        ? { quantizationPhysicalPixels: 1, arithmeticPhysicalPixels: 0 }
+        : actual.assessPrimitivePacking(...args),
+    ),
+  };
 });
 const assessments = vi.mocked(packing.assessPrimitivePacking);
 
@@ -513,11 +522,26 @@ function runDifferential(seed: number, frames: number) {
     expect(mirror.replaceSnapshot(model.snapshot()).status).toBe('applied');
   }
   let camera = { x: 0, y: 0, zoom: 1 };
+  let frameTarget = target;
   let compared = 0;
   let fresh = 0;
+  let errors = 0;
+  let unacknowledged = 0;
   for (let frame = 0; frame < frames; frame += 1) {
     const step = rng();
     const sets: RenderChangeSet[] = [];
+    failing.on = false;
+    // A new surface generation, or a resize or DPR change, now and then.
+    const surface = rng();
+    if (surface < 0.03) frameTarget = { ...frameTarget, generation: frameTarget.generation + 1 };
+    else if (surface < 0.06) {
+      frameTarget = {
+        ...frameTarget,
+        surfaceRevision: frameTarget.surfaceRevision + 1,
+        width: frameTarget.width === 640 ? 800 : 640,
+        devicePixelRatio: frameTarget.devicePixelRatio === 2 ? 1.5 : 2,
+      };
+    }
     if (step < 0.45) {
       const set = randomSet(rng, model);
       if (set !== null) sets.push(set);
@@ -525,6 +549,7 @@ function runDifferential(seed: number, frames: number) {
       sets.push(...isolationSets(model));
     } else if (step < 0.75) {
       // Pan, zoom, or a far jump that moves the primitive and mesh origins.
+      const before = camera;
       const move = rng();
       camera =
         move < 0.6
@@ -535,6 +560,12 @@ function runDifferential(seed: number, frames: number) {
                 zoom: Math.min(8, Math.max(0.125, camera.zoom * (rng() < 0.5 ? 0.7 : 1.4))),
               }
             : { ...camera, x: (rng() - 0.5) * 4000, y: (rng() - 0.5) * 4000 };
+      // The new camera's assessments fail on some frames; both sources must throw the same. A
+      // zoom at its bound leaves the camera, and so the memo's inputs, unchanged: the injected
+      // failure would then break the assessment's purity, which the memo relies on.
+      failing.on =
+        rng() < 0.25 &&
+        (camera.x !== before.x || camera.y !== before.y || camera.zoom !== before.zoom);
     }
     // Otherwise a frame with no change.
     for (const set of sets) {
@@ -546,18 +577,22 @@ function runDifferential(seed: number, frames: number) {
     }
     const prepared = [incremental, oracle].map(({ source }) => {
       try {
-        return { packet: source.prepare(target), error: null };
+        return { packet: source.prepare(frameTarget), error: null };
       } catch (error) {
         return { packet: null, error: String(error) };
       }
     });
+    failing.on = false;
     const [left, right] = prepared as [(typeof prepared)[0], (typeof prepared)[0]];
     expect(left.error, `frame ${frame}`).toBe(right.error);
+    if (left.error !== null) errors += 1;
     expect(normalize.incremental(left.packet), `frame ${frame}`).toBe(
       normalize.oracle(right.packet),
     );
     compared += 1;
-    if (left.packet !== null) {
+    // Some packets are replaced without a receipt.
+    if (left.packet !== null && rng() < 0.1) unacknowledged += 1;
+    else if (left.packet !== null) {
       incremental.source.acknowledge(receiptOf(left.packet));
       oracle.source.acknowledge(receiptOf(right.packet!));
     }
@@ -565,29 +600,42 @@ function runDifferential(seed: number, frames: number) {
       const check = twin(true);
       check.mirror.replaceSnapshot(model.snapshot());
       check.mirror.setCamera({ position: { x: camera.x, y: camera.y }, zoom: camera.zoom });
-      const packet = check.source.prepare(target);
+      const packet = check.source.prepare(frameTarget);
       expect(drawn(check, packet), `frame ${frame} fresh`).toEqual(drawn(incremental, left.packet));
       fresh += 1;
     }
   }
-  return { compared, fresh, counts: derivationCountsForTesting(incremental.source) };
+  return {
+    compared,
+    fresh,
+    errors,
+    unacknowledged,
+    counts: derivationCountsForTesting(incremental.source),
+  };
 }
 
 describe('E26-U5c kept and patched derivation', () => {
   it('prepares the same packets as the pre-U5c path over 1,200 seeded frames', () => {
     let compared = 0;
     let fresh = 0;
+    let errors = 0;
+    let unacknowledged = 0;
     const counts = { reused: 0, patched: 0, full: 0 };
     for (const seed of [1, 2, 3, 4]) {
       const result = runDifferential(seed, 300);
       compared += result.compared;
       fresh += result.fresh;
+      errors += result.errors;
+      unacknowledged += result.unacknowledged;
       counts.reused += result.counts.reused;
       counts.patched += result.counts.patched;
       counts.full += result.counts.full;
     }
     expect(compared).toBe(1200);
     expect(fresh).toBeGreaterThanOrEqual(20);
+    // Thrown frames and packets replaced without a receipt are both exercised.
+    expect(errors).toBeGreaterThan(10);
+    expect(unacknowledged).toBeGreaterThan(50);
     // Every path is taken many times.
     expect(counts.reused).toBeGreaterThan(300);
     expect(counts.patched).toBeGreaterThan(100);
@@ -732,6 +780,40 @@ describe('E26-U5c derivation paths', () => {
       ],
     );
     expect(counts).toMatchObject({ reused: 0, patched: 0, full: 4 });
+  });
+
+  it('rewrites the transforms when a frame that moved the origin threw', () => {
+    // Frame 1 at the first origin; frame 2 jumps 5,000 and throws after selecting the new
+    // origin; frame 3 at the same camera keeps that origin and must rebase the transforms.
+    const nodes = [rect('a', 0), rect('b', 5060)];
+    const incremental = twin(false);
+    const oracle = twin(true);
+    const normalize = { incremental: normalizer(), oracle: normalizer() };
+    for (const { mirror } of [incremental, oracle]) {
+      mirror.replaceSnapshot({ identity, revision: 1, nodes, rootOrder: ['a', 'b'] });
+    }
+    const frame = (x: number, fail: boolean) => {
+      failing.on = fail;
+      try {
+        return [incremental, oracle].map(({ mirror, source }) => {
+          mirror.setCamera({ position: { x, y: 0 }, zoom: 1 });
+          try {
+            const packet = source.prepare(target)!;
+            source.acknowledge(receiptOf(packet));
+            return packet;
+          } catch {
+            return null;
+          }
+        });
+      } finally {
+        failing.on = false;
+      }
+    };
+    frame(0, false);
+    expect(frame(5000, true)).toEqual([null, null]);
+    const [left, right] = frame(5000, false);
+    expect(normalize.incremental(left!)).toBe(normalize.oracle(right!));
+    expect(left!.writes.some((write) => write.resourceId === 'transforms')).toBe(true);
   });
 
   it('assesses a kept primitive once per camera, target and origin', () => {
