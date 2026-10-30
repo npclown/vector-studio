@@ -507,17 +507,17 @@ describe('M6b-A04 the first text creates the node in one step (section 7.1)', ()
     expect(target.query({ type: 'selection' })).toEqual(['n1']);
     expect(target.query({ type: 'textEdit' })).toEqual(caret('n1', 2));
     expect(target.query({ type: 'tool' })).toBe('select');
-    // Typing goes on in the created node (merging is M6b-U5's).
+    // Typing goes on in the created node and merges into the creating step (M6b-U5).
     type(target, 'c');
     expect(target.query({ type: 'node', id: 'n1' })).toMatchObject({
       runs: [{ text: 'abc', ...ARIAL }],
     });
     expect(target.query({ type: 'textEdit' })).toEqual(caret('n1', 3));
-    target.execute({ type: 'undo' });
+    expect(history(target)).toEqual({ undoDepth: 1, redoDepth: 0 });
     target.execute({ type: 'undo' });
     expect(target.query({ type: 'node', id: 'n1' })).toBeNull();
     expect(target.query({ type: 'textEdit' })).toBeNull();
-    expect(history(target)).toEqual({ undoDepth: 0, redoDepth: 2 });
+    expect(history(target)).toEqual({ undoDepth: 0, redoDepth: 1 });
     // Redo brings the node back without entering edit mode (section 8.3).
     target.execute({ type: 'redo' });
     expect(target.query({ type: 'node', id: 'n1' })).not.toBeNull();

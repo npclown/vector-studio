@@ -115,6 +115,7 @@ import type {
   QueryResult,
   ReorderOp,
   SnapOverlay,
+  TextCaret,
   TextEditPending,
   TextEditState,
   TextStyle,
@@ -219,7 +220,30 @@ type HistoryEntry = Readonly<{
    * replaces the nodes under them, so they leave the rule (1) link set as a new draw does.
    */
   drawn: readonly string[];
+  /**
+   * The caret entry of a text step (M6b contract, section 8.1): the edited node and its caret
+   * before and after the step, restored by undo and redo while edit mode is on that node
+   * (section 8.3); null for every other step. Never serialized.
+   */
+  caret: TextCaretEntry | null;
 }>;
+
+type TextCaretEntry = Readonly<{ id: string; before: TextCaret; after: TextCaret }>;
+
+/**
+ * The kind of a text step (M6b contract, section 8.2), as its caller knows it: `insert` (a
+ * `textinput`, or the first text of a pending node), `replace` (an insertion over a non-empty
+ * selection: a new step that later insertions may merge into), `backward` and `forward` (a
+ * Backspace or Delete of one cluster, M6b-Q13 (a)), and `own` for a step that neither merges
+ * nor takes a merge (an LF, a word deletion, a deletion of a non-empty selection).
+ */
+type TextStepKind = 'insert' | 'replace' | 'backward' | 'forward' | 'own';
+
+/**
+ * The open merge of section 8.2: the top undo entry, made by text input in this edit session,
+ * and the kind that may still merge into it. Any break clears it.
+ */
+type TextMerge = Readonly<{ entry: HistoryEntry; kind: 'insert' | 'backward' | 'forward' }>;
 
 type Gesture = {
   base: DocumentV6;
@@ -655,6 +679,13 @@ class EditorCore implements Editor {
    * deletion's start moved down to one, in place of the clamp of any other change.
    */
   private textCaretAfter: Readonly<{ id: string; offset: number; up: boolean }> | null = null;
+  /**
+   * The caret an undo or redo restores (section 8.3), read by `syncTextEdit` while that undo or
+   * redo changes the document; applied only when edit mode is still on `id`.
+   */
+  private textCaretRestore: Readonly<{ id: string; caret: TextCaret }> | null = null;
+  /** The open text merge (section 8.2), or null after a break. */
+  private textMerge: TextMerge | null = null;
   private extensionDepth = 0;
   private readonly ids: IdSource;
   private readonly extensions: ExtensionRegistry;
@@ -983,7 +1014,13 @@ class EditorCore implements Editor {
       // A command's draws all run on `base`.
       const drawn = this.unlink(EditorCore.taken(returned, base));
       this.interrupt();
-      const entry = { before: base, after: result.document, touched: result.touched, drawn };
+      const entry = {
+        before: base,
+        after: result.document,
+        touched: result.touched,
+        drawn,
+        caret: null,
+      };
       this.undoStack.push(entry);
       this.redoStack = [];
       this.changeDocument(result.document, 'command', result.touched);
@@ -1008,7 +1045,17 @@ class EditorCore implements Editor {
         // The step's IDs now name other nodes, or none (section 6, rule (1)).
         for (const id of entry.drawn) this.clipboardLinks.delete(id);
         const target = command.type === 'undo' ? entry.before : entry.after;
-        this.changeDocument(target, command.type, entry.touched, entry.projected);
+        // The caret entry's caret comes back only while edit mode is on its node (section 8.3).
+        const caret = entry.caret;
+        this.textCaretRestore =
+          caret === null
+            ? null
+            : { id: caret.id, caret: command.type === 'undo' ? caret.before : caret.after };
+        try {
+          this.changeDocument(target, command.type, entry.touched, entry.projected);
+        } finally {
+          this.textCaretRestore = null;
+        }
         return { ok: true, ids: [] };
       }
       case 'loadDocument': {
@@ -1967,6 +2014,9 @@ class EditorCore implements Editor {
       touched,
       drawn,
       ...(projected.length === touched.length ? {} : { projected }),
+      // M6b-U6: a composition commit is an insertion step; it gets its caret entry and merges
+      // by section 8.2 through `recordTextStep`, as `editText` does.
+      caret: null,
     });
     this.redoStack = [];
     this.changeDocument(after, 'gesture-commit', changed);
@@ -2014,6 +2064,9 @@ class EditorCore implements Editor {
     const previous = this.document;
     this.document = document;
     this.revision += 1;
+    // Any document change breaks the merge (section 8.2); a text step records its own merge
+    // after its change (`recordTextStep`).
+    this.textMerge = null;
     const ids = sorted(touched);
     const scene = projected === undefined ? ids : sorted(projected);
     // A load activates the first page; removing or undoing away the active page activates the
@@ -2217,6 +2270,7 @@ class EditorCore implements Editor {
       composition: null,
     });
     this.goalX = null;
+    this.textMerge = null;
     this.textScopeExit = false;
     this.setSelectionState([]);
     this.refresh({ type: 'session', field: 'textEdit' });
@@ -2231,14 +2285,17 @@ class EditorCore implements Editor {
    * and the caret after the text, moved up to a stop (section 4.1). A failure (the length
    * bound) changes nothing and keeps the pending node.
    *
-   * M6b-U5: this step is an insertion whose caret entry (section 8.1) holds the new ID, and
-   * following insertions merge into it (section 8.2, "the pending node's creating step merges").
+   * The step is an insertion whose caret entry (section 8.1) holds the new ID, from the pending
+   * caret 0 to the caret after the text, and following insertions merge into it (section 8.2,
+   * "the pending node's creating step merges"); an LF (Enter, or a text holding one) is its own
+   * step.
    * M6b-U6: a first composition on a pending node creates it through `replace` instead
    * (section 7.1, appendix A case 9); a `textinput` keeps this one command.
    */
   private createPendingText(pending: TextEditPending, text: string): CommandResult {
     const { parent, frame, sizing, style } = pending;
     const siblings = childrenOf(documentTree(this.document), parent).length;
+    const depth = this.undoStack.length;
     const result = this.run({
       type: 'createText',
       frame,
@@ -2260,6 +2317,8 @@ class EditorCore implements Editor {
     this.goalX = null;
     this.setSelectionState([id]);
     this.refresh({ type: 'session', field: 'textEdit' });
+    const before = { anchor: edit.anchor, focus: edit.focus, affinity: edit.affinity };
+    this.recordTextStep(depth, id, text.includes('\n') ? 'own' : 'insert', before, false);
     return result;
   }
 
@@ -2330,8 +2389,10 @@ class EditorCore implements Editor {
     const f = (focus ?? anchor ?? length) as number;
     const caret = { anchor: a + 0, focus: f + 0, affinity: 'downstream' as const };
     if (this.textEdit?.id === id) {
-      // Entering the edited node again only sets the caret, and cancels a deferred exit.
+      // Entering the edited node again only sets the caret, and cancels a deferred exit; like
+      // `setTextSelection` it ends the merge, also for the same caret.
       this.textScopeExit = false;
+      this.textMerge = null;
       this.setTextEditState({ ...this.textEdit, ...caret });
       return { ok: true, ids: [] };
     }
@@ -2341,6 +2402,7 @@ class EditorCore implements Editor {
     // Set first, so the selection change to `[id]` keeps it; the event follows the selection's.
     this.textEdit = deepFreeze({ id, pending: null, ...caret, composition: null });
     this.goalX = null;
+    this.textMerge = null;
     this.textScopeExit = false;
     this.setSelectionState([id]);
     this.refresh({ type: 'session', field: 'textEdit' });
@@ -2369,7 +2431,9 @@ class EditorCore implements Editor {
         return failure('editor.invalid-text-range', `/${key}`);
       }
     }
-    // The goal x clears (in `setTextEditState`); M6b-U5: the merge ends here.
+    // The goal x clears (in `setTextEditState`), and the merge ends, also for the same caret
+    // (section 3.1); the select tool's press, drag and double-click inside come here (4.4).
+    this.textMerge = null;
     this.setTextEditState({
       ...edit,
       anchor: (anchor as number) + 0,
@@ -2421,7 +2485,7 @@ class EditorCore implements Editor {
         return done(true);
       case 'undo':
       case 'redo':
-        // M6b-U5: the caret restore of section 8.3.
+        // The caret restore of section 8.3 is in `run`.
         return { ...this.run({ type: route.type }), consumed: true };
       case 'caret':
         this.textCaretAction(route.action);
@@ -2474,11 +2538,21 @@ class EditorCore implements Editor {
     if (edit.id === null) return { ok: true, ids: [] };
     if (action.type === 'lineBreak') {
       const start = Math.min(edit.anchor, edit.focus);
-      return this.editText(edit.id, start, Math.max(edit.anchor, edit.focus), '\n');
+      return this.editText(edit.id, start, Math.max(edit.anchor, edit.focus), '\n', 'own');
     }
     const range = deletionRange(target.model, edit, action.movement);
     if (range === null) return { ok: true, ids: [] };
-    return this.editText(edit.id, range.start, range.end, '');
+    // Cluster Backspace and Delete runs merge; word and line deletions and a deletion of a
+    // non-empty selection are each their own step (M6b-Q13 (a)).
+    const kind: TextStepKind =
+      edit.anchor !== edit.focus
+        ? 'own'
+        : action.movement === 'left'
+          ? 'backward'
+          : action.movement === 'right'
+            ? 'forward'
+            : 'own';
+    return this.editText(edit.id, range.start, range.end, '', kind);
   }
 
   /**
@@ -2500,22 +2574,35 @@ class EditorCore implements Editor {
     }
     if (edit.id === null) return { ok: true, ids: [], consumed: true };
     const start = Math.min(edit.anchor, edit.focus);
-    const result = this.editText(edit.id, start, Math.max(edit.anchor, edit.focus), text);
+    // An LF is its own step; an insertion over a non-empty selection starts a new one.
+    const kind: TextStepKind = text.includes('\n')
+      ? 'own'
+      : edit.anchor !== edit.focus
+        ? 'replace'
+        : 'insert';
+    const result = this.editText(edit.id, start, Math.max(edit.anchor, edit.focus), text, kind);
     return { ...result, consumed: result.ok };
   }
 
   /**
    * One edit of edit mode: `setText` over `[start, end)` as one document command and one
-   * history step, the caret then at the insertion's end moved up to a stop, or for a deletion
-   * at its start moved down to one (section 4.1), and the goal x cleared. A failing `setText`
-   * (`document.invalid-field` over `MAX_TEXT_LENGTH`) changes nothing.
-   *
-   * M6b-U5: each edit is its own step here; the caret entry (section 8.1) and the merge of
-   * section 8.2 attach to this one path, whose callers know the step's kind (an insertion by
-   * `textinput`, an LF, a Backspace or Delete of a cluster, a word deletion, a selection
-   * deletion or replacement).
+   * history step of `kind` (section 8.2), the caret then at the insertion's end moved up to a
+   * stop, or for a deletion at its start moved down to one (section 4.1), and the goal x
+   * cleared. The step carries its caret entry (section 8.1) and merges into the top entry when
+   * `mergesInto` allows. A failing `setText` (`document.invalid-field` over `MAX_TEXT_LENGTH`)
+   * changes nothing, the merge included.
    */
-  private editText(id: string, start: number, end: number, text: string): CommandResult {
+  private editText(
+    id: string,
+    start: number,
+    end: number,
+    text: string,
+    kind: TextStepKind,
+  ): CommandResult {
+    const edit = this.textEdit!;
+    const before = { anchor: edit.anchor, focus: edit.focus, affinity: edit.affinity };
+    const merge = this.mergesInto(id, kind, before, start, text);
+    const depth = this.undoStack.length;
     const after = { id, offset: start + text.length, up: text.length > 0 };
     this.textCaretAfter = after;
     let result: CommandResult;
@@ -2528,14 +2615,104 @@ class EditorCore implements Editor {
     // The caret is set here too, after `run`: a no-op when `syncTextEdit` already placed it,
     // and the placement for any `setText` that left the document as it was (M6a's `setText`
     // writes even a text replaced by itself, which is still a step).
-    const edit = this.textEdit;
+    const current = this.textEdit;
     const target = this.textTarget();
-    if (edit !== null && edit.id === id && target !== null) {
-      this.setTextEditState({ ...edit, ...this.editCaret(target.model, after) });
+    if (current !== null && current.id === id && target !== null) {
+      this.setTextEditState({ ...current, ...this.editCaret(target.model, after) });
     } else {
       this.goalX = null;
     }
+    this.recordTextStep(depth, id, kind, before, merge);
     return result;
+  }
+
+  /**
+   * Whether a text step of `kind` on node `id` from caret `from`, writing `text` at `start`,
+   * merges into the top undo entry (section 8.2): the merge is open (no break since the entry,
+   * which was made by text input in this edit session on `id`; the redo stack is then empty),
+   * the kind is the entry's (a `replace` and an `own` step never merge), the step starts at the
+   * entry's `after` caret, and an insertion does not start with whitespace after a
+   * non-whitespace character. An LF is an `own` step, so the next insertion starts anew.
+   */
+  private mergesInto(
+    id: string,
+    kind: TextStepKind,
+    from: TextCaret,
+    start: number,
+    text: string,
+  ): boolean {
+    const merge = this.textMerge;
+    if (merge === null || merge.kind !== kind) return false;
+    const entry = merge.entry;
+    if (this.undoStack.at(-1) !== entry || this.redoStack.length > 0) return false;
+    const caret = entry.caret;
+    if (caret === null || caret.id !== id) return false;
+    // Affinity is not compared: an affinity-only change goes through setTextEditState, which
+    // breaks the merge first.
+    if (from.anchor !== caret.after.anchor || from.focus !== caret.after.focus) return false;
+    if (from.anchor !== from.focus) return false;
+    if (kind === 'insert' && /^\s/u.test(text) && start > 0) {
+      const node = this.document.nodes[id];
+      const full = node?.type === 'text' ? node.runs.map((r) => r.text).join('') : '';
+      if (!/\s/u.test(full[start - 1] ?? ' ')) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Gives the step `run` just pushed above `depth` its caret entry for node `id` (section 8.1),
+   * from `before` to the caret edit mode now holds, merges it into the entry below when `merge`
+   * (keeping that entry's `before`, extending `after`, `touched`, `projected` and `drawn`), and
+   * records the open merge for the next step of the same kind. A merged entry's `projected`
+   * stays complete by object identity (E26-U4): it is the union of both entries' lists, each of
+   * which holds every node that differs across its step, so it holds every node that differs
+   * between the merged `before` and `after`. A `replace` step opens an insertion merge; an
+   * `own` step opens none.
+   */
+  private recordTextStep(
+    depth: number,
+    id: string,
+    kind: TextStepKind,
+    before: TextCaret,
+    merge: boolean,
+  ): void {
+    this.textMerge = null;
+    if (this.undoStack.length !== depth + 1) return;
+    const step = this.undoStack.pop()!;
+    const edit = this.textEdit;
+    const after: TextCaret =
+      edit !== null && edit.id === id
+        ? { anchor: edit.anchor, focus: edit.focus, affinity: edit.affinity }
+        : before;
+    const below = merge ? this.undoStack.pop()! : null;
+    let entry: HistoryEntry;
+    if (below === null) {
+      entry = { ...step, caret: { id, before, after } };
+    } else {
+      const touched = sorted(new Set([...below.touched, ...step.touched]));
+      const projected = sorted(
+        new Set([
+          ...touched,
+          ...(below.projected ?? below.touched),
+          ...(step.projected ?? step.touched),
+        ]),
+      );
+      entry = {
+        before: below.before,
+        after: step.after,
+        touched,
+        ...(projected.length === touched.length ? {} : { projected }),
+        drawn: [...new Set([...below.drawn, ...step.drawn])],
+        caret: { id, before: below.caret!.before, after },
+      };
+    }
+    this.undoStack.push(entry);
+    // The step's document event is already raised with the unmerged depth; the snapshot, which
+    // listeners read once the command has committed, gets the merged one.
+    if (below !== null) this.snapshot = this.buildSnapshot();
+    if (edit === null || edit.id !== id) return;
+    if (kind === 'own') return;
+    this.textMerge = { entry, kind: kind === 'replace' ? 'insert' : kind };
   }
 
   /** The collapsed caret an edit leaves (section 4.1), on `model` of the edited text. */
@@ -2557,6 +2734,9 @@ class EditorCore implements Editor {
     this.goalX = next === null ? null : goalX;
     if (next === null) this.textScopeExit = false;
     if (JSON.stringify(next) === JSON.stringify(current)) return;
+    // A caret or selection change, and leaving edit mode, break the merge (section 8.2); a text
+    // step's own caret change is followed by `recordTextStep`, which records its merge.
+    this.textMerge = null;
     this.textEdit =
       next === null
         ? null
@@ -2609,6 +2789,13 @@ class EditorCore implements Editor {
       // The editor's own edit (section 4.1): an insertion's end moved up, a deletion's start
       // moved down, to a stop of the new text.
       this.setTextEditState({ ...edit, ...this.editCaret(target.model, after) });
+      return;
+    }
+    const restore = this.textCaretRestore;
+    if (restore !== null && restore.id === edit.id) {
+      // Undo and redo restore the document byte-identically (P5), so the recorded caret is on
+      // stops of the restored text (section 8.3).
+      this.setTextEditState({ ...edit, ...restore.caret });
       return;
     }
     const caret = clampCaret(target.model, edit);
