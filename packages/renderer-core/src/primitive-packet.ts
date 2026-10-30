@@ -137,12 +137,17 @@ export type MeshResource = Readonly<{
   incarnation: symbol;
   capacityBytes: number;
 }>;
+/**
+ * E26 contract, U5a: `count` consecutive mesh records from `index`, written with one version. A
+ * write's ranges cover its byte range in order, without gaps or overlap.
+ */
+export type MeshRecordRange = Readonly<{ index: number; count: number; version: symbol }>;
 export type MeshWrite = Readonly<{
   resourceId: MeshResourceId;
   incarnation: symbol;
   byteOffset: number;
   bytes: Uint8Array;
-  records: readonly PrimitiveRecordVersion[];
+  records: readonly MeshRecordRange[];
 }>;
 export type MeshPacketPart = Readonly<{
   layoutVersion: 0;
@@ -156,7 +161,7 @@ export type MeshPacketPart = Readonly<{
 export type MeshReceiptResource = Readonly<{
   resourceId: MeshResourceId;
   incarnation: symbol;
-  records: readonly PrimitiveRecordVersion[];
+  records: readonly MeshRecordRange[];
 }>;
 /** `skipped`: the mesh path is unavailable for this generation; only the P1 part is acknowledged. */
 export type MeshReceiptPart =

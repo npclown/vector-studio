@@ -9,7 +9,6 @@ import type {
   ClipMaskPacketLevel,
   MeshFillDraw,
   MeshPacketPart,
-  MeshResourceId,
   LayerPacketPart,
   PrimitiveDraw,
   PrimitiveFrameSource,
@@ -42,6 +41,7 @@ import {
   PathMeshPacker,
   meshFrameLanes,
   selectMeshOrigin,
+  type MeshExpectedRecords,
   type MeshOrigin,
 } from './path-mesh-packet.js';
 import { GradientRecordTable, paintColorLanes, type GradientPaintRecord } from './paint-records.js';
@@ -130,7 +130,7 @@ type VersionedRecords = {
 type PendingPacket = Readonly<{
   packet: PrimitivePacket;
   expected: ReadonlyMap<PrimitiveResourceId, ReadonlyMap<number, symbol>>;
-  meshExpected: ReadonlyMap<MeshResourceId, ReadonlyMap<number, symbol>> | null;
+  meshExpected: MeshExpectedRecords | null;
   /** E28: the atlas frame the packet's text part carries; null without a text part. */
   text: AtlasFrame | null;
 }>;

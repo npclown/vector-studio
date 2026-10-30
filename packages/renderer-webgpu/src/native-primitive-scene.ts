@@ -8,6 +8,7 @@ import type {
   MeshPacketPart,
   MeshReceiptPart,
   MeshReceiptResource,
+  MeshRecordRange,
   MeshResourceId,
   PrimitiveDraw,
   PrimitivePacket,
@@ -3450,7 +3451,7 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       ? current.links
       : new Map<number, number>();
     let frameInitialized = backingMatches ? current.frameInitialized : false;
-    const writeRecords = new Map<MeshResourceId, PrimitiveRecordVersion[]>(
+    const writeRecords = new Map<MeshResourceId, MeshRecordRange[]>(
       MESH_RESOURCE_IDS.map((id) => [id, []]),
     );
     let previousResource = -1;
@@ -3479,21 +3480,31 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
       if (
         !Number.isInteger(firstIndex) ||
         write.bytes.byteLength % stride !== 0 ||
-        !isArrayValue(write.records) ||
-        write.records.length !== write.bytes.byteLength / stride
+        !isArrayValue(write.records)
       ) {
         throw new TypeError('Mesh write records do not cover the write range.');
       }
-      write.records.forEach((record, offset) => {
-        if (record.index !== firstIndex + offset || typeof record.version !== 'symbol') {
-          throw new TypeError('Invalid mesh record receipt.');
+      // E26 contract, U5a: the ranges cover the write's records in order, without gaps or overlap.
+      const end = firstIndex + write.bytes.byteLength / stride;
+      let next = firstIndex;
+      for (const range of write.records) {
+        if (
+          range.index !== next ||
+          !Number.isSafeInteger(range.count) ||
+          range.count <= 0 ||
+          range.index + range.count > end ||
+          typeof range.version !== 'symbol'
+        ) {
+          throw new TypeError('Invalid mesh record range.');
         }
-        writeRecords.get(write.resourceId)!.push(Object.freeze({ ...record }));
-      });
+        next += range.count;
+        writeRecords.get(write.resourceId)!.push(Object.freeze({ ...range }));
+      }
+      if (next !== end) throw new TypeError('Mesh write records do not cover the write range.');
       if (write.resourceId === 'meshInstances') {
-        const next = new Set(instances);
-        for (const record of write.records) next.add(record.index);
-        instances = next;
+        const nextInstances = new Set(instances);
+        for (let index = firstIndex; index < end; index += 1) nextInstances.add(index);
+        instances = nextInstances;
         // Word 15 of each written record, for the joint draw check below (ST-U7, section 4.5).
         const view = new DataView(
           write.bytes.buffer,
@@ -3501,9 +3512,9 @@ class NativePrimitiveScene implements WebGpuPrimitiveScenePort {
           write.bytes.byteLength,
         );
         const nextLinks = new Map(links);
-        write.records.forEach((record, offset) => {
-          nextLinks.set(record.index, view.getUint32(offset * stride + 60, true));
-        });
+        for (let index = firstIndex; index < end; index += 1) {
+          nextLinks.set(index, view.getUint32((index - firstIndex) * stride + 60, true));
+        }
         links = nextLinks;
       } else if (write.resourceId === 'meshFrame') {
         frameInitialized = true;

@@ -58,6 +58,7 @@
     "e14:rung0-oracle": "vitest run --config vitest.e14-rung0-oracle.config.ts",
     "e16:fill-diag": "node tooling/run-e16-fill-diag.mjs",
     "e17:snap-model": "node tooling/run-e17-snap-model.mjs",
+    "check:e26-u5a": "vitest run --config vitest.e26-u5a.config.ts",
     "observe:m1-a13": "vitest run --config vitest.m1-a13.config.ts",
     "observe:m4-a13": "vitest run --config vitest.m4-a13.config.ts",
     "observe:m7-a10": "vitest run --config vitest.m7-a10.config.ts",
