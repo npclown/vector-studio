@@ -33,6 +33,13 @@ import { m1A13MoveSelection } from '../m1-a13/document';
 //     along the edit drag's path, on demand. The `plain` variant drops the fill and the
 //     rejection (A04's second measure).
 //
+// Each record also holds the environment (the page's DPR, canvas size, screen, refresh estimate,
+// GPU adapter, visibility and focus) and the page errors. A run is invalid, kept and failed, when
+// the device was lost or recovered, the page was hidden or lost focus, its DPR differs from the
+// project's, a page error was thrown, or the interaction did not happen (section 3.5). Non-smoke
+// runs refuse a dirty working tree, so the recorded commit is what ran. Do not touch the mouse
+// during a run: the real pointer is captured on the canvas.
+//
 // The harness checks that each run completed and recorded its metrics; it does not assert the
 // targets, because a baseline records misses. U6b's exit record reads the targets from the run
 // records (maximum per-run p95, no rounding allowance).
@@ -45,13 +52,15 @@ const filter = (process.env.E26_SCENARIOS ?? '')
   .split(',')
   .map((entry) => entry.trim())
   .filter((entry) => entry.length > 0);
-const commit = (() => {
+const git = (command: string): string | null => {
   try {
-    return execSync('git rev-parse HEAD', { cwd: root, encoding: 'utf8' }).trim();
+    return execSync(command, { cwd: root, encoding: 'utf8' }).trim();
   } catch {
-    return 'unknown';
+    return null;
   }
-})();
+};
+const commit = git('git rev-parse HEAD') ?? 'unknown';
+const dirty = (git('git status --porcelain') ?? 'unknown') !== '';
 
 type Variant = 'frame' | 'busy' | 'plain';
 const runs: { scenario: E26Scenario; variant: Variant }[] = E26_SCENARIOS.filter(
@@ -107,7 +116,14 @@ type PageHook = {
       startedAtMs?: number;
       endedAtMs?: number;
     };
-    getStatistics(): { framesSubmitted: number; lifecycle: string; recoveryAttempts: number };
+    getStatistics(): {
+      framesSubmitted: number;
+      lifecycle: string;
+      recoveryAttempts: number;
+      mode: string;
+    };
+    invalidate(invalidation: { reason: 'scene' }): void;
+    waitForSubmittedWork(): Promise<void>;
   } | null;
   setDriver(driver: unknown): void;
   driverSteps(): number;
@@ -120,24 +136,110 @@ type PageHook = {
   longTasksAvailable: boolean;
   isolations(): readonly { startMs: number; durationMs: number }[];
 };
+/** Installed before the page loads (`installProbe`): press and release times, focus, visibility. */
+type Probe = { downs: number[]; ups: number[]; visibilityChanges: number; blurs: number };
 declare global {
   interface Window {
     __e26Bench?: PageHook;
+    __e26Probe?: Probe;
   }
 }
 
-async function open(page: Page, query: string): Promise<void> {
+/** Page errors fail a run; console errors (a missing favicon, for one) are only recorded. */
+async function installProbe(page: Page) {
   const errors: string[] = [];
+  const consoleErrors: string[] = [];
   page.on('pageerror', (error) => errors.push(String(error)));
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  await page.addInitScript(() => {
+    const probe: Probe = { downs: [], ups: [], visibilityChanges: 0, blurs: 0 };
+    window.__e26Probe = probe;
+    // Capture listeners on the window run before the canvas handles the event, so these are
+    // the events' own timestamps, not a later evaluate (U1c review S1).
+    window.addEventListener('pointerdown', (event) => probe.downs.push(event.timeStamp), {
+      capture: true,
+    });
+    window.addEventListener('pointerup', (event) => probe.ups.push(event.timeStamp), {
+      capture: true,
+    });
+    window.addEventListener('blur', () => (probe.blurs += 1));
+    document.addEventListener('visibilitychange', () => (probe.visibilityChanges += 1));
+  });
+  return { errors, consoleErrors };
+}
+
+/** The page's environment: DPR, canvas, screen, an idle refresh estimate and the GPU adapter. */
+async function environment(page: Page) {
+  return page.evaluate(async () => {
+    const canvas = document.querySelector('canvas')!;
+    const stamps: number[] = [];
+    await new Promise<void>((resolve) => {
+      const step = (time: number) => {
+        stamps.push(time);
+        if (stamps.length < 61) requestAnimationFrame(step);
+        else resolve();
+      };
+      requestAnimationFrame(step);
+    });
+    const intervals = stamps
+      .slice(1)
+      .map((time, index) => time - stamps[index]!)
+      .sort((a, b) => a - b);
+    let adapter: Record<string, string> | null = null;
+    try {
+      const gpu = (navigator as { gpu?: GPU }).gpu;
+      const info = (await gpu?.requestAdapter({ powerPreference: 'high-performance' }))?.info;
+      if (info !== undefined) {
+        adapter = {
+          vendor: info.vendor,
+          architecture: info.architecture,
+          device: info.device,
+          description: info.description,
+        };
+      }
+    } catch {
+      adapter = null;
+    }
+    return {
+      devicePixelRatio: window.devicePixelRatio,
+      canvas: { width: canvas.width, height: canvas.height },
+      screen: { width: screen.width, height: screen.height },
+      idleRafMedianMs: intervals[Math.floor(intervals.length / 2)] ?? null,
+      adapter,
+      userAgent: navigator.userAgent,
+    };
+  });
+}
+
+/** Visibility and focus at a point of the run, with the probe's counts so far. */
+async function presence(page: Page) {
+  return page.evaluate(() => ({
+    visibilityState: document.visibilityState,
+    hasFocus: document.hasFocus(),
+    visibilityChanges: window.__e26Probe!.visibilityChanges,
+    blurs: window.__e26Probe!.blurs,
+  }));
+}
+
+async function open(page: Page, query: string, errors: readonly string[]): Promise<void> {
   await page.goto(`/?bench=1&${query}`);
   const status = page.getByTestId('status');
   await expect(status).toHaveAttribute('data-fixture', 'bench-loaded', { timeout: 90_000 });
   await expect(status).toHaveAttribute('data-renderer', 'ready', { timeout: 90_000 });
   expect(errors).toEqual([]);
-  // The load's scene reached the renderer: two frames after a submission.
-  await page.waitForFunction(
-    () => (window.__e26Bench?.backend()?.getStatistics().framesSubmitted ?? 0) > 0,
-  );
+  // The loaded scene reached the GPU: one more submission after both are set, and its work done.
+  await page.evaluate(async () => {
+    const backend = window.__e26Bench!.backend()!;
+    const before = backend.getStatistics().framesSubmitted;
+    backend.invalidate({ reason: 'scene' });
+    while (backend.getStatistics().framesSubmitted === before) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+    // A lost device rejects here; the run goes on so its record shows it (expectValidRun).
+    await backend.waitForSubmittedWork().catch(() => undefined);
+  });
 }
 
 /** Runs editor commands in the page and checks each result. */
@@ -182,13 +284,32 @@ function moveTarget(document: E26Loaded) {
   };
 }
 
+type Presence = Awaited<ReturnType<typeof presence>>;
+
 /**
- * A run on a lost or recovering device is not a measurement: it is kept (section 3.5: never
- * replaced silently) and fails the test, so the record shows why.
+ * An invalid run is not a measurement: it is kept (section 3.5: never replaced silently) and
+ * fails the test after its record is written, so the record shows why.
  */
-function expectValidRun(run: { lifecycle: string; recoveryAttempts: number }): void {
+function expectValidRun(
+  run: { lifecycle: string; recoveryAttempts: number },
+  checks: Readonly<{
+    errors: readonly string[];
+    expectedDpr: number;
+    pageDpr: number;
+    start: Presence;
+    end: Presence;
+  }>,
+): void {
   expect(run.recoveryAttempts, 'device recoveries during the run').toBe(0);
   expect(run.lifecycle).toBe('ready');
+  expect(checks.errors, 'page errors').toEqual([]);
+  expect(checks.pageDpr, 'the page DPR').toBe(checks.expectedDpr);
+  for (const point of [checks.start, checks.end]) {
+    expect(point.visibilityState, 'page visibility').toBe('visible');
+    expect(point.hasFocus, 'page focus').toBe(true);
+  }
+  expect(checks.end.visibilityChanges, 'visibility changes').toBe(0);
+  expect(checks.end.blurs, 'focus losses').toBe(0);
 }
 
 function record(name: string, value: unknown): void {
@@ -200,9 +321,14 @@ for (const { scenario, variant } of runs) {
   for (let repetition = 1; repetition <= repetitions; repetition += 1) {
     const title = `${scenario.id}${variant === 'plain' ? ' (plain)' : ''} r${repetition}`;
     test(title, async ({ page, browser }, testInfo) => {
+      if (!smoke)
+        expect(dirty, 'a clean working tree, so the recorded commit is what ran').toBe(false);
       const dpr = testInfo.project.use.deviceScaleFactor ?? 1;
       const document = loaded(scenario.document);
-      const configuration = e26Configuration(scenario, dpr, repetitions, document);
+      // The plain variant has no fill and no rejection, so its configuration (and hash) says so.
+      const configured =
+        variant === 'plain' ? { ...scenario, reject: null, setFillBeforeDownMs: null } : scenario;
+      const configuration = e26Configuration(configured, dpr, repetitions, document);
       const camera = configuration.camera;
       const base = {
         scenario: scenario.id,
@@ -212,6 +338,7 @@ for (const { scenario, variant } of runs) {
         browser: `${browser.browserType().name()} ${browser.version()}`,
         devicePixelRatio: dpr,
         commit,
+        dirty,
         configurationHash: configurationHash(configuration),
         configuration,
         visibility: visibility(document.bounds, camera, dpr),
@@ -219,10 +346,12 @@ for (const { scenario, variant } of runs) {
       const slug = `${testInfo.project.name}--${scenario.id.replace(/[^a-z0-9-]+/gi, '_')}${
         variant === 'plain' ? '-plain' : ''
       }--r${repetition}`;
+      const { errors, consoleErrors } = await installProbe(page);
 
       if (variant === 'frame') {
-        await open(page, `doc=${scenario.document}`);
+        await open(page, `doc=${scenario.document}`, errors);
         await execute(page, [{ type: 'setViewport', camera }]);
+        const env = await environment(page);
         let driver: unknown;
         if (scenario.interaction === 'edit-drag') {
           const target = moveTarget(document);
@@ -237,6 +366,7 @@ for (const { scenario, variant } of runs) {
         } else {
           driver = { kind: 'pan-zoom', fitted: camera };
         }
+        const start = await presence(page);
         const run = await page.evaluate(
           async ({ driver, warmUpMs, windowEndMs }) => {
             const hook = window.__e26Bench!;
@@ -251,6 +381,7 @@ for (const { scenario, variant } of runs) {
             await until(t0 + warmUpMs);
             const windowStartMs = performance.now();
             const steps = hook.driverSteps();
+            const revisions = hook.latencies.length;
             const submitted = backend.getStatistics().framesSubmitted;
             backend.startFrameMeasurements(8192);
             await until(t0 + windowEndMs);
@@ -263,6 +394,8 @@ for (const { scenario, variant } of runs) {
               windowStartMs,
               windowEndMs: windowEndAtMs,
               driverSteps: hook.driverSteps() - steps,
+              // Edit drag: moves in the window that produced a scene revision (the drag happened).
+              revisedMoves: hook.latencies.length - revisions,
               framesSubmitted: backend.getStatistics().framesSubmitted - submitted,
               lifecycle: backend.getStatistics().lifecycle,
               recoveryAttempts: backend.getStatistics().recoveryAttempts,
@@ -276,18 +409,33 @@ for (const { scenario, variant } of runs) {
           { driver, warmUpMs: E26_DRIVERS.warmUpMs, windowEndMs: E26_DRIVERS.windowEndMs },
         );
         if (scenario.interaction === 'edit-drag') await page.mouse.up();
+        const end = await presence(page);
         const intervals = run.measurements.frameIntervalsMs;
-        const rafCallbackIntervalMs = summary(intervals);
         record(slug, {
           ...base,
-          rafCallbackIntervalMs,
+          environment: env,
+          presence: { start, end },
+          errors,
+          consoleErrors,
+          rafCallbackIntervalMs: summary(intervals),
           encodeAndSubmitMs: summary(run.measurements.encodeAndSubmitMs),
           ceilingMs: scenario.frameCeilingMs,
+          // Each interval should end in a submission: intervals + 1 against submissions.
+          intervalsPlusOne: intervals.length + 1,
           run,
         });
-        expectValidRun(run);
+        expectValidRun(run, {
+          errors,
+          expectedDpr: dpr,
+          pageDpr: env.devicePixelRatio,
+          start,
+          end,
+        });
         expect(run.measurements.droppedSamples.frameIntervalsMs).toBe(0);
-        if (!smoke) expect(intervals.length).toBeGreaterThan(0);
+        if (!smoke) {
+          expect(intervals.length).toBeGreaterThan(0);
+          if (scenario.interaction === 'edit-drag') expect(run.revisedMoves).toBeGreaterThan(0);
+        }
         return;
       }
 
@@ -297,6 +445,7 @@ for (const { scenario, variant } of runs) {
       await open(
         page,
         `doc=${scenario.document}&persist=1${busy ? `&reject=${target.selection.ids[0]}` : ''}`,
+        errors,
       );
       // The load's own autosave write has completed (section 3.1).
       await page.waitForFunction(
@@ -307,44 +456,65 @@ for (const { scenario, variant } of runs) {
         undefined,
         { timeout: 30_000 },
       );
+      expect(await page.evaluate(() => window.__e26Bench!.writes[0]!.ok)).toBe(true);
       await execute(page, [
         { type: 'setViewport', camera },
         { type: 'setSnapping', enabled: false },
         { type: 'setSelection', ids: target.selection.ids },
       ]);
+      const env = await environment(page);
       const start = await clientPoint(page, camera, target.press);
-      await page.mouse.move(start.x, start.y);
-      const now = () => page.evaluate(() => performance.now());
+      // Input goes through CDP without awaiting each move, so moves queue behind a busy main
+      // thread as a real mouse's do (an awaited move returns only after the page handled it).
+      const cdp = await page.context().newCDPSession(page);
+      const mouse = (type: 'mouseMoved' | 'mousePressed' | 'mouseReleased', x: number, y: number) =>
+        cdp.send('Input.dispatchMouseEvent', {
+          type,
+          x,
+          y,
+          button: 'left',
+          buttons: type === 'mouseReleased' ? 0 : 1,
+          clickCount: type === 'mouseMoved' ? 0 : 1,
+        });
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: start.x, y: start.y });
+      const presenceStart = await presence(page);
       if (busy) {
         await execute(page, [
           { type: 'setStyle', ids: [target.outside], style: { fill: { r: 1, g: 0, b: 0, a: 1 } } },
         ]);
         await page.waitForTimeout(scenario.setFillBeforeDownMs ?? 0);
       }
-      // Taken just before the press, so its handling and every later move fall after it and the
-      // hover move to the start point falls before it (#403 review N5).
-      const downMs = await now();
-      await page.mouse.down();
+      await mouse('mousePressed', start.x, start.y);
       const started = Date.now();
       let armed = !busy;
-      let moves = 0;
+      const sent: Promise<unknown>[] = [];
+      const sentAtMs: number[] = [];
+      let arming: Promise<void> | null = null;
       for (;;) {
         const elapsed = Date.now() - started;
         if (elapsed >= E26_DRIVERS.latencyDurationMs) break;
         if (!armed && elapsed >= (scenario.reject?.armedAtMs ?? 0)) {
-          await page.evaluate(() => window.__e26Bench!.armReject());
+          arming = page.evaluate(() => window.__e26Bench!.armReject());
           armed = true;
         }
         const offset = editDragOffset(elapsed);
-        await page.mouse.move(start.x + offset.x, start.y + offset.y);
-        moves += 1;
-        const next = (moves + 1) * E26_DRIVERS.latencyCadenceMs;
-        const wait = next - (Date.now() - started);
+        sent.push(mouse('mouseMoved', start.x + offset.x, start.y + offset.y));
+        sentAtMs.push(elapsed);
+        const wait = sentAtMs.length * E26_DRIVERS.latencyCadenceMs - (Date.now() - started);
         if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
       }
       const last = editDragOffset(Date.now() - started);
-      await page.mouse.up();
-      const upMs = await now();
+      await mouse('mouseReleased', start.x + last.x, start.y + last.y);
+      await Promise.all(sent);
+      await arming;
+      const moves = sent.length;
+      const probe = await page.evaluate(() => window.__e26Probe!);
+      expect(probe.downs.length, 'one press').toBe(1);
+      expect(probe.ups.length, 'one release').toBe(1);
+      // The events' own timestamps: the press's handling and every move fall inside, the hover
+      // move to the start point before it, and a write started by the release after it.
+      const downMs = probe.downs[0]!;
+      const upMs = probe.ups[0]!;
       // The due write after pointer up, the last samples' submitted work and the isolation
       // measure settle; then the run is read.
       await page.waitForTimeout(1_500);
@@ -365,6 +535,7 @@ for (const { scenario, variant } of runs) {
             isolations: hook.isolations(),
             rejections: hook.rejections(),
             undoDepth: history.undoDepth,
+            mode: hook.backend()!.getStatistics().mode,
             lifecycle: hook.backend()!.getStatistics().lifecycle,
             recoveryAttempts: hook.backend()!.getStatistics().recoveryAttempts,
           };
@@ -385,15 +556,25 @@ for (const { scenario, variant } of runs) {
         (write) => write.startMs > downMs && write.startMs < upMs,
       );
       const firstAfterUp = state.writes.find((write) => write.startMs >= upMs) ?? null;
+      const presenceEnd = await presence(page);
+      const open_ = (entry: (typeof state.latencies)[number]) =>
+        entry.failed !== true && (entry.doneMs === null || Number.isNaN(entry.doneMs));
       const result = {
         ...base,
+        environment: env,
+        presence: { start: presenceStart, end: presenceEnd },
+        errors,
+        consoleErrors,
         downMs,
         upMs,
         moves,
+        expectedMoves: E26_DRIVERS.latencyDurationMs / E26_DRIVERS.latencyCadenceMs,
+        sentAtMs,
         lastOffset: last,
         pointerToWorkDoneMs: summary(samples),
         boundMs: scenario.latencyBoundMs,
-        unresolved: state.latencies.filter((entry) => entry.doneMs === null).length,
+        // Not ended and not failed after the settle, claimed by a submission or not.
+        unresolved: state.latencies.filter(open_).length,
         failed: state.latencies.filter((entry) => entry.failed === true).length,
         noChange: state.noChangeMoves.length,
         longTasksAvailable: state.longTasksAvailable,
@@ -408,9 +589,19 @@ for (const { scenario, variant } of runs) {
         state,
       };
       record(slug, result);
-      expectValidRun(state);
-      expect(moves).toBeGreaterThan(0);
+      expectValidRun(state, {
+        errors,
+        expectedDpr: dpr,
+        pageDpr: env.devicePixelRatio,
+        start: presenceStart,
+        end: presenceEnd,
+      });
+      expect(state.mode).toBe('on-demand');
       expect(result.failed).toBe(0);
+      expect(result.unresolved).toBe(0);
+      expect(samples.length, 'moves that produced a revision').toBeGreaterThan(0);
+      expect(result.undoDepth, 'the release was applied').toBe(result.expectedUndoDepth);
+      if (busy) expect(result.rejections).toBe(1);
     });
   }
 }
