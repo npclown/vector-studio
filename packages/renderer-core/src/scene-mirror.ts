@@ -128,6 +128,12 @@ let injectNextGeometryRevision: (mirror: RetainedSceneMirror, next: number) => v
 let injectFullValidation: (mirror: RetainedSceneMirror) => void;
 let readLastSetVisits: (mirror: RetainedSceneMirror) => number;
 
+/**
+ * E26-U5b: past this many held paths (removals with no frame in between, for example in a
+ * hidden tab) the mirror forgets them all; that costs mesh cache hits, never correctness.
+ */
+const RETIRED_PATHS_MAX = 131_072;
+
 /** E26-U5b: a removed path's data and revision, kept until the next view or snapshot. */
 type RetiredPath = Readonly<{
   geometry: Extract<RenderNodeSnapshot, { kind: 'path' }>['geometry'];
@@ -484,6 +490,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
         }
       }
       for (const id of ownedNodes.keys()) this.#retired.delete(id);
+      if (this.#retired.size > RETIRED_PATHS_MAX) this.#retired.clear();
     }
     const childrenByParent = new Map<string | null, Set<string>>();
     for (const node of ownedNodes.values()) addChild(childrenByParent, node.parentId, node.id);
@@ -567,6 +574,7 @@ export class RetainedSceneMirror implements RendererSceneSynchronization {
       if (revision !== undefined) geometryRevisions.set(id, revision);
       else if (after.kind !== 'path') geometryRevisions.delete(id);
     }
+    if (this.#retired.size > RETIRED_PATHS_MAX) this.#retired.clear();
     const published: OwnedScene = {
       sceneEpoch: current.sceneEpoch,
       identity: input.identity,

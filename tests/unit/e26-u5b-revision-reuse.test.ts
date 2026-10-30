@@ -2,6 +2,7 @@ import type { RenderNodeSnapshot, RenderSceneSnapshot } from '@vector-studio/con
 import { describe, expect, it } from 'vitest';
 import {
   RetainedSceneMirror,
+  setNextGeometryRevisionForTesting,
   useFullChangeValidationForTesting,
 } from '../../packages/renderer-core/src/scene-mirror.js';
 import {
@@ -63,7 +64,7 @@ describe.each(modes)('E26-U5b geometry revision reuse (%s publication)', (mode) 
 
   it('a removal set and re-adds before the next view keep equal paths revisions', () => {
     const mirror = mirrorFor(mode);
-    mirror.replaceSnapshot(snapshot([a(), b(), rectangleNode('r', 40) as RenderNodeSnapshot]));
+    mirror.replaceSnapshot(snapshot([a(), b(), rectangleNode('r', 40)]));
     const before = revisions(mirror);
     const removal = mirror.applyChanges(change(2, { removed: ['a', 'b', 'r'], rootOrder: [] }));
     expect(removal.status).toBe('applied');
@@ -99,21 +100,56 @@ describe.each(modes)('E26-U5b geometry revision reuse (%s publication)', (mode) 
     expect(revisions(mirror).get('a')).toBeGreaterThan(first);
   });
 
-  it('a rejected set changes nothing, and a non-path insert drops the held revision', () => {
+  it('a rejected set keeps the held revision', () => {
     const mirror = mirrorFor(mode);
     mirror.replaceSnapshot(snapshot([a()]));
     const first = revisions(mirror).get('a')!;
     mirror.applyChanges(change(2, { removed: ['a'], rootOrder: [] }));
-    // Unknown node in the order: rejected, the held revision survives.
+    // Unknown node in the order: rejected, and the held revision survives it.
     expect(mirror.applyChanges(change(3, { inserted: [a()], rootOrder: ['a', 'x'] })).status).toBe(
       'invalid-scene',
     );
-    mirror.applyChanges(
-      change(3, { inserted: [rectangleNode('a', 0) as RenderNodeSnapshot], rootOrder: ['a'] }),
+    expect(mirror.applyChanges(change(3, { inserted: [a()], rootOrder: ['a'] })).status).toBe(
+      'applied',
     );
+    expect(revisions(mirror).get('a')).toBe(first);
+  });
+
+  it('a non-path insert drops the held revision', () => {
+    const mirror = mirrorFor(mode);
+    mirror.replaceSnapshot(snapshot([a()]));
+    const first = revisions(mirror).get('a')!;
+    mirror.applyChanges(change(2, { removed: ['a'], rootOrder: [] }));
+    mirror.applyChanges(change(3, { inserted: [rectangleNode('a', 0)], rootOrder: ['a'] }));
     mirror.applyChanges(change(4, { removed: ['a'], rootOrder: [] }));
     mirror.applyChanges(change(5, { inserted: [a()], rootOrder: ['a'] }));
     expect(revisions(mirror).get('a')).toBeGreaterThan(first);
+  });
+
+  it('at the end of the counter, a re-insert that reuses needs no new value', () => {
+    const mirror = mirrorFor(mode);
+    mirror.replaceSnapshot(snapshot([a(), b()]));
+    const first = revisions(mirror);
+    mirror.applyChanges(change(2, { removed: ['a', 'b'], rootOrder: [] }));
+    setNextGeometryRevisionForTesting(mirror, Number.MAX_SAFE_INTEGER + 1);
+    // b with changed data needs a new value: overflow publishes nothing and keeps the held ones.
+    expect(
+      mirror.applyChanges(change(3, { inserted: [a(), bMoved()], rootOrder: ['a', 'b'] })).status,
+    ).toBe('invalid-scene');
+    expect(
+      mirror.applyChanges(change(3, { inserted: [a(), b()], rootOrder: ['a', 'b'] })).status,
+    ).toBe('applied');
+    expect(revisions(mirror)).toEqual(first);
+  });
+
+  it('an equal-revision snapshot replay is not a publication and keeps the held revisions', () => {
+    const mirror = mirrorFor(mode);
+    mirror.replaceSnapshot(snapshot([a()]));
+    const first = revisions(mirror).get('a')!;
+    mirror.applyChanges(change(2, { removed: ['a'], rootOrder: [] }));
+    expect(mirror.replaceSnapshot(snapshot([], 2)).status).toBe('replayed');
+    mirror.applyChanges(change(3, { inserted: [a()], rootOrder: ['a'] }));
+    expect(revisions(mirror).get('a')).toBe(first);
   });
 });
 
