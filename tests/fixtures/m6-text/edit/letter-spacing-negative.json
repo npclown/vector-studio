@@ -1,0 +1,39 @@
+{
+  "description": "Letter spacing -1 (M6a-S3's lower bound): negative advances move the caret left of the box origin; nothing is clamped in autoWidth. A selection spans its end carets and its glyphs' [x, x + advance]; 가 at -1 has advance 0, so [1, 2] stays 0 wide.",
+  "request": {
+    "runs": [{ "text": "a가a", "family": "Fake", "size": 10 }],
+    "width": null,
+    "align": "left",
+    "letterSpacing": -1,
+    "lineHeight": 1
+  },
+  "stops": [0, 1, 2, 3],
+  "carets": [
+    { "offset": 0, "affinity": "downstream", "line": 0, "segment": [[0, 0], [0, 10]] },
+    { "offset": 1, "affinity": "downstream", "line": 0, "segment": [[-5, 0], [-5, 10]] },
+    { "offset": 2, "affinity": "downstream", "line": 0, "segment": [[-5, 0], [-5, 10]] },
+    { "offset": 3, "affinity": "downstream", "line": 0, "segment": [[-10, 0], [-10, 10]] }
+  ],
+  "selections": [
+    { "range": [0, 3], "rects": [[-10, 0, 10, 10]] },
+    { "range": [0, 2], "rects": [[-5, 0, 5, 10]] },
+    { "range": [1, 2], "rects": [[-5, 0, 0, 10]] },
+    { "range": [2, 3], "rects": [[-10, 0, 5, 10]] }
+  ],
+  "points": [
+    { "point": [-7, 5], "offset": 1, "affinity": "downstream" },
+    { "point": [-20, 5], "offset": 3, "affinity": "downstream" },
+    { "point": [3, 5], "offset": 0, "affinity": "downstream" }
+  ],
+  "scripts": [
+    {
+      "platform": "other",
+      "caret": [2, 2],
+      "steps": [
+        { "key": "ArrowUp", "caret": [0, 0], "goalX": -5 },
+        { "key": "ArrowDown", "caret": [3, 3], "goalX": -5 },
+        { "key": "ArrowLeft", "caret": [2, 2], "goalX": null }
+      ]
+    }
+  ]
+}

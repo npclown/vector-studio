@@ -1,0 +1,132 @@
+{
+  "description": "Words (M6b-Q10 (a)) over three wrapped lines, Windows and macOS word keys (M6b-Q12 (a)), and the goal x kept across a shorter line.",
+  "request": {
+    "runs": [{ "text": "안녕 세상, hi!", "family": "Fake", "size": 10 }],
+    "width": 40,
+    "align": "left",
+    "letterSpacing": 0,
+    "lineHeight": 1
+  },
+  "stops": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  "words": [
+    [0, 2, true],
+    [2, 3, false],
+    [3, 5, true],
+    [5, 6, false],
+    [6, 7, false],
+    [7, 9, true],
+    [9, 10, false]
+  ],
+  "wordAt": [
+    { "offset": 4, "range": [3, 5] },
+    { "offset": 3, "range": [3, 5] },
+    { "offset": 2, "range": [0, 2] },
+    { "offset": 6, "range": [6, 7] },
+    { "offset": 10, "range": [9, 10] }
+  ],
+  "carets": [
+    { "offset": 3, "affinity": "upstream", "line": 0, "segment": [[22.5, 0], [22.5, 10]] },
+    { "offset": 7, "affinity": "upstream", "line": 1, "segment": [[27.5, 10], [27.5, 20]] },
+    { "offset": 7, "affinity": "downstream", "line": 2, "segment": [[0, 20], [0, 30]] }
+  ],
+  "selections": [{ "range": [2, 8], "rects": [[20, 0, 2.5, 10], [0, 10, 27.5, 10], [0, 20, 5, 10]] }],
+  "points": [
+    { "point": [30, 15], "offset": 7, "affinity": "upstream" },
+    { "point": [26.5, 15], "offset": 7, "affinity": "upstream" },
+    { "point": [25.5, 15], "offset": 6, "affinity": "downstream" }
+  ],
+  "scripts": [
+    {
+      "platform": "other",
+      "caret": [0, 0],
+      "steps": [
+        { "key": "Ctrl+ArrowRight", "caret": [3, 3] },
+        { "key": "Ctrl+ArrowRight", "caret": [7, 7] },
+        { "key": "Ctrl+ArrowRight", "caret": [10, 10] },
+        { "key": "Ctrl+ArrowRight", "caret": [10, 10] },
+        { "key": "Ctrl+ArrowLeft", "caret": [7, 7] },
+        { "key": "Ctrl+ArrowLeft", "caret": [3, 3] },
+        { "key": "ArrowRight", "caret": [4, 4] },
+        { "key": "Ctrl+ArrowLeft", "caret": [3, 3] },
+        { "key": "Ctrl+ArrowLeft", "caret": [0, 0] },
+        { "key": "Ctrl+ArrowLeft", "caret": [0, 0] },
+        { "key": "Shift+Ctrl+ArrowRight", "caret": [0, 3] },
+        { "key": "Shift+Ctrl+ArrowRight", "caret": [0, 7] },
+        { "key": "Ctrl+ArrowLeft", "caret": [3, 3] }
+      ]
+    },
+    {
+      "platform": "other",
+      "caret": [9, 9],
+      "steps": [
+        { "key": "ArrowUp", "caret": [4, 4], "goalX": 10 },
+        { "key": "ArrowUp", "caret": [1, 1], "goalX": 10 },
+        { "key": "ArrowDown", "caret": [4, 4], "goalX": 10 },
+        { "key": "ArrowDown", "caret": [9, 9], "goalX": 10 }
+      ]
+    },
+    {
+      "platform": "other",
+      "caret": [6, 6],
+      "steps": [
+        { "key": "ArrowUp", "caret": [3, 3, "upstream"], "goalX": 25 },
+        { "key": "ArrowDown", "caret": [6, 6], "goalX": 25 },
+        { "key": "ArrowDown", "caret": [10, 10], "goalX": 25 },
+        { "key": "ArrowUp", "caret": [6, 6], "goalX": 25 },
+        { "key": "End", "caret": [7, 7, "upstream"], "goalX": null },
+        { "key": "Home", "caret": [3, 3] },
+        { "key": "ArrowDown", "caret": [7, 7], "goalX": 0 }
+      ]
+    },
+    {
+      "platform": "mac",
+      "caret": [0, 0],
+      "steps": [
+        { "key": "Alt+ArrowRight", "caret": [2, 2] },
+        { "key": "Alt+ArrowRight", "caret": [5, 5] },
+        { "key": "Alt+ArrowRight", "caret": [9, 9] },
+        { "key": "Alt+ArrowRight", "caret": [10, 10] },
+        { "key": "Alt+ArrowLeft", "caret": [7, 7] },
+        { "key": "ArrowLeft", "caret": [6, 6] },
+        { "key": "ArrowLeft", "caret": [5, 5] },
+        { "key": "Meta+ArrowRight", "caret": [7, 7, "upstream"] },
+        { "key": "Meta+ArrowLeft", "caret": [3, 3] },
+        { "key": "Shift+Meta+ArrowDown", "caret": [3, 10] },
+        { "key": "Meta+ArrowUp", "caret": [0, 0] },
+        { "key": "Meta+ArrowDown", "caret": [10, 10] },
+        { "key": "Meta+Home", "caret": [0, 0] },
+        { "key": "Meta+A", "caret": [0, 10] },
+        { "key": "Shift+Alt+ArrowLeft", "caret": [0, 7] }
+      ]
+    },
+    {
+      "platform": "other",
+      "caret": [1, 4],
+      "steps": [{ "key": "ArrowDown", "caret": [9, 9], "goalX": 10 }]
+    },
+    {
+      "platform": "other",
+      "caret": [9, 1],
+      "steps": [{ "key": "ArrowDown", "caret": [10, 10], "goalX": 10 }]
+    },
+    {
+      "platform": "other",
+      "caret": [1, 9],
+      "steps": [{ "key": "Home", "caret": [7, 7], "goalX": null }]
+    },
+    {
+      "platform": "other",
+      "caret": [9, 1],
+      "steps": [{ "key": "End", "caret": [3, 3, "upstream"], "goalX": null }]
+    }
+  ],
+  "deletions": [
+    { "platform": "other", "caret": [5, 5], "key": "Ctrl+Backspace", "range": [3, 5] },
+    { "platform": "other", "caret": [5, 5], "key": "Ctrl+Delete", "range": [5, 7] },
+    { "platform": "other", "caret": [0, 0], "key": "Ctrl+Backspace", "range": null },
+    { "platform": "other", "caret": [10, 10], "key": "Ctrl+Delete", "range": null },
+    { "platform": "mac", "caret": [5, 5], "key": "Alt+Backspace", "range": [3, 5] },
+    { "platform": "mac", "caret": [5, 5], "key": "Alt+Delete", "range": [5, 9] },
+    { "platform": "mac", "caret": [4, 4], "key": "Backspace", "range": [3, 4] }
+  ]
+}

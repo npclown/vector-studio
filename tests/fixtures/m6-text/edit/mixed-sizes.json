@@ -1,0 +1,39 @@
+{
+  "description": "Mixed sizes (10 then 20, line height 1.2): a line takes its largest size, the selected LF widens by 0.25 of its own run's size, and the composition underline sits 0.1 of the size below the baseline.",
+  "request": {
+    "runs": [
+      { "text": "ab", "family": "Fake", "size": 10 },
+      { "text": "CD\nx", "family": "Fake", "size": 20 }
+    ],
+    "width": null,
+    "align": "left",
+    "letterSpacing": 0,
+    "lineHeight": 1.2
+  },
+  "stops": [0, 1, 2, 3, 4, 5, 6],
+  "carets": [
+    { "offset": 2, "affinity": "downstream", "line": 0, "segment": [[10, 0], [10, 24]] },
+    { "offset": 4, "affinity": "downstream", "line": 0, "segment": [[30, 0], [30, 24]] },
+    { "offset": 5, "affinity": "downstream", "line": 1, "segment": [[0, 24], [0, 48]] }
+  ],
+  "selections": [{ "range": [1, 6], "rects": [[5, 0, 30, 24], [0, 24, 10, 24]] }],
+  "composition": [
+    { "range": [0, 3], "segments": [[[0, 19], [20, 19]]] },
+    { "range": [2, 4], "segments": [[[10, 20], [30, 20]]] }
+  ],
+  "points": [
+    { "point": [12, 30], "offset": 6, "affinity": "downstream" },
+    { "point": [7.5, 23.9], "offset": 1, "affinity": "downstream" },
+    { "point": [7.5, 24], "offset": 6, "affinity": "downstream" }
+  ],
+  "scripts": [
+    {
+      "platform": "other",
+      "caret": [3, 3],
+      "steps": [
+        { "key": "ArrowDown", "caret": [6, 6], "goalX": 20 },
+        { "key": "ArrowUp", "caret": [3, 3], "goalX": 20 }
+      ]
+    }
+  ]
+}
