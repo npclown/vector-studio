@@ -1,0 +1,206 @@
+{
+  "kind": "vector-studio/m6-s0-ime-trace",
+  "version": 1,
+  "synthetic": true,
+  "source": "Hand-authored for M6b-U7 from docs/plans/mvp-m6b-text-editing-contract.md, appendix A case (5); not recorded on the main PC and not made by a real IME.",
+  "appendixCase": 5,
+  "title": "A final consonant moving into the next syllable: compositionend then compositionstart in separate tasks",
+  "assumes": "The IME's end of 가 and the next compositionstart fall in separate tasks, so the M6b-H4 reset empties the textarea between them; the editor's text does not depend on the textarea.",
+  "replay": {
+    "start": {
+      "edit": "t",
+      "anchor": 5,
+      "focus": 5
+    },
+    "expect": {
+      "node": "t",
+      "text": "ab cd가가 ",
+      "anchor": 8,
+      "focus": 8,
+      "undoDepth": 2,
+      "textEdit": true,
+      "focused": "textarea",
+      "textarea": ""
+    }
+  },
+  "events": [
+    {
+      "seq": 1,
+      "beforeMessage": 1,
+      "type": "keydown",
+      "target": "#sink",
+      "key": "Process",
+      "code": "KeyR",
+      "keyCode": 229,
+      "isComposing": false,
+      "repeat": false,
+      "mods": {
+        "alt": false,
+        "ctrl": false,
+        "meta": false,
+        "shift": false
+      },
+      "cancelable": true,
+      "expectPrevented": false
+    },
+    {
+      "seq": 2,
+      "beforeMessage": 1,
+      "type": "compositionstart",
+      "target": "#sink",
+      "data": "",
+      "cancelable": false
+    },
+    {
+      "seq": 3,
+      "beforeMessage": 1,
+      "type": "compositionupdate",
+      "target": "#sink",
+      "data": "ㄱ",
+      "cancelable": false,
+      "value": "ㄱ"
+    },
+    {
+      "seq": 4,
+      "beforeMessage": 2,
+      "type": "keydown",
+      "target": "#sink",
+      "key": "Process",
+      "code": "KeyK",
+      "keyCode": 229,
+      "isComposing": true,
+      "repeat": false,
+      "mods": {
+        "alt": false,
+        "ctrl": false,
+        "meta": false,
+        "shift": false
+      },
+      "cancelable": true,
+      "expectPrevented": false
+    },
+    {
+      "seq": 5,
+      "beforeMessage": 2,
+      "type": "compositionupdate",
+      "target": "#sink",
+      "data": "가",
+      "cancelable": false,
+      "value": "가"
+    },
+    {
+      "seq": 6,
+      "beforeMessage": 3,
+      "type": "keydown",
+      "target": "#sink",
+      "key": "Process",
+      "code": "KeyR",
+      "keyCode": 229,
+      "isComposing": true,
+      "repeat": false,
+      "mods": {
+        "alt": false,
+        "ctrl": false,
+        "meta": false,
+        "shift": false
+      },
+      "cancelable": true,
+      "expectPrevented": false
+    },
+    {
+      "seq": 7,
+      "beforeMessage": 3,
+      "type": "compositionupdate",
+      "target": "#sink",
+      "data": "각",
+      "cancelable": false,
+      "value": "각"
+    },
+    {
+      "seq": 8,
+      "beforeMessage": 4,
+      "type": "keydown",
+      "target": "#sink",
+      "key": "Process",
+      "code": "KeyK",
+      "keyCode": 229,
+      "isComposing": true,
+      "repeat": false,
+      "mods": {
+        "alt": false,
+        "ctrl": false,
+        "meta": false,
+        "shift": false
+      },
+      "cancelable": true,
+      "expectPrevented": false
+    },
+    {
+      "seq": 9,
+      "beforeMessage": 4,
+      "type": "compositionend",
+      "target": "#sink",
+      "data": "가",
+      "cancelable": false,
+      "value": "가"
+    },
+    {
+      "seq": 10,
+      "beforeMessage": 5,
+      "type": "compositionstart",
+      "target": "#sink",
+      "data": "",
+      "cancelable": false,
+      "expectTextarea": ""
+    },
+    {
+      "seq": 11,
+      "beforeMessage": 5,
+      "type": "compositionupdate",
+      "target": "#sink",
+      "data": "가",
+      "cancelable": false,
+      "value": "가"
+    },
+    {
+      "seq": 12,
+      "beforeMessage": 6,
+      "type": "keydown",
+      "target": "#sink",
+      "key": "Process",
+      "code": "Space",
+      "keyCode": 229,
+      "isComposing": true,
+      "repeat": false,
+      "mods": {
+        "alt": false,
+        "ctrl": false,
+        "meta": false,
+        "shift": false
+      },
+      "cancelable": true,
+      "expectPrevented": false,
+      "expectTextarea": "가"
+    },
+    {
+      "seq": 13,
+      "beforeMessage": 6,
+      "type": "compositionend",
+      "target": "#sink",
+      "data": "가",
+      "cancelable": false,
+      "value": "가"
+    },
+    {
+      "seq": 14,
+      "beforeMessage": 6,
+      "type": "beforeinput",
+      "target": "#sink",
+      "inputType": "insertText",
+      "data": " ",
+      "isComposing": false,
+      "cancelable": true,
+      "expectPrevented": true
+    }
+  ]
+}

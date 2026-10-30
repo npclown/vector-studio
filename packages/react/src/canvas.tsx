@@ -1,7 +1,20 @@
 import type { RendererSceneSynchronization } from '@vector-studio/contracts';
-import { useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
-import { CanvasInput, attachCanvasListeners, syncViewportSize } from './canvas-input.js';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
+import {
+  CanvasInput,
+  attachCanvasListeners,
+  syncViewportSize,
+  type KeyLike,
+} from './canvas-input.js';
 import { useEditor } from './context.js';
+import { MIN_INPUT_FONT_PX, TextInputHost, createMessageScheduler } from './text-input.js';
 
 // P5-U6 (P5 plan, section 6): a headless canvas. It renders a <canvas> and turns pointer and key
 // input into editor `input` commands in page space. The renderer is created only inside an
@@ -11,6 +24,9 @@ import { useEditor } from './context.js';
 // size, event-time camera mapping and the blur reset; the mapping lives in canvas-input.ts.
 // M2-U6 (section 6): DOM copy, cut and paste on the focused canvas, and the system clipboard
 // write of the bound clipboard actions.
+// M6b-U7 (MVP M6b contract, section 6): the hidden textarea beside the canvas (M6b-H1), one
+// focus target with it (M6b-H2), its `beforeinput` and composition mapping, reset and forced end
+// (M6b-H3 to H5) in text-input.ts.
 
 /** What a host factory returns: the renderer to attach, and how to release it. */
 export type RendererHandle = Readonly<{
@@ -46,6 +62,43 @@ export type EditorCanvasProps = Readonly<{
  */
 const creations = new WeakMap<HTMLCanvasElement, Promise<void>>();
 
+/** M6b-H1's fixed textarea styles; its place, `font-size` and height are set at event time. */
+const TEXTAREA_STYLE: CSSProperties = {
+  position: 'absolute',
+  left: 0,
+  top: 0,
+  width: 1,
+  height: MIN_INPUT_FONT_PX,
+  fontSize: MIN_INPUT_FONT_PX,
+  lineHeight: 1,
+  margin: 0,
+  padding: 0,
+  border: 0,
+  opacity: 0,
+  resize: 'none',
+  overflow: 'hidden',
+  pointerEvents: 'none',
+};
+
+/** Attributes React's textarea type does not list (M6b-H1). */
+const TEXTAREA_EXTRA: Record<string, string> = { writingsuggestions: 'false' };
+
+/** A React keyboard event as `CanvasInput` reads it, `keyCode` included (M6b-H2). */
+function keyOf(event: KeyboardEvent): KeyLike {
+  return {
+    key: event.key,
+    code: event.code,
+    repeat: event.repeat,
+    isComposing: event.nativeEvent.isComposing,
+    keyCode: event.nativeEvent.keyCode,
+    shiftKey: event.shiftKey,
+    altKey: event.altKey,
+    metaKey: event.metaKey,
+    ctrlKey: event.ctrlKey,
+    preventDefault: () => event.preventDefault(),
+  };
+}
+
 export function EditorCanvas({
   width,
   height,
@@ -58,19 +111,26 @@ export function EditorCanvas({
 }: EditorCanvasProps) {
   const editor = useEditor();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const heightRef = useRef(height);
   heightRef.current = height;
-  const input = useMemo(
-    () =>
-      new CanvasInput(
-        editor,
-        () => heightRef.current,
-        () => canvasRef.current,
-        // Read at use, so importing this module touches no browser global.
-        () => (typeof navigator === 'undefined' ? undefined : navigator.clipboard),
-      ),
-    [editor],
-  );
+  const { input, text } = useMemo(() => {
+    const input = new CanvasInput(
+      editor,
+      () => heightRef.current,
+      () => canvasRef.current,
+      // Read at use, so importing this module touches no browser global.
+      () => (typeof navigator === 'undefined' ? undefined : navigator.clipboard),
+    );
+    const text = new TextInputHost(editor, {
+      textarea: () => textareaRef.current,
+      canvas: () => canvasRef.current,
+      documentHasFocus: () => document.hasFocus(),
+      activeElement: () => document.activeElement,
+    });
+    input.text = text;
+    return { input, text };
+  }, [editor]);
   const onError = useRef(onRendererError);
   onError.current = onRendererError;
   const onReady = useRef(onRendererReady);
@@ -78,13 +138,28 @@ export function EditorCanvas({
 
   useEffect(() => syncViewportSize(editor, width, height), [editor, width, height]);
 
-  // Wheel, the canvas blur, the clipboard events and the window blur (canvas-input.ts). The
-  // canvas is the focus target; focus moving within it is not a blur.
+  // Wheel, the blur of the canvas and the textarea, the clipboard events, the textarea's
+  // `beforeinput` and composition events and the window blur (canvas-input.ts, text-input.ts).
+  // The canvas and the textarea are one focus target; focus moving within it is not a blur.
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (canvas === null) return;
-    return attachCanvasListeners(canvas, window, input, (node) => node === canvas);
-  }, [input]);
+    const textarea = textareaRef.current;
+    if (canvas === null || textarea === null) return;
+    const detach = attachCanvasListeners(
+      canvas,
+      window,
+      input,
+      (node) => node === canvas || node === textarea,
+      textarea,
+    );
+    const scheduler = createMessageScheduler();
+    const detachText = text.attach(scheduler.post);
+    return () => {
+      detachText();
+      scheduler.close();
+      detach();
+    };
+  }, [input, text]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -133,36 +208,26 @@ export function EditorCanvas({
         className={className}
         style={{ display: 'block', width, height, touchAction: 'none', ...style }}
         onPointerDown={(event) => input.pointerDown(event)}
+        onMouseDown={(event) => input.mouseDown(event)}
         onPointerMove={(event) => input.pointerMove(event)}
         onPointerUp={(event) => input.pointerUp(event)}
         onPointerCancel={(event) => input.pointerCancel(event)}
         onDoubleClick={(event) => input.doubleClick(event)}
-        onKeyDown={(event) =>
-          input.keyDown({
-            key: event.key,
-            code: event.code,
-            repeat: event.repeat,
-            isComposing: event.nativeEvent.isComposing,
-            shiftKey: event.shiftKey,
-            altKey: event.altKey,
-            metaKey: event.metaKey,
-            ctrlKey: event.ctrlKey,
-            preventDefault: () => event.preventDefault(),
-          })
-        }
-        onKeyUp={(event) =>
-          input.keyUp({
-            key: event.key,
-            code: event.code,
-            repeat: event.repeat,
-            isComposing: event.nativeEvent.isComposing,
-            shiftKey: event.shiftKey,
-            altKey: event.altKey,
-            metaKey: event.metaKey,
-            ctrlKey: event.ctrlKey,
-            preventDefault: () => event.preventDefault(),
-          })
-        }
+        onKeyDown={(event) => input.keyDown(keyOf(event))}
+        onKeyUp={(event) => input.keyUp(keyOf(event))}
+      />
+      <textarea
+        ref={textareaRef}
+        aria-label="Text input"
+        tabIndex={-1}
+        spellCheck={false}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        {...TEXTAREA_EXTRA}
+        style={TEXTAREA_STYLE}
+        onKeyDown={(event) => input.keyDown(keyOf(event))}
+        onKeyUp={(event) => input.keyUp(keyOf(event))}
       />
       {children === undefined ? null : (
         <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>{children}</div>

@@ -1,0 +1,99 @@
+{
+  "kind": "vector-studio/m6-s0-ime-trace",
+  "version": 1,
+  "synthetic": true,
+  "source": "Hand-authored for M6b-U7 from docs/plans/mvp-m6b-text-editing-contract.md, appendix A case (9); not recorded on the main PC and not made by a real IME.",
+  "appendixCase": 9,
+  "title": "A first composition on a pending node, cancelled",
+  "assumes": "The only jamo is deleted and the composition ends empty: the gesture is cancelled, no node is created and the pending state comes back.",
+  "replay": {
+    "start": {
+      "pending": {
+        "x": 200,
+        "y": 100
+      }
+    },
+    "expect": {
+      "node": "pending",
+      "undoDepth": 0,
+      "textEdit": true,
+      "focused": "textarea",
+      "textarea": ""
+    }
+  },
+  "events": [
+    {
+      "seq": 1,
+      "beforeMessage": 1,
+      "type": "keydown",
+      "target": "#sink",
+      "key": "Process",
+      "code": "KeyG",
+      "keyCode": 229,
+      "isComposing": false,
+      "repeat": false,
+      "mods": {
+        "alt": false,
+        "ctrl": false,
+        "meta": false,
+        "shift": false
+      },
+      "cancelable": true,
+      "expectPrevented": false
+    },
+    {
+      "seq": 2,
+      "beforeMessage": 1,
+      "type": "compositionstart",
+      "target": "#sink",
+      "data": "",
+      "cancelable": false
+    },
+    {
+      "seq": 3,
+      "beforeMessage": 1,
+      "type": "compositionupdate",
+      "target": "#sink",
+      "data": "ㅎ",
+      "cancelable": false,
+      "value": "ㅎ"
+    },
+    {
+      "seq": 4,
+      "beforeMessage": 2,
+      "type": "keydown",
+      "target": "#sink",
+      "key": "Process",
+      "code": "Backspace",
+      "keyCode": 229,
+      "isComposing": true,
+      "repeat": false,
+      "mods": {
+        "alt": false,
+        "ctrl": false,
+        "meta": false,
+        "shift": false
+      },
+      "cancelable": true,
+      "expectPrevented": false
+    },
+    {
+      "seq": 5,
+      "beforeMessage": 2,
+      "type": "compositionupdate",
+      "target": "#sink",
+      "data": "",
+      "cancelable": false,
+      "value": ""
+    },
+    {
+      "seq": 6,
+      "beforeMessage": 2,
+      "type": "compositionend",
+      "target": "#sink",
+      "data": "",
+      "cancelable": false,
+      "value": ""
+    }
+  ]
+}
