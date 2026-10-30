@@ -135,6 +135,8 @@ type PendingPacket = Readonly<{
   text: AtlasFrame | null;
 }>;
 type PackingKeys = Readonly<{
+  /** The derived primitive the keys were taken from (E26-U5c). */
+  primitive: DerivedPrimitive;
   transform: readonly number[];
   geometry: readonly number[];
   style: readonly number[];
@@ -159,6 +161,34 @@ const MASK_NOTICES_PER_PACKET = 32;
 const LAYER_NOTICES_QUEUED = 4096;
 const LAYER_NOTICES_PER_PACKET = 32;
 const IDENTITY: SceneAffine = [1, 0, 0, 1, 0, 0];
+
+type DerivationCounts = Readonly<{
+  /** Frames that kept the derivation unchanged. */
+  reused: number;
+  /** Frames that re-derived only the written leaves. */
+  patched: number;
+  /** Frames that derived the whole scene. */
+  full: number;
+  /** Nodes derived in patched and full frames together. */
+  leaves: number;
+}>;
+
+let injectFullDerivation: (source: PrimitiveSceneSource) => void;
+let readDerivationCounts: (source: PrimitiveSceneSource) => DerivationCounts;
+
+/**
+ * Test seam (E26-U5c): prepare as before U5c, the oracle of its kept state: derive the whole
+ * scene and reconcile every slot on every frame, assess every primitive against the packing
+ * budget and compare every primitive's packing keys. Not exported from the package index.
+ */
+export function useFullDerivationForTesting(source: PrimitiveSceneSource): void {
+  injectFullDerivation(source);
+}
+
+/** Test seam (E26-U5c): how this source derived its frames. Not exported from the package index. */
+export function derivationCountsForTesting(source: PrimitiveSceneSource): DerivationCounts {
+  return readDerivationCounts(source);
+}
 
 export class PrimitiveSceneSource implements PrimitiveFrameSource {
   readonly #mirror: RetainedSceneMirror;
@@ -185,6 +215,21 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   #reconstructedIncarnation: symbol | null = null;
   #pending: PendingPacket | null = null;
   #derivedCache = new Map<string, DerivedCacheEntry>();
+  /** E26 contract, U5c: the kept derivation, and the change serial the slots are current at. */
+  #derivation: Derivation | null = null;
+  #slotSerial: number | null = null;
+  #fullDerivation = false;
+  #derivationCounts = { reused: 0, patched: 0, full: 0, leaves: 0 };
+  /** The inputs the primitives in `#assessed` passed the packing budget under. */
+  #assessedKey: readonly number[] | null = null;
+  #assessed = new WeakSet<DerivedPrimitive>();
+
+  static {
+    injectFullDerivation = (source) => {
+      source.#fullDerivation = true;
+    };
+    readDerivationCounts = (source) => Object.freeze({ ...source.#derivationCounts });
+  }
   #packingKeys = new Map<string, PackingKeys>();
   #geometryBuilds = 0;
   #recordWrites: Record<PrimitiveResourceId, number> = {
@@ -277,26 +322,23 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
 
     const epochChanged = scene.sceneEpoch !== this.#sceneEpoch;
     if (epochChanged) this.#resetForSnapshot(scene);
-    else this.#reconcileSlots(scene);
+    else
+      this.#reconcileSlots(
+        scene,
+        this.#slotSerial === null || this.#fullDerivation
+          ? null
+          : scene.changedSince(this.#slotSerial),
+      );
+    this.#slotSerial = scene.changeSerial;
 
-    const paths: DerivedPath[] = [];
-    const pathSequences = new Map<string, number>();
-    const clipSeen = { value: false };
-    const layerScopes: LayerScope[] = [];
-    const pathLayers = new Map<string, LayerScope>();
-    const derivedTexts: DerivedTexts = { leaves: [], held: false };
-    const derived = derivePrimitives(
-      scene,
-      this.#slots,
-      this.#derivedCache,
-      paths,
-      pathSequences,
-      clipSeen,
-      layerScopes,
-      pathLayers,
-      this.#isolateUnitOpacity,
-      derivedTexts,
-    );
+    const derivation = this.#derive(scene);
+    const derived = derivation.primitives;
+    const paths = derivation.paths;
+    const pathSequences = derivation.pathSequences;
+    const clipSeen = { value: derivation.clipSeen };
+    const layerScopes = derivation.layerScopes;
+    const pathLayers = derivation.pathLayers;
+    const derivedTexts = derivation.texts;
     let visible = cullPrimitives(
       derived.filter((entry) => !entry.hidden && !entry.omitted && entry.clip?.empty !== true),
       cameraState.camera,
@@ -1239,6 +1281,43 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     });
   }
 
+  /**
+   * E26 contract, U5c: the scene's derivation, kept when nothing was written since it, patched
+   * when the writes were leaf-only (`patchDerivation`), and otherwise derived in full.
+   */
+  #derive(scene: RetainedSceneView): Derivation {
+    const kept = this.#derivation;
+    const changed = kept === null || this.#fullDerivation ? null : scene.changedSince(kept.serial);
+    let derivation: Derivation | null = null;
+    if (kept !== null && changed !== null) {
+      if (changed.length === 0 && sameIds(kept.rootOrder, scene.rootOrder)) {
+        derivation =
+          kept.serial === scene.changeSerial
+            ? kept
+            : Object.freeze({ ...kept, serial: scene.changeSerial });
+        this.#derivationCounts.reused += 1;
+      } else {
+        derivation = patchDerivation(kept, scene, changed, this.#derivedCache, this.#slots);
+        if (derivation !== null) {
+          this.#derivationCounts.patched += 1;
+          this.#derivationCounts.leaves += new Set(changed).size;
+        }
+      }
+    }
+    if (derivation === null) {
+      derivation = derivePrimitives(
+        scene,
+        this.#slots,
+        this.#derivedCache,
+        this.#isolateUnitOpacity,
+      );
+      this.#derivationCounts.full += 1;
+      this.#derivationCounts.leaves += derivation.leaves.size;
+    }
+    this.#derivation = derivation;
+    return derivation;
+  }
+
   #resetForSnapshot(scene: RetainedSceneView): void {
     const slots = new Map<string, number>();
     const slotIds: Array<string | undefined> = [];
@@ -1267,17 +1346,27 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     this.#origin = null;
     this.#pending = null;
     this.#derivedCache.clear();
+    this.#derivation = null;
     this.#packingKeys.clear();
     this.#reconstructedEpoch = null;
     this.#reconstructedIncarnation = null;
   }
 
-  #reconcileSlots(scene: RetainedSceneView): void {
-    const primitiveIds = new Set(
-      scene.nodes.filter((node) => node.kind === 'primitive').map((node) => node.id),
-    );
-    for (const [id, slot] of this.#slots) {
-      if (primitiveIds.has(id)) continue;
+  /**
+   * Frees the slots of primitives the scene no longer holds and gives new primitives the lowest
+   * free slots in ordinal order. With the IDs written since the slots were last reconciled
+   * (E26-U5c), only those are visited; null visits the whole scene.
+   */
+  #reconcileSlots(scene: RetainedSceneView, changed: readonly string[] | null): void {
+    const visited = changed === null ? scene.nodes.map((node) => node.id) : changed;
+    const primitiveIds = new Set<string>();
+    for (const id of visited) {
+      if (scene.getNode(id)?.kind === 'primitive') primitiveIds.add(id);
+    }
+    const freed = changed === null ? [...this.#slots.keys()] : changed;
+    for (const id of freed) {
+      const slot = this.#slots.get(id);
+      if (slot === undefined || primitiveIds.has(id)) continue;
       this.#slots.delete(id);
       this.#slotIds[slot] = undefined;
       this.#values.transforms[slot] = undefined;
@@ -1324,7 +1413,25 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
     target: PrimitiveTarget,
     origin: Origin,
   ): void {
+    // E26 contract, U5c: the assessment is a function of the primitive and these inputs, so a
+    // primitive that passed under the same inputs passes again and is not assessed twice.
+    const key = [
+      camera.position.x,
+      camera.position.y,
+      camera.zoom,
+      target.devicePixelRatio,
+      target.width,
+      target.height,
+      origin.x,
+      origin.y,
+    ];
+    if (!numericArraysEqual(this.#assessedKey, key)) {
+      this.#assessedKey = key;
+      this.#assessed = new WeakSet();
+    }
+    const assessed = this.#assessed;
     for (const primitive of primitives) {
+      if (!this.#fullDerivation && assessed.has(primitive)) continue;
       const assessment = assessPrimitivePacking(
         primitive.world,
         primitive.localBounds,
@@ -1342,6 +1449,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       ) {
         throw new PrimitiveNumericPreparationError('packet v1 position precision budget exceeded');
       }
+      assessed.add(primitive);
     }
   }
 
@@ -1372,6 +1480,19 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   ): void {
     for (const primitive of primitives) {
       const previous = this.#packingKeys.get(primitive.id);
+      // E26 contract, U5c: the keys are functions of the derived primitive and the origin, so a
+      // kept primitive whose keys were taken under this origin writes nothing. The origin is
+      // compared with the keys' own, not with the last frame's: a frame that selected a new origin
+      // may have thrown before it wrote any record.
+      if (
+        !forceTransforms &&
+        !this.#fullDerivation &&
+        previous?.primitive === primitive &&
+        previous.transform[6] === origin.x &&
+        previous.transform[7] === origin.y
+      ) {
+        continue;
+      }
       const transformKey = [...primitive.world, origin.x, origin.y];
       const geometryKey = primitiveGeometryKey(primitive.node);
       const styleKey = primitiveStyleKey(primitive.node);
@@ -1403,6 +1524,7 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
       this.#packingKeys.set(
         primitive.id,
         Object.freeze({
+          primitive,
           transform: Object.freeze(transformKey),
           geometry: Object.freeze(geometryKey),
           style: Object.freeze(styleKey),
@@ -1519,34 +1641,67 @@ export class PrimitiveSceneSource implements PrimitiveFrameSource {
   }
 }
 
+/** One traversal position: the node and what its ancestors give it. */
+type DeriveItem = Readonly<{
+  id: string;
+  parentWorld: SceneAffine;
+  parentWorldVersion: symbol;
+  parentHidden: boolean;
+  chain: ClipChain | null;
+  maskSource: boolean;
+  /** For a mask source: the mask container's own chain, which its fill draw is clipped by. */
+  sourceChain: ClipChain | null;
+  /** E25 contract, U2: the innermost isolated container above the node. */
+  layer: LayerScope | null;
+}>;
+
+/** Where a leaf sits in the derivation, so a set that changes only leaves can patch it. */
+type DerivedLeaf = Readonly<{
+  kind: 'primitive' | 'path' | 'text';
+  item: DeriveItem;
+  sequence: number;
+  /** The leaf's index in `primitives`, `paths` or `texts.leaves`, by kind. */
+  index: number;
+}>;
+
+/**
+ * The scene's derivation (E26 contract, U5c): kept between frames and replaced only when the
+ * scene changes. Nothing in it depends on the camera or the target. Its arrays, maps and layer
+ * scopes are shared by later frames, so nothing after `derivePrimitives` may mutate them (a
+ * `LayerScope`'s `end` is written only while deriving).
+ */
+type Derivation = Readonly<{
+  /** The view's `changeSerial` this derivation is current at. */
+  serial: number;
+  rootOrder: readonly string[];
+  primitives: readonly DerivedPrimitive[];
+  paths: readonly DerivedPath[];
+  pathSequences: ReadonlyMap<string, number>;
+  clipSeen: boolean;
+  layerScopes: readonly LayerScope[];
+  pathLayers: ReadonlyMap<string, LayerScope>;
+  texts: Readonly<DerivedTexts>;
+  leaves: ReadonlyMap<string, DerivedLeaf>;
+}>;
+
 function derivePrimitives(
   scene: RetainedSceneView,
   slots: ReadonlyMap<string, number>,
   cache: Map<string, DerivedCacheEntry>,
-  paths: DerivedPath[],
-  pathSequences: Map<string, number>,
-  clipSeen: { value: boolean },
-  layerScopes: LayerScope[],
-  pathLayers: Map<string, LayerScope>,
   isolateUnitOpacity = false,
-  texts: DerivedTexts = { leaves: [], held: false },
-): DerivedPrimitive[] {
+): Derivation {
   const result: DerivedPrimitive[] = [];
+  const paths: DerivedPath[] = [];
+  const pathSequences = new Map<string, number>();
+  let clipSeen = false;
+  const layerScopes: LayerScope[] = [];
+  const pathLayers = new Map<string, LayerScope>();
+  const texts: DerivedTexts = { leaves: [], held: false };
+  const leaves = new Map<string, DerivedLeaf>();
   const present = new Set<string>();
   let sequence = 0;
   const rootWorldVersion = Symbol.for('vector-studio.primitive-root-world');
-  const stack: {
-    id: string;
-    parentWorld: SceneAffine;
-    parentWorldVersion: symbol;
-    parentHidden: boolean;
-    chain: ClipChain | null;
-    maskSource: boolean;
-    /** For a mask source: the mask container's own chain, which its fill draw is clipped by. */
-    sourceChain: ClipChain | null;
-    /** E25 contract, U2: the innermost isolated container above the node. */
-    layer: LayerScope | null;
-  }[] = [...scene.rootOrder].reverse().map((id) => ({
+  const stack: DeriveItem[] = [...scene.rootOrder].reverse().map((id) => ({
     id,
     parentWorld: IDENTITY,
     parentWorldVersion: rootWorldVersion,
@@ -1564,6 +1719,25 @@ function derivePrimitives(
     const item = stack.pop()!;
     const node = scene.getNode(item.id)!;
     present.add(node.id);
+    if (node.kind !== 'container') {
+      const leaf = deriveLeaf(node, item, sequence, cache, slots);
+      if (leaf.kind === 'primitive') {
+        leaves.set(node.id, { kind: 'primitive', item, sequence, index: result.length });
+        result.push(leaf.primitive);
+      } else if (leaf.kind === 'path') {
+        leaves.set(node.id, { kind: 'path', item, sequence, index: paths.length });
+        paths.push(leaf.path);
+        pathSequences.set(node.id, sequence);
+        if (item.layer !== null) pathLayers.set(node.id, item.layer);
+      } else {
+        texts.held = true;
+        leaves.set(node.id, { kind: 'text', item, sequence, index: texts.leaves.length });
+        texts.leaves.push(leaf.text);
+      }
+      extendLayers(item.layer);
+      sequence += 1;
+      continue;
+    }
     const previous = cache.get(node.id);
     const worldChanged =
       previous === undefined ||
@@ -1575,149 +1749,32 @@ function derivePrimitives(
     const worldVersion = worldChanged ? Symbol(`world-${node.id}`) : previous.worldVersion;
     // P4-S2: a mask source never paints, whatever its visibility.
     const hidden = item.parentHidden || !node.visible || item.maskSource;
-    if (node.kind === 'container') {
-      if (node.clip !== null) clipSeen.value = true;
-      const isMask = node.clip?.kind === 'mask';
-      const source = isMask ? scene.getNode(node.children[0] ?? '') : undefined;
-      const chain = extendClipChain(
-        item.chain,
-        node,
-        world,
-        source,
-        source === undefined ? null : composeSceneAffine(world, source.transform),
-      );
-      // E25-K3: opacity 0 draws nothing of the subtree, as `visible: false` does (P4-K2b); E25-K1:
-      // a visible container with 0 < opacity < 1 is a layer.
-      const subtreeHidden = hidden || node.opacity === 0;
-      let layer = item.layer;
-      if (!subtreeHidden && (node.opacity < 1 || isolateUnitOpacity)) {
-        layer = {
-          nodeId: node.id,
-          opacity: node.opacity,
-          parent: item.layer,
-          depth: item.layer === null ? 0 : item.layer.depth + 1,
-          chain,
-          start: sequence,
-          end: sequence,
-        };
-        layerScopes.push(layer);
-      }
-      cache.set(
-        node.id,
-        Object.freeze({
-          transform: node.transform,
-          parentWorldVersion: item.parentWorldVersion,
-          worldVersion,
-          world,
-          hidden,
-          localKey: null,
-          localBounds: null,
-          worldBounds: null,
-          omitted: false,
-        }),
-      );
-      for (let index = node.children.length - 1; index >= 0; index -= 1) {
-        stack.push({
-          id: node.children[index]!,
-          parentWorld: world,
-          parentWorldVersion: worldVersion,
-          parentHidden: subtreeHidden,
-          chain,
-          maskSource: isMask && index === 0,
-          sourceChain: item.chain,
-          layer,
-        });
-      }
-      continue;
+    if (node.clip !== null) clipSeen = true;
+    const isMask = node.clip?.kind === 'mask';
+    const source = isMask ? scene.getNode(node.children[0] ?? '') : undefined;
+    const chain = extendClipChain(
+      item.chain,
+      node,
+      world,
+      source,
+      source === undefined ? null : composeSceneAffine(world, source.transform),
+    );
+    // E25-K3: opacity 0 draws nothing of the subtree, as `visible: false` does (P4-K2b); E25-K1:
+    // a visible container with 0 < opacity < 1 is a layer.
+    const subtreeHidden = hidden || node.opacity === 0;
+    let layer = item.layer;
+    if (!subtreeHidden && (node.opacity < 1 || isolateUnitOpacity)) {
+      layer = {
+        nodeId: node.id,
+        opacity: node.opacity,
+        parent: item.layer,
+        depth: item.layer === null ? 0 : item.layer.depth + 1,
+        chain,
+        start: sequence,
+        end: sequence,
+      };
+      layerScopes.push(layer);
     }
-    if (node.kind === 'path') {
-      cache.set(
-        node.id,
-        Object.freeze({
-          transform: node.transform,
-          parentWorldVersion: item.parentWorldVersion,
-          worldVersion,
-          world,
-          hidden,
-          localKey: null,
-          localBounds: null,
-          worldBounds: null,
-          omitted: false,
-        }),
-      );
-      // P4-S2 and P4-Q3: a mask source is meshed as a fill whatever its style and visibility,
-      // clipped by its container's own chain, and never paints.
-      paths.push(
-        Object.freeze(
-          item.maskSource
-            ? {
-                id: node.id,
-                node,
-                world,
-                hidden: item.parentHidden || item.chain?.empty === true,
-                maskSource: true as const,
-                ...(item.sourceChain === null ? {} : { clip: item.sourceChain }),
-              }
-            : {
-                id: node.id,
-                node,
-                world,
-                hidden: hidden || item.chain?.empty === true,
-                ...(item.chain === null ? {} : { clip: item.chain }),
-              },
-        ),
-      );
-      pathSequences.set(node.id, sequence);
-      if (item.layer !== null) pathLayers.set(node.id, item.layer);
-      extendLayers(item.layer);
-      sequence += 1;
-      continue;
-    }
-    // E28 contract, U2: a text node is one leaf at its paint position, with E28-K9 bounds.
-    if (node.kind === 'text') {
-      texts.held = true;
-      const localBounds = getTextLocalBounds(node);
-      const worldBounds = localBounds === null ? null : transformSceneBounds(localBounds, world);
-      cache.set(
-        node.id,
-        Object.freeze({
-          transform: node.transform,
-          parentWorldVersion: item.parentWorldVersion,
-          worldVersion,
-          world,
-          hidden,
-          localKey: null,
-          localBounds,
-          worldBounds,
-          omitted: false,
-        }),
-      );
-      texts.leaves.push(
-        Object.freeze({
-          id: node.id,
-          node,
-          world,
-          worldBounds,
-          hidden: hidden || item.chain?.empty === true,
-          clip: item.chain,
-          sequence,
-          layer: item.layer,
-        }),
-      );
-      extendLayers(item.layer);
-      sequence += 1;
-      continue;
-    }
-    const localKey = primitiveBoundsKey(node);
-    const boundsChanged =
-      worldChanged || previous === undefined || !numericArraysEqual(previous.localKey, localKey);
-    const localBounds = boundsChanged
-      ? getPrimitiveLocalStrokeBounds(node)!
-      : previous.localBounds!;
-    const worldBounds = boundsChanged
-      ? transformSceneBounds(localBounds, world)!
-      : previous.worldBounds!;
-    const omitted = boundsChanged ? isDegenerate(node, world) : previous.omitted;
     cache.set(
       node.id,
       Object.freeze({
@@ -1726,32 +1783,241 @@ function derivePrimitives(
         worldVersion,
         world,
         hidden,
-        localKey,
-        localBounds,
-        worldBounds,
-        omitted,
+        localKey: null,
+        localBounds: null,
+        worldBounds: null,
+        omitted: false,
       }),
     );
-    result.push(
+    for (let index = node.children.length - 1; index >= 0; index -= 1) {
+      stack.push({
+        id: node.children[index]!,
+        parentWorld: world,
+        parentWorldVersion: worldVersion,
+        parentHidden: subtreeHidden,
+        chain,
+        maskSource: isMask && index === 0,
+        sourceChain: item.chain,
+        layer,
+      });
+    }
+  }
+  for (const id of cache.keys()) if (!present.has(id)) cache.delete(id);
+  return Object.freeze({
+    serial: scene.changeSerial,
+    rootOrder: scene.rootOrder,
+    primitives: result,
+    paths,
+    pathSequences,
+    clipSeen,
+    layerScopes,
+    pathLayers,
+    texts,
+    leaves,
+  });
+}
+
+type LeafOutput =
+  | Readonly<{ kind: 'primitive'; primitive: DerivedPrimitive }>
+  | Readonly<{ kind: 'path'; path: DerivedPath }>
+  | Readonly<{ kind: 'text'; text: DerivedText }>;
+
+/** Derives one leaf at its traversal position and updates its cache entry. */
+function deriveLeaf(
+  node: Exclude<RenderNodeSnapshot, { kind: 'container' }>,
+  item: DeriveItem,
+  sequence: number,
+  cache: Map<string, DerivedCacheEntry>,
+  slots: ReadonlyMap<string, number>,
+): LeafOutput {
+  const previous = cache.get(node.id);
+  const worldChanged =
+    previous === undefined ||
+    previous.parentWorldVersion !== item.parentWorldVersion ||
+    !numericArraysEqual(previous.transform, node.transform);
+  const world = worldChanged
+    ? composeSceneAffine(item.parentWorld, node.transform)!
+    : previous.world;
+  const worldVersion = worldChanged ? Symbol(`world-${node.id}`) : previous.worldVersion;
+  // P4-S2: a mask source never paints, whatever its visibility.
+  const hidden = item.parentHidden || !node.visible || item.maskSource;
+  if (node.kind === 'path') {
+    cache.set(
+      node.id,
       Object.freeze({
-        id: node.id,
-        slot: slots.get(node.id)!,
-        node,
+        transform: node.transform,
+        parentWorldVersion: item.parentWorldVersion,
+        worldVersion,
         world,
+        hidden,
+        localKey: null,
+        localBounds: null,
+        worldBounds: null,
+        omitted: false,
+      }),
+    );
+    // P4-S2 and P4-Q3: a mask source is meshed as a fill whatever its style and visibility,
+    // clipped by its container's own chain, and never paints.
+    return {
+      kind: 'path',
+      path: Object.freeze(
+        item.maskSource
+          ? {
+              id: node.id,
+              node,
+              world,
+              hidden: item.parentHidden || item.chain?.empty === true,
+              maskSource: true as const,
+              ...(item.sourceChain === null ? {} : { clip: item.sourceChain }),
+            }
+          : {
+              id: node.id,
+              node,
+              world,
+              hidden: hidden || item.chain?.empty === true,
+              ...(item.chain === null ? {} : { clip: item.chain }),
+            },
+      ),
+    };
+  }
+  // E28 contract, U2: a text node is one leaf at its paint position, with E28-K9 bounds.
+  if (node.kind === 'text') {
+    const localBounds = getTextLocalBounds(node);
+    const worldBounds = localBounds === null ? null : transformSceneBounds(localBounds, world);
+    cache.set(
+      node.id,
+      Object.freeze({
+        transform: node.transform,
+        parentWorldVersion: item.parentWorldVersion,
+        worldVersion,
+        world,
+        hidden,
+        localKey: null,
         localBounds,
         worldBounds,
-        hidden,
-        omitted,
+        omitted: false,
+      }),
+    );
+    return {
+      kind: 'text',
+      text: Object.freeze({
+        id: node.id,
+        node,
+        world,
+        worldBounds,
+        hidden: hidden || item.chain?.empty === true,
         clip: item.chain,
         sequence,
         layer: item.layer,
       }),
-    );
-    extendLayers(item.layer);
-    sequence += 1;
+    };
   }
-  for (const id of cache.keys()) if (!present.has(id)) cache.delete(id);
-  return result;
+  const localKey = primitiveBoundsKey(node);
+  const boundsChanged =
+    worldChanged || previous === undefined || !numericArraysEqual(previous.localKey, localKey);
+  const localBounds = boundsChanged ? getPrimitiveLocalStrokeBounds(node)! : previous.localBounds!;
+  const worldBounds = boundsChanged
+    ? transformSceneBounds(localBounds, world)!
+    : previous.worldBounds!;
+  const omitted = boundsChanged ? isDegenerate(node, world) : previous.omitted;
+  cache.set(
+    node.id,
+    Object.freeze({
+      transform: node.transform,
+      parentWorldVersion: item.parentWorldVersion,
+      worldVersion,
+      world,
+      hidden,
+      localKey,
+      localBounds,
+      worldBounds,
+      omitted,
+    }),
+  );
+  return {
+    kind: 'primitive',
+    primitive: Object.freeze({
+      id: node.id,
+      slot: slots.get(node.id)!,
+      node,
+      world,
+      localBounds,
+      worldBounds,
+      hidden,
+      omitted,
+      clip: item.chain,
+      sequence,
+      layer: item.layer,
+    }),
+  };
+}
+
+/**
+ * E26 contract, U5c: the derivation after a set that wrote only leaves, each still a leaf of the
+ * same kind under the same parent and not a mask source, re-derives just those leaves at their
+ * kept positions. Anything else (a container, an insert or removal, a mask source, a root order
+ * change) returns null, and the caller derives the scene in full.
+ */
+function patchDerivation(
+  previous: Derivation,
+  scene: RetainedSceneView,
+  changed: readonly string[],
+  cache: Map<string, DerivedCacheEntry>,
+  slots: ReadonlyMap<string, number>,
+): Derivation | null {
+  if (!sameIds(previous.rootOrder, scene.rootOrder)) return null;
+  const ids = new Set(changed);
+  const updates: { leaf: DerivedLeaf; node: Exclude<RenderNodeSnapshot, { kind: 'container' }> }[] =
+    [];
+  for (const id of ids) {
+    const leaf = previous.leaves.get(id);
+    const node = scene.getNode(id);
+    if (leaf === undefined || node === undefined || node.kind === 'container') return null;
+    if (leaf.item.maskSource) return null;
+    if (node.kind !== leaf.kind) return null;
+    const before =
+      leaf.kind === 'primitive'
+        ? previous.primitives[leaf.index]!.node
+        : leaf.kind === 'path'
+          ? previous.paths[leaf.index]!.node
+          : previous.texts.leaves[leaf.index]!.node;
+    // Defensive: a valid set that moves a leaf also writes a container or the root order.
+    if (before.parentId !== node.parentId) return null;
+    updates.push({ leaf, node });
+  }
+  if (updates.length === 0) return Object.freeze({ ...previous, serial: scene.changeSerial });
+  let primitives: DerivedPrimitive[] | null = null;
+  let paths: DerivedPath[] | null = null;
+  let textLeaves: DerivedText[] | null = null;
+  for (const { leaf, node } of updates) {
+    const output = deriveLeaf(node, leaf.item, leaf.sequence, cache, slots);
+    if (output.kind === 'primitive') {
+      primitives ??= [...previous.primitives];
+      primitives[leaf.index] = output.primitive;
+    } else if (output.kind === 'path') {
+      paths ??= [...previous.paths];
+      paths[leaf.index] = output.path;
+    } else {
+      textLeaves ??= [...previous.texts.leaves];
+      textLeaves[leaf.index] = output.text;
+    }
+  }
+  return Object.freeze({
+    ...previous,
+    serial: scene.changeSerial,
+    primitives: primitives ?? previous.primitives,
+    paths: paths ?? previous.paths,
+    texts: textLeaves === null ? previous.texts : Object.freeze({ leaves: textLeaves, held: true }),
+  });
+}
+
+function sameIds(left: readonly string[], right: readonly string[]): boolean {
+  if (left === right) return true;
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
 }
 
 /**
