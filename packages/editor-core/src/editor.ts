@@ -68,8 +68,8 @@ import {
   pendingRequest,
   pendingTarget,
   textEditOverlay,
-  type TextEditSupport,
   type TextEditTarget,
+  type TextToolSupport,
 } from './text-edit.js';
 import { normalizeInputText, textKeyRoute } from './text-input.js';
 import {
@@ -77,6 +77,7 @@ import {
   createLineTool,
   createPathTool,
   createSelectTool,
+  createTextTool,
   selectionHandles,
 } from './tools.js';
 import {
@@ -114,6 +115,7 @@ import type {
   QueryResult,
   ReorderOp,
   SnapOverlay,
+  TextEditPending,
   TextEditState,
   TextStyle,
   ToolApi,
@@ -776,6 +778,10 @@ class EditorCore implements Editor {
     this.tools.set('frame', createBoxTool('createFrame'));
     this.tools.set('line', createLineTool());
     this.tools.set('path', createPathTool());
+    this.tools.set(
+      'text',
+      createTextTool((node) => this.extensions.geometry(node), this.expansions, this.textSupport),
+    );
     const isActive = () => this.gestureState !== null;
     this.gesture = {
       get active() {
@@ -1500,6 +1506,10 @@ class EditorCore implements Editor {
     ) {
       this.setSnap(null);
     }
+    // The text tool without a port fails its press and changes nothing (M6b section 2).
+    if (this.tool === 'text' && this.textLayouts === null && event.kind === 'pointerdown') {
+      return { ...failure('editor.no-text-layout'), consumed: false };
+    }
     const tool = this.tools.get(this.tool);
     const consumed =
       tool?.input(event, {
@@ -2156,14 +2166,102 @@ class EditorCore implements Editor {
     }
   }
 
-  /** What the select tool reads of text edit mode (M6b section 4.4). */
-  private readonly textSupport: TextEditSupport = {
+  /**
+   * What the select tool reads of text edit mode (M6b section 4.4), and what the text tool
+   * reads and starts (section 3.2).
+   */
+  private readonly textSupport: TextToolSupport = {
     current: () => this.textTarget(),
     of: (id) => {
       const node = editableText(this.document, this.activePage, id);
       return node === undefined ? null : this.nodeTextTarget(node);
     },
+    startPending: (origin, width) => this.startPending(origin, width),
   };
+
+  /**
+   * The text tool's pending node (M6b contract, section 3.2): edit mode on a node not yet
+   * created, at `origin` (page space, rotation 0), `autoWidth` with a zero-width frame when
+   * `width` is null, else `autoHeight` of that width, its height its empty layout's (section
+   * 4.3), in the scope if set, else on the active page, on top, in the session `textStyle`
+   * (M6b-Q7 (a)). As `enterTextEdit`, it ends an active gesture and sets the tool to `select`
+   * (M6b-Q5 (a)); the selection becomes empty. Events: `tool`, `selection` (when either
+   * changes), then `textEdit`. Nothing is created and no step recorded (M6-Q19 (a)).
+   */
+  private startPending(origin: PagePoint, width: number | null): boolean {
+    const cache = this.textLayouts;
+    if (cache === null) return false;
+    // M6b-U6: an active text gesture commits by section 7.3 instead of being cancelled.
+    this.interrupt();
+    if (this.tool !== 'select') this.run({ type: 'setTool', tool: 'select' });
+    const parent = this.scope ?? this.activePage;
+    const index = childrenOf(documentTree(this.document), parent).length;
+    const sizing: TextEditPending['sizing'] = width === null ? 'autoWidth' : 'autoHeight';
+    const style = this.textStyle;
+    const frame = { x: origin.x + 0, y: origin.y + 0, width: (width ?? 0) + 0, height: 0 };
+    const empty = cache.layoutRequest(pendingRequest({ parent, index, frame, sizing, style }));
+    const pending: TextEditPending = {
+      parent,
+      index,
+      frame: { ...frame, height: empty.height },
+      sizing,
+      style,
+    };
+    // Set first, so the selection change to `[]` keeps it; the event follows the selection's.
+    this.textEdit = deepFreeze({
+      id: null,
+      pending,
+      anchor: 0,
+      focus: 0,
+      affinity: 'downstream',
+      composition: null,
+    });
+    this.goalX = null;
+    this.textScopeExit = false;
+    this.setSelectionState([]);
+    this.refresh({ type: 'session', field: 'textEdit' });
+    return true;
+  }
+
+  /**
+   * The first text on a pending node (section 7.1): `createText` with `text` as its one run in
+   * the pending style, at its frame, sizing, parent and index (clamped to the parent's current
+   * children, which a host command may have changed), as one document command and one step, so
+   * an undo removes the node. Edit mode then moves to the new node with the selection `[id]`
+   * and the caret after the text, moved up to a stop (section 4.1). A failure (the length
+   * bound) changes nothing and keeps the pending node.
+   *
+   * M6b-U5: this step is an insertion whose caret entry (section 8.1) holds the new ID, and
+   * following insertions merge into it (section 8.2, "the pending node's creating step merges").
+   * M6b-U6: a first composition on a pending node creates it through `replace` instead
+   * (section 7.1, appendix A case 9); a `textinput` keeps this one command.
+   */
+  private createPendingText(pending: TextEditPending, text: string): CommandResult {
+    const { parent, frame, sizing, style } = pending;
+    const siblings = childrenOf(documentTree(this.document), parent).length;
+    const result = this.run({
+      type: 'createText',
+      frame,
+      runs: [{ text, family: style.family, size: style.size, color: style.color }],
+      sizing,
+      parent,
+      index: Math.min(pending.index, siblings),
+    });
+    if (!result.ok) return result;
+    const id = result.ids[0]!;
+    const edit = this.textEdit;
+    const node = editableText(this.document, this.activePage, id);
+    // A listener may already have ended edit mode or removed the node.
+    if (edit === null || edit.pending === null || node === undefined) return result;
+    const target = this.nodeTextTarget(node)!;
+    const caret = caretAfterInsertion(target.model, text.length);
+    // Set first, so the selection change to `[id]` keeps it; the event follows the selection's.
+    this.textEdit = deepFreeze({ id, pending: null, ...caret, composition: null });
+    this.goalX = null;
+    this.setSelectionState([id]);
+    this.refresh({ type: 'session', field: 'textEdit' });
+    return result;
+  }
 
   /** The caret model of `layout`, from the one-entry cache when it is the same layout object. */
   private caretModel(
@@ -2366,8 +2464,14 @@ class EditorCore implements Editor {
   ): CommandResult {
     const edit = this.textEdit!;
     const target = this.textTarget();
-    // M6b-U3: on a pending node an LF runs `createText`; a deletion has nothing to remove.
-    if (edit.id === null || target === null) return { ok: true, ids: [] };
+    if (target === null) return { ok: true, ids: [] };
+    // On a pending node an LF creates the node (section 7.1); a deletion has nothing to remove.
+    if (edit.pending !== null) {
+      return action.type === 'lineBreak'
+        ? this.createPendingText(edit.pending, '\n')
+        : { ok: true, ids: [] };
+    }
+    if (edit.id === null) return { ok: true, ids: [] };
     if (action.type === 'lineBreak') {
       const start = Math.min(edit.anchor, edit.focus);
       return this.editText(edit.id, start, Math.max(edit.anchor, edit.focus), '\n');
@@ -2388,8 +2492,13 @@ class EditorCore implements Editor {
     const edit = this.textEdit;
     if (edit === null) return { ...failure('editor.no-text-edit'), consumed: false };
     const text = normalizeInputText(event.text);
-    // M6b-U3: on a pending node the first text runs `createText` as one command.
-    if (text.length === 0 || edit.id === null) return { ok: true, ids: [], consumed: true };
+    if (text.length === 0) return { ok: true, ids: [], consumed: true };
+    if (edit.pending !== null) {
+      // On a pending node the first text runs `createText` as one command (section 7.1).
+      const created = this.createPendingText(edit.pending, text);
+      return { ...created, consumed: created.ok };
+    }
+    if (edit.id === null) return { ok: true, ids: [], consumed: true };
     const start = Math.min(edit.anchor, edit.focus);
     const result = this.editText(edit.id, start, Math.max(edit.anchor, edit.focus), text);
     return { ...result, consumed: result.ok };
