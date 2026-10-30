@@ -1,5 +1,6 @@
 import type { FillMesh } from '@vector-studio/contracts';
 import type {
+  MeshRecordRange,
   MeshResourceId,
   MeshWrite,
   PrimitivePacket,
@@ -11,6 +12,17 @@ import type {
 // Functional evidence only: precision is UNVERIFIED against the 0.25 physical-pixel target.
 
 export type MeshReceiptMode = 'submitted' | 'skipped' | 'none';
+
+/** The record indices that mesh ranges cover (E26 contract, U5a), in range order. */
+export function recordIndices(records: readonly MeshRecordRange[]): number[] {
+  const indices: number[] = [];
+  for (const range of records) {
+    for (let index = range.index; index < range.index + range.count; index += 1) {
+      indices.push(index);
+    }
+  }
+  return indices;
+}
 
 /** A receipt acknowledging every write of the packet, with the requested mesh part. */
 export function receiptOf(
@@ -81,7 +93,7 @@ export class MeshShadow {
       written = new Set();
       this.written.set(write.resourceId, written);
     }
-    for (const record of write.records) written.add(record.index);
+    for (const index of recordIndices(write.records)) written.add(index);
   }
 
   public f32(resource: MeshResourceId, byteOffset: number): number {

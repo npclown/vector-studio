@@ -365,6 +365,58 @@ describe('V3b mesh submission (V3-A13)', () => {
     creation.dispose();
   });
 
+  it('E26-U5a: rejects mesh record ranges with a gap, an overlap, an overrun, a zero count or no version, and returns the written ranges in the receipt', async () => {
+    const fixture = nativeFixture();
+    const { scene, creation, target } = await nativeScene(fixture, true);
+    const h = createPathHarness({ port: createCountingPort(), nodes: interleaved() });
+    const packet = h.source.prepare(target)!;
+    const part = packet.mesh!;
+    const at = part.writes.findIndex((write) => write.records.length >= 2);
+    expect(at).toBeGreaterThanOrEqual(0);
+    const write = part.writes[at]!;
+    const [first, second] = write.records;
+    const rest = write.records.slice(2);
+    const withRecords = (records: unknown[]): PrimitivePacket =>
+      ({
+        ...packet,
+        mesh: {
+          ...part,
+          writes: part.writes.map((candidate, index) =>
+            index === at ? { ...candidate, records } : candidate,
+          ),
+        },
+      }) as unknown as PrimitivePacket;
+    const invalid = [
+      withRecords([second, ...rest]),
+      withRecords([first, ...rest]),
+      withRecords([first, first, second, ...rest]),
+      withRecords([{ ...first, count: first!.count + 1 }, second, ...rest]),
+      withRecords([{ ...first, count: 0 }, first, second, ...rest]),
+      withRecords([{ ...first, count: 0.5 }, second, ...rest]),
+      withRecords([{ ...first, index: first!.index + 1 }, second, ...rest]),
+      withRecords([first, second, ...rest, { index: 1e6, count: 1, version: Symbol('extra') }]),
+      withRecords([{ ...first, version: 'v' }, second, ...rest]),
+      withRecords([]),
+    ];
+    for (const candidate of invalid) {
+      expect(scene.submitPrimitivePacket(candidate)).toEqual({
+        status: 'failed',
+        reason: 'invalid-packet',
+      });
+    }
+    const receipt = submitted(scene.submitPrimitivePacket(packet));
+    expect(receipt.mesh!.status === 'submitted' && receipt.mesh!.resources).toEqual(
+      part.resources.map((resource) => ({
+        resourceId: resource.id,
+        incarnation: resource.incarnation,
+        records: part.writes
+          .filter((candidate) => candidate.resourceId === resource.id)
+          .flatMap((candidate) => candidate.records),
+      })),
+    );
+    creation.dispose();
+  });
+
   it('V3-A13: each submission marks both arenas; growth tracks the old and new mesh arenas until the old one retires', async () => {
     const markSubmitted = vi.spyOn(SharedBufferAllocator.prototype, 'markSubmitted');
     try {

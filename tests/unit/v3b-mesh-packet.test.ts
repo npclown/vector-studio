@@ -35,7 +35,13 @@ import {
   squareMesh,
   target,
 } from '../support/v3a-path-harness.js';
-import { MeshShadow, fanMesh, receiptOf, words } from '../support/v3b-mesh-harness.js';
+import {
+  MeshShadow,
+  fanMesh,
+  receiptOf,
+  recordIndices,
+  words,
+} from '../support/v3b-mesh-harness.js';
 
 // P3 V3 contract unit V3b, renderer-core side: the optional mesh packet part (section f), paint
 // order (section g), range management and receipts, and device loss (section i). Functional
@@ -148,7 +154,7 @@ describe('V3b mesh part bytes (V3-A10)', () => {
         write.resourceId,
         write.byteOffset,
         Buffer.from(write.bytes).toString('hex'),
-        write.records.map((record) => record.index),
+        recordIndices(write.records),
       ]),
       draws: part.draws,
     });
@@ -664,7 +670,7 @@ describe('V3b device loss and skipped receipts (V3-A15, V3-A13 source part)', ()
         before.subarray(write.byteOffset, write.byteOffset + write.bytes.byteLength),
       );
       const indices = covered.get(write.resourceId) ?? new Set<number>();
-      for (const record of write.records) indices.add(record.index);
+      for (const index of recordIndices(write.records)) indices.add(index);
       covered.set(write.resourceId, indices);
     }
     // Every occupied slot's instance record, every served variant's ranges and the frame.
