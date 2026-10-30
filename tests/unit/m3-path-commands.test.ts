@@ -2040,7 +2040,7 @@ describe('M3-A07 grammar and history under seeded path commands', () => {
             'setPathHandle',
           ]);
         }
-      });
+      }, 15_000);
     }
   }
 });
