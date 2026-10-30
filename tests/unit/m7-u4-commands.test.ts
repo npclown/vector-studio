@@ -653,10 +653,10 @@ describe('setNodeProps and setFrames on instances and symbols (M7-A07, section 5
         },
       );
     }
-    // M7-S4: an instance's opacity stays 1.
+    // M7-S4 ended with M4-U3 (MVP M4 contract, section 5): any opacity in [0, 1]; 1.5 fails.
     fails(
       setup,
-      { type: 'setNodeProps', id: 'i1', props: { opacity: 0.5 } },
+      { type: 'setNodeProps', id: 'i1', props: { opacity: 1.5 } },
       {
         code: 'document.invalid-field',
         path: '/nodes/i1/opacity',
@@ -683,9 +683,10 @@ describe('setNodeProps and setFrames on instances and symbols (M7-A07, section 5
         path: '/props/cornerRadii',
       },
     );
+    // Any opacity in [0, 1] since M4-U3 (MVP M4 contract, M4-L1); 1.5 fails.
     fails(
       setup,
-      { type: 'setNodeProps', id: 's1', props: { opacity: 0.5 } },
+      { type: 'setNodeProps', id: 's1', props: { opacity: 1.5 } },
       {
         code: 'document.invalid-field',
         path: '/nodes/s1/opacity',

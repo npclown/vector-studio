@@ -8,6 +8,7 @@ import {
   documentTree,
   instanceClipViolation,
   instanceTreeViolation,
+  isolationViolation,
   nestedSymbolViolation,
   nodePath,
   symbolChange,
@@ -143,7 +144,8 @@ export function structural(
  * extended by the M7 contract, section 5.5: the M7-S5 tree depth of the instances the change can
  * deepen (`document.invalid-field`), the structural rules (mask source, nesting, the clip depth
  * of the changed subtrees), the M7-S5 clip depth of the instances the change can deepen
- * (`editor.clip-depth`), then every expansion's validity and the caps. The depth checks visit
+ * (`editor.clip-depth`), the isolation count of the change (`editor.isolation-depth`, MVP M4
+ * contract, section 4.3), then every expansion's validity and the caps. The depth checks visit
  * only the instances of `symbolChange` (section 5.3): those in a created, reparented or retyped
  * subtree and every instance of a source that holds one, so a change that adds nothing to a
  * source and moves no instance checks none.
@@ -163,6 +165,9 @@ export function success(
   if (rejected !== null) return rejected;
   const deep = instanceClipViolation(tree, change.instances);
   if (deep !== null) return fail('editor.clip-depth', nodePath(deep, '/parent'));
+  // The isolation count right after the clip depth (MVP M4 contract, sections 4.3 and 4.4).
+  const isolated = isolationViolation(draft.base, document, draft.touched);
+  if (isolated !== null) return fail('editor.isolation-depth', nodePath(isolated, '/parent'));
   // Then the expansions of every instance (M7 contract, sections 3 and 4.1, order of 5.5).
   const expansion =
     draft.expansions === undefined ? null : expansionFailure(document, draft.expansions);

@@ -215,15 +215,26 @@ export function validateFragmentTree(value: unknown): FragmentTreeResult {
   }
 }
 
+/** Options of `validateNode`. */
+export type ValidateNodeOptions = Readonly<{
+  /**
+   * The node comes from an input below v6 (an older clipboard fragment), already given the v6
+   * fields: a container or instance opacity other than 1 fails at `/opacity`, in the field order
+   * of an older document (M4 contract, M4-M2 and section 7).
+   */
+  olderInput?: boolean;
+}>;
+
 /**
  * Validates one v6 node with the field rules of `validateDocument`, so commands reject the values
  * a load would reject. `path` is relative to the node; references (M7-S2 and the M7-T3 override
  * keys among them) are not checked here.
  */
-export function validateNode(value: unknown): NodeResult {
+export function validateNode(value: unknown, options: ValidateNodeOptions = {}): NodeResult {
+  const schema = options.olderInput === true ? V6_OLDER_OPACITY : V6;
   try {
     const id = isPlainObject(value) ? value.id : undefined;
-    return { ok: true, node: readNode(typeof id === 'string' ? id : '', value, [], V6) };
+    return { ok: true, node: readNode(typeof id === 'string' ? id : '', value, [], schema) };
   } catch (error) {
     if (error instanceof Failure) {
       return { ok: false, code: 'document.invalid-field', path: pointer(error.path) };
@@ -592,7 +603,7 @@ export function migrateV4toV5(document: DocumentV4): ParseResultV5 {
  * `{ color, width, cap: 'butt', join: 'round', miterLimit: 4, dash: null }`, and a line, path or
  * custom stroke gains `dash: null`. The input is validated with the v5 rules, so a v6 stroke or
  * a gradient in it fails at its first v6 key, and a container or instance opacity other than 1
- * still fails (M4-L1).
+ * still fails (M4-M2).
  */
 export function migrateV5toV6(document: DocumentV5): ParseResult {
   return guarded(() => readDocumentV6({ ...document, schemaVersion: 6 }, V5_TO_V6));
@@ -684,19 +695,32 @@ type Schema = Readonly<{
   types: readonly NodeTypeKey[];
   overrides: 'none' | 'added' | 'read';
   appearance: 'none' | 'added' | 'read';
+  /**
+   * The opacity of a container or instance: `one` below v6 (M1-S5, M7-S4, kept for older inputs
+   * by M4-M2), `any` at v6 (M4-L1), where M4-S5's `[0, 1]` applies as to every node.
+   */
+  containerOpacity: 'one' | 'any';
 }>;
 
 const V4_TYPES = Object.keys(NODE_KEYS_V2) as NodeTypeKey[];
 const V3_TYPES = V4_TYPES.filter((type) => type !== 'text');
 const V2_TYPES = V3_TYPES.filter((type) => type !== 'symbol' && type !== 'instance');
-const V2: Schema = { types: V2_TYPES, overrides: 'none', appearance: 'none' };
-const V3: Schema = { types: V3_TYPES, overrides: 'none', appearance: 'none' };
-const V4_TO_V5: Schema = { types: V4_TYPES, overrides: 'added', appearance: 'none' };
-const V2_TO_V6: Schema = { types: V2_TYPES, overrides: 'added', appearance: 'added' };
-const V3_TO_V6: Schema = { types: V3_TYPES, overrides: 'added', appearance: 'added' };
-const V4_TO_V6: Schema = { types: V4_TYPES, overrides: 'added', appearance: 'added' };
-const V5_TO_V6: Schema = { types: V4_TYPES, overrides: 'read', appearance: 'added' };
-const V6: Schema = { types: V4_TYPES, overrides: 'read', appearance: 'read' };
+const OLDER = { containerOpacity: 'one' } as const;
+const V2: Schema = { types: V2_TYPES, overrides: 'none', appearance: 'none', ...OLDER };
+const V3: Schema = { types: V3_TYPES, overrides: 'none', appearance: 'none', ...OLDER };
+const V4_TO_V5: Schema = { types: V4_TYPES, overrides: 'added', appearance: 'none', ...OLDER };
+const V2_TO_V6: Schema = { types: V2_TYPES, overrides: 'added', appearance: 'added', ...OLDER };
+const V3_TO_V6: Schema = { types: V3_TYPES, overrides: 'added', appearance: 'added', ...OLDER };
+const V4_TO_V6: Schema = { types: V4_TYPES, overrides: 'added', appearance: 'added', ...OLDER };
+const V5_TO_V6: Schema = { types: V4_TYPES, overrides: 'read', appearance: 'added', ...OLDER };
+const V6: Schema = {
+  types: V4_TYPES,
+  overrides: 'read',
+  appearance: 'read',
+  containerOpacity: 'any',
+};
+/** v6 nodes of an input below v6, already migrated: v6 fields, the older opacity rule. */
+const V6_OLDER_OPACITY: Schema = { ...V6, ...OLDER };
 
 const GRADIENT_KINDS: readonly Gradient['kind'][] = ['linear', 'radial'];
 const SPREADS: readonly Gradient['spread'][] = ['pad', 'reflect', 'repeat'];
@@ -961,10 +985,13 @@ function readNode(key: string, value: unknown, path: Path, schema: Schema): Node
     opacity: readNumber(record.opacity, [...path, 'opacity'], 0, 1),
     visible: readBoolean(record.visible, [...path, 'visible']),
   };
-  // Container opacity other than 1 waits for isolated composition (M1-S5); an instance projects
-  // as a container, so it follows the same rule (M7-S4). M4-U1 keeps it at every version, v6
-  // included, until M4-U3 lifts it (M4 contract, M4-L1).
-  if ((isContainerType(type) || type === 'instance') && base.opacity !== 1) {
+  // Container opacity other than 1 (M1-S5, and M7-S4 for an instance) is lifted at v6 (M4
+  // contract, M4-L1 and M4-S5); an input below v6 still fails, since no build wrote one (M4-M2).
+  if (
+    schema.containerOpacity === 'one' &&
+    (isContainerType(type) || type === 'instance') &&
+    base.opacity !== 1
+  ) {
     invalid([...path, 'opacity']);
   }
   const readers = strokeReaders(schema);

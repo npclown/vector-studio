@@ -1221,8 +1221,8 @@ describe('M4-A10 projection part and M4-P6 opacity (directly built documents)', 
 
   it('an instance at opacity 0.5 projects its outer container at 0.5, isolated by the renderer', () => {
     const document = symbols(0.5);
-    // M4-L1: the model rejects it until M4-U3, so it is built without validation.
-    expect(validateDocument(document).ok).toBe(false);
+    // Built without validation in M4-U2, when M4-L1 still rejected it; model-valid from M4-U3.
+    expect(validateDocument(document).ok).toBe(true);
     const nodes = project(document);
     for (const id of ['i1', 'i2']) {
       expect(nodes.get(id)).toMatchObject({ kind: 'container', opacity: 0.5 });

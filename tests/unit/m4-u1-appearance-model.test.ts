@@ -206,7 +206,7 @@ describe('M4-A01 schema v6 rules (M4-S1 to M4-S5)', () => {
     'dash-odd-period-overflow': ['document.invalid-field', at('/stroke/dash/pattern')],
     'dash-non-finite-phase': ['document.invalid-field', at('/stroke/dash/phase')],
     'opacity-1.5': ['document.invalid-field', at('/opacity')],
-    'container-opacity': ['document.invalid-field', at('/opacity')],
+    'container-opacity-in-v5': ['document.invalid-field', at('/opacity')],
     'gradient-in-v5': ['document.invalid-field', at('/fill/r')],
     'v6-stroke-in-v5': ['document.invalid-field', at('/stroke/cap')],
     'unsupported-version': ['document.unsupported-version', '/schemaVersion'],
@@ -599,7 +599,9 @@ describe('M4-A02 migration v5 to v6, versions and round trips (section 2.1)', ()
     },
   );
 
-  it('still fails a container or instance at opacity 0.5 at every version (M4-L1)', () => {
+  // Until M4-U3 every version failed (M4-L1); from M4-U3 v6 accepts and older inputs still fail
+  // (M4-M2). M4-A08 (`m4-u3-opacity.test.ts`) covers the commands.
+  it('fails a container or instance at opacity 0.5 below v6 and accepts it at v6 (M4-M2)', () => {
     const frame = {
       ...base('f', 'p'),
       opacity: 0.5,
@@ -610,7 +612,7 @@ describe('M4-A02 migration v5 to v6, versions and round trips (section 2.1)', ()
     };
     const group = { ...base('g', 'p'), opacity: 0.5, type: 'group', children: ['k'] };
     const leaf = { ...rect('k', 'g'), fill: black, stroke: null };
-    for (const version of [2, 3, 4, 5, 6]) {
+    for (const version of [2, 3, 4, 5]) {
       expect(validateAnyDocument(one(frame, version))).toEqual({
         ok: false,
         code: 'document.invalid-field',
@@ -625,6 +627,16 @@ describe('M4-A02 migration v5 to v6, versions and round trips (section 2.1)', ()
         }),
       ).toEqual({ ok: false, code: 'document.invalid-field', path: '/nodes/g/opacity' });
     }
+    expect(validateAnyDocument(one(frame, 6)).ok).toBe(true);
+    expect(validateDocument(one(frame, 6)).ok).toBe(true);
+    expect(
+      validateAnyDocument({
+        schemaVersion: 6,
+        id: 'd',
+        pages: [{ id: 'p', name: 'P', children: ['g'] }],
+        nodes: { g: group, k: leaf },
+      }).ok,
+    ).toBe(true);
     // An instance at 0.5 from v3, where symbols and instances start (M7-U1), to v6; v5 added
     // `textOverrides` (M7-U7). At v2 the instance type itself is unknown.
     const instanceAt = (version: number): Json => ({
@@ -645,7 +657,7 @@ describe('M4-A02 migration v5 to v6, versions and round trips (section 2.1)', ()
         },
       },
     });
-    for (const version of [3, 4, 5, 6]) {
+    for (const version of [3, 4, 5]) {
       expect(validateAnyDocument(instanceAt(version)), `v${version}`).toEqual({
         ok: false,
         code: 'document.invalid-field',
@@ -656,14 +668,13 @@ describe('M4-A02 migration v5 to v6, versions and round trips (section 2.1)', ()
       expect(validateAnyDocument(opaque).ok, `v${version} at opacity 1`).toBe(true);
     }
     expect(validateAnyDocument(instanceAt(2)).ok).toBe(false);
+    expect(validateAnyDocument(instanceAt(6)).ok).toBe(true);
     const symbols = JSON.parse(APPEARANCE) as Json;
     symbols.nodes.i1!.opacity = 0.5;
-    expect(validateDocument(symbols)).toEqual({
-      ok: false,
-      code: 'document.invalid-field',
-      path: '/nodes/i1/opacity',
-    });
-    expect(validateNode({ ...symbols.nodes.s1, opacity: 0.5 })).toEqual({
+    expect(validateDocument(symbols).ok).toBe(true);
+    expect(validateNode({ ...symbols.nodes.s1, opacity: 0.5 }).ok).toBe(true);
+    // An older input's node, already given the v6 fields (a clipboard fragment below v6).
+    expect(validateNode({ ...symbols.nodes.s1, opacity: 0.5 }, { olderInput: true })).toEqual({
       ok: false,
       code: 'document.invalid-field',
       path: '/opacity',
@@ -1105,13 +1116,13 @@ describe('M4-U1 commands: v6 input and defaults (section 4.1)', () => {
     expect(serializeDocument(target.query({ type: 'document' }))).toBe(after);
   });
 
-  it('keeps container and instance opacity at 1 and gives text and instances no paint', () => {
+  // Until M4-U3 container and instance opacity stayed at 1 (M4-L1); M4-A08 covers the lift.
+  it('takes container and instance opacity and gives text and instances no paint', () => {
     const target = editor();
     for (const id of ['f1', 'g1', 's1', 'i1']) {
       expect(target.execute({ type: 'setNodeProps', id, props: { opacity: 0.5 } })).toEqual({
-        ok: false,
-        code: 'document.invalid-field',
-        path: `/nodes/${id}/opacity`,
+        ok: true,
+        ids: [],
       });
     }
     for (const id of ['t1', 'i1']) {
